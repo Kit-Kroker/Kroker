@@ -1,0 +1,225 @@
+# PRD — Agentic SDLC Factory
+
+| | |
+|---|---|
+| Status | Draft v1.0 |
+| Date | 2026-07-02 |
+| Related | `ARCHITECTURE.md`, `SDLC-spec.md` (v2 + v2.1 addendum) |
+
+---
+
+## 1. Vision
+
+A software factory that takes a feature idea to a deployed, observed feature
+through a governed pipeline of specialized AI agents — with humans making
+decisions, not doing labor. The operator decides *what* and approves *whether*;
+agents handle *how*. The factory learns from every run, so run N+1 is cheaper
+and better than run N.
+
+## 2. Problem
+
+Teams adopting coding agents today face four gaps:
+
+1. **No orchestration.** Coding agents (Claude Code, OpenCode) are powerful
+   per-task but have no durable, resumable process around them. A crash, a
+   deploy, or an overnight wait for approval loses state.
+2. **All-or-nothing autonomy.** Existing tools are either fully interactive
+   (human babysits every step) or fully autonomous (human reviews a giant PR
+   at the end). There is no per-decision autonomy dial.
+3. **No structural governance.** Prompt-based rules drift; agents review
+   their own work; quality is asserted, not enforced.
+4. **No learning.** Every run starts from zero. Clarifications answered last
+   week get asked again; gotchas rediscovered every task.
+
+## 3. Users
+
+| Persona | Needs |
+|---|---|
+| **Operator** (tech lead / senior eng) | start runs, answer clarifications, approve architecture/merge/deploy, handle escalations — from dashboard, chat, or CLI, in minutes/day |
+| **Platform engineer** | deploy/scale the factory, configure agents/gates per project, add harnesses, monitor cost |
+| **Stakeholder** (PM / EM) | visibility into run status, cost, and what shipped; audit trail of who approved what |
+
+## 4. Goals / Non-goals
+
+**Goals**
+- G1: Idea → deployed feature for greenfield projects and brownfield features
+  with configurable human involvement per decision point.
+- G2: Durable execution — runs survive crashes, deploys, and multi-day waits.
+- G3: Structural quality enforcement — deterministic gates, cross-harness
+  review, contract validation.
+- G4: Cross-run learning via shared memory.
+- G5: Post-deploy maintenance loop (detect → repair through the factory).
+
+**Non-goals (v1)**
+- NG1: Replacing human product judgment — the factory executes decided work.
+- NG2: Multi-repo / monorepo-wide refactors spanning many services per run.
+- NG3: A spec-authoring UI (Spec Kit / OpenSpec conventions are consumed,
+  not reimplemented).
+- NG4: Self-modification — the factory does not change its own prompts,
+  validators, or gates autonomously.
+
+## 5. User stories
+
+- US-1: As an operator, I submit "Add SSO to our app" with a repo URL and
+  receive clarifying questions with suggested answers I can accept in one
+  click. *(AC: questions arrive in dashboard + Slack/MCP within one pipeline
+  cycle; accept-suggestion is a single action.)*
+- US-2: As an operator, I approve an architecture spec before any code is
+  written, and reject it with comments to trigger a revision. *(AC: rejection
+  with comments re-runs the architect with the feedback; approval is recorded
+  with identity + timestamp.)*
+- US-3: As an operator, when a task fails its fix loop, I receive an
+  escalation with the resolver's analysis and choose retry-with-guidance or
+  quarantine. *(AC: guidance text reaches the same harness session.)*
+- US-4: As a platform engineer, I set the merge gate to `soft` with a 0.95
+  confidence threshold for a low-risk repo, and `hard` for the billing repo.
+  *(AC: per-project YAML config; no code change.)*
+- US-5: As a platform engineer, I run the developer role on Claude Code and
+  the reviewer on OpenCode with a different model family. *(AC: registry
+  validator rejects same-family dev/reviewer configs.)*
+- US-6: As a stakeholder, I see every run's stage, cost to date, and pending
+  blockers in one screen. *(AC: fleet view + per-run spine.)*
+- US-7: As an operator, I ask my chat assistant "what's blocked in the
+  factory?" and approve a gate conversationally. *(AC: MCP tools expose
+  inbox + decisions.)*
+
+## 6. Functional requirements
+
+### Pipeline (FR-100)
+- FR-101: The pipeline SHALL execute the 14-stage DAG defined in SDLC-spec v2
+  §1 (intake → … → deploy → retro) as a durable workflow.
+- FR-102: Intake SHALL classify runs as greenfield or brownfield; brownfield
+  runs SHALL produce a `CodebaseMap` and a delta `Architecture`.
+- FR-103: Each stage SHALL be a pure function of hashed, declared inputs;
+  unchanged inputs SHALL be served from memoization.
+- FR-104: Dev tasks SHALL execute in dependency-ordered parallel waves, each
+  in an isolated git worktree with a dedicated branch.
+- FR-105: Review/analyze failures SHALL trigger a bounded Developer repair
+  loop (default 2) resuming the same harness session; QA failures a bounded
+  Resolver loop (default 3); exhaustion SHALL escalate to a human gate.
+- FR-106: The quality gate SHALL be deterministic: block on critical (config:
+  high) review/analysis issues, coverage < 0.80, or lint failure; the Analyst
+  SHALL verify every acceptance criterion traces to ≥ 1 test.
+
+### Agents (FR-200)
+- FR-201: Agents SHALL be declared in a versioned registry (`agents.yaml`):
+  role, kind (proposer|harness), model, prompt file, memory policy.
+- FR-202: Proposer agents SHALL emit schema-validated Pydantic artifacts;
+  validation failure SHALL re-prompt up to a configured retry count.
+- FR-203: Harness roles SHALL support `claude -p` and `opencode run` behind a
+  common adapter; adding a harness SHALL not change workflow code.
+- FR-204: The registry SHALL reject configurations where developer and
+  reviewer share both harness and model family (cross-harness review).
+- FR-205: Proposer decision boundaries (MAY / MUST NOT per SDLC-spec §2)
+  SHALL be enforced by validators where expressible.
+
+### Human-in-the-loop (FR-300)
+- FR-301: Gates (clarify, architecture, plan, merge, deploy, task
+  escalation, repair) SHALL each be configurable hard | soft | off per
+  project, with a confidence threshold for soft.
+- FR-302: Decisions SHALL arrive as idempotent signals (first decision wins)
+  from any surface: CLI, dashboard, MCP, Slack.
+- FR-303: Open gates SHALL push notifications (activity-based, retried) with
+  deep links; durable timers SHALL drive reminder, escalation-to-fallback,
+  and timeout policies.
+- FR-304: Every decision SHALL be recorded with decider (human|policy|
+  timeout), identity, comments, timestamp — queryable per run.
+- FR-305: A cross-run decision inbox SHALL list everything awaiting a human.
+
+### Memory (FR-400)
+- FR-401: The factory SHALL retain to Hindsight: stage summaries, fix-loop
+  experiences, human gate decisions, incidents; and recall per the agent's
+  configured banks/filters.
+- FR-402: Recall results SHALL be persisted as hashed `RecallSnapshot`
+  artifacts and treated as declared stage inputs.
+- FR-403: Memory writes SHALL be non-blocking (fire-and-forget with retries)
+  and pass a PII/secret scrub hook.
+- FR-404: A scheduled reflect job SHALL consolidate learnings nightly
+  (project) and cross-project (org).
+
+### Maintenance (FR-500)
+- FR-501: A per-project proactive workflow SHALL run the DAPER cycle on a
+  timer and on demand (nudge signal).
+- FR-502: Repair `code_fix` actions SHALL execute as brownfield factory runs
+  (children), never as direct patches; ops actions SHALL be risk-classed.
+- FR-503: Repair execution below the confidence threshold SHALL require
+  human approval via the standard gate contract; timeout SHALL mean inaction.
+
+### Interfaces (FR-600)
+- FR-601: Dashboard: fleet list, per-run stage spine, decision inbox with
+  one-click accept-suggestion, approve/reject with comments.
+- FR-602: MCP server exposing list/detail/inbox/answer/decide/start tools.
+- FR-603: CLI covering the same operations.
+- FR-604: All surfaces SHALL be stateless shells over Temporal queries and
+  signals (no interface-owned database).
+
+### Governance & ops (FR-700)
+- FR-701: Budgets (wall-clock, steps, LLM cost) per run; exhaustion SHALL
+  escalate, not silently stop. Cost SHALL aggregate harness JSON cost output
+  and model usage records.
+- FR-702: Payloads through workflow history SHALL stay under 2MB via
+  claim-check `ArtifactRef`s.
+- FR-703: Harness permissions SHALL be pinned in native config
+  (`--allowedTools` / `opencode.json`), not prompts.
+- FR-704: An observability export SHALL render run history to
+  `events.jsonl` + `report.html`.
+
+## 7. Non-functional requirements
+
+- NFR-1 **Durability:** no run state lost on worker/server restart; waits of
+  ≥ 7 days supported.
+- NFR-2 **Scale (v1 targets):** 50 concurrent runs, 200 concurrent harness
+  tasks across pooled workers; harness and proposer pools scale
+  independently.
+- NFR-3 **Latency:** operator surfaces reflect state within 5 s; decision
+  signals take effect within 2 s.
+- NFR-4 **Auditability:** every artifact, decision, retry, and cost item
+  reconstructible from history + artifact store.
+- NFR-5 **Security:** sandboxed worktrees; least-privilege harness tools;
+  secrets never in prompts, history, or memory (scrub hook); operator
+  surfaces authenticated.
+- NFR-6 **Reproducibility:** identical inputs + prompts + model + memories =
+  cache hit; any variation is an explicit, hashed input change.
+- NFR-7 **Portability:** self-hostable (Temporal OSS, Hindsight OSS,
+  Postgres, object store); no mandatory SaaS.
+
+## 8. Success criteria
+
+- SC-1: ≥ 80% of runs reach the merge gate without human intervention beyond
+  configured gates (no unplanned escalations).
+- SC-2: Median operator time per shipped feature ≤ 15 minutes of decisions.
+- SC-3: Fix-loop success (no escalation) ≥ 70% of failing tasks.
+- SC-4: Repeat-clarification rate (same question re-asked on same project)
+  trends to < 10% by run 10 — the memory efficacy metric.
+- SC-5: Zero deploys past a failed deterministic gate (hard invariant).
+- SC-6: Soft-gate auto-approvals overridden by humans < 5% when sampled —
+  the confidence calibration metric.
+
+## 9. Rollout
+
+| Phase | Scope | Exit criteria |
+|---|---|---|
+| P1 | Greenfield pipeline, CLI only, hard gates everywhere, no memory | one project shipped end-to-end |
+| P2 | Brownfield mode, dashboard + notifications, fix loops, cross-harness review | first brownfield feature merged via PR |
+| P3 | Hindsight memory + confidence-gated soft gates | SC-4 and SC-6 measurable |
+| P4 | MCP surface, maintenance loop (DAPER), fleet scale | SC-1..3 at target |
+
+## 10. Risks & mitigations
+
+| Risk | Mitigation |
+|---|---|
+| Agent confidence miscalibrated → bad auto-approvals | start all gates hard; calibration report in retro (SC-6) before enabling soft |
+| Coverage/tests gamed by same-factory authorship | criterion→test traceability check; cross-harness review; mutation testing later |
+| Harness CLI breaking changes (`claude`, `opencode`) | adapter layer + contract tests against pinned versions; fake harness in CI |
+| Memory poisoning (bad learnings compound) | validators outrank memory; retain scrubbing; reflect review; bank-level reset |
+| Cost runaway on fix loops | per-run budgets (FR-701), bounded loops, cost surfaced per run |
+| Temporal history bloat on long runs | claim-check discipline (FR-702), continue-as-new policies |
+
+## 11. Open questions
+
+- OQ-1: Clarifier confidence — numeric self-score vs. separate judge call?
+- OQ-2: Integration-branch strategy for merging parallel task branches
+  (sequential rebase vs. octopus merge) — prototype both in P2.
+- OQ-3: Per-run working-memory banks (`run:<id>`) vs. project-bank metadata
+  only — defer until P3 data exists.
+- OQ-4: Multi-tenant isolation (namespace per team?) — defer to fleet scale.

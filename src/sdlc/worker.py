@@ -1,0 +1,48 @@
+"""Worker entrypoint.
+
+Registers the FeatureWorkflow, plain activities, and the activities that
+TemporalAgent generates for each Pydantic AI agent (model requests, tool
+calls). Uses the Pydantic data converter so pipeline models serialize
+cleanly through Temporal.
+"""
+from __future__ import annotations
+
+import asyncio
+
+from temporalio.client import Client
+from temporalio.contrib.pydantic import pydantic_data_converter
+from temporalio.worker import Worker
+
+from .activities import (
+    create_worktree, deploy, open_pull_request, run_coding_task,
+    run_test_suite,
+)
+from .agents.roles import ALL_TEMPORAL_AGENTS
+from .workflows.feature import FeatureWorkflow
+
+TASK_QUEUE = "ai-sdlc"
+
+
+async def main() -> None:
+    client = await Client.connect(
+        "localhost:7233", data_converter=pydantic_data_converter)
+
+    agent_activities = [
+        act for ta in ALL_TEMPORAL_AGENTS for act in ta.temporal_activities
+    ]
+    worker = Worker(
+        client,
+        task_queue=TASK_QUEUE,
+        workflows=[FeatureWorkflow],
+        activities=[
+            create_worktree, run_coding_task, run_test_suite,
+            open_pull_request, deploy,
+            *agent_activities,
+        ],
+    )
+    print(f"worker running on task queue {TASK_QUEUE!r}")
+    await worker.run()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

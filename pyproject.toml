@@ -1,0 +1,12 @@
+[project]
+name = "ai-sdlc-temporal"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "temporalio>=1.9",
+    "pydantic>=2.7",
+    "pydantic-ai-slim[anthropic,openai,temporal]>=0.4",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
