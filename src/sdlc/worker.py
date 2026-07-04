@@ -14,8 +14,9 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker
 
 from .activities import (
-    create_worktree, deploy, merge_into_integration, open_pull_request,
-    run_coding_task, run_test_suite, setup_integration_branch,
+    create_worktree, deploy, evaluate_gate, merge_into_integration,
+    open_pull_request, run_coding_task, run_test_suite,
+    setup_integration_branch,
 )
 from .agents.roles import ALL_TEMPORAL_AGENTS
 from .workflows.feature import FeatureWorkflow
@@ -37,7 +38,7 @@ async def main() -> None:
         activities=[
             create_worktree, setup_integration_branch, merge_into_integration,
             run_coding_task, run_test_suite, open_pull_request, deploy,
-            *agent_activities,
+            evaluate_gate, *agent_activities,
         ],
     )
     print(f"worker running on task queue {TASK_QUEUE!r}")

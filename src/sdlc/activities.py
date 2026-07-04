@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from temporalio import activity
 
+from .gate import CheckResult, GateOverride, GateReport, evaluate_quality_gate
 from .harness.adapters import HARNESSES, HarnessRequest
 from .models import HarnessKind, HarnessRunResult, QAReport
 
@@ -240,3 +241,15 @@ async def deploy(inp: DeployInput) -> str:
     if proc.returncode != 0:
         raise RuntimeError(f"deploy failed: {out_b.decode()[-2000:]}")
     return out_b.decode(errors="replace")[-2000:]
+
+
+@dataclass
+class QualityGateInput:
+    checks: list[CheckResult]
+    overrides: list[GateOverride] | None = None
+
+
+@activity.defn
+async def evaluate_gate(inp: QualityGateInput) -> GateReport:
+    """Activity wrapper over the pure DeterministicQualityGate."""
+    return evaluate_quality_gate(inp.checks, inp.overrides)
