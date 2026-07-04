@@ -49,6 +49,15 @@ async def main() -> None:
     st = sub.add_parser("status")
     st.add_argument("--id", required=True)
 
+    from .benchmarks.cli import build_parser as _bench_parser
+    # delegate benchmark subcommands to the benchmarks.cli parser
+    bp = sub.add_parser("benchmark")
+    bsub = bp.add_subparsers(dest="bench_cmd", required=True)
+    br = bsub.add_parser("run"); br.add_argument("--case", required=True)
+    bd = bsub.add_parser("drift"); bd.add_argument("--since", type=int, default=168)
+    bf = bsub.add_parser("report"); bf.add_argument("--bench", required=True)
+    bf.add_argument("--source", default="golden")
+
     args = p.parse_args()
     client = await Client.connect(
         "localhost:7233", data_converter=pydantic_data_converter)
@@ -63,6 +72,19 @@ async def main() -> None:
         )
         print(f"started {handle.id}")
         return
+
+    if args.cmd == "benchmark":
+        from .benchmarks.cli import dispatch_report
+        if args.bench_cmd == "report":
+            print(dispatch_report(args.bench, args.source))
+            return
+        if args.bench_cmd == "run":
+            from .benchmarks.cli import _run_matrix
+            print(asyncio.run(_run_matrix(args.case)))
+            return
+        if args.bench_cmd == "drift":
+            print("drift requires a live Temporal client; see ARCHITECTURE.md §8.")
+            return
 
     handle = client.get_workflow_handle_for(FeatureWorkflow.run, args.id)
 
