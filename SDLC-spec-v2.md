@@ -11,10 +11,13 @@ The factory is a deterministic state machine over a fixed DAG, executed as a
 Temporal workflow. Each stage's agent *proposes* a schema-validated artifact;
 the orchestration layer validates, authorizes, executes, and records it.
 
-> **Rule 1 (revised): The model never acts outside a sandboxed, observed
+> **Rule 1 (revised): The model never acts outside a contained, observed
 > boundary.** Thinking agents propose structured artifacts and never touch
 > tools. Coding harnesses may act, but only inside a risk-classed, budgeted
-> sandbox (git worktree), and only their *diff* is admitted as an artifact.
+> *containment* — a git worktree gives the diff boundary, but isolation is
+> enforced by a restricted OS user + FS ACLs + egress policy (container at
+> scale), never by the worktree alone (§7). Only their *diff* is admitted as
+> an artifact.
 
 > **Rule 2 (new): Memory is I/O.** All Hindsight calls happen in Temporal
 > activities. A stage never reads memory implicitly: recall produces a
@@ -38,11 +41,11 @@ workflows on the `ai-sdlc` task queue.
 | 4 | clarify | Clarifier | TemporalAgent + **gate(clarify)** | `Clarifications` | ambiguities resolved; low-confidence ones routed to human |
 | 5 | architecture | Architect | TemporalAgent + **gate(architecture)** | `Architecture` | greenfield: stack+tree+contracts; brownfield: **delta** (added/modified/removed) grounded in `CodebaseMap` |
 | 6 | planning | Planner | TemporalAgent + **gate(plan)** | `TaskPlan` | acyclic DAG (Kahn validator, kept from v1); phased vertical slices |
-| 7 | code | Developer | **long-running activity** (harness) per task, parallel waves | `CodeArtifact` | diff committed in task worktree; honors contracts |
-| 8 | review | Reviewer | TemporalAgent activity | `ReviewReport` | contract conformance; blocking issues listed |
-| 9 | analyze | Analyst | TemporalAgent activity | `AnalysisReport` | cross-artifact consistency; criterion→test traceability |
+| 7 | code | Developer | **long-running activity** (harness) per task, parallel waves | `CodeArtifact` | worktree cut from the **running integration head** (ADR-14); diff measured against the task's branch point; merged back into integration on gate approval; honors contracts |
+| 8 | review | Reviewer | TemporalAgent activity *(clean-context proposer; optional harness deep-review tier)* | `ReviewReport` | contract conformance; blocking issues listed |
+| 9 | analyze | Analyst | TemporalAgent activity | `AnalysisReport` | cross-artifact consistency; *proposes* criterion→test mapping (gate enforces) |
 | 10 | qa | QA (+ Resolver) | activities (test run + repair loop) | `TestReport` | red→green within `MAX_REPAIR_ATTEMPTS` |
-| 11 | quality_gate | *(deterministic)* | local code + **gate(merge)** | `GateReport` | no critical review/analysis issues AND coverage ≥ 0.80 AND lint clean |
+| 11 | quality_gate | *(deterministic)* | local code + **gate(merge)** | `GateReport` | `DeterministicQualityGate`: absolute checks (lint, no critical security, build/integration) pass, advisory checks (coverage, traceability completeness, severity) pass-or-human-overridden |
 | 12 | deploy | DevOps | activity + **gate(deploy)** | `DeployPlan` → `DeployReport` | greenfield: smoke test; brownfield: PR merged + env deploy |
 | 13 | retro | *(deterministic + reflect)* | activity | `RunSummary` + memory retains | trace + metrics; learnings written to Hindsight |
 
@@ -99,9 +102,14 @@ agents:
     memory:
       recall: {banks: [project], top_k: 6, filters: {kind: [convention, gotcha]}}
   reviewer:
-    kind: harness
-    harness: opencode                        # cross-harness: never same as developer
-    model: openai/gpt-5.2
+    kind: proposer                           # clean-context reviewer, default
+    output_model: ReviewReport
+    model: openai/gpt-5.2                     # different family than developer's author model
+    prompt: prompts/reviewer.md
+    deep_review:                             # optional escalation tier
+      kind: harness                          # a harness that can read the tree, run greps
+      harness: opencode                      # cross-harness: never the developer's
+      trigger: {on: [large_diff, security_touch, low_confidence]}
     memory:
       recall: {banks: [project, org], top_k: 8, filters: {kind: review_finding}}
       retain: {bank: project, kind: review_finding}
@@ -113,9 +121,13 @@ with the declared `output_model` and wraps it in `TemporalAgent`; `kind:
 harness` routes the role through the harness activity. **Constraint carried
 over from v1 activity-naming rules:** agent names and toolset ids become
 Temporal activity names — adding agents is safe, renaming deployed ones is a
-breaking change. The registry validator enforces `reviewer.harness ≠
-developer.harness ∨ reviewer.model family ≠ developer.model family`
-(cross-harness review by construction).
+breaking change. The registry validator enforces the review-independence
+invariant: `reviewer.model family ≠ developer author-model family` (a
+clean-context proposer that shares no authoring bias), and, when the
+`deep_review` tier is configured, `reviewer.deep_review.harness ≠
+developer.harness` (cross-harness deep review by construction). The reviewer
+never resumes the developer's harness session — review starts from a clean
+context by definition.
 
 Schema-validation retries: v1's `MAX_VALIDATION_RETRIES` re-prompt loop is
 **deleted as custom code** — Pydantic AI's output validation retries provide
@@ -136,7 +148,7 @@ too many.
 | retry counters in the harness | activity `RetryPolicy` + bounded loops in workflow code |
 | loop budgets (steps, wall-clock, cost) | workflow timers + a `Budget` counter in workflow state; cost accumulated from harness `total_cost_usd` and TemporalAgent usage; exhaustion → escalate gate |
 | "stop cleanly, write ESCALATION.md" | **durable signal wait** (see §5); `ESCALATION.md` is still written, as the gate's human-readable payload |
-| input hashes for incremental re-runs | activity-level memoization keyed on `hash(inputs + prompt_file_content + model_id + recall_snapshot)` — *correction:* v1's hash omitted prompt and model, so prompt edits served stale artifacts |
+| input hashes for incremental re-runs | content-addressed activity cache keyed on `hash(inputs + prompt_file_content + model_id + recall_snapshot)`; memory is pinned per run by a **watermark** so re-runs inside a run are deterministic cache hits and a memory refresh is a deliberate watermark bump, not silent drift — *correction:* v1's hash omitted prompt and model, so prompt edits served stale artifacts. Auditability (full Temporal history, every artifact) is separate from memoization (skipping recompute): the cache never elides a *record*, only the recompute. |
 
 The v1 `Message` envelope is kept as the logical protocol (it documents
 hand-offs), but it is *derived from* Temporal history, not maintained
@@ -176,7 +188,17 @@ All v1 contracts kept, with three changes:
    - `CodebaseMap { modules[], contracts[], entry_points[], hot_spots[] }`
    - `RecallSnapshot { agent, bank_ids[], query, memory_ids[], content_ref, sha256 }`
      — the hashed memory input (Rule 2)
-   - `GateDecision { gate, approved, decided_by: human|policy|timeout, comments }`
+   - `GateDecision { gate, round, outcome: approve|reject|revise, decided_by:
+     human|policy|timeout, comments }` — *correction:* a boolean `approved`
+     cannot express "send back for revision," which is the common gate
+     outcome. `revise` re-enters the producing stage with the comments as
+     input; identity is `(gate, round)` so a late signal for a superseded
+     round is ignored (idempotency survives the revision loop). See §5.
+   - `HarnessRunResult` gains observability fields the budget and
+     context-ceiling logic depend on: `input_tokens, output_tokens,
+     context_window, compacted` — so the workflow can measure "near the
+     context ceiling" (`input_tokens > fraction × context_window`) rather
+     than guess, and detect a harness that silently compacted mid-task.
 
 Enum fix carried from review: `TaskStatus` drops the duplicate — 
 `pending | running | done | blocked | failed` (no separate `in_progress`).
@@ -205,6 +227,26 @@ Human decisions arrive as Temporal signals (`submit_gate_decision`,
 `answer_question`) from any surface (CLI, dashboard, Slack). Every decision
 is **retained to Hindsight** (§6) — human feedback is the highest-value
 learning signal the factory produces.
+
+**Gate outcomes and the revision loop.** A gate resolves to one of
+`approve | reject | revise` (§4). `approve` advances; `reject` terminates the
+branch (quarantine/abandon); `revise` re-enters the producing stage with the
+gate comments as an added input and increments `round`. The revision loop is
+bounded (`MAX_GATE_ROUNDS`, default 2) — exhaustion escalates to a hard human
+gate rather than looping forever. Because gate identity is `(gate, round)`, a
+decision signal that names a stale round is dropped: no double-advance, no
+lost revision.
+
+**Merge-gate precedence (the merge row above, expanded).** The merge gate is
+not a single verdict. `DeterministicQualityGate` runs first and classifies
+each check as **absolute** (lint clean, no critical security finding,
+build/integration green) or **advisory** (coverage, criterion→test
+traceability completeness, review severity). A failed *absolute* check blocks
+the merge unconditionally — no human, no `soft` policy, can wave it through.
+A failed *advisory* check blocks only until a human override is recorded (an
+audited `GateDecision`, retained). The LLM-produced `MergeVerdict` is
+advisory input to that gate, never the decider: **models emit evidence,
+deterministic code decides, humans override only audited advisory checks.**
 
 ---
 
@@ -257,15 +299,33 @@ per task under `runs/<id>/worktrees/<task>/`), hook layer (`pre_tool`,
 hallucination control via Reviewer contract check, failures-become-validators.
 
 Deltas:
-- **Harness sandboxing:** `claude -p` runs with explicit `--allowedTools` and
-  a permission mode; `opencode run` with a locked `opencode.json`
-  (`permission`, `tools`) — the risk-class policy expressed in each harness's
-  native config, not trusted to prompts.
-- **Gate threshold configurable:** blocking severity defaults to `critical`,
-  projects may set `high`.
-- **Coverage honesty:** the Analyst must verify every acceptance criterion
-  traces to ≥1 test (v1's coverage ≥ 0.80 alone is gameable when the same
-  factory writes code and tests).
+- **Harness containment (a worktree is not a sandbox).** Isolation is
+  *tiered*: at P1, a restricted OS user + filesystem ACLs scoping writes to
+  the worktree + an egress policy; at fleet scale, a container per run. The
+  harness environment is an **allowlist, not a passthrough** — curated
+  `PATH`/`HOME`/toolchain vars plus deliberately-injected repo-scoped,
+  short-TTL credentials (GitHub App installation token or fine-grained PAT,
+  never org-wide), never the worker's full environment. Destructive-action
+  denial lives in the **`pre_tool` hook** (deny/escalate out-of-worktree
+  writes, `rm -rf`, non-allowlisted network) — not in `--allowedTools`, which
+  is a capability list, not a guardrail. Egress is restricted to the model API
+  and the git remote. Harness-native config (`--allowedTools` + permission
+  mode; locked `opencode.json`) is the *inner* layer, not the only one.
+- **Secrets never enter prompts, history, or memory.** Credentials are
+  injected into the harness environment at run time and scrubbed from any
+  artifact, log, or retain payload (`pre_retain`, §6).
+- **Merge gate = per-check classification, not one threshold.** The
+  `DeterministicQualityGate` splits checks into **absolute** (lint, no
+  critical security finding, build/integration green — never overridable) and
+  **advisory** (coverage, traceability completeness, review severity —
+  overridable only by an audited human `GateDecision`). Blocking severity for
+  the *advisory* review-finding check defaults to `critical`; projects may set
+  `high`. See §5.
+- **Coverage honesty (traceability is proposed, then enforced).** The Analyst
+  *proposes* a criterion→test mapping; the gate *enforces* that every
+  acceptance criterion traces to ≥1 test, and prefers **diff-scoped** coverage
+  over a repo-wide ratio (v1's coverage ≥ 0.80 alone is gameable when the same
+  factory writes code and tests, and dilutes on large repos).
 - **Budgets** include LLM spend, summed from harness JSON cost output and
   TemporalAgent usage records; visible in the run summary and in Temporal
   search attributes for fleet-level queries.

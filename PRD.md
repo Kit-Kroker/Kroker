@@ -65,9 +65,10 @@ Teams adopting coding agents today face four gaps:
   click. *(AC: questions arrive in dashboard + Slack/MCP within one pipeline
   cycle; accept-suggestion is a single action.)*
 - US-2: As an operator, I approve an architecture spec before any code is
-  written, and reject it with comments to trigger a revision. *(AC: rejection
-  with comments re-runs the architect with the feedback; approval is recorded
-  with identity + timestamp.)*
+  written, or send it back with comments for revision. *(AC: a `revise`
+  outcome re-runs the architect with the feedback as input, bounded by
+  `MAX_GATE_ROUNDS`; `reject` abandons the branch; approval is recorded with
+  identity + timestamp.)*
 - US-3: As an operator, when a task fails its fix loop, I receive an
   escalation with the resolver's analysis and choose retry-with-guidance or
   quarantine. *(AC: guidance text reaches the same harness session.)*
@@ -91,15 +92,29 @@ Teams adopting coding agents today face four gaps:
 - FR-102: Intake SHALL classify runs as greenfield or brownfield; brownfield
   runs SHALL produce a `CodebaseMap` and a delta `Architecture`.
 - FR-103: Each stage SHALL be a pure function of hashed, declared inputs;
-  unchanged inputs SHALL be served from memoization.
+  unchanged inputs SHALL be served from a content-addressed cache. Memory
+  SHALL be pinned per run by a watermark so memoization is deterministic and a
+  memory refresh is a deliberate watermark bump. Memoization (skipping
+  recompute) SHALL never elide an audit *record* — full history is retained
+  regardless of cache hits.
 - FR-104: Dev tasks SHALL execute in dependency-ordered parallel waves, each
-  in an isolated git worktree with a dedicated branch.
+  in an isolated git worktree cut from the **running integration head**
+  (ADR-14), with a dedicated branch merged back into integration on gate
+  approval; a task's diff SHALL be measured against its own branch point, not
+  the run's base.
 - FR-105: Review/analyze failures SHALL trigger a bounded Developer repair
   loop (default 2) resuming the same harness session; QA failures a bounded
   Resolver loop (default 3); exhaustion SHALL escalate to a human gate.
-- FR-106: The quality gate SHALL be deterministic: block on critical (config:
-  high) review/analysis issues, coverage < 0.80, or lint failure; the Analyst
-  SHALL verify every acceptance criterion traces to ≥ 1 test.
+- FR-106: The quality gate SHALL be deterministic and classify each check as
+  **absolute** or **advisory**. Absolute checks (lint clean, no critical
+  security finding, build/integration green) SHALL block the merge
+  unconditionally — no policy or human override. Advisory checks (coverage,
+  criterion→test traceability completeness, review/analysis severity — config:
+  `high`) SHALL block only until an audited human `GateDecision` override is
+  recorded. Coverage SHALL be **diff-scoped**, not a repo-wide ratio. The
+  Analyst SHALL *propose* the criterion→test mapping; the gate SHALL *enforce*
+  that every acceptance criterion traces to ≥ 1 test. The LLM `MergeVerdict`
+  SHALL be advisory input to the gate, never the decider.
 
 ### Agents (FR-200)
 - FR-201: Agents SHALL be declared in a versioned registry (`agents.yaml`):
@@ -108,22 +123,31 @@ Teams adopting coding agents today face four gaps:
   validation failure SHALL re-prompt up to a configured retry count.
 - FR-203: Harness roles SHALL support `claude -p` and `opencode run` behind a
   common adapter; adding a harness SHALL not change workflow code.
-- FR-204: The registry SHALL reject configurations where developer and
-  reviewer share both harness and model family (cross-harness review).
+- FR-204: The reviewer SHALL default to a clean-context proposer whose model
+  family differs from the developer's author-model family; the registry SHALL
+  reject configurations that violate this. When an optional harness
+  deep-review tier is configured, it SHALL run a different harness than the
+  developer's. The reviewer SHALL NOT resume the developer's harness session.
 - FR-205: Proposer decision boundaries (MAY / MUST NOT per SDLC-spec §2)
   SHALL be enforced by validators where expressible.
 
 ### Human-in-the-loop (FR-300)
 - FR-301: Gates (clarify, architecture, plan, merge, deploy, task
   escalation, repair) SHALL each be configurable hard | soft | off per
-  project, with a confidence threshold for soft.
-- FR-302: Decisions SHALL arrive as idempotent signals (first decision wins)
-  from any surface: CLI, dashboard, MCP, Slack.
+  project, with a confidence threshold for soft. A gate SHALL resolve to one
+  of `approve | reject | revise`; `revise` SHALL re-enter the producing stage
+  with the comments as input, bounded by `MAX_GATE_ROUNDS` (default 2) before
+  escalating to a hard human gate.
+- FR-302: Decisions SHALL arrive as idempotent signals from any surface (CLI,
+  dashboard, MCP, Slack); gate identity SHALL be `(gate, round)` so the first
+  decision per round wins and a signal for a superseded round is ignored.
 - FR-303: Open gates SHALL push notifications (activity-based, retried) with
   deep links; durable timers SHALL drive reminder, escalation-to-fallback,
   and timeout policies.
-- FR-304: Every decision SHALL be recorded with decider (human|policy|
-  timeout), identity, comments, timestamp — queryable per run.
+- FR-304: Every decision SHALL be recorded with outcome (approve|reject|
+  revise), decider (human|policy|timeout), identity `(gate, round)`, comments,
+  timestamp — queryable per run. Advisory-check overrides SHALL be recorded as
+  audited decisions.
 - FR-305: A cross-run decision inbox SHALL list everything awaiting a human.
 
 ### Memory (FR-400)
@@ -159,8 +183,15 @@ Teams adopting coding agents today face four gaps:
   and model usage records.
 - FR-702: Payloads through workflow history SHALL stay under 2MB via
   claim-check `ArtifactRef`s.
-- FR-703: Harness permissions SHALL be pinned in native config
-  (`--allowedTools` / `opencode.json`), not prompts.
+- FR-703: Harness containment SHALL be tiered: at P1 a restricted OS user +
+  filesystem ACLs (writes scoped to the worktree) + an egress policy
+  (model API and git remote only); at fleet scale a container per run. The
+  harness environment SHALL be an **allowlist** (curated toolchain vars +
+  injected repo-scoped, short-TTL credentials), never the worker's full
+  environment. Destructive-action denial (out-of-worktree writes, `rm -rf`,
+  non-allowlisted network) SHALL be enforced in the `pre_tool` hook, with
+  native config (`--allowedTools` / `opencode.json`) as the inner layer — a
+  worktree is not a sandbox.
 - FR-704: An observability export SHALL render run history to
   `events.jsonl` + `report.html`.
 
@@ -175,11 +206,17 @@ Teams adopting coding agents today face four gaps:
   signals take effect within 2 s.
 - NFR-4 **Auditability:** every artifact, decision, retry, and cost item
   reconstructible from history + artifact store.
-- NFR-5 **Security:** sandboxed worktrees; least-privilege harness tools;
-  secrets never in prompts, history, or memory (scrub hook); operator
-  surfaces authenticated.
-- NFR-6 **Reproducibility:** identical inputs + prompts + model + memories =
-  cache hit; any variation is an explicit, hashed input change.
+- NFR-5 **Security:** tiered harness containment (restricted OS user + FS
+  ACLs + egress policy now, container at scale — a worktree is not a sandbox);
+  environment allowlist, not passthrough; repo-scoped, short-TTL credentials
+  only (never org-wide); least-privilege harness tools with destructive-action
+  denial in the `pre_tool` hook; secrets never in prompts, history, or memory
+  (scrub hook); operator surfaces authenticated.
+- NFR-6 **Reproducibility & auditability (distinct concerns):** identical
+  inputs + prompts + model + watermarked memories = cache hit; any variation
+  is an explicit, hashed input change. Auditability is independent of
+  memoization — every artifact, decision, and cost item stays reconstructible
+  from history even when recompute was skipped.
 - NFR-7 **Portability:** self-hostable (Temporal OSS, Hindsight OSS,
   Postgres, object store); no mandatory SaaS.
 
@@ -191,7 +228,9 @@ Teams adopting coding agents today face four gaps:
 - SC-3: Fix-loop success (no escalation) ≥ 70% of failing tasks.
 - SC-4: Repeat-clarification rate (same question re-asked on same project)
   trends to < 10% by run 10 — the memory efficacy metric.
-- SC-5: Zero deploys past a failed deterministic gate (hard invariant).
+- SC-5: Zero deploys past a failed **absolute** gate check; zero *unattended*
+  deploys past any failed check (a failed advisory check requires an audited
+  human override) — the hard invariant.
 - SC-6: Soft-gate auto-approvals overridden by humans < 5% when sampled —
   the confidence calibration metric.
 
@@ -218,8 +257,11 @@ Teams adopting coding agents today face four gaps:
 ## 11. Open questions
 
 - OQ-1: Clarifier confidence — numeric self-score vs. separate judge call?
-- OQ-2: Integration-branch strategy for merging parallel task branches
-  (sequential rebase vs. octopus merge) — prototype both in P2.
+- OQ-2: **Resolved (ADR-14):** parallel task branches integrate onto a
+  **running integration branch** — each task's worktree is cut from the
+  current integration head and merged back on gate approval, so later tasks
+  build on earlier merged work rather than a stale base. (Conflict-handling
+  policy on merge-back remains to be tuned in P2.)
 - OQ-3: Per-run working-memory banks (`run:<id>`) vs. project-bank metadata
   only — defer until P3 data exists.
 - OQ-4: Multi-tenant isolation (namespace per team?) — defer to fleet scale.

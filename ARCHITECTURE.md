@@ -105,10 +105,35 @@ Projects may enable dependency-ordered `waves`; the planner declares
 module/file overlap and overlapping tasks serialize regardless. Read-only
 work (review, analysis) always parallelizes freely.
 
-**Incremental re-runs:** each stage is memoized on
-`hash(inputs + prompt file + model id + recall snapshot)`. Editing a prompt
-or learning a new memory legitimately invalidates; anything else is a cache
-hit.
+**Integration by running branch (ADR-14):** worktrees isolate but do not
+compose — a dependent task must *see* its predecessors' code, not just a
+prose handoff. So each run holds one `sdlc/<run_id>/integration` branch,
+created from `base` at run start, that accumulates completed task work. A
+task branches from the *current integration head* (in wave mode, the head
+frozen at wave start); on clean-context QA pass, an activity merges the task
+branch back into integration. The merge-gate PR is `integration → base` —
+resolving the parallel-branch/one-PR question (was OQ-2) as continuous
+integration onto a run branch. Validator diffs anchor to the branch point,
+not `base`, so a dependent task's diff shows only its own change. A wave-mode
+merge conflict is a *falsified `overlaps` declaration* — now detectable →
+serialize the loser or escalate. Integration fixes visibility, **not**
+divergence; divergence remains serial-by-default's job.
+
+**Incremental re-runs — auditability vs memoization (ADR-5):** two things
+the specs used to conflate. *Auditability* is the invariant: persisted
+artifacts, RecallSnapshots, and Temporal history reconstruct every run.
+*Memoization* is a best-effort dev-loop optimization — re-running a fixed
+idea after a prompt/config edit skips unchanged **upstream** stages (its ROI
+is bounded: the expensive code stage is usually downstream of the edit and
+re-runs anyway). Temporal gives none of this for free, so a `memoization`
+module owns a content-addressed activity cache keyed on
+`hash(activity + inputs + prompt file + model id + upstream recall snapshot ref)`,
+backed by the artifact store (hash-named keys, no new infra). Recall is
+itself a cached activity keyed with a **per-run memory watermark**: reusing
+the persisted RecallSnapshot *is* the freeze, so nightly `reflect` churn no
+longer busts caches. Default re-run reuses the watermark (reproducible,
+cache-warm); an explicit "refresh memory" advances it. This also removes any
+need for Hindsight point-in-time reads.
 
 ## 4. Agent architecture
 
@@ -116,8 +141,8 @@ Agent classes map to Temporal constructs (this is a rule, not a convention):
 
 | Class | Construct | Ours |
 |---|---|---|
-| Automation (one LLM call) | activity via TemporalAgent | Product, Clarifier, Architect, Planner, Analyst, QA analyst, quality-gate verdict, detector, repair planner |
-| Long-running (tools, iteration) | heartbeating activity | Developer / Resolver / reviewer harness runs |
+| Automation (one LLM call) | activity via TemporalAgent | Product, Clarifier, Architect, Planner, Reviewer, Analyst, QA analyst, MergeVerdict, detector, repair planner |
+| Long-running (tools, iteration) | heartbeating activity | Developer / Resolver harness runs; optional Reviewer *deep-review* tier |
 | Conversational | external client ↔ workflow signals/queries | operators via MCP/dashboard |
 | Proactive | workflow (timer loop / Schedule) | MaintenanceWorkflow, nightly reflect |
 | Routing | deterministic workflow branch | intake (greenfield / brownfield / repair) |
@@ -148,16 +173,26 @@ attributed per role per run (SC-7 feeds tiering decisions):
 |---|---|---|
 | Architect, Planner, repair planner | strategic reasoning | frontier reasoning model |
 | Developer, Resolver | code fluency + tools | code-optimized (harness-native) |
-| Reviewer, QA analyst | adversarial instruction-following | **different provider/family than developer** |
+| Reviewer, QA analyst | adversarial instruction-following | **different model family than the developer's authoring model** |
 | Clarifier, detector, Cartographer triage | narrow classification/extraction | small fast model |
 
 **Harness abstraction:** one protocol, two adapters.
 `claude -p <prompt> --output-format json --allowedTools … --resume <sid>` and
 `opencode run [-m provider/model] [-s sid] [--attach url] --format json
 <prompt>`. Adapters normalize to `HarnessRunResult{session_id, exit_code,
-summary, cost_usd, commit_sha}`. Sessions resume across fix-loop attempts,
-preserving the agent's working context. Permissions live in native harness
-config, not prompts.
+summary, cost_usd, commit_sha, input_tokens, output_tokens, context_window,
+compacted}` — the token fields (already present in the harness result JSON)
+make the ADR-13 context ceiling measurable rather than a blind resume count.
+Sessions resume across fix-loop attempts, preserving the agent's working
+context. Permissions live in native harness config, not prompts.
+
+**Reviewer is a clean-context proposer by default (ADR-6/ADR-12):** it emits
+a typed `ReviewReport` from orchestrator-assembled inputs (materialized diff
++ frozen contract + test output + scoped `CodebaseMap` extracts) and holds no
+tools, repo, or worker session — so it *cannot* wander or be polluted. The
+doer has tools; the judge does not. A harness **deep-review** tier is
+configurable per project/task for high-risk work; when enabled, the
+harness-inequality clause re-applies to that path.
 
 ## 5. Human-in-the-loop architecture
 
@@ -170,11 +205,20 @@ policy: hard  -> always wait for human
         off   -> proceed
 ```
 
+A decision carries an **outcome ∈ {approve, reject, revise}** (not a bare
+boolean): `approve` proceeds, `reject` is terminal, `revise` feeds `guidance`
+back into the agent's next-round inputs. Revisable gates (clarify,
+architecture, plan) run a **bounded revision loop**; exhaustion escalates to
+a hard accept-anyway / abandon gate. This one contract collapses
+architecture-revise, task-retry-with-guidance, and repair-approval into a
+single shape (ADR-4).
+
 Mechanics: entering a gate publishes an entry to the `pending_decisions`
 query, fires a notify activity (Slack/email with deep links, retried), and
-parks on `wait_condition`. Signals (`submit_gate_decision`,
-`answer_question`) are idempotent — first decision wins — so multiple
-surfaces cannot conflict. Durable timers drive reminders, fallback-approver
+parks on `wait_condition`. Gate identity is `(gate_name, round)` so each
+revision round is its own wait. Signals (`submit_gate_decision`,
+`answer_question`) are idempotent — first decision *per round* wins — so
+multiple surfaces cannot conflict and re-review is still possible. Durable timers drive reminders, fallback-approver
 escalation, and timeout policy (soft clarifications may auto-accept the
 suggested answer; everything else times out to rejection/inaction). Every
 decision records decider, identity, comments, timestamp in history, and is
@@ -262,20 +306,38 @@ flowchart LR
 Two task queues split the fleet: lightweight proposer/support workers scale
 on LLM throughput; heavy harness workers (harness CLIs, language toolchains,
 repo credentials, worktree disk) scale on coding concurrency — and hold the
-only credentials that can touch repos. Everything stateless is disposable;
+only credentials that can touch repos, repo-scoped and short-lived. Each
+harness run is contained per the §10 tier (restricted OS user at P1,
+container at fleet scale). Everything stateless is disposable;
 backup surface = Temporal DB + Hindsight Postgres + object store.
 
 ## 10. Security & governance
 
-- Worktree sandbox per task; generated code confined under `runs/<id>/`.
-- Least-privilege harness tools pinned in native config; risk-classed
-  actions: reads free, workspace writes checked, destructive denied →
-  escalate.
+- **Harness containment, tiered — a worktree is not a sandbox** (same host,
+  FS, and env; it prevents file collisions, not escape). P1: harness runs as
+  a restricted OS user with FS ACLs (worktree-only) + egress policy. Fleet
+  scale: container per run (rootless, read-only base FS, worktree bind-mount
+  rw, egress-restricted). Generated code confined under `runs/<run_id>/`.
+- **Env allowlist, not passthrough:** the harness subprocess receives a
+  curated env (PATH, HOME, toolchain vars) + deliberately-injected,
+  repo-scoped, short-TTL credentials only — never the worker's full
+  environment. The env is a larger secret channel than prompts.
+- **Risk classing lives in the `pre_tool` hook, not `--allowedTools`** (too
+  coarse to express "reads free / writes checked / destructive denied"): the
+  hook inspects the concrete command and denies/escalates out-of-worktree
+  writes, `rm -rf`, and non-allowlisted network. Egress is restricted to the
+  model API + git remote.
 - Secrets: never in prompts, history, or memory; scrub hook on retain;
-  harness credentials only on harness workers.
+  harness credentials only on harness workers, repo-scoped and short-lived.
 - Budgets per run (steps, wall-clock, cost) — exhaustion escalates.
-- Deterministic quality gate cannot be overridden by any agent, memory, or
-  soft-gate policy (SC-5 invariant).
+- **`DeterministicQualityGate` decides on typed evidence; `MergeVerdict`
+  (LLM) only advises the soft merge path and only on an already-passing
+  build.** Checks are classed *absolute* (lint, no critical security finding,
+  build/integration integrity — never overridable) or *advisory* (coverage,
+  traceability completeness, non-critical severity — human-overridable with
+  recorded justification, retained as calibration). SC-5: **zero deploys past
+  a failed absolute check; zero *unattended* deploys past any failed check.**
+  No agent, memory, or soft-gate policy overrides any check.
 - Full audit: Temporal history + artifact store reconstruct every decision;
   exported to `events.jsonl` / `report.html`.
 - **Prompt lifecycle:** prompts are managed, versioned assets in git — edit
@@ -320,16 +382,26 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
   small/greenfield and test files; harness-mode (diff in worktree) for real
   iterative work. Downstream consumers see one materialized diff.
 - **ADR-4 Gates as policy-driven durable signal waits** (hard/soft/off +
-  confidence threshold). One mechanism serves approvals, questions,
-  escalations, repairs — one inbox everywhere. *Trade-off:* calibrated
-  confidence is a prompt-engineering liability → monitored via SC-6.
-- **ADR-5 Hindsight as advisory memory with hashed recall snapshots.**
-  Learning without sacrificing reproducibility or contract authority.
-  *Trade-off:* extra artifact per stage; snapshot in cache key means memory
-  churn reduces cache hits (accepted: correctness over cache rate).
-- **ADR-6 Cross-harness review by construction.** Registry validator rejects
-  same harness+family dev/reviewer. Structural, not prompt-based, defense
-  against self-review collusion.
+  confidence threshold). A decision's outcome is `{approve, reject, revise}`,
+  and gate identity is `(gate_name, round)` so `revise` loops back
+  (bounded) while idempotency holds per round. One mechanism serves
+  approvals, questions, escalations, repairs, *and revisions* — one inbox
+  everywhere. *Trade-off:* calibrated confidence is a prompt-engineering
+  liability → monitored via SC-6.
+- **ADR-5 Hindsight as advisory memory; auditability vs memoization split.**
+  Auditability (persisted artifacts + snapshots + history) is the invariant;
+  memoization is a best-effort dev-loop cache. A per-run memory watermark
+  pins recall — reusing the persisted snapshot *is* the freeze — so memory is
+  refreshed on purpose, not busted by nightly `reflect`. *Trade-off:* extra
+  artifact per stage; the memoization module and watermark are real (if
+  small) components Temporal does not provide.
+- **ADR-6 Anti-collusion review by construction.** The real invariant is
+  *different model family than the developer's authoring model*; the reviewer
+  is a clean-context proposer (no tools/repo/session) by default, so the doer
+  has tools and the judge does not. The registry validator enforces
+  model-family inequality; when the optional harness *deep-review* tier is
+  enabled, it additionally rejects same harness+family. Structural, not
+  prompt-based.
 - **ADR-7 Repairs execute through the factory.** MaintenanceWorkflow starts
   brownfield children for code fixes; autonomy never bypasses gates.
 - **ADR-8 Interfaces are stateless signal/query shells.** No interface DB;
@@ -357,9 +429,20 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
   implementation defaults to serial with declared-overlap serialization in
   wave mode; agent context is handles + scoped extracts with per-role
   budgets, and sessions are resume-bounded (fresh session + structured
-  handoff past the ceiling — compaction is failure). *Trade-off:* lower
-  throughput per run and stricter prompt-assembly plumbing, in exchange for
-  design consistency and sustained reasoning quality over long runs.
+  handoff past the ceiling — compaction is failure). The ceiling is
+  *measured*: `input_tokens > fraction × context_window` (from the harness
+  result JSON), with `max_session_resumes` as a hard fallback — not a blind
+  resume count. *Trade-off:* lower throughput per run and stricter
+  prompt-assembly plumbing, in exchange for design consistency and sustained
+  reasoning quality over long runs.
+- **ADR-14 Integration by running branch.** Worktrees isolate but do not
+  compose; a `sdlc/<run_id>/integration` branch accumulates completed task
+  work, tasks branch from its head, and merge back on QA pass. The merge PR
+  is `integration → base` (resolves the old OQ-2). Validator diffs anchor to
+  the branch point; a wave-mode merge conflict is a falsified `overlaps`
+  declaration → serialize or escalate. *Trade-off:* integration fixes
+  visibility, not divergence (still serial-by-default's job); adds a
+  merge-back activity and run-scoped worktree paths.
 
 ## 13. Technology summary
 
@@ -413,7 +496,8 @@ agentic-sdlc/
 │   │   └── retro.py           #   scheduled reflect
 │   ├── activities/            # all non-determinism
 │   │   ├── harness.py         #   run_coding_task (heartbeats, checkpoint commits, cost)
-│   │   ├── repo.py            #   clone, worktree, get_task_diff, PR
+│   │   ├── repo.py            #   clone, worktree (from integration head),
+│   │   │                      #   get_task_diff (vs branch point), merge_into_integration, PR
 │   │   ├── qa.py              #   tests, coverage, lint
 │   │   ├── memory.py          #   recall_snapshot, retain, reflect
 │   │   ├── cartography.py     #   brownfield repo analysis (programmatic access)
@@ -422,7 +506,8 @@ agentic-sdlc/
 │   ├── harness/               # CodingHarness protocol; claude_code.py, opencode.py
 │   ├── agents/                # loader.py (agents.yaml → TemporalAgent), deterministic.py
 │   ├── memory/                # Hindsight client wrapper, scrub.py
-│   ├── hooks/                 # risk classes, budgets
+│   ├── memoization/           # content-addressed activity cache; per-run watermark (ADR-5)
+│   ├── hooks/                 # risk classes (pre_tool), budgets, env allowlist
 │   ├── observability/         # history → events.jsonl/report.html; trajectory export (P5)
 │   ├── worker.py              # two queues: ai-sdlc, ai-sdlc-harness
 │   └── cli.py
