@@ -45,3 +45,9 @@ def test_render_markdown_has_headers_and_rows(tmp_path):
 def test_render_markdown_handles_empty():
     md = render_markdown([])
     assert "no records" in md.lower()
+
+
+def test_aggregate_sort_is_deterministic_on_model_tie():
+    recs = [_rec("beta", None, 1.0, 100), _rec("alpha", None, 1.0, 100)]
+    sums = aggregate("b1", CompositeWeights(), _records=recs)
+    assert [s.model for s in sums] == ["alpha", "beta"]

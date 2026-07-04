@@ -17,6 +17,7 @@ def aggregate(bench_run_id: str, weights: CompositeWeights | None = None,
         compute_summaries(records, weights),
         key=lambda s: (s.case_id, s.stage,
                        s.harness.value if s.harness else "",
+                       s.model,
                        -(s.composite or -1)),
     )
 
