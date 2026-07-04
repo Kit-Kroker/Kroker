@@ -18,7 +18,7 @@ from .activities import (
     run_coding_task, run_test_suite, setup_integration_branch,
 )
 from .agents.roles import ALL_TEMPORAL_AGENTS
-from .benchmarks.judge import judge_artifact
+from .benchmarks.judge import judge_artifact, load_case_assets
 from .benchmarks.recorder import record_benchmark
 from .benchmarks.report import finalize_benchmark_report
 from .benchmarks.workflow import BenchmarkWorkflow
@@ -41,7 +41,8 @@ async def main() -> None:
         activities=[
             create_worktree, setup_integration_branch, merge_into_integration,
             run_coding_task, run_test_suite, open_pull_request, deploy,
-            record_benchmark, judge_artifact, finalize_benchmark_report,
+            record_benchmark, judge_artifact, load_case_assets,
+            finalize_benchmark_report,
             *agent_activities,
         ],
     )

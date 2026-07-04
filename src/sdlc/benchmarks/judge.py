@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable
 
 from temporalio import activity
@@ -22,6 +23,7 @@ class JudgeInput:
     artifact_json: str          # the stage's emitted artifact, serialized
     rubric: str                 # rubric markdown/text for this case+stage
     author_model: str           # to assert cross-family at call time
+    judge_model: str | None = None     # model the judge should USE (A1)
 
 
 JudgeFn = Callable[[JudgeInput], str]
@@ -62,3 +64,31 @@ async def judge_artifact(inp: JudgeInput) -> QualityScore:
 
 # test convenience
 judge_artifact.sync = _judge_sync   # type: ignore[attr-defined]
+
+
+# Repo root, derived from this module's location (editable install resolves
+# __file__ to the worktree source). Used to locate golden-case dirs:
+#   <root>/benchmarks/cases/<case_id>/
+_CASES_DIR = Path(__file__).resolve().parents[3] / "benchmarks" / "cases"
+
+
+@activity.defn
+async def load_case_assets(case_id: str,
+                           rubric_files: dict[str, str]) -> dict[str, str]:
+    """Read each rubric file and return {stage: rubric_text}.
+
+    ``rubric_files`` is the CaseSpec.rubrics map (stage -> file path). Paths
+    may be absolute or relative to the case dir
+    (``benchmarks/cases/<case_id>/``). A missing file is skipped — that stage
+    simply won't be judged — so the workflow never crashes on a absent rubric.
+
+    All filesystem I/O lives here (the activity); the workflow passes only
+    serializable args (``case_id`` + the path map).
+    """
+    case_dir = _CASES_DIR / case_id
+    out: dict[str, str] = {}
+    for stage, rel in rubric_files.items():
+        p = Path(rel) if Path(rel).is_absolute() else case_dir / rel
+        if p.exists():
+            out[stage] = p.read_text(encoding="utf-8")
+    return out

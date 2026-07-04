@@ -7,6 +7,12 @@ def test_default_pipeline_config_has_no_benchmark():
     assert cfg.benchmark.bench_run_id is None
 
 
+def test_benchmark_config_rubric_and_judge_model_default():
+    bc = BenchmarkConfig()
+    assert bc.rubrics == {}
+    assert bc.judge_model is None
+
+
 def test_pipeline_config_accepts_benchmark_fields():
     cfg = PipelineConfig()
     cfg.benchmark = BenchmarkConfig(case_id="add-login",

@@ -21,6 +21,7 @@ with workflow.unsafe.imports_passed_through():
     from ..models import (BenchmarkConfig, HarnessKind, IdeaBrief,
                           PipelineConfig, ProjectMode, RoleConfig)
     from ..workflows.feature import FeatureWorkflow
+    from .judge import load_case_assets
     from .matrix import expand_matrix
     from .models import CaseSpec
     from .report import finalize_benchmark_report
@@ -33,7 +34,8 @@ RECORD_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
 
 def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
                  harness: HarnessKind, model: str,
-                 bench_run_id: str) -> PipelineConfig:
+                 bench_run_id: str,
+                 rubrics: dict[str, str] | None = None) -> PipelineConfig:
     """Build a per-cell PipelineConfig: every role overridden to
     (harness, model), benchmark fields set so FeatureWorkflow records."""
     cfg = base.model_copy(deep=True)
@@ -43,8 +45,9 @@ def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
                          extra_args=rc.extra_args)
         for role, rc in base.roles.items()
     }
-    cfg.benchmark = BenchmarkConfig(case_id=spec.case_id,
-                                    bench_run_id=bench_run_id)
+    cfg.benchmark = BenchmarkConfig(
+        case_id=spec.case_id, bench_run_id=bench_run_id,
+        rubrics=dict(rubrics or {}), judge_model=spec.judge_model)
     return cfg
 
 
@@ -58,9 +61,13 @@ class BenchmarkWorkflow:
         idea = IdeaBrief(title=spec.case_id, description=spec.description,
                          mode=ProjectMode(spec.mode), repo_url=spec.repo_url)
         base = PipelineConfig()
+        # Load rubric text once (file I/O in the activity, not the workflow);
+        # the same {stage: text} map is reused across every cell.
+        rubrics = await workflow.execute_activity(
+            load_case_assets, spec.case_id, dict(spec.rubrics), **RECORD_ACT)
         for cell in cells:
             cfg = _cell_config(base, idea, spec, cell.harness, cell.model,
-                               bench_run_id=bench_run_id)
+                               bench_run_id=bench_run_id, rubrics=rubrics)
             child_id = f"{bench_run_id}/{cell.cell_id}"
             try:
                 await workflow.execute_child_workflow(

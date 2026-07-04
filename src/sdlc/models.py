@@ -215,6 +215,8 @@ class BenchmarkConfig(BaseModel):
     """Carried on PipelineConfig. case_id=None => not a benchmark run."""
     case_id: str | None = None
     bench_run_id: str | None = None
+    rubrics: dict[str, str] = Field(default_factory=dict)   # stage -> rubric text
+    judge_model: str | None = None                          # model the judge uses
 
 
 def gate_key(gate: str, round: int) -> str:

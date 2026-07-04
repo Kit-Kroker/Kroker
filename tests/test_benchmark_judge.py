@@ -29,3 +29,15 @@ def test_judge_clamps_out_of_range_score():
         artifact_json="{}", rubric="r",
         author_model="anthropic:claude-sonnet-4-6"))
     assert result.score == 1.0     # clamped
+
+
+def test_judge_input_accepts_judge_model():
+    inp = JudgeInput(artifact_json="{}", rubric="r",
+                     author_model="anthropic:claude-sonnet-4-6",
+                     judge_model="openai/gpt-5.2")
+    assert inp.judge_model == "openai/gpt-5.2"
+
+
+def test_judge_input_judge_model_defaults_none():
+    inp = JudgeInput(artifact_json="{}", rubric="r", author_model="m")
+    assert inp.judge_model is None
