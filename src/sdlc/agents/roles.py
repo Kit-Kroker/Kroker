@@ -12,7 +12,7 @@ from __future__ import annotations
 from pydantic_ai import Agent
 from pydantic_ai.durable_exec.temporal import TemporalAgent
 
-from .models import (
+from ..models import (
     ArchitectureSpec,
     ClarifiedRequirements,
     GateDecision,

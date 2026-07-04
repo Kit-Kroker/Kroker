@@ -12,15 +12,20 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
-    from .activities import (
+    from ..activities import (
         CodingTaskInput, DeployInput, DiffInput, PROpenInput, QAInput,
         WorktreeInput, create_worktree, deploy, get_task_diff,
         open_pull_request, run_coding_task, run_test_suite,
     )
-    from .agents.roles import (
+    from ..agents.roles import (
         t_architect, t_clarify, t_gate, t_planner, t_qa,
     )
-    from .models import (
+    from ..benchmarks.models import (
+        BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, CostBag,
+        QualityScore, SpeedBag,
+    )
+    from ..benchmarks.recorder import record_benchmark
+    from ..models import (
         DevTask, ExecutionMode, GateDecision, GatePolicy, HandoffSummary,
         IdeaBrief, PipelineConfig, TaskResult,
     )
@@ -30,6 +35,8 @@ ACT = dict(start_to_close_timeout=timedelta(minutes=10),
 LONG_ACT = dict(start_to_close_timeout=timedelta(hours=2),
                 heartbeat_timeout=timedelta(minutes=2),
                 retry_policy=RetryPolicy(maximum_attempts=2))
+RECORD_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
+                  retry_policy=RetryPolicy(maximum_attempts=5))
 
 
 @workflow.defn
@@ -38,6 +45,41 @@ class FeatureWorkflow:
         self._gate_decisions: dict[str, GateDecision] = {}
         self._question_answers: dict[str, str] = {}
         self._status: str = "starting"
+
+    # ----------------------- benchmark recording ------------------------
+
+    @staticmethod
+    def _benchmarking(cfg: PipelineConfig) -> bool:
+        return bool(cfg.benchmark and cfg.benchmark.case_id)
+
+    def _stage_record(self, cfg: PipelineConfig, stage: str, role: str,
+                      started: datetime, ended: datetime,
+                      quality_score: float | None, judge: str,
+                      outcome: BenchmarkOutcome, model: str,
+                      harness=None, cost_usd: float | None = None,
+                      fix_attempts: int = 0,
+                      task_id: str | None = None,
+                      attempt: int | None = None) -> BenchmarkRecord:
+        scope = (BenchmarkScope.TASK_ATTEMPT if task_id is not None
+                 else BenchmarkScope.STAGE)
+        return BenchmarkRecord(
+            run_id=workflow.info().workflow_id,
+            bench_run_id=cfg.benchmark.bench_run_id or "_unknown",
+            case_id=cfg.benchmark.case_id or "_unknown",
+            scope=scope, stage=stage, task_id=task_id, attempt=attempt,
+            role=role, harness=harness, model=model, prompt_sha="",
+            quality=QualityScore(score=quality_score, judge=judge),
+            cost=CostBag(usd=cost_usd),
+            speed=SpeedBag(wall_clock_s=(ended - started).total_seconds(),
+                           started_at=started, ended_at=ended),
+            outcome=outcome, fix_attempts=fix_attempts,
+        )
+
+    async def _record(self, cfg: PipelineConfig, record: BenchmarkRecord
+                      ) -> None:
+        if not self._benchmarking(cfg):
+            return
+        await workflow.execute_activity(record_benchmark, record, **RECORD_ACT)
 
     # ---------------- signals / queries (the HITL surface) --------------
 
@@ -147,6 +189,21 @@ class FeatureWorkflow:
                 + f"\nDiff stat:\n{diff['stat']}"
                 + f"\nDiff:\n{diff['patch']}")).output
 
+            await self._record(cfg, self._stage_record(
+                cfg, stage="code", role=task.role,
+                started=workflow.now(), ended=workflow.now(),
+                quality_score=(1.0 if (qa.tests_passed and not qa.issues)
+                               else 0.0),
+                judge="contract",
+                outcome=(BenchmarkOutcome.PASS
+                         if (qa.tests_passed and not qa.issues)
+                         else BenchmarkOutcome.FAIL),
+                model=role_cfg.model or "anthropic:claude-sonnet-4-6",
+                harness=role_cfg.harness,
+                cost_usd=run.cost_usd,
+                fix_attempts=attempt - 1,
+                task_id=task.id, attempt=attempt - 1))
+
             if qa.tests_passed and not qa.issues:
                 handoff = HandoffSummary(
                     task_id=task.id,
@@ -197,6 +254,7 @@ class FeatureWorkflow:
 
         # 1. CLARIFY — open questions answered by human via signals
         self._status = "clarifying"
+        _started = workflow.now()
         reqs = (await t_clarify.run(idea.model_dump_json())).output
         if reqs.open_questions:
             self._status = "awaiting:clarify"
@@ -207,18 +265,43 @@ class FeatureWorkflow:
             )
             for q in reqs.open_questions:
                 q.answer = self._question_answers.get(q.id)
+        _ended = workflow.now()
+        await self._record(cfg, self._stage_record(
+            cfg, stage="clarify", role="clarify",
+            started=_started, ended=_ended,
+            quality_score=None, judge="llm_judge",
+            outcome=BenchmarkOutcome.PASS,
+            model="anthropic:claude-sonnet-4-6"))
 
         # 2. ARCHITECT (+ human approval of the spec)
         self._status = "architecting"
+        _started = workflow.now()
         arch = (await t_architect.run(
             f"mode={idea.mode.value}\n{reqs.model_dump_json()}")).output
         gate = await self._gate("architecture", cfg)
+        _ended = workflow.now()
+        await self._record(cfg, self._stage_record(
+            cfg, stage="architecture", role="architect",
+            started=_started, ended=_ended,
+            quality_score=None, judge="llm_judge",
+            outcome=(BenchmarkOutcome.PASS if gate.approved
+                     else BenchmarkOutcome.REVISED),
+            model="anthropic:claude-sonnet-4-6"))
         if not gate.approved:
             return "rejected:architecture"
 
         # 3. PLAN (soft gate by default)
+        _started = workflow.now()
         plan = (await t_planner.run(arch.model_dump_json())).output
         gate = await self._gate("plan", cfg)
+        _ended = workflow.now()
+        await self._record(cfg, self._stage_record(
+            cfg, stage="plan", role="planner",
+            started=_started, ended=_ended,
+            quality_score=None, judge="llm_judge",
+            outcome=(BenchmarkOutcome.PASS if gate.approved
+                     else BenchmarkOutcome.REVISED),
+            model="anthropic:claude-sonnet-4-6"))
         if not gate.approved:
             return "rejected:plan"
 
@@ -260,10 +343,19 @@ class FeatureWorkflow:
                 return "failed:quarantined-tasks"
 
         # 5. MERGE gate — soft path consults the quality-gate agent first
+        _started = workflow.now()
         auto = (await t_gate.run(
             "Summarize gate decision for merging all task branches. "
             f"Task results: {[r.model_dump() for r in done.values()]}")).output
         gate = await self._gate("merge", cfg, auto_decision=auto)
+        _ended = workflow.now()
+        await self._record(cfg, self._stage_record(
+            cfg, stage="merge", role="reviewer",
+            started=_started, ended=_ended,
+            quality_score=None, judge="llm_judge",
+            outcome=(BenchmarkOutcome.PASS if gate.approved
+                     else BenchmarkOutcome.REVISED),
+            model="anthropic:claude-sonnet-4-6"))
         if not gate.approved:
             return "rejected:merge"
 
@@ -275,7 +367,16 @@ class FeatureWorkflow:
         )
 
         # 6. DEPLOY gate → deploy
+        _started = workflow.now()
         gate = await self._gate("deploy", cfg)
+        _ended = workflow.now()
+        await self._record(cfg, self._stage_record(
+            cfg, stage="deploy", role="devops",
+            started=_started, ended=_ended,
+            quality_score=None, judge="llm_judge",
+            outcome=(BenchmarkOutcome.PASS if gate.approved
+                     else BenchmarkOutcome.REVISED),
+            model="anthropic:claude-sonnet-4-6"))
         if not gate.approved:
             return f"merged-not-deployed:{pr_url}"
         await workflow.execute_activity(
