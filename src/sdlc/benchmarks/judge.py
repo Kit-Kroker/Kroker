@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from pydantic_ai import Agent
 from temporalio import activity
 
 from .models import QualityScore
@@ -35,12 +36,45 @@ def _set_judge_fn(fn: JudgeFn | None) -> None:
     _judge_fn = fn
 
 
+_JUDGE_SYSTEM_PROMPT = (
+    "You are an impartial quality judge. Score the supplied artifact against "
+    "the supplied rubric. Respond with ONLY a JSON object of exactly this "
+    "shape and nothing else (no prose, no markdown fences):\n"
+    '  {"score": <float between 0.0 and 1.0>, '
+    '"components": {<name>: <float between 0.0 and 1.0>}}\n'
+    "The overall \"score\" must reflect the artifact's rubric compliance; "
+    "each component score must be grounded in a named rubric criterion."
+)
+
+
+def _run_judge_agent(model, system_prompt: str, user_prompt: str) -> str:
+    """Construct a Pydantic AI agent lazily and run it synchronously.
+
+    The agent is built per call (never at module import) to avoid the
+    eager-construction smell that bit ``agents/roles.py``. Kept as a small,
+    explicitly-patchable seam: ``TestModel`` cannot flow through
+    ``JudgeInput.judge_model`` (typed ``str | None``), so tests patch this
+    helper rather than the ``Agent`` class.
+    """
+    agent = Agent(model, name="benchmark_judge", system_prompt=system_prompt)
+    result = agent.run_sync(user_prompt)
+    return result.output
+
+
 def _default_judge(inp: JudgeInput) -> str:
-    # Production default: a Pydantic AI Agent call on a cross-family model.
-    # Implemented in a later hardening task; for now raise so misconfiguration
-    # surfaces as judge="error" rather than a silent wrong answer.
-    raise RuntimeError("no judge configured; set one via _set_judge_fn or "
-                       "wire the production Pydantic AI agent")
+    # Production default: a Pydantic AI Agent call on the configured
+    # cross-family judge model. Returns the raw JSON string; parsing,
+    # clamping and error-handling live in ``_judge_sync``.
+    if inp.judge_model is None:
+        raise RuntimeError(
+            "no judge_model configured; cannot run production judge "
+            "(set BenchmarkConfig.judge_model or inject a fn via "
+            "_set_judge_fn)")
+    user_prompt = (
+        f"Rubric:\n{inp.rubric}\n\nArtifact:\n{inp.artifact_json}"
+    )
+    return _run_judge_agent(
+        inp.judge_model, _JUDGE_SYSTEM_PROMPT, user_prompt)
 
 
 def _judge_sync(inp: JudgeInput) -> QualityScore:
