@@ -4,7 +4,7 @@
 **Complete.** All five plumbing pieces landed; full suite green (77 passed, +6 new).
 
 ## Commits
-- `05b6d27` — `feat(benchmarks): judge plumbing — rubrics/judge_model on config, load_case_assets activity`
+- `26d523f` — `feat(benchmarks): judge plumbing — rubrics/judge_model on config, load_case_assets activity` (code + tests + report)
 
 ## What was built
 1. **`BenchmarkConfig`** (`src/sdlc/models.py`): added `rubrics: dict[str, str]` (stage → rubric text) and `judge_model: str | None = None`. Additive, both safe defaults — `PipelineConfig()` behavior unchanged.
