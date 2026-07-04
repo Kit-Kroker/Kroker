@@ -234,6 +234,7 @@ class PipelineConfig(BaseModel):
         "merge": GatePolicy.HARD,
         "deploy": GatePolicy.HARD,
     })
+    benchmark: BenchmarkConfig = Field(default_factory=BenchmarkConfig)
     roles: dict[str, RoleConfig] = Field(default_factory=lambda: {
         "dev": RoleConfig(harness=HarnessKind.CLAUDE_CODE),
         "test": RoleConfig(harness=HarnessKind.CLAUDE_CODE),
