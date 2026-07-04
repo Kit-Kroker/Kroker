@@ -6,6 +6,7 @@ the filesystem, or the network directly.
 from __future__ import annotations
 
 import asyncio
+import os
 import subprocess
 from dataclasses import dataclass
 
@@ -14,26 +15,97 @@ from temporalio import activity
 from .harness.adapters import HARNESSES, HarnessRequest
 from .models import HarnessKind, HarnessRunResult, QAReport
 
-WORKTREES_ROOT = "/var/sdlc/worktrees"
+
+def _worktrees_root() -> str:
+    """Read at call time so tests can point it at a temp dir."""
+    return os.environ.get("SDLC_WORKTREES_ROOT", "/var/sdlc/worktrees")
 
 
 @dataclass
 class WorktreeInput:
     repo_path: str
+    run_id: str
     task_id: str
+    from_ref: str          # integration head SHA (ADR-14) — NOT base_branch
+
+
+@dataclass
+class WorktreeHandle:
+    path: str
+    branch: str
+    branch_point: str      # SHA the task branched from (diff anchor)
+
+
+@activity.defn
+async def create_worktree(inp: WorktreeInput) -> WorktreeHandle:
+    """Run-scoped worktree + branch, cut from the integration head."""
+    path = f"{_worktrees_root()}/{inp.run_id}/{inp.task_id}"
+    branch = f"sdlc/{inp.run_id}/{inp.task_id}"
+    subprocess.run(
+        ["git", "worktree", "add", "-b", branch, path, inp.from_ref],
+        cwd=inp.repo_path, check=True, capture_output=True,
+    )
+    point = subprocess.run(
+        ["git", "rev-parse", inp.from_ref], cwd=inp.repo_path,
+        capture_output=True, text=True).stdout.strip()
+    return WorktreeHandle(path=path, branch=branch, branch_point=point)
+
+
+@dataclass
+class IntegrationInput:
+    repo_path: str
+    run_id: str
     base_branch: str
 
 
 @activity.defn
-async def create_worktree(inp: WorktreeInput) -> str:
-    """Isolated worktree + branch per task; returns worktree path."""
-    path = f"{WORKTREES_ROOT}/{inp.task_id}"
-    branch = f"sdlc/{inp.task_id}"
+async def setup_integration_branch(inp: IntegrationInput) -> str:
+    """Create sdlc/<run>/integration from base in its own worktree;
+    return its head SHA. Task worktrees branch from this head."""
+    branch = f"sdlc/{inp.run_id}/integration"
+    path = f"{_worktrees_root()}/{inp.run_id}/integration"
     subprocess.run(
         ["git", "worktree", "add", "-b", branch, path, inp.base_branch],
         cwd=inp.repo_path, check=True, capture_output=True,
     )
-    return path
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=path,
+        capture_output=True, text=True).stdout.strip()
+
+
+@dataclass
+class MergeInput:
+    repo_path: str
+    run_id: str
+    task_branch: str
+
+
+@dataclass
+class MergeResult:
+    merged: bool
+    conflict: bool
+    integration_head: str
+
+
+@activity.defn
+async def merge_into_integration(inp: MergeInput) -> MergeResult:
+    """Merge a completed task branch into the run's integration branch.
+    A merge conflict = a falsified `overlaps` declaration (Finding #1):
+    abort cleanly and report it so the caller serializes/escalates."""
+    ipath = f"{_worktrees_root()}/{inp.run_id}/integration"
+    merge = subprocess.run(
+        ["git", "merge", "--no-ff", "-m", f"merge {inp.task_branch}",
+         inp.task_branch],
+        cwd=ipath, capture_output=True, text=True)
+    if merge.returncode != 0:
+        subprocess.run(["git", "merge", "--abort"], cwd=ipath,
+                       capture_output=True)
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ipath,
+                              capture_output=True, text=True).stdout.strip()
+        return MergeResult(merged=False, conflict=True, integration_head=head)
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ipath,
+                          capture_output=True, text=True).stdout.strip()
+    return MergeResult(merged=True, conflict=False, integration_head=head)
 
 
 @dataclass
@@ -78,26 +150,24 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
 @dataclass
 class DiffInput:
     worktree: str
-    base_branch: str
+    branch_point: str      # SHA the task branched from — NOT base_branch
     max_chars: int = 60_000
 
 
 @activity.defn
 async def get_task_diff(inp: DiffInput) -> dict:
-    """Materialized diff for clean-context validators (FR-804).
-
-    Validators judge the diff + contract + test output — never the
-    implementer's narrative. Large diffs are truncated here and should be
-    claim-checked to the artifact store in production.
-    """
+    """Materialized diff for clean-context validators (FR-804), anchored to
+    the task's branch point so a dependent task's diff shows only its own
+    change — upstream work is invisible (Finding #1)."""
+    rng = f"{inp.branch_point}...HEAD"
     stat = subprocess.run(
-        ["git", "diff", "--stat", f"{inp.base_branch}...HEAD"],
+        ["git", "diff", "--stat", rng],
         cwd=inp.worktree, capture_output=True, text=True).stdout
     patch = subprocess.run(
-        ["git", "diff", f"{inp.base_branch}...HEAD"],
+        ["git", "diff", rng],
         cwd=inp.worktree, capture_output=True, text=True).stdout
     files = subprocess.run(
-        ["git", "diff", "--name-only", f"{inp.base_branch}...HEAD"],
+        ["git", "diff", "--name-only", rng],
         cwd=inp.worktree, capture_output=True, text=True).stdout.splitlines()
     return {"stat": stat, "patch": patch[:inp.max_chars], "files": files}
 
