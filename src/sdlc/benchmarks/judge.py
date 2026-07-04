@@ -27,6 +27,33 @@ class JudgeInput:
     judge_model: str | None = None     # model the judge should USE (A1)
 
 
+def _build_judge_input(artifact_json: str, rubrics: dict[str, str],
+                       stage: str, author_model: str,
+                       judge_model: str | None) -> JudgeInput | None:
+    """Build a JudgeInput iff a rubric is registered for ``stage``.
+
+    ``stage`` is the rubric-map key — i.e. the keys carried on
+    ``BenchmarkConfig.rubrics`` (populated from ``CaseSpec.rubrics`` by
+    ``load_case_assets``): e.g. ``clarifier`` / ``architect``. It is NOT
+    necessarily the record's ``stage`` field, which uses a different
+    vocabulary (``clarify`` / ``architecture``).
+
+    Returns ``None`` when no rubric exists for the stage (or it is empty),
+    so the workflow skips judging and emits the record with a graceful
+    ``quality_score=None`` instead. Pure function — no I/O — so it can be
+    unit-tested without a Temporal environment.
+    """
+    rubric = rubrics.get(stage, "")
+    if not rubric:
+        return None
+    return JudgeInput(
+        artifact_json=artifact_json,
+        rubric=rubric,
+        author_model=author_model,
+        judge_model=judge_model,
+    )
+
+
 JudgeFn = Callable[[JudgeInput], str]
 _judge_fn: JudgeFn | None = None
 

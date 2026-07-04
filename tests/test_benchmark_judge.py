@@ -3,6 +3,7 @@ import pytest
 import sdlc.benchmarks.judge as judge_mod
 from sdlc.benchmarks.judge import (
     JudgeInput,
+    _build_judge_input,
     _default_judge,
     _run_judge_agent,
     _set_judge_fn,
@@ -168,3 +169,57 @@ def test_run_judge_agent_uses_pydantic_ai():
     raw = _run_judge_agent(
         TestModel(custom_output_text=canned), "sys", "user prompt")
     assert raw == canned
+
+
+# --- A3: JudgeInput construction helper ----------------------------------
+
+def test_build_judge_input_returns_input_when_rubric_present():
+    ji = _build_judge_input(
+        artifact_json='{"summary": "login"}',
+        rubrics={"clarifier": "score materiality 0..1"},
+        stage="clarifier",
+        author_model="anthropic:claude-sonnet-4-6",
+        judge_model="openai/gpt-5.2",
+    )
+    assert ji is not None
+    assert isinstance(ji, JudgeInput)
+    assert ji.artifact_json == '{"summary": "login"}'
+    assert ji.rubric == "score materiality 0..1"
+    assert ji.author_model == "anthropic:claude-sonnet-4-6"
+    assert ji.judge_model == "openai/gpt-5.2"
+
+
+def test_build_judge_input_passes_judge_model_none_through():
+    ji = _build_judge_input(
+        artifact_json="{}",
+        rubrics={"architect": "r"},
+        stage="architect",
+        author_model="anthropic:claude-sonnet-4-6",
+        judge_model=None,
+    )
+    assert ji is not None
+    assert ji.judge_model is None
+
+
+def test_build_judge_input_returns_none_when_stage_missing():
+    ji = _build_judge_input(
+        artifact_json="{}",
+        rubrics={"architect": "r"},   # no "clarifier" key
+        stage="clarifier",
+        author_model="anthropic:claude-sonnet-4-6",
+        judge_model="openai/gpt-5.2",
+    )
+    assert ji is None
+
+
+def test_build_judge_input_returns_none_when_rubric_empty():
+    # an empty-string rubric is treated as "no rubric" so the caller
+    # skips judging gracefully (no stage fails for a blank rubric).
+    ji = _build_judge_input(
+        artifact_json="{}",
+        rubrics={"clarifier": ""},
+        stage="clarifier",
+        author_model="anthropic:claude-sonnet-4-6",
+        judge_model="openai/gpt-5.2",
+    )
+    assert ji is None

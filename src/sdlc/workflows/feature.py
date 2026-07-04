@@ -18,7 +18,10 @@ with workflow.unsafe.imports_passed_through():
         open_pull_request, run_coding_task, run_test_suite,
     )
     from ..agents.roles import (
-        t_architect, t_clarify, t_gate, t_planner, t_qa,
+        MODEL, t_architect, t_clarify, t_gate, t_planner, t_qa,
+    )
+    from ..benchmarks.judge import (
+        JudgeInput, _build_judge_input, judge_artifact,
     )
     from ..benchmarks.models import (
         BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, CostBag,
@@ -80,6 +83,41 @@ class FeatureWorkflow:
         if not self._benchmarking(cfg):
             return
         await workflow.execute_activity(record_benchmark, record, **RECORD_ACT)
+
+    async def _judge(self, cfg: PipelineConfig, artifact_json: str,
+                     stage: str) -> QualityScore:
+        """Judge a proposer-stage artifact iff benchmarking is on AND a
+        rubric is registered for the stage.
+
+        Returns a graceful QualityScore(score=None, judge='llm_judge') when
+        judging is skipped — when not benchmarking, or no rubric exists for
+        the stage — so the record still emits without failing the stage.
+        The LLM call lives in the judge_artifact activity, never in workflow
+        code.
+
+        ``stage`` is the rubric-map key carried on cfg.benchmark.rubrics
+        (e.g. 'clarifier', 'architect'), NOT the record's stage field.
+
+        Author model: proposer agents bind roles.MODEL today (foundation
+        limitation — they don't yet honor cfg.roles), so the same constant is
+        the author identity for every proposer stage. The judge_model (e.g.
+        'openai/gpt-5.2') differs from the author ('anthropic:...') →
+        ADR-6 cross-family satisfied.
+        """
+        fallback = QualityScore(score=None, judge="llm_judge")
+        if not self._benchmarking(cfg):
+            return fallback
+        judge_input: JudgeInput | None = _build_judge_input(
+            artifact_json=artifact_json,
+            rubrics=cfg.benchmark.rubrics,
+            stage=stage,
+            author_model=MODEL,
+            judge_model=cfg.benchmark.judge_model,
+        )
+        if judge_input is None:
+            return fallback
+        return await workflow.execute_activity(
+            judge_artifact, judge_input, **RECORD_ACT)
 
     # ---------------- signals / queries (the HITL surface) --------------
 
@@ -266,10 +304,11 @@ class FeatureWorkflow:
             for q in reqs.open_questions:
                 q.answer = self._question_answers.get(q.id)
         _ended = workflow.now()
+        _quality = await self._judge(cfg, reqs.model_dump_json(), "clarifier")
         await self._record(cfg, self._stage_record(
             cfg, stage="clarify", role="clarify",
             started=_started, ended=_ended,
-            quality_score=None, judge="llm_judge",
+            quality_score=_quality.score, judge=_quality.judge,
             outcome=BenchmarkOutcome.PASS,
             model="anthropic:claude-sonnet-4-6"))
 
@@ -280,10 +319,11 @@ class FeatureWorkflow:
             f"mode={idea.mode.value}\n{reqs.model_dump_json()}")).output
         gate = await self._gate("architecture", cfg)
         _ended = workflow.now()
+        _quality = await self._judge(cfg, arch.model_dump_json(), "architect")
         await self._record(cfg, self._stage_record(
             cfg, stage="architecture", role="architect",
             started=_started, ended=_ended,
-            quality_score=None, judge="llm_judge",
+            quality_score=_quality.score, judge=_quality.judge,
             outcome=(BenchmarkOutcome.PASS if gate.approved
                      else BenchmarkOutcome.REVISED),
             model="anthropic:claude-sonnet-4-6"))
@@ -295,10 +335,11 @@ class FeatureWorkflow:
         plan = (await t_planner.run(arch.model_dump_json())).output
         gate = await self._gate("plan", cfg)
         _ended = workflow.now()
+        _quality = await self._judge(cfg, plan.model_dump_json(), "planner")
         await self._record(cfg, self._stage_record(
             cfg, stage="plan", role="planner",
             started=_started, ended=_ended,
-            quality_score=None, judge="llm_judge",
+            quality_score=_quality.score, judge=_quality.judge,
             outcome=(BenchmarkOutcome.PASS if gate.approved
                      else BenchmarkOutcome.REVISED),
             model="anthropic:claude-sonnet-4-6"))
@@ -349,10 +390,11 @@ class FeatureWorkflow:
             f"Task results: {[r.model_dump() for r in done.values()]}")).output
         gate = await self._gate("merge", cfg, auto_decision=auto)
         _ended = workflow.now()
+        _quality = await self._judge(cfg, auto.model_dump_json(), "merge")
         await self._record(cfg, self._stage_record(
             cfg, stage="merge", role="reviewer",
             started=_started, ended=_ended,
-            quality_score=None, judge="llm_judge",
+            quality_score=_quality.score, judge=_quality.judge,
             outcome=(BenchmarkOutcome.PASS if gate.approved
                      else BenchmarkOutcome.REVISED),
             model="anthropic:claude-sonnet-4-6"))
