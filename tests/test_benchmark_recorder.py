@@ -1,10 +1,12 @@
+import asyncio
 from datetime import datetime
 
 from sdlc.benchmarks.models import (
     BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, CostBag, QualityScore,
     SpeedBag,
 )
-from sdlc.benchmarks.recorder import RecordStore, records_path
+from sdlc.benchmarks.recorder import RecordStore, record_benchmark, records_path
+from sdlc.models import HarnessKind
 
 
 def _record(run_id="r1", bench="b1", case="c1"):
@@ -52,3 +54,37 @@ def test_records_path_partitions_by_bench_and_cell(tmp_path):
 def test_records_path_drift_namespace(tmp_path):
     p = records_path("_drift/2026-07-04", cell_id=None, root=str(tmp_path))
     assert "_drift" in str(p)
+
+
+def test_record_benchmark_routes_production_to_flat_file(tmp_path, monkeypatch):
+    monkeypatch.setenv("SDLC_BENCHMARKS_ROOT", str(tmp_path))
+    rec = _record(run_id="r1", bench="_drift/2026-07-04", case="_production")
+    asyncio.run(record_benchmark(rec))
+    # drift/production records go to <root>/<bench_run_id>/records.jsonl
+    expected = tmp_path / "_drift" / "2026-07-04" / "records.jsonl"
+    assert expected.exists()
+    store = RecordStore(bench_run_id="_drift/2026-07-04", cell_id=None,
+                        root=str(tmp_path))
+    recs = store.read_all()
+    assert len(recs) == 1
+    assert recs[0].case_id == "_production"
+
+
+def test_record_benchmark_sanitizes_colon_in_model_id(tmp_path, monkeypatch):
+    monkeypatch.setenv("SDLC_BENCHMARKS_ROOT", str(tmp_path))
+    rec = _record(run_id="r1", bench="b1", case="c1")
+    rec = rec.model_copy(update={"harness": HarnessKind.CLAUDE_CODE})
+    asyncio.run(record_benchmark(rec))
+    # the cell filename must contain no ':' — sanitized to '_'
+    files = list(tmp_path.rglob("*.jsonl"))
+    assert len(files) == 1
+    assert ":" not in files[0].name
+    assert "_" in files[0].name
+    # sanitization touches only the filename, not the stored payload
+    store = RecordStore(
+        bench_run_id="b1",
+        cell_id="c1#claude_code#anthropic:claude-sonnet-4-6",
+        root=str(tmp_path))
+    recs = store.read_all()
+    assert len(recs) == 1
+    assert recs[0].model == "anthropic:claude-sonnet-4-6"
