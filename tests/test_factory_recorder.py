@@ -1,13 +1,6 @@
 """The purity assertion: when benchmark.case_id is None, the recorder is
 never called. We assert this by pointing SDLC_BENCHMARKS_ROOT at a temp
 dir and checking no file appears after a stage-boundary helper runs."""
-import os
-
-# agents/roles.py constructs pydantic_ai Agent instances at import time,
-# which require an API key. We never call the models — we only test the
-# _benchmarking predicate — so a dummy key is sufficient here.
-os.environ.setdefault("ANTHROPIC_API_KEY", "test-dummy")
-
 from sdlc.models import BenchmarkConfig, PipelineConfig
 from sdlc.workflows.feature import FeatureWorkflow
 

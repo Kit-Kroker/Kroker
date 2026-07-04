@@ -2,7 +2,7 @@
 
   python -m sdlc.cli benchmark run    --case benchmarks/cases/add-login/case.yaml
   python -m sdlc.cli benchmark drift  --since 168
-  python -m sdlc.cli benchmark report --bench <id> [--source golden,drift]
+  python -m sdlc.cli benchmark report --bench <id>
 """
 from __future__ import annotations
 
@@ -44,11 +44,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     rep = bsub.add_parser("report")
     rep.add_argument("--bench", required=True)
-    rep.add_argument("--source", default="golden")
     return p
 
 
-def dispatch_report(bench: str, source: str = "golden",
+def dispatch_report(bench: str,
                     root: str | None = None) -> str:
     summaries = aggregate(bench, CompositeWeights(), root=root)
     md = render_markdown(summaries)
@@ -85,4 +84,4 @@ def main_async(args: argparse.Namespace) -> None:
     elif args.bench_cmd == "drift":
         print(asyncio.run(_run_drift(args.since)))
     elif args.bench_cmd == "report":
-        print(dispatch_report(args.bench, args.source))
+        print(dispatch_report(args.bench))

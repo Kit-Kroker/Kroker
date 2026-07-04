@@ -1,12 +1,3 @@
-import os
-
-# Importing sdlc.benchmarks.cli pulls in sdlc.worker -> agents.roles, which
-# instantiate pydantic_ai Agents at module load time and require these keys.
-# Bootstrap placeholders here (mirrors test_benchmark_cli.py /
-# test_benchmark_workflow.py).
-os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
-os.environ.setdefault("OPENAI_API_KEY", "test-key")
-
 from pathlib import Path
 
 from sdlc.benchmarks.cli import load_case_spec

@@ -1,13 +1,3 @@
-import os
-
-# Importing sdlc.benchmarks.cli pulls in sdlc.worker -> agents.roles, which
-# instantiate pydantic_ai Agents at module load time and require these keys.
-# The autouse _llm_api_keys fixture runs at test-time, not collection-time, so
-# bootstrap the same placeholders here (mirrors conftest.py / test_benchmark_
-# workflow.py).
-os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
-os.environ.setdefault("OPENAI_API_KEY", "test-key")
-
 from sdlc.benchmarks.cli import load_case_spec, build_parser, dispatch_report
 
 
@@ -40,7 +30,7 @@ def test_parser_accepts_benchmark_subcommands():
 def test_dispatch_report_writes_markdown(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_BENCHMARKS_ROOT", str(tmp_path))
     # no records → empty report, but no crash
-    out = dispatch_report("b1", source="golden", root=str(tmp_path))
+    out = dispatch_report("b1", root=str(tmp_path))
     assert "No records" in out or "case" in out.lower()
 
 

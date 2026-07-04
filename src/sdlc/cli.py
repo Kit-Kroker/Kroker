@@ -56,7 +56,6 @@ async def main() -> None:
     br = bsub.add_parser("run"); br.add_argument("--case", required=True)
     bd = bsub.add_parser("drift"); bd.add_argument("--since", type=int, default=168)
     bf = bsub.add_parser("report"); bf.add_argument("--bench", required=True)
-    bf.add_argument("--source", default="golden")
 
     args = p.parse_args()
     client = None
@@ -78,7 +77,7 @@ async def main() -> None:
     if args.cmd == "benchmark":
         from .benchmarks.cli import dispatch_report
         if args.bench_cmd == "report":
-            print(dispatch_report(args.bench, args.source))
+            print(dispatch_report(args.bench))
             return
         if args.bench_cmd == "run":
             from .benchmarks.cli import _run_matrix
