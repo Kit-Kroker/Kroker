@@ -14,6 +14,15 @@ def run_git(args: list[str], cwd: str | Path) -> str:
     ).stdout
 
 
+@pytest.fixture(autouse=True)
+def _llm_api_keys(monkeypatch):
+    """Importing ``sdlc.worker`` pulls in pydantic_ai agents that read
+    ANTHROPIC_API_KEY / OPENAI_API_KEY at import time. Set placeholder
+    values so deferred in-package imports inside tests never fail."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+
 @pytest.fixture
 def git_repo(tmp_path, monkeypatch):
     """A fresh git repo with one commit on `main`, plus a writable
