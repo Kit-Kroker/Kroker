@@ -211,6 +211,14 @@ class ExecutionMode(str, Enum):
     WAVES = "waves"      # dependency-ordered parallel; overlaps still serialize
 
 
+class BenchmarkConfig(BaseModel):
+    """Carried on PipelineConfig. case_id=None => not a benchmark run."""
+    case_id: str | None = None
+    bench_run_id: str | None = None
+    rubrics: dict[str, str] = Field(default_factory=dict)   # stage -> rubric text
+    judge_model: str | None = None                          # model the judge uses
+
+
 def gate_key(gate: str, round: int) -> str:
     """Round-scoped gate identity — 'first decision wins' applies per round."""
     return f"{gate}#{round}"
@@ -238,6 +246,7 @@ class PipelineConfig(BaseModel):
         "merge": GatePolicy.HARD,
         "deploy": GatePolicy.HARD,
     })
+    benchmark: BenchmarkConfig = Field(default_factory=BenchmarkConfig)
     roles: dict[str, RoleConfig] = Field(default_factory=lambda: {
         "dev": RoleConfig(harness=HarnessKind.CLAUDE_CODE),
         "test": RoleConfig(harness=HarnessKind.CLAUDE_CODE),

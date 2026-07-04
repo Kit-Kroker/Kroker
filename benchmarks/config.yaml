@@ -1,0 +1,8 @@
+# Pipeline-step benchmark defaults. Override per `benchmark run` invocation.
+weights:
+  quality: 0.6
+  cost: 0.2
+  speed: 0.2
+# Default judge model — must be a DIFFERENT family than any author model in
+# a case's matrix (ADR-6). The matrix expander rejects same-family configs.
+default_judge_model: openai/gpt-5.2
