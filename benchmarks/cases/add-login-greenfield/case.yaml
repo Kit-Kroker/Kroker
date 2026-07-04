@@ -1,0 +1,18 @@
+case_id: add-login-greenfield
+idea_summary: Add a login page (email + password) to a fresh greenfield web app.
+description: |
+  A small greenfield feature: one login route, credential check against a
+  user table, session cookie on success. Exercises architect (stack choice),
+  planner (task decomposition), and dev (one implementation task with a
+  frozen contract). Sized for a single short factory run.
+mode: greenfield
+repo_url: null
+harnesses:
+  - claude_code
+  - opencode
+models:
+  - anthropic:claude-sonnet-4-6
+judge_model: openai/gpt-5.2     # different family than the author (ADR-6)
+rubrics:
+  architect: rubric-architect.md
+  clarifier: rubric-clarifier.md
