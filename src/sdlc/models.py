@@ -30,6 +30,12 @@ class GatePolicy(str, Enum):
     OFF = "off"      # auto-approve
 
 
+class GateOutcome(str, Enum):
+    APPROVE = "approve"    # proceed
+    REJECT = "reject"      # terminal
+    REVISE = "revise"      # loop back with guidance (Finding #6)
+
+
 class ArtifactRef(BaseModel):
     """Claim-check reference to a large artifact (spec, diff, report)."""
     kind: str                      # e.g. "spec", "plan", "qa_report", "diff"
@@ -151,12 +157,21 @@ class QAReport(BaseModel):
 
 
 class GateDecision(BaseModel):
-    gate: str                               # "spec", "plan", "merge", "deploy"
-    approved: bool
+    gate: str                               # "architecture", "merge", ...
+    round: int = 1                          # revision round (Finding #6)
+    outcome: GateOutcome
     decided_by: Literal["human", "policy", "timeout"]
     reviewer: str | None = None
     comments: str | None = None
+    guidance: str | None = None             # fed back into the agent on 'revise'
     decided_at: datetime | None = None
+
+    @property
+    def approved(self) -> bool:
+        """Convenience for callers that only branch on go/no-go. `reject`
+        and `revise` are both non-approvals; callers that must distinguish
+        read `outcome` directly."""
+        return self.outcome is GateOutcome.APPROVE
 
 
 class DeploymentResult(BaseModel):
@@ -177,6 +192,11 @@ class RoleConfig(BaseModel):
 class ExecutionMode(str, Enum):
     SERIAL = "serial"    # default: consistent design decisions (ADR-13)
     WAVES = "waves"      # dependency-ordered parallel; overlaps still serialize
+
+
+def gate_key(gate: str, round: int) -> str:
+    """Round-scoped gate identity — 'first decision wins' applies per round."""
+    return f"{gate}#{round}"
 
 
 class PipelineConfig(BaseModel):

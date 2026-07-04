@@ -15,7 +15,7 @@ import re
 from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 
-from .models import GateDecision, IdeaBrief, ProjectMode
+from .models import GateDecision, GateOutcome, IdeaBrief, ProjectMode
 from .worker import TASK_QUEUE
 from .workflows.feature import FeatureWorkflow
 
@@ -69,7 +69,9 @@ async def main() -> None:
     if args.cmd in ("approve", "reject"):
         await handle.signal(
             FeatureWorkflow.submit_gate_decision,
-            GateDecision(gate=args.gate, approved=args.cmd == "approve",
+            GateDecision(gate=args.gate,
+                         outcome=(GateOutcome.APPROVE if args.cmd == "approve"
+                                  else GateOutcome.REJECT),
                          decided_by="human", comments=args.comment),
         )
         print(f"{args.cmd}d gate {args.gate!r} on {args.id}")
