@@ -136,6 +136,23 @@ class HarnessRunResult(BaseModel):
     cost_usd: float | None = None
     commit_sha: str | None = None           # checkpoint commit after the run
     diff_ref: ArtifactRef | None = None
+    # Observability for the context-ceiling trigger (Finding #7):
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    context_window: int | None = None
+    compacted: bool = False                 # harness signalled a mid-run compaction
+
+    def near_context_ceiling(self, fraction: float = 0.75) -> bool:
+        """True when the run is at/over the usable context budget. A
+        harness-signalled compaction always counts; otherwise compare
+        input tokens to a fraction of the window. Unknown token data is
+        treated as 'not at ceiling' so callers fall back to the resume
+        counter rather than mis-triggering."""
+        if self.compacted:
+            return True
+        if self.input_tokens is None or not self.context_window:
+            return False
+        return self.input_tokens > fraction * self.context_window
 
 
 class TaskResult(BaseModel):

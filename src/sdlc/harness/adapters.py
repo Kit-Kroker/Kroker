@@ -24,6 +24,26 @@ from ..models import HarnessKind, HarnessRunResult
 
 SUMMARY_MAX = 4000  # keep Temporal payloads small
 
+# Best-effort model → context window (tokens). Substring match; extend as
+# needed. Used only to compute the context ceiling (Finding #7); unknown
+# models fall back to the resume counter.
+CONTEXT_WINDOWS = {
+    "sonnet": 200_000,
+    "opus": 200_000,
+    "haiku": 200_000,
+    "gpt-5": 400_000,
+}
+
+
+def context_window_for(model: str | None) -> int | None:
+    if not model:
+        return None
+    m = model.lower()
+    for key, win in CONTEXT_WINDOWS.items():
+        if key in m:
+            return win
+    return None
+
 
 @dataclass
 class HarnessRequest:
@@ -76,8 +96,11 @@ class CodingHarness(ABC):
             proc.kill()
             raise
 
-        return self.parse(stdout_b.decode(errors="replace"),
-                          proc.returncode or 0)
+        result = self.parse(stdout_b.decode(errors="replace"),
+                            proc.returncode or 0)
+        if result.context_window is None:
+            result.context_window = context_window_for(req.model)
+        return result
 
 
 class ClaudeCodeHarness(CodingHarness):
@@ -103,16 +126,21 @@ class ClaudeCodeHarness(CodingHarness):
 
     def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
         session_id = cost = summary = None
+        input_tokens = output_tokens = None
         try:
             payload = json.loads(stdout.strip().splitlines()[-1])
             session_id = payload.get("session_id")
             cost = payload.get("total_cost_usd")
             summary = payload.get("result") or payload.get("content")
+            usage = payload.get("usage") or {}
+            input_tokens = usage.get("input_tokens")
+            output_tokens = usage.get("output_tokens")
         except (json.JSONDecodeError, IndexError):
             summary = stdout
         return HarnessRunResult(
             harness=self.kind, session_id=session_id, exit_code=exit_code,
             summary=(summary or "")[:SUMMARY_MAX], cost_usd=cost,
+            input_tokens=input_tokens, output_tokens=output_tokens,
         )
 
 
@@ -138,15 +166,20 @@ class OpenCodeHarness(CodingHarness):
 
     def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
         session_id = summary = None
+        input_tokens = output_tokens = None
         try:
             payload = json.loads(stdout.strip().splitlines()[-1])
             session_id = payload.get("sessionID") or payload.get("session_id")
             summary = payload.get("text") or payload.get("result")
+            usage = payload.get("usage") or {}
+            input_tokens = usage.get("input_tokens")
+            output_tokens = usage.get("output_tokens")
         except (json.JSONDecodeError, IndexError):
             summary = stdout
         return HarnessRunResult(
             harness=self.kind, session_id=session_id, exit_code=exit_code,
             summary=(summary or "")[:SUMMARY_MAX],
+            input_tokens=input_tokens, output_tokens=output_tokens,
         )
 
 
