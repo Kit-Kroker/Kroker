@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from temporalio import activity
+
 from .models import BenchmarkRecord, BenchmarkSummary, CompositeWeights
 from .recorder import RecordStore, _root
 from .scoring import compute_summaries
@@ -60,3 +62,14 @@ def render_markdown(summaries: list[BenchmarkSummary]) -> str:
 def write_report(summaries: list[BenchmarkSummary], out_path: str) -> None:
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     Path(out_path).write_text(render_markdown(summaries), encoding="utf-8")
+
+
+@activity.defn
+async def finalize_benchmark_report(bench_run_id: str) -> str:
+    """Activity: read all records for the bench run, aggregate, write the
+    Markdown report, return the report path. All file I/O lives here —
+    never in workflow code."""
+    summaries = aggregate(bench_run_id, CompositeWeights())
+    out_path = f"runs/benchmarks/{bench_run_id}/report.md"
+    write_report(summaries, out_path)
+    return out_path

@@ -20,6 +20,8 @@ from .activities import (
 from .agents.roles import ALL_TEMPORAL_AGENTS
 from .benchmarks.judge import judge_artifact
 from .benchmarks.recorder import record_benchmark
+from .benchmarks.report import finalize_benchmark_report
+from .benchmarks.workflow import BenchmarkWorkflow
 from .workflows.feature import FeatureWorkflow
 
 TASK_QUEUE = "ai-sdlc"
@@ -35,11 +37,12 @@ async def main() -> None:
     worker = Worker(
         client,
         task_queue=TASK_QUEUE,
-        workflows=[FeatureWorkflow],
+        workflows=[FeatureWorkflow, BenchmarkWorkflow],
         activities=[
             create_worktree, setup_integration_branch, merge_into_integration,
             run_coding_task, run_test_suite, open_pull_request, deploy,
-            record_benchmark, judge_artifact, *agent_activities,
+            record_benchmark, judge_artifact, finalize_benchmark_report,
+            *agent_activities,
         ],
     )
     print(f"worker running on task queue {TASK_QUEUE!r}")
