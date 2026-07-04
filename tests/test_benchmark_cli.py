@@ -42,3 +42,11 @@ def test_dispatch_report_writes_markdown(tmp_path, monkeypatch):
     # no records → empty report, but no crash
     out = dispatch_report("b1", source="golden", root=str(tmp_path))
     assert "No records" in out or "case" in out.lower()
+
+
+def test_dispatch_report_does_not_require_temporal_client(tmp_path):
+    # The report path is a pure offline file operation: it must succeed
+    # without constructing or connecting a Temporal Client. This locks in
+    # the invariant that `sdlc.cli benchmark report` can run offline.
+    out = dispatch_report("nonexistent-bench", root=str(tmp_path))
+    assert "No records" in out

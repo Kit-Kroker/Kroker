@@ -59,8 +59,10 @@ async def main() -> None:
     bf.add_argument("--source", default="golden")
 
     args = p.parse_args()
-    client = await Client.connect(
-        "localhost:7233", data_converter=pydantic_data_converter)
+    client = None
+    if args.cmd != "benchmark":
+        client = await Client.connect(
+            "localhost:7233", data_converter=pydantic_data_converter)
 
     if args.cmd == "start":
         wf_id = f"feature-{slug(args.title)}"
