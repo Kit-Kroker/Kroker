@@ -12,17 +12,17 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
-    from .activities import (
+    from ..activities import (
         CodingTaskInput, DeployInput, DiffInput, PROpenInput, QAInput,
         WorktreeInput, create_worktree, deploy, get_task_diff,
         open_pull_request, run_coding_task, run_test_suite,
     )
-    from .agents.roles import (
-        t_architect, t_clarify, t_gate, t_planner, t_qa,
+    from ..agents.roles import (
+        t_architect, t_clarify, t_merge_verdict, t_planner, t_qa,
     )
-    from .models import (
-        DevTask, ExecutionMode, GateDecision, GatePolicy, HandoffSummary,
-        IdeaBrief, PipelineConfig, TaskResult,
+    from ..models import (
+        DevTask, ExecutionMode, GateDecision, GateOutcome, GatePolicy,
+        HandoffSummary, IdeaBrief, MergeVerdict, PipelineConfig, TaskResult,
     )
 
 ACT = dict(start_to_close_timeout=timedelta(minutes=10),
@@ -68,7 +68,7 @@ class FeatureWorkflow:
         policy = cfg.gates.get(name, GatePolicy.HARD)
 
         if policy == GatePolicy.OFF:
-            return GateDecision(gate=name, approved=True, decided_by="policy")
+            return GateDecision(gate=name, outcome=GateOutcome.APPROVE, decided_by="policy")
 
         if policy == GatePolicy.SOFT and auto_decision and auto_decision.approved:
             return auto_decision  # quality-gate agent said yes → no human
@@ -80,7 +80,7 @@ class FeatureWorkflow:
                 timeout=timedelta(hours=cfg.gate_timeout_hours),
             )
         except TimeoutError:
-            return GateDecision(gate=name, approved=False,
+            return GateDecision(gate=name, outcome=GateOutcome.REJECT,
                                 decided_by="timeout")
         finally:
             self._status = "running"
@@ -97,12 +97,13 @@ class FeatureWorkflow:
         FR-804: the QA validator sees contract + diff + test output only.
         """
         role_cfg = cfg.roles.get(task.role, cfg.roles["dev"])
-        worktree = await workflow.execute_activity(
+        handle = await workflow.execute_activity(
             create_worktree,
-            WorktreeInput(repo_path=repo_path, task_id=task.id,
-                          base_branch=base_branch),
+            WorktreeInput(repo_path=repo_path, run_id=workflow.info().workflow_id,
+                          task_id=task.id, from_ref=base_branch),
             **ACT,
         )
+        worktree = handle.path
         contract = task.contract
         assertions = (contract.assertions if contract
                       else task.acceptance_criteria)
@@ -138,7 +139,7 @@ class FeatureWorkflow:
                 run_test_suite, QAInput(worktree=worktree), **LONG_ACT)
             diff = await workflow.execute_activity(
                 get_task_diff,
-                DiffInput(worktree=worktree, base_branch=base_branch),
+                DiffInput(worktree=worktree, branch_point=handle.branch_point),
                 **ACT,
             )
             qa = (await t_qa.run(
@@ -155,7 +156,7 @@ class FeatureWorkflow:
                     open_concerns=[],
                 )
                 return TaskResult(task_id=task.id, status="done",
-                                  attempts=attempt, branch=f"sdlc/{task.id}",
+                                  attempts=attempt, branch=handle.branch,
                                   run=run, handoff=handoff)
 
             if attempt > cfg.max_fix_attempts:
@@ -183,7 +184,7 @@ class FeatureWorkflow:
             task_id=task.id,
             status="done" if decision.approved else "quarantined",
             attempts=cfg.max_fix_attempts + 1,
-            branch=f"sdlc/{task.id}",
+            branch=handle.branch,
             notes=decision.comments or "",
         )
 
@@ -259,10 +260,16 @@ class FeatureWorkflow:
             if any(r.status == "quarantined" for r in done.values()):
                 return "failed:quarantined-tasks"
 
-        # 5. MERGE gate — soft path consults the quality-gate agent first
-        auto = (await t_gate.run(
-            "Summarize gate decision for merging all task branches. "
-            f"Task results: {[r.model_dump() for r in done.values()]}")).output
+        # 5. MERGE gate — advisory MergeVerdict only informs the SOFT path.
+        # (Plan 2 runs the DeterministicQualityGate before this consult.)
+        verdict: MergeVerdict = (await t_merge_verdict.run(
+            "Advisory only. Given these task results, should the merge "
+            f"proceed? Task results: {[r.model_dump() for r in done.values()]}"
+        )).output
+        auto = GateDecision(
+            gate="merge", outcome=(GateOutcome.APPROVE if verdict.approve
+                                   else GateOutcome.REJECT),
+            decided_by="policy", comments=verdict.rationale)
         gate = await self._gate("merge", cfg, auto_decision=auto)
         if not gate.approved:
             return "rejected:merge"

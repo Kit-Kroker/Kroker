@@ -12,12 +12,11 @@ from __future__ import annotations
 from pydantic_ai import Agent
 from pydantic_ai.durable_exec.temporal import TemporalAgent
 
-from .models import (
+from ..models import (
     ArchitectureSpec,
     ClarifiedRequirements,
-    GateDecision,
-    IdeaBrief,
     ImplementationPlan,
+    MergeVerdict,
     QAReport,
 )
 
@@ -82,15 +81,17 @@ qa_analyst_agent = Agent(
     ),
 )
 
-quality_gate_agent = Agent(
+merge_verdict_agent = Agent(
     MODEL,
-    name="quality_gate_agent",
-    output_type=GateDecision,
+    name="merge_verdict_agent",
+    output_type=MergeVerdict,
     system_prompt=(
-        "You are a release gate. Given the QA report, reviewer summary and "
-        "diff stats, decide approve/reject for the SOFT gate policy. Be "
-        "conservative: reject on failing tests, security smells, missing "
-        "acceptance criteria, or reviewer objections. Explain briefly."
+        "You are an ADVISORY release reviewer, consulted only after the "
+        "deterministic quality gate has already passed. Given the QA report, "
+        "reviewer summary and diff stats, give a confidence-scored opinion on "
+        "whether the merge should proceed. You cannot block a merge on your "
+        "own and you cannot approve one the deterministic gate failed; you "
+        "only advise. Be conservative and list concrete concerns."
     ),
 )
 
@@ -110,7 +111,8 @@ t_clarify = TemporalAgent(clarify_agent)
 t_architect = TemporalAgent(architect_agent)
 t_planner = TemporalAgent(planner_agent)
 t_qa = TemporalAgent(qa_analyst_agent)
-t_gate = TemporalAgent(quality_gate_agent)
+t_merge_verdict = TemporalAgent(merge_verdict_agent)
 t_devops = TemporalAgent(devops_agent)
 
-ALL_TEMPORAL_AGENTS = [t_clarify, t_architect, t_planner, t_qa, t_gate, t_devops]
+ALL_TEMPORAL_AGENTS = [t_clarify, t_architect, t_planner, t_qa,
+                       t_merge_verdict, t_devops]

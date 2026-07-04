@@ -216,6 +216,16 @@ def gate_key(gate: str, round: int) -> str:
     return f"{gate}#{round}"
 
 
+class MergeVerdict(BaseModel):
+    """Advisory LLM proposer output (Finding #5). Consulted only under a
+    SOFT merge policy, and only AFTER the DeterministicQualityGate passes.
+    It can approve an already-clean build; it can never bypass the gate."""
+    approve: bool
+    confidence: float = Field(ge=0.0, le=1.0)
+    rationale: str
+    concerns: list[str] = Field(default_factory=list)
+
+
 class PipelineConfig(BaseModel):
     execution_mode: ExecutionMode = ExecutionMode.SERIAL
     max_session_resumes: int = 3            # FR-802: past this, fresh session
