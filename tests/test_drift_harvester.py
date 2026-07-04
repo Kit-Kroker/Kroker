@@ -78,3 +78,13 @@ def test_drift_skips_run_whose_history_fetch_raises(tmp_path):
     # must not raise — the harvest continues past the broken fetch
     n = asyncio.run(h.harvest_since(hours=24))
     assert n == 0
+
+
+def test_drift_skips_event_with_non_numeric_exit_code(tmp_path):
+    ev = _harness_result_event()
+    ev["result"]["exit_code"] = "not-a-number"
+    runs = [("feature-5", [ev])]
+    h = DriftHarvester(FakeHistory(runs), root=str(tmp_path),
+                       bench_run_id="_drift/2026-07-04")
+    n = asyncio.run(h.harvest_since(hours=24))
+    assert n == 0

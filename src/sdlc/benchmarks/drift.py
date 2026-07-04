@@ -6,6 +6,7 @@ history_provider so tests pass a fake.
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
@@ -13,6 +14,8 @@ from .models import (BenchmarkOutcome, BenchmarkRecord, BenchmarkScope,
                      CostBag, QualityScore, SpeedBag)
 from .recorder import RecordStore
 from ..models import HarnessKind
+
+_log = logging.getLogger(__name__)
 
 
 class HistoryProvider(Protocol):
@@ -38,7 +41,9 @@ class DriftHarvester:
         for run_id, _ in runs:
             try:
                 history = await self.provider.fetch_history(run_id)
-            except Exception:
+            except Exception as exc:
+                _log.warning("drift: skipping run %s (fetch_history raised: %r)",
+                             run_id, exc)
                 continue
             for ev in _iter_events(history):
                 rec = _record_from_event(run_id, ev, self.bench_run_id)
@@ -68,34 +73,31 @@ def _record_from_event(run_id: str, event: Any, bench_run_id: str
     result = event.get("result")
     if not isinstance(result, dict):
         return None
-    ts = event.get("timestamp") or datetime.now(timezone.utc)
-    if isinstance(ts, str):
-        try:
-            ts = datetime.fromisoformat(ts)
-        except ValueError:
-            ts = datetime.now(timezone.utc)
-    started = ts
-    ended = ts
     try:
+        ts = event.get("timestamp") or datetime.now(timezone.utc)
+        if isinstance(ts, str):
+            ts = datetime.fromisoformat(ts)
+        started = ts
+        ended = ts
         harness = HarnessKind(result.get("harness", "claude_code"))
-    except ValueError:
+        exit_code = int(result.get("exit_code", 1))
+        return BenchmarkRecord(
+            run_id=run_id,
+            bench_run_id=bench_run_id,
+            case_id="_production",
+            scope=BenchmarkScope.TASK_ATTEMPT, stage="code", task_id=run_id,
+            attempt=0, role="dev", harness=harness,
+            model="unknown",   # drift can't reliably recover the per-run model
+                               # without parsing WorkflowStarted attributes; left
+                               # for a later hardening pass
+            quality=QualityScore(score=None if exit_code != 0 else 1.0,
+                                 judge="contract"),
+            cost=CostBag(usd=result.get("cost_usd"),
+                         input_tokens=result.get("input_tokens"),
+                         output_tokens=result.get("output_tokens")),
+            speed=SpeedBag(wall_clock_s=0.0, started_at=started, ended_at=ended),
+            outcome=(BenchmarkOutcome.PASS if exit_code == 0
+                     else BenchmarkOutcome.FAIL),
+        )
+    except (TypeError, ValueError):
         return None
-    exit_code = int(result.get("exit_code", 1))
-    return BenchmarkRecord(
-        run_id=run_id,
-        bench_run_id=bench_run_id,
-        case_id="_production",
-        scope=BenchmarkScope.TASK_ATTEMPT, stage="code", task_id=run_id,
-        attempt=0, role="dev", harness=harness,
-        model="unknown",   # drift can't reliably recover the per-run model
-                           # without parsing WorkflowStarted attributes; left
-                           # for a later hardening pass
-        quality=QualityScore(score=None if exit_code != 0 else 1.0,
-                             judge="contract"),
-        cost=CostBag(usd=result.get("cost_usd"),
-                     input_tokens=result.get("input_tokens"),
-                     output_tokens=result.get("output_tokens")),
-        speed=SpeedBag(wall_clock_s=0.0, started_at=started, ended_at=ended),
-        outcome=(BenchmarkOutcome.PASS if exit_code == 0
-                 else BenchmarkOutcome.FAIL),
-    )
