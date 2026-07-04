@@ -1,6 +1,8 @@
 import asyncio
 from pathlib import Path
 
+import pytest
+
 from sdlc.activities import (
     DiffInput, IntegrationInput, MergeInput, WorktreeInput,
     create_worktree, get_task_diff, merge_into_integration,
@@ -48,6 +50,7 @@ def test_diff_anchors_to_branch_point_not_base(git_repo):
         WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="B",
                       from_ref=res.integration_head)))
     _add_commit(b.path, "b.txt", "from B\n", "B work")
+    assert res.merged
     diff = asyncio.run(get_task_diff(
         DiffInput(worktree=b.path, branch_point=b.branch_point)))
     assert "b.txt" in diff["files"]
@@ -73,3 +76,16 @@ def test_merge_conflict_is_detected_and_aborted(git_repo):
     assert rb.conflict is True and rb.merged is False
     # Integration head unchanged after the aborted merge → equals A's merge head.
     assert rb.integration_head == ra.integration_head
+
+
+def test_merge_failure_that_is_not_a_conflict_raises(git_repo):
+    asyncio.run(setup_integration_branch(
+        IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")))
+
+    # A nonexistent branch ref makes `git merge` fail with no unmerged
+    # entries in the index — this is an infra/config failure, not a real
+    # task-overlap conflict, and must raise rather than report conflict=True.
+    with pytest.raises(RuntimeError):
+        asyncio.run(merge_into_integration(
+            MergeInput(repo_path=git_repo, run_id=RUN,
+                      task_branch="sdlc/nope/does-not-exist")))

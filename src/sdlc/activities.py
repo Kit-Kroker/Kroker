@@ -98,8 +98,16 @@ async def merge_into_integration(inp: MergeInput) -> MergeResult:
          inp.task_branch],
         cwd=ipath, capture_output=True, text=True)
     if merge.returncode != 0:
+        # Distinguish a real conflict from an infra/config failure via the
+        # git index's unmerged entries (locale-independent) — must be read
+        # BEFORE `merge --abort`, which clears the unmerged state.
+        unmerged = subprocess.run(["git", "ls-files", "--unmerged"], cwd=ipath,
+                                  capture_output=True, text=True).stdout
         subprocess.run(["git", "merge", "--abort"], cwd=ipath,
                        capture_output=True)
+        if not unmerged.strip():
+            raise RuntimeError(
+                f"git merge failed (not a conflict): {merge.stderr.strip()}")
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ipath,
                               capture_output=True, text=True).stdout.strip()
         return MergeResult(merged=False, conflict=True, integration_head=head)
