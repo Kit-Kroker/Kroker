@@ -45,6 +45,26 @@ def context_window_for(model: str | None) -> int | None:
     return None
 
 
+# Env allowlist (Finding #8): the harness receives ONLY these vars from the
+# worker environment, plus credentials deliberately injected via req.env.
+# Never the worker's full os.environ (that is a bigger secret channel than
+# the prompt). Covers POSIX + Windows toolchain essentials.
+ENV_ALLOWLIST: tuple[str, ...] = (
+    "PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "TMP", "TEMP",
+    "SYSTEMROOT", "SYSTEMDRIVE", "USERPROFILE", "PATHEXT", "COMSPEC",
+    "GIT_EXEC_PATH", "GIT_SSH", "SSH_AUTH_SOCK",
+)
+
+
+def build_env(req_env: dict[str, str],
+              allowlist: tuple[str, ...] = ENV_ALLOWLIST) -> dict[str, str]:
+    """Curated child environment: allowlisted worker vars, then the
+    request's injected (repo-scoped, short-TTL) credentials."""
+    env = {k: os.environ[k] for k in allowlist if k in os.environ}
+    env.update(req_env)
+    return env
+
+
 @dataclass
 class HarnessRequest:
     prompt: str
@@ -71,7 +91,7 @@ class CodingHarness(ABC):
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=req.cwd,
-            env={**os.environ, **req.env},
+            env=build_env(req.env),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
