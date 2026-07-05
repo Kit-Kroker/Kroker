@@ -1,0 +1,44 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #0c0f14;
+}
+* {
+  box-sizing: border-box;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a3140;
+  border-radius: 5px;
+  border: 2px solid #0c0f14;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+@keyframes fc-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes fc-toast {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+textarea:focus,
+input:focus {
+  outline: 1px solid #4a6da8;
+}
