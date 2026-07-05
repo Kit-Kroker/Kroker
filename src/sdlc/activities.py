@@ -72,10 +72,25 @@ class IntegrationInput:
     base_branch: str
 
 
+@dataclass
+class IntegrationHandle:
+    """Returned by setup_integration_branch.
+
+    The workflow cannot compute the integration worktree path itself
+    (doing so would require reading SDLC_WORKTREES_ROOT from the env — a
+    determinism violation), so the activity hands back both the head SHA
+    and the path. The SHA advances after each merge; the path is stable
+    for the run.
+    """
+    head_sha: str
+    worktree_path: str
+
+
 @activity.defn
-async def setup_integration_branch(inp: IntegrationInput) -> str:
+async def setup_integration_branch(inp: IntegrationInput) -> IntegrationHandle:
     """Create sdlc/<run>/integration from base in its own worktree;
-    return its head SHA. Task worktrees branch from this head."""
+    return its head SHA + worktree path. Task worktrees branch from this
+    head; the merge stage reuses the worktree path."""
     branch = f"sdlc/{inp.run_id}/integration"
     path = os.path.join(_worktrees_root(), inp.run_id, "integration")
     subprocess.run(["git", "worktree", "prune"],
@@ -88,9 +103,10 @@ async def setup_integration_branch(inp: IntegrationInput) -> str:
         raise RuntimeError(
             f"git worktree add failed (rc={wt.returncode}): "
             f"{wt.stderr.strip() or wt.stdout.strip()}")
-    return subprocess.run(
+    head = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=path,
         capture_output=True, encoding="utf-8", errors="replace").stdout.strip()
+    return IntegrationHandle(head_sha=head, worktree_path=path)
 
 
 @dataclass

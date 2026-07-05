@@ -14,10 +14,11 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from ..activities import (
-        CodingTaskInput, DeployInput, DiffInput, LintInput, PROpenInput,
+        CodingTaskInput, DeployInput, DiffInput, IntegrationHandle,
+        IntegrationInput, LintInput, MergeInput, PROpenInput,
         QAInput, WorktreeInput, create_worktree, deploy, evaluate_gate,
-        get_task_diff, open_pull_request, run_coding_task, run_lint,
-        run_test_suite,
+        get_task_diff, merge_into_integration, open_pull_request,
+        run_coding_task, run_lint, run_test_suite, setup_integration_branch,
     )
     from ..agents.roles import (
         MODEL, PROMPT_SHAS, t_architect, t_clarify, t_merge_verdict,
@@ -94,6 +95,11 @@ class FeatureWorkflow:
         self._question_answers: dict[str, str] = {}
         self._status: str = "starting"
         self._memory_watermark: str | None = None
+        # ADR-14: one sdlc/<run_id>/integration branch accumulates completed
+        # task work. _integration_head advances after each successful merge;
+        # _integration_wt is the worktree path (set once at run start, stable).
+        self._integration_head: str | None = None
+        self._integration_wt: str | None = None
 
     # ----------------------- benchmark recording ------------------------
 
@@ -294,8 +300,29 @@ class FeatureWorkflow:
         decision = await self._gate(name, cfg, round=cfg.max_gate_rounds + 1)
         return artifact, decision
 
+    async def _merge_task(self, tr: TaskResult, cfg: PipelineConfig,
+                          repo_path: str) -> None:
+        """Merge a completed task branch into the integration branch and
+        advance self._integration_head. A merge conflict means the task's
+        declared `overlaps` were incomplete (Finding #1) → falsified
+        contract → serialize/escalate. Called from both SERIAL and wave
+        paths; never inside run_one (Resolution B)."""
+        merge_res = await workflow.execute_activity(
+            merge_into_integration,
+            MergeInput(repo_path=repo_path,
+                       run_id=workflow.info().workflow_id,
+                       task_branch=tr.branch),
+            **ACT,
+        )
+        if merge_res.conflict:
+            # Falsified `overlaps` declaration → serialize/escalate.
+            raise RuntimeError(
+                f"integration conflict on task {tr.task_id}: "
+                "declared overlaps were incomplete")
+        self._integration_head = merge_res.integration_head
+
     async def _dev_task(self, task: DevTask, repo_path: str,
-                        base_branch: str, cfg: PipelineConfig,
+                        from_ref: str, cfg: PipelineConfig,
                         prior_handoffs: list) -> TaskResult:
         """dev → clean-context QA vs. frozen contract, bounded fix loop.
 
@@ -308,7 +335,7 @@ class FeatureWorkflow:
         handle = await workflow.execute_activity(
             create_worktree,
             WorktreeInput(repo_path=repo_path, run_id=workflow.info().workflow_id,
-                          task_id=task.id, from_ref=base_branch),
+                          task_id=task.id, from_ref=from_ref),
             **ACT,
         )
         worktree = handle.path
@@ -435,6 +462,21 @@ class FeatureWorkflow:
                     **MEM_ACT))
         repo_path = idea.repo_url or "/var/sdlc/repo"  # prepared by a setup activity IRL
 
+        # ADR-14: one sdlc/<run_id>/integration branch accumulates completed
+        # task work; dependent tasks branch from its head. The activity hands
+        # back both the head SHA and the worktree path — the workflow never
+        # computes the path itself (that would read SDLC_WORKTREES_ROOT from
+        # the env, a determinism violation).
+        integration: IntegrationHandle = await workflow.execute_activity(
+            setup_integration_branch,
+            IntegrationInput(repo_path=repo_path,
+                             run_id=workflow.info().workflow_id,
+                             base_branch=idea.base_branch),
+            **ACT,
+        )
+        self._integration_head = integration.head_sha
+        self._integration_wt = integration.worktree_path
+
         # 1. CLARIFY — open questions answered by human via signals
         self._status = "clarifying"
         _started = workflow.now()
@@ -559,13 +601,17 @@ class FeatureWorkflow:
         remaining = {t.id: t for t in plan.tasks}
         import asyncio
 
-        async def run_one(t: DevTask) -> None:
-            r = await self._dev_task(t, repo_path, idea.base_branch,
+        async def run_one(t: DevTask) -> TaskResult:
+            """Execute the task only. Merging is a separate concern — see
+            _merge_task (Resolution B: merging inside run_one would race
+            the integration worktree under wave mode's asyncio.gather)."""
+            r = await self._dev_task(t, repo_path, self._integration_head,
                                      cfg, handoffs)
             done[r.task_id] = r
             if r.handoff:
                 handoffs.append(r.handoff)
             remaining.pop(r.task_id)
+            return r
 
         while remaining:
             ready = [t for t in remaining.values()
@@ -574,16 +620,25 @@ class FeatureWorkflow:
                 return "failed:dependency-cycle"
 
             if cfg.execution_mode == ExecutionMode.SERIAL:
-                await run_one(ready[0])
+                # SERIAL: execute + merge sequentially so the next task
+                # branches from the updated integration head.
+                tr = await run_one(ready[0])
+                if tr.status == "done":
+                    await self._merge_task(tr, cfg, repo_path)
             else:
-                # Wave mode: batch ready tasks so no two in a batch share
-                # an overlap module; batches run sequentially.
+                # Wave mode: execute the batch in parallel (preserving the
+                # gather), THEN merge results sequentially so integration
+                # updates are ordered — two tasks racing the integration
+                # worktree would corrupt the merge (Resolution B).
                 batch, seen = [], set()
                 for t in ready:
                     if seen.isdisjoint(t.overlaps):
                         batch.append(t)
                         seen.update(t.overlaps)
-                await asyncio.gather(*[run_one(t) for t in batch])
+                results = await asyncio.gather(*[run_one(t) for t in batch])
+                for tr in results:
+                    if tr.status == "done":
+                        await self._merge_task(tr, cfg, repo_path)
 
             if any(r.status == "quarantined" for r in done.values()):
                 return "failed:quarantined-tasks"
@@ -593,8 +648,10 @@ class FeatureWorkflow:
         # MergeVerdict advisory only under SOFT policy.
         _started = workflow.now()
 
-        # 5a. Collect typed evidence from the run.
-        integration_worktree = repo_path  # Task 3 will make this the integration wt
+        # 5a. Collect typed evidence from the run. The merge stage runs
+        # against the integration worktree (ADR-14), where every completed
+        # task's merge has accumulated.
+        integration_worktree = self._integration_wt
         lint_clean, lint_detail = await workflow.execute_activity(
             run_lint, LintInput(worktree=integration_worktree), **ACT)
         all_tests_green = all(
@@ -675,7 +732,7 @@ class FeatureWorkflow:
 
         pr_url = await workflow.execute_activity(
             open_pull_request,
-            PROpenInput(worktree=repo_path, title=idea.title,
+            PROpenInput(worktree=self._integration_wt, title=idea.title,
                         body=arch.overview, base_branch=idea.base_branch),
             **ACT,
         )

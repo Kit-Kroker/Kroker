@@ -20,8 +20,9 @@ def _add_commit(path: str, name: str, content: str, msg: str) -> None:
 
 
 def test_dependent_task_sees_prior_task_code(git_repo):
-    head = asyncio.run(setup_integration_branch(
+    handle = asyncio.run(setup_integration_branch(
         IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")))
+    head = handle.head_sha
 
     a = asyncio.run(create_worktree(
         WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="A", from_ref=head)))
@@ -37,9 +38,21 @@ def test_dependent_task_sees_prior_task_code(git_repo):
     assert (Path(b.path) / "a.txt").read_text() == "from A\n"
 
 
+def test_setup_returns_worktree_path(git_repo):
+    """Resolution A: setup hands back the integration worktree path so the
+    workflow doesn't read SDLC_WORKTREES_ROOT from the env."""
+    import os
+    handle = asyncio.run(setup_integration_branch(
+        IntegrationInput(repo_path=git_repo, run_id="run-wt", base_branch="main")))
+    assert handle.worktree_path == os.path.join(
+        os.environ["SDLC_WORKTREES_ROOT"], "run-wt", "integration")
+    assert (Path(handle.worktree_path) / "README.md").exists()
+
+
 def test_diff_anchors_to_branch_point_not_base(git_repo):
-    head = asyncio.run(setup_integration_branch(
+    handle = asyncio.run(setup_integration_branch(
         IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")))
+    head = handle.head_sha
     a = asyncio.run(create_worktree(
         WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="A", from_ref=head)))
     _add_commit(a.path, "a.txt", "from A\n", "A work")
@@ -58,8 +71,9 @@ def test_diff_anchors_to_branch_point_not_base(git_repo):
 
 
 def test_merge_conflict_is_detected_and_aborted(git_repo):
-    head = asyncio.run(setup_integration_branch(
+    handle = asyncio.run(setup_integration_branch(
         IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")))
+    head = handle.head_sha
     # A and B branch from the same head and edit the SAME file.
     a = asyncio.run(create_worktree(
         WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="A", from_ref=head)))
