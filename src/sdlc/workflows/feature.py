@@ -420,13 +420,16 @@ class FeatureWorkflow:
                     f"{issues}",
                 metadata={"task_id": task.id,
                          "run_id": workflow.info().workflow_id})
-            if resumes < cfg.max_session_resumes:
+            if resumes < cfg.max_session_resumes and not run.near_context_ceiling():
                 session_id = run.session_id       # resume: context intact
                 resumes += 1
                 prompt = f"Previous attempt has issues. Fix them:\n- {issues}"
             else:
-                session_id = None                 # FR-802: fresh session,
-                prompt = (                         # seeded with a handoff
+                # Either past the resume bound OR at/over the context
+                # ceiling (compaction = failure) → fresh session seeded
+                # with a structured handoff (FR-802, ADR-13).
+                session_id = None
+                prompt = (
                     f"Task: {task.title}\n{task.description}\n"
                     "A previous session implemented part of this in the same "
                     f"worktree (files: {', '.join(diff['files'][:20])}). "
