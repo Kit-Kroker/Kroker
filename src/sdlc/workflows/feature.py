@@ -46,9 +46,10 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..models import (
         ArchitectureSpec, ClarifiedRequirements, DevTask, ExecutionMode,
-        GateDecision, GateOutcome, GatePolicy, HandoffSummary, IdeaBrief,
-        ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig,
-        RecallSnapshot, RetainItem, RoleConfig, TaskResult, gate_key,
+        GateConfig, GateDecision, GateOutcome, GatePolicy, HandoffSummary,
+        IdeaBrief, ImplementationPlan, MemoryKind, MergeVerdict,
+        PipelineConfig, RecallSnapshot, RetainItem, RoleConfig, TaskResult,
+        gate_key,
     )
 
 ACT = dict(start_to_close_timeout=timedelta(minutes=10),
@@ -96,6 +97,24 @@ def _merge_evidence_all_green(results: list) -> bool:
     `all([])` pass. The merge absolute check must see real green evidence."""
     return bool(results) and all(
         r.qa is not None and r.qa.tests_passed for r in results)
+
+
+def _auto_decision_for(name: str, cfg: PipelineConfig,
+                       confidence: float | None) -> GateDecision | None:
+    """FR-301: SOFT + confidence >= threshold -> an APPROVE decision _gate()
+    can short-circuit on. None confidence (missing/legacy artifact) or below
+    threshold -> None, falling through to the human wait -- never a silent
+    auto-approve on absent data (same defensive stance as
+    HarnessRunResult.near_context_ceiling())."""
+    gate_cfg = cfg.gates.get(name, GateConfig())
+    if gate_cfg.policy != GatePolicy.SOFT or confidence is None:
+        return None
+    if confidence < gate_cfg.threshold:
+        return None
+    return GateDecision(
+        gate=name, round=1, outcome=GateOutcome.APPROVE, decided_by="policy",
+        comments=f"auto-approved: confidence={confidence:.2f} "
+                f">= threshold={gate_cfg.threshold:.2f}")
 
 
 @workflow.defn
@@ -260,7 +279,7 @@ class FeatureWorkflow:
                     auto_decision: GateDecision | None = None,
                     round: int = 1) -> GateDecision:
         """Durable HITL gate with policy-based auto-approval."""
-        policy = cfg.gates.get(name, GatePolicy.HARD)
+        policy = cfg.gates.get(name, GateConfig()).policy
         key = gate_key(name, round)
 
         if policy == GatePolicy.OFF:
