@@ -1,0 +1,26 @@
+{
+  "name": "ai-sdlc-temporal",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "forwardPorts": [7233, 8233],
+  "postCreateCommand": "pip install -e .[dev]",
+  "portsAttributes": {
+    "7233": { "label": "Temporal gRPC" },
+    "8233": { "label": "Temporal UI" }
+  },
+  "remoteEnv": {
+    "TEMPORAL_HOST": "localhost:7233"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+      }
+    }
+  }
+}

@@ -10,12 +10,15 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import re
+
+from dotenv import load_dotenv
 
 from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 
-from .models import GateDecision, GateOutcome, IdeaBrief, ProjectMode
+from .models import GateDecision, GateOutcome, IdeaBrief, PipelineConfig, ProjectMode
 from .worker import TASK_QUEUE
 from .workflows.feature import FeatureWorkflow
 
@@ -25,6 +28,7 @@ def slug(text: str) -> str:
 
 
 async def main() -> None:
+    load_dotenv()
     p = argparse.ArgumentParser()
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -61,14 +65,18 @@ async def main() -> None:
     client = None
     if args.cmd != "benchmark":
         client = await Client.connect(
-            "localhost:7233", data_converter=pydantic_data_converter)
+            os.environ.get("TEMPORAL_HOST", "localhost:7233"),
+            data_converter=pydantic_data_converter)
 
     if args.cmd == "start":
         wf_id = f"feature-{slug(args.title)}"
         handle = await client.start_workflow(
             FeatureWorkflow.run,
-            IdeaBrief(title=args.title, description=args.description,
-                      mode=ProjectMode(args.mode), repo_url=args.repo),
+            args=[
+                IdeaBrief(title=args.title, description=args.description,
+                          mode=ProjectMode(args.mode), repo_url=args.repo),
+                PipelineConfig(),
+            ],
             id=wf_id, task_queue=TASK_QUEUE,
         )
         print(f"started {handle.id}")

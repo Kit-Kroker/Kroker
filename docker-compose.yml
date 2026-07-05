@@ -1,0 +1,29 @@
+services:
+  temporal:
+    image: temporal/cli:latest
+    ports:
+      - "7233:7233"   # gRPC
+      - "8233:8233"   # Web UI
+    environment:
+      TEMPORAL_ADDRESS: "localhost:7233"
+    # `temporal cli start` runs an embedded server — enough for a single-node
+    # dev/mini-prod setup. For real production swap in the full Temporal Server
+    # with Postgres/Cassandra persistence.
+    command: ["server", "start-dev"]
+
+  worker:
+    build: .
+    depends_on: ["temporal"]
+    environment:
+      TEMPORAL_HOST: "temporal:7233"
+    env_file: [".env"]
+    volumes:
+      # worktrees need persistent storage across activity retries
+      - worker-worktrees:/tmp/sdlc/worktrees
+      # repos cloned / pushed to by the pipeline live here
+      - worker-repos:/srv/repos
+    restart: unless-stopped
+
+volumes:
+  worker-worktrees:
+  worker-repos:

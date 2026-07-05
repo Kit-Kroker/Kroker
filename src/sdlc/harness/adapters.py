@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
@@ -32,6 +33,7 @@ CONTEXT_WINDOWS = {
     "opus": 200_000,
     "haiku": 200_000,
     "gpt-5": 400_000,
+    "glm": 1_000_000,
 }
 
 
@@ -88,6 +90,11 @@ class CodingHarness(ABC):
     async def run(self, req: HarnessRequest,
                   heartbeat=None) -> HarnessRunResult:
         cmd = self.build_cmd(req)
+        # Resolve via PATH — Windows npm shims are .cmd files that
+        # CreateProcess can't find without an explicit extension.
+        resolved = shutil.which(cmd[0])
+        if resolved:
+            cmd[0] = resolved
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=req.cwd,

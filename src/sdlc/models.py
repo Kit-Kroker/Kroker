@@ -201,7 +201,7 @@ class DeploymentResult(BaseModel):
 class RoleConfig(BaseModel):
     """Which harness/model a 'doing' role uses. Enables cross-harness review."""
     harness: HarnessKind
-    model: str | None = None                # e.g. "anthropic/claude-sonnet-4-6"
+    model: str | None = None                # e.g. "zai-coding-plan/glm-5.2"
     context_budget_tokens: int = 30_000     # FR-801: enforced at prompt assembly
     extra_args: list[str] = Field(default_factory=list)
     # Long-running activity timeouts for this role's harness invocations
@@ -254,11 +254,14 @@ class PipelineConfig(BaseModel):
     })
     benchmark: BenchmarkConfig = Field(default_factory=BenchmarkConfig)
     roles: dict[str, RoleConfig] = Field(default_factory=lambda: {
-        "dev": RoleConfig(harness=HarnessKind.CLAUDE_CODE),
-        "test": RoleConfig(harness=HarnessKind.CLAUDE_CODE),
+        "dev": RoleConfig(harness=HarnessKind.OPENCODE,
+                          model="zai-coding-plan/glm-5.2"),
+        "test": RoleConfig(harness=HarnessKind.OPENCODE,
+                           model="zai-coding-plan/glm-5.2"),
         "reviewer": RoleConfig(harness=HarnessKind.OPENCODE,
-                               model="openai/gpt-5.2"),  # cross-harness review
-        "devops": RoleConfig(harness=HarnessKind.CLAUDE_CODE),
+                               model="zai-coding-plan/glm-5.2"),
+        "devops": RoleConfig(harness=HarnessKind.OPENCODE,
+                             model="zai-coding-plan/glm-5.2"),
     })
     max_fix_attempts: int = 2                # then escalate to human
     gate_timeout_hours: int = 48

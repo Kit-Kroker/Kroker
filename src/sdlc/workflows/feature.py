@@ -129,7 +129,7 @@ class FeatureWorkflow:
         Author model: proposer agents bind roles.MODEL today (foundation
         limitation — they don't yet honor cfg.roles), so the same constant is
         the author identity for every proposer stage. The judge_model (e.g.
-        'openai/gpt-5.2') differs from the author ('anthropic:...') →
+        'openai/gpt-5.2') differs from the author ('zai-coding-plan/...') →
         ADR-6 cross-family satisfied.
         """
         fallback = QualityScore(score=None, judge="llm_judge")
@@ -266,7 +266,7 @@ class FeatureWorkflow:
                 outcome=(BenchmarkOutcome.PASS
                          if (qa.tests_passed and not qa.issues)
                          else BenchmarkOutcome.FAIL),
-                model=role_cfg.model or "anthropic:claude-sonnet-4-6",
+                model=role_cfg.model or "zai-coding-plan/glm-5.2",
                 harness=role_cfg.harness,
                 cost_usd=run.cost_usd,
                 fix_attempts=attempt - 1,
@@ -318,7 +318,7 @@ class FeatureWorkflow:
     async def run(self, idea: IdeaBrief,
                   cfg: PipelineConfig | None = None) -> str:
         cfg = cfg or PipelineConfig()
-        repo_path = "/var/sdlc/repo"  # prepared by a setup activity IRL
+        repo_path = idea.repo_url or "/var/sdlc/repo"  # prepared by a setup activity IRL
 
         # 1. CLARIFY — open questions answered by human via signals
         self._status = "clarifying"
@@ -340,7 +340,7 @@ class FeatureWorkflow:
             started=_started, ended=_ended,
             quality_score=_quality.score, judge=_quality.judge,
             outcome=BenchmarkOutcome.PASS,
-            model="anthropic:claude-sonnet-4-6"))
+            model="anthropic:glm-5.2"))
 
         # 2. ARCHITECT (+ human approval of the spec)
         self._status = "architecting"
@@ -356,7 +356,7 @@ class FeatureWorkflow:
             quality_score=_quality.score, judge=_quality.judge,
             outcome=(BenchmarkOutcome.PASS if gate.approved
                      else BenchmarkOutcome.REVISED),
-            model="anthropic:claude-sonnet-4-6"))
+            model="anthropic:glm-5.2"))
         if not gate.approved:
             return "rejected:architecture"
 
@@ -372,7 +372,7 @@ class FeatureWorkflow:
             quality_score=_quality.score, judge=_quality.judge,
             outcome=(BenchmarkOutcome.PASS if gate.approved
                      else BenchmarkOutcome.REVISED),
-            model="anthropic:claude-sonnet-4-6"))
+            model="anthropic:glm-5.2"))
         if not gate.approved:
             return "rejected:plan"
 
@@ -433,7 +433,7 @@ class FeatureWorkflow:
             quality_score=_quality.score, judge=_quality.judge,
             outcome=(BenchmarkOutcome.PASS if gate.approved
                      else BenchmarkOutcome.REVISED),
-            model="anthropic:claude-sonnet-4-6"))
+            model="anthropic:glm-5.2"))
         if not gate.approved:
             return "rejected:merge"
 
@@ -454,7 +454,7 @@ class FeatureWorkflow:
             quality_score=None, judge="llm_judge",
             outcome=(BenchmarkOutcome.PASS if gate.approved
                      else BenchmarkOutcome.REVISED),
-            model="anthropic:claude-sonnet-4-6"))
+            model="anthropic:glm-5.2"))
         if not gate.approved:
             return f"merged-not-deployed:{pr_url}"
         await workflow.execute_activity(
