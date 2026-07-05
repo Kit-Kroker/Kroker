@@ -754,13 +754,17 @@ class FeatureWorkflow:
             # 5d. Gate passed clean. MergeVerdict is advisory and ONLY
             # consulted under SOFT policy — it can approve an already-clean
             # build; it can never reach this branch otherwise.
-            if cfg.gates.get("merge", GatePolicy.HARD) == GatePolicy.SOFT:
+            if cfg.gates.get("merge", GateConfig()).policy == GatePolicy.SOFT:
                 verdict: MergeVerdict = (await t_merge_verdict.run(
                     "Advisory only — the deterministic gate already passed. "
                     f"Task results: {[r.model_dump() for r in done.values()]}"
                 )).output
-                if not verdict.approve:
-                    # Soft policy + negative verdict = escalate to human.
+                auto = _auto_decision_for(
+                    "merge", cfg,
+                    verdict.confidence if verdict.approve else None)
+                if auto is None:
+                    # Soft policy + (negative verdict OR confidence below
+                    # threshold) = escalate to human.
                     gate = await self._gate("merge", cfg)
                     if not gate.approved:
                         return "rejected:merge:soft-verdict"

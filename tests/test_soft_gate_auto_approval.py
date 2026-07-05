@@ -58,3 +58,17 @@ def test_revisable_stage_passes_auto_decision():
     # The auto_decision must actually reach _gate(), not just be computed.
     assert "auto_decision=auto" in src, (
         "_revisable_stage must pass auto_decision=auto into self._gate()")
+
+
+def test_merge_soft_path_uses_auto_decision_for():
+    src = SRC.read_text(encoding="utf-8")
+    # Find the merge stage's soft-path block (after the MergeVerdict call)
+    # and confirm it consults _auto_decision_for rather than a bare
+    # verdict.approve check alone.
+    idx = src.find("t_merge_verdict.run(")
+    assert idx != -1, "merge stage no longer calls t_merge_verdict"
+    tail = src[idx: idx + 700]
+    assert "_auto_decision_for(" in tail, (
+        "merge gate's soft path must route through _auto_decision_for so "
+        "verdict.confidence is checked against cfg.gates['merge'].threshold, "
+        "not just verdict.approve")
