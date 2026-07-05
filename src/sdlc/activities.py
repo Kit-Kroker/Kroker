@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -27,6 +28,52 @@ def _worktrees_root() -> str:
     return os.environ.get("SDLC_WORKTREES_ROOT", default)
 
 
+def _ensure_worktree(repo_path: str, branch: str, path: str, from_ref: str) -> None:
+    """Idempotently create (or reuse) a worktree checked out to ``branch``.
+
+    Temporal retries re-run the calling activity; bare ``git worktree add -b``
+    fails with "a branch named ... already exists" if the branch or path
+    survives from a prior partial attempt (``git worktree prune`` only drops
+    registrations whose dirs are gone — it never touches a lingering branch
+    ref or a live worktree). Converge all states to a live worktree at ``path``:
+
+      - live worktree (dir present + is a git worktree) -> reuse as-is
+        (run_coding_task checkpoints a commit, so resuming preserves progress)
+      - branch lingers but worktree gone -> check out the existing branch
+      - neither present -> fresh ``add -b`` cut from ``from_ref``
+    """
+    subprocess.run(["git", "worktree", "prune"],
+                   cwd=repo_path, capture_output=True)
+
+    live = os.path.isdir(path) and subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        cwd=path, capture_output=True).returncode == 0
+    if live:
+        return
+
+    if os.path.exists(path):
+        shutil.rmtree(path, ignore_errors=True)
+
+    branch_exists = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", branch],
+        cwd=repo_path, capture_output=True).returncode == 0
+
+    if branch_exists:
+        wt = subprocess.run(
+            ["git", "worktree", "add", path, branch],
+            cwd=repo_path, capture_output=True,
+            encoding="utf-8", errors="replace")
+    else:
+        wt = subprocess.run(
+            ["git", "worktree", "add", "-b", branch, path, from_ref],
+            cwd=repo_path, capture_output=True,
+            encoding="utf-8", errors="replace")
+    if wt.returncode != 0:
+        raise RuntimeError(
+            f"git worktree add failed (rc={wt.returncode}): "
+            f"{wt.stderr.strip() or wt.stdout.strip()}")
+
+
 @dataclass
 class WorktreeInput:
     repo_path: str
@@ -44,21 +91,11 @@ class WorktreeHandle:
 
 @activity.defn
 async def create_worktree(inp: WorktreeInput) -> WorktreeHandle:
-    """Run-scoped worktree + branch, cut from the integration head."""
+    """Run-scoped worktree + branch, cut from the integration head.
+    Idempotent across Temporal retries (see ``_ensure_worktree``)."""
     path = os.path.join(_worktrees_root(), inp.run_id, inp.task_id)
     branch = f"sdlc/{inp.run_id}/{inp.task_id}"
-    # Prune stale worktree registrations from prior failed runs so retries
-    # don't hit "already exists" on a dead path.
-    subprocess.run(["git", "worktree", "prune"],
-                   cwd=inp.repo_path, capture_output=True)
-    wt = subprocess.run(
-        ["git", "worktree", "add", "-b", branch, path, inp.from_ref],
-        cwd=inp.repo_path, capture_output=True,
-        encoding="utf-8", errors="replace")
-    if wt.returncode != 0:
-        raise RuntimeError(
-            f"git worktree add failed (rc={wt.returncode}): "
-            f"{wt.stderr.strip() or wt.stdout.strip()}")
+    _ensure_worktree(inp.repo_path, branch, path, inp.from_ref)
     point = subprocess.run(
         ["git", "rev-parse", inp.from_ref], cwd=inp.repo_path,
         capture_output=True, encoding="utf-8", errors="replace").stdout.strip()
@@ -90,19 +127,11 @@ class IntegrationHandle:
 async def setup_integration_branch(inp: IntegrationInput) -> IntegrationHandle:
     """Create sdlc/<run>/integration from base in its own worktree;
     return its head SHA + worktree path. Task worktrees branch from this
-    head; the merge stage reuses the worktree path."""
+    head; the merge stage reuses the worktree path.
+    Idempotent across Temporal retries (see ``_ensure_worktree``)."""
     branch = f"sdlc/{inp.run_id}/integration"
     path = os.path.join(_worktrees_root(), inp.run_id, "integration")
-    subprocess.run(["git", "worktree", "prune"],
-                   cwd=inp.repo_path, capture_output=True)
-    wt = subprocess.run(
-        ["git", "worktree", "add", "-b", branch, path, inp.base_branch],
-        cwd=inp.repo_path, capture_output=True,
-        encoding="utf-8", errors="replace")
-    if wt.returncode != 0:
-        raise RuntimeError(
-            f"git worktree add failed (rc={wt.returncode}): "
-            f"{wt.stderr.strip() or wt.stdout.strip()}")
+    _ensure_worktree(inp.repo_path, branch, path, inp.base_branch)
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=path,
         capture_output=True, encoding="utf-8", errors="replace").stdout.strip()
