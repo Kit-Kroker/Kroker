@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import os
 import subprocess
+import tempfile
 from dataclasses import dataclass
 
 from temporalio import activity
@@ -19,7 +20,8 @@ from .models import HarnessKind, HarnessRunResult, QAReport
 
 def _worktrees_root() -> str:
     """Read at call time so tests can point it at a temp dir."""
-    return os.environ.get("SDLC_WORKTREES_ROOT", "/var/sdlc/worktrees")
+    default = os.path.join(tempfile.gettempdir(), "sdlc", "worktrees")
+    return os.environ.get("SDLC_WORKTREES_ROOT", default)
 
 
 @dataclass

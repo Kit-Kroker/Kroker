@@ -6,6 +6,7 @@ signal waits with a per-gate policy (hard / soft / off).
 """
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta
 
 from temporalio import workflow
@@ -30,16 +31,43 @@ with workflow.unsafe.imports_passed_through():
     from ..benchmarks.recorder import record_benchmark
     from ..models import (
         DevTask, ExecutionMode, GateDecision, GateOutcome, GatePolicy,
-        HandoffSummary, IdeaBrief, MergeVerdict, PipelineConfig, TaskResult,
+        HandoffSummary, IdeaBrief, MergeVerdict, PipelineConfig, RoleConfig,
+        TaskResult,
     )
 
 ACT = dict(start_to_close_timeout=timedelta(minutes=10),
            retry_policy=RetryPolicy(maximum_attempts=3))
-LONG_ACT = dict(start_to_close_timeout=timedelta(hours=2),
-                heartbeat_timeout=timedelta(minutes=2),
-                retry_policy=RetryPolicy(maximum_attempts=2))
+# Coding/test-suite runs stream output in bursts; a quiet LLM turn can
+# outlast a short heartbeat window and get killed as a false-dead worker.
+# Both knobs are env-configurable since "how long is one attempt allowed
+# to run silently" is a deployment/harness choice, not a code constant.
+LONG_ACT_HEARTBEAT_MINUTES = int(
+    os.environ.get("SDLC_LONG_ACTIVITY_HEARTBEAT_MINUTES", "60"))
+LONG_ACT_TIMEOUT_HOURS = int(
+    os.environ.get("SDLC_LONG_ACTIVITY_TIMEOUT_HOURS", "4"))
+LONG_ACT = dict(
+    start_to_close_timeout=timedelta(hours=LONG_ACT_TIMEOUT_HOURS),
+    heartbeat_timeout=timedelta(minutes=LONG_ACT_HEARTBEAT_MINUTES),
+    retry_policy=RetryPolicy(maximum_attempts=2))
 RECORD_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
                   retry_policy=RetryPolicy(maximum_attempts=5))
+
+
+def _long_act(role_cfg: RoleConfig | None = None) -> dict:
+    """LONG_ACT, with a role's own timeout/heartbeat overrides if it has any."""
+    if role_cfg is None:
+        return LONG_ACT
+    hours = role_cfg.activity_timeout_hours
+    minutes = role_cfg.activity_heartbeat_minutes
+    if hours is None and minutes is None:
+        return LONG_ACT
+    return dict(
+        start_to_close_timeout=timedelta(
+            hours=hours if hours is not None else LONG_ACT_TIMEOUT_HOURS),
+        heartbeat_timeout=timedelta(
+            minutes=minutes if minutes is not None
+            else LONG_ACT_HEARTBEAT_MINUTES),
+        retry_policy=RetryPolicy(maximum_attempts=2))
 
 
 @workflow.defn
@@ -211,12 +239,13 @@ class FeatureWorkflow:
                 CodingTaskInput(harness=role_cfg.harness, prompt=prompt,
                                 worktree=worktree, model=role_cfg.model,
                                 session_id=session_id),
-                **LONG_ACT,
+                **_long_act(role_cfg),
             )
 
             # Clean-context validation: contract + tests + diff. No narrative.
             qa_raw = await workflow.execute_activity(
-                run_test_suite, QAInput(worktree=worktree), **LONG_ACT)
+                run_test_suite, QAInput(worktree=worktree),
+                **_long_act(cfg.roles.get("test", role_cfg)))
             diff = await workflow.execute_activity(
                 get_task_diff,
                 DiffInput(worktree=worktree, branch_point=handle.branch_point),
@@ -432,7 +461,7 @@ class FeatureWorkflow:
             deploy,
             DeployInput(environment="staging", version=idea.title,
                         command="make deploy ENV=staging", cwd=repo_path),
-            **LONG_ACT,
+            **_long_act(cfg.roles.get("devops")),
         )
         self._status = "deployed"
         return f"deployed:{pr_url}"

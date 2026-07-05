@@ -67,8 +67,8 @@ other's code:
   three-dot) so a dependent task's diff shows only its own change.
 - **`evaluate_gate(QualityGateInput)`** → `GateReport` — thin activity wrapper
   over the pure gate below.
-- Worktree root is `SDLC_WORKTREES_ROOT` (default `/var/sdlc/worktrees`), read
-  at call time.
+- Worktree root is `SDLC_WORKTREES_ROOT` (default `<tempdir>/sdlc/worktrees`,
+  cross-platform), read at call time.
 
 ### `sdlc/gate.py` — DeterministicQualityGate (Finding #5, new, pure)
 

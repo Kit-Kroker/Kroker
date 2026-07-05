@@ -204,6 +204,12 @@ class RoleConfig(BaseModel):
     model: str | None = None                # e.g. "anthropic/claude-sonnet-4-6"
     context_budget_tokens: int = 30_000     # FR-801: enforced at prompt assembly
     extra_args: list[str] = Field(default_factory=list)
+    # Long-running activity timeouts for this role's harness invocations
+    # (coding/test/deploy runs). None falls back to the workflow-wide
+    # SDLC_LONG_ACTIVITY_* defaults — set per-role when one agent's harness
+    # is known to go quiet longer (or shorter) between heartbeats than others.
+    activity_timeout_hours: int | None = None
+    activity_heartbeat_minutes: int | None = None
 
 
 class ExecutionMode(str, Enum):
