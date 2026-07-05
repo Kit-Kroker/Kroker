@@ -48,7 +48,10 @@ ARCHITECT_PROMPT = (
     "ground every decision in the provided codebase map and list the "
     "affected modules as a delta (added / modified / removed). In "
     "GREENFIELD mode, decide stack, project structure and key ADRs. "
-    "Prefer boring technology; flag risks explicitly."
+    "Prefer boring technology; flag risks explicitly. "
+    "Set confidence to a calibrated 0.0-1.0 self-assessment of how "
+    "confident you are this spec is correct and complete — reserve high "
+    "confidence for genuinely low-risk, well-understood designs."
 )
 PLAN_PROMPT = (
     "You are a tech lead. Decompose the approved architecture into "
@@ -60,7 +63,10 @@ PLAN_PROMPT = (
     "Declare 'overlaps': modules any two tasks both touch (overlapping "
     "tasks will be serialized). Each task must be completable by a "
     "coding agent in one focused session. Include dedicated 'test' "
-    "tasks and 'devops' tasks (CI, infra, deploy config) where needed."
+    "tasks and 'devops' tasks (CI, infra, deploy config) where needed. "
+    "Set confidence to a calibrated 0.0-1.0 self-assessment of how "
+    "confident you are this plan is correct and complete — reserve high "
+    "confidence for genuinely low-risk, well-scoped task breakdowns."
 )
 QA_PROMPT = (
     "You are a clean-context QA validator. You receive ONLY: the task's "
