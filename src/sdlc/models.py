@@ -240,6 +240,43 @@ class MergeVerdict(BaseModel):
     concerns: list[str] = Field(default_factory=list)
 
 
+class MemoryKind(str, Enum):
+    STAGE_SUMMARY = "stage_summary"
+    GOTCHA = "gotcha"
+    GATE_FEEDBACK = "gate_feedback"
+
+
+class RecallSnapshot(BaseModel):
+    """Persisted, hashed recall result — FR-402: a declared stage input,
+    never a live side-channel. `degraded=True` means the backend was
+    unreachable; the pipeline proceeds with an empty snapshot rather than
+    blocking on memory."""
+    query_hash: str
+    bank: str
+    watermark: str
+    items: list[str] = Field(default_factory=list)
+    degraded: bool = False
+
+
+class RetainItem(BaseModel):
+    kind: MemoryKind
+    bank: str
+    text: str
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
+class MemoryConfig(BaseModel):
+    """FR-400. `watermark=None` means "capture fresh at run start"; setting
+    it pins a run to a prior freeze point (ADR-5 explicit "refresh
+    memory")."""
+    enabled: bool = False
+    backend: Literal["fake", "hindsight"] = "fake"
+    base_url: str = "http://localhost:8088"
+    org_bank: str = "org"
+    project_bank: str = "project:default"
+    watermark: str | None = None
+
+
 class PipelineConfig(BaseModel):
     execution_mode: ExecutionMode = ExecutionMode.SERIAL
     max_session_resumes: int = 3            # FR-802: past this, fresh session
@@ -265,3 +302,5 @@ class PipelineConfig(BaseModel):
     })
     max_fix_attempts: int = 2                # then escalate to human
     gate_timeout_hours: int = 48
+    memory: MemoryConfig = Field(default_factory=MemoryConfig)
+    memoization_enabled: bool = False
