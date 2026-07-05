@@ -392,6 +392,10 @@ class FeatureWorkflow:
             + ("\nHandoffs from preceding tasks:\n" + "\n".join(handoff_notes)
                if handoff_notes else "")
             + "\nWork only in this worktree. Run the tests before finishing."
+            + "\nThis worktree is already a git repository (checked out on its"
+            " own branch) even if the task looks like a fresh/greenfield"
+            " project — do NOT run `git init`, and do NOT delete or modify"
+            " the `.git` file/directory."
         )
 
         session_id: str | None = None

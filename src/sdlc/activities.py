@@ -11,6 +11,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 
 from temporalio import activity
@@ -29,78 +30,200 @@ def _worktrees_root() -> str:
     return os.environ.get("SDLC_WORKTREES_ROOT", default)
 
 
+def _git(args: list[str], cwd: str) -> subprocess.CompletedProcess:
+    """Run git in ``cwd`` with the dubious-ownership check bypassed.
+
+    Git's ``safe.directory`` ownership check (added in 2.36.3) refuses
+    operations on a repo whose owner differs from the calling process —
+    exit 128, "fatal: detected dubious ownership in repository at '...'".
+    On Windows this fires whenever the worker's SID doesn't match the
+    worktree dir's owner (service accounts, mounted volumes, containers,
+    files extracted across users). Our worktrees live under
+    ``SDLC_WORKTREES_ROOT`` (default ``tempfile.gettempdir()/sdlc/worktrees``)
+    and are created and fully owned by this worker, so we bypass the
+    check per-invocation via ``-c safe.directory=*`` rather than mutate
+    global git config (which would weaken the check for the user's own
+    repos too).
+
+    Stdout/stderr are always captured so a non-zero exit surfaces git's
+    actual diagnostic instead of a bare ``CalledProcessError`` that loses
+    git's stderr when propagated through Temporal.
+    """
+    return subprocess.run(
+        ["git", "-c", "safe.directory=*", *args], cwd=cwd,
+        capture_output=True, encoding="utf-8", errors="replace")
+
+
+def _chmod_retry(func, p, _exc):
+    """shutil.rmtree onerror callback: clear read-only bits and retry.
+
+    Handles the common case of git pack/index files marked read-only on
+    Windows. Does NOT clear sharing violations (WinError 32) — those are
+    handled by the caller falling back to an alternate worktree path.
+    """
+    try:
+        os.chmod(p, stat.S_IWRITE)
+    except OSError:
+        pass
+    func(p)
+
+
+def _rmtree_with_retry(path: str, attempts: int = 3, delay_s: float = 1.0) -> None:
+    """rmtree with short retry for transient Windows locks.
+
+    Windows Defender / Search Indexer briefly hold handles during their
+    scans of newly-populated worktree dirs; that surfaces as WinError 32
+    inside shutil.rmtree. A few short retries clears those. Persistent
+    locks (orphan process holding the dir as its CWD) cannot be cleared
+    in user space and will keep raising — the caller must fall back to
+    a different path.
+    """
+    last_err: OSError | None = None
+    for _ in range(attempts):
+        try:
+            shutil.rmtree(path, onerror=_chmod_retry)
+            return
+        except OSError as e:
+            last_err = e
+            time.sleep(delay_s)
+    assert last_err is not None
+    raise last_err
+
+
+def _find_live_worktree_for_branch(repo_path: str, branch: str) -> str | None:
+    """Return the path of the worktree whose HEAD is ``branch``, or None.
+
+    Git rejects checking the same branch out in two worktrees
+    ("fatal: '...' is already checked out at '<path>'"). When a prior
+    ``_ensure_worktree`` had to fall back to an alternate path (because
+    the canonical one was CWD-locked), the branch is still checked out
+    at that fallback path. Returning it here lets subsequent retries /
+    reset runs reuse the same path instead of accumulating orphans.
+    """
+    result = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=repo_path, capture_output=True, encoding="utf-8", errors="replace")
+    if result.returncode != 0:
+        return None
+    current_path: str | None = None
+    for line in result.stdout.splitlines():
+        if line.startswith("worktree "):
+            current_path = os.path.normpath(line[len("worktree "):].strip())
+        elif line.startswith("branch ") and current_path is not None:
+            ref = line[len("branch "):].strip()
+            if ref == branch or ref == f"refs/heads/{branch}":
+                return current_path
+    return None
+
+
 def _clear_worktree_dir(repo_path: str, path: str) -> None:
     """Remove every trace of a stale worktree at ``path``.
 
-    Two mechanisms, in order: ``git worktree remove -f`` (git cleans its own
-    registration + internals correctly), then a Windows-robust rmtree for any
-    leftover dir. ``shutil.rmtree(ignore_errors=True)`` silently aborts on the
-    first read-only or locked file (common with git index/pack files on
+    Three mechanisms, in order: ``git worktree remove -f`` (cleans git's
+    own registration + internals), ``git worktree prune`` (drops stale
+    registrations), then a Windows-robust rmtree for any leftover dir.
+    ``shutil.rmtree(ignore_errors=True)`` silently aborts on the first
+    read-only or locked file (common with git index/pack files on
     Windows), leaving the dir in place and causing a downstream
-    'already exists' failure — so we chmod read-only entries and retry, and
-    let genuinely locked files raise a clear error instead."""
+    'already exists' failure — so we chmod read-only entries and retry.
+
+    Raises OSError if the dir cannot be cleared (typically WinError 32:
+    another process — Defender, an orphan coding-agent subprocess, etc.
+    — holds an open handle on the dir or its contents). The caller is
+    responsible for falling back to an alternate path; no amount of
+    in-process retry can release a CWD lock.
+    """
     subprocess.run(["git", "worktree", "remove", "-f", path],
                    cwd=repo_path, capture_output=True)
     subprocess.run(["git", "worktree", "prune"],
                    cwd=repo_path, capture_output=True)
     if not os.path.exists(path):
         return
-
-    def _chmod_retry(func, p, _exc):
-        try:
-            os.chmod(p, stat.S_IWRITE)
-        except OSError:
-            pass
-        func(p)
-
-    shutil.rmtree(path, onerror=_chmod_retry)
+    _rmtree_with_retry(path)
 
 
-def _ensure_worktree(repo_path: str, branch: str, path: str, from_ref: str) -> None:
+def _ensure_worktree(repo_path: str, branch: str, path: str,
+                     from_ref: str, max_alt: int = 8) -> str:
     """Idempotently create (or reuse) a worktree checked out to ``branch``.
+
+    Returns the worktree path (which may differ from ``path`` if a
+    persistent lock forced a fallback — see below).
 
     Temporal retries re-run the calling activity; bare ``git worktree add -b``
     fails with "a branch named ... already exists" if the branch or path
     survives from a prior partial attempt (``git worktree prune`` only drops
     registrations whose dirs are gone — it never touches a lingering branch
-    ref or a live worktree). Converge all states to a live worktree at ``path``:
+    ref or a live worktree). Converge all states to a live worktree:
 
-      - live worktree (dir present + is a git worktree) -> reuse as-is
-        (run_coding_task checkpoints a commit, so resuming preserves progress)
-      - stale dir at path (dead/broken) -> clear it, then recreate
+      - branch already checked out in some worktree -> reuse that worktree
+        (covers retries after a path-fallback on a prior attempt)
+      - live worktree at ``path`` -> reuse as-is
+      - stale dir at ``path`` (dead/broken) -> clear it, then recreate
       - branch lingers but worktree gone -> check out the existing branch
       - neither present -> fresh ``add -b`` cut from ``from_ref``
+
+    Windows-only failure mode: if a stale ``path`` is held open by another
+    process (WinError 32 — typically an orphan coding-agent subprocess
+    whose CWD is the worktree, or a Defender real-time scan), no in-process
+    API can move or delete it. We fall back to ``path.1``, ``path.2``, ...
+    up to ``max_alt`` so the activity can still succeed; the orphaned dir
+    is left behind for the OS / a later janitor to clean up once the lock
+    holder releases.
     """
     subprocess.run(["git", "worktree", "prune"],
                    cwd=repo_path, capture_output=True)
 
-    live = os.path.isdir(path) and subprocess.run(
-        ["git", "rev-parse", "--is-inside-work-tree"],
-        cwd=path, capture_output=True).returncode == 0
-    if live:
-        return
+    # Normalize so candidate paths and git's reported paths use the same
+    # separator (git emits forward slashes on Windows; os.path.join emits
+    # backslashes).
+    path = os.path.normpath(path)
 
-    if os.path.exists(path):
-        _clear_worktree_dir(repo_path, path)
+    # If a prior fallback already checked `branch` out at an alternate path,
+    # reuse it — `git worktree add` would otherwise fail with
+    # "... is already checked out at '<alt_path>'".
+    existing = _find_live_worktree_for_branch(repo_path, branch)
+    if existing and os.path.isdir(existing):
+        return existing
 
-    branch_exists = subprocess.run(
-        ["git", "rev-parse", "--verify", "--quiet", branch],
-        cwd=repo_path, capture_output=True).returncode == 0
+    candidates = [path] + [f"{path}.{i}" for i in range(1, max_alt)]
+    last_clear_err: Exception | None = None
+    for cand in candidates:
+        live = os.path.isdir(cand) and _git(
+            ["rev-parse", "--is-inside-work-tree"], cand).returncode == 0
+        if live:
+            return cand
 
-    if branch_exists:
-        wt = subprocess.run(
-            ["git", "worktree", "add", path, branch],
-            cwd=repo_path, capture_output=True,
-            encoding="utf-8", errors="replace")
-    else:
-        wt = subprocess.run(
-            ["git", "worktree", "add", "-b", branch, path, from_ref],
-            cwd=repo_path, capture_output=True,
-            encoding="utf-8", errors="replace")
-    if wt.returncode != 0:
-        raise RuntimeError(
-            f"git worktree add failed (rc={wt.returncode}): "
-            f"{wt.stderr.strip() or wt.stdout.strip()}")
+        if os.path.exists(cand):
+            try:
+                _clear_worktree_dir(repo_path, cand)
+            except OSError as e:
+                last_clear_err = e
+                continue  # try the next candidate path
+
+        branch_exists = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", branch],
+            cwd=repo_path, capture_output=True).returncode == 0
+
+        if branch_exists:
+            wt = subprocess.run(
+                ["git", "worktree", "add", cand, branch],
+                cwd=repo_path, capture_output=True,
+                encoding="utf-8", errors="replace")
+        else:
+            wt = subprocess.run(
+                ["git", "worktree", "add", "-b", branch, cand, from_ref],
+                cwd=repo_path, capture_output=True,
+                encoding="utf-8", errors="replace")
+        if wt.returncode != 0:
+            raise RuntimeError(
+                f"git worktree add failed (rc={wt.returncode}): "
+                f"{wt.stderr.strip() or wt.stdout.strip()}")
+        return cand
+
+    raise RuntimeError(
+        f"could not clear or create worktree at {path} (tried {len(candidates)} "
+        f"candidate paths). Last clear error: {last_clear_err!r}. Likely a "
+        f"process is holding the dir as its CWD — kill it or reboot.")
 
 
 @dataclass
@@ -121,14 +244,19 @@ class WorktreeHandle:
 @activity.defn
 async def create_worktree(inp: WorktreeInput) -> WorktreeHandle:
     """Run-scoped worktree + branch, cut from the integration head.
-    Idempotent across Temporal retries (see ``_ensure_worktree``)."""
+    Idempotent across Temporal retries (see ``_ensure_worktree``).
+
+    The returned ``path`` may differ from the canonical
+    ``<root>/<run>/<task>`` if a persistent Windows lock forced a
+    fallback to ``<root>/<run>/<task>.N``; the workflow treats the
+    returned path as authoritative."""
     path = os.path.join(_worktrees_root(), inp.run_id, inp.task_id)
     branch = f"sdlc/{inp.run_id}/{inp.task_id}"
-    _ensure_worktree(inp.repo_path, branch, path, inp.from_ref)
+    actual = _ensure_worktree(inp.repo_path, branch, path, inp.from_ref)
     point = subprocess.run(
         ["git", "rev-parse", inp.from_ref], cwd=inp.repo_path,
         capture_output=True, encoding="utf-8", errors="replace").stdout.strip()
-    return WorktreeHandle(path=path, branch=branch, branch_point=point)
+    return WorktreeHandle(path=actual, branch=branch, branch_point=point)
 
 
 @dataclass
@@ -157,14 +285,17 @@ async def setup_integration_branch(inp: IntegrationInput) -> IntegrationHandle:
     """Create sdlc/<run>/integration from base in its own worktree;
     return its head SHA + worktree path. Task worktrees branch from this
     head; the merge stage reuses the worktree path.
-    Idempotent across Temporal retries (see ``_ensure_worktree``)."""
+    Idempotent across Temporal retries (see ``_ensure_worktree``).
+
+    The returned ``worktree_path`` may differ from the canonical
+    ``<root>/<run>/integration`` if a persistent Windows lock forced a
+    fallback to ``<root>/<run>/integration.N``; the workflow treats the
+    returned path as authoritative."""
     branch = f"sdlc/{inp.run_id}/integration"
     path = os.path.join(_worktrees_root(), inp.run_id, "integration")
-    _ensure_worktree(inp.repo_path, branch, path, inp.base_branch)
-    head = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=path,
-        capture_output=True, encoding="utf-8", errors="replace").stdout.strip()
-    return IntegrationHandle(head_sha=head, worktree_path=path)
+    actual = _ensure_worktree(inp.repo_path, branch, path, inp.base_branch)
+    head = _git(["rev-parse", "HEAD"], actual).stdout.strip()
+    return IntegrationHandle(head_sha=head, worktree_path=actual)
 
 
 @dataclass
@@ -187,26 +318,22 @@ async def merge_into_integration(inp: MergeInput) -> MergeResult:
     A merge conflict = a falsified `overlaps` declaration (Finding #1):
     abort cleanly and report it so the caller serializes/escalates."""
     ipath = os.path.join(_worktrees_root(), inp.run_id, "integration")
-    merge = subprocess.run(
-        ["git", "merge", "--no-ff", "-m", f"merge {inp.task_branch}",
+    merge = _git(
+        ["merge", "--no-ff", "-m", f"merge {inp.task_branch}",
          inp.task_branch],
-        cwd=ipath, capture_output=True, encoding="utf-8", errors="replace")
+        ipath)
     if merge.returncode != 0:
         # Distinguish a real conflict from an infra/config failure via the
         # git index's unmerged entries (locale-independent) — must be read
         # BEFORE `merge --abort`, which clears the unmerged state.
-        unmerged = subprocess.run(["git", "ls-files", "--unmerged"], cwd=ipath,
-                                  capture_output=True, encoding="utf-8", errors="replace").stdout
-        subprocess.run(["git", "merge", "--abort"], cwd=ipath,
-                       capture_output=True)
+        unmerged = _git(["ls-files", "--unmerged"], ipath).stdout
+        _git(["merge", "--abort"], ipath)
         if not unmerged.strip():
             raise RuntimeError(
                 f"git merge failed (not a conflict): {merge.stderr.strip()}")
-        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ipath,
-                              capture_output=True, encoding="utf-8", errors="replace").stdout.strip()
+        head = _git(["rev-parse", "HEAD"], ipath).stdout.strip()
         return MergeResult(merged=False, conflict=True, integration_head=head)
-    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ipath,
-                          capture_output=True, encoding="utf-8", errors="replace").stdout.strip()
+    head = _git(["rev-parse", "HEAD"], ipath).stdout.strip()
     return MergeResult(merged=True, conflict=False, integration_head=head)
 
 
@@ -236,16 +363,29 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
         heartbeat=activity.heartbeat,
     )
     # Checkpoint commit — the resume point if anything downstream fails.
-    subprocess.run(["git", "add", "-A"], cwd=inp.worktree, check=True)
-    commit = subprocess.run(
-        ["git", "commit", "-m", f"sdlc checkpoint (exit={result.exit_code})",
+    add = _git(["add", "-A"], inp.worktree)
+    if add.returncode != 0:
+        # Surface git's actual diagnostic (e.g. "dubious ownership", a
+        # locked index, a corrupt repo) instead of a bare CalledProcessError
+        # that loses stderr when Temporal serializes the exception.
+        detail = add.stderr.strip() or add.stdout.strip()
+        hint = ""
+        if "not a git repository" in detail:
+            # create_worktree only returns after `git worktree add` succeeds,
+            # so `.git` existed when this activity started. The coding agent
+            # itself must have deleted/overwritten it (e.g. ran `git init`
+            # on a "greenfield" task) — this is agent misbehavior, not a
+            # worktree-setup bug.
+            hint = (" (the worktree's .git was intact when this task started; "
+                    "the coding agent likely deleted or reinitialized it)")
+        raise RuntimeError(
+            f"git add failed in {inp.worktree}: {detail}{hint}")
+    commit = _git(
+        ["commit", "-m", f"sdlc checkpoint (exit={result.exit_code})",
          "--allow-empty"],
-        cwd=inp.worktree, capture_output=True, encoding="utf-8", errors="replace",
-    )
+        inp.worktree)
     if commit.returncode == 0:
-        sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=inp.worktree,
-                             capture_output=True, encoding="utf-8", errors="replace").stdout.strip()
-        result.commit_sha = sha
+        result.commit_sha = _git(["rev-parse", "HEAD"], inp.worktree).stdout.strip()
     return result
 
 
@@ -262,15 +402,9 @@ async def get_task_diff(inp: DiffInput) -> dict:
     the task's branch point so a dependent task's diff shows only its own
     change — upstream work is invisible (Finding #1)."""
     rng = f"{inp.branch_point}...HEAD"
-    stat = subprocess.run(
-        ["git", "diff", "--stat", rng],
-        cwd=inp.worktree, capture_output=True, encoding="utf-8", errors="replace").stdout
-    patch = subprocess.run(
-        ["git", "diff", rng],
-        cwd=inp.worktree, capture_output=True, encoding="utf-8", errors="replace").stdout
-    files = subprocess.run(
-        ["git", "diff", "--name-only", rng],
-        cwd=inp.worktree, capture_output=True, encoding="utf-8", errors="replace").stdout.splitlines()
+    stat = _git(["diff", "--stat", rng], inp.worktree).stdout
+    patch = _git(["diff", rng], inp.worktree).stdout
+    files = _git(["diff", "--name-only", rng], inp.worktree).stdout.splitlines()
     return {"stat": stat, "patch": patch[:inp.max_chars], "files": files}
 
 
@@ -326,8 +460,10 @@ class PROpenInput:
 
 @activity.defn
 async def open_pull_request(inp: PROpenInput) -> str:
-    subprocess.run(["git", "push", "-u", "origin", "HEAD"],
-                   cwd=inp.worktree, check=True)
+    push = _git(["push", "-u", "origin", "HEAD"], inp.worktree)
+    if push.returncode != 0:
+        raise RuntimeError(
+            f"git push failed: {push.stderr.strip() or push.stdout.strip()}")
     pr = subprocess.run(
         ["gh", "pr", "create", "--title", inp.title, "--body", inp.body,
          "--base", inp.base_branch],

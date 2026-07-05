@@ -10,7 +10,10 @@ import asyncio
 import os
 import shutil
 import stat
+import sys
 from pathlib import Path
+
+import pytest
 
 from sdlc.activities import (
     IntegrationInput, WorktreeInput,
@@ -100,3 +103,52 @@ def test_create_worktree_clears_stale_readonly_dir(git_repo):
 
     assert recovered.path == first.path
     assert recovered.branch == first.branch
+
+
+@pytest.mark.skipif(sys.platform != "win32",
+                    reason="WinError 32 reproduction is Windows-specific; "
+                           "POSIX allows unlinking open files")
+def test_create_worktree_clears_stale_dir_with_locked_file(git_repo):
+    """A prior worktree left a dead dir at the path containing a file held
+    open by another process. On Windows this is WinError 32 — produced by
+    Defender real-time scans, a coding-agent subprocess that hasn't released
+    its CWD, an orphan MCP server, etc. No user-space API can move or delete
+    a dir that's a process's CWD (verified: shutil.rmtree, os.rename,
+    cmd /c rd /s /q, and MoveFileEx all fail). So _ensure_worktree cannot
+    clear the path; it must fall back to ``<path>.N`` so the activity still
+    succeeds, and the workflow treats the returned path as authoritative.
+    """
+    setup = asyncio.run(setup_integration_branch(
+        IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")))
+    inp = WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="T04",
+                        from_ref=setup.head_sha)
+
+    first = asyncio.run(create_worktree(inp))
+    # Break the worktree's liveness: drop the .git pointer so rev-parse fails
+    # and the reuse path does not short-circuit.
+    git_link = os.path.join(first.path, ".git")
+    if os.path.exists(git_link):
+        os.remove(git_link)
+    # Hold an open handle on a file inside the dead dir — the exact thing
+    # that produces WinError 32 inside shutil.rmtree. We also need to drop
+    # git's worktree registration so the fallback path can check out the
+    # same branch.
+    run_git(["worktree", "prune"], git_repo)
+    locked_path = Path(first.path) / "locked.log"
+    locked_path.write_text("x")
+    locked_handle = open(locked_path, "r+")
+    # Sanity: the branch survived, the path is dead but present.
+    assert run_git(["rev-parse", "--verify", first.branch], git_repo).strip()
+
+    try:
+        recovered = asyncio.run(create_worktree(inp))  # raises before the fix
+    finally:
+        locked_handle.close()
+
+    # The recovered worktree lives at a fallback path (.1, .2, ...) because
+    # the canonical path could not be cleared. Same branch, fresh live tree.
+    assert recovered.branch == first.branch
+    assert recovered.path != first.path
+    assert os.path.isdir(recovered.path)
+    assert run_git(["rev-parse", "--is-inside-work-tree"],
+                   recovered.path).strip() == "true"
