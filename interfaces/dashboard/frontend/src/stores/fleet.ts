@@ -22,9 +22,10 @@ export const useFleetStore = defineStore('fleet', () => {
     return runs.value.find((r) => r.id === id)
   }
 
-  async function startRun(input: StartRunInput) {
-    await api.startRun(input)
+  async function startRun(input: StartRunInput): Promise<Run> {
+    const r = await api.startRun(input)
     await refresh()
+    return r
   }
 
   const blockedCount = computed(() => runs.value.filter((r) => r.status === 'blocked').length)

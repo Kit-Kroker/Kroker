@@ -1,7 +1,6 @@
 export type Status = 'running' | 'blocked' | 'failed' | 'done'
 export type GateOutcome = 'approve' | 'revise' | 'reject'
 export type ProjectMode = 'brownfield' | 'greenfield'
-export type InboxKind = 'clarify' | 'gate' | 'override' | 'escalation'
 
 export interface Decision {
   ts: string

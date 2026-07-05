@@ -3,7 +3,7 @@ import { selectApi } from './client'
 
 describe('selectApi', () => {
   it('mock provider seeds 7 runs', async () => {
-    const api = selectApi('mock')
+    const api = selectApi('mock', { simulateLive: false })
     expect(await api.listRuns()).toHaveLength(7)
   })
 

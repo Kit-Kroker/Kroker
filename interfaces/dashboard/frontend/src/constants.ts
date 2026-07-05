@@ -43,12 +43,3 @@ export const STATUS_COLORS = {
   pending: '#2a3140',
   skipped: '#1b202b',
 } as const
-
-export const STAGE_LABELS = {
-  done: 'done',
-  active: 'in flight',
-  blocked: 'gate open',
-  failed: 'failed',
-  skipped: 'skipped',
-  pending: '·',
-} as const

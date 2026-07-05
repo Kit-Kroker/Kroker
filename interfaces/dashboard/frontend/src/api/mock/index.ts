@@ -355,9 +355,3 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
 
   return api
 }
-
-let singleton: DashboardApi | null = null
-export function getMockApi(): DashboardApi {
-  if (!singleton) singleton = createMockApi({ simulateLive: true })
-  return singleton
-}

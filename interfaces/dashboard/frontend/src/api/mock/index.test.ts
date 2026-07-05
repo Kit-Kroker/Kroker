@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createMockApi, tickCosts } from './index'
 import type { Run } from '../types'
 
@@ -8,6 +8,8 @@ const mk = (over: Partial<Run>): Run => ({
   ...over,
 })
 
+afterEach(() => { vi.restoreAllMocks() })
+
 describe('tickCosts', () => {
   it('bumps running runs and leaves others untouched', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.5)
@@ -15,7 +17,6 @@ describe('tickCosts', () => {
     const out = tickCosts(runs)
     expect(out[0].cost).toBeCloseTo(1.05, 5)
     expect(out[1].cost).toBe(5)
-    vi.restoreAllMocks()
   })
 })
 

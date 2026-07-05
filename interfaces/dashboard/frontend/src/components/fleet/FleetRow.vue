@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { Run } from '../../api/types'
 import { statusMetaOf } from '../../composables/status'
 import { money } from '../../composables/format'
 import StageDots from './StageDots.vue'
 
 const props = defineProps<{ run: Run }>()
-const meta = () => statusMetaOf(props.run)
+const meta = computed(() => statusMetaOf(props.run))
 </script>
 
 <template>
@@ -16,9 +17,9 @@ const meta = () => statusMetaOf(props.run)
       <span class="mode">{{ run.mode }}</span>
     </span>
     <StageDots :run="run" />
-    <span class="status" :style="{ color: meta().color }">
-      <span class="pip" :style="{ background: meta().color, animation: meta().anim }" />
-      {{ meta().label }}
+    <span class="status" :style="{ color: meta.color }">
+      <span class="pip" :style="{ background: meta.color, animation: meta.anim }" />
+      {{ meta.label }}
     </span>
     <span class="blocker">{{ run.blocker || '—' }}</span>
     <span class="cost">{{ money(run.cost) }}</span>

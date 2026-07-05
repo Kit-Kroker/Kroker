@@ -1,24 +1,9 @@
 import type { DashboardApi } from './types'
-import { getMockApi } from './mock'
+import { createMockApi } from './mock'
+import { createHttpApi } from './http'
 
-const notWired = (method: string) => () =>
-  Promise.reject(new Error(`Dashboard http provider not wired (VITE_API=http): ${method}`))
-
-function httpApi(): DashboardApi {
-  return {
-    listRuns: notWired('listRuns'),
-    getRun: notWired('getRun'),
-    listInbox: notWired('listInbox'),
-    answerClarify: notWired('answerClarify'),
-    decideGate: notWired('decideGate'),
-    overrideMerge: notWired('overrideMerge'),
-    resolveEscalation: notWired('resolveEscalation'),
-    startRun: notWired('startRun'),
-  }
-}
-
-export function selectApi(mode: 'mock' | 'http'): DashboardApi {
-  return mode === 'http' ? httpApi() : getMockApi()
+export function selectApi(mode: 'mock' | 'http', opts?: { simulateLive?: boolean }): DashboardApi {
+  return mode === 'http' ? createHttpApi() : createMockApi({ simulateLive: opts?.simulateLive ?? true })
 }
 
 export const api: DashboardApi = selectApi(import.meta.env.VITE_API === 'http' ? 'http' : 'mock')
