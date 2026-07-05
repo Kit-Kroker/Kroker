@@ -322,7 +322,10 @@ class FeatureWorkflow:
         guidance: str | None = None
         for round in range(1, cfg.max_gate_rounds + 1):
             artifact = await run_fn(guidance)
-            decision = await self._gate(name, cfg, round=round)
+            auto = _auto_decision_for(
+                name, cfg, getattr(artifact, "confidence", None))
+            decision = await self._gate(name, cfg, auto_decision=auto,
+                                        round=round)
             if decision.outcome is not GateOutcome.REVISE:
                 return artifact, decision
             guidance = decision.guidance or decision.comments

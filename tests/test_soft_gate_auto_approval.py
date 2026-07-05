@@ -43,3 +43,18 @@ def test_off_policy_ignores_confidence():
 def test_unconfigured_gate_defaults_to_hard_and_falls_through():
     decision = _auto_decision_for("deploy", PipelineConfig(gates={}), 0.99)
     assert decision is None
+
+
+import pathlib
+
+SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+
+
+def test_revisable_stage_passes_auto_decision():
+    src = SRC.read_text(encoding="utf-8")
+    assert "_auto_decision_for(" in src, (
+        "_revisable_stage must call _auto_decision_for to compute an "
+        "auto_decision from the artifact's confidence (FR-301)")
+    # The auto_decision must actually reach _gate(), not just be computed.
+    assert "auto_decision=auto" in src, (
+        "_revisable_stage must pass auto_decision=auto into self._gate()")
