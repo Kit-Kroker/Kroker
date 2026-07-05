@@ -7,7 +7,10 @@ Reproduces the runtime error:
   git worktree add failed (rc=255): ... a branch named 'sdlc/<run>/<task>' already exists
 """
 import asyncio
+import os
 import shutil
+import stat
+from pathlib import Path
 
 from sdlc.activities import (
     IntegrationInput, WorktreeInput,
@@ -62,3 +65,38 @@ def test_setup_integration_branch_reuses_on_repeat_call(git_repo):
     first = asyncio.run(setup_integration_branch(inp))
     second = asyncio.run(setup_integration_branch(inp))  # raises before the fix
     assert second.worktree_path == first.worktree_path
+
+
+def test_create_worktree_clears_stale_readonly_dir(git_repo):
+    """A prior worktree left a *dead* (non-live) dir at the path containing
+    a read-only file (Windows: git index/pack files are read-only, and
+    shutil.rmtree(ignore_errors=True) silently aborts on them). The branch
+    lingers too. _ensure_worktree must clear the path robustly and recreate,
+    not fail with 'already exists'.
+
+    Reproduces:
+      git worktree add failed (rc=128): checking out 'sdlc/<run>/<task>'
+      fatal: '<path>' already exists
+    """
+    setup = asyncio.run(setup_integration_branch(
+        IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")))
+    inp = WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="T03",
+                        from_ref=setup.head_sha)
+
+    first = asyncio.run(create_worktree(inp))
+    # Break the worktree's liveness: drop the .git pointer so rev-parse fails
+    # and the reuse path does not short-circuit.
+    git_link = os.path.join(first.path, ".git")
+    if os.path.exists(git_link):
+        os.remove(git_link)
+    # Leave a read-only file — the exact thing that breaks naive rmtree.
+    ro = Path(first.path) / "readonly.lock"
+    ro.write_text("x")
+    os.chmod(ro, stat.S_IREAD)
+    # Sanity: the branch survived, the path is dead but present.
+    assert run_git(["rev-parse", "--verify", first.branch], git_repo).strip()
+
+    recovered = asyncio.run(create_worktree(inp))  # raises before the fix
+
+    assert recovered.path == first.path
+    assert recovered.branch == first.branch

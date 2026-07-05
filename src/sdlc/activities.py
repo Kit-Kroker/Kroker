@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shutil
+import stat
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -28,6 +29,33 @@ def _worktrees_root() -> str:
     return os.environ.get("SDLC_WORKTREES_ROOT", default)
 
 
+def _clear_worktree_dir(repo_path: str, path: str) -> None:
+    """Remove every trace of a stale worktree at ``path``.
+
+    Two mechanisms, in order: ``git worktree remove -f`` (git cleans its own
+    registration + internals correctly), then a Windows-robust rmtree for any
+    leftover dir. ``shutil.rmtree(ignore_errors=True)`` silently aborts on the
+    first read-only or locked file (common with git index/pack files on
+    Windows), leaving the dir in place and causing a downstream
+    'already exists' failure — so we chmod read-only entries and retry, and
+    let genuinely locked files raise a clear error instead."""
+    subprocess.run(["git", "worktree", "remove", "-f", path],
+                   cwd=repo_path, capture_output=True)
+    subprocess.run(["git", "worktree", "prune"],
+                   cwd=repo_path, capture_output=True)
+    if not os.path.exists(path):
+        return
+
+    def _chmod_retry(func, p, _exc):
+        try:
+            os.chmod(p, stat.S_IWRITE)
+        except OSError:
+            pass
+        func(p)
+
+    shutil.rmtree(path, onerror=_chmod_retry)
+
+
 def _ensure_worktree(repo_path: str, branch: str, path: str, from_ref: str) -> None:
     """Idempotently create (or reuse) a worktree checked out to ``branch``.
 
@@ -39,6 +67,7 @@ def _ensure_worktree(repo_path: str, branch: str, path: str, from_ref: str) -> N
 
       - live worktree (dir present + is a git worktree) -> reuse as-is
         (run_coding_task checkpoints a commit, so resuming preserves progress)
+      - stale dir at path (dead/broken) -> clear it, then recreate
       - branch lingers but worktree gone -> check out the existing branch
       - neither present -> fresh ``add -b`` cut from ``from_ref``
     """
@@ -52,7 +81,7 @@ def _ensure_worktree(repo_path: str, branch: str, path: str, from_ref: str) -> N
         return
 
     if os.path.exists(path):
-        shutil.rmtree(path, ignore_errors=True)
+        _clear_worktree_dir(repo_path, path)
 
     branch_exists = subprocess.run(
         ["git", "rev-parse", "--verify", "--quiet", branch],
