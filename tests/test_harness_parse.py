@@ -77,20 +77,17 @@ def test_opencode_build_cmd_auto_approves_edits():
     assert "--auto" in cmd
 
 
-def test_opencode_default_env_disables_plugins():
+def test_opencode_build_cmd_runs_pure():
     """The user's global opencode config loads the superpowers plugin, whose
     brainstorming skill auto-activates on any 'creative work' and makes the
     model ask clarifying questions instead of implementing -> the coding
-    activity stalls waiting for an answer that never comes. The harness
-    injects OPENCODE_CONFIG_CONTENT (inline config, highest non-managed
-    precedence) with plugin:[] to drop only plugins while keeping built-in
-    Read/Write/Edit/Bash. An env var, not a project file, so the worktree
-    diff stays clean."""
-    import json as _json
-    env = OpenCodeHarness().default_env()
-    assert "OPENCODE_CONFIG_CONTENT" in env
-    cfg = _json.loads(env["OPENCODE_CONFIG_CONTENT"])
-    assert cfg.get("plugin") == []
+    activity stalls. Config-level plugin:[] does NOT unload it (opencode
+    auto-discovers installed plugins from its cache), so --pure — the only
+    mechanism that actually skips plugin loading — is required. It keeps the
+    built-in Read/Write/Edit/Bash tools (verified end-to-end)."""
+    cmd = OpenCodeHarness().build_cmd(HarnessRequest(
+        prompt="do stuff", cwd="/tmp/wt", model="zai-coding-plan/glm-5.2"))
+    assert "--pure" in cmd
 
 
 def test_claude_build_cmd_accept_edits():

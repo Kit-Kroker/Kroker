@@ -87,11 +87,6 @@ class CodingHarness(ABC):
     @abstractmethod
     def parse(self, stdout: str, exit_code: int) -> HarnessRunResult: ...
 
-    def default_env(self) -> dict[str, str]:
-        """Env vars the harness always needs (caller's req.env wins on
-        conflict). Subclasses override to inject harness-specific config."""
-        return {}
-
     async def run(self, req: HarnessRequest,
                   heartbeat=None) -> HarnessRunResult:
         cmd = self.build_cmd(req)
@@ -103,7 +98,7 @@ class CodingHarness(ABC):
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=req.cwd,
-            env=build_env({**self.default_env(), **req.env}),
+            env=build_env(req.env),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -179,31 +174,26 @@ class ClaudeCodeHarness(CodingHarness):
 class OpenCodeHarness(CodingHarness):
     kind = HarnessKind.OPENCODE
 
-    # Headless config injected via OPENCODE_CONFIG_CONTENT (inline config —
-    # highest non-managed precedence, overrides global + project). The user's
-    # global config loads the superpowers plugin, whose brainstorming skill
-    # auto-activates on "creative work" and makes the model ask clarifying
-    # questions instead of implementing -> the non-interactive coding activity
-    # stalls waiting for an answer that never comes. Setting plugin:[] drops
-    # only plugins (superpowers) while keeping the built-in Read/Write/Edit/
-    # Bash tools and the auth (which lives in the data dir, not config).
-    # An env var (not a project opencode.json) so it leaves no file in the
-    # worktree to pollute the task diff.
-    HEADLESS_CONFIG = '{"plugin":[]}'
-
     def __init__(self, attach_url: str | None = None):
         # Point at a running `opencode serve` to skip MCP cold boots.
         self.attach_url = attach_url
 
-    def default_env(self) -> dict[str, str]:
-        return {"OPENCODE_CONFIG_CONTENT": self.HEADLESS_CONFIG}
-
     def build_cmd(self, req: HarnessRequest) -> list[str]:
         cmd = ["opencode", "run"]
-        # --auto: non-interactive run; without it every Edit/Write/Bash call
-        # blocks on a permission approval that never arrives -> empty diff.
-        # Mirrors claude's --permission-mode acceptEdits.
-        cmd += ["--auto"]
+        # --pure: skip external plugins. The user's global config loads the
+        # superpowers plugin, whose brainstorming skill auto-activates on
+        # "creative work" and makes the model ask clarifying questions
+        # instead of implementing -> the non-interactive coding activity
+        # stalls waiting for an answer that never comes. Config-level
+        # plugin:[] does NOT work here — opencode auto-discovers installed
+        # plugins from its cache regardless of the plugin array, so the
+        # skills persist (confirmed via `opencode debug config`). --pure is
+        # the only mechanism that actually excludes them, and it keeps the
+        # built-in Read/Write/Edit/Bash tools (verified end-to-end).
+        # --auto: non-interactive; without it every tool call blocks on a
+        # permission approval that never arrives -> empty diff. Mirrors
+        # claude's --permission-mode acceptEdits.
+        cmd += ["--pure", "--auto"]
         if req.model:
             cmd += ["-m", req.model]
         if req.session_id:
