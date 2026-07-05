@@ -180,6 +180,11 @@ class OpenCodeHarness(CodingHarness):
 
     def build_cmd(self, req: HarnessRequest) -> list[str]:
         cmd = ["opencode", "run"]
+        # Non-interactive run: without --auto, every Edit/Write/Bash tool
+        # call blocks on a permission approval that never arrives (no TTY,
+        # no human) -> the model finishes its turn having written nothing
+        # -> empty diff. Mirrors claude's --permission-mode acceptEdits.
+        cmd += ["--auto"]
         if req.model:
             cmd += ["-m", req.model]
         if req.session_id:
@@ -192,20 +197,40 @@ class OpenCodeHarness(CodingHarness):
         return cmd
 
     def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
-        session_id = summary = None
-        input_tokens = output_tokens = None
-        try:
-            payload = json.loads(stdout.strip().splitlines()[-1])
-            session_id = payload.get("sessionID") or payload.get("session_id")
-            summary = payload.get("text") or payload.get("result")
-            usage = payload.get("usage") or {}
-            input_tokens = usage.get("input_tokens")
-            output_tokens = usage.get("output_tokens")
-        except (json.JSONDecodeError, IndexError):
-            summary = stdout
+        """Parse opencode's ``--format json`` event stream.
+
+        opencode emits one JSON object per line: ``step_start``, one or more
+        ``text`` chunks, then ``step_finish``. The content lives in
+        ``part.text`` on ``text`` events; tokens/cost live in ``part`` on the
+        ``step_finish`` event. Walking the whole stream (not just the last
+        line) is required — the last line is ``step_finish`` with no text."""
+        session_id = None
+        text_parts: list[str] = []
+        input_tokens = output_tokens = cost = None
+        parsed_any = False
+        for ln in stdout.splitlines():
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                ev = json.loads(ln)
+            except json.JSONDecodeError:
+                continue
+            parsed_any = True
+            session_id = session_id or ev.get("sessionID") or ev.get("session_id")
+            part = ev.get("part") or {}
+            if ev.get("type") == "text" and part.get("text"):
+                text_parts.append(part["text"])
+            if ev.get("type") == "step_finish":
+                tokens = part.get("tokens") or {}
+                input_tokens = input_tokens or tokens.get("input")
+                output_tokens = output_tokens or tokens.get("output")
+                if cost is None:
+                    cost = part.get("cost")
+        summary = "\n".join(text_parts) if parsed_any else stdout
         return HarnessRunResult(
             harness=self.kind, session_id=session_id, exit_code=exit_code,
-            summary=(summary or "")[:SUMMARY_MAX],
+            summary=(summary or "")[:SUMMARY_MAX], cost_usd=cost,
             input_tokens=input_tokens, output_tokens=output_tokens,
         )
 
