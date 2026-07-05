@@ -44,6 +44,8 @@ async def main() -> None:
         g.add_argument("--id", required=True)
         g.add_argument("--gate", required=True)
         g.add_argument("--comment", default=None)
+        g.add_argument("--round", type=int, default=1,
+                       help="gate revision round (default: current = 1)")
 
     a = sub.add_parser("answer")
     a.add_argument("--id", required=True)
@@ -101,11 +103,12 @@ async def main() -> None:
         await handle.signal(
             FeatureWorkflow.submit_gate_decision,
             GateDecision(gate=args.gate,
+                         round=args.round,
                          outcome=(GateOutcome.APPROVE if args.cmd == "approve"
                                   else GateOutcome.REJECT),
                          decided_by="human", comments=args.comment),
         )
-        print(f"{args.cmd}d gate {args.gate!r} on {args.id}")
+        print(f"{args.cmd}d gate {args.gate!r} (round {args.round}) on {args.id}")
     elif args.cmd == "answer":
         await handle.signal(FeatureWorkflow.answer_question,
                             args=[args.q, args.text])

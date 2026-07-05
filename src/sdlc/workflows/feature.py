@@ -47,7 +47,7 @@ with workflow.unsafe.imports_passed_through():
         ArchitectureSpec, ClarifiedRequirements, DevTask, ExecutionMode,
         GateDecision, GateOutcome, GatePolicy, HandoffSummary, IdeaBrief,
         ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig,
-        RecallSnapshot, RetainItem, RoleConfig, TaskResult,
+        RecallSnapshot, RetainItem, RoleConfig, TaskResult, gate_key,
     )
 
 ACT = dict(start_to_close_timeout=timedelta(minutes=10),
@@ -220,10 +220,11 @@ class FeatureWorkflow:
 
     @workflow.signal
     def submit_gate_decision(self, decision: GateDecision) -> None:
-        # Idempotent: first decision per gate wins.
-        if decision.gate not in self._gate_decisions:
+        # Idempotent per (gate, round): first decision for a round wins.
+        key = gate_key(decision.gate, decision.round)
+        if key not in self._gate_decisions:
             decision.decided_at = workflow.now()
-            self._gate_decisions[decision.gate] = decision
+            self._gate_decisions[key] = decision
 
     @workflow.signal
     def answer_question(self, question_id: str, answer: str) -> None:
@@ -240,12 +241,15 @@ class FeatureWorkflow:
     # ---------------------------- helpers -------------------------------
 
     async def _gate(self, name: str, cfg: PipelineConfig,
-                    auto_decision: GateDecision | None = None) -> GateDecision:
+                    auto_decision: GateDecision | None = None,
+                    round: int = 1) -> GateDecision:
         """Durable HITL gate with policy-based auto-approval."""
         policy = cfg.gates.get(name, GatePolicy.HARD)
+        key = gate_key(name, round)
 
         if policy == GatePolicy.OFF:
-            decision = GateDecision(gate=name, outcome=GateOutcome.APPROVE,
+            decision = GateDecision(gate=name, round=round,
+                                    outcome=GateOutcome.APPROVE,
                                     decided_by="policy")
         elif policy == GatePolicy.SOFT and auto_decision and auto_decision.approved:
             decision = auto_decision
@@ -253,22 +257,42 @@ class FeatureWorkflow:
             self._status = f"awaiting:{name}"
             try:
                 await workflow.wait_condition(
-                    lambda: name in self._gate_decisions,
+                    lambda: key in self._gate_decisions,
                     timeout=timedelta(hours=cfg.gate_timeout_hours),
                 )
-                decision = self._gate_decisions[name]
+                decision = self._gate_decisions[key]
             except TimeoutError:
-                decision = GateDecision(gate=name, outcome=GateOutcome.REJECT,
+                decision = GateDecision(gate=name, round=round,
+                                        outcome=GateOutcome.REJECT,
                                         decided_by="timeout")
             finally:
                 self._status = "running"
 
         await self._retain(
             cfg, MemoryKind.GATE_FEEDBACK, cfg.memory.project_bank,
-            text=f"gate {name}: {decision.outcome.value}"
+            text=f"gate {name}#{round}: {decision.outcome.value}"
                 f"{' — ' + decision.comments if decision.comments else ''}",
-            metadata={"gate": name, "run_id": workflow.info().workflow_id})
+            metadata={"gate": name, "round": str(round),
+                      "run_id": workflow.info().workflow_id})
         return decision
+
+    async def _revisable_stage(self, name: str, cfg: PipelineConfig,
+                               run_fn) -> tuple[object, GateDecision]:
+        """Run a proposer stage, gate it, and on REVISE re-run with the
+        human's guidance at round+1, up to cfg.max_gate_rounds. Past that,
+        escalate to a HARD human gate (FR-301). `run_fn(guidance: str | None)`
+        must re-execute the producer with the guidance injected."""
+        guidance: str | None = None
+        for round in range(1, cfg.max_gate_rounds + 1):
+            artifact = await run_fn(guidance)
+            decision = await self._gate(name, cfg, round=round)
+            if decision.outcome is not GateOutcome.REVISE:
+                return artifact, decision
+            guidance = decision.guidance or decision.comments
+        # Exhausted: one final HARD gate decides accept-anyway vs abandon.
+        artifact = await run_fn(guidance)
+        decision = await self._gate(name, cfg, round=cfg.max_gate_rounds + 1)
+        return artifact, decision
 
     async def _dev_task(self, task: DevTask, repo_path: str,
                         base_branch: str, cfg: PipelineConfig,
@@ -456,16 +480,23 @@ class FeatureWorkflow:
             cfg, cfg.memory.project_bank, query=f"architect:{idea.title}",
             filters={"stage": "architect"})
 
-        async def _run_architect():
-            return (await t_architect.run(
-                f"mode={idea.mode.value}\n{reqs.model_dump_json()}"
-                + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
-                   if snapshot.items else ""))).output
+        async def _run_architect(guidance: str | None):
+            prompt = (f"mode={idea.mode.value}\n{reqs.model_dump_json()}"
+                      + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
+                         if snapshot.items else "")
+                      + (f"\nRevision guidance from reviewer:\n{guidance}"
+                         if guidance else ""))
 
-        arch, _ = await self._cached_stage(
-            cfg, "architect", reqs.model_dump_json(), MODEL,
-            ArchitectureSpec, _run_architect)
-        gate = await self._gate("architecture", cfg)
+            async def _produce():
+                return (await t_architect.run(prompt)).output
+            arch, _ = await self._cached_stage(
+                cfg, "architect",
+                reqs.model_dump_json() + (guidance or ""), MODEL,
+                ArchitectureSpec, _produce)
+            return arch
+
+        arch, gate = await self._revisable_stage("architecture", cfg,
+                                                 _run_architect)
         _ended = workflow.now()
         _quality = await self._judge(cfg, arch.model_dump_json(), "architect")
         await self._record(cfg, self._stage_record(
@@ -488,16 +519,22 @@ class FeatureWorkflow:
             cfg, cfg.memory.project_bank, query=f"plan:{idea.title}",
             filters={"stage": "plan"})
 
-        async def _run_plan():
-            return (await t_planner.run(
-                arch.model_dump_json()
-                + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
-                   if snapshot.items else ""))).output
+        async def _run_plan(guidance: str | None):
+            prompt = (arch.model_dump_json()
+                      + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
+                         if snapshot.items else "")
+                      + (f"\nRevision guidance from reviewer:\n{guidance}"
+                         if guidance else ""))
 
-        plan, _ = await self._cached_stage(
-            cfg, "plan", arch.model_dump_json(), MODEL,
-            ImplementationPlan, _run_plan)
-        gate = await self._gate("plan", cfg)
+            async def _produce():
+                return (await t_planner.run(prompt)).output
+            plan, _ = await self._cached_stage(
+                cfg, "plan",
+                arch.model_dump_json() + (guidance or ""), MODEL,
+                ImplementationPlan, _produce)
+            return plan
+
+        plan, gate = await self._revisable_stage("plan", cfg, _run_plan)
         _ended = workflow.now()
         _quality = await self._judge(cfg, plan.model_dump_json(), "planner")
         await self._record(cfg, self._stage_record(

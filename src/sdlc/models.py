@@ -302,6 +302,9 @@ class PipelineConfig(BaseModel):
                              model="zai-coding-plan/glm-5.2"),
     })
     max_fix_attempts: int = 2                # then escalate to human
+    max_gate_rounds: int = 2                # FR-301: bounded revision loop;
+                                            # exhaustion escalates to a hard
+                                            # human gate
     gate_timeout_hours: int = 48
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     memoization_enabled: bool = False
