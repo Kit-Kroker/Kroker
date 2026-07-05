@@ -62,3 +62,26 @@ def test_advisory_failure_passes_with_audited_override():
                                         approved_by="human", reason="accepted")])
     assert report.passed
     assert "coverage_gate" in report.overridden
+
+
+from sdlc.models import TaskResult, QAReport
+from sdlc.workflows.feature import _merge_evidence_all_green
+
+def test_merge_evidence_treats_missing_qa_as_failure():
+    """SC-5: an escalation-approved task (qa=None) must NOT be filtered to a
+    vacuous all([]) pass."""
+    no_qa = TaskResult(task_id="t1", status="done", attempts=1, branch="b")
+    assert not _merge_evidence_all_green([no_qa]), (
+        "missing QA evidence must fail the merge absolute check")
+
+def test_merge_evidence_all_green_passes():
+    ok = TaskResult(task_id="t1", status="done", attempts=1, branch="b",
+                    qa=QAReport(tests_passed=True))
+    assert _merge_evidence_all_green([ok])
+
+def test_merge_evidence_one_failing_fails():
+    ok = TaskResult(task_id="t1", status="done", attempts=1, branch="b",
+                    qa=QAReport(tests_passed=True))
+    bad = TaskResult(task_id="t2", status="done", attempts=1, branch="b",
+                     qa=QAReport(tests_passed=False))
+    assert not _merge_evidence_all_green([ok, bad])

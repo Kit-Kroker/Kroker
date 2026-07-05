@@ -88,6 +88,16 @@ def _long_act(role_cfg: RoleConfig | None = None) -> dict:
         retry_policy=RetryPolicy(maximum_attempts=2))
 
 
+def _merge_evidence_all_green(results: list) -> bool:
+    """True only when every task has positive, passing QA evidence.
+
+    SC-5: a done task with missing QA (e.g. an escalation-approved task
+    whose fix loop exhausted) is treated as FAILURE — never a vacuous
+    `all([])` pass. The merge absolute check must see real green evidence."""
+    return bool(results) and all(
+        r.qa is not None and r.qa.tests_passed for r in results)
+
+
 @workflow.defn
 class FeatureWorkflow:
     def __init__(self) -> None:
@@ -286,8 +296,10 @@ class FeatureWorkflow:
                                run_fn) -> tuple[object, GateDecision]:
         """Run a proposer stage, gate it, and on REVISE re-run with the
         human's guidance at round+1, up to cfg.max_gate_rounds. Past that,
-        escalate to a HARD human gate (FR-301). `run_fn(guidance: str | None)`
-        must re-execute the producer with the guidance injected."""
+        escalate to a final human gate (the configured policy still applies,
+        but no auto_decision is passed, so SOFT also waits) (FR-301).
+        `run_fn(guidance: str | None)` must re-execute the producer with the
+        guidance injected."""
         guidance: str | None = None
         for round in range(1, cfg.max_gate_rounds + 1):
             artifact = await run_fn(guidance)
@@ -300,13 +312,17 @@ class FeatureWorkflow:
         decision = await self._gate(name, cfg, round=cfg.max_gate_rounds + 1)
         return artifact, decision
 
-    async def _merge_task(self, tr: TaskResult, cfg: PipelineConfig,
-                          repo_path: str) -> None:
+    async def _merge_task(self, tr: TaskResult,
+                          repo_path: str) -> str | None:
         """Merge a completed task branch into the integration branch and
-        advance self._integration_head. A merge conflict means the task's
-        declared `overlaps` were incomplete (Finding #1) → falsified
-        contract → serialize/escalate. Called from both SERIAL and wave
-        paths; never inside run_one (Resolution B)."""
+        advance self._integration_head.
+
+        Returns a terminal status string on conflict (falsified overlaps
+        declaration), else None. A conflict means the task's declared
+        `overlaps` were incomplete → falsified contract → the run terminates
+        with an observable status rather than raising (a raise would make
+        Temporal retry a deterministic conflict). Called from both SERIAL and
+        wave paths; never inside run_one (Resolution B)."""
         merge_res = await workflow.execute_activity(
             merge_into_integration,
             MergeInput(repo_path=repo_path,
@@ -315,11 +331,10 @@ class FeatureWorkflow:
             **ACT,
         )
         if merge_res.conflict:
-            # Falsified `overlaps` declaration → serialize/escalate.
-            raise RuntimeError(
-                f"integration conflict on task {tr.task_id}: "
-                "declared overlaps were incomplete")
+            # Falsified `overlaps` declaration → terminal status, not a raise.
+            return f"failed:integration-conflict:{tr.task_id}"
         self._integration_head = merge_res.integration_head
+        return None
 
     async def _dev_task(self, task: DevTask, repo_path: str,
                         from_ref: str, cfg: PipelineConfig,
@@ -445,7 +460,7 @@ class FeatureWorkflow:
             status="done" if decision.approved else "quarantined",
             attempts=cfg.max_fix_attempts + 1,
             branch=handle.branch,
-            qa=None,
+            qa=qa_raw,
             notes=decision.comments or "",
         )
 
@@ -627,7 +642,9 @@ class FeatureWorkflow:
                 # branches from the updated integration head.
                 tr = await run_one(ready[0])
                 if tr.status == "done":
-                    await self._merge_task(tr, cfg, repo_path)
+                    conflict = await self._merge_task(tr, repo_path)
+                    if conflict:
+                        return conflict
             else:
                 # Wave mode: execute the batch in parallel (preserving the
                 # gather), THEN merge results sequentially so integration
@@ -641,7 +658,9 @@ class FeatureWorkflow:
                 results = await asyncio.gather(*[run_one(t) for t in batch])
                 for tr in results:
                     if tr.status == "done":
-                        await self._merge_task(tr, cfg, repo_path)
+                        conflict = await self._merge_task(tr, repo_path)
+                        if conflict:
+                            return conflict
 
             if any(r.status == "quarantined" for r in done.values()):
                 return "failed:quarantined-tasks"
@@ -657,8 +676,7 @@ class FeatureWorkflow:
         integration_worktree = self._integration_wt
         lint_clean, lint_detail = await workflow.execute_activity(
             run_lint, LintInput(worktree=integration_worktree), **ACT)
-        all_tests_green = all(
-            r.qa.tests_passed for r in done.values() if r.qa is not None)
+        all_tests_green = _merge_evidence_all_green(list(done.values()))
 
         checks = [
             build_check("build_integration_green", all_tests_green,
@@ -679,7 +697,15 @@ class FeatureWorkflow:
             await self._retain(
                 cfg, MemoryKind.GATE_FEEDBACK, cfg.memory.project_bank,
                 text=f"merge blocked (absolute): {absolute_blocking}",
-                metadata={"gate": "merge", "run_id": workflow.info().workflow_id})
+                metadata={"gate": "merge", "round": "1",
+                          "run_id": workflow.info().workflow_id})
+            await self._record(cfg, self._stage_record(
+                cfg, stage="merge", role="reviewer",
+                started=_started, ended=workflow.now(),
+                quality_score=0.0,
+                judge="deterministic_gate",
+                outcome=BenchmarkOutcome.FAIL,
+                model="deterministic"))
             return f"rejected:merge:absolute-gate-failed:{','.join(absolute_blocking)}"
 
         # 5c. Advisory failure: the human merge gate IS the override. A
@@ -716,8 +742,6 @@ class FeatureWorkflow:
                     gate = await self._gate("merge", cfg)
                     if not gate.approved:
                         return "rejected:merge:soft-verdict"
-            gate = GateDecision(gate="merge", outcome=GateOutcome.APPROVE,
-                                decided_by="policy")
 
         _ended = workflow.now()
         await self._record(cfg, self._stage_record(
@@ -725,13 +749,15 @@ class FeatureWorkflow:
             started=_started, ended=_ended,
             quality_score=(1.0 if gate_report.passed else 0.0),
             judge="deterministic_gate",
-            outcome=BenchmarkOutcome.PASS,
+            outcome=(BenchmarkOutcome.REVISED if overrides
+                     else BenchmarkOutcome.PASS),
             model="deterministic"))
         await self._retain(
             cfg, MemoryKind.GATE_FEEDBACK, cfg.memory.project_bank,
             text=(f"merge gate: passed={gate_report.passed} "
                   f"overridden={[o.check for o in overrides]}"),
-            metadata={"gate": "merge", "run_id": workflow.info().workflow_id})
+            metadata={"gate": "merge", "round": "1",
+                      "run_id": workflow.info().workflow_id})
 
         pr_url = await workflow.execute_activity(
             open_pull_request,
