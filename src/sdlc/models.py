@@ -11,7 +11,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ProjectMode(str, Enum):
@@ -34,6 +34,21 @@ class GateOutcome(str, Enum):
     APPROVE = "approve"    # proceed
     REJECT = "reject"      # terminal
     REVISE = "revise"      # loop back with guidance (Finding #6)
+
+
+class GateConfig(BaseModel):
+    """Per-gate policy + the confidence bar a SOFT gate must clear to
+    auto-approve (FR-301). threshold is read only when policy == SOFT."""
+    policy: GatePolicy = GatePolicy.HARD
+    threshold: float = Field(default=0.8, ge=0.0, le=1.0)
+
+    @classmethod
+    def _coerce(cls, v: "GateConfig | GatePolicy | str | dict") -> "GateConfig":
+        if isinstance(v, GateConfig):
+            return v
+        if isinstance(v, dict):
+            return cls(**v)
+        return cls(policy=GatePolicy(v))
 
 
 class ArtifactRef(BaseModel):
@@ -84,6 +99,7 @@ class ArchitectureSpec(BaseModel):
     new_components: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
     spec_ref: ArtifactRef | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)  # FR-301
 
 
 class ValidationContract(BaseModel):
@@ -125,6 +141,7 @@ class DevTask(BaseModel):
 class ImplementationPlan(BaseModel):
     tasks: list[DevTask]
     plan_ref: ArtifactRef | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)  # FR-301
 
 
 class HarnessRunResult(BaseModel):
@@ -283,13 +300,20 @@ class PipelineConfig(BaseModel):
     max_session_resumes: int = 3            # FR-802: past this, fresh session
                                             # seeded with a handoff — compaction
                                             # is failure, never continued
-    gates: dict[str, GatePolicy] = Field(default_factory=lambda: {
-        "clarify": GatePolicy.HARD,
-        "architecture": GatePolicy.HARD,
-        "plan": GatePolicy.SOFT,
-        "merge": GatePolicy.HARD,
-        "deploy": GatePolicy.HARD,
+    gates: dict[str, GateConfig] = Field(default_factory=lambda: {
+        "clarify": GateConfig(policy=GatePolicy.HARD),
+        "architecture": GateConfig(policy=GatePolicy.HARD),
+        "plan": GateConfig(policy=GatePolicy.SOFT),
+        "merge": GateConfig(policy=GatePolicy.HARD),
+        "deploy": GateConfig(policy=GatePolicy.HARD),
     })
+
+    @field_validator("gates", mode="before")
+    @classmethod
+    def _coerce_gates(cls, v):
+        if not isinstance(v, dict):
+            return v
+        return {k: GateConfig._coerce(gv) for k, gv in v.items()}
     benchmark: BenchmarkConfig = Field(default_factory=BenchmarkConfig)
     roles: dict[str, RoleConfig] = Field(default_factory=lambda: {
         "dev": RoleConfig(harness=HarnessKind.OPENCODE,
