@@ -19,3 +19,10 @@ def _worker_activities(worker):
     import inspect
     src = inspect.getsource(worker)
     assert "record_benchmark" in src
+
+
+def test_worker_module_imports_memory_activities():
+    from sdlc import worker
+    src = __import__("inspect").getsource(worker)
+    for name in ("recall_snapshot", "retain", "capture_watermark", "reflect"):
+        assert name in src, f"{name} missing from worker registration"

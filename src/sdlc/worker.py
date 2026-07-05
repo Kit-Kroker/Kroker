@@ -29,6 +29,9 @@ from .benchmarks.judge import judge_artifact, load_case_assets
 from .benchmarks.recorder import record_benchmark
 from .benchmarks.report import finalize_benchmark_report
 from .benchmarks.workflow import BenchmarkWorkflow
+from .memory.activities import (
+    capture_watermark, recall_snapshot, reflect, retain,
+)
 from .workflows.feature import FeatureWorkflow
 
 TASK_QUEUE = "ai-sdlc"
@@ -52,6 +55,7 @@ async def main() -> None:
             run_coding_task, run_test_suite, open_pull_request, deploy,
             evaluate_gate, get_task_diff, record_benchmark, judge_artifact,
             load_case_assets, finalize_benchmark_report,
+            recall_snapshot, retain, capture_watermark, reflect,
             *agent_activities,
         ],
     )
