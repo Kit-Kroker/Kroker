@@ -13,6 +13,7 @@ from pydantic_ai import Agent
 from pydantic_ai.durable_exec.temporal import TemporalAgent
 from pydantic_ai.settings import ModelSettings
 from datetime import timedelta
+import hashlib
 import os
 from temporalio.workflow import ActivityConfig
 
@@ -34,18 +35,61 @@ MODEL = "anthropic:glm-5.2"
 MODEL_SETTINGS = ModelSettings(max_tokens=int(
     os.environ.get("SDLC_MODEL_MAX_TOKENS", "64000")))
 
+CLARIFY_PROMPT = (
+    "You are a requirements analyst. Given a feature idea, extract "
+    "functional and non-functional requirements, define what is out of "
+    "scope, and list ONLY the open questions whose answers materially "
+    "change the design (Definition-of-Ready style). For each question "
+    "include a suggested answer so the human can approve or override."
+)
+ARCHITECT_PROMPT = (
+    "You are a software architect. Produce an architecture spec with "
+    "explicit, numbered decisions and rationale. In BROWNFIELD mode, "
+    "ground every decision in the provided codebase map and list the "
+    "affected modules as a delta (added / modified / removed). In "
+    "GREENFIELD mode, decide stack, project structure and key ADRs. "
+    "Prefer boring technology; flag risks explicitly."
+)
+PLAN_PROMPT = (
+    "You are a tech lead. Decompose the approved architecture into "
+    "small, independently mergeable dev tasks with acceptance criteria "
+    "and dependency edges. For EVERY task, compile its acceptance "
+    "criteria into a ValidationContract: concrete, checkable assertions "
+    "and test commands, written before any code exists — correctness "
+    "will be judged against this contract, not the implementation. "
+    "Declare 'overlaps': modules any two tasks both touch (overlapping "
+    "tasks will be serialized). Each task must be completable by a "
+    "coding agent in one focused session. Include dedicated 'test' "
+    "tasks and 'devops' tasks (CI, infra, deploy config) where needed."
+)
+QA_PROMPT = (
+    "You are a clean-context QA validator. You receive ONLY: the task's "
+    "frozen ValidationContract, test output, and the materialized diff. "
+    "You never see, and must never request, the implementer's summary "
+    "or reasoning. Judge whether the diff satisfies each contract "
+    "assertion — not whether tests merely pass. List concrete issues "
+    "per unmet assertion."
+)
+MERGE_VERDICT_PROMPT = (
+    "You are an ADVISORY release reviewer, consulted only after the "
+    "deterministic quality gate has already passed. Given the QA report, "
+    "reviewer summary and diff stats, give a confidence-scored opinion on "
+    "whether the merge should proceed. You cannot block a merge on your "
+    "own and you cannot approve one the deterministic gate failed; you "
+    "only advise. Be conservative and list concrete concerns."
+)
+DEVOPS_PROMPT = (
+    "You are a DevOps engineer. Given the architecture and repo state, "
+    "produce the pipeline/infra tasks needed to ship this feature: "
+    "CI updates, migrations, feature flags, deploy and rollback steps."
+)
+
 clarify_agent = Agent(
     MODEL,
     name="clarify_agent",
     output_type=ClarifiedRequirements,
     model_settings=MODEL_SETTINGS,
-    system_prompt=(
-        "You are a requirements analyst. Given a feature idea, extract "
-        "functional and non-functional requirements, define what is out of "
-        "scope, and list ONLY the open questions whose answers materially "
-        "change the design (Definition-of-Ready style). For each question "
-        "include a suggested answer so the human can approve or override."
-    ),
+    system_prompt=CLARIFY_PROMPT,
 )
 
 architect_agent = Agent(
@@ -53,14 +97,7 @@ architect_agent = Agent(
     name="architect_agent",
     output_type=ArchitectureSpec,
     model_settings=MODEL_SETTINGS,
-    system_prompt=(
-        "You are a software architect. Produce an architecture spec with "
-        "explicit, numbered decisions and rationale. In BROWNFIELD mode, "
-        "ground every decision in the provided codebase map and list the "
-        "affected modules as a delta (added / modified / removed). In "
-        "GREENFIELD mode, decide stack, project structure and key ADRs. "
-        "Prefer boring technology; flag risks explicitly."
-    ),
+    system_prompt=ARCHITECT_PROMPT,
 )
 
 planner_agent = Agent(
@@ -68,18 +105,7 @@ planner_agent = Agent(
     name="planner_agent",
     output_type=ImplementationPlan,
     model_settings=MODEL_SETTINGS,
-    system_prompt=(
-        "You are a tech lead. Decompose the approved architecture into "
-        "small, independently mergeable dev tasks with acceptance criteria "
-        "and dependency edges. For EVERY task, compile its acceptance "
-        "criteria into a ValidationContract: concrete, checkable assertions "
-        "and test commands, written before any code exists — correctness "
-        "will be judged against this contract, not the implementation. "
-        "Declare 'overlaps': modules any two tasks both touch (overlapping "
-        "tasks will be serialized). Each task must be completable by a "
-        "coding agent in one focused session. Include dedicated 'test' "
-        "tasks and 'devops' tasks (CI, infra, deploy config) where needed."
-    ),
+    system_prompt=PLAN_PROMPT,
 )
 
 qa_analyst_agent = Agent(
@@ -87,14 +113,7 @@ qa_analyst_agent = Agent(
     name="qa_analyst_agent",
     output_type=QAReport,
     model_settings=MODEL_SETTINGS,
-    system_prompt=(
-        "You are a clean-context QA validator. You receive ONLY: the task's "
-        "frozen ValidationContract, test output, and the materialized diff. "
-        "You never see, and must never request, the implementer's summary "
-        "or reasoning. Judge whether the diff satisfies each contract "
-        "assertion — not whether tests merely pass. List concrete issues "
-        "per unmet assertion."
-    ),
+    system_prompt=QA_PROMPT,
 )
 
 merge_verdict_agent = Agent(
@@ -102,14 +121,7 @@ merge_verdict_agent = Agent(
     name="merge_verdict_agent",
     output_type=MergeVerdict,
     model_settings=MODEL_SETTINGS,
-    system_prompt=(
-        "You are an ADVISORY release reviewer, consulted only after the "
-        "deterministic quality gate has already passed. Given the QA report, "
-        "reviewer summary and diff stats, give a confidence-scored opinion on "
-        "whether the merge should proceed. You cannot block a merge on your "
-        "own and you cannot approve one the deterministic gate failed; you "
-        "only advise. Be conservative and list concrete concerns."
-    ),
+    system_prompt=MERGE_VERDICT_PROMPT,
 )
 
 devops_agent = Agent(
@@ -117,12 +129,15 @@ devops_agent = Agent(
     name="devops_agent",
     output_type=ImplementationPlan,  # devops tasks reuse the task shape
     model_settings=MODEL_SETTINGS,
-    system_prompt=(
-        "You are a DevOps engineer. Given the architecture and repo state, "
-        "produce the pipeline/infra tasks needed to ship this feature: "
-        "CI updates, migrations, feature flags, deploy and rollback steps."
-    ),
+    system_prompt=DEVOPS_PROMPT,
 )
+
+PROMPT_SHAS: dict[str, str] = {
+    "clarify": hashlib.sha256(CLARIFY_PROMPT.encode()).hexdigest(),
+    "architect": hashlib.sha256(ARCHITECT_PROMPT.encode()).hexdigest(),
+    "plan": hashlib.sha256(PLAN_PROMPT.encode()).hexdigest(),
+    "devops": hashlib.sha256(DEVOPS_PROMPT.encode()).hexdigest(),
+}
 
 # Temporal-wrapped versions used inside workflows.
 t_clarify = TemporalAgent(clarify_agent, activity_config=AGENT_ACTIVITY_CONFIG)

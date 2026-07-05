@@ -29,6 +29,7 @@ from .benchmarks.judge import judge_artifact, load_case_assets
 from .benchmarks.recorder import record_benchmark
 from .benchmarks.report import finalize_benchmark_report
 from .benchmarks.workflow import BenchmarkWorkflow
+from .memoization.activities import cache_get, cache_put
 from .memory.activities import (
     capture_watermark, recall_snapshot, reflect, retain,
 )
@@ -56,6 +57,7 @@ async def main() -> None:
             evaluate_gate, get_task_diff, record_benchmark, judge_artifact,
             load_case_assets, finalize_benchmark_report,
             recall_snapshot, retain, capture_watermark, reflect,
+            cache_get, cache_put,
             *agent_activities,
         ],
     )

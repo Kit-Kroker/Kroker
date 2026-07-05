@@ -19,7 +19,8 @@ with workflow.unsafe.imports_passed_through():
         open_pull_request, run_coding_task, run_test_suite,
     )
     from ..agents.roles import (
-        MODEL, t_architect, t_clarify, t_merge_verdict, t_planner, t_qa,
+        MODEL, PROMPT_SHAS, t_architect, t_clarify, t_merge_verdict,
+        t_planner, t_qa,
     )
     from ..benchmarks.judge import (
         JudgeInput, _build_judge_input, judge_artifact,
@@ -29,13 +30,18 @@ with workflow.unsafe.imports_passed_through():
         QualityScore, SpeedBag,
     )
     from ..benchmarks.recorder import record_benchmark
+    from ..memoization.activities import (
+        CacheGetInput, CachePutInput, cache_get, cache_put,
+    )
+    from ..memoization.cache import content_key
     from ..memory.activities import (
         RecallInput, RetainInput, WatermarkInput, capture_watermark,
         recall_snapshot, retain,
     )
     from ..models import (
-        DevTask, ExecutionMode, GateDecision, GateOutcome, GatePolicy,
-        HandoffSummary, IdeaBrief, MemoryKind, MergeVerdict, PipelineConfig,
+        ArchitectureSpec, ClarifiedRequirements, DevTask, ExecutionMode,
+        GateDecision, GateOutcome, GatePolicy, HandoffSummary, IdeaBrief,
+        ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig,
         RecallSnapshot, RetainItem, RoleConfig, TaskResult,
     )
 
@@ -182,6 +188,28 @@ class FeatureWorkflow:
                 **MEM_ACT)
         except Exception:
             pass
+
+    async def _cached_stage(self, cfg: PipelineConfig, stage: str,
+                            input_json: str, model_id: str,
+                            output_type: type, run_fn) -> tuple[object, bool]:
+        """Skips `run_fn()` (a no-arg async callable invoking the proposer
+        agent) when an identical (stage, input, prompt, model,
+        upstream-recall-watermark) combination was already computed — the
+        ADR-5 dev-loop cache. Returns (output, was_cache_hit)."""
+        if not cfg.memoization_enabled:
+            return await run_fn(), False
+        key = content_key(stage, input_json, PROMPT_SHAS[stage], model_id,
+                          self._memory_watermark or "none")
+        cached = await workflow.execute_activity(
+            cache_get, CacheGetInput(key=key), **MEM_ACT)
+        if cached is not None:
+            return output_type.model_validate_json(cached), True
+        result = await run_fn()
+        await workflow.execute_activity(
+            cache_put,
+            CachePutInput(key=key, payload_json=result.model_dump_json()),
+            **MEM_ACT)
+        return result, False
 
     # ---------------- signals / queries (the HITL surface) --------------
 
@@ -383,10 +411,16 @@ class FeatureWorkflow:
         snapshot = await self._recall(
             cfg, cfg.memory.project_bank, query=f"clarify:{idea.title}",
             filters={"stage": "clarify"})
-        reqs = (await t_clarify.run(
-            idea.model_dump_json()
-            + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
-               if snapshot.items else ""))).output
+
+        async def _run_clarify():
+            return (await t_clarify.run(
+                idea.model_dump_json()
+                + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
+                   if snapshot.items else ""))).output
+
+        reqs, _ = await self._cached_stage(
+            cfg, "clarify", idea.model_dump_json(), MODEL,
+            ClarifiedRequirements, _run_clarify)
         if reqs.open_questions:
             self._status = "awaiting:clarify"
             await workflow.wait_condition(
@@ -415,10 +449,16 @@ class FeatureWorkflow:
         snapshot = await self._recall(
             cfg, cfg.memory.project_bank, query=f"architect:{idea.title}",
             filters={"stage": "architect"})
-        arch = (await t_architect.run(
-            f"mode={idea.mode.value}\n{reqs.model_dump_json()}"
-            + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
-               if snapshot.items else ""))).output
+
+        async def _run_architect():
+            return (await t_architect.run(
+                f"mode={idea.mode.value}\n{reqs.model_dump_json()}"
+                + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
+                   if snapshot.items else ""))).output
+
+        arch, _ = await self._cached_stage(
+            cfg, "architect", reqs.model_dump_json(), MODEL,
+            ArchitectureSpec, _run_architect)
         gate = await self._gate("architecture", cfg)
         _ended = workflow.now()
         _quality = await self._judge(cfg, arch.model_dump_json(), "architect")
@@ -441,10 +481,16 @@ class FeatureWorkflow:
         snapshot = await self._recall(
             cfg, cfg.memory.project_bank, query=f"plan:{idea.title}",
             filters={"stage": "plan"})
-        plan = (await t_planner.run(
-            arch.model_dump_json()
-            + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
-               if snapshot.items else ""))).output
+
+        async def _run_plan():
+            return (await t_planner.run(
+                arch.model_dump_json()
+                + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
+                   if snapshot.items else ""))).output
+
+        plan, _ = await self._cached_stage(
+            cfg, "plan", arch.model_dump_json(), MODEL,
+            ImplementationPlan, _run_plan)
         gate = await self._gate("plan", cfg)
         _ended = workflow.now()
         _quality = await self._judge(cfg, plan.model_dump_json(), "planner")
