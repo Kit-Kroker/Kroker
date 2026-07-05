@@ -1,8 +1,19 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useFleetStore } from '../stores/fleet'
+import FleetTable from '../components/fleet/FleetTable.vue'
+
+const fleet = useFleetStore()
+const summary = computed(() => `${fleet.runs.length} runs · ${fleet.blockedCount} blocked on humans`)
+</script>
 
 <template>
   <main data-testid="fleet-view" data-screen-label="Fleet" class="view">
-    <div class="hint">Fleet view — implemented in Task 11.</div>
+    <div class="head-row">
+      <h1 class="title">Fleet</h1>
+      <span class="summary">{{ summary }}</span>
+    </div>
+    <FleetTable />
   </main>
 </template>
 
@@ -12,9 +23,21 @@
   overflow: auto;
   padding: 20px 20px 40px;
 }
-.hint {
-  color: #5d6675;
+.head-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 14px;
+}
+.title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #e8edf5;
+}
+.summary {
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 12px;
+  font-size: 11px;
+  color: #5d6675;
 }
 </style>
