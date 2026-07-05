@@ -45,6 +45,14 @@ class GateReport(BaseModel):
     checks: list[CheckResult]
 
 
+class QualityGateInput(BaseModel):
+    """Input contract for the `evaluate_gate` activity. Lives next to the
+    gate types it references (CheckResult/GateOverride) so the pure gate
+    module is the single home for the gate's data model."""
+    checks: list[CheckResult]
+    overrides: list[GateOverride] | None = None
+
+
 # Never demotable to advisory, whatever a project configures.
 ABSOLUTE_FLOOR: frozenset[str] = frozenset({"security_no_critical"})
 

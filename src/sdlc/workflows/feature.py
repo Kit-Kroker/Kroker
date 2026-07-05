@@ -14,9 +14,10 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from ..activities import (
-        CodingTaskInput, DeployInput, DiffInput, PROpenInput, QAInput,
-        WorktreeInput, create_worktree, deploy, get_task_diff,
-        open_pull_request, run_coding_task, run_test_suite,
+        CodingTaskInput, DeployInput, DiffInput, LintInput, PROpenInput,
+        QAInput, WorktreeInput, create_worktree, deploy, evaluate_gate,
+        get_task_diff, open_pull_request, run_coding_task, run_lint,
+        run_test_suite,
     )
     from ..agents.roles import (
         MODEL, PROMPT_SHAS, t_architect, t_clarify, t_merge_verdict,
@@ -30,6 +31,10 @@ with workflow.unsafe.imports_passed_through():
         QualityScore, SpeedBag,
     )
     from ..benchmarks.recorder import record_benchmark
+    from ..gate import (
+        CheckClass, CheckResult, GateOverride, GateReport, QualityGateInput,
+        build_check,
+    )
     from ..memoization.activities import (
         CacheGetInput, CachePutInput, cache_get, cache_put,
     )
@@ -352,7 +357,7 @@ class FeatureWorkflow:
                 )
                 return TaskResult(task_id=task.id, status="done",
                                   attempts=attempt, branch=handle.branch,
-                                  run=run, handoff=handoff)
+                                  run=run, handoff=handoff, qa=qa_raw)
 
             if attempt > cfg.max_fix_attempts:
                 break
@@ -386,6 +391,7 @@ class FeatureWorkflow:
             status="done" if decision.approved else "quarantined",
             attempts=cfg.max_fix_attempts + 1,
             branch=handle.branch,
+            qa=None,
             notes=decision.comments or "",
         )
 
@@ -545,29 +551,90 @@ class FeatureWorkflow:
             if any(r.status == "quarantined" for r in done.values()):
                 return "failed:quarantined-tasks"
 
-        # 5. MERGE gate — advisory MergeVerdict only informs the SOFT path.
-        # (Plan 2 runs the DeterministicQualityGate before this consult.)
+        # 5. MERGE — DeterministicQualityGate first (SC-5), then the human
+        # gate (which doubles as the advisory-override mechanism), then
+        # MergeVerdict advisory only under SOFT policy.
         _started = workflow.now()
-        verdict: MergeVerdict = (await t_merge_verdict.run(
-            "Advisory only. Given these task results, should the merge "
-            f"proceed? Task results: {[r.model_dump() for r in done.values()]}"
-        )).output
-        auto = GateDecision(
-            gate="merge", outcome=(GateOutcome.APPROVE if verdict.approve
-                                   else GateOutcome.REJECT),
-            decided_by="policy", comments=verdict.rationale)
-        gate = await self._gate("merge", cfg, auto_decision=auto)
+
+        # 5a. Collect typed evidence from the run.
+        integration_worktree = repo_path  # Task 3 will make this the integration wt
+        lint_clean, lint_detail = await workflow.execute_activity(
+            run_lint, LintInput(worktree=integration_worktree), **ACT)
+        all_tests_green = all(
+            r.qa.tests_passed for r in done.values() if r.qa is not None)
+
+        checks = [
+            build_check("build_integration_green", all_tests_green,
+                        CheckClass.ABSOLUTE,
+                        detail="aggregate of per-task pytest runs"),
+            build_check("lint_clean", lint_clean, CheckClass.ABSOLUTE,
+                        detail=lint_detail),
+        ]
+        gate_report: GateReport = await workflow.execute_activity(
+            evaluate_gate, QualityGateInput(checks=checks), **ACT)
+
+        # 5b. Absolute failure = terminal. No override path exists.
+        absolute_blocking = [
+            c.name for c in gate_report.checks
+            if c.name in gate_report.blocking
+            and c.classification is CheckClass.ABSOLUTE]
+        if absolute_blocking:
+            await self._retain(
+                cfg, MemoryKind.GATE_FEEDBACK, cfg.memory.project_bank,
+                text=f"merge blocked (absolute): {absolute_blocking}",
+                metadata={"gate": "merge", "run_id": workflow.info().workflow_id})
+            return f"rejected:merge:absolute-gate-failed:{','.join(absolute_blocking)}"
+
+        # 5c. Advisory failure: the human merge gate IS the override. A
+        # human APPROVE records audited GateOverrides; REJECT terminates.
+        overrides: list[GateOverride] = []
+        if not gate_report.passed:
+            advisory_blocking = [
+                c.name for c in gate_report.checks
+                if c.name in gate_report.blocking
+                and c.classification is CheckClass.ADVISORY]
+            gate = await self._gate("merge", cfg)
+            if not gate.approved:
+                return "rejected:merge:advisory"
+            # Human waved the advisory checks through — record each waiver.
+            reviewer = gate.reviewer or "human"
+            reason = gate.comments or "advisory override"
+            overrides = [
+                GateOverride(check=n, approved_by=reviewer, reason=reason)
+                for n in advisory_blocking]
+            gate_report = await workflow.execute_activity(
+                evaluate_gate,
+                QualityGateInput(checks=checks, overrides=overrides), **ACT)
+        else:
+            # 5d. Gate passed clean. MergeVerdict is advisory and ONLY
+            # consulted under SOFT policy — it can approve an already-clean
+            # build; it can never reach this branch otherwise.
+            if cfg.gates.get("merge", GatePolicy.HARD) == GatePolicy.SOFT:
+                verdict: MergeVerdict = (await t_merge_verdict.run(
+                    "Advisory only — the deterministic gate already passed. "
+                    f"Task results: {[r.model_dump() for r in done.values()]}"
+                )).output
+                if not verdict.approve:
+                    # Soft policy + negative verdict = escalate to human.
+                    gate = await self._gate("merge", cfg)
+                    if not gate.approved:
+                        return "rejected:merge:soft-verdict"
+            gate = GateDecision(gate="merge", outcome=GateOutcome.APPROVE,
+                                decided_by="policy")
+
         _ended = workflow.now()
-        _quality = await self._judge(cfg, auto.model_dump_json(), "merge")
         await self._record(cfg, self._stage_record(
             cfg, stage="merge", role="reviewer",
             started=_started, ended=_ended,
-            quality_score=_quality.score, judge=_quality.judge,
-            outcome=(BenchmarkOutcome.PASS if gate.approved
-                     else BenchmarkOutcome.REVISED),
-            model="anthropic:glm-5.2"))
-        if not gate.approved:
-            return "rejected:merge"
+            quality_score=(1.0 if gate_report.passed else 0.0),
+            judge="deterministic_gate",
+            outcome=BenchmarkOutcome.PASS,
+            model="deterministic"))
+        await self._retain(
+            cfg, MemoryKind.GATE_FEEDBACK, cfg.memory.project_bank,
+            text=(f"merge gate: passed={gate_report.passed} "
+                  f"overridden={[o.check for o in overrides]}"),
+            metadata={"gate": "merge", "run_id": workflow.info().workflow_id})
 
         pr_url = await workflow.execute_activity(
             open_pull_request,

@@ -162,6 +162,7 @@ class TaskResult(BaseModel):
     branch: str
     run: HarnessRunResult | None = None
     handoff: HandoffSummary | None = None   # FR-805
+    qa: QAReport | None = None              # NEW: evidence for the merge gate
     notes: str = ""
 
 

@@ -13,7 +13,10 @@ from dataclasses import dataclass
 
 from temporalio import activity
 
-from .gate import CheckResult, GateOverride, GateReport, evaluate_quality_gate
+from .gate import (
+    CheckResult, GateOverride, GateReport, QualityGateInput,
+    evaluate_quality_gate,
+)
 from .harness.adapters import HARNESSES, HarnessRequest
 from .models import HarnessKind, HarnessRunResult, QAReport
 
@@ -220,6 +223,26 @@ async def run_test_suite(inp: QAInput) -> QAReport:
 
 
 @dataclass
+class LintInput:
+    worktree: str
+    lint_cmd: str = "ruff check ."
+
+
+@activity.defn
+async def run_lint(inp: LintInput) -> tuple[bool, str]:
+    """Run a linter; return (clean, detail). P1 runs the repo's configured
+    linter; non-zero exit = not clean. `detail` is the tail of stdout for
+    the gate's CheckResult.detail."""
+    proc = await asyncio.create_subprocess_shell(
+        inp.lint_cmd, cwd=inp.worktree,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+    )
+    out_b, _ = await proc.communicate()
+    out = out_b.decode(errors="replace")
+    return proc.returncode == 0, out[-2000:]
+
+
+@dataclass
 class PROpenInput:
     worktree: str
     title: str
@@ -257,12 +280,6 @@ async def deploy(inp: DeployInput) -> str:
     if proc.returncode != 0:
         raise RuntimeError(f"deploy failed: {out_b.decode()[-2000:]}")
     return out_b.decode(errors="replace")[-2000:]
-
-
-@dataclass
-class QualityGateInput:
-    checks: list[CheckResult]
-    overrides: list[GateOverride] | None = None
 
 
 @activity.defn
