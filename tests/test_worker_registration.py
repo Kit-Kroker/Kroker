@@ -26,3 +26,9 @@ def test_worker_module_imports_memory_activities():
     src = __import__("inspect").getsource(worker)
     for name in ("recall_snapshot", "retain", "capture_watermark", "reflect"):
         assert name in src, f"{name} missing from worker registration"
+
+
+def test_worker_module_imports_run_lint():
+    from sdlc import worker
+    src = __import__("inspect").getsource(worker)
+    assert "run_lint" in src, "run_lint missing from worker registration"
