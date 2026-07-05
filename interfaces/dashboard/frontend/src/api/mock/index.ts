@@ -320,7 +320,7 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '')
         .split('-')
-        .slice(0, 3)
+        .slice(0, 4)
         .join('-')
       const run: Run = {
         id,
