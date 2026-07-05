@@ -29,10 +29,14 @@ with workflow.unsafe.imports_passed_through():
         QualityScore, SpeedBag,
     )
     from ..benchmarks.recorder import record_benchmark
+    from ..memory.activities import (
+        RecallInput, RetainInput, WatermarkInput, capture_watermark,
+        recall_snapshot, retain,
+    )
     from ..models import (
         DevTask, ExecutionMode, GateDecision, GateOutcome, GatePolicy,
-        HandoffSummary, IdeaBrief, MergeVerdict, PipelineConfig, RoleConfig,
-        TaskResult,
+        HandoffSummary, IdeaBrief, MemoryKind, MergeVerdict, PipelineConfig,
+        RecallSnapshot, RetainItem, RoleConfig, TaskResult,
     )
 
 ACT = dict(start_to_close_timeout=timedelta(minutes=10),
@@ -51,6 +55,8 @@ LONG_ACT = dict(
     retry_policy=RetryPolicy(maximum_attempts=2))
 RECORD_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
                   retry_policy=RetryPolicy(maximum_attempts=5))
+MEM_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
+              retry_policy=RetryPolicy(maximum_attempts=5))
 
 
 def _long_act(role_cfg: RoleConfig | None = None) -> dict:
@@ -76,6 +82,7 @@ class FeatureWorkflow:
         self._gate_decisions: dict[str, GateDecision] = {}
         self._question_answers: dict[str, str] = {}
         self._status: str = "starting"
+        self._memory_watermark: str | None = None
 
     # ----------------------- benchmark recording ------------------------
 
@@ -146,6 +153,35 @@ class FeatureWorkflow:
             return fallback
         return await workflow.execute_activity(
             judge_artifact, judge_input, **RECORD_ACT)
+
+    # ------------------------------ memory -------------------------------
+
+    async def _recall(self, cfg: PipelineConfig, bank: str, query: str,
+                      filters: dict[str, str]) -> RecallSnapshot:
+        if not cfg.memory.enabled:
+            return RecallSnapshot(query_hash="", bank=bank,
+                                  watermark="unknown", items=[])
+        return await workflow.execute_activity(
+            recall_snapshot,
+            RecallInput(bank=bank, query=query, filters=filters,
+                       watermark=self._memory_watermark,
+                       backend=cfg.memory.backend, base_url=cfg.memory.base_url),
+            **MEM_ACT)
+
+    async def _retain(self, cfg: PipelineConfig, kind: MemoryKind, bank: str,
+                      text: str, metadata: dict[str, str]) -> None:
+        if not cfg.memory.enabled:
+            return
+        try:
+            await workflow.execute_activity(
+                retain,
+                RetainInput(item=RetainItem(kind=kind, bank=bank, text=text,
+                                            metadata=metadata),
+                           backend=cfg.memory.backend,
+                           base_url=cfg.memory.base_url),
+                **MEM_ACT)
+        except Exception:
+            pass
 
     # ---------------- signals / queries (the HITL surface) --------------
 
@@ -318,6 +354,14 @@ class FeatureWorkflow:
     async def run(self, idea: IdeaBrief,
                   cfg: PipelineConfig | None = None) -> str:
         cfg = cfg or PipelineConfig()
+        if cfg.memory.enabled:
+            self._memory_watermark = cfg.memory.watermark or (
+                await workflow.execute_activity(
+                    capture_watermark,
+                    WatermarkInput(bank=cfg.memory.project_bank,
+                                  backend=cfg.memory.backend,
+                                  base_url=cfg.memory.base_url),
+                    **MEM_ACT))
         repo_path = idea.repo_url or "/var/sdlc/repo"  # prepared by a setup activity IRL
 
         # 1. CLARIFY — open questions answered by human via signals
