@@ -212,23 +212,30 @@ class FeatureWorkflow:
         policy = cfg.gates.get(name, GatePolicy.HARD)
 
         if policy == GatePolicy.OFF:
-            return GateDecision(gate=name, outcome=GateOutcome.APPROVE, decided_by="policy")
+            decision = GateDecision(gate=name, outcome=GateOutcome.APPROVE,
+                                    decided_by="policy")
+        elif policy == GatePolicy.SOFT and auto_decision and auto_decision.approved:
+            decision = auto_decision
+        else:
+            self._status = f"awaiting:{name}"
+            try:
+                await workflow.wait_condition(
+                    lambda: name in self._gate_decisions,
+                    timeout=timedelta(hours=cfg.gate_timeout_hours),
+                )
+                decision = self._gate_decisions[name]
+            except TimeoutError:
+                decision = GateDecision(gate=name, outcome=GateOutcome.REJECT,
+                                        decided_by="timeout")
+            finally:
+                self._status = "running"
 
-        if policy == GatePolicy.SOFT and auto_decision and auto_decision.approved:
-            return auto_decision  # quality-gate agent said yes → no human
-
-        self._status = f"awaiting:{name}"
-        try:
-            await workflow.wait_condition(
-                lambda: name in self._gate_decisions,
-                timeout=timedelta(hours=cfg.gate_timeout_hours),
-            )
-        except TimeoutError:
-            return GateDecision(gate=name, outcome=GateOutcome.REJECT,
-                                decided_by="timeout")
-        finally:
-            self._status = "running"
-        return self._gate_decisions[name]
+        await self._retain(
+            cfg, MemoryKind.GATE_FEEDBACK, cfg.memory.project_bank,
+            text=f"gate {name}: {decision.outcome.value}"
+                f"{' — ' + decision.comments if decision.comments else ''}",
+            metadata={"gate": name, "run_id": workflow.info().workflow_id})
+        return decision
 
     async def _dev_task(self, task: DevTask, repo_path: str,
                         base_branch: str, cfg: PipelineConfig,
@@ -323,6 +330,12 @@ class FeatureWorkflow:
                 break
 
             issues = "\n- ".join(qa.issues or qa.failing_tests)
+            await self._retain(
+                cfg, MemoryKind.GOTCHA, cfg.memory.project_bank,
+                text=f"task {task.id} ({task.title}) attempt {attempt} failed: "
+                    f"{issues}",
+                metadata={"task_id": task.id,
+                         "run_id": workflow.info().workflow_id})
             if resumes < cfg.max_session_resumes:
                 session_id = run.session_id       # resume: context intact
                 resumes += 1
@@ -367,7 +380,13 @@ class FeatureWorkflow:
         # 1. CLARIFY — open questions answered by human via signals
         self._status = "clarifying"
         _started = workflow.now()
-        reqs = (await t_clarify.run(idea.model_dump_json())).output
+        snapshot = await self._recall(
+            cfg, cfg.memory.project_bank, query=f"clarify:{idea.title}",
+            filters={"stage": "clarify"})
+        reqs = (await t_clarify.run(
+            idea.model_dump_json()
+            + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
+               if snapshot.items else ""))).output
         if reqs.open_questions:
             self._status = "awaiting:clarify"
             await workflow.wait_condition(
@@ -385,12 +404,21 @@ class FeatureWorkflow:
             quality_score=_quality.score, judge=_quality.judge,
             outcome=BenchmarkOutcome.PASS,
             model="anthropic:glm-5.2"))
+        await self._retain(
+            cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
+            text=f"clarify: {reqs.summary}",
+            metadata={"stage": "clarify", "run_id": workflow.info().workflow_id})
 
         # 2. ARCHITECT (+ human approval of the spec)
         self._status = "architecting"
         _started = workflow.now()
+        snapshot = await self._recall(
+            cfg, cfg.memory.project_bank, query=f"architect:{idea.title}",
+            filters={"stage": "architect"})
         arch = (await t_architect.run(
-            f"mode={idea.mode.value}\n{reqs.model_dump_json()}")).output
+            f"mode={idea.mode.value}\n{reqs.model_dump_json()}"
+            + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
+               if snapshot.items else ""))).output
         gate = await self._gate("architecture", cfg)
         _ended = workflow.now()
         _quality = await self._judge(cfg, arch.model_dump_json(), "architect")
@@ -401,12 +429,22 @@ class FeatureWorkflow:
             outcome=(BenchmarkOutcome.PASS if gate.approved
                      else BenchmarkOutcome.REVISED),
             model="anthropic:glm-5.2"))
+        await self._retain(
+            cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
+            text=f"architect: {arch.overview}",
+            metadata={"stage": "architect", "run_id": workflow.info().workflow_id})
         if not gate.approved:
             return "rejected:architecture"
 
         # 3. PLAN (soft gate by default)
         _started = workflow.now()
-        plan = (await t_planner.run(arch.model_dump_json())).output
+        snapshot = await self._recall(
+            cfg, cfg.memory.project_bank, query=f"plan:{idea.title}",
+            filters={"stage": "plan"})
+        plan = (await t_planner.run(
+            arch.model_dump_json()
+            + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
+               if snapshot.items else ""))).output
         gate = await self._gate("plan", cfg)
         _ended = workflow.now()
         _quality = await self._judge(cfg, plan.model_dump_json(), "planner")
@@ -417,6 +455,10 @@ class FeatureWorkflow:
             outcome=(BenchmarkOutcome.PASS if gate.approved
                      else BenchmarkOutcome.REVISED),
             model="anthropic:glm-5.2"))
+        await self._retain(
+            cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
+            text=f"plan: {len(plan.tasks)} tasks",
+            metadata={"stage": "plan", "run_id": workflow.info().workflow_id})
         if not gate.approved:
             return "rejected:plan"
 
