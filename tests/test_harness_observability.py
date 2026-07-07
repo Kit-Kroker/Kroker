@@ -141,3 +141,55 @@ async def test_run_logs_events_as_they_stream(tmp_path, caplog):
     messages = [r.message for r in caplog.records]
     assert any("step_start" in m for m in messages)
     assert any("step_finish" in m for m in messages)
+
+
+def test_log_live_event_survives_non_dict_part(caplog):
+    caplog.set_level(logging.DEBUG, logger="sdlc.harness.adapters")
+    _log_live_event(json.dumps({
+        "type": "step_finish", "sessionID": "s", "part": "oops",
+    }))
+    _log_live_event(json.dumps({
+        "type": "text", "sessionID": "s", "part": [1, 2],
+    }))
+    _log_live_event(json.dumps({
+        "type": "step_finish", "sessionID": "s", "part": {"tokens": 5},
+    }))
+
+
+class _PyHarnessNoTruncate(CodingHarness):
+    """Like _PyHarness but parse() doesn't truncate to SUMMARY_MAX, so the
+    test can assert the full raw stdout survived _pump()'s chunked read."""
+    kind = HarnessKind.OPENCODE
+
+    def __init__(self, script: str):
+        self.script = script
+
+    def build_cmd(self, req: HarnessRequest) -> list[str]:
+        return [sys.executable, "-c", self.script]
+
+    def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
+        return HarnessRunResult(harness=self.kind, exit_code=exit_code,
+                                 summary=stdout)
+
+
+@pytest.mark.asyncio
+async def test_run_captures_line_larger_than_read_chunk(tmp_path):
+    # 200_000 chars is well past the 64KB read() chunk size in _pump(), so
+    # a single JSON line spans multiple chunks. This proves the buffered
+    # line assembly in _pump() reconstructs the line (and thus the raw
+    # stdout bytes fed to parse()) without loss across chunk boundaries.
+    script = (
+        "import json\n"
+        "big = 'z' * 200_000\n"
+        "print(json.dumps({'type': 'text', 'sessionID': 's1', "
+        "'part': {'text': big}}))\n"
+        "print(json.dumps({'type': 'step_finish', 'sessionID': 's1', "
+        "'part': {'tokens': {'input': 1, 'output': 1}, 'cost': 0.0}}))\n"
+    )
+    harness = _PyHarnessNoTruncate(script)
+    result = await asyncio.wait_for(
+        harness.run(HarnessRequest(prompt="x", cwd=str(tmp_path), timeout_s=15)),
+        timeout=20,
+    )
+    assert result.exit_code == 0
+    assert "z" * 200_000 in result.summary

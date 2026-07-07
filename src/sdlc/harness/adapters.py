@@ -101,13 +101,19 @@ def _log_live_event(line: str) -> None:
     if ev_type == "step_start":
         _log.info("harness step_start session_id=%s", session_id)
     elif ev_type == "step_finish":
-        part = ev.get("part") or {}
-        tokens = part.get("tokens") or {}
+        part = ev.get("part")
+        if not isinstance(part, dict):
+            part = {}
+        tokens = part.get("tokens")
+        if not isinstance(tokens, dict):
+            tokens = {}
         _log.info("harness step_finish session_id=%s input_tokens=%s "
                   "output_tokens=%s cost_usd=%s", session_id,
                   tokens.get("input"), tokens.get("output"), part.get("cost"))
     elif ev_type == "text":
-        part = ev.get("part") or {}
+        part = ev.get("part")
+        if not isinstance(part, dict):
+            part = {}
         _log.debug("harness text session_id=%s chars=%d", session_id,
                    len(part.get("text") or ""))
 
@@ -143,15 +149,21 @@ class CodingHarness(ABC):
 
         async def _pump() -> bytes:
             chunks: list[bytes] = []
+            buf = b""
             assert proc.stdout is not None
             while True:
-                line = await proc.stdout.readline()
-                if not line:
+                chunk = await proc.stdout.read(65536)
+                if not chunk:
                     break
-                chunks.append(line)
-                _log_live_event(line.decode(errors="replace"))
+                chunks.append(chunk)
+                buf += chunk
+                while b"\n" in buf:
+                    line, buf = buf.split(b"\n", 1)
+                    _log_live_event(line.decode(errors="replace"))
                 if heartbeat:
                     heartbeat()          # keep the Temporal activity alive
+            if buf.strip():
+                _log_live_event(buf.decode(errors="replace"))
             return b"".join(chunks)
 
         async def _pump_stderr() -> str:
@@ -179,6 +191,12 @@ class CodingHarness(ABC):
             proc.kill()
             _log.warning("harness timeout kind=%s cwd=%s cmd=%s",
                         self.kind.value, req.cwd, cmd)
+            raise
+        except Exception:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
             raise
         duration_s = time.monotonic() - start
 
@@ -294,7 +312,7 @@ class OpenCodeHarness(CodingHarness):
             try:
                 ev = json.loads(ln)
             except json.JSONDecodeError:
-                _log.debug("opencode parse: skipping malformed line: %s", ln)
+                _log.debug("opencode parse: skipping malformed line: %s", ln[:200])
                 continue
             parsed_any = True
             session_id = session_id or ev.get("sessionID") or ev.get("session_id")
