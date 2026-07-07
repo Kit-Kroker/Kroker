@@ -18,12 +18,16 @@ import asyncio
 import json
 import os
 import shutil
+import time
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 from ..models import HarnessKind, HarnessRunResult
 
 SUMMARY_MAX = 4000  # keep Temporal payloads small
+
+_log = logging.getLogger(__name__)
 
 # Best-effort model → context window (tokens). Substring match; extend as
 # needed. Used only to compute the context ceiling (Finding #7); unknown
@@ -78,6 +82,42 @@ class HarnessRequest:
     extra_args: list[str] = field(default_factory=list)
 
 
+def _log_live_event(line: str) -> None:
+    """Best-effort live logging of one opencode --format json event line as
+    it streams. Never raises: a line that doesn't parse (e.g. Claude Code's
+    single final JSON payload, which isn't line-delimited) is silently
+    skipped — parse-time failure logging is handled separately in parse()."""
+    line = line.strip()
+    if not line:
+        return
+    try:
+        ev = json.loads(line)
+    except json.JSONDecodeError:
+        return
+    if not isinstance(ev, dict):
+        return
+    ev_type = ev.get("type")
+    session_id = ev.get("sessionID") or ev.get("session_id")
+    if ev_type == "step_start":
+        _log.info("harness step_start session_id=%s", session_id)
+    elif ev_type == "step_finish":
+        part = ev.get("part")
+        if not isinstance(part, dict):
+            part = {}
+        tokens = part.get("tokens")
+        if not isinstance(tokens, dict):
+            tokens = {}
+        _log.info("harness step_finish session_id=%s input_tokens=%s "
+                  "output_tokens=%s cost_usd=%s", session_id,
+                  tokens.get("input"), tokens.get("output"), part.get("cost"))
+    elif ev_type == "text":
+        part = ev.get("part")
+        if not isinstance(part, dict):
+            part = {}
+        _log.debug("harness text session_id=%s chars=%d", session_id,
+                   len(part.get("text") or ""))
+
+
 class CodingHarness(ABC):
     kind: HarnessKind
 
@@ -95,38 +135,84 @@ class CodingHarness(ABC):
         resolved = shutil.which(cmd[0])
         if resolved:
             cmd[0] = resolved
+        _log.debug("harness start kind=%s model=%s session_id=%s cwd=%s",
+                   self.kind.value, req.model, req.session_id, req.cwd)
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=req.cwd,
             env=build_env(req.env),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            limit=10_000_000,  # opencode text events can exceed the 64KB
+                               # default StreamReader line limit
         )
 
         async def _pump() -> bytes:
             chunks: list[bytes] = []
+            buf = b""
             assert proc.stdout is not None
             while True:
                 chunk = await proc.stdout.read(65536)
                 if not chunk:
                     break
                 chunks.append(chunk)
+                buf += chunk
+                while b"\n" in buf:
+                    line, buf = buf.split(b"\n", 1)
+                    _log_live_event(line.decode(errors="replace"))
                 if heartbeat:
                     heartbeat()          # keep the Temporal activity alive
+            if buf.strip():
+                _log_live_event(buf.decode(errors="replace"))
             return b"".join(chunks)
 
+        async def _pump_stderr() -> str:
+            # Drained concurrently with stdout — an unread stderr pipe can
+            # fill its OS buffer and deadlock the child if it writes enough.
+            chunks: list[bytes] = []
+            size = 0
+            assert proc.stderr is not None
+            while True:
+                chunk = await proc.stderr.read(65536)
+                if not chunk:
+                    break
+                if size < SUMMARY_MAX:
+                    chunks.append(chunk)
+                    size += len(chunk)
+            return b"".join(chunks).decode(errors="replace")[:SUMMARY_MAX]
+
+        start = time.monotonic()
         try:
-            stdout_b, _ = await asyncio.wait_for(
-                asyncio.gather(_pump(), proc.wait()), timeout=req.timeout_s
+            stdout_b, stderr_s, _ = await asyncio.wait_for(
+                asyncio.gather(_pump(), _pump_stderr(), proc.wait()),
+                timeout=req.timeout_s,
             )
         except asyncio.TimeoutError:
             proc.kill()
+            _log.warning("harness timeout kind=%s cwd=%s cmd=%s",
+                        self.kind.value, req.cwd, cmd)
             raise
+        except Exception:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            raise
+        duration_s = time.monotonic() - start
 
         result = self.parse(stdout_b.decode(errors="replace"),
                             proc.returncode or 0)
         if result.context_window is None:
             result.context_window = context_window_for(req.model)
+
+        _log.info("harness done kind=%s exit_code=%s session_id=%s "
+                  "duration_s=%.1f input_tokens=%s output_tokens=%s cost_usd=%s",
+                  self.kind.value, result.exit_code, result.session_id,
+                  duration_s, result.input_tokens, result.output_tokens,
+                  result.cost_usd)
+        if result.exit_code != 0 or stderr_s:
+            _log.warning("harness stderr kind=%s exit_code=%s stderr=%s",
+                        self.kind.value, result.exit_code, stderr_s)
         return result
 
 
@@ -163,6 +249,8 @@ class ClaudeCodeHarness(CodingHarness):
             input_tokens = usage.get("input_tokens")
             output_tokens = usage.get("output_tokens")
         except (json.JSONDecodeError, IndexError):
+            _log.warning("claude parse: JSON decode failed, falling back "
+                         "to raw stdout as summary")
             summary = stdout
         return HarnessRunResult(
             harness=self.kind, session_id=session_id, exit_code=exit_code,
@@ -224,6 +312,7 @@ class OpenCodeHarness(CodingHarness):
             try:
                 ev = json.loads(ln)
             except json.JSONDecodeError:
+                _log.debug("opencode parse: skipping malformed line: %s", ln[:200])
                 continue
             parsed_any = True
             session_id = session_id or ev.get("sessionID") or ev.get("session_id")
@@ -236,6 +325,9 @@ class OpenCodeHarness(CodingHarness):
                 output_tokens = output_tokens or tokens.get("output")
                 if cost is None:
                     cost = part.get("cost")
+        if not parsed_any:
+            _log.warning("opencode parse: no events parsed from stdout "
+                         "(parsed_any=False); falling back to raw stdout")
         summary = "\n".join(text_parts) if parsed_any else stdout
         return HarnessRunResult(
             harness=self.kind, session_id=session_id, exit_code=exit_code,
