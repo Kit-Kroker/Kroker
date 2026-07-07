@@ -1,4 +1,5 @@
 import json
+import logging
 
 from sdlc.harness.adapters import (
     ClaudeCodeHarness, HarnessRequest, OpenCodeHarness, context_window_for,
@@ -95,3 +96,28 @@ def test_claude_build_cmd_accept_edits():
     cmd = ClaudeCodeHarness().build_cmd(HarnessRequest(
         prompt="do stuff", cwd="/tmp/wt"))
     assert "--permission-mode" in cmd and "acceptEdits" in cmd
+
+
+def test_opencode_parse_logs_debug_on_malformed_line(caplog):
+    caplog.set_level(logging.DEBUG, logger="sdlc.harness.adapters")
+    events = "\n".join([
+        "not valid json",
+        json.dumps({"type": "step_finish", "sessionID": "s",
+                    "part": {"tokens": {}, "cost": 0.0}}),
+    ])
+    OpenCodeHarness().parse(events, 0)
+    assert any("not valid json" in r.message for r in caplog.records)
+
+
+def test_opencode_parse_logs_warning_when_nothing_parses(caplog):
+    caplog.set_level(logging.WARNING, logger="sdlc.harness.adapters")
+    OpenCodeHarness().parse("not json at all", 1)
+    assert any("parsed_any" in r.message or "no events parsed" in r.message
+               for r in caplog.records)
+
+
+def test_claude_parse_logs_warning_on_decode_failure(caplog):
+    caplog.set_level(logging.WARNING, logger="sdlc.harness.adapters")
+    ClaudeCodeHarness().parse("not json at all", 1)
+    assert any("decode" in r.message.lower() or "fallback" in r.message.lower()
+               for r in caplog.records)

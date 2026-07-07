@@ -231,6 +231,8 @@ class ClaudeCodeHarness(CodingHarness):
             input_tokens = usage.get("input_tokens")
             output_tokens = usage.get("output_tokens")
         except (json.JSONDecodeError, IndexError):
+            _log.warning("claude parse: JSON decode failed, falling back "
+                         "to raw stdout as summary")
             summary = stdout
         return HarnessRunResult(
             harness=self.kind, session_id=session_id, exit_code=exit_code,
@@ -292,6 +294,7 @@ class OpenCodeHarness(CodingHarness):
             try:
                 ev = json.loads(ln)
             except json.JSONDecodeError:
+                _log.debug("opencode parse: skipping malformed line: %s", ln)
                 continue
             parsed_any = True
             session_id = session_id or ev.get("sessionID") or ev.get("session_id")
@@ -304,6 +307,9 @@ class OpenCodeHarness(CodingHarness):
                 output_tokens = output_tokens or tokens.get("output")
                 if cost is None:
                     cost = part.get("cost")
+        if not parsed_any:
+            _log.warning("opencode parse: no events parsed from stdout "
+                         "(parsed_any=False); falling back to raw stdout")
         summary = "\n".join(text_parts) if parsed_any else stdout
         return HarnessRunResult(
             harness=self.kind, session_id=session_id, exit_code=exit_code,
