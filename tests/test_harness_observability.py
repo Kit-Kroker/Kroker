@@ -78,3 +78,66 @@ async def test_timeout_logs_warning(tmp_path, caplog):
     with pytest.raises(asyncio.TimeoutError):
         await harness.run(HarnessRequest(prompt="x", cwd=str(tmp_path), timeout_s=1))
     assert any("harness timeout" in r.message for r in caplog.records)
+
+
+import json
+
+from sdlc.harness.adapters import _log_live_event
+
+
+def test_log_live_event_step_start_logged_at_info(caplog):
+    caplog.set_level(logging.INFO, logger="sdlc.harness.adapters")
+    _log_live_event(json.dumps({"type": "step_start", "sessionID": "abc"}))
+    assert any("step_start" in r.message and "abc" in r.message
+               for r in caplog.records)
+
+
+def test_log_live_event_step_finish_logs_tokens_and_cost(caplog):
+    caplog.set_level(logging.INFO, logger="sdlc.harness.adapters")
+    _log_live_event(json.dumps({
+        "type": "step_finish", "sessionID": "abc",
+        "part": {"tokens": {"input": 10, "output": 2}, "cost": 0.01},
+    }))
+    assert any("step_finish" in r.message and "input_tokens=10" in r.message
+               for r in caplog.records)
+
+
+def test_log_live_event_text_logged_at_debug_with_length_not_content(caplog):
+    caplog.set_level(logging.DEBUG, logger="sdlc.harness.adapters")
+    _log_live_event(json.dumps({
+        "type": "text", "sessionID": "abc",
+        "part": {"text": "some repo content that should not be logged verbatim"},
+    }))
+    messages = [r.message for r in caplog.records]
+    assert any("chars=" in m for m in messages)
+    assert not any("some repo content" in m for m in messages)
+
+
+def test_log_live_event_ignores_non_json_and_unknown_type(caplog):
+    caplog.set_level(logging.DEBUG, logger="sdlc.harness.adapters")
+    _log_live_event("not json at all")             # must not raise
+    _log_live_event(json.dumps({"type": "something_else"}))
+    assert caplog.records == []
+
+
+def test_log_live_event_ignores_non_dict_json(caplog):
+    caplog.set_level(logging.DEBUG, logger="sdlc.harness.adapters")
+    for line in ("42", "[1,2,3]", "true", "null"):
+        _log_live_event(line)   # must not raise
+    assert caplog.records == []
+
+
+@pytest.mark.asyncio
+async def test_run_logs_events_as_they_stream(tmp_path, caplog):
+    caplog.set_level(logging.INFO, logger="sdlc.harness.adapters")
+    script = (
+        "import json\n"
+        "print(json.dumps({'type': 'step_start', 'sessionID': 's1'}))\n"
+        "print(json.dumps({'type': 'step_finish', 'sessionID': 's1', "
+        "'part': {'tokens': {'input': 5, 'output': 1}, 'cost': 0.0}}))\n"
+    )
+    harness = _PyHarness(script)
+    await harness.run(HarnessRequest(prompt="x", cwd=str(tmp_path)))
+    messages = [r.message for r in caplog.records]
+    assert any("step_start" in m for m in messages)
+    assert any("step_finish" in m for m in messages)

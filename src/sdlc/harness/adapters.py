@@ -82,6 +82,36 @@ class HarnessRequest:
     extra_args: list[str] = field(default_factory=list)
 
 
+def _log_live_event(line: str) -> None:
+    """Best-effort live logging of one opencode --format json event line as
+    it streams. Never raises: a line that doesn't parse (e.g. Claude Code's
+    single final JSON payload, which isn't line-delimited) is silently
+    skipped — parse-time failure logging is handled separately in parse()."""
+    line = line.strip()
+    if not line:
+        return
+    try:
+        ev = json.loads(line)
+    except json.JSONDecodeError:
+        return
+    if not isinstance(ev, dict):
+        return
+    ev_type = ev.get("type")
+    session_id = ev.get("sessionID") or ev.get("session_id")
+    if ev_type == "step_start":
+        _log.info("harness step_start session_id=%s", session_id)
+    elif ev_type == "step_finish":
+        part = ev.get("part") or {}
+        tokens = part.get("tokens") or {}
+        _log.info("harness step_finish session_id=%s input_tokens=%s "
+                  "output_tokens=%s cost_usd=%s", session_id,
+                  tokens.get("input"), tokens.get("output"), part.get("cost"))
+    elif ev_type == "text":
+        part = ev.get("part") or {}
+        _log.debug("harness text session_id=%s chars=%d", session_id,
+                   len(part.get("text") or ""))
+
+
 class CodingHarness(ABC):
     kind: HarnessKind
 
@@ -115,10 +145,11 @@ class CodingHarness(ABC):
             chunks: list[bytes] = []
             assert proc.stdout is not None
             while True:
-                chunk = await proc.stdout.read(65536)
-                if not chunk:
+                line = await proc.stdout.readline()
+                if not line:
                     break
-                chunks.append(chunk)
+                chunks.append(line)
+                _log_live_event(line.decode(errors="replace"))
                 if heartbeat:
                     heartbeat()          # keep the Temporal activity alive
             return b"".join(chunks)
