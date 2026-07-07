@@ -18,12 +18,16 @@ import asyncio
 import json
 import os
 import shutil
+import time
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 from ..models import HarnessKind, HarnessRunResult
 
 SUMMARY_MAX = 4000  # keep Temporal payloads small
+
+_log = logging.getLogger(__name__)
 
 # Best-effort model → context window (tokens). Substring match; extend as
 # needed. Used only to compute the context ceiling (Finding #7); unknown
@@ -95,12 +99,16 @@ class CodingHarness(ABC):
         resolved = shutil.which(cmd[0])
         if resolved:
             cmd[0] = resolved
+        _log.debug("harness start kind=%s model=%s session_id=%s cwd=%s",
+                   self.kind.value, req.model, req.session_id, req.cwd)
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=req.cwd,
             env=build_env(req.env),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            limit=10_000_000,  # opencode text events can exceed the 64KB
+                               # default StreamReader line limit
         )
 
         async def _pump() -> bytes:
@@ -115,18 +123,47 @@ class CodingHarness(ABC):
                     heartbeat()          # keep the Temporal activity alive
             return b"".join(chunks)
 
+        async def _pump_stderr() -> str:
+            # Drained concurrently with stdout — an unread stderr pipe can
+            # fill its OS buffer and deadlock the child if it writes enough.
+            chunks: list[bytes] = []
+            size = 0
+            assert proc.stderr is not None
+            while True:
+                chunk = await proc.stderr.read(65536)
+                if not chunk:
+                    break
+                if size < SUMMARY_MAX:
+                    chunks.append(chunk)
+                    size += len(chunk)
+            return b"".join(chunks).decode(errors="replace")[:SUMMARY_MAX]
+
+        start = time.monotonic()
         try:
-            stdout_b, _ = await asyncio.wait_for(
-                asyncio.gather(_pump(), proc.wait()), timeout=req.timeout_s
+            stdout_b, stderr_s, _ = await asyncio.wait_for(
+                asyncio.gather(_pump(), _pump_stderr(), proc.wait()),
+                timeout=req.timeout_s,
             )
         except asyncio.TimeoutError:
             proc.kill()
+            _log.warning("harness timeout kind=%s cwd=%s cmd=%s",
+                        self.kind.value, req.cwd, cmd)
             raise
+        duration_s = time.monotonic() - start
 
         result = self.parse(stdout_b.decode(errors="replace"),
                             proc.returncode or 0)
         if result.context_window is None:
             result.context_window = context_window_for(req.model)
+
+        _log.info("harness done kind=%s exit_code=%s session_id=%s "
+                  "duration_s=%.1f input_tokens=%s output_tokens=%s cost_usd=%s",
+                  self.kind.value, result.exit_code, result.session_id,
+                  duration_s, result.input_tokens, result.output_tokens,
+                  result.cost_usd)
+        if result.exit_code != 0 or stderr_s:
+            _log.warning("harness stderr kind=%s exit_code=%s stderr=%s",
+                        self.kind.value, result.exit_code, stderr_s)
         return result
 
 
