@@ -186,6 +186,7 @@ class TaskResult(BaseModel):
     run: HarnessRunResult | None = None
     handoff: HandoffSummary | None = None   # FR-805
     qa: QAReport | None = None              # NEW: evidence for the merge gate
+    review: ReviewReport | None = None      # FR-204: clean-context review evidence
     notes: str = ""
 
 
@@ -199,6 +200,27 @@ class QAReport(BaseModel):
                                              # than the contract's frozen
                                              # stack, not merely incomplete
     report_ref: ArtifactRef | None = None
+
+
+class ReviewFinding(BaseModel):
+    assertion: str                          # which contract assertion / concern
+    severity: Literal["critical", "high", "medium", "low"]
+    detail: str
+    suggested_fix: str = ""
+
+
+class ReviewReport(BaseModel):
+    """Clean-context reviewer output (ADR-6/ADR-12/FR-204). Emitted from
+    orchestrator-assembled inputs only — frozen contract + materialized diff +
+    test output. The reviewer holds no tools, no repo, no worker session, and
+    never resumes the developer's harness session."""
+    approve: bool
+    findings: list[ReviewFinding] = Field(default_factory=list)
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)  # FR-301
+
+    @property
+    def blocking_findings(self) -> list[ReviewFinding]:
+        return [f for f in self.findings if f.severity in ("critical", "high")]
 
 
 class GateDecision(BaseModel):
@@ -228,7 +250,8 @@ class DeploymentResult(BaseModel):
 
 class RoleConfig(BaseModel):
     """Which harness/model a 'doing' role uses. Enables cross-harness review."""
-    harness: HarnessKind
+    kind: Literal["proposer", "harness"] = "harness"
+    harness: HarnessKind | None = None      # None for proposer roles
     model: str | None = None                # e.g. "zai-coding-plan/glm-5.2"
     context_budget_tokens: int = 30_000     # FR-801: enforced at prompt assembly
     extra_args: list[str] = Field(default_factory=list)
@@ -334,8 +357,7 @@ class PipelineConfig(BaseModel):
                           model="zai-coding-plan/glm-5.2"),
         "test": RoleConfig(harness=HarnessKind.OPENCODE,
                            model="zai-coding-plan/glm-5.2"),
-        "reviewer": RoleConfig(harness=HarnessKind.OPENCODE,
-                               model="zai-coding-plan/glm-5.2"),
+        "reviewer": RoleConfig(kind="proposer", model="anthropic:glm-5.2"),
         "devops": RoleConfig(harness=HarnessKind.OPENCODE,
                              model="zai-coding-plan/glm-5.2"),
     })
@@ -346,3 +368,6 @@ class PipelineConfig(BaseModel):
     gate_timeout_hours: int = 48
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     memoization_enabled: bool = False
+    review_enabled: bool = True             # FR-204: run the clean-context
+                                            # reviewer per task; disable to trade
+                                            # the anti-collusion check for cost
