@@ -22,7 +22,7 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..agents.roles import (
         MODEL, PROMPT_SHAS, t_architect, t_clarify, t_merge_verdict,
-        t_planner, t_qa,
+        t_planner, t_qa, t_reviewer,
     )
     from ..benchmarks.judge import (
         JudgeInput, _build_judge_input, judge_artifact,
@@ -477,6 +477,16 @@ class FeatureWorkflow:
                 + f"\nDiff stat:\n{diff['stat']}"
                 + f"\nDiff:\n{diff['patch']}")).output
 
+            # Second clean-context judge (FR-204): same inputs as QA — frozen
+            # contract + materialized diff + test output. No narrative, no
+            # session. A different model family than the developer (ADR-6).
+            review = None
+            if cfg.review_enabled:
+                review = (await t_reviewer.run(
+                    "Frozen contract assertions:\n- " + "\n- ".join(assertions)
+                    + f"\nTest results: {qa_raw.model_dump_json()}"
+                    + f"\nDiff:\n{diff['patch']}")).output
+
             await self._record(cfg, self._stage_record(
                 cfg, stage="code", role=task.role,
                 started=_attempt_started, ended=workflow.now(),
@@ -492,7 +502,8 @@ class FeatureWorkflow:
                 fix_attempts=attempt - 1,
                 task_id=task.id, attempt=attempt - 1))
 
-            if qa.tests_passed and not qa.issues:
+            review_ok = review is None or review.approve
+            if qa.tests_passed and not qa.issues and review_ok:
                 handoff = HandoffSummary(
                     task_id=task.id,
                     what_changed=[task.title],
@@ -501,12 +512,17 @@ class FeatureWorkflow:
                 )
                 return TaskResult(task_id=task.id, status="done",
                                   attempts=attempt, branch=handle.branch,
-                                  run=run, handoff=handoff, qa=qa_raw)
+                                  run=run, handoff=handoff, qa=qa_raw,
+                                  review=review)
 
             if attempt > cfg.max_fix_attempts:
                 break
 
-            issues = "\n- ".join(qa.issues or qa.failing_tests)
+            review_issues = (
+                [f"{f.severity}: {f.assertion} — {f.detail}"
+                 for f in review.blocking_findings] if review else [])
+            issues = "\n- ".join(
+                list(qa.issues or qa.failing_tests) + review_issues)
             await self._retain(
                 cfg, MemoryKind.GOTCHA, cfg.memory.project_bank,
                 text=f"task {task.id} ({task.title}) attempt {attempt} failed: "
@@ -554,6 +570,7 @@ class FeatureWorkflow:
             attempts=cfg.max_fix_attempts + 1,
             branch=handle.branch,
             qa=qa_raw,
+            review=review,
             notes=decision.comments or "",
         )
 
