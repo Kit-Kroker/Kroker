@@ -30,6 +30,7 @@ from .activities import (
     merge_into_integration, open_pull_request, run_coding_task,
     run_lint, run_test_suite, setup_integration_branch,
 )
+from .agents.loader import load_registry, validate_registry
 from .agents.roles import ALL_TEMPORAL_AGENTS
 from .benchmarks.judge import judge_artifact, load_case_assets
 from .benchmarks.recorder import record_benchmark
@@ -45,6 +46,10 @@ TASK_QUEUE = "ai-sdlc"
 
 
 async def main() -> None:
+    # Fail closed: a registry that violates the ADR-6 family-inequality
+    # invariant must never boot a worker (FR-204/US-5).
+    validate_registry(load_registry())
+
     client = await Client.connect(
         os.environ.get("TEMPORAL_HOST", "localhost:7233"),
         data_converter=pydantic_data_converter,
