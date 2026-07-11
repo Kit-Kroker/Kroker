@@ -19,15 +19,22 @@ from temporalio.workflow import ActivityConfig
 
 AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=10))
 
+from .loader import load_registry
+
 from ..models import (
     ArchitectureSpec,
     ClarifiedRequirements,
     ImplementationPlan,
     MergeVerdict,
     QAReport,
+    ReviewReport,
 )
 
 MODEL = "anthropic:glm-5.2"
+
+# The reviewer model comes from the versioned registry (FR-201), guaranteed a
+# different family than the developer by validate_registry at worker boot.
+REVIEWER_MODEL = load_registry()["reviewer"].model
 
 # Structured-output agents emit typed tool calls; Pydantic AI's 4096-token
 # default truncates the tool-call arguments to {} on larger schemas (or when
@@ -95,6 +102,16 @@ QA_PROMPT = (
     "TypeScript) — never for a merely incomplete implementation within "
     "the correct stack."
 )
+REVIEWER_PROMPT = (
+    "You are a clean-context code reviewer. You receive ONLY: the task's "
+    "frozen ValidationContract assertions, the test output, and the "
+    "materialized diff. You never see, and must never request, the "
+    "implementer's summary, reasoning, or session. Judge whether the diff "
+    "correctly and safely satisfies each contract assertion. Report concrete "
+    "findings with a severity of 'critical', 'high', 'medium', or 'low' and a "
+    "suggested fix. Set 'approve' to false if ANY finding is 'critical' or "
+    "'high'. Set confidence to a calibrated 0.0-1.0 self-assessment."
+)
 MERGE_VERDICT_PROMPT = (
     "You are an ADVISORY release reviewer, consulted only after the "
     "deterministic quality gate has already passed. Given the QA report, "
@@ -141,6 +158,14 @@ qa_analyst_agent = Agent(
     system_prompt=QA_PROMPT,
 )
 
+reviewer_agent = Agent(
+    REVIEWER_MODEL,
+    name="reviewer_agent",
+    output_type=ReviewReport,
+    model_settings=MODEL_SETTINGS,
+    system_prompt=REVIEWER_PROMPT,
+)
+
 merge_verdict_agent = Agent(
     MODEL,
     name="merge_verdict_agent",
@@ -162,6 +187,7 @@ PROMPT_SHAS: dict[str, str] = {
     "architect": hashlib.sha256(ARCHITECT_PROMPT.encode()).hexdigest(),
     "plan": hashlib.sha256(PLAN_PROMPT.encode()).hexdigest(),
     "devops": hashlib.sha256(DEVOPS_PROMPT.encode()).hexdigest(),
+    "review": hashlib.sha256(REVIEWER_PROMPT.encode()).hexdigest(),
 }
 
 # Temporal-wrapped versions used inside workflows.
@@ -169,8 +195,9 @@ t_clarify = TemporalAgent(clarify_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 t_architect = TemporalAgent(architect_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 t_planner = TemporalAgent(planner_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 t_qa = TemporalAgent(qa_analyst_agent, activity_config=AGENT_ACTIVITY_CONFIG)
+t_reviewer = TemporalAgent(reviewer_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 t_merge_verdict = TemporalAgent(merge_verdict_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 t_devops = TemporalAgent(devops_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 
 ALL_TEMPORAL_AGENTS = [t_clarify, t_architect, t_planner, t_qa,
-                       t_merge_verdict, t_devops]
+                       t_reviewer, t_merge_verdict, t_devops]
