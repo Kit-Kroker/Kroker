@@ -1,0 +1,13 @@
+# Versioned agent registry (FR-201). Loaded and validated at worker boot by
+# src/sdlc/agents/loader.py. The load-time validator enforces the ADR-6
+# invariant: model_family(reviewer) != model_family(developer). Editing a
+# model here is a per-project configuration change, not a code change (US-4/US-5).
+version: 1
+roles:
+  developer:
+    kind: harness
+    harness: opencode
+    model: zai-coding-plan/glm-5.2
+  reviewer:
+    kind: proposer                # clean-context, no tools (ADR-6 default)
+    model: anthropic:glm-5.2      # DIFFERENT family than developer
