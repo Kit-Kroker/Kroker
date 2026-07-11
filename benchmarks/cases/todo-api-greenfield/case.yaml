@@ -1,0 +1,22 @@
+case_id: todo-api-greenfield
+idea_summary: Build a simple TODO REST API (CRUD) as a fresh greenfield service.
+description: |
+  A small greenfield feature: CRUD endpoints for todo items (create, list,
+  update, delete), backed by a single data store, no auth. Exercises
+  architect (stack + storage choice), planner (task decomposition), and dev
+  (a couple of implementation tasks with a frozen contract). Sized for a
+  single short factory run.
+mode: greenfield
+repo_url: D:/own/sdlc-scratch-repos/todo-api-greenfield
+harnesses:
+  - opencode
+models:
+  - zai-coding-plan/glm-5.2
+judge_model: openai/gpt-5.2     # different family than the author (ADR-6)
+extra_args_by_model:
+  zai-coding-plan/glm-5.2:
+    - --variant
+    - max        # opencode: max reasoning effort for GLM 5.2
+rubrics:
+  architect: rubric-architect.md
+  clarifier: rubric-clarifier.md

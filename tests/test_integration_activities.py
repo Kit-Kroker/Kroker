@@ -28,7 +28,8 @@ def test_dependent_task_sees_prior_task_code(git_repo):
         WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="A", from_ref=head)))
     _add_commit(a.path, "a.txt", "from A\n", "A work")
     res = asyncio.run(merge_into_integration(
-        MergeInput(repo_path=git_repo, run_id=RUN, task_branch=a.branch)))
+        MergeInput(repo_path=git_repo, run_id=RUN, task_branch=a.branch,
+                   integration_path=handle.worktree_path)))
     assert res.merged and not res.conflict
 
     # B branches from the UPDATED integration head → must see A's file.
@@ -57,7 +58,8 @@ def test_diff_anchors_to_branch_point_not_base(git_repo):
         WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="A", from_ref=head)))
     _add_commit(a.path, "a.txt", "from A\n", "A work")
     res = asyncio.run(merge_into_integration(
-        MergeInput(repo_path=git_repo, run_id=RUN, task_branch=a.branch)))
+        MergeInput(repo_path=git_repo, run_id=RUN, task_branch=a.branch,
+                   integration_path=handle.worktree_path)))
 
     b = asyncio.run(create_worktree(
         WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="B",
@@ -83,17 +85,50 @@ def test_merge_conflict_is_detected_and_aborted(git_repo):
     _add_commit(b.path, "shared.txt", "B version\n", "B edits shared")
 
     ra = asyncio.run(merge_into_integration(
-        MergeInput(repo_path=git_repo, run_id=RUN, task_branch=a.branch)))
+        MergeInput(repo_path=git_repo, run_id=RUN, task_branch=a.branch,
+                   integration_path=handle.worktree_path)))
     assert ra.merged is True
     rb = asyncio.run(merge_into_integration(
-        MergeInput(repo_path=git_repo, run_id=RUN, task_branch=b.branch)))
+        MergeInput(repo_path=git_repo, run_id=RUN, task_branch=b.branch,
+                   integration_path=handle.worktree_path)))
     assert rb.conflict is True and rb.merged is False
     # Integration head unchanged after the aborted merge → equals A's merge head.
     assert rb.integration_head == ra.integration_head
 
 
+def test_merge_uses_integration_path_not_canonical(git_repo):
+    """Regression: setup_integration_branch may hand back a non-canonical
+    worktree path (``integration.N``) when the canonical one was CWD-locked
+    on Windows. merge_into_integration must merge at the handed-back path,
+    NOT recompute the canonical one — otherwise cwd points at a cleared dir
+    and subprocess.run raises NotADirectoryError (WinError 267).
+
+    Simulate the fallback by moving the worktree off the canonical path
+    via `git worktree move`, then merging with integration_path=<moved>."""
+    import os
+    handle = asyncio.run(setup_integration_branch(
+        IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")))
+    canonical = os.path.join(
+        os.environ["SDLC_WORKTREES_ROOT"], RUN, "integration")
+    assert handle.worktree_path == canonical  # baseline: starts canonical
+
+    moved = canonical + ".moved"
+    run_git(["worktree", "move", canonical, moved], git_repo)
+    assert not os.path.exists(canonical)  # canonical is now gone
+
+    a = asyncio.run(create_worktree(
+        WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="A",
+                      from_ref=handle.head_sha)))
+    _add_commit(a.path, "a.txt", "from A\n", "A work")
+
+    res = asyncio.run(merge_into_integration(
+        MergeInput(repo_path=git_repo, run_id=RUN, task_branch=a.branch,
+                   integration_path=moved)))
+    assert res.merged and not res.conflict
+
+
 def test_merge_failure_that_is_not_a_conflict_raises(git_repo):
-    asyncio.run(setup_integration_branch(
+    handle = asyncio.run(setup_integration_branch(
         IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")))
 
     # A nonexistent branch ref makes `git merge` fail with no unmerged
@@ -102,4 +137,5 @@ def test_merge_failure_that_is_not_a_conflict_raises(git_repo):
     with pytest.raises(RuntimeError):
         asyncio.run(merge_into_integration(
             MergeInput(repo_path=git_repo, run_id=RUN,
-                      task_branch="sdlc/nope/does-not-exist")))
+                       task_branch="sdlc/nope/does-not-exist",
+                       integration_path=handle.worktree_path)))

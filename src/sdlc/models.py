@@ -111,6 +111,12 @@ class ValidationContract(BaseModel):
     task_id: str
     assertions: list[str]                   # human-readable, test-mappable
     test_commands: list[str] = Field(default_factory=list)
+    lint_commands: list[str] = Field(default_factory=list)
+    stack: str = ""                         # e.g. "TypeScript/Node.js, npm
+                                             # workspaces" — copied verbatim
+                                             # from the architecture decision;
+                                             # a hard constraint, not a soft
+                                             # acceptance criterion
     frozen: bool = True                     # set at plan gate; immutable after
 
 
@@ -188,6 +194,10 @@ class QAReport(BaseModel):
     coverage_pct: float | None = None
     failing_tests: list[str] = Field(default_factory=list)
     issues: list[str] = Field(default_factory=list)
+    stack_mismatch: bool = False            # diff uses a fundamentally
+                                             # different language/runtime
+                                             # than the contract's frozen
+                                             # stack, not merely incomplete
     report_ref: ArtifactRef | None = None
 
 
@@ -307,6 +317,10 @@ class PipelineConfig(BaseModel):
         "merge": GateConfig(policy=GatePolicy.HARD),
         "deploy": GateConfig(policy=GatePolicy.HARD),
     })
+    # Policy for gates not named in `gates` above — e.g. the per-task
+    # escalation gate `task:<id>` fired when a dev task exhausts its fix
+    # budget. Kept separate from `gates` since task ids aren't known upfront.
+    default_gate_policy: GatePolicy = GatePolicy.HARD
 
     @field_validator("gates", mode="before")
     @classmethod

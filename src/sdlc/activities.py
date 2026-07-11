@@ -303,6 +303,13 @@ class MergeInput:
     repo_path: str
     run_id: str
     task_branch: str
+    # Authoritative integration worktree path, as handed back by
+    # setup_integration_branch (IntegrationHandle.worktree_path). Required
+    # to hit the right dir when setup fell back to integration.N — see
+    # merge_into_integration. Optional only for Temporal replay safety:
+    # histories recorded before this field existed deserialize without it,
+    # and we fall back to the canonical path (the pre-fix behavior).
+    integration_path: str | None = None
 
 
 @dataclass
@@ -316,8 +323,19 @@ class MergeResult:
 async def merge_into_integration(inp: MergeInput) -> MergeResult:
     """Merge a completed task branch into the run's integration branch.
     A merge conflict = a falsified `overlaps` declaration (Finding #1):
-    abort cleanly and report it so the caller serializes/escalates."""
-    ipath = os.path.join(_worktrees_root(), inp.run_id, "integration")
+    abort cleanly and report it so the caller serializes/escalates.
+
+    The integration worktree path is taken from ``inp.integration_path``
+    (the authoritative path returned by setup_integration_branch) — NOT
+    recomputed from run_id. setup may have fallen back to
+    ``<root>/<run>/integration.N`` if the canonical path was CWD-locked
+    on Windows; recomputing the canonical path here would then point at
+    a cleared/nonexistent dir and raise ``NotADirectoryError``
+    (WinError 267) inside ``subprocess.run``. Falls back to the
+    canonical path only for replay of histories recorded before this
+    field existed."""
+    ipath = (inp.integration_path
+             or os.path.join(_worktrees_root(), inp.run_id, "integration"))
     merge = _git(
         ["merge", "--no-ff", "-m", f"merge {inp.task_branch}",
          inp.task_branch],
@@ -412,15 +430,35 @@ async def get_task_diff(inp: DiffInput) -> dict:
 class QAInput:
     worktree: str
     test_cmd: str = "pytest -q --maxfail=25"
+    timeout_s: int = 600
 
 
 @activity.defn
 async def run_test_suite(inp: QAInput) -> QAReport:
+    """Bounded by timeout_s (default 10 min): a contract-specified command
+    can accidentally chain in a long-running process (e.g. `npm run dev`,
+    which never exits) instead of a one-shot test run. Without a bound
+    here, that hang is only caught by the activity's heartbeat_timeout
+    (60 min by default) — and since run_test_suite never heartbeats, a
+    genuine hang burns the full hour AND, once retries are exhausted,
+    fails as an uncaught activity error that crashes the whole workflow
+    rather than being handled as a normal (fixable) task failure."""
     proc = await asyncio.create_subprocess_shell(
         inp.test_cmd, cwd=inp.worktree,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
     )
-    out_b, _ = await proc.communicate()
+    try:
+        out_b, _ = await asyncio.wait_for(
+            proc.communicate(), timeout=inp.timeout_s)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return QAReport(
+            tests_passed=False, failing_tests=[],
+            issues=[f"test command timed out after {inp.timeout_s}s "
+                    f"(cmd: {inp.test_cmd!r}) — likely hung on a "
+                    "long-running process (e.g. a dev server) rather "
+                    "than exiting after a one-shot test run"])
     out = out_b.decode(errors="replace")
     failing = [ln.split(" ")[0] for ln in out.splitlines()
                if ln.startswith("FAILED")]
@@ -434,18 +472,28 @@ async def run_test_suite(inp: QAInput) -> QAReport:
 class LintInput:
     worktree: str
     lint_cmd: str = "ruff check ."
+    timeout_s: int = 600
 
 
 @activity.defn
 async def run_lint(inp: LintInput) -> tuple[bool, str]:
     """Run a linter; return (clean, detail). P1 runs the repo's configured
     linter; non-zero exit = not clean. `detail` is the tail of stdout for
-    the gate's CheckResult.detail."""
+    the gate's CheckResult.detail. Bounded by timeout_s — see
+    run_test_suite's docstring for why an unbounded shell command is
+    dangerous here."""
     proc = await asyncio.create_subprocess_shell(
         inp.lint_cmd, cwd=inp.worktree,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
     )
-    out_b, _ = await proc.communicate()
+    try:
+        out_b, _ = await asyncio.wait_for(
+            proc.communicate(), timeout=inp.timeout_s)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return False, (f"lint command timed out after {inp.timeout_s}s "
+                       f"(cmd: {inp.lint_cmd!r})")
     out = out_b.decode(errors="replace")
     return proc.returncode == 0, out[-2000:]
 
@@ -496,27 +544,4 @@ async def deploy(inp: DeployInput) -> str:
 async def evaluate_gate(inp: QualityGateInput) -> GateReport:
     """Activity wrapper over the pure DeterministicQualityGate."""
     return evaluate_quality_gate(inp.checks, inp.overrides)
-
-
-def _cleanup_worktrees_on_import():
-    try:
-        import shutil
-        wt_base = os.path.join(tempfile.gettempdir(), "sdlc", "worktrees")
-        repo_path = "D:/own/temp_tests"
-        if os.path.exists(wt_base):
-            for run_id in os.listdir(wt_base):
-                run_dir = os.path.join(wt_base, run_id)
-                if os.path.isdir(run_dir):
-                    for task_id in os.listdir(run_dir):
-                        wt_path = os.path.join(run_dir, task_id)
-                        subprocess.run(
-                            ["git", "worktree", "remove", "-f", wt_path],
-                            cwd=repo_path, capture_output=True
-                        )
-            shutil.rmtree(wt_base, ignore_errors=True)
-        subprocess.run(["git", "worktree", "prune"], cwd=repo_path, capture_output=True)
-    except Exception:
-        pass
-
-_cleanup_worktrees_on_import()
 

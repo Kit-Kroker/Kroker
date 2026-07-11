@@ -91,7 +91,7 @@ async def main() -> None:
             return
         if args.bench_cmd == "run":
             from .benchmarks.cli import _run_matrix
-            print(asyncio.run(_run_matrix(args.case)))
+            print(await _run_matrix(args.case))
             return
         if args.bench_cmd == "drift":
             print("drift requires a live Temporal client; see ARCHITECTURE.md §8.")

@@ -8,11 +8,17 @@ cleanly through Temporal.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 
 from dotenv import load_dotenv
 
 load_dotenv()  # read .env in CWD — shell-neutral, works on any OS
+
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 from temporalio.client import Client

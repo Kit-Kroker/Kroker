@@ -18,8 +18,8 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
-    from ..models import (BenchmarkConfig, HarnessKind, IdeaBrief,
-                          PipelineConfig, ProjectMode, RoleConfig)
+    from ..models import (BenchmarkConfig, GateConfig, GatePolicy, HarnessKind,
+                          IdeaBrief, PipelineConfig, ProjectMode, RoleConfig)
     from ..workflows.feature import FeatureWorkflow
     from .judge import load_case_assets
     from .matrix import expand_matrix
@@ -39,15 +39,23 @@ def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
     """Build a per-cell PipelineConfig: every role overridden to
     (harness, model), benchmark fields set so FeatureWorkflow records."""
     cfg = base.model_copy(deep=True)
+    model_extra_args = spec.extra_args_by_model.get(model, [])
     cfg.roles = {
         role: RoleConfig(harness=harness, model=model,
                          context_budget_tokens=rc.context_budget_tokens,
-                         extra_args=rc.extra_args)
+                         extra_args=[*rc.extra_args, *model_extra_args])
         for role, rc in base.roles.items()
     }
     cfg.benchmark = BenchmarkConfig(
         case_id=spec.case_id, bench_run_id=bench_run_id,
         rubrics=dict(rubrics or {}), judge_model=spec.judge_model)
+    # A benchmark matrix run is unattended — no human is present to click
+    # approve for every (harness x model) cell. Auto-approve every gate
+    # rather than let FeatureWorkflow block for gate_timeout_hours and
+    # auto-reject the whole cell. default_gate_policy covers dynamic gates
+    # not named in `gates` (e.g. the per-task `task:<id>` escalation gate).
+    cfg.gates = {name: GateConfig(policy=GatePolicy.OFF) for name in cfg.gates}
+    cfg.default_gate_policy = GatePolicy.OFF
     return cfg
 
 
@@ -64,14 +72,15 @@ class BenchmarkWorkflow:
         # Load rubric text once (file I/O in the activity, not the workflow);
         # the same {stage: text} map is reused across every cell.
         rubrics = await workflow.execute_activity(
-            load_case_assets, spec.case_id, dict(spec.rubrics), **RECORD_ACT)
+            load_case_assets, args=[spec.case_id, dict(spec.rubrics)],
+            **RECORD_ACT)
         for cell in cells:
             cfg = _cell_config(base, idea, spec, cell.harness, cell.model,
                                bench_run_id=bench_run_id, rubrics=rubrics)
             child_id = f"{bench_run_id}/{cell.cell_id}"
             try:
                 await workflow.execute_child_workflow(
-                    FeatureWorkflow.run, idea, cfg,
+                    FeatureWorkflow.run, args=[idea, cfg],
                     id=child_id, task_queue=workflow.info().task_queue,
                 )
             except Exception as e:

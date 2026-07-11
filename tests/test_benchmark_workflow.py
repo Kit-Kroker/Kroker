@@ -4,7 +4,8 @@ class is registered and runnable-shaped. A full time-skipping integration
 test lives in Task 13's golden-case smoke run."""
 from sdlc.benchmarks.models import CaseSpec
 from sdlc.benchmarks.workflow import BenchmarkWorkflow, _cell_config
-from sdlc.models import HarnessKind, PipelineConfig, ProjectMode, IdeaBrief
+from sdlc.models import (GatePolicy, HarnessKind, PipelineConfig, ProjectMode,
+                         IdeaBrief)
 
 
 def _spec():
@@ -43,3 +44,38 @@ def test_cell_config_is_pure_when_base_unbenchmark():
 def test_benchmark_workflow_class_has_run():
     # the @workflow.run method exists
     assert hasattr(BenchmarkWorkflow, "run")
+
+
+def test_cell_config_forwards_per_model_extra_args():
+    base = PipelineConfig()
+    idea = IdeaBrief(title="t", description="d", mode=ProjectMode.GREENFIELD)
+    spec = CaseSpec(
+        case_id="todo-api", idea_summary="todo api", mode="greenfield",
+        harnesses=[HarnessKind.OPENCODE], models=["zai-coding-plan/glm-5.2"],
+        judge_model="openai/gpt-5.2", rubrics={},
+        extra_args_by_model={"zai-coding-plan/glm-5.2": ["--variant", "max"]})
+    cfg = _cell_config(base, idea, spec, HarnessKind.OPENCODE,
+                       "zai-coding-plan/glm-5.2", bench_run_id="b1")
+    for rc in cfg.roles.values():
+        assert rc.extra_args == ["--variant", "max"]
+
+    # a model with no entry gets no extra args
+    cfg2 = _cell_config(base, idea, _spec(), HarnessKind.OPENCODE,
+                        "openai/gpt-5.2", bench_run_id="b1")
+    for rc in cfg2.roles.values():
+        assert rc.extra_args == []
+
+
+def test_cell_config_auto_approves_every_gate():
+    # a benchmark run is unattended — no human to click approve, so every
+    # gate must be forced to OFF regardless of the base config's policy
+    base = PipelineConfig()
+    assert any(g.policy != GatePolicy.OFF for g in base.gates.values())
+    idea = IdeaBrief(title="t", description="d", mode=ProjectMode.GREENFIELD)
+    cfg = _cell_config(base, idea, _spec(), HarnessKind.OPENCODE,
+                       "openai/gpt-5.2", bench_run_id="b1")
+    assert all(g.policy == GatePolicy.OFF for g in cfg.gates.values())
+    assert set(cfg.gates) == set(base.gates)
+    # dynamic gates not named in cfg.gates (e.g. task:<id> escalation)
+    # must also auto-approve — otherwise an unattended cell still blocks
+    assert cfg.default_gate_policy == GatePolicy.OFF

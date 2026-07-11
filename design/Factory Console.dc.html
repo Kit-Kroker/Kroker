@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#0c0f14;}
+*{box-sizing:border-box;}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-thumb{background:#2a3140;border-radius:5px;border:2px solid #0c0f14;}
+::-webkit-scrollbar-track{background:transparent;}
+@keyframes fc-pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+@keyframes fc-toast{from{transform:translateY(8px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+textarea:focus,input:focus{outline:1px solid #4a6da8;}
+</style>
+</helmet>
+
+<div style="height:100vh;display:flex;flex-direction:column;background:#0c0f14;color:#d9dfe9;font-family:'IBM Plex Sans',sans-serif;font-size:13px;overflow:hidden">
+
+  <!-- ============ HEADER ============ -->
+  <header style="flex:none;height:52px;display:flex;align-items:center;gap:24px;padding:0 20px;background:#090b0f;border-bottom:1px solid #1e242f">
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:14px;letter-spacing:.08em;color:#e8edf5">SDLC·FACTORY</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#4d5665">temporal · ai-sdlc queue</span>
+    </div>
+    <nav style="display:flex;gap:4px;height:100%">
+      <button onClick="{{ goFleet }}" style="border:none;background:none;cursor:pointer;padding:0 14px;height:100%;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.04em;color:{{ fleetTabColor }};border-bottom:2px solid {{ fleetTabLine }}" style-hover="color:#e8edf5">FLEET</button>
+      <button onClick="{{ goInbox }}" style="border:none;background:none;cursor:pointer;padding:0 14px;height:100%;display:flex;align-items:center;gap:8px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.04em;color:{{ inboxTabColor }};border-bottom:2px solid {{ inboxTabLine }}" style-hover="color:#e8edf5">INBOX
+        <sc-if value="{{ hasInbox }}" hint-placeholder-val="{{ true }}">
+          <span style="min-width:18px;height:18px;padding:0 5px;display:inline-flex;align-items:center;justify-content:center;background:#e0b050;color:#1a1405;border-radius:9px;font-size:10.5px;font-weight:600">{{ inboxCount }}</span>
+        </sc-if>
+      </button>
+    </nav>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:18px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#7d8697">
+      <span>runs <b style="color:#d9dfe9">{{ activeCount }}</b>/50</span>
+      <span>harness <b style="color:#d9dfe9">{{ harnessCount }}</b>/200</span>
+      <span>spend today <b style="color:#d9dfe9">{{ totalCost }}</b></span>
+      <button onClick="{{ openStart }}" style="cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;padding:7px 14px;background:#e0b050;color:#1a1405;border:none;border-radius:4px" style-hover="background:#ecc06a">+ START RUN</button>
+    </div>
+  </header>
+
+  <!-- ============ FLEET ============ -->
+  <sc-if value="{{ isFleet }}" hint-placeholder-val="{{ true }}">
+  <main data-screen-label="Fleet" style="flex:1;overflow:auto;padding:20px 20px 40px">
+    <div style="display:flex;align-items:baseline;gap:12px;margin:0 0 14px">
+      <h1 style="margin:0;font-size:15px;font-weight:600;color:#e8edf5">Fleet</h1>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5d6675">{{ fleetSummary }}</span>
+    </div>
+    <div style="border:1px solid #1e242f;border-radius:6px;overflow:hidden;background:#10141b">
+      <div style="display:grid;grid-template-columns:170px minmax(140px,1.4fr) 172px 126px minmax(90px,1fr) 76px 60px;gap:12px;align-items:center;padding:8px 14px;background:#0d1016;border-bottom:1px solid #1e242f;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.08em;color:#5d6675">
+        <span>RUN</span><span>TITLE</span><span>STAGES</span><span>STATUS</span><span>BLOCKER</span><span style="text-align:right">COST</span><span style="text-align:right">AGE</span>
+      </div>
+      <sc-for list="{{ fleetRuns }}" as="r" hint-placeholder-count="6">
+        <div onClick="{{ r.open }}" style="display:grid;grid-template-columns:170px minmax(140px,1.4fr) 172px 126px minmax(90px,1fr) 76px 60px;gap:12px;align-items:center;padding:11px 14px;border-bottom:1px solid #171c25;cursor:pointer" style-hover="background:#151a23">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#9db4d8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.id }}</span>
+          <span style="display:flex;align-items:center;gap:8px;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c8cfdb">{{ r.title }}</span><span style="flex:none;font-family:'IBM Plex Mono',monospace;font-size:9.5px;padding:2px 6px;border:1px solid #2a3140;border-radius:3px;color:#7d8697">{{ r.mode }}</span></span>
+          <span style="display:flex;gap:3px">
+            <sc-for list="{{ r.dots }}" as="d" hint-placeholder-count="14">
+              <span title="{{ d.t }}" style="width:9px;height:9px;border-radius:2px;background:{{ d.c }};animation:{{ d.a }}"></span>
+            </sc-for>
+          </span>
+          <span style="display:flex;align-items:center;gap:7px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ r.statusColor }}"><span style="width:7px;height:7px;border-radius:50%;background:{{ r.statusColor }};animation:{{ r.statusAnim }}"></span>{{ r.statusLabel }}</span>
+          <span style="font-size:11px;color:#8a93a5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.blockerText }}</span>
+          <span style="text-align:right;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#c8cfdb">{{ r.costText }}</span>
+          <span style="text-align:right;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5d6675">{{ r.age }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </main>
+  </sc-if>
+
+  <!-- ============ INBOX ============ -->
+  <sc-if value="{{ isInbox }}" hint-placeholder-val="{{ false }}">
+  <main data-screen-label="Decision inbox" style="flex:1;overflow:auto;padding:20px 20px 60px">
+    <div style="max-width:860px;margin:0 auto">
+      <div style="display:flex;align-items:baseline;gap:12px;margin:0 0 14px">
+        <h1 style="margin:0;font-size:15px;font-weight:600;color:#e8edf5">Decision inbox</h1>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5d6675">{{ inboxSummary }}</span>
+      </div>
+      <sc-if value="{{ inboxEmpty }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:60px 0;text-align:center;color:#5d6675;font-family:'IBM Plex Mono',monospace;font-size:12px">inbox zero — nothing awaits a human</div>
+      </sc-if>
+      <div style="display:flex;flex-direction:column;gap:14px">
+      <sc-for list="{{ inboxItems }}" as="it" hint-placeholder-count="4">
+        <article style="background:#10141b;border:1px solid #1e242f;border-left:3px solid {{ it.typeColor }};border-radius:6px;padding:16px 18px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.08em;font-weight:600;padding:3px 8px;border-radius:3px;background:{{ it.typeBg }};color:{{ it.typeColor }}">{{ it.typeLabel }}</span>
+            <button onClick="{{ it.openRun }}" style="border:none;background:none;cursor:pointer;padding:0;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#9db4d8;text-decoration:underline;text-underline-offset:3px">{{ it.runId }}</button>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#5d6675">{{ it.roundText }}</span>
+            <span style="flex:1"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#5d6675">{{ it.age }}</span>
+          </div>
+          <h2 style="margin:0 0 6px;font-size:13.5px;font-weight:600;color:#e8edf5">{{ it.title }}</h2>
+          <p style="margin:0 0 12px;font-size:12.5px;line-height:1.55;color:#8a93a5">{{ it.body }}</p>
+
+          <!-- clarify -->
+          <sc-if value="{{ it.isClarify }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#0d1016;border:1px solid #232b3a;border-radius:5px;padding:12px 14px;margin-bottom:12px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;color:#5d6675">SUGGESTED ANSWER <span style="color:#e0b050">confidence {{ it.confidence }}</span></div>
+              <div style="font-size:12.5px;line-height:1.55;color:#c8cfdb">{{ it.suggestion }}</div>
+            </div>
+            <sc-if value="{{ it.editing }}" hint-placeholder-val="{{ false }}">
+              <textarea value="{{ it.draft }}" onChange="{{ it.setDraft }}" placeholder="Your answer…" style="width:100%;min-height:64px;resize:vertical;background:#0d1016;border:1px solid #2a3140;border-radius:5px;color:#d9dfe9;font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;padding:10px 12px;margin-bottom:10px"></textarea>
+            </sc-if>
+            <div style="display:flex;gap:8px">
+              <button onClick="{{ it.accept }}" style="cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;padding:7px 14px;background:#1d3629;color:#6fd39a;border:1px solid #2c5741;border-radius:4px" style-hover="background:#234230">{{ it.acceptLabel }}</button>
+              <button onClick="{{ it.toggleEdit }}" style="cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11.5px;padding:7px 14px;background:none;color:#8a93a5;border:1px solid #2a3140;border-radius:4px" style-hover="color:#d9dfe9;border-color:#3a4356">{{ it.editLabel }}</button>
+            </div>
+          </sc-if>
+
+          <!-- gate approve/revise/reject -->
+          <sc-if value="{{ it.isGate }}" hint-placeholder-val="{{ false }}">
+            <textarea value="{{ it.draft }}" onChange="{{ it.setDraft }}" placeholder="Comments — required for revise / reject…" style="width:100%;min-height:52px;resize:vertical;background:#0d1016;border:1px solid #2a3140;border-radius:5px;color:#d9dfe9;font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;padding:10px 12px;margin-bottom:10px"></textarea>
+            <div style="display:flex;gap:8px">
+              <button onClick="{{ it.approve }}" style="cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;padding:7px 14px;background:#1d3629;color:#6fd39a;border:1px solid #2c5741;border-radius:4px" style-hover="background:#234230">APPROVE</button>
+              <button onClick="{{ it.revise }}" style="cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;padding:7px 14px;background:#37301a;color:#e0b050;border:1px solid #574a2c;border-radius:4px" style-hover="background:#443b20">REVISE</button>
+              <button onClick="{{ it.reject }}" style="cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;padding:7px 14px;background:#3a1f1b;color:#e08573;border:1px solid #5c322b;border-radius:4px" style-hover="background:#472621">REJECT</button>
+            </div>
+          </sc-if>
+
+          <!-- merge-gate advisory override -->
+          <sc-if value="{{ it.isOverride }}" hint-placeholder-val="{{ false }}">
+            <div style="border:1px solid #232b3a;border-radius:5px;overflow:hidden;margin-bottom:12px">
+              <sc-for list="{{ it.checks }}" as="ck" hint-placeholder-count="6">
+                <div style="display:grid;grid-template-columns:16px 200px 90px 1fr;gap:10px;align-items:center;padding:7px 12px;border-bottom:1px solid #171c25;background:#0d1016;font-family:'IBM Plex Mono',monospace;font-size:11.5px">
+                  <span style="color:{{ ck.color }}">{{ ck.icon }}</span>
+                  <span style="color:#c8cfdb">{{ ck.name }}</span>
+                  <span style="font-size:9.5px;letter-spacing:.06em;color:{{ ck.kindColor }}">{{ ck.kind }}</span>
+                  <span style="color:#7d8697">{{ ck.detail }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="background:#0d1016;border:1px dashed #2a3140;border-radius:5px;padding:10px 14px;margin-bottom:12px;font-size:12px;line-height:1.5;color:#8a93a5"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5d6675">ADVISORY · </span>{{ it.verdict }}</div>
+            <textarea value="{{ it.draft }}" onChange="{{ it.setDraft }}" placeholder="Override justification — recorded in the audit trail…" style="width:100%;min-height:52px;resize:vertical;background:#0d1016;border:1px solid #2a3140;border-radius:5px;color:#d9dfe9;font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;padding:10px 12px;margin-bottom:10px"></textarea>
+            <div style="display:flex;gap:8px">
+              <button onClick="{{ it.override }}" style="cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;padding:7px 14px;background:#1d3629;color:#6fd39a;border:1px solid #2c5741;border-radius:4px" style-hover="background:#234230">RECORD OVERRIDE &amp; MERGE</button>
+              <button onClick="{{ it.sendBack }}" style="cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;padding:7px 14px;background:#37301a;color:#e0b050;border:1px solid #574a2c;border-radius:4px" style-hover="background:#443b20">SEND BACK TO DEV</button>
+            </div>
+          </sc-if>
+
+          <!-- escalation -->
+          <sc-if value="{{ it.isEscalation }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#0d1016;border:1px solid #232b3a;border-radius:5px;padding:12px 14px;margin-bottom:12px">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;color:#5d6675;margin-bottom:6px">RESOLVER ANALYSIS</div>
+              <div style="font-size:12.5px;line-height:1.55;color:#c8cfdb">{{ it.analysis }}</div>
+            </div>
+            <textarea value="{{ it.draft }}" onChange="{{ it.setDraft }}" placeholder="Guidance for the harness session (reaches the same session — claude --resume)…" style="width:100%;min-height:52px;resize:vertical;background:#0d1016;border:1px solid #2a3140;border-radius:5px;color:#d9dfe9;font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;padding:10px 12px;margin-bottom:10px"></textarea>
+            <div style="display:flex;gap:8px">
+              <button onClick="{{ it.retry }}" style="cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;padding:7px 14px;background:#1d3629;color:#6fd39a;border:1px solid #2c5741;border-radius:4px" style-hover="background:#234230">RETRY WITH GUIDANCE</button>
+              <button onClick="{{ it.quarantine }}" style="cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;padding:7px 14px;background:#2c2138;color:#b98fdc;border:1px solid #453257;border-radius:4px" style-hover="background:#362a44">QUARANTINE TASK</button>
+            </div>
+          </sc-if>
+        </article>
+      </sc-for>
+      </div>
+    </div>
+  </main>
+  </sc-if>
+
+  <!-- ============ RUN DETAIL ============ -->
+  <sc-if value="{{ isRun }}" hint-placeholder-val="{{ false }}">
+  <main data-screen-label="Run detail" style="flex:1;overflow:auto;padding:20px 20px 60px">
+    <div style="max-width:1100px;margin:0 auto">
+      <button onClick="{{ goFleet }}" style="border:none;background:none;cursor:pointer;padding:0;margin-bottom:14px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5d6675" style-hover="color:#9db4d8">← FLEET</button>
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:4px">
+        <h1 style="margin:0;font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:600;color:#e8edf5">{{ run.id }}</h1>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;padding:3px 8px;border:1px solid #2a3140;border-radius:3px;color:#7d8697">{{ run.mode }}</span>
+        <span style="display:flex;align-items:center;gap:7px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:{{ run.statusColor }}"><span style="width:7px;height:7px;border-radius:50%;background:{{ run.statusColor }};animation:{{ run.statusAnim }}"></span>{{ run.statusLabel }}</span>
+      </div>
+      <p style="margin:0 0 6px;font-size:13px;color:#8a93a5">{{ run.title }}</p>
+      <div style="display:flex;gap:20px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5d6675;margin-bottom:22px">
+        <span>{{ run.repo }}</span><span>started {{ run.age }} ago</span><span>cost <b style="color:#c8cfdb">{{ run.costText }}</b> / {{ run.budgetText }} budget</span>
+      </div>
+
+      <!-- stage spine -->
+      <section style="background:#10141b;border:1px solid #1e242f;border-radius:6px;padding:18px;margin-bottom:16px">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#5d6675;margin-bottom:14px">STAGE SPINE — 14-STAGE DAG</div>
+        <div style="display:grid;grid-template-columns:repeat(14,1fr);gap:4px">
+          <sc-for list="{{ stageRows }}" as="s" hint-placeholder-count="14">
+            <div title="{{ s.tip }}" style="display:flex;flex-direction:column;gap:6px;min-width:0">
+              <div style="height:5px;border-radius:2px;background:{{ s.barColor }};animation:{{ s.anim }}"></div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:{{ s.numColor }}">{{ s.num }}</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:{{ s.nameColor }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.name }}</div>
+              <div style="font-size:9.5px;color:#4d5563;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.stateLabel }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ run.stageNote }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:14px;padding:10px 14px;background:#0d1016;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#8a93a5">{{ run.stageNote }}</div>
+        </sc-if>
+      </section>
+
+      <div style="display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start">
+        <!-- pending gate / decisions -->
+        <section style="display:flex;flex-direction:column;gap:16px;min-width:0">
+          <sc-if value="{{ hasRunItems }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#171308;border:1px solid #574a2c;border-radius:6px;padding:14px 16px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="width:7px;height:7px;border-radius:50%;background:#e0b050;animation:fc-pulse 1.6s infinite"></span>
+                <span style="font-size:12.5px;color:#e5cd93">{{ runItemsText }}</span>
+                <span style="flex:1"></span>
+                <button onClick="{{ goInbox }}" style="cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;padding:6px 12px;background:#e0b050;color:#1a1405;border:none;border-radius:4px" style-hover="background:#ecc06a">OPEN IN INBOX →</button>
+              </div>
+            </div>
+          </sc-if>
+          <div style="background:#10141b;border:1px solid #1e242f;border-radius:6px;padding:16px 18px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#5d6675;margin-bottom:12px">DECISION LOG</div>
+            <sc-if value="{{ noDecisions }}" hint-placeholder-val="{{ false }}">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#4d5563">no decisions recorded yet</div>
+            </sc-if>
+            <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ runDecisions }}" as="d" hint-placeholder-count="2">
+              <div style="display:grid;grid-template-columns:64px 150px 1fr 110px;gap:12px;padding:8px 0;border-bottom:1px solid #171c25;font-family:'IBM Plex Mono',monospace;font-size:11.5px;align-items:baseline">
+                <span style="color:#5d6675">{{ d.ts }}</span>
+                <span style="color:#c8cfdb">{{ d.gate }}</span>
+                <span style="min-width:0"><b style="color:{{ d.color }}">{{ d.outcome }}</b><span style="color:#7d8697"> — {{ d.comment }}</span></span>
+                <span style="color:#5d6675;text-align:right">{{ d.decider }}</span>
+              </div>
+            </sc-for>
+            </div>
+          </div>
+        </section>
+        <!-- side: artifacts + cost -->
+        <section style="display:flex;flex-direction:column;gap:16px">
+          <div style="background:#10141b;border:1px solid #1e242f;border-radius:6px;padding:16px 18px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#5d6675;margin-bottom:12px">ARTIFACTS</div>
+            <div style="display:flex;flex-direction:column;gap:7px">
+            <sc-for list="{{ runArtifacts }}" as="a" hint-placeholder-count="5">
+              <div style="display:flex;align-items:baseline;gap:8px;font-family:'IBM Plex Mono',monospace;font-size:11.5px">
+                <span style="color:#6fd39a">▪</span><span style="color:#9db4d8">{{ a.name }}</span><span style="flex:1"></span><span style="color:#4d5563;font-size:10.5px">{{ a.hash }}</span>
+              </div>
+            </sc-for>
+            </div>
+          </div>
+          <div style="background:#10141b;border:1px solid #1e242f;border-radius:6px;padding:16px 18px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#5d6675;margin-bottom:12px">BUDGET</div>
+            <div style="height:6px;background:#1e242f;border-radius:3px;overflow:hidden;margin-bottom:8px"><div style="height:100%;width:{{ run.budgetPct }};background:{{ run.budgetColor }}"></div></div>
+            <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#7d8697"><span>{{ run.costText }} spent</span><span>{{ run.budgetText }} cap</span></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+  </sc-if>
+
+  <!-- ============ START RUN MODAL ============ -->
+  <sc-if value="{{ showStart }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeStart }}" style="position:fixed;inset:0;background:rgba(5,7,10,.7);display:flex;align-items:center;justify-content:center;z-index:50">
+      <div onClick="{{ stop }}" style="width:480px;background:#10141b;border:1px solid #2a3140;border-radius:8px;padding:22px 24px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.08em;font-weight:600;color:#e8edf5;margin-bottom:18px">START RUN</div>
+        <label style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;color:#5d6675;margin-bottom:6px">FEATURE TITLE</label>
+        <input value="{{ startTitle }}" onChange="{{ setStartTitle }}" placeholder="Add SSO to customer portal" style="width:100%;background:#0d1016;border:1px solid #2a3140;border-radius:5px;color:#d9dfe9;font-size:12.5px;padding:9px 12px;margin-bottom:14px;font-family:'IBM Plex Sans',sans-serif">
+        <label style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;color:#5d6675;margin-bottom:6px">REPO URL</label>
+        <input value="{{ startRepo }}" onChange="{{ setStartRepo }}" placeholder="git@github.com:org/repo" style="width:100%;background:#0d1016;border:1px solid #2a3140;border-radius:5px;color:#d9dfe9;font-size:12.5px;padding:9px 12px;margin-bottom:14px;font-family:'IBM Plex Mono',monospace">
+        <label style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;color:#5d6675;margin-bottom:6px">MODE</label>
+        <div style="display:flex;gap:8px;margin-bottom:20px">
+          <button onClick="{{ modeBrown }}" style="cursor:pointer;flex:1;font-family:'IBM Plex Mono',monospace;font-size:11.5px;padding:8px 0;border-radius:4px;background:{{ brownBg }};color:{{ brownColor }};border:1px solid {{ brownBorder }}">brownfield</button>
+          <button onClick="{{ modeGreen }}" style="cursor:pointer;flex:1;font-family:'IBM Plex Mono',monospace;font-size:11.5px;padding:8px 0;border-radius:4px;background:{{ greenBg }};color:{{ greenColor }};border:1px solid {{ greenBorder }}">greenfield</button>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button onClick="{{ closeStart }}" style="cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11.5px;padding:8px 16px;background:none;color:#8a93a5;border:1px solid #2a3140;border-radius:4px" style-hover="color:#d9dfe9">CANCEL</button>
+          <button onClick="{{ submitStart }}" style="cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;padding:8px 16px;background:#e0b050;color:#1a1405;border:none;border-radius:4px" style-hover="background:#ecc06a">START</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ TOASTS ============ -->
+  <div style="position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:60;pointer-events:none">
+    <sc-for list="{{ toasts }}" as="t" hint-placeholder-count="0">
+      <div style="background:#161c26;border:1px solid #2a3140;border-left:3px solid {{ t.color }};border-radius:5px;padding:10px 14px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#c8cfdb;box-shadow:0 8px 24px rgba(0,0,0,.4);animation:fc-toast .18s ease-out">{{ t.msg }}</div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;simulateLive&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Behavior&quot;}, &quot;showCompleted&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Fleet&quot;}, &quot;defaultView&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;fleet&quot;, &quot;options&quot;: [&quot;fleet&quot;, &quot;inbox&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Behavior&quot;}}">
+const STAGES = ['intake','constitution','context','requirements','clarify','architecture','planning','code','review','analyze','qa','quality_gate','deploy','retro'];
+const ARTIFACTS = ['IdeaBrief','Constitution','CodebaseMap','Requirements','Clarifications','Architecture','TaskPlan','CodeArtifact','ReviewReport','AnalysisReport','TestReport','GateReport','DeployReport','RunSummary'];
+const C = { running:'#5b9dd9', blocked:'#e0b050', failed:'#e06c55', done:'#4fae7f', quarantined:'#b98fdc', pending:'#2a3140', skipped:'#1b202b' };
+
+function seedRuns(){
+  return [
+    { id:'feature-add-sso', title:'Add SSO to customer portal', mode:'brownfield', repo:'git@github.com:acme/portal', stageIdx:4, status:'blocked', blocker:'clarify gate — 2 questions', cost:3.12, budget:40, age:'2h 14m', skipCtx:false,
+      stageNote:'clarify: 2 low-confidence questions routed to human (gate round 1). 4 others auto-answered ≥ 0.95.',
+      decisions:[{ts:'09:12',gate:'clarify r1 (partial)',outcome:'approve',comment:'4 questions auto-answered, confidence ≥ 0.95',decider:'policy (soft)'}] },
+    { id:'feature-billing-webhooks', title:'Outbound webhooks for billing events', mode:'brownfield', repo:'git@github.com:acme/billing', stageIdx:11, status:'blocked', blocker:'merge gate — advisory: coverage', cost:18.40, budget:60, age:'9h 03m', skipCtx:false,
+      stageNote:'quality_gate: absolutes green · advisory diff coverage 0.68 < 0.80 — awaiting human GateDecision.',
+      decisions:[
+        {ts:'02:20',gate:'architecture r1',outcome:'approve',comment:'delta grounded in CodebaseMap',decider:'human · mika'},
+        {ts:'03:05',gate:'plan r1',outcome:'approve',comment:'7 tasks / 3 waves, DAG valid',decider:'policy (soft)'},
+        {ts:'08:44',gate:'task T-04 repair',outcome:'approve',comment:'review fix loop 1/2 green',decider:'policy'}] },
+    { id:'feature-onboarding-v2', title:'Self-serve onboarding flow (new service)', mode:'greenfield', repo:'git@github.com:acme/onboard', stageIdx:7, status:'running', blocker:'', cost:9.75, budget:50, age:'4h 41m', skipCtx:true,
+      stageNote:'code: wave 2/3 — 4 tasks in flight in isolated worktrees, cut from integration head (ADR-14).',
+      decisions:[
+        {ts:'11:02',gate:'clarify r1',outcome:'approve',comment:'all suggestions accepted',decider:'human · sam'},
+        {ts:'11:38',gate:'architecture r1',outcome:'revise',comment:'split auth from profile service',decider:'human · sam'},
+        {ts:'12:19',gate:'architecture r2',outcome:'approve',comment:'',decider:'human · sam'},
+        {ts:'12:31',gate:'plan r1',outcome:'approve',comment:'confidence 0.97',decider:'policy (soft)'}] },
+    { id:'fix-rate-limit-retry', title:'Fix: retry budget exhausted under burst load', mode:'brownfield', repo:'git@github.com:acme/gateway', stageIdx:10, status:'blocked', blocker:'escalation — T-07 resolver 3/3', cost:6.20, budget:30, age:'6h 27m', skipCtx:false,
+      stageNote:'qa: T-07 red after 3 resolver attempts — escalated to human (retry-with-guidance | quarantine).',
+      decisions:[{ts:'13:15',gate:'plan r1',outcome:'approve',comment:'',decider:'policy (soft)'}] },
+    { id:'feature-usage-metering', title:'Usage metering for billing tiers', mode:'brownfield', repo:'git@github.com:acme/billing', stageIdx:5, status:'blocked', blocker:'architecture gate — round 1', cost:2.05, budget:45, age:'1h 02m', skipCtx:false,
+      stageNote:'architecture: delta spec awaiting approval (adds MeteringService; 3 contracts added, 0 removed).',
+      decisions:[{ts:'14:30',gate:'clarify r1',outcome:'approve',comment:'auto, confidence 0.96',decider:'policy (soft)'}] },
+    { id:'feature-audit-export', title:'Audit-trail export (events.jsonl + report)', mode:'brownfield', repo:'git@github.com:acme/portal', stageIdx:13, status:'running', blocker:'', cost:14.02, budget:40, age:'11h 50m', skipCtx:false,
+      stageNote:'retro: RunSummary building; learnings retained to Hindsight.',
+      decisions:[
+        {ts:'05:12',gate:'merge r1',outcome:'approve',comment:'all checks green',decider:'policy (soft)'},
+        {ts:'06:01',gate:'deploy r1',outcome:'approve',comment:'PR #482 merged, staging deploy',decider:'human · mika'}] },
+    { id:'feature-dark-mode', title:'Dark mode for settings pages', mode:'brownfield', repo:'git@github.com:acme/portal', stageIdx:14, status:'done', blocker:'', cost:7.88, budget:30, age:'1d 3h', skipCtx:false,
+      stageNote:'', decisions:[
+        {ts:'yday',gate:'merge r1',outcome:'approve',comment:'',decider:'policy (soft)'},
+        {ts:'yday',gate:'deploy r1',outcome:'approve',comment:'',decider:'human · sam'}] },
+  ];
+}
+function seedInbox(){
+  return [
+    { id:'q1', type:'clarify', runId:'feature-add-sso', round:1, age:'38m',
+      title:'Q1 — Which identity protocol should SSO support?', confidence:'0.82',
+      body:'The repo has no auth-provider abstraction. Requirements mention "enterprise SSO" but not a protocol; the CodebaseMap shows session middleware in portal/auth/session.py.',
+      suggestion:'OIDC (Authorization Code + PKCE). It fits the existing session middleware; defer SAML to a follow-up run if an enterprise customer requires it.' },
+    { id:'q2', type:'clarify', runId:'feature-add-sso', round:1, age:'38m',
+      title:'Q2 — Should password login remain enabled after SSO ships?', confidence:'0.74',
+      body:'US-1 is silent on migration. Disabling password auth immediately would lock out users whose IdP mapping fails on first login.',
+      suggestion:'Keep password auth behind a feature flag for 2 releases, then retire it once SSO adoption is > 95%.' },
+    { id:'g2', type:'gate', gate:'architecture', runId:'feature-usage-metering', round:1, age:'54m',
+      title:'Architecture (delta) — usage metering',
+      body:'Adds MeteringService (event ingest + hourly rollup), modifies billing-worker to emit usage events, adds 3 contracts (UsageEvent, MeterReading, TierQuota). No removals. Grounded in CodebaseMap @ a41c9e.' },
+    { id:'g1', type:'override', gate:'merge', runId:'feature-billing-webhooks', round:1, age:'1h 12m',
+      title:'Merge gate — advisory check needs a decision',
+      body:'All absolute checks pass. One advisory check fails; merging requires an audited human override (FR-106).',
+      verdict:'MergeVerdict 0.91 — approve. Uncovered lines are retry/backoff branches exercised indirectly by the integration suite; direct unit coverage would need an injected clock.',
+      checks:[
+        {name:'lint', kind:'ABSOLUTE', ok:true, detail:'clean'},
+        {name:'security (critical)', kind:'ABSOLUTE', ok:true, detail:'0 critical findings'},
+        {name:'build / integration', kind:'ABSOLUTE', ok:true, detail:'green · 4m12s'},
+        {name:'diff coverage', kind:'ADVISORY', ok:false, detail:'0.68 — target 0.80'},
+        {name:'criterion→test traceability', kind:'ADVISORY', ok:true, detail:'9/9 criteria mapped'},
+        {name:'review severity', kind:'ADVISORY', ok:true, detail:'max severity: medium'}] },
+    { id:'e1', type:'escalation', runId:'fix-rate-limit-retry', round:1, age:'2h 05m',
+      title:'T-07 "retry budget accounting" — resolver exhausted (3/3)',
+      body:'QA fix loop hit MAX_REPAIR_ATTEMPTS. The task branch stays parked on its worktree; wave 3 is holding.',
+      analysis:'test_retry_budget flakes on wall-clock timing. A reliable fix needs an injected clock in RateLimiter, but rate_limiter/core.py is outside the task\u2019s declared file scope. Recommend widening scope or quarantining.' },
+  ];
+}
+
+class Component extends DCLogic {
+  state = { view:null, runId:null, runs:seedRuns(), inbox:seedInbox(), drafts:{}, editing:{}, toasts:[], nextToast:1,
+            showStart:false, startTitle:'', startRepo:'', startMode:'brownfield' };
+
+  componentDidMount(){
+    if((this.props.simulateLive ?? true)){
+      this._t = setInterval(()=>{
+        this.setState(s=>({ runs: s.runs.map(r => r.status==='running' ? {...r, cost:+(r.cost + 0.02 + Math.random()*0.06).toFixed(2)} : r) }));
+      }, 4000);
+    }
+  }
+  componentWillUnmount(){ if(this._t) clearInterval(this._t); }
+
+  toast(msg, color){
+    const id = this.state.nextToast;
+    this.setState(s=>({ toasts:[...s.toasts, {id, msg, color: color||'#4fae7f'}], nextToast:s.nextToast+1 }));
+    setTimeout(()=> this.setState(s=>({ toasts: s.toasts.filter(t=>t.id!==id) })), 3800);
+  }
+  now(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+
+  patchRun(id, patch){ this.setState(s=>({ runs: s.runs.map(r => r.id===id ? {...r, ...(typeof patch==='function'?patch(r):patch)} : r) })); }
+  addDecision(runId, d){ this.patchRun(runId, r=>({ decisions:[...r.decisions, {ts:this.now(), decider:'human · you', comment:'', ...d}] })); }
+  removeItem(id){ this.setState(s=>({ inbox: s.inbox.filter(i=>i.id!==id) })); }
+
+  resolveClarify(it, answer){
+    this.removeItem(it.id);
+    this.addDecision(it.runId, { gate:'clarify Q'+it.id.slice(1)+' r'+it.round, outcome:'approve', comment:answer.length>60?answer.slice(0,57)+'…':answer });
+    this.toast('Answer recorded — '+it.runId);
+    setTimeout(()=>{ this.setState(s=>{
+      const left = s.inbox.some(i=>i.runId===it.runId && i.type==='clarify');
+      if(!left) { this.toast('clarify gate resolved — architect drafting', '#5b9dd9');
+        return { runs: s.runs.map(r=> r.id===it.runId ? {...r, status:'running', stageIdx:5, blocker:'', stageNote:'architecture: drafting delta spec from Clarifications @ r1.'} : r) }; }
+      return {};
+    }); }, 50);
+  }
+
+  gateDecide(it, outcome){
+    const comment = (this.state.drafts[it.id]||'').trim();
+    if((outcome==='revise'||outcome==='reject') && !comment){ this.toast('Comment required for '+outcome, '#e0b050'); return; }
+    this.removeItem(it.id);
+    this.addDecision(it.runId, { gate:(it.gate||'gate')+' r'+it.round, outcome, comment });
+    if(outcome==='approve'){ this.patchRun(it.runId, r=>({ status:'running', stageIdx:r.stageIdx+1, blocker:'', stageNote:'gate approved — pipeline resumed.' })); this.toast('Approved — '+it.runId+' resumed'); }
+    if(outcome==='revise'){ this.patchRun(it.runId, { status:'running', blocker:'revising — round '+(it.round+1), stageNote:'revise: producing stage re-entered with your comments (round '+(it.round+1)+' of MAX_GATE_ROUNDS=2).' }); this.toast('Sent back for revision (round '+(it.round+1)+')', '#e0b050'); }
+    if(outcome==='reject'){ this.patchRun(it.runId, { status:'failed', blocker:'rejected at '+(it.gate||'gate'), stageNote:'branch abandoned — rejection recorded with identity + timestamp.' }); this.toast('Rejected — branch abandoned', '#e06c55'); }
+  }
+
+  overrideDecide(it, ok){
+    const comment = (this.state.drafts[it.id]||'').trim();
+    if(ok && !comment){ this.toast('Override justification required (audited)', '#e0b050'); return; }
+    this.removeItem(it.id);
+    if(ok){ this.addDecision(it.runId, { gate:'merge r'+it.round, outcome:'approve', comment:'ADVISORY OVERRIDE: '+comment, decider:'human · you (override)' });
+      this.patchRun(it.runId, { status:'running', stageIdx:12, blocker:'', stageNote:'deploy: DeployPlan proposed — PR opened against main.' });
+      this.toast('Override recorded — merging'); }
+    else { this.addDecision(it.runId, { gate:'merge r'+it.round, outcome:'revise', comment: comment||'raise diff coverage to 0.80' });
+      this.patchRun(it.runId, { status:'running', stageIdx:7, blocker:'revising — coverage', stageNote:'code: developer session resumed to add coverage for retry/backoff branches.' });
+      this.toast('Sent back to dev — coverage', '#e0b050'); }
+  }
+
+  escalationDecide(it, retry){
+    const guidance = (this.state.drafts[it.id]||'').trim();
+    this.removeItem(it.id);
+    if(retry){ this.addDecision(it.runId, { gate:'escalation T-07', outcome:'approve', comment:'retry w/ guidance: '+(guidance||'(none)') });
+      this.patchRun(it.runId, { status:'running', blocker:'repair attempt 4 (guided)', stageNote:'qa: resolver resumed same harness session with your guidance.' });
+      this.toast('Guidance sent to harness session'); }
+    else { this.addDecision(it.runId, { gate:'escalation T-07', outcome:'reject', comment:'quarantined'+(guidance?': '+guidance:'') });
+      this.patchRun(it.runId, { status:'running', blocker:'T-07 quarantined', stageNote:'qa: T-07 quarantined; remaining tasks proceed — plan marked partial.' });
+      this.toast('T-07 quarantined — wave continues', '#b98fdc'); }
+  }
+
+  submitStart(){
+    const t = this.state.startTitle.trim(); if(!t){ this.toast('Title required', '#e0b050'); return; }
+    const id = 'feature-' + t.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').split('-').slice(0,4).join('-');
+    const run = { id, title:t, mode:this.state.startMode, repo:this.state.startRepo||'git@github.com:acme/portal', stageIdx:3, status:'running', blocker:'', cost:0.04, budget:40, age:'just now', skipCtx:this.state.startMode==='greenfield', stageNote:'requirements: Product agent drafting stories from IdeaBrief.', decisions:[] };
+    this.setState(s=>({ runs:[run, ...s.runs], showStart:false, startTitle:'', startRepo:'' }));
+    this.toast('Run started — '+id, '#5b9dd9');
+  }
+
+  statusMeta(r){
+    const m = { running:{c:C.running,l:'running',a:'fc-pulse 1.8s infinite'}, blocked:{c:C.blocked,l:'awaiting human',a:'fc-pulse 1.4s infinite'}, failed:{c:C.failed,l:'failed',a:'none'}, done:{c:C.done,l:'done',a:'none'} };
+    return m[r.status] || m.running;
+  }
+  stageState(r, i){
+    if(i===2 && r.skipCtx) return 'skipped';
+    if(i < r.stageIdx) return 'done';
+    if(i === r.stageIdx){ if(r.status==='blocked') return 'blocked'; if(r.status==='failed') return 'failed'; if(r.status==='done') return 'done'; return 'active'; }
+    return 'pending';
+  }
+
+  renderVals(){
+    const s = this.state;
+    const showCompleted = this.props.showCompleted ?? true;
+    const view = s.view || (this.props.defaultView ?? 'fleet');
+    const setDraft = id => e => this.setState(st=>({ drafts:{...st.drafts, [id]: e.target.value} }));
+    const openRun = id => () => this.setState({ view:'run', runId:id });
+
+    const fleetRuns = s.runs.filter(r=> showCompleted || r.status!=='done').map(r=>{
+      const sm = this.statusMeta(r);
+      return { ...r, open: openRun(r.id), statusColor: sm.c, statusLabel: sm.l, statusAnim: sm.a,
+        blockerText: r.blocker || '—', costText: '$'+r.cost.toFixed(2),
+        dots: STAGES.map((name,i)=>{ const st=this.stageState(r,i);
+          return { t: i+' '+name+' · '+st, c: st==='done'?C.done: st==='active'?C.running: st==='blocked'?C.blocked: st==='failed'?C.failed: st==='skipped'?C.skipped: C.pending, a: (st==='active'||st==='blocked')?'fc-pulse 1.6s infinite':'none' }; }) };
+    });
+
+    const inboxItems = s.inbox.map(it=>{
+      const typeMeta = { clarify:{l:'CLARIFY', c:'#5b9dd9', bg:'#14202e'}, gate:{l:'GATE · '+(it.gate||'').toUpperCase(), c:'#e0b050', bg:'#2a2310'}, override:{l:'MERGE GATE', c:'#e0b050', bg:'#2a2310'}, escalation:{l:'ESCALATION', c:'#e06c55', bg:'#2a1712'} }[it.type];
+      const editing = !!s.editing[it.id];
+      const draft = s.drafts[it.id] || '';
+      return { ...it, typeLabel:typeMeta.l, typeColor:typeMeta.c, typeBg:typeMeta.bg,
+        roundText:'round '+it.round, openRun: openRun(it.runId),
+        isClarify: it.type==='clarify', isGate: it.type==='gate', isOverride: it.type==='override', isEscalation: it.type==='escalation',
+        editing, editLabel: editing?'USE SUGGESTION INSTEAD':'ANSWER DIFFERENTLY',
+        acceptLabel: editing?'SUBMIT ANSWER':'✓ ACCEPT SUGGESTION',
+        draft, setDraft: setDraft(it.id),
+        toggleEdit: ()=> this.setState(st=>({ editing:{...st.editing, [it.id]: !st.editing[it.id]} })),
+        accept: ()=> this.resolveClarify(it, editing && draft.trim() ? draft.trim() : it.suggestion),
+        approve: ()=> this.gateDecide(it,'approve'), revise: ()=> this.gateDecide(it,'revise'), reject: ()=> this.gateDecide(it,'reject'),
+        override: ()=> this.overrideDecide(it,true), sendBack: ()=> this.overrideDecide(it,false),
+        retry: ()=> this.escalationDecide(it,true), quarantine: ()=> this.escalationDecide(it,false),
+        checks: (it.checks||[]).map(ck=>({ ...ck, icon: ck.ok?'✓':'✗', color: ck.ok?C.done:C.failed, kindColor: ck.kind==='ABSOLUTE'?'#e06c55':'#7d8697' })) };
+    });
+
+    const rawRun = s.runs.find(r=>r.id===s.runId) || s.runs[0];
+    const sm = this.statusMeta(rawRun);
+    const pct = Math.min(100, rawRun.cost/rawRun.budget*100);
+    const run = { ...rawRun, statusColor:sm.c, statusLabel:sm.l, statusAnim:sm.a, costText:'$'+rawRun.cost.toFixed(2), budgetText:'$'+rawRun.budget.toFixed(0), budgetPct: pct.toFixed(0)+'%', budgetColor: pct>85?C.failed: pct>60?C.blocked: C.done };
+    const stageRows = STAGES.map((name,i)=>{ const st=this.stageState(rawRun,i);
+      const col = st==='done'?C.done: st==='active'?C.running: st==='blocked'?C.blocked: st==='failed'?C.failed: st==='skipped'?C.skipped: C.pending;
+      return { num:String(i).padStart(2,'0'), name, tip:ARTIFACTS[i], barColor:col, anim:(st==='active'||st==='blocked')?'fc-pulse 1.6s infinite':'none',
+        numColor: st==='pending'||st==='skipped' ? '#3a4150' : col, nameColor: st==='pending'?'#4d5563': st==='skipped'?'#3a4150':'#c8cfdb',
+        stateLabel: st==='skipped'?'skipped': st==='pending'?'·': st==='active'?'in flight': st==='blocked'?'gate open': st }; });
+    const runArtifacts = STAGES.map((_,i)=>i).filter(i=> this.stageState(rawRun,i)==='done' && !(i===2&&rawRun.skipCtx)).map(i=>({ name:ARTIFACTS[i], hash:'#'+((i*2654435761 + rawRun.id.length*97) >>> 8).toString(16).slice(0,6) }));
+    const runDecisions = [...rawRun.decisions].reverse().map(d=>({ ...d, comment:d.comment||'—', color: d.outcome==='approve'?C.done: d.outcome==='revise'?C.blocked: C.failed }));
+    const runItems = s.inbox.filter(i=>i.runId===rawRun.id);
+
+    const active = s.runs.filter(r=>r.status==='running'||r.status==='blocked');
+    const isBrown = s.startMode==='brownfield';
+
+    return {
+      isFleet: view==='fleet', isInbox: view==='inbox', isRun: view==='run',
+      goFleet: ()=> this.setState({view:'fleet'}), goInbox: ()=> this.setState({view:'inbox'}),
+      fleetTabColor: view==='fleet'?'#e8edf5':'#7d8697', fleetTabLine: view==='fleet'?'#e0b050':'transparent',
+      inboxTabColor: view==='inbox'?'#e8edf5':'#7d8697', inboxTabLine: view==='inbox'?'#e0b050':'transparent',
+      hasInbox: s.inbox.length>0, inboxCount: s.inbox.length, inboxEmpty: s.inbox.length===0,
+      inboxSummary: s.inbox.length+' item(s) awaiting a decision · signals are idempotent per (gate, round)',
+      activeCount: active.length, harnessCount: 4 + active.length,
+      totalCost: '$'+s.runs.reduce((a,r)=>a+r.cost,0).toFixed(2),
+      fleetSummary: s.runs.length+' runs · '+s.runs.filter(r=>r.status==='blocked').length+' blocked on humans',
+      fleetRuns, inboxItems, run, stageRows, runArtifacts, runDecisions,
+      noDecisions: rawRun.decisions.length===0,
+      hasRunItems: runItems.length>0,
+      runItemsText: runItems.length+' decision(s) pending for this run — '+runItems.map(i=>i.type).join(', '),
+      toasts: s.toasts,
+      showStart: s.showStart, openStart: ()=> this.setState({showStart:true}), closeStart: ()=> this.setState({showStart:false}),
+      stop: e=> e.stopPropagation(),
+      startTitle: s.startTitle, setStartTitle: e=> this.setState({startTitle:e.target.value}),
+      startRepo: s.startRepo, setStartRepo: e=> this.setState({startRepo:e.target.value}),
+      modeBrown: ()=> this.setState({startMode:'brownfield'}), modeGreen: ()=> this.setState({startMode:'greenfield'}),
+      brownBg: isBrown?'#2a2310':'#0d1016', brownColor: isBrown?'#e0b050':'#7d8697', brownBorder: isBrown?'#574a2c':'#2a3140',
+      greenBg: !isBrown?'#2a2310':'#0d1016', greenColor: !isBrown?'#e0b050':'#7d8697', greenBorder: !isBrown?'#574a2c':'#2a3140',
+      submitStart: ()=> this.submitStart(),
+    };
+  }
+}
+</script>
+</body>
+</html>

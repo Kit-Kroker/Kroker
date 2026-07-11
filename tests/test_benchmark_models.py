@@ -72,7 +72,7 @@ def test_case_spec_matrix_axes():
 def test_benchmark_cell_identity():
     c = BenchmarkCell(case_id="add-login", harness=HarnessKind.OPENCODE,
                      model="anthropic:claude-sonnet-4-6")
-    assert c.cell_id == "add-login#opencode#anthropic:claude-sonnet-4-6"
+    assert c.cell_id == "add-login#opencode#anthropic-claude-sonnet-4-6"
 
 
 def test_benchmark_summary_aggregates_fields():

@@ -6,6 +6,7 @@ the reporter can recompute under different weights without re-running.
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from enum import Enum
 from typing import Literal
@@ -13,6 +14,12 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from ..models import HarnessKind
+
+# cell_id feeds Temporal workflow ids and, via those, git branch names
+# (see benchmarks/workflow.py + activities.py's worktree helpers) — strip
+# characters git rejects in refs (`:`, space, `~^?*[\`) rather than only
+# the ones that happen to appear in today's model ids.
+_GIT_UNSAFE = re.compile(r"[:\s~^?*\[\\]")
 
 
 class BenchmarkScope(str, Enum):
@@ -84,6 +91,9 @@ class CaseSpec(BaseModel):
     models: list[str]
     judge_model: str                        # cross-family (ADR-6)
     rubrics: dict[str, str] = Field(default_factory=dict)  # stage -> rubric file
+    # per-model extra CLI args (e.g. opencode's `--variant` reasoning-effort
+    # flag) forwarded to every role's harness invocation for that model.
+    extra_args_by_model: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class BenchmarkCell(BaseModel):
@@ -94,7 +104,8 @@ class BenchmarkCell(BaseModel):
 
     @property
     def cell_id(self) -> str:
-        return f"{self.case_id}#{self.harness.value}#{self.model}"
+        safe_model = _GIT_UNSAFE.sub("-", self.model)
+        return f"{self.case_id}#{self.harness.value}#{safe_model}"
 
 
 class BenchmarkSummary(BaseModel):

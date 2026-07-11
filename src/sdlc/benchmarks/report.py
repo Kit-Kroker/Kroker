@@ -49,7 +49,10 @@ def render_markdown(summaries: list[BenchmarkSummary]) -> str:
     ]
     for s in summaries:
         def fmt(x):
-            return f"{x:.3f}" if isinstance(x, float) else "—"
+            # ASCII only — a Windows console's default cp1252 codepage
+            # mangles the em dash into "�" (Unicode replacement char)
+            # when this gets printed, not just when written to the file.
+            return f"{x:.3f}" if isinstance(x, float) else "n/a"
         lines.append(
             f"| {s.case_id} | {s.stage} | "
             f"{s.harness.value if s.harness else 'proposer'} | {s.model} | "

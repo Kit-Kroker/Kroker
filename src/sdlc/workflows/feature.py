@@ -99,6 +99,47 @@ def _merge_evidence_all_green(results: list) -> bool:
         r.qa is not None and r.qa.tests_passed for r in results)
 
 
+# Fallbacks only for contracts predating test_commands/lint_commands
+# (legacy cached artifacts) — every fresh plan populates both per-stack.
+DEFAULT_TEST_CMD = "pytest -q --maxfail=25"
+DEFAULT_LINT_CMD = "ruff check ."
+
+
+def _contract_stack_directive(contract) -> str:
+    """Surface the frozen stack as a standalone, non-negotiable line —
+    not just one bullet among the assertions. A coding agent on a
+    greenfield (empty) worktree has no existing scaffolding to anchor
+    it to the required language/runtime, so the constraint needs to be
+    unmissable rather than buried in prose."""
+    if not contract or not contract.stack:
+        return ""
+    return (f"MANDATORY STACK (do not deviate, even when revising): "
+            f"{contract.stack}\n")
+
+
+def _contract_shell_cmd(commands: list[str] | None, default: str) -> str:
+    """Join a contract's stack-specific test/lint commands into one shell
+    command (`&&`-chained so an earlier failure short-circuits the rest).
+    Falls back to `default` (a Python toolchain command) only when the
+    contract carries none — e.g. a legacy/cached artifact predating this
+    field, never as a silent stack-mismatch."""
+    if not commands:
+        return default
+    return " && ".join(commands)
+
+
+def _should_resume_session(qa, resumes: int, max_resumes: int,
+                           near_ceiling: bool) -> bool:
+    """FR-802 resume budget, with a stack-mismatch override: a session
+    that already committed to the wrong language/runtime is a worse
+    starting point than a fresh one — the agent is anchored to files it
+    would need to delete wholesale. Never resume it, regardless of
+    remaining resume budget or context headroom."""
+    if qa.stack_mismatch:
+        return False
+    return resumes < max_resumes and not near_ceiling
+
+
 def _auto_decision_for(name: str, cfg: PipelineConfig,
                        confidence: float | None) -> GateDecision | None:
     """FR-301: SOFT + confidence >= threshold -> an APPROVE decision _gate()
@@ -279,7 +320,8 @@ class FeatureWorkflow:
                     auto_decision: GateDecision | None = None,
                     round: int = 1) -> GateDecision:
         """Durable HITL gate with policy-based auto-approval."""
-        policy = cfg.gates.get(name, GateConfig()).policy
+        policy = cfg.gates.get(
+            name, GateConfig(policy=cfg.default_gate_policy)).policy
         key = gate_key(name, round)
 
         if policy == GatePolicy.OFF:
@@ -349,7 +391,8 @@ class FeatureWorkflow:
             merge_into_integration,
             MergeInput(repo_path=repo_path,
                        run_id=workflow.info().workflow_id,
-                       task_branch=tr.branch),
+                       task_branch=tr.branch,
+                       integration_path=self._integration_wt),
             **ACT,
         )
         if merge_res.conflict:
@@ -385,9 +428,11 @@ class FeatureWorkflow:
             f"- {h.task_id}: {'; '.join(h.open_concerns) or 'no concerns'}"
             for h in prior_handoffs[-5:]
         ]
+        stack_directive = _contract_stack_directive(contract)
         prompt = (
             f"Task: {task.title}\n{task.description}\n"
-            "Your work will be validated against this frozen contract:\n- "
+            + stack_directive
+            + "Your work will be validated against this frozen contract:\n- "
             + "\n- ".join(assertions)
             + ("\nHandoffs from preceding tasks:\n" + "\n".join(handoff_notes)
                if handoff_notes else "")
@@ -402,6 +447,7 @@ class FeatureWorkflow:
         resumes = 0
         run = None
         for attempt in range(1, cfg.max_fix_attempts + 2):
+            _attempt_started = workflow.now()
             run = await workflow.execute_activity(
                 run_coding_task,
                 CodingTaskInput(harness=role_cfg.harness, prompt=prompt,
@@ -411,8 +457,14 @@ class FeatureWorkflow:
             )
 
             # Clean-context validation: contract + tests + diff. No narrative.
+            # Uses the contract's own stack-specific test_commands (FR-803)
+            # rather than QAInput's Python-toolchain default — a non-Python
+            # stack must never be QA'd with pytest.
+            test_cmd = _contract_shell_cmd(
+                contract.test_commands if contract else None,
+                DEFAULT_TEST_CMD)
             qa_raw = await workflow.execute_activity(
-                run_test_suite, QAInput(worktree=worktree),
+                run_test_suite, QAInput(worktree=worktree, test_cmd=test_cmd),
                 **_long_act(cfg.roles.get("test", role_cfg)))
             diff = await workflow.execute_activity(
                 get_task_diff,
@@ -427,7 +479,7 @@ class FeatureWorkflow:
 
             await self._record(cfg, self._stage_record(
                 cfg, stage="code", role=task.role,
-                started=workflow.now(), ended=workflow.now(),
+                started=_attempt_started, ended=workflow.now(),
                 quality_score=(1.0 if (qa.tests_passed and not qa.issues)
                                else 0.0),
                 judge="contract",
@@ -461,21 +513,36 @@ class FeatureWorkflow:
                     f"{issues}",
                 metadata={"task_id": task.id,
                          "run_id": workflow.info().workflow_id})
-            if resumes < cfg.max_session_resumes and not run.near_context_ceiling():
+            if _should_resume_session(qa, resumes, cfg.max_session_resumes,
+                                      run.near_context_ceiling()):
                 session_id = run.session_id       # resume: context intact
                 resumes += 1
-                prompt = f"Previous attempt has issues. Fix them:\n- {issues}"
+                prompt = (stack_directive
+                          + f"Previous attempt has issues. Fix them:\n- {issues}")
             else:
-                # Either past the resume bound OR at/over the context
-                # ceiling (compaction = failure) → fresh session seeded
-                # with a structured handoff (FR-802, ADR-13).
+                # Either past the resume bound, at/over the context ceiling
+                # (compaction = failure), or the diff used the wrong
+                # language/runtime entirely → fresh session seeded with a
+                # structured handoff (FR-802, ADR-13). A stack mismatch is
+                # never resumed even within budget: the prior session is
+                # anchored to files it would need to delete wholesale.
                 session_id = None
-                prompt = (
-                    f"Task: {task.title}\n{task.description}\n"
+                discard_note = (
+                    "The previous attempt used the WRONG language/runtime "
+                    "entirely. Delete that wrong-stack scaffolding rather "
+                    "than patching it, and reimplement from scratch in the "
+                    "mandated stack below.\n"
+                    if qa.stack_mismatch else
                     "A previous session implemented part of this in the same "
                     f"worktree (files: {', '.join(diff['files'][:20])}). "
                     "Review the current state, then fix these unmet contract "
-                    f"assertions:\n- {issues}\n"
+                    "assertions.\n"
+                )
+                prompt = (
+                    stack_directive
+                    + f"Task: {task.title}\n{task.description}\n"
+                    + discard_note
+                    + f"Unmet contract assertions:\n- {issues}\n"
                     "Contract:\n- " + "\n- ".join(assertions)
                 )
 
@@ -538,14 +605,22 @@ class FeatureWorkflow:
             cfg, "clarify", idea.model_dump_json(), MODEL,
             ClarifiedRequirements, _run_clarify)
         if reqs.open_questions:
-            self._status = "awaiting:clarify"
-            await workflow.wait_condition(
-                lambda: all(q.id in self._question_answers
-                            for q in reqs.open_questions),
-                timeout=timedelta(hours=cfg.gate_timeout_hours),
-            )
-            for q in reqs.open_questions:
-                q.answer = self._question_answers.get(q.id)
+            clarify_policy = cfg.gates.get("clarify", GateConfig()).policy
+            if clarify_policy == GatePolicy.OFF:
+                # unattended run (e.g. a benchmark cell) — no human is
+                # present to answer; fall back to the clarifier's own
+                # suggested_answer rather than blocking forever.
+                for q in reqs.open_questions:
+                    q.answer = q.suggested_answer
+            else:
+                self._status = "awaiting:clarify"
+                await workflow.wait_condition(
+                    lambda: all(q.id in self._question_answers
+                                for q in reqs.open_questions),
+                    timeout=timedelta(hours=cfg.gate_timeout_hours),
+                )
+                for q in reqs.open_questions:
+                    q.answer = self._question_answers.get(q.id)
         _ended = workflow.now()
         _quality = await self._judge(cfg, reqs.model_dump_json(), "clarifier")
         await self._record(cfg, self._stage_record(
@@ -700,8 +775,16 @@ class FeatureWorkflow:
         # against the integration worktree (ADR-14), where every completed
         # task's merge has accumulated.
         integration_worktree = self._integration_wt
+        # Same stack-awareness as the per-task QA command: use the plan's
+        # own lint_commands rather than assuming a Python toolchain against
+        # whatever stack the architecture actually chose.
+        lint_commands = next(
+            (t.contract.lint_commands for t in plan.tasks
+             if t.contract and t.contract.lint_commands), None)
+        lint_cmd = _contract_shell_cmd(lint_commands, DEFAULT_LINT_CMD)
         lint_clean, lint_detail = await workflow.execute_activity(
-            run_lint, LintInput(worktree=integration_worktree), **ACT)
+            run_lint, LintInput(worktree=integration_worktree,
+                                lint_cmd=lint_cmd), **ACT)
         all_tests_green = _merge_evidence_all_green(list(done.values()))
 
         checks = [
@@ -729,7 +812,7 @@ class FeatureWorkflow:
                 cfg, stage="merge", role="reviewer",
                 started=_started, ended=workflow.now(),
                 quality_score=0.0,
-                judge="deterministic_gate",
+                judge="contract",
                 outcome=BenchmarkOutcome.FAIL,
                 model="deterministic"))
             return f"rejected:merge:absolute-gate-failed:{','.join(absolute_blocking)}"
@@ -778,7 +861,7 @@ class FeatureWorkflow:
             cfg, stage="merge", role="reviewer",
             started=_started, ended=_ended,
             quality_score=(1.0 if gate_report.passed else 0.0),
-            judge="deterministic_gate",
+            judge="contract",
             outcome=(BenchmarkOutcome.REVISED if overrides
                      else BenchmarkOutcome.PASS),
             model="deterministic"))

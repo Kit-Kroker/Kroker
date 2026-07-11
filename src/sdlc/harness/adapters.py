@@ -303,7 +303,12 @@ class OpenCodeHarness(CodingHarness):
         line) is required — the last line is ``step_finish`` with no text."""
         session_id = None
         text_parts: list[str] = []
-        input_tokens = output_tokens = cost = None
+        # opencode emits one step_finish per step (tool call / turn), each
+        # reporting that step's own tokens/cost, not a running total — so
+        # these must be summed across every step_finish, not just the first.
+        input_tokens = output_tokens = 0
+        cost = 0.0
+        saw_tokens = saw_cost = False
         parsed_any = False
         for ln in stdout.splitlines():
             ln = ln.strip()
@@ -321,10 +326,18 @@ class OpenCodeHarness(CodingHarness):
                 text_parts.append(part["text"])
             if ev.get("type") == "step_finish":
                 tokens = part.get("tokens") or {}
-                input_tokens = input_tokens or tokens.get("input")
-                output_tokens = output_tokens or tokens.get("output")
-                if cost is None:
-                    cost = part.get("cost")
+                if isinstance(tokens.get("input"), (int, float)):
+                    input_tokens += tokens["input"]
+                    saw_tokens = True
+                if isinstance(tokens.get("output"), (int, float)):
+                    output_tokens += tokens["output"]
+                    saw_tokens = True
+                if isinstance(part.get("cost"), (int, float)):
+                    cost += part["cost"]
+                    saw_cost = True
+        input_tokens = input_tokens if saw_tokens else None
+        output_tokens = output_tokens if saw_tokens else None
+        cost = cost if saw_cost else None
         if not parsed_any:
             _log.warning("opencode parse: no events parsed from stdout "
                          "(parsed_any=False); falling back to raw stdout")
