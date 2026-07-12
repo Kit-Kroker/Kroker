@@ -35,3 +35,15 @@ def test_task_result_carries_review():
 def test_reviewer_imported():
     src = SRC.read_text(encoding="utf-8")
     assert "t_reviewer" in src
+
+
+def test_merge_gate_has_review_severity_check():
+    src = SRC.read_text(encoding="utf-8")
+    assert '"review_severity"' in src, (
+        "the deterministic merge gate must consume ReviewReport evidence as "
+        "an advisory check (FR-106)")
+    idx = src.find('"review_severity"')
+    block = src[idx: idx + 220]
+    assert "CheckClass.ADVISORY" in block, "review check must be advisory"
+    assert "r.review is None or r.review.approve" in block, (
+        "review check passes iff every task was approved or had review off")

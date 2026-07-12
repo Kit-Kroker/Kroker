@@ -810,6 +810,12 @@ class FeatureWorkflow:
                         detail="aggregate of per-task pytest runs"),
             build_check("lint_clean", lint_clean, CheckClass.ABSOLUTE,
                         detail=lint_detail),
+            build_check(
+                "review_severity",
+                all(r.review is None or r.review.approve
+                    for r in done.values()),
+                CheckClass.ADVISORY,
+                detail="clean-context reviewer blocking findings (FR-204)"),
         ]
         gate_report: GateReport = await workflow.execute_activity(
             evaluate_gate, QualityGateInput(checks=checks), **ACT)
