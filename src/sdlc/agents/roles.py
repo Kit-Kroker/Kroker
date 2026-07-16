@@ -31,11 +31,19 @@ from ..models import (
     ReviewReport,
 )
 
-MODEL = "anthropic:glm-5.2"
+# The registry (FR-201) is the single source of every role's model. It is
+# loaded AND validated here at import (loader.load_registry validates), so a
+# registry violating ADR-6 cannot even import this module, let alone boot a
+# worker. There is deliberately no fleet-wide default model constant: a role's
+# model comes from its own registry entry or the registry is incomplete and
+# fails closed.
+REGISTRY = load_registry()
 
-# The reviewer model comes from the versioned registry (FR-201), guaranteed a
-# different family than the developer by validate_registry at worker boot.
-REVIEWER_MODEL = load_registry()["reviewer"].model
+
+def _model(role: str) -> str:
+    """The model this role declares. KeyError is unreachable — REQUIRED_ROLES
+    is checked during load_registry above."""
+    return REGISTRY[role].model
 
 # Structured-output agents emit typed tool calls; Pydantic AI's 4096-token
 # default truncates the tool-call arguments to {} on larger schemas (or when
@@ -140,7 +148,7 @@ DEVOPS_PROMPT = (
 )
 
 clarify_agent = Agent(
-    MODEL,
+    _model("clarify"),
     name="clarify_agent",
     output_type=ClarifiedRequirements,
     model_settings=MODEL_SETTINGS,
@@ -148,7 +156,7 @@ clarify_agent = Agent(
 )
 
 architect_agent = Agent(
-    MODEL,
+    _model("architect"),
     name="architect_agent",
     output_type=ArchitectureSpec,
     model_settings=MODEL_SETTINGS,
@@ -156,7 +164,7 @@ architect_agent = Agent(
 )
 
 planner_agent = Agent(
-    MODEL,
+    _model("planner"),
     name="planner_agent",
     output_type=ImplementationPlan,
     model_settings=MODEL_SETTINGS,
@@ -164,7 +172,7 @@ planner_agent = Agent(
 )
 
 qa_analyst_agent = Agent(
-    MODEL,
+    _model("qa"),
     name="qa_analyst_agent",
     output_type=QAReport,
     model_settings=MODEL_SETTINGS,
@@ -172,7 +180,7 @@ qa_analyst_agent = Agent(
 )
 
 reviewer_agent = Agent(
-    REVIEWER_MODEL,
+    _model("reviewer"),
     name="reviewer_agent",
     output_type=ReviewReport,
     model_settings=MODEL_SETTINGS,
@@ -180,7 +188,7 @@ reviewer_agent = Agent(
 )
 
 analyst_agent = Agent(
-    MODEL,
+    _model("analyst"),
     name="analyst_agent",
     output_type=AnalysisReport,
     model_settings=MODEL_SETTINGS,
@@ -188,7 +196,7 @@ analyst_agent = Agent(
 )
 
 merge_verdict_agent = Agent(
-    MODEL,
+    _model("merge_verdict"),
     name="merge_verdict_agent",
     output_type=MergeVerdict,
     model_settings=MODEL_SETTINGS,
@@ -196,20 +204,48 @@ merge_verdict_agent = Agent(
 )
 
 devops_agent = Agent(
-    MODEL,
+    _model("devops_planner"),
     name="devops_agent",
     output_type=ImplementationPlan,  # devops tasks reuse the task shape
     model_settings=MODEL_SETTINGS,
     system_prompt=DEVOPS_PROMPT,
 )
 
+# Stage name -> registry role. Stage names (feature.py's pipeline vocabulary)
+# and role names (the registry's) genuinely differ — 'plan'/'planner',
+# 'review'/'reviewer', 'analyze'/'analyst', 'devops'/'devops_planner'. This
+# table is the ONE place that divergence is reconciled.
+STAGE_ROLES: dict[str, str] = {
+    "clarify": "clarify",
+    "architect": "architect",
+    "plan": "planner",
+    "devops": "devops_planner",
+    "review": "reviewer",
+    "analyze": "analyst",
+    "qa": "qa",
+    "merge_verdict": "merge_verdict",
+}
+
+# Both maps are keyed by stage and looked up together in _cached_stage. Keep
+# their keyspaces identical (tests/test_stage_models.py asserts it).
+STAGE_MODELS: dict[str, str] = {
+    stage: _model(role) for stage, role in STAGE_ROLES.items()
+}
+
+_STAGE_PROMPTS: dict[str, str] = {
+    "clarify": CLARIFY_PROMPT,
+    "architect": ARCHITECT_PROMPT,
+    "plan": PLAN_PROMPT,
+    "devops": DEVOPS_PROMPT,
+    "review": REVIEWER_PROMPT,
+    "analyze": ANALYST_PROMPT,
+    "qa": QA_PROMPT,
+    "merge_verdict": MERGE_VERDICT_PROMPT,
+}
+
 PROMPT_SHAS: dict[str, str] = {
-    "clarify": hashlib.sha256(CLARIFY_PROMPT.encode()).hexdigest(),
-    "architect": hashlib.sha256(ARCHITECT_PROMPT.encode()).hexdigest(),
-    "plan": hashlib.sha256(PLAN_PROMPT.encode()).hexdigest(),
-    "devops": hashlib.sha256(DEVOPS_PROMPT.encode()).hexdigest(),
-    "review": hashlib.sha256(REVIEWER_PROMPT.encode()).hexdigest(),
-    "analyze": hashlib.sha256(ANALYST_PROMPT.encode()).hexdigest(),
+    stage: hashlib.sha256(prompt.encode()).hexdigest()
+    for stage, prompt in _STAGE_PROMPTS.items()
 }
 
 # Temporal-wrapped versions used inside workflows.
