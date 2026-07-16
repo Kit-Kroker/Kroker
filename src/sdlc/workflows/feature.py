@@ -23,7 +23,7 @@ with workflow.unsafe.imports_passed_through():
         setup_integration_branch,
     )
     from ..agents.roles import (
-        MODEL, PROMPT_SHAS, t_analyst, t_architect, t_clarify,
+        PROMPT_SHAS, STAGE_MODELS, t_analyst, t_architect, t_clarify,
         t_merge_verdict, t_planner, t_qa, t_reviewer,
     )
     from ..benchmarks.judge import (
@@ -227,7 +227,7 @@ class FeatureWorkflow:
         await workflow.execute_activity(record_benchmark, record, **RECORD_ACT)
 
     async def _judge(self, cfg: PipelineConfig, artifact_json: str,
-                     stage: str) -> QualityScore:
+                     stage: str, author_model: str) -> QualityScore:
         """Judge a proposer-stage artifact iff benchmarking is on AND a
         rubric is registered for the stage.
 
@@ -240,11 +240,9 @@ class FeatureWorkflow:
         ``stage`` is the rubric-map key carried on cfg.benchmark.rubrics
         (e.g. 'clarifier', 'architect'), NOT the record's stage field.
 
-        Author model: proposer agents bind roles.MODEL today (foundation
-        limitation — they don't yet honor cfg.roles), so the same constant is
-        the author identity for every proposer stage. The judge_model (e.g.
-        'openai/gpt-5.2') differs from the author ('zai-coding-plan/...') →
-        ADR-6 cross-family satisfied.
+        Author model: passed in by the caller, which knows both this rubric key
+        and the stage name STAGE_MODELS is keyed by. The judge_model (e.g.
+        'openai/gpt-5.2') differs from the author → ADR-6 cross-family satisfied.
         """
         fallback = QualityScore(score=None, judge="llm_judge")
         if not self._benchmarking(cfg):
@@ -253,7 +251,7 @@ class FeatureWorkflow:
             artifact_json=artifact_json,
             rubrics=cfg.benchmark.rubrics,
             stage=stage,
-            author_model=MODEL,
+            author_model=author_model,
             judge_model=cfg.benchmark.judge_model,
         )
         if judge_input is None:
@@ -291,15 +289,21 @@ class FeatureWorkflow:
             pass
 
     async def _cached_stage(self, cfg: PipelineConfig, stage: str,
-                            input_json: str, model_id: str,
+                            input_json: str,
                             output_type: type, run_fn) -> tuple[object, bool]:
         """Skips `run_fn()` (a no-arg async callable invoking the proposer
         agent) when an identical (stage, input, prompt, model,
         upstream-recall-watermark) combination was already computed — the
-        ADR-5 dev-loop cache. Returns (output, was_cache_hit)."""
+        ADR-5 dev-loop cache. Returns (output, was_cache_hit).
+
+        The stage's model is resolved here from STAGE_MODELS rather than passed
+        in: it MUST be the model that role actually binds, or a role's model
+        change would leave the key unmoved and serve a result computed by the
+        previous model."""
         if not cfg.memoization_enabled:
             return await run_fn(), False
-        key = content_key(stage, input_json, PROMPT_SHAS[stage], model_id,
+        key = content_key(stage, input_json, PROMPT_SHAS[stage],
+                          STAGE_MODELS[stage],
                           self._memory_watermark or "none")
         cached = await workflow.execute_activity(
             cache_get, CacheGetInput(key=key), **MEM_ACT)
@@ -516,7 +520,7 @@ class FeatureWorkflow:
                 outcome=(BenchmarkOutcome.PASS
                          if (qa.tests_passed and not qa.issues)
                          else BenchmarkOutcome.FAIL),
-                model=role_cfg.model or "zai-coding-plan/glm-5.2",
+                model=role_cfg.model,
                 harness=role_cfg.harness,
                 cost_usd=run.cost_usd,
                 fix_attempts=attempt - 1,
@@ -639,7 +643,7 @@ class FeatureWorkflow:
                    if snapshot.items else ""))).output
 
         reqs, _ = await self._cached_stage(
-            cfg, "clarify", idea.model_dump_json(), MODEL,
+            cfg, "clarify", idea.model_dump_json(),
             ClarifiedRequirements, _run_clarify)
         if reqs.open_questions:
             clarify_policy = cfg.gates.get("clarify", GateConfig()).policy
@@ -659,13 +663,14 @@ class FeatureWorkflow:
                 for q in reqs.open_questions:
                     q.answer = self._question_answers.get(q.id)
         _ended = workflow.now()
-        _quality = await self._judge(cfg, reqs.model_dump_json(), "clarifier")
+        _quality = await self._judge(cfg, reqs.model_dump_json(), "clarifier",
+                                     author_model=STAGE_MODELS["clarify"])
         await self._record(cfg, self._stage_record(
             cfg, stage="clarify", role="clarify",
             started=_started, ended=_ended,
             quality_score=_quality.score, judge=_quality.judge,
             outcome=BenchmarkOutcome.PASS,
-            model="anthropic:glm-5.2"))
+            model=STAGE_MODELS["clarify"]))
         await self._retain(
             cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
             text=f"clarify: {reqs.summary}",
@@ -689,21 +694,22 @@ class FeatureWorkflow:
                 return (await t_architect.run(prompt)).output
             arch, _ = await self._cached_stage(
                 cfg, "architect",
-                reqs.model_dump_json() + (guidance or ""), MODEL,
+                reqs.model_dump_json() + (guidance or ""),
                 ArchitectureSpec, _produce)
             return arch
 
         arch, gate = await self._revisable_stage("architecture", cfg,
                                                  _run_architect)
         _ended = workflow.now()
-        _quality = await self._judge(cfg, arch.model_dump_json(), "architect")
+        _quality = await self._judge(cfg, arch.model_dump_json(), "architect",
+                                     author_model=STAGE_MODELS["architect"])
         await self._record(cfg, self._stage_record(
             cfg, stage="architecture", role="architect",
             started=_started, ended=_ended,
             quality_score=_quality.score, judge=_quality.judge,
             outcome=(BenchmarkOutcome.PASS if gate.approved
                      else BenchmarkOutcome.REVISED),
-            model="anthropic:glm-5.2"))
+            model=STAGE_MODELS["architect"]))
         await self._retain(
             cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
             text=f"architect: {arch.overview}",
@@ -728,20 +734,21 @@ class FeatureWorkflow:
                 return (await t_planner.run(prompt)).output
             plan, _ = await self._cached_stage(
                 cfg, "plan",
-                arch.model_dump_json() + (guidance or ""), MODEL,
+                arch.model_dump_json() + (guidance or ""),
                 ImplementationPlan, _produce)
             return plan
 
         plan, gate = await self._revisable_stage("plan", cfg, _run_plan)
         _ended = workflow.now()
-        _quality = await self._judge(cfg, plan.model_dump_json(), "planner")
+        _quality = await self._judge(cfg, plan.model_dump_json(), "planner",
+                                     author_model=STAGE_MODELS["plan"])
         await self._record(cfg, self._stage_record(
             cfg, stage="plan", role="planner",
             started=_started, ended=_ended,
             quality_score=_quality.score, judge=_quality.judge,
             outcome=(BenchmarkOutcome.PASS if gate.approved
                      else BenchmarkOutcome.REVISED),
-            model="anthropic:glm-5.2"))
+            model=STAGE_MODELS["plan"]))
         await self._retain(
             cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
             text=f"plan: {len(plan.tasks)} tasks",
@@ -839,7 +846,7 @@ class FeatureWorkflow:
             judge="contract",
             outcome=(BenchmarkOutcome.PASS if not untraced
                      else BenchmarkOutcome.FAIL),
-            model="anthropic:glm-5.2"))
+            model=STAGE_MODELS["analyze"]))
         await self._retain(
             cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
             text=f"analyze: {len(authoritative)} criteria, "
@@ -1002,7 +1009,7 @@ class FeatureWorkflow:
             quality_score=None, judge="llm_judge",
             outcome=(BenchmarkOutcome.PASS if gate.approved
                      else BenchmarkOutcome.REVISED),
-            model="anthropic:glm-5.2"))
+            model=STAGE_MODELS["devops"]))
         if not gate.approved:
             return f"merged-not-deployed:{pr_url}"
         await workflow.execute_activity(
