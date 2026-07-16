@@ -20,6 +20,20 @@ AGENTS_CONFIG_ENV = "SDLC_AGENTS_CONFIG"
 # three parents up from the file dir is the repo root.
 DEFAULT_AGENTS_CONFIG = Path(__file__).resolve().parents[3] / "config" / "agents.yaml"
 
+# Harness-execution roles. Keys fixed by DevTask.role
+# (Literal["dev","test","devops"], models.py:144). PipelineConfig.roles
+# mirrors exactly this set — see _validate_pipeline_mirror.
+HARNESS_ROLES = frozenset({"dev", "test", "devops"})
+
+# Proposer roles, one per agent in agents/roles.py. 'devops_planner' PLANS
+# devops tasks; the 'devops' harness role above RUNS them.
+PROPOSER_ROLES = frozenset({
+    "clarify", "architect", "planner", "qa", "reviewer", "analyst",
+    "merge_verdict", "devops_planner",
+})
+
+REQUIRED_ROLES = HARNESS_ROLES | PROPOSER_ROLES
+
 
 class RegistryError(ValueError):
     """A registry that violates a structural invariant (missing role, or an
@@ -44,20 +58,28 @@ def load_registry(path: str | os.PathLike | None = None) -> dict[str, RoleConfig
 
 
 def validate_registry(roles: dict[str, RoleConfig]) -> None:
-    """Fail closed on any structural violation. The ADR-6 invariant is
-    model-family inequality (NOT harness inequality); the harness clause only
-    applies to the optional deep-review harness reviewer tier."""
-    dev = roles.get("developer")
-    rev = roles.get("reviewer")
-    if dev is None or rev is None:
+    """Fail closed on any structural violation.
+
+    Checks run in this order deliberately: a missing role is reported as
+    itself, before any downstream check trips over its absence.
+
+    The ADR-6 invariant is model-family inequality between the reviewer and
+    'dev' — the role feature.py:434 resolves to actually write code. (It is
+    NOT harness inequality; that clause applies only to the optional
+    deep-review harness reviewer tier.)
+    """
+    missing = sorted(REQUIRED_ROLES - set(roles))
+    if missing:
         raise RegistryError(
-            "registry must define both developer and reviewer roles")
-    if dev.model is None or rev.model is None:
-        raise RegistryError("developer and reviewer roles must declare a model")
+            f"registry is missing required role(s): {', '.join(missing)}")
+    for name in ("dev", "reviewer"):
+        if roles[name].model is None:
+            raise RegistryError(f"role '{name}' must declare a model")
+    dev, rev = roles["dev"], roles["reviewer"]
     if model_family(dev.model) == model_family(rev.model):
         raise RegistryError(
             f"ADR-6 violation: reviewer family '{model_family(rev.model)}' "
-            f"equals developer family — anti-collusion review requires a "
+            f"equals the family of 'dev' — anti-collusion review requires a "
             f"different model family than the developer's authoring model")
     if rev.kind == "harness" and rev.harness is not None \
             and rev.harness == dev.harness:

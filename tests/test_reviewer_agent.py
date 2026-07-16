@@ -16,12 +16,12 @@ def test_review_prompt_sha_present():
     assert len(roles.PROMPT_SHAS["review"]) == 64      # sha256 hexdigest
 
 
-def test_reviewer_model_family_differs_from_developer():
-    """The bound reviewer model must be a different family than the shipped
-    developer model — the ADR-6 invariant, guarded so the two constants can
-    never silently drift into the same family."""
+def test_reviewer_model_family_differs_from_dev():
+    """The bound reviewer model must be a different family than the model that
+    actually writes code — the ADR-6 invariant. 'dev' (not 'developer') is what
+    feature.py:434 resolves for coding tasks."""
     reg = load_registry()
     assert model_family(reg["reviewer"].model) \
-        != model_family(reg["developer"].model)
+        != model_family(reg["dev"].model)
     # the agent actually binds that reviewer model
     assert reg["reviewer"].model in roles.reviewer_agent.model.model_id
