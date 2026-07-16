@@ -115,7 +115,10 @@ async def test_non_finite_line_rate_degrades_safely(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_infinite_line_rate_is_clamped(tmp_path):
+async def test_infinite_line_rate_is_skipped(tmp_path):
+    """An overflowing literal ('1e400') parses to inf, which the isfinite
+    guard skips rather than clamps — so the only class is dropped and the
+    seam reports nothing measured instead of a fabricated 100%."""
     xml = """<?xml version="1.0" ?>
 <coverage>
   <packages>
