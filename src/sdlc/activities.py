@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+import pathlib
+import re
 import shutil
 import stat
 import subprocess
@@ -21,7 +23,7 @@ from .gate import (
     evaluate_quality_gate,
 )
 from .harness.adapters import HARNESSES, HarnessRequest
-from .models import HarnessKind, HarnessRunResult, QAReport
+from .models import HarnessKind, HarnessRunResult, QAReport, SecurityFinding, SecurityReport
 
 
 def _worktrees_root() -> str:
@@ -496,6 +498,54 @@ async def run_lint(inp: LintInput) -> tuple[bool, str]:
                        f"(cmd: {inp.lint_cmd!r})")
     out = out_b.decode(errors="replace")
     return proc.returncode == 0, out[-2000:]
+
+
+# Minimal deterministic security ruleset (FR-106 absolute floor). Each entry
+# is (compiled_regex, severity, rule_name, human_detail). Intentionally small
+# and offline; the seam for a real SAST is this function's return type.
+_SECURITY_RULES: list[tuple[re.Pattern, str, str, str]] = [
+    (re.compile(r"(?i)(aws_secret_access_key|secret_key)\s*=\s*['\"][A-Za-z0-9/+]{20,}['\"]"),
+     "critical", "hardcoded-secret", "hardcoded credential/secret literal"),
+    (re.compile(r"\beval\s*\("),
+     "critical", "dangerous-eval", "use of eval() on untrusted input"),
+    (re.compile(r"subprocess\.[a-z_]+\([^)]*shell\s*=\s*True"),
+     "high", "shell-injection", "subprocess call with shell=True"),
+]
+
+_SECURITY_SCAN_EXTENSIONS = (".py", ".js", ".ts", ".go", ".rb", ".java")
+
+
+@dataclass
+class SecurityScanInput:
+    worktree: str
+
+
+@activity.defn
+async def security_scan(inp: SecurityScanInput) -> SecurityReport:
+    """Scan source files under the integration worktree against a minimal
+    deterministic ruleset. Pure filesystem read — no network, no git — so it
+    is reproducible across Temporal retries."""
+    findings: list[SecurityFinding] = []
+    root = inp.worktree
+    for dirpath, dirnames, filenames in os.walk(root):
+        if ".git" in dirnames:
+            dirnames.remove(".git")
+        for fname in filenames:
+            if not fname.endswith(_SECURITY_SCAN_EXTENSIONS):
+                continue
+            fpath = os.path.join(dirpath, fname)
+            try:
+                text = pathlib.Path(fpath).read_text(
+                    encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            rel = os.path.relpath(fpath, root)
+            for pattern, severity, rule, detail in _SECURITY_RULES:
+                if pattern.search(text):
+                    findings.append(SecurityFinding(
+                        severity=severity, rule=rule, detail=detail, path=rel))
+    critical = sum(1 for f in findings if f.severity == "critical")
+    return SecurityReport(critical=critical, findings=findings)
 
 
 @dataclass

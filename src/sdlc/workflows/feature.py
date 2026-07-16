@@ -16,9 +16,10 @@ with workflow.unsafe.imports_passed_through():
     from ..activities import (
         CodingTaskInput, DeployInput, DiffInput, IntegrationHandle,
         IntegrationInput, LintInput, MergeInput, PROpenInput,
-        QAInput, WorktreeInput, create_worktree, deploy, evaluate_gate,
-        get_task_diff, merge_into_integration, open_pull_request,
-        run_coding_task, run_lint, run_test_suite, setup_integration_branch,
+        QAInput, SecurityScanInput, WorktreeInput, create_worktree, deploy,
+        evaluate_gate, get_task_diff, merge_into_integration,
+        open_pull_request, run_coding_task, run_lint, run_test_suite,
+        security_scan, setup_integration_branch,
     )
     from ..agents.roles import (
         MODEL, PROMPT_SHAS, t_architect, t_clarify, t_merge_verdict,
@@ -48,8 +49,8 @@ with workflow.unsafe.imports_passed_through():
         ArchitectureSpec, ClarifiedRequirements, DevTask, ExecutionMode,
         GateConfig, GateDecision, GateOutcome, GatePolicy, HandoffSummary,
         IdeaBrief, ImplementationPlan, MemoryKind, MergeVerdict,
-        PipelineConfig, RecallSnapshot, RetainItem, RoleConfig, TaskResult,
-        gate_key,
+        PipelineConfig, RecallSnapshot, RetainItem, RoleConfig,
+        SecurityReport, TaskResult, gate_key,
     )
 
 ACT = dict(start_to_close_timeout=timedelta(minutes=10),
@@ -802,6 +803,9 @@ class FeatureWorkflow:
         lint_clean, lint_detail = await workflow.execute_activity(
             run_lint, LintInput(worktree=integration_worktree,
                                 lint_cmd=lint_cmd), **ACT)
+        security: SecurityReport = await workflow.execute_activity(
+            security_scan,
+            SecurityScanInput(worktree=integration_worktree), **ACT)
         all_tests_green = _merge_evidence_all_green(list(done.values()))
 
         checks = [
@@ -810,6 +814,10 @@ class FeatureWorkflow:
                         detail="aggregate of per-task pytest runs"),
             build_check("lint_clean", lint_clean, CheckClass.ABSOLUTE,
                         detail=lint_detail),
+            build_check(
+                "security_no_critical", security.critical == 0,
+                CheckClass.ABSOLUTE,
+                detail=f"{security.critical} critical finding(s)"),
             build_check(
                 "review_severity",
                 all(r.review is None or r.review.approve

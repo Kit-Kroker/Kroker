@@ -202,6 +202,22 @@ class QAReport(BaseModel):
     report_ref: ArtifactRef | None = None
 
 
+class SecurityFinding(BaseModel):
+    severity: Literal["critical", "high", "medium", "low"]
+    rule: str                               # which scanner rule matched
+    detail: str
+    path: str = ""
+
+
+class SecurityReport(BaseModel):
+    """Deterministic scanner evidence for the merge gate's absolute floor
+    (FR-106/NFR-5/SC-5). `critical` is the count feeding the
+    `security_no_critical` absolute check; a minimal ruleset now, seam to a
+    real SAST later."""
+    critical: int
+    findings: list[SecurityFinding] = Field(default_factory=list)
+
+
 class ReviewFinding(BaseModel):
     assertion: str                          # which contract assertion / concern
     severity: Literal["critical", "high", "medium", "low"]
