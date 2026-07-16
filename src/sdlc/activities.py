@@ -6,6 +6,7 @@ the filesystem, or the network directly.
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import pathlib
 import re
@@ -16,6 +17,8 @@ import tempfile
 import time
 from dataclasses import dataclass
 
+import defusedxml.ElementTree as DET
+from defusedxml.common import DefusedXmlException
 from temporalio import activity
 
 from .gate import (
@@ -23,7 +26,14 @@ from .gate import (
     evaluate_quality_gate,
 )
 from .harness.adapters import HARNESSES, HarnessRequest
-from .models import HarnessKind, HarnessRunResult, QAReport, SecurityFinding, SecurityReport
+from .models import (
+    CoverageReport,
+    HarnessKind,
+    HarnessRunResult,
+    QAReport,
+    SecurityFinding,
+    SecurityReport,
+)
 
 
 def _worktrees_root() -> str:
@@ -546,6 +556,65 @@ async def security_scan(inp: SecurityScanInput) -> SecurityReport:
                         severity=severity, rule=rule, detail=detail, path=rel))
     critical = sum(1 for f in findings if f.severity == "critical")
     return SecurityReport(critical=critical, findings=findings)
+
+
+@dataclass
+class CoverageInput:
+    worktree: str
+    changed_files: list[str]
+
+
+@activity.defn
+async def measure_coverage(inp: CoverageInput) -> CoverageReport:
+    """Diff-scoped coverage from a Cobertura coverage.xml already emitted into
+    the worktree by the run's test commands (FR-106). Minimal deterministic
+    seam — pure filesystem read, reproducible across retries. Real per-stack
+    instrumentation replaces only this body.
+
+    The file is generated inside a harness worktree (untrusted, ARCHITECTURE.md
+    §10), so it is parsed with defusedxml to block XXE / entity-expansion DoS.
+
+    measured=False (check passes as a no-op) when there is no coverage.xml, it
+    is unparseable/malicious, or none of the changed files appear in it — an
+    unbuilt measurement must never force a human override."""
+    path = os.path.join(inp.worktree, "coverage.xml")
+    if not os.path.isfile(path):
+        return CoverageReport(measured=False,
+                              detail="no coverage.xml (seam not measured)")
+    try:
+        root = DET.parse(path).getroot()
+    except (DefusedXmlException, DET.ParseError, OSError):
+        return CoverageReport(measured=False,
+                              detail="coverage.xml unparseable or unsafe")
+    rates: list[float] = []
+    for cls in root.iter("class"):
+        fname = cls.get("filename") or ""
+        if any(fname == cf or fname.endswith("/" + cf) or cf.endswith("/" + fname)
+               for cf in inp.changed_files):
+            try:
+                rate = float(cls.get("line-rate", "0"))
+            except ValueError:
+                continue
+            if not math.isfinite(rate):
+                # Hostile/corrupt input (nan, inf) — never let it propagate
+                # into diff_pct, where e.g. `nan >= threshold` silently
+                # evaluates False and fabricates an advisory failure.
+                continue
+            rates.append(max(0.0, min(100.0, rate * 100.0)))
+    if not rates:
+        return CoverageReport(
+            measured=False,
+            detail="no changed file found in coverage.xml (seam not measured)")
+    # Unweighted mean of per-class line-rates — an approximation of true
+    # diff coverage, not a line-weighted average. A 500-line file at 50%
+    # and a 5-line file at 100% average to 75% here, though true line
+    # coverage across both is ~50.5%. Acceptable for this seam; real
+    # per-stack instrumentation should replace this with a weighted
+    # (lines-covered / lines-valid) computation.
+    pct = sum(rates) / len(rates)
+    return CoverageReport(measured=True, diff_pct=pct,
+                          detail=f"diff-scoped coverage {pct:.1f}% "
+                                 f"over {len(rates)} changed file(s)")
 
 
 @dataclass

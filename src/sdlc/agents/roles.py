@@ -22,6 +22,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
 from .loader import load_registry
 
 from ..models import (
+    AnalysisReport,
     ArchitectureSpec,
     ClarifiedRequirements,
     ImplementationPlan,
@@ -112,6 +113,18 @@ REVIEWER_PROMPT = (
     "suggested fix. Set 'approve' to false if ANY finding is 'critical' or "
     "'high'. Set confidence to a calibrated 0.0-1.0 self-assessment."
 )
+ANALYST_PROMPT = (
+    "You are a clean-context release analyst. You receive ONLY: the run's "
+    "acceptance criteria (each tagged with its task id), the materialized "
+    "integration diff, and the aggregate test output. You never see, and "
+    "must never request, any implementer's summary, reasoning, or session. "
+    "For EACH acceptance criterion, populate a CriterionTrace with the exact "
+    "test name(s) in the diff/test output that verify it; leave 'tests' empty "
+    "if nothing does — do NOT invent a test name. Copy each criterion's "
+    "task_id and text verbatim so it matches the plan. Report any "
+    "integration-level concerns as 'findings'. Set a calibrated 0.0-1.0 "
+    "confidence. You do not decide pass/fail — you only propose the mapping."
+)
 MERGE_VERDICT_PROMPT = (
     "You are an ADVISORY release reviewer, consulted only after the "
     "deterministic quality gate has already passed. Given the QA report, "
@@ -166,6 +179,14 @@ reviewer_agent = Agent(
     system_prompt=REVIEWER_PROMPT,
 )
 
+analyst_agent = Agent(
+    MODEL,
+    name="analyst_agent",
+    output_type=AnalysisReport,
+    model_settings=MODEL_SETTINGS,
+    system_prompt=ANALYST_PROMPT,
+)
+
 merge_verdict_agent = Agent(
     MODEL,
     name="merge_verdict_agent",
@@ -188,6 +209,7 @@ PROMPT_SHAS: dict[str, str] = {
     "plan": hashlib.sha256(PLAN_PROMPT.encode()).hexdigest(),
     "devops": hashlib.sha256(DEVOPS_PROMPT.encode()).hexdigest(),
     "review": hashlib.sha256(REVIEWER_PROMPT.encode()).hexdigest(),
+    "analyze": hashlib.sha256(ANALYST_PROMPT.encode()).hexdigest(),
 }
 
 # Temporal-wrapped versions used inside workflows.
@@ -196,8 +218,9 @@ t_architect = TemporalAgent(architect_agent, activity_config=AGENT_ACTIVITY_CONF
 t_planner = TemporalAgent(planner_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 t_qa = TemporalAgent(qa_analyst_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 t_reviewer = TemporalAgent(reviewer_agent, activity_config=AGENT_ACTIVITY_CONFIG)
+t_analyst = TemporalAgent(analyst_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 t_merge_verdict = TemporalAgent(merge_verdict_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 t_devops = TemporalAgent(devops_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 
 ALL_TEMPORAL_AGENTS = [t_clarify, t_architect, t_planner, t_qa,
-                       t_reviewer, t_merge_verdict, t_devops]
+                       t_reviewer, t_analyst, t_merge_verdict, t_devops]

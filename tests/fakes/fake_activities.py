@@ -7,11 +7,13 @@ from __future__ import annotations
 from temporalio import activity
 
 from sdlc.activities import (
-    CodingTaskInput, DeployInput, DiffInput, IntegrationHandle,
+    CodingTaskInput, CoverageInput, DeployInput, DiffInput, IntegrationHandle,
     IntegrationInput, LintInput, MergeInput, MergeResult, PROpenInput,
     QAInput, SecurityScanInput, WorktreeHandle, WorktreeInput,
 )
-from sdlc.models import HarnessRunResult, QAReport, SecurityReport
+from sdlc.models import (
+    CoverageReport, HarnessRunResult, QAReport, SecurityReport,
+)
 
 
 @activity.defn(name="setup_integration_branch")
@@ -72,9 +74,15 @@ async def fake_security_scan(inp: SecurityScanInput) -> SecurityReport:
     return SecurityReport(critical=0, findings=[])
 
 
+@activity.defn(name="measure_coverage")
+async def fake_measure_coverage(inp: CoverageInput) -> CoverageReport:
+    # No coverage artifact in this offline run -> unmeasured, check passes.
+    return CoverageReport(measured=False, detail="fake: unmeasured")
+
+
 GIT_FAKES = [
     fake_setup_integration_branch, fake_create_worktree, fake_run_coding_task,
     fake_get_task_diff, fake_run_test_suite, fake_run_lint,
     fake_merge_into_integration, fake_open_pull_request, fake_deploy,
-    fake_security_scan,
+    fake_security_scan, fake_measure_coverage,
 ]
