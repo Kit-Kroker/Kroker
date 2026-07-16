@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- **Determinism boundary:** nothing under `src/sdlc/workflows/` may import `subprocess`, HTTP clients, the memory client, or the harness package. All I/O lives in activities. (Enforced by `tests/test_factory_purity.py`.)
+- **Determinism boundary:** nothing under `src/sdlc/workflows/` may import `subprocess`, HTTP clients, the memory client, or the harness package. All I/O lives in activities. New imports go inside the existing `with workflow.unsafe.imports_passed_through():` block. (No import-linter is configured; the real backstop is Temporal's workflow sandbox at runtime, exercised by the Task 7 e2e that runs the real `FeatureWorkflow` through a worker. Note: `tests/test_factory_purity.py` does NOT check imports — it guards benchmark-activity gating — so do not rely on it as a purity check.)
 - **Claim-check discipline:** pipeline models stay small; large text (diffs, reports) travels by reference or truncated extract, never inline in full.
 - **Clean-context validators (ADR-12):** the Analyst receives only orchestrator-assembled artifacts (criteria list + materialized diff + test output) — never an implementer's session or narrative.
 - **Propose vs enforce (FR-106):** the LLM proposes the mapping; the workflow computes the verdict against the authoritative plan set. Never trust an LLM-emitted pass/fail.
@@ -805,10 +805,10 @@ In the `checks = [ ... ]` list (~line 811-827), after the `review_severity` `bui
                              f"{cfg.coverage_threshold:.1f}%")),
 ```
 
-- [ ] **Step 6: Run the wiring test + purity guard**
+- [ ] **Step 6: Run the wiring test + confirm the module still imports cleanly**
 
-Run: `python -m pytest tests/test_analyst_stage_wiring.py tests/test_factory_purity.py -q`
-Expected: PASS. (If the source-substring assertions in Step 1 are brittle against your exact formatting, adjust the test's expected substrings to match the code you wrote — the intent is: `t_analyst.run(`, `untraced_criteria(`, `"traceability"`, `"coverage"`, `measure_coverage` all present, and analyze precedes `evaluate_gate`.)
+Run: `python -m pytest tests/test_analyst_stage_wiring.py -q && python -c "import sdlc.workflows.feature; print('feature module imports OK')"`
+Expected: wiring test PASS; the import prints OK (a forbidden top-level import outside the `imports_passed_through()` block would fail here; the true determinism-sandbox check is exercised by the Task 7 e2e running the real workflow through a Temporal worker). (If the source-substring assertions in Step 1 are brittle against your exact formatting, adjust the test's expected substrings to match the code you wrote — the intent is: `t_analyst.run(`, `untraced_criteria(`, `"traceability"`, `"coverage"`, `measure_coverage` all present, and analyze precedes `evaluate_gate`.)
 
 - [ ] **Step 7: Commit**
 
