@@ -15,8 +15,17 @@ from ..workflows.reflect import ReflectScheduleInput
 from .reconcile import Change, plan_changes
 
 
+# The {{ .ScheduledTime }} token is substituted by the Temporal server at each
+# schedule fire, yielding a unique workflow id per run. A fixed id would be
+# rejected on the second fire: ScheduleActionStartWorkflow exposes no reuse-policy
+# knob, and the default WorkflowIdReusePolicy (ALLOW_DUPLICATE_FAILED_ONLY)
+# forbids reuse once a run completed successfully — so nightly reflect would run
+# exactly once and then every later trigger's start would be rejected.
+_SCHEDULED_TIME_TOKEN = "{{ .ScheduledTime }}"
+
+
 def _workflow_id(sid: str) -> str:
-    return f"sched-{sid}"
+    return f"sched-{sid}-{_SCHEDULED_TIME_TOKEN}"
 
 
 def to_temporal(a: ScheduleAsset) -> Schedule:
@@ -42,6 +51,8 @@ def from_temporal(sid: str, sched: Schedule) -> ScheduleAsset | None:
     if action.workflow not in KNOWN_SCHEDULE_WORKFLOWS:
         return None
     if not action.args:
+        return None
+    if not sched.spec.cron_expressions:
         return None
     inp = action.args[0]
     return ScheduleAsset(
@@ -87,6 +98,8 @@ async def apply_changes(client: Client, desired: list[ScheduleAsset],
             await handle.update(
                 lambda _inp, a=asset: ScheduleUpdate(schedule=to_temporal(a)))
             results.append(f"updated {c.id}")
+        elif c.action == "noop":
+            pass
         elif c.action == "drift":
             if prune:
                 await client.get_schedule_handle(c.id).delete()
@@ -95,4 +108,6 @@ async def apply_changes(client: Client, desired: list[ScheduleAsset],
                 results.append(
                     f"DRIFT {c.id} on server with no yaml asset "
                     f"(use --prune to delete)")
+        else:
+            raise ValueError(f"unknown schedule change action: {c.action!r}")
     return results

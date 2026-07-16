@@ -102,3 +102,15 @@ def test_env_var_overrides_default_dir(tmp_path, monkeypatch):
     _write(tmp_path, "s.yaml", VALID)
     monkeypatch.setenv("SDLC_SCHEDULES_DIR", str(tmp_path))
     assert len(load_schedules()) == 1
+
+
+def test_yaml_syntax_error_raises_schedule_error(tmp_path):
+    _write(tmp_path, "broken.yaml", "spec: [unclosed")
+    with pytest.raises(ScheduleError, match="broken.yaml"):
+        load_schedules(tmp_path)
+
+
+def test_non_mapping_body_raises_schedule_error(tmp_path):
+    _write(tmp_path, "list.yaml", "- just\n- a\n- list\n")
+    with pytest.raises(ScheduleError, match="list.yaml"):
+        load_schedules(tmp_path)

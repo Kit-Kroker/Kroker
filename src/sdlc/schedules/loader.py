@@ -35,9 +35,9 @@ def load_schedules(path: str | os.PathLike | None = None) -> list[ScheduleAsset]
         return []
     assets: list[ScheduleAsset] = []
     for f in sorted(resolved.glob("*.yaml")):
-        data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
         try:
+            data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
             assets.append(ScheduleAsset(id=f.stem, **data))
-        except ValidationError as e:
+        except (ValidationError, yaml.YAMLError, TypeError) as e:
             raise ScheduleError(f"{f.name}: {e}") from e
     return assets

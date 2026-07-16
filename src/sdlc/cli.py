@@ -108,7 +108,7 @@ async def main() -> None:
             print(await _run_matrix(args.case))
             return
         if args.bench_cmd == "drift":
-            print("drift requires a live Temporal client; see ARCHITECTURE.md §8.")
+            print("drift requires a live Temporal client; see ARCHITECTURE.md section 8.")
             return
 
     if args.cmd == "schedules":
@@ -123,7 +123,7 @@ async def main() -> None:
                 return
             for a in desired:
                 print(f"{a.id:<24} {a.spec.cron!r} {a.spec.timezone} "
-                      f"→ {a.action.workflow} banks={a.action.banks}")
+                      f"-> {a.action.workflow} banks={a.action.banks}")
             return
         existing = await fetch_existing(client)
         changes = plan_changes(desired, existing)
