@@ -103,7 +103,7 @@ def _merge_evidence_all_green(results: list) -> bool:
 
 
 def untraced_criteria(authoritative: list[tuple[str, str]],
-                      report: "AnalysisReport") -> list[str]:
+                      report: AnalysisReport) -> list[str]:
     """FR-106 enforcement (workflow-side, NOT the LLM's verdict).
 
     A criterion is traced iff the Analyst's report contains a CriterionTrace

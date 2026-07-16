@@ -103,12 +103,11 @@ async def test_greenfield_run_ships_end_to_end():
 
 
 @pytest.mark.asyncio
-async def test_untraced_criterion_is_advisory_not_blocking(monkeypatch):
+async def test_untraced_criterion_is_advisory_not_blocking():
     """An Analyst that maps nothing still ships end-to-end under HARD merge:
     traceability is ADVISORY, so the human merge gate (auto-approved here via
     the driver) waves it through — it never becomes a terminal absolute block."""
     from sdlc.models import AnalysisReport
-    from tests.fakes import canned
 
     empty = ("analyst_agent", AnalysisReport, AnalysisReport(summary="none"))
     specs = [s for s in AGENT_SPECS if s[0] != "analyst_agent"] + [empty]

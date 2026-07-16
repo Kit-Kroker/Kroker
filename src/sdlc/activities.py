@@ -6,6 +6,7 @@ the filesystem, or the network directly.
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import pathlib
 import re
@@ -589,15 +590,27 @@ async def measure_coverage(inp: CoverageInput) -> CoverageReport:
     for cls in root.iter("class"):
         fname = cls.get("filename") or ""
         if any(fname == cf or fname.endswith("/" + cf) or cf.endswith("/" + fname)
-               or cf.endswith(fname) for cf in inp.changed_files):
+               for cf in inp.changed_files):
             try:
-                rates.append(float(cls.get("line-rate", "0")) * 100.0)
+                rate = float(cls.get("line-rate", "0"))
             except ValueError:
                 continue
+            if not math.isfinite(rate):
+                # Hostile/corrupt input (nan, inf) — never let it propagate
+                # into diff_pct, where e.g. `nan >= threshold` silently
+                # evaluates False and fabricates an advisory failure.
+                continue
+            rates.append(max(0.0, min(100.0, rate * 100.0)))
     if not rates:
         return CoverageReport(
             measured=False,
             detail="no changed file found in coverage.xml (seam not measured)")
+    # Unweighted mean of per-class line-rates — an approximation of true
+    # diff coverage, not a line-weighted average. A 500-line file at 50%
+    # and a 5-line file at 100% average to 75% here, though true line
+    # coverage across both is ~50.5%. Acceptable for this seam; real
+    # per-stack instrumentation should replace this with a weighted
+    # (lines-covered / lines-valid) computation.
     pct = sum(rates) / len(rates)
     return CoverageReport(measured=True, diff_pct=pct,
                           detail=f"diff-scoped coverage {pct:.1f}% "

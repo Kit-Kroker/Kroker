@@ -947,7 +947,7 @@ git commit -m "test(analyst): e2e proof stage-9 analyze ships; advisory traceabi
 In `ROADMAP.md`:
 
 - §1 stage **9 · analyze** — change `[ ]` to `[x]`: "Analyst clean-context proposer (`t_analyst`) emits `AnalysisReport`; workflow enforces criterion→test traceability against the plan's authoritative criteria (FR-106)."
-- §1 stage **11 · quality_gate** — remove "coverage and traceability checks still unbuilt"; note both now built, coverage via a deterministic Cobertura seam (`measured=False` ⇒ no-op until a project emits coverage + sets `coverage_threshold`).
+- §1 stage **11 · quality_gate** — remove "coverage and traceability checks still unbuilt"; note both now built, coverage via a deterministic Cobertura seam (`measured=False` ⇒ no-op — blocked not just on a project emitting `coverage.xml` + setting `coverage_threshold`, but on the test suite running in the integration worktree the seam reads, or the artifact being carried across the merge).
 - §2 **FR-106** — change `⚠️` note: traceability enforced ✅; coverage wired as a deterministic diff-scoped seam ✅ (real instrumentation future work).
 - §8 item **2 (Analyze/Analyst stage)** — mark done, pointer to `docs/superpowers/specs/2026-07-16-analyst-stage-traceability-coverage-design.md` and this plan.
 - Update the header "Last verified" date to `2026-07-16`.
