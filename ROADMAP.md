@@ -19,8 +19,8 @@
 
 ## 0. Phase summary (PRD §9)
 
-- [ ] ⚠️ **P1** — Greenfield pipeline, CLI, hard gates, no memory → *one project shipped end-to-end*
-  Core mechanisms done; **not demonstrated**: no CI-runnable end-to-end run through `FeatureWorkflow`; absolute security floor still vacuous. See `docs/superpowers/specs/2026-07-15-p1-consolidation-e2e-and-security-floor-design.md`.
+- [x] **P1** — Greenfield pipeline, CLI, hard gates, no memory → *one project shipped end-to-end*
+  Exit criterion **demonstrated**: `tests/test_e2e_greenfield.py` drives the real `FeatureWorkflow` greenfield `IdeaBrief` → `deployed:` end-to-end in CI, and the `security_no_critical` absolute floor now bites (SC-5). Delivered on `feat/p1-consolidation` (`3cfbe62`…`41c9185`).
 - [ ] ⚠️ **P2** — Brownfield, dashboard + notifications, fix loops, cross-harness review → *first brownfield feature merged via PR*
   Cross-harness review ✅ and fix loops ✅ landed early; brownfield mode, dashboard backend, and notifications not started.
 - [ ] ⚠️ **P3** — Hindsight memory + confidence-gated soft gates → *SC-4 and SC-6 measurable*
@@ -45,7 +45,7 @@
 - [x] **8 · review** — clean-context `reviewer_agent` (`t_reviewer`) run in `_dev_task`; blocking findings fold into the fix loop. **(new)**
 - [ ] **9 · analyze (Analyst)** — no `AnalysisReport`, no Analyst agent, no criterion→test traceability produced/enforced.
 - [x] **10 · qa (+ Resolver)** — clean-context `t_qa` + bounded fix loop (folded into stage 7). *Note: default `max_fix_attempts=2`, PRD says QA loop 3 — numeric drift.*
-- [ ] ⚠️ **11 · quality_gate** — `DeterministicQualityGate` mechanism ✅; only 3 checks built (`build_integration_green`, `lint_clean` absolute; `review_severity` advisory). **No `security_no_critical` (absolute floor), no coverage, no traceability.**
+- [ ] ⚠️ **11 · quality_gate** — `DeterministicQualityGate` mechanism ✅; 4 checks built (`build_integration_green`, `lint_clean`, `security_no_critical` absolute; `review_severity` advisory). Absolute security floor now wired ✅; **coverage and traceability checks still unbuilt** (need the Analyst stage).
 - [ ] ⚠️ **12 · deploy** — single hardcoded `make deploy ENV=staging`; no `DeployPlan`/`DeployReport` split, no smoke-test vs PR-merge distinction.
 - [ ] **13 · retro** — `reflect()` activity exists and is registered but **never called**; no `RunSummary`, no export.
 
@@ -59,7 +59,7 @@
 - [x] **FR-103** memoization, per-run watermark, audit-record-always-kept (`memoization/cache.py`, `content_key`, `_cached_stage`).
 - [x] **FR-104** integration branch, per-task worktree, own-branch-point diff (ADR-14 fully wired).
 - [ ] ⚠️ **FR-105** fix loops — QA loop ✅, review findings now fold into it ✅; loop-count defaults drift from spec (2 vs 3).
-- [ ] ⚠️ **FR-106** deterministic absolute/advisory gate — classification ✅ and load-bearing (SC-5 fix); coverage, traceability, and the security absolute-floor check unbuilt.
+- [ ] ⚠️ **FR-106** deterministic absolute/advisory gate — classification ✅ and load-bearing; security absolute-floor check now wired ✅ (`security_no_critical`); coverage and traceability still unbuilt (need the Analyst stage).
 
 ### Agents (FR-200)
 - [x] **FR-201** versioned `config/agents.yaml` registry (role/kind/model). **(new)**
@@ -118,7 +118,7 @@
 - [ ] — **SC-2** ≤15 min operator time — not measurable.
 - [ ] — **SC-3** fix-loop success ≥70% — mechanism exists; no aggregate metric captured.
 - [ ] — **SC-4** repeat-clarification <10% by run 10 — needs reflect wiring (FR-404) + runs.
-- [ ] ⚠️ **SC-5** zero deploys past a failed **absolute** check — empty/vacuous-task bypass fixed and absolute failure is terminal; **but** the `security_no_critical` floor is declared and never emitted, so the security half of the invariant does not yet bite.
+- [x] **SC-5** zero deploys past a failed **absolute** check — empty/vacuous-task bypass fixed, absolute failure is terminal, and the `security_no_critical` floor is now emitted by the `security_scan` activity and wired as an absolute merge-gate check (`feature.py:807,818`). `tests/test_security_floor.py` asserts a critical finding blocks deploy.
 - [ ] — **SC-6** soft-gate override <5% — mechanism exists; not measurable without runs + reflect.
 
 ---
@@ -158,14 +158,14 @@
 
 - [ ] ⚠️ Layered `src/factory/` tree — code still lives in the flattened `src/sdlc/` skeleton; §14 tree is aspirational (documented "P1 hardening", not silent drift).
 - [ ] `prompts/` as versioned assets — prompts are inline Python constants (`REVIEWER_PROMPT`, etc.), hashed into `PROMPT_SHAS`, but not standalone files with an eval loop.
-- [ ] `tests/fakes/fake_harness.py` — deterministic CI harness stand-in does not exist (blocks the P1 end-to-end proof).
+- [x] Deterministic CI stand-in for the e2e proof — `tests/fakes/` provides same-named `TemporalAgent` `TestModel` stubs + fake git/subprocess activities (P1 orchestration test). (A `fake_harness.py`-style adapter for real-git fidelity remains future work.)
 - [ ] Cosmetic: workflow class is `FeatureWorkflow`; docs call it `FactoryWorkflow`.
 
 ---
 
 ## 8. Recommended next increments (ranked by invariant undercut, not effort)
 
-1. **Close P1 honestly** — CI-runnable end-to-end run through `FeatureWorkflow` (fake harness + stubbed proposers) **+** wire the `security_no_critical` absolute check so SC-5 bites. Spec: `docs/superpowers/specs/2026-07-15-p1-consolidation-e2e-and-security-floor-design.md`.
+1. ~~**Close P1 honestly** — CI-runnable end-to-end run through `FeatureWorkflow` + wire the `security_no_critical` absolute check.~~ **Done** on `feat/p1-consolidation` (`3cfbe62`…`41c9185`); plan `docs/superpowers/plans/2026-07-15-p1-consolidation.md`.
 2. **Analyze/Analyst stage** — unlocks coverage + criterion→test traceability advisory checks (FR-106).
 3. **retro/reflect wiring** (FR-404) — starts accumulating the SC-4/SC-6 calibration signal.
 4. **Harness containment** beyond env allowlist — `pre_tool` hook + egress (FR-703/NFR-5).
