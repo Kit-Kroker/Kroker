@@ -32,3 +32,21 @@ def test_worker_module_imports_run_lint():
     from sdlc import worker
     src = __import__("inspect").getsource(worker)
     assert "run_lint" in src, "run_lint missing from worker registration"
+
+
+def test_worker_module_registers_reflect_workflow():
+    # FR-404's original bug was a registered activity that nothing ever
+    # called. reflect is only reachable if ReflectWorkflow is registered too.
+    from sdlc import worker
+    src = __import__("inspect").getsource(worker)
+    assert "ReflectWorkflow" in src, "ReflectWorkflow missing from worker"
+
+
+def test_reflect_workflow_is_reachable_from_the_reflect_activity():
+    # the wrapper must actually call the activity — not just exist
+    import inspect
+
+    from sdlc.workflows import reflect as mod
+    src = inspect.getsource(mod)
+    assert "execute_activity" in src
+    assert "reflect" in src

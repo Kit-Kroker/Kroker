@@ -42,6 +42,7 @@ from .memory.activities import (
     capture_watermark, recall_snapshot, reflect, retain,
 )
 from .workflows.feature import FeatureWorkflow
+from .workflows.reflect import ReflectWorkflow
 
 TASK_QUEUE = "ai-sdlc"
 
@@ -62,7 +63,7 @@ async def main() -> None:
     worker = Worker(
         client,
         task_queue=TASK_QUEUE,
-        workflows=[FeatureWorkflow, BenchmarkWorkflow],
+        workflows=[FeatureWorkflow, BenchmarkWorkflow, ReflectWorkflow],
         activities=[
             create_worktree, setup_integration_branch, merge_into_integration,
             run_coding_task, run_lint, run_test_suite, security_scan,
