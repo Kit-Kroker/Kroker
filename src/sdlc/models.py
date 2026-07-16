@@ -378,6 +378,49 @@ class MemoryConfig(BaseModel):
     watermark: str | None = None
 
 
+KNOWN_SCHEDULE_WORKFLOWS = {"ReflectWorkflow"}
+
+
+class ScheduleAction(BaseModel):
+    """The start-workflow action of a schedule asset. Temporal Schedules can
+    only start workflows, never activities — hence ReflectWorkflow."""
+    workflow: str
+    banks: list[str] = Field(min_length=1)
+    backend: Literal["fake", "hindsight"] = "fake"
+    base_url: str = "http://localhost:8088"
+
+    @field_validator("workflow")
+    @classmethod
+    def _known_workflow(cls, v: str) -> str:
+        if v not in KNOWN_SCHEDULE_WORKFLOWS:
+            raise ValueError(
+                f"unknown workflow {v!r}; known: "
+                f"{sorted(KNOWN_SCHEDULE_WORKFLOWS)}")
+        return v
+
+
+class ScheduleSpecAsset(BaseModel):
+    cron: str
+    timezone: str = "UTC"
+
+    @field_validator("cron")
+    @classmethod
+    def _cron_shape(cls, v: str) -> str:
+        if len(v.split()) != 5:
+            raise ValueError(
+                f"cron must have 5 whitespace-separated fields, got "
+                f"{len(v.split())}: {v!r}")
+        return v
+
+
+class ScheduleAsset(BaseModel):
+    """One schedules/<id>.yaml. `id` comes from the filename, not the body —
+    the filename is the API."""
+    id: str
+    spec: ScheduleSpecAsset
+    action: ScheduleAction
+
+
 class PipelineConfig(BaseModel):
     execution_mode: ExecutionMode = ExecutionMode.SERIAL
     max_session_resumes: int = 3            # FR-802: past this, fresh session
