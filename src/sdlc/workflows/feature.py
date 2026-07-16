@@ -46,10 +46,10 @@ with workflow.unsafe.imports_passed_through():
         recall_snapshot, retain,
     )
     from ..models import (
-        ArchitectureSpec, ClarifiedRequirements, DevTask, ExecutionMode,
-        GateConfig, GateDecision, GateOutcome, GatePolicy, HandoffSummary,
-        IdeaBrief, ImplementationPlan, MemoryKind, MergeVerdict,
-        PipelineConfig, RecallSnapshot, RetainItem, RoleConfig,
+        AnalysisReport, ArchitectureSpec, ClarifiedRequirements, DevTask,
+        ExecutionMode, GateConfig, GateDecision, GateOutcome, GatePolicy,
+        HandoffSummary, IdeaBrief, ImplementationPlan, MemoryKind,
+        MergeVerdict, PipelineConfig, RecallSnapshot, RetainItem, RoleConfig,
         SecurityReport, TaskResult, gate_key,
     )
 
@@ -98,6 +98,23 @@ def _merge_evidence_all_green(results: list) -> bool:
     `all([])` pass. The merge absolute check must see real green evidence."""
     return bool(results) and all(
         r.qa is not None and r.qa.tests_passed for r in results)
+
+
+def untraced_criteria(authoritative: list[tuple[str, str]],
+                      report: "AnalysisReport") -> list[str]:
+    """FR-106 enforcement (workflow-side, NOT the LLM's verdict).
+
+    A criterion is traced iff the Analyst's report contains a CriterionTrace
+    for that exact (task_id, criterion) with a non-empty `tests` list. Any
+    authoritative criterion the report omits OR maps to zero tests is untraced.
+    Enforced against the plan's authoritative set so an Analyst cannot hide a
+    gap by forgetting to list a criterion. Returns "task_id: criterion" labels
+    in authoritative order."""
+    traced = {(t.task_id, t.criterion)
+              for t in report.traceability if t.tests}
+    return [f"{task_id}: {criterion}"
+            for (task_id, criterion) in authoritative
+            if (task_id, criterion) not in traced]
 
 
 # Fallbacks only for contracts predating test_commands/lint_commands
