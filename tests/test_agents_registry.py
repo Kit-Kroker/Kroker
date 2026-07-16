@@ -81,3 +81,39 @@ def test_deep_review_harness_reviewer_must_differ_from_developer():
                             model=_PROPOSER_MODEL))
     with pytest.raises(RegistryError, match="harness"):
         validate_registry(roles)
+
+
+def _write_registry(tmp_path, body: str):
+    cfg = tmp_path / "agents.yaml"
+    cfg.write_text(body, encoding="utf-8")
+    return cfg
+
+
+def _yaml_for(roles: dict[str, RoleConfig]) -> str:
+    lines = ["version: 1", "roles:"]
+    for name, r in roles.items():
+        lines.append(f"  {name}:")
+        lines.append(f"    kind: {r.kind}")
+        if r.harness is not None:
+            lines.append(f"    harness: {r.harness.value}")
+        lines.append(f"    model: {r.model}")
+    return "\n".join(lines) + "\n"
+
+
+def test_load_registry_via_env_override(tmp_path, monkeypatch):
+    cfg = _write_registry(tmp_path, _yaml_for(_complete_registry()))
+    monkeypatch.setenv("SDLC_AGENTS_CONFIG", str(cfg))
+    roles = load_registry()
+    assert roles["reviewer"].model == _PROPOSER_MODEL
+    assert roles["reviewer"].harness is None
+
+
+def test_load_registry_raises_registry_error_not_keyerror(tmp_path, monkeypatch):
+    """An incomplete registry must fail through the validator that explains
+    it, not as a KeyError from the first caller to index it."""
+    partial = _complete_registry()
+    del partial["clarify"]
+    cfg = _write_registry(tmp_path, _yaml_for(partial))
+    monkeypatch.setenv("SDLC_AGENTS_CONFIG", str(cfg))
+    with pytest.raises(RegistryError, match="clarify"):
+        load_registry()

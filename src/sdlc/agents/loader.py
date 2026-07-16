@@ -47,14 +47,24 @@ def model_family(model: str) -> str:
     return re.split(r"[:/]", model, maxsplit=1)[0].strip().lower()
 
 
-def load_registry(path: str | os.PathLike | None = None) -> dict[str, RoleConfig]:
-    """Parse the registry YAML into {role_name: RoleConfig}. Resolution order:
-    explicit arg, then $SDLC_AGENTS_CONFIG, then the shipped default."""
+def _parse(path: str | os.PathLike | None = None) -> dict[str, RoleConfig]:
+    """Parse the registry YAML into {role_name: RoleConfig}, UNVALIDATED.
+    Resolution order: explicit arg, then $SDLC_AGENTS_CONFIG, then the shipped
+    default. Private: callers must go through load_registry, which validates."""
     resolved = Path(path or os.environ.get(AGENTS_CONFIG_ENV)
                     or DEFAULT_AGENTS_CONFIG)
     data = yaml.safe_load(resolved.read_text(encoding="utf-8")) or {}
     roles_raw = data.get("roles") or {}
     return {name: RoleConfig(**cfg) for name, cfg in roles_raw.items()}
+
+
+def load_registry(path: str | os.PathLike | None = None) -> dict[str, RoleConfig]:
+    """Parse AND validate. No unvalidated registry escapes this module, so
+    roles.py's import-time call fails with a RegistryError explaining the
+    problem rather than a KeyError from whichever role it indexed first."""
+    roles = _parse(path)
+    validate_registry(roles)
+    return roles
 
 
 def validate_registry(roles: dict[str, RoleConfig]) -> None:
