@@ -5,6 +5,9 @@
   python -m sdlc.cli answer  --id feature-add-sso --q Q1 --text "Use OIDC"
   python -m sdlc.cli approve --id feature-add-sso --gate architecture
   python -m sdlc.cli reject  --id feature-add-sso --gate merge --comment "..."
+  python -m sdlc.cli schedules list
+  python -m sdlc.cli schedules apply --dry-run
+  python -m sdlc.cli schedules apply
 """
 from __future__ import annotations
 
@@ -55,6 +58,15 @@ async def main() -> None:
     st = sub.add_parser("status")
     st.add_argument("--id", required=True)
 
+    sc = sub.add_parser("schedules")
+    scsub = sc.add_subparsers(dest="sched_cmd", required=True)
+    scsub.add_parser("list")
+    sa = scsub.add_parser("apply")
+    sa.add_argument("--dry-run", action="store_true",
+                    help="print the plan without touching Temporal")
+    sa.add_argument("--prune", action="store_true",
+                    help="delete server schedules that have no yaml asset")
+
     from .benchmarks.cli import build_parser as _bench_parser
     # delegate benchmark subcommands to the benchmarks.cli parser
     bp = sub.add_parser("benchmark")
@@ -65,7 +77,9 @@ async def main() -> None:
 
     args = p.parse_args()
     client = None
-    if args.cmd != "benchmark":
+    _local_only = (args.cmd == "benchmark"
+                   or (args.cmd == "schedules" and args.sched_cmd == "list"))
+    if not _local_only:
         client = await Client.connect(
             os.environ.get("TEMPORAL_HOST", "localhost:7233"),
             data_converter=pydantic_data_converter)
@@ -96,6 +110,30 @@ async def main() -> None:
         if args.bench_cmd == "drift":
             print("drift requires a live Temporal client; see ARCHITECTURE.md §8.")
             return
+
+    if args.cmd == "schedules":
+        from .schedules.apply import apply_changes, fetch_existing, format_plan
+        from .schedules.loader import load_schedules
+        from .schedules.reconcile import plan_changes
+
+        desired = load_schedules()
+        if args.sched_cmd == "list":
+            if not desired:
+                print("no schedule assets found")
+                return
+            for a in desired:
+                print(f"{a.id:<24} {a.spec.cron!r} {a.spec.timezone} "
+                      f"→ {a.action.workflow} banks={a.action.banks}")
+            return
+        existing = await fetch_existing(client)
+        changes = plan_changes(desired, existing)
+        if args.dry_run:
+            print(format_plan(changes))
+            return
+        for line in await apply_changes(client, desired, changes,
+                                        prune=args.prune):
+            print(line)
+        return
 
     handle = client.get_workflow_handle_for(FeatureWorkflow.run, args.id)
 
