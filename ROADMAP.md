@@ -15,6 +15,8 @@
 
 > Since the 2026-07-05 audit, the **reviewer stage (ADR-6/FR-204)** and **agent registry (FR-201)** landed (merged `b9455c3`), plus a **coding-harness adapter layer** and **harness observability logging**. Those items are now checked. The audit's `docs/feature-coverage-audit-2026-07-05.md` is superseded by this tracker.
 
+> **2026-07-16 — ADR-6 correction.** The anti-collusion check was validating `config/agents.yaml`'s `developer` role, which nothing ever ran; `cfg.roles["dev"]` (a second, hardcoded registry in `models.py`) selected the coding model. The invariant held only while two hardcoded lists agreed. `agents.yaml` is now the single registry, the check compares `reviewer` against `dev`, and `PipelineConfig.roles` is asserted at boot to mirror it. Prior `[x]` marks on ADR-6/US-5 were true of the mechanism, not of the pairing it constrained.
+
 ---
 
 ## 0. Phase summary (PRD §9)
@@ -56,13 +58,13 @@
 ### Pipeline (FR-100)
 - [ ] ⚠️ **FR-101** 14-stage durable DAG — 8/14 stages (see §1).
 - [ ] **FR-102** greenfield/brownfield classify + `CodebaseMap` + delta.
-- [x] **FR-103** memoization, per-run watermark, audit-record-always-kept (`memoization/cache.py`, `content_key`, `_cached_stage`).
+- [x] **FR-103** memoization, per-run watermark, audit-record-always-kept (`memoization/cache.py`, `content_key`, `_cached_stage`) — each stage's memo key now carries *its own* role's model (`STAGE_MODELS`), so a per-role model change invalidates exactly that stage.
 - [x] **FR-104** integration branch, per-task worktree, own-branch-point diff (ADR-14 fully wired).
 - [ ] ⚠️ **FR-105** fix loops — QA loop ✅, review findings now fold into it ✅; loop-count defaults drift from spec (2 vs 3).
 - [ ] ⚠️ **FR-106** deterministic absolute/advisory gate — classification ✅ and load-bearing; security absolute-floor check now wired ✅ (`security_no_critical`); traceability enforced ✅; coverage wired as a deterministic diff-scoped seam ✅ (real instrumentation future work).
 
 ### Agents (FR-200)
-- [x] **FR-201** versioned `config/agents.yaml` registry (role/kind/model). **(new)**
+- [x] **FR-201** versioned `config/agents.yaml` registry (role/kind/model) — governs all eleven roles (3 harness + 8 proposer); `PipelineConfig.roles` is a purity-mandated mirror asserted at boot.
 - [ ] ⚠️ **FR-202** schema-validated artifacts + re-prompt — Pydantic `output_type` gives validation; configurable `validation_retries` knob not surfaced.
 - [x] **FR-203** `claude -p` / `opencode run` adapters, harness-agnostic workflow (`harness/adapters.py`, `HARNESSES`).
 - [x] **FR-204** reviewer clean-context, model-family inequality enforced by boot-time `validate_registry`, no session resume. **(new)**
@@ -129,7 +131,7 @@
 - [x] **US-2** approve/revise architecture spec — REVISE loop with recorded identity.
 - [x] **US-3** task escalation → retry-with-guidance/quarantine — guidance reaches same harness session.
 - [x] **US-4** per-project gate config (hard/soft + threshold) — `GateConfig`, no code change.
-- [x] **US-5** dev/reviewer different model family; registry rejects same-family — enforced at boot. **(new)**
+- [x] **US-5** dev/reviewer different model family; registry rejects same-family — enforced at boot, against `dev` (the role that actually codes) since `2026-07-16-registry-drives-every-role`.
 - [ ] **US-6** stakeholder one-screen fleet view — no dashboard backend.
 - [ ] **US-7** MCP conversational gate approval — no MCP server.
 
@@ -142,7 +144,7 @@
 - [ ] **ADR-3** `CodeArtifact` union (files|diff_ref) — model doesn't exist; diff handling ad hoc.
 - [x] **ADR-4** Gates as policy-driven durable signal waits (revision loop included)
 - [x] **ADR-5** Memoization + watermark; auditability/memoization split
-- [x] **ADR-6** Anti-collusion review (model-family inequality, clean-context reviewer) **(new)**
+- [x] **ADR-6** Anti-collusion review (model-family inequality, clean-context reviewer) — *the boot check validated `agents.yaml`'s `developer` entry, which nothing ran; `cfg.roles["dev"]` did the coding. Re-aimed at `dev` and the two registries mirror-checked at boot (`2026-07-16-registry-drives-every-role`).*
 - [ ] **ADR-7** Repairs execute through the factory — maintenance loop absent.
 - [ ] ⚠️ **ADR-8** Interfaces as stateless shells — true for CLI; dashboard backend absent.
 - [ ] **ADR-9** Two worker pools by capability — single queue.
@@ -171,7 +173,7 @@
 4. **Harness containment** beyond env allowlist — `pre_tool` hook + egress (FR-703/NFR-5). Tasks: **E-15…E-18** (§9.4) — note the hook and the gate are one mechanism, not two.
 5. **Operability** — dashboard FastAPI backend + MCP + cross-run inbox (FR-305/601/602). Tasks: **E-6…E-11** (§9.2) — these four items are one contract plus thin adapters, so E-6/E-7 land before any surface.
 6. **Post-P1 roadmap** — MaintenanceWorkflow/DAPER (**E-14**), two worker pools, run budgets (**E-19**), observability export (**E-22, E-23**), brownfield mode, claim-check.
-7. **Repo hardening via agents-as-folders** — closes §7's prompts-as-assets drift and makes prompt edits invalidate memo cache correctly. Tasks: **E-1…E-4** (§9.1). Ranked low by invariant undercut, but it is the cheapest self-contained item on this list.
+7. **Repo hardening via agents-as-folders** — closes §7's prompts-as-assets drift. Tasks: **E-1, E-2, E-4** (§9.1). *Re-ranked down*: the memoization payoff that justified it was already banked (see §9.1), and the ADR-6 hole it sat next to is closed. Cheapest self-contained item on this list, but now purely reorganisation.
 
 ---
 
@@ -185,11 +187,23 @@ Eve's thesis is *"the filesystem is the authoring interface"*: an agent is a dir
 
 ### 9.1 Agents-as-folders → §7 "prompts as versioned assets", FR-201, FR-103
 
-Today a role's definition is split: `config/agents.yaml` carries `kind`/`model`/`harness`, while prompts are inline Python constants (`CLARIFY_PROMPT`, `REVIEWER_PROMPT`, …) hashed into `PROMPT_SHAS`. §7 already records this as known drift. Consolidating into `agents/<role>/` is more than reorganisation because of **memoization**: prompt files become genuinely content-addressed inputs, so editing one instruction invalidates exactly the affected stage's cache and nothing else.
+Today a role's definition is split: `config/agents.yaml` carries `kind`/`model`/`harness`,
+while prompts are inline Python constants hashed into `PROMPT_SHAS`. §7 records this as known
+drift.
 
-- [ ] **E-1** `agents/<role>/` directory loader — `load_registry()` walks a directory (`agent.yaml` + `instructions.md`) instead of parsing one file. `validate_registry()`'s ADR-6 family-inequality check must keep biting at boot, unchanged in behaviour. *Migration must be a strict refactor: same `RoleConfig`, same boot failure on a same-family pairing.*
-- [ ] **E-2** Move inline prompt constants out of `agents/roles.py` into `agents/<role>/instructions.md`; `PROMPT_SHAS` derives from file content rather than a Python literal.
-- [ ] **E-3** Wire prompt-file content into `content_key` (FR-103) so a prompt edit invalidates that stage's memo and no other. *This is the payoff item — E-1/E-2 without E-3 is filing, not capability.*
+**The memoization argument for consolidating has been withdrawn.** E-3 was written on the
+theory that prompt files would *become* content-addressed memo inputs. They already are:
+`content_key` takes a `prompt_sha` and `PROMPT_SHAS` hashes the prompt text, so editing a
+prompt already invalidates exactly its stage. Moving that text into `instructions.md` hashes
+the same bytes. E-1/E-2 remain justified by §7's prompts-as-assets drift and by E-4's eval
+loop — but they are filing, which is what E-3's own note warned against.
+
+The real gap E-3 pointed at was the *model*, not the prompt, and it turned out to sit on top
+of an ADR-6 hole. Closed by `docs/superpowers/specs/2026-07-16-registry-drives-every-role-design.md`.
+
+- [ ] **E-1** `agents/<role>/` directory loader — `load_registry()` walks a directory (`agent.yaml` + `instructions.md`) instead of parsing one file. *Migration must be a strict refactor: same `RoleConfig`, same boot failure on a same-family pairing, same mirror-check against `PipelineConfig.roles`.* **Re-ranked down**: with the memoization payoff already banked, this is reorganisation.
+- [ ] **E-2** Move inline prompt constants out of `agents/roles.py` into `agents/<role>/instructions.md`; `PROMPT_SHAS` derives from file content rather than a Python literal. Blocked on E-1.
+- [x] **E-3** ~~Wire prompt-file content into `content_key`~~ — **the prompt half was already wired before the item was written** (`content_key(prompt_sha=...)` + `PROMPT_SHAS`). The *model* half was the real gap: every stage passed one hardcoded `MODEL` constant as `content_key`'s `model_id`, so per-role models would have served stale-model cache hits. Closed together with the ADR-6 hole (§9.1 preamble); `STAGE_MODELS` now resolves each stage's real model.
 - [ ] **E-4** Prompt eval loop over the new `agents/` assets — closes §7's "versioned assets **with an eval loop**" clause. Blocked on E-2.
 - [ ] **E-5** *(speculative — do not schedule)* Factory takes its own `agents/` folders as brownfield input to itself (ADR-7's endpoint). Recorded because it's a pleasing closure of ADR-7, flagged because that's exactly why it deserves suspicion. Needs E-1 and brownfield mode (FR-102) first.
 
@@ -212,6 +226,7 @@ FR-404 records that `reflect()` exists and is registered but is **never called**
 - [x] **E-13** `schedules/nightly-reflect.yaml` → `ReflectWorkflow` → the existing `reflect()` activity, **project banks only** (FR-404, partial). *Corrected from "invoking the existing `reflect()` activity": Temporal Schedules start workflows, not activities, hence the wrapper. Corrected from "project + org scope": see E-25.*
 - [ ] **E-14** DAPER maintenance timer + nudge as a schedule asset (FR-501). Blocked on MaintenanceWorkflow existing at all.
 - [ ] **E-25** Nothing retains to `org_bank` — `MemoryConfig` defines it (`models.py:376`) but every `_retain` call site in `feature.py` passes `project_bank`. Cross-project consolidation (`reflect(org)`, SDLC-spec §279) therefore has no writers, and the nightly schedule deliberately omits it. **This, not scheduling, is the remaining blocker on FR-404's org half.** Needs a decision on what belongs in an org bank — likely **(new scope)**.
+- [ ] **E-26** Make `cfg.roles` genuinely per-project (US-4) without reintroducing drift. `PipelineConfig.roles` is a hardcoded mirror of `agents.yaml`'s harness roles because `PipelineConfig()` is constructed *inside* the workflow (`feature.py:602`), so its default cannot read the file without breaking sandbox purity. The boot mirror-check makes drift fail closed, but it also means a per-project override must resolve at the boundary (`cli.py`, `benchmarks/workflow.py`) and satisfy ADR-6 *per run*, not just at boot. **Nothing populates `cfg.roles` today**, which is the only reason the mirror can be a static assertion.
 
 ### 9.4 `pre_tool` unifies containment with gates → FR-703, NFR-5, FR-301
 
@@ -243,7 +258,7 @@ Independent reviews of eve converge on observability as its weak point: silent d
 Not a commitment, and deliberately not "by section":
 
 1. **E-12, E-13** — smallest, and the only items that start the SC-4/SC-6 signal (§8 item 3).
-2. **E-1 → E-2 → E-3** — self-contained, closes §7 drift, and E-3 makes prompt edits correctly invalidate cache.
+2. ~~**E-1 → E-2 → E-3**~~ — superseded. E-3's payoff was already wired; its model half plus an ADR-6 hole (the boot check validated a role that never ran) closed by `2026-07-16-registry-drives-every-role`. E-1/E-2 remain as reorganisation, no longer ranked here.
 3. **E-6 → E-7 → E-8** — contract, then CLI refit as proof, then the first new capability.
 4. **E-15 → E-17** — the hook seam, then gate reuse.
 5. **E-22** — before the surfaces in E-9/E-10/E-11 multiply the ways delivery can fail silently.
