@@ -167,7 +167,84 @@
 
 1. ~~**Close P1 honestly** — CI-runnable end-to-end run through `FeatureWorkflow` + wire the `security_no_critical` absolute check.~~ **Done** on `feat/p1-consolidation` (`3cfbe62`…`41c9185`); plan `docs/superpowers/plans/2026-07-15-p1-consolidation.md`.
 2. ~~**Analyze/Analyst stage** — unlocks coverage + criterion→test traceability advisory checks (FR-106).~~ **Done** on `feat/analyst-stage`; plan `docs/superpowers/plans/2026-07-16-analyst-stage.md`, spec `docs/superpowers/specs/2026-07-16-analyst-stage-traceability-coverage-design.md`.
-3. **retro/reflect wiring** (FR-404) — starts accumulating the SC-4/SC-6 calibration signal.
-4. **Harness containment** beyond env allowlist — `pre_tool` hook + egress (FR-703/NFR-5).
-5. **Operability** — dashboard FastAPI backend + MCP + cross-run inbox (FR-305/601/602).
-6. **Post-P1 roadmap** — MaintenanceWorkflow/DAPER, two worker pools, run budgets, observability export, brownfield mode, claim-check.
+3. **retro/reflect wiring** (FR-404) — starts accumulating the SC-4/SC-6 calibration signal. Tasks: **E-12, E-13** (§9.3).
+4. **Harness containment** beyond env allowlist — `pre_tool` hook + egress (FR-703/NFR-5). Tasks: **E-15…E-18** (§9.4) — note the hook and the gate are one mechanism, not two.
+5. **Operability** — dashboard FastAPI backend + MCP + cross-run inbox (FR-305/601/602). Tasks: **E-6…E-11** (§9.2) — these four items are one contract plus thin adapters, so E-6/E-7 land before any surface.
+6. **Post-P1 roadmap** — MaintenanceWorkflow/DAPER (**E-14**), two worker pools, run budgets (**E-19**), observability export (**E-22, E-23**), brownfield mode, claim-check.
+7. **Repo hardening via agents-as-folders** — closes §7's prompts-as-assets drift and makes prompt edits invalidate memo cache correctly. Tasks: **E-1…E-4** (§9.1). Ranked low by invariant undercut, but it is the cheapest self-contained item on this list.
+
+---
+
+## 9. Filesystem-first work items (`E-`) — design input from `vercel/eve`
+
+**Tracked work, not an idea list.** The `[x]`/`[ ]` legend applies here as it does in §§1–7, with one difference: §§1–7 record what *is*, while §9 records what we've *decided to build*. Nothing here is started, so every item is `[ ]` until code says otherwise.
+
+**Scope discipline:** `PRD.md` / `ARCHITECTURE.md` / `SDLC-spec.md` remain the source of truth for *scope*. [`vercel/eve`](https://github.com/vercel/eve) and the [Vercel agent stack](https://vercel.com/blog/agent-stack) supply an *approach*. Every `E-` task therefore anchors to an FR/NFR already open in this tracker — an `E-` task is how we satisfy that requirement, not a new requirement. `E-` items that would add genuine scope are marked **(new scope)** and need a PRD change before they're real.
+
+Eve's thesis is *"the filesystem is the authoring interface"*: an agent is a directory (`instructions.md`, `agent.ts`, `tools/`, `skills/`, `channels/`, `schedules/`), the framework reads and validates that directory, and the filename is the API — nothing registers because the directory **is** the registry. The reported payoff is that an agent change becomes a reviewable file diff, and one agent runs across terminal / HTTP / Slack without rewriting.
+
+### 9.1 Agents-as-folders → §7 "prompts as versioned assets", FR-201, FR-103
+
+Today a role's definition is split: `config/agents.yaml` carries `kind`/`model`/`harness`, while prompts are inline Python constants (`CLARIFY_PROMPT`, `REVIEWER_PROMPT`, …) hashed into `PROMPT_SHAS`. §7 already records this as known drift. Consolidating into `agents/<role>/` is more than reorganisation because of **memoization**: prompt files become genuinely content-addressed inputs, so editing one instruction invalidates exactly the affected stage's cache and nothing else.
+
+- [ ] **E-1** `agents/<role>/` directory loader — `load_registry()` walks a directory (`agent.yaml` + `instructions.md`) instead of parsing one file. `validate_registry()`'s ADR-6 family-inequality check must keep biting at boot, unchanged in behaviour. *Migration must be a strict refactor: same `RoleConfig`, same boot failure on a same-family pairing.*
+- [ ] **E-2** Move inline prompt constants out of `agents/roles.py` into `agents/<role>/instructions.md`; `PROMPT_SHAS` derives from file content rather than a Python literal.
+- [ ] **E-3** Wire prompt-file content into `content_key` (FR-103) so a prompt edit invalidates that stage's memo and no other. *This is the payoff item — E-1/E-2 without E-3 is filing, not capability.*
+- [ ] **E-4** Prompt eval loop over the new `agents/` assets — closes §7's "versioned assets **with an eval loop**" clause. Blocked on E-2.
+- [ ] **E-5** *(speculative — do not schedule)* Factory takes its own `agents/` folders as brownfield input to itself (ADR-7's endpoint). Recorded because it's a pleasing closure of ADR-7, flagged because that's exactly why it deserves suspicion. Needs E-1 and brownfield mode (FR-102) first.
+
+### 9.2 Channels as one abstraction → FR-303, FR-305, FR-601, FR-602, US-1, US-7
+
+We track notifications, cross-run inbox, dashboard backend, and MCP server as four independent unbuilt items. Eve treats them as one primitive wearing four hats: *render the pending decision, deliver it, translate the reply into a signal.* We already own the hard half — FR-302 (idempotent signals, `(gate, round)` identity, first-decision-wins) makes two channels racing the same gate safe by construction.
+
+- [ ] **E-6** Define the channel contract over the FR-302 signal substrate: render pending decision → deliver → translate reply to signal. Contract only; no new surfaces.
+- [ ] **E-7** Refit the existing CLI (`answer`/`approve`/`reject`) onto the contract. *Ordered first deliberately: it validates the contract against a known-good surface before any new surface depends on it. If the CLI doesn't fit cleanly, the contract is wrong.*
+- [ ] **E-8** Cross-run inbox as a query over pending gates (FR-305, FR-603's missing verb) — the first capability the contract buys that we don't already have.
+- [ ] **E-9** Notify activity + reminder timer + fallback approver (FR-303). Today: timeout→auto-reject only.
+- [ ] **E-10** FastAPI dashboard backend as a channel adapter, replacing the Vue frontend's mock API (FR-601, US-6, ADR-8).
+- [ ] **E-11** MCP server as a channel adapter — list/detail/inbox/answer/decide/start (FR-602, US-7).
+
+### 9.3 Schedules as files → FR-404, FR-501
+
+FR-404 records that `reflect()` exists and is registered but is **never called**, with no Temporal `Schedule`. We have Schedules natively, so this is small work that starts the SC-4/SC-6 calibration signal accruing — which nothing else currently does. Same mechanism later carries the DAPER timer.
+
+- [ ] **E-12** `schedules/*.yaml` assets registered as Temporal Schedules at worker boot.
+- [ ] **E-13** `schedules/nightly-reflect.yaml` invoking the existing `reflect()` activity, project + org scope (FR-404). *Unblocks §8 item 3.*
+- [ ] **E-14** DAPER maintenance timer + nudge as a schedule asset (FR-501). Blocked on MaintenanceWorkflow existing at all.
+
+### 9.4 `pre_tool` unifies containment with gates → FR-703, NFR-5, FR-301
+
+Eve marks individual tools `needsApproval`. FR-703 wants a `pre_tool` hook and has none. These are the same hook — a denial is a policy decision, an approval request is a gate. Building `pre_tool` as an escalation into the *existing* gate machinery gets both, instead of growing containment and human-in-the-loop as two separate subsystems.
+
+- [ ] **E-15** `pre_tool` hook seam in `harness/adapters.py`, called for every harness tool invocation.
+- [ ] **E-16** Policy denial path — deny by rule, no human involved (FR-703).
+- [ ] **E-17** Approval escalation: a `needsApproval`-class tool call raises a gate through existing FR-301/FR-302 machinery rather than a parallel mechanism.
+- [ ] **E-18** Egress policy (FR-703/NFR-5). Currently env allowlist only.
+
+### 9.5 Sandbox / Connect / Gateway → NFR-5, FR-701, FR-703
+
+Reference designs for gaps already named in §2/§3, not new scope.
+
+- [ ] **E-19** Single model egress point yielding run-level token/cost counters (FR-701). Today cost bookkeeping "exists in benchmarks only"; one egress point is how to get run counters without touching every call site. *Prerequisite for the run-budget escalation half of FR-701.*
+- [ ] **E-20** Short-lived, task-scoped credential injection with an audit trail binding each action to a user (Connect's model) — the "scoped-cred injection absent" gap in NFR-5.
+- [ ] **E-21** OS-user / container isolation tier (Sandbox's model) — the missing tier in FR-703.
+
+### 9.6 Observability — the lesson eve teaches by failing → FR-704, NFR-4
+
+Independent reviews of eve converge on observability as its weak point: silent delivery failures with no diagnostic ("no 404, no failed-delivery banner — silence"), debugging by manual diff, dependency drift breaking tool loops mid-execution. That is precisely our unimplemented FR-704. This is outside evidence that the missing piece is what makes such a system painful in production — an argument for ranking FR-704 above "nice to have".
+
+- [ ] **E-22** `observability/` module emitting `events.jsonl` (FR-704, NFR-4).
+- [ ] **E-23** `report.html` export from the event stream (FR-704).
+- [ ] **E-24** Pin harness/adapter versions and assert them at boot — eve's dependency-drift failure mode applies directly to `HARNESSES` (FR-203).
+
+### 9.7 Suggested ordering
+
+Not a commitment, and deliberately not "by section":
+
+1. **E-12, E-13** — smallest, and the only items that start the SC-4/SC-6 signal (§8 item 3).
+2. **E-1 → E-2 → E-3** — self-contained, closes §7 drift, and E-3 makes prompt edits correctly invalidate cache.
+3. **E-6 → E-7 → E-8** — contract, then CLI refit as proof, then the first new capability.
+4. **E-15 → E-17** — the hook seam, then gate reuse.
+5. **E-22** — before the surfaces in E-9/E-10/E-11 multiply the ways delivery can fail silently.
+
+E-19/E-20/E-21 and E-14 are post-P1. E-5 is not scheduled.
