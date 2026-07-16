@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-07-15 (against `src/sdlc/`, `interfaces/`, `tests/`, `config/`) |
+| Last verified | 2026-07-16 (against `src/sdlc/`, `interfaces/`, `tests/`, `config/`) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 14-stage DAG checked against actual code, not against prior audit claims |
 
@@ -43,9 +43,9 @@
 - [x] **6 · planning** — Planner + gate, with REVISE loop.
 - [x] **7 · code** — Developer, per-task, ADR-14 integration branch (`_dev_task`).
 - [x] **8 · review** — clean-context `reviewer_agent` (`t_reviewer`) run in `_dev_task`; blocking findings fold into the fix loop. **(new)**
-- [ ] **9 · analyze (Analyst)** — no `AnalysisReport`, no Analyst agent, no criterion→test traceability produced/enforced.
+- [x] **9 · analyze (Analyst)** — Analyst clean-context proposer (`t_analyst`) emits `AnalysisReport`; workflow enforces criterion→test traceability against the plan's authoritative criteria (FR-106).
 - [x] **10 · qa (+ Resolver)** — clean-context `t_qa` + bounded fix loop (folded into stage 7). *Note: default `max_fix_attempts=2`, PRD says QA loop 3 — numeric drift.*
-- [ ] ⚠️ **11 · quality_gate** — `DeterministicQualityGate` mechanism ✅; 4 checks built (`build_integration_green`, `lint_clean`, `security_no_critical` absolute; `review_severity` advisory). Absolute security floor now wired ✅; **coverage and traceability checks still unbuilt** (need the Analyst stage).
+- [ ] ⚠️ **11 · quality_gate** — `DeterministicQualityGate` mechanism ✅; 6 checks built (`build_integration_green`, `lint_clean`, `security_no_critical` absolute; `review_severity`, `traceability`, `coverage` advisory). Absolute security floor now wired ✅; traceability enforced ✅; coverage via deterministic Cobertura seam (`measured=False` ⇒ no-op until a project emits coverage + sets `coverage_threshold`).
 - [ ] ⚠️ **12 · deploy** — single hardcoded `make deploy ENV=staging`; no `DeployPlan`/`DeployReport` split, no smoke-test vs PR-merge distinction.
 - [ ] **13 · retro** — `reflect()` activity exists and is registered but **never called**; no `RunSummary`, no export.
 
@@ -59,7 +59,7 @@
 - [x] **FR-103** memoization, per-run watermark, audit-record-always-kept (`memoization/cache.py`, `content_key`, `_cached_stage`).
 - [x] **FR-104** integration branch, per-task worktree, own-branch-point diff (ADR-14 fully wired).
 - [ ] ⚠️ **FR-105** fix loops — QA loop ✅, review findings now fold into it ✅; loop-count defaults drift from spec (2 vs 3).
-- [ ] ⚠️ **FR-106** deterministic absolute/advisory gate — classification ✅ and load-bearing; security absolute-floor check now wired ✅ (`security_no_critical`); coverage and traceability still unbuilt (need the Analyst stage).
+- [ ] ⚠️ **FR-106** deterministic absolute/advisory gate — classification ✅ and load-bearing; security absolute-floor check now wired ✅ (`security_no_critical`); traceability enforced ✅; coverage wired as a deterministic diff-scoped seam ✅ (real instrumentation future work).
 
 ### Agents (FR-200)
 - [x] **FR-201** versioned `config/agents.yaml` registry (role/kind/model). **(new)**
@@ -166,7 +166,7 @@
 ## 8. Recommended next increments (ranked by invariant undercut, not effort)
 
 1. ~~**Close P1 honestly** — CI-runnable end-to-end run through `FeatureWorkflow` + wire the `security_no_critical` absolute check.~~ **Done** on `feat/p1-consolidation` (`3cfbe62`…`41c9185`); plan `docs/superpowers/plans/2026-07-15-p1-consolidation.md`.
-2. **Analyze/Analyst stage** — unlocks coverage + criterion→test traceability advisory checks (FR-106).
+2. ~~**Analyze/Analyst stage** — unlocks coverage + criterion→test traceability advisory checks (FR-106).~~ **Done** on `feat/analyst-stage`; plan `docs/superpowers/plans/2026-07-16-analyst-stage.md`, spec `docs/superpowers/specs/2026-07-16-analyst-stage-traceability-coverage-design.md`.
 3. **retro/reflect wiring** (FR-404) — starts accumulating the SC-4/SC-6 calibration signal.
 4. **Harness containment** beyond env allowlist — `pre_tool` hook + egress (FR-703/NFR-5).
 5. **Operability** — dashboard FastAPI backend + MCP + cross-run inbox (FR-305/601/602).
