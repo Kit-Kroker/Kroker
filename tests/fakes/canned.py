@@ -7,9 +7,9 @@ contract, and clean QA/review so the run reaches deploy.
 from __future__ import annotations
 
 from sdlc.models import (
-    ArchitectureDecision, ArchitectureSpec, ClarifiedRequirements, DevTask,
-    GateConfig, GatePolicy, IdeaBrief, ImplementationPlan, MemoryConfig,
-    MergeVerdict, OpenQuestion, PipelineConfig, ProjectMode, QAReport,
+    AnalysisReport, ArchitectureDecision, ArchitectureSpec, ClarifiedRequirements,
+    CriterionTrace, DevTask, GateConfig, GatePolicy, IdeaBrief, ImplementationPlan,
+    MemoryConfig, MergeVerdict, OpenQuestion, PipelineConfig, ProjectMode, QAReport,
     ReviewReport, ValidationContract,
 )
 
@@ -52,12 +52,19 @@ QA_OK = QAReport(tests_passed=True, coverage_pct=100.0)
 REVIEW_OK = ReviewReport(approve=True, confidence=0.95)
 MERGE_OK = MergeVerdict(approve=True, confidence=0.95, rationale="clean")
 
+ANALYSIS_OK = AnalysisReport(
+    traceability=[CriterionTrace(
+        task_id="t1", criterion="GET /hello returns 200",
+        tests=["test_hello_returns_200"])],
+    summary="all criteria traced", confidence=0.95)
+
 AGENT_SPECS = [
     ("clarify_agent", ClarifiedRequirements, CLARIFIED),
     ("architect_agent", ArchitectureSpec, ARCH),
     ("planner_agent", ImplementationPlan, PLAN),
     ("qa_analyst_agent", QAReport, QA_OK),
     ("reviewer_agent", ReviewReport, REVIEW_OK),
+    ("analyst_agent", AnalysisReport, ANALYSIS_OK),
     ("merge_verdict_agent", MergeVerdict, MERGE_OK),
 ]
 

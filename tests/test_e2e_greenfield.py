@@ -57,6 +57,18 @@ async def _drive(handle):
                          decided_by="human"))
 
 
+async def _drive_with_merge(handle):
+    await _wait_for_status(handle, "awaiting:clarify")
+    for qid in QUESTION_IDS:
+        await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
+    for gate in ("architecture", "plan", "merge", "deploy"):
+        await _wait_for_status(handle, f"awaiting:{gate}")
+        await handle.signal(
+            FeatureWorkflow.submit_gate_decision,
+            GateDecision(gate=gate, round=1, outcome=GateOutcome.APPROVE,
+                         decided_by="human"))
+
+
 @pytest.mark.asyncio
 async def test_greenfield_run_ships_end_to_end():
     activities = [evaluate_gate, *GIT_FAKES,
@@ -87,4 +99,32 @@ async def test_greenfield_run_ships_end_to_end():
                 result = await handle.result()
                 await driver
 
+    assert result.startswith("deployed:"), result
+
+
+@pytest.mark.asyncio
+async def test_untraced_criterion_is_advisory_not_blocking(monkeypatch):
+    """An Analyst that maps nothing still ships end-to-end under HARD merge:
+    traceability is ADVISORY, so the human merge gate (auto-approved here via
+    the driver) waves it through — it never becomes a terminal absolute block."""
+    from sdlc.models import AnalysisReport
+    from tests.fakes import canned
+
+    empty = ("analyst_agent", AnalysisReport, AnalysisReport(summary="none"))
+    specs = [s for s in AGENT_SPECS if s[0] != "analyst_agent"] + [empty]
+    activities = [evaluate_gate, *GIT_FAKES, *fake_agent_activities(specs)]
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        with env.auto_time_skipping_disabled():
+            async with Worker(
+                    env.client, task_queue=TASK_QUEUE,
+                    workflows=[FeatureWorkflow], activities=activities,
+                    plugins=[PydanticAIPlugin()]):
+                handle = await env.client.start_workflow(
+                    FeatureWorkflow.run,
+                    args=[greenfield_idea(), e2e_config()],
+                    id=f"e2e-untraced-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                driver = asyncio.create_task(_drive_with_merge(handle))
+                result = await handle.result()
+                await driver
     assert result.startswith("deployed:"), result
