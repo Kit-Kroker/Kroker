@@ -239,6 +239,40 @@ class ReviewReport(BaseModel):
         return [f for f in self.findings if f.severity in ("critical", "high")]
 
 
+class CriterionTrace(BaseModel):
+    """One acceptance criterion and the test(s) the Analyst says verify it."""
+    task_id: str
+    criterion: str
+    tests: list[str] = Field(default_factory=list)
+
+
+class AnalysisReport(BaseModel):
+    """Clean-context Analyst output (stage 9 / FR-106). Emitted from
+    orchestrator-assembled inputs only — the authoritative acceptance-criteria
+    list + materialized integration diff + aggregate test output. The Analyst
+    holds no tools, no repo, no worker session.
+
+    The Analyst PROPOSES the criterion->test mapping; the workflow ENFORCES
+    completeness against the plan's criteria. This model never carries a
+    pass/fail verdict. `findings` ride along for memory/observability and are
+    NOT wired as a blocking gate check.
+    """
+    traceability: list[CriterionTrace] = Field(default_factory=list)
+    findings: list[ReviewFinding] = Field(default_factory=list)
+    summary: str = ""
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class CoverageReport(BaseModel):
+    """Diff-scoped coverage evidence for the advisory `coverage` check.
+    `measured=False` means no coverage artifact was emitted by the run's test
+    commands — the seam could not measure, so the check passes rather than
+    forcing a spurious human override every run."""
+    measured: bool
+    diff_pct: float | None = None       # 0..100 over changed files
+    detail: str = ""
+
+
 class GateDecision(BaseModel):
     gate: str                               # "architecture", "merge", ...
     round: int = 1                          # revision round (Finding #6)
@@ -387,3 +421,7 @@ class PipelineConfig(BaseModel):
     review_enabled: bool = True             # FR-204: run the clean-context
                                             # reviewer per task; disable to trade
                                             # the anti-collusion check for cost
+    coverage_threshold: float = Field(default=0.0, ge=0.0, le=100.0)
+    # FR-106: diff-scoped coverage (0..100) the advisory `coverage` check must
+    # clear. Default 0.0 = effectively off until a project opts in AND its test
+    # command emits a coverage artifact (see measure_coverage).
