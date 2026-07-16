@@ -27,8 +27,9 @@ from temporalio.worker import Worker
 
 from .activities import (
     create_worktree, deploy, evaluate_gate, get_task_diff,
-    merge_into_integration, open_pull_request, run_coding_task,
-    run_lint, run_test_suite, security_scan, setup_integration_branch,
+    measure_coverage, merge_into_integration, open_pull_request,
+    run_coding_task, run_lint, run_test_suite, security_scan,
+    setup_integration_branch,
 )
 from .agents.loader import load_registry, validate_registry
 from .agents.roles import ALL_TEMPORAL_AGENTS
@@ -65,6 +66,7 @@ async def main() -> None:
         activities=[
             create_worktree, setup_integration_branch, merge_into_integration,
             run_coding_task, run_lint, run_test_suite, security_scan,
+            measure_coverage,
             open_pull_request, deploy,
             evaluate_gate, get_task_diff, record_benchmark, judge_artifact,
             load_case_assets, finalize_benchmark_report,

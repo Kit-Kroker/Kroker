@@ -17,3 +17,15 @@ def test_analyze_prompt_is_hashed():
 
 def test_analyst_in_all_temporal_agents():
     assert t_analyst in ALL_TEMPORAL_AGENTS
+
+
+def test_measure_coverage_registered_on_worker():
+    # The worker's activity list is assembled in main(); assert the callable
+    # is imported into the worker module and included alongside security_scan.
+    import inspect
+
+    import sdlc.worker as w
+
+    assert hasattr(w, "measure_coverage")
+    src = inspect.getsource(w.main)
+    assert "measure_coverage" in src
