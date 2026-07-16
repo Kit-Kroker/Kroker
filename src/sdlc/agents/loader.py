@@ -96,3 +96,28 @@ def validate_registry(roles: dict[str, RoleConfig]) -> None:
         raise RegistryError(
             "deep-review harness reviewer must use a different harness than "
             "the developer")
+    _validate_pipeline_mirror(roles)
+
+
+def _validate_pipeline_mirror(roles: dict[str, RoleConfig]) -> None:
+    """agents.yaml is authoritative; PipelineConfig.roles is a purity-mandated
+    mirror of its harness roles (see the note on PipelineConfig.roles). Drift
+    between them is what let ADR-6 validate a role that never ran, so it fails
+    the worker at boot."""
+    from ..models import PipelineConfig      # local: avoid an import cycle at
+                                             # module scope via models -> ...
+    default_roles = PipelineConfig().roles
+    if set(default_roles) != HARNESS_ROLES:
+        raise RegistryError(
+            f"PipelineConfig.roles must mirror exactly the harness roles "
+            f"{sorted(HARNESS_ROLES)}; it has {sorted(default_roles)}")
+    for name in sorted(HARNESS_ROLES):
+        reg, dflt = roles[name], default_roles[name]
+        if (reg.kind, reg.harness, reg.model) != \
+                (dflt.kind, dflt.harness, dflt.model):
+            raise RegistryError(
+                f"PipelineConfig.roles['{name}'] does not mirror agents.yaml: "
+                f"registry has (kind={reg.kind}, harness={reg.harness}, "
+                f"model={reg.model}); PipelineConfig default has "
+                f"(kind={dflt.kind}, harness={dflt.harness}, "
+                f"model={dflt.model})")

@@ -445,12 +445,16 @@ class PipelineConfig(BaseModel):
             return v
         return {k: GateConfig._coerce(gv) for k, gv in v.items()}
     benchmark: BenchmarkConfig = Field(default_factory=BenchmarkConfig)
+    # Harness-execution roles ONLY (keys match DevTask.role). This is a
+    # hardcoded MIRROR of agents.yaml's harness roles, not a second registry:
+    # PipelineConfig is constructed inside the workflow (feature.py:602), so
+    # this default cannot read the file. agents/loader.py asserts the two agree
+    # at boot. Change one, change both, or the worker won't start.
     roles: dict[str, RoleConfig] = Field(default_factory=lambda: {
         "dev": RoleConfig(harness=HarnessKind.OPENCODE,
                           model="zai-coding-plan/glm-5.2"),
         "test": RoleConfig(harness=HarnessKind.OPENCODE,
                            model="zai-coding-plan/glm-5.2"),
-        "reviewer": RoleConfig(kind="proposer", model="anthropic:glm-5.2"),
         "devops": RoleConfig(harness=HarnessKind.OPENCODE,
                              model="zai-coding-plan/glm-5.2"),
     })
