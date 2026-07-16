@@ -14,16 +14,17 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from ..activities import (
-        CodingTaskInput, DeployInput, DiffInput, IntegrationHandle,
-        IntegrationInput, LintInput, MergeInput, PROpenInput,
-        QAInput, SecurityScanInput, WorktreeInput, create_worktree, deploy,
-        evaluate_gate, get_task_diff, merge_into_integration,
-        open_pull_request, run_coding_task, run_lint, run_test_suite,
-        security_scan, setup_integration_branch,
+        CodingTaskInput, CoverageInput, DeployInput, DiffInput,
+        IntegrationHandle, IntegrationInput, LintInput, MergeInput,
+        PROpenInput, QAInput, SecurityScanInput, WorktreeInput,
+        create_worktree, deploy, evaluate_gate, get_task_diff,
+        measure_coverage, merge_into_integration, open_pull_request,
+        run_coding_task, run_lint, run_test_suite, security_scan,
+        setup_integration_branch,
     )
     from ..agents.roles import (
-        MODEL, PROMPT_SHAS, t_architect, t_clarify, t_merge_verdict,
-        t_planner, t_qa, t_reviewer,
+        MODEL, PROMPT_SHAS, t_analyst, t_architect, t_clarify,
+        t_merge_verdict, t_planner, t_qa, t_reviewer,
     )
     from ..benchmarks.judge import (
         JudgeInput, _build_judge_input, judge_artifact,
@@ -46,11 +47,12 @@ with workflow.unsafe.imports_passed_through():
         recall_snapshot, retain,
     )
     from ..models import (
-        AnalysisReport, ArchitectureSpec, ClarifiedRequirements, DevTask,
-        ExecutionMode, GateConfig, GateDecision, GateOutcome, GatePolicy,
-        HandoffSummary, IdeaBrief, ImplementationPlan, MemoryKind,
-        MergeVerdict, PipelineConfig, RecallSnapshot, RetainItem, RoleConfig,
-        SecurityReport, TaskResult, gate_key,
+        AnalysisReport, ArchitectureSpec, ClarifiedRequirements,
+        CoverageReport, DevTask, ExecutionMode, GateConfig, GateDecision,
+        GateOutcome, GatePolicy, HandoffSummary, IdeaBrief,
+        ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig,
+        RecallSnapshot, RetainItem, RoleConfig, SecurityReport, TaskResult,
+        gate_key,
     )
 
 ACT = dict(start_to_close_timeout=timedelta(minutes=10),
@@ -801,6 +803,56 @@ class FeatureWorkflow:
             if any(r.status == "quarantined" for r in done.values()):
                 return "failed:quarantined-tasks"
 
+        # 4b. ANALYZE (stage 9) — clean-context Analyst proposes the
+        # criterion->test mapping; the workflow enforces it (FR-106). Runs on
+        # the integrated whole, before the merge gate.
+        self._status = "analyzing"
+        _an_started = workflow.now()
+        integration_diff = await workflow.execute_activity(
+            get_task_diff,
+            DiffInput(worktree=self._integration_wt,
+                      branch_point=idea.base_branch),
+            **ACT)
+        authoritative: list[tuple[str, str]] = [
+            (t.id, c) for t in plan.tasks for c in t.acceptance_criteria]
+        _criteria_lines = "\n".join(f"- [{tid}] {crit}"
+                                    for tid, crit in authoritative)
+        _qa_lines = "\n".join(
+            f"- {r.task_id}: tests_passed={r.qa.tests_passed if r.qa else 'n/a'}"
+            f" failing={r.qa.failing_tests if r.qa else []}"
+            for r in done.values())
+        analysis: AnalysisReport = (await t_analyst.run(
+            "Acceptance criteria (task_id in brackets):\n" + _criteria_lines
+            + "\nAggregate test output:\n" + _qa_lines
+            + f"\nIntegration diff stat:\n{integration_diff['stat']}"
+            + f"\nIntegration diff:\n{integration_diff['patch']}")).output
+        untraced = untraced_criteria(authoritative, analysis)
+        cov: CoverageReport = await workflow.execute_activity(
+            measure_coverage,
+            CoverageInput(worktree=self._integration_wt,
+                          changed_files=integration_diff["files"]),
+            **ACT)
+        await self._record(cfg, self._stage_record(
+            cfg, stage="analyze", role="analyst",
+            started=_an_started, ended=workflow.now(),
+            quality_score=(1.0 if not untraced else 0.0),
+            judge="contract",
+            outcome=(BenchmarkOutcome.PASS if not untraced
+                     else BenchmarkOutcome.FAIL),
+            model="anthropic:glm-5.2"))
+        await self._retain(
+            cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
+            text=f"analyze: {len(authoritative)} criteria, "
+                 f"{len(untraced)} untraced. {analysis.summary}",
+            metadata={"stage": "analyze",
+                      "run_id": workflow.info().workflow_id})
+        if untraced:
+            await self._retain(
+                cfg, MemoryKind.GOTCHA, cfg.memory.project_bank,
+                text=f"untraced acceptance criteria at merge: {untraced}",
+                metadata={"stage": "analyze",
+                          "run_id": workflow.info().workflow_id})
+
         # 5. MERGE — DeterministicQualityGate first (SC-5), then the human
         # gate (which doubles as the advisory-override mechanism), then
         # MergeVerdict advisory only under SOFT policy.
@@ -841,6 +893,19 @@ class FeatureWorkflow:
                     for r in done.values()),
                 CheckClass.ADVISORY,
                 detail="clean-context reviewer blocking findings (FR-204)"),
+            build_check(
+                "traceability", not untraced, CheckClass.ADVISORY,
+                detail=(f"{len(untraced)} criterion(s) without a test: "
+                        f"{untraced[:10]}" if untraced
+                        else "every acceptance criterion traces to >=1 test")),
+            build_check(
+                "coverage",
+                (True if not cov.measured
+                 else (cov.diff_pct or 0.0) >= cfg.coverage_threshold),
+                CheckClass.ADVISORY,
+                detail=(cov.detail if not cov.measured
+                        else f"diff coverage {cov.diff_pct:.1f}% vs threshold "
+                             f"{cfg.coverage_threshold:.1f}%")),
         ]
         gate_report: GateReport = await workflow.execute_activity(
             evaluate_gate, QualityGateInput(checks=checks), **ACT)
