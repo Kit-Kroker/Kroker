@@ -15,17 +15,15 @@ from ..workflows.reflect import ReflectScheduleInput
 from .reconcile import Change, plan_changes
 
 
-# The {{ .ScheduledTime }} token is substituted by the Temporal server at each
-# schedule fire, yielding a unique workflow id per run. A fixed id would be
-# rejected on the second fire: ScheduleActionStartWorkflow exposes no reuse-policy
-# knob, and the default WorkflowIdReusePolicy (ALLOW_DUPLICATE_FAILED_ONLY)
-# forbids reuse once a run completed successfully — so nightly reflect would run
-# exactly once and then every later trigger's start would be rejected.
-_SCHEDULED_TIME_TOKEN = "{{ .ScheduledTime }}"
-
-
 def _workflow_id(sid: str) -> str:
-    return f"sched-{sid}-{_SCHEDULED_TIME_TOKEN}"
+    # A fixed id is correct here: Temporal auto-appends a per-fire scheduled-time
+    # suffix to schedule-started workflow ids, so each nightly fire gets a unique
+    # id and the default WorkflowIdReusePolicy never rejects a later fire. Verified
+    # live on Temporal Server 1.31.1 (a fixed-id control produced <id>-<time> per
+    # fire; two fires both started). The {{ .ScheduledTime }} templating token is
+    # NOT substituted by this SDK/server and would render as literal text, so it is
+    # intentionally NOT used here.
+    return f"sched-{sid}"
 
 
 def to_temporal(a: ScheduleAsset) -> Schedule:

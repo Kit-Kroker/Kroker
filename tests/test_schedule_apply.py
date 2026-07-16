@@ -61,16 +61,6 @@ def test_format_plan_of_empty_plan_says_so():
     assert "no schedules" in format_plan([]).lower()
 
 
-def test_to_temporal_uses_a_per_run_workflow_id():
-    # A recurring schedule must use a per-run workflow id, not a fixed one:
-    # the default WorkflowIdReusePolicy (ALLOW_DUPLICATE_FAILED_ONLY) rejects
-    # reuse once a run completed, so a fixed id would let nightly reflect run
-    # exactly once. The {{ .ScheduledTime }} token is substituted server-side.
-    sched = to_temporal(asset())
-    assert "{{ .ScheduledTime }}" in sched.action.id
-    assert sched.action.id.startswith("sched-nightly-reflect-")
-
-
 @pytest.mark.asyncio
 async def test_apply_changes_unknown_action_raises():
     # A typo'd action string must surface loudly, not no-op silently.
