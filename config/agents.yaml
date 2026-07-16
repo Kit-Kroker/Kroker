@@ -11,3 +11,6 @@ roles:
   reviewer:
     kind: proposer                # clean-context, no tools (ADR-6 default)
     model: anthropic:glm-5.2      # DIFFERENT family than developer
+  analyst:
+    kind: proposer                # clean-context stage-9 analyst (FR-106)
+    model: anthropic:glm-5.2
