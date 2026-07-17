@@ -66,3 +66,37 @@ def brief_digest(brief: ResearchBrief) -> str:
     pairs = sorted((f.source_url, f.claim) for f in brief.grounded_findings)
     payload = json.dumps(pairs, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode()).hexdigest()
+
+
+class GroundingViolation(Exception):
+    """Raised by verify_brief_activity when a ResearchBrief has grounded_findings
+    that cannot be verified against bytes fetched this run. The workflow (Task 8)
+    catches this and fails the research stage closed — it is NOT a ModelRetry,
+    because TemporalAgent silently drops @agent.output_validator (Task 1 finding
+    A); a hard stage failure is the authorized post-run fallback semantics."""
+
+    def __init__(self, violations: list[Violation]):
+        self.violations = violations
+        lines = "\n".join(
+            f"- {v.kind}: {v.source_url}: {v.quote!r}" for v in violations)
+        super().__init__(
+            "Grounded findings are not verified against bytes fetched this run. "
+            "The research stage fails closed. Fix the quote to a verbatim span "
+            "from a page fetched this run, or move the claim to "
+            "inferred_findings. Violations:\n" + lines)
+
+
+async def verify_brief_activity(brief: ResearchBrief, run_id: str) -> None:
+    """Temporal activity: verify a ResearchBrief's grounded_findings against the
+    page files fetched this run. Raises GroundingViolation on any violation;
+    returns None otherwise. Registered on the worker and called from the
+    research workflow (Task 8) AFTER the research agent produces its brief.
+
+    This is the authorized fallback for Task 1 finding A: the original design
+    used @agent.output_validator + ModelRetry, which TemporalAgent silently
+    drops. This activity runs activity-side (where reading page files is legal
+    I/O), fails the stage closed on a violation, and gives the model no retry
+    — stricter than ModelRetry, but correct under temporalization."""
+    violations = verify_brief(brief, run_id)
+    if violations:
+        raise GroundingViolation(violations)
