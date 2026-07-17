@@ -93,4 +93,22 @@ def write_registry_dir(root, version=1):
         (d / "instructions.md").write_bytes(b"do the thing")   # Task 2
         (d / "agent.py").write_bytes(
             _AGENT_PY.format(name=_TEST_AGENT_NAMES[name]).encode())  # Task 3
+    # Optional research role (2026-07-17-research-agent-grounded-briefs).
+    # A VALID research tree: agent.yaml (kind=research, provider=fake),
+    # instructions.md, agent.py, and one tool file. Tests perturb one thing.
+    r = root / "research"
+    r.mkdir(exist_ok=True)
+    (r / "agent.yaml").write_bytes(
+        b"kind: research\nmodel: anthropic:glm-5.2\nprovider: fake\n")
+    (r / "instructions.md").write_bytes(b"research the question")
+    (r / "agent.py").write_bytes(
+        b"from pydantic_ai import Agent\n"
+        b"def build(model, instructions, model_settings, tool_paths, provider):\n"
+        b"    return Agent(model, name='research_agent',\n"
+        b"                 model_settings=model_settings,\n"
+        b"                 system_prompt=instructions)\n")
+    (r / "tools").mkdir(exist_ok=True)
+    (r / "tools" / "web_search.py").write_bytes(
+        b"async def web_search(query: str, max_results: int = 5) -> list:\n"
+        b"    return []\n")
     return root

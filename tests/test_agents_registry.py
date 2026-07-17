@@ -88,15 +88,16 @@ from tests.conftest import write_registry_dir as _write_registry_dir
 
 
 def test_optional_roles_is_empty_and_known_is_their_union():
-    """The seam the research spec extends. Empty here on purpose."""
-    assert OPTIONAL_ROLES == frozenset()
+    """The seam the research spec extends. 'research' is its first entry
+    (2026-07-17-research-agent-grounded-briefs); KNOWN_ROLES stays the union."""
+    assert OPTIONAL_ROLES == frozenset({"research"})
     assert KNOWN_ROLES == REQUIRED_ROLES | OPTIONAL_ROLES
 
 
 def test_directory_registry_loads_and_validates(tmp_path):
     root = _write_registry_dir(tmp_path / "agents")
     roles = load_registry(root)
-    assert set(roles) == REQUIRED_ROLES
+    assert set(roles) == KNOWN_ROLES
     assert roles["dev"].harness == HarnessKind.OPENCODE
     assert roles["reviewer"].model == "anthropic:glm-5.2"
 

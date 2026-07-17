@@ -52,11 +52,11 @@ PROPOSER_ROLES = frozenset({
 REQUIRED_ROLES = HARNESS_ROLES | PROPOSER_ROLES
 
 # Roles the pipeline can run WITHOUT, but which are still known directories.
-# Empty today, named deliberately: a fail-closed unknown-directory check would
-# otherwise reject an optional role's folder outright, forcing the next spec to
-# weaken this check instead of extending it. The research role is its first
-# entry (2026-07-17-research-agent-grounded-briefs-design.md).
-OPTIONAL_ROLES: frozenset[str] = frozenset()
+# 'research' is the first entry: research_enabled defaults False so the
+# pipeline boots without running the stage, but agents/research/ is still a
+# KNOWN directory so the unknown-directory check keeps biting. This EXTENDS
+# the fail-closed check; it does not weaken it.
+OPTIONAL_ROLES: frozenset[str] = frozenset({"research"})
 
 # REQUIRED_ROLES gates PRESENCE (a missing one fails boot).
 # KNOWN_ROLES gates RECOGNITION (an unknown directory fails boot).
@@ -158,6 +158,14 @@ def _parse_role(name: str, d: Path) -> RoleConfig:
         cfg = cfg.model_copy(update={"instructions": text})
         if not (d / "agent.py").is_file():
             raise RegistryError(f"role '{name}': missing {d / 'agent.py'}")
+        if cfg.kind == "research":
+            tools_dir = d / "tools"
+            if not tools_dir.is_dir():
+                raise RegistryError(
+                    f"role '{name}' is kind=research and must carry a tools/ "
+                    f"directory (it is the only role that may): {tools_dir}")
+            tool_files = _validate_tool_files(name, tools_dir)
+            cfg = cfg.model_copy(update={"tool_files": tool_files})
     elif instructions_file.exists() or (d / "agent.py").exists():
         raise RegistryError(
             f"role '{name}' is kind=harness and carries instructions.md or "
@@ -203,6 +211,17 @@ def validate_registry(roles: dict[str, RoleConfig]) -> None:
         raise RegistryError(
             "deep-review harness reviewer must use a different harness than "
             "the developer")
+    for name, cfg in roles.items():
+        if cfg.kind != "research":
+            continue
+        if cfg.provider is None:
+            raise RegistryError(
+                f"role '{name}' is kind=research and must name a provider "
+                f"(tavily or fake); ADR-6 does not apply — it reviews nothing")
+        if cfg.provider == "tavily" and not os.environ.get("TAVILY_API_KEY"):
+            raise RegistryError(
+                f"role '{name}' declares provider: tavily but TAVILY_API_KEY is "
+                f"not set — fail closed. Use provider: fake for CI/offline.")
     _validate_pipeline_mirror(roles)
 
 
@@ -252,6 +271,42 @@ def _load_build(name: str, d: Path):
     return build
 
 
+def _validate_tool_files(role: str, tools_dir: Path) -> list[str]:
+    """Structurally validate each tools/*.py WITHOUT importing it: exactly one
+    top-level function whose name == the filename stem, with every parameter and
+    the return fully annotated. Returns absolute paths. Import happens later, in
+    build_agents, only after the whole registry has validated."""
+    import ast
+
+    paths: list[str] = []
+    for f in sorted(tools_dir.glob("*.py")):
+        if f.name == "__init__.py":
+            continue
+        stem = f.stem
+        tree = ast.parse(f.read_text(encoding="utf-8"), filename=str(f))
+        funcs = [n for n in tree.body
+                 if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        if not any(fn.name == stem for fn in funcs):
+            raise RegistryError(
+                f"role '{role}': tool file {f.name} defines no function named "
+                f"'{stem}' — the filename is the API (mismatch)")
+        fn = next(fn for fn in funcs if fn.name == stem)
+        args = fn.args
+        params = [*args.posonlyargs, *args.args, *args.kwonlyargs]
+        unannotated = [a.arg for a in params if a.annotation is None]
+        if unannotated or fn.returns is None:
+            raise RegistryError(
+                f"role '{role}': tool '{stem}' has an unannotated signature "
+                f"(params={unannotated}, return_annotated={fn.returns is not None})"
+                f" — tool signatures must be fully typed")
+        paths.append(str(f.resolve()))
+    if not paths:
+        raise RegistryError(
+            f"role '{role}': tools/ is empty — a research role with no tools "
+            f"cannot fetch anything")
+    return paths
+
+
 def build_agents(roles: dict[str, RoleConfig], model_settings,
                  agents_dir: str | os.PathLike | None = None
                  ) -> dict[str, "Agent"]:
@@ -277,8 +332,15 @@ def build_agents(roles: dict[str, RoleConfig], model_settings,
     for name, cfg in roles.items():
         if cfg.kind == "harness":
             continue
-        agent = _load_build(name, root / name)(cfg.model, cfg.instructions,
-                                               model_settings)
+        build = _load_build(name, root / name)
+        if cfg.kind == "research":
+            # Research build takes its tool paths and provider name too. Tool
+            # modules are imported HERE — after the whole registry validated
+            # (validation precedes import; registry spec finding 3).
+            agent = build(cfg.model, cfg.instructions, model_settings,
+                          cfg.tool_files, cfg.provider)
+        else:
+            agent = build(cfg.model, cfg.instructions, model_settings)
         if agent.name in seen:
             raise RegistryError(
                 f"roles '{seen[agent.name]}' and '{name}' both build an agent "

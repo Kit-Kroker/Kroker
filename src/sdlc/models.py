@@ -368,6 +368,11 @@ class RoleConfig(BaseModel):
     # kind. 'tavily' requires a reachable TAVILY_API_KEY at boot (validated in
     # agents/loader.py); 'fake' is the CI/default opt-out.
     provider: Literal["tavily", "fake"] | None = None
+    # Absolute paths to agents/research/tools/*.py, populated by the registry
+    # loader for a kind=research role ONLY. Paths, not imported modules: the
+    # loader validates them structurally (name/signature) but nothing imports
+    # a tool as a side effect of importing roles (registry spec finding 3).
+    tool_files: list[str] = Field(default_factory=list)
     # Loaded from agents/<role>/instructions.md by the registry loader (E-2).
     # None for harness roles: they run a CLI and carry no prompt of ours.
     # PROMPT_SHAS hashes these bytes, so editing one invalidates exactly that
