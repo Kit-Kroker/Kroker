@@ -13,7 +13,8 @@ from sdlc.agents.roles import MODEL_SETTINGS
 from tests.conftest import _AGENT_PY, write_registry_dir
 
 # roles.py at HEAD, verified. NOT derived from the role name: 'qa' builds
-# qa_analyst_agent and 'devops_planner' builds devops_agent.
+# qa_analyst_agent and 'devops_planner' builds devops_agent. 'research' is the
+# optional role (Task 6); its agent_name follows the same <role>_agent pattern.
 PRE_MIGRATION_AGENT_NAMES = {
     "clarify": "clarify_agent",
     "architect": "architect_agent",
@@ -23,6 +24,7 @@ PRE_MIGRATION_AGENT_NAMES = {
     "analyst": "analyst_agent",
     "merge_verdict": "merge_verdict_agent",
     "devops_planner": "devops_agent",
+    "research": "research_agent",
 }
 
 

@@ -12,8 +12,6 @@ def test_research_is_optional_not_required():
     assert "research" not in REQUIRED_ROLES
 
 
-@pytest.mark.xfail(reason="shipped agents/research/ lands in Task 6",
-                   strict=True)
 def test_shipped_registry_loads_with_research(monkeypatch, tmp_path):
     """The repo's own agents/ tree loads and includes a research role."""
     roles = load_registry()               # shipped agents/
