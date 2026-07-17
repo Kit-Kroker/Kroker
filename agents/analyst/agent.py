@@ -8,7 +8,7 @@ def build(model: str, instructions: str,
           model_settings: ModelSettings) -> Agent:
     return Agent(
         model,
-        name="analyst_agent",       # Temporal activity name â NEVER rename
+        name="analyst_agent",       # Temporal activity name -- NEVER rename
         output_type=AnalysisReport,
         model_settings=model_settings,
         system_prompt=instructions,

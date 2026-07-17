@@ -15,6 +15,17 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 
 
+def test_dockerfile_ships_the_registry_explicitly():
+    """The two Dockerfile lines are load-bearing and have no other guard.
+    Deleting ENV SDLC_AGENTS_DIR breaks zero tests today because repo-root
+    discovery silently rescues it in the image (WORKDIR /app + pyproject.toml
+    + agents/), so this source-inspection test is the only thing that catches
+    a future PR removing the explicit, deterministic prod path."""
+    text = (REPO / "Dockerfile").read_text(encoding="utf-8")
+    assert "COPY agents ./agents" in text
+    assert "ENV SDLC_AGENTS_DIR=" in text
+
+
 @pytest.mark.slow
 def test_non_editable_install_resolves_registry_via_env(tmp_path):
     venv = tmp_path / "venv"

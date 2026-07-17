@@ -8,7 +8,7 @@ def build(model: str, instructions: str,
           model_settings: ModelSettings) -> Agent:
     return Agent(
         model,
-        name="merge_verdict_agent", # Temporal activity name â NEVER rename
+        name="merge_verdict_agent", # Temporal activity name -- NEVER rename
         output_type=MergeVerdict,
         model_settings=model_settings,
         system_prompt=instructions,
