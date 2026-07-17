@@ -87,7 +87,7 @@ Teams adopting coding agents today face four gaps:
 ## 6. Functional requirements
 
 ### Pipeline (FR-100)
-- FR-101: The pipeline SHALL execute the 14-stage DAG defined in SDLC-spec v2
+- FR-101: The pipeline SHALL execute the 15-stage DAG defined in SDLC-spec v2
   §1 (intake → … → deploy → retro) as a durable workflow.
 - FR-102: Intake SHALL classify runs as greenfield or brownfield; brownfield
   runs SHALL produce a `CodebaseMap` and a delta `Architecture`.
@@ -115,6 +115,14 @@ Teams adopting coding agents today face four gaps:
   Analyst SHALL *propose* the criterion→test mapping; the gate SHALL *enforce*
   that every acceptance criterion traces to ≥ 1 test. The LLM `MergeVerdict`
   SHALL be advisory input to the gate, never the decider.
+- **FR-107 — Grounded research.** The pipeline MAY run a research stage before
+  clarification that produces a `ResearchBrief` grounding downstream stages in
+  fetched evidence. Every claim presented as grounded MUST carry a source URL
+  and a verbatim quote verified against bytes fetched during that run; claims
+  that cannot be so verified MUST be presented as inferred, or not at all.
+  Research findings retained to memory are leads, not grounded claims: recall
+  MUST NOT restore grounded status without re-verification. The stage MUST be
+  bounded by explicit per-run limits and is off by default.
 
 ### Agents (FR-200)
 - FR-201: Agents SHALL be declared in a versioned registry (`agents.yaml`):

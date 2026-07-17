@@ -38,16 +38,22 @@ workflows on the `ai-sdlc` task queue.
 | 1 | constitution | *(deterministic)* | local code | `Constitution` | governing principles fixed |
 | 2 | context | Cartographer *(brownfield only)* | activity (repo tools) | `CodebaseMap` | modules, contracts, hot spots extracted from repo |
 | 3 | requirements | Product | TemporalAgent activity | `Requirements` | ≥1 story; FR-### + SC-### |
-| 4 | clarify | Clarifier | TemporalAgent + **gate(clarify)** | `Clarifications` | ambiguities resolved; low-confidence ones routed to human |
-| 5 | architecture | Architect | TemporalAgent + **gate(architecture)** | `Architecture` | greenfield: stack+tree+contracts; brownfield: **delta** (added/modified/removed) grounded in `CodebaseMap` |
-| 6 | planning | Planner | TemporalAgent + **gate(plan)** | `TaskPlan` | acyclic DAG (Kahn validator, kept from v1); phased vertical slices |
-| 7 | code | Developer | **long-running activity** (harness) per task, parallel waves | `CodeArtifact` | worktree cut from the **running integration head** (ADR-14); diff measured against the task's branch point; merged back into integration on gate approval; honors contracts |
-| 8 | review | Reviewer | TemporalAgent activity *(clean-context proposer; optional harness deep-review tier)* | `ReviewReport` | contract conformance; blocking issues listed |
-| 9 | analyze | Analyst | TemporalAgent activity | `AnalysisReport` | cross-artifact consistency; *proposes* criterion→test mapping (gate enforces) |
-| 10 | qa | QA (+ Resolver) | activities (test run + repair loop) | `TestReport` | red→green within `MAX_REPAIR_ATTEMPTS` |
-| 11 | quality_gate | *(deterministic)* | local code + **gate(merge)** | `GateReport` | `DeterministicQualityGate`: absolute checks (lint, no critical security, build/integration) pass, advisory checks (coverage, traceability completeness, severity) pass-or-human-overridden |
-| 12 | deploy | DevOps | activity + **gate(deploy)** | `DeployPlan` → `DeployReport` | greenfield: smoke test; brownfield: PR merged + env deploy |
-| 13 | retro | *(deterministic + reflect)* | activity | `RunSummary` + memory retains | trace + metrics; learnings written to Hindsight |
+| 4 | research | Researcher *(optional; off by default — FR-107)* | TemporalAgent activity (bounded per-run: searches, fetches, cost) | `ResearchBrief` | grounded findings carry source URL + verbatim quote verified against bytes fetched this run; unverifiable claims flagged inferred or omitted; stage off by default |
+| 5 | clarify | Clarifier | TemporalAgent + **gate(clarify)** | `Clarifications` | ambiguities resolved; low-confidence ones routed to human |
+| 6 | architecture | Architect | TemporalAgent + **gate(architecture)** | `Architecture` | greenfield: stack+tree+contracts; brownfield: **delta** (added/modified/removed) grounded in `CodebaseMap` |
+| 7 | planning | Planner | TemporalAgent + **gate(plan)** | `TaskPlan` | acyclic DAG (Kahn validator, kept from v1); phased vertical slices |
+| 8 | code | Developer | **long-running activity** (harness) per task, parallel waves | `CodeArtifact` | worktree cut from the **running integration head** (ADR-14); diff measured against the task's branch point; merged back into integration on gate approval; honors contracts |
+| 9 | review | Reviewer | TemporalAgent activity *(clean-context proposer; optional harness deep-review tier)* | `ReviewReport` | contract conformance; blocking issues listed |
+| 10 | analyze | Analyst | TemporalAgent activity | `AnalysisReport` | cross-artifact consistency; *proposes* criterion→test mapping (gate enforces) |
+| 11 | qa | QA (+ Resolver) | activities (test run + repair loop) | `TestReport` | red→green within `MAX_REPAIR_ATTEMPTS` |
+| 12 | quality_gate | *(deterministic)* | local code + **gate(merge)** | `GateReport` | `DeterministicQualityGate`: absolute checks (lint, no critical security, build/integration) pass, advisory checks (coverage, traceability, severity) pass-or-human-overridden |
+| 13 | deploy | DevOps | activity + **gate(deploy)** | `DeployPlan` → `DeployReport` | greenfield: smoke test; brownfield: PR merged + env deploy |
+| 14 | retro | *(deterministic + reflect)* | activity | `RunSummary` + memory retains | trace + metrics; learnings written to Hindsight |
+
+> Stage 4 `research` (FR-107) is inserted before `clarify`. The existing stage
+> 2 *context (Cartographer)* covers brownfield codebase mapping (FR-102) and is
+> NOT a research stage; grounded web research is genuinely new scope. The DAG is
+> now 15 stages.
 
 Kept from v1: constitution, quality gate, and summary are deterministic code —
 no LLM call. The propose/persist split is kept: QA and DevOps *propose*
