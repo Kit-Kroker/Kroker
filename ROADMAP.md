@@ -159,7 +159,9 @@
 ## 7. Structural / repo-hardening items (ARCHITECTURE.md §14)
 
 - [ ] ⚠️ Layered `src/factory/` tree — code still lives in the flattened `src/sdlc/` skeleton; §14 tree is aspirational (documented "P1 hardening", not silent drift).
-- [ ] `prompts/` as versioned assets — prompts are inline Python constants (`REVIEWER_PROMPT`, etc.), hashed into `PROMPT_SHAS`, but not standalone files with an eval loop.
+- [ ] ⚠️ `prompts/` as versioned assets — prompts now live in `agents/<role>/instructions.md`
+  and hash into `PROMPT_SHAS` from file content (E-2 ✅). The "**with an eval loop**" clause
+  stays open on E-4.
 - [x] Deterministic CI stand-in for the e2e proof — `tests/fakes/` provides same-named `TemporalAgent` `TestModel` stubs + fake git/subprocess activities (P1 orchestration test). (A `fake_harness.py`-style adapter for real-git fidelity remains future work.)
 - [ ] Cosmetic: workflow class is `FeatureWorkflow`; docs call it `FactoryWorkflow`.
 
@@ -201,10 +203,19 @@ loop — but they are filing, which is what E-3's own note warned against.
 The real gap E-3 pointed at was the *model*, not the prompt, and it turned out to sit on top
 of an ADR-6 hole. Closed by `docs/superpowers/specs/2026-07-16-registry-drives-every-role-design.md`.
 
-- [ ] **E-1** `agents/<role>/` directory loader — `load_registry()` walks a directory (`agent.yaml` + `instructions.md`) instead of parsing one file. *Migration must be a strict refactor: same `RoleConfig`, same boot failure on a same-family pairing, same mirror-check against `PipelineConfig.roles`.* **Re-ranked down**: with the memoization payoff already banked, this is reorganisation.
-- [ ] **E-2** Move inline prompt constants out of `agents/roles.py` into `agents/<role>/instructions.md`; `PROMPT_SHAS` derives from file content rather than a Python literal. Blocked on E-1.
+- [x] **E-1** `agents/<role>/` directory loader — `load_registry()` walks a directory
+  (`agent.yaml` + `instructions.md` + `agent.py`) instead of parsing one file. ADR-6's
+  family-inequality check keeps biting at boot, unchanged: `validate_registry` is re-fed the
+  same dict, not re-implemented. Also deleted the `parents[3]` walk, which made the
+  containerised worker unbootable (the editable install masked it). Spec:
+  `docs/superpowers/specs/2026-07-17-agents-as-folders-design.md`.
+- [x] **E-2** Prompts moved to `agents/<role>/instructions.md`; `PROMPT_SHAS` derives from file
+  content. Every hash byte-identical, pinned. *Revived not by the memoization argument E-3's
+  note made — finding 1 checked that and it was wrong — but because the research role is the
+  first role a folder describes rather than decorates, and a folder for it beside eleven YAML
+  entries would reopen the two-registry hole.*
 - [x] **E-3** ~~Wire prompt-file content into `content_key`~~ — **the prompt half was already wired before the item was written** (`content_key(prompt_sha=...)` + `PROMPT_SHAS`). The *model* half was the real gap: every stage passed one hardcoded `MODEL` constant as `content_key`'s `model_id`, so per-role models would have served stale-model cache hits. Closed together with the ADR-6 hole (§9.1 preamble); `STAGE_MODELS` now resolves each stage's real model.
-- [ ] **E-4** Prompt eval loop over the new `agents/` assets — closes §7's "versioned assets **with an eval loop**" clause. Blocked on E-2.
+- [ ] **E-4** Prompt eval loop over the new `agents/` assets — closes §7's "versioned assets **with an eval loop**" clause.
 - [ ] **E-5** *(speculative — do not schedule)* Factory takes its own `agents/` folders as brownfield input to itself (ADR-7's endpoint). Recorded because it's a pleasing closure of ADR-7, flagged because that's exactly why it deserves suspicion. Needs E-1 and brownfield mode (FR-102) first.
 
 ### 9.2 Channels as one abstraction → FR-303, FR-305, FR-601, FR-602, US-1, US-7
@@ -258,7 +269,7 @@ Independent reviews of eve converge on observability as its weak point: silent d
 Not a commitment, and deliberately not "by section":
 
 1. **E-12, E-13** — smallest, and the only items that start the SC-4/SC-6 signal (§8 item 3).
-2. ~~**E-1 → E-2 → E-3**~~ — superseded. E-3's payoff was already wired; its model half plus an ADR-6 hole (the boot check validated a role that never ran) closed by `2026-07-16-registry-drives-every-role`. E-1/E-2 remain as reorganisation, no longer ranked here.
+2. ~~**E-1 → E-2 → E-3**~~ — landed. E-1/E-2 landed as `agents/<role>/` directories (`feat/agents-as-folders`); E-3 was subsumed by the registry increment (`2026-07-16-registry-drives-every-role`), which already closed the model-half gap.
 3. **E-6 → E-7 → E-8** — contract, then CLI refit as proof, then the first new capability.
 4. **E-15 → E-17** — the hook seam, then gate reuse.
 5. **E-22** — before the surfaces in E-9/E-10/E-11 multiply the ways delivery can fail silently.
