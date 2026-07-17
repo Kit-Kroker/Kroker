@@ -263,6 +263,67 @@ class AnalysisReport(BaseModel):
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
+class SubQuestion(BaseModel):
+    id: str
+    question: str
+
+
+class ConsultedSource(BaseModel):
+    """Judgment before label: assess the source, THEN attach a relevance tag."""
+    url: str
+    title: str = ""
+    assessment: str = ""            # what this source is / is worth
+    relevance: str = ""             # e.g. "high" / "peripheral"
+
+
+class GroundedFinding(BaseModel):
+    """quote BEFORE claim (spec §4): commit to a verbatim span actually in the
+    fetched bytes, then state what it supports. The verifier (research/verify.py)
+    asserts `quote` is a substring of the page fetched THIS run for `source_url`."""
+    source_url: str
+    quote: str                      # verbatim span from bytes fetched this run
+    claim: str
+    sub_question_ids: list[str] = Field(default_factory=list)
+
+
+class InferredFinding(BaseModel):
+    """reasoning BEFORE claim. `fetched_at` is set only when the lead came from
+    the corpus (a recalled lead honestly belongs here, never in grounded)."""
+    reasoning: str
+    claim: str
+    based_on: list[str] = Field(default_factory=list)   # source urls / lead ids
+    fetched_at: str | None = None
+
+
+class Contradiction(BaseModel):
+    topic: str
+    positions: list[str] = Field(default_factory=list)
+    assessment: str = ""
+    unresolved: bool = True
+
+
+class Gap(BaseModel):
+    sub_question_id: str
+    what_is_missing: str
+    why_it_matters: str = ""
+
+
+class ResearchBrief(BaseModel):
+    """FR-107 grounded research brief. Field order is reasoning order (SGR):
+    decompose -> gather -> what the bytes say -> what I concluded -> where
+    sources disagree -> what I could not answer -> summary -> ref -> confidence.
+    tests/test_research_models.py pins the order; a reorder is a regression."""
+    sub_questions: list[SubQuestion] = Field(default_factory=list)
+    sources_consulted: list[ConsultedSource] = Field(default_factory=list)
+    grounded_findings: list[GroundedFinding] = Field(default_factory=list)
+    inferred_findings: list[InferredFinding] = Field(default_factory=list)
+    contradictions: list[Contradiction] = Field(default_factory=list)
+    gaps: list[Gap] = Field(default_factory=list)
+    summary: str = ""
+    brief_ref: ArtifactRef | None = None
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
 class CoverageReport(BaseModel):
     """Diff-scoped coverage evidence for the advisory `coverage` check.
     `measured=False` means no coverage artifact was emitted by the run's test
@@ -300,9 +361,13 @@ class DeploymentResult(BaseModel):
 
 class RoleConfig(BaseModel):
     """Which harness/model a 'doing' role uses. Enables cross-harness review."""
-    kind: Literal["proposer", "harness"] = "harness"
-    harness: HarnessKind | None = None      # None for proposer roles
+    kind: Literal["proposer", "harness", "research"] = "harness"
+    harness: HarnessKind | None = None      # None for proposer/research roles
     model: str | None = None                # e.g. "zai-coding-plan/glm-5.2"
+    # Which search provider a kind=research role uses. None for every other
+    # kind. 'tavily' requires a reachable TAVILY_API_KEY at boot (validated in
+    # agents/loader.py); 'fake' is the CI/default opt-out.
+    provider: Literal["tavily", "fake"] | None = None
     # Loaded from agents/<role>/instructions.md by the registry loader (E-2).
     # None for harness roles: they run a CLI and carry no prompt of ours.
     # PROMPT_SHAS hashes these bytes, so editing one invalidates exactly that
@@ -351,6 +416,7 @@ class MemoryKind(str, Enum):
     STAGE_SUMMARY = "stage_summary"
     GOTCHA = "gotcha"
     GATE_FEEDBACK = "gate_feedback"
+    RESEARCH_FINDING = "research_finding"    # verified grounded findings only
 
 
 class RecallSnapshot(BaseModel):
@@ -427,6 +493,16 @@ class ScheduleAsset(BaseModel):
     action: ScheduleAction
 
 
+class ResearchConfig(BaseModel):
+    """Stage-scoped, per-run research bounds (spec §3). Enforced INSIDE the
+    tool functions, not the prompt. Exceeding one raises an ordinary error and
+    the shortfall lands in the brief's `gaps`. The first run-level counters in
+    the codebase — E-19 remains the general version."""
+    max_searches: int = 5
+    max_fetches: int = 10
+    max_cost_usd: float = 1.0
+
+
 class PipelineConfig(BaseModel):
     execution_mode: ExecutionMode = ExecutionMode.SERIAL
     max_session_resumes: int = 3            # FR-802: past this, fresh session
@@ -471,6 +547,10 @@ class PipelineConfig(BaseModel):
     gate_timeout_hours: int = 48
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     memoization_enabled: bool = False
+    research: ResearchConfig = Field(default_factory=ResearchConfig)
+    research_enabled: bool = False          # FR-107: off by default; the
+                                            # default pipeline is unchanged
+                                            # until a project opts in
     review_enabled: bool = True             # FR-204: run the clean-context
                                             # reviewer per task; disable to trade
                                             # the anti-collusion check for cost
