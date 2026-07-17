@@ -137,7 +137,25 @@ def _parse_role(name: str, d: Path) -> RoleConfig:
             f"role directory '{name}' contains an agent.yaml declaring role "
             f"'{declared}': the filename is the API and must agree with its "
             f"contents")
-    return RoleConfig(**data)
+    cfg = RoleConfig(**data)
+    instructions_file = d / "instructions.md"
+    needs_prompt = cfg.kind != "harness"
+    if needs_prompt:
+        if not instructions_file.is_file():
+            raise RegistryError(f"role '{name}': missing {instructions_file}")
+        # read_text applies universal newlines, so a CRLF checkout still
+        # hashes as LF (tests/test_prompt_migration.py pins this).
+        text = instructions_file.read_text(encoding="utf-8")
+        if not text.strip():
+            raise RegistryError(
+                f"role '{name}': {instructions_file} is empty — an empty system "
+                f"prompt is a boot-time bug, not a runtime surprise")
+        cfg = cfg.model_copy(update={"instructions": text})
+    elif instructions_file.exists():
+        raise RegistryError(
+            f"role '{name}' is kind=harness and carries {instructions_file}, "
+            f"which would never be read: silent dead config")
+    return cfg
 
 
 def load_registry(path: str | os.PathLike | None = None) -> dict[str, RoleConfig]:

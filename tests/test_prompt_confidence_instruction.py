@@ -1,4 +1,7 @@
-from sdlc.agents.roles import ARCHITECT_PROMPT, PLAN_PROMPT
+from sdlc.agents.roles import _STAGE_PROMPTS
+
+ARCHITECT_PROMPT = _STAGE_PROMPTS["architect"]
+PLAN_PROMPT = _STAGE_PROMPTS["plan"]
 
 
 def test_architect_prompt_requests_confidence_score():

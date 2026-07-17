@@ -1,9 +1,12 @@
-from sdlc.agents.roles import PLAN_PROMPT, QA_PROMPT
+from sdlc.agents.roles import _STAGE_PROMPTS
 from sdlc.models import QAReport, ValidationContract
 from sdlc.workflows.feature import (
     DEFAULT_LINT_CMD, DEFAULT_TEST_CMD, _contract_shell_cmd,
     _contract_stack_directive, _should_resume_session,
 )
+
+PLAN_PROMPT = _STAGE_PROMPTS["plan"]
+QA_PROMPT = _STAGE_PROMPTS["qa"]
 
 
 def test_plan_prompt_requires_stack_on_contract():

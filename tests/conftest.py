@@ -74,4 +74,5 @@ def write_registry_dir(root, version=1):
         d = root / name
         d.mkdir(exist_ok=True)
         (d / "agent.yaml").write_bytes(_PROPOSER_AGENT_YAML)
+        (d / "instructions.md").write_bytes(b"do the thing")   # Task 2
     return root

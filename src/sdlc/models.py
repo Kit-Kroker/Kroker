@@ -303,6 +303,12 @@ class RoleConfig(BaseModel):
     kind: Literal["proposer", "harness"] = "harness"
     harness: HarnessKind | None = None      # None for proposer roles
     model: str | None = None                # e.g. "zai-coding-plan/glm-5.2"
+    # Loaded from agents/<role>/instructions.md by the registry loader (E-2).
+    # None for harness roles: they run a CLI and carry no prompt of ours.
+    # PROMPT_SHAS hashes these bytes, so editing one invalidates exactly that
+    # stage's memo — which content_key already did via prompt_sha before the
+    # text moved house. Moving it buys no new cache capability.
+    instructions: str | None = None
     context_budget_tokens: int = 30_000     # FR-801: enforced at prompt assembly
     extra_args: list[str] = Field(default_factory=list)
     # Long-running activity timeouts for this role's harness invocations
