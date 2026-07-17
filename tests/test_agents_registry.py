@@ -38,7 +38,7 @@ def test_complete_registry_helper_is_itself_valid():
 
 
 def test_shipped_registry_loads_and_validates():
-    roles = load_registry()                      # default config/agents.yaml
+    roles = load_registry()                      # default: discovered agents/
     assert REQUIRED_ROLES <= set(roles)
     validate_registry(roles)                     # must not raise
 
@@ -83,37 +83,66 @@ def test_deep_review_harness_reviewer_must_differ_from_developer():
         validate_registry(roles)
 
 
-def _write_registry(tmp_path, body: str):
-    cfg = tmp_path / "agents.yaml"
-    cfg.write_text(body, encoding="utf-8")
-    return cfg
+from sdlc.agents.loader import KNOWN_ROLES, OPTIONAL_ROLES
+from tests.conftest import write_registry_dir as _write_registry_dir
 
 
-def _yaml_for(roles: dict[str, RoleConfig]) -> str:
-    lines = ["version: 1", "roles:"]
-    for name, r in roles.items():
-        lines.append(f"  {name}:")
-        lines.append(f"    kind: {r.kind}")
-        if r.harness is not None:
-            lines.append(f"    harness: {r.harness.value}")
-        lines.append(f"    model: {r.model}")
-    return "\n".join(lines) + "\n"
+def test_optional_roles_is_empty_and_known_is_their_union():
+    """The seam the research spec extends. Empty here on purpose."""
+    assert OPTIONAL_ROLES == frozenset()
+    assert KNOWN_ROLES == REQUIRED_ROLES | OPTIONAL_ROLES
 
 
-def test_load_registry_via_env_override(tmp_path, monkeypatch):
-    cfg = _write_registry(tmp_path, _yaml_for(_complete_registry()))
-    monkeypatch.setenv("SDLC_AGENTS_CONFIG", str(cfg))
-    roles = load_registry()
-    assert roles["reviewer"].model == _PROPOSER_MODEL
-    assert roles["reviewer"].harness is None
+def test_directory_registry_loads_and_validates(tmp_path):
+    root = _write_registry_dir(tmp_path / "agents")
+    roles = load_registry(root)
+    assert set(roles) == REQUIRED_ROLES
+    assert roles["dev"].harness == HarnessKind.OPENCODE
+    assert roles["reviewer"].model == "anthropic:glm-5.2"
 
 
-def test_load_registry_raises_registry_error_not_keyerror(tmp_path, monkeypatch):
-    """An incomplete registry must fail through the validator that explains
-    it, not as a KeyError from the first caller to index it."""
-    partial = _complete_registry()
-    del partial["clarify"]
-    cfg = _write_registry(tmp_path, _yaml_for(partial))
-    monkeypatch.setenv("SDLC_AGENTS_CONFIG", str(cfg))
-    with pytest.raises(RegistryError, match="clarify"):
-        load_registry()
+def test_unknown_role_directory_rejected(tmp_path):
+    root = _write_registry_dir(tmp_path / "agents")
+    (root / "not_a_role").mkdir()
+    (root / "not_a_role" / "agent.yaml").write_bytes(b"kind: proposer\n")
+    with pytest.raises(RegistryError, match="not_a_role"):
+        load_registry(root)
+
+
+def test_role_directory_missing_agent_yaml_rejected(tmp_path):
+    root = _write_registry_dir(tmp_path / "agents")
+    (root / "reviewer" / "agent.yaml").unlink()
+    with pytest.raises(RegistryError, match="reviewer"):
+        load_registry(root)
+
+
+def test_agent_yaml_declaring_a_different_role_rejected(tmp_path):
+    """The filename is the API; contents disagreeing with it is an error."""
+    root = _write_registry_dir(tmp_path / "agents")
+    (root / "reviewer" / "agent.yaml").write_bytes(
+        b"role: analyst\nkind: proposer\nmodel: anthropic:glm-5.2\n")
+    with pytest.raises(RegistryError, match="reviewer"):
+        load_registry(root)
+
+
+def test_missing_registry_yaml_rejected(tmp_path):
+    root = _write_registry_dir(tmp_path / "agents")
+    (root / "registry.yaml").unlink()
+    with pytest.raises(RegistryError, match="registry.yaml"):
+        load_registry(root)
+
+
+def test_unsupported_registry_version_rejected(tmp_path):
+    root = _write_registry_dir(tmp_path / "agents", version=99)
+    with pytest.raises(RegistryError, match="99"):
+        load_registry(root)
+
+
+def test_adr6_still_bites_through_the_directory_loader(tmp_path):
+    """The registry spec's regression test, re-run against directories. This
+    is what proves 'strict refactor' rather than aspiration."""
+    root = _write_registry_dir(tmp_path / "agents")
+    (root / "reviewer" / "agent.yaml").write_bytes(
+        b"kind: proposer\nmodel: zai-coding-plan/other\n")   # dev's family
+    with pytest.raises(RegistryError, match="family"):
+        load_registry(root)

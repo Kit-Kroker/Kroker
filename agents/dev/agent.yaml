@@ -1,0 +1,3 @@
+kind: harness
+harness: opencode
+model: zai-coding-plan/glm-5.2

@@ -46,3 +46,32 @@ def git_repo(tmp_path, monkeypatch):
     run_git(["commit", "-m", "seed"], repo)
     monkeypatch.setenv("SDLC_WORKTREES_ROOT", str(tmp_path / "wt"))
     return str(repo)
+
+
+_HARNESS_AGENT_YAML = (
+    b"kind: harness\nharness: opencode\nmodel: zai-coding-plan/glm-5.2\n")
+_PROPOSER_AGENT_YAML = b"kind: proposer\nmodel: anthropic:glm-5.2\n"
+
+HARNESS_ROLE_NAMES = ("dev", "test", "devops")
+PROPOSER_ROLE_NAMES = ("clarify", "architect", "planner", "qa", "reviewer",
+                       "analyst", "merge_verdict", "devops_planner")
+
+
+def write_registry_dir(root, version=1):
+    """Materialise a VALID agents/ tree. Tests perturb exactly one thing after
+    calling this, so each assertion fails for the reason under test.
+
+    Grows with the increment: Task 2 adds instructions.md, Task 3 adds
+    agent.py. Keep it valid or every caller breaks at once.
+    """
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "registry.yaml").write_bytes(f"version: {version}\n".encode())
+    for name in HARNESS_ROLE_NAMES:
+        d = root / name
+        d.mkdir(exist_ok=True)
+        (d / "agent.yaml").write_bytes(_HARNESS_AGENT_YAML)
+    for name in PROPOSER_ROLE_NAMES:
+        d = root / name
+        d.mkdir(exist_ok=True)
+        (d / "agent.yaml").write_bytes(_PROPOSER_AGENT_YAML)
+    return root

@@ -1,9 +1,15 @@
 """Agent registry (FR-201) + the ADR-6 anti-collusion validator (FR-204).
 
-The registry is a versioned YAML asset (config/agents.yaml). Loading it and
-running validate_registry() at worker boot is what gives the model-family
-inequality invariant teeth — a same-family developer/reviewer config cannot
-boot a worker.
+The registry is a directory of role folders (agents/<role>/), one per role,
+where the directory name IS the role name. Loading it and running
+validate_registry() at worker boot is what gives the model-family inequality
+invariant teeth — a same-family dev/reviewer config cannot boot a worker.
+
+Resolution deliberately contains no __file__: the registry's location has no
+relationship to where this package is installed. Under `pip install .` the
+package lands in site-packages, which is why the old
+parents[3]/config/agents.yaml walk resolved to a path that never existed in
+the image. Order: explicit arg -> $SDLC_AGENTS_DIR -> repo-root discovery.
 """
 from __future__ import annotations
 
@@ -15,10 +21,16 @@ import yaml
 
 from ..models import RoleConfig
 
-AGENTS_CONFIG_ENV = "SDLC_AGENTS_CONFIG"
-# repo_root/config/agents.yaml — loader.py is src/sdlc/agents/loader.py, so
-# three parents up from the file dir is the repo root.
-DEFAULT_AGENTS_CONFIG = Path(__file__).resolve().parents[3] / "config" / "agents.yaml"
+AGENTS_DIR_ENV = "SDLC_AGENTS_DIR"
+# Renamed from SDLC_AGENTS_CONFIG: the value's meaning changed from a single
+# YAML file to a directory. Accepting the old name silently would let a stale
+# value resolve a file where a directory is expected and fail somewhere less
+# obvious than boot.
+LEGACY_AGENTS_ENV = "SDLC_AGENTS_CONFIG"
+
+# Marker files that identify a repo checkout. Two, not one: `pyproject.toml`
+# alone matches any Python project we happen to be cwd'd into.
+_ROOT_MARKERS = ("pyproject.toml", "agents/registry.yaml")
 
 # Harness-execution roles. Keys fixed by DevTask.role
 # (Literal["dev","test","devops"], models.py:144). PipelineConfig.roles
@@ -34,6 +46,17 @@ PROPOSER_ROLES = frozenset({
 
 REQUIRED_ROLES = HARNESS_ROLES | PROPOSER_ROLES
 
+# Roles the pipeline can run WITHOUT, but which are still known directories.
+# Empty today, named deliberately: a fail-closed unknown-directory check would
+# otherwise reject an optional role's folder outright, forcing the next spec to
+# weaken this check instead of extending it. The research role is its first
+# entry (2026-07-17-research-agent-grounded-briefs-design.md).
+OPTIONAL_ROLES: frozenset[str] = frozenset()
+
+# REQUIRED_ROLES gates PRESENCE (a missing one fails boot).
+# KNOWN_ROLES gates RECOGNITION (an unknown directory fails boot).
+KNOWN_ROLES = REQUIRED_ROLES | OPTIONAL_ROLES
+
 
 class RegistryError(ValueError):
     """A registry that violates a structural invariant (missing role, or an
@@ -47,15 +70,74 @@ def model_family(model: str) -> str:
     return re.split(r"[:/]", model, maxsplit=1)[0].strip().lower()
 
 
+def _discover_agents_dir() -> Path | None:
+    """Walk up from cwd for a checkout containing BOTH marker files. Dev and
+    tests only — production sets $SDLC_AGENTS_DIR explicitly."""
+    for d in (Path.cwd(), *Path.cwd().parents):
+        if all((d / m).is_file() for m in _ROOT_MARKERS):
+            return d / "agents"
+    return None
+
+
+def _resolve_agents_dir(path: str | os.PathLike | None = None) -> Path:
+    if os.environ.get(LEGACY_AGENTS_ENV):
+        raise RegistryError(
+            f"{LEGACY_AGENTS_ENV} was renamed to {AGENTS_DIR_ENV} and now names "
+            f"a DIRECTORY (the registry is agents/<role>/, not one YAML file). "
+            f"Unset {LEGACY_AGENTS_ENV} and set {AGENTS_DIR_ENV}.")
+    if path is not None:
+        return Path(path)
+    env = os.environ.get(AGENTS_DIR_ENV)
+    if env:
+        return Path(env)
+    found = _discover_agents_dir()
+    if found is not None:
+        return found
+    raise RegistryError(
+        f"cannot locate the agents registry. Tried: an explicit path argument; "
+        f"${AGENTS_DIR_ENV}; and walking up from {Path.cwd()} for a directory "
+        f"containing both pyproject.toml and agents/registry.yaml.")
+
+
 def _parse(path: str | os.PathLike | None = None) -> dict[str, RoleConfig]:
-    """Parse the registry YAML into {role_name: RoleConfig}, UNVALIDATED.
-    Resolution order: explicit arg, then $SDLC_AGENTS_CONFIG, then the shipped
-    default. Private: callers must go through load_registry, which validates."""
-    resolved = Path(path or os.environ.get(AGENTS_CONFIG_ENV)
-                    or DEFAULT_AGENTS_CONFIG)
-    data = yaml.safe_load(resolved.read_text(encoding="utf-8")) or {}
-    roles_raw = data.get("roles") or {}
-    return {name: RoleConfig(**cfg) for name, cfg in roles_raw.items()}
+    """Walk the registry directory into {role_name: RoleConfig}, UNVALIDATED.
+    Private: callers go through load_registry, which validates."""
+    root = _resolve_agents_dir(path)
+    if not root.is_dir():
+        raise RegistryError(f"agents registry is not a directory: {root}")
+
+    reg = root / "registry.yaml"
+    if not reg.is_file():
+        raise RegistryError(
+            f"missing {reg}: every registry declares its version")
+    version = (yaml.safe_load(reg.read_text(encoding="utf-8")) or {}).get("version")
+    if version != 1:
+        raise RegistryError(
+            f"unsupported registry version {version!r} in {reg}; expected 1")
+
+    roles: dict[str, RoleConfig] = {}
+    for d in sorted(p for p in root.iterdir() if p.is_dir()):
+        roles[d.name] = _parse_role(d.name, d)
+    return roles
+
+
+def _parse_role(name: str, d: Path) -> RoleConfig:
+    if name not in KNOWN_ROLES:
+        raise RegistryError(
+            f"unknown role directory '{name}' in {d.parent}: the directory name "
+            f"is the role name, so this is a typo, not an extension point. "
+            f"Known roles: {', '.join(sorted(KNOWN_ROLES))}")
+    f = d / "agent.yaml"
+    if not f.is_file():
+        raise RegistryError(f"role '{name}': missing {f}")
+    data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+    declared = data.pop("role", None)
+    if declared is not None and declared != name:
+        raise RegistryError(
+            f"role directory '{name}' contains an agent.yaml declaring role "
+            f"'{declared}': the filename is the API and must agree with its "
+            f"contents")
+    return RoleConfig(**data)
 
 
 def load_registry(path: str | os.PathLike | None = None) -> dict[str, RoleConfig]:
@@ -100,10 +182,10 @@ def validate_registry(roles: dict[str, RoleConfig]) -> None:
 
 
 def _validate_pipeline_mirror(roles: dict[str, RoleConfig]) -> None:
-    """agents.yaml is authoritative; PipelineConfig.roles is a purity-mandated
-    mirror of its harness roles (see the note on PipelineConfig.roles). Drift
-    between them is what let ADR-6 validate a role that never ran, so it fails
-    the worker at boot."""
+    """the agents/ registry is authoritative; PipelineConfig.roles is a
+    purity-mandated mirror of its harness roles (see the note on
+    PipelineConfig.roles). Drift between them is what let ADR-6 validate a role
+    that never ran, so it fails the worker at boot."""
     from ..models import PipelineConfig      # local: avoid an import cycle at
                                              # module scope via models -> ...
     default_roles = PipelineConfig().roles
@@ -116,7 +198,8 @@ def _validate_pipeline_mirror(roles: dict[str, RoleConfig]) -> None:
         if (reg.kind, reg.harness, reg.model) != \
                 (dflt.kind, dflt.harness, dflt.model):
             raise RegistryError(
-                f"PipelineConfig.roles['{name}'] does not mirror agents.yaml: "
+                f"PipelineConfig.roles['{name}'] does not mirror the agents/ "
+                f"registry: "
                 f"registry has (kind={reg.kind}, harness={reg.harness}, "
                 f"model={reg.model}); PipelineConfig default has "
                 f"(kind={dflt.kind}, harness={dflt.harness}, "

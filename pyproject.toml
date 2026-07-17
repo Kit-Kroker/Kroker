@@ -21,3 +21,4 @@ dev = ["pytest>=8"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = ["slow: builds a venv or otherwise takes >10s"]

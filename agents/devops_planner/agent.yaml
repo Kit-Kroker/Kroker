@@ -1,0 +1,3 @@
+# PLANS devops tasks (builds devops_agent). The 'devops' harness role RUNS them.
+kind: proposer
+model: anthropic:glm-5.2

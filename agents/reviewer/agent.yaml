@@ -1,0 +1,5 @@
+# ADR-6: model_family(reviewer) != model_family(dev). 'dev' is the role that
+# actually writes code (feature.py:434), so it is the one the check constrains.
+# Editing a model here is configuration, not a code change (US-4/US-5).
+kind: proposer
+model: anthropic:glm-5.2
