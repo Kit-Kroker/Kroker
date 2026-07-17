@@ -13,13 +13,18 @@ the image. Order: explicit arg -> $SDLC_AGENTS_DIR -> repo-root discovery.
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 
 from ..models import RoleConfig
+
+if TYPE_CHECKING:                       # pydantic_ai import is not free
+    from pydantic_ai import Agent
 
 AGENTS_DIR_ENV = "SDLC_AGENTS_DIR"
 # Renamed from SDLC_AGENTS_CONFIG: the value's meaning changed from a single
@@ -151,10 +156,12 @@ def _parse_role(name: str, d: Path) -> RoleConfig:
                 f"role '{name}': {instructions_file} is empty — an empty system "
                 f"prompt is a boot-time bug, not a runtime surprise")
         cfg = cfg.model_copy(update={"instructions": text})
-    elif instructions_file.exists():
+        if not (d / "agent.py").is_file():
+            raise RegistryError(f"role '{name}': missing {d / 'agent.py'}")
+    elif instructions_file.exists() or (d / "agent.py").exists():
         raise RegistryError(
-            f"role '{name}' is kind=harness and carries {instructions_file}, "
-            f"which would never be read: silent dead config")
+            f"role '{name}' is kind=harness and carries instructions.md or "
+            f"agent.py, which would never be read: silent dead config")
     return cfg
 
 
@@ -222,3 +229,60 @@ def _validate_pipeline_mirror(roles: dict[str, RoleConfig]) -> None:
                 f"model={reg.model}); PipelineConfig default has "
                 f"(kind={dflt.kind}, harness={dflt.harness}, "
                 f"model={dflt.model})")
+
+
+def _load_build(name: str, d: Path):
+    """Import agents/<role>/agent.py by PATH under a private module name, so
+    no `agents` package is created and nothing resolves against the code
+    package src/sdlc/agents/."""
+    f = d / "agent.py"
+    spec = importlib.util.spec_from_file_location(f"_sdlc_agent_{name}", f)
+    if spec is None or spec.loader is None:
+        raise RegistryError(f"role '{name}': cannot load {f}")
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    except Exception as exc:
+        raise RegistryError(f"role '{name}': {f} failed to import: {exc}") from exc
+    build = getattr(module, "build", None)
+    if not callable(build):
+        raise RegistryError(
+            f"role '{name}': {f} defines no callable build(model, "
+            f"instructions, model_settings)")
+    return build
+
+
+def build_agents(roles: dict[str, RoleConfig], model_settings,
+                 agents_dir: str | os.PathLike | None = None
+                 ) -> dict[str, "Agent"]:
+    """Construct every proposer role's Agent from its own agent.py.
+
+    MUST be called only AFTER load_registry() has returned: validation precedes
+    import (see the module docstring). Keyed by ROLE name — an agent's own
+    .name is its Temporal activity name and is NOT derived from the role
+    ('qa' -> qa_analyst_agent, 'devops_planner' -> devops_agent).
+
+    model_settings is a parameter rather than an import from roles.py: roles.py
+    imports this function, so importing back would be a cycle that only works
+    by definition order.
+
+    agents_dir is a parameter rather than a re-resolution: the caller knows
+    which tree it loaded, and re-resolving would import agent.py from the
+    shipped registry while validating a different one.
+    """
+    root = Path(agents_dir) if agents_dir is not None \
+        else _resolve_agents_dir(None)
+    agents: dict[str, "Agent"] = {}
+    seen: dict[str, str] = {}
+    for name, cfg in roles.items():
+        if cfg.kind == "harness":
+            continue
+        agent = _load_build(name, root / name)(cfg.model, cfg.instructions,
+                                               model_settings)
+        if agent.name in seen:
+            raise RegistryError(
+                f"roles '{seen[agent.name]}' and '{name}' both build an agent "
+                f"named '{agent.name}': colliding Temporal activity names")
+        seen[agent.name] = name
+        agents[name] = agent
+    return agents

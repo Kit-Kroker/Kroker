@@ -9,7 +9,6 @@ Set them explicitly and never rename after deploying to production.
 """
 from __future__ import annotations
 
-from pydantic_ai import Agent
 from pydantic_ai.durable_exec.temporal import TemporalAgent
 from pydantic_ai.settings import ModelSettings
 from datetime import timedelta
@@ -19,17 +18,7 @@ from temporalio.workflow import ActivityConfig
 
 AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=10))
 
-from .loader import load_registry
-
-from ..models import (
-    AnalysisReport,
-    ArchitectureSpec,
-    ClarifiedRequirements,
-    ImplementationPlan,
-    MergeVerdict,
-    QAReport,
-    ReviewReport,
-)
+from .loader import build_agents, load_registry
 
 # The registry (FR-201) is the single source of every role's model. It is
 # loaded AND validated here at import (loader.load_registry validates), so a
@@ -51,69 +40,18 @@ def _model(role: str) -> str:
 MODEL_SETTINGS = ModelSettings(max_tokens=int(
     os.environ.get("SDLC_MODEL_MAX_TOKENS", "64000")))
 
-clarify_agent = Agent(
-    _model("clarify"),
-    name="clarify_agent",
-    output_type=ClarifiedRequirements,
-    model_settings=MODEL_SETTINGS,
-    system_prompt=REGISTRY["clarify"].instructions,
-)
+AGENTS = build_agents(REGISTRY, MODEL_SETTINGS)
 
-architect_agent = Agent(
-    _model("architect"),
-    name="architect_agent",
-    output_type=ArchitectureSpec,
-    model_settings=MODEL_SETTINGS,
-    system_prompt=REGISTRY["architect"].instructions,
-)
-
-planner_agent = Agent(
-    _model("planner"),
-    name="planner_agent",
-    output_type=ImplementationPlan,
-    model_settings=MODEL_SETTINGS,
-    system_prompt=REGISTRY["planner"].instructions,
-)
-
-qa_analyst_agent = Agent(
-    _model("qa"),
-    name="qa_analyst_agent",
-    output_type=QAReport,
-    model_settings=MODEL_SETTINGS,
-    system_prompt=REGISTRY["qa"].instructions,
-)
-
-reviewer_agent = Agent(
-    _model("reviewer"),
-    name="reviewer_agent",
-    output_type=ReviewReport,
-    model_settings=MODEL_SETTINGS,
-    system_prompt=REGISTRY["reviewer"].instructions,
-)
-
-analyst_agent = Agent(
-    _model("analyst"),
-    name="analyst_agent",
-    output_type=AnalysisReport,
-    model_settings=MODEL_SETTINGS,
-    system_prompt=REGISTRY["analyst"].instructions,
-)
-
-merge_verdict_agent = Agent(
-    _model("merge_verdict"),
-    name="merge_verdict_agent",
-    output_type=MergeVerdict,
-    model_settings=MODEL_SETTINGS,
-    system_prompt=REGISTRY["merge_verdict"].instructions,
-)
-
-devops_agent = Agent(
-    _model("devops_planner"),
-    name="devops_agent",
-    output_type=ImplementationPlan,  # devops tasks reuse the task shape
-    model_settings=MODEL_SETTINGS,
-    system_prompt=REGISTRY["devops_planner"].instructions,
-)
+# Module-level names are preserved verbatim: feature.py and worker.py import
+# these and must not change. Note role name != agent name for two of them.
+clarify_agent = AGENTS["clarify"]
+architect_agent = AGENTS["architect"]
+planner_agent = AGENTS["planner"]
+qa_analyst_agent = AGENTS["qa"]                 # role 'qa'
+reviewer_agent = AGENTS["reviewer"]
+analyst_agent = AGENTS["analyst"]
+merge_verdict_agent = AGENTS["merge_verdict"]
+devops_agent = AGENTS["devops_planner"]         # role 'devops_planner'
 
 # Stage name -> registry role. Stage names (feature.py's pipeline vocabulary)
 # and role names (the registry's) genuinely differ — 'plan'/'planner',

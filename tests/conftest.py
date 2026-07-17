@@ -56,6 +56,22 @@ HARNESS_ROLE_NAMES = ("dev", "test", "devops")
 PROPOSER_ROLE_NAMES = ("clarify", "architect", "planner", "qa", "reviewer",
                        "analyst", "merge_verdict", "devops_planner")
 
+_AGENT_PY = (
+    "from pydantic_ai import Agent\n"
+    "def build(model, instructions, model_settings):\n"
+    "    return Agent(model, name={name!r}, model_settings=model_settings,\n"
+    "                 system_prompt=instructions)\n"
+)
+
+# Role -> agent name. Mirrors roles.py; NOT derived — 'qa' builds
+# qa_analyst_agent, 'devops_planner' builds devops_agent.
+_TEST_AGENT_NAMES = {
+    "clarify": "clarify_agent", "architect": "architect_agent",
+    "planner": "planner_agent", "qa": "qa_analyst_agent",
+    "reviewer": "reviewer_agent", "analyst": "analyst_agent",
+    "merge_verdict": "merge_verdict_agent", "devops_planner": "devops_agent",
+}
+
 
 def write_registry_dir(root, version=1):
     """Materialise a VALID agents/ tree. Tests perturb exactly one thing after
@@ -75,4 +91,6 @@ def write_registry_dir(root, version=1):
         d.mkdir(exist_ok=True)
         (d / "agent.yaml").write_bytes(_PROPOSER_AGENT_YAML)
         (d / "instructions.md").write_bytes(b"do the thing")   # Task 2
+        (d / "agent.py").write_bytes(
+            _AGENT_PY.format(name=_TEST_AGENT_NAMES[name]).encode())  # Task 3
     return root
