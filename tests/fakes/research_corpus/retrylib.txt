@@ -1,0 +1,3 @@
+RetryLib is a small library that handles retries natively, with exponential
+backoff and jitter. It has a known failure mode: without a cap on attempts it
+can retry a poisoned request forever. Prior art: it is modeled on Tenacity.

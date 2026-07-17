@@ -1,0 +1,11 @@
+{
+  "searches": {
+    "retry library": ["https://docs.example.com/retrylib"],
+    "retry": ["https://docs.example.com/retrylib"],
+    "http client": ["https://docs.example.com/httpx"]
+  },
+  "pages": {
+    "https://docs.example.com/retrylib": "retrylib.txt",
+    "https://docs.example.com/httpx": "httpx.txt"
+  }
+}

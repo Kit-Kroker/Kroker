@@ -1,0 +1,2 @@
+HTTPX is an HTTP client for Python supporting sync and async. It does not retry
+by default; pair it with a retry library for resilience.
