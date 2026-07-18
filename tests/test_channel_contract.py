@@ -61,3 +61,9 @@ def test_reference_channel_satisfies_protocol_and_round_trips():
     assert ch.render(d).reply_kind == "gate"
     assert ch.translate(d, Reply(outcome=GateOutcome.REJECT)).signal \
         == "submit_gate_decision"
+
+
+def test_translate_rejects_unknown_type():
+    import pytest
+    with pytest.raises(TypeError):
+        default_translate(object(), Reply(text="x"))

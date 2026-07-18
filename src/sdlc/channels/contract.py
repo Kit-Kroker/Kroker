@@ -77,14 +77,16 @@ def default_translate(d: PendingDecision, reply: Reply) -> SignalCall:
     if isinstance(d, ClarifyPending):
         return SignalCall(signal="answer_question",
                           question_id=d.key, answer=reply.text)
-    # every gate variant -> submit_gate_decision; gate/round come from the
-    # pending item, so a reply can never land on the wrong round.
-    guidance = reply.text if reply.outcome is GateOutcome.REVISE else None
-    return SignalCall(
-        signal="submit_gate_decision",
-        decision=GateDecision(
-            gate=d.gate, round=d.round, outcome=reply.outcome,
-            decided_by="human", comments=reply.text, guidance=guidance))
+    if isinstance(d, (StageGatePending, TaskEscalationPending, MergeGatePending)):
+        # every gate variant -> submit_gate_decision; gate/round come from the
+        # pending item, so a reply can never land on the wrong round.
+        guidance = reply.text if reply.outcome is GateOutcome.REVISE else None
+        return SignalCall(
+            signal="submit_gate_decision",
+            decision=GateDecision(
+                gate=d.gate, round=d.round, outcome=reply.outcome,
+                decided_by="human", comments=reply.text, guidance=guidance))
+    raise TypeError(f"unhandled pending decision: {type(d)!r}")
 
 
 @runtime_checkable
