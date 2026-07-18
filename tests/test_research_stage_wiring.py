@@ -45,10 +45,14 @@ def test_research_retains_verified_findings():
 
 def test_research_stage_verifies_grounding_post_run():
     """AMENDED (Task 7 fallback for Task 1 finding A): the workflow calls
-    verify_brief_activity AFTER the research agent runs, because the original
-    @agent.output_validator was silently dropped by TemporalAgent. The stage
-    fails closed on a GroundingViolation. If this call disappears, grounding
-    enforcement silently vanishes — pin it in the source."""
+    verify_brief_activity AFTER the research agent runs and inspects the
+    returned violations list (the activity returns, not raises — temporalio
+    wraps activity-raised exceptions in ActivityError). Non-empty = fail
+    closed. If this disappears, grounding enforcement silently vanishes.
+
+    Code-review C1/C2 fix: the previous form asserted `"GroundingViolation"
+    in src`, but the workflow no longer references that type — it inspects
+    the returned list. Pin the new shape instead."""
     src = _run_method_src()
     assert "verify_brief_activity" in src
-    assert "GroundingViolation" in src
+    assert "rejected:research.grounding" in src

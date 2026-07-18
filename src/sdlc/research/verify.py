@@ -70,11 +70,20 @@ def brief_digest(brief: ResearchBrief) -> str:
 
 
 class GroundingViolation(Exception):
-    """Raised by verify_brief_activity when a ResearchBrief has grounded_findings
-    that cannot be verified against bytes fetched this run. The workflow (Task 8)
-    catches this and fails the research stage closed — it is NOT a ModelRetry,
-    because TemporalAgent silently drops @agent.output_validator (Task 1 finding
-    A); a hard stage failure is the authorized post-run fallback semantics."""
+    """Exception form of the Violation list returned by verify_brief.
+
+    verify_brief_activity RETURNS list[Violation] (does not raise) so the
+    calling workflow can inspect the result directly — temporalio's
+    execute_activity wraps activity-raised exceptions in
+    ActivityError(ApplicationError), which would prevent a typed
+    `except GroundingViolation` from matching on the workflow side. A DIRECT
+    (non-activity) caller that prefers an exception interface can raise
+    GroundingViolation(violations) from the returned list.
+
+    The workflow (Task 8) treats a non-empty violations list as a hard stage
+    failure: it is NOT a ModelRetry, because TemporalAgent silently drops
+    @agent.output_validator (Task 1 finding A); a hard stage failure is the
+    authorized post-run fallback semantics."""
 
     def __init__(self, violations: list[Violation]):
         self.violations = violations
@@ -88,17 +97,16 @@ class GroundingViolation(Exception):
 
 
 @activity.defn
-async def verify_brief_activity(brief: ResearchBrief, run_id: str) -> None:
+async def verify_brief_activity(brief: ResearchBrief, run_id: str) -> list[Violation]:
     """Temporal activity: verify a ResearchBrief's grounded_findings against the
-    page files fetched this run. Raises GroundingViolation on any violation;
-    returns None otherwise. Registered on the worker and called from the
-    research workflow (Task 8) AFTER the research agent produces its brief.
+    page files fetched this run. Returns the list of violations (empty if the
+    brief is clean). The calling workflow inspects the result and fails the
+    stage closed if non-empty.
 
-    This is the authorized fallback for Task 1 finding A: the original design
-    used @agent.output_validator + ModelRetry, which TemporalAgent silently
-    drops. This activity runs activity-side (where reading page files is legal
-    I/O), fails the stage closed on a violation, and gives the model no retry
-    — stricter than ModelRetry, but correct under temporalization."""
-    violations = verify_brief(brief, run_id)
-    if violations:
-        raise GroundingViolation(violations)
+    Returns (does not raise) so the workflow can inspect the result directly:
+    temporalio's execute_activity wraps activity-raised exceptions in
+    ActivityError(ApplicationError), which would prevent the workflow from
+    catching a typed GroundingViolation. A direct (non-activity) caller that
+    wants an exception interface can raise GroundingViolation(violations)
+    from the returned list."""
+    return verify_brief(brief, run_id)

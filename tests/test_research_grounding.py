@@ -47,28 +47,29 @@ def test_recalled_lead_in_grounded_fails_verification(runs_root):
 
 
 @pytest.mark.asyncio
-async def test_verify_brief_activity_raises_on_violation(runs_root):
-    """The post-run activity turns a violation into a GroundingViolation
-    (NOT ModelRetry) — the research stage fails closed. (Task 1 finding A: the
-    original @agent.output_validator design was silently dropped by
-    TemporalAgent; this activity is the authorized fallback.)"""
-    from sdlc.research.verify import GroundingViolation, verify_brief_activity
+async def test_verify_brief_activity_returns_violations(runs_root):
+    """The post-run activity RETURNS the violations list (does not raise) so
+    the workflow can inspect it directly — temporalio wraps activity-raised
+    exceptions in ActivityError, preventing a typed catch. The workflow checks
+    `if violations:` and fails the stage closed. (Task 1 finding A fallback.)
+    Code-review C1: the previous raise-based form was unwrappable on the
+    workflow side; this pins the return-shape contract."""
+    from sdlc.research.verify import verify_brief_activity
     brief = ResearchBrief(grounded_findings=[
         GroundedFinding(source_url="https://x/none", quote="x", claim="c")])
-    with pytest.raises(GroundingViolation) as exc_info:
-        await verify_brief_activity(brief, "r1")
-    # The exception carries the violations so the workflow can surface them.
-    assert exc_info.value.violations
-    assert exc_info.value.violations[0].source_url == "https://x/none"
+    violations = await verify_brief_activity(brief, "r1")
+    assert violations
+    assert violations[0].source_url == "https://x/none"
+    assert violations[0].kind == "source_never_fetched"
 
 
 @pytest.mark.asyncio
 async def test_verify_brief_activity_passes_clean_brief(runs_root):
     """A brief whose grounded quotes are all substrings of fetched pages
-    verifies cleanly — no raise."""
+    verifies cleanly — returns an empty violations list."""
     from sdlc.research.verify import verify_brief_activity
     _write_page("r1", "https://x/1", "the verbatim quote is here")
     brief = ResearchBrief(grounded_findings=[
         GroundedFinding(source_url="https://x/1", quote="the verbatim quote is here",
                         claim="c")])
-    await verify_brief_activity(brief, "r1")  # no raise
+    assert await verify_brief_activity(brief, "r1") == []

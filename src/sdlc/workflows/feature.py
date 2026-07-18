@@ -57,7 +57,7 @@ with workflow.unsafe.imports_passed_through():
     from ..research.deps import ResearchDeps
     from ..research.retain import verified_findings_to_retain
     from ..research.verify import (
-        GroundingViolation, brief_digest, verify_brief_activity,
+        brief_digest, verify_brief_activity,
     )
 
 ACT = dict(start_to_close_timeout=timedelta(minutes=10),
@@ -77,7 +77,13 @@ LONG_ACT = dict(
 RECORD_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
                   retry_policy=RetryPolicy(maximum_attempts=5))
 MEM_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
-              retry_policy=RetryPolicy(maximum_attempts=5))
+               retry_policy=RetryPolicy(maximum_attempts=5))
+# Code-review C2: deterministic substring check — retrying cannot change the
+# outcome, so maximum_attempts=1 (no retries). Matches the *_ACT convention.
+VERIFY_ACT = dict(
+    start_to_close_timeout=timedelta(minutes=1),
+    retry_policy=RetryPolicy(maximum_attempts=1),
+)
 
 
 def _long_act(role_cfg: RoleConfig | None = None) -> dict:
@@ -666,15 +672,15 @@ class FeatureWorkflow:
             # @agent.output_validator was silently dropped by TemporalAgent, so
             # grounding is enforced here as a post-run ACTIVITY. Reads page
             # files (I/O) — must run via execute_activity, not inline, or
-            # test_factory_purity.py fires. Raises GroundingViolation if any
-            # grounded quote is not a substring of a page fetched this run;
-            # the stage fails closed (no ModelRetry, no retry).
-            try:
-                await workflow.execute_activity(
-                    verify_brief_activity,
-                    args=[brief, workflow.info().workflow_id],
-                    start_to_close_timeout=timedelta(minutes=1))
-            except GroundingViolation:
+            # test_factory_purity.py fires. The activity RETURNS the violations
+            # list (does not raise) so we can inspect it directly — temporalio
+            # wraps activity-raised exceptions in ActivityError, which would
+            # prevent catching a typed exception here. Non-empty = fail closed.
+            violations = await workflow.execute_activity(
+                verify_brief_activity,
+                args=[brief, workflow.info().workflow_id],
+                **VERIFY_ACT)
+            if violations:
                 self._status = "rejected:research.grounding"
                 return "rejected:research.grounding"
             brief_digest_val = brief_digest(brief)

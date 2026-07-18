@@ -18,8 +18,8 @@ from temporalio.worker import Worker
 from sdlc.activities import evaluate_gate  # pure — reused, not faked
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
 from sdlc.models import (
-    GateConfig, GateDecision, GateOutcome, GatePolicy, PipelineConfig,
-    ResearchBrief,
+    GateConfig, GateDecision, GateOutcome, GatePolicy, GroundedFinding,
+    PipelineConfig, ResearchBrief,
 )
 from sdlc.research.verify import verify_brief_activity
 from tests.fakes.canned import (
@@ -34,11 +34,28 @@ with workflow.unsafe.imports_passed_through():
 TASK_QUEUE = "e2e-research"
 
 # The research fake: a brief with NO grounded_findings, so verify_brief_activity
-# raises no GroundingViolation — the happy path for an offline run.
+# returns an empty violations list — the happy path for an offline run.
 _RESEARCH = ResearchBrief(summary="found nothing external", confidence=0.5)
 
+# Code-review I1: a brief WITH a grounded finding whose source_url was NEVER
+# fetched this run. verify_brief_activity reads
+# $SDLC_RUNS_ROOT/<run_id>/research/pages/<sha256(url)>.txt — no such file
+# exists for "https://x/never-fetched" under the test's empty tmp_path, so the
+# activity RETURNS [Violation(kind="source_never_fetched", ...)] and the
+# workflow returns "rejected:research.grounding". This exercises the fail-closed
+# path that the old `except GroundingViolation` could never catch (C1) and the
+# retry_policy=1 (C2): under the old raise-based form, temporalio wrapped the
+# GroundingViolation in ActivityError(ApplicationError), the workflow's typed
+# catch never matched, and the workflow crashed instead of rejecting.
+_RESEARCH_WITH_VIOLATION = ResearchBrief(
+    summary="a grounded claim with no page file",
+    confidence=0.5,
+    grounded_findings=[
+        GroundedFinding(source_url="https://x/never-fetched",
+                        quote="anything", claim="c")])
 
-def _research_fake_activities() -> list:
+
+def _research_fake_activities(brief: ResearchBrief = _RESEARCH) -> list:
     """The research agent is the only proposer with FUNCTION tools registered
     (web_search, fetch_page, …). The workflow-side model_request activity
     carries the production agent's function_tools in ModelRequestParameters,
@@ -53,7 +70,7 @@ def _research_fake_activities() -> list:
     function tools, so the default TestModel behaviour already produces [] for
     them and this override is unnecessary there."""
     agent = Agent(
-        TestModel(custom_output_args=_RESEARCH.model_dump(mode="json"),
+        TestModel(custom_output_args=brief.model_dump(mode="json"),
                   call_tools=[]),
         name="research_agent",
         output_type=ResearchBrief,
@@ -132,3 +149,54 @@ async def test_research_stage_runs_and_hands_off():
                 await driver
 
     assert result.startswith("deployed:"), result
+
+
+@pytest.mark.asyncio
+async def test_research_stage_rejects_on_grounding_violation(tmp_path,
+                                                              monkeypatch):
+    """Code-review I1: a brief with an ungrounded finding (source_url never
+    fetched this run) must cause the workflow to return
+    "rejected:research.grounding" — NOT crash with ActivityError and NOT
+    proceed to clarify.
+
+    Under the OLD raise-based form, verify_brief_activity raised
+    GroundingViolation; temporalio's execute_activity wrapped it in
+    ActivityError(ApplicationError); the workflow's `except GroundingViolation`
+    never matched (C1); the workflow crashed. This test exercises the catch by
+    feeding the workflow a brief with `source_url="https://x/never-fetched"`
+    and asserting a clean rejection. It would have caught both C1 and C2.
+
+    The research gate policy is OFF (auto-approve) so the gate doesn't block
+    before verification runs. $SDLC_RUNS_ROOT points at an empty tmp_path —
+    no page file for the violating URL, so the activity returns
+    [Violation(kind="source_never_fetched", ...)] and the workflow inspects it
+    (`if violations:`) and rejects. No driver task: the workflow returns
+    before reaching any human-gated stage."""
+    monkeypatch.setenv("SDLC_RUNS_ROOT", str(tmp_path))
+    activities = [evaluate_gate, verify_brief_activity, *GIT_FAKES,
+                  *_research_fake_activities(_RESEARCH_WITH_VIOLATION),
+                  *fake_agent_activities(AGENT_SPECS)]
+    cfg = PipelineConfig(
+        research_enabled=True,
+        gates={"research": GateConfig(policy=GatePolicy.OFF),
+               "architecture": GateConfig(policy=GatePolicy.OFF),
+               "plan": GateConfig(policy=GatePolicy.OFF),
+               "deploy": GateConfig(policy=GatePolicy.HARD)},
+        memoization_enabled=False,
+        review_enabled=True,
+    )
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        with env.auto_time_skipping_disabled():
+            async with Worker(
+                    env.client, task_queue=TASK_QUEUE,
+                    workflows=[FeatureWorkflow], activities=activities,
+                    plugins=[PydanticAIPlugin()]):
+                handle = await env.client.start_workflow(
+                    FeatureWorkflow.run,
+                    args=[greenfield_idea(), cfg],
+                    id=f"e2e-research-violation-{uuid.uuid4()}",
+                    task_queue=TASK_QUEUE)
+                result = await handle.result()
+
+    assert result == "rejected:research.grounding", result
