@@ -48,18 +48,18 @@
 - [ ] **1 · constitution** — no `Constitution` model, no stage.
 - [ ] **2 · context (Cartographer)** — no `CodebaseMap`, no `cartography.py`, no brownfield delta.
 - [ ] **3 · requirements (Product)** — conflated into clarify; no standalone Product proposer / `Requirements` artifact.
-- [ ] **research** (FR-107) — grounded brief before clarify. The DAG is now 15
+- [ ] **4 · research** (FR-107) — grounded brief before clarify. The DAG is now 15
   stages; **7 of 15 stages live** (research is scaffolded, off by default).
-- [x] **4 · clarify** — Clarifier + gate; open-question wait on `answer_question`; recall/retain/memoization wired.
-- [x] **5 · architecture** — Architect + gate, with REVISE loop (`_revisable_stage`).
-- [x] **6 · planning** — Planner + gate, with REVISE loop.
-- [x] **7 · code** — Developer, per-task, ADR-14 integration branch (`_dev_task`).
-- [x] **8 · review** — clean-context `reviewer_agent` (`t_reviewer`) run in `_dev_task`; blocking findings fold into the fix loop. **(new)**
-- [x] **9 · analyze (Analyst)** — Analyst clean-context proposer (`t_analyst`) emits `AnalysisReport`; workflow enforces criterion→test traceability against the plan's authoritative criteria (FR-106).
-- [x] **10 · qa (+ Resolver)** — clean-context `t_qa` + bounded fix loop (folded into stage 7). *Note: default `max_fix_attempts=2`, PRD says QA loop 3 — numeric drift.*
-- [ ] ⚠️ **11 · quality_gate** — `DeterministicQualityGate` mechanism ✅; 6 checks built (`build_integration_green`, `lint_clean`, `security_no_critical` absolute; `review_severity`, `traceability`, `coverage` advisory). Absolute security floor now wired ✅; traceability enforced ✅; coverage via deterministic Cobertura seam (`measured=False` ⇒ no-op — blocked not just on a project emitting `coverage.xml` + setting `coverage_threshold`, but on the test suite actually running in the *integration* worktree the seam reads from: stage 5a only runs `run_lint`/`security_scan` there, `run_test_suite` runs per-task in task worktrees, so `coverage.xml` never lands where `measure_coverage` looks unless the artifact is carried across the merge).
-- [ ] ⚠️ **12 · deploy** — single hardcoded `make deploy ENV=staging`; no `DeployPlan`/`DeployReport` split, no smoke-test vs PR-merge distinction.
-- [ ] **13 · retro** — `reflect()` activity exists and is registered but **never called**; no `RunSummary`, no export.
+- [x] **5 · clarify** — Clarifier + gate; open-question wait on `answer_question`; recall/retain/memoization wired.
+- [x] **6 · architecture** — Architect + gate, with REVISE loop (`_revisable_stage`).
+- [x] **7 · planning** — Planner + gate, with REVISE loop.
+- [x] **8 · code** — Developer, per-task, ADR-14 integration branch (`_dev_task`).
+- [x] **9 · review** — clean-context `reviewer_agent` (`t_reviewer`) run in `_dev_task`; blocking findings fold into the fix loop. **(new)**
+- [x] **10 · analyze (Analyst)** — Analyst clean-context proposer (`t_analyst`) emits `AnalysisReport`; workflow enforces criterion→test traceability against the plan's authoritative criteria (FR-106).
+- [x] **11 · qa (+ Resolver)** — clean-context `t_qa` + bounded fix loop (folded into stage 7). *Note: default `max_fix_attempts=2`, PRD says QA loop 3 — numeric drift.*
+- [ ] ⚠️ **12 · quality_gate** — `DeterministicQualityGate` mechanism ✅; 6 checks built (`build_integration_green`, `lint_clean`, `security_no_critical` absolute; `review_severity`, `traceability`, `coverage` advisory). Absolute security floor now wired ✅; traceability enforced ✅; coverage via deterministic Cobertura seam (`measured=False` ⇒ no-op — blocked not just on a project emitting `coverage.xml` + setting `coverage_threshold`, but on the test suite actually running in the *integration* worktree the seam reads from: stage 5a only runs `run_lint`/`security_scan` there, `run_test_suite` runs per-task in task worktrees, so `coverage.xml` never lands where `measure_coverage` looks unless the artifact is carried across the merge).
+- [ ] ⚠️ **13 · deploy** — single hardcoded `make deploy ENV=staging`; no `DeployPlan`/`DeployReport` split, no smoke-test vs PR-merge distinction.
+- [ ] **14 · retro** — `reflect()` activity exists and is registered but **never called**; no `RunSummary`, no export.
 
 ---
 

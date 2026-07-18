@@ -82,6 +82,7 @@ class _SpikeWorkflow:
 
 
 @pytest.mark.asyncio
+@pytest.mark.xfail(strict=True, reason="Task 1 finding A: TemporalAgent silently drops @agent.output_validator (runs in no context). Recorded decision-gate output; see FINDING block. A future pydantic-ai release that fixes this will turn this xfail green (strict=True flags that).")
 async def test_output_validator_survives_temporalization_and_runs_activity_side():
     _VALIDATOR_RAN_IN.clear()
     async with await WorkflowEnvironment.start_time_skipping(
@@ -128,6 +129,7 @@ class _CodeModeWorkflow:
 
 
 @pytest.mark.asyncio
+@pytest.mark.xfail(strict=True, reason="Task 1 finding B: CodeMode's run_code cannot be exercised via TestModel under TemporalAgent (Monty rejects dummy code; infinite retry). Recorded decision-gate output; see FINDING block.")
 async def test_codemode_run_code_executes_through_temporal_agent():
     # NOTE: asyncio.wait_for bounds an observed INDEFINITE HANG. With plain
     # TestModel(call_tools=['run_code']), CodeMode's Monty type-checker

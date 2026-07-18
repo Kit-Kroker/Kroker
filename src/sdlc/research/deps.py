@@ -1,5 +1,5 @@
 """Runtime deps for the research agent's tools. Serializable (crosses the
-Tempororal activity boundary via pydantic_data_converter), so it carries CONFIG
+Temporal activity boundary via pydantic_data_converter), so it carries CONFIG
 and COUNTERS — never a live provider handle or a filesystem path.
 
 The `budget` counter is a mutable pydantic model on `ResearchDeps`. It

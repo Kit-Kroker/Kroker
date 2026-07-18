@@ -13,7 +13,9 @@ async def read_repo(ctx: RunContext[ResearchDeps], path: str) -> str:
     budget — local reads are free and bounded by the model's own restraint."""
     root = Path(os.environ.get("SDLC_RESEARCH_REPO_ROOT", ".")).resolve()
     target = (root / path).resolve()
-    if not str(target).startswith(str(root)):
+    try:
+        target.relative_to(root)
+    except ValueError:
         raise ValueError(f"refusing to read outside the repo root: {path}")
     if not target.is_file():
         return f"[no such file: {path}]"

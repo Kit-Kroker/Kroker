@@ -10,7 +10,7 @@
 
 ## 1. Overview
 
-The factory is a deterministic state machine over a fixed 14-stage DAG,
+The factory is a deterministic state machine over a fixed 15-stage DAG,
 executed as a Temporal workflow. Specialized agents fill roles; humans hold
 configurable decision gates; a shared memory makes the system learn across
 runs; a proactive maintenance loop closes the circle from deployed feature
@@ -271,7 +271,7 @@ bounds history.
 All surfaces are stateless shells over three Temporal primitives — queries
 (`status`, `stages`, `pending_decisions`), signals, visibility lists:
 
-- **Dashboard** (FastAPI + single-page UI): fleet rail, 14-stage spine,
+- **Dashboard** (FastAPI + single-page UI): fleet rail, 15-stage spine,
   decision inbox (accept-suggestion one-click, inline custom answers,
   approve/reject with comments). Auth via API-key flow + rate limit
   (fastapi-request-pipeline). 5 s polling v1; SSE later.
@@ -488,7 +488,7 @@ agentic-sdlc/
 │   │   └── validators.py      #   Kahn DAG check, delta-vs-CodebaseMap, union checks,
 │   │                          #   cross-harness reviewer rule
 │   ├── workflows/             # deterministic only (import-linted)
-│   │   ├── factory.py         #   FactoryWorkflow: 14-stage DAG, scheduling (serial|waves
+│   │   ├── factory.py         #   FactoryWorkflow: 15-stage DAG, scheduling (serial|waves
 │   │   │                      #   + overlap serialization), handoff flow
 │   │   ├── task.py            #   per-task loop: contract-first, resume-bounded sessions
 │   │   ├── gates.py           #   signal-wait gate helper + pending_decisions publishing

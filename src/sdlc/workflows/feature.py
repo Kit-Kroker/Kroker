@@ -762,8 +762,15 @@ class FeatureWorkflow:
 
             # ResearchDeps is ALWAYS constructed so the architect agent's
             # deps_type=ResearchDeps is satisfied uniformly. When research is
-            # disabled, provider="fake" — the architect can still consult the
-            # offline corpus via its research(q) tool (advisory; spec §8).
+            # disabled, provider="fake".
+            # NOTE: under the default config (research_enabled=False,
+            # provider="fake", no $SDLC_RESEARCH_FAKE_CORPUS), the architect's
+            # research(q) tool is advertised but will raise if the LLM calls
+            # it — the fake corpus is a CI fixture, not production-accessible.
+            # Set research_enabled=True and a real provider (or point
+            # SDLC_RESEARCH_FAKE_CORPUS at a corpus) to use it.
+            # The error surfaces to the model, which stops calling the tool;
+            # the architect still produces its ArchitectureSpec.
             # NOTE (accepted loss, 2026-07-17 human decision): the budget
             # counter on deps.budget accumulates correctly for direct/test
             # invocation, but under TemporalAgent each tool activity receives
