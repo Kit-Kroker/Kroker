@@ -24,7 +24,7 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..agents.roles import (
         PROMPT_SHAS, STAGE_MODELS, t_analyst, t_architect, t_clarify,
-        t_merge_verdict, t_planner, t_qa, t_reviewer,
+        t_merge_verdict, t_planner, t_qa, t_research, t_reviewer,
     )
     from ..benchmarks.judge import (
         JudgeInput, _build_judge_input, judge_artifact,
@@ -51,8 +51,13 @@ with workflow.unsafe.imports_passed_through():
         CoverageReport, DevTask, ExecutionMode, GateConfig, GateDecision,
         GateOutcome, GatePolicy, HandoffSummary, IdeaBrief,
         ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig,
-        RecallSnapshot, RetainItem, RoleConfig, SecurityReport, TaskResult,
-        gate_key,
+        RecallSnapshot, ResearchBrief, RetainItem, RoleConfig,
+        SecurityReport, TaskResult, gate_key,
+    )
+    from ..research.deps import ResearchDeps
+    from ..research.retain import verified_findings_to_retain
+    from ..research.verify import (
+        GroundingViolation, brief_digest, verify_brief_activity,
     )
 
 ACT = dict(start_to_close_timeout=timedelta(minutes=10),
@@ -629,6 +634,65 @@ class FeatureWorkflow:
         self._integration_head = integration.head_sha
         self._integration_wt = integration.worktree_path
 
+        # 0. RESEARCH (FR-107) — optional, human-gated, NOT memoized. A served
+        # memo means pages were not fetched this run, so a brief cannot be
+        # cached (spec finding 4). The brief contributes only its canonical
+        # digest to downstream keys (finding 3), never its prose.
+        brief_digest_val = ""
+        if cfg.research_enabled and t_research is not None:
+            self._status = "researching"
+            _r_started = workflow.now()
+            deps = ResearchDeps(
+                run_id=workflow.info().workflow_id,
+                provider=cfg.roles.get("research").provider
+                    if cfg.roles.get("research") else "fake",
+                max_searches=cfg.research.max_searches,
+                max_fetches=cfg.research.max_fetches,
+                max_cost_usd=cfg.research.max_cost_usd,
+                memory_backend=cfg.memory.backend,
+                memory_base_url=cfg.memory.base_url,
+                memory_bank=cfg.memory.project_bank,
+                memory_watermark=self._memory_watermark)
+            # NOTE (accepted loss, 2026-07-17 human decision): the budget
+            # counter on deps.budget accumulates correctly for direct/test
+            # invocation, but under TemporalAgent each tool activity receives
+            # a fresh deserialized copy, so charge() never raises mid-run.
+            # Per-run budget enforcement is effectively absent under
+            # temporalization; restoring it needs a disk-persisted counter
+            # (deferred — not this task).
+            brief: ResearchBrief = (await t_research.run(
+                idea.model_dump_json(), deps=deps)).output
+            # Task 7 fallback (Task 1 finding A): the original
+            # @agent.output_validator was silently dropped by TemporalAgent, so
+            # grounding is enforced here as a post-run ACTIVITY. Reads page
+            # files (I/O) — must run via execute_activity, not inline, or
+            # test_factory_purity.py fires. Raises GroundingViolation if any
+            # grounded quote is not a substring of a page fetched this run;
+            # the stage fails closed (no ModelRetry, no retry).
+            try:
+                await workflow.execute_activity(
+                    verify_brief_activity,
+                    args=[brief, workflow.info().workflow_id],
+                    start_to_close_timeout=timedelta(minutes=1))
+            except GroundingViolation:
+                self._status = "rejected:research.grounding"
+                return "rejected:research.grounding"
+            brief_digest_val = brief_digest(brief)
+            gate = await self._gate("research", cfg)
+            if not gate.approved:
+                return "rejected:research"
+            for item in verified_findings_to_retain(
+                    brief, workflow.info().workflow_id,
+                    bank=cfg.memory.project_bank):
+                await self._retain(cfg, item.kind, item.bank, item.text,
+                                   item.metadata)
+            await self._record(cfg, self._stage_record(
+                cfg, stage="research", role="research",
+                started=_r_started, ended=workflow.now(),
+                quality_score=None, judge="contract",
+                outcome=BenchmarkOutcome.PASS,
+                model=STAGE_MODELS.get("research", "unknown")))
+
         # 1. CLARIFY — open questions answered by human via signals
         self._status = "clarifying"
         _started = workflow.now()
@@ -643,7 +707,7 @@ class FeatureWorkflow:
                    if snapshot.items else ""))).output
 
         reqs, _ = await self._cached_stage(
-            cfg, "clarify", idea.model_dump_json(),
+            cfg, "clarify", idea.model_dump_json() + brief_digest_val,
             ClarifiedRequirements, _run_clarify)
         if reqs.open_questions:
             clarify_policy = cfg.gates.get("clarify", GateConfig()).policy

@@ -50,3 +50,13 @@ def test_reflect_workflow_is_reachable_from_the_reflect_activity():
     src = inspect.getsource(mod)
     assert "execute_activity" in src
     assert "reflect" in src
+
+
+def test_worker_registers_research_verify_activity():
+    """verify_brief_activity is a standalone Temporal activity (not an
+    agent-tool activity that flows through ALL_TEMPORAL_AGENTS), so the worker
+    must register it explicitly — otherwise the research workflow's
+    execute_activity call would fail at runtime with no registered activity."""
+    from sdlc import worker
+    src = __import__("inspect").getsource(worker)
+    assert "verify_brief_activity" in src

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel
+from temporalio import activity
 
 from ..models import ResearchBrief
 
@@ -86,6 +87,7 @@ class GroundingViolation(Exception):
             "inferred_findings. Violations:\n" + lines)
 
 
+@activity.defn
 async def verify_brief_activity(brief: ResearchBrief, run_id: str) -> None:
     """Temporal activity: verify a ResearchBrief's grounded_findings against the
     page files fetched this run. Raises GroundingViolation on any violation;

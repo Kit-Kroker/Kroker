@@ -53,6 +53,10 @@ analyst_agent = AGENTS["analyst"]
 merge_verdict_agent = AGENTS["merge_verdict"]
 devops_agent = AGENTS["devops_planner"]         # role 'devops_planner'
 
+# Optional research agent (2026-07-17). Present iff agents/research/ ships,
+# which it does; the STAGE runs only under cfg.research_enabled (feature.py).
+research_agent = AGENTS.get("research")
+
 # Stage name -> registry role. Stage names (feature.py's pipeline vocabulary)
 # and role names (the registry's) genuinely differ — 'plan'/'planner',
 # 'review'/'reviewer', 'analyze'/'analyst', 'devops'/'devops_planner'. This
@@ -66,12 +70,17 @@ STAGE_ROLES: dict[str, str] = {
     "analyze": "analyst",
     "qa": "qa",
     "merge_verdict": "merge_verdict",
+    "research": "research",             # optional; present iff the folder ships
 }
 
 # Both maps are keyed by stage and looked up together in _cached_stage. Keep
-# their keyspaces identical (tests/test_stage_models.py asserts it).
+# their keyspaces identical (tests/test_stage_models.py asserts it). The
+# tolerant `if role in REGISTRY` covers optional roles whose folder is absent
+# (research today, possibly others later) — without it, _model(role) would
+# KeyError at import on a tree that ships an OPTIONAL_ROLES slot but no folder.
 STAGE_MODELS: dict[str, str] = {
     stage: _model(role) for stage, role in STAGE_ROLES.items()
+    if role in REGISTRY
 }
 
 # Prompt text now lives in agents/<role>/instructions.md (E-2). The hash is
@@ -79,6 +88,7 @@ STAGE_MODELS: dict[str, str] = {
 # tests/test_prompt_migration.py pins every value.
 _STAGE_PROMPTS: dict[str, str] = {
     stage: REGISTRY[role].instructions for stage, role in STAGE_ROLES.items()
+    if role in REGISTRY and REGISTRY[role].instructions is not None
 }
 
 PROMPT_SHAS: dict[str, str] = {
@@ -96,5 +106,13 @@ t_analyst = TemporalAgent(analyst_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 t_merge_verdict = TemporalAgent(merge_verdict_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 t_devops = TemporalAgent(devops_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 
+# Optional: the research TemporalAgent exists iff agents/research/ shipped
+# and built cleanly. feature.py guards the stage with `t_research is not None`
+# AND cfg.research_enabled before invoking it.
+t_research = (TemporalAgent(research_agent, activity_config=AGENT_ACTIVITY_CONFIG)
+              if research_agent is not None else None)
+
 ALL_TEMPORAL_AGENTS = [t_clarify, t_architect, t_planner, t_qa,
                        t_reviewer, t_analyst, t_merge_verdict, t_devops]
+if t_research is not None:
+    ALL_TEMPORAL_AGENTS.append(t_research)

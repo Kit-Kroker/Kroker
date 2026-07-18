@@ -23,7 +23,11 @@ PRE_MIGRATION_SHAS = {
 
 
 def test_prompt_shas_did_not_move():
-    assert PROMPT_SHAS == PRE_MIGRATION_SHAS
+    # Subset, not equality: new roles (e.g. the optional research role added
+    # 2026-07-17) can join PROMPT_SHAS without rocking the migration
+    # invariant. The pinned pre-migration shas must all still match exactly —
+    # THAT is the "prompts didn't move" check.
+    assert PRE_MIGRATION_SHAS.items() <= PROMPT_SHAS.items()
 
 
 def test_every_proposer_role_has_instructions():

@@ -52,3 +52,11 @@ def test_changing_one_roles_model_moves_only_that_stages_key():
     clarify_before = key_for("clarify", roles.STAGE_MODELS["clarify"])
     clarify_after = key_for("clarify", roles.STAGE_MODELS["clarify"])
     assert clarify_before == clarify_after
+
+
+def test_research_is_a_stage_but_optional():
+    from sdlc.agents import roles
+    assert roles.STAGE_ROLES["research"] == "research"
+    # Present in the shipped tree, so it resolves a model + prompt sha.
+    assert "research" in roles.STAGE_MODELS
+    assert "research" in roles.PROMPT_SHAS
