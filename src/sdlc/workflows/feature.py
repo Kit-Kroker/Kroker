@@ -760,8 +760,30 @@ class FeatureWorkflow:
                       + (f"\nRevision guidance from reviewer:\n{guidance}"
                          if guidance else ""))
 
+            # ResearchDeps is ALWAYS constructed so the architect agent's
+            # deps_type=ResearchDeps is satisfied uniformly. When research is
+            # disabled, provider="fake" — the architect can still consult the
+            # offline corpus via its research(q) tool (advisory; spec §8).
+            # NOTE (accepted loss, 2026-07-17 human decision): the budget
+            # counter on deps.budget accumulates correctly for direct/test
+            # invocation, but under TemporalAgent each tool activity receives
+            # a fresh deserialized copy — shared-budget enforcement is
+            # advisory-only when the architect runs temporalized.
+            architect_deps = ResearchDeps(
+                run_id=workflow.info().workflow_id,
+                provider=(cfg.roles.get("research").provider
+                          if cfg.research_enabled and cfg.roles.get("research")
+                          else "fake"),
+                max_searches=cfg.research.max_searches,
+                max_fetches=cfg.research.max_fetches,
+                max_cost_usd=cfg.research.max_cost_usd,
+                memory_backend=cfg.memory.backend,
+                memory_base_url=cfg.memory.base_url,
+                memory_bank=cfg.memory.project_bank,
+                memory_watermark=self._memory_watermark)
+
             async def _produce():
-                return (await t_architect.run(prompt)).output
+                return (await t_architect.run(prompt, deps=architect_deps)).output
             arch, _ = await self._cached_stage(
                 cfg, "architect",
                 reqs.model_dump_json() + (guidance or ""),

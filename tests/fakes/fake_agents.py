@@ -17,9 +17,17 @@ from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
 
 def fake_temporal_agent(name: str, output_type: type,
                         value: BaseModel) -> TemporalAgent:
-    """A TemporalAgent whose model always returns `value` as `output_type`."""
+    """A TemporalAgent whose model always returns `value` as `output_type`.
+
+    `call_tools=[]` disables TestModel's default behaviour of auto-calling
+    every tool in `function_tools` before emitting its canned output. With
+    Task 9 the production architect agent registers a `research` tool, so
+    the workflow-side `t_architect` advertises that tool to the model; the
+    fake architect has no tools locally and would otherwise raise
+    `Tool 'research' not found in toolset`."""
     agent = Agent(
-        TestModel(custom_output_args=value.model_dump(mode="json")),
+        TestModel(custom_output_args=value.model_dump(mode="json"),
+                  call_tools=[]),
         name=name,
         output_type=output_type,
     )
