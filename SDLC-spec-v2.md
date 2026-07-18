@@ -28,7 +28,7 @@ the orchestration layer validates, authorizes, executes, and records it.
 
 ## 1. Lifecycle stages
 
-Unchanged order from v1; each row now maps to a Temporal construct. The
+Order kept from v1 with `research` (stage 4) inserted before `clarify`; each row now maps to a Temporal construct. The
 pipeline is one `FactoryWorkflow` execution; stages are activities or child
 workflows on the `ai-sdlc` task queue.
 
@@ -281,7 +281,7 @@ recall filters in `agents.yaml` (§2) select on these.
 | after each stage success | `retain(project)` | artifact summary (not the full artifact — the store holds that) |
 | after fix loops | `retain(project, kind=gotcha)` | *experiences*: what failed, what fixed it — this is what makes attempt N+1 cheaper |
 | after every `GateDecision` | `retain(project, kind=gate_feedback)` | human approve/reject + comments |
-| retro stage (13) | `reflect` | consolidate the run into mental models ("this repo's migrations always break X") |
+| retro stage (14) | `reflect` | consolidate the run into mental models ("this repo's migrations always break X") |
 | nightly Temporal **Schedule** | `reflect(org)` | cross-project consolidation — the factory-wide learning loop |
 
 **Governance additions (extends v1 §5):**

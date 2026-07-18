@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-07-16 (against `src/sdlc/`, `interfaces/`, `tests/`, `config/`) |
+| Last verified | 2026-07-17 (against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
-| Method | Every FR / NFR / SC / US / ADR and the 14-stage DAG checked against actual code, not against prior audit claims |
+| Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
 **Legend**
 - `[x]` — implemented and wired into the live path
@@ -16,6 +16,14 @@
 > Since the 2026-07-05 audit, the **reviewer stage (ADR-6/FR-204)** and **agent registry (FR-201)** landed (merged `b9455c3`), plus a **coding-harness adapter layer** and **harness observability logging**. Those items are now checked. The audit's `docs/feature-coverage-audit-2026-07-05.md` is superseded by this tracker.
 
 > **2026-07-16 — ADR-6 correction.** The anti-collusion check was validating `config/agents.yaml`'s `developer` role, which nothing ever ran; `cfg.roles["dev"]` (a second, hardcoded registry in `models.py`) selected the coding model. The invariant held only while two hardcoded lists agreed. `agents.yaml` is now the single registry, the check compares `reviewer` against `dev`, and `PipelineConfig.roles` is asserted at boot to mirror it. Prior `[x]` marks on ADR-6/US-5 were true of the mechanism, not of the pairing it constrained.
+
+> **2026-07-17 — research stage (FR-107).** A grounded research stage lands
+> before clarify, off by default. `grounded` means quote-verified against bytes
+> fetched this run; unverified claims are inferred or dropped; recall yields
+> leads, not truth. It is the pipeline's first outbound egress (raising E-18)
+> and the first role a folder genuinely describes. Memoization is preserved by a
+> canonical `brief_digest`, not by caching the brief (a cached brief was never
+> fetched). `2026-07-17-research-agent-grounded-briefs`.
 
 ---
 
@@ -32,14 +40,16 @@
 
 ---
 
-## 1. Pipeline — 14-stage DAG (SDLC-spec v2 §1)
+## 1. Pipeline — 15-stage DAG (SDLC-spec v2 §1)
 
-**8 of 14 stages live.**
+**7 of 15 stages live.**
 
 - [ ] **0 · intake** — routing greenfield/brownfield/repair. `IdeaBrief.mode` is a field only; no branch logic in `feature.py`.
 - [ ] **1 · constitution** — no `Constitution` model, no stage.
 - [ ] **2 · context (Cartographer)** — no `CodebaseMap`, no `cartography.py`, no brownfield delta.
 - [ ] **3 · requirements (Product)** — conflated into clarify; no standalone Product proposer / `Requirements` artifact.
+- [ ] **research** (FR-107) — grounded brief before clarify. The DAG is now 15
+  stages; **7 of 15 stages live** (research is scaffolded, off by default).
 - [x] **4 · clarify** — Clarifier + gate; open-question wait on `answer_question`; recall/retain/memoization wired.
 - [x] **5 · architecture** — Architect + gate, with REVISE loop (`_revisable_stage`).
 - [x] **6 · planning** — Planner + gate, with REVISE loop.
@@ -56,12 +66,13 @@
 ## 2. Functional requirements (PRD §6)
 
 ### Pipeline (FR-100)
-- [ ] ⚠️ **FR-101** 14-stage durable DAG — 8/14 stages (see §1).
+- [ ] ⚠️ **FR-101** 15-stage durable DAG — 7/15 stages (see §1).
 - [ ] **FR-102** greenfield/brownfield classify + `CodebaseMap` + delta.
-- [x] **FR-103** memoization, per-run watermark, audit-record-always-kept (`memoization/cache.py`, `content_key`, `_cached_stage`) — each stage's memo key now carries *its own* role's model (`STAGE_MODELS`), so a per-role model change invalidates exactly that stage.
+- [x] **FR-103** memoization, per-run watermark, audit-record-always-kept (`memoization/cache.py`, `content_key`, `_cached_stage`) — each stage's memo key now carries *its own* role's model (`STAGE_MODELS`), so a per-role model change invalidates exactly that stage. `brief_digest` keeps memoization alive once a non-memoized stage (research) feeds memoized ones: the brief contributes only a canonical (source_url, claim) digest to `content_key`, so identical facts hit and new facts invalidate clarify/architect/planner.
 - [x] **FR-104** integration branch, per-task worktree, own-branch-point diff (ADR-14 fully wired).
 - [ ] ⚠️ **FR-105** fix loops — QA loop ✅, review findings now fold into it ✅; loop-count defaults drift from spec (2 vs 3).
 - [ ] ⚠️ **FR-106** deterministic absolute/advisory gate — classification ✅ and load-bearing; security absolute-floor check now wired ✅ (`security_no_critical`); traceability enforced ✅; coverage wired as a deterministic diff-scoped seam ✅ (real instrumentation future work).
+- [ ] **FR-107 (new scope)** grounded research stage — `ResearchBrief`, quote-verified against bytes fetched this run, off by default (`research_enabled`). Landed behind the PRD amendment adding FR-107; `2026-07-17-research-agent-grounded-briefs`.
 
 ### Agents (FR-200)
 - [x] **FR-201** versioned `config/agents.yaml` registry (role/kind/model) — governs all eleven roles (3 harness + 8 proposer); `PipelineConfig.roles` is a purity-mandated mirror asserted at boot.
@@ -95,9 +106,9 @@
 - [x] **FR-604** stateless shells, no interface DB — true for CLI.
 
 ### Governance & ops (FR-700)
-- [ ] **FR-701** run budgets (wall-clock/steps/cost) + escalation — only *context* budget exists; no run-level counters. Cost bookkeeping exists in benchmarks only.
+- [ ] **FR-701** run-level budgets — research ships the FIRST run-level counters (`max_searches`/`max_fetches`/`max_cost_usd`), stage-scoped and enforced inside the tools; E-19 remains the general version.
 - [ ] ⚠️ **FR-702** claim-check `ArtifactRef` / 2MB discipline — `ArtifactRef` model exists but diffs travel inline; no `CodeArtifact` union; no size guard.
-- [ ] ⚠️ **FR-703** tiered harness containment — env allowlist ✅ only; **no `pre_tool` hook, no OS-user/container tier, no egress policy**.
+- [ ] ⚠️ **FR-703** egress policy — **research is the pipeline's first outbound egress, and it arrives before the egress policy.** Still env-allowlist only; no `pre_tool` hook, no egress tier. This spec is E-18's first consumer, not its implementation.
 - [ ] **FR-704** observability export (`events.jsonl` + `report.html`) — no `observability/` module.
 
 ---
@@ -164,6 +175,13 @@
   stays open on E-4.
 - [x] Deterministic CI stand-in for the e2e proof — `tests/fakes/` provides same-named `TemporalAgent` `TestModel` stubs + fake git/subprocess activities (P1 orchestration test). (A `fake_harness.py`-style adapter for real-git fidelity remains future work.)
 - [ ] Cosmetic: workflow class is `FeatureWorkflow`; docs call it `FactoryWorkflow`.
+- **ReviewReport / MergeVerdict SGR ordering (found in the research spec).**
+  `ReviewReport` is `approve → findings → confidence` — the reviewer commits to a
+  verdict before writing a finding, contradicting `REVIEWER_PROMPT`'s "set
+  approve to false if ANY finding is critical/high". `MergeVerdict` rates its own
+  confidence two fields before listing concerns. `AnalysisReport`/`ArchitectureSpec`
+  are already evidence-first. A one-line-per-contract fix; its own change and its
+  own benchmark run (out of scope for the research increment).
 
 ---
 
@@ -217,6 +235,10 @@ of an ADR-6 hole. Closed by `docs/superpowers/specs/2026-07-16-registry-drives-e
 - [x] **E-3** ~~Wire prompt-file content into `content_key`~~ — **the prompt half was already wired before the item was written** (`content_key(prompt_sha=...)` + `PROMPT_SHAS`). The *model* half was the real gap: every stage passed one hardcoded `MODEL` constant as `content_key`'s `model_id`, so per-role models would have served stale-model cache hits. Closed together with the ADR-6 hole (§9.1 preamble); `STAGE_MODELS` now resolves each stage's real model.
 - [ ] **E-4** Prompt eval loop over the new `agents/` assets — closes §7's "versioned assets **with an eval loop**" clause.
 - [ ] **E-5** *(speculative — do not schedule)* Factory takes its own `agents/` folders as brownfield input to itself (ADR-7's endpoint). Recorded because it's a pleasing closure of ADR-7, flagged because that's exactly why it deserves suspicion. Needs E-1 and brownfield mode (FR-102) first.
+- Research is the first role a folder *describes* rather than decorates
+  (instructions + four tools + a provider + a corpus + a budget), which is the
+  argument that reopened E-1/E-2 (agents-as-folders finding 6). The memoization
+  argument the registry spec's finding 1 killed stays dead — this is not it.
 
 ### 9.2 Channels as one abstraction → FR-303, FR-305, FR-601, FR-602, US-1, US-7
 
@@ -246,7 +268,7 @@ Eve marks individual tools `needsApproval`. FR-703 wants a `pre_tool` hook and h
 - [ ] **E-15** `pre_tool` hook seam in `harness/adapters.py`, called for every harness tool invocation.
 - [ ] **E-16** Policy denial path — deny by rule, no human involved (FR-703).
 - [ ] **E-17** Approval escalation: a `needsApproval`-class tool call raises a gate through existing FR-301/FR-302 machinery rather than a parallel mechanism.
-- [ ] **E-18** Egress policy (FR-703/NFR-5). Currently env allowlist only.
+- [ ] **E-18** harness/egress containment — **re-ranked up.** §8 item 4 ranked it fourth on the strength of `pre_tool`; an unpoliced outbound egress (research, FR-703) is a second, independent argument. The research stage fetches arbitrary URLs through a provider with only an env allowlist between it and the worker's network.
 
 ### 9.5 Sandbox / Connect / Gateway → NFR-5, FR-701, FR-703
 
