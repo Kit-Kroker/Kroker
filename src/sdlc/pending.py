@@ -74,3 +74,35 @@ class GateContext(BaseModel):
     analysis: str | None = None          # task escalation
     attempts: int | None = None          # task escalation
     task_id: str | None = None           # task escalation
+
+
+def clarify_pending(
+    open_questions: list[OpenQuestion], answered_ids: set[str],
+) -> list[ClarifyPending]:
+    """One ClarifyPending per still-unanswered open question."""
+    return [
+        ClarifyPending(key=q.id, question=q.question,
+                       why_it_matters=q.why_it_matters,
+                       suggested_answer=q.suggested_answer)
+        for q in open_questions if q.id not in answered_ids
+    ]
+
+
+def gate_pending(
+    name: str, round: int, context: GateContext | None,
+) -> PendingDecision:
+    """Build the render variant a gate wait should surface. The gate name is
+    the discriminator: 'merge' -> MergeGatePending, 'task:<id>' ->
+    TaskEscalationPending, anything else -> StageGatePending."""
+    key = gate_key(name, round)
+    ctx = context or GateContext()
+    if name == "merge":
+        return MergeGatePending(key=key, gate=name, round=round,
+                                checks=ctx.checks, verdict=ctx.verdict)
+    if name.startswith("task:"):
+        return TaskEscalationPending(
+            key=key, gate=name, round=round,
+            task_id=ctx.task_id or name.removeprefix("task:"),
+            analysis=ctx.analysis or "", attempts=ctx.attempts or 0)
+    return StageGatePending(key=key, gate=name, round=round,
+                            spec_summary=ctx.spec_summary or "")
