@@ -54,6 +54,9 @@ with workflow.unsafe.imports_passed_through():
         RecallSnapshot, ResearchBrief, RetainItem, RoleConfig,
         SecurityReport, TaskResult, gate_key,
     )
+    from ..pending import (
+        GateContext, PendingDecision, clarify_pending, gate_pending,
+    )
     from ..research.deps import ResearchDeps
     from ..research.retain import verified_findings_to_retain
     from ..research.verify import (
@@ -189,6 +192,15 @@ def _auto_decision_for(name: str, cfg: PipelineConfig,
                 f">= threshold={gate_cfg.threshold:.2f}")
 
 
+def _spec_summary(artifact: object) -> str:
+    """Best-effort one-field summary of a proposer artifact for gate render.
+    ClarifiedRequirements has `summary`; ArchitectureSpec has `overview`;
+    fall back to the type name so the field is never empty."""
+    return (getattr(artifact, "summary", None)
+            or getattr(artifact, "overview", None)
+            or type(artifact).__name__)
+
+
 @workflow.defn
 class FeatureWorkflow:
     def __init__(self) -> None:
@@ -201,6 +213,9 @@ class FeatureWorkflow:
         # _integration_wt is the worktree path (set once at run start, stable).
         self._integration_head: str | None = None
         self._integration_wt: str | None = None
+        # E-6: structured pending-decision registry, keyed by resolution key
+        # (question id, or gate_key(gate, round)). Rendered by sdlc.channels.
+        self._pending: dict[str, PendingDecision] = {}
 
     # ----------------------- benchmark recording ------------------------
 
@@ -349,11 +364,18 @@ class FeatureWorkflow:
     def pending_gate(self) -> str | None:
         return self._status if self._status.startswith("awaiting:") else None
 
+    @workflow.query
+    def pending_decisions(self) -> list[PendingDecision]:
+        """Structured items a human currently owes a decision on (E-6).
+        Empty when nothing is awaiting. Rendered by sdlc.channels."""
+        return list(self._pending.values())
+
     # ---------------------------- helpers -------------------------------
 
     async def _gate(self, name: str, cfg: PipelineConfig,
                     auto_decision: GateDecision | None = None,
-                    round: int = 1) -> GateDecision:
+                    round: int = 1,
+                    context: GateContext | None = None) -> GateDecision:
         """Durable HITL gate with policy-based auto-approval."""
         policy = cfg.gates.get(
             name, GateConfig(policy=cfg.default_gate_policy)).policy
@@ -366,6 +388,7 @@ class FeatureWorkflow:
         elif policy == GatePolicy.SOFT and auto_decision and auto_decision.approved:
             decision = auto_decision
         else:
+            self._pending[key] = gate_pending(name, round, context)
             self._status = f"awaiting:{name}"
             try:
                 await workflow.wait_condition(
@@ -379,6 +402,7 @@ class FeatureWorkflow:
                                         decided_by="timeout")
             finally:
                 self._status = "running"
+                self._pending.pop(key, None)
 
         await self._retain(
             cfg, MemoryKind.GATE_FEEDBACK, cfg.memory.project_bank,
@@ -401,14 +425,17 @@ class FeatureWorkflow:
             artifact = await run_fn(guidance)
             auto = _auto_decision_for(
                 name, cfg, getattr(artifact, "confidence", None))
-            decision = await self._gate(name, cfg, auto_decision=auto,
-                                        round=round)
+            decision = await self._gate(
+                name, cfg, auto_decision=auto, round=round,
+                context=GateContext(spec_summary=_spec_summary(artifact)))
             if decision.outcome is not GateOutcome.REVISE:
                 return artifact, decision
             guidance = decision.guidance or decision.comments
         # Exhausted: one final HARD gate decides accept-anyway vs abandon.
         artifact = await run_fn(guidance)
-        decision = await self._gate(name, cfg, round=cfg.max_gate_rounds + 1)
+        decision = await self._gate(
+            name, cfg, round=cfg.max_gate_rounds + 1,
+            context=GateContext(spec_summary=_spec_summary(artifact)))
         return artifact, decision
 
     async def _merge_task(self, tr: TaskResult,
@@ -598,7 +625,11 @@ class FeatureWorkflow:
                 )
 
         # Escalate: human decides whether to accept, retry, or quarantine.
-        decision = await self._gate(f"task:{task.id}", cfg)
+        analysis = "\n- ".join(qa.issues or qa.failing_tests) if qa else ""
+        decision = await self._gate(
+            f"task:{task.id}", cfg,
+            context=GateContext(task_id=task.id, analysis=analysis,
+                                attempts=cfg.max_fix_attempts + 1))
         return TaskResult(
             task_id=task.id,
             status="done" if decision.approved else "quarantined",
@@ -725,6 +756,8 @@ class FeatureWorkflow:
                     q.answer = q.suggested_answer
             else:
                 self._status = "awaiting:clarify"
+                for p in clarify_pending(reqs.open_questions, set()):
+                    self._pending[p.key] = p
                 await workflow.wait_condition(
                     lambda: all(q.id in self._question_answers
                                 for q in reqs.open_questions),
@@ -732,6 +765,7 @@ class FeatureWorkflow:
                 )
                 for q in reqs.open_questions:
                     q.answer = self._question_answers.get(q.id)
+                    self._pending.pop(q.id, None)
         _ended = workflow.now()
         _quality = await self._judge(cfg, reqs.model_dump_json(), "clarifier",
                                      author_model=STAGE_MODELS["clarify"])
@@ -1044,7 +1078,9 @@ class FeatureWorkflow:
                 c.name for c in gate_report.checks
                 if c.name in gate_report.blocking
                 and c.classification is CheckClass.ADVISORY]
-            gate = await self._gate("merge", cfg)
+            gate = await self._gate(
+                "merge", cfg,
+                context=GateContext(checks=gate_report.checks))
             if not gate.approved:
                 return "rejected:merge:advisory"
             # Human waved the advisory checks through — record each waiver.
@@ -1071,7 +1107,9 @@ class FeatureWorkflow:
                 if auto is None:
                     # Soft policy + (negative verdict OR confidence below
                     # threshold) = escalate to human.
-                    gate = await self._gate("merge", cfg)
+                    gate = await self._gate(
+                        "merge", cfg,
+                        context=GateContext(checks=gate_report.checks))
                     if not gate.approved:
                         return "rejected:merge:soft-verdict"
 
