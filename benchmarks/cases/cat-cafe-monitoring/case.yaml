@@ -36,7 +36,7 @@ harnesses:
   - opencode
 models:
   - zai-coding-plan/glm-5.2
-judge_model: openai/gpt-5.2     # different family than the author (ADR-6)
+judge_model: zai-coding-plan/glm-5.2     # different family than the author (ADR-6)
 extra_args_by_model:
   zai-coding-plan/glm-5.2:
     - --variant
