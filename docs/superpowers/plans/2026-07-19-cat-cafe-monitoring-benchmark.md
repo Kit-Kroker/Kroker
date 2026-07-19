@@ -697,13 +697,39 @@ This pins the Finding-6 property — the registry keeps `provider: fake`, so
 CI and contributors need no Tavily key. A failure here means someone
 committed `provider: tavily`.
 
-- [ ] **Step 3: Start the worker and confirm boot**
+- [ ] **Step 3: Create the base repo the case points at**
+
+A greenfield case still needs its `repo_url` to be an **already-initialized git
+repo with a commit on `main`** — the pipeline creates worktrees off it, and
+`_ensure_worktree` (`activities.py:185`) runs `git worktree prune` in that
+directory as its first act. If the directory does not exist, the very first
+activity fails with `[WinError 267] The directory name is invalid` (or the POSIX
+equivalent) and the whole cell fails before any stage records. This bit the
+first smoke-run attempt.
+
+`todo-api-greenfield`'s base repo is the template: a non-bare repo with a single
+empty `init` commit on `main`. Create the cat-café one the same way:
+
+```bash
+mkdir -p D:/own/sdlc-scratch-repos/cat-cafe-monitoring
+cd D:/own/sdlc-scratch-repos/cat-cafe-monitoring
+git init -b main
+git -c user.name="sdlc" -c user.email="sdlc@local" commit --allow-empty -m "init"
+```
+
+Verify: `git -C D:/own/sdlc-scratch-repos/cat-cafe-monitoring log --oneline -1`
+shows one `init` commit and `git branch --show-current` shows `main`.
+
+- [ ] **Step 4: Start the worker and confirm boot**
 
 In one terminal: `temporal server start-dev`
 In another: `python -m sdlc.worker`
 Expected: the worker boots. `.env` supplies `TAVILY_API_KEY` via python-dotenv.
+The worker's stdout may be buffered/empty on Windows — confirm it is polling via
+`temporal task-queue describe --task-queue ai-sdlc` (look for a poller under
+Identity), not by waiting for a log line.
 
-- [ ] **Step 4: Smoke-run the case**
+- [ ] **Step 5: Smoke-run the case**
 
 Run: `python -m sdlc.cli benchmark run --case benchmarks/cases/cat-cafe-monitoring/case.yaml`
 
@@ -717,19 +743,19 @@ the description.
 Expected on success: a report path, and records for stages `research`,
 `clarify`, `architecture`, `plan`, `code` and `qa`.
 
-- [ ] **Step 5: Confirm the new rubrics actually scored**
+- [ ] **Step 6: Confirm the new rubrics actually scored**
 
-Run: `python -m sdlc.cli benchmark report --bench <bench_run_id from Step 4>`
+Run: `python -m sdlc.cli benchmark report --bench <bench_run_id from Step 5>`
 Expected: rows for `research` and `qa` with a non-null quality score and
 `judge="llm_judge"`. A `judge="error"` row means the judge call failed — the
 benchmark deliberately does not fail on it, so it will not announce itself.
 
-- [ ] **Step 6: Mark E-27 done in ROADMAP.md**
+- [ ] **Step 7: Mark E-27 done in ROADMAP.md**
 
 Change the `- [ ] **E-27**` entry to `- [x] **E-27**` and append a sentence
 recording what the smoke run showed.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add ROADMAP.md
