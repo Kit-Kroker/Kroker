@@ -582,8 +582,7 @@ class FeatureWorkflow:
                 outcome=(BenchmarkOutcome.PASS
                          if (qa.tests_passed and not qa.issues)
                          else BenchmarkOutcome.FAIL),
-                model=role_cfg.model,
-                harness=role_cfg.harness,
+                model=STAGE_MODELS["qa"],
                 task_id=task.id, attempt=attempt - 1))
 
             review_ok = review is None or review.approve
