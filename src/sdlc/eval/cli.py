@@ -11,8 +11,7 @@ from pathlib import Path
 import yaml
 
 from .compare import EvalError, EvalReport, compare
-from .fixtures import (DEPS_ROLES, SUPPORTED_ROLES, fixtures_from_events,
-                       write_fixtures)
+from .fixtures import DEPS_ROLES, fixtures_from_events, write_fixtures
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _AGENTS_DIR = _REPO_ROOT / "agents"

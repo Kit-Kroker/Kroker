@@ -38,3 +38,10 @@ def test_default_judge_model_reads_config(tmp_path):
     cfg = tmp_path / "config.yaml"
     cfg.write_text("default_judge_model: openai/gpt-5.2\n", encoding="utf-8")
     assert default_judge_model(cfg) == "openai/gpt-5.2"
+
+
+def test_default_judge_model_raises_when_missing(tmp_path):
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("weights: {}\n", encoding="utf-8")
+    with pytest.raises(EvalError):
+        default_judge_model(cfg)

@@ -158,8 +158,8 @@ async def main() -> None:
             for p in paths:
                 print(f"  {p}")
             return
-        judge = args.judge_model or default_judge_model()
         try:
+            judge = args.judge_model or default_judge_model()
             print(run_eval(args.target, against=args.against, case=args.case,
                            k=args.k, judge_model=judge))
         except EvalError as e:
