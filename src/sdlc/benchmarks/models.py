@@ -91,6 +91,11 @@ class CaseSpec(BaseModel):
     models: list[str]
     judge_model: str                        # cross-family (ADR-6)
     rubrics: dict[str, str] = Field(default_factory=dict)  # stage -> rubric file
+    # FR-107: run the research stage for this case. Default False so existing
+    # cases inherit no behavior change -- including no new abort path, since
+    # a grounding-verifier violation hard-returns the whole run
+    # (feature.py:717).
+    research_enabled: bool = False
     # per-model extra CLI args (e.g. opencode's `--variant` reasoning-effort
     # flag) forwarded to every role's harness invocation for that model.
     extra_args_by_model: dict[str, list[str]] = Field(default_factory=dict)
