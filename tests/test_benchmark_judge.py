@@ -223,3 +223,28 @@ def test_build_judge_input_returns_none_when_rubric_empty():
         judge_model="openai/gpt-5.2",
     )
     assert ji is None
+
+
+def test_build_judge_input_supports_research_key():
+    ji = _build_judge_input(
+        artifact_json='{"findings": []}',
+        rubrics={"research": "score grounding 0..1"},
+        stage="research",
+        author_model="zai-coding-plan/glm-5.2",
+        judge_model="openai/gpt-5.2",
+    )
+    assert ji is not None
+    assert ji.rubric == "score grounding 0..1"
+
+
+def test_build_judge_input_research_absent_returns_none():
+    """A case with no research rubric must skip judging gracefully rather
+    than fail the stage."""
+    ji = _build_judge_input(
+        artifact_json='{"findings": []}',
+        rubrics={"clarifier": "r"},
+        stage="research",
+        author_model="zai-coding-plan/glm-5.2",
+        judge_model="openai/gpt-5.2",
+    )
+    assert ji is None

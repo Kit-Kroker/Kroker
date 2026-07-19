@@ -726,10 +726,13 @@ class FeatureWorkflow:
                     bank=cfg.memory.project_bank):
                 await self._retain(cfg, item.kind, item.bank, item.text,
                                    item.metadata)
+            _r_quality = await self._judge(
+                cfg, brief.model_dump_json(), "research",
+                author_model=STAGE_MODELS.get("research", "unknown"))
             await self._record(cfg, self._stage_record(
                 cfg, stage="research", role="research",
                 started=_r_started, ended=workflow.now(),
-                quality_score=None, judge="contract",
+                quality_score=_r_quality.score, judge=_r_quality.judge,
                 outcome=BenchmarkOutcome.PASS,
                 model=STAGE_MODELS.get("research", "unknown")))
 
