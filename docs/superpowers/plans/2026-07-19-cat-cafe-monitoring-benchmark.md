@@ -366,13 +366,21 @@ inside the task loop, add:
                 outcome=(BenchmarkOutcome.PASS
                          if (qa.tests_passed and not qa.issues)
                          else BenchmarkOutcome.FAIL),
-                model=role_cfg.model,
-                harness=role_cfg.harness,
+                model=STAGE_MODELS["qa"],
                 task_id=task.id, attempt=attempt - 1))
 ```
 
 `qa` is the `QAReport` already in scope from `t_qa.run(...)`. `STAGE_MODELS["qa"]`
 exists — `STAGE_ROLES` maps stage `"qa"` to role `"qa"` (`roles.py:71`).
+
+**Attribution:** the record carries `model=STAGE_MODELS["qa"]` and **no** `harness`,
+matching the four other judged stages. Do NOT use `role_cfg.model` /
+`role_cfg.harness` here: `role_cfg` is the *dev coding harness* config
+(`feature.py:479`; `cfg.roles` has no `"qa"` entry), but the artifact being scored
+is authored by `t_qa`, a Pydantic AI agent. Since `scoring.py` aggregates by
+`(case_id, stage, harness, model)`, dev-harness attribution would credit the QA
+rubric score to the wrong model — and would contradict the `author_model` passed
+to `_judge` two lines above.
 
 - [ ] **Step 4: Run the suites**
 
