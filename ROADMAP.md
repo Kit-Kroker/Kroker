@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-07-17 (against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
+| Last verified | 2026-07-19 (against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -102,7 +102,9 @@
 ### Interfaces (FR-600)
 - [ ] ⚠️ **FR-601** dashboard fleet/spine/inbox — Vue 3 frontend exists (mock API); **no FastAPI backend** wired to Temporal.
 - [ ] **FR-602** MCP server (list/detail/inbox/answer/decide/start) — no `interfaces/mcp/`.
-- [ ] ⚠️ **FR-603** CLI — `start/status/answer/approve/reject/benchmark` ✅; missing cross-run `inbox` (FR-305).
+- [ ] ⚠️ **FR-603** CLI — `start/status/answer/approve/revise/reject/benchmark` ✅
+  (`revise` landed with E-7; gate rounds are now derived from the pending item,
+  not typed by the operator); missing cross-run `inbox` (FR-305).
 - [x] **FR-604** stateless shells, no interface DB — true for CLI.
 
 ### Governance & ops (FR-700)
@@ -251,7 +253,17 @@ of an ADR-6 hole. Closed by `docs/superpowers/specs/2026-07-16-registry-drives-e
 We track notifications, cross-run inbox, dashboard backend, and MCP server as four independent unbuilt items. Eve treats them as one primitive wearing four hats: *render the pending decision, deliver it, translate the reply into a signal.* We already own the hard half — FR-302 (idempotent signals, `(gate, round)` identity, first-decision-wins) makes two channels racing the same gate safe by construction.
 
 - [x] **E-6** Channel contract over the FR-302 signal substrate: a structured `pending_decisions()` workflow query (Layer A, `sdlc/pending.py`) feeding a pure `render`/`translate` adapter (Layer B, `sdlc/channels/contract.py`), with `deliver` an opt-in `PushChannel`. All four render variants (clarify / stage gate / task escalation / merge gate) collapse to the two FR-302 signals on reply. Contract only — no new surface; E-7 refits the CLI as the proof. *Layer B landed under `sdlc/channels/` not `interfaces/channels/`: `pyproject` packages only `src/`. Spec: `docs/superpowers/specs/2026-07-18-channel-contract-over-fr302-design.md`.*
-- [ ] **E-7** Refit the existing CLI (`answer`/`approve`/`reject`) onto the contract. *Ordered first deliberately: it validates the contract against a known-good surface before any new surface depends on it. If the CLI doesn't fit cleanly, the contract is wrong.*
+- [x] **E-7** Refit the existing CLI (`answer`/`approve`/`reject`) onto the contract.
+  *Ordered first deliberately: it validates the contract against a known-good
+  surface before any new surface depends on it.* **The contract held; the CLI and
+  the query did not.** Three defects fell out: `--round` defaulted to 1, so a
+  post-REVISE approve was silently deduped under a success message; `revise` had
+  no verb despite `GateOutcome.REVISE` and US-2 marked done; and
+  `pending_decisions()` over-reported answered clarify questions because
+  `answer_question` never popped `_pending` (an E-6 bug, fixed here before E-8
+  could inherit it). Adds `channels/transport.py` — query/match/signal/verify —
+  so E-8/E-10/E-11 do not each reimplement it. Spec:
+  `docs/superpowers/specs/2026-07-19-cli-refit-onto-channel-contract-design.md`.
 - [ ] **E-8** Cross-run inbox as a query over pending gates (FR-305, FR-603's missing verb) — the first capability the contract buys that we don't already have.
 - [ ] **E-9** Notify activity + reminder timer + fallback approver (FR-303). Today: timeout→auto-reject only.
 - [ ] **E-10** FastAPI dashboard backend as a channel adapter, replacing the Vue frontend's mock API (FR-601, US-6, ADR-8).
@@ -298,7 +310,9 @@ Not a commitment, and deliberately not "by section":
 
 1. **E-12, E-13** — smallest, and the only items that start the SC-4/SC-6 signal (§8 item 3).
 2. ~~**E-1 → E-2 → E-3**~~ — landed. E-1/E-2 landed as `agents/<role>/` directories (`feat/agents-as-folders`); E-3 was subsumed by the registry increment (`2026-07-16-registry-drives-every-role`), which already closed the model-half gap.
-3. ~~**E-6**~~ landed (`feat/channel-contract`) → **E-7 → E-8** — CLI refit as proof, then the first new capability.
+3. ~~**E-6**~~ landed (`feat/channel-contract`) → ~~**E-7**~~ landed
+   (`feat/cli-channel-refit`) → **E-8** — the CLI refit proved the contract;
+   E-8 is the first *new* capability it buys.
 4. **E-15 → E-17** — the hook seam, then gate reuse.
 5. **E-22** — before the surfaces in E-9/E-10/E-11 multiply the ways delivery can fail silently.
 

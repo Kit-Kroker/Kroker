@@ -351,10 +351,13 @@ class FeatureWorkflow:
         if key not in self._gate_decisions:
             decision.decided_at = workflow.now()
             self._gate_decisions[key] = decision
+        # _pending means "not yet decided" for every variant (E-7).
+        self._pending.pop(key, None)
 
     @workflow.signal
     def answer_question(self, question_id: str, answer: str) -> None:
         self._question_answers.setdefault(question_id, answer)
+        self._pending.pop(question_id, None)
 
     @workflow.query
     def status(self) -> str:
