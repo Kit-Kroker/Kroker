@@ -588,24 +588,41 @@ the prose quality.
 
 - [ ] **Step 7: Write `rubric-qa.md`**
 
+The QA rubric must score only fields `QAReport` (`models.py:193`) actually
+carries — `tests_passed`, `coverage_pct`, `failing_tests`, `issues`,
+`stack_mismatch`. `report_ref` is an `ArtifactRef` pointer, not content, and the
+judge sees only `qa.model_dump_json()`. An earlier draft scored test strategy /
+seeding / boundary coverage, none of which is in the artifact — the judge would
+hallucinate those scores. Score what is present:
+
 ```markdown
 # QA rubric — cat-cafe-monitoring
 
 Score the QAReport artifact 0.0..1.0 on these components; return
 `{"score": <mean>, "components": {...}}`.
 
-The system under test is randomized and real-time, which is what makes its
-test strategy worth scoring.
+Score only what the QAReport actually carries: `tests_passed` (bool),
+`coverage_pct` (float or null), `failing_tests` (list of names), `issues`
+(list of strings), `stack_mismatch` (bool). `report_ref` is a pointer, not
+content — do not score the report body you cannot see. Do not infer test
+strategy, seeding, or boundary coverage: none of that is in the artifact, and
+guessing at it is a scoring error.
 
-- **determinism (0.35):** telemetry is seeded or injected so tests are
-  repeatable. A test that asserts over unseeded random data is a defect, and
-  identifying one is worth full marks on this component
-- **classification_coverage (0.3):** boundary cases per activity class — a
-  cat just inside vs just outside a zone radius, breathing rate either side
-  of the risk threshold
-- **risk_path (0.2):** the risk flag and its red-marking are asserted, not
-  assumed
-- **history_window (0.15):** the 24h boundary is tested at its edges
+- **internal_consistency (0.35):** the fields do not contradict each other.
+  `tests_passed: true` alongside a non-empty `failing_tests` or a non-empty
+  `issues` list is a contradiction and scores 0 on this component.
+  `tests_passed: false` with an empty `failing_tests` and empty `issues` is
+  also inconsistent — a failure with nothing naming it
+- **issue_specificity (0.3):** each entry in `issues` is specific and
+  actionable — names a file, symbol, or concrete behavior — rather than vague
+  ("some tests are flaky", "needs work"). An empty `issues` list on a passing
+  report scores full marks here; a populated list of vague strings scores low
+- **failing_tests_named (0.2):** entries in `failing_tests` are precise test
+  identifiers (a test path or node id), not prose. Empty on a passing report
+  is full marks
+- **coverage_reported (0.15):** `coverage_pct` is populated with a plausible
+  0..100 value when `tests_passed` is true. Null coverage on a green run is a
+  reporting gap and scores low
 ```
 
 - [ ] **Step 8: Write `rubric-research.md`**
