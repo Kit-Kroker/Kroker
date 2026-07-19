@@ -248,3 +248,15 @@ def test_build_judge_input_research_absent_returns_none():
         judge_model="openai/gpt-5.2",
     )
     assert ji is None
+
+
+def test_build_judge_input_supports_qa_key():
+    ji = _build_judge_input(
+        artifact_json='{"tests_passed": true, "issues": []}',
+        rubrics={"qa": "score determinism 0..1"},
+        stage="qa",
+        author_model="zai-coding-plan/glm-5.2",
+        judge_model="openai/gpt-5.2",
+    )
+    assert ji is not None
+    assert ji.rubric == "score determinism 0..1"

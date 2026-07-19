@@ -567,6 +567,25 @@ class FeatureWorkflow:
                 fix_attempts=attempt - 1,
                 task_id=task.id, attempt=attempt - 1))
 
+            # The QA report gets its OWN record. The stage="code" record above
+            # keeps its deterministic contract score (1.0 iff tests passed and
+            # no issues) -- an LLM opinion must never overwrite a deterministic
+            # signal. Cardinality is per-task-attempt, not once-per-run like
+            # clarifier/architect/planner; scoring.py means over them natively.
+            _qa_quality = await self._judge(
+                cfg, qa.model_dump_json(), "qa",
+                author_model=STAGE_MODELS["qa"])
+            await self._record(cfg, self._stage_record(
+                cfg, stage="qa", role="qa",
+                started=_attempt_started, ended=workflow.now(),
+                quality_score=_qa_quality.score, judge=_qa_quality.judge,
+                outcome=(BenchmarkOutcome.PASS
+                         if (qa.tests_passed and not qa.issues)
+                         else BenchmarkOutcome.FAIL),
+                model=role_cfg.model,
+                harness=role_cfg.harness,
+                task_id=task.id, attempt=attempt - 1))
+
             review_ok = review is None or review.approve
             if qa.tests_passed and not qa.issues and review_ok:
                 handoff = HandoffSummary(
