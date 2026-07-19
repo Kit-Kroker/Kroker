@@ -68,3 +68,36 @@ async def test_fetch_budget_cap_raises(deps):
     await fetch_page(_ctx(deps), "https://docs.example.com/httpx")
     with pytest.raises(BudgetExceeded):
         await fetch_page(_ctx(deps), "https://docs.example.com/retrylib")
+
+
+@pytest.mark.asyncio
+async def test_read_repo_reads_in_root_file(deps, monkeypatch, tmp_path):
+    monkeypatch.setenv("SDLC_RESEARCH_REPO_ROOT", str(tmp_path))
+    (tmp_path / "hello.txt").write_text("cats", encoding="utf-8")
+    read_repo = _load_tool("read_repo")
+    assert await read_repo(_ctx(deps), "hello.txt") == "cats"
+
+
+@pytest.mark.asyncio
+async def test_read_repo_missing_file_returns_string(deps, monkeypatch, tmp_path):
+    monkeypatch.setenv("SDLC_RESEARCH_REPO_ROOT", str(tmp_path))
+    read_repo = _load_tool("read_repo")
+    out = await read_repo(_ctx(deps), "nope.txt")
+    assert out == "[no such file: nope.txt]"
+
+
+@pytest.mark.asyncio
+async def test_read_repo_out_of_root_returns_string_not_raises(
+        deps, monkeypatch, tmp_path):
+    """A path escaping the root must be REFUSED GRACEFULLY (a model-visible
+    string), never raised. A raised ValueError becomes a Temporal
+    ApplicationFailure that the tool-call activity retries with no cap — an
+    infinite loop that hangs the whole run (observed on the cat-cafe smoke
+    run: read_repo on an out-of-cwd greenfield repo, attempt 11 and climbing)."""
+    monkeypatch.setenv("SDLC_RESEARCH_REPO_ROOT", str(tmp_path))
+    read_repo = _load_tool("read_repo")
+    out = await read_repo(_ctx(deps), "../../../etc/passwd")
+    assert isinstance(out, str)
+    # a bracketed refusal marker, not file contents — the escaping path is
+    # refused before any read, so nothing from outside the root leaks through
+    assert out == "[refusing to read outside the repo root: ../../../etc/passwd]"

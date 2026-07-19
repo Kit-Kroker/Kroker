@@ -16,7 +16,13 @@ async def read_repo(ctx: RunContext[ResearchDeps], path: str) -> str:
     try:
         target.relative_to(root)
     except ValueError:
-        raise ValueError(f"refusing to read outside the repo root: {path}")
+        # Refuse GRACEFULLY — return a model-visible string, never raise. A
+        # raised exception becomes a Temporal ApplicationFailure that the
+        # pydantic-ai tool-call activity retries with no attempt cap, hanging
+        # the whole run in an infinite loop (observed: research on an
+        # out-of-cwd greenfield repo). The model reads the refusal and moves
+        # on, exactly as it does for the missing-file case below.
+        return f"[refusing to read outside the repo root: {path}]"
     if not target.is_file():
         return f"[no such file: {path}]"
     return target.read_text(encoding="utf-8", errors="replace")

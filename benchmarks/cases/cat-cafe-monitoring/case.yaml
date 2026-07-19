@@ -1,0 +1,49 @@
+case_id: cat-cafe-monitoring
+idea_summary: Real-time monitoring for a cat café — detect each cat's activity
+  from smart-collar telemetry and show it live on the floor plan.
+description: |
+  Ten cats live in the café. Each cat wears a smart collar that sends the
+  cat's exact coordinates and the cat's breathing rate. Sensor data arrives
+  every 5 seconds.
+
+  Generate this sensor data randomly. Do not build collar data emulators.
+  Keep it as simple as possible.
+
+  The café floor plan includes the coordinates of rest areas, litter boxes,
+  water bowls, and food bowls.
+
+  Anything not described here is your choice — the rules are up to you. The
+  functional requirements below must not be changed: do not make them
+  smaller and do not add new ones.
+
+  Task 1. Activity Detection
+  Detect the current activity of each cat from collar telemetry and distance
+  to café zones. The detectable activities are: sleeping, eating, drinking,
+  using the litter box, playing, and fighting.
+
+  Task 2. Monitoring
+  Show in real time on the café floor plan: the movement of all cats; the
+  possible current activity of each cat from Task 1; and a risk analysis for
+  each cat's life or health based on collar data. Cats with a detected life
+  or health risk must be marked in red.
+
+  For each cat the user must also be able to see detailed sensor data and
+  movement history for the last 24 hours.
+mode: greenfield
+repo_url: D:/own/sdlc-scratch-repos/cat-cafe-monitoring
+research_enabled: true
+harnesses:
+  - opencode
+models:
+  - zai-coding-plan/glm-5.2
+judge_model: openai/gpt-5.2     # different family than the author (ADR-6)
+extra_args_by_model:
+  zai-coding-plan/glm-5.2:
+    - --variant
+    - max        # opencode: max reasoning effort for GLM 5.2
+rubrics:
+  clarifier: rubric-clarifier.md
+  architect: rubric-architect.md
+  planner: rubric-planner.md
+  qa: rubric-qa.md
+  research: rubric-research.md

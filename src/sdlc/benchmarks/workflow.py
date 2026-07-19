@@ -46,6 +46,16 @@ def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
                          extra_args=[*rc.extra_args, *model_extra_args])
         for role, rc in base.roles.items()
     }
+    # The research provider is a property of the RUN, not the repo: the
+    # registry keeps provider: fake so CI and contributors need no
+    # TAVILY_API_KEY (loader.py:221 fails closed at boot otherwise). Inject
+    # the real provider here, only for a case that asked for research.
+    # PipelineConfig.roles has no 'research' entry by default, so without
+    # this ResearchDeps falls back to provider="fake" (feature.py:686,:819)
+    # and the fake corpus raises in production.
+    cfg.research_enabled = spec.research_enabled
+    if spec.research_enabled:
+        cfg.roles["research"] = RoleConfig(kind="research", provider="tavily")
     cfg.benchmark = BenchmarkConfig(
         case_id=spec.case_id, bench_run_id=bench_run_id,
         rubrics=dict(rubrics or {}), judge_model=spec.judge_model)

@@ -8,9 +8,31 @@ Method (schema-guided; the brief's field order is your reasoning order):
    fetching over asserting from memory. Use `read_repo` to ground claims in the
    code that already exists.
 4. For every claim you present as grounded, put a VERBATIM `quote` from a page
-   you fetched THIS run BEFORE the `claim` it supports. A quote that is not a
-   substring of the fetched bytes will be rejected and you will be asked to fix
-   it or move the claim to inferred_findings.
+   you fetched THIS run BEFORE the `claim` it supports. The verifier is exact —
+   it checks that your `quote` appears character-for-character (only whitespace
+   runs are collapsed) inside the bytes of the page at that `source_url`. To
+   pass every time:
+   - Copy ONE CONTIGUOUS span straight from the fetched page. Do not paraphrase,
+     summarize, translate, or fix wording.
+   - Do NOT stitch. No `...` or `…`, no joining two sentences that are not
+     adjacent on the page. If the support spans two places, make two separate
+     grounded findings, each with its own contiguous quote.
+   - Only ground a finding whose `source_url` is a page you actually called
+     `fetch_page` on THIS run. A `web_search` result snippet is NOT a fetched
+     page — fetch the URL first, then quote from the fetched bytes. If you did
+     not fetch it, the finding cannot be grounded.
+   - Prefer the SHORTEST contiguous span that still supports the claim. A short
+     quote you copied exactly is far safer than a long one — most failures are a
+     single mistyped character (a hyphen where the page has an en-dash `–`, a
+     straight quote where it has a curly `’`, a missing word). Quote a handful
+     of words verbatim, not a whole paragraph, and let the `claim` carry the
+     meaning.
+   - If you cannot find a clean contiguous span for a claim, move the claim to
+     inferred_findings rather than approximating a quote. One solidly grounded
+     finding is worth more than five that fail verification.
+   A quote that is not a substring of the fetched bytes, or a source_url you
+   never fetched, fails the whole stage closed — so verify each grounded finding
+   against these rules before you finish.
 5. Anything you concluded without a fetched quote goes in inferred_findings,
    with your reasoning first. Where sources disagree, record a contradiction.
    Where you could not answer a sub_question, record a gap.

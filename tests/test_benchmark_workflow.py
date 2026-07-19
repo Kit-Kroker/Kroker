@@ -79,3 +79,48 @@ def test_cell_config_auto_approves_every_gate():
     # dynamic gates not named in cfg.gates (e.g. task:<id> escalation)
     # must also auto-approve — otherwise an unattended cell still blocks
     assert cfg.default_gate_policy == GatePolicy.OFF
+
+
+def _research_spec():
+    return CaseSpec(
+        case_id="cat-cafe", idea_summary="cats",
+        mode="greenfield",
+        harnesses=[HarnessKind.OPENCODE],
+        models=["zai-coding-plan/glm-5.2"],
+        judge_model="openai/gpt-5.2", rubrics={},
+        research_enabled=True)
+
+
+def test_case_spec_research_disabled_by_default():
+    assert _spec().research_enabled is False
+
+
+def test_cell_config_leaves_research_off_by_default():
+    base = PipelineConfig()
+    idea = IdeaBrief(title="t", description="d", mode=ProjectMode.GREENFIELD)
+    cfg = _cell_config(base, idea, _spec(), HarnessKind.OPENCODE,
+                       "openai/gpt-5.2", bench_run_id="b1")
+    assert cfg.research_enabled is False
+    assert "research" not in cfg.roles
+
+
+def test_cell_config_enables_research_and_injects_provider():
+    base = PipelineConfig()
+    idea = IdeaBrief(title="t", description="d", mode=ProjectMode.GREENFIELD)
+    cfg = _cell_config(base, idea, _research_spec(), HarnessKind.OPENCODE,
+                       "zai-coding-plan/glm-5.2", bench_run_id="b1")
+    assert cfg.research_enabled is True
+    rc = cfg.roles["research"]
+    assert rc.kind == "research"
+    assert rc.provider == "tavily"
+
+
+def test_cell_config_research_role_is_not_harness_overridden():
+    """The research role is a proposer-side role: the cell's harness/model
+    override applies to harness roles, but the injected research role must
+    keep kind='research' and carry no harness."""
+    base = PipelineConfig()
+    idea = IdeaBrief(title="t", description="d", mode=ProjectMode.GREENFIELD)
+    cfg = _cell_config(base, idea, _research_spec(), HarnessKind.OPENCODE,
+                       "zai-coding-plan/glm-5.2", bench_run_id="b1")
+    assert cfg.roles["research"].harness is None
