@@ -290,16 +290,23 @@ have decided it first, or the workflow has not processed the signal yet.
 | `tests/test_channel_transport.py` | new |
 | `tests/test_pending_wiring.py` | extend |
 
-## 10. Implementation risk to spike first
+## 10. Implementation risk — resolved during planning
 
-Querying **by name** must round-trip the `Annotated`-discriminated
-`PendingDecision` union through `pydantic_data_converter`. If
-`result_type=list[PendingDecision]` does not deserialize cleanly, the fallback
-is a raw query plus
-`TypeAdapter(list[PendingDecision]).validate_python(raw)`.
+The open question was whether querying **by name** round-trips the
+`Annotated`-discriminated `PendingDecision` union through
+`pydantic_data_converter`, with a `TypeAdapter` fallback if
+`result_type=list[PendingDecision]` did not deserialize cleanly.
 
-Cheap to verify at the start of implementation, expensive to discover after the
-transport API is built on the assumption. Resolve this in task 1.
+**Resolved: use the `TypeAdapter` path unconditionally.** It was verified
+locally — `TypeAdapter(list[PendingDecision])` dumps and revalidates a mixed
+`ClarifyPending` / `StageGatePending` list, preserving both the concrete types
+and `round`. `result_type` was not adopted, because confirming it requires a
+live server, which would make the deserialization behavior untestable in the
+unit suite. The `TypeAdapter` path is pinned by ordinary tests instead.
+
+`temporalio` 1.30.0's `WorkflowHandle.query` and `.signal` both accept a
+string name (verified against the installed signatures), so signalling and
+querying by name needs no workflow import.
 
 ## 11. What this unblocks
 
