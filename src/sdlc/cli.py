@@ -4,6 +4,7 @@
   python -m sdlc.cli status  --id feature-add-sso
   python -m sdlc.cli answer  --id feature-add-sso --q Q1 --text "Use OIDC"
   python -m sdlc.cli approve --id feature-add-sso --gate architecture
+  python -m sdlc.cli revise  --id feature-add-sso --gate architecture --comment "split task 3"
   python -m sdlc.cli reject  --id feature-add-sso --gate merge --comment "..."
   python -m sdlc.cli schedules list
   python -m sdlc.cli schedules apply --dry-run
@@ -23,13 +24,51 @@ from dotenv import load_dotenv
 from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 
-from .models import GateDecision, GateOutcome, IdeaBrief, PipelineConfig, ProjectMode
+from .models import GateOutcome, IdeaBrief, PipelineConfig, ProjectMode
 from .worker import TASK_QUEUE
 from .workflows.feature import FeatureWorkflow
 
 
 def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+_OUTCOME = {
+    "approve": GateOutcome.APPROVE,
+    "reject": GateOutcome.REJECT,
+    "revise": GateOutcome.REVISE,
+}
+
+DECISION_CMDS = ("approve", "reject", "revise", "answer")
+
+
+def add_decision_parsers(sub) -> None:
+    """The four human-in-the-loop verbs. No --round: the round is read off
+    the pending item, so a reply can never land on a stale round (E-7)."""
+    for name in ("approve", "reject", "revise"):
+        g = sub.add_parser(name)
+        g.add_argument("--id", required=True)
+        g.add_argument("--gate", default=None,
+                       help="gate name; omit if exactly one gate is pending")
+        g.add_argument("--comment", default=None,
+                       help="comment; required for revise (becomes guidance)")
+
+    a = sub.add_parser("answer")
+    a.add_argument("--id", required=True)
+    a.add_argument("--q", default=None,
+                   help="question id; omit if exactly one is pending")
+    a.add_argument("--text", required=True)
+
+
+def selector_for(args):
+    """Map parsed args to the surface-neutral (Selector, Reply) pair."""
+    from .channels.contract import Reply
+    from .channels.transport import Selector
+
+    if args.cmd == "answer":
+        return Selector(reply_kind="text", name=args.q), Reply(text=args.text)
+    return (Selector(reply_kind="gate", name=args.gate),
+            Reply(outcome=_OUTCOME[args.cmd], text=args.comment))
 
 
 async def main() -> None:
@@ -44,18 +83,7 @@ async def main() -> None:
                    default="brownfield")
     s.add_argument("--repo")
 
-    for name in ("approve", "reject"):
-        g = sub.add_parser(name)
-        g.add_argument("--id", required=True)
-        g.add_argument("--gate", required=True)
-        g.add_argument("--comment", default=None)
-        g.add_argument("--round", type=int, default=1,
-                       help="gate revision round (default: current = 1)")
-
-    a = sub.add_parser("answer")
-    a.add_argument("--id", required=True)
-    a.add_argument("--q", required=True)
-    a.add_argument("--text", required=True)
+    add_decision_parsers(sub)
 
     st = sub.add_parser("status")
     st.add_argument("--id", required=True)
@@ -90,6 +118,10 @@ async def main() -> None:
     if args.cmd == "eval" and args.target == "capture" \
             and not (args.from_run and args.case):
         print("eval capture requires --from <run_id> and --case <name>")
+        raise SystemExit(1)
+
+    if args.cmd == "revise" and not args.comment:
+        print("revise requires --comment <guidance>")
         raise SystemExit(1)
 
     client = None
@@ -172,21 +204,21 @@ async def main() -> None:
 
     handle = client.get_workflow_handle_for(FeatureWorkflow.run, args.id)
 
-    if args.cmd in ("approve", "reject"):
-        await handle.signal(
-            FeatureWorkflow.submit_gate_decision,
-            GateDecision(gate=args.gate,
-                         round=args.round,
-                         outcome=(GateOutcome.APPROVE if args.cmd == "approve"
-                                  else GateOutcome.REJECT),
-                         decided_by="human", comments=args.comment),
-        )
-        print(f"{args.cmd}d gate {args.gate!r} (round {args.round}) on {args.id}")
-    elif args.cmd == "answer":
-        await handle.signal(FeatureWorkflow.answer_question,
-                            args=[args.q, args.text])
-        print(f"answered {args.q} on {args.id}")
-    elif args.cmd == "status":
+    if args.cmd in DECISION_CMDS:
+        from .channels.transport import Ambiguous, NoMatch, resolve, submit
+        selector, reply = selector_for(args)
+        try:
+            pending = await resolve(handle, selector)
+        except (NoMatch, Ambiguous) as e:
+            print(e.message)
+            if isinstance(e, Ambiguous):
+                flag = "--q" if args.cmd == "answer" else "--gate"
+                print(f"re-run with {flag} <name>")
+            raise SystemExit(1)
+        print((await submit(handle, pending, reply)).message)
+        return
+
+    if args.cmd == "status":
         print(await handle.query(FeatureWorkflow.status))
 
 

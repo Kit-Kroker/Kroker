@@ -170,3 +170,55 @@ async def test_submit_confirms_when_a_different_item_remains():
     h = StubHandle("run-1", [_raw(Q1)])        # unrelated item still pending
     res = await submit(h, ARCH, Reply(outcome=GateOutcome.APPROVE))
     assert res.confirmed is True
+
+
+import sdlc.cli
+
+
+def _parse(argv):
+    """Build the CLI parser the same way main() does, and parse argv."""
+    import argparse
+    p = argparse.ArgumentParser()
+    sub = p.add_subparsers(dest="cmd", required=True)
+    sdlc.cli.add_decision_parsers(sub)
+    return p.parse_args(argv)
+
+
+def test_gate_verbs_no_longer_accept_round():
+    with pytest.raises(SystemExit):
+        _parse(["approve", "--id", "X", "--round", "2"])
+
+
+def test_gate_selector_is_optional():
+    args = _parse(["approve", "--id", "X"])
+    assert args.cmd == "approve" and args.gate is None
+
+
+def test_revise_verb_exists_and_takes_comment():
+    args = _parse(["revise", "--id", "X", "--comment", "split it"])
+    assert args.cmd == "revise" and args.comment == "split it"
+
+
+def test_answer_question_id_is_optional_but_text_required():
+    args = _parse(["answer", "--id", "X", "--text", "yes"])
+    assert args.q is None and args.text == "yes"
+    with pytest.raises(SystemExit):
+        _parse(["answer", "--id", "X"])
+
+
+def test_selector_for_builds_gate_and_text_selectors():
+    a = _parse(["approve", "--id", "X", "--gate", "merge"])
+    sel, reply = sdlc.cli.selector_for(a)
+    assert sel.reply_kind == "gate" and sel.name == "merge"
+    assert reply.outcome is GateOutcome.APPROVE
+
+    a = _parse(["answer", "--id", "X", "--q", "Q1", "--text", "yes"])
+    sel, reply = sdlc.cli.selector_for(a)
+    assert sel.reply_kind == "text" and sel.name == "Q1"
+    assert reply.text == "yes"
+
+
+def test_revise_reply_carries_comment_as_text():
+    a = _parse(["revise", "--id", "X", "--comment", "split it"])
+    _, reply = sdlc.cli.selector_for(a)
+    assert reply.outcome is GateOutcome.REVISE and reply.text == "split it"
