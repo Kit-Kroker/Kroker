@@ -15,10 +15,12 @@ from __future__ import annotations
 
 from typing import Literal, Sequence
 
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 
 from ..pending import PendingDecision
-from .contract import Channel, ReferenceChannel
+from .contract import Channel, ReferenceChannel, Reply
+
+from ..models import GateOutcome
 
 PENDING_QUERY = "pending_decisions"
 
@@ -106,3 +108,70 @@ def match(pendings: Sequence[PendingDecision], selector: Selector,
 def _name_of(d: PendingDecision) -> str:
     """Gate variants carry .gate; clarify falls back to its question id."""
     return getattr(d, "gate", None) or d.key
+
+
+_PENDING_LIST = TypeAdapter(list[PendingDecision])
+
+_PAST = {
+    GateOutcome.APPROVE: "approved",
+    GateOutcome.REJECT: "rejected",
+    GateOutcome.REVISE: "revision requested on",
+}
+
+
+class SubmitResult(BaseModel):
+    """Outcome of one reply. ``confirmed`` is False when the item is still
+    pending after the signal -- not an error (see ``message``)."""
+    confirmed: bool
+    message: str
+
+
+async def _fetch(handle) -> list[PendingDecision]:
+    """Query by name and validate the discriminated union ourselves.
+
+    Deliberately not `result_type=list[PendingDecision]`: TypeAdapter round-
+    trips the Annotated union verifiably without a live server, so the
+    behavior is pinned by unit tests rather than discovered in staging.
+    """
+    raw = await handle.query(PENDING_QUERY)
+    return _PENDING_LIST.validate_python(raw)
+
+
+async def resolve(handle, selector: Selector,
+                  channel: Channel | None = None) -> PendingDecision:
+    """Fetch what is pending and narrow it to the one item meant."""
+    return match(await _fetch(handle), selector, channel)
+
+
+async def submit(handle, pending: PendingDecision, reply: Reply,
+                 channel: Channel | None = None) -> SubmitResult:
+    """Translate a reply to its signal, send it, and verify it landed."""
+    ch = channel or ReferenceChannel()
+    call = ch.translate(pending, reply)
+
+    if call.signal == "answer_question":
+        await handle.signal(call.signal, args=[call.question_id, call.answer])
+    else:
+        await handle.signal(call.signal, call.decision)
+
+    still = await _fetch(handle)
+    confirmed = pending.key not in {d.key for d in still}
+    return SubmitResult(
+        confirmed=confirmed,
+        message=_message(handle.id, pending, reply, confirmed))
+
+
+def _message(run_id: str, pending: PendingDecision, reply: Reply,
+             confirmed: bool) -> str:
+    if not confirmed:
+        # Signal processing is asynchronous, so this is never reported as a
+        # failure: the dominant cause is another surface winning the race,
+        # which is FR-302 working as designed.
+        return (f"not confirmed: {describe(pending)} still pending -- another "
+                f"surface may have decided it first, or the workflow has not "
+                f"processed the signal yet.")
+    gate = getattr(pending, "gate", None)
+    if gate is not None:
+        return (f"{_PAST[reply.outcome]} gate '{gate}' "
+                f"(round {pending.round}) on {run_id}")
+    return f"answered {pending.key} on {run_id}"
