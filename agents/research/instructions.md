@@ -21,6 +21,12 @@ Method (schema-guided; the brief's field order is your reasoning order):
      `fetch_page` on THIS run. A `web_search` result snippet is NOT a fetched
      page — fetch the URL first, then quote from the fetched bytes. If you did
      not fetch it, the finding cannot be grounded.
+   - Prefer the SHORTEST contiguous span that still supports the claim. A short
+     quote you copied exactly is far safer than a long one — most failures are a
+     single mistyped character (a hyphen where the page has an en-dash `–`, a
+     straight quote where it has a curly `’`, a missing word). Quote a handful
+     of words verbatim, not a whole paragraph, and let the `claim` carry the
+     meaning.
    - If you cannot find a clean contiguous span for a claim, move the claim to
      inferred_findings rather than approximating a quote. One solidly grounded
      finding is worth more than five that fail verification.
