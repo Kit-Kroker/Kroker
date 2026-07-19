@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Implementation Roadmap — Agentic SDLC Factory</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1f2328;
+    --muted: #57606a;
+    --subtle: #8250df;
+    --border: #d0d7de;
+    --border-soft: #eaeef2;
+    --track: #eaeef2;
+
+    --done: #1a7f37;
+    --partial: #bf8700;
+    --notstarted: #57606a;
+    --notmeasurable: #8250df;
+
+    --done-bg: rgba(26,127,55,0.12);
+    --partial-bg: rgba(191,135,0,0.12);
+    --notstarted-bg: rgba(87,96,106,0.10);
+    --notmeasurable-bg: rgba(130,80,223,0.10);
+
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "Cascadia Code", "Menlo", "Consolas", monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    max-width: 1012px;
+    margin: 0 auto;
+    padding: 24px 16px 96px;
+  }
+
+  a { color: var(--subtle); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  code, .mono { font-family: var(--mono); font-size: 0.92em; }
+
+  h1 {
+    font-size: 32px;
+    font-weight: 600;
+    margin: 0 0 4px;
+    letter-spacing: -0.02em;
+  }
+  h2 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 32px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: -0.01em;
+  }
+  h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 20px 0 6px;
+    color: var(--fg);
+  }
+  p { margin: 8px 0; }
+
+  /* ====== Header ====== */
+  .meta {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0 0 4px;
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    margin: 16px 0 8px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #f6f8fa;
+    font-size: 12px;
+  }
+  .legend .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .legend .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .legend .dot.done          { background: var(--done); }
+  .legend .dot.partial       { background: var(--partial); }
+  .legend .dot.notstarted    { background: var(--notstarted); }
+  .legend .dot.notmeasurable { background: var(--notmeasurable); }
+
+  /* ====== Summary dashboard ====== */
+  .summary-block {
+    margin: 24px 0;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fbfcfd;
+  }
+  .summary-block h3 {
+    margin-top: 0;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* Phase bars */
+  .phase-row {
+    display: grid;
+    grid-template-columns: 36px 1fr 64px;
+    gap: 12px;
+    align-items: center;
+    margin: 10px 0;
+  }
+  .phase-row .id {
+    font-family: var(--mono);
+    font-weight: 600;
+    color: var(--fg);
+    font-size: 13px;
+  }
+  .phase-row .bar-track {
+    height: 12px;
+    background: var(--track);
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+  }
+  .phase-row .bar-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width .4s ease;
+  }
+  .phase-row .pct {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    text-align: right;
+  }
+  .phase-row + .phase-note {
+    margin: -4px 0 8px 48px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  /* DAG strip */
+  .dag {
+    display: grid;
+    grid-template-columns: repeat(15, 1fr);
+    gap: 4px;
+    margin-top: 10px;
+  }
+  .dag-cell {
+    position: relative;
+    text-align: center;
+    cursor: help;
+  }
+  .dag-cell .square {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    min-height: 38px;
+    border-radius: 6px;
+    border: 2px solid;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+    font-family: var(--mono);
+  }
+  .dag-cell.done          .square { background: var(--done-bg);          border-color: var(--done);          color: var(--done); }
+  .dag-cell.partial       .square { background: var(--partial-bg);       border-color: var(--partial);       color: var(--partial); }
+  .dag-cell.notstarted    .square { background: var(--notstarted-bg);    border-color: var(--notstarted);    color: var(--notstarted); }
+  .dag-cell.notmeasurable .square { background: var(--notmeasurable-bg); border-color: var(--notmeasurable); color: var(--notmeasurable); }
+  .dag-cell .name {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 4px;
+    line-height: 1.2;
+    min-height: 24px;
+  }
+  /* tooltip */
+  .dag-cell .tip {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1f2328;
+    color: #fff;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1.4;
+    width: 180px;
+    text-align: left;
+    z-index: 50;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .15s;
+    font-weight: 400;
+    font-family: var(--sans);
+  }
+  .dag-cell .tip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #1f2328;
+  }
+  .dag-cell:hover .tip { opacity: 1; }
+  .dag-cell .tip .t-title { font-weight: 600; margin-bottom: 2px; }
+  .dag-cell .tip .t-status { text-transform: uppercase; font-size: 10px; letter-spacing: 0.06em; opacity: 0.85; }
+
+  /* Section tiles */
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .tile {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color .15s, transform .1s;
+  }
+  .tile:hover {
+    border-color: var(--muted);
+    transform: translateY(-1px);
+  }
+  .tile .t-title {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+  }
+  .tile .t-counts {
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 600;
+    margin-top: 2px;
+  }
+  .tile .t-counts .small { font-size: 13px; color: var(--muted); font-weight: 400; }
+  .tile .t-bar {
+    margin-top: 8px;
+    height: 5px;
+    background: var(--track);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .tile .t-bar > div {
+    height: 100%;
+    background: var(--done);
+    border-radius: 3px;
+  }
+
+  /* Status totals */
+  .totals {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .total {
+    border-left: 4px solid;
+    padding: 8px 12px;
+    background: #fff;
+    border-radius: 0 6px 6px 0;
+    border-top: 1px solid var(--border-soft);
+    border-right: 1px solid var(--border-soft);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .total.done          { border-left-color: var(--done); }
+  .total.partial       { border-left-color: var(--partial); }
+  .total.notstarted    { border-left-color: var(--notstarted); }
+  .total.notmeasurable { border-left-color: var(--notmeasurable); }
+  .total .n {
+    font-family: var(--mono);
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1.1;
+  }
+  .total .l {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* ====== Filter bar ====== */
+  .filter-bar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: rgba(255,255,255,0.96);
+    backdrop-filter: blur(4px);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 0;
+    margin: 16px -4px 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    align-items: center;
+  }
+  .chip-group { display: flex; flex-wrap: wrap; gap: 6px; }
+  .fchip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: #fff;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+    transition: all .12s;
+  }
+  .fchip .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .fchip[data-status="done"]          .dot { background: var(--done); }
+  .fchip[data-status="partial"]       .dot { background: var(--partial); }
+  .fchip[data-status="notstarted"]    .dot { background: var(--notstarted); }
+  .fchip[data-status="notmeasurable"] .dot { background: var(--notmeasurable); }
+  .fchip[data-status="recent"]        .dot { background: var(--subtle); }
+  .fchip[data-status="all"]           .dot { background: var(--fg); }
+
+  .fchip:hover { border-color: var(--muted); color: var(--fg); }
+  .fchip.active {
+    background: var(--fg);
+    color: #fff;
+    border-color: var(--fg);
+  }
+  .fchip.active .dot { background: #fff !important; }
+
+  .search-box {
+    margin-left: auto;
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: var(--sans);
+    background: #fff;
+    color: var(--fg);
+    min-width: 200px;
+  }
+  .search-box:focus {
+    outline: 2px solid var(--subtle);
+    outline-offset: -1px;
+    border-color: var(--subtle);
+  }
+  .result-count {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  /* ====== Detail list ====== */
+  .section-anchor { display: block; position: relative; top: -80px; visibility: hidden; }
+
+  .detail-row {
+    display: grid;
+    grid-template-columns: 16px 90px 1fr;
+    gap: 10px;
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--border-soft);
+    align-items: start;
+  }
+  .detail-row.hidden { display: none; }
+
+  .detail-row .sdot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    margin-top: 5px;
+    border: 2px solid;
+  }
+  .detail-row.done          .sdot { background: var(--done);          border-color: var(--done); }
+  .detail-row.partial       .sdot { background: var(--partial);       border-color: var(--partial); }
+  .detail-row.notstarted    .sdot { background: transparent;          border-color: var(--notstarted); }
+  .detail-row.notmeasurable .sdot { background: var(--notmeasurable); border-color: var(--notmeasurable); }
+
+  .detail-row .id-link {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--subtle);
+    font-weight: 600;
+    padding-top: 1px;
+  }
+  .detail-row .id-link:hover { text-decoration: underline; }
+
+  .detail-row .body { font-size: 13px; }
+  .detail-row .title {
+    color: var(--fg);
+    font-weight: 500;
+  }
+  .detail-row .recent-tag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: var(--notmeasurable-bg);
+    color: var(--subtle);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    vertical-align: 1px;
+  }
+  .detail-row .note {
+    color: var(--muted);
+    margin-top: 3px;
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  .detail-row .note .expand-btn {
+    background: none;
+    border: none;
+    color: var(--subtle);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0 0 0 4px;
+    font-family: var(--sans);
+  }
+  .detail-row .note .expand-btn:hover { text-decoration: underline; }
+  .detail-row .full { display: none; }
+  .detail-row.expanded .full { display: inline; }
+  .detail-row.expanded .trunc { display: none; }
+  .detail-row.expanded .expand-btn::before { content: "◀ less"; }
+  .detail-row:not(.expanded) .expand-btn::before { content: "more ▶"; }
+
+  /* Phase row in detail list (full-width) */
+  .phase-detail {
+    grid-template-columns: 16px 90px 1fr;
+  }
+
+  /* Narrative blocks (§0 phases recap, §8 recommended next) */
+  .narrative {
+    padding: 10px 14px;
+    background: #f6f8fa;
+    border-left: 3px solid var(--border);
+    margin: 8px 0;
+    font-size: 13px;
+    color: var(--fg);
+    border-radius: 0 4px 4px 0;
+  }
+  .narrative.done          { border-left-color: var(--done); }
+  .narrative.partial       { border-left-color: var(--partial); }
+  .narrative.notstarted    { border-left-color: var(--notstarted); }
+  .narrative.notmeasurable { border-left-color: var(--notmeasurable); }
+  .narrative strong { color: var(--fg); }
+
+  ol.next-list {
+    margin: 8px 0;
+    padding-left: 22px;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  ol.next-list li { color: var(--muted); margin-bottom: 6px; }
+  ol.next-list li.done { color: var(--done); text-decoration: line-through; text-decoration-color: var(--muted); }
+  ol.next-list li strong { color: var(--fg); }
+
+  footer {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* Print */
+  @media print {
+    .filter-bar, .expand-btn { display: none !important; }
+    .detail-row .full { display: inline !important; }
+    .detail-row .trunc { display: none !important; }
+    body { max-width: none; padding: 0; }
+    a { color: var(--fg); text-decoration: none; }
+    .summary-block, .legend { break-inside: avoid; }
+    .dag-cell .tip { display: none; }
+  }
+
+  /* Narrow screens */
+  @media (max-width: 720px) {
+    .dag { grid-template-columns: repeat(8, 1fr); gap: 6px; }
+    .tiles { grid-template-columns: repeat(2, 1fr); }
+    .totals { grid-template-columns: repeat(2, 1fr); }
+    .detail-row { grid-template-columns: 14px 1fr; }
+    .detail-row .id-link { grid-column: 2; }
+    .search-box { min-width: 0; flex: 1; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Implementation Roadmap — Agentic SDLC Factory</h1>
+  <p class="meta">
+    Source of truth: <a href="../ROADMAP.md">ROADMAP.md</a> ·
+    <a href="../PRD.md">PRD.md</a> ·
+    <a href="../ARCHITECTURE.md">ARCHITECTURE.md</a> ·
+    <a href="../SDLC-spec-v2.md">SDLC-spec-v2.md</a>
+    <br>
+    Last verified: <strong>2026-07-19</strong> ·
+    Method: every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code.
+  </p>
+
+  <div class="legend">
+    <span class="chip"><span class="dot done"></span> <code>[x]</code> done — implemented, on live path</span>
+    <span class="chip"><span class="dot partial"></span> <code>[ ] ⚠️</code> partial — mechanism exists, incomplete</span>
+    <span class="chip"><span class="dot notstarted"></span> <code>[ ]</code> not started</span>
+    <span class="chip"><span class="dot notmeasurable"></span> <code>—</code> not falsifiable from code alone</span>
+  </div>
+</header>
+
+<!-- ===== Summary dashboard ===== -->
+<section class="summary-block">
+  <h3>Phases</h3>
+  <div id="phase-bars"></div>
+</section>
+
+<section class="summary-block">
+  <h3>15-stage pipeline DAG — <span id="dag-summary"></span></h3>
+  <div id="dag" class="dag"></div>
+</section>
+
+<section class="summary-block">
+  <h3>Sections</h3>
+  <div id="tiles" class="tiles"></div>
+</section>
+
+<section class="summary-block">
+  <h3>Status totals (all items)</h3>
+  <div id="totals" class="totals"></div>
+</section>
+
+<!-- ===== Filter bar ===== -->
+<div class="filter-bar">
+  <div class="chip-group" id="chip-group">
+    <span class="fchip active" data-status="all"><span class="dot"></span>All</span>
+    <span class="fchip" data-status="done"><span class="dot"></span>Done</span>
+    <span class="fchip" data-status="partial"><span class="dot"></span>Partial</span>
+    <span class="fchip" data-status="notstarted"><span class="dot"></span>Not started</span>
+    <span class="fchip" data-status="notmeasurable"><span class="dot"></span>Not measurable</span>
+    <span class="fchip" data-status="recent"><span class="dot"></span>Recently changed</span>
+  </div>
+  <input type="search" id="search" class="search-box" placeholder="Filter by id, title, note…" aria-label="Filter items">
+  <span class="result-count" id="result-count"></span>
+</div>
+
+<!-- ===== Detail list ===== -->
+<main id="detail"></main>
+
+<footer>
+  Generated from <a href="../ROADMAP.md">ROADMAP.md</a> at 2026-07-19 fidelity.
+  To refresh, re-extract items per the rule documented inline in this file's <code>&lt;script&gt;</code> block.
+</footer>
+
+<script>
+/* =========================================================================
+ * DATA — hand-extracted from ROADMAP.md (verified 2026-07-19).
+ *
+ * Extraction rules (mechanical):
+ *   [x]            -> status: "done"
+ *   [ ] ⚠️         -> status: "partial"
+ *   [ ]            -> status: "notstarted"
+ *   —              -> status: "notmeasurable"
+ *
+ * `recent: true`  iff note contains any of:
+ *   - "2026-"            (a dated audit/incident pointer)
+ *   - "**(new)**"        (the audit's "newly landed" marker)
+ *   - "**Done**"         (the next-increment strikethrough marker)
+ *   - "~~"               (markdown strikethrough = completed increment)
+ *
+ * Phase `pct` is hand-encoded from the prose (not derived).
+ * ========================================================================= */
+const ROADMAP = {
+  meta: {
+    lastVerified: "2026-07-19",
+    sourceFile: "ROADMAP.md"
+  },
+
+  phases: [
+    { id: "P1", pct: 100, status: "done",
+      title: "Greenfield pipeline, CLI, hard gates, no memory",
+      exit:  "one project shipped end-to-end",
+      note:  "Demonstrated by tests/test_e2e_greenfield.py driving FeatureWorkflow greenfield IdeaBrief → deployed: end-to-end in CI; security_no_critical absolute floor now bites (SC-5). Delivered on feat/p1-consolidation (3cfbe62…41c9185)." },
+    { id: "P2", pct: 40, status: "partial",
+      title: "Brownfield, dashboard + notifications, fix loops, cross-harness review",
+      exit:  "first brownfield feature merged via PR",
+      note:  "Cross-harness review ✅ and fix loops ✅ landed early; brownfield mode, dashboard backend, and notifications not started." },
+    { id: "P3", pct: 50, status: "partial",
+      title: "Hindsight memory + confidence-gated soft gates",
+      exit:  "SC-4 and SC-6 measurable",
+      note:  "Memory (recall/retain/watermark) ✅ and soft gates ✅ done; SC-4/SC-6 not yet measurable (need retro/reflect wiring + real runs)." },
+    { id: "P4", pct: 0, status: "notstarted",
+      title: "MCP surface, maintenance loop (DAPER), fleet scale",
+      exit:  "SC-1..3 at target",
+      note:  "Not started." }
+  ],
+
+  stages: [
+    { n: 0,  name: "intake",        status: "notstarted", note: "routing greenfield/brownfield/repair. IdeaBrief.mode is a field only; no branch logic in feature.py." },
+    { n: 1,  name: "constitution",  status: "notstarted", note: "no Constitution model, no stage." },
+    { n: 2,  name: "context",       status: "notstarted", note: "Cartographer. No CodebaseMap, no cartography.py, no brownfield delta." },
+    { n: 3,  name: "requirements",  status: "notstarted", note: "Product. Conflated into clarify; no standalone Product proposer / Requirements artifact." },
+    { n: 4,  name: "research",      status: "partial",    note: "FR-107 grounded brief before clarify. Scaffolded, off by default (research_enabled)." },
+    { n: 5,  name: "clarify",       status: "done",       note: "Clarifier + gate; open-question wait on answer_question; recall/retain/memoization wired." },
+    { n: 6,  name: "architecture",  status: "done",       note: "Architect + gate, with REVISE loop (_revisable_stage)." },
+    { n: 7,  name: "planning",      status: "done",       note: "Planner + gate, with REVISE loop." },
+    { n: 8,  name: "code",          status: "done",       note: "Developer, per-task, ADR-14 integration branch (_dev_task)." },
+    { n: 9,  name: "review",        status: "done",       note: "clean-context reviewer_agent (t_reviewer) run in _dev_task; blocking findings fold into the fix loop. (new)" },
+    { n: 10, name: "analyze",       status: "done",       note: "Analyst clean-context proposer (t_analyst) emits AnalysisReport; workflow enforces criterion→test traceability (FR-106)." },
+    { n: 11, name: "qa",            status: "done",       note: "+ Resolver. clean-context t_qa + bounded fix loop. Note: default max_fix_attempts=2, PRD says QA loop 3 — numeric drift." },
+    { n: 12, name: "quality_gate",  status: "partial",    note: "DeterministicQualityGate ✅; 6 checks built. Security absolute floor ✅; traceability ✅; coverage blocked on test suite running in integration worktree." },
+    { n: 13, name: "deploy",        status: "partial",    note: "single hardcoded make deploy ENV=staging; no DeployPlan/DeployReport split, no smoke-test vs PR-merge distinction." },
+    { n: 14, name: "retro",         status: "notstarted", note: "reflect() activity exists and is registered but never called; no RunSummary, no export." }
+  ],
+
+  items: [
+    /* FR-100 — Pipeline */
+    { id: "FR-101", section: "FR", status: "partial",    title: "15-stage durable DAG",
+      note: "7/15 stages (see §1).", recent: false },
+    { id: "FR-102", section: "FR", status: "notstarted", title: "greenfield/brownfield classify + CodebaseMap + delta",
+      note: "No classifier, no CodebaseMap, no brownfield delta.", recent: false },
+    { id: "FR-103", section: "FR", status: "done",       title: "memoization, per-run watermark, audit-record-always-kept",
+      note: "memoization/cache.py, content_key, _cached_stage — each stage's memo key now carries its own role's model (STAGE_MODELS). brief_digest keeps memoization alive once a non-memoized stage (research) feeds memoized ones.", recent: true },
+    { id: "FR-104", section: "FR", status: "done",       title: "integration branch, per-task worktree, own-branch-point diff",
+      note: "ADR-14 fully wired.", recent: false },
+    { id: "FR-105", section: "FR", status: "partial",    title: "fix loops",
+      note: "QA loop ✅, review findings now fold into it ✅; loop-count defaults drift from spec (2 vs 3).", recent: true },
+    { id: "FR-106", section: "FR", status: "partial",    title: "deterministic absolute/advisory gate",
+      note: "classification ✅ and load-bearing; security absolute-floor ✅; traceability ✅; coverage wired as deterministic diff-scoped seam ✅ (real instrumentation future work).", recent: true },
+    { id: "FR-107", section: "FR", status: "partial",    title: "grounded research stage (new scope)",
+      note: "ResearchBrief, quote-verified against bytes fetched this run, off by default (research_enabled). Landed behind the PRD amendment adding FR-107; 2026-07-17-research-agent-grounded-briefs.", recent: true },
+
+    /* FR-200 — Agents */
+    { id: "FR-201", section: "FR", status: "done",       title: "versioned config/agents.yaml registry (role/kind/model)",
+      note: "governs all eleven roles (3 harness + 8 proposer); PipelineConfig.roles is a purity-mandated mirror asserted at boot.", recent: true },
+    { id: "FR-202", section: "FR", status: "partial",    title: "schema-validated artifacts + re-prompt",
+      note: "Pydantic output_type gives validation; configurable validation_retries knob not surfaced.", recent: false },
+    { id: "FR-203", section: "FR", status: "done",       title: "claude -p / opencode run adapters, harness-agnostic workflow",
+      note: "harness/adapters.py, HARNESSES.", recent: false },
+    { id: "FR-204", section: "FR", status: "done",       title: "reviewer clean-context, model-family inequality enforced, no session resume",
+      note: "boot-time validate_registry. (new)", recent: true },
+    { id: "FR-205", section: "FR", status: "partial",    title: "proposer MAY/MUST NOT validators",
+      note: "only inline dependency-cycle check; no dedicated validators.py.", recent: false },
+
+    /* FR-300 — Human-in-the-loop */
+    { id: "FR-301", section: "FR", status: "partial",    title: "hard/soft/off + threshold + revise + MAX_GATE_ROUNDS",
+      note: "wired for architecture/plan/merge; soft still confidence-only (no deterministic-check AND-clause); no calibration monitoring.", recent: false },
+    { id: "FR-302", section: "FR", status: "done",       title: "idempotent signals, (gate, round) identity, first-decision-wins",
+      note: "", recent: false },
+    { id: "FR-303", section: "FR", status: "partial",    title: "notifications + durable timers",
+      note: "timeout→auto-reject only; no notify activity, no reminder timer, no fallback-approver.", recent: false },
+    { id: "FR-304", section: "FR", status: "partial",    title: "decisions recorded/queryable",
+      note: "fields captured + retained as text; no structured queryable decision log.", recent: false },
+    { id: "FR-305", section: "FR", status: "notstarted", title: "cross-run decision inbox",
+      note: "no surface lists everything awaiting a human.", recent: false },
+
+    /* FR-400 — Memory */
+    { id: "FR-401", section: "FR", status: "done",       title: "retain stage summaries / fix-loop gotchas / gate decisions",
+      note: "no \"incidents\" — needs maintenance loop.", recent: false },
+    { id: "FR-402", section: "FR", status: "partial",    title: "RecallSnapshot persisted/hashed/declared input",
+      note: "query_hash exists; snapshots not a separately content-addressed artifact; watermark is the working piece.", recent: false },
+    { id: "FR-403", section: "FR", status: "done",       title: "non-blocking retain, fire-and-forget with retries, PII/secret scrub hook",
+      note: "memory/scrub.py.", recent: false },
+    { id: "FR-404", section: "FR", status: "partial",    title: "nightly reflect",
+      note: "project half live: schedules/nightly-reflect.yaml → ReflectWorkflow → reflect(), applied via sdlc schedules apply (E-12/E-13). Org half unmet: nothing retains to org_bank (E-25).", recent: true },
+
+    /* FR-500 — Maintenance */
+    { id: "FR-501", section: "FR", status: "notstarted", title: "DAPER proactive workflow (timer + nudge)",
+      note: "", recent: false },
+    { id: "FR-502", section: "FR", status: "notstarted", title: "repair code_fix as brownfield child runs; risk-classed ops actions",
+      note: "", recent: false },
+    { id: "FR-503", section: "FR", status: "notstarted", title: "confidence-gated repair approval; timeout = inaction",
+      note: "", recent: false },
+
+    /* FR-600 — Interfaces */
+    { id: "FR-601", section: "FR", status: "partial",    title: "dashboard fleet/spine/inbox",
+      note: "Vue 3 frontend exists (mock API); no FastAPI backend wired to Temporal.", recent: false },
+    { id: "FR-602", section: "FR", status: "notstarted", title: "MCP server (list/detail/inbox/answer/decide/start)",
+      note: "no interfaces/mcp/.", recent: false },
+    { id: "FR-603", section: "FR", status: "partial",    title: "CLI — start/status/answer/approve/reject/benchmark",
+      note: "✅; missing cross-run inbox (FR-305).", recent: false },
+    { id: "FR-604", section: "FR", status: "done",       title: "stateless shells, no interface DB",
+      note: "true for CLI.", recent: false },
+
+    /* FR-700 — Governance & ops */
+    { id: "FR-701", section: "FR", status: "notstarted", title: "run-level budgets",
+      note: "research ships the FIRST run-level counters (max_searches/max_fetches/max_cost_usd), stage-scoped and enforced inside the tools; E-19 remains the general version.", recent: true },
+    { id: "FR-702", section: "FR", status: "partial",    title: "claim-check ArtifactRef / 2MB discipline",
+      note: "ArtifactRef model exists but diffs travel inline; no CodeArtifact union; no size guard.", recent: false },
+    { id: "FR-703", section: "FR", status: "partial",    title: "egress policy",
+      note: "research is the pipeline's first outbound egress, and it arrives before the egress policy. Still env-allowlist only; no pre_tool hook, no egress tier. E-18's first consumer, not its implementation.", recent: true },
+    { id: "FR-704", section: "FR", status: "notstarted", title: "observability export (events.jsonl + report.html)",
+      note: "no observability/ module.", recent: false },
+
+    /* NFR */
+    { id: "NFR-1", section: "NFR", status: "done",       title: "Durability — Temporal-native",
+      note: "", recent: false },
+    { id: "NFR-2", section: "NFR", status: "notstarted", title: "Scale / two pools",
+      note: "single task queue \"ai-sdlc\"; contra ADR-9.", recent: false },
+    { id: "NFR-3", section: "NFR", status: "notmeasurable", title: "Latency (5s/2s)",
+      note: "untested, not falsifiable from code.", recent: false },
+    { id: "NFR-4", section: "NFR", status: "partial",    title: "Auditability",
+      note: "Temporal history reconstructs runs; no events.jsonl/report.html export.", recent: false },
+    { id: "NFR-5", section: "NFR", status: "partial",    title: "Security",
+      note: "env allowlist done; OS user, container, pre_tool hook, egress, scoped-cred injection absent.", recent: false },
+    { id: "NFR-6", section: "NFR", status: "done",       title: "Reproducibility vs memoization",
+      note: "watermark-pinned recall + content-addressed cache.", recent: false },
+    { id: "NFR-7", section: "NFR", status: "done",       title: "Portability",
+      note: "MemoryConfig.backend defaults to fake; real Hindsight client for self-hosting.", recent: false },
+
+    /* SC */
+    { id: "SC-1", section: "SC", status: "notmeasurable", title: "≥80% runs reach merge gate unattended",
+      note: "not measurable (no fleet runs).", recent: false },
+    { id: "SC-2", section: "SC", status: "notmeasurable", title: "≤15 min operator time",
+      note: "not measurable.", recent: false },
+    { id: "SC-3", section: "SC", status: "notmeasurable", title: "fix-loop success ≥70%",
+      note: "mechanism exists; no aggregate metric captured.", recent: false },
+    { id: "SC-4", section: "SC", status: "notmeasurable", title: "repeat-clarification <10% by run 10",
+      note: "needs reflect wiring (FR-404) + runs.", recent: false },
+    { id: "SC-5", section: "SC", status: "done",          title: "zero deploys past a failed absolute check",
+      note: "empty/vacuous-task bypass fixed, absolute failure is terminal, security_no_critical floor emitted by security_scan and wired as absolute merge-gate check (feature.py:807,818). tests/test_security_floor.py asserts a critical finding blocks deploy.", recent: true },
+    { id: "SC-6", section: "SC", status: "notmeasurable", title: "soft-gate override <5%",
+      note: "mechanism exists; not measurable without runs + reflect.", recent: false },
+
+    /* US */
+    { id: "US-1", section: "US", status: "partial",    title: "clarify + one-click suggested answers",
+      note: "CLI clarify + suggested-answer auto-accept ✅; no dashboard/Slack/MCP delivery.", recent: false },
+    { id: "US-2", section: "US", status: "done",       title: "approve/revise architecture spec",
+      note: "REVISE loop with recorded identity.", recent: false },
+    { id: "US-3", section: "US", status: "done",       title: "task escalation → retry-with-guidance/quarantine",
+      note: "guidance reaches same harness session.", recent: false },
+    { id: "US-4", section: "US", status: "done",       title: "per-project gate config (hard/soft + threshold)",
+      note: "GateConfig, no code change.", recent: false },
+    { id: "US-5", section: "US", status: "done",       title: "dev/reviewer different model family; registry rejects same-family",
+      note: "enforced at boot, against dev (the role that actually codes) since 2026-07-16-registry-drives-every-role.", recent: true },
+    { id: "US-6", section: "US", status: "notstarted", title: "stakeholder one-screen fleet view",
+      note: "no dashboard backend.", recent: false },
+    { id: "US-7", section: "US", status: "notstarted", title: "MCP conversational gate approval",
+      note: "no MCP server.", recent: false },
+
+    /* ADR */
+    { id: "ADR-1",  section: "ADR", status: "done",       title: "Temporal owns state",                              note: "", recent: false },
+    { id: "ADR-2",  section: "ADR", status: "done",       title: "Pydantic AI proposers + harness CLIs",             note: "", recent: false },
+    { id: "ADR-3",  section: "ADR", status: "notstarted", title: "CodeArtifact union (files|diff_ref)",
+      note: "model doesn't exist; diff handling ad hoc.", recent: false },
+    { id: "ADR-4",  section: "ADR", status: "done",       title: "Gates as policy-driven durable signal waits (revision loop included)",
+      note: "", recent: false },
+    { id: "ADR-5",  section: "ADR", status: "done",       title: "Memoization + watermark; auditability/memoization split",
+      note: "", recent: false },
+    { id: "ADR-6",  section: "ADR", status: "done",       title: "Anti-collusion review (model-family inequality, clean-context reviewer)",
+      note: "Re-aimed at dev (the role that actually codes) and the two registries mirror-checked at boot (2026-07-16-registry-drives-every-role).", recent: true },
+    { id: "ADR-7",  section: "ADR", status: "notstarted", title: "Repairs execute through the factory",
+      note: "maintenance loop absent.", recent: false },
+    { id: "ADR-8",  section: "ADR", status: "partial",    title: "Interfaces as stateless shells",
+      note: "true for CLI; dashboard backend absent.", recent: false },
+    { id: "ADR-9",  section: "ADR", status: "notstarted", title: "Two worker pools by capability",
+      note: "single queue.", recent: false },
+    { id: "ADR-10", section: "ADR", status: "partial",    title: "Claim-check for large payloads",
+      note: "ArtifactRef exists but not load-bearing.", recent: false },
+    { id: "ADR-11", section: "ADR", status: "partial",    title: "Deterministic DAG",
+      note: "holds for the 8 live stages; 6 stages absent.", recent: false },
+    { id: "ADR-12", section: "ADR", status: "done",       title: "Contract-first, clean-context validators",
+      note: "QA ✅ and review ✅ both clean-context. (now complete)", recent: true },
+    { id: "ADR-13", section: "ADR", status: "done",       title: "Serial-by-default; resume-bounded; context by reference",
+      note: "near_context_ceiling wired.", recent: false },
+    { id: "ADR-14", section: "ADR", status: "done",       title: "Integration by running branch",
+      note: "fully wired.", recent: false },
+
+    /* STRUCT (§7) */
+    { id: "STRUCT-1", section: "STRUCT", status: "partial",    title: "Layered src/factory/ tree",
+      note: "code still lives in the flattened src/sdlc/ skeleton; §14 tree is aspirational (documented \"P1 hardening\", not silent drift).", recent: false },
+    { id: "STRUCT-2", section: "STRUCT", status: "done",       title: "prompts/ as versioned assets with an eval loop",
+      note: "prompts live in agents/<role>/instructions.md and hash into PROMPT_SHAS from file content (E-2 ✅); a prompt edit is now measurable via sdlc eval <role> (E-4 ✅).", recent: true },
+    { id: "STRUCT-3", section: "STRUCT", status: "done",       title: "Deterministic CI stand-in for the e2e proof",
+      note: "tests/fakes/ provides same-named TemporalAgent TestModel stubs + fake git/subprocess activities (P1 orchestration test). A fake_harness.py-style adapter for real-git fidelity remains future work.", recent: false },
+    { id: "STRUCT-4", section: "STRUCT", status: "notstarted", title: "Cosmetic: workflow class is FeatureWorkflow; docs call it FactoryWorkflow",
+      note: "", recent: false },
+    { id: "STRUCT-5", section: "STRUCT", status: "partial",    title: "ReviewReport / MergeVerdict SGR ordering",
+      note: "ReviewReport is approve → findings → confidence — the reviewer commits to a verdict before writing a finding, contradicting REVIEWER_PROMPT's \"set approve to false if ANY finding is critical/high\". MergeVerdict rates its own confidence two fields before listing concerns. AnalysisReport/ArchitectureSpec are already evidence-first. A one-line-per-contract fix; its own change and its own benchmark run (out of scope for the research increment).", recent: false },
+
+    /* E-items (§9) */
+    { id: "E-1",  section: "E", status: "done",       title: "agents/<role>/ directory loader",
+      note: "load_registry() walks a directory (agent.yaml + instructions.md + agent.py) instead of parsing one file. ADR-6's family-inequality check keeps biting at boot, unchanged: validate_registry is re-fed the same dict, not re-implemented. Also deleted the parents[3] walk, which made the containerised worker unbootable (editable install masked it). Spec: docs/superpowers/specs/2026-07-17-agents-as-folders-design.md.", recent: true },
+    { id: "E-2",  section: "E", status: "done",       title: "Prompts moved to agents/<role>/instructions.md; PROMPT_SHAS derives from file content",
+      note: "Every hash byte-identical, pinned. Revived not by the memoization argument E-3's note made — finding 1 checked that and it was wrong — but because the research role is the first role a folder genuinely describes rather than decorates.", recent: true },
+    { id: "E-3",  section: "E", status: "done",       title: "~~Wire prompt-file content into content_key~~ — closed (the model half, not the prompt half)",
+      note: "The prompt half was already wired before the item was written (content_key(prompt_sha=...) + PROMPT_SHAS). The model half was the real gap: every stage passed one hardcoded MODEL constant as content_key's model_id. Closed together with the ADR-6 hole (§9.1 preamble); STAGE_MODELS now resolves each stage's real model.", recent: true },
+    { id: "E-4",  section: "E", status: "done",       title: "Prompt eval loop over the agents/ assets",
+      note: "sdlc eval <role> A/B-scores a working-tree instructions.md against a committed one on a captured fixture, judged by the existing cross-family judge_artifact + the case rubric; sdlc eval capture harvests fixtures from a run's history. Stage-isolated and on-demand (an exploration tool). Six pure proposers; architect/research refused (carry deps). Closes §7's \"with an eval loop\" clause. The regression-gate half (a committed baseline + a CI check) is a named future increment (OQ-E2). Spec: docs/superpowers/specs/2026-07-18-prompt-eval-loop-design.md.", recent: true },
+    { id: "E-5",  section: "E", status: "notstarted", title: "(speculative — do not schedule) Factory takes its own agents/ folders as brownfield input to itself",
+      note: "ADR-7's endpoint. Recorded because it's a pleasing closure of ADR-7, flagged because that's exactly why it deserves suspicion. Needs E-1 and brownfield mode (FR-102) first.", recent: false },
+    { id: "E-6",  section: "E", status: "done",       title: "Channel contract over the FR-302 signal substrate",
+      note: "structured pending_decisions() workflow query (Layer A, sdlc/pending.py) feeding a pure render/translate adapter (Layer B, sdlc/channels/contract.py), with deliver an opt-in PushChannel. All four render variants collapse to the two FR-302 signals on reply. Contract only — no new surface; E-7 refits the CLI as the proof. Layer B landed under sdlc/channels/ not interfaces/channels/: pyproject packages only src/. Spec: docs/superpowers/specs/2026-07-18-channel-contract-over-fr302-design.md.", recent: true },
+    { id: "E-7",  section: "E", status: "notstarted", title: "Refit the existing CLI (answer/approve/reject) onto the contract",
+      note: "Ordered first deliberately: it validates the contract against a known-good surface before any new surface depends on it. If the CLI doesn't fit cleanly, the contract is wrong.", recent: false },
+    { id: "E-8",  section: "E", status: "notstarted", title: "Cross-run inbox as a query over pending gates (FR-305, FR-603's missing verb)",
+      note: "the first capability the contract buys that we don't already have.", recent: false },
+    { id: "E-9",  section: "E", status: "notstarted", title: "Notify activity + reminder timer + fallback approver (FR-303)",
+      note: "Today: timeout→auto-reject only.", recent: false },
+    { id: "E-10", section: "E", status: "notstarted", title: "FastAPI dashboard backend as a channel adapter, replacing the Vue frontend's mock API",
+      note: "FR-601, US-6, ADR-8.", recent: false },
+    { id: "E-11", section: "E", status: "notstarted", title: "MCP server as a channel adapter — list/detail/inbox/answer/decide/start",
+      note: "FR-602, US-7.", recent: false },
+    { id: "E-12", section: "E", status: "done",       title: "schedules/*.yaml assets reconciled into Temporal Schedules via sdlc schedules apply",
+      note: "--dry-run shows the diff; drift is reported, --prune deletes. Not worker boot as originally written: schedules are server-side mutable state, so a restart must not silently rewrite production scheduling. Spec: docs/superpowers/specs/2026-07-16-schedules-as-files-and-nightly-reflect-design.md.", recent: true },
+    { id: "E-13", section: "E", status: "done",       title: "schedules/nightly-reflect.yaml → ReflectWorkflow → the existing reflect() activity, project banks only (FR-404, partial)",
+      note: "Corrected from \"invoking the existing reflect() activity\": Temporal Schedules start workflows, not activities, hence the wrapper. Corrected from \"project + org scope\": see E-25.", recent: true },
+    { id: "E-14", section: "E", status: "notstarted", title: "DAPER maintenance timer + nudge as a schedule asset (FR-501)",
+      note: "Blocked on MaintenanceWorkflow existing at all.", recent: false },
+    { id: "E-15", section: "E", status: "notstarted", title: "pre_tool hook seam in harness/adapters.py, called for every harness tool invocation",
+      note: "", recent: false },
+    { id: "E-16", section: "E", status: "notstarted", title: "Policy denial path — deny by rule, no human involved (FR-703)",
+      note: "", recent: false },
+    { id: "E-17", section: "E", status: "notstarted", title: "Approval escalation: a needsApproval-class tool call raises a gate through existing FR-301/FR-302 machinery",
+      note: "rather than a parallel mechanism.", recent: false },
+    { id: "E-18", section: "E", status: "notstarted", title: "harness/egress containment — re-ranked up",
+      note: "§8 item 4 ranked it fourth on the strength of pre_tool; an unpoliced outbound egress (research, FR-703) is a second, independent argument. The research stage fetches arbitrary URLs through a provider with only an env allowlist between it and the worker's network.", recent: true },
+    { id: "E-19", section: "E", status: "notstarted", title: "Single model egress point yielding run-level token/cost counters (FR-701)",
+      note: "Today cost bookkeeping \"exists in benchmarks only\"; one egress point is how to get run counters without touching every call site. Prerequisite for the run-budget escalation half of FR-701.", recent: false },
+    { id: "E-20", section: "E", status: "notstarted", title: "Short-lived, task-scoped credential injection with an audit trail binding each action to a user (Connect's model)",
+      note: "the \"scoped-cred injection absent\" gap in NFR-5.", recent: false },
+    { id: "E-21", section: "E", status: "notstarted", title: "OS-user / container isolation tier (Sandbox's model)",
+      note: "the missing tier in FR-703.", recent: false },
+    { id: "E-22", section: "E", status: "notstarted", title: "observability/ module emitting events.jsonl (FR-704, NFR-4)",
+      note: "before the surfaces in E-9/E-10/E-11 multiply the ways delivery can fail silently.", recent: false },
+    { id: "E-23", section: "E", status: "notstarted", title: "report.html export from the event stream (FR-704)",
+      note: "", recent: false },
+    { id: "E-24", section: "E", status: "notstarted", title: "Pin harness/adapter versions and assert them at boot",
+      note: "eve's dependency-drift failure mode applies directly to HARNESSES (FR-203).", recent: false },
+    { id: "E-25", section: "E", status: "notstarted", title: "Nothing retains to org_bank",
+      note: "MemoryConfig defines it (models.py:376) but every _retain call site in feature.py passes project_bank. Cross-project consolidation (reflect(org), SDLC-spec §279) therefore has no writers. This, not scheduling, is the remaining blocker on FR-404's org half. Needs a decision on what belongs in an org bank — likely (new scope).", recent: false },
+    { id: "E-26", section: "E", status: "notstarted", title: "Make cfg.roles genuinely per-project (US-4) without reintroducing drift",
+      note: "PipelineConfig.roles is a hardcoded mirror of agents.yaml's harness roles because PipelineConfig() is constructed inside the workflow (feature.py:602), so its default cannot read the file without breaking sandbox purity. The boot mirror-check makes drift fail closed, but it also means a per-project override must resolve at the boundary (cli.py, benchmarks/workflow.py) and satisfy ADR-6 per run, not just at boot. Nothing populates cfg.roles today.", recent: false }
+  ],
+
+  /* §8 — Recommended next increments (narrative, ranked) */
+  next: [
+    { rank: 1, status: "done", text: "<strong>Close P1 honestly</strong> — CI-runnable end-to-end run through FeatureWorkflow + wire the security_no_critical absolute check. <strong>Done</strong> on feat/p1-consolidation (3cfbe62…41c9185)." },
+    { rank: 2, status: "done", text: "<strong>Analyze/Analyst stage</strong> — unlocks coverage + criterion→test traceability advisory checks (FR-106). <strong>Done</strong> on feat/analyst-stage." },
+    { rank: 3, status: "partial", text: "<strong>retro/reflect wiring</strong> (FR-404) — starts accumulating the SC-4/SC-6 calibration signal. <strong>Partially done</strong> — schedule mechanism + nightly project reflect ship (E-12/E-13). Org half blocked on E-25; the retro <em>stage</em> (§1 item 13, RunSummary) is still unbuilt." },
+    { rank: 4, status: "notstarted", text: "<strong>Harness containment</strong> beyond env allowlist — pre_tool hook + egress (FR-703/NFR-5). Tasks: E-15…E-18 — note the hook and the gate are one mechanism, not two." },
+    { rank: 5, status: "notstarted", text: "<strong>Operability</strong> — dashboard FastAPI backend + MCP + cross-run inbox (FR-305/601/602). Tasks: E-6…E-11 — these four items are one contract plus thin adapters, so E-6/E-7 land before any surface." },
+    { rank: 6, status: "notstarted", text: "<strong>Post-P1 roadmap</strong> — MaintenanceWorkflow/DAPER (E-14), two worker pools, run budgets (E-19), observability export (E-22, E-23), brownfield mode, claim-check." },
+    { rank: 7, status: "partial", text: "<strong>Repo hardening via agents-as-folders</strong> — closes §7's prompts-as-assets drift. Tasks: E-1, E-2, E-4. <em>Re-ranked down</em>: the memoization payoff that justified it was already banked, and the ADR-6 hole it sat next to is closed. Cheapest self-contained item on this list, but now purely reorganisation." }
+  ]
+};
+
+/* ===== Section metadata ===== */
+const SECTION_META = {
+  FR:     { title: "Functional requirements",     anchor: "fr",    sourceAnchor: null },
+  NFR:    { title: "Non-functional requirements",  anchor: "nfr",   sourceAnchor: null },
+  SC:     { title: "Success criteria",             anchor: "sc",    sourceAnchor: null },
+  US:     { title: "User stories",                 anchor: "us",    sourceAnchor: null },
+  ADR:    { title: "Architecture decision records",anchor: "adr",   sourceAnchor: null },
+  STRUCT: { title: "Structural / repo-hardening",  anchor: "struct",sourceAnchor: null },
+  E:      { title: "Filesystem-first work items (E-)", anchor: "e", sourceAnchor: null }
+};
+const DETAIL_ORDER = ["FR", "NFR", "SC", "US", "ADR", "STRUCT", "E"];
+
+/* ===== Status metadata ===== */
+const STATUS = {
+  done:          { label: "Done",          color: "var(--done)" },
+  partial:       { label: "Partial",       color: "var(--partial)" },
+  notstarted:    { label: "Not started",   color: "var(--notstarted)" },
+  notmeasurable: { label: "Not measurable",color: "var(--notmeasurable)" }
+};
+const STATUSES = ["done", "partial", "notstarted", "notmeasurable"];
+
+/* =========================================================================
+ * RENDER
+ * ========================================================================= */
+function renderPhaseBars() {
+  const host = document.getElementById("phase-bars");
+  host.innerHTML = "";
+  ROADMAP.phases.forEach(p => {
+    const row = document.createElement("div");
+    row.className = "phase-row";
+    row.innerHTML = `
+      <div class="id">${p.id}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${p.pct}%;background:${STATUS[p.status].color}"></div></div>
+      <div class="pct">${p.pct}%</div>
+    `;
+    host.appendChild(row);
+    const note = document.createElement("div");
+    note.className = "phase-note";
+    note.innerHTML = `<strong>${p.title}</strong> → <em>${p.exit}</em> — ${p.note}`;
+    host.appendChild(note);
+  });
+}
+
+function renderDAG() {
+  const host = document.getElementById("dag");
+  host.innerHTML = "";
+  ROADMAP.stages.forEach(s => {
+    const cell = document.createElement("div");
+    cell.className = "dag-cell " + s.status;
+    cell.innerHTML = `
+      <div class="square">${s.n}</div>
+      <div class="name">${s.name}</div>
+      <div class="tip">
+        <div class="t-title">${s.n} · ${s.name}</div>
+        <div class="t-status">${STATUS[s.status].label}</div>
+        <div>${escapeHtml(s.note)}</div>
+      </div>
+    `;
+    host.appendChild(cell);
+  });
+  const liveCount = ROADMAP.stages.filter(s => s.status === "done").length;
+  document.getElementById("dag-summary").textContent =
+    `${liveCount} of 15 stages live`;
+}
+
+function renderTiles() {
+  const host = document.getElementById("tiles");
+  host.innerHTML = "";
+  DETAIL_ORDER.filter(s => s !== "STRUCT").forEach(sec => {
+    const items = ROADMAP.items.filter(i => i.section === sec);
+    const done = items.filter(i => i.status === "done").length;
+    const total = items.length;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    const tile = document.createElement("div");
+    tile.className = "tile";
+    tile.dataset.section = sec;
+    tile.innerHTML = `
+      <div class="t-title">${SECTION_META[sec].title}</div>
+      <div class="t-counts">${done}<span class="small"> / ${total} done · ${pct}%</span></div>
+      <div class="t-bar"><div style="width:${pct}%"></div></div>
+    `;
+    tile.onclick = () => {
+      const anchor = document.getElementById("anchor-" + SECTION_META[sec].anchor);
+      if (anchor) anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    host.appendChild(tile);
+  });
+}
+
+function renderTotals() {
+  const counts = { done: 0, partial: 0, notstarted: 0, notmeasurable: 0 };
+  ROADMAP.items.forEach(i => counts[i.status]++);
+  const host = document.getElementById("totals");
+  host.innerHTML = "";
+  STATUSES.forEach(s => {
+    const t = document.createElement("div");
+    t.className = "total " + s;
+    t.innerHTML = `<div class="n">${counts[s]}</div><div class="l">${STATUS[s].label}</div>`;
+    host.appendChild(t);
+  });
+}
+
+function truncate(s, n) {
+  if (s.length <= n) return null;
+  return s.slice(0, n).trim() + "…";
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+  }[c]));
+}
+
+function renderDetail() {
+  const host = document.getElementById("detail");
+  host.innerHTML = "";
+
+  /* §0 — Phases (narrative recap) */
+  const ph = document.createElement("section");
+  ph.id = "phases";
+  ph.innerHTML = `<h2>Phase summary <span style="font-weight:400;color:var(--muted);font-size:13px">— PRD §9</span></h2>`;
+  ROADMAP.phases.forEach(p => {
+    const block = document.createElement("div");
+    block.className = "narrative " + p.status;
+    block.innerHTML = `
+      <strong>${p.id} — ${p.title}</strong>
+      → <em>${p.exit}</em>
+      <br><span style="color:var(--muted)">${p.note}</span>
+    `;
+    ph.appendChild(block);
+  });
+  host.appendChild(ph);
+
+  /* §1 — Pipeline 15-stage DAG (detail) */
+  const dag = document.createElement("section");
+  dag.id = "dag-detail";
+  dag.innerHTML = `<h2>Pipeline — 15-stage DAG <span style="font-weight:400;color:var(--muted);font-size:13px">— SDLC-spec v2 §1</span></h2>`;
+  ROADMAP.stages.forEach(s => {
+    const row = document.createElement("div");
+    row.className = "detail-row " + s.status;
+    row.dataset.status = s.status;
+    row.dataset.search = (s.n + " " + s.name + " " + s.note).toLowerCase();
+    row.innerHTML = `
+      <div class="sdot"></div>
+      <div class="id-link">stage ${s.n}</div>
+      <div class="body">
+        <div class="title">${s.name}</div>
+        <div class="note">${escapeHtml(s.note)}</div>
+      </div>
+    `;
+    dag.appendChild(row);
+  });
+  host.appendChild(dag);
+
+  /* §2-7 — Item sections (FR/NFR/SC/US/ADR/STRUCT) */
+  DETAIL_ORDER.forEach(sec => {
+    const anchor = document.createElement("a");
+    anchor.className = "section-anchor";
+    anchor.id = "anchor-" + SECTION_META[sec].anchor;
+    host.appendChild(anchor);
+
+    const section = document.createElement("section");
+    section.id = SECTION_META[sec].anchor;
+    const sectionNum = DETAIL_ORDER.indexOf(sec) + 2; // §2..§8
+    const headingExtra =
+      sec === "FR"     ? " — PRD §6" :
+      sec === "NFR"    ? " — PRD §7" :
+      sec === "SC"     ? " — PRD §8" :
+      sec === "US"     ? " — PRD §5" :
+      sec === "ADR"    ? " — ARCHITECTURE.md §12" :
+      sec === "STRUCT" ? " — ARCHITECTURE.md §14" :
+                         " — design input from vercel/eve";
+    section.innerHTML = `<h2>${SECTION_META[sec].title} <span style="font-weight:400;color:var(--muted);font-size:13px">${headingExtra}</span></h2>`;
+
+    const items = ROADMAP.items.filter(i => i.section === sec);
+    items.forEach(item => {
+      const row = document.createElement("div");
+      row.className = "detail-row " + item.status;
+      row.dataset.status = item.status;
+      row.dataset.recent = item.recent ? "true" : "false";
+      row.dataset.search = (item.id + " " + item.title + " " + item.note).toLowerCase();
+
+      const note = item.note || "";
+      const trunc = truncate(note, 140);
+      const noteHtml = trunc
+        ? `<span class="trunc">${escapeHtml(trunc)}</span><span class="full">${escapeHtml(note)}</span> <button class="expand-btn" type="button"></button>`
+        : escapeHtml(note);
+      const recentTag = item.recent ? `<span class="recent-tag">recent</span>` : "";
+
+      row.innerHTML = `
+        <div class="sdot"></div>
+        <div class="id-link"><a href="../ROADMAP.md">${item.id}</a></div>
+        <div class="body">
+          <div class="title">${escapeHtml(item.title)}${recentTag}</div>
+          <div class="note">${noteHtml}</div>
+        </div>
+      `;
+      section.appendChild(row);
+    });
+    host.appendChild(section);
+  });
+
+  /* §8 — Recommended next increments */
+  const next = document.createElement("section");
+  next.id = "next";
+  next.innerHTML = `<h2>Recommended next increments <span style="font-weight:400;color:var(--muted);font-size:13px">— ranked by invariant undercut, not effort</span></h2>`;
+  const ol = document.createElement("ol");
+  ol.className = "next-list";
+  ROADMAP.next.forEach(n => {
+    const li = document.createElement("li");
+    li.className = n.status === "done" ? "done" : "";
+    li.innerHTML = n.text;
+    ol.appendChild(li);
+  });
+  next.appendChild(ol);
+  host.appendChild(next);
+
+  /* §9.7 — Suggested ordering (from §9) */
+  const order = document.createElement("section");
+  order.id = "ordering";
+  order.innerHTML = `
+    <h2>Suggested ordering <span style="font-weight:400;color:var(--muted);font-size:13px">— §9.7</span></h2>
+    <ol class="next-list">
+      <li class="done"><strong>E-12, E-13</strong> — smallest, and the only items that start the SC-4/SC-6 signal.</li>
+      <li class="done"><strong>E-1 → E-2 → E-3</strong> — landed. E-3 subsumed by the registry increment.</li>
+      <li><strong>E-6</strong> landed → <strong>E-7 → E-8</strong> — CLI refit as proof, then the first new capability.</li>
+      <li><strong>E-15 → E-17</strong> — the hook seam, then gate reuse.</li>
+      <li><strong>E-22</strong> — before the surfaces in E-9/E-10/E-11 multiply the ways delivery can fail silently.</li>
+    </ol>
+    <p style="color:var(--muted);font-size:12px">E-19/E-20/E-21 and E-14 are post-P1. E-5 is not scheduled.</p>
+  `;
+  host.appendChild(order);
+}
+
+/* =========================================================================
+ * FILTER + SEARCH
+ * ========================================================================= */
+const activeStatuses = new Set(STATUSES); // start: all
+let recentOnly = false;
+let searchTerm = "";
+
+function applyFilters() {
+  const rows = document.querySelectorAll(".detail-row");
+  let visible = 0;
+  rows.forEach(row => {
+    const status = row.dataset.status;
+    const isRecent = row.dataset.recent === "true";
+    const haystack = row.dataset.search || "";
+    const statusOk = activeStatuses.has(status);
+    const recentOk = !recentOnly || isRecent;
+    const searchOk = !searchTerm || haystack.includes(searchTerm);
+    if (statusOk && recentOk && searchOk) {
+      row.classList.remove("hidden");
+      visible++;
+    } else {
+      row.classList.add("hidden");
+    }
+  });
+  document.getElementById("result-count").textContent = `${visible} shown`;
+}
+
+/* Chip logic:
+   - "All" clears recentOnly and selects every status.
+   - A status chip toggles membership; if all four are selected and recentOnly is false,
+     "All" becomes active; otherwise "All" deactivates.
+   - "Recently changed" toggles recentOnly independently. */
+function setActiveChips() {
+  document.querySelectorAll(".fchip").forEach(c => {
+    const s = c.dataset.status;
+    if (s === "all") {
+      c.classList.toggle("active",
+        !recentOnly && activeStatuses.size === STATUSES.length);
+    } else if (s === "recent") {
+      c.classList.toggle("active", recentOnly);
+    } else {
+      c.classList.toggle("active", activeStatuses.has(s));
+    }
+  });
+}
+
+function bindFilters() {
+  document.querySelectorAll(".fchip").forEach(c => {
+    c.addEventListener("click", () => {
+      const s = c.dataset.status;
+      if (s === "all") {
+        activeStatuses.clear();
+        STATUSES.forEach(x => activeStatuses.add(x));
+        recentOnly = false;
+      } else if (s === "recent") {
+        recentOnly = !recentOnly;
+      } else {
+        if (activeStatuses.has(s)) {
+          if (activeStatuses.size === 1) return; // never empty
+          activeStatuses.delete(s);
+        } else {
+          activeStatuses.add(s);
+        }
+      }
+      setActiveChips();
+      applyFilters();
+    });
+  });
+
+  const search = document.getElementById("search");
+  let timer;
+  search.addEventListener("input", e => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      searchTerm = e.target.value.toLowerCase().trim();
+      applyFilters();
+    }, 100);
+  });
+
+  /* Expand buttons (delegated) */
+  document.getElementById("detail").addEventListener("click", e => {
+    if (e.target.classList.contains("expand-btn")) {
+      e.target.closest(".detail-row").classList.toggle("expanded");
+    }
+  });
+}
+
+/* =========================================================================
+ * INIT
+ * ========================================================================= */
+document.addEventListener("DOMContentLoaded", () => {
+  renderPhaseBars();
+  renderDAG();
+  renderTiles();
+  renderTotals();
+  renderDetail();
+  bindFilters();
+  applyFilters();
+});
+</script>
+
+</body>
+</html>
