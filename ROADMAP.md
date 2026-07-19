@@ -170,9 +170,9 @@
 ## 7. Structural / repo-hardening items (ARCHITECTURE.md §14)
 
 - [ ] ⚠️ Layered `src/factory/` tree — code still lives in the flattened `src/sdlc/` skeleton; §14 tree is aspirational (documented "P1 hardening", not silent drift).
-- [ ] ⚠️ `prompts/` as versioned assets — prompts now live in `agents/<role>/instructions.md`
-  and hash into `PROMPT_SHAS` from file content (E-2 ✅). The "**with an eval loop**" clause
-  stays open on E-4.
+- [x] `prompts/` as versioned assets **with an eval loop** — prompts live in
+  `agents/<role>/instructions.md` and hash into `PROMPT_SHAS` from file content (E-2 ✅); a prompt
+  edit is now measurable via `sdlc eval <role>` (E-4 ✅).
 - [x] Deterministic CI stand-in for the e2e proof — `tests/fakes/` provides same-named `TemporalAgent` `TestModel` stubs + fake git/subprocess activities (P1 orchestration test). (A `fake_harness.py`-style adapter for real-git fidelity remains future work.)
 - [ ] Cosmetic: workflow class is `FeatureWorkflow`; docs call it `FactoryWorkflow`.
 - **ReviewReport / MergeVerdict SGR ordering (found in the research spec).**
@@ -233,7 +233,13 @@ of an ADR-6 hole. Closed by `docs/superpowers/specs/2026-07-16-registry-drives-e
   first role a folder describes rather than decorates, and a folder for it beside eleven YAML
   entries would reopen the two-registry hole.*
 - [x] **E-3** ~~Wire prompt-file content into `content_key`~~ — **the prompt half was already wired before the item was written** (`content_key(prompt_sha=...)` + `PROMPT_SHAS`). The *model* half was the real gap: every stage passed one hardcoded `MODEL` constant as `content_key`'s `model_id`, so per-role models would have served stale-model cache hits. Closed together with the ADR-6 hole (§9.1 preamble); `STAGE_MODELS` now resolves each stage's real model.
-- [ ] **E-4** Prompt eval loop over the new `agents/` assets — closes §7's "versioned assets **with an eval loop**" clause.
+- [x] **E-4** Prompt eval loop over the `agents/` assets — `sdlc eval <role>` A/B-scores a
+  working-tree `instructions.md` against a committed one on a captured fixture, judged by the
+  existing cross-family `judge_artifact` + the case rubric; `sdlc eval capture` harvests fixtures
+  from a run's history. Stage-isolated and on-demand (an exploration tool). Six pure proposers;
+  architect/research refused (carry deps). Closes §7's "with an eval loop" clause. The
+  regression-gate half (a committed baseline + a CI check) is a named future increment (OQ-E2).
+  Spec: `docs/superpowers/specs/2026-07-18-prompt-eval-loop-design.md`.
 - [ ] **E-5** *(speculative — do not schedule)* Factory takes its own `agents/` folders as brownfield input to itself (ADR-7's endpoint). Recorded because it's a pleasing closure of ADR-7, flagged because that's exactly why it deserves suspicion. Needs E-1 and brownfield mode (FR-102) first.
 - Research is the first role a folder *describes* rather than decorates
   (instructions + four tools + a provider + a corpus + a budget), which is the
