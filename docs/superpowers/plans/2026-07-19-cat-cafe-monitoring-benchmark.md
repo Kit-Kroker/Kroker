@@ -142,6 +142,7 @@ git commit -m "feat(benchmarks): per-case research_enabled + injected provider (
 
 **Files:**
 - Modify: `src/sdlc/workflows/feature.py:728-734` (the research `_stage_record` call)
+- Create: `tests/test_research_stage_judging.py`
 - Test: `tests/test_benchmark_judge.py`
 
 **Interfaces:**
@@ -178,10 +179,47 @@ def test_build_judge_input_research_absent_returns_none():
     assert ji is None
 ```
 
-- [ ] **Step 2: Run tests to verify they pass already**
+- [ ] **Step 2: Run them — they pass already, and that is the point**
 
 Run: `python -m pytest tests/test_benchmark_judge.py -v -k research`
-Expected: PASS. `_build_judge_input` is key-agnostic, so these pin the contract rather than drive new code. The real change is at the call site — Step 3.
+Expected: PASS. `_build_judge_input` is key-agnostic, so these are regression guards on the contract, **not** the TDD-red test for this task. Step 2a supplies that.
+
+- [ ] **Step 2a: Write the genuinely-failing wiring test**
+
+The real change is a call site inside workflow code, which cannot run without a
+Temporal server. This repo tests stage wiring by reading the source —
+see `tests/test_analyst_stage_wiring.py`. Create
+`tests/test_research_stage_judging.py`:
+
+```python
+"""The research stage is judged against a rubric, not hardcoded to a
+contract score."""
+import inspect
+
+from sdlc.workflows import feature
+
+
+def test_research_brief_is_judged():
+    src = inspect.getsource(feature.FeatureWorkflow.run)
+    assert '"research"' in src
+    assert "brief.model_dump_json()" in src
+    assert "quality_score=_r_quality.score" in src
+
+
+def test_research_record_no_longer_hardcodes_contract_judge():
+    """The old record passed quality_score=None, judge="contract". Both must
+    be gone from the research block, or the rubric can never affect a score."""
+    src = inspect.getsource(feature.FeatureWorkflow.run)
+    start = src.index('stage="research"')
+    block = src[start:start + 400]
+    assert "quality_score=None" not in block
+    assert 'judge="contract"' not in block
+```
+
+- [ ] **Step 2b: Run it to verify it fails**
+
+Run: `python -m pytest tests/test_research_stage_judging.py -v`
+Expected: FAIL — the research block still reads `quality_score=None, judge="contract"`.
 
 - [ ] **Step 3: Replace the hardcoded score at the research call site**
 
@@ -224,7 +262,7 @@ Expected: PASS, no regressions.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/sdlc/workflows/feature.py tests/test_benchmark_judge.py
+git add src/sdlc/workflows/feature.py tests/test_benchmark_judge.py tests/test_research_stage_judging.py
 git commit -m "feat(benchmarks): judge the research brief against a rubric (E-27)"
 ```
 
@@ -233,7 +271,8 @@ git commit -m "feat(benchmarks): judge the research brief against a rubric (E-27
 ### Task 3: Judge the QA report, without disturbing the deterministic code record
 
 **Files:**
-- Modify: `src/sdlc/workflows/feature.py:555-568` (the `stage="code"` record inside the task loop)
+- Modify: `src/sdlc/workflows/feature.py:555-568` (the `stage="code"` record inside `_dev_task`)
+- Create: `tests/test_qa_stage_judging.py`
 - Test: `tests/test_benchmark_judge.py`
 
 **Interfaces:**
@@ -257,10 +296,53 @@ def test_build_judge_input_supports_qa_key():
     assert ji.rubric == "score determinism 0..1"
 ```
 
-- [ ] **Step 2: Run it**
+- [ ] **Step 2: Run it — passing already is expected**
 
 Run: `python -m pytest tests/test_benchmark_judge.py -v -k qa`
-Expected: PASS — again pinning the contract; the change is at the call site.
+Expected: PASS — a regression guard on the contract, **not** this task's TDD-red test. Step 2a supplies that.
+
+- [ ] **Step 2a: Write the genuinely-failing wiring test**
+
+The QA call site lives in `FeatureWorkflow._dev_task` (`feature.py:469`), not
+`run`. Same source-reading pattern as `tests/test_analyst_stage_wiring.py`.
+Create `tests/test_qa_stage_judging.py`:
+
+```python
+"""The QA report is judged against a rubric in its OWN record, leaving the
+deterministic stage="code" record's contract score untouched."""
+import inspect
+
+from sdlc.workflows import feature
+
+
+def test_qa_report_is_judged():
+    src = inspect.getsource(feature.FeatureWorkflow._dev_task)
+    assert '"qa"' in src
+    assert "qa.model_dump_json()" in src
+    assert 'stage="qa"' in src
+
+
+def test_code_record_keeps_its_deterministic_contract_score():
+    """Finding 4: the qa record is ADDITIVE. If the code record stopped
+    carrying judge="contract", an LLM opinion has replaced a deterministic
+    signal -- the exact regression this task must not cause."""
+    src = inspect.getsource(feature.FeatureWorkflow._dev_task)
+    start = src.index('stage="code"')
+    block = src[start:start + 400]
+    assert 'judge="contract"' in block
+
+
+def test_qa_record_is_separate_from_the_code_record():
+    src = inspect.getsource(feature.FeatureWorkflow._dev_task)
+    assert src.count("self._record(") >= 2
+```
+
+- [ ] **Step 2b: Run it to verify it fails**
+
+Run: `python -m pytest tests/test_qa_stage_judging.py -v`
+Expected: FAIL on `test_qa_report_is_judged` — no `stage="qa"` record exists yet.
+`test_code_record_keeps_its_deterministic_contract_score` passes now and must
+keep passing; it is the guard, not the driver.
 
 - [ ] **Step 3: Add the qa record beside the code record**
 
@@ -303,7 +385,7 @@ Expected: PASS, no regressions.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/sdlc/workflows/feature.py tests/test_benchmark_judge.py
+git add src/sdlc/workflows/feature.py tests/test_benchmark_judge.py tests/test_qa_stage_judging.py
 git commit -m "feat(benchmarks): judge the QA report alongside the code record (E-27)"
 ```
 
