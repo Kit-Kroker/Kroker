@@ -64,6 +64,22 @@ A `rubric-qa.md` or `rubric-research.md` authored today would be an inert file.
    qa rubric gets its own `stage="qa"` record alongside it. `scoring.py` aggregates by
    `(case_id, stage, harness, model)` with a mean, so N records per run aggregate natively.
 
+6. **The research provider must be per-case, not global.** Three facts force this.
+   (a) `PipelineConfig.roles` (`models.py:540`) contains only `dev`/`test`/`devops`, so
+   `cfg.roles.get("research")` is `None` and `ResearchDeps.provider` falls back to `"fake"`
+   at `feature.py:686` and `:819` no matter what the registry declares. (b) `_cell_config`
+   rebuilds each `RoleConfig` from `harness`/`model`/`context_budget_tokens`/`extra_args`
+   only, dropping `kind` and `provider`. (c) Committing `provider: tavily` to
+   `agents/research/agent.yaml` makes `loader.py:221` fail registry validation at boot for
+   anyone without a `TAVILY_API_KEY` — the loader's own message reads *"Use provider: fake
+   for CI/offline."*
+
+   So the registry keeps `provider: fake` and `_cell_config` injects a `research`
+   `RoleConfig(kind="research", provider="tavily")` when the case enables research. CI and
+   contributors need no key; the provider becomes a property of the run rather than of the
+   repo. This is strictly better than the global switch: two cases in one suite could run
+   different providers.
+
 5. **The kata's own simplifying license is part of the requirements.** "Generate this data
    randomly", "no collar data emulators", "keep it as simple as possible", "the rules are up
    to you" must be carried into the case description verbatim. Without them the architect
@@ -134,19 +150,26 @@ Three changes, all mirroring existing call sites:
 1. **`CaseSpec.research_enabled: bool = False`** (`benchmarks/models.py`), threaded into the
    per-cell `PipelineConfig` in `_cell_config` (`benchmarks/workflow.py`). Default `False`
    keeps both existing cases unchanged.
-2. **`feature.py:730`** — replace the hardcoded `quality_score=None, judge="contract"` with
+2. **`_cell_config` injects a `research` RoleConfig** when `spec.research_enabled` —
+   `kind="research"`, `provider="tavily"` — because of Finding 6. Without this the stage
+   runs against the fake corpus and raises.
+3. **`feature.py:730`** — replace the hardcoded `quality_score=None, judge="contract"` with
    a `self._judge(cfg, brief.model_dump_json(), "research", ...)` call and carry its score
    onto the record.
-3. **`feature.py` task loop** — add a `stage="qa"`, `role="qa"` record judged against the
+4. **`feature.py` task loop** — add a `stage="qa"`, `role="qa"` record judged against the
    `qa` rubric key, alongside the existing `stage="code"` contract record (Finding 4).
 
-And one config change: `agents/research/agent.yaml` `provider: fake` → `tavily`.
+`agents/research/agent.yaml` **stays `provider: fake`** — see Finding 6.
 
 ### 4. Configuration
 
 `TAVILY_API_KEY` lives in `.env` (gitignored; verified via `git check-ignore`). A
 placeholder is documented in the tracked `.env.example`. The key appears in no committed
 file.
+
+The key is needed only by the worker process that runs a research-enabled case. Because the
+registry keeps `provider: fake` (Finding 6), `pytest` and a plain worker boot need no key —
+only a `research_enabled: true` cell reaches `TavilyProvider`.
 
 ## Risk: grounding failure aborts the whole run
 
