@@ -10,11 +10,11 @@ from pathlib import Path
 
 import yaml
 
+from ..agents.loader import _resolve_agents_dir
 from .compare import EvalError, EvalReport, compare
-from .fixtures import DEPS_ROLES, fixtures_from_events, write_fixtures
+from .fixtures import DEPS_ROLES, SUPPORTED_ROLES, fixtures_from_events, write_fixtures
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_AGENTS_DIR = _REPO_ROOT / "agents"
 _CASES_ROOT = _REPO_ROOT / "benchmarks" / "cases"
 _BENCH_CONFIG = _REPO_ROOT / "benchmarks" / "config.yaml"
 
@@ -71,12 +71,17 @@ def _fmt_delta(v: float | None) -> str:
 
 
 def run_eval(role: str, *, against: str, case: str | None, k: int,
-             judge_model: str, agents_dir: Path = _AGENTS_DIR,
+             judge_model: str, agents_dir: Path | None = None,
              cases_root: Path = _CASES_ROOT,
              repo_root: Path = _REPO_ROOT) -> str:
     if role in DEPS_ROLES:
         raise EvalError(
             f"role '{role}' carries deps; deps-aware eval is future work")
+    if role not in SUPPORTED_ROLES:
+        raise EvalError(f"unknown role '{role}'; supported: "
+                        f"{', '.join(sorted(SUPPORTED_ROLES))}")
+    if agents_dir is None:
+        agents_dir = _resolve_agents_dir()
     resolved_case = _resolve_case(role, case, agents_dir)
     report = compare(role, resolved_case, against_ref=against, k=k,
                      agents_dir=agents_dir, cases_root=cases_root,
@@ -85,7 +90,7 @@ def run_eval(role: str, *, against: str, case: str | None, k: int,
 
 
 async def run_capture(client, run_id: str, case: str,
-                      agents_dir: Path = _AGENTS_DIR) -> list[Path]:
+                      agents_dir: Path | None = None) -> list[Path]:
     """Live capture: fetch a run's history, normalize to events, write fixtures.
 
     SEAM: `_history_to_events` converts a Temporal history into the normalized
@@ -94,6 +99,8 @@ async def run_capture(client, run_id: str, case: str,
     fixture is trivial JSON, so hand-authoring is the offline fallback.
     """
     from ..agents.roles import REGISTRY
+    if agents_dir is None:
+        agents_dir = _resolve_agents_dir()
     history = await client.get_workflow_handle(run_id).fetch_history()
     events = _history_to_events(history)
     fixtures = fixtures_from_events(run_id, case, events, REGISTRY)

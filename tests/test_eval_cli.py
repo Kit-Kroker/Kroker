@@ -34,6 +34,13 @@ def test_run_eval_refuses_deps_role(tmp_path):
                  cases_root=tmp_path, repo_root=tmp_path)
 
 
+def test_run_eval_refuses_unknown_role(tmp_path):
+    with pytest.raises(EvalError, match="unknown role"):
+        run_eval("nonsense", against="HEAD", case="c1", k=1,
+                 judge_model="openai/gpt-5.2", agents_dir=tmp_path,
+                 cases_root=tmp_path, repo_root=tmp_path)
+
+
 def test_default_judge_model_reads_config(tmp_path):
     cfg = tmp_path / "config.yaml"
     cfg.write_text("default_judge_model: openai/gpt-5.2\n", encoding="utf-8")

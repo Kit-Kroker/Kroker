@@ -86,6 +86,12 @@ async def main() -> None:
     ev.add_argument("--judge-model", default=None, dest="judge_model")
 
     args = p.parse_args()
+
+    if args.cmd == "eval" and args.target == "capture" \
+            and not (args.from_run and args.case):
+        print("eval capture requires --from <run_id> and --case <name>")
+        raise SystemExit(1)
+
     client = None
     _local_only = (args.cmd == "benchmark"
                    or (args.cmd == "schedules" and args.sched_cmd == "list")
@@ -150,9 +156,6 @@ async def main() -> None:
         from .eval.cli import default_judge_model, run_capture, run_eval
         from .eval.compare import EvalError
         if args.target == "capture":
-            if not (args.from_run and args.case):
-                print("eval capture requires --from <run_id> and --case <name>")
-                return
             paths = await run_capture(client, args.from_run, args.case)
             print(f"captured {len(paths)} fixtures:")
             for p in paths:

@@ -60,6 +60,17 @@ def test_load_rubric_missing_raises(tmp_path):
         load_rubric("c1", "reviewer", tmp_path)
 
 
+def test_load_rubric_named_file_missing_raises_eval_error(tmp_path):
+    # case.yaml lists a rubric file that was never authored on disk.
+    cdir = tmp_path / "c1"
+    cdir.mkdir()
+    (cdir / "case.yaml").write_text(
+        "case_id: c1\nrubrics:\n  reviewer: rubric-reviewer.md\n",
+        encoding="utf-8")
+    with pytest.raises(EvalError, match="rubric-reviewer.md"):
+        load_rubric("c1", "reviewer", tmp_path)
+
+
 def test_compare_scores_both_and_reports_delta(tmp_path, monkeypatch):
     _repo_with_instructions(tmp_path, "reviewer", "OLD PROMPT", "NEW PROMPT")
     _case_with_rubric(tmp_path / "cases", "c1", "reviewer", "be good")

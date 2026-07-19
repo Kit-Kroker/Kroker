@@ -2,13 +2,12 @@
 from a completed run's history.
 
 Pure core here; the live Temporal->events adapter is a documented seam (see
-capture_cli in cli.py), mirroring drift.py whose real HistoryProvider ships
+run_capture in cli.py), mirroring drift.py whose real HistoryProvider ships
 unimplemented and fake-tested. A fixture is trivial JSON, so it can also be
 hand-authored when a live run is not available.
 """
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any

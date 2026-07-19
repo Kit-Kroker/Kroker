@@ -75,7 +75,12 @@ def load_rubric(case: str, role: str, cases_root: Path) -> str:
             f"no rubric for role '{role}' (key '{key}') in {case_yaml}. "
             f"Author benchmarks/cases/{case}/rubric-{key}.md and add it under "
             f"`rubrics:` before evaluating this role.")
-    return (cases_root / case / rel).read_text(encoding="utf-8")
+    rubric_path = cases_root / case / rel
+    try:
+        return rubric_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise EvalError(
+            f"rubric file {rubric_path} named in {case_yaml} does not exist")
 
 
 def _mean(vals: list[float | None]) -> float | None:
@@ -109,7 +114,11 @@ def compare(role: str, case: str, *, against_ref: str, k: int,
                         against_ref=against_ref)
 
     rel = f"agents/{role}/instructions.md"
-    b_text = (agents_dir / role / "instructions.md").read_text(encoding="utf-8")
+    instructions_path = agents_dir / role / "instructions.md"
+    try:
+        b_text = instructions_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise EvalError(f"no instructions.md at {instructions_path}")
     a_text = read_ref_text(against_ref, rel, repo_root)
     if a_text is None:
         report.no_baseline = True
