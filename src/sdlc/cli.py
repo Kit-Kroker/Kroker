@@ -8,6 +8,8 @@
   python -m sdlc.cli schedules list
   python -m sdlc.cli schedules apply --dry-run
   python -m sdlc.cli schedules apply
+  python -m sdlc.cli eval capture --from feature-add-sso --case add-login-greenfield
+  python -m sdlc.cli eval reviewer --against HEAD
 """
 from __future__ import annotations
 
@@ -75,10 +77,19 @@ async def main() -> None:
     bd = bsub.add_parser("drift"); bd.add_argument("--since", type=int, default=168)
     bf = bsub.add_parser("report"); bf.add_argument("--bench", required=True)
 
+    ev = sub.add_parser("eval")
+    ev.add_argument("target", help="a role name, or 'capture'")
+    ev.add_argument("--from", dest="from_run", help="run id (capture only)")
+    ev.add_argument("--case", default=None)
+    ev.add_argument("--against", default="HEAD")
+    ev.add_argument("--n", type=int, default=1, dest="k")
+    ev.add_argument("--judge-model", default=None, dest="judge_model")
+
     args = p.parse_args()
     client = None
     _local_only = (args.cmd == "benchmark"
-                   or (args.cmd == "schedules" and args.sched_cmd == "list"))
+                   or (args.cmd == "schedules" and args.sched_cmd == "list")
+                   or (args.cmd == "eval" and args.target != "capture"))
     if not _local_only:
         client = await Client.connect(
             os.environ.get("TEMPORAL_HOST", "localhost:7233"),
@@ -133,6 +144,27 @@ async def main() -> None:
         for line in await apply_changes(client, desired, changes,
                                         prune=args.prune):
             print(line)
+        return
+
+    if args.cmd == "eval":
+        from .eval.cli import default_judge_model, run_capture, run_eval
+        from .eval.compare import EvalError
+        if args.target == "capture":
+            if not (args.from_run and args.case):
+                print("eval capture requires --from <run_id> and --case <name>")
+                return
+            paths = await run_capture(client, args.from_run, args.case)
+            print(f"captured {len(paths)} fixtures:")
+            for p in paths:
+                print(f"  {p}")
+            return
+        judge = args.judge_model or default_judge_model()
+        try:
+            print(run_eval(args.target, against=args.against, case=args.case,
+                           k=args.k, judge_model=judge))
+        except EvalError as e:
+            print(f"eval error: {e}")
+            raise SystemExit(1)
         return
 
     handle = client.get_workflow_handle_for(FeatureWorkflow.run, args.id)
