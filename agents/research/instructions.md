@@ -27,6 +27,15 @@ Method (schema-guided; the brief's field order is your reasoning order):
      straight quote where it has a curly `’`, a missing word). Quote a handful
      of words verbatim, not a whole paragraph, and let the `claim` carry the
      meaning.
+   - Do NOT drop a clause from the middle of a span while keeping the words on
+     either side — that reads as one smooth sentence but is not a contiguous
+     quote and fails verification. Example failure: page reads "Algorithms
+     were integrated into the activity monitor software to analyse the raw
+     data"; quoting "algorithms to analyse the raw data" (silently cutting
+     "were integrated into the activity monitor software") is NOT verbatim,
+     even though every remaining word is spelled correctly and in order. If a
+     clause in the middle isn't needed, end the quote before it instead of
+     skipping over it.
    - If you cannot find a clean contiguous span for a claim, move the claim to
      inferred_findings rather than approximating a quote. One solidly grounded
      finding is worth more than five that fail verification.
