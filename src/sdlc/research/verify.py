@@ -21,10 +21,22 @@ from ..models import ResearchBrief
 
 _WS = re.compile(r"\s+")
 
+# Proven false-failure (cat-cafe-monitoring smoke run, 2026-07-20): Tavily's
+# PDF extractor decoded a source's curly apostrophe (U+2019) as U+FFFD
+# (REPLACEMENT CHARACTER) — "owner�s phone" on the page, "owner's phone"
+# in an otherwise word-for-word-verbatim quote. Not a model error; the byte
+# was already lost upstream of us. Apostrophe/quote variants (straight,
+# curly, backtick, and the replacement character standing in for one) are
+# low-signal punctuation — dropping them symmetrically on both the quote and
+# the page text closes this specific hole without weakening word-level
+# matching.
+_APOSTROPHE = re.compile(r"['‘’`�]")
+
 
 def normalize(text: str) -> str:
-    """Collapse whitespace runs to one space; preserve case."""
-    return _WS.sub(" ", text).strip()
+    """Collapse whitespace runs to one space, drop apostrophe/quote-glyph
+    noise (see _APOSTROPHE); preserve case and all other punctuation."""
+    return _WS.sub(" ", _APOSTROPHE.sub("", text)).strip()
 
 
 def page_filename(url: str) -> str:

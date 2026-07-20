@@ -62,6 +62,38 @@ def test_whitespace_runs_collapse_but_case_is_preserved(runs_root):
         ["quote_not_found"]
 
 
+def test_replacement_char_standing_in_for_an_apostrophe_still_grounds(runs_root):
+    """Regression for the cat-cafe-monitoring smoke run (2026-07-20): Tavily's
+    PDF extractor decoded a source's curly apostrophe as U+FFFD (the
+    REPLACEMENT CHARACTER) — the fetched page read "owner�s phone", while
+    the research agent quoted the same sentence verbatim with an ordinary
+    apostrophe: "owner's phone". This is a lost byte upstream of the pipeline,
+    not a model error, and previously fail-closed the whole research stage
+    over a single punctuation mark."""
+    _write_page("r1", "https://x/1",
+                "send it to owner�s phone into compatible app")
+    brief = ResearchBrief(grounded_findings=[GroundedFinding(
+        source_url="https://x/1",
+        quote="send it to owner's phone into compatible app", claim="c")])
+    assert verify.verify_brief(brief, "r1") == []
+
+
+def test_curly_and_straight_quotes_are_interchangeable(runs_root):
+    _write_page("r1", "https://x/1", "the cat’s favorite spot")
+    brief = ResearchBrief(grounded_findings=[GroundedFinding(
+        source_url="https://x/1", quote="the cat's favorite spot", claim="c")])
+    assert verify.verify_brief(brief, "r1") == []
+
+
+def test_apostrophe_normalization_does_not_mask_a_real_word_mismatch(runs_root):
+    # Dropping apostrophes must not let genuinely different content pass.
+    _write_page("r1", "https://x/1", "the dog's favorite spot")
+    brief = ResearchBrief(grounded_findings=[GroundedFinding(
+        source_url="https://x/1", quote="the cat's favorite spot", claim="c")])
+    assert [v.kind for v in verify.verify_brief(brief, "r1")] == \
+        ["quote_not_found"]
+
+
 def test_brief_digest_ignores_prose_ordering_and_confidence():
     """Same (source_url, claim) facts -> same digest, regardless of order,
     summary, or confidence (spec §7)."""
