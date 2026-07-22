@@ -25,6 +25,7 @@ _GIT_UNSAFE = re.compile(r"[:\s~^?*\[\\]")
 class BenchmarkScope(str, Enum):
     STAGE = "stage"
     TASK_ATTEMPT = "task_attempt"
+    ORACLE = "oracle"
 
 
 class BenchmarkOutcome(str, Enum):
@@ -37,7 +38,7 @@ class BenchmarkOutcome(str, Enum):
 class QualityScore(BaseModel):
     score: float | None = None              # 0.0..1.0; None when judge errored
     components: dict[str, float] = Field(default_factory=dict)
-    judge: Literal["contract", "llm_judge", "human_override", "error"]
+    judge: Literal["contract", "llm_judge", "human_override", "error", "oracle"]
 
 
 class CostBag(BaseModel):
@@ -96,6 +97,11 @@ class CaseSpec(BaseModel):
     # a grounding-verifier violation hard-returns the whole run
     # (feature.py:717).
     research_enabled: bool = False
+    # E-31: declares the held-out oracle's language. Set => this case opts
+    # into oracle grading (BenchmarkWorkflow runs grade_oracle after the
+    # child). Also the value the manifest-vs-marker mismatch signal compares
+    # against. None => no oracle grade for this case.
+    language: str | None = None
     # per-model extra CLI args (e.g. opencode's `--variant` reasoning-effort
     # flag) forwarded to every role's harness invocation for that model.
     extra_args_by_model: dict[str, list[str]] = Field(default_factory=dict)

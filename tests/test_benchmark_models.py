@@ -82,3 +82,21 @@ def test_benchmark_summary_aggregates_fields():
                          n=3, mean_quality=0.9, mean_cost_usd=0.5,
                          mean_wall_clock_s=120.0, composite=0.88)
     assert s.n == 3 and s.composite == 0.88
+
+
+def test_oracle_scope_exists():
+    assert BenchmarkScope.ORACLE.value == "oracle"
+
+
+def test_quality_score_accepts_oracle_judge():
+    q = QualityScore(score=0.5, judge="oracle")
+    assert q.judge == "oracle"
+
+
+def test_case_spec_language_defaults_none_and_accepts_value():
+    base = dict(case_id="c", idea_summary="s",
+                harnesses=[HarnessKind.OPENCODE],
+                models=["zai-coding-plan/glm-5.2"],
+                judge_model="openai/gpt-5.2")
+    assert CaseSpec(**base).language is None
+    assert CaseSpec(**base, language="python").language == "python"
