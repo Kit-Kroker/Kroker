@@ -41,6 +41,7 @@ from .memoization.activities import cache_get, cache_put
 from .memory.activities import (
     capture_watermark, recall_snapshot, reflect, retain,
 )
+from .observability.activities import export_run_artifacts
 from .research.verify import verify_brief_activity
 from .workflows.feature import FeatureWorkflow
 from .workflows.reflect import ReflectWorkflow
@@ -74,6 +75,7 @@ async def main() -> None:
             load_case_assets, finalize_benchmark_report,
             recall_snapshot, retain, capture_watermark, reflect,
             cache_get, cache_put,
+            export_run_artifacts,
             verify_brief_activity,
             *agent_activities,
         ],

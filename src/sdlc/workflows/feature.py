@@ -43,16 +43,19 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..memoization.cache import content_key
     from ..memory.activities import (
-        RecallInput, RetainInput, WatermarkInput, capture_watermark,
-        recall_snapshot, retain,
+        RecallInput, ReflectInput, RetainInput, WatermarkInput,
+        capture_watermark, recall_snapshot, reflect, retain,
     )
+    from ..observability.activities import RunExportInput, export_run_artifacts
+    from ..observability.summary import build_run_summary
+    from ..observability.trace import RunEvent, RunEventKind
     from ..models import (
         AnalysisReport, ArchitectureSpec, ClarifiedRequirements,
         CoverageReport, DevTask, ExecutionMode, GateConfig, GateDecision,
         GateOutcome, GatePolicy, HandoffSummary, IdeaBrief,
         ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig,
         RecallSnapshot, ResearchBrief, RetainItem, RoleConfig,
-        SecurityReport, TaskResult, gate_key,
+        RunSummary, SecurityReport, TaskResult, gate_key,
     )
     from ..pending import (
         GateContext, PendingDecision, clarify_pending, gate_pending,
@@ -87,6 +90,10 @@ VERIFY_ACT = dict(
     start_to_close_timeout=timedelta(minutes=1),
     retry_policy=RetryPolicy(maximum_attempts=1),
 )
+# E-32: export is best-effort — a single attempt, no retry hammering (a failing
+# export must never change the run's return string).
+EXPORT_ACT = dict(start_to_close_timeout=timedelta(minutes=2),
+                  retry_policy=RetryPolicy(maximum_attempts=1))
 
 
 def _long_act(role_cfg: RoleConfig | None = None) -> dict:
@@ -216,6 +223,10 @@ class FeatureWorkflow:
         # E-6: structured pending-decision registry, keyed by resolution key
         # (question id, or gate_key(gate, round)). Rendered by sdlc.channels.
         self._pending: dict[str, PendingDecision] = {}
+        # E-32: append-only domain trace; source for RunSummary + events.jsonl.
+        self._trace: list[RunEvent] = []
+        self._seq: int = 0
+        self._run_summary: RunSummary | None = None
 
     # ----------------------- benchmark recording ------------------------
 
@@ -249,6 +260,13 @@ class FeatureWorkflow:
 
     async def _record(self, cfg: PipelineConfig, record: BenchmarkRecord
                       ) -> None:
+        self._emit(
+            RunEventKind.STAGE_ENDED, stage=record.stage,
+            role=record.role, outcome=record.outcome.value,
+            duration_s=str(record.speed.wall_clock_s),
+            fix_attempts=str(record.fix_attempts),
+            **({"cost_usd": str(record.cost.usd)}
+               if record.cost.usd is not None else {}))
         if not self._benchmarking(cfg):
             return
         await workflow.execute_activity(record_benchmark, record, **RECORD_ACT)
@@ -374,12 +392,26 @@ class FeatureWorkflow:
         Empty when nothing is awaiting. Rendered by sdlc.channels."""
         return list(self._pending.values())
 
+    @workflow.query
+    def run_summary(self) -> RunSummary | None:
+        """The retro-stage RunSummary; None until the run terminates (E-32)."""
+        return self._run_summary
+
     # ---------------------------- helpers -------------------------------
+
+    def _emit(self, kind: RunEventKind, stage: str | None = None,
+              **data: str) -> None:
+        """Append a domain event to the run trace. Pure state mutation — safe
+        in workflow code (no I/O, deterministic seq + workflow.now())."""
+        self._trace.append(RunEvent(seq=self._seq, at=workflow.now(),
+                                    kind=kind, stage=stage, data=data))
+        self._seq += 1
 
     async def _gate(self, name: str, cfg: PipelineConfig,
                     auto_decision: GateDecision | None = None,
                     round: int = 1,
-                    context: GateContext | None = None) -> GateDecision:
+                    context: GateContext | None = None,
+                    confidence: float | None = None) -> GateDecision:
         """Durable HITL gate with policy-based auto-approval."""
         policy = cfg.gates.get(
             name, GateConfig(policy=cfg.default_gate_policy)).policy
@@ -394,6 +426,8 @@ class FeatureWorkflow:
         else:
             self._pending[key] = gate_pending(name, round, context)
             self._status = f"awaiting:{name}"
+            self._emit(RunEventKind.GATE_AWAITED, stage=name,
+                       gate=name, round=str(round))
             try:
                 await workflow.wait_condition(
                     lambda: key in self._gate_decisions,
@@ -408,6 +442,12 @@ class FeatureWorkflow:
                 self._status = "running"
                 self._pending.pop(key, None)
 
+        self._emit(
+            RunEventKind.GATE_DECIDED, stage=name,
+            gate=name, round=str(round), policy=policy.value,
+            decided_by=decision.decided_by,
+            approved=("true" if decision.approved else "false"),
+            **({"confidence": str(confidence)} if confidence is not None else {}))
         await self._retain(
             cfg, MemoryKind.GATE_FEEDBACK, cfg.memory.project_bank,
             text=f"gate {name}#{round}: {decision.outcome.value}"
@@ -431,7 +471,8 @@ class FeatureWorkflow:
                 name, cfg, getattr(artifact, "confidence", None))
             decision = await self._gate(
                 name, cfg, auto_decision=auto, round=round,
-                context=GateContext(spec_summary=_spec_summary(artifact)))
+                context=GateContext(spec_summary=_spec_summary(artifact)),
+                confidence=getattr(artifact, "confidence", None))
             if decision.outcome is not GateOutcome.REVISE:
                 return artifact, decision
             guidance = decision.guidance or decision.comments
@@ -514,6 +555,8 @@ class FeatureWorkflow:
         run = None
         for attempt in range(1, cfg.max_fix_attempts + 2):
             _attempt_started = workflow.now()
+            self._emit(RunEventKind.FIX_ATTEMPT, stage="code",
+                       task_id=task.id, attempt=str(attempt))
             run = await workflow.execute_activity(
                 run_coding_task,
                 CodingTaskInput(harness=role_cfg.harness, prompt=prompt,
@@ -668,7 +711,54 @@ class FeatureWorkflow:
     async def run(self, idea: IdeaBrief,
                   cfg: PipelineConfig | None = None) -> str:
         cfg = cfg or PipelineConfig()
-        return await self._pipeline(idea, cfg)
+        result = await self._pipeline(idea, cfg)
+        await self._retro(cfg, idea, result)
+        return result
+
+    async def _retro(self, cfg: PipelineConfig, idea: IdeaBrief,
+                     result: str) -> None:
+        """Stage 14 (E-32). Best-effort: any failure is swallowed so the run's
+        return string is never changed."""
+        try:
+            if cfg.memory.enabled:
+                self._emit(RunEventKind.MEMORY_RETAINED, stage="retro",
+                           item="run_summary")
+            self._emit(RunEventKind.RUN_FINISHED, stage="retro", outcome=result)
+            summary = build_run_summary(
+                run_id=workflow.info().workflow_id,
+                mode=idea.mode.value,
+                outcome=result, trace=self._trace,
+                memory_enabled=cfg.memory.enabled,
+                memory_watermark=self._memory_watermark)
+            self._run_summary = summary
+
+            if cfg.memory.enabled:
+                await self._retain(
+                    cfg, MemoryKind.RUN_SUMMARY, cfg.memory.project_bank,
+                    text=summary.model_dump_json(),
+                    metadata={"run_id": workflow.info().workflow_id,
+                              "stage": "retro"})
+                try:
+                    await workflow.execute_activity(
+                        reflect,
+                        ReflectInput(bank=cfg.memory.project_bank,
+                                     backend=cfg.memory.backend,
+                                     base_url=cfg.memory.base_url),
+                        **MEM_ACT)
+                except Exception:
+                    pass
+
+            try:
+                await workflow.execute_activity(
+                    export_run_artifacts,
+                    RunExportInput(run_id=workflow.info().workflow_id,
+                                   summary=summary, trace=self._trace),
+                    **EXPORT_ACT)
+            except Exception:
+                pass
+        except Exception:
+            # Retro must never change the run outcome (best-effort stage).
+            pass
 
     async def _pipeline(self, idea: IdeaBrief, cfg: PipelineConfig) -> str:
         if cfg.memory.enabled:
@@ -792,6 +882,9 @@ class FeatureWorkflow:
             cfg, "clarify", idea.model_dump_json() + brief_digest_val,
             ClarifiedRequirements, _run_clarify)
         if reqs.open_questions:
+            for q in reqs.open_questions:
+                self._emit(RunEventKind.CLARIFICATION_ASKED, stage="clarify",
+                           question_id=q.id, question=q.question)
             clarify_policy = cfg.gates.get("clarify", GateConfig()).policy
             if clarify_policy == GatePolicy.OFF:
                 # unattended run (e.g. a benchmark cell) — no human is
@@ -811,6 +904,12 @@ class FeatureWorkflow:
                 for q in reqs.open_questions:
                     q.answer = self._question_answers.get(q.id)
                     self._pending.pop(q.id, None)
+            for q in reqs.open_questions:
+                answered = ("human" if q.id in self._question_answers
+                            else "suggested" if q.answer is not None
+                            else "unanswered")
+                self._emit(RunEventKind.CLARIFICATION_ANSWERED, stage="clarify",
+                           question_id=q.id, answered_by=answered)
         _ended = workflow.now()
         _quality = await self._judge(cfg, reqs.model_dump_json(), "clarifier",
                                      author_model=STAGE_MODELS["clarify"])
@@ -1134,6 +1233,11 @@ class FeatureWorkflow:
             overrides = [
                 GateOverride(check=n, approved_by=reviewer, reason=reason)
                 for n in advisory_blocking]
+            self._emit(
+                RunEventKind.GATE_DECIDED, stage="merge", gate="merge",
+                round="1", policy="soft", decided_by=(gate.reviewer or "human"),
+                approved="true",
+                overrides=",".join(o.check for o in overrides))
             gate_report = await workflow.execute_activity(
                 evaluate_gate,
                 QualityGateInput(checks=checks, overrides=overrides), **ACT)
