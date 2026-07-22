@@ -71,7 +71,7 @@
 - [x] **9 · review** — clean-context `reviewer_agent` (`t_reviewer`) run in `_dev_task`; blocking findings fold into the fix loop. **(new)**
 - [x] **10 · analyze (Analyst)** — Analyst clean-context proposer (`t_analyst`) emits `AnalysisReport`; workflow enforces criterion→test traceability against the plan's authoritative criteria (FR-106).
 - [x] **11 · qa (+ Resolver)** — clean-context `t_qa` + bounded fix loop (folded into stage 7). *Note: default `max_fix_attempts=2`, PRD says QA loop 3 — numeric drift.*
-- [ ] ⚠️ **12 · quality_gate** — `DeterministicQualityGate` mechanism ✅; 6 checks built (`build_integration_green`, `lint_clean`, `security_no_critical` absolute; `review_severity`, `traceability`, `coverage` advisory). Absolute security floor now wired ✅; traceability enforced ✅; coverage via deterministic Cobertura seam (`measured=False` ⇒ no-op — blocked not just on a project emitting `coverage.xml` + setting `coverage_threshold`, but on the test suite actually running in the *integration* worktree the seam reads from: stage 5a only runs `run_lint`/`security_scan` there, `run_test_suite` runs per-task in task worktrees, so `coverage.xml` never lands where `measure_coverage` looks unless the artifact is carried across the merge).
+- [ ] ⚠️ **12 · quality_gate** — `DeterministicQualityGate` mechanism ✅; 6 checks built (`build_integration_green`, `lint_clean`, `security_no_critical` absolute; `review_severity`, `traceability`, `coverage` advisory). Absolute security floor now wired ✅; traceability enforced ✅; coverage via deterministic Cobertura seam — **E-30 closes the FR-106 crossing gap**: `run_integration_checks` now runs coverage-instrumented tests against the merged integration head, landing `coverage.xml` where `measure_coverage` reads (Python adapter end-to-end; Go/TS/Rust via E-30a/b/c). Still an advisory no-op unless `coverage_threshold` is set.
 - [ ] ⚠️ **13 · deploy** — single hardcoded `make deploy ENV=staging`; no `DeployPlan`/`DeployReport` split, no smoke-test vs PR-merge distinction.
 - [x] **14 · retro** — on every terminal path the workflow builds a `RunSummary` from an in-workflow `RunEvent` trace, retains it + fires-and-forgets `reflect(project_bank)` (gated on `memory.enabled`), and exports `events.jsonl` + `report.html` via the `export_run_artifacts` activity (E-32). The `org_bank`-writer half stays unbuilt (E-25); retro is project scope only.
 
@@ -85,8 +85,9 @@
 - [x] **FR-103** memoization, per-run watermark, audit-record-always-kept (`memoization/cache.py`, `content_key`, `_cached_stage`) — each stage's memo key now carries *its own* role's model (`STAGE_MODELS`), so a per-role model change invalidates exactly that stage. `brief_digest` keeps memoization alive once a non-memoized stage (research) feeds memoized ones: the brief contributes only a canonical (source_url, claim) digest to `content_key`, so identical facts hit and new facts invalidate clarify/architect/planner.
 - [x] **FR-104** integration branch, per-task worktree, own-branch-point diff (ADR-14 fully wired).
 - [ ] ⚠️ **FR-105** fix loops — QA loop ✅, review findings now fold into it ✅; loop-count defaults drift from spec (2 vs 3).
-- [ ] ⚠️ **FR-106** deterministic absolute/advisory gate — classification ✅ and load-bearing; security absolute-floor check now wired ✅ (`security_no_critical`); traceability enforced ✅; coverage wired as a deterministic diff-scoped seam ✅ (real instrumentation future work).
+- [ ] ⚠️ **FR-106** deterministic absolute/advisory gate — classification ✅ and load-bearing; security absolute-floor check now wired ✅ (`security_no_critical`); traceability enforced ✅; coverage wired as a deterministic diff-scoped seam ✅ (Python instrumentation landed via E-30; Go/TS/Rust via E-30a/b/c).
 - [ ] **FR-107 (new scope)** grounded research stage — `ResearchBrief`, quote-verified against bytes fetched this run, off by default (`research_enabled`). Landed behind the PRD amendment adding FR-107; `2026-07-17-research-agent-grounded-briefs`.
+- [x] **FR-108 (new scope; ADR-15)** language-agnostic toolchain adapter — `ToolchainAdapter`/`TOOLCHAINS` resolved by marker file, canonical Cobertura + SARIF, Python reference end-to-end; `run_integration_checks` closes the FR-106 coverage-crossing gap. Go/TS/Rust = E-30a/b/c.
 
 ### Agents (FR-200)
 - [x] **FR-201** versioned `config/agents.yaml` registry (role/kind/model) — governs all eleven roles (3 harness + 8 proposer); `PipelineConfig.roles` is a purity-mandated mirror asserted at boot.
@@ -180,6 +181,7 @@
 - [x] **ADR-12** Contract-first, clean-context validators — QA ✅ and review ✅ both clean-context. **(now complete)**
 - [x] **ADR-13** Serial-by-default; resume-bounded; context by reference (`near_context_ceiling` wired).
 - [x] **ADR-14** Integration by running branch (fully wired).
+- [x] **ADR-15** Language-agnostic toolchain by marker file (`src/sdlc/toolchain/`) — Python reference adapter end-to-end; Go/TS/Rust are E-30a/b/c.
 
 ---
 
@@ -347,7 +349,7 @@ Ranked, as everywhere in §8/§9.7, by which measurement invariant is undercut �
 not by effort. Anchors are existing FR/NFR/SC; genuinely new measurement scope
 is marked **(new scope)** and needs a PRD line before it is real.
 
-- [ ] **E-30 (new scope; ADR-15)** `ToolchainAdapter` + the coverage seam,
+- [x] **E-30 (new scope; ADR-15)** `ToolchainAdapter` + the coverage seam,
   language-agnostic. **This is a pipeline capability, not a benchmark fix** —
   `run_test_suite`/`run_lint`/`security_scan`/`measure_coverage` are stage 11/12
   *production* activities the benchmark merely exercises, and generated projects
@@ -369,6 +371,13 @@ is marked **(new scope)** and needs a PRD line before it is real.
   integration worktree where the seam reads (the original FR-106 gap). **Highest-
   leverage item on this list — without it there is no objective, test-based grade
   and every benchmark number rests on rubric-only judging.**
+  *Landed:* PRD FR-108 + ADR-15; `src/sdlc/toolchain/` (adapter + Python
+  reference + SARIF seam) and the `run_integration_checks` activity close the
+  FR-106 gap (coverage.xml now crosses into the integration worktree) and make
+  `build_integration_green` a real integration run. Spec
+  `docs/superpowers/specs/2026-07-22-toolchain-adapter-coverage-seam-design.md`,
+  plan `docs/superpowers/plans/2026-07-22-toolchain-adapter-coverage-seam.md`.
+  Go/TS/Rust adapters (E-30a/b/c) and the held-out oracle (E-31) remain open.
 - [ ] **E-30a** Go `ToolchainAdapter` — the second adapter (`go test -cover` →
   Cobertura via gocover-cobertura; `go vet`/golangci-lint; semgrep). Incremental,
   same shape as the Python reference; validates the abstraction on a
