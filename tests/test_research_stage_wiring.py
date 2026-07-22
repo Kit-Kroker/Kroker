@@ -6,11 +6,13 @@ FEATURE_PY = (Path(__file__).resolve().parents[1]
 
 
 def _run_method_src() -> str:
+    # E-32: the pipeline body lives in _pipeline (run is now a thin wrapper
+    # that calls _pipeline then _retro). Inspect that body for wiring.
     tree = ast.parse(FEATURE_PY.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "run":
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_pipeline":
             return ast.unparse(node)
-    raise AssertionError("run() not found")
+    raise AssertionError("_pipeline() not found")
 
 
 def test_research_stage_is_guarded_by_research_enabled():

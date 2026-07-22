@@ -17,7 +17,9 @@ def test_code_record_keeps_its_deterministic_contract_score():
     carrying judge="contract", an LLM opinion has replaced a deterministic
     signal -- the exact regression this task must not cause."""
     src = inspect.getsource(feature.FeatureWorkflow._dev_task)
-    start = src.index('stage="code"')
+    # Anchor on the code-stage BenchmarkRecord specifically (role=task.role),
+    # not the E-32 FIX_ATTEMPT emit which also carries stage="code".
+    start = src.index('stage="code", role=task.role')
     block = src[start:start + 400]
     assert 'judge="contract"' in block
 

@@ -33,14 +33,15 @@ def _calls_self_method(fn: ast.AST, method: str) -> bool:
 
 def test_run_calls_recall_at_least_three_times_source_count(feature_class):
     methods = _methods(feature_class)
-    src = ast.unparse(methods["run"])
+    # E-32: the pipeline body lives in _pipeline now (run wraps it + _retro).
+    src = ast.unparse(methods["_pipeline"])
     assert src.count("self._recall(") >= 3, (
         "expected recall before clarify/architect/plan at minimum")
 
 
 def test_run_calls_retain_for_stage_summaries(feature_class):
     methods = _methods(feature_class)
-    assert _calls_self_method(methods["run"], "_retain")
+    assert _calls_self_method(methods["_pipeline"], "_retain")
 
 
 def test_gate_helper_retains_gate_feedback(feature_class):

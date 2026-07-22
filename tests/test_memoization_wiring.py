@@ -28,7 +28,8 @@ def test_cached_stage_helper_exists(feature_class):
 
 def test_run_uses_cached_stage_for_clarify_architect_plan(feature_class):
     methods = _methods(feature_class)
-    src = ast.unparse(methods["run"])
+    # E-32: the pipeline body lives in _pipeline now (run wraps it + _retro).
+    src = ast.unparse(methods["_pipeline"])
     assert src.count("self._cached_stage(") >= 3
 
 
