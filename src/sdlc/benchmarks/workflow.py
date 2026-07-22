@@ -12,7 +12,7 @@ finalize_benchmark_report activity, invoked via execute_activity.
 """
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
@@ -23,13 +23,18 @@ with workflow.unsafe.imports_passed_through():
     from ..workflows.feature import FeatureWorkflow
     from .judge import load_case_assets
     from .matrix import expand_matrix
-    from .models import CaseSpec
+    from .models import (BenchmarkCell, BenchmarkOutcome, BenchmarkRecord,
+                         BenchmarkScope, CaseSpec, QualityScore, SpeedBag)
+    from .oracle import OracleGrade, OracleInput, grade_oracle
+    from .recorder import record_benchmark
     from .report import finalize_benchmark_report
 
 CHILD_ACT = dict(start_to_close_timeout=timedelta(hours=4),
                  retry_policy=RetryPolicy(maximum_attempts=1))
 RECORD_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
                   retry_policy=RetryPolicy(maximum_attempts=5))
+ORACLE_ACT = dict(start_to_close_timeout=timedelta(minutes=20),
+                  retry_policy=RetryPolicy(maximum_attempts=1))
 
 
 def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
@@ -69,6 +74,35 @@ def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
     return cfg
 
 
+def _oracle_record(base_cell: BenchmarkCell, grade: OracleGrade,
+                   bench_run_id: str, run_id: str,
+                   started: datetime, ended: datetime) -> BenchmarkRecord:
+    """Build the stage='oracle' record from a grade. An integrity breach
+    (held-out or language mismatch) sets .error so it surfaces in the report's
+    failure section -- loud, never silent."""
+    err = None
+    if not grade.held_out_ok:
+        err = "held-out breach: oracle path in produced diff"
+    elif not grade.language_match:
+        err = (f"language mismatch: manifest={grade.language_manifest} "
+               f"detected={grade.language_detected}")
+    outcome = (BenchmarkOutcome.PASS if (grade.score or 0.0) >= 1.0
+               else BenchmarkOutcome.FAIL)
+    return BenchmarkRecord(
+        run_id=run_id, bench_run_id=bench_run_id, case_id=base_cell.case_id,
+        scope=BenchmarkScope.ORACLE, stage="oracle", role="oracle",
+        harness=base_cell.harness, model=base_cell.model,
+        quality=QualityScore(
+            score=grade.score, judge="oracle",
+            components={"passed": float(grade.passed),
+                        "total": float(grade.total),
+                        "held_out_ok": float(grade.held_out_ok),
+                        "language_match": float(grade.language_match)}),
+        speed=SpeedBag(wall_clock_s=(ended - started).total_seconds(),
+                       started_at=started, ended_at=ended),
+        outcome=outcome, error=err)
+
+
 @workflow.defn
 class BenchmarkWorkflow:
     @workflow.run
@@ -96,6 +130,21 @@ class BenchmarkWorkflow:
             except Exception as e:
                 # a failed/escalated cell is a data point, not a crash
                 workflow.logger.warning("cell %s failed: %s", child_id, e)
+
+            if spec.language:
+                started = workflow.now()
+                grade = await workflow.execute_activity(
+                    grade_oracle,
+                    OracleInput(case_id=spec.case_id,
+                                repo_url=spec.repo_url or "",
+                                run_id=child_id, language=spec.language,
+                                base_branch=idea.base_branch),
+                    **ORACLE_ACT)
+                await workflow.execute_activity(
+                    record_benchmark,
+                    _oracle_record(cell, grade, bench_run_id, child_id,
+                                   started, workflow.now()),
+                    **RECORD_ACT)
 
         # All file I/O (aggregate + write_report) is isolated in this
         # activity — workflow code stays deterministic and replay-safe.

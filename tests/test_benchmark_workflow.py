@@ -2,10 +2,60 @@
 the pure config-building helper directly, plus a smoke test that the workflow
 class is registered and runnable-shaped. A full time-skipping integration
 test lives in Task 13's golden-case smoke run."""
-from sdlc.benchmarks.models import CaseSpec
-from sdlc.benchmarks.workflow import BenchmarkWorkflow, _cell_config
+from datetime import datetime, timezone
+
+from sdlc.benchmarks.models import BenchmarkCell, BenchmarkScope, CaseSpec
+from sdlc.benchmarks.oracle import OracleGrade
+from sdlc.benchmarks.workflow import BenchmarkWorkflow, _cell_config, _oracle_record
 from sdlc.models import (GatePolicy, HarnessKind, PipelineConfig, ProjectMode,
                          IdeaBrief)
+
+
+def _grade(**kw):
+    base = dict(score=0.5, passed=1, total=2, language_manifest="python",
+                language_detected="python", language_match=True,
+                held_out_ok=True, detail="1/2")
+    base.update(kw)
+    return OracleGrade(**base)
+
+
+def _cell():
+    return BenchmarkCell(case_id="todo-api", harness=HarnessKind.OPENCODE,
+                         model="zai-coding-plan/glm-5.2")
+
+
+def _rec(grade):
+    t0 = datetime(2026, 7, 23, tzinfo=timezone.utc)
+    t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=timezone.utc)
+    return _oracle_record(_cell(), grade, "b1", "b1/todo-api#opencode#m", t0, t1)
+
+
+def test_oracle_record_shape():
+    r = _rec(_grade())
+    assert r.scope is BenchmarkScope.ORACLE
+    assert r.stage == "oracle" and r.role == "oracle"
+    assert r.quality.judge == "oracle" and r.quality.score == 0.5
+    assert r.quality.components["passed"] == 1.0
+    assert r.quality.components["total"] == 2.0
+    assert r.harness is HarnessKind.OPENCODE
+    assert r.error is None
+
+
+def test_oracle_record_flags_held_out_breach():
+    r = _rec(_grade(held_out_ok=False))
+    assert r.error is not None and "held-out" in r.error
+
+
+def test_oracle_record_flags_language_mismatch():
+    r = _rec(_grade(language_match=False, language_detected="typescript"))
+    assert r.error is not None and "mismatch" in r.error
+
+
+def test_oracle_record_none_score_is_fail():
+    from sdlc.benchmarks.models import BenchmarkOutcome
+    r = _rec(_grade(score=None, passed=0))
+    assert r.outcome is BenchmarkOutcome.FAIL
+    assert r.quality.score is None
 
 
 def _spec():

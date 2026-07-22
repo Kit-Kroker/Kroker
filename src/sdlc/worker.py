@@ -34,6 +34,7 @@ from .activities import (
 from .agents.loader import load_registry, validate_registry
 from .agents.roles import ALL_TEMPORAL_AGENTS
 from .benchmarks.judge import judge_artifact, load_case_assets
+from .benchmarks.oracle import grade_oracle
 from .benchmarks.recorder import record_benchmark
 from .benchmarks.report import finalize_benchmark_report
 from .benchmarks.workflow import BenchmarkWorkflow
@@ -74,6 +75,7 @@ async def main() -> None:
             open_pull_request, deploy,
             evaluate_gate, get_task_diff, record_benchmark, judge_artifact,
             load_case_assets, finalize_benchmark_report,
+            grade_oracle,
             recall_snapshot, retain, capture_watermark, reflect,
             cache_get, cache_put,
             export_run_artifacts,
