@@ -7,7 +7,8 @@ from __future__ import annotations
 from temporalio import activity
 
 from sdlc.activities import (
-    CodingTaskInput, CoverageInput, DeployInput, DiffInput, IntegrationHandle,
+    CodingTaskInput, CoverageInput, DeployInput, DiffInput, IntegrationChecks,
+    IntegrationChecksInput, IntegrationHandle,
     IntegrationInput, LintInput, MergeInput, MergeResult, PROpenInput,
     QAInput, SecurityScanInput, WorktreeHandle, WorktreeInput,
 )
@@ -80,9 +81,22 @@ async def fake_measure_coverage(inp: CoverageInput) -> CoverageReport:
     return CoverageReport(measured=False, detail="fake: unmeasured")
 
 
+@activity.defn(name="run_integration_checks")
+async def fake_run_integration_checks(
+        inp: IntegrationChecksInput) -> IntegrationChecks:
+    # Offline orchestration proof: no real toolchain is detected in the fake
+    # worktree, so the workflow takes the no-adapter fallback (per-task
+    # aggregate green + fake run_lint) — identical to the pre-E-30 path the
+    # e2e suite was built around. Never touches a real subprocess.
+    return IntegrationChecks(
+        toolchain=None,
+        qa=QAReport(tests_passed=False, issues=["fake: no adapter"]),
+        lint_clean=True, lint_detail="fake: no adapter (not linted)")
+
+
 GIT_FAKES = [
     fake_setup_integration_branch, fake_create_worktree, fake_run_coding_task,
     fake_get_task_diff, fake_run_test_suite, fake_run_lint,
     fake_merge_into_integration, fake_open_pull_request, fake_deploy,
-    fake_security_scan, fake_measure_coverage,
+    fake_security_scan, fake_measure_coverage, fake_run_integration_checks,
 ]

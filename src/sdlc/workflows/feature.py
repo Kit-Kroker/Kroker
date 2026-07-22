@@ -15,12 +15,13 @@ from temporalio.common import RetryPolicy
 with workflow.unsafe.imports_passed_through():
     from ..activities import (
         CodingTaskInput, CoverageInput, DeployInput, DiffInput,
+        IntegrationChecks, IntegrationChecksInput,
         IntegrationHandle, IntegrationInput, LintInput, MergeInput,
         PROpenInput, QAInput, SecurityScanInput, WorktreeInput,
         create_worktree, deploy, evaluate_gate, get_task_diff,
         measure_coverage, merge_into_integration, open_pull_request,
-        run_coding_task, run_lint, run_test_suite, security_scan,
-        setup_integration_branch,
+        run_coding_task, run_integration_checks, run_lint, run_test_suite,
+        security_scan, setup_integration_branch,
     )
     from ..agents.roles import (
         PROMPT_SHAS, STAGE_MODELS, t_analyst, t_architect, t_clarify,
@@ -94,6 +95,13 @@ VERIFY_ACT = dict(
 # export must never change the run's return string).
 EXPORT_ACT = dict(start_to_close_timeout=timedelta(minutes=2),
                   retry_policy=RetryPolicy(maximum_attempts=1))
+
+# E-30: run_integration_checks runs a real test suite + lint against the merged
+# integration head. Generous start_to_close (> the activity's internal test
+# 600s + fallback 600s + lint 300s worst case); 2 attempts like the per-task
+# test run. It does not heartbeat, so no heartbeat_timeout.
+INTEG_ACT = dict(start_to_close_timeout=timedelta(minutes=30),
+                 retry_policy=RetryPolicy(maximum_attempts=2))
 
 
 def _long_act(role_cfg: RoleConfig | None = None) -> dict:
@@ -1111,11 +1119,6 @@ class FeatureWorkflow:
             + f"\nIntegration diff stat:\n{integration_diff['stat']}"
             + f"\nIntegration diff:\n{integration_diff['patch']}")).output
         untraced = untraced_criteria(authoritative, analysis)
-        cov: CoverageReport = await workflow.execute_activity(
-            measure_coverage,
-            CoverageInput(worktree=self._integration_wt,
-                          changed_files=integration_diff["files"]),
-            **ACT)
         await self._record(cfg, self._stage_record(
             cfg, stage="analyze", role="analyst",
             started=_an_started, ended=workflow.now(),
@@ -1146,20 +1149,41 @@ class FeatureWorkflow:
         # against the integration worktree (ADR-14), where every completed
         # task's merge has accumulated.
         integration_worktree = self._integration_wt
-        # Same stack-awareness as the per-task QA command: use the plan's
-        # own lint_commands rather than assuming a Python toolchain against
-        # whatever stack the architecture actually chose.
-        lint_commands = next(
-            (t.contract.lint_commands for t in plan.tasks
-             if t.contract and t.contract.lint_commands), None)
-        lint_cmd = _contract_shell_cmd(lint_commands, DEFAULT_LINT_CMD)
-        lint_clean, lint_detail = await workflow.execute_activity(
-            run_lint, LintInput(worktree=integration_worktree,
-                                lint_cmd=lint_cmd), **ACT)
+        # E-30/FR-108/ADR-14: run the toolchain adapter (coverage-instrumented
+        # tests + lint) against the merged integration head — a REAL
+        # integration-green signal, and the coverage.xml measure_coverage reads.
+        # No adapter for the built language => degrade to the pre-E-30 path
+        # (per-task aggregate green + the plan's own lint command).
+        ichecks: IntegrationChecks = await workflow.execute_activity(
+            run_integration_checks,
+            IntegrationChecksInput(worktree=integration_worktree,
+                                   changed_files=integration_diff["files"]),
+            **INTEG_ACT)
+        if ichecks.toolchain is not None:
+            all_tests_green = ichecks.qa.tests_passed
+            lint_clean, lint_detail = ichecks.lint_clean, ichecks.lint_detail
+        else:
+            lint_commands = next(
+                (t.contract.lint_commands for t in plan.tasks
+                 if t.contract and t.contract.lint_commands), None)
+            lint_cmd = _contract_shell_cmd(lint_commands, DEFAULT_LINT_CMD)
+            lint_clean, lint_detail = await workflow.execute_activity(
+                run_lint, LintInput(worktree=integration_worktree,
+                                    lint_cmd=lint_cmd), **ACT)
+            all_tests_green = _merge_evidence_all_green(list(done.values()))
+
+        # Coverage is read AFTER the integration test run that emits
+        # coverage.xml (E-30 closes the FR-106 gap: the artifact now lands where
+        # the seam reads). measured=False stays a no-op advisory pass.
+        cov: CoverageReport = await workflow.execute_activity(
+            measure_coverage,
+            CoverageInput(worktree=integration_worktree,
+                          changed_files=integration_diff["files"]),
+            **ACT)
+
         security: SecurityReport = await workflow.execute_activity(
             security_scan,
             SecurityScanInput(worktree=integration_worktree), **ACT)
-        all_tests_green = _merge_evidence_all_green(list(done.values()))
 
         checks = [
             build_check("build_integration_green", all_tests_green,
