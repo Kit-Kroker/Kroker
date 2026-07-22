@@ -116,7 +116,7 @@ class StageOutcome(BaseModel):
 class ClarificationOutcome(BaseModel):
     question_id: str
     question: str
-    answered_by: Literal["human", "recall", "unanswered"]   # SC-4 signal
+    answered_by: Literal["human", "suggested", "unanswered"]  # SC-4 signal
 
 class GateOutcomeSummary(BaseModel):
     gate: str
@@ -146,9 +146,12 @@ class RunSummary(BaseModel):
 
 **How the SC signal lands:**
 - **SC-4** (repeat clarifications): `clarifications[].answered_by` distinguishes
-  a human answer from a recall-satisfied one from an unanswered one; the retained
-  `RunSummary` is what a later run's aggregation compares against to detect a
-  repeat by run 10.
+  a human answer (costs operator time) from a `suggested` auto-fill (the
+  clarifier's own `suggested_answer`, taken under an OFF clarify policy) from an
+  `unanswered` (timed-out) one; the retained `RunSummary` is what a later run's
+  aggregation compares against to detect a repeat by run 10. (No path today
+  auto-answers a *surfaced* question directly from recall — recall feeds the
+  clarifier prompt, which may reduce how many questions are surfaced at all.)
 - **SC-6** (soft-gate override): `gates[].overrides` (advisory checks a human
   waved through) and `gates[].decided_by` give the override rate; `confidence` vs
   `approved`/`decided_by` gives the §10 calibration compare (predicted confidence
