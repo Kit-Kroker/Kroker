@@ -35,3 +35,13 @@ def test_python_build_cmd_is_none():
 
 def test_registry_has_python_marker():
     assert TOOLCHAINS[ToolchainKind.PYTHON].marker == "pyproject.toml"
+
+
+def test_python_oracle_test_cmd_targets_path_and_emits_junit():
+    cmd = PythonToolchain().oracle_test_cmd("oracle", "oracle-report.xml")
+    assert cmd.startswith("pytest oracle")
+    assert "--junitxml=oracle-report.xml" in cmd
+    # never pollute the produced repo with a pytest cache
+    assert "-p no:cacheprovider" in cmd
+    # the oracle run is NOT coverage-instrumented (that is test_cmd's job)
+    assert "--cov" not in cmd

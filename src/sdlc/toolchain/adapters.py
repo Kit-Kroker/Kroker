@@ -38,6 +38,14 @@ class ToolchainAdapter(ABC):
     def lint_cmd(self) -> str:
         ...
 
+    @abstractmethod
+    def oracle_test_cmd(self, oracle_path: str, report_out: str) -> str:
+        """Run ONLY the tests under oracle_path (a path relative to the
+        worktree root), emitting a JUnit XML report at report_out. The
+        held-out oracle grader (benchmarks/oracle.py) reads tests/failures/
+        errors/skipped from that report. Canonical JUnit XML keeps the grade
+        language-agnostic, exactly as Cobertura does for coverage."""
+
     def build_cmd(self) -> str | None:
         """Separate build step, or None where the language has none (Python)."""
         return None
@@ -58,6 +66,13 @@ class PythonToolchain(ToolchainAdapter):
 
     def lint_cmd(self) -> str:
         return "ruff check ."
+
+    def oracle_test_cmd(self, oracle_path: str, report_out: str) -> str:
+        # -p no:cacheprovider: never write .pytest_cache into the produced
+        # repo (keeps the throwaway worktree clean). --junitxml lands the
+        # canonical report the grader parses.
+        return (f"pytest {oracle_path} -q "
+                f"--junitxml={report_out} -p no:cacheprovider")
 
 
 TOOLCHAINS: dict[ToolchainKind, ToolchainAdapter] = {
