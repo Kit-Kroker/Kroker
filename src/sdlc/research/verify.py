@@ -32,11 +32,23 @@ _WS = re.compile(r"\s+")
 # matching.
 _APOSTROPHE = re.compile(r"['‘’`�]")
 
+# Proven false-failure (cat-cafe-monitoring smoke run, 2026-07-20): Tavily's
+# HTML-to-text extraction for en.wikipedia.org/wiki/Indoor_positioning_system
+# left literal markdown emphasis markers (`**bold**`) inside otherwise-plain
+# prose — "provide accuracy between **1-5 meters**, making them suitable".
+# The model quoted the underlying sentence without the `**` (nobody reads
+# markup as content), which is faithful to the source's meaning and wording
+# but breaks a byte-exact substring check. Stripping `**` symmetrically from
+# both the quote and the page text closes this hole the same way apostrophe
+# normalization does above.
+_MD_BOLD = re.compile(r"\*\*")
+
 
 def normalize(text: str) -> str:
     """Collapse whitespace runs to one space, drop apostrophe/quote-glyph
-    noise (see _APOSTROPHE); preserve case and all other punctuation."""
-    return _WS.sub(" ", _APOSTROPHE.sub("", text)).strip()
+    noise (see _APOSTROPHE) and markdown bold markers (see _MD_BOLD);
+    preserve case and all other punctuation."""
+    return _WS.sub(" ", _MD_BOLD.sub("", _APOSTROPHE.sub("", text))).strip()
 
 
 def page_filename(url: str) -> str:

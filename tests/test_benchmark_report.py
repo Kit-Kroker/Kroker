@@ -51,3 +51,24 @@ def test_aggregate_sort_is_deterministic_on_model_tie():
     recs = [_rec("beta", None, 1.0, 100), _rec("alpha", None, 1.0, 100)]
     sums = aggregate("b1", CompositeWeights(), _records=recs)
     assert [s.model for s in sums] == ["alpha", "beta"]
+
+
+def test_render_markdown_surfaces_stage_failures():
+    """A degraded stage (research grounding rejected, pipeline continues
+    per the 2026-07-20 decision) still leaves a trace in the human-facing
+    report instead of vanishing silently."""
+    failed = BenchmarkRecord(
+        run_id="r", bench_run_id="b1", case_id="c1",
+        scope=BenchmarkScope.STAGE, stage="research", role="research",
+        model="google:gemini-3.5-flash", prompt_sha="",
+        quality=QualityScore(score=None, judge="error"),
+        speed=SpeedBag(wall_clock_s=1.0,
+                       started_at=datetime(2026, 7, 4, 10),
+                       ended_at=datetime(2026, 7, 4, 10) + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.FAIL,
+        error="rejected:research.grounding: quote_not_found: https://x/1: 'q'")
+    sums = aggregate("b1", CompositeWeights(), _records=[failed])
+    md = render_markdown(sums)
+    assert "Stage failures" in md
+    assert "c1 / research" in md
+    assert "rejected:research.grounding" in md

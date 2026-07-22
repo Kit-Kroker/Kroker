@@ -59,6 +59,12 @@ def render_markdown(summaries: list[BenchmarkSummary]) -> str:
             f"{s.n} | {fmt(s.mean_quality)} | {fmt(s.mean_cost_usd)} | "
             f"{fmt(s.mean_wall_clock_s)} | {fmt(s.composite)} |"
         )
+    errored = [s for s in summaries if s.errors]
+    if errored:
+        lines += ["", "## Stage failures", ""]
+        for s in errored:
+            for err in s.errors:
+                lines.append(f"- **{s.case_id} / {s.stage}** ({s.model}): {err}")
     return "\n".join(lines) + "\n"
 
 

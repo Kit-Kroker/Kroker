@@ -94,6 +94,32 @@ def test_apostrophe_normalization_does_not_mask_a_real_word_mismatch(runs_root):
         ["quote_not_found"]
 
 
+def test_markdown_bold_markers_in_page_text_do_not_break_grounding(runs_root):
+    """Regression for the cat-cafe-monitoring smoke run (2026-07-20): Tavily's
+    extractor left literal `**bold**` markdown markers inside plain-text
+    Wikipedia content ("between **1-5 meters**, making them suitable"). The
+    research agent quoted the same span without the markers, which is
+    faithful to the source but previously failed the exact-substring check."""
+    _write_page("r1", "https://x/1",
+                "advanced technologies like **UWB (Ultra-Wideband)** can "
+                "achieve **centimeter-level precision** for robotics")
+    brief = ResearchBrief(grounded_findings=[GroundedFinding(
+        source_url="https://x/1",
+        quote="advanced technologies like UWB (Ultra-Wideband) can "
+              "achieve centimeter-level precision",
+        claim="c")])
+    assert verify.verify_brief(brief, "r1") == []
+
+
+def test_markdown_bold_normalization_does_not_mask_a_real_word_mismatch(runs_root):
+    _write_page("r1", "https://x/1", "**UWB** can achieve meter-level precision")
+    brief = ResearchBrief(grounded_findings=[GroundedFinding(
+        source_url="https://x/1",
+        quote="UWB can achieve centimeter-level precision", claim="c")])
+    assert [v.kind for v in verify.verify_brief(brief, "r1")] == \
+        ["quote_not_found"]
+
+
 def test_brief_digest_ignores_prose_ordering_and_confidence():
     """Same (source_url, claim) facts -> same digest, regardless of order,
     summary, or confidence (spec §7)."""

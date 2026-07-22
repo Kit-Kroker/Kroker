@@ -41,12 +41,15 @@ _RESEARCH = ResearchBrief(summary="found nothing external", confidence=0.5)
 # fetched this run. verify_brief_activity reads
 # $SDLC_RUNS_ROOT/<run_id>/research/pages/<sha256(url)>.txt — no such file
 # exists for "https://x/never-fetched" under the test's empty tmp_path, so the
-# activity RETURNS [Violation(kind="source_never_fetched", ...)] and the
-# workflow returns "rejected:research.grounding". This exercises the fail-closed
-# path that the old `except GroundingViolation` could never catch (C1) and the
-# retry_policy=1 (C2): under the old raise-based form, temporalio wrapped the
-# GroundingViolation in ActivityError(ApplicationError), the workflow's typed
-# catch never matched, and the workflow crashed instead of rejecting.
+# activity RETURNS [Violation(kind="source_never_fetched", ...)]. The
+# workflow records the research stage as FAILed and proceeds (2026-07-20
+# decision — see test_research_stage_degrades_instead_of_blocking_on_
+# grounding_violation below). This still exercises the fail-closed READ of
+# the violations list that the old `except GroundingViolation` could never
+# catch (C1) and the retry_policy=1 (C2): under the old raise-based form,
+# temporalio wrapped GroundingViolation in ActivityError(ApplicationError),
+# the workflow's typed catch never matched, and the workflow crashed instead
+# of handling it.
 _RESEARCH_WITH_VIOLATION = ResearchBrief(
     summary="a grounded claim with no page file",
     confidence=0.5,
@@ -152,26 +155,25 @@ async def test_research_stage_runs_and_hands_off():
 
 
 @pytest.mark.asyncio
-async def test_research_stage_rejects_on_grounding_violation(tmp_path,
-                                                              monkeypatch):
-    """Code-review I1: a brief with an ungrounded finding (source_url never
-    fetched this run) must cause the workflow to return
-    "rejected:research.grounding" — NOT crash with ActivityError and NOT
-    proceed to clarify.
+async def test_research_stage_degrades_instead_of_blocking_on_grounding_violation(
+        tmp_path, monkeypatch):
+    """2026-07-20 human decision: an ungrounded finding (source_url never
+    fetched this run) must fail the research STAGE, not the whole pipeline.
+    The workflow records the research stage as failed and proceeds to
+    clarify/deploy exactly as a research-disabled run would — it must NOT
+    crash with ActivityError and must NOT return early.
 
-    Under the OLD raise-based form, verify_brief_activity raised
-    GroundingViolation; temporalio's execute_activity wrapped it in
-    ActivityError(ApplicationError); the workflow's `except GroundingViolation`
-    never matched (C1); the workflow crashed. This test exercises the catch by
-    feeding the workflow a brief with `source_url="https://x/never-fetched"`
-    and asserting a clean rejection. It would have caught both C1 and C2.
+    Earlier behavior (pre this test) hard-stopped the workflow with
+    "rejected:research.grounding" on any violation. That was too blunt for
+    exploring the rest of the pipeline when research grounding is inherently
+    stochastic (depends on which sources the model cites and how faithfully
+    it quotes them) — see cat-cafe-monitoring benchmark runs.
 
     The research gate policy is OFF (auto-approve) so the gate doesn't block
     before verification runs. $SDLC_RUNS_ROOT points at an empty tmp_path —
     no page file for the violating URL, so the activity returns
     [Violation(kind="source_never_fetched", ...)] and the workflow inspects it
-    (`if violations:`) and rejects. No driver task: the workflow returns
-    before reaching any human-gated stage."""
+    (`if violations:`), records a FAIL stage record, and continues."""
     monkeypatch.setenv("SDLC_RUNS_ROOT", str(tmp_path))
     activities = [evaluate_gate, verify_brief_activity, *GIT_FAKES,
                   *_research_fake_activities(_RESEARCH_WITH_VIOLATION),
@@ -197,6 +199,8 @@ async def test_research_stage_rejects_on_grounding_violation(tmp_path,
                     args=[greenfield_idea(), cfg],
                     id=f"e2e-research-violation-{uuid.uuid4()}",
                     task_queue=TASK_QUEUE)
+                driver = asyncio.create_task(_drive(handle))
                 result = await handle.result()
+                await driver
 
-    assert result == "rejected:research.grounding", result
+    assert result.startswith("deployed:"), result

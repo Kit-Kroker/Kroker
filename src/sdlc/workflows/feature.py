@@ -230,7 +230,8 @@ class FeatureWorkflow:
                       harness=None, cost_usd: float | None = None,
                       fix_attempts: int = 0,
                       task_id: str | None = None,
-                      attempt: int | None = None) -> BenchmarkRecord:
+                      attempt: int | None = None,
+                      error: str | None = None) -> BenchmarkRecord:
         scope = (BenchmarkScope.TASK_ATTEMPT if task_id is not None
                  else BenchmarkScope.STAGE)
         return BenchmarkRecord(
@@ -243,7 +244,7 @@ class FeatureWorkflow:
             cost=CostBag(usd=cost_usd),
             speed=SpeedBag(wall_clock_s=(ended - started).total_seconds(),
                            started_at=started, ended_at=ended),
-            outcome=outcome, fix_attempts=fix_attempts,
+            outcome=outcome, fix_attempts=fix_attempts, error=error,
         )
 
     async def _record(self, cfg: PipelineConfig, record: BenchmarkRecord
@@ -733,26 +734,43 @@ class FeatureWorkflow:
                 args=[brief, workflow.info().workflow_id],
                 **VERIFY_ACT)
             if violations:
-                self._status = "rejected:research.grounding"
-                return "rejected:research.grounding"
-            brief_digest_val = brief_digest(brief)
-            gate = await self._gate("research", cfg)
-            if not gate.approved:
-                return "rejected:research"
-            for item in verified_findings_to_retain(
-                    brief, workflow.info().workflow_id,
-                    bank=cfg.memory.project_bank):
-                await self._retain(cfg, item.kind, item.bank, item.text,
-                                   item.metadata)
-            _r_quality = await self._judge(
-                cfg, brief.model_dump_json(), "research",
-                author_model=STAGE_MODELS.get("research", "unknown"))
-            await self._record(cfg, self._stage_record(
-                cfg, stage="research", role="research",
-                started=_r_started, ended=workflow.now(),
-                quality_score=_r_quality.score, judge=_r_quality.judge,
-                outcome=BenchmarkOutcome.PASS,
-                model=STAGE_MODELS.get("research", "unknown")))
+                # Ungrounded brief: fail this stage but do NOT stop the
+                # pipeline (2026-07-20 human decision — see report for
+                # rationale). Nothing from an unverified brief is trustworthy
+                # enough to retain to memory or feed into downstream content
+                # keys, so brief_digest_val stays "" and retain is skipped;
+                # everything after research proceeds on the idea alone, same
+                # as a research-disabled run.
+                self._status = "research_failed"
+                err = "; ".join(
+                    f"{v.kind}: {v.source_url}: {v.quote[:80]!r}"
+                    for v in violations)
+                await self._record(cfg, self._stage_record(
+                    cfg, stage="research", role="research",
+                    started=_r_started, ended=workflow.now(),
+                    quality_score=None, judge="error",
+                    outcome=BenchmarkOutcome.FAIL,
+                    model=STAGE_MODELS.get("research", "unknown"),
+                    error=f"rejected:research.grounding: {err}"))
+            else:
+                brief_digest_val = brief_digest(brief)
+                gate = await self._gate("research", cfg)
+                if not gate.approved:
+                    return "rejected:research"
+                for item in verified_findings_to_retain(
+                        brief, workflow.info().workflow_id,
+                        bank=cfg.memory.project_bank):
+                    await self._retain(cfg, item.kind, item.bank, item.text,
+                                       item.metadata)
+                _r_quality = await self._judge(
+                    cfg, brief.model_dump_json(), "research",
+                    author_model=STAGE_MODELS.get("research", "unknown"))
+                await self._record(cfg, self._stage_record(
+                    cfg, stage="research", role="research",
+                    started=_r_started, ended=workflow.now(),
+                    quality_score=_r_quality.score, judge=_r_quality.judge,
+                    outcome=BenchmarkOutcome.PASS,
+                    model=STAGE_MODELS.get("research", "unknown")))
 
         # 1. CLARIFY — open questions answered by human via signals
         self._status = "clarifying"

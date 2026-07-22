@@ -54,10 +54,12 @@ def compute_summaries(
             composite = _composite(mean_q, mean_usd, mean_sec,
                                    max_usd, max_sec, use_cost, use_speed, w)
             harness = (HarnessKind(h) if h else None)
+            errors = [r.error for r in cell_recs if r.error]
             summaries.append(BenchmarkSummary(
                 case_id=case_id, stage=stage, harness=harness, model=m,
                 n=len(cell_recs), mean_quality=mean_q, mean_cost_usd=mean_usd,
                 mean_wall_clock_s=mean_sec, composite=composite,
+                errors=errors,
             ))
     return summaries
 

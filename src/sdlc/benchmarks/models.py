@@ -124,3 +124,4 @@ class BenchmarkSummary(BaseModel):
     mean_cost_usd: float | None
     mean_wall_clock_s: float | None
     composite: float | None
+    errors: list[str] = Field(default_factory=list)
