@@ -82,3 +82,76 @@ def test_render_inbox_output_is_ascii():
         RunInbox(run_id="r", pending=[Q1]),
     ])
     render_inbox(inbox).encode("ascii")
+
+
+from types import SimpleNamespace
+
+import pytest
+
+from sdlc.channels.inbox import fetch_inbox, list_open_run_ids
+
+
+class _StubHandle:
+    """Returns one scripted pending_decisions() result, or raises."""
+
+    def __init__(self, response=None, error=None):
+        self._response = response if response is not None else []
+        self._error = error
+
+    async def query(self, name):
+        assert name == "pending_decisions"
+        if self._error is not None:
+            raise self._error
+        return self._response
+
+
+class _StubClient:
+    def __init__(self, handles: dict[str, _StubHandle]):
+        self._handles = handles
+
+    async def list_workflows(self, query):
+        assert "FeatureWorkflow" in query
+        assert "Running" in query
+        for run_id in self._handles:
+            yield SimpleNamespace(id=run_id)
+
+    def get_workflow_handle(self, run_id):
+        return self._handles[run_id]
+
+
+def _raw(*items):
+    return [i.model_dump(mode="json") for i in items]
+
+
+@pytest.mark.asyncio
+async def test_list_open_run_ids_returns_ids_from_the_visibility_query():
+    client = _StubClient({"run-a": _StubHandle(), "run-b": _StubHandle()})
+    assert await list_open_run_ids(client) == ["run-a", "run-b"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_inbox_aggregates_pending_across_runs_and_drops_empty_ones():
+    client = _StubClient({
+        "run-a": _StubHandle(response=_raw(ARCH)),
+        "run-b": _StubHandle(response=[]),          # nothing pending -> dropped
+        "run-c": _StubHandle(response=_raw(Q1, MERGE)),
+    })
+    inbox = await fetch_inbox(client)
+    assert inbox.total_open_runs == 3
+    assert {r.run_id for r in inbox.runs} == {"run-a", "run-c"}
+    assert inbox.errors == []
+    by_id = {r.run_id: r.pending for r in inbox.runs}
+    assert [d.key for d in by_id["run-c"]] == ["Q1", "merge#2"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_inbox_isolates_a_failing_run_from_the_rest():
+    client = _StubClient({
+        "run-a": _StubHandle(response=_raw(ARCH)),
+        "run-b": _StubHandle(error=RuntimeError("workflow not found")),
+    })
+    inbox = await fetch_inbox(client)
+    assert inbox.total_open_runs == 2
+    assert [r.run_id for r in inbox.runs] == ["run-a"]
+    assert inbox.errors[0].run_id == "run-b"
+    assert "workflow not found" in inbox.errors[0].error

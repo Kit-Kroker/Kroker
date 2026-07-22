@@ -5,10 +5,12 @@ caller already named.
 """
 from __future__ import annotations
 
+import asyncio
+
 from pydantic import BaseModel, Field
 
 from ..pending import PendingDecision
-from .transport import describe
+from .transport import describe, fetch_pending
 
 
 class RunInbox(BaseModel):
@@ -59,3 +61,41 @@ def render_inbox(inbox: Inbox) -> str:
         lines += [f"  {e.run_id}: {e.error}" for e in inbox.errors]
 
     return "\n".join(lines)
+
+
+_OPEN_FEATURE_QUERY = "WorkflowType='FeatureWorkflow' AND ExecutionStatus='Running'"
+
+
+async def list_open_run_ids(client) -> list[str]:
+    """Every currently-running FeatureWorkflow id, via a server-side
+    visibility filter -- ReflectWorkflow/BenchmarkWorkflow executions on the
+    same task queue never expose pending_decisions, so they are excluded
+    here rather than probed and discarded."""
+    return [wf.id async for wf in client.list_workflows(_OPEN_FEATURE_QUERY)]
+
+
+async def _fetch_one(client, run_id: str):
+    """Never raises: an exception becomes the return value, so one run's
+    failure can't take down asyncio.gather for the rest."""
+    try:
+        handle = client.get_workflow_handle(run_id)
+        return await fetch_pending(handle)
+    except Exception as e:  # noqa: BLE001 -- captured into Inbox.errors, not raised
+        return e
+
+
+async def fetch_inbox(client) -> Inbox:
+    """Discover every open run, fetch each one's pending decisions
+    concurrently, and aggregate. A run with nothing pending is dropped, not
+    listed; a run whose query raised becomes an InboxError instead of
+    aborting the whole fetch."""
+    run_ids = await list_open_run_ids(client)
+    results = await asyncio.gather(*(_fetch_one(client, rid) for rid in run_ids))
+
+    inbox = Inbox(total_open_runs=len(run_ids))
+    for run_id, outcome in zip(run_ids, results):
+        if isinstance(outcome, Exception):
+            inbox.errors.append(InboxError(run_id=run_id, error=str(outcome)))
+        elif outcome:
+            inbox.runs.append(RunInbox(run_id=run_id, pending=outcome))
+    return inbox
