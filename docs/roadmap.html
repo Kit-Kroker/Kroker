@@ -524,7 +524,8 @@
     Source of truth: <a href="../ROADMAP.md">ROADMAP.md</a> ·
     <a href="../PRD.md">PRD.md</a> ·
     <a href="../ARCHITECTURE.md">ARCHITECTURE.md</a> ·
-    <a href="../SDLC-spec-v2.md">SDLC-spec-v2.md</a>
+    <a href="../SDLC-spec-v2.md">SDLC-spec-v2.md</a> ·
+    <a href="../BENCHMARK.md">BENCHMARK.md</a> (§9.8)
     <br>
     Last verified: <strong>2026-07-19</strong> ·
     Method: every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code.
@@ -577,7 +578,7 @@
 <main id="detail"></main>
 
 <footer>
-  Generated from <a href="../ROADMAP.md">ROADMAP.md</a> at 2026-07-19 fidelity.
+  Regenerated 2026-07-22 from <a href="../ROADMAP.md">ROADMAP.md</a> (last verified 2026-07-19; §9.8 benchmark &amp; evaluation items E-30…E-39 added).
   To refresh, re-extract items per the rule documented inline in this file's <code>&lt;script&gt;</code> block.
 </footer>
 
@@ -617,7 +618,7 @@ const ROADMAP = {
     { id: "P3", pct: 50, status: "partial",
       title: "Hindsight memory + confidence-gated soft gates",
       exit:  "SC-4 and SC-6 measurable",
-      note:  "Memory (recall/retain/watermark) ✅ and soft gates ✅ done; SC-4/SC-6 not yet measurable (need retro/reflect wiring + real runs)." },
+      note:  "Memory (recall/retain/watermark) ✅ and soft gates ✅ done; SC-4/SC-6 not yet measurable (need retro/reflect wiring + real runs). The retro stage that makes them measurable is E-32 (§9.8); the on/off memory delta is the measurement E-31/E-33 exist to run." },
     { id: "P4", pct: 0, status: "notstarted",
       title: "MCP surface, maintenance loop (DAPER), fleet scale",
       exit:  "SC-1..3 at target",
@@ -706,13 +707,13 @@ const ROADMAP = {
       note: "Vue 3 frontend exists (mock API); no FastAPI backend wired to Temporal.", recent: false },
     { id: "FR-602", section: "FR", status: "notstarted", title: "MCP server (list/detail/inbox/answer/decide/start)",
       note: "no interfaces/mcp/.", recent: false },
-    { id: "FR-603", section: "FR", status: "partial",    title: "CLI — start/status/answer/approve/reject/benchmark",
-      note: "✅; missing cross-run inbox (FR-305).", recent: false },
+    { id: "FR-603", section: "FR", status: "partial",    title: "CLI — start/status/answer/approve/revise/reject/benchmark",
+      note: "revise landed with E-7; gate rounds are now derived from the pending item, not typed by the operator; missing cross-run inbox (FR-305).", recent: false },
     { id: "FR-604", section: "FR", status: "done",       title: "stateless shells, no interface DB",
       note: "true for CLI.", recent: false },
 
     /* FR-700 — Governance & ops */
-    { id: "FR-701", section: "FR", status: "notstarted", title: "run-level budgets",
+    { id: "FR-701", section: "FR", status: "partial",    title: "run-level budgets",
       note: "research ships the FIRST run-level counters (max_searches/max_fetches/max_cost_usd), stage-scoped and enforced inside the tools; E-19 remains the general version.", recent: true },
     { id: "FR-702", section: "FR", status: "partial",    title: "claim-check ArtifactRef / 2MB discipline",
       note: "ArtifactRef model exists but diffs travel inline; no CodeArtifact union; no size guard.", recent: false },
@@ -820,8 +821,8 @@ const ROADMAP = {
       note: "ADR-7's endpoint. Recorded because it's a pleasing closure of ADR-7, flagged because that's exactly why it deserves suspicion. Needs E-1 and brownfield mode (FR-102) first.", recent: false },
     { id: "E-6",  section: "E", status: "done",       title: "Channel contract over the FR-302 signal substrate",
       note: "structured pending_decisions() workflow query (Layer A, sdlc/pending.py) feeding a pure render/translate adapter (Layer B, sdlc/channels/contract.py), with deliver an opt-in PushChannel. All four render variants collapse to the two FR-302 signals on reply. Contract only — no new surface; E-7 refits the CLI as the proof. Layer B landed under sdlc/channels/ not interfaces/channels/: pyproject packages only src/. Spec: docs/superpowers/specs/2026-07-18-channel-contract-over-fr302-design.md.", recent: true },
-    { id: "E-7",  section: "E", status: "notstarted", title: "Refit the existing CLI (answer/approve/reject) onto the contract",
-      note: "Ordered first deliberately: it validates the contract against a known-good surface before any new surface depends on it. If the CLI doesn't fit cleanly, the contract is wrong.", recent: false },
+    { id: "E-7",  section: "E", status: "done", title: "Refit the existing CLI (answer/approve/reject/revise) onto the contract",
+      note: "The contract held; the CLI and the query did not. Three defects fell out: --round defaulted to 1 so a post-REVISE approve was silently deduped under a success message; revise had no verb despite GateOutcome.REVISE and US-2 marked done; and pending_decisions() over-reported answered clarify questions (answer_question never popped _pending — an E-6 bug fixed here). Adds channels/transport.py (query/match/signal/verify) so E-8/E-10/E-11 don't reimplement it. Spec: 2026-07-19-cli-refit-onto-channel-contract.", recent: true },
     { id: "E-8",  section: "E", status: "notstarted", title: "Cross-run inbox as a query over pending gates (FR-305, FR-603's missing verb)",
       note: "the first capability the contract buys that we don't already have.", recent: false },
     { id: "E-9",  section: "E", status: "notstarted", title: "Notify activity + reminder timer + fallback approver (FR-303)",
@@ -859,14 +860,48 @@ const ROADMAP = {
     { id: "E-25", section: "E", status: "notstarted", title: "Nothing retains to org_bank",
       note: "MemoryConfig defines it (models.py:376) but every _retain call site in feature.py passes project_bank. Cross-project consolidation (reflect(org), SDLC-spec §279) therefore has no writers. This, not scheduling, is the remaining blocker on FR-404's org half. Needs a decision on what belongs in an org bank — likely (new scope).", recent: false },
     { id: "E-26", section: "E", status: "notstarted", title: "Make cfg.roles genuinely per-project (US-4) without reintroducing drift",
-      note: "PipelineConfig.roles is a hardcoded mirror of agents.yaml's harness roles because PipelineConfig() is constructed inside the workflow (feature.py:602), so its default cannot read the file without breaking sandbox purity. The boot mirror-check makes drift fail closed, but it also means a per-project override must resolve at the boundary (cli.py, benchmarks/workflow.py) and satisfy ADR-6 per run, not just at boot. Nothing populates cfg.roles today.", recent: false }
+      note: "PipelineConfig.roles is a hardcoded mirror of agents.yaml's harness roles because PipelineConfig() is constructed inside the workflow (feature.py:602), so its default cannot read the file without breaking sandbox purity. The boot mirror-check makes drift fail closed, but it also means a per-project override must resolve at the boundary (cli.py, benchmarks/workflow.py) and satisfy ADR-6 per run, not just at boot. Nothing populates cfg.roles today.", recent: false },
+    { id: "E-27", section: "E", status: "done",       title: "Cat café monitoring golden case + qa/research rubric judging",
+      note: "A kata large enough to require decomposition and small enough to specify completely. Authoring it surfaced that only 3 rubric keys reached the judge (clarifier/architect/planner): qa emits a judgeable artifact that only feeds the deterministic code record, and research hardcoded judge=\"contract\" with no _judge call. Added CaseSpec.research_enabled (default False) with a per-case injected provider: tavily (registry stays fake so CI needs no key), both _judge calls, and five rubrics. Smoke run reached research live (real Tavily+glm) and grounded the exact risk threshold the research rubric targets (>35 bpm at rest), but ends at rejected:research.grounding — the fail-closed verifier requires byte-exact contiguous quotes and glm-5.2 cannot reliably reproduce special chars/tabular data (8→3 violations, then plateau). So live judge scoring of research/qa is unit-tested but unproven end-to-end; unblocks when E-29 or E-30 lands. Spec: 2026-07-19-cat-cafe-monitoring-benchmark.", recent: true },
+    { id: "E-28", section: "E", status: "notstarted", title: "Research tool-call activities retry a deterministic failure with no attempt cap",
+      note: "E-27's smoke run hung when read_repo raised ValueError on an out-of-cwd path: the pydantic-ai temporal tool-call wrapper retried it forever (attempt 11+). Fixed the immediate trigger (read_repo now returns a refusal string), but the underlying hazard remains — any research tool that raises a non-transient error loops the whole run. Needs a bounded/non_retryable retry policy on agent__research_agent__toolset__*__call_tool, or a rule that research tools return errors as strings rather than raise.", recent: false },
+    { id: "E-29", section: "E", status: "notstarted", title: "Research grounding unreachable for a mid-tier author model",
+      note: "verify_brief (research/verify.py) fails closed unless every grounded_finding.quote is a byte-exact contiguous substring (whitespace-normalized only) of a page fetched this run. glm-5.2 reliably violates this on special characters (en-dash, curly quotes) and tabular content — E-27 plateaued at 3 violations after two prompt fixes cut it from 8. Options: (a) normalize more aggressively in the verifier (dash/quote folding — but every loosening is a hole, each needs a test); (b) a per-case research-model override to a higher-fidelity family (interacts with ADR-6 + E-26); (c) accept research as advisory (inferred_findings) rather than a hard gate for benchmark cells. Blocks live proof of E-27's research-stage judging.", recent: false },
+
+    /* §9.8 — Benchmark & evaluation (SC-1..6, FR-106, FR-404, FR-701, FR-702, FR-704, ADR-15, ADR-16) */
+    { id: "E-30",  section: "E", status: "notstarted", title: "ToolchainAdapter + coverage seam, language-agnostic (new scope; ADR-15)",
+      note: "A pipeline capability, not a benchmark fix — run_test_suite/run_lint/security_scan/measure_coverage are stage 11/12 production activities the benchmark merely exercises, and generated projects can be Python/TS/Go/Rust, so the grade cannot be language-agnostic unless those stages are. A TOOLCHAINS registry beside HARNESSES resolves by marker file in the produced repo (pyproject.toml/package.json/go.mod/Cargo.toml — detect what was built, not what was intended), normalising build()/test()/lint()/coverage() into the existing TestReport. Canonical coverage = Cobertura XML (each adapter only translates into it; no change to the gate reader); absolute security floor = semgrep → SARIF (one multi-language tool keeps security_no_critical/SC-5 a single check). Delivers: interface + registry + marker detection + canonical formats + the Python adapter end-to-end as reference + the artifact crossing the merge into the integration worktree where the seam reads (the original FR-106 gap). Highest-leverage item — without it there is no objective test-based grade and every benchmark number rests on rubric-only judging.", recent: true },
+    { id: "E-30a", section: "E", status: "notstarted", title: "Go ToolchainAdapter",
+      note: "The second adapter (go test -cover → Cobertura via gocover-cobertura; go vet/golangci-lint; semgrep). Incremental, same shape as the Python reference; validates the abstraction on a non-Python language.", recent: false },
+    { id: "E-30b", section: "E", status: "notstarted", title: "TypeScript/JS ToolchainAdapter",
+      note: "vitest/jest + c8/nyc → Cobertura; eslint; semgrep.", recent: false },
+    { id: "E-30c", section: "E", status: "notstarted", title: "Rust ToolchainAdapter",
+      note: "cargo-llvm-cov → Cobertura; clippy; semgrep. E-30a/b/c are deliberately sub-numbered: each is the N-th adapter, identical in shape, added on demand as the corpus (E-34) needs that language — not a fork, exactly like adding a harness.", recent: false },
+    { id: "E-31",  section: "E", status: "notstarted", title: "Tier-A held-out oracle in benchmark cases (new scope)",
+      note: "benchmarks/cases/<case>/oracle/ — a suite + fixtures held out of the workflow's context (never in a worktree, prompt, or recall), run against the produced code through the case's ToolchainAdapter (E-30), graded as fraction passing. Each case manifest declares language:; the runner dispatches to the matching adapter, and manifest-language vs marker-detected language is itself a mismatch signal. Adds the Cursor anti-cheat as a routine assertion (oracle-is-held-out check + a diff-coverage built-evenly-not-to-the-test check). Extends E-27, which judges rubrics only. Depends on E-30.", recent: true },
+    { id: "E-32",  section: "E", status: "notstarted", title: "Retro stage 14: emit RunSummary, call reflect(), export trace + metrics",
+      note: "Closes the learning loop (§1 stage 14; FR-404; NFR-4; SDLC-spec §1/§6). Three payoffs from one stage: unblocks SC-4/SC-6 (P3's exit), turns on the memory benchmark axis (on/off delta, §9.8 economics), and opens the loop-B intake where production runs become eval cases. The org_bank-writer half stays E-25 (needs the what-belongs-in-an-org-bank decision); E-32 is the stage itself, project scope.", recent: true },
+    { id: "E-33",  section: "E", status: "notstarted", title: "Per-role cost attribution (folds E-19)",
+      note: "Promote cost from benchmarks-only (§9.5) to run-level counters and attribute dollars per role, not per token (FR-701). The Cursor economics result restated for this registry: the expensive roles are the deciding proposers (architect on opus-4-8), the volume is in the executing harness roles — so per-role $ is the number that moves ($1,339 vs $10,565 on the same task). HarnessRunResult already carries the token/context/compacted fields; this is the aggregation + the proposer-side TemporalAgent usage join.", recent: false },
+    { id: "E-34",  section: "E", status: "notstarted", title: "A decomposition-forcing benchmark case (new scope)",
+      note: "Both current cases are sized for a single short factory run, so planner decomposition — the load-bearing variable in real work — is unexercised (E-27's own finding), which is exactly the variable Cursor's entire result turns on. The bar E-27 set holds: large enough to require decomposition (multiple vertical slices + real inter-task contracts), small enough to specify completely.", recent: false },
+    { id: "E-35",  section: "E", status: "notstarted", title: "cursor harness adapter — third point on the harness axis (folds E-24)",
+      note: "Normalised into HarnessRunResult (tokens, cost, context_window, compacted, resume handle) and version-pinned at boot (FR-203; folds E-24). Value is not cursor vs claude in the abstract — it is measuring claude -p vs opencode vs cursor through the DeterministicQualityGate on the held-out oracles, a comparison no external leaderboard provides. Ordered after E-33 so the economics fields exist to receive it; until the adapter fills them, cursor cells are quality-only.", recent: false },
+    { id: "E-36",  section: "E", status: "notstarted", title: "Error heatmap (case × stage) + rubric-calibration tracking (new scope)",
+      note: "The heatmap aggregates gate rejections, fix-loop iterations, and oracle failures per stage per case (FR-704 export is the data source, NFR-4) — Abdullin's prioritisation instrument, answering which stage on which case class costs most, so what to fix next. Calibration tracking attaches a judge-agreement rate to every rubric score (hand-score 20–30 fixtures per rubric) so a Tier-B number is never read without its trust level.", recent: false },
+    { id: "E-37",  section: "E", status: "notstarted", title: "Per-role model sweep at the benchmark boundary (folds E-26)",
+      note: "Resolve cfg.roles per cell (folds E-26) so each cell overrides role→model and satisfies ADR-6 per run, not just at boot — the full model×role matrix (US-4). Deferred last: the harness (E-35) and memory (E-32) axes deliver most of the insight without it, and E-26 is real work. Ties to OQ-B2 (the judge family must move per cell to stay ADR-6-independent of the swept producer family) and OQ-E2.", recent: false },
+    { id: "E-38",  section: "E", status: "notstarted", title: "Capture-always harness sessions (new scope; ADR-16)",
+      note: "Every harness run emits a canonical HarnessSession (normalised transcript: tool-calls, file reads/writes, commands + exit status, model turns) as a claim-checked ArtifactRef{kind: harness_session} on HarnessRunResult (ADR-3/§4). Because it is captured on every run, three things are hot-path invariants, not options: (a) claim-check is unconditional — the transcript is megabytes and never touches workflow state (the second reason to finally close FR-702); (b) the memory scrub (pre_retain) runs over the session before it is stored, fail-closed like the SC-5 security floor; (c) retention follows a decided policy: full transcript on fail/benchmark/attempts>0 (the diagnostic cases), a structured SessionDigest on clean-green runs — never blind byte-truncation; the §4.3 waste aggregates + decision-skeleton are computed pre-truncation and always kept. Ordering is strict — capture → scrub (fail-closed) → then branch full-vs-digest. This is the concrete P5 trajectory-harvesting seam (ARCHITECTURE §10): the session is most of what events.jsonl/report.html should render (E-22/E-23) and the extraction point for trajectory eval + small-model distillation. Invariant: capturing the developer's session does not let the default reviewer read it — see E-39. Full-transcript TTL is the one open sub-point (OQ-B7).", recent: true },
+    { id: "E-39",  section: "E", status: "notstarted", title: "deep_review — optional review tier reading the scrubbed HarnessSession (new scope)",
+      note: "An optional, opt-in review tier that reads the scrubbed HarnessSession (E-38) as data. This is Cursor's full-transcript lens, and it deliberately does what the default reviewer must not: see how the diff was reached (backtracking, oracle peeking, hardcoded answers), feeding both the anti-cheat check and a richer verdict. Three guardrails, all load-bearing: it reads the scrubbed artifact, never the raw session and never via resume-handle; its model stays ADR-6 family-independent of the developer; and it is an additional lens, not a replacement — clean-context review (ADR-6/ADR-12) remains the default, because Cursor's value is decorrelated lenses stacking, not swapping one for another.", recent: true }
   ],
 
   /* §8 — Recommended next increments (narrative, ranked) */
   next: [
     { rank: 1, status: "done", text: "<strong>Close P1 honestly</strong> — CI-runnable end-to-end run through FeatureWorkflow + wire the security_no_critical absolute check. <strong>Done</strong> on feat/p1-consolidation (3cfbe62…41c9185)." },
     { rank: 2, status: "done", text: "<strong>Analyze/Analyst stage</strong> — unlocks coverage + criterion→test traceability advisory checks (FR-106). <strong>Done</strong> on feat/analyst-stage." },
-    { rank: 3, status: "partial", text: "<strong>retro/reflect wiring</strong> (FR-404) — starts accumulating the SC-4/SC-6 calibration signal. <strong>Partially done</strong> — schedule mechanism + nightly project reflect ship (E-12/E-13). Org half blocked on E-25; the retro <em>stage</em> (§1 item 13, RunSummary) is still unbuilt." },
+    { rank: 3, status: "partial", text: "<strong>retro/reflect wiring</strong> (FR-404) — starts accumulating the SC-4/SC-6 calibration signal. <strong>Partially done</strong> — schedule mechanism + nightly project reflect ship (E-12/E-13). Org half blocked on E-25; the retro <em>stage</em> (§1 item 13, RunSummary) is still unbuilt (<strong>E-32</strong>). <em>Follow-on:</em> the benchmark instrument (§9.8) is what turns the accruing signal into the SC-1..6 numbers — held-out grade (<strong>E-30/E-31</strong>) and per-role economics (<strong>E-33</strong>) are the load-bearing measurement work." },
     { rank: 4, status: "notstarted", text: "<strong>Harness containment</strong> beyond env allowlist — pre_tool hook + egress (FR-703/NFR-5). Tasks: E-15…E-18 — note the hook and the gate are one mechanism, not two." },
     { rank: 5, status: "notstarted", text: "<strong>Operability</strong> — dashboard FastAPI backend + MCP + cross-run inbox (FR-305/601/602). Tasks: E-6…E-11 — these four items are one contract plus thin adapters, so E-6/E-7 land before any surface." },
     { rank: 6, status: "notstarted", text: "<strong>Post-P1 roadmap</strong> — MaintenanceWorkflow/DAPER (E-14), two worker pools, run budgets (E-19), observability export (E-22, E-23), brownfield mode, claim-check." },
@@ -1099,13 +1134,30 @@ function renderDetail() {
     <ol class="next-list">
       <li class="done"><strong>E-12, E-13</strong> — smallest, and the only items that start the SC-4/SC-6 signal.</li>
       <li class="done"><strong>E-1 → E-2 → E-3</strong> — landed. E-3 subsumed by the registry increment.</li>
-      <li><strong>E-6</strong> landed → <strong>E-7 → E-8</strong> — CLI refit as proof, then the first new capability.</li>
+      <li><strong>E-6</strong> landed → <strong>E-7</strong> landed → <strong>E-8</strong> — the CLI refit proved the contract; E-8 is the first new capability it buys.</li>
       <li><strong>E-15 → E-17</strong> — the hook seam, then gate reuse.</li>
       <li><strong>E-22</strong> — before the surfaces in E-9/E-10/E-11 multiply the ways delivery can fail silently.</li>
     </ol>
     <p style="color:var(--muted);font-size:12px">E-19/E-20/E-21 and E-14 are post-P1. E-5 is not scheduled.</p>
   `;
   host.appendChild(order);
+
+  /* §9.8 — Suggested ordering within the benchmark & evaluation section */
+  const benchOrder = document.createElement("section");
+  benchOrder.id = "bench-ordering";
+  benchOrder.innerHTML = `
+    <h2>Suggested ordering — benchmark &amp; evaluation <span style="font-weight:400;color:var(--muted);font-size:13px">— §9.8</span></h2>
+    <p style="color:var(--muted);font-size:13px;margin-top:0;">Ranked, as everywhere in §8/§9.7, by which measurement invariant is undercut — not by effort.</p>
+    <ol class="next-list">
+      <li><strong>E-30</strong> (interface + <strong>Python reference</strong>, the grade) → <strong>E-31</strong> (held-out oracle on that one language) → <strong>E-32</strong> (the loop, also unblocks P3).</li>
+      <li><strong>E-38</strong> — capture-always sessions: observability + anti-cheat foundation, feeds E-22/E-23/P5. Ranked high on purpose: it is the substrate every later analysis reads from.</li>
+      <li><strong>E-33 + E-34</strong> — economics + the decomposition case.</li>
+      <li><strong>E-30a/b/c</strong> — add languages as the corpus needs them.</li>
+      <li><strong>E-35</strong> — the cursor point → <strong>E-36</strong> (heatmap + calibration, sliceable by language) → <strong>E-39</strong> (deep-review lens, reads the session) → <strong>E-37</strong> (per-role sweep).</li>
+    </ol>
+    <p style="color:var(--muted);font-size:12px"><strong>Deliberate:</strong> the pipeline goes multi-language <em>incrementally</em> — E-30 proves one language end-to-end so the first SC signal isn't blocked on N adapters; E-30a/b/c follow the corpus, not precede it. E-30/E-32 unblock the most: the first gives an objective grade, the second closes P3 and three capabilities.</p>
+  `;
+  host.appendChild(benchOrder);
 }
 
 /* =========================================================================

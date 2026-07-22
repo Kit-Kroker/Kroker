@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Benchmark &amp; Evaluation Foundation — Agentic SDLC Factory</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1f2328;
+    --muted: #57606a;
+    --subtle: #8250df;
+    --accent: #8250df;
+    --border: #d0d7de;
+    --border-soft: #eaeef2;
+    --track: #eaeef2;
+    --panel: #f6f8fa;
+    --panel-2: #f0f3f7;
+
+    --done: #1a7f37;
+    --partial: #bf8700;
+    --notstarted: #57606a;
+    --notmeasurable: #8250df;
+
+    --done-bg: rgba(26,127,55,0.12);
+    --partial-bg: rgba(191,135,0,0.14);
+    --notstarted-bg: rgba(87,96,106,0.10);
+    --notmeasurable-bg: rgba(130,80,223,0.10);
+
+    --done-bd: rgba(26,127,55,0.45);
+    --partial-bd: rgba(191,135,0,0.50);
+    --notstarted-bd: rgba(87,96,106,0.35);
+    --notmeasurable-bd: rgba(130,80,223,0.40);
+
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "Cascadia Code", "Men", "Consolas", monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 28px 20px 120px;
+  }
+
+  a { color: var(--subtle); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  code, .mono { font-family: var(--mono); font-size: 0.92em; }
+
+  h1 {
+    font-size: 30px;
+    font-weight: 600;
+    margin: 0 0 4px;
+    letter-spacing: -0.02em;
+  }
+  h2 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 36px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: -0.01em;
+    scroll-margin-top: 14px;
+  }
+  h2 .count {
+    color: var(--muted);
+    font-weight: 400;
+    font-size: 14px;
+    margin-left: 10px;
+  }
+  h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 18px 0 6px;
+    color: var(--fg);
+  }
+  h4 {
+    font-size: 13.5px;
+    font-weight: 600;
+    margin: 14px 0 4px;
+    color: var(--fg);
+  }
+  p { margin: 8px 0; }
+
+  /* ====== Header ====== */
+  .meta {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0 0 4px;
+  }
+  .lede {
+    color: var(--muted);
+    font-size: 15px;
+    max-width: 840px;
+    margin: 12px 0 0;
+  }
+
+  /* ====== Legend ====== */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    margin: 18px 0 8px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    font-size: 12px;
+  }
+  .legend .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .legend .dot {
+    width: 11px; height: 11px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .dot.done          { background: var(--done); }
+  .dot.partial       { background: var(--partial); }
+  .dot.notstarted    { background: var(--notstarted); }
+  .dot.notmeasurable { background: var(--notmeasurable); }
+
+  /* ====== Status pill ====== */
+  .pill {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border: 1px solid transparent;
+    white-space: nowrap;
+    vertical-align: 1px;
+  }
+  .pill.done          { background: var(--done-bg);          color: var(--done);          border-color: var(--done-bd); }
+  .pill.partial       { background: var(--partial-bg);       color: var(--partial);       border-color: var(--partial-bd); }
+  .pill.notstarted    { background: var(--notstarted-bg);    color: var(--notstarted);    border-color: var(--notstarted-bd); }
+  .pill.notmeasurable { background: var(--notmeasurable-bg); color: var(--notmeasurable); border-color: var(--notmeasurable-bd); }
+
+  /* (new scope) marker */
+  .newscope {
+    display: inline-block;
+    padding: 0px 6px;
+    border-radius: 10px;
+    font-size: 10.5px;
+    font-weight: 700;
+    font-family: var(--mono);
+    background: var(--notmeasurable-bg);
+    color: var(--subtle);
+    border: 1px solid var(--notmeasurable-bd);
+    text-transform: lowercase;
+    letter-spacing: 0.02em;
+    vertical-align: 1px;
+    white-space: nowrap;
+  }
+
+  /* ====== Contents nav ====== */
+  .contents {
+    margin: 18px 0 4px;
+    padding: 12px 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fbfcfd;
+    font-size: 13px;
+  }
+  .contents .t {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-right: 10px;
+  }
+  .contents a { margin-right: 14px; white-space: nowrap; }
+
+  /* ====== Layout ====== */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  @media (max-width: 860px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    padding: 14px 16px;
+  }
+  .card.tinted { background: var(--panel); }
+  .card h3 { margin-top: 0; }
+  .card .head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 8px; margin-bottom: 6px; flex-wrap: wrap;
+  }
+  .card .head .id {
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+  }
+
+  ul.tight { margin: 6px 0; padding-left: 18px; }
+  ul.tight li { margin: 4px 0; }
+  ul.tight li .sub { color: var(--muted); }
+
+  ol.ranked {
+    margin: 8px 0;
+    padding-left: 0;
+    list-style: none;
+    counter-reset: rk;
+  }
+  ol.ranked li {
+    counter-increment: rk;
+    position: relative;
+    padding: 10px 12px 10px 44px;
+    margin: 8px 0;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--partial);
+    border-radius: 6px;
+    background: var(--bg);
+  }
+  ol.ranked li::before {
+    content: counter(rk);
+    position: absolute;
+    left: 12px; top: 10px;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--fg);
+    color: #fff;
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  ol.ranked li .rk-title { font-weight: 600; }
+  ol.ranked li .rk-note { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+  ol.ranked li.priority-1 { border-left-color: var(--notmeasurable); }
+
+  /* ====== Narrative ====== */
+  .narrative {
+    padding: 12px 16px;
+    background: var(--panel);
+    border-left: 3px solid var(--border);
+    margin: 12px 0;
+    font-size: 13.5px;
+    color: var(--fg);
+    border-radius: 0 6px 6px 0;
+  }
+  .narrative.done          { border-left-color: var(--done); }
+  .narrative.partial       { border-left-color: var(--partial); }
+  .narrative.notstarted    { border-left-color: var(--notstarted); }
+  .narrative.notmeasurable { border-left-color: var(--notmeasurable); }
+  .narrative p { margin: 6px 0; }
+  .narrative strong { color: var(--fg); }
+  .narrative em { color: var(--muted); }
+
+  /* limits callout */
+  .limits {
+    margin: 16px 0;
+    padding: 14px 16px;
+    border: 1px solid var(--partial-bd);
+    border-left: 3px solid var(--partial);
+    border-radius: 0 6px 6px 0;
+    background: var(--partial-bg);
+  }
+  .limits h3 { margin: 0 0 8px; color: var(--partial); }
+  .limits ol { margin: 6px 0 0; padding-left: 20px; }
+  .limits ol li { margin: 6px 0; }
+  .limits ol li .ln { color: var(--fg); }
+
+  /* ====== Matrix table ====== */
+  table.matrix {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  table.matrix th, table.matrix td {
+    text-align: left;
+    padding: 9px 11px;
+    border-bottom: 1px solid var(--border-soft);
+    vertical-align: top;
+  }
+  table.matrix thead th {
+    background: var(--panel-2);
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+  table.matrix tbody tr:last-child td { border-bottom: none; }
+  table.matrix td.name { font-weight: 600; width: 16%; white-space: nowrap; }
+  table.matrix td.note { color: var(--muted); }
+  table.matrix code { font-size: 12px; color: var(--fg); }
+
+  /* ====== Tier card ====== */
+  .tier {
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: var(--bg);
+  }
+  .tier.notstarted { border-left-color: var(--notstarted); }
+  .tier.partial    { border-left-color: var(--partial); }
+  .tier.done       { border-left-color: var(--done); }
+  .tier .ttag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .tier h3 { margin: 2px 0 6px; font-size: 15px; }
+  .tier ul.tight { font-size: 12.5px; }
+  .tier .footnote { margin-top: 8px; font-size: 12px; color: var(--muted); }
+
+  /* ====== Open-question list ====== */
+  .oq {
+    display: grid;
+    grid-template-columns: 86px 1fr;
+    gap: 12px;
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--border-soft);
+    align-items: start;
+  }
+  .oq:last-child { border-bottom: none; }
+  .oq .oq-id {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    background: var(--notmeasurable);
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-align: center;
+    display: inline-block;
+    justify-self: start;
+  }
+  .oq.decided .oq-id { background: var(--done); }
+  .oq .oq-title { font-weight: 600; }
+  .oq .oq-body { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+
+  .tag-link {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  hr.soft { border: none; border-top: 1px solid var(--border-soft); margin: 24px 0; }
+
+  .footer {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 40px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Print */
+  @media print {
+    .contents, .legend { break-inside: avoid; }
+    body { max-width: none; padding: 0; }
+    a { color: var(--fg); text-decoration: none; }
+    ol.ranked li, .card, .tier, .narrative, .limits { break-inside: avoid; }
+  }
+
+  /* Narrow screens */
+  @media (max-width: 720px) {
+    body { padding: 18px 12px 80px; }
+    h1 { font-size: 24px; }
+    h2 { font-size: 19px; }
+    .oq { grid-template-columns: 1fr; gap: 4px; }
+    .oq .oq-id { justify-self: start; }
+    table.matrix { font-size: 12px; }
+    table.matrix td.name { white-space: normal; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Benchmark &amp; Evaluation Foundation — Agentic SDLC Factory</h1>
+  <p class="meta">
+    Source of truth: <a href="../BENCHMARK.md">BENCHMARK.md</a> ·
+    <a href="../ROADMAP.md">ROADMAP.md</a> ·
+    <a href="../ARCHITECTURE.md">ARCHITECTURE.md</a> ·
+    <a href="../SDLC-spec-v2.md">SDLC-spec-v2.md</a> ·
+    <a href="../PRD.md">PRD.md</a>
+    <br>
+    Status: <strong>Design input — not yet reconciled into ROADMAP.md</strong> ·
+    Companion to <code>ROADMAP.md</code>, <code>SDLC-spec-v2.md</code>, <code>ARCHITECTURE.md</code>, <code>PRD.md</code>.
+  </p>
+
+  <p class="meta">
+    <strong>Anchoring rule.</strong> Like every <code>E-</code> item, this doc is <em>how we measure</em>
+    requirements already open in the tracker — not new requirements. Genuinely new scope is marked
+    <span class="newscope">(new scope)</span> and needs a PRD change before it is real.
+  </p>
+
+  <div class="legend">
+    <span class="chip"><span class="dot done"></span> built / on live path</span>
+    <span class="chip"><span class="dot partial"></span> partial — mechanism exists, gap remains</span>
+    <span class="chip"><span class="dot notstarted"></span> not started</span>
+    <span class="chip"><span class="dot notmeasurable"></span> not measurable from code alone (SC-1..6 today)</span>
+    <span style="margin-left:auto; align-self:center;">
+      <span class="newscope">(new scope)</span> &nbsp;= measurement capability that needs a PRD line
+    </span>
+  </div>
+
+  <p class="lede">
+    The factory already has a benchmark harness (<code>benchmarks/workflow.py</code>, <strong>E-27</strong>)
+    and a prompt eval loop (<code>sdlc eval</code>, <strong>E-4</strong>). What it does not yet have is a
+    <em>measurement design</em>: a stated ground-truth strategy, the metrics each success criterion needs,
+    and the wiring that turns <strong>SC-1..SC-6</strong> from “not measurable” into numbers. This doc is that design.
+  </p>
+
+  <div class="contents">
+    <span class="t">Contents</span>
+    <a href="#sec0">§0 Why a benchmark</a>
+    <a href="#sec1">§1 Honest baseline</a>
+    <a href="#sec2">§2 Ground-truth tiers</a>
+    <a href="#sec3">§3 Four matrix axes</a>
+    <a href="#sec4">§4 Metrics</a>
+    <a href="#sec5">§5 Cases</a>
+    <a href="#sec6">§6 Sequencing</a>
+    <a href="#sec7">§7 Open questions</a>
+  </div>
+</header>
+
+<!-- ============================================================ -->
+<h2 id="sec0">0. Why a benchmark is the load-bearing artifact <span class="count">BENCHMARK §0</span></h2>
+
+<p>
+  Three independent sources converge on the same claim, and the factory’s own roadmap is the fourth.
+</p>
+
+<div class="grid-2">
+  <div class="card tinted">
+    <h3>Quality is a trajectory <span class="tag-link">Abdullin</span></h3>
+    <p>
+      Start a project from the <strong>feedback loop</strong>, not the architecture. The eval environment is the
+      instrument that lets you compare <em>any</em> architecture on <em>your</em> task in minutes. Half the work is
+      building that environment and labelling the hard cases; the clean harness is a by-product of the eval,
+      not the goal.
+    </p>
+  </div>
+
+  <div class="card tinted">
+    <h3>The harness is the variable <span class="tag-link">Cursor · SQLite swarm</span></h3>
+    <p>
+      Hold the task, the models, and the time budget fixed; vary only the harness; grade against a held-out suite the
+      swarm was never told existed. The <strong>behavioural</strong> differences (thrash, contention, duplicated work)
+      were far larger than the score differences — so a single pass/fail number hides the thing you actually want to improve.
+    </p>
+  </div>
+
+  <div class="card tinted">
+    <h3>Model economics <span class="tag-link">Cursor</span></h3>
+    <p>
+      Every model mix reached similar quality at wildly different cost —
+      <strong>$1,339 → $10,565</strong> on the same task — because few moments in a task need frontier intelligence.
+      <strong>Cost per role</strong>, not per token, is the number that moves.
+    </p>
+  </div>
+
+  <div class="card tinted">
+    <h3>The factory’s own state <span class="tag-link">ROADMAP §0 / SC-1..6</span></h3>
+    <p>
+      SC-1 through SC-6 are marked <span class="pill notmeasurable">not measurable</span> or mechanism-exists-no-metric.
+      The pipeline can ship a feature end-to-end (P1 done), but it cannot yet tell you <em>how well</em> or
+      <em>how cheaply</em> it does so across a fleet. The benchmark is the missing instrument, and the precondition
+      for P3’s exit and everything in P4.
+    </p>
+  </div>
+</div>
+
+<div class="narrative notmeasurable">
+  <p>
+    <strong>Design stance, carried from the architecture (ADR-11).</strong>
+    ADR-11 already commits the factory to a deterministic DAG <em>contra</em> the Bitter Lesson. The benchmark inherits
+    that stance: it is a <strong>fixed, versioned instrument, not a self-modifying one</strong>. The two feedback loops
+    below improve the <em>system under test</em>; the instrument itself changes only through reviewed diffs — exactly as
+    ADR-11 treats the DAG.
+  </p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="sec1">1. What already exists — the honest baseline <span class="count">BENCHMARK §1 · ROADMAP §9.5</span></h2>
+
+<p>
+  Measurement pieces already in the tree, per <code>ROADMAP.md</code> and <code>SDLC-spec-v2.md</code>:
+</p>
+
+<table class="matrix">
+  <thead>
+    <tr>
+      <th>Piece</th>
+      <th>Status</th>
+      <th>What it is</th>
+      <th>Note / refs</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="name">Benchmark harness</td>
+      <td><span class="pill done">done</span></td>
+      <td><code>benchmarks/workflow.py</code> (<strong>E-27</strong>) — runs golden cases through the real <code>FeatureWorkflow</code>, judges per-stage artifacts against rubrics via the cross-family <code>judge_artifact</code>. Two cases today, both sized for a single short factory run.</td>
+      <td class="note">Single-run-sized only — decomposition unexercised.</td>
+    </tr>
+    <tr>
+      <td class="name">Cross-family judge</td>
+      <td><span class="pill done">done</span></td>
+      <td><code>judge_artifact</code> with the <strong>ADR-6</strong> family-inequality invariant — the judge never shares an authoring model family with the producer. The “decorrelated review lens”, already load-bearing.</td>
+      <td class="note">Needs calibration before phase-exit trust (<a href="#sec2">§2 Tier B</a>).</td>
+    </tr>
+    <tr>
+      <td class="name">Prompt eval loop</td>
+      <td><span class="pill done">done</span></td>
+      <td><code>sdlc eval &lt;role&gt;</code> (<strong>E-4</strong>) — A/B-scores a working-tree <code>instructions.md</code> against a committed one on a captured fixture, using the same judge + case rubric. <code>sdlc eval capture</code> harvests fixtures from a run’s history. On-demand, stage-isolated.</td>
+      <td class="note">Regression-gate (CI) half unbuilt — <strong>OQ-E2</strong>.</td>
+    </tr>
+    <tr>
+      <td class="name">Cost attribution</td>
+      <td><span class="pill partial">partial</span></td>
+      <td>Exists <em>in benchmarks only</em> today (<strong>E-19</strong>). <code>HarnessRunResult</code> carries <code>input_tokens</code>, <code>output_tokens</code>, <code>context_window</code>, <code>compacted</code>; TemporalAgent usage records carry the proposer side.</td>
+      <td class="note">Numbers collected; not yet aggregated into run-level counters.</td>
+    </tr>
+    <tr>
+      <td class="name">CLI surface</td>
+      <td><span class="pill done">done</span></td>
+      <td><code>sdlc … benchmark</code> verb already exists (<strong>FR-603</strong>).</td>
+      <td class="note">Cross-run inbox still missing (FR-305).</td>
+    </tr>
+    <tr>
+      <td class="name">Eval-aware memoization</td>
+      <td><span class="pill done">done</span></td>
+      <td><code>content_key</code> keys on <code>prompt_sha + model_id + recall_snapshot</code> (<strong>FR-103</strong>, <strong>NFR-6</strong>), so a benchmark cell that changes a prompt or a role’s model invalidates exactly the affected stages.</td>
+      <td class="note">This is what makes A/B cells cheap.</td>
+    </tr>
+    <tr>
+      <td class="name">Golden-artifact regression seam</td>
+      <td><span class="pill partial">partial</span></td>
+      <td>Named as the prompt-lifecycle mechanism in <strong>ARCHITECTURE §10</strong> (edit → offline eval → deploy); external platform (e.g. Braintrust) as an optional later owner. The seam is the prompt loader.</td>
+      <td class="note">Mechanism named, committed-baseline+CI half not built.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="limits">
+  <h3>Three limits the roadmap already admits — this design must fix them</h3>
+  <ol>
+    <li>
+      <span class="ln"><strong>No held-out grade wired end-to-end.</strong></span>
+      The coverage seam (<code>measure_coverage</code>) reads <code>coverage.xml</code> from the <em>integration</em>
+      worktree, but <code>run_test_suite</code> runs per-task in <em>task</em> worktrees, so the artifact never lands
+      where the gate looks (ROADMAP §1 stage 12, <strong>FR-106</strong>). Until this is closed there is no objective,
+      test-based grade — only rubric judgments.
+    </li>
+    <li>
+      <span class="ln"><strong>Decomposition is unexercised.</strong></span>
+      Both benchmark cases are single-run-sized, so planner decomposition — the load-bearing variable in real work — is
+      unexercised (<strong>E-27</strong>). Cursor’s whole result is about decomposition quality; the factory cannot see
+      it yet.
+    </li>
+    <li>
+      <span class="ln"><strong>The learning loop is open.</strong></span>
+      <code>reflect()</code> is registered but the retro <em>stage</em> (14) never runs (<code>RunSummary</code> unbuilt);
+      nothing writes to <code>org_bank</code> (<strong>E-25</strong>). So SC-4/SC-6 have no signal to measure, and
+      Abdullin’s second loop (distil production into eval cases) has no intake.
+    </li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="sec2">2. Ground truth — three tiers <span class="count">BENCHMARK §2 · cheapest → most objective</span></h2>
+
+<p>
+  The factory builds greenfield features, so there is no back-catalogue of closed tickets to mine. Ground truth has to
+  be <strong>authored</strong>, in three tiers. Every benchmark case declares which tier(s) grade it.
+</p>
+
+<div class="grid-3">
+  <div class="tier notstarted">
+    <span class="ttag">Tier A · objective, ungameable</span>
+    <h3>Held-out acceptance tests</h3>
+    <p><span class="pill notstarted">not started</span> <span class="newscope">(new scope)</span></p>
+    <p>
+      The Cursor pattern: a test suite the factory is <strong>never told exists</strong>, run against the produced code,
+      graded as fraction passing. Authored <em>with</em> the case; the gap between the factory’s own criterion→test
+      mapping and the hidden oracle is itself a signal.
+    </p>
+    <ul class="tight">
+      <li><strong>Ground-truth artifact:</strong> <code>benchmarks/cases/&lt;case&gt;/oracle/</code> — suite + fixtures, held out of the workflow’s context, run in a clean checkout <strong>through the case’s <code>ToolchainAdapter</code></strong> (<strong>ADR-15</strong>).</li>
+      <li><strong>Language by marker file</strong> in the produced repo (<code>pyproject.toml</code> / <code>package.json</code> / <code>go.mod</code> / <code>Cargo.toml</code>); manifest-vs-detected mismatch is itself a signal.</li>
+      <li>Coverage → Cobertura XML; security floor → semgrep / SARIF; gate stays language-agnostic (<strong>ADR-15, E-30</strong>).</li>
+      <li><strong>Anti-cheat (Cursor’s manual review, made routine):</strong> (i) oracle held out of worktree/prompt/recall + post-run diff-coverage check; (ii) <strong>session inspection</strong> via <code>HarnessSession</code> (<strong>E-38</strong>) + the <code>deep_review</code> lens (<strong>E-39</strong>) — did the agent peek at a hidden test, hardcode answers, or fit to a discovered oracle? <span class="newscope">(new scope vs E-27)</span></li>
+    </ul>
+    <p class="footnote">
+      <strong>Unblocks on:</strong> the coverage/test-execution seam (<a href="#sec1">§1 limit 1</a>). Single highest-leverage fix in the whole document — see <a href="#sec6">§6</a>.
+    </p>
+  </div>
+
+  <div class="tier partial">
+    <span class="ttag">Tier B · subjective, already built</span>
+    <h3>Rubric judging</h3>
+    <p><span class="pill partial">partial — built, calibration gap</span></p>
+    <p>
+      The <strong>E-27</strong> mechanism: a rubric per stage, scored by the cross-family judge. The only way to grade
+      non-code stages (clarify quality, architecture soundness, research grounding) where no oracle can exist. Already
+      wired for <code>clarifier</code> / <code>architect</code> / <code>planner</code> and, since E-27, <code>qa</code> / <code>research</code>.
+    </p>
+    <ul class="tight">
+      <li><strong>Calibration requirement (non-negotiable):</strong> before a rubric’s score is trusted in a phase-exit decision, hand-score 20–30 fixtures and confirm judge agreement (report the agreement rate; low agreement = rubric defect, not model defect). Track per rubric. <span class="newscope">(new scope)</span></li>
+      <li><strong>Known open defect:</strong> research grounding is unreachable for a mid-tier author model — <code>verify_brief</code> fails closed on byte-exact quote matching and <code>glm-5.2</code> plateaus at 3 violations (<strong>E-29</strong>). Until E-29 lands, research rubric scores are unit-tested but unproven end-to-end; a benchmark reporting a research score today reports a number the pipeline can’t yet earn live.</li>
+    </ul>
+  </div>
+
+  <div class="tier partial">
+    <span class="ttag">Tier C · differential</span>
+    <h3>Golden-artifact regression</h3>
+    <p><span class="pill partial">partial — on-demand half</span></p>
+    <p>
+      <strong>ARCHITECTURE §10</strong>’s named mechanism: a committed baseline artifact per stage; a new run diffs
+      against it; drift is a <strong>reviewed event, not a silent change</strong>. It does not say “how good” — it says
+      “changed vs the known-good baseline”, which is exactly what you want for regression protection during prompt/model
+      iteration.
+    </p>
+    <ul class="tight">
+      <li><code>sdlc eval</code> (<strong>E-4</strong>) is the on-demand half; the committed-baseline + CI-check half is a named future increment (<strong>OQ-E2</strong> in E-4’s note).</li>
+      <li><strong>Use for:</strong> every prompt edit and model swap, as the fast inner loop.</li>
+    </ul>
+    <p class="footnote">
+      <strong>Relationship to A/B:</strong> <em>C catches “you made it different”; A/B catch “you made it worse”.</em> C is cheap and runs on every change; A is expensive and runs on the matrix.
+    </p>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="sec3">3. The four axes of the benchmark matrix <span class="count">BENCHMARK §3 · agents.yaml FR-201</span></h2>
+
+<p>
+  The factory’s registry (<code>agents.yaml</code>, <strong>FR-201</strong>) already makes three of these axes
+  <em>configuration</em>, not code changes. That is the single biggest reason the benchmark is tractable:
+  an axis is a config sweep, not a fork.
+</p>
+
+<table class="matrix">
+  <thead>
+    <tr>
+      <th>Axis</th>
+      <th>What varies</th>
+      <th>Where it lives today</th>
+      <th>Roadmap dependency</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="name">Harness</td>
+      <td><code>claude -p</code> vs <code>opencode run</code> vs <strong>cursor (to add)</strong></td>
+      <td><code>harness/adapters.py</code>, <code>HARNESSES</code> (<strong>FR-203</strong>)</td>
+      <td class="note">New adapter must normalise into <code>HarnessRunResult</code> (<a href="#sec4">§4</a>); cursor pinning = <strong>E-24</strong>.</td>
+    </tr>
+    <tr>
+      <td class="name">Model × role</td>
+      <td>Which model drives each of 11 roles</td>
+      <td><code>STAGE_MODELS</code> + <code>agents.yaml</code> per-role <code>model</code></td>
+      <td class="note"><code>cfg.roles</code> not yet per-project — <strong>E-26</strong> blocks per-run overrides.</td>
+    </tr>
+    <tr>
+      <td class="name">Memory</td>
+      <td>Hindsight on/off/watermark; <code>project</code> vs <code>+org</code> banks</td>
+      <td><code>MemoryConfig</code> (<code>memory.enabled</code> default <code>False</code>)</td>
+      <td class="note">Org bank has no writers — <strong>E-25</strong>; retro closes the loop — stage 14.</td>
+    </tr>
+    <tr>
+      <td class="name">Case</td>
+      <td>Greenfield feature specs of graded complexity</td>
+      <td><code>benchmarks/cases/</code></td>
+      <td class="note">Only single-run-sized cases exist — need a decomposition-forcing case (<a href="#sec5">§5</a>).</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="sec3-0">3.0 Language is a case property, not a fifth axis</h3>
+<p>
+  Generated projects can be any language, but language should <strong>not</strong> be a sweep dimension crossed with the
+  others (that multiplies the matrix for little insight). Instead each case <em>declares</em> its language and carries an
+  oracle in it (<a href="#sec2">§2 Tier A</a>, <strong>E-31</strong>); the corpus spans several languages; and the
+  <strong>error heatmap is sliceable by language</strong> (<a href="#sec4">§4.4</a>). This catches the real risk cheaply:
+  if every prompt and rubric was tuned on Python cases, the factory may quietly do worse on Go, and a Python-only
+  benchmark never sees it. The machinery that makes any of this work is the <code>ToolchainAdapter</code>
+  (<strong>ADR-15</strong>) under <strong>E-30</strong>.
+</p>
+
+<h3 id="sec3-1">3.1 Harness axis — and where <code>cursor</code> fits</h3>
+<p>
+  Adding cursor is worthwhile, but <strong>as a third point on this axis, not as a replacement.</strong> The value is not
+  “cursor vs claude in the abstract” — that is a blog post about someone else’s task. The value is measuring
+  <code>claude -p</code> vs <code>opencode</code> vs <code>cursor</code> <em>on your SDLC, through your
+  DeterministicQualityGate, on your held-out oracles</em>. That comparison cannot be bought or borrowed.
+</p>
+<p>
+  Hard requirement (FR-203 + the <code>HarnessRunResult</code> contract): a new harness adapter must normalise its output
+  — tokens, cost, <code>context_window</code>, <code>compacted</code>, session-resume handle — into
+  <code>HarnessRunResult</code>. If cursor reports cost/usage in a different shape, that translation is the adapter’s job
+  (<strong>E-24</strong> also wants its version pinned and asserted at boot). Until the adapter fills those fields, the
+  <strong>economics axis is blind for that harness</strong> — quality without cost, which defeats half the point.
+</p>
+
+<h3 id="sec3-2">3.2 Model × role — the economics result to reproduce</h3>
+<p>
+  Cursor’s finding, restated for this factory: the expensive roles are the <em>proposers that decide</em> (architect on
+  <code>opus-4-8</code> per <code>agents.yaml</code>), and the volume is in the <em>harness roles that execute</em>. The
+  benchmark should attribute <strong>dollars per role</strong>, not tokens, because planner-family tokens cost multiples
+  of worker-family tokens — precisely Cursor’s $1,339-vs-$10,565 experiment, expressed in your config.
+</p>
+<p>
+  <strong>Blocker to be honest about:</strong> <code>cfg.roles</code> is a hardcoded mirror of <code>agents.yaml</code>
+  because <code>PipelineConfig()</code> is constructed <em>inside</em> the workflow (<strong>E-26</strong>). A per-cell
+  model sweep needs the override to resolve at the boundary (<code>benchmarks/workflow.py</code>) and satisfy ADR-6
+  <em>per run</em>. <strong>E-26 is therefore a prerequisite for a full model×role sweep</strong>, not an optional
+  nicety. Without it you can still sweep the harness and memory axes, just not per-role models per cell.
+</p>
+
+<h3 id="sec3-3">3.3 Memory axis — the measurement the whole stack was built for</h3>
+<p>
+  This is the axis that justifies Hindsight’s presence, and it is the one the roadmap is furthest from being able to run.
+  The experiment is simple: the same case, same models, same harness, run with <code>memory.enabled=false</code> and
+  <code>memory.enabled=true</code>. The delta in quality (and fix-loop cost — recalled gotchas should make attempt N+1
+  cheaper) is the value of memory.
+</p>
+<p>
+  Why it can’t run yet, precisely: SC-4 (“repeat-clarification &lt;10% by run 10”) and SC-6 (“soft-gate override
+  &lt;5%”) both need <em>reflect wiring + real runs</em>. The nightly project reflect ships (<strong>E-12/E-13</strong>)
+  but only accrues signal on runs with <code>memory.enabled=true</code> (default false); the retro stage that writes
+  <code>RunSummary</code> is unbuilt (stage 14); and nothing writes to <code>org_bank</code> (<strong>E-25</strong>).
+  So the memory axis is gated on closing the learning loop — <a href="#sec6">§6</a>’s second priority.
+</p>
+
+<!-- ============================================================ -->
+<h2 id="sec4">4. Metrics — beyond a single pass rate <span class="count">BENCHMARK §4 · a row per run</span></h2>
+
+<p>
+  Cursor’s central lesson: the behavioural differences dwarfed the score differences. A benchmark that emits one number
+  per run cannot see thrash, duplicated work, or a harness that silently compacted mid-task. The factory should emit a
+  <strong>row per run</strong> with the fields below, aggregated across the matrix.
+</p>
+
+<div class="grid-2">
+  <div class="card">
+    <h3>4.1 Quality <span class="tag-link">the grade</span></h3>
+    <ul class="tight">
+      <li><strong>Oracle pass rate</strong> — fraction of the held-out Tier-A suite passing. The primary number. Requires <a href="#sec6">§6 priority 1</a>.</li>
+      <li><strong>Grade-over-time</strong> — Cursor grade the suite as a <em>rising curve</em>; the factory’s stages are discrete, so the natural analogue is <strong>grade at each gate</strong> (post-clarify, post-architecture, post-plan, post-QA, post-merge): a step curve showing <em>where</em> quality is won or lost.</li>
+      <li><strong>Rubric scores per stage</strong> (Tier B) — for non-code stages, with the calibration agreement rate attached so a score is never read without its trust level.</li>
+      <li><strong>Traceability gap</strong> — criteria the factory tested (its own mapping) vs criteria the oracle covers. A proxy for “did it build evenly or to the test” (the Cursor anti-cheat, quantified).</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>4.2 Economics <span class="tag-link">the cost</span></h3>
+    <ul class="tight">
+      <li><strong>$ per run</strong>, decomposed <strong>per role</strong> (not per token — <a href="#sec3-2">§3.2</a>).</li>
+      <li><strong>Tokens per role</strong>, with the planner/worker split Cursor highlight (workers carried <strong>≥69%</strong>, often <strong>&gt;90%</strong>, of tokens but a minority of cost).</li>
+      <li><strong>Context-ceiling events</strong> — <code>input_tokens &gt; fraction × context_window</code> and <code>compacted=true</code> counts, from <code>HarnessRunResult</code> (SDLC-spec §4, <strong>ADR-13</strong>). A harness that keeps hitting its ceiling is a signal to decompose smaller.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>4.3 Coordination &amp; waste <span class="tag-link">factory analogue of swarm thrash</span></h3>
+    <p style="margin-top:0;">The factory runs a serial DAG, not a 1,000-commit/sec swarm, so Cursor’s merge-conflict/megafile metrics don’t port directly. The <em>principle</em> does: measure work that didn’t advance the goal.</p>
+    <ul class="tight">
+      <li><strong>Fix-loop attempts</strong> per run — QA loop (<code>MAX_REPAIR_ATTEMPTS</code>, spec 3) and review-fix loop (<code>MAX_REVIEW_FIX_ATTEMPTS = 2</code>). Record the <em>actual</em> cap in force — note the numeric drift (<strong>FR-105</strong>: default 2 vs spec 3).</li>
+      <li><strong>Gate rounds</strong> per gate — REVISE re-entries (<code>MAX_GATE_ROUNDS</code>, default 2, <strong>FR-301</strong>).</li>
+      <li><strong>Escalations</strong> — how often fix loops exhausted into a hard human gate.</li>
+      <li><strong>Wall-clock per stage</strong> — from Temporal history, free.</li>
+      <li><strong>Session-derived waste</strong> (from <code>HarnessSession</code>, <strong>E-38</strong>) — the richest signal the diff hides: tool-call count, file re-reads, failed commands (non-zero exits), and rewrite/backtrack churn <em>within</em> a run. The transcript shows “rewrote the auth module three times before settling”; the diff never does. Also surfaces <code>compacted</code> mid-run context loss (<strong>ADR-13</strong>) as <em>what</em> was dropped. Aggregates are computed <strong>pre-truncation</strong>, so they are kept on clean-green runs too (where only a <code>SessionDigest</code> survives) — the heatmap never goes blind on green.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>4.4 The error heatmap <span class="tag-link">Abdullin’s prioritisation instrument</span></h3>
+    <p>
+      Aggregate the above — including the session-derived waste (<a href="#sec4">§4.3</a>) and the anti-cheat findings —
+      into a <strong>case × stage</strong> grid: rows are benchmark cases, columns are the 15 stages, cell colour is
+      failure/rework density (gate rejections, fix-loop iterations, oracle failures attributable to that stage).
+    </p>
+    <p>
+      This answers the only question that matters between iterations: <em>which stage, on which class of case, is
+      costing the most — and therefore what do I fix next.</em> It is strictly more useful than a scalar and it is the
+      <strong>natural home for every §4.1–4.3 metric</strong>.
+    </p>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="sec5">5. Cases — authoring the corpus <span class="count">BENCHMARK §5 · the dataset</span></h2>
+
+<p>
+  Cases are the dataset. Three sources, matching the greenfield reality (there is no history to mine):
+</p>
+
+<div class="grid-3">
+  <div class="card tinted">
+    <h3>Spec-authored katas <span class="tag-link">primary</span></h3>
+    <p>
+      A case is a feature spec + a held-out oracle suite, authored together. The bar E-27 set is the right one:
+      <em>“large enough to require decomposition and small enough to specify completely.”</em>
+    </p>
+    <p>
+      The cat-café case meets the “specifiable” half but not the “decomposition” half —
+      <strong>the top corpus gap is one case that forces genuine planner decomposition</strong>
+      (multiple vertical slices, real inter-task contracts): the load-bearing variable Cursor’s entire result turns on
+      and the one the current suite cannot see.
+    </p>
+  </div>
+
+  <div class="card tinted">
+    <h3>Public anchors <span class="tag-link">external validity</span></h3>
+    <p>
+      A handful of <strong>SWE-bench-Verified-style</strong> tasks (issue → PR with hidden tests) give an external,
+      task-independent reference point that doesn’t move when you change your own prompts.
+    </p>
+    <p>
+      Use them to tell “my change regressed <em>my</em> cases” from “my change regressed <em>everything</em>”.
+      These grade purely on <a href="#sec2">Tier A</a>.
+    </p>
+  </div>
+
+  <div class="card tinted">
+    <h3>Distilled production incidents <span class="tag-link">loop B</span></h3>
+    <p>
+      Abdullin’s loop B and Cursor’s Field Guide are the same idea: <em>every time the factory fails in real use, that
+      failure becomes a case.</em> This is the mechanism that grows the corpus past the cold start — and it is exactly
+      what the retro stage (14) + <code>RunSummary</code> are for.
+    </p>
+    <p>
+      Closing that stage (<a href="#sec6">§6 priority 2</a>) turns production runs into eval intake automatically.
+      Until then, cases are hand-authored only.
+    </p>
+  </div>
+</div>
+
+<div class="narrative notstarted">
+  <p>
+    <strong>Field Guide vs Hindsight — a note, not a task.</strong>
+    Cursor’s Field Guide (a line-budgeted, agent-curated <code>index.md</code> injected at every agent start) is a
+    lightweight, in-repo cousin of Hindsight’s cross-run memory. It is worth holding as a <em>fourth memory-axis
+    condition</em> eventually (none / Field-Guide / Hindsight-project / Hindsight+org), because it isolates “shared
+    scratchpad within a run” from “consolidated memory across runs” — but it is speculative and should be
+    <strong>filed, not scheduled</strong>, in the spirit of <strong>E-5</strong>.
+  </p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="sec6">6. Sequencing — ranked by what each unblocks <span class="count">BENCHMARK §6 · ROADMAP §8 discipline</span></h2>
+
+<p>
+  Following <code>ROADMAP.md §8</code>’s discipline: rank by which measurement invariant is undercut, not by size.
+</p>
+
+<ol class="ranked">
+  <li class="priority-1">
+    <div class="rk-title">Wire the held-out grade — a pipeline capability, not a benchmark fix. <span class="pill notmeasurable">highest leverage</span></div>
+    <div class="rk-note">
+      The stage-11/12 quality activities are <em>production</em> code the benchmark merely exercises, and generated projects
+      are multi-language, so the grade cannot be language-agnostic unless those stages are. Deliver a
+      <code>ToolchainAdapter</code> abstraction (<strong>ADR-15, E-30</strong>): a <code>TOOLCHAINS</code> registry resolving
+      by repo marker file, normalising <code>build/test/lint/coverage</code> into <code>TestReport</code>, with canonical
+      Cobertura coverage and a semgrep/SARIF security floor so the gate reader is untouched. Ship <strong>one reference
+      adapter (Python) end-to-end</strong> — including the diff-scoped test artifact crossing the merge into the integration
+      worktree where <code>measure_coverage</code> reads (the original <strong>FR-106</strong> gap) — then add the Tier-A
+      held-out oracle on that one language (<strong>E-31</strong>). Without this there is no objective grade and every
+      other metric sits on rubric-only judging. <strong>Deliberately Python-first;</strong> further languages
+      (<strong>E-30a/b/c</strong>) follow the corpus. <code>DeterministicQualityGate</code> already has
+      <code>build_integration_green</code>, <code>lint_clean</code>, <code>security_no_critical</code> — the sqllogictest moment.
+    </div>
+  </li>
+  <li>
+    <div class="rk-title">Close the learning loop. <span class="pill partial">3 payoffs from one stage</span></div>
+    <div class="rk-note">
+      Build the retro stage (14): emit <code>RunSummary</code>, call the already-registered <code>reflect()</code>, and give
+      <code>org_bank</code> a writer (<strong>E-25</strong>). <em>Unblocks SC-4 and SC-6 (P3’s exit criterion), turns on the
+      memory axis (<a href="#sec3-3">§3.3</a>), and opens Abdullin’s loop-B case intake (<a href="#sec5">§5</a>).</em>
+    </div>
+  </li>
+  <li>
+    <div class="rk-title">Full cost attribution + a decomposition case.</div>
+    <div class="rk-note">
+      Promote cost bookkeeping from benchmarks-only to run-level counters (<strong>E-19</strong>), attribute per role
+      (<a href="#sec4">§4.2</a>), and author the decomposition-forcing kata (<a href="#sec5">§5</a>). <em>Now the economics
+      graph in Cursor’s style is reproducible on your data, and the axis that matters most (decomposition) is finally
+      exercised.</em>
+    </div>
+  </li>
+  <li>
+    <div class="rk-title">Add the <code>cursor</code> adapter.</div>
+    <div class="rk-note">
+      Third point on the harness axis (<a href="#sec3-1">§3.1</a>), normalised into <code>HarnessRunResult</code>,
+      version-pinned at boot (<strong>E-24</strong>). <em>Do this after <a href="#sec6">§6.3</a> so the economics fields
+      exist to receive it; otherwise cursor’s cells are quality-only.</em>
+    </div>
+  </li>
+  <li>
+    <div class="rk-title">Error heatmap + calibration harness.</div>
+    <div class="rk-note">
+      The <code>case × stage</code> aggregation (<a href="#sec4">§4.4</a>) and the rubric-calibration agreement tracking
+      (<a href="#sec2">§2 Tier B</a>). <em>The prioritisation instrument and the trust layer under every rubric number.</em>
+    </div>
+  </li>
+  <li>
+    <div class="rk-title">Per-role model sweep.</div>
+    <div class="rk-note">
+      Resolve <code>cfg.roles</code> at the benchmark boundary (<strong>E-26</strong>) so each cell can override role→model
+      and satisfy ADR-6 per run. <em>The full model×role matrix; deferred because the harness and memory axes deliver most
+      of the insight without it and E-26 is real work.</em>
+    </div>
+  </li>
+</ol>
+
+<p style="font-size:12.5px; color:var(--muted); margin-top:14px;">
+  <strong>Items already banked that this design builds on:</strong>
+  E-4 (prompt eval loop), E-12/E-13 (nightly project reflect), E-27 (benchmark harness + rubric judging),
+  FR-103/NFR-6 (eval-aware memoization), FR-201/FR-203 (registry + harness adapters).
+</p>
+
+<!-- ============================================================ -->
+<h2 id="sec7">7. Open questions <span class="count">BENCHMARK §7 · OQ-B1..B7</span></h2>
+
+<div class="oq">
+  <span class="oq-id">OQ-B1</span>
+  <div>
+    <span class="oq-title">Oracle authorship cost.</span>
+    <div class="oq-body">
+      Tier-A oracles are hand-written per case. What is the minimum corpus (how many cases, what complexity spread) before
+      the matrix produces a trustworthy signal rather than noise? Cursor ran one task across four mixes; Abdullin spent
+      half a project on the environment. Likely 10–30 cases, but this needs its own calibration.
+    </div>
+  </div>
+</div>
+
+<div class="oq">
+  <span class="oq-id">OQ-B2</span>
+  <div>
+    <span class="oq-title">Judge independence under model sweep → <strong>E-37</strong>.</span>
+    <div class="oq-body">
+      ADR-6 forbids the judge sharing a family with the <em>producer</em>. When the model×role axis sweeps producer
+      families, the judge family must move to stay independent per cell. Does <code>judge_artifact</code> re-resolve the
+      judge per cell, or is it fixed? Ties to <strong>E-26</strong> and <strong>OQ-E2</strong>.
+    </div>
+  </div>
+</div>
+
+<div class="oq">
+  <span class="oq-id">OQ-B3</span>
+  <div>
+    <span class="oq-title">Research grounding gate → <strong>E-29</strong>.</span>
+    <div class="oq-body">
+      Until E-29, research grades are unproven live. Do benchmark cells that need research (a) treat findings as advisory,
+      (b) pin a higher-fidelity research model, or (c) wait for E-29? The E-29 note lays out exactly these three options;
+      the benchmark should pick one explicitly rather than silently reporting an unearnable number.
+    </div>
+  </div>
+</div>
+
+<div class="oq">
+  <span class="oq-id">OQ-B4</span>
+  <div>
+    <span class="oq-title">Regression-gate half of E-4 (<strong>OQ-E2</strong>).</span>
+    <div class="oq-body">
+      <code>sdlc eval</code> is on-demand; the committed-baseline-plus-CI-check half is unbuilt. Is the golden-artifact
+      regression suite (<a href="#sec2">Tier C</a>) a CI gate on every prompt/model change, or an advisory report?
+      ADR-11’s stance (deterministic, reviewed change) argues for a gate.
+    </div>
+  </div>
+</div>
+
+<div class="oq">
+  <span class="oq-id">OQ-B5</span>
+  <div>
+    <span class="oq-title">External platform seam.</span>
+    <div class="oq-body">
+      ARCHITECTURE §10 names Braintrust as an optional later owner of the eval loop, seam = prompt loader. At what corpus
+      size does an external eval platform earn its keep over the in-repo harness?
+    </div>
+  </div>
+</div>
+
+<div class="oq">
+  <span class="oq-id">OQ-B6</span>
+  <div>
+    <span class="oq-title">Multi-language corpus balance (<strong>ADR-15</strong>).</span>
+    <div class="oq-body">
+      With language a case property (<a href="#sec3-0">§3.0</a>), how is the corpus balanced across Python / TS / Go /
+      Rust so per-language signal is trustworthy, and which languages get a <code>ToolchainAdapter</code> first
+      (<strong>E-30a/b/c</strong> order) — driven by the cases that exist, or by the languages the factory is expected to
+      target? Also: is a language with no adapter yet a hard case-skip or a rubric-only (Tier-B) grade?
+    </div>
+  </div>
+</div>
+
+<div class="oq decided">
+  <span class="oq-id">OQ-B7</span>
+  <div>
+    <span class="oq-title">Session retention under capture-always (<strong>ADR-16, E-38</strong>) — DECIDED, one sub-point open.</span>
+    <div class="oq-body">
+      Policy: <strong>full transcript</strong> on fail / benchmark / any run with &gt;0 fix-loop attempts (the diagnostic
+      and measurement cases — “green after a retry” counts as full, since <em>how the agent recovered</em> is the point);
+      a structured <strong><code>SessionDigest</code></strong> on clean-green (first-pass) runs. The digest is not a
+      byte-truncation — it is the <a href="#sec4">§4.3</a> waste aggregates + a decision-skeleton (tools/files/decisions,
+      no full payloads), computed <strong>pre-truncation</strong> in the same scrub activity and always kept, so the heatmap
+      sees waste on green runs and P5 harvesting keeps successful-trajectory shape. Ordering is strict:
+      <em>capture → scrub (fail-closed) → then branch full-vs-digest</em>; a scrub failure stores nothing, either way.
+      <strong>Still open: the TTL on full transcripts</strong> — keep failed/benchmark sessions indefinitely, or purge
+      N days after the run is triaged? That is the only remaining sub-decision; the scrub is non-negotiable and
+      fail-closed regardless.
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  Generated from <a href="../BENCHMARK.md">BENCHMARK.md</a>. Adds no scope to
+  <a href="../PRD.md">PRD.md</a>; every <span class="newscope">(new scope)</span> marker is a measurement capability
+  that needs a PRD line before it becomes a real requirement. Everything else is an <code>E-</code>-style plan for
+  measuring requirements already open in the tracker.
+</div>
+
+</body>
+</html>

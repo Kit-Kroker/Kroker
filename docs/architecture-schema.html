@@ -341,7 +341,7 @@
   <span class="chip"><span class="dot notmeasurable"></span> Not falsifiable from code alone</span>
   <span style="margin-left:auto; align-self:center;">
     Pipeline: <strong>7 / 15</strong> stages live &middot;
-    ADRs: <strong>9 / 14</strong> satisfied &middot;
+    ADRs: <strong>9 / 16</strong> satisfied &middot;
     Phase: <strong>P1 closed</strong>, P2/P3 partial, P4 not started
   </span>
 </div>
@@ -802,10 +802,11 @@
       <li><span class="pill done">done</span> 11 roles in <code>agents.yaml</code>: 3 harness + 8 proposer.</li>
       <li><span class="pill done">done</span> Automation class via <code>TemporalAgent</code> (Pydantic AI).</li>
       <li><span class="pill done">done</span> Harness protocol with 2 adapters; <code>HarnessRunResult</code> normalised.</li>
+      <li><span class="pill notstarted">todo</span> <code>session_ref: ArtifactRef{kind: harness_session}</code> on <code>HarnessRunResult</code> — a claim-checked, scrubbed canonical <code>HarnessSession</code> transcript captured on every run (ADR-16); clean-green runs keep a structured <code>SessionDigest</code>, fail/benchmark/retried runs keep the full transcript.</li>
       <li><span class="pill done">done</span> Model-family inequality enforced at boot (ADR-6).</li>
       <li><span class="pill done">done</span> Reviewer is clean-context proposer (ADR-12).</li>
       <li><span class="pill partial">partial</span> Context by reference + budgets; <code>CodebaseMap</code> slice missing.</li>
-      <li><span class="pill notstarted">todo</span> Optional harness <em>deep-review</em> tier (ADR-6 opt-in).</li>
+      <li><span class="pill notstarted">todo</span> Optional harness <em>deep-review</em> tier (ADR-6 opt-in) — default <code>review</code> never resumes the developer's session; the opt-in tier reads the scrubbed <code>HarnessSession</code> as data (ADR-6 + ADR-16).</li>
       <li><span class="pill partial">partial</span> Model tiering per role; cost attributed in benchmarks only (E-19 will fix).</li>
     </ul>
   </div>
@@ -938,7 +939,7 @@
 </div>
 
 <!-- =========================================================== -->
-<h2>Architecture decision records <span class="count">ARCHITECTURE &sect;12 &middot; 9 / 14 satisfied</span></h2>
+<h2>Architecture decision records <span class="count">ARCHITECTURE &sect;12 &middot; 9 / 16 satisfied</span></h2>
 
 <div class="adr-grid">
   <div class="adr done">
@@ -997,12 +998,20 @@
     <div class="head"><span class="title">Integration by running branch</span><span class="id">ADR-14</span></div>
     <p class="why"><code>sdlc/&lt;run_id&gt;/integration</code> accumulates task work; merge PR is <code>integration → base</code>. Fully wired.</p>
   </div>
+  <div class="adr notstarted">
+    <div class="head"><span class="title">Toolchain adapters for language-agnostic evaluation</span><span class="id">ADR-15</span></div>
+    <p class="why">Generated projects are multi-language, so the stage-11/12 quality activities (<code>run_test_suite</code>, <code>run_lint</code>, <code>security_scan</code>, <code>measure_coverage</code>) cannot hardcode one toolchain. A <code>ToolchainAdapter</code> registry (<code>TOOLCHAINS</code>, beside <code>HARNESSES</code>) resolves by <strong>marker file in the produced repo</strong> (<code>pyproject.toml</code>/<code>package.json</code>/<code>go.mod</code>/<code>Cargo.toml</code> — the built artifact decides, not the Architect's stated stack) and normalises <code>build()/test()/lint()/coverage()</code> into the existing <code>TestReport</code>. Two format invariants keep the deterministic gate language-agnostic and unchanged: canonical coverage = <strong>Cobertura XML</strong> (each adapter translates into it; <code>measure_coverage</code> already reads <code>coverage.xml</code>); absolute security floor = <strong>semgrep → SARIF</strong> (one multi-language tool so <code>security_no_critical</code>/SC-5 stays a single check, not per-language sprawl). Same shape as the ADR-2/3 harness adapter: adding a language is adding an adapter, never a fork. Rollout incremental — Python reference adapter first; further languages on demand as the benchmark corpus needs them (ROADMAP §9.8, E-30/E-30a-c). <strong>New scope.</strong></p>
+  </div>
+  <div class="adr notstarted">
+    <div class="head"><span class="title">Harness sessions as first-class, claim-checked artifacts</span><span class="id">ADR-16</span></div>
+    <p class="why">Every harness run emits a canonical <code>HarnessSession</code> — a normalised transcript (tool-calls, file reads/writes, commands + exit status, model turns) — as <code>session_ref: ArtifactRef{kind: harness_session}</code> on <code>HarnessRunResult</code> (§4). Normalising the transcript is the <strong>harness adapter's</strong> job, beside the resume-handle it already owns (<code>claude --resume</code> / <code>opencode -s</code>) — same registry/pattern as the toolchain adapter (ADR-15). Because capture is <strong>always-on</strong>, three invariants are hot-path, not options: (a) claim-check unconditional (transcripts are large, never touch workflow state — the second reason FR-702 must close, beside diffs); (b) the memory scrub (<code>pre_retain</code>) runs over the session <strong>before</strong> storage, <strong>fail-closed</strong> like the SC-5 security floor; (c) retention follows a decided policy — full transcript on fail/benchmark/any run with <strong>&gt;0</strong> fix-loop attempts, a structured <code>SessionDigest</code> (§4.3 waste aggregates + decision-skeleton, computed pre-truncation and always kept) on clean-green runs, never a blind byte-truncation; scrub runs fail-closed <strong>before</strong> the full-vs-digest branch (full-transcript TTL is the one open sub-point, OQ-B7). The session is the concrete <strong>P5 trajectory seam</strong> (§10). Consumers: offline benchmark/anti-cheat, the opt-in <code>deep_review</code> lens (ADR-6, E-39), trajectory harvesting, retro distillation — <strong>never</strong> the default clean-context reviewer (ADR-6). <strong>New scope.</strong></p>
+  </div>
 </div>
 
 <div class="footer">
   Sources: <code>ARCHITECTURE.md</code> (Draft v1.0, 2026-07-02) and <code>ROADMAP.md</code> (last verified 2026-07-19).
   Status reflects code in <code>src/sdlc/</code>, <code>interfaces/</code>, <code>tests/</code>, <code>config/</code>, <code>agents/</code> &mdash; not prior audit claims.
-  Companion page: <a href="roadmap.html">roadmap.html</a> (full FR/NFR/SC/US checklist).
+  Companion pages: <a href="roadmap.html">roadmap.html</a> (full FR/NFR/SC/US checklist) &middot; <a href="benchmark.html">benchmark.html</a> (evaluation design).
 </div>
 
 </body>
