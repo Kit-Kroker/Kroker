@@ -126,12 +126,15 @@ class SubmitResult(BaseModel):
     message: str
 
 
-async def _fetch(handle) -> list[PendingDecision]:
+async def fetch_pending(handle) -> list[PendingDecision]:
     """Query by name and validate the discriminated union ourselves.
 
     Deliberately not `result_type=list[PendingDecision]`: TypeAdapter round-
     trips the Annotated union verifiably without a live server, so the
     behavior is pinned by unit tests rather than discovered in staging.
+
+    Public (not `_fetch`): E-8's cross-run inbox reuses this exact
+    query/validate path across many handles instead of one.
     """
     raw = await handle.query(PENDING_QUERY)
     return _PENDING_LIST.validate_python(raw)
@@ -140,7 +143,7 @@ async def _fetch(handle) -> list[PendingDecision]:
 async def resolve(handle, selector: Selector,
                   channel: Channel | None = None) -> PendingDecision:
     """Fetch what is pending and narrow it to the one item meant."""
-    return match(await _fetch(handle), selector, channel)
+    return match(await fetch_pending(handle), selector, channel)
 
 
 async def submit(handle, pending: PendingDecision, reply: Reply,
@@ -154,7 +157,7 @@ async def submit(handle, pending: PendingDecision, reply: Reply,
     else:
         await handle.signal(call.signal, call.decision)
 
-    still = await _fetch(handle)
+    still = await fetch_pending(handle)
     confirmed = pending.key not in {d.key for d in still}
     return SubmitResult(
         confirmed=confirmed,
