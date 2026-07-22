@@ -144,7 +144,7 @@
 
 ## 4. Success criteria (PRD §8)
 
-- [ ] — **SC-1** ≥80% runs reach merge gate unattended — not measurable (no fleet runs). Vehicle: the benchmark matrix (§9.8, E-31/E-34) is where unattended-reach rate is aggregated once cases carry a held-out grade.
+- [ ] — **SC-1** ≥80% runs reach merge gate unattended — not measurable (no fleet runs). Vehicle: the benchmark matrix (§9.8, E-34) is where unattended-reach rate is aggregated; cases can now carry a held-out grade (E-31 landed), so the gate is the next load-bearing piece.
 - [ ] — **SC-2** ≤15 min operator time — not measurable.
 - [ ] — **SC-3** fix-loop success ≥70% — mechanism exists; no aggregate metric captured. Captured per run as a coordination metric by the benchmark (§9.8, E-36 heatmap): fix-loop attempts vs resolution, per stage.
 - [ ] — **SC-4** repeat-clarification <10% by run 10 — needs reflect wiring (FR-404) + runs. **The per-run signal now accrues:** the retro stage (E-32) emits a `RunSummary` carrying `clarifications[].answered_by` (`human`/`suggested`/`unanswered`) on every terminal path. The cross-run *aggregation* into a repeat-clarification rate remains the benchmark's job (§9.8), via the memory-on cells that generate the run-10 series.
@@ -377,7 +377,7 @@ is marked **(new scope)** and needs a PRD line before it is real.
   `build_integration_green` a real integration run. Spec
   `docs/superpowers/specs/2026-07-22-toolchain-adapter-coverage-seam-design.md`,
   plan `docs/superpowers/plans/2026-07-22-toolchain-adapter-coverage-seam.md`.
-  Go/TS/Rust adapters (E-30a/b/c) and the held-out oracle (E-31) remain open.
+  Go/TS/Rust adapters (E-30a/b/c) remain open; the held-out oracle (E-31) is landed.
 - [ ] **E-30a** Go `ToolchainAdapter` — the second adapter (`go test -cover` →
   Cobertura via gocover-cobertura; `go vet`/golangci-lint; semgrep). Incremental,
   same shape as the Python reference; validates the abstraction on a
@@ -389,7 +389,7 @@ is marked **(new scope)** and needs a PRD line before it is real.
   identical in shape, added on demand as the corpus (E-34) needs that language —
   not a fork, exactly like adding a harness. Order by which languages the case
   corpus actually exercises.*
-- [ ] **E-31 (new scope)** Tier-A held-out oracle in benchmark cases:
+- [x] **E-31 (new scope)** Tier-A held-out oracle in benchmark cases:
   `benchmarks/cases/<case>/oracle/` — a suite + fixtures held out of the
   workflow's context (never in a worktree, prompt, or recall), run against the
   produced code **through the case's `ToolchainAdapter` (E-30)**, graded as
@@ -402,6 +402,22 @@ is marked **(new scope)** and needs a PRD line before it is real.
   factory's own criterion→test discipline (FR-106) makes the author side natural:
   the case ships acceptance criteria + a hidden oracle; the gap between the
   factory's self-proposed mapping and the oracle is itself a signal.
+  *Landed:* `BenchmarkScope.ORACLE` + `CaseSpec.language` + the pure grading
+  logic + the benchmark-only `grade_oracle` activity
+  (`src/sdlc/benchmarks/oracle.py`), invoked by `BenchmarkWorkflow` strictly
+  after each child (held out by construction). Ships the fraction-passing grade
+  via JUnit XML (`ToolchainAdapter.oracle_test_cmd`) + manifest `language:`
+  adapter dispatch + manifest-vs-marker mismatch signal + oracle-is-held-out
+  assertion; the "built evenly" overfit check is deferred to **E-31a**. todo-api
+  is the Python reference oracle (ASGI `app:app` contract). Spec
+  `docs/superpowers/specs/2026-07-23-held-out-oracle-design.md`, plan
+  `docs/superpowers/plans/2026-07-23-held-out-oracle.md`.
+- [ ] **E-31a** Anti-cheat B: diff-coverage "built evenly, not to the test"
+  check. The oracle-is-held-out assertion (E-31) catches the model writing into
+  the oracle dir; E-31a closes the second half of the Cursor anti-cheat — that
+  produced code wasn't overfit to the visible criterion→test mapping vs the
+  hidden oracle. Reuses the E-30 coverage seam; adds a per-file diff-coverage
+  gate signal alongside the fraction-passing grade.
 - [x] **E-32** Retro stage 14: emit `RunSummary`, call the already-registered
   `reflect()`, export trace + metrics (§1 stage 14; FR-404; NFR-4; SDLC-spec
   §1/§6). Closes the learning loop. **Three payoffs from one stage:** unblocks
@@ -500,7 +516,7 @@ fail-closed before the branch — E-38); **only the full-transcript TTL is
 still open**; OQ-B5 when an external eval platform (Braintrust, ARCHITECTURE §10) earns its keep.
 
 **Suggested ordering within §9.8:** E-30 (interface + **Python reference**, the
-grade) → E-31 (held-out oracle on that one language) → E-32 (the loop, also
+grade) ✓ → E-31 (held-out oracle on that one language) ✓ → E-32 (the loop, also
 unblocks P3) → **E-38 (capture-always sessions — observability + anti-cheat
 foundation, feeds E-22/E-23/P5)** → E-33 + E-34 (economics + the
 decomposition case) → E-30a/b/c (add languages as the corpus needs them) →
