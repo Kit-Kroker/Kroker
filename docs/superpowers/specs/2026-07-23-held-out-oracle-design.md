@@ -208,9 +208,12 @@ An in-process oracle must exercise produced code through a **stable interface
 contract** — the criterion→test discipline (FR-106) E-31 leans on. Amend the
 `todo-api-greenfield` case description to add, as a frozen acceptance criterion:
 
-> Implement in **Python**. Expose a WSGI/ASGI application object importable as
+> Implement in **Python**. Expose an **ASGI** application object importable as
 > **`app:app`** (module `app.py`, attribute `app`) serving the CRUD routes.
 
+ASGI is pinned for the reference so the oracle drives it deterministically via
+`httpx.ASGITransport` (present in the worker env as a `pydantic-ai` dep), keeping
+the oracle framework-agnostic *within* ASGI (FastAPI / Starlette / Litestar / raw).
 The oracle is then black-box against that HTTP contract, not internal layout:
 
 ```
