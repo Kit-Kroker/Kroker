@@ -123,6 +123,20 @@ Teams adopting coding agents today face four gaps:
   Research findings retained to memory are leads, not grounded claims: recall
   MUST NOT restore grounded status without re-verification. The stage MUST be
   bounded by explicit per-run limits and is off by default.
+- **FR-108 — Language-agnostic toolchain.** The deterministic quality gate's
+  stack-specific verification steps — build, test, lint, coverage, and the
+  security scan (FR-106) — SHALL be performed by a **toolchain adapter**
+  resolved from the produced repository's marker file (e.g. `pyproject.toml`,
+  `package.json`, `go.mod`, `Cargo.toml`), so the gate grades whatever language
+  was actually built rather than an assumed stack. Adapters SHALL normalize
+  their output into the gate's canonical, language-neutral evidence formats
+  (one coverage schema, one security-finding schema), so the deterministic gate
+  reader is identical across languages and **adding a language SHALL NOT change
+  workflow or gate code** (cf. FR-203). Diff-scoped coverage (FR-106) SHALL be
+  measured against the running integration head (FR-104): the coverage artifact
+  produced by the test step SHALL be available in the integration worktree the
+  gate reads. The factory SHALL ship at least one reference adapter exercised
+  end-to-end; further language adapters are additive and off the critical path.
 
 ### Agents (FR-200)
 - FR-201: Agents SHALL be declared in a versioned registry (`agents.yaml`):
