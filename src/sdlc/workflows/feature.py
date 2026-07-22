@@ -668,6 +668,9 @@ class FeatureWorkflow:
     async def run(self, idea: IdeaBrief,
                   cfg: PipelineConfig | None = None) -> str:
         cfg = cfg or PipelineConfig()
+        return await self._pipeline(idea, cfg)
+
+    async def _pipeline(self, idea: IdeaBrief, cfg: PipelineConfig) -> str:
         if cfg.memory.enabled:
             self._memory_watermark = cfg.memory.watermark or (
                 await workflow.execute_activity(
