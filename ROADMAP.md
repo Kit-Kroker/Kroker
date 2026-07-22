@@ -25,6 +25,20 @@
 > canonical `brief_digest`, not by caching the brief (a cached brief was never
 > fetched). `2026-07-17-research-agent-grounded-briefs`.
 
+> **2026-07-19 — benchmark & evaluation design input.** A measurement
+> design (`docs/BENCHMARK.md`) folds the existing benchmark harness (E-27)
+> and prompt eval loop (E-4) into an instrument for the success criteria.
+> It adds **no scope**: each item anchors to an FR/NFR/SC already open, and
+> the capabilities that would (held-out oracles, anti-cheat assertions,
+> rubric-calibration tracking) are marked **(new scope)** and need a PRD
+> line. New work lands as **E-30…E-39** (§9.8), with a language-agnostic
+> `ToolchainAdapter` (ADR-15) under E-30 so the grade holds across Python /
+> TS / Go / Rust, and canonical claim-checked harness **sessions** (ADR-16,
+> E-38) captured on every run so *how* a diff was reached is measurable, not
+> just the diff. The framing: three of four
+> phase exits are gated on measurement that does not run yet — P3's exit is
+> literally *"SC-4 and SC-6 measurable"*, and SC-1/2/3 are all `—`.
+
 ---
 
 ## 0. Phase summary (PRD §9)
@@ -34,7 +48,7 @@
 - [ ] ⚠️ **P2** — Brownfield, dashboard + notifications, fix loops, cross-harness review → *first brownfield feature merged via PR*
   Cross-harness review ✅ and fix loops ✅ landed early; brownfield mode, dashboard backend, and notifications not started.
 - [ ] ⚠️ **P3** — Hindsight memory + confidence-gated soft gates → *SC-4 and SC-6 measurable*
-  Memory (recall/retain/watermark) ✅ and soft gates ✅ done; SC-4/SC-6 not yet measurable (need retro/reflect wiring + real runs).
+  Memory (recall/retain/watermark) ✅ and soft gates ✅ done; SC-4/SC-6 not yet measurable (need retro/reflect wiring + real runs). **The retro stage that makes them measurable is E-32** (§9.8); the on/off memory delta is the measurement E-31/E-33 exist to run.
 - [ ] **P4** — MCP surface, maintenance loop (DAPER), fleet scale → *SC-1..3 at target*
   Not started.
 
@@ -129,12 +143,12 @@
 
 ## 4. Success criteria (PRD §8)
 
-- [ ] — **SC-1** ≥80% runs reach merge gate unattended — not measurable (no fleet runs).
+- [ ] — **SC-1** ≥80% runs reach merge gate unattended — not measurable (no fleet runs). Vehicle: the benchmark matrix (§9.8, E-31/E-34) is where unattended-reach rate is aggregated once cases carry a held-out grade.
 - [ ] — **SC-2** ≤15 min operator time — not measurable.
-- [ ] — **SC-3** fix-loop success ≥70% — mechanism exists; no aggregate metric captured.
-- [ ] — **SC-4** repeat-clarification <10% by run 10 — needs reflect wiring (FR-404) + runs.
+- [ ] — **SC-3** fix-loop success ≥70% — mechanism exists; no aggregate metric captured. Captured per run as a coordination metric by the benchmark (§9.8, E-36 heatmap): fix-loop attempts vs resolution, per stage.
+- [ ] — **SC-4** repeat-clarification <10% by run 10 — needs reflect wiring (FR-404) + runs. Unblocks on **E-32** (retro stage → `RunSummary` + `reflect()`) plus the memory-on benchmark cells that generate the run-10 series (§9.8).
 - [x] **SC-5** zero deploys past a failed **absolute** check — empty/vacuous-task bypass fixed, absolute failure is terminal, and the `security_no_critical` floor is now emitted by the `security_scan` activity and wired as an absolute merge-gate check (`feature.py:807,818`). `tests/test_security_floor.py` asserts a critical finding blocks deploy.
-- [ ] — **SC-6** soft-gate override <5% — mechanism exists; not measurable without runs + reflect.
+- [ ] — **SC-6** soft-gate override <5% — mechanism exists; not measurable without runs + reflect. Same chain as SC-4: **E-32** wires the retro calibration compare (confidence vs human override, ARCHITECTURE §10), the benchmark supplies the runs (§9.8).
 
 ---
 
@@ -191,7 +205,7 @@
 
 1. ~~**Close P1 honestly** — CI-runnable end-to-end run through `FeatureWorkflow` + wire the `security_no_critical` absolute check.~~ **Done** on `feat/p1-consolidation` (`3cfbe62`…`41c9185`); plan `docs/superpowers/plans/2026-07-15-p1-consolidation.md`.
 2. ~~**Analyze/Analyst stage** — unlocks coverage + criterion→test traceability advisory checks (FR-106).~~ **Done** on `feat/analyst-stage`; plan `docs/superpowers/plans/2026-07-16-analyst-stage.md`, spec `docs/superpowers/specs/2026-07-16-analyst-stage-traceability-coverage-design.md`.
-3. ~~**retro/reflect wiring** (FR-404) — starts accumulating the SC-4/SC-6 calibration signal. Tasks: **E-12, E-13** (§9.3).~~ **Partially done** — schedule mechanism + nightly project reflect ship (E-12/E-13); plan `docs/superpowers/plans/2026-07-16-schedules-as-files-and-nightly-reflect.md`. Signal only accrues on runs with `memory.enabled=true` (defaults `False`). Org half blocked on **E-25**; the retro *stage* (§1 item 13, `RunSummary`) is still unbuilt.
+3. ~~**retro/reflect wiring** (FR-404) — starts accumulating the SC-4/SC-6 calibration signal. Tasks: **E-12, E-13** (§9.3).~~ **Partially done** — schedule mechanism + nightly project reflect ship (E-12/E-13); plan `docs/superpowers/plans/2026-07-16-schedules-as-files-and-nightly-reflect.md`. Signal only accrues on runs with `memory.enabled=true` (defaults `False`). Org half blocked on **E-25**; the retro *stage* (§1 item 13, `RunSummary`) is still unbuilt (**E-32**). *Follow-on:* the benchmark instrument (§9.8) is what turns the accruing signal into the SC-1..6 numbers — held-out grade (**E-30/E-31**) and per-role economics (**E-33**) are the load-bearing measurement work, ranked there by invariant undercut.
 4. **Harness containment** beyond env allowlist — `pre_tool` hook + egress (FR-703/NFR-5). Tasks: **E-15…E-18** (§9.4) — note the hook and the gate are one mechanism, not two.
 5. **Operability** — dashboard FastAPI backend + MCP + cross-run inbox (FR-305/601/602). Tasks: **E-6…E-11** (§9.2) — these four items are one contract plus thin adapters, so E-6/E-7 land before any surface.
 6. **Post-P1 roadmap** — MaintenanceWorkflow/DAPER (**E-14**), two worker pools, run budgets (**E-19**), observability export (**E-22, E-23**), brownfield mode, claim-check.
@@ -320,3 +334,169 @@ Not a commitment, and deliberately not "by section":
 5. **E-22** — before the surfaces in E-9/E-10/E-11 multiply the ways delivery can fail silently.
 
 E-19/E-20/E-21 and E-14 are post-P1. E-5 is not scheduled.
+
+### 9.8 Benchmark & evaluation → SC-1..6, FR-106, FR-404, FR-701, FR-702, FR-704, ADR-15, ADR-16
+
+Design: `docs/BENCHMARK.md`. The factory already has the *pieces* of a
+measurement system — the E-27 benchmark harness (golden cases + cross-family
+rubric judging), the E-4 prompt eval loop, eval-aware memoization (FR-103/NFR-6),
+and cost bookkeeping that "exists in benchmarks only" (§9.5). What it lacks is a
+measurement *design*: a held-out grade, metrics per success criterion, and the
+wiring that turns SC-1..SC-6 from `—` into numbers. These items build that.
+Ranked, as everywhere in §8/§9.7, by which measurement invariant is undercut —
+not by effort. Anchors are existing FR/NFR/SC; genuinely new measurement scope
+is marked **(new scope)** and needs a PRD line before it is real.
+
+- [ ] **E-30 (new scope; ADR-15)** `ToolchainAdapter` + the coverage seam,
+  language-agnostic. **This is a pipeline capability, not a benchmark fix** —
+  `run_test_suite`/`run_lint`/`security_scan`/`measure_coverage` are stage 11/12
+  *production* activities the benchmark merely exercises, and generated projects
+  can be Python, TS, Go, Rust, … so the grade cannot be language-agnostic unless
+  those stages are. Structurally identical to the harness adapter (ADR-2/3): a
+  `TOOLCHAINS` registry beside `HARNESSES`, resolving **by marker file in the
+  produced repo** (`pyproject.toml`/`package.json`/`go.mod`/`Cargo.toml` — detect
+  what was *built*, not what was intended, matching E-31's anti-cheat stance),
+  normalising `build()/test()/lint()/coverage()` into the existing `TestReport`.
+  Two format decisions keep the gate untouched and language-agnostic: **(a)
+  canonical coverage = Cobertura XML** — `measure_coverage` already reads
+  `coverage.xml`, so each adapter only *translates into* it (coverage.py / c8 /
+  gocover-cobertura / cargo-llvm-cov), and E-30 adds **no change to the gate
+  reader**; **(b) absolute security floor = semgrep → SARIF** — one multi-language
+  tool keeps `security_no_critical` (SC-5) a single language-agnostic check
+  rather than bandit/gosec/clippy sprawl. E-30 proper delivers: the interface +
+  registry + marker detection + canonical formats + **the Python adapter
+  end-to-end as the reference** + the artifact crossing the merge into the
+  integration worktree where the seam reads (the original FR-106 gap). **Highest-
+  leverage item on this list — without it there is no objective, test-based grade
+  and every benchmark number rests on rubric-only judging.**
+- [ ] **E-30a** Go `ToolchainAdapter` — the second adapter (`go test -cover` →
+  Cobertura via gocover-cobertura; `go vet`/golangci-lint; semgrep). Incremental,
+  same shape as the Python reference; validates the abstraction on a
+  non-Python language.
+- [ ] **E-30b** TypeScript/JS `ToolchainAdapter` — vitest/jest + c8/nyc →
+  Cobertura; eslint; semgrep.
+- [ ] **E-30c** Rust `ToolchainAdapter` — cargo-llvm-cov → Cobertura; clippy;
+  semgrep. *E-30a/b/c are deliberately sub-numbered: each is the N-th adapter,
+  identical in shape, added on demand as the corpus (E-34) needs that language —
+  not a fork, exactly like adding a harness. Order by which languages the case
+  corpus actually exercises.*
+- [ ] **E-31 (new scope)** Tier-A held-out oracle in benchmark cases:
+  `benchmarks/cases/<case>/oracle/` — a suite + fixtures held out of the
+  workflow's context (never in a worktree, prompt, or recall), run against the
+  produced code **through the case's `ToolchainAdapter` (E-30)**, graded as
+  fraction passing. Each case manifest declares `language:`; the runner
+  dispatches to the matching adapter, and **manifest-language vs marker-detected
+  language is itself a mismatch signal** (the toolchain analogue of the
+  criterion→test traceability gap). Adds the Cursor anti-cheat as a routine
+  assertion (oracle-is-held-out check + a diff-coverage "built evenly, not to the
+  test" check). Extends E-27, which judges rubrics only. Depends on E-30. The
+  factory's own criterion→test discipline (FR-106) makes the author side natural:
+  the case ships acceptance criteria + a hidden oracle; the gap between the
+  factory's self-proposed mapping and the oracle is itself a signal.
+- [ ] **E-32** Retro stage 14: emit `RunSummary`, call the already-registered
+  `reflect()`, export trace + metrics (§1 stage 14; FR-404; NFR-4; SDLC-spec
+  §1/§6). Closes the learning loop. **Three payoffs from one stage:** unblocks
+  SC-4/SC-6 (P3's exit), turns on the memory benchmark axis (on/off delta,
+  §9.8 economics), and opens the loop-B intake where production runs become
+  eval cases. The `org_bank`-writer half stays **E-25** (needs the "what
+  belongs in an org bank" decision); E-32 is the stage itself, project scope.
+- [ ] **E-33** Per-role cost attribution: promote cost from benchmarks-only
+  (§9.5) to run-level counters (folds **E-19**) and attribute **dollars per
+  role**, not per token (FR-701). The Cursor economics result restated for this
+  registry: the expensive roles are the deciding proposers (architect on
+  `opus-4-8`), the volume is in the executing harness roles — so per-role $ is
+  the number that moves ($1,339 vs $10,565 on the same task, in their run).
+  `HarnessRunResult` already carries the token/context/`compacted` fields; this
+  is the aggregation + the proposer-side TemporalAgent usage join.
+- [ ] **E-34 (new scope)** A decomposition-forcing benchmark case. Both current
+  cases are "sized for a single short factory run", so **planner decomposition
+  — the load-bearing variable in real work — is unexercised** (E-27's own
+  finding), which is exactly the variable Cursor's entire result turns on. The
+  bar E-27 set holds: large enough to require decomposition (multiple vertical
+  slices + real inter-task contracts), small enough to specify completely.
+- [ ] **E-35** `cursor` harness adapter — third point on the harness axis,
+  normalised into `HarnessRunResult` (tokens, cost, `context_window`,
+  `compacted`, resume handle) and version-pinned at boot (FR-203; folds the
+  intent of **E-24**). Value is not "cursor vs claude in the abstract" — it is
+  measuring `claude -p` vs `opencode` vs `cursor` **through the
+  DeterministicQualityGate on the held-out oracles**, a comparison no external
+  leaderboard provides. Ordered *after* E-33 so the economics fields exist to
+  receive it; until the adapter fills them, cursor cells are quality-only.
+- [ ] **E-36 (new scope)** Error heatmap (`case × stage`) + rubric-calibration
+  tracking. The heatmap aggregates gate rejections, fix-loop iterations, and
+  oracle failures per stage per case (FR-704 export is the data source, NFR-4) —
+  Abdullin's prioritisation instrument, answering "which stage on which case
+  class costs most, so what do I fix next." Calibration tracking attaches a
+  judge-agreement rate to every rubric score (hand-score 20–30 fixtures per
+  rubric) so a Tier-B number is never read without its trust level.
+- [ ] **E-37** Per-role model sweep at the benchmark boundary. Resolve
+  `cfg.roles` per cell (folds **E-26**) so each cell overrides role→model and
+  satisfies ADR-6 *per run*, not just at boot — the full model×role matrix
+  (US-4). Deferred last: the harness (E-35) and memory (E-32) axes deliver most
+  of the insight without it, and E-26 is real work. Ties to **OQ-B2** (the
+  judge family must move per cell to stay ADR-6-independent of the swept
+  producer family) and **OQ-E2**.
+
+- [ ] **E-38 (new scope; ADR-16)** Capture-always harness sessions. Every
+  harness run emits a **canonical `HarnessSession`** (normalised transcript:
+  tool-calls, file reads/writes, commands + exit status, model turns) as a
+  claim-checked `ArtifactRef{kind: harness_session}` on `HarnessRunResult`
+  (ADR-3/§4). **Because it is captured on every run, three things are hot-path
+  invariants, not options:** (a) claim-check is unconditional — the transcript
+  is megabytes and never touches workflow state, which is the second, independent
+  reason to finally close **FR-702** (diffs *and* sessions both force it); (b)
+  the memory scrub (`pre_retain`) runs over the session **before** it is stored,
+  **fail-closed like the SC-5 security floor** — an injected credential in a
+  transcript stored by default is a leak by default; (c) retention follows a
+  **decided policy**: full transcript on fail / benchmark / any run with >0
+  fix-loop attempts (the diagnostic cases), a structured **`SessionDigest`**
+  on clean-green (first-pass green) runs — never a blind byte-truncation. The
+  §4.3 waste aggregates and a decision-skeleton are computed **pre-truncation**
+  in the scrub activity and always kept, so the heatmap sees waste on green
+  runs too and P5 harvesting keeps successful-trajectory shape. Ordering is
+  strict — capture → scrub (fail-closed) → *then* branch full-vs-digest — so a
+  scrub failure stores nothing regardless of outcome. Full-transcript TTL is
+  the one open sub-point (OQ-B7). Normalising the transcript is the **harness adapter's** job,
+  beside the resume-handle it already owns (`claude --resume` / `opencode -s`) —
+  same registry, same pattern as `HarnessRunResult` and `ToolchainAdapter`.
+  **This is the concrete P5 trajectory-harvesting seam** (ARCHITECTURE §10): the
+  session is most of what `events.jsonl`/`report.html` should render (**E-22/E-23**)
+  and the extraction point for trajectory eval + small-model distillation.
+  *Invariant it must preserve:* capturing the developer's session does **not**
+  let the default reviewer read it — see E-39.
+- [ ] **E-39 (new scope)** `deep_review` — an optional, opt-in review tier that
+  reads the scrubbed `HarnessSession` (E-38) as **data**. This is Cursor's
+  full-transcript lens, and it deliberately does what the default reviewer must
+  not: see *how* the diff was reached (backtracking, oracle peeking, hardcoded
+  answers), feeding both the anti-cheat check (§2/§4.4) and a richer verdict.
+  **Three guardrails, all load-bearing:** it reads the **scrubbed** artifact,
+  never the raw session and never via resume-handle (else it drags authoring
+  context + secrets back in); its model stays **ADR-6 family-independent** of the
+  developer (else the lens correlates with authoring); and it is an **additional**
+  lens, not a replacement — the clean-context `review` (ADR-6/ADR-12) remains the
+  default, because Cursor's value is *decorrelated lenses stacking*, not swapping
+  one for another. Requires the ADR-6 boundary to be restated precisely (E-38's
+  ADR-16 note does this): *default review starts clean and never resumes the
+  developer's session; `deep_review` reads the scrubbed session as data.*
+**Open questions (tracked in `docs/BENCHMARK.md §7`):** OQ-B1 minimum trustworthy
+corpus size; OQ-B2 judge independence under model sweep (→ E-37); OQ-B3 research
+grounding gate for benchmark cells (→ **E-29**, pick advisory / pin model / wait,
+explicitly); OQ-B4 the regression-gate half of E-4 as a CI gate (→ OQ-E2); OQ-B7
+session-retention policy **decided** (full on fail/benchmark/attempts>0,
+`SessionDigest` on clean-green, aggregates kept pre-truncation, scrub
+fail-closed before the branch — E-38); **only the full-transcript TTL is
+still open**; OQ-B5 when an external eval platform (Braintrust, ARCHITECTURE §10) earns its keep.
+
+**Suggested ordering within §9.8:** E-30 (interface + **Python reference**, the
+grade) → E-31 (held-out oracle on that one language) → E-32 (the loop, also
+unblocks P3) → **E-38 (capture-always sessions — observability + anti-cheat
+foundation, feeds E-22/E-23/P5)** → E-33 + E-34 (economics + the
+decomposition case) → E-30a/b/c (add languages as the corpus needs them) →
+E-35 (the cursor point) → E-36 (heatmap + calibration, sliceable by
+language) → E-39 (deep-review lens, reads the session) → E-37 (per-role
+sweep). E-38 is ranked high on purpose: it is the observability substrate
+every later analysis (heatmap, anti-cheat, harvesting) reads from.
+**Deliberate:** the pipeline goes multi-language *incrementally* — E-30 proves
+one language end-to-end so the first SC signal isn't blocked on N adapters;
+E-30a/b/c follow the corpus, not precede it. E-30/E-32 unblock the most: the
+first gives an objective grade, the second closes P3 and three capabilities.

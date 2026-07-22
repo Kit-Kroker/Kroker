@@ -24,6 +24,7 @@ python -m sdlc.cli start --title "Add SSO" --mode brownfield --repo git@...
 python -m sdlc.cli status  --id feature-add-sso
 python -m sdlc.cli answer  --id feature-add-sso --q Q1 --text "Use OIDC"
 python -m sdlc.cli approve --id feature-add-sso --gate architecture
+python -m sdlc.cli benchmark --case cat-cafe   # run the eval harness (see docs/BENCHMARK.md)
 ```
 
 ## Run
@@ -41,11 +42,19 @@ python -m sdlc.cli approve --id feature-add-sso --gate architecture
   and the deterministic gate, and
   [`docs/architecture-review-2026-07.md`](docs/architecture-review-2026-07.md)
   for the design decisions and implementation status.
+- See [`docs/BENCHMARK.md`](docs/BENCHMARK.md) for the benchmark & evaluation design — the four measurement axes (harness / model×role / memory / case), how success criteria SC-1..6 get their numbers, and the E-30…E-37 increments.
 
 ## Notes
 - Payloads through Temporal stay small (claim-check for specs/diffs/logs).
 - Agent names / toolset ids are activity names — never rename in prod.
 - Harness sessions are resumed across fix-loop attempts (claude `--resume`,
   opencode `-s`), so the fixer keeps its context.
+- Every harness run also emits a **canonical `HarnessSession`** — a
+  normalised, scrubbed, claim-checked transcript (ADR-16) — so *how* a diff
+  was reached is a first-class signal, not just the diff. The default
+  reviewer never reads it; the opt-in `deep_review` lens does (ADR-6).
 - Cross-harness review: configure `roles["reviewer"]` with a different
   harness/model family than `roles["dev"]`.
+- Harness is a config axis, not a fork: `claude -p` and `opencode run` are
+  registry entries (`HARNESSES`), so a third adapter (e.g. `cursor`) drops in
+  once it normalises into `HarnessRunResult`. The benchmark sweeps this axis.

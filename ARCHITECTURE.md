@@ -181,10 +181,18 @@ attributed per role per run (SC-7 feeds tiering decisions):
 `opencode run [-m provider/model] [-s sid] [--attach url] --format json
 <prompt>`. Adapters normalize to `HarnessRunResult{session_id, exit_code,
 summary, cost_usd, commit_sha, input_tokens, output_tokens, context_window,
-compacted}` — the token fields (already present in the harness result JSON)
-make the ADR-13 context ceiling measurable rather than a blind resume count.
-Sessions resume across fix-loop attempts, preserving the agent's working
-context. Permissions live in native harness config, not prompts.
+compacted, session_ref}` — the token fields (already present in the harness
+result JSON) make the ADR-13 context ceiling measurable rather than a blind
+resume count. `session_ref: ArtifactRef{kind: harness_session}` is a
+claim-checked, scrubbed **canonical `HarnessSession`** (normalised transcript
+— tool-calls, file reads/writes, commands + exit status, model turns);
+captured on every run (ADR-16), it is what makes *how* a diff was reached
+measurable, not just the diff. Green (first-pass) runs keep a structured
+`SessionDigest` (waste aggregates + decision-skeleton) rather than the full
+transcript; fail / benchmark / retried runs keep the full session (§4 waste
+aggregates are computed pre-truncation, so they exist for every run). Sessions resume across fix-loop attempts,
+preserving the agent's working context. Permissions live in native harness
+config, not prompts.
 
 **Reviewer is a clean-context proposer by default (ADR-6/ADR-12):** it emits
 a typed `ReviewReport` from orchestrator-assembled inputs (materialized diff
@@ -345,7 +353,12 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
   prompt version change is a legitimate cache invalidation (it is in the
   memoization hash), never a silent behavior change. An external prompt/eval
   platform (e.g., Braintrust) can own this loop later; the seam is the
-  prompt loader.
+  prompt loader. **Status:** the offline-eval half exists today — the
+  benchmark harness (`benchmarks/workflow.py`, E-27) and `sdlc eval`
+  loop (E-4) judge per-stage artifacts with the cross-family judge. The
+  design that folds them into an SC-1..6 measurement instrument —
+  held-out oracles, per-role economics, the `case × stage` error
+  heatmap — is `docs/BENCHMARK.md` (ROADMAP §9.8, E-30…E-37).
 - **Trajectory harvesting (P5 seam):** Temporal history + artifacts +
   handoffs + gate decisions already constitute complete trajectories
   (actions, tool calls, costs, outcomes, human feedback). The observability
@@ -399,9 +412,14 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
   *different model family than the developer's authoring model*; the reviewer
   is a clean-context proposer (no tools/repo/session) by default, so the doer
   has tools and the judge does not. The registry validator enforces
-  model-family inequality; when the optional harness *deep-review* tier is
-  enabled, it additionally rejects same harness+family. Structural, not
-  prompt-based.
+  model-family inequality. **Precise boundary for sessions (ADR-16):** the
+  default `review` starts from a clean context and **never resumes the
+  developer's session**; the optional, opt-in `deep_review` tier (ROADMAP
+  E-39) reads the **scrubbed** `HarnessSession` as *data* (never the raw
+  session, never via resume-handle), stays ADR-6 family-independent of the
+  developer, and is an **additional** decorrelated lens, not a replacement
+  for clean-context review — so it additionally rejects same harness+family.
+  Structural, not prompt-based.
 - **ADR-7 Repairs execute through the factory.** MaintenanceWorkflow starts
   brownfield children for code fixes; autonomy never bypasses gates.
 - **ADR-8 Interfaces are stateless signal/query shells.** No interface DB;
@@ -443,6 +461,54 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
   declaration → serialize or escalate. *Trade-off:* integration fixes
   visibility, not divergence (still serial-by-default's job); adds a
   merge-back activity and run-scoped worktree paths.
+- **ADR-15 Toolchain adapters for language-agnostic evaluation.** Generated
+  projects are not one language, so the stage-11/12 quality activities
+  (`run_test_suite`, `run_lint`, `security_scan`, `measure_coverage`) cannot
+  hardcode one toolchain. A `ToolchainAdapter` registry (`TOOLCHAINS`, beside
+  `HARNESSES`) resolves **by marker file in the produced repo**
+  (`pyproject.toml`/`package.json`/`go.mod`/`Cargo.toml` — the built artifact
+  decides, not the Architect's stated stack) and normalises
+  `build()/test()/lint()/coverage()` into the existing `TestReport`. Two format
+  invariants keep the deterministic gate language-agnostic and *unchanged*:
+  canonical coverage is **Cobertura XML** (each adapter translates into it;
+  `measure_coverage` already reads `coverage.xml`), and the absolute security
+  floor is **semgrep → SARIF** (one multi-language tool, so `security_no_critical`
+  / SC-5 stays a single check, not per-language sprawl). This is the exact
+  shape of ADR-2/3's harness adapter, applied to the evaluation toolchain:
+  adding a language is adding an adapter, never a fork. Rollout is incremental
+  — one reference adapter (Python) proves the seam end-to-end; further languages
+  are added on demand as the benchmark corpus needs them (ROADMAP §9.8,
+  E-30/E-30a-c). *Trade-off:* a new abstraction and registry to maintain, and a
+  per-language translation shim, in exchange for a grade that holds across every
+  language the factory can emit. **New scope** vs a Python-only pipeline —
+  likely a PRD line for the multi-language capability, not only this ADR.
+- **ADR-16 Harness sessions as first-class, claim-checked artifacts.**
+  Every harness run emits a canonical `HarnessSession` — a normalised
+  transcript (tool-calls, file reads/writes, commands + exit status, model
+  turns) — as `session_ref: ArtifactRef{kind: harness_session}` on
+  `HarnessRunResult` (§4). Normalising the transcript is the **harness
+  adapter's** responsibility, beside the resume-handle it already owns
+  (`claude --resume` / `opencode -s`) — same registry and pattern as the
+  toolchain adapter (ADR-15). Because capture is **always-on**, three
+  properties are hot-path invariants, not options: claim-check is
+  unconditional (transcripts are large, never touch workflow state — the
+  second reason FR-702 must close, beside diffs); the memory scrub
+  (`pre_retain`) runs over the session **before** storage, **fail-closed**
+  like the SC-5 security floor (an injected credential in an always-stored
+  transcript is a leak by default); and retention follows a decided policy —
+  full transcript on fail / benchmark / any run with >0 fix-loop attempts, a
+  structured `SessionDigest` (§4.3 waste aggregates + decision-skeleton,
+  computed pre-truncation and always kept) on clean-green runs, never a blind
+  byte-truncation; scrub runs fail-closed **before** the full-vs-digest
+  branch, so a scrub failure stores nothing either way (full-transcript TTL
+  is the one open sub-point, OQ-B7). The session is the concrete **P5 trajectory
+  seam** (§10): most of what `events.jsonl`/`report.html` render and the
+  extraction point for trajectory eval + small-model distillation. Consumers
+  are the offline benchmark/anti-cheat, the opt-in `deep_review` lens
+  (ADR-6, E-39), trajectory harvesting, and retro distillation into memory —
+  **never** the default clean-context reviewer (ADR-6). *Trade-off:* a
+  storage + scrub cost on every run, in exchange for making agent behaviour
+  (not just its output diff) a first-class, measurable signal. **New scope.**
 
 ## 13. Technology summary
 
@@ -521,6 +587,9 @@ agentic-sdlc/
 │   ├── unit/ · workflows/     # validators, parsers; time-skipping gate/signal tests
 │   ├── integration/           # real Hindsight container
 │   └── fakes/fake_harness.py  # deterministic claude/opencode stand-in for CI
+├── benchmarks/                # §9.8: eval harness — golden cases, rubric judging (E-27)
+│   ├── workflow.py            #   runs cases through FeatureWorkflow; per-cell harness/model/memory
+│   └── cases/<case>/          #   feature spec + rubrics; oracle/ = held-out acceptance suite (E-31)
 └── runs/                      # runtime, gitignored: worktrees, artifacts, report.html
 ```
 
