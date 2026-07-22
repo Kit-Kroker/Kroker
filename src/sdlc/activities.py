@@ -26,6 +26,7 @@ from .gate import (
     evaluate_quality_gate,
 )
 from .harness.adapters import HARNESSES, HarnessRequest
+from .toolchain.adapters import detect
 from .models import (
     CoverageReport,
     HarnessKind,
@@ -615,6 +616,86 @@ async def measure_coverage(inp: CoverageInput) -> CoverageReport:
     return CoverageReport(measured=True, diff_pct=pct,
                           detail=f"diff-scoped coverage {pct:.1f}% "
                                  f"over {len(rates)} changed file(s)")
+
+
+async def _bounded_shell(cmd: str, cwd: str, timeout_s: int) -> tuple[int, str]:
+    """Run a shell command bounded by timeout_s, combining stdout+stderr.
+    On timeout: kill and return (-1, message). See run_test_suite's docstring
+    for why an unbounded shell command is dangerous in an activity."""
+    proc = await asyncio.create_subprocess_shell(
+        cmd, cwd=cwd,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+    try:
+        out_b, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return -1, f"command timed out after {timeout_s}s (cmd: {cmd!r})"
+    return (proc.returncode or 0), out_b.decode(errors="replace")
+
+
+@dataclass
+class IntegrationChecksInput:
+    worktree: str
+    changed_files: list[str]
+    test_timeout_s: int = 600
+    lint_timeout_s: int = 300
+
+
+@dataclass
+class IntegrationChecks:
+    toolchain: str | None          # ToolchainKind value, or None if undetected
+    qa: QAReport
+    lint_clean: bool
+    lint_detail: str
+
+
+# pytest usage-error exit code: unrecognized args (e.g. --cov when pytest-cov is
+# absent) => 4, distinct from 1 (tests failed). A MISSING coverage plugin must
+# degrade coverage to measured=False, never falsely fail the ABSOLUTE
+# build_integration_green check — so on a 4 we re-run WITHOUT coverage for the
+# honest green signal (FR-108 green-signal invariant).
+_PYTEST_USAGE_ERROR = 4
+
+
+@activity.defn
+async def run_integration_checks(
+        inp: IntegrationChecksInput) -> IntegrationChecks:
+    """FR-108/ADR-15: resolve the toolchain by marker file and run
+    coverage-instrumented tests + lint against the merged integration head.
+    Emits coverage.xml into inp.worktree, where measure_coverage reads — the
+    FR-106 gap this closes.
+
+    toolchain=None (unrecognized marker) => tests/lint NOT re-run here; the
+    workflow falls back to the per-task aggregate + standalone run_lint, exactly
+    as before E-30. Never blocks on a language it doesn't know."""
+    adapter = detect(inp.worktree)
+    if adapter is None:
+        return IntegrationChecks(
+            toolchain=None,
+            qa=QAReport(tests_passed=False,
+                        issues=["no toolchain adapter for this worktree"]),
+            lint_clean=True, lint_detail="no toolchain adapter (not linted)")
+
+    code, out = await _bounded_shell(
+        adapter.test_cmd(coverage=True), inp.worktree, inp.test_timeout_s)
+    if code == _PYTEST_USAGE_ERROR:
+        # Coverage tooling unavailable — get the honest green signal without it.
+        prefix = ("coverage instrumentation unavailable (pytest usage error); "
+                  "coverage left unmeasured\n")
+        code, out = await _bounded_shell(
+            adapter.test_cmd(coverage=False), inp.worktree, inp.test_timeout_s)
+        out = prefix + out
+    failing = [ln.split(" ")[0] for ln in out.splitlines()
+               if ln.startswith("FAILED")]
+    qa = QAReport(tests_passed=code == 0, failing_tests=failing[:50],
+                  issues=[] if code == 0 else [out[-2000:]])
+
+    lcode, ldetail = await _bounded_shell(
+        adapter.lint_cmd(), inp.worktree, inp.lint_timeout_s)
+    return IntegrationChecks(
+        toolchain=adapter.kind.value, qa=qa,
+        lint_clean=lcode == 0, lint_detail=ldetail[-2000:])
 
 
 @dataclass
