@@ -14,7 +14,7 @@ from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 
 from sdlc.activities import evaluate_gate
 from sdlc.models import GateDecision, GateOutcome
-from sdlc.observability.activities import export_run_artifacts
+from sdlc.observability.activities import RunExportInput, export_run_artifacts
 from tests.fakes.canned import AGENT_SPECS, QUESTION_IDS, e2e_config, greenfield_idea
 from tests.fakes.fake_activities import GIT_FAKES
 
@@ -23,6 +23,13 @@ with workflow.unsafe.imports_passed_through():
     from tests.fakes.fake_agents import fake_agent_activities
 
 TASK_QUEUE = "retro"
+
+from temporalio import activity as _activity
+
+
+@_activity.defn(name="export_run_artifacts")
+async def _boom_export(inp: RunExportInput) -> str:  # same name, always fails
+    raise RuntimeError("disk full")
 
 
 async def _wait_for_status(handle, target, timeout_s=10.0):
@@ -74,3 +81,61 @@ async def test_retro_populates_run_summary_on_deploy(tmp_path, monkeypatch):
     # export wrote the files
     run_dirs = list(tmp_path.iterdir())
     assert run_dirs and (run_dirs[0] / "report.html").exists()
+
+
+async def _drive_reject_arch(handle):
+    await _wait_for_status(handle, "awaiting:clarify")
+    for qid in QUESTION_IDS:
+        await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
+    await _wait_for_status(handle, "awaiting:architecture")
+    await handle.signal(FeatureWorkflow.submit_gate_decision,
+                        GateDecision(gate="architecture", round=1,
+                                     outcome=GateOutcome.REJECT,
+                                     decided_by="human"))
+
+
+@pytest.mark.asyncio
+async def test_retro_fires_on_rejected_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
+    activities = [evaluate_gate, export_run_artifacts, *GIT_FAKES,
+                  *fake_agent_activities(AGENT_SPECS)]
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        with env.auto_time_skipping_disabled():
+            async with Worker(env.client, task_queue=TASK_QUEUE,
+                              workflows=[FeatureWorkflow], activities=activities,
+                              plugins=[PydanticAIPlugin()]):
+                handle = await env.client.start_workflow(
+                    FeatureWorkflow.run,
+                    args=[greenfield_idea(), e2e_config()],
+                    id=f"retro-rej-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                driver = asyncio.create_task(_drive_reject_arch(handle))
+                result = await handle.result()
+                await driver
+                summary = await handle.query(FeatureWorkflow.run_summary)
+    assert result == "rejected:architecture", result
+    assert summary is not None and summary.outcome == result
+    assert summary.terminal_stage in ("clarify", "architecture")
+
+
+@pytest.mark.asyncio
+async def test_export_failure_does_not_change_outcome(tmp_path, monkeypatch):
+    monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
+    activities = [evaluate_gate, _boom_export, *GIT_FAKES,
+                  *fake_agent_activities(AGENT_SPECS)]
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        with env.auto_time_skipping_disabled():
+            async with Worker(env.client, task_queue=TASK_QUEUE,
+                              workflows=[FeatureWorkflow], activities=activities,
+                              plugins=[PydanticAIPlugin()]):
+                handle = await env.client.start_workflow(
+                    FeatureWorkflow.run,
+                    args=[greenfield_idea(), e2e_config()],
+                    id=f"retro-boom-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                driver = asyncio.create_task(_drive(handle))
+                result = await handle.result()
+                await driver
+                summary = await handle.query(FeatureWorkflow.run_summary)
+    assert result.startswith("deployed:"), result   # export failed, run didn't
+    assert summary is not None                       # summary still built
