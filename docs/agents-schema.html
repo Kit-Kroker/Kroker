@@ -1,0 +1,1401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents Schema — Agentic SDLC Factory</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1f2328;
+    --muted: #57606a;
+    --subtle: #8250df;
+    --border: #d0d7de;
+    --border-soft: #eaeef2;
+    --panel: #f6f8fa;
+    --panel-2: #f0f3f7;
+
+    --det:        #8250df;
+    --act:        #0969da;
+    --agent:      #1a7f37;
+    --asset:      #bf8700;
+    --io:         #cf222e;
+    --hitl:       #0969da;
+
+    --det-bg:     rgba(130,80,223,0.10);
+    --act-bg:     rgba(9,105,218,0.10);
+    --agent-bg:   rgba(26,127,55,0.10);
+    --asset-bg:   rgba(191,135,0,0.12);
+    --io-bg:      rgba(207,34,46,0.10);
+
+    --det-bd:     rgba(130,80,223,0.40);
+    --act-bd:     rgba(9,105,218,0.40);
+    --agent-bd:   rgba(26,127,55,0.40);
+    --asset-bd:   rgba(191,135,0,0.45);
+    --io-bd:      rgba(207,34,46,0.40);
+
+    --accent: #0969da;
+    --warn: #9a6700;
+    --warn-bg: rgba(154,103,0,0.10);
+    --warn-bd: rgba(154,103,0,0.40);
+    --bad: #cf222e;
+    --bad-bg: rgba(207,34,46,0.08);
+    --bad-bd: rgba(207,34,46,0.35);
+
+    --proposer: #1a7f37;
+    --harness:  #bf8700;
+    --research: #8250df;
+
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "Cascadia Code", "Men", "Consolas", monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--fg);
+    font-family: var(--sans); font-size: 14px; line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  body { max-width: 1240px; margin: 0 auto; padding: 28px 20px 120px; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, .mono { font-family: var(--mono); font-size: 0.92em; }
+
+  h1 { font-size: 32px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.02em; }
+  h2 {
+    font-size: 22px; font-weight: 600; margin: 44px 0 12px;
+    padding-bottom: 6px; border-bottom: 1px solid var(--border);
+    letter-spacing: -0.01em; scroll-margin-top: 12px;
+  }
+  h2 .count { color: var(--muted); font-weight: 400; font-size: 14px; margin-left: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 6px; scroll-margin-top: 12px; }
+  h4 {
+    font-size: 12.5px; font-weight: 600; margin: 14px 0 4px;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  p { margin: 8px 0; }
+  ul, ol { margin: 8px 0 8px 22px; padding: 0; }
+  li { margin: 3px 0; }
+
+  .meta { color: var(--muted); font-size: 13px; margin: 0 0 4px; }
+  .lede { color: var(--muted); font-size: 15px; max-width: 880px; margin: 12px 0 0; }
+
+  .toc {
+    position: sticky; top: 0; z-index: 5;
+    margin: 18px -20px 0; padding: 10px 20px;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: saturate(140%) blur(6px);
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 12.5px; overflow-x: auto; white-space: nowrap;
+  }
+  .toc a { color: var(--muted); margin-right: 14px; }
+  .toc a:hover { color: var(--accent); text-decoration: none; }
+  .toc a.major { color: var(--fg); font-weight: 600; }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 10px 18px;
+    margin: 18px 0 8px; padding: 10px 14px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--panel); font-size: 12px;
+  }
+  .legend .chip { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .dot.proposer { background: var(--proposer); }
+  .dot.harness  { background: var(--harness); }
+  .dot.research { background: var(--research); }
+
+  .pill {
+    display: inline-block; padding: 1px 8px; border-radius: 12px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+    border: 1px solid transparent; white-space: nowrap; vertical-align: middle;
+  }
+  .pill.proposer { background: rgba(26,127,55,0.10);  color: var(--proposer); border-color: rgba(26,127,55,0.40); }
+  .pill.harness  { background: rgba(191,135,0,0.12);  color: var(--harness);  border-color: rgba(191,135,0,0.45); }
+  .pill.research { background: rgba(130,80,223,0.10); color: var(--research); border-color: rgba(130,80,223,0.40); }
+  .pill.det      { background: var(--det-bg);   color: var(--det);   border-color: var(--det-bd); }
+  .pill.act      { background: var(--act-bg);   color: var(--act);   border-color: var(--act-bd); }
+  .pill.agent    { background: var(--agent-bg); color: var(--agent); border-color: var(--agent-bd); }
+  .pill.asset    { background: var(--asset-bg); color: var(--asset); border-color: var(--asset-bd); }
+  .pill.io       { background: var(--io-bg);    color: var(--io);    border-color: var(--io-bd); }
+  .pill.warn     { background: var(--warn-bg);  color: var(--warn);  border-color: var(--warn-bd); }
+  .pill.bad      { background: var(--bad-bg);   color: var(--bad);   border-color: var(--bad-bd); }
+
+  .card {
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 14px 16px; margin: 12px 0; background: var(--bg);
+  }
+  .card.soft { background: var(--panel); }
+  .card.warn { border-color: var(--warn-bd); background: var(--warn-bg); }
+  .card.bad  { border-color: var(--bad-bd);  background: var(--bad-bg); }
+  .card > h3:first-child, .card > h4:first-child { margin-top: 0; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 820px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  .table-wrap { overflow-x: auto; margin: 12px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--border-soft); }
+  th { background: var(--panel); font-weight: 600; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; }
+  td .pill { margin-right: 4px; }
+  tr:last-child td { border-bottom: none; }
+
+  pre {
+    background: var(--panel); border: 1px solid var(--border-soft);
+    border-radius: 6px; padding: 10px 12px; overflow-x: auto;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.55;
+    margin: 10px 0;
+  }
+  pre .k { color: var(--subtle); }
+  pre .c { color: var(--muted); }
+  pre .s { color: #0a3069; }
+  pre .n { color: var(--bad); }
+
+  .diagram {
+    border: 1px solid var(--border-soft); border-radius: 6px;
+    background: var(--panel); padding: 18px; margin: 14px 0; overflow-x: auto;
+  }
+  .diagram svg { display: block; max-width: 100%; height: auto; }
+
+  .callout {
+    border-left: 3px solid var(--accent); background: var(--panel);
+    padding: 10px 14px; margin: 12px 0; border-radius: 0 4px 4px 0; font-size: 13.5px;
+  }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.bad  { border-left-color: var(--bad); }
+  .callout .label { display: inline-block; font-weight: 600; margin-right: 6px; }
+
+  /* Per-agent section anchor banner */
+  .agent-banner {
+    display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline;
+    padding: 10px 14px; margin: 12px 0 8px;
+    background: var(--panel-2); border: 1px solid var(--border-soft); border-radius: 6px;
+    font-size: 12.5px;
+  }
+  .agent-banner .name { font-family: var(--mono); font-weight: 600; font-size: 13.5px; color: var(--fg); }
+  .agent-banner .kv { color: var(--muted); }
+  .agent-banner .kv b { color: var(--fg); font-weight: 600; }
+
+  .filemap {
+    display: grid; grid-template-columns: 240px 1fr; gap: 0;
+    border: 1px solid var(--border-soft); border-radius: 6px;
+    overflow: hidden; margin: 12px 0;
+  }
+  @media (max-width: 820px) { .filemap { grid-template-columns: 1fr; } }
+  .filemap .layer { background: var(--panel); padding: 10px 12px; border-bottom: 1px solid var(--border-soft); font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+  .filemap .files { padding: 10px 12px; border-bottom: 1px solid var(--border-soft); font-size: 13px; }
+  .filemap .layer:last-child, .filemap .files:last-child { border-bottom: none; }
+  .filemap .files p { margin: 2px 0; }
+  .filemap .files .mono { color: var(--fg); }
+
+  footer {
+    margin-top: 60px; padding-top: 16px;
+    border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 12.5px;
+  }
+  footer a { color: var(--muted); margin-right: 14px; }
+</style>
+</head>
+<body>
+
+<h1>Agents Schema &amp; Architecture</h1>
+<p class="meta">
+  12 agents &middot; <code>agents/&lt;role&gt;/</code> registry &middot;
+  loader: <code>src/sdlc/agents/loader.py</code> &middot;
+  runtime: <code>src/sdlc/agents/roles.py</code> &middot;
+  workflow callsites: <code>src/sdlc/workflows/feature.py</code> &middot;
+  contract source-of-truth: <code>src/sdlc/models.py</code>
+</p>
+<p class="lede">
+  Every role is a folder. The folder name <strong>is</strong> the role name, the API surface, and
+  the Temporal activity namespace. Three kinds: <strong>proposer</strong> agents emit typed
+  Pydantic artifacts via Pydantic AI wrapped in <code>TemporalAgent</code>;
+  <strong>harness</strong> roles drive a coding CLI (<code>opencode run</code> / <code>claude -p</code>) in a worktree;
+  <strong>research</strong> is a proposer with four sequential tools and a pure verifier.
+  The registry is parsed, validated (incl. ADR-6 cross-family check), and built at worker boot
+  &mdash; a misconfigured registry cannot start a worker.
+</p>
+
+<div class="toc" role="navigation">
+  <a href="#overview" class="major">Overview</a>
+  <a href="#registry">Registry</a>
+  <a href="#matrix">Matrix</a>
+  <a href="#dag">DAG</a>
+  <a href="#classes">Classes</a>
+  <a href="#tiering">Tiering</a>
+  <a href="#adr6">ADR-6</a>
+  <a href="#harness-adapter">Harness</a>
+  <a href="#context">Context</a>
+  <a href="#clarify" class="major">clarify</a>
+  <a href="#architect">architect</a>
+  <a href="#planner">planner</a>
+  <a href="#dev">dev</a>
+  <a href="#reviewer">reviewer</a>
+  <a href="#qa">qa</a>
+  <a href="#analyst">analyst</a>
+  <a href="#merge_verdict">merge_verdict</a>
+  <a href="#devops_planner">devops_planner</a>
+  <a href="#devops">devops</a>
+  <a href="#test">test</a>
+  <a href="#research">research</a>
+  <a href="#filemap" class="major">File map</a>
+</div>
+
+<div class="legend">
+  <span class="chip"><span class="dot proposer"></span>proposer (typed artifact, Pydantic AI)</span>
+  <span class="chip"><span class="dot harness"></span>harness (drives opencode/claude CLI in a worktree)</span>
+  <span class="chip"><span class="dot research"></span>research (proposer + 4 tools + verifier)</span>
+  <span style="margin-left:auto;color:var(--muted)">all agents are config in <code>agents/&lt;role&gt;/</code>; behaviour is edited there, not in source</span>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="overview">Overview <span class="count">three kinds, one registry</span></h2>
+
+<p>
+  Agents are <strong>configuration in <code>agents/&lt;role&gt;/</code></strong>, not source code.
+  Each folder carries an <code>agent.yaml</code> (kind, model, provider), and &mdash; for
+  non-harness roles &mdash; <code>instructions.md</code> (the system prompt) and
+  <code>agent.py</code> (a <code>build(model, instructions, model_settings, &hellip;) -&gt; Agent</code>
+  factory). The folder name is the role name; the role name is the registry key; the agent's own
+  <code>name</code> attribute is its Temporal activity name.
+</p>
+
+<div class="grid-3">
+  <div class="card">
+    <h3 style="margin-top:0">Proposer <span class="pill proposer">8 roles</span></h3>
+    <p style="margin:0">
+      <strong>clarify, architect, planner, qa, reviewer, analyst, merge_verdict, devops_planner.</strong>
+      One LLM call (via Pydantic AI) emitting a schema-validated Pydantic artifact. Never touch the
+      repo, never call tools <em>except</em> architect (research tool). Wrapped in
+      <code>TemporalAgent</code> so model calls offload to activities.
+    </p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Harness <span class="pill harness">3 roles</span></h3>
+    <p style="margin:0">
+      <strong>dev, test, devops.</strong> Drive an autonomous coding CLI inside a git worktree.
+      Each role maps to a <code>DevTask.role</code> literal. <code>role_cfg.harness</code> picks
+      the adapter (claude / opencode). No prompt, no <code>agent.py</code> &mdash; the workflow
+      assembles the prompt and calls <code>run_coding_task</code>.
+    </p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Research <span class="pill research">1 role</span></h3>
+    <p style="margin:0">
+      <strong>research</strong> (FR-107). Optional proposer with four sequential tools and a pure
+      verifier. <code>provider</code> field is required. See
+      <a href="research-stage-schema.html">research-stage-schema.html</a> for the deep treatment;
+      this page summarises its place among the other agents.
+    </p>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="registry">Registry lifecycle <span class="count">parse &rarr; validate &rarr; build</span></h2>
+
+<p>
+  <code>src/sdlc/agents/loader.py</code> owns three phases at worker boot. <strong>No unvalidated
+  registry escapes the module</strong>: <code>roles.py</code> imports
+  <code>load_registry()</code> at module scope, so a bad registry fails the import itself.
+</p>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>phase</th><th>function</th><th>does</th><th>fails closed on</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="pill det">1. parse</span></td>
+        <td class="mono">_parse() &rarr; _parse_role()</td>
+        <td>Walk <code>agents/</code> into <code>{role: RoleConfig}</code>; load instructions; structurally validate tool files (research only) via AST &mdash; no imports.</td>
+        <td>Unknown directory, missing <code>agent.yaml</code>, missing/empty <code>instructions.md</code>, missing <code>agent.py</code>, role-folder name mismatch, harness role carrying prompt/agent.py.</td>
+      </tr>
+      <tr>
+        <td><span class="pill det">2. validate</span></td>
+        <td class="mono">validate_registry()</td>
+        <td>Required-role presence; <code>dev</code>/<code>reviewer</code> model declared; <strong>ADR-6 cross-family check</strong>; research <code>provider</code> set; <code>TAVILY_API_KEY</code> reachable for <code>provider: tavily</code>; PipelineConfig mirror.</td>
+        <td>Missing role; same-family dev/reviewer; deep-review harness reviewer on same harness as dev; research without provider; tavily without key; PipelineConfig drift.</td>
+      </tr>
+      <tr>
+        <td><span class="pill agent">3. build</span></td>
+        <td class="mono">build_agents()</td>
+        <td>Import each role's <code>agent.py</code> by private module name, call <code>build()</code>, wrap in <code>TemporalAgent</code>. Harness roles are skipped (no Agent to build).</td>
+        <td>Agent import failure; missing <code>build()</code> callable; colliding agent.name (Temporal activity name).</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="callout warn">
+  <span class="label">Validation precedes import.</span>
+  Tool modules under <code>agents/research/tools/</code> are <em>structurally validated by AST</em>
+  (filename stem == top-level function name; every parameter and return fully annotated) before
+  anything is imported. A typo in a tool signature fails boot with a precise message, not a
+  runtime <code>ImportError</code> mid-pipeline.
+</div>
+
+<!-- ================================================================ -->
+<h2 id="matrix">Matrix <span class="count">12 agents &times; key attributes</span></h2>
+
+<p>
+  Three name spaces are distinct and easy to confuse: <strong>stage</strong> (the workflow's
+  vocabulary, looked up in <code>STAGE_MODELS</code>), <strong>role</strong> (the registry key =
+  folder name), and <strong>agent.name</strong> (the Temporal activity name set inside
+  <code>agent.py</code>). They diverge for four roles.
+</p>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>role (folder)</th>
+        <th>kind</th>
+        <th>stage</th>
+        <th>agent.name (Temporal activity)</th>
+        <th>model</th>
+        <th>output_type</th>
+        <th>harness</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="mono">clarify</td>          <td><span class="pill proposer">proposer</span></td><td class="mono">clarify</td>          <td class="mono">clarify_agent</td>          <td class="mono">anthropic:glm-5.2</td>     <td class="mono">ClarifiedRequirements</td>     <td>&mdash;</td></tr>
+      <tr><td class="mono">architect</td>        <td><span class="pill proposer">proposer</span></td><td class="mono">architect</td>       <td class="mono">architect_agent</td>        <td class="mono">anthropic:glm-5.2</td>     <td class="mono">ArchitectureSpec</td>          <td>&mdash;</td></tr>
+      <tr><td class="mono">planner</td>          <td><span class="pill proposer">proposer</span></td><td class="mono">plan</td>            <td class="mono">planner_agent</td>          <td class="mono">anthropic:glm-5.2</td>     <td class="mono">ImplementationPlan</td>        <td>&mdash;</td></tr>
+      <tr><td class="mono">dev</td>              <td><span class="pill harness">harness</span></td>  <td class="mono">code</td>            <td class="mono">&mdash;</td>                 <td class="mono">zai-coding-plan/glm-5.2</td><td class="mono">HarnessRunResult</td>          <td class="mono">opencode</td></tr>
+      <tr><td class="mono">reviewer</td>         <td><span class="pill proposer">proposer</span></td><td class="mono">review (per-task)</td><td class="mono">reviewer_agent</td>        <td class="mono">anthropic:glm-5.2</td>     <td class="mono">ReviewReport</td>             <td>&mdash;</td></tr>
+      <tr><td class="mono">qa</td>               <td><span class="pill proposer">proposer</span></td><td class="mono">qa (per-task)</td>   <td class="mono">qa_analyst_agent</td>       <td class="mono">anthropic:glm-5.2</td>     <td class="mono">QAReport</td>                 <td>&mdash;</td></tr>
+      <tr><td class="mono">analyst</td>          <td><span class="pill proposer">proposer</span></td><td class="mono">analyze</td>         <td class="mono">analyst_agent</td>          <td class="mono">anthropic:glm-5.2</td>     <td class="mono">AnalysisReport</td>           <td>&mdash;</td></tr>
+      <tr><td class="mono">merge_verdict</td>    <td><span class="pill proposer">proposer</span></td><td class="mono">merge</td>           <td class="mono">merge_verdict_agent</td>    <td class="mono">anthropic:glm-5.2</td>     <td class="mono">MergeVerdict</td>             <td>&mdash;</td></tr>
+      <tr><td class="mono">devops_planner</td>   <td><span class="pill proposer">proposer</span></td><td class="mono">devops (plan)</td>  <td class="mono">devops_agent</td>           <td class="mono">anthropic:glm-5.2</td>     <td class="mono">ImplementationPlan</td>        <td>&mdash;</td></tr>
+      <tr><td class="mono">devops</td>           <td><span class="pill harness">harness</span></td>  <td class="mono">deploy/devops</td>   <td class="mono">&mdash;</td>                 <td class="mono">zai-coding-plan/glm-5.2</td><td class="mono">HarnessRunResult</td>          <td class="mono">opencode</td></tr>
+      <tr><td class="mono">test</td>             <td><span class="pill harness">harness</span></td>  <td class="mono">code (test tasks)</td><td class="mono">&mdash;</td>               <td class="mono">zai-coding-plan/glm-5.2</td><td class="mono">HarnessRunResult</td>          <td class="mono">opencode</td></tr>
+      <tr><td class="mono">research</td>         <td><span class="pill research">research</span></td><td class="mono">research</td>       <td class="mono">research_agent</td>         <td class="mono">anthropic:glm-5.2</td>     <td class="mono">ResearchBrief</td>            <td>&mdash;</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="callout">
+  <span class="label">Easy-to-confuse names.</span>
+  <ul style="margin:6px 0 0">
+    <li><code>qa</code> role &rarr; <code>qa_analyst_agent</code> activity name (kept stable for history).</li>
+    <li><code>devops_planner</code> role &rarr; <code>devops_agent</code> activity name. The proposer that <em>plans</em> devops tasks is named <code>devops_agent</code>; the harness role <code>devops</code> <em>runs</em> them.</li>
+    <li><code>plan</code> stage &rarr; <code>planner</code> role &rarr; <code>planner_agent</code> activity.</li>
+    <li><code>analyze</code> stage &rarr; <code>analyst</code> role &rarr; <code>analyst_agent</code> activity.</li>
+    <li><code>review</code> stage &rarr; <code>reviewer</code> role &rarr; <code>reviewer_agent</code> activity.</li>
+  </ul>
+  <p style="margin:6px 0 0">
+    The <em>one</em> place this divergence is reconciled: <code>STAGE_ROLES</code> in
+    <code>roles.py:64</code>.
+  </p>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="dag">Pipeline placement <span class="count">who runs where</span></h2>
+
+<div class="diagram">
+  <svg viewBox="0 0 1180 360" role="img" aria-label="15-stage DAG with agent roles annotated">
+    <defs>
+      <marker id="arrA" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L6,3 L0,6 Z" fill="#57606a"/>
+      </marker>
+    </defs>
+    <g font-family="var(--sans)" font-size="11" text-anchor="middle">
+      <!-- stage row -->
+      <g>
+        <rect x="10"  y="40" width="80" height="40" rx="5" fill="#ffffff" stroke="#d0d7de"/>
+        <text x="50"  y="58">intake</text>
+        <text x="50"  y="73" font-size="10" fill="#8250df">(routing)</text>
+
+        <rect x="100" y="40" width="90" height="40" rx="5" fill="#ffffff" stroke="#d0d7de"/>
+        <text x="145" y="58">constitution</text>
+        <text x="145" y="73" font-size="10" fill="#57606a">deterministic</text>
+
+        <rect x="200" y="40" width="80" height="40" rx="5" fill="#ffffff" stroke="#d0d7de" stroke-dasharray="3 3"/>
+        <text x="240" y="58">context*</text>
+        <text x="240" y="73" font-size="10" fill="#57606a">brownfield</text>
+
+        <rect x="290" y="34" width="90" height="52" rx="6" fill="rgba(130,80,223,0.10)" stroke="#8250df" stroke-width="2"/>
+        <text x="335" y="58" font-weight="600" fill="#8250df">research</text>
+        <text x="335" y="73" font-size="10" fill="#8250df">research_agent</text>
+
+        <rect x="390" y="34" width="90" height="52" rx="6" fill="rgba(26,127,55,0.10)" stroke="#1a7f37" stroke-width="2"/>
+        <text x="435" y="58" font-weight="600" fill="#1a7f37">clarify</text>
+        <text x="435" y="73" font-size="10" fill="#1a7f37">clarify_agent</text>
+
+        <rect x="490" y="34" width="90" height="52" rx="6" fill="rgba(26,127,55,0.10)" stroke="#1a7f37" stroke-width="2"/>
+        <text x="535" y="58" font-weight="600" fill="#1a7f37">architecture</text>
+        <text x="535" y="73" font-size="10" fill="#1a7f37">architect_agent</text>
+
+        <rect x="590" y="34" width="90" height="52" rx="6" fill="rgba(26,127,55,0.10)" stroke="#1a7f37" stroke-width="2"/>
+        <text x="635" y="58" font-weight="600" fill="#1a7f37">planning</text>
+        <text x="635" y="73" font-size="10" fill="#1a7f37">planner_agent</text>
+
+        <!-- per-task loop block -->
+        <rect x="690" y="20" width="200" height="80" rx="6" fill="rgba(191,135,0,0.06)" stroke="#bf8700" stroke-dasharray="4 3"/>
+        <text x="790" y="38" font-size="10" fill="#bf8700" font-weight="600">PER-TASK LOOP (waves)</text>
+        <text x="790" y="58" font-weight="600" fill="#bf8700">code ⇄ review ⇄ qa</text>
+        <text x="790" y="73" font-size="10" fill="#bf8700">dev (harness) · reviewer · qa</text>
+        <text x="790" y="88" font-size="10" fill="#57606a">+ test/devops harness roles for their tasks</text>
+
+        <rect x="900" y="34" width="90" height="52" rx="6" fill="rgba(26,127,55,0.10)" stroke="#1a7f37" stroke-width="2"/>
+        <text x="945" y="58" font-weight="600" fill="#1a7f37">analyze</text>
+        <text x="945" y="73" font-size="10" fill="#1a7f37">analyst_agent</text>
+
+        <rect x="1000" y="34" width="80" height="52" rx="6" fill="rgba(154,103,0,0.10)" stroke="#9a6700" stroke-dasharray="3 2"/>
+        <text x="1040" y="55" font-weight="600" fill="#9a6700">merge</text>
+        <text x="1040" y="68" font-size="9" fill="#9a6700">Det. Q-gate</text>
+        <text x="1040" y="79" font-size="9" fill="#9a6700">+ merge_verdict</text>
+
+        <rect x="1090" y="40" width="80" height="40" rx="5" fill="#ffffff" stroke="#d0d7de"/>
+        <text x="1130" y="58">deploy</text>
+        <text x="1130" y="73" font-size="10" fill="#bf8700">devops_agent + devops (h)</text>
+      </g>
+
+      <!-- arrows along the stage row -->
+      <g stroke="#57606a" stroke-width="1" fill="none" marker-end="url(#arrA)">
+        <line x1="90"  y1="60" x2="100" y2="60"/>
+        <line x1="190" y1="60" x2="200" y2="60"/>
+        <line x1="280" y1="60" x2="290" y2="60"/>
+        <line x1="380" y1="60" x2="390" y2="60"/>
+        <line x1="480" y1="60" x2="490" y2="60"/>
+        <line x1="580" y1="60" x2="590" y2="60"/>
+        <line x1="680" y1="60" x2="690" y2="60"/>
+        <line x1="890" y1="60" x2="900" y2="60"/>
+        <line x1="990" y1="60" x2="1000" y2="60"/>
+        <line x1="1080" y1="60" x2="1090" y2="60"/>
+      </g>
+
+      <!-- gates row -->
+      <g font-size="10" fill="#9a6700">
+        <polygon points="435,140 470,165 435,190 400,165" fill="rgba(154,103,0,0.10)" stroke="#9a6700"/>
+        <text x="435" y="168" text-anchor="middle">clarify</text>
+
+        <polygon points="535,140 570,165 535,190 500,165" fill="rgba(154,103,0,0.10)" stroke="#9a6700"/>
+        <text x="535" y="168" text-anchor="middle">arch</text>
+
+        <polygon points="635,140 670,165 635,190 600,165" fill="rgba(154,103,0,0.10)" stroke="#9a6700"/>
+        <text x="635" y="168" text-anchor="middle">plan</text>
+
+        <polygon points="790,140 825,165 790,190 755,165" fill="rgba(154,103,0,0.10)" stroke="#9a6700"/>
+        <text x="790" y="168" text-anchor="middle">task esc.</text>
+
+        <polygon points="1040,140 1075,165 1040,190 1005,165" fill="rgba(154,103,0,0.10)" stroke="#9a6700"/>
+        <text x="1040" y="168" text-anchor="middle">merge</text>
+
+        <polygon points="1130,140 1165,165 1130,190 1095,165" fill="rgba(154,103,0,0.10)" stroke="#9a6700"/>
+        <text x="1130" y="168" text-anchor="middle">deploy</text>
+
+        <text x="50" y="170" fill="#57606a">HITL gates (durable signal-wait, hard|soft|off):</text>
+      </g>
+
+      <!-- bottom row: model tier coloring -->
+      <g font-size="10">
+        <text x="50"   y="240" fill="#57606a">capability tier:</text>
+
+        <rect x="290" y="225" width="90" height="22" rx="3" fill="rgba(130,80,223,0.10)" stroke="#8250df"/>
+        <text x="335" y="240" fill="#8250df">narrow / fast</text>
+
+        <rect x="390" y="225" width="290" height="22" rx="3" fill="rgba(26,127,55,0.10)" stroke="#1a7f37"/>
+        <text x="535" y="240" fill="#1a7f37">frontier reasoning (architect, planner, repair planner)</text>
+
+        <rect x="690" y="225" width="200" height="22" rx="3" fill="rgba(191,135,0,0.12)" stroke="#bf8700"/>
+        <text x="790" y="240" fill="#bf8700">code-optimised harness + adversarial reviewer</text>
+
+        <rect x="900" y="225" width="180" height="22" rx="3" fill="rgba(26,127,55,0.10)" stroke="#1a7f37"/>
+        <text x="990" y="240" fill="#1a7f37">adversarial instruction-following</text>
+
+        <text x="50" y="285" fill="#57606a" font-style="italic">
+          serial-by-default inside the per-task loop; "waves" mode serializes any two tasks that declare overlapping modules (overlaps falsified → integration conflict → escalate).
+        </text>
+        <text x="50" y="305" fill="#57606a" font-style="italic">
+          each task cuts its worktree from the running integration head; clean-context QA pass → merge back into integration (ADR-14).
+        </text>
+        <text x="50" y="325" fill="#57606a" font-style="italic">
+          a task diff is measured against its own branch point, not the run's base.
+        </text>
+      </g>
+    </g>
+  </svg>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="classes">Agent class &rarr; Temporal construct <span class="count">ADR-2</span></h2>
+
+<p>
+  Pydantic AI agent classes map to Temporal constructs by rule, not convention
+  (<code>ARCHITECTURE.md &sect;4</code>).
+</p>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>class</th><th>Temporal construct</th><th>our roles</th></tr></thead>
+    <tbody>
+      <tr><td>Automation (one LLM call)</td><td class="mono">activity via TemporalAgent</td><td>clarify, architect, planner, reviewer, qa, analyst, merge_verdict, devops_planner, research</td></tr>
+      <tr><td>Long-running (tools, iteration)</td><td class="mono">heartbeating activity</td><td>dev, test, devops (via <code>run_coding_task</code>); optional reviewer deep-review tier</td></tr>
+      <tr><td>Conversational</td><td class="mono">external client ↔ workflow signals/queries</td><td>operators via MCP / dashboard / CLI (not agents)</td></tr>
+      <tr><td>Proactive</td><td class="mono">workflow (timer / Schedule)</td><td>MaintenanceWorkflow, nightly reflect (not agents)</td></tr>
+      <tr><td>Routing</td><td class="mono">deterministic workflow branch</td><td>intake (greenfield / brownfield / repair) (not an agent)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card soft">
+  <h4>The <code>TemporalAgent</code> wrapping <span class="pill asset">roles.py:100</span></h4>
+  <pre>t_clarify    = TemporalAgent(clarify_agent,         activity_config=AGENT_ACTIVITY_CONFIG)
+t_architect  = TemporalAgent(architect_agent,       activity_config=AGENT_ACTIVITY_CONFIG)
+<span class="c"># ...one per proposer role. AGENT_ACTIVITY_CONFIG:</span>
+AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=10))</pre>
+  <p style="margin:6px 0 0;font-size:12.5px;color:var(--muted)">
+    Each model call and each tool call from a proposer agent is automatically offloaded to its own
+    Temporal activity. The workflow code stays deterministic.
+  </p>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="tiering">Model tiering per role <span class="count">capability-matched</span></h2>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>role</th><th>capability need</th><th>tier</th></tr></thead>
+    <tbody>
+      <tr><td>architect, planner, devops_planner</td><td>strategic reasoning</td><td>frontier reasoning model</td></tr>
+      <tr><td>dev, test, devops (harness)</td><td>code fluency + tools</td><td>code-optimised (harness-native)</td></tr>
+      <tr><td>reviewer, qa, analyst</td><td>adversarial instruction-following</td><td><strong>different model family than <code>dev</code></strong> (ADR-6)</td></tr>
+      <tr><td>clarify, research</td><td>narrow classification / extraction / grounded search</td><td>small fast model (research can be lifted)</td></tr>
+      <tr><td>merge_verdict</td><td>advisory opinion on already-passing build</td><td>conservative frontier</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="adr6">ADR-6 anti-collusion by construction <span class="count">structural, not prompt-based</span></h2>
+
+<p>
+  The doer has tools; the judge does not. Enforced at <strong>boot</strong>, not at runtime.
+</p>
+
+<div class="card soft">
+  <h4>The invariant <span class="pill asset">loader.py:200</span></h4>
+  <pre><span class="k">def</span> validate_registry(roles):
+    <span class="c"># 1. dev and reviewer must both declare a model</span>
+    <span class="k">for</span> name <span class="k">in</span> (<span class="s">"dev"</span>, <span class="s">"reviewer"</span>):
+        <span class="k">if</span> roles[name].model <span class="k">is</span> <span class="k">None</span>: <span class="k">raise</span> RegistryError(...)
+
+    <span class="c"># 2. their model FAMILIES must differ</span>
+    dev, rev = roles[<span class="s">"dev"</span>], roles[<span class="s">"reviewer"</span>]
+    <span class="k">if</span> model_family(dev.model) == model_family(rev.model):
+        <span class="k">raise</span> RegistryError(<span class="s">"ADR-6 violation: reviewer family equals dev family"</span>)
+
+    <span class="c"># 3. optional deep-review harness reviewer must use a different HARNESS too</span>
+    <span class="k">if</span> rev.kind == <span class="s">"harness"</span> <span class="k">and</span> rev.harness == dev.harness:
+        <span class="k">raise</span> RegistryError(<span class="s">"deep-review harness reviewer must differ from dev harness"</span>)
+
+<span class="k">def</span> model_family(model: str) -&gt; str:
+    <span class="c"># 'anthropic:glm-5.2'  -&gt; 'anthropic'</span>
+    <span class="c"># 'zai-coding-plan/glm-5.2' -&gt; 'zai-coding-plan'</span>
+    <span class="k">return</span> re.split(r<span class="s">"[:/]"</span>, model, maxsplit=1)[0].strip().lower()</pre>
+</div>
+
+<div class="callout warn">
+  <span class="label">Reviewer is a clean-context proposer by default (ADR-6/ADR-12).</span>
+  It receives orchestrator-assembled inputs only (frozen contract + materialized diff + test output),
+  holds <strong>no tools, no repo, no worker session</strong>, and never resumes the developer's
+  harness session. The doer has tools; the judge does not &mdash; so the judge cannot wander or be
+  polluted. A harness <strong>deep-review</strong> tier is configurable per project for high-risk
+  work; when enabled, the harness-inequality clause re-applies to that path.
+</div>
+
+<!-- ================================================================ -->
+<h2 id="harness-adapter">Harness adapter <span class="count">one protocol, two adapters</span></h2>
+
+<p>
+  <code>src/sdlc/harness/adapters.py</code> &mdash; invoked from a Temporal activity
+  (<code>run_coding_task</code>), never from workflow code. Both adapters normalize to
+  <code>HarnessRunResult</code>.
+</p>
+
+<div class="card soft">
+  <h4>The normalized result <span class="pill asset">models.py:153</span></h4>
+  <pre><span class="k">class</span> HarnessRunResult(BaseModel):
+    harness: HarnessKind                <span class="c"># CLAUDE_CODE | OPENCODE</span>
+    session_id: str | <span class="k">None</span>             <span class="c"># resume across fix-loop attempts</span>
+    exit_code: int
+    summary: str                        <span class="c"># harness final text, truncated to 4 KB</span>
+    cost_usd: float | <span class="k">None</span>
+    commit_sha: str | <span class="k">None</span>             <span class="c"># checkpoint commit after the run</span>
+    diff_ref: ArtifactRef | <span class="k">None</span>
+    <span class="c"># ADR-13 context ceiling (Finding #7):</span>
+    input_tokens:  int | <span class="k">None</span>
+    output_tokens: int | <span class="k">None</span>
+    context_window: int | <span class="k">None</span>
+    compacted: bool = <span class="k">False</span>             <span class="c"># harness signalled mid-run compaction</pre>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>adapter</th><th>build_cmd</th><th>resume flag</th><th>format / parse</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="mono">ClaudeCodeHarness</td>
+        <td class="mono">claude -p &lt;prompt&gt; --output-format json --allowedTools &hellip; --permission-mode acceptEdits</td>
+        <td class="mono">--resume &lt;sid&gt;</td>
+        <td>single JSON payload on last line; <code>usage.input_tokens</code>, <code>usage.output_tokens</code>, <code>total_cost_usd</code></td>
+      </tr>
+      <tr>
+        <td class="mono">OpenCodeHarness</td>
+        <td class="mono">opencode run --pure --auto -m &lt;model&gt; -s &lt;sid&gt; --format json &lt;prompt&gt;</td>
+        <td class="mono">-s &lt;sid&gt;</td>
+        <td>one JSON event per line (<code>step_start</code>, <code>text</code>, <code>step_finish</code>); tokens/cost summed across every <code>step_finish</code></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="callout warn">
+  <span class="label">Why opencode runs with <code>--pure --auto</code>.</span>
+  <code>--pure</code> excludes auto-discovered plugins (otherwise the user's global
+  <em>superpowers</em> plugin auto-activates its brainstorming skill on "creative work" and the
+  non-interactive activity stalls waiting for an answer that never comes; the <code>plugin: []</code>
+  config does <strong>not</strong> exclude auto-discovered plugins). <code>--auto</code> mirrors
+  claude's <code>--permission-mode acceptEdits</code> &mdash; without it every tool call blocks on
+  a permission approval that never arrives and the diff comes back empty.
+</div>
+
+<div class="card soft">
+  <h4>Env allowlist (FR-703, Finding #8) <span class="pill asset">adapters.py:58</span></h4>
+  <pre>ENV_ALLOWLIST = (
+    <span class="s">"PATH"</span>, <span class="s">"HOME"</span>, <span class="s">"LANG"</span>, <span class="s">"LC_ALL"</span>, <span class="s">"TMPDIR"</span>, <span class="s">"TMP"</span>, <span class="s">"TEMP"</span>,
+    <span class="s">"SYSTEMROOT"</span>, <span class="s">"SYSTEMDRIVE"</span>, <span class="s">"USERPROFILE"</span>, <span class="s">"PATHEXT"</span>, <span class="s">"COMSPEC"</span>,
+    <span class="s">"GIT_EXEC_PATH"</span>, <span class="s">"GIT_SSH"</span>, <span class="s">"SSH_AUTH_SOCK"</span>,
+)
+<span class="c"># Plus credentials deliberately injected via req.env (repo-scoped, short-TTL).</span>
+<span class="c"># Never the worker's full os.environ — env is a bigger secret channel than prompts.</span></pre>
+</div>
+
+<div class="card soft">
+  <h4>Context-window table <span class="pill asset">adapters.py:35</span></h4>
+  <pre>CONTEXT_WINDOWS = {
+    <span class="s">"sonnet"</span>: 200_000,  <span class="s">"opus"</span>: 200_000,  <span class="s">"haiku"</span>: 200_000,
+    <span class="s">"gpt-5"</span>: 400_000,  <span class="s">"glm"</span>:  1_000_000,
+}
+<span class="c"># Substring match on the model id; unknown models fall back to the resume counter.</span></pre>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="context">Context engineering <span class="count">handles, not walls of text</span></h2>
+
+<p>
+  Agent context is assembled from references and scoped extracts, <strong>never full artifact
+  dumps</strong>. Each role declares a context budget in <code>RoleConfig.context_budget_tokens
+  (default 30 000)</code>, enforced at prompt assembly.
+</p>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>role</th><th>sees</th><th>never sees</th></tr></thead>
+    <tbody>
+      <tr><td>clarify</td>          <td>idea (+ brief digest, + recalled clarify items)</td><td>code</td></tr>
+      <tr><td>architect</td>        <td>idea + clarified reqs + (brownfield) CodebaseMap + research tool access</td><td>worker sessions</td></tr>
+      <tr><td>planner</td>          <td>architecture spec</td><td>individual file contents beyond plan-relevant extracts</td></tr>
+      <tr><td>dev (harness)</td>    <td>task + contract + recent handoffs + worktree (the code itself)</td><td>other tasks' transcripts</td></tr>
+      <tr><td>reviewer</td>         <td>frozen contract + materialised diff + test output</td><td><strong>implementer's summary, reasoning, or session</strong></td></tr>
+      <tr><td>qa</td>               <td>frozen contract + test output + diff stat + diff patch</td><td><strong>implementer's summary or reasoning</strong></td></tr>
+      <tr><td>analyst</td>          <td>acceptance criteria + integration diff + aggregate test output</td><td><strong>any implementer's summary, reasoning, or session</strong></td></tr>
+      <tr><td>merge_verdict</td>    <td>QA report + reviewer summary + diff stats</td><td>raw sessions</td></tr>
+      <tr><td>research</td>         <td>idea; pages it fetches this run; recalled leads</td><td>another stage's raw transcript</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ################################################################ -->
+<h2 id="clarify">1. clarify <span class="pill proposer">proposer</span></h2>
+
+<div class="agent-banner">
+  <span class="name">clarify</span>
+  <span class="kv">activity: <b>clarify_agent</b></span>
+  <span class="kv">stage: <b>clarify</b></span>
+  <span class="kv">output: <b>ClarifiedRequirements</b></span>
+  <span class="kv">model: <b>anthropic:glm-5.2</b></span>
+  <span class="kv">files: <b>agents/clarify/{agent.py, agent.yaml, instructions.md}</b></span>
+</div>
+
+<p>
+  Requirements analyst. Extracts functional / non-functional requirements, defines out-of-scope,
+  and lists <strong>only</strong> the open questions whose answers materially change the design
+  (Definition-of-Ready style). Each question carries a suggested answer the human can accept in
+  one click. Wiring: <code>feature.py:776</code> via <code>_cached_stage</code> +
+  <code>_revisable_stage</code> &rarr; <code>_gate("clarify")</code>.
+</p>
+
+<h3>The contract: <code>ClarifiedRequirements</code> <span class="pill asset">models.py:79</span></h3>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>field</th><th>type</th><th>rule</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">summary</td><td class="mono">str</td><td>Prose summary of understood intent.</td></tr>
+      <tr><td class="mono">functional_requirements</td><td class="mono">list[str]</td><td>What the system must do.</td></tr>
+      <tr><td class="mono">non_functional_requirements</td><td class="mono">list[str]</td><td>Performance, security, accessibility, &hellip;</td></tr>
+      <tr><td class="mono">out_of_scope</td><td class="mono">list[str]</td><td>Explicit non-goals &mdash; defends against scope creep at plan time.</td></tr>
+      <tr><td class="mono">open_questions</td><td class="mono">list[OpenQuestion]</td><td>Only the questions whose answers materially change the design.</td></tr>
+      <tr><td class="mono">spec_ref</td><td class="mono">ArtifactRef | None</td><td>Claim-check to the full requirements doc.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card soft">
+  <h4><code>OpenQuestion</code> <span class="pill asset">models.py:71</span></h4>
+  <pre><span class="k">class</span> OpenQuestion(BaseModel):
+    id: str
+    question: str
+    why_it_matters: str
+    suggested_answer: str | <span class="k">None</span> = <span class="k">None</span>
+    answer:             str | <span class="k">None</span> = <span class="k">None</span>      <span class="c"># filled by human (or auto)</span></pre>
+</div>
+
+<div class="card soft">
+  <h4>Stage-specific mechanics <span class="pill asset">feature.py:773</span></h4>
+  <ul style="margin:6px 0 0">
+    <li>Pre-run <code>_recall</code> with <code>filters={stage: clarify}</code> supplies relevant memory.</li>
+    <li>If <code>open_questions</code> are emitted and gate policy is <code>OFF</code> (e.g. benchmark cell), the suggested answer is auto-applied so the run does not block forever.</li>
+    <li>Otherwise the workflow <code>wait_condition</code>s on every <code>q.id</code> appearing in <code>self._question_answers</code>, with a <code>cfg.gate_timeout_hours</code> timeout.</li>
+    <li>Each answer is recorded via <code>answer_question</code> signal (idempotent per question_id).</li>
+  </ul>
+</div>
+
+<!-- ################################################################ -->
+<h2 id="architect">2. architect <span class="pill proposer">proposer · 1 tool</span></h2>
+
+<div class="agent-banner">
+  <span class="name">architect</span>
+  <span class="kv">activity: <b>architect_agent</b></span>
+  <span class="kv">stage: <b>architect</b></span>
+  <span class="kv">output: <b>ArchitectureSpec</b></span>
+  <span class="kv">model: <b>anthropic:glm-5.2</b></span>
+  <span class="kv">deps_type: <b>ResearchDeps</b></span>
+  <span class="kv">files: <b>agents/architect/{agent.py, agent.yaml, instructions.md}</b></span>
+</div>
+
+<p>
+  Software architect. Produces an architecture spec with explicit, numbered decisions and
+  rationale. <strong>Brownfield:</strong> grounds every decision in the provided
+  <code>CodebaseMap</code> and lists affected modules as a delta (added / modified / removed).
+  <strong>Greenfield:</strong> decides stack, project structure, key ADRs. Prefers boring
+  technology, flags risks explicitly. <strong>Uniquely among proposers, holds a tool</strong>:
+  <code>research</code>, which consults grounded research mid-run on a sub-question, drawing down
+  the same per-run budget as the research stage.
+</p>
+
+<h3>The contract: <code>ArchitectureSpec</code> <span class="pill asset">models.py:95</span></h3>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>field</th><th>type</th><th>rule</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">overview</td><td class="mono">str</td><td>Prose overview of the design.</td></tr>
+      <tr><td class="mono">decisions</td><td class="mono">list[ArchitectureDecision]</td><td>Explicit, numbered, with rationale and alternatives.</td></tr>
+      <tr><td class="mono">affected_modules</td><td class="mono">list[str]</td><td>Brownfield delta (added / modified / removed).</td></tr>
+      <tr><td class="mono">new_components</td><td class="mono">list[str]</td><td>New modules / services introduced.</td></tr>
+      <tr><td class="mono">risks</td><td class="mono">list[str]</td><td>Called out explicitly, never buried.</td></tr>
+      <tr><td class="mono">spec_ref</td><td class="mono">ArtifactRef | None</td><td>Claim-check to the full spec.</td></tr>
+      <tr><td class="mono">confidence</td><td class="mono">float | None &ge;0, &le;1</td><td>Calibrated self-score (FR-301); feeds soft-gate auto-approval.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="grid-2">
+  <div class="card soft">
+    <h4><code>ArchitectureDecision</code> <span class="pill asset">models.py:88</span></h4>
+    <pre><span class="k">class</span> ArchitectureDecision(BaseModel):
+    id: str
+    decision: str
+    rationale: str
+    alternatives_considered: list[str] = []</pre>
+  </div>
+  <div class="card soft">
+    <h4>The <code>research</code> tool <span class="pill agent">agent.py:19</span></h4>
+    <pre>@agent.tool
+<span class="k">async def</span> research(ctx, question: str) -&gt; ResearchBrief:
+    <span class="s">"""Consult grounded research on a sub-question.
+    Draws down this run's shared research budget."""</span>
+    <span class="k">from</span> sdlc.research.toolset <span class="k">import</span> research_subquery
+    <span class="k">return await</span> research_subquery(ctx.deps, question)</pre>
+    <p style="margin:6px 0 0;font-size:12.5px;color:var(--muted)">
+      Imported lazily so <code>agents/architect/agent.py</code> stays importable without
+      constructing the research agent at import time.
+    </p>
+  </div>
+</div>
+
+<div class="callout warn">
+  <span class="label">Stack directive propagates from here to every task.</span>
+  The architect decides the stack; the planner copies it verbatim into every task's
+  <code>ValidationContract.stack</code>; the dev harness is told <em>not</em> to deviate; the QA
+  validator flags <code>stack_mismatch</code> if the diff uses a fundamentally different runtime.
+</div>
+
+<!-- ################################################################ -->
+<h2 id="planner">3. planner <span class="pill proposer">proposer</span></h2>
+
+<div class="agent-banner">
+  <span class="name">planner</span>
+  <span class="kv">activity: <b>planner_agent</b></span>
+  <span class="kv">stage: <b>plan</b></span>
+  <span class="kv">output: <b>ImplementationPlan</b></span>
+  <span class="kv">model: <b>anthropic:glm-5.2</b></span>
+  <span class="kv">files: <b>agents/planner/{agent.py, agent.yaml, instructions.md}</b></span>
+</div>
+
+<p>
+  Tech lead. Decomposes the approved architecture into small, independently mergeable dev tasks
+  with acceptance criteria and dependency edges. <strong>For every task</strong>, compiles its
+  acceptance criteria into a <code>ValidationContract</code> &mdash; concrete, checkable
+  assertions, test commands, lint commands, written before any code exists.
+</p>
+
+<h3>The contract: <code>ImplementationPlan</code> <span class="pill asset">models.py:147</span></h3>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>field</th><th>type</th><th>rule</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">tasks</td><td class="mono">list[DevTask]</td><td>Each completable by a coding agent in one focused session.</td></tr>
+      <tr><td class="mono">plan_ref</td><td class="mono">ArtifactRef | None</td><td>Claim-check to the full plan.</td></tr>
+      <tr><td class="mono">confidence</td><td class="mono">float | None &ge;0, &le;1</td><td>Calibrated self-score.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card soft">
+  <h4><code>DevTask</code> <span class="pill asset">models.py:132</span></h4>
+  <pre><span class="k">class</span> DevTask(BaseModel):
+    id: str
+    title: str
+    description: str
+    depends_on: list[str] = []                <span class="c"># dependency edges</span>
+    acceptance_criteria: list[str]
+    files_hint: list[str] = []
+    overlaps: list[str] = []                  <span class="c"># modules shared with other tasks (FR-104)</span>
+                                              <span class="c"># overlapping tasks serialize in wave mode</span>
+    contract: ValidationContract | <span class="k">None</span> = <span class="k">None</span>  <span class="c"># frozen at planning</span>
+    role: Literal[<span class="s">"dev"</span>, <span class="s">"test"</span>, <span class="s">"devops"</span>] = <span class="s">"dev"</span></pre>
+</div>
+
+<div class="card soft">
+  <h4><code>ValidationContract</code> <span class="pill asset">models.py:105</span> &mdash; FR-803</h4>
+  <pre><span class="k">class</span> ValidationContract(BaseModel):
+    task_id: str
+    assertions: list[str]                     <span class="c"># human-readable, test-mappable</span>
+    test_commands: list[str] = []             <span class="c"># MUST be real, runnable shell commands</span>
+    lint_commands: list[str] = []             <span class="c"># for the stack chosen in the architecture</span>
+    stack: str = <span class="s">""</span>                           <span class="c"># e.g. "TypeScript/Node.js, npm workspaces"</span>
+                                              <span class="c"># copied verbatim; hard constraint, not soft</span>
+    frozen: bool = <span class="k">True</span>                       <span class="c"># set at plan gate; immutable after</span></pre>
+  <p style="margin:8px 0 0">
+    Correctness is judged against this contract, never against the implementation or the worker's
+    narrative (ADR-12). The contract is <strong>frozen at the plan gate</strong> &mdash; once
+    frozen, the implementation cannot redefine "done".
+  </p>
+</div>
+
+<div class="callout warn">
+  <span class="label">Commands must be self-contained.</span>
+  A command may run in a worktree that has never had dependencies installed (the integration
+  branch accumulates merged code but is never <code>npm install</code> / <code>pip install</code>-ed
+  on its own). Each command must install its own deps first (e.g.
+  <code>npm install &amp;&amp; npm test</code>), never assume a prior install step already ran.
+</div>
+
+<!-- ################################################################ -->
+<h2 id="dev">4. dev <span class="pill harness">harness · opencode</span></h2>
+
+<div class="agent-banner">
+  <span class="name">dev</span>
+  <span class="kv">harness: <b>opencode</b></span>
+  <span class="kv">stage: <b>code (per-task, the implementer)</b></span>
+  <span class="kv">model: <b>zai-coding-plan/glm-5.2</b></span>
+  <span class="kv">ADR-6 anchor: <b>yes (this is the role ADR-6 constrains)</b></span>
+  <span class="kv">file: <b>agents/dev/agent.yaml</b></span>
+</div>
+
+<p>
+  The harness role that <strong>writes code</strong>. Resolves to <code>role_cfg =
+  cfg.roles[task.role]</code> in <code>_dev_task</code>; default role literal is
+  <code>"dev"</code>. The workflow builds the prompt, opens a worktree from the integration head,
+  and invokes <code>run_coding_task</code> which dispatches to <code>OpenCodeHarness</code>.
+</p>
+
+<div class="card soft">
+  <h4>Per-task loop <span class="pill det">feature.py:470</span></h4>
+  <pre><span class="k">for</span> attempt <span class="k">in</span> range(1, cfg.max_fix_attempts + 2):
+    run = await workflow.execute_activity(
+        run_coding_task,
+        CodingTaskInput(harness=role_cfg.harness, prompt=prompt,
+                        worktree=worktree, model=role_cfg.model,
+                        session_id=session_id),           <span class="c"># resume across attempts</span>
+        **_long_act(role_cfg))
+
+    qa_raw = await workflow.execute_activity(run_test_suite, QAInput(worktree, test_cmd), ...)
+    diff   = await workflow.execute_activity(get_task_diff, DiffInput(worktree, branch_point), ...)
+    qa     = (await t_qa.run(...)).output                  <span class="c"># clean-context</span>
+    review = (await t_reviewer.run(...)).output <span class="k">if</span> cfg.review_enabled <span class="k">else</span> <span class="k">None</span>
+
+    <span class="k">if</span> qa.tests_passed <span class="k">and not</span> qa.issues <span class="k">and</span> review_ok:
+        <span class="k">return</span> TaskResult(status=<span class="s">"done"</span>, ...)            <span class="c"># → _merge_task into integration</span>
+
+    <span class="c"># else: feed issues back into the SAME harness session and retry</span></pre>
+</div>
+
+<div class="card soft">
+  <h4>Prompt assembly <span class="pill det">feature.py:498</span></h4>
+  <pre>prompt = (
+    f<span class="s">"Task: {task.title}\n{task.description}\n"</span>
+    + stack_directive                              <span class="c"># "use {contract.stack}, do not deviate"</span>
+    + <span class="s">"Your work will be validated against this frozen contract:\n- "</span>
+    + <span class="s">"\n- "</span>.join(assertions)
+    + (<span class="s">"\nHandoffs from preceding tasks:\n"</span> + <span class="s">"\n"</span>.join(handoff_notes)
+       <span class="k">if</span> handoff_notes <span class="k">else</span> <span class="s">""</span>)                 <span class="c"># last 5 only</span>
+    + <span class="s">"\nWork only in this worktree. Run the tests before finishing."</span>
+    + <span class="s">"\nThis worktree is already a git repository ... do NOT run `git init`"</span>
+)</pre>
+</div>
+
+<div class="callout warn">
+  <span class="label">Why "don't <code>git init</code>" appears in every prompt.</span>
+  Observed in the wild: a greenfield-looking worktree (no checked-in files yet) made the harness
+  run <code>git init</code> over the existing <code>.git</code> file/directory, corrupting the
+  branch state. The prompt now warns explicitly; the harness cannot infer this from the filesystem
+  alone.
+</div>
+
+<div class="callout bad">
+  <span class="label">ADR-6 anchor.</span>
+  The check in <code>validate_registry</code> uses <code>dev.model</code> as the authoring-model
+  reference. <em>Editing <code>agents/dev/agent.yaml</code>'s model is configuration, not a code
+  change (US-4 / US-5)</em> &mdash; but the reviewer's family must differ.
+</div>
+
+<!-- ################################################################ -->
+<h2 id="reviewer">5. reviewer <span class="pill proposer">proposer · clean-context</span></h2>
+
+<div class="agent-banner">
+  <span class="name">reviewer</span>
+  <span class="kv">activity: <b>reviewer_agent</b></span>
+  <span class="kv">stage: <b>review (per-task, second judge)</b></span>
+  <span class="kv">output: <b>ReviewReport</b></span>
+  <span class="kv">model: <b>anthropic:glm-5.2 (must differ from dev family)</b></span>
+  <span class="kv">files: <b>agents/reviewer/{agent.py, agent.yaml, instructions.md}</b></span>
+</div>
+
+<p>
+  Clean-context code reviewer. Receives <strong>ONLY</strong>: the task's frozen
+  <code>ValidationContract</code> assertions, the test output, and the materialized diff. Never
+  sees the implementer's summary, reasoning, or session. Judges whether the diff correctly and
+  safely satisfies each contract assertion. Reports concrete findings with severity
+  (<code>critical</code> / <code>high</code> / <code>medium</code> / <code>low</code>) and a
+  suggested fix. Sets <code>approve=False</code> if <em>any</em> finding is critical or high.
+</p>
+
+<h3>The contract: <code>ReviewReport</code> <span class="pill asset">models.py:228</span></h3>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>field</th><th>type</th><th>rule</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">approve</td><td class="mono">bool</td><td>False if any finding is critical or high.</td></tr>
+      <tr><td class="mono">findings</td><td class="mono">list[ReviewFinding]</td><td>Concrete, assertion-anchored, with suggested fix.</td></tr>
+      <tr><td class="mono">confidence</td><td class="mono">float | None &ge;0, &le;1</td><td>Calibrated self-score.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="grid-2">
+  <div class="card soft">
+    <h4><code>ReviewFinding</code> <span class="pill asset">models.py:221</span></h4>
+    <pre><span class="k">class</span> ReviewFinding(BaseModel):
+    assertion: str            <span class="c"># which contract assertion / concern</span>
+    severity: Literal[<span class="s">"critical"</span>, <span class="s">"high"</span>,
+                     <span class="s">"medium"</span>,  <span class="s">"low"</span>]
+    detail: str
+    suggested_fix: str = <span class="s">""</span></pre>
+  </div>
+  <div class="card soft">
+    <h4><code>blocking_findings</code> property <span class="pill asset">models.py:237</span></h4>
+    <pre>@property
+<span class="k">def</span> blocking_findings(self):
+    <span class="k">return</span> [f <span class="k">for</span> f <span class="k">in</span> self.findings
+            <span class="k">if</span> f.severity <span class="k">in</span> (<span class="s">"critical"</span>, <span class="s">"high"</span>)]</pre>
+    <p style="margin:6px 0 0;font-size:12.5px;color:var(--muted)">
+      Drives the per-task fix loop: blocking findings join <code>qa.issues</code> in the next
+      attempt's guidance.
+    </p>
+  </div>
+</div>
+
+<div class="card soft">
+  <h4>Per-task wiring <span class="pill det">feature.py:550</span></h4>
+  <pre>review = <span class="k">None</span>
+<span class="k">if</span> cfg.review_enabled:
+    review = (await t_reviewer.run(
+        <span class="s">"Frozen contract assertions:\n- "</span> + <span class="s">"\n- "</span>.join(assertions)
+        + f<span class="s">"\nTest results: {qa_raw.model_dump_json()}"</span>
+        + f<span class="s">"\nDiff:\n{diff['patch']}"</span>)).output
+<span class="c"># Same inputs as QA, plus the full patch. No narrative, no session.</span></pre>
+</div>
+
+<!-- ################################################################ -->
+<h2 id="qa">6. qa <span class="pill proposer">proposer · clean-context</span></h2>
+
+<div class="agent-banner">
+  <span class="name">qa</span>
+  <span class="kv">activity: <b>qa_analyst_agent</b></span>
+  <span class="kv">stage: <b>qa (per-task, first judge)</b></span>
+  <span class="kv">output: <b>QAReport</b></span>
+  <span class="kv">model: <b>anthropic:glm-5.2</b></span>
+  <span class="kv">files: <b>agents/qa/{agent.py, agent.yaml, instructions.md}</b></span>
+</div>
+
+<p>
+  Clean-context QA validator. Same inputs as the reviewer (frozen contract + test output +
+  materialized diff), but judges <strong>whether the diff satisfies each contract assertion
+  &mdash; not whether tests merely pass</strong>. Lists concrete issues per unmet assertion. Sets
+  <code>stack_mismatch</code> only when the diff uses a fundamentally different runtime than the
+  contract's frozen stack (not for a merely incomplete implementation within the correct stack).
+</p>
+
+<h3>The contract: <code>QAReport</code> <span class="pill asset">models.py:193</span></h3>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>field</th><th>type</th><th>rule</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">tests_passed</td><td class="mono">bool</td><td>From the actual test run (deterministic signal).</td></tr>
+      <tr><td class="mono">coverage_pct</td><td class="mono">float | None</td><td>Diff-scoped, advisory.</td></tr>
+      <tr><td class="mono">failing_tests</td><td class="mono">list[str]</td><td>Concrete test names.</td></tr>
+      <tr><td class="mono">issues</td><td class="mono">list[str]</td><td>Per unmet assertion.</td></tr>
+      <tr><td class="mono">stack_mismatch</td><td class="mono">bool</td><td>Fundamentally different runtime, not merely incomplete.</td></tr>
+      <tr><td class="mono">report_ref</td><td class="mono">ArtifactRef | None</td><td>Claim-check.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="callout">
+  <span class="label">QA is advisory to the gate; <code>tests_passed</code> is the deterministic backbone.</span>
+  The per-task loop accepts only when <code>qa.tests_passed and not qa.issues and review_ok</code>.
+  An LLM opinion can never overwrite the deterministic <code>tests_passed</code> signal &mdash;
+  the stage=<code>"code"</code> benchmark record keeps the deterministic score; the stage=<code>"qa"</code> record rides along with the LLM-judged quality.
+</div>
+
+<!-- ################################################################ -->
+<h2 id="analyst">7. analyst <span class="pill proposer">proposer · clean-context</span></h2>
+
+<div class="agent-banner">
+  <span class="name">analyst</span>
+  <span class="kv">activity: <b>analyst_agent</b></span>
+  <span class="kv">stage: <b>analyze</b></span>
+  <span class="kv">output: <b>AnalysisReport</b></span>
+  <span class="kv">model: <b>anthropic:glm-5.2</b></span>
+  <span class="kv">files: <b>agents/analyst/{agent.py, agent.yaml, instructions.md}</b></span>
+</div>
+
+<p>
+  Clean-context release analyst. Receives <strong>ONLY</strong>: the run's acceptance criteria
+  (each tagged with its task id), the materialized integration diff, and the aggregate test output.
+  Never sees any implementer's summary, reasoning, or session. For each acceptance criterion,
+  populates a <code>CriterionTrace</code> with the exact test name(s) that verify it; leaves
+  <code>tests</code> empty if nothing does. <strong>Proposes the criterion&rarr;test mapping; does
+  not decide pass/fail.</strong>
+</p>
+
+<h3>The contract: <code>AnalysisReport</code> <span class="pill asset">models.py:249</span></h3>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>field</th><th>type</th><th>rule</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">traceability</td><td class="mono">list[CriterionTrace]</td><td>Proposed criterion &rarr; test(s) mapping.</td></tr>
+      <tr><td class="mono">findings</td><td class="mono">list[ReviewFinding]</td><td>Integration-level concerns. <strong>Not wired as a blocking gate check</strong> &mdash; rides along for memory/observability.</td></tr>
+      <tr><td class="mono">summary</td><td class="mono">str</td><td>Prose summary.</td></tr>
+      <tr><td class="mono">confidence</td><td class="mono">float | None &ge;0, &le;1</td><td>Calibrated self-score.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card soft">
+  <h4><code>CriterionTrace</code> <span class="pill asset">models.py:242</span></h4>
+  <pre><span class="k">class</span> CriterionTrace(BaseModel):
+    task_id: str
+    criterion: str             <span class="c"># copied verbatim from the plan</span>
+    tests: list[str] = []      <span class="c"># exact test names in the diff/test output</span></pre>
+  <p style="margin:8px 0 0">
+    The Analyst PROPOSES the mapping; the workflow <strong>ENFORCES</strong> completeness against
+    the plan's criteria. This model never carries a pass/fail verdict. Verbatim copy matters:
+    the gate matches criterion text against the plan; a paraphrase breaks the match.
+  </p>
+</div>
+
+<!-- ################################################################ -->
+<h2 id="merge_verdict">8. merge_verdict <span class="pill proposer">proposer · advisory only</span></h2>
+
+<div class="agent-banner">
+  <span class="name">merge_verdict</span>
+  <span class="kv">activity: <b>merge_verdict_agent</b></span>
+  <span class="kv">stage: <b>merge (advisory under SOFT only)</b></span>
+  <span class="kv">output: <b>MergeVerdict</b></span>
+  <span class="kv">model: <b>anthropic:glm-5.2</b></span>
+  <span class="kv">files: <b>agents/merge_verdict/{agent.py, agent.yaml, instructions.md}</b></span>
+</div>
+
+<p>
+  <strong>Advisory</strong> release reviewer, consulted <em>only</em> after the
+  <code>DeterministicQualityGate</code> has already passed, and <em>only</em> under a SOFT merge
+  policy. Given the QA report, reviewer summary, and diff stats, gives a confidence-scored
+  opinion on whether the merge should proceed. <strong>Cannot block a merge on its own and cannot
+  approve one the deterministic gate failed; it only advises.</strong>
+</p>
+
+<h3>The contract: <code>MergeVerdict</code> <span class="pill asset">models.py:410</span></h3>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>field</th><th>type</th><th>rule</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">approve</td><td class="mono">bool</td><td>Advisory only.</td></tr>
+      <tr><td class="mono">confidence</td><td class="mono">float &ge;0, &le;1</td><td>Required (not optional).</td></tr>
+      <tr><td class="mono">rationale</td><td class="mono">str</td><td>Required, concrete.</td></tr>
+      <tr><td class="mono">concerns</td><td class="mono">list[str]</td><td>Be conservative; list concrete concerns.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="callout warn">
+  <span class="label">Two-tier merge architecture.</span>
+  The <code>DeterministicQualityGate</code> decides on typed evidence &mdash; absolute checks
+  (lint, no critical security finding, build/integration integrity) never overridable, advisory
+  checks (coverage, traceability completeness, non-critical severity) human-overridable with
+  recorded justification. The LLM <code>MergeVerdict</code> <em>only</em> advises the soft path
+  and <em>only</em> on an already-passing build. SC-5: zero deploys past a failed absolute check;
+  zero <em>unattended</em> deploys past any failed check.
+</div>
+
+<!-- ################################################################ -->
+<h2 id="devops_planner">9. devops_planner <span class="pill proposer">proposer · devops_agent activity name</span></h2>
+
+<div class="agent-banner">
+  <span class="name">devops_planner</span>
+  <span class="kv">activity: <b>devops_agent</b> ⚠</span>
+  <span class="kv">stage: <b>devops (plans devops tasks)</b></span>
+  <span class="kv">output: <b>ImplementationPlan</b></span>
+  <span class="kv">model: <b>anthropic:glm-5.2</b></span>
+  <span class="kv">files: <b>agents/devops_planner/{agent.py, agent.yaml, instructions.md}</b></span>
+</div>
+
+<p>
+  DevOps engineer. Given the architecture and repo state, produces the pipeline / infra tasks
+  needed to ship this feature: CI updates, migrations, feature flags, deploy and rollback steps.
+  <strong>Reuses <code>ImplementationPlan</code></strong> (same task shape as <code>planner</code>);
+  tasks emitted here carry <code>role="devops"</code> and are <em>executed by the harness role
+  <code>devops</code></em>, not by <code>dev</code>.
+</p>
+
+<div class="callout warn">
+  <span class="label">Naming trap.</span>
+  The proposer that <em>plans</em> devops tasks has agent.name <code>devops_agent</code>. The
+  harness role <em>running</em> those tasks is folder <code>agents/devops/</code>. The activity
+  name is set inside <code>agents/devops_planner/agent.py</code> and must not be renamed
+  (<code># Temporal activity name -- NEVER rename</code>) &mdash; renaming is a breaking change to
+  every running workflow.
+</div>
+
+<!-- ################################################################ -->
+<h2 id="devops">10. devops <span class="pill harness">harness · opencode</span></h2>
+
+<div class="agent-banner">
+  <span class="name">devops</span>
+  <span class="kv">harness: <b>opencode</b></span>
+  <span class="kv">stage: <b>deploy (runs devops-planned tasks)</b></span>
+  <span class="kv">model: <b>zai-coding-plan/glm-5.2</b></span>
+  <span class="kv">file: <b>agents/devops/agent.yaml</b></span>
+</div>
+
+<p>
+  Harness role that <strong>runs devops tasks</strong> (CI / infra / deploy config) emitted by
+  <code>devops_planner</code>. Same machinery as <code>dev</code>: the workflow builds the prompt,
+  opens a worktree, invokes <code>run_coding_task</code>. Picked via
+  <code>role_cfg = cfg.roles[task.role]</code> when <code>task.role == "devops"</code>. ADR-6
+  <em>does not</em> constrain this role (it is not the code-authoring role the check is defined
+  against); it is still subject to the env allowlist, egress policy, and pre-tool risk classing.
+</p>
+
+<!-- ################################################################ -->
+<h2 id="test">11. test <span class="pill harness">harness · opencode</span></h2>
+
+<div class="agent-banner">
+  <span class="name">test</span>
+  <span class="kv">harness: <b>opencode</b></span>
+  <span class="kv">stage: <b>code (runs test tasks)</b></span>
+  <span class="kv">model: <b>zai-coding-plan/glm-5.2</b></span>
+  <span class="kv">file: <b>agents/test/agent.yaml</b></span>
+</div>
+
+<p>
+  Harness role that <strong>writes tests</strong> &mdash; dedicated <code>role="test"</code>
+  tasks emitted by the planner. Same harness machinery as <code>dev</code> and <code>devops</code>.
+  Lets the planner decompose test-writing as its own first-class work-stream rather than
+  interleaving it with implementation tasks.
+</p>
+
+<div class="callout">
+  <span class="label">Why a separate test role.</span>
+  A dedicated test harness lets the planner express "write the integration test for the auth
+  module" as a task that runs in its own worktree, against the integration head, with its own
+  contract &mdash; rather than as an afterthought inside a <code>dev</code> task. The reviewer
+  and QA still judge it the same way (against its own contract).
+</div>
+
+<!-- ################################################################ -->
+<h2 id="research">12. research <span class="pill research">research · tools + verifier</span></h2>
+
+<div class="agent-banner">
+  <span class="name">research</span>
+  <span class="kv">activity: <b>research_agent</b></span>
+  <span class="kv">stage: <b>research (optional, FR-107)</b></span>
+  <span class="kv">output: <b>ResearchBrief</b></span>
+  <span class="kv">model: <b>anthropic:glm-5.2</b></span>
+  <span class="kv">provider: <b>fake (CI) / tavily (needs TAVILY_API_KEY)</b></span>
+  <span class="kv">tools: <b>recall_leads, web_search, fetch_page, read_repo</b></span>
+</div>
+
+<p>
+  Optional pre-clarify stage (FR-107). A proposer with <strong>four sequential tools</strong>
+  against a per-run budget, emitting a schema-validated <code>ResearchBrief</code>. A
+  <strong>pure verifier</strong> fails the stage closed if any grounded quote is not a verbatim
+  substring of bytes fetched <em>this run</em>. The brief is not memoized; only its canonical
+  digest feeds downstream content keys.
+</p>
+
+<div class="card soft">
+  <h4>The contract: <code>ResearchBrief</code> field order (SGR) <span class="pill asset">models.py:311</span></h4>
+  <pre><span class="k">class</span> ResearchBrief(BaseModel):
+    sub_questions:      list[SubQuestion]       <span class="c"># 1. decompose</span>
+    sources_consulted:  list[ConsultedSource]   <span class="c"># 2. gather</span>
+    grounded_findings:  list[GroundedFinding]   <span class="c"># 3. quote BEFORE claim</span>
+    inferred_findings:  list[InferredFinding]   <span class="c"># 4. reasoning BEFORE claim</span>
+    contradictions:     list[Contradiction]     <span class="c"># 5. where sources disagree</span>
+    gaps:               list[Gap]               <span class="c"># 6. what I could not answer</span>
+    summary:            str                     <span class="c"># 7. prose</span>
+    brief_ref:          ArtifactRef | <span class="k">None</span>        <span class="c"># 8. claim-check</span>
+    confidence:         float &ge;0, &le;1            <span class="c"># 9. self-score</span></pre>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>tool</th><th>charges</th><th>persists</th><th>rule</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">recall_leads</td><td>nothing</td><td>nothing</td><td>Recalled findings are LEADS, never truth. Watermark-pinned, filtered to <code>stage=research</code>.</td></tr>
+      <tr><td class="mono">web_search</td><td>1 search</td><td>nothing</td><td>Snippet is NOT a fetched page &mdash; must call <code>fetch_page</code> before quoting.</td></tr>
+      <tr><td class="mono">fetch_page</td><td>1 fetch</td><td class="mono">runs/&lt;id&gt;/research/pages/&lt;sha&gt;.txt</td><td>So the verifier can check quotes against bytes fetched <em>this run</em>.</td></tr>
+      <tr><td class="mono">read_repo</td><td>nothing</td><td>nothing</td><td>Rooted repo read; traversal outside root refused <strong>by returning a string, never by raising</strong>.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>
+  <strong>For the full treatment</strong> &mdash; verifier normalization rules, budget
+  enforcement and its temporalization gap, the two entry points (stage vs architect mid-run
+  <code>research_subquery</code>), provider seam, sequence diagram, and all gotchas &mdash; see
+  <a href="research-stage-schema.html">docs/research-stage-schema.html</a>.
+</p>
+
+<!-- ################################################################ -->
+<h2 id="filemap">File map <span class="count">by layer</span></h2>
+
+<div class="filemap">
+  <div class="layer">REGISTRY<br>agents/&lt;role&gt;/</div>
+  <div class="files">
+    <p><span class="mono">clarify/{agent.py, agent.yaml, instructions.md}</span></p>
+    <p><span class="mono">architect/{agent.py, agent.yaml, instructions.md}</span> &mdash; declares <code>research</code> tool</p>
+    <p><span class="mono">planner/{agent.py, agent.yaml, instructions.md}</span></p>
+    <p><span class="mono">reviewer/{agent.py, agent.yaml, instructions.md}</span> &mdash; ADR-6 anchor</p>
+    <p><span class="mono">qa/{agent.py, agent.yaml, instructions.md}</span></p>
+    <p><span class="mono">analyst/{agent.py, agent.yaml, instructions.md}</span></p>
+    <p><span class="mono">merge_verdict/{agent.py, agent.yaml, instructions.md}</span></p>
+    <p><span class="mono">devops_planner/{agent.py, agent.yaml, instructions.md}</span> &mdash; builds <code>devops_agent</code></p>
+    <p><span class="mono">dev/agent.yaml</span>, <span class="mono">test/agent.yaml</span>, <span class="mono">devops/agent.yaml</span> &mdash; harness roles, prompt+agent.py forbidden</p>
+    <p><span class="mono">research/{agent.py, agent.yaml, instructions.md, tools/}</span></p>
+    <p><span class="mono">registry.yaml</span> &mdash; declares registry version (must be <code>1</code>)</p>
+  </div>
+
+  <div class="layer">LOADER &amp; RUNTIME<br>src/sdlc/agents/</div>
+  <div class="files">
+    <p><span class="mono">loader.py</span> &mdash; parse, validate (ADR-6, provider, pipeline mirror), build_agents.</p>
+    <p><span class="mono">roles.py</span> &mdash; import-time <code>load_registry()</code>; <code>STAGE_ROLES</code>, <code>STAGE_MODELS</code>, <code>PROMPT_SHAS</code>; one <code>TemporalAgent</code> per proposer.</p>
+    <p><span class="mono">__init__.py</span> &mdash; package surface.</p>
+  </div>
+
+  <div class="layer">HARNESS ADAPTER<br>src/sdlc/harness/</div>
+  <div class="files">
+    <p><span class="mono">adapters.py</span> &mdash; <code>CodingHarness</code> ABC, <code>ClaudeCodeHarness</code>, <code>OpenCodeHarness</code>, <code>build_env</code> + <code>ENV_ALLOWLIST</code>, <code>context_window_for</code>, <code>HarnessRequest</code>.</p>
+    <p><span class="mono">__init__.py</span> &mdash; package surface.</p>
+  </div>
+
+  <div class="layer">CONTRACT<br>src/sdlc/models.py</div>
+  <div class="files">
+    <p><span class="mono">OpenQuestion, ClarifiedRequirements</span> (:71, :79)</p>
+    <p><span class="mono">ArchitectureDecision, ArchitectureSpec</span> (:88, :95)</p>
+    <p><span class="mono">ValidationContract, DevTask, ImplementationPlan</span> (:105, :132, :147)</p>
+    <p><span class="mono">HarnessRunResult, TaskResult</span> (:153, :181)</p>
+    <p><span class="mono">QAReport, ReviewFinding, ReviewReport</span> (:193, :221, :228)</p>
+    <p><span class="mono">CriterionTrace, AnalysisReport</span> (:242, :249)</p>
+    <p><span class="mono">MergeVerdict</span> (:410)</p>
+    <p><span class="mono">ResearchBrief + nested</span> (:266-324)</p>
+    <p><span class="mono">RoleConfig</span> &mdash; <code>kind</code>, <code>harness</code>, <code>model</code>, <code>provider</code>, <code>tool_files</code>, <code>instructions</code>, <code>context_budget_tokens</code>.</p>
+  </div>
+
+  <div class="layer">WORKFLOW CALLSITE<br>src/sdlc/workflows/feature.py</div>
+  <div class="files">
+    <p><span class="mono">:26-27</span> &mdash; imports <code>t_*</code> TemporalAgents + <code>STAGE_MODELS</code>/<code>PROMPT_SHAS</code>.</p>
+    <p><span class="mono">:318</span> &mdash; <code>_cached_stage</code> (memoization; <code>STAGE_MODELS</code> keyed lookup).</p>
+    <p><span class="mono">:379, :419</span> &mdash; <code>_gate</code>, <code>_revisable_stage</code>.</p>
+    <p><span class="mono">:470</span> &mdash; <code>_dev_task</code> (dev harness + qa + reviewer per-task loop).</p>
+    <p><span class="mono">:695</span> &mdash; research stage wiring (optional, FR-107).</p>
+    <p><span class="mono">:776</span> clarify stage; <span class="mono">:869</span> architect; <span class="mono">:909</span> planner; <span class="mono">:1006</span> analyst; <span class="mono">:1142</span> merge_verdict.</p>
+  </div>
+
+  <div class="layer">RESEARCH CODE<br>src/sdlc/research/</div>
+  <div class="files">
+    <p><span class="mono">deps.py, protocol.py, {tavily,fake}.py, verify.py, retain.py, toolset.py</span> &mdash; see <a href="research-stage-schema.html">research-stage-schema.html</a>.</p>
+  </div>
+
+  <div class="layer">SUPPORT ACTIVITIES<br>src/sdlc/</div>
+  <div class="files">
+    <p><span class="mono">activities.py</span> &mdash; flattened activity module (target layout in <code>ARCHITECTURE.md &sect;14</code> splits this by concern). Holds <code>create_worktree</code> (:257), <code>run_coding_task</code> (:381), <code>run_test_suite</code> (:449), <code>get_task_diff</code>, <code>merge_into_integration</code>, <code>setup_integration_branch</code>, <code>run_lint</code>, <code>security_scan</code>.</p>
+    <p><span class="mono">memory/activities.py</span> &mdash; <code>recall_snapshot</code>, <code>retain</code>.</p>
+    <p><span class="mono">memoization/activities.py</span> &mdash; <code>cache_get</code>, <code>cache_put</code> (content-addressed; ADR-5).</p>
+  </div>
+
+  <div class="layer">TESTS<br>tests/</div>
+  <div class="files">
+    <p><span class="mono">test_research_*.py, test_architect_research_tool.py</span> &mdash; research + architect tool.</p>
+    <p><span class="mono">test_stage_models.py</span> &mdash; <code>STAGE_MODELS</code>/<code>STAGE_ROLES</code> keyspaces identical.</p>
+    <p><span class="mono">test_prompt_migration.py</span> &mdash; <code>PROMPT_SHAS</code> pinned; CRLF checkouts hash as LF.</p>
+    <p><em>Fake harness stand-in for CI: not yet split out; <code>ARCHITECTURE.md &sect;14</code> targets <code>tests/fakes/fake_harness.py</code>.</em></p>
+  </div>
+
+  <div class="layer">DOCS / SPEC</div>
+  <div class="files">
+    <p><span class="mono">PRD.md</span> &mdash; <a href="../PRD.md">FR-200 (agents), FR-204 (reviewer)</a>.</p>
+    <p><span class="mono">ARCHITECTURE.md</span> &mdash; <a href="../ARCHITECTURE.md">&sect;4 Agent architecture, &sect;12 ADR-2/6/12/13</a>.</p>
+    <p><span class="mono">docs/superpowers/specs/2026-07-16-registry-drives-every-role-design.md</span> &mdash; the registry spec.</p>
+    <p><span class="mono">docs/superpowers/specs/2026-07-17-agents-as-folders-design.md</span> &mdash; the agents-as-folders migration.</p>
+    <p><span class="mono">docs/architecture-schema.html</span> &mdash; <a href="architecture-schema.html">whole-factory schema</a>.</p>
+    <p><span class="mono">docs/research-stage-schema.html</span> &mdash; <a href="research-stage-schema.html">research deep dive</a>.</p>
+  </div>
+</div>
+
+<footer>
+  <a href="architecture-schema.html">&larr; architecture-schema.html</a>
+  <a href="research-stage-schema.html">&larr; research-stage-schema.html</a>
+  <a href="../PRD.md">PRD &sect; FR-200</a>
+  <a href="../ARCHITECTURE.md">ARCHITECTURE.md &sect;4 / &sect;12</a>
+  <span style="float:right">Registry: <code>agents/&lt;role&gt;/</code> &middot; loader: <code>src/sdlc/agents/loader.py</code> &middot; runtime: <code>src/sdlc/agents/roles.py</code></span>
+</footer>
+
+</body>
+</html>
