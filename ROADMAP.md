@@ -73,7 +73,7 @@
 - [x] **11 · qa (+ Resolver)** — clean-context `t_qa` + bounded fix loop (folded into stage 7). *Note: default `max_fix_attempts=2`, PRD says QA loop 3 — numeric drift.*
 - [ ] ⚠️ **12 · quality_gate** — `DeterministicQualityGate` mechanism ✅; 6 checks built (`build_integration_green`, `lint_clean`, `security_no_critical` absolute; `review_severity`, `traceability`, `coverage` advisory). Absolute security floor now wired ✅; traceability enforced ✅; coverage via deterministic Cobertura seam (`measured=False` ⇒ no-op — blocked not just on a project emitting `coverage.xml` + setting `coverage_threshold`, but on the test suite actually running in the *integration* worktree the seam reads from: stage 5a only runs `run_lint`/`security_scan` there, `run_test_suite` runs per-task in task worktrees, so `coverage.xml` never lands where `measure_coverage` looks unless the artifact is carried across the merge).
 - [ ] ⚠️ **13 · deploy** — single hardcoded `make deploy ENV=staging`; no `DeployPlan`/`DeployReport` split, no smoke-test vs PR-merge distinction.
-- [ ] **14 · retro** — `reflect()` activity exists and is registered but **never called**; no `RunSummary`, no export.
+- [x] **14 · retro** — on every terminal path the workflow builds a `RunSummary` from an in-workflow `RunEvent` trace, retains it + fires-and-forgets `reflect(project_bank)` (gated on `memory.enabled`), and exports `events.jsonl` + `report.html` via the `export_run_artifacts` activity (E-32). The `org_bank`-writer half stays unbuilt (E-25); retro is project scope only.
 
 ---
 
@@ -106,7 +106,7 @@
 - [x] **FR-401** retain stage summaries / fix-loop gotchas / gate decisions (no "incidents" — needs maintenance loop).
 - [ ] ⚠️ **FR-402** `RecallSnapshot` persisted/hashed/declared input — `query_hash` exists; snapshots not a separately content-addressed artifact; watermark is the working piece.
 - [x] **FR-403** non-blocking retain, fire-and-forget with retries, PII/secret scrub hook (`memory/scrub.py`).
-- [ ] ⚠️ **FR-404** nightly reflect — **project half live**: `schedules/nightly-reflect.yaml` → `ReflectWorkflow` → `reflect()`, applied via `sdlc schedules apply` (E-12/E-13). **Org half unmet**: nothing retains to `org_bank`, so `reflect(org)` would consolidate an empty bank (E-25). Not `[x]` until org has writers.
+- [ ] ⚠️ **FR-404** nightly reflect — **project half live**: `schedules/nightly-reflect.yaml` → `ReflectWorkflow` → `reflect()`, applied via `sdlc schedules apply` (E-12/E-13); the retro stage (E-32) now also calls `reflect(project_bank)` per run (best-effort, gated on `memory.enabled`). **Org half unmet**: nothing retains to `org_bank`, so `reflect(org)` would consolidate an empty bank (E-25). Not `[x]` until org has writers.
 
 ### Maintenance (FR-500)
 - [ ] **FR-501** DAPER proactive workflow (timer + nudge).
@@ -146,9 +146,9 @@
 - [ ] — **SC-1** ≥80% runs reach merge gate unattended — not measurable (no fleet runs). Vehicle: the benchmark matrix (§9.8, E-31/E-34) is where unattended-reach rate is aggregated once cases carry a held-out grade.
 - [ ] — **SC-2** ≤15 min operator time — not measurable.
 - [ ] — **SC-3** fix-loop success ≥70% — mechanism exists; no aggregate metric captured. Captured per run as a coordination metric by the benchmark (§9.8, E-36 heatmap): fix-loop attempts vs resolution, per stage.
-- [ ] — **SC-4** repeat-clarification <10% by run 10 — needs reflect wiring (FR-404) + runs. Unblocks on **E-32** (retro stage → `RunSummary` + `reflect()`) plus the memory-on benchmark cells that generate the run-10 series (§9.8).
+- [ ] — **SC-4** repeat-clarification <10% by run 10 — needs reflect wiring (FR-404) + runs. **The per-run signal now accrues:** the retro stage (E-32) emits a `RunSummary` carrying `clarifications[].answered_by` (`human`/`suggested`/`unanswered`) on every terminal path. The cross-run *aggregation* into a repeat-clarification rate remains the benchmark's job (§9.8), via the memory-on cells that generate the run-10 series.
 - [x] **SC-5** zero deploys past a failed **absolute** check — empty/vacuous-task bypass fixed, absolute failure is terminal, and the `security_no_critical` floor is now emitted by the `security_scan` activity and wired as an absolute merge-gate check (`feature.py:807,818`). `tests/test_security_floor.py` asserts a critical finding blocks deploy.
-- [ ] — **SC-6** soft-gate override <5% — mechanism exists; not measurable without runs + reflect. Same chain as SC-4: **E-32** wires the retro calibration compare (confidence vs human override, ARCHITECTURE §10), the benchmark supplies the runs (§9.8).
+- [ ] — **SC-6** soft-gate override <5% — mechanism exists; not measurable without runs + reflect. **The per-run signal now accrues:** the retro stage (E-32) emits `RunSummary.gates[]` with `policy`/`decided_by`/`confidence`/`overrides` (ARCHITECTURE §10 calibration compare). The cross-run *aggregation* into an override rate remains the benchmark's job (§9.8).
 
 ---
 
@@ -317,8 +317,8 @@ Reference designs for gaps already named in §2/§3, not new scope.
 
 Independent reviews of eve converge on observability as its weak point: silent delivery failures with no diagnostic ("no 404, no failed-delivery banner — silence"), debugging by manual diff, dependency drift breaking tool loops mid-execution. That is precisely our unimplemented FR-704. This is outside evidence that the missing piece is what makes such a system painful in production — an argument for ranking FR-704 above "nice to have".
 
-- [ ] **E-22** `observability/` module emitting `events.jsonl` (FR-704, NFR-4).
-- [ ] **E-23** `report.html` export from the event stream (FR-704).
+- [x] **E-22** `observability/` module emitting `events.jsonl` (FR-704, NFR-4). *Folded into E-32:* `observability/trace.py` (`RunEvent`) + `observability/export.py::render_events_jsonl` render the in-workflow trace to `events.jsonl`; written by the `export_run_artifacts` activity.
+- [x] **E-23** `report.html` export from the event stream (FR-704). *Folded into E-32:* `observability/export.py::render_report_html` renders a self-contained `report.html` from the `RunSummary`.
 - [ ] **E-24** Pin harness/adapter versions and assert them at boot — eve's dependency-drift failure mode applies directly to `HARNESSES` (FR-203).
 
 ### 9.7 Suggested ordering
@@ -393,13 +393,16 @@ is marked **(new scope)** and needs a PRD line before it is real.
   factory's own criterion→test discipline (FR-106) makes the author side natural:
   the case ships acceptance criteria + a hidden oracle; the gap between the
   factory's self-proposed mapping and the oracle is itself a signal.
-- [ ] **E-32** Retro stage 14: emit `RunSummary`, call the already-registered
+- [x] **E-32** Retro stage 14: emit `RunSummary`, call the already-registered
   `reflect()`, export trace + metrics (§1 stage 14; FR-404; NFR-4; SDLC-spec
   §1/§6). Closes the learning loop. **Three payoffs from one stage:** unblocks
   SC-4/SC-6 (P3's exit), turns on the memory benchmark axis (on/off delta,
   §9.8 economics), and opens the loop-B intake where production runs become
   eval cases. The `org_bank`-writer half stays **E-25** (needs the "what
   belongs in an org bank" decision); E-32 is the stage itself, project scope.
+  *Landed:* spec `docs/superpowers/specs/2026-07-22-retro-stage-run-summary-design.md`,
+  plan `docs/superpowers/plans/2026-07-22-retro-stage-run-summary.md`. E-22/E-23
+  (events.jsonl + report.html) folded in here.
 - [ ] **E-33** Per-role cost attribution: promote cost from benchmarks-only
   (§9.5) to run-level counters (folds **E-19**) and attribute **dollars per
   role**, not per token (FR-701). The Cursor economics result restated for this
