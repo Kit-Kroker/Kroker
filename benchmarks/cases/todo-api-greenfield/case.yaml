@@ -6,7 +6,18 @@ description: |
   architect (stack + storage choice), planner (task decomposition), and dev
   (a couple of implementation tasks with a frozen contract). Sized for a
   single short factory run.
+  Implement in Python. Expose an ASGI application object importable as
+  `app:app` (module `app.py` at the repo root, attribute named `app`)
+  serving the CRUD routes over HTTP:
+    POST   /todos      {title}       -> 201 {id, title, done}
+    GET    /todos                    -> 200 [ ... ]
+    GET    /todos/{id}               -> 200 {id, title, done} | 404
+    PUT    /todos/{id}  {title,done} -> 200 {id, title, done} | 404
+    DELETE /todos/{id}               -> 204 ; subsequent GET -> 404
+  Storage and framework are your choice, as long as the app is ASGI and
+  importable as `app:app`.
 mode: greenfield
+language: python
 repo_url: D:/own/sdlc-scratch-repos/todo-api-greenfield
 harnesses:
   - opencode
