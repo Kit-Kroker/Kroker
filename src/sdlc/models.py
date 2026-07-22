@@ -422,6 +422,7 @@ class MemoryKind(str, Enum):
     GOTCHA = "gotcha"
     GATE_FEEDBACK = "gate_feedback"
     RESEARCH_FINDING = "research_finding"    # verified grounded findings only
+    RUN_SUMMARY = "run_summary"              # retro-stage per-run summary (E-32)
 
 
 class RecallSnapshot(BaseModel):
@@ -563,3 +564,52 @@ class PipelineConfig(BaseModel):
     # FR-106: diff-scoped coverage (0..100) the advisory `coverage` check must
     # clear. Default 0.0 = effectively off until a project opts in AND its test
     # command emits a coverage artifact (see measure_coverage).
+
+
+class StageOutcome(BaseModel):
+    """One stage's line in a RunSummary, projected from its BenchmarkRecord."""
+    stage: str
+    role: str
+    outcome: str            # BenchmarkOutcome value
+    duration_s: float
+    cost_usd: float | None = None
+    fix_attempts: int = 0
+
+
+class ClarificationOutcome(BaseModel):
+    """SC-4 signal: was a surfaced question answered by a human (operator time),
+    auto-filled from the clarifier's suggested_answer, or left unanswered."""
+    question_id: str
+    question: str
+    answered_by: Literal["human", "suggested", "unanswered"]
+
+
+class GateOutcomeSummary(BaseModel):
+    """SC-6 + ARCHITECTURE §10 calibration signal: policy, who decided, the
+    confidence available at decision time, and any advisory checks waved."""
+    gate: str
+    round: int
+    policy: str             # GatePolicy value
+    decided_by: str         # "human" | "policy" | "timeout"
+    approved: bool
+    confidence: float | None = None
+    overrides: list[str] = Field(default_factory=list)
+
+
+class RunSummary(BaseModel):
+    """Retro-stage (14) aggregate of one run (E-32). Retained to memory,
+    exported to report.html, and exposed via the run_summary() query."""
+    run_id: str
+    mode: str
+    outcome: str            # the run() return string
+    terminal_stage: str
+    started_at: datetime
+    ended_at: datetime
+    duration_s: float
+    stages: list[StageOutcome] = Field(default_factory=list)
+    clarifications: list[ClarificationOutcome] = Field(default_factory=list)
+    gates: list[GateOutcomeSummary] = Field(default_factory=list)
+    cost_usd_total: float | None = None
+    memory_enabled: bool = False
+    memory_watermark: str | None = None
+    memory_retains: int = 0
