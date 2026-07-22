@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         npm \
     && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g opencode
+RUN npm install -g opencode-ai
 
 WORKDIR /app
 COPY pyproject.toml ./

@@ -9,4 +9,4 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -sSf https://temporal.download/cli.sh | sh
 
 # opencode CLI (z.ai auth via `opencode auth login` inside the container)
-RUN npm install -g opencode
+RUN npm install -g opencode-ai
