@@ -2,6 +2,7 @@
 
   python -m sdlc.cli start   --title "Add SSO" --mode brownfield --repo <url>
   python -m sdlc.cli status  --id feature-add-sso
+  python -m sdlc.cli inbox
   python -m sdlc.cli answer  --id feature-add-sso --q Q1 --text "Use OIDC"
   python -m sdlc.cli approve --id feature-add-sso --gate architecture
   python -m sdlc.cli revise  --id feature-add-sso --gate architecture --comment "split task 3"
@@ -87,6 +88,8 @@ async def main() -> None:
 
     st = sub.add_parser("status")
     st.add_argument("--id", required=True)
+
+    sub.add_parser("inbox")
 
     sc = sub.add_parser("schedules")
     scsub = sc.add_subparsers(dest="sched_cmd", required=True)
@@ -200,6 +203,11 @@ async def main() -> None:
         except EvalError as e:
             print(f"eval error: {e}")
             raise SystemExit(1)
+        return
+
+    if args.cmd == "inbox":
+        from .channels.inbox import fetch_inbox, render_inbox
+        print(render_inbox(await fetch_inbox(client)))
         return
 
     handle = client.get_workflow_handle_for(FeatureWorkflow.run, args.id)

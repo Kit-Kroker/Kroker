@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import argparse
+
 import pytest
 
 from sdlc.channels.transport import (
@@ -222,3 +224,11 @@ def test_revise_reply_carries_comment_as_text():
     a = _parse(["revise", "--id", "X", "--comment", "split it"])
     _, reply = sdlc.cli.selector_for(a)
     assert reply.outcome is GateOutcome.REVISE and reply.text == "split it"
+
+
+def test_inbox_verb_takes_no_arguments():
+    p = argparse.ArgumentParser()
+    sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("inbox")
+    args = p.parse_args(["inbox"])
+    assert args.cmd == "inbox"
