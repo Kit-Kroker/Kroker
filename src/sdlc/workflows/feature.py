@@ -50,8 +50,10 @@ with workflow.unsafe.imports_passed_through():
     from ..observability.activities import RunExportInput, export_run_artifacts
     from ..observability.summary import build_run_summary
     from ..observability.trace import RunEvent, RunEventKind
+    from ..artifacts.retention import (RetentionInput, apply_session_retention,
+                                       keep_full_transcripts)
     from ..models import (
-        AnalysisReport, ArchitectureSpec, ClarifiedRequirements,
+        AnalysisReport, ArchitectureSpec, ArtifactRef, ClarifiedRequirements,
         CoverageReport, DevTask, ExecutionMode, GateConfig, GateDecision,
         GateOutcome, GatePolicy, HandoffSummary, IdeaBrief,
         ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig,
@@ -235,6 +237,9 @@ class FeatureWorkflow:
         self._trace: list[RunEvent] = []
         self._seq: int = 0
         self._run_summary: RunSummary | None = None
+        # E-38: session refs collected per coding attempt; retro applies
+        # the OQ-B7 retention policy over them.
+        self._session_refs: list[ArtifactRef] = []
 
     # ----------------------- benchmark recording ------------------------
 
@@ -573,6 +578,8 @@ class FeatureWorkflow:
                                 task_id=task.id, attempt=attempt),
                 **_long_act(role_cfg),
             )
+            if run.session_ref is not None:
+                self._session_refs.append(run.session_ref)
 
             # Clean-context validation: contract + tests + diff. No narrative.
             # Uses the contract's own stack-specific test_commands (FR-803)
@@ -762,6 +769,25 @@ class FeatureWorkflow:
                     export_run_artifacts,
                     RunExportInput(run_id=workflow.info().workflow_id,
                                    summary=summary, trace=self._trace),
+                    **EXPORT_ACT)
+            except Exception:
+                pass
+
+            # E-38: OQ-B7 retention — downgrade clean-green non-benchmark
+            # runs to digest-only. Best-effort like the export above.
+            try:
+                had_fix = any(
+                    ev.kind == RunEventKind.FIX_ATTEMPT
+                    and ev.data.get("attempt") not in (None, "1")
+                    for ev in self._trace)
+                await workflow.execute_activity(
+                    apply_session_retention,
+                    RetentionInput(
+                        refs=self._session_refs,
+                        keep_full=keep_full_transcripts(
+                            outcome=result,
+                            had_fix_attempts=had_fix,
+                            is_benchmark=cfg.benchmark.case_id is not None)),
                     **EXPORT_ACT)
             except Exception:
                 pass

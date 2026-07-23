@@ -33,6 +33,7 @@ from .activities import (
 )
 from .agents.loader import load_registry, validate_registry
 from .agents.roles import ALL_TEMPORAL_AGENTS
+from .artifacts.retention import apply_session_retention
 from .benchmarks.judge import judge_artifact, load_case_assets
 from .benchmarks.oracle import grade_oracle
 from .benchmarks.recorder import record_benchmark
@@ -79,6 +80,7 @@ async def main() -> None:
             recall_snapshot, retain, capture_watermark, reflect,
             cache_get, cache_put,
             export_run_artifacts,
+            apply_session_retention,
             verify_brief_activity,
             *agent_activities,
         ],
