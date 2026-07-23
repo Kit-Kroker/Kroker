@@ -68,3 +68,18 @@ def test_cat_cafe_description_preserves_every_activity():
     for activity in ("sleeping", "eating", "drinking", "litter",
                      "playing", "fighting"):
         assert activity in body, f"description dropped '{activity}'"
+
+
+def test_cat_cafe_declares_python_language():
+    """E-34: language set => the case opts into E-31 oracle grading."""
+    spec = load_case_spec(str(CAT_CASE))
+    assert spec.language == "python"
+
+
+def test_cat_cafe_description_freezes_the_interface_contract():
+    """The oracle grades through this contract; if a marker vanishes the
+    oracle is asserting against an interface the case no longer freezes."""
+    body = load_case_spec(str(CAT_CASE)).description
+    for marker in ("app:app", "POST /telemetry", "GET /floorplan",
+                   "GET /cats", "must not auto-start"):
+        assert marker in body, f"contract marker {marker!r} missing"

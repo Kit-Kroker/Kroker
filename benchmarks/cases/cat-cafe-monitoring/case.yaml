@@ -29,7 +29,30 @@ description: |
 
   For each cat the user must also be able to see detailed sensor data and
   movement history for the last 24 hours.
+
+  Interface contract (frozen — graded through it; not a functional
+  requirement and it changes none of the tasks above):
+  Implement in Python. Expose an ASGI application object importable as
+  `app:app` (module `app.py` at the repo root, attribute named `app`).
+  Importing `app:app` must not auto-start the random telemetry generator;
+  the simulation runs only when launched explicitly (e.g. `python app.py`).
+    POST /telemetry {cat_id, x, y, breathing_rate, timestamp} -> 2xx;
+      the reading is processed exactly as if a collar emitted it, and a
+      reading for a new cat_id begins tracking that cat.
+    GET /floorplan -> 200 {"zones": [{kind, x, y}, ...]} with kind one of
+      rest_area | litter_box | water_bowl | food_bowl; richer zone shapes
+      are allowed and all coordinates are your choice.
+    GET /cats -> 200 [{id, x, y, activity, at_risk}, ...]; activity is one
+      of sleeping | eating | drinking | litter_box | playing | fighting,
+      or null when undetermined; at_risk is a boolean.
+    GET /cats/{id} -> 200 detail with the latest reading and history: that
+      cat's readings {timestamp, x, y, breathing_rate} from the last 24
+      hours relative to the cat's newest reading (never the wall clock);
+      unknown id -> 404.
+  Timestamps are ISO-8601 strings supplied by the caller; detection and
+  the 24-hour window are computed from telemetry timestamps.
 mode: greenfield
+language: python
 repo_url: D:/own/sdlc-scratch-repos/cat-cafe-monitoring
 research_enabled: true
 harnesses:
