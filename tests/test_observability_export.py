@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 
 from sdlc.models import (
-    ClarificationOutcome, GateOutcomeSummary, RunSummary, StageOutcome,
+    ClarificationOutcome, GateOutcomeSummary, RoleUsage, RunSummary,
+    StageOutcome,
 )
 from sdlc.observability.export import render_events_jsonl, render_report_html
 from sdlc.observability.trace import RunEvent, RunEventKind
@@ -46,3 +47,18 @@ def test_report_html_is_self_contained_and_covers_sections():
     assert "src=" not in html and "href=" not in html
     for token in ("r1", "deployed:", "clarify", "merge", "scope?", "coverage"):
         assert token in html
+
+
+def test_report_html_renders_role_table():
+    now = datetime.now(timezone.utc)
+    s = RunSummary(run_id="r1", mode="greenfield", outcome="deployed:x",
+                   terminal_stage="deploy", started_at=now, ended_at=now,
+                   duration_s=1.0,
+                   roles=[RoleUsage(role="architect", model="anthropic:o",
+                                    calls=2, input_tokens=1500,
+                                    output_tokens=300, cost_usd=1.25)],
+                   budget_usd=5.0, budget_crossings=1)
+    html = render_report_html(s)
+    assert "architect" in html
+    assert "$1.2500" in html
+    assert "budget" in html.lower()

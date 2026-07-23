@@ -862,7 +862,9 @@ class FeatureWorkflow:
                 mode=idea.mode.value,
                 outcome=result, trace=self._trace,
                 memory_enabled=cfg.memory.enabled,
-                memory_watermark=self._memory_watermark)
+                memory_watermark=self._memory_watermark,
+                budget_usd=(cfg.run_budget_usd
+                            if cfg.run_budget_usd > 0 else None))
             self._run_summary = summary
 
             if cfg.memory.enabled:

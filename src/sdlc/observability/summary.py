@@ -3,9 +3,11 @@ testable outside the workflow, called once from the retro stage."""
 from __future__ import annotations
 
 from ..models import (
-    ClarificationOutcome, GateOutcomeSummary, RunSummary, StageOutcome,
+    ClarificationOutcome, GateOutcomeSummary, RoleUsage, RunSummary,
+    StageOutcome,
 )
 from .trace import RunEvent, RunEventKind
+from .usage import merge_usage
 
 
 def _stage_outcome(ev: RunEvent) -> StageOutcome:
@@ -36,10 +38,31 @@ def _gate_outcome(ev: RunEvent) -> GateOutcomeSummary:
     )
 
 
+def _role_rollup(trace: list[RunEvent]) -> list[RoleUsage]:
+    bags: dict[str, RoleUsage] = {}
+    for e in trace:
+        if e.kind is not RunEventKind.MODEL_USAGE:
+            continue
+        d = e.data
+        role = d.get("role", "?")
+        model = d.get("model", "?")
+        bag = bags.setdefault(role, RoleUsage(role=role, model=model))
+        cost = d.get("cost_usd")
+        merge_usage(
+            bag, model=model,
+            input_tokens=int(d.get("input_tokens", "0")),
+            output_tokens=int(d.get("output_tokens", "0")),
+            cache_read_tokens=int(d.get("cache_read_tokens", "0")),
+            cache_write_tokens=int(d.get("cache_write_tokens", "0")),
+            cost_usd=float(cost) if cost is not None else None)
+    return list(bags.values())
+
+
 def build_run_summary(
     *, run_id: str, mode: str, outcome: str,
     trace: list[RunEvent],
     memory_enabled: bool, memory_watermark: str | None,
+    budget_usd: float | None = None,
 ) -> RunSummary:
     stages = [_stage_outcome(e) for e in trace
               if e.kind is RunEventKind.STAGE_ENDED]
@@ -68,7 +91,12 @@ def build_run_summary(
     terminal = next((e.stage for e in reversed(trace)
                      if e.kind is RunEventKind.STAGE_ENDED and e.stage),
                     "intake")
-    costs = [s.cost_usd for s in stages if s.cost_usd is not None]
+    roles = _role_rollup(trace)
+    role_costs = [u.cost_usd for u in roles if u.cost_usd is not None]
+    budget_crossings = sum(
+        1 for e in trace
+        if e.kind is RunEventKind.GATE_DECIDED
+        and e.data.get("gate") == "budget")
     started = trace[0].at
     ended = trace[-1].at
     retains = sum(1 for e in trace if e.kind is RunEventKind.MEMORY_RETAINED)
@@ -78,7 +106,9 @@ def build_run_summary(
         started_at=started, ended_at=ended,
         duration_s=(ended - started).total_seconds(),
         stages=stages, clarifications=clarifications, gates=gates,
-        cost_usd_total=(sum(costs) if costs else None),
+        roles=roles,
+        cost_usd_total=(sum(role_costs) if role_costs else None),
+        budget_usd=budget_usd, budget_crossings=budget_crossings,
         memory_enabled=memory_enabled, memory_watermark=memory_watermark,
         memory_retains=retains,
     )

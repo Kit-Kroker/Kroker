@@ -36,7 +36,13 @@ def render_report_html(s: RunSummary) -> str:
     clar_rows = "".join(
         _row([c.question_id, c.question, c.answered_by])
         for c in s.clarifications)
+    role_rows = "".join(
+        _row([u.role, u.model, str(u.calls),
+              str(u.input_tokens), str(u.output_tokens),
+              "-" if u.cost_usd is None else f"${u.cost_usd:.4f}"])
+        for u in s.roles)
     cost = "-" if s.cost_usd_total is None else f"${s.cost_usd_total:.4f}"
+    budget = "-" if s.budget_usd is None else f"${s.budget_usd:.2f}"
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Run {escape(s.run_id)}</title>
@@ -58,7 +64,12 @@ th{{background:#f3f3f3}} .meta{{color:#555}}
 <th>approved</th><th>confidence</th><th>overrides</th></tr>{gate_rows}</table>
 <h2>Clarifications</h2>
 <table><tr><th>id</th><th>question</th><th>answered_by</th></tr>{clar_rows}</table>
+<h2>Cost by role</h2>
+<table><tr><th>role</th><th>model</th><th>calls</th><th>in_tokens</th>
+<th>out_tokens</th><th>cost</th></tr>{role_rows}</table>
 <p class="meta">memory_enabled={s.memory_enabled}
 &middot; watermark={escape(str(s.memory_watermark))}
-&middot; retains={s.memory_retains}</p>
+&middot; retains={s.memory_retains}
+&middot; budget={budget}
+&middot; budget_crossings={s.budget_crossings}</p>
 </body></html>"""
