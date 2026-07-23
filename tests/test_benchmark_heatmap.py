@@ -69,3 +69,15 @@ def test_empty_records_give_empty_heatmap():
     hm = build_heatmap([])
     assert hm.cells == [] and hm.cases == [] and hm.stages == []
     assert hm.max_density == 0.0
+
+
+def test_oracle_non_fail_rework_not_counted_as_oracle_failure():
+    recs = [
+        _rec(run="r1", stage="oracle", scope=BenchmarkScope.ORACLE,
+             outcome=BenchmarkOutcome.ESCALATED),
+        _rec(run="r1", stage="oracle", scope=BenchmarkScope.ORACLE,
+             outcome=BenchmarkOutcome.FAIL),
+    ]
+    hm = build_heatmap(recs)
+    cell = next(c for c in hm.cells if c.stage == ORACLE_STAGE)
+    assert cell.oracle_fails == 1   # only the FAIL, not the ESCALATED

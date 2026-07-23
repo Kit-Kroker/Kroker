@@ -59,8 +59,11 @@ def build_heatmap(records: list[BenchmarkRecord],
         is_oracle = r.scope is BenchmarkScope.ORACLE
         stage = ORACLE_STAGE if is_oracle else r.stage
         key = (r.case_id, stage)
-        if r.outcome in REWORK_OUTCOMES:
-            acc[key]["oracle" if is_oracle else "gate"] += 1
+        if is_oracle:
+            if r.outcome is BenchmarkOutcome.FAIL:
+                acc[key]["oracle"] += 1
+        elif r.outcome in REWORK_OUTCOMES:
+            acc[key]["gate"] += 1
         acc[key]["fix"] += r.fix_attempts
 
     cells: list[HeatmapCell] = []
