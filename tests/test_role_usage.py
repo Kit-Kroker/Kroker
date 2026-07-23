@@ -45,3 +45,23 @@ def test_run_summary_carries_roles_and_budget():
     assert s.roles == []
     assert s.budget_usd is None
     assert s.budget_crossings == 0
+
+
+def test_cost_bag_from_spend():
+    from sdlc.observability.usage import cost_bag_from_spend
+    u = RoleUsage(role="clarify", model="m", calls=1,
+                  input_tokens=100, output_tokens=10, cost_usd=0.5)
+    bag = cost_bag_from_spend(u)
+    assert bag.usd == 0.5
+    assert bag.input_tokens == 100
+    assert bag.output_tokens == 10
+
+
+def test_cost_bag_explicit_usd_wins_and_none_spend_degrades():
+    from sdlc.observability.usage import cost_bag_from_spend
+    u = RoleUsage(role="dev", model="m", input_tokens=100)
+    assert cost_bag_from_spend(u, cost_usd=2.0).usd == 2.0   # harness $ wins
+    empty = cost_bag_from_spend(None, cost_usd=None)
+    assert empty.usd is None and empty.input_tokens is None
+    zero = cost_bag_from_spend(RoleUsage(role="x", model="m"))
+    assert zero.input_tokens is None       # cache-hit cell: zeros → None

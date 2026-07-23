@@ -31,7 +31,7 @@ with workflow.unsafe.imports_passed_through():
         JudgeInput, _build_judge_input, judge_artifact,
     )
     from ..benchmarks.models import (
-        BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, CostBag,
+        BenchmarkOutcome, BenchmarkRecord, BenchmarkScope,
         QualityScore, SpeedBag,
     )
     from ..benchmarks.recorder import record_benchmark
@@ -50,7 +50,7 @@ with workflow.unsafe.imports_passed_through():
     from ..observability.activities import RunExportInput, export_run_artifacts
     from ..observability.summary import build_run_summary
     from ..observability.trace import RunEvent, RunEventKind
-    from ..observability.usage import merge_usage
+    from ..observability.usage import cost_bag_from_spend, merge_usage
     from ..pricing import PriceUsageInput, price_usage
     from ..artifacts.retention import (RetentionInput, apply_session_retention,
                                        keep_full_transcripts)
@@ -268,6 +268,7 @@ class FeatureWorkflow:
                       quality_score: float | None, judge: str,
                       outcome: BenchmarkOutcome, model: str,
                       harness=None, cost_usd: float | None = None,
+                      spend: RoleUsage | None = None,
                       fix_attempts: int = 0,
                       task_id: str | None = None,
                       attempt: int | None = None,
@@ -281,7 +282,7 @@ class FeatureWorkflow:
             scope=scope, stage=stage, task_id=task_id, attempt=attempt,
             role=role, harness=harness, model=model, prompt_sha="",
             quality=QualityScore(score=quality_score, judge=judge),
-            cost=CostBag(usd=cost_usd),
+            cost=cost_bag_from_spend(spend, cost_usd),
             speed=SpeedBag(wall_clock_s=(ended - started).total_seconds(),
                            started_at=started, ended_at=ended),
             outcome=outcome, fix_attempts=fix_attempts, error=error,
@@ -709,11 +710,12 @@ class FeatureWorkflow:
                 DiffInput(worktree=worktree, branch_point=handle.branch_point),
                 **ACT,
             )
+            qa_spend = RoleUsage(role="qa", model=STAGE_MODELS["qa"])
             qa = (await self._run_role(cfg, "qa", STAGE_MODELS["qa"], t_qa,
                 "Frozen contract assertions:\n- " + "\n- ".join(assertions)
                 + f"\nTest results: {qa_raw.model_dump_json()}"
                 + f"\nDiff stat:\n{diff['stat']}"
-                + f"\nDiff:\n{diff['patch']}")).output
+                + f"\nDiff:\n{diff['patch']}", into=qa_spend)).output
 
             # Second clean-context judge (FR-204): same inputs as QA — frozen
             # contract + materialized diff + test output. No narrative, no
@@ -755,7 +757,7 @@ class FeatureWorkflow:
                 outcome=(BenchmarkOutcome.PASS
                          if (qa.tests_passed and not qa.issues)
                          else BenchmarkOutcome.FAIL),
-                model=STAGE_MODELS["qa"],
+                model=STAGE_MODELS["qa"], spend=qa_spend,
                 task_id=task.id, attempt=attempt - 1))
 
             review_ok = review is None or review.approve
@@ -966,8 +968,10 @@ class FeatureWorkflow:
             # Per-run budget enforcement is effectively absent under
             # temporalization; restoring it needs a disk-persisted counter
             # (deferred — not this task).
+            research_spend = RoleUsage(role="research",
+                                       model=STAGE_MODELS.get("research", "unknown"))
             brief: ResearchBrief = (await self._run_role(cfg, "research", STAGE_MODELS.get("research", "unknown"), t_research,
-                idea.model_dump_json(), deps=deps)).output
+                idea.model_dump_json(), deps=deps, into=research_spend)).output
             # Task 7 fallback (Task 1 finding A): the original
             # @agent.output_validator was silently dropped by TemporalAgent, so
             # grounding is enforced here as a post-run ACTIVITY. Reads page
@@ -998,6 +1002,7 @@ class FeatureWorkflow:
                     quality_score=None, judge="error",
                     outcome=BenchmarkOutcome.FAIL,
                     model=STAGE_MODELS.get("research", "unknown"),
+                    spend=research_spend,
                     error=f"rejected:research.grounding: {err}"))
             else:
                 brief_digest_val = brief_digest(brief)
@@ -1017,7 +1022,8 @@ class FeatureWorkflow:
                     started=_r_started, ended=workflow.now(),
                     quality_score=_r_quality.score, judge=_r_quality.judge,
                     outcome=BenchmarkOutcome.PASS,
-                    model=STAGE_MODELS.get("research", "unknown")))
+                    model=STAGE_MODELS.get("research", "unknown"),
+                    spend=research_spend))
 
         # E-33: serial budget check after the research section (runs whether
         # research is on or off; off-by-default research adds no spend here).
@@ -1030,11 +1036,13 @@ class FeatureWorkflow:
             cfg, cfg.memory.project_bank, query=f"clarify:{idea.title}",
             filters={"stage": "clarify"})
 
+        clarify_spend = RoleUsage(role="clarify", model=STAGE_MODELS["clarify"])
+
         async def _run_clarify():
             return (await self._run_role(cfg, "clarify", STAGE_MODELS["clarify"], t_clarify,
                 idea.model_dump_json()
                 + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
-                   if snapshot.items else ""))).output
+                   if snapshot.items else ""), into=clarify_spend)).output
 
         reqs, _ = await self._cached_stage(
             cfg, "clarify", idea.model_dump_json() + brief_digest_val,
@@ -1076,7 +1084,7 @@ class FeatureWorkflow:
             started=_started, ended=_ended,
             quality_score=_quality.score, judge=_quality.judge,
             outcome=BenchmarkOutcome.PASS,
-            model=STAGE_MODELS["clarify"]))
+            model=STAGE_MODELS["clarify"], spend=clarify_spend))
         await self._retain(
             cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
             text=f"clarify: {reqs.summary}",
@@ -1091,6 +1099,8 @@ class FeatureWorkflow:
         snapshot = await self._recall(
             cfg, cfg.memory.project_bank, query=f"architect:{idea.title}",
             filters={"stage": "architect"})
+
+        arch_spend = RoleUsage(role="architect", model=STAGE_MODELS["architect"])
 
         async def _run_architect(guidance: str | None):
             prompt = (f"mode={idea.mode.value}\n{reqs.model_dump_json()}"
@@ -1129,7 +1139,7 @@ class FeatureWorkflow:
                 memory_watermark=self._memory_watermark)
 
             async def _produce():
-                return (await self._run_role(cfg, "architect", STAGE_MODELS["architect"], t_architect, prompt, deps=architect_deps)).output
+                return (await self._run_role(cfg, "architect", STAGE_MODELS["architect"], t_architect, prompt, deps=architect_deps, into=arch_spend)).output
             arch, _ = await self._cached_stage(
                 cfg, "architect",
                 reqs.model_dump_json() + (guidance or ""),
@@ -1147,7 +1157,7 @@ class FeatureWorkflow:
             quality_score=_quality.score, judge=_quality.judge,
             outcome=(BenchmarkOutcome.PASS if gate.approved
                      else BenchmarkOutcome.REVISED),
-            model=STAGE_MODELS["architect"]))
+            model=STAGE_MODELS["architect"], spend=arch_spend))
         await self._retain(
             cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
             text=f"architect: {arch.overview}",
@@ -1162,6 +1172,8 @@ class FeatureWorkflow:
             cfg, cfg.memory.project_bank, query=f"plan:{idea.title}",
             filters={"stage": "plan"})
 
+        plan_spend = RoleUsage(role="planner", model=STAGE_MODELS["plan"])
+
         async def _run_plan(guidance: str | None):
             prompt = (arch.model_dump_json()
                       + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
@@ -1170,7 +1182,7 @@ class FeatureWorkflow:
                          if guidance else ""))
 
             async def _produce():
-                return (await self._run_role(cfg, "planner", STAGE_MODELS["plan"], t_planner, prompt)).output
+                return (await self._run_role(cfg, "planner", STAGE_MODELS["plan"], t_planner, prompt, into=plan_spend)).output
             plan, _ = await self._cached_stage(
                 cfg, "plan",
                 arch.model_dump_json() + (guidance or ""),
@@ -1187,7 +1199,7 @@ class FeatureWorkflow:
             quality_score=_quality.score, judge=_quality.judge,
             outcome=(BenchmarkOutcome.PASS if gate.approved
                      else BenchmarkOutcome.REVISED),
-            model=STAGE_MODELS["plan"]))
+            model=STAGE_MODELS["plan"], spend=plan_spend))
         await self._retain(
             cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
             text=f"plan: {len(plan.tasks)} tasks",
@@ -1270,11 +1282,12 @@ class FeatureWorkflow:
             f"- {r.task_id}: tests_passed={r.qa.tests_passed if r.qa else 'n/a'}"
             f" failing={r.qa.failing_tests if r.qa else []}"
             for r in done.values())
+        analyst_spend = RoleUsage(role="analyst", model=STAGE_MODELS["analyze"])
         analysis: AnalysisReport = (await self._run_role(cfg, "analyst", STAGE_MODELS["analyze"], t_analyst,
             "Acceptance criteria (task_id in brackets):\n" + _criteria_lines
             + "\nAggregate test output:\n" + _qa_lines
             + f"\nIntegration diff stat:\n{integration_diff['stat']}"
-            + f"\nIntegration diff:\n{integration_diff['patch']}")).output
+            + f"\nIntegration diff:\n{integration_diff['patch']}", into=analyst_spend)).output
         untraced = untraced_criteria(authoritative, analysis)
         await self._record(cfg, self._stage_record(
             cfg, stage="analyze", role="analyst",
@@ -1283,7 +1296,7 @@ class FeatureWorkflow:
             judge="contract",
             outcome=(BenchmarkOutcome.PASS if not untraced
                      else BenchmarkOutcome.FAIL),
-            model=STAGE_MODELS["analyze"]))
+            model=STAGE_MODELS["analyze"], spend=analyst_spend))
         await self._retain(
             cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
             text=f"analyze: {len(authoritative)} criteria, "

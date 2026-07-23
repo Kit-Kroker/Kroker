@@ -20,3 +20,18 @@ def merge_usage(bag: RoleUsage, *, model: str,
     bag.cache_write_tokens += cache_write_tokens
     if cost_usd is not None:
         bag.cost_usd = (bag.cost_usd or 0.0) + cost_usd
+
+
+def cost_bag_from_spend(spend: RoleUsage | None,
+                        cost_usd: float | None = None):
+    """CostBag for a stage's BenchmarkRecord (E-33, spec §2). Explicit
+    cost_usd (harness-reported dollars) wins over the spend's priced sum.
+    A zero-token spend (memoization cache hit — the closure never ran)
+    degrades to None fields, matching pre-E-33 records."""
+    from ..benchmarks.models import CostBag
+    if spend is None:
+        return CostBag(usd=cost_usd)
+    return CostBag(
+        usd=cost_usd if cost_usd is not None else spend.cost_usd,
+        input_tokens=spend.input_tokens or None,
+        output_tokens=spend.output_tokens or None)
