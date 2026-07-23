@@ -130,6 +130,11 @@ def _long_act(role_cfg: RoleConfig | None = None) -> dict:
         retry_policy=RetryPolicy(maximum_attempts=2))
 
 
+class _BudgetRejected(Exception):
+    """Raised at a budget-gate reject; caught in run() so the terminal
+    outcome is the ordinary string "rejected:budget" and retro still runs."""
+
+
 def _merge_evidence_all_green(results: list) -> bool:
     """True only when every task has positive, passing QA evidence.
 
@@ -489,14 +494,44 @@ class FeatureWorkflow:
             cost_usd=usd, into=into)
         return result
 
+    async def _check_budget(self, cfg: PipelineConfig) -> None:
+        """E-33/FR-701 run-budget enforcement. Called at SERIAL points only
+        (stage boundaries + the task loop after merges) — never inside a
+        wave-mode gather, so gate rounds cannot race. Approve grants one
+        more increment; the while-loop re-gates a spend that jumped
+        multiple increments at once."""
+        if cfg.run_budget_usd <= 0:
+            return
+        total = sum(u.cost_usd or 0.0 for u in self._role_usage.values())
+        while total >= self._budget_threshold:
+            self._budget_crossings += 1
+            rows = "\n".join(
+                f"  {u.role} ({u.model}): ${u.cost_usd:.4f}"
+                for u in self._role_usage.values()
+                if u.cost_usd is not None)
+            decision = await self._gate(
+                "budget", cfg, round=self._budget_crossings,
+                context=GateContext(spec_summary=(
+                    f"Run cost ${total:.4f} >= budget "
+                    f"${self._budget_threshold:.2f}\n{rows}")),
+                default_policy=GatePolicy.HARD)
+            if decision.outcome is not GateOutcome.APPROVE:
+                # REVISE has nothing to revise here — any non-approve
+                # terminates (spec §5).
+                raise _BudgetRejected()
+            self._budget_threshold += cfg.run_budget_usd
+
     async def _gate(self, name: str, cfg: PipelineConfig,
                     auto_decision: GateDecision | None = None,
                     round: int = 1,
                     context: GateContext | None = None,
-                    confidence: float | None = None) -> GateDecision:
+                    confidence: float | None = None,
+                    default_policy: GatePolicy | None = None) -> GateDecision:
         """Durable HITL gate with policy-based auto-approval."""
         policy = cfg.gates.get(
-            name, GateConfig(policy=cfg.default_gate_policy)).policy
+            name,
+            GateConfig(policy=default_policy or cfg.default_gate_policy),
+        ).policy
         key = gate_key(name, round)
 
         if policy == GatePolicy.OFF:
@@ -805,7 +840,11 @@ class FeatureWorkflow:
     async def run(self, idea: IdeaBrief,
                   cfg: PipelineConfig | None = None) -> str:
         cfg = cfg or PipelineConfig()
-        result = await self._pipeline(idea, cfg)
+        self._budget_threshold = cfg.run_budget_usd    # E-33
+        try:
+            result = await self._pipeline(idea, cfg)
+        except _BudgetRejected:
+            result = "rejected:budget"
         await self._retro(cfg, idea, result)
         return result
 
@@ -978,6 +1017,10 @@ class FeatureWorkflow:
                     outcome=BenchmarkOutcome.PASS,
                     model=STAGE_MODELS.get("research", "unknown")))
 
+        # E-33: serial budget check after the research section (runs whether
+        # research is on or off; off-by-default research adds no spend here).
+        await self._check_budget(cfg)
+
         # 1. CLARIFY — open questions answered by human via signals
         self._status = "clarifying"
         _started = workflow.now()
@@ -1036,6 +1079,9 @@ class FeatureWorkflow:
             cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
             text=f"clarify: {reqs.summary}",
             metadata={"stage": "clarify", "run_id": workflow.info().workflow_id})
+
+        # E-33: serial budget check after clarify.
+        await self._check_budget(cfg)
 
         # 2. ARCHITECT (+ human approval of the spec)
         self._status = "architecting"
@@ -1104,6 +1150,7 @@ class FeatureWorkflow:
             cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
             text=f"architect: {arch.overview}",
             metadata={"stage": "architect", "run_id": workflow.info().workflow_id})
+        await self._check_budget(cfg)   # E-33: serial boundary after architect
         if not gate.approved:
             return "rejected:architecture"
 
@@ -1143,6 +1190,7 @@ class FeatureWorkflow:
             cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
             text=f"plan: {len(plan.tasks)} tasks",
             metadata={"stage": "plan", "run_id": workflow.info().workflow_id})
+        await self._check_budget(cfg)   # E-33: serial boundary after planner
         if not gate.approved:
             return "rejected:plan"
 
@@ -1200,6 +1248,8 @@ class FeatureWorkflow:
             if any(r.status == "quarantined" for r in done.values()):
                 return "failed:quarantined-tasks"
 
+            await self._check_budget(cfg)   # E-33: serial boundary per task wave
+
         # 4b. ANALYZE (stage 9) — clean-context Analyst proposes the
         # criterion->test mapping; the workflow enforces it (FR-106). Runs on
         # the integrated whole, before the merge gate.
@@ -1243,7 +1293,9 @@ class FeatureWorkflow:
                 cfg, MemoryKind.GOTCHA, cfg.memory.project_bank,
                 text=f"untraced acceptance criteria at merge: {untraced}",
                 metadata={"stage": "analyze",
-                          "run_id": workflow.info().workflow_id})
+                           "run_id": workflow.info().workflow_id})
+
+        await self._check_budget(cfg)   # E-33: serial boundary after analyst
 
         # 5. MERGE — DeterministicQualityGate first (SC-5), then the human
         # gate (which doubles as the advisory-override mechanism), then
