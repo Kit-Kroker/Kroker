@@ -612,6 +612,26 @@ class PipelineConfig(BaseModel):
     # FR-106: diff-scoped coverage (0..100) the advisory `coverage` check must
     # clear. Default 0.0 = effectively off until a project opts in AND its test
     # command emits a coverage artifact (see measure_coverage).
+    run_budget_usd: float = Field(default=0.0, ge=0.0)
+    # E-33/FR-701: run-level USD budget. 0.0 = off (the coverage_threshold
+    # opt-in pattern). When crossed, the workflow raises a hard "budget"
+    # gate; approve grants one more increment of this amount.
+
+
+class RoleUsage(BaseModel):
+    """One role's accumulated model spend across the run (E-33).
+
+    cost_usd None is load-bearing: tokens are facts from the run; dollars
+    are a lookup that can fail. A pricing miss must never discard tokens,
+    so the field stays None until the first successfully priced call."""
+    role: str                       # "architect", "dev", "clarify", ...
+    model: str                      # last model seen for the role
+    calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    cost_usd: float | None = None
 
 
 class StageOutcome(BaseModel):
@@ -657,7 +677,10 @@ class RunSummary(BaseModel):
     stages: list[StageOutcome] = Field(default_factory=list)
     clarifications: list[ClarificationOutcome] = Field(default_factory=list)
     gates: list[GateOutcomeSummary] = Field(default_factory=list)
+    roles: list[RoleUsage] = Field(default_factory=list)   # E-33 rollup
     cost_usd_total: float | None = None
+    budget_usd: float | None = None     # configured run budget; None = off
+    budget_crossings: int = 0           # budget-gate rounds raised (E-33)
     memory_enabled: bool = False
     memory_watermark: str | None = None
     memory_retains: int = 0
