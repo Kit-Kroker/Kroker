@@ -22,6 +22,7 @@ class ProjectMode(str, Enum):
 class HarnessKind(str, Enum):
     CLAUDE_CODE = "claude_code"   # claude -p
     OPENCODE = "opencode"         # opencode run
+    CURSOR = "cursor"             # cursor-agent -p (E-35)
 
 
 class GatePolicy(str, Enum):
