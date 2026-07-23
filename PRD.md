@@ -209,7 +209,11 @@ Teams adopting coding agents today face four gaps:
 ### Governance & ops (FR-700)
 - FR-701: Budgets (wall-clock, steps, LLM cost) per run; exhaustion SHALL
   escalate, not silently stop. Cost SHALL aggregate harness JSON cost output
-  and model usage records.
+  and model usage records. *(Landed 2026-07-23, E-33: run-level token/cost
+  counters in `RunSummary.roles` aggregate both the harness JSON cost output
+  and model usage records; a `run_budget_usd` gate escalates through the
+  FR-301/302 gate machinery on crossing. Stage-scoped research budgets under
+  FR-107 are unchanged.)*
 - FR-702: Payloads through workflow history SHALL stay under 2MB via
   claim-check `ArtifactRef`s.
 - FR-703: Harness containment SHALL be tiered: at P1 a restricted OS user +

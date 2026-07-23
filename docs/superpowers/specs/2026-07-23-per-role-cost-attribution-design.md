@@ -5,7 +5,7 @@
 | Date | 2026-07-23 |
 | Roadmap item | E-33 (§9.8); folds E-19 (§9.5) |
 | Anchors | **FR-701** (run-level budgets — counters *and* escalation), FR-704/NFR-4 (records), BENCHMARK.md §3.2 (dollars per role) |
-| Status | Approved design — pre-plan |
+| Status | Implemented (feat/e-33-cost-attribution) |
 
 ## 1. Why
 

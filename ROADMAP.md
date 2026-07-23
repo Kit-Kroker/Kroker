@@ -123,7 +123,7 @@
 - [x] **FR-604** stateless shells, no interface DB — true for CLI.
 
 ### Governance & ops (FR-700)
-- [ ] **FR-701** run-level budgets — research ships the FIRST run-level counters (`max_searches`/`max_fetches`/`max_cost_usd`), stage-scoped and enforced inside the tools; E-19 remains the general version.
+- [x] **FR-701** run-level budgets — research ships the FIRST run-level counters (`max_searches`/`max_fetches`/`max_cost_usd`), stage-scoped and enforced inside the tools; E-19 remains the general version. *Landed (E-33):* run-level token/cost counters in `RunSummary.roles` + a `run_budget_usd` budget gate that escalates through the FR-301/302 gate machinery on crossing (approve = one more increment, reject = `rejected:budget`). Stage-scoped research budgets (FR-107) unchanged.
 - [ ] ⚠️ **FR-702** claim-check `ArtifactRef` / 2MB discipline — `ArtifactRef` model exists but diffs travel inline; no `CodeArtifact` union; no size guard. Sessions are now a real claim-check consumer (`ArtifactStore` / `harness_session`, E-38), but diffs still travel inline, so FR-702 stays open.
 - [ ] ⚠️ **FR-703** egress policy — **research is the pipeline's first outbound egress, and it arrives before the egress policy.** Still env-allowlist only; no `pre_tool` hook, no egress tier. This spec is E-18's first consumer, not its implementation.
 - [ ] **FR-704** observability export (`events.jsonl` + `report.html`) — no `observability/` module.
@@ -311,7 +311,7 @@ Eve marks individual tools `needsApproval`. FR-703 wants a `pre_tool` hook and h
 
 Reference designs for gaps already named in §2/§3, not new scope.
 
-- [ ] **E-19** Single model egress point yielding run-level token/cost counters (FR-701). Today cost bookkeeping "exists in benchmarks only"; one egress point is how to get run counters without touching every call site. *Prerequisite for the run-budget escalation half of FR-701.*
+- [x] **E-19** Single model egress point yielding run-level token/cost counters (FR-701). Today cost bookkeeping "exists in benchmarks only"; one egress point is how to get run counters without touching every call site. *Prerequisite for the run-budget escalation half of FR-701.* *Folded into E-33:* `_run_role` is the single egress point; run-level counters live in `RunSummary.roles`.
 - [ ] **E-20** Short-lived, task-scoped credential injection with an audit trail binding each action to a user (Connect's model) — the "scoped-cred injection absent" gap in NFR-5.
 - [ ] **E-21** OS-user / container isolation tier (Sandbox's model) — the missing tier in FR-703.
 
@@ -428,7 +428,7 @@ is marked **(new scope)** and needs a PRD line before it is real.
   *Landed:* spec `docs/superpowers/specs/2026-07-22-retro-stage-run-summary-design.md`,
   plan `docs/superpowers/plans/2026-07-22-retro-stage-run-summary.md`. E-22/E-23
   (events.jsonl + report.html) folded in here.
-- [ ] **E-33** Per-role cost attribution: promote cost from benchmarks-only
+- [x] **E-33** Per-role cost attribution: promote cost from benchmarks-only
   (§9.5) to run-level counters (folds **E-19**) and attribute **dollars per
   role**, not per token (FR-701). The Cursor economics result restated for this
   registry: the expensive roles are the deciding proposers (architect on
@@ -436,6 +436,7 @@ is marked **(new scope)** and needs a PRD line before it is real.
   the number that moves ($1,339 vs $10,565 on the same task, in their run).
   `HarnessRunResult` already carries the token/context/`compacted` fields; this
   is the aggregation + the proposer-side TemporalAgent usage join.
+  *Landed:* single workflow egress (`_run_role`) + `MODEL_USAGE` events + `price_usage` activity (genai-prices, replay-safe) + `RunSummary.roles` rollup + report.html role table + proposer CostBag fill, **and FR-701's run-level budget gate** (`run_budget_usd`, hard gate via FR-301/302, approve = one more increment, reject = `rejected:budget` with retro intact). Research provider spend stays stage-scoped. Spec `docs/superpowers/specs/2026-07-23-per-role-cost-attribution-design.md`, plan `docs/superpowers/plans/2026-07-23-per-role-cost-attribution.md`.
 - [ ] **E-34 (new scope)** A decomposition-forcing benchmark case. Both current
   cases are "sized for a single short factory run", so **planner decomposition
   — the load-bearing variable in real work — is unexercised** (E-27's own
@@ -527,7 +528,7 @@ still open**; OQ-B5 when an external eval platform (Braintrust, ARCHITECTURE §1
 **Suggested ordering within §9.8:** E-30 (interface + **Python reference**, the
 grade) ✓ → E-31 (held-out oracle on that one language) ✓ → E-32 (the loop, also
 unblocks P3) → **E-38 (capture-always sessions — observability + anti-cheat
-foundation, feeds E-22/E-23/P5) ✓** → E-33 + E-34 (economics + the
+foundation, feeds E-22/E-23/P5) ✓** → E-33 ✓ + E-34 (economics + the
 decomposition case) → E-30a/b/c (add languages as the corpus needs them) →
 E-35 (the cursor point) → E-36 (heatmap + calibration, sliceable by
 language) → E-39 (deep-review lens, reads the session) → E-37 (per-role

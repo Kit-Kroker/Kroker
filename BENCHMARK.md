@@ -239,6 +239,8 @@ of worker-family tokens. The registry already lets you pair a frontier architect
 with a cheaper developer harness and measure whether quality holds — which is
 precisely Cursor's $1,339-vs-$10,565 experiment, expressed in your config.
 
+*E-33 landed this: `RunSummary.roles` carries per-role dollars on every run; proposer `BenchmarkRecord.cost` is now populated, so `mean_cost_usd` is real for proposer cells.*
+
 Blocker to be honest about: `cfg.roles` is a hardcoded mirror of `agents.yaml`
 because `PipelineConfig()` is constructed *inside* the workflow (E-26). A
 per-cell model sweep needs the override to resolve at the boundary
