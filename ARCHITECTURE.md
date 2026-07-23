@@ -181,13 +181,17 @@ attributed per role per run (SC-7 feeds tiering decisions):
 `opencode run [-m provider/model] [-s sid] [--attach url] --format json
 <prompt>`. Adapters normalize to `HarnessRunResult{session_id, exit_code,
 summary, cost_usd, commit_sha, input_tokens, output_tokens, context_window,
-compacted, session_ref}` — the token fields (already present in the harness
+compacted, session_ref, session_digest}` — the token fields (already present in the harness
 result JSON) make the ADR-13 context ceiling measurable rather than a blind
 resume count. `session_ref: ArtifactRef{kind: harness_session}` is a
 claim-checked, scrubbed **canonical `HarnessSession`** (normalised transcript
 — tool-calls, file reads/writes, commands + exit status, model turns);
 captured on every run (ADR-16), it is what makes *how* a diff was reached
-measurable, not just the diff. Green (first-pass) runs keep a structured
+measurable, not just the diff. `session_digest: SessionDigest` travels
+**inline** (not claim-checked — it is small and bounded) carrying the §4.3
+waste aggregates + decision-skeleton, computed pre-truncation so it exists
+for every run including ones whose full transcript is later downgraded.
+Green (first-pass) runs keep a structured
 `SessionDigest` (waste aggregates + decision-skeleton) rather than the full
 transcript; fail / benchmark / retried runs keep the full session (§4 waste
 aggregates are computed pre-truncation, so they exist for every run). Sessions resume across fix-loop attempts,

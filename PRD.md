@@ -137,6 +137,13 @@ Teams adopting coding agents today face four gaps:
   produced by the test step SHALL be available in the integration worktree the
   gate reads. The factory SHALL ship at least one reference adapter exercised
   end-to-end; further language adapters are additive and off the critical path.
+- **FR-109 (new scope; ADR-16)** Capture-always harness sessions: every
+  harness run emits a canonical, scrubbed `HarnessSession` transcript as a
+  claim-checked `ArtifactRef{kind: harness_session}` plus an inline
+  `SessionDigest` (waste aggregates + decision-skeleton, always kept).
+  Scrub is fail-closed before storage; retention downgrades clean-green
+  non-benchmark runs to digest-only (full-transcript TTL remains open,
+  OQ-B7).
 
 ### Agents (FR-200)
 - FR-201: Agents SHALL be declared in a versioned registry (`agents.yaml`):

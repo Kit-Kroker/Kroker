@@ -124,7 +124,7 @@
 
 ### Governance & ops (FR-700)
 - [ ] **FR-701** run-level budgets — research ships the FIRST run-level counters (`max_searches`/`max_fetches`/`max_cost_usd`), stage-scoped and enforced inside the tools; E-19 remains the general version.
-- [ ] ⚠️ **FR-702** claim-check `ArtifactRef` / 2MB discipline — `ArtifactRef` model exists but diffs travel inline; no `CodeArtifact` union; no size guard.
+- [ ] ⚠️ **FR-702** claim-check `ArtifactRef` / 2MB discipline — `ArtifactRef` model exists but diffs travel inline; no `CodeArtifact` union; no size guard. Sessions are now a real claim-check consumer (`ArtifactStore` / `harness_session`, E-38), but diffs still travel inline, so FR-702 stays open.
 - [ ] ⚠️ **FR-703** egress policy — **research is the pipeline's first outbound egress, and it arrives before the egress policy.** Still env-allowlist only; no `pre_tool` hook, no egress tier. This spec is E-18's first consumer, not its implementation.
 - [ ] **FR-704** observability export (`events.jsonl` + `report.html`) — no `observability/` module.
 
@@ -465,7 +465,7 @@ is marked **(new scope)** and needs a PRD line before it is real.
   judge family must move per cell to stay ADR-6-independent of the swept
   producer family) and **OQ-E2**.
 
-- [ ] **E-38 (new scope; ADR-16)** Capture-always harness sessions. Every
+- [x] **E-38 (new scope; ADR-16)** Capture-always harness sessions. Every
   harness run emits a **canonical `HarnessSession`** (normalised transcript:
   tool-calls, file reads/writes, commands + exit status, model turns) as a
   claim-checked `ArtifactRef{kind: harness_session}` on `HarnessRunResult`
@@ -492,6 +492,15 @@ is marked **(new scope)** and needs a PRD line before it is real.
   and the extraction point for trajectory eval + small-model distillation.
   *Invariant it must preserve:* capturing the developer's session does **not**
   let the default reviewer read it — see E-39.
+  *Landed:* `HarnessSession`/`SessionDigest` + per-adapter normalisers
+  (claude via `--output-format stream-json --verbose`; opencode from its
+  event stream), `ArtifactStore` seam with `file://` backend
+  (`src/sdlc/artifacts/`), fail-closed capture in `run_coding_task`,
+  retro-time OQ-B7 retention, env-gated Logfire slice. PRD line: FR-109.
+  Diff claim-check (FR-702 proper) and report rendering deliberately not
+  here; TTL still open. Spec
+  `docs/superpowers/specs/2026-07-23-capture-always-harness-sessions-design.md`,
+  plan `docs/superpowers/plans/2026-07-23-capture-always-harness-sessions.md`.
 - [ ] **E-39 (new scope)** `deep_review` — an optional, opt-in review tier that
   reads the scrubbed `HarnessSession` (E-38) as **data**. This is Cursor's
   full-transcript lens, and it deliberately does what the default reviewer must
@@ -518,7 +527,7 @@ still open**; OQ-B5 when an external eval platform (Braintrust, ARCHITECTURE §1
 **Suggested ordering within §9.8:** E-30 (interface + **Python reference**, the
 grade) ✓ → E-31 (held-out oracle on that one language) ✓ → E-32 (the loop, also
 unblocks P3) → **E-38 (capture-always sessions — observability + anti-cheat
-foundation, feeds E-22/E-23/P5)** → E-33 + E-34 (economics + the
+foundation, feeds E-22/E-23/P5) ✓** → E-33 + E-34 (economics + the
 decomposition case) → E-30a/b/c (add languages as the corpus needs them) →
 E-35 (the cursor point) → E-36 (heatmap + calibration, sliceable by
 language) → E-39 (deep-review lens, reads the session) → E-37 (per-role

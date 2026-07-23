@@ -480,7 +480,12 @@ adapters).
   open: the TTL on full transcripts** — keep failed/benchmark sessions
   indefinitely, or purge N days after the run is triaged? That is the only
   remaining sub-decision; the scrub is non-negotiable and fail-closed
-  regardless.
+  regardless. **Implemented (E-38):** capture → fail-closed scrub → full
+  transcript (`harness_session`) + `SessionDigest` stored by
+  `run_coding_task`; retro downgrades clean-green non-benchmark runs to
+  digest-only (`keep_full_transcripts` / `apply_session_retention`). The
+  §4.3 digest is always kept. **TTL on kept full transcripts is the one
+  remaining open sub-point.**
 
 ---
 
