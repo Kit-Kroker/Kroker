@@ -21,6 +21,7 @@ import defusedxml.ElementTree as DET
 from defusedxml.common import DefusedXmlException
 from temporalio import activity
 
+from .artifacts.capture import capture_session
 from .gate import (
     CheckResult, GateOverride, GateReport, QualityGateInput,
     evaluate_quality_gate,
@@ -376,6 +377,8 @@ class CodingTaskInput:
     model: str | None = None
     session_id: str | None = None
     timeout_s: int = 3600
+    task_id: str = "task"       # E-38: session artifact naming
+    attempt: int = 1
 
 
 @activity.defn
@@ -393,6 +396,20 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
         ),
         heartbeat=activity.heartbeat,
     )
+    # E-38: capture the transcript. Raw stdout rides a PrivateAttr — it
+    # exists only inside this activity and is never written unscrubbed.
+    # Best-effort: a failure here (incl. running outside an activity context
+    # in tests) must never break the coding task itself.
+    try:
+        run_id = activity.info().workflow_run_id
+    except RuntimeError:
+        run_id = "local"
+    ref, digest = capture_session(
+        harness, result._raw_stdout,
+        run_id=run_id,
+        task_id=inp.task_id, attempt=inp.attempt)
+    result.session_ref = ref
+    result.session_digest = digest
     # Checkpoint commit — the resume point if anything downstream fails.
     add = _git(["add", "-A"], inp.worktree)
     if add.returncode != 0:

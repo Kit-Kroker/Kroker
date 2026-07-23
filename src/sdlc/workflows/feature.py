@@ -569,7 +569,8 @@ class FeatureWorkflow:
                 run_coding_task,
                 CodingTaskInput(harness=role_cfg.harness, prompt=prompt,
                                 worktree=worktree, model=role_cfg.model,
-                                session_id=session_id),
+                                session_id=session_id,
+                                task_id=task.id, attempt=attempt),
                 **_long_act(role_cfg),
             )
 
