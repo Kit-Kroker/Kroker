@@ -5,11 +5,11 @@ SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 
 def test_dev_task_runs_reviewer_on_clean_inputs():
     src = SRC.read_text(encoding="utf-8")
-    assert "t_reviewer.run(" in src, (
+    idx = src.find('self._run_role(cfg, "reviewer"')
+    assert idx != -1, (
         "_dev_task must run the clean-context reviewer (FR-204)")
     # Reviewer must see the diff patch — the same materialized diff QA sees,
     # never the implementer's narrative.
-    idx = src.find("t_reviewer.run(")
     call = src[idx: idx + 400]
     assert "diff['patch']" in call or 'diff["patch"]' in call
 

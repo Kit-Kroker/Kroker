@@ -8,7 +8,7 @@ from sdlc.workflows import feature
 def test_analyze_stage_calls_analyst_and_builds_both_checks():
     src = inspect.getsource(feature.FeatureWorkflow._pipeline)
     # Analyst invoked
-    assert "t_analyst.run(" in src
+    assert "t_analyst," in src
     # Enforcement helper used (not an LLM verdict)
     assert "untraced_criteria(" in src
     # Both advisory checks appended
@@ -20,4 +20,4 @@ def test_analyze_stage_calls_analyst_and_builds_both_checks():
 
 def test_analyze_runs_before_merge_evidence():
     src = inspect.getsource(feature.FeatureWorkflow._pipeline)
-    assert src.index("t_analyst.run(") < src.index("evaluate_gate")
+    assert src.index("t_analyst,") < src.index("evaluate_gate")

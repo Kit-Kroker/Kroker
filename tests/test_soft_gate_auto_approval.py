@@ -65,7 +65,7 @@ def test_merge_soft_path_uses_auto_decision_for():
     # Find the merge stage's soft-path block (after the MergeVerdict call)
     # and confirm it consults _auto_decision_for rather than a bare
     # verdict.approve check alone.
-    idx = src.find("t_merge_verdict.run(")
+    idx = src.find('"merge_verdict"')
     assert idx != -1, "merge stage no longer calls t_merge_verdict"
     tail = src[idx: idx + 700]
     assert "_auto_decision_for(" in tail, (
