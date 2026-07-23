@@ -18,6 +18,7 @@ where = ["src"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.24", "pytest-cov>=5"]
+logfire = ["logfire[pydantic-ai]>=3"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

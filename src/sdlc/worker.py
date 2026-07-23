@@ -56,6 +56,10 @@ async def main() -> None:
     # invariant must never boot a worker (FR-204/US-5).
     validate_registry(load_registry())
 
+    from .observability.logfire_setup import configure as configure_logfire
+    if configure_logfire():
+        logging.getLogger(__name__).info("logfire instrumentation enabled")
+
     client = await Client.connect(
         os.environ.get("TEMPORAL_HOST", "localhost:7233"),
         data_converter=pydantic_data_converter,

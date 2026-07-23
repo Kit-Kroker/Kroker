@@ -22,6 +22,7 @@ from defusedxml.common import DefusedXmlException
 from temporalio import activity
 
 from .artifacts.capture import capture_session
+from .observability.logfire_setup import span
 from .gate import (
     CheckResult, GateOverride, GateReport, QualityGateInput,
     evaluate_quality_gate,
@@ -389,13 +390,15 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
     can detect a hung/dead worker and retry elsewhere.
     """
     harness = HARNESSES[inp.harness]
-    result = await harness.run(
-        HarnessRequest(
-            prompt=inp.prompt, cwd=inp.worktree, model=inp.model,
-            session_id=inp.session_id, timeout_s=inp.timeout_s,
-        ),
-        heartbeat=activity.heartbeat,
-    )
+    with span("harness.run", harness=inp.harness.value,
+              task_id=inp.task_id, attempt=inp.attempt):
+        result = await harness.run(
+            HarnessRequest(
+                prompt=inp.prompt, cwd=inp.worktree, model=inp.model,
+                session_id=inp.session_id, timeout_s=inp.timeout_s,
+            ),
+            heartbeat=activity.heartbeat,
+        )
     # E-38: capture the transcript. Raw stdout rides a PrivateAttr — it
     # exists only inside this activity and is never written unscrubbed.
     # Best-effort: a failure here (incl. running outside an activity context
@@ -404,12 +407,14 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
         run_id = activity.info().workflow_run_id
     except RuntimeError:
         run_id = "local"
-    ref, digest = capture_session(
-        harness, result._raw_stdout,
-        run_id=run_id,
-        task_id=inp.task_id, attempt=inp.attempt)
-    result.session_ref = ref
-    result.session_digest = digest
+    with span("session.capture", task_id=inp.task_id,
+              stdout_bytes=len(result._raw_stdout)):
+        ref, digest = capture_session(
+            harness, result._raw_stdout,
+            run_id=run_id,
+            task_id=inp.task_id, attempt=inp.attempt)
+        result.session_ref = ref
+        result.session_digest = digest
     # Checkpoint commit — the resume point if anything downstream fails.
     add = _git(["add", "-A"], inp.worktree)
     if add.returncode != 0:
