@@ -11,7 +11,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_validator
 
 
 class ProjectMode(str, Enum):
@@ -56,6 +56,48 @@ class ArtifactRef(BaseModel):
     kind: str                      # e.g. "spec", "plan", "qa_report", "diff"
     uri: str                       # s3://..., file://..., git ref, etc.
     sha256: str | None = None
+
+
+class SessionEvent(BaseModel):
+    """One normalised harness-transcript event (ADR-16). Harness-agnostic;
+    adapters map their native streams onto this schema."""
+    kind: str          # model_turn | tool_call | tool_result | file_read
+                       # | file_write | command | compaction | result
+    tool: str | None = None
+    target: str | None = None      # file path or command line (scrubbed)
+    exit_code: int | None = None
+    tokens_in: int | None = None
+    tokens_out: int | None = None
+    text: str | None = None        # payload (scrubbed)
+
+
+class HarnessSession(BaseModel):
+    """Canonical transcript of one harness run (ADR-16). NEVER enters
+    workflow state — serialized to JSONL and claim-checked (E-38)."""
+    harness: HarnessKind
+    session_id: str | None = None
+    model: str | None = None
+    events: list[SessionEvent] = Field(default_factory=list)
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    cost_usd: float | None = None
+
+
+class SessionDigest(BaseModel):
+    """BENCHMARK §4.3 waste aggregates + decision-skeleton. Small and
+    bounded — travels inline on HarnessRunResult; always kept, even when
+    the full transcript is downgraded at retro (OQ-B7)."""
+    tool_calls: int = 0
+    file_reads: int = 0
+    file_rereads: int = 0          # same path read more than once
+    files_written: int = 0         # distinct paths written
+    rewrite_churn: int = 0         # paths written more than once
+    failed_commands: int = 0       # command events with exit_code not in (0, None)
+    model_turns: int = 0
+    compacted: bool = False
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    decision_skeleton: list[str] = Field(default_factory=list)
 
 
 class IdeaBrief(BaseModel):
@@ -164,6 +206,12 @@ class HarnessRunResult(BaseModel):
     output_tokens: int | None = None
     context_window: int | None = None
     compacted: bool = False                 # harness signalled a mid-run compaction
+    # E-38 (ADR-16): full scrubbed transcript as a claim-checked ref; waste
+    # digest inline. The raw stdout rides a PrivateAttr so it can never
+    # serialize into workflow state.
+    session_ref: ArtifactRef | None = None
+    session_digest: SessionDigest | None = None
+    _raw_stdout: str = PrivateAttr(default="")
 
     def near_context_ceiling(self, fraction: float = 0.75) -> bool:
         """True when the run is at/over the usable context budget. A
