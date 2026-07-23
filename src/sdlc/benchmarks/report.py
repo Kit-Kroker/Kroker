@@ -3,8 +3,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
 from temporalio import activity
 
+from .heatmap import build_heatmap, render_heatmap_html, render_heatmap_json
+from .judge import _CASES_DIR
 from .models import BenchmarkRecord, BenchmarkSummary, CompositeWeights
 from .recorder import RecordStore, _root
 from .scoring import compute_summaries
@@ -73,12 +76,45 @@ def write_report(summaries: list[BenchmarkSummary], out_path: str) -> None:
     Path(out_path).write_text(render_markdown(summaries), encoding="utf-8")
 
 
+def resolve_language_map(case_ids: list[str],
+                         cases_dir: Path | None = None) -> dict[str, str]:
+    """Best-effort {case_id: language} from each case's case.yaml. A missing
+    manifest or language contributes ""; never raises (a broken manifest just
+    means that case is language-unknown)."""
+    base = cases_dir if cases_dir is not None else _CASES_DIR
+    out: dict[str, str] = {}
+    for cid in case_ids:
+        lang = ""
+        p = Path(base) / cid / "case.yaml"
+        if p.is_file():
+            try:
+                data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+                lang = str(data.get("language") or "")
+            except Exception:
+                lang = ""
+        out[cid] = lang
+    return out
+
+
+def write_heatmap(records, out_dir: Path,
+                  language_by_case: dict[str, str]) -> tuple[Path, Path]:
+    hm = build_heatmap(records, language_by_case)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    html_p = out_dir / "heatmap.html"
+    json_p = out_dir / "heatmap.json"
+    html_p.write_text(render_heatmap_html(hm), encoding="utf-8")
+    json_p.write_text(render_heatmap_json(hm), encoding="utf-8")
+    return html_p, json_p
+
+
 @activity.defn
 async def finalize_benchmark_report(bench_run_id: str) -> str:
-    """Activity: read all records for the bench run, aggregate, write the
-    Markdown report, return the report path. All file I/O lives here —
-    never in workflow code."""
-    summaries = aggregate(bench_run_id, CompositeWeights())
-    out_path = f"runs/benchmarks/{bench_run_id}/report.md"
-    write_report(summaries, out_path)
-    return out_path
+    """Activity: read all records, aggregate, write report.md AND the
+    heatmap.{html,json} beside it. All file I/O lives here."""
+    records = _read_all(bench_run_id, None)
+    summaries = aggregate(bench_run_id, CompositeWeights(), _records=records)
+    out_dir = Path(_root()) / bench_run_id
+    write_report(summaries, str(out_dir / "report.md"))
+    lang = resolve_language_map(sorted({r.case_id for r in records}))
+    write_heatmap(records, out_dir, lang)
+    return str(out_dir / "report.md")

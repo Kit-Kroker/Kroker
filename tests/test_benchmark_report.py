@@ -72,3 +72,22 @@ def test_render_markdown_surfaces_stage_failures():
     assert "Stage failures" in md
     assert "c1 / research" in md
     assert "rejected:research.grounding" in md
+
+
+def test_resolve_language_map_reads_case_manifests(tmp_path):
+    from sdlc.benchmarks.report import resolve_language_map
+    (tmp_path / "c1").mkdir()
+    (tmp_path / "c1" / "case.yaml").write_text(
+        "case_id: c1\nlanguage: python\n", encoding="utf-8")
+    (tmp_path / "c2").mkdir()          # no case.yaml
+    m = resolve_language_map(["c1", "c2"], cases_dir=tmp_path)
+    assert m == {"c1": "python", "c2": ""}
+
+
+def test_write_heatmap_emits_both_files(tmp_path):
+    from sdlc.benchmarks.report import write_heatmap
+    recs = [_rec("sonnet", 0.9, 1.0, 100)]
+    html_p, json_p = write_heatmap(recs, tmp_path, {"c1": "python"})
+    assert html_p.exists() and json_p.exists()
+    assert html_p.name == "heatmap.html" and json_p.name == "heatmap.json"
+    assert "<!doctype html>" in html_p.read_text(encoding="utf-8")
