@@ -15,6 +15,7 @@ from sdlc.activities import (
 from sdlc.models import (
     CoverageReport, HarnessRunResult, QAReport, SecurityReport,
 )
+from sdlc.pricing import price_usage
 
 
 @activity.defn(name="setup_integration_branch")
@@ -99,4 +100,5 @@ GIT_FAKES = [
     fake_get_task_diff, fake_run_test_suite, fake_run_lint,
     fake_merge_into_integration, fake_open_pull_request, fake_deploy,
     fake_security_scan, fake_measure_coverage, fake_run_integration_checks,
+    price_usage,   # E-33: real activity — pure local table lookup, no network
 ]

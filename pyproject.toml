@@ -10,6 +10,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "httpx>=0.27",
     "defusedxml>=0.7",
+    "genai-prices>=0.0.60",
     "pydantic-ai-harness[codemode]>=0.1",
 ]
 
