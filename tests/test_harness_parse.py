@@ -7,7 +7,10 @@ from sdlc.harness.adapters import (
 
 
 def test_claude_parse_extracts_tokens_and_cost():
-    payload = {"session_id": "abc", "total_cost_usd": 0.12, "result": "done",
+    # E-38: claude now emits stream-json; parse walks lines for the result
+    # event. Wrap the old plain-json payload as a one-line result stream.
+    payload = {"type": "result", "session_id": "abc",
+               "total_cost_usd": 0.12, "result": "done",
                "usage": {"input_tokens": 1234, "output_tokens": 56}}
     res = ClaudeCodeHarness().parse(json.dumps(payload), 0)
     assert res.session_id == "abc"
@@ -119,5 +122,5 @@ def test_opencode_parse_logs_warning_when_nothing_parses(caplog):
 def test_claude_parse_logs_warning_on_decode_failure(caplog):
     caplog.set_level(logging.WARNING, logger="sdlc.harness.adapters")
     ClaudeCodeHarness().parse("not json at all", 1)
-    assert any("decode" in r.message.lower() or "fallback" in r.message.lower()
+    assert any("result event" in r.message.lower() or "fallback" in r.message.lower()
                for r in caplog.records)
