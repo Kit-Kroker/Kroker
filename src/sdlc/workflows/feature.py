@@ -50,6 +50,8 @@ with workflow.unsafe.imports_passed_through():
     from ..observability.activities import RunExportInput, export_run_artifacts
     from ..observability.summary import build_run_summary
     from ..observability.trace import RunEvent, RunEventKind
+    from ..observability.usage import merge_usage
+    from ..pricing import PriceUsageInput, price_usage
     from ..artifacts.retention import (RetentionInput, apply_session_retention,
                                        keep_full_transcripts)
     from ..models import (
@@ -58,7 +60,7 @@ with workflow.unsafe.imports_passed_through():
         GateOutcome, GatePolicy, HandoffSummary, IdeaBrief,
         ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig,
         RecallSnapshot, ResearchBrief, RetainItem, RoleConfig,
-        RunSummary, SecurityReport, TaskResult, gate_key,
+        RoleUsage, RunSummary, SecurityReport, TaskResult, gate_key,
     )
     from ..pending import (
         GateContext, PendingDecision, clarify_pending, gate_pending,
@@ -93,6 +95,11 @@ VERIFY_ACT = dict(
     start_to_close_timeout=timedelta(minutes=1),
     retry_policy=RetryPolicy(maximum_attempts=1),
 )
+# E-33: pricing is a deterministic local table lookup — retrying cannot
+# change the outcome (VERIFY_ACT rationale); the caller treats failure as
+# "price unknown", so 1 attempt, short timeout.
+PRICE_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
+                 retry_policy=RetryPolicy(maximum_attempts=1))
 # E-32: export is best-effort — a single attempt, no retry hammering (a failing
 # export must never change the run's return string).
 EXPORT_ACT = dict(start_to_close_timeout=timedelta(minutes=2),
@@ -240,6 +247,10 @@ class FeatureWorkflow:
         # E-38: session refs collected per coding attempt; retro applies
         # the OQ-B7 retention policy over them.
         self._session_refs: list[ArtifactRef] = []
+        # E-33: per-role spend accumulated across the run; budget state.
+        self._role_usage: dict[str, RoleUsage] = {}
+        self._budget_threshold: float = 0.0
+        self._budget_crossings: int = 0
 
     # ----------------------- benchmark recording ------------------------
 
@@ -420,6 +431,64 @@ class FeatureWorkflow:
                                     kind=kind, stage=stage, data=data))
         self._seq += 1
 
+    def _track_usage(self, *, role: str, model: str,
+                     input_tokens: int = 0, output_tokens: int = 0,
+                     cache_read_tokens: int = 0, cache_write_tokens: int = 0,
+                     cost_usd: float | None = None,
+                     into: RoleUsage | None = None) -> None:
+        """Fold one model call into the run's per-role accumulator and emit
+        a MODEL_USAGE event. Pure state mutation — safe in workflow code.
+        `into` additionally folds the same delta into a caller-held bag
+        (per-stage benchmark records)."""
+        bag = self._role_usage.setdefault(
+            role, RoleUsage(role=role, model=model))
+        for target in (bag, into) if into is not None else (bag,):
+            merge_usage(target, model=model,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        cache_read_tokens=cache_read_tokens,
+                        cache_write_tokens=cache_write_tokens,
+                        cost_usd=cost_usd)
+        self._emit(
+            RunEventKind.MODEL_USAGE, role=role, model=model, calls="1",
+            input_tokens=str(input_tokens), output_tokens=str(output_tokens),
+            cache_read_tokens=str(cache_read_tokens),
+            cache_write_tokens=str(cache_write_tokens),
+            **({"cost_usd": str(cost_usd)} if cost_usd is not None else {}))
+
+    async def _run_role(self, cfg: PipelineConfig, role: str, model: str,
+                        agent, *args, into: RoleUsage | None = None,
+                        **kwargs):
+        """E-33 single model-egress point (folds E-19): run a proposer
+        agent, capture its usage, price it (replay-safe: in an activity),
+        accumulate per role. Returns the AgentRunResult — callers keep
+        taking .output. Pricing failure of ANY kind degrades to usd=None;
+        it must never fail the stage."""
+        result = await agent.run(*args, **kwargs)
+        u = result.usage
+        usd: float | None = None
+        if u.input_tokens or u.output_tokens:
+            try:
+                usd = await workflow.execute_activity(
+                    price_usage,
+                    PriceUsageInput(
+                        model=model,
+                        input_tokens=u.input_tokens or 0,
+                        output_tokens=u.output_tokens or 0,
+                        cache_read_tokens=u.cache_read_tokens or 0,
+                        cache_write_tokens=u.cache_write_tokens or 0),
+                    **PRICE_ACT)
+            except Exception:
+                usd = None
+        self._track_usage(
+            role=role, model=model,
+            input_tokens=u.input_tokens or 0,
+            output_tokens=u.output_tokens or 0,
+            cache_read_tokens=u.cache_read_tokens or 0,
+            cache_write_tokens=u.cache_write_tokens or 0,
+            cost_usd=usd, into=into)
+        return result
+
     async def _gate(self, name: str, cfg: PipelineConfig,
                     auto_decision: GateDecision | None = None,
                     round: int = 1,
@@ -581,6 +650,15 @@ class FeatureWorkflow:
             if run.session_ref is not None:
                 self._session_refs.append(run.session_ref)
 
+            # E-33 harness join: the harness reports REAL dollars (CLI
+            # total_cost_usd) — no pricing activity needed. Accumulate
+            # under the executing role.
+            self._track_usage(
+                role="dev", model=role_cfg.model,
+                input_tokens=run.input_tokens or 0,
+                output_tokens=run.output_tokens or 0,
+                cost_usd=run.cost_usd)
+
             # Clean-context validation: contract + tests + diff. No narrative.
             # Uses the contract's own stack-specific test_commands (FR-803)
             # rather than QAInput's Python-toolchain default — a non-Python
@@ -596,7 +674,7 @@ class FeatureWorkflow:
                 DiffInput(worktree=worktree, branch_point=handle.branch_point),
                 **ACT,
             )
-            qa = (await t_qa.run(
+            qa = (await self._run_role(cfg, "qa", STAGE_MODELS["qa"], t_qa,
                 "Frozen contract assertions:\n- " + "\n- ".join(assertions)
                 + f"\nTest results: {qa_raw.model_dump_json()}"
                 + f"\nDiff stat:\n{diff['stat']}"
@@ -607,7 +685,7 @@ class FeatureWorkflow:
             # session. A different model family than the developer (ADR-6).
             review = None
             if cfg.review_enabled:
-                review = (await t_reviewer.run(
+                review = (await self._run_role(cfg, "reviewer", STAGE_MODELS.get("review", "unknown"), t_reviewer,
                     "Frozen contract assertions:\n- " + "\n- ".join(assertions)
                     + f"\nTest results: {qa_raw.model_dump_json()}"
                     + f"\nDiff:\n{diff['patch']}")).output
@@ -847,7 +925,7 @@ class FeatureWorkflow:
             # Per-run budget enforcement is effectively absent under
             # temporalization; restoring it needs a disk-persisted counter
             # (deferred — not this task).
-            brief: ResearchBrief = (await t_research.run(
+            brief: ResearchBrief = (await self._run_role(cfg, "research", STAGE_MODELS.get("research", "unknown"), t_research,
                 idea.model_dump_json(), deps=deps)).output
             # Task 7 fallback (Task 1 finding A): the original
             # @agent.output_validator was silently dropped by TemporalAgent, so
@@ -908,7 +986,7 @@ class FeatureWorkflow:
             filters={"stage": "clarify"})
 
         async def _run_clarify():
-            return (await t_clarify.run(
+            return (await self._run_role(cfg, "clarify", STAGE_MODELS["clarify"], t_clarify,
                 idea.model_dump_json()
                 + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
                    if snapshot.items else ""))).output
@@ -1003,7 +1081,7 @@ class FeatureWorkflow:
                 memory_watermark=self._memory_watermark)
 
             async def _produce():
-                return (await t_architect.run(prompt, deps=architect_deps)).output
+                return (await self._run_role(cfg, "architect", STAGE_MODELS["architect"], t_architect, prompt, deps=architect_deps)).output
             arch, _ = await self._cached_stage(
                 cfg, "architect",
                 reqs.model_dump_json() + (guidance or ""),
@@ -1043,7 +1121,7 @@ class FeatureWorkflow:
                          if guidance else ""))
 
             async def _produce():
-                return (await t_planner.run(prompt)).output
+                return (await self._run_role(cfg, "planner", STAGE_MODELS["plan"], t_planner, prompt)).output
             plan, _ = await self._cached_stage(
                 cfg, "plan",
                 arch.model_dump_json() + (guidance or ""),
@@ -1140,7 +1218,7 @@ class FeatureWorkflow:
             f"- {r.task_id}: tests_passed={r.qa.tests_passed if r.qa else 'n/a'}"
             f" failing={r.qa.failing_tests if r.qa else []}"
             for r in done.values())
-        analysis: AnalysisReport = (await t_analyst.run(
+        analysis: AnalysisReport = (await self._run_role(cfg, "analyst", STAGE_MODELS["analyze"], t_analyst,
             "Acceptance criteria (task_id in brackets):\n" + _criteria_lines
             + "\nAggregate test output:\n" + _qa_lines
             + f"\nIntegration diff stat:\n{integration_diff['stat']}"
@@ -1297,7 +1375,7 @@ class FeatureWorkflow:
             # consulted under SOFT policy — it can approve an already-clean
             # build; it can never reach this branch otherwise.
             if cfg.gates.get("merge", GateConfig()).policy == GatePolicy.SOFT:
-                verdict: MergeVerdict = (await t_merge_verdict.run(
+                verdict: MergeVerdict = (await self._run_role(cfg, "merge_verdict", STAGE_MODELS.get("merge_verdict", "unknown"), t_merge_verdict,
                     "Advisory only — the deterministic gate already passed. "
                     f"Task results: {[r.model_dump() for r in done.values()]}"
                 )).output
