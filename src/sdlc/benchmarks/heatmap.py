@@ -7,6 +7,7 @@ no temporalio -- mirrors observability/export.py. The finalize activity
 from __future__ import annotations
 
 from collections import defaultdict
+from html import escape
 
 from pydantic import BaseModel, Field
 
@@ -84,3 +85,63 @@ def build_heatmap(records: list[BenchmarkRecord],
     lang = {c: language_by_case.get(c, "") for c in cases}
     return Heatmap(cells=cells, cases=cases, stages=stages,
                    max_density=max_density, language_by_case=lang)
+
+
+def render_heatmap_json(hm: Heatmap) -> str:
+    return hm.model_dump_json(indent=2)
+
+
+def _cell_color(density: float, max_density: float) -> str:
+    ratio = 0.0 if max_density <= 0 else min(density / max_density, 1.0)
+    hue = 120 * (1 - ratio)          # 120=green (low) -> 0=red (high)
+    return f"hsl({hue:.0f},70%,{85 - 25 * ratio:.0f}%)"
+
+
+def _grid(hm: Heatmap, cases: list[str]) -> str:
+    by = {(c.case, c.stage): c for c in hm.cells}
+    head = "".join(f"<th>{escape(s)}</th>" for s in hm.stages)
+    rows = []
+    for case in cases:
+        tds = [f"<th>{escape(case)}</th>"]
+        for stage in hm.stages:
+            c = by.get((case, stage))
+            if c is None:
+                tds.append('<td class="empty"></td>')
+                continue
+            tip = (f"{case}/{stage}: {c.gate_rejects} rejects, "
+                   f"{c.fix_attempts} fix-attempts, {c.oracle_fails} "
+                   f"oracle-fails over {c.n_runs} runs = {c.density:.2f}/run")
+            tds.append(
+                f'<td title="{escape(tip)}" '
+                f'style="background:{_cell_color(c.density, hm.max_density)}">'
+                f"{c.density:.2f}</td>")
+        rows.append("<tr>" + "".join(tds) + "</tr>")
+    return (f"<table><tr><th>case \\ stage</th>{head}</tr>"
+            + "".join(rows) + "</table>")
+
+
+def render_heatmap_html(hm: Heatmap, calibration_html: str = "") -> str:
+    if not hm.cells:
+        body = "<p>No records.</p>"
+    else:
+        sections = [f"<h2>All cases</h2>{_grid(hm, hm.cases)}"]
+        langs = sorted({v for v in hm.language_by_case.values() if v})
+        for lang in langs:
+            cases = [c for c in hm.cases if hm.language_by_case.get(c) == lang]
+            sections.append(f"<h2>{escape(lang)}</h2>{_grid(hm, cases)}")
+        body = "".join(sections)
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Benchmark heatmap</title>
+<style>
+body{{font:14px system-ui,sans-serif;margin:2rem;color:#111}}
+h1{{font-size:1.3rem}} h2{{font-size:1rem;margin-top:1.5rem}}
+table{{border-collapse:collapse;margin:.5rem 0}}
+td,th{{border:1px solid #ccc;padding:.3rem .6rem;text-align:center}}
+th{{background:#f3f3f3}} td.empty{{background:#fafafa}}
+</style></head><body>
+<h1>Rework-density heatmap</h1>
+<p>Cell = (gate rejections + fix-loop attempts + oracle failures) per run.
+Greener is cleaner; redder is more rework.</p>
+{body}
+{calibration_html}
+</body></html>"""
