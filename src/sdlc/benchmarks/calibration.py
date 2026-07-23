@@ -9,10 +9,16 @@ Pure compute here; the CLI (cli.py) owns file I/O and the live-history seam.
 from __future__ import annotations
 
 import hashlib
+import logging
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal
 
 from pydantic import BaseModel, Field
+
+from ..agents.loader import model_family
+from .judge import JudgeInput
+from .models import QualityScore
 
 
 class CalibrationFixture(BaseModel):
@@ -124,3 +130,58 @@ def compute_agreement(pairs: list[tuple[float, float]],
     return AgreementStats(n=n, epsilon=epsilon, threshold=threshold,
                           agreement_rate=agree, mae=mae, spearman=sp,
                           verdict=verdict)
+
+
+_log = logging.getLogger(__name__)
+
+JudgeScoreFn = Callable[[JudgeInput], "QualityScore"]
+
+
+class CalibrationReport(BaseModel):
+    rubric: str
+    judge_model: str
+    n_fixtures: int
+    epsilon: float
+    threshold: float
+    agreement_rate: float
+    mae: float
+    spearman: float
+    verdict: str
+    computed_at: datetime
+
+
+def _default_judge(inp: JudgeInput) -> QualityScore:
+    # judge_artifact.sync is attached in judge.py as a test/sync convenience.
+    from .judge import judge_artifact
+    return judge_artifact.sync(inp)
+
+
+def run_calibration(rubric: str, fixtures: list[CalibrationFixture],
+                    judge_model: str, *, epsilon: float = 0.15,
+                    threshold: float = 0.75, now: datetime | None = None,
+                    judge: JudgeScoreFn | None = None) -> CalibrationReport:
+    judge = judge or _default_judge
+    now = now or datetime.now(timezone.utc)
+    pairs: list[tuple[float, float]] = []
+    for fx in fixtures:
+        if fx.human_score is None:
+            continue
+        if model_family(judge_model) == model_family(fx.author_model):
+            _log.warning(
+                "calibration: skipping fixture (judge %s shares family with "
+                "author %s; ADR-6)", judge_model, fx.author_model)
+            continue
+        qs = judge(JudgeInput(artifact_json=fx.artifact_json,
+                              rubric=fx.rubric_text,
+                              author_model=fx.author_model,
+                              judge_model=judge_model))
+        if qs.score is None:            # judge errored -> exclude, never crash
+            continue
+        pairs.append((fx.human_score, qs.score))
+
+    stats = compute_agreement(pairs, epsilon=epsilon, threshold=threshold)
+    return CalibrationReport(
+        rubric=rubric, judge_model=judge_model, n_fixtures=stats.n,
+        epsilon=stats.epsilon, threshold=stats.threshold,
+        agreement_rate=stats.agreement_rate, mae=stats.mae,
+        spearman=stats.spearman, verdict=stats.verdict, computed_at=now)
