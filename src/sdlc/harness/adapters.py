@@ -432,6 +432,59 @@ class OpenCodeHarness(CodingHarness):
             input_tokens=input_tokens, output_tokens=output_tokens,
         )
 
+    # opencode tool name -> canonical kind + target field in state.input
+    _TOOL_MAP = {
+        "read": ("file_read", "filePath"),
+        "write": ("file_write", "filePath"),
+        "edit": ("file_write", "filePath"),
+        "bash": ("command", "command"),
+    }
+
+    def normalise_session(self, stdout: str) -> HarnessSession:
+        events: list[SessionEvent] = []
+        session_id = None
+        in_tok = out_tok = 0
+        cost = 0.0
+        saw_tokens = saw_cost = False
+        for ln in stdout.splitlines():
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                ev = json.loads(ln)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(ev, dict):
+                continue
+            session_id = session_id or ev.get("sessionID") or ev.get("session_id")
+            part = ev.get("part") or {}
+            etype = ev.get("type")
+            if etype == "text" and part.get("text"):
+                events.append(SessionEvent(kind="model_turn",
+                                           text=part["text"][:2000]))
+            elif etype == "tool":
+                name = (part.get("tool") or "tool").lower()
+                kind, field = self._TOOL_MAP.get(name, ("tool_call", ""))
+                state = part.get("state") or {}
+                inp = state.get("input") or {}
+                target = inp.get(field) if field else json.dumps(inp)[:500]
+                events.append(SessionEvent(
+                    kind=kind, tool=name, target=target,
+                    exit_code=1 if state.get("status") == "error" else None))
+            elif etype == "step_finish":
+                tokens = part.get("tokens") or {}
+                if isinstance(tokens.get("input"), (int, float)):
+                    in_tok += tokens["input"]; saw_tokens = True
+                if isinstance(tokens.get("output"), (int, float)):
+                    out_tok += tokens["output"]; saw_tokens = True
+                if isinstance(part.get("cost"), (int, float)):
+                    cost += part["cost"]; saw_cost = True
+        return HarnessSession(
+            harness=self.kind, session_id=session_id, events=events,
+            input_tokens=in_tok if saw_tokens else None,
+            output_tokens=out_tok if saw_tokens else None,
+            cost_usd=cost if saw_cost else None)
+
 
 HARNESSES: dict[HarnessKind, CodingHarness] = {
     HarnessKind.CLAUDE_CODE: ClaudeCodeHarness(),
