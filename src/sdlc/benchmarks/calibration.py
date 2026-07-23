@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -60,3 +61,66 @@ def load_scored_fixtures(rubric_dir: Path) -> list[CalibrationFixture]:
         if fx.human_score is not None:
             out.append(fx)
     return out
+
+
+def _ranks(xs: list[float]) -> list[float]:
+    """Average ranks (1-based), ties share the mean of their positions."""
+    order = sorted(range(len(xs)), key=lambda i: xs[i])
+    ranks = [0.0] * len(xs)
+    i = 0
+    while i < len(xs):
+        j = i
+        while j + 1 < len(xs) and xs[order[j + 1]] == xs[order[i]]:
+            j += 1
+        avg = (i + j) / 2 + 1
+        for k in range(i, j + 1):
+            ranks[order[k]] = avg
+        i = j + 1
+    return ranks
+
+
+def _spearman(xs: list[float], ys: list[float]) -> float:
+    n = len(xs)
+    if n < 2:
+        return 0.0
+    rx, ry = _ranks(xs), _ranks(ys)
+    mx, my = sum(rx) / n, sum(ry) / n
+    num = sum((a - mx) * (b - my) for a, b in zip(rx, ry))
+    denx = sum((a - mx) ** 2 for a in rx)
+    deny = sum((b - my) ** 2 for b in ry)
+    if denx == 0 or deny == 0:      # zero variance -> correlation undefined
+        return 0.0
+    result = num / (denx ** 0.5 * deny ** 0.5)
+    # Round to handle floating point precision (e.g., perfect correlation may be 0.9999999999999998)
+    return round(result, 15)
+
+
+class AgreementStats(BaseModel):
+    n: int
+    epsilon: float
+    threshold: float
+    agreement_rate: float
+    mae: float
+    spearman: float
+    verdict: Literal["calibrated", "uncalibrated"]
+
+
+def compute_agreement(pairs: list[tuple[float, float]],
+                      epsilon: float = 0.15,
+                      threshold: float = 0.75) -> AgreementStats:
+    """pairs are (human, judge). Verdict is 'calibrated' iff the within-epsilon
+    agreement rate meets the threshold."""
+    n = len(pairs)
+    if n == 0:
+        return AgreementStats(n=0, epsilon=epsilon, threshold=threshold,
+                              agreement_rate=0.0, mae=0.0, spearman=0.0,
+                              verdict="uncalibrated")
+    diffs = [abs(j - h) for h, j in pairs]
+    # Use a small tolerance for floating point boundary condition
+    agree = sum(1 for d in diffs if d <= epsilon + 1e-9) / n
+    mae = sum(diffs) / n
+    sp = _spearman([h for h, _ in pairs], [j for _, j in pairs])
+    verdict = "calibrated" if agree >= threshold else "uncalibrated"
+    return AgreementStats(n=n, epsilon=epsilon, threshold=threshold,
+                          agreement_rate=agree, mae=mae, spearman=sp,
+                          verdict=verdict)
