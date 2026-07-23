@@ -63,3 +63,44 @@ def test_cursor_build_cmd_headless_flags():
 
 def test_cursor_registered_in_harnesses():
     assert isinstance(HARNESSES[HarnessKind.CURSOR], CursorHarness)
+
+
+import logging
+
+from sdlc.harness.adapters import check_harness_versions
+
+
+def test_version_check_warns_on_drift(monkeypatch, caplog):
+    from sdlc.harness import adapters
+    monkeypatch.setattr(adapters.shutil, "which", lambda c: "/usr/bin/" + c)
+
+    class _Res:
+        stdout = "9.9.9 (drifted)"
+    monkeypatch.setattr(adapters.subprocess, "run", lambda *a, **k: _Res())
+    caplog.set_level(logging.WARNING, logger="sdlc.harness.adapters")
+    check_harness_versions()   # claude pinned 2.1.218 vs 9.9.9 -> drift
+    assert any("version drift" in r.message for r in caplog.records)
+
+
+def test_version_check_skips_when_cli_absent(monkeypatch, caplog):
+    from sdlc.harness import adapters
+    monkeypatch.setattr(adapters.shutil, "which", lambda c: None)
+    caplog.set_level(logging.WARNING, logger="sdlc.harness.adapters")
+    check_harness_versions()
+    assert not any("version drift" in r.message for r in caplog.records)
+
+
+def test_version_check_silent_on_match(monkeypatch, caplog):
+    from sdlc.harness import adapters
+    monkeypatch.setattr(adapters.shutil, "which", lambda c: "/usr/bin/" + c)
+    versions = {"claude": "2.1.218 (Claude Code)", "opencode": "1.18.4",
+                "cursor-agent": "0.0.0"}
+
+    def _run(cmd, *a, **k):
+        class _R:
+            stdout = versions.get(cmd[0], "0.0.0")
+        return _R()
+    monkeypatch.setattr(adapters.subprocess, "run", _run)
+    caplog.set_level(logging.WARNING, logger="sdlc.harness.adapters")
+    check_harness_versions()   # claude+opencode match pins; cursor unpinned
+    assert not any("version drift" in r.message for r in caplog.records)

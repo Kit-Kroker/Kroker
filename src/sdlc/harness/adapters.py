@@ -17,7 +17,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shutil
+import subprocess
 import time
 import logging
 from abc import ABC, abstractmethod
@@ -120,6 +122,11 @@ def _log_live_event(line: str) -> None:
 
 class CodingHarness(ABC):
     kind: HarnessKind
+    cli: str = ""                          # executable name on PATH
+    expected_version: str | None = None    # E-24 pin; None = declared-unpinned
+
+    def version_cmd(self) -> list[str]:
+        return [self.cli, "--version"]
 
     @abstractmethod
     def build_cmd(self, req: HarnessRequest) -> list[str]: ...
@@ -228,6 +235,8 @@ class CodingHarness(ABC):
 
 class ClaudeCodeHarness(CodingHarness):
     kind = HarnessKind.CLAUDE_CODE
+    cli = "claude"
+    expected_version = "2.1.218"
 
     def __init__(self, allowed_tools: str = "Read,Edit,Write,Bash",
                  permission_mode: str = "acceptEdits"):
@@ -345,6 +354,8 @@ class ClaudeCodeHarness(CodingHarness):
 
 class OpenCodeHarness(CodingHarness):
     kind = HarnessKind.OPENCODE
+    cli = "opencode"
+    expected_version = "1.18.4"
 
     def __init__(self, attach_url: str | None = None):
         # Point at a running `opencode serve` to skip MCP cold boots.
@@ -615,3 +626,35 @@ HARNESSES: dict[HarnessKind, CodingHarness] = {
     HarnessKind.OPENCODE: OpenCodeHarness(),
     HarnessKind.CURSOR: CursorHarness(),
 }
+
+
+_VERSION_RE = re.compile(r"(\d+\.\d+(?:\.\d+)?)")
+
+
+def check_harness_versions(
+        harnesses: dict[HarnessKind, CodingHarness] | None = None) -> None:
+    """E-24 (folded into E-35): warn when an installed harness CLI has drifted
+    from its pinned version — the failure mode where a silent CLI upgrade
+    breaks an adapter's parse. Never raises (a patch bump must not brick the
+    worker). Skips silently when the CLI is absent (CI/fakes) or unpinned."""
+    for h in (harnesses or HARNESSES).values():
+        if not h.expected_version or not h.cli:
+            continue
+        if shutil.which(h.cli) is None:
+            _log.debug("harness version check: %s not on PATH, skipping", h.cli)
+            continue
+        try:
+            out = subprocess.run(h.version_cmd(), capture_output=True,
+                                 text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError) as e:
+            _log.debug("harness version check: %s --version failed: %s",
+                       h.cli, e)
+            continue
+        m = _VERSION_RE.search(out.stdout or "")
+        found = m.group(1) if m else None
+        if found != h.expected_version:
+            _log.warning("harness version drift: %s is %s, pinned %s "
+                         "(adapter parse may break; capture a fresh transcript "
+                         "and update the pin)", h.cli, found, h.expected_version)
+        else:
+            _log.debug("harness version ok: %s %s", h.cli, found)

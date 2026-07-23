@@ -39,6 +39,7 @@ from .benchmarks.oracle import grade_oracle
 from .benchmarks.recorder import record_benchmark
 from .benchmarks.report import finalize_benchmark_report
 from .benchmarks.workflow import BenchmarkWorkflow
+from .harness.adapters import check_harness_versions
 from .memoization.activities import cache_get, cache_put
 from .memory.activities import (
     capture_watermark, recall_snapshot, reflect, retain,
@@ -56,6 +57,8 @@ async def main() -> None:
     # Fail closed: a registry that violates the ADR-6 family-inequality
     # invariant must never boot a worker (FR-204/US-5).
     validate_registry(load_registry())
+    # E-24 (via E-35): warn — not fail — on harness CLI version drift.
+    check_harness_versions()
 
     from .observability.logfire_setup import configure as configure_logfire
     if configure_logfire():
