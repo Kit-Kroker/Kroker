@@ -40,3 +40,24 @@ def test_dispatch_report_does_not_require_temporal_client(tmp_path):
     # the invariant that `sdlc.cli benchmark report` can run offline.
     out = dispatch_report("nonexistent-bench", root=str(tmp_path))
     assert "No records" in out
+
+
+def test_dispatch_report_also_writes_heatmap(tmp_path):
+    from datetime import datetime, timedelta
+    from sdlc.benchmarks.cli import dispatch_report
+    from sdlc.benchmarks.models import (
+        BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag)
+    from sdlc.benchmarks.recorder import RecordStore
+    from sdlc.models import HarnessKind
+    t = datetime(2026, 7, 24, 10)
+    rec = BenchmarkRecord(
+        run_id="r1", bench_run_id="b1", case_id="c1",
+        scope=BenchmarkScope.STAGE, stage="code", role="dev",
+        harness=HarnessKind.CLAUDE_CODE, model="m",
+        quality=QualityScore(score=0.9, judge="contract"),
+        speed=SpeedBag(wall_clock_s=1.0, started_at=t, ended_at=t + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.FAIL, fix_attempts=1)
+    RecordStore(root=str(tmp_path), bench_run_id="b1").append(rec)
+    dispatch_report("b1", root=str(tmp_path))
+    assert (tmp_path / "b1" / "heatmap.html").exists()
+    assert (tmp_path / "b1" / "heatmap.json").exists()

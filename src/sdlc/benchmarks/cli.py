@@ -49,10 +49,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 def dispatch_report(bench: str,
                     root: str | None = None) -> str:
-    summaries = aggregate(bench, CompositeWeights(), root=root)
+    from .report import (
+        _read_all, resolve_language_map, write_heatmap)
+    records = _read_all(bench, root)
+    summaries = aggregate(bench, CompositeWeights(), root=root, _records=records)
     md = render_markdown(summaries)
-    out_path = Path(root if root is not None else _root()) / bench / "report.md"
-    write_report(summaries, str(out_path))
+    out_dir = Path(root if root is not None else _root()) / bench
+    write_report(summaries, str(out_dir / "report.md"))
+    lang = resolve_language_map(sorted({r.case_id for r in records}))
+    write_heatmap(records, out_dir, lang)
     return md
 
 
