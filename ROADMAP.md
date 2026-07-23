@@ -293,9 +293,20 @@ FR-404 records that `reflect()` exists and is registered but is **never called**
 - [x] **E-13** `schedules/nightly-reflect.yaml` → `ReflectWorkflow` → the existing `reflect()` activity, **project banks only** (FR-404, partial). *Corrected from "invoking the existing `reflect()` activity": Temporal Schedules start workflows, not activities, hence the wrapper. Corrected from "project + org scope": see E-25.*
 - [ ] **E-14** DAPER maintenance timer + nudge as a schedule asset (FR-501). Blocked on MaintenanceWorkflow existing at all.
 - [ ] **E-25** Nothing retains to `org_bank` — `MemoryConfig` defines it (`models.py:376`) but every `_retain` call site in `feature.py` passes `project_bank`. Cross-project consolidation (`reflect(org)`, SDLC-spec §279) therefore has no writers, and the nightly schedule deliberately omits it. **This, not scheduling, is the remaining blocker on FR-404's org half.** Needs a decision on what belongs in an org bank — likely **(new scope)**.
-- [x] **E-27** Cat café monitoring golden case + `qa`/`research` rubric judging. The suite's two cases are both "sized for a single short factory run", so **planner decomposition — the load-bearing variable in real work — is unexercised**. The kata is large enough to require decomposition and small enough to specify completely. Authoring it surfaced that only 3 rubric keys reach the judge (`clarifier`/`architect`/`planner`, `feature.py:773`/`:840`/`:879`): `qa` (`:539`) emits a judgeable artifact that only feeds the deterministic `code` record, and `research` (`:730`) hardcoded `judge="contract"` with no `_judge` call, so **no cell had ever run the stage**. Added `CaseSpec.research_enabled` (default `False`) with a per-case injected `provider: tavily` (registry stays `fake` so CI needs no key), both `_judge` calls, and five rubrics. Spec: `docs/superpowers/specs/2026-07-19-cat-cafe-monitoring-benchmark-design.md`; plan: `docs/superpowers/plans/2026-07-19-cat-cafe-monitoring-benchmark.md`. *Smoke run reached the research stage live (real Tavily+glm) and grounded the exact risk threshold the research rubric targets (>35 bpm at rest), but ends at `rejected:research.grounding` — the fail-closed verifier (`research/verify.py`) requires byte-exact contiguous quotes and glm-5.2 cannot reliably reproduce special chars/tabular data (violations improved 8→3 across two prompt fixes, then plateaued). So live judge scoring of `research`/`qa` records is unit-tested but unproven end-to-end; it unblocks when E-29 or E-30 lands. Two robustness defects surfaced by the run and fixed inline: `read_repo` infinite-retry (see E-28) and the research quoting prompt.*
+- [x] **E-27** Cat café monitoring golden case + `qa`/`research` rubric judging. The suite's two cases are both "sized for a single short factory run", so **planner decomposition — the load-bearing variable in real work — is unexercised**. The kata is large enough to require decomposition and small enough to specify completely. Authoring it surfaced that only 3 rubric keys reach the judge (`clarifier`/`architect`/`planner`, `feature.py:773`/`:840`/`:879`): `qa` (`:539`) emits a judgeable artifact that only feeds the deterministic `code` record, and `research` (`:730`) hardcoded `judge="contract"` with no `_judge` call, so **no cell had ever run the stage**. Added `CaseSpec.research_enabled` (default `False`) with a per-case injected `provider: tavily` (registry stays `fake` so CI needs no key), both `_judge` calls, and five rubrics. Spec: `docs/superpowers/specs/2026-07-19-cat-cafe-monitoring-benchmark-design.md`; plan: `docs/superpowers/plans/2026-07-19-cat-cafe-monitoring-benchmark.md`. *Smoke run reached the research stage live (real Tavily+glm) and grounded the exact risk threshold the research rubric targets (>35 bpm at rest), but ends at `rejected:research.grounding` — the fail-closed verifier (`research/verify.py`) requires byte-exact contiguous quotes and glm-5.2 cannot reliably reproduce special chars/tabular data (violations improved 8→3 across two prompt fixes, then plateaued). So live judge scoring of `research`/`qa` records is unit-tested but unproven end-to-end; E-29's closure (fail-and-continue, 2026-07-20) unblocks the run itself — a live re-run is still pending. Two robustness defects surfaced by the run and fixed inline: `read_repo` infinite-retry (see E-28) and the research quoting prompt.*
 - [ ] **E-28** Research tool-call activities retry a **deterministic** failure with no attempt cap. E-27's smoke run hung when `read_repo` raised `ValueError` on an out-of-cwd path: the pydantic-ai temporal tool-call wrapper retried it forever (attempt 11+). Fixed the immediate trigger (`read_repo` now returns a refusal string, matching its own missing-file branch), but the underlying hazard remains — **any** research tool that raises a non-transient error loops the whole run. Needs a bounded/`non_retryable` retry policy on `agent__research_agent__toolset__*__call_tool`, or a rule that research tools return errors as strings rather than raise.
-- [ ] **E-29** Research grounding is unreachable for a mid-tier author model. `verify_brief` (`research/verify.py`) fails closed unless every `grounded_finding.quote` is a **byte-exact contiguous substring** (whitespace-normalized only) of a page fetched this run. glm-5.2 reliably violates this on special characters (en-dash `–`, curly quotes) and tabular content — E-27's run plateaued at 3 violations after two prompt fixes cut it from 8. Options: (a) normalize more aggressively in the verifier (dash/quote folding — but "every loosening is a hole", per the module's own warning, so each needs a test proving the false-failure it fixes); (b) a per-case research-model override to a higher-fidelity family (interacts with ADR-6 + E-26); (c) accept research as advisory (`inferred_findings`) rather than a hard gate for benchmark cells. **Blocks live proof of E-27's research-stage judging.**
+- [x] **E-29** Research grounding was unreachable for a mid-tier author
+  model (byte-exact quote verification; glm-5.2 plateaued at 3
+  violations). **Closed by the 2026-07-20 fail-and-continue decision**
+  (`feature.py:987`): a grounding violation now fails the research *stage*
+  (recorded `FAIL`, retain + digest skipped) and the run proceeds on the
+  idea alone — of the three options this is (c) advisory, implemented as
+  fail-and-continue rather than demote-to-inferred. Rubric judging of the
+  brief happens only when grounding passes, so a cell's research grade is
+  earnable but not guaranteed. The demote-to-inferred + still-judge
+  variant was considered for E-34 and deliberately not built
+  (`2026-07-23-cat-cafe-tier-a-oracle-design.md` §2). OQ-B3 answered
+  accordingly. The verifier itself is unchanged — no loosening.
 - [ ] **E-26** Make `cfg.roles` genuinely per-project (US-4) without reintroducing drift. `PipelineConfig.roles` is a hardcoded mirror of `agents.yaml`'s harness roles because `PipelineConfig()` is constructed *inside* the workflow (`feature.py:602`), so its default cannot read the file without breaking sandbox purity. The boot mirror-check makes drift fail closed, but it also means a per-project override must resolve at the boundary (`cli.py`, `benchmarks/workflow.py`) and satisfy ADR-6 *per run*, not just at boot. **Nothing populates `cfg.roles` today**, which is the only reason the mirror can be a static assertion.
 
 ### 9.4 `pre_tool` unifies containment with gates → FR-703, NFR-5, FR-301
@@ -437,12 +448,19 @@ is marked **(new scope)** and needs a PRD line before it is real.
   `HarnessRunResult` already carries the token/context/`compacted` fields; this
   is the aggregation + the proposer-side TemporalAgent usage join.
   *Landed:* single workflow egress (`_run_role`) + `MODEL_USAGE` events + `price_usage` activity (genai-prices, replay-safe) + `RunSummary.roles` rollup + report.html role table + proposer CostBag fill, **and FR-701's run-level budget gate** (`run_budget_usd`, hard gate via FR-301/302, approve = one more increment, reject = `rejected:budget` with retro intact). Research provider spend stays stage-scoped. Spec `docs/superpowers/specs/2026-07-23-per-role-cost-attribution-design.md`, plan `docs/superpowers/plans/2026-07-23-per-role-cost-attribution.md`.
-- [ ] **E-34 (new scope)** A decomposition-forcing benchmark case. Both current
-  cases are "sized for a single short factory run", so **planner decomposition
-  — the load-bearing variable in real work — is unexercised** (E-27's own
-  finding), which is exactly the variable Cursor's entire result turns on. The
-  bar E-27 set holds: large enough to require decomposition (multiple vertical
-  slices + real inter-task contracts), small enough to specify completely.
+- [x] **E-34 (new scope)** A decomposition-forcing benchmark case. *Landed
+  via cat-café (E-27), not a new case* — the "both current cases" text
+  predated E-27 landing the kata; the real gap was that the decomposition
+  case had no objective grade. Cat-café now freezes an interface contract
+  (ASGI `app:app`, `/telemetry` injection, `/floorplan`, `/cats`) and
+  ships a held-out `oracle/` graded through the E-31 machinery
+  (`language: python`). Assertions are unambiguous extremes crafted
+  against the app's **own** floorplan, so the kata's "rules are up to you"
+  freedom is intact. Oracle validated in CI against a reference
+  implementation (`tests/fixtures/cat_cafe_ref/`): green on the reference,
+  red when risk detection is stubbed out. Spec
+  `docs/superpowers/specs/2026-07-23-cat-cafe-tier-a-oracle-design.md`,
+  plan `docs/superpowers/plans/2026-07-23-cat-cafe-tier-a-oracle.md`.
 - [ ] **E-35** `cursor` harness adapter — third point on the harness axis,
   normalised into `HarnessRunResult` (tokens, cost, `context_window`,
   `compacted`, resume handle) and version-pinned at boot (FR-203; folds the
@@ -517,9 +535,7 @@ is marked **(new scope)** and needs a PRD line before it is real.
   ADR-16 note does this): *default review starts clean and never resumes the
   developer's session; `deep_review` reads the scrubbed session as data.*
 **Open questions (tracked in `docs/BENCHMARK.md §7`):** OQ-B1 minimum trustworthy
-corpus size; OQ-B2 judge independence under model sweep (→ E-37); OQ-B3 research
-grounding gate for benchmark cells (→ **E-29**, pick advisory / pin model / wait,
-explicitly); OQ-B4 the regression-gate half of E-4 as a CI gate (→ OQ-E2); OQ-B7
+corpus size; OQ-B2 judge independence under model sweep (→ E-37); OQ-B3 **answered** (E-29 closed: grounding failure = recorded stage `FAIL`, run continues); OQ-B4 the regression-gate half of E-4 as a CI gate (→ OQ-E2); OQ-B7
 session-retention policy **decided** (full on fail/benchmark/attempts>0,
 `SessionDigest` on clean-green, aggregates kept pre-truncation, scrub
 fail-closed before the branch — E-38); **only the full-transcript TTL is

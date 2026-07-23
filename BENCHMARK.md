@@ -446,12 +446,16 @@ adapters).
   producer families, the judge family must move to stay independent per cell.
   Does `judge_artifact` re-resolve the judge per cell, or is it fixed? (Ties to
   E-26 and OQ-E2.)
-- **OQ-B3 — Research grounding gate for benchmark cells (E-29).** Until E-29,
-  research grades are unproven live. Do benchmark cells that need research (a)
-  treat findings as advisory, (b) pin a higher-fidelity research model, or (c)
-  wait for E-29? The E-29 note lays out exactly these three options; the
-  benchmark should pick one explicitly rather than silently reporting an
-  unearnable number.
+- **OQ-B3 — Research grounding gate for benchmark cells (E-29). ANSWERED
+  2026-07-23.** Benchmark cells run with the hard grounding verifier
+  unchanged; a violation is a recorded research-stage `FAIL` in the cell's
+  record — retain and digest are skipped and the run continues on the idea
+  alone (the 2026-07-20 fail-and-continue decision, `feature.py:987`).
+  Research rubric judging happens only on grounded briefs, so a cell's
+  research grade is earnable but not guaranteed — never an unearnable
+  number silently reported. The demote-to-inferred + still-judge variant
+  was considered and deliberately not built
+  (`2026-07-23-cat-cafe-tier-a-oracle-design.md` §2).
 - **OQ-B4 — Regression-gate half of E-4 (OQ-E2).** `sdlc eval` is on-demand;
   the committed-baseline-plus-CI-check half is unbuilt. Is the golden-artifact
   regression suite (Tier C) a CI gate on every prompt/model change, or an
