@@ -50,9 +50,14 @@ Those mechanisms are unequal, which is the design's central difficulty:
    Policy is declared once; each adapter translates it and declares what it
    can enforce. A harness that can enforce *nothing* fails closed rather
    than running unpoliced (ADR-17).
-3. **Policy is a versioned asset**, `config/containment.yaml` — a policy
+3. **Policy is a versioned asset**, `policy/containment.yaml` — a policy
    change is a reviewable file diff, matching agents-as-folders (E-1/E-2)
-   and schedules-as-files (E-12).
+   and schedules-as-files (E-12). *Corrected from `config/containment.yaml`
+   during planning: there is no `config/` directory — E-1 migrated
+   `config/agents.yaml` into `agents/`, and top-level asset directories
+   (`agents/`, `schedules/`, `benchmarks/`) are the convention. Resolution
+   mirrors `agents/loader.py`: explicit arg → `$SDLC_CONTAINMENT_POLICY`
+   → repo-root discovery, with no `__file__` walk.*
 4. **Hybrid enforcement: native config inner, hook outer** — FR-703
    verbatim. Verified against the installed CLI, this is an *invariant the
    CLI enforces for us*, not a convention we maintain (see §0 below).
@@ -75,6 +80,21 @@ These are not assumptions; each was checked before the design settled.
   which `build_cmd` already passes (`:249`). Hook verdicts arrive in the
   *same stream* `normalise_session` already parses. **No side-channel log
   file and no new IPC path.**
+- **Executed live against 2.1.219, and it works end-to-end**: a hook
+  returning `{"hookSpecificOutput":{"permissionDecision":"deny",
+  "permissionDecisionReason": ...}}` on stdout with exit 0 blocks the call,
+  and the reason reaches the model verbatim (it quoted the rule text back).
+- **The `result` event carries a structured `permission_denials` list**
+  (`tool_name`, `tool_use_id`, `tool_input`) — a first-class denial record.
+  `parse()` already reads that event (`:263`), so no extra parsing surface.
+- **But the two layers are NOT equally observable.** A *hook* denial
+  populates `permission_denials`; a *native* `permissions.deny` denial
+  blocks correctly yet reports `permission_denials: []`, leaving only prose
+  in the tool result. **Both verified live.** This inverts which layer is
+  primary — see §4a.
+- `permission_denials` carries no reason or rule id, so the hook **encodes
+  the rule id into the reason string** (`"[rule-id] reason text"`). Belt;
+  the `hook_response` event's `output` field is suspenders.
 - **A `"defer"` permission decision exists**: headless sessions pause at a
   tool call and resume with `-p --resume` to have the hook re-evaluate.
   **This dissolves E-17's blocker** — the escalation never requires an
@@ -86,7 +106,7 @@ These are not assumptions; each was checked before the design settled.
 
 ## Design
 
-### 1. Policy asset (`config/containment.yaml`)
+### 1. Policy asset (`policy/containment.yaml`)
 
 A fixed, small predicate vocabulary — deliberately not an expression
 language (YAGNI). Each rule declares the layer it needs, so coverage is
@@ -146,7 +166,7 @@ No I/O, no CLI knowledge, no subprocess. The entire risk-classing decision
 lives here so it is unit-testable as a table.
 
 ```python
-class ContainmentLayer(StrEnum):
+class ContainmentLayer(str, Enum):     # models.py convention, not StrEnum
     NATIVE = "native"   # declarative deny inside the CLI's own config
     HOOK   = "hook"     # per-call inspection callback
 
@@ -200,6 +220,24 @@ def normalise_denials(self, stdout) -> list[ToolDenial]
   from its event stream.
 - **cursor** → `frozenset()`.
 
+### 4a. `layer` is a *minimum*, and every adapter enforces at every layer it has
+
+Because native denials are structurally unobservable (§0), a rule marked
+`layer: native` is **not** compiled *only* to the native layer. `layer`
+declares the **minimum capability the rule requires**; each adapter then
+enforces it at *every* layer it possesses:
+
+| rule | claude (`{NATIVE, HOOK}`) | opencode (`{NATIVE}`) |
+|---|---|---|
+| `layer: native` | native deny **and** hook | native deny |
+| `layer: hook` | hook | *unenforceable — reported* |
+
+The payoff: on claude every denial is observable via `permission_denials`,
+while the native rule remains as the floor that a buggy hook cannot weaken
+(§0, first bullet). The hook can trivially do the command/path matching the
+native layer does, so the duplication costs nothing. Defense in depth and
+full observability stop being a trade-off.
+
 **The temp settings file lives outside the worktree**, in the activity's temp
 dir, passed by absolute path. Writes *inside* the worktree are permitted by
 design, so a settings file placed there is a file the agent may rewrite — it
@@ -249,6 +287,13 @@ class ToolDenial(BaseModel):
 `containment: ContainmentReport | None`. Denial *events* also land in the
 claim-checked `HarnessSession`; `SessionDigest` gains a `denials` count so
 clean-green runs still report them.
+
+For claude, `normalise_denials` reads `result.permission_denials` — the
+structured, reliable spine — and recovers `rule_id`/`reason` from the
+rule-id prefix the hook embeds. Native-only denials (no hook fired) are not
+structurally reported by the CLI; §4a is what keeps that case empty in
+practice on claude, and on opencode it is a known limit recorded in
+`ContainmentReport`, not a silent gap.
 
 **Denials are advisory in this increment.** The harness was already told
 "no" and continued; a denial does not fail the task. It is recorded as a
