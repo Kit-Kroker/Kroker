@@ -96,6 +96,10 @@ async def main() -> None:
     s.add_argument("--mode", choices=["greenfield", "brownfield"],
                    default="brownfield")
     s.add_argument("--repo")
+    s.add_argument("--role-model", action="append", default=[],
+                   dest="role_model", metavar="ROLE=MODEL",
+                   help="override a role's model, e.g. --role-model "
+                        "architect=anthropic:claude-opus-4-8 (repeatable)")
 
     add_decision_parsers(sub)
 
@@ -158,13 +162,22 @@ async def main() -> None:
             data_converter=pydantic_data_converter)
 
     if args.cmd == "start":
+        from .cli_roles import build_role_overrides, parse_role_models
+        cfg = PipelineConfig()
+        if args.role_model:
+            try:
+                overrides = parse_role_models(args.role_model)
+                cfg.roles.update(build_role_overrides(overrides))
+            except Exception as e:      # ValueError / RegistryError
+                print(f"invalid --role-model: {e}")
+                raise SystemExit(1)
         wf_id = f"feature-{slug(args.title)}"
         handle = await client.start_workflow(
             FeatureWorkflow.run,
             args=[
                 IdeaBrief(title=args.title, description=args.description,
                           mode=ProjectMode(args.mode), repo_url=args.repo),
-                PipelineConfig(),
+                cfg,
             ],
             id=wf_id, task_queue=TASK_QUEUE,
         )
