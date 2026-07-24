@@ -48,3 +48,15 @@ def test_run_calibration_excludes_judge_errors_from_pairs():
         return QualityScore(score=0.5, judge="llm_judge")
     rep = run_calibration("architect", fixtures, "openai/gpt-5.2", judge=judge)
     assert rep.n_fixtures == 1     # only the successfully-judged pair counts
+
+
+def test_importing_calibration_does_not_import_temporalio():
+    import subprocess
+    import sys
+    code = ("import sys; import sdlc.benchmarks.calibration; "
+            "sys.exit(1 if 'temporalio' in sys.modules else 0)")
+    result = subprocess.run([sys.executable, "-c", code],
+                            capture_output=True, text=True)
+    assert result.returncode == 0, (
+        "importing sdlc.benchmarks.calibration pulled in temporalio:\n"
+        + result.stderr)

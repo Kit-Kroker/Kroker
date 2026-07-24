@@ -12,13 +12,15 @@ import hashlib
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Literal
+from typing import Callable, Literal, TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
 from ..agents.loader import model_family
-from .judge import JudgeInput
 from .models import QualityScore
+
+if TYPE_CHECKING:
+    from .judge import JudgeInput
 
 
 class CalibrationFixture(BaseModel):
@@ -134,7 +136,7 @@ def compute_agreement(pairs: list[tuple[float, float]],
 
 _log = logging.getLogger(__name__)
 
-JudgeScoreFn = Callable[[JudgeInput], "QualityScore"]
+JudgeScoreFn = Callable[["JudgeInput"], "QualityScore"]
 
 
 class CalibrationReport(BaseModel):
@@ -160,6 +162,7 @@ def run_calibration(rubric: str, fixtures: list[CalibrationFixture],
                     judge_model: str, *, epsilon: float = 0.15,
                     threshold: float = 0.75, now: datetime | None = None,
                     judge: JudgeScoreFn | None = None) -> CalibrationReport:
+    from .judge import JudgeInput
     judge = judge or _default_judge
     now = now or datetime.now(timezone.utc)
     pairs: list[tuple[float, float]] = []
