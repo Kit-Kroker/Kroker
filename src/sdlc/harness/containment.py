@@ -12,9 +12,12 @@ Order: explicit arg -> $SDLC_CONTAINMENT_POLICY -> repo-root discovery.
 """
 from __future__ import annotations
 
+import fnmatch
 import os
+import re
 from enum import Enum
 from pathlib import Path
+from urllib.parse import urlparse
 
 import yaml
 from pydantic import BaseModel, Field
@@ -107,3 +110,101 @@ def load_policy(path: str | os.PathLike | None = None) -> Policy:
             raise ContainmentError(
                 f"invalid rule {rid!r} in {p}: {e}") from e
     return Policy(version=version, rules=rules)
+
+
+class Verdict(BaseModel):
+    allow: bool
+    rule_id: str | None = None
+    reason: str | None = None
+
+
+_URL_RE = re.compile(r"https?://[^\s'\"|;>)]+", re.IGNORECASE)
+
+
+def target_of(tool: str, tool_input: dict) -> str | None:
+    """The single string a denial is 'about' — a path, a command, or a URL."""
+    for key in ("file_path", "path", "notebook_path", "command", "url"):
+        val = tool_input.get(key)
+        if isinstance(val, str) and val:
+            return val
+    return None
+
+
+def _abs_under(path: str, worktree: str) -> bool:
+    """True when `path` resolves inside `worktree`. resolve() follows
+    symlinks, which is what makes an in-worktree symlink to /etc fail."""
+    try:
+        root = Path(worktree).resolve()
+        p = Path(path)
+        if not p.is_absolute():
+            p = root / p
+        p = p.resolve()
+    except (OSError, ValueError):
+        return False        # unresolvable -> treat as outside (fail closed)
+    return p == root or root in p.parents
+
+
+def _norm_cmd(command: str) -> str:
+    return " ".join(command.split())
+
+
+def _hosts_in(tool: str, tool_input: dict) -> list[str]:
+    """Hosts this call reaches, best-effort. For Bash this scans the command
+    line for URLs — a socket opened another way is invisible, which is the
+    tool-level limitation stated in the spec, not a bug to fix here."""
+    hosts: list[str] = []
+    url = tool_input.get("url")
+    if isinstance(url, str):
+        hosts.append(urlparse(url).hostname or "")
+    command = tool_input.get("command")
+    if isinstance(command, str):
+        hosts += [urlparse(m).hostname or "" for m in _URL_RE.findall(command)]
+    return [h for h in hosts if h]
+
+
+def _host_allowed(host: str, allow_hosts: list[str]) -> bool:
+    """Exact match or subdomain of an allowlisted host."""
+    h = host.lower()
+    return any(h == a.lower() or h.endswith("." + a.lower())
+               for a in allow_hosts)
+
+
+def _rule_denies(rule: Rule, tool: str, tool_input: dict,
+                 worktree: str) -> bool:
+    if tool not in rule.tools:
+        return False
+
+    if rule.predicate is Predicate.PATH_OUTSIDE_WORKTREE:
+        target = target_of(tool, tool_input)
+        return target is not None and not _abs_under(target, worktree)
+
+    if rule.predicate is Predicate.PATH_MATCHES:
+        target = target_of(tool, tool_input)
+        if target is None:
+            return False
+        norm = Path(target).as_posix()
+        return any(fnmatch.fnmatch(norm, pat) for pat in rule.patterns)
+
+    if rule.predicate is Predicate.COMMAND_MATCHES:
+        command = tool_input.get("command")
+        if not isinstance(command, str):
+            return False
+        norm = _norm_cmd(command)
+        return any(fnmatch.fnmatch(norm, pat) for pat in rule.patterns)
+
+    if rule.predicate is Predicate.HOST_NOT_ALLOWLISTED:
+        hosts = _hosts_in(tool, tool_input)
+        return any(not _host_allowed(h, rule.allow_hosts) for h in hosts)
+
+    return False
+
+
+def evaluate(policy: Policy, tool: str, tool_input: dict,
+             worktree: str) -> Verdict:
+    """First matching rule wins. `worktree` is a PARAMETER, never computed:
+    create_worktree may return <task>.N after a Windows lock fallback and its
+    returned path is authoritative (activities.py:260-274)."""
+    for rule in policy.rules:
+        if _rule_denies(rule, tool, tool_input, worktree):
+            return Verdict(allow=False, rule_id=rule.id, reason=rule.reason)
+    return Verdict(allow=True)
