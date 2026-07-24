@@ -227,6 +227,16 @@ Teams adopting coding agents today face four gaps:
   worktree is not a sandbox.
 - FR-704: An observability export SHALL render run history to
   `events.jsonl` + `report.html`.
+- **FR-110 (new scope) — Rubric-judge calibration.** Before a rubric's
+  LLM-judge score is trusted in a phase-exit decision, the factory SHALL
+  support calibrating that rubric against a sample of human-scored fixtures
+  and SHALL report judge-human agreement (a within-epsilon agreement rate,
+  mean absolute error, and rank correlation) per rubric. A rubric's
+  calibration verdict and agreement rate SHALL be surfaced alongside every
+  score derived from it, so a rubric score is never read without its trust
+  level. Calibration is an offline measurement tool; it SHALL NOT modify
+  scores or gate outcomes automatically -- low agreement is a rubric defect
+  to be fixed, not an automatic adjustment.
 
 ## 7. Non-functional requirements
 

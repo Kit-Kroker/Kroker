@@ -469,13 +469,22 @@ is marked **(new scope)** and needs a PRD line before it is real.
   DeterministicQualityGate on the held-out oracles**, a comparison no external
   leaderboard provides. Ordered *after* E-33 so the economics fields exist to
   receive it; until the adapter fills them, cursor cells are quality-only.
-- [ ] **E-36 (new scope)** Error heatmap (`case × stage`) + rubric-calibration
+- [x] **E-36 (new scope)** Error heatmap (`case × stage`) + rubric-calibration
   tracking. The heatmap aggregates gate rejections, fix-loop iterations, and
   oracle failures per stage per case (FR-704 export is the data source, NFR-4) —
   Abdullin's prioritisation instrument, answering "which stage on which case
   class costs most, so what do I fix next." Calibration tracking attaches a
   judge-agreement rate to every rubric score (hand-score 20–30 fixtures per
   rubric) so a Tier-B number is never read without its trust level.
+  *Landed:* `src/sdlc/benchmarks/heatmap.py` (case x stage rework-density
+  grid) written by `finalize_benchmark_report` as `heatmap.{html,json}`;
+  `src/sdlc/benchmarks/calibration.py` + `sdlc calibrate <rubric>` report
+  within-epsilon agreement + MAE + Spearman over human-scored fixtures,
+  surfaced as a trust level beside every rubric score (PRD FR-110). Session-
+  derived waste (E-38) as a heatmap input and calibration-as-CI-gate (OQ-B4)
+  deliberately deferred. Spec
+  `docs/superpowers/specs/2026-07-24-error-heatmap-and-rubric-calibration-design.md`,
+  plan `docs/superpowers/plans/2026-07-24-error-heatmap-and-rubric-calibration.md`.
 - [ ] **E-37** Per-role model sweep at the benchmark boundary. Resolve
   `cfg.roles` per cell (folds **E-26**) so each cell overrides role→model and
   satisfies ADR-6 *per run*, not just at boot — the full model×role matrix
