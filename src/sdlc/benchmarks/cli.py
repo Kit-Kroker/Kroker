@@ -44,6 +44,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     rep = bsub.add_parser("report")
     rep.add_argument("--bench", required=True)
+
+    cal = sub.add_parser("calibrate")
+    cal.add_argument("rubric")
+    cal.add_argument("--judge-model", default=None, dest="judge_model")
+    cal.add_argument("--epsilon", type=float, default=0.15)
+    cal.add_argument("--threshold", type=float, default=0.75)
     return p
 
 
@@ -62,6 +68,31 @@ def dispatch_report(bench: str,
     lang = resolve_language_map(sorted({r.case_id for r in records}))
     write_heatmap(records, out_dir, lang, render_calibration_html(calibration))
     return md
+
+
+def dispatch_calibrate(rubric: str, *, judge_model: str | None,
+                       epsilon: float, threshold: float,
+                       calib_root=None) -> str:
+    from pathlib import Path
+    from .calibration import (
+        _CALIB_DIR, load_scored_fixtures, run_calibration,
+        write_calibration_report)
+    root = Path(calib_root) if calib_root is not None else _CALIB_DIR
+    rubric_dir = root / rubric
+    fixtures = load_scored_fixtures(rubric_dir)
+    if not fixtures:
+        return (f"no scored fixtures under {rubric_dir}; capture some with "
+                f"`sdlc calibrate capture --case <c> --rubric {rubric}` and "
+                f"fill in human_score.")
+    if judge_model is None:
+        from ..eval.cli import default_judge_model
+        judge_model = default_judge_model()
+    rep = run_calibration(rubric, fixtures, judge_model,
+                          epsilon=epsilon, threshold=threshold)
+    write_calibration_report(rep, rubric_dir)
+    return (f"calibrate {rubric}: n={rep.n_fixtures} "
+            f"agreement={rep.agreement_rate:.2f} mae={rep.mae:.3f} "
+            f"spearman={rep.spearman:.2f} -> {rep.verdict}")
 
 
 async def _run_matrix(case_path: str) -> str:

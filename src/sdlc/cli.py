@@ -116,6 +116,17 @@ async def main() -> None:
     ev.add_argument("--n", type=int, default=1, dest="k")
     ev.add_argument("--judge-model", default=None, dest="judge_model")
 
+    cal = sub.add_parser("calibrate")
+    cal.add_argument("target", help="a rubric/role name, or 'capture'")
+    cal.add_argument("--rubric", default=None,
+                     help="rubric/role (capture only)")
+    cal.add_argument("--case", default=None, help="case id (capture only)")
+    cal.add_argument("--from", dest="from_run", default=None,
+                     help="run id (capture only)")
+    cal.add_argument("--judge-model", default=None, dest="judge_model")
+    cal.add_argument("--epsilon", type=float, default=0.15)
+    cal.add_argument("--threshold", type=float, default=0.75)
+
     args = p.parse_args()
 
     if args.cmd == "eval" and args.target == "capture" \
@@ -130,7 +141,8 @@ async def main() -> None:
     client = None
     _local_only = (args.cmd == "benchmark"
                    or (args.cmd == "schedules" and args.sched_cmd == "list")
-                   or (args.cmd == "eval" and args.target != "capture"))
+                   or (args.cmd == "eval" and args.target != "capture")
+                   or (args.cmd == "calibrate" and args.target != "capture"))
     if not _local_only:
         client = await Client.connect(
             os.environ.get("TEMPORAL_HOST", "localhost:7233"),
@@ -203,6 +215,19 @@ async def main() -> None:
         except EvalError as e:
             print(f"eval error: {e}")
             raise SystemExit(1)
+        return
+
+    if args.cmd == "calibrate":
+        if args.target == "capture":
+            print("calibrate capture requires a live Temporal client and a "
+                  "run id; run via the operator CLI. See the E-36 spec: the "
+                  "pure normalizer is tested, the live artifact-history adapter "
+                  "is operator-runtime. Hand-authoring fixtures under "
+                  "benchmarks/calibration/<rubric>/ is the offline path.")
+            return
+        from .benchmarks.cli import dispatch_calibrate
+        print(dispatch_calibrate(args.target, judge_model=args.judge_model,
+                                 epsilon=args.epsilon, threshold=args.threshold))
         return
 
     if args.cmd == "inbox":

@@ -267,3 +267,26 @@ def render_calibration_html(
     return ("<h2>Rubric calibration</h2><table><tr><th>rubric</th><th>n</th>"
             "<th>agreement</th><th>MAE</th><th>spearman</th><th>verdict</th></tr>"
             + rows + "</table>")
+
+
+# --- Capture (E-36 Task 9): pure events -> capture fixtures ----------------
+
+def calibration_fixtures_from_events(
+        run_id: str, events: list[dict], role_to_agent: dict[str, str],
+        *, rubric_ref: str, rubric_text: str, author_model: str,
+        role: str) -> list[CalibrationFixture]:
+    """Pure: normalized history events -> capture fixtures (human_score None)
+    for one role. A normalized event is {"activity": str, "output": str}
+    where output is the produced artifact JSON. Keeps the FIRST matching
+    event, mirroring eval.fixtures_from_events."""
+    agent = role_to_agent.get(role)
+    if agent is None:
+        return []
+    wanted = f"{agent}__model_request"
+    for ev in events:
+        if ev.get("activity") == wanted:
+            out = ev.get("output")
+            if isinstance(out, str) and out:
+                return [make_capture_fixture(out, author_model,
+                                             rubric_ref, rubric_text)]
+    return []
