@@ -87,10 +87,8 @@ from sdlc.agents.loader import KNOWN_ROLES, OPTIONAL_ROLES
 from tests.conftest import write_registry_dir as _write_registry_dir
 
 
-def test_optional_roles_contains_research_and_known_is_their_union():
-    """The seam the research spec extends. 'research' is its first entry
-    (2026-07-17-research-agent-grounded-briefs); KNOWN_ROLES stays the union."""
-    assert OPTIONAL_ROLES == frozenset({"research"})
+def test_optional_roles_contains_research_and_deep_review():
+    assert OPTIONAL_ROLES == frozenset({"research", "deep_review"})
     assert KNOWN_ROLES == REQUIRED_ROLES | OPTIONAL_ROLES
 
 

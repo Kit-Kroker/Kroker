@@ -1,0 +1,6 @@
+# ADR-6/E-39: deep_review reads the SCRUBBED harness transcript as DATA and is
+# advisory only. Its model family must differ from 'dev' (the coding role) so
+# the lens does not correlate with authoring. Editing the model here is
+# configuration, not a code change.
+kind: proposer
+model: anthropic:glm-5.2

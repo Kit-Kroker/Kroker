@@ -25,6 +25,7 @@ PRE_MIGRATION_AGENT_NAMES = {
     "merge_verdict": "merge_verdict_agent",
     "devops_planner": "devops_agent",
     "research": "research_agent",
+    "deep_review": "deep_review_agent",
 }
 
 
