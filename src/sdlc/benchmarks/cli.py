@@ -18,7 +18,7 @@ from ..models import HarnessKind
 from ..worker import TASK_QUEUE
 from .models import CaseSpec
 from .workflow import BenchmarkWorkflow
-from .report import aggregate, render_markdown, write_report
+from .report import aggregate, render_markdown
 from .models import CompositeWeights
 from .recorder import _root
 
@@ -73,7 +73,6 @@ def dispatch_report(bench: str,
 def dispatch_calibrate(rubric: str, *, judge_model: str | None,
                        epsilon: float, threshold: float,
                        calib_root=None) -> str:
-    from pathlib import Path
     from .calibration import (
         _CALIB_DIR, load_scored_fixtures, run_calibration,
         write_calibration_report)

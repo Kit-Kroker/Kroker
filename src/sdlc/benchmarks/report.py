@@ -74,11 +74,6 @@ def render_markdown(summaries: list[BenchmarkSummary], calibration=None) -> str:
     return "\n".join(lines) + "\n" + render_calibration_markdown(calibration)
 
 
-def write_report(summaries: list[BenchmarkSummary], out_path: str) -> None:
-    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(out_path).write_text(render_markdown(summaries), encoding="utf-8")
-
-
 def write_report_with_calibration(summaries: list[BenchmarkSummary],
                                   out_path: str, calibration) -> None:
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)

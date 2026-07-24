@@ -4,7 +4,10 @@ Offline measurement tool: hand-score a sample of rubric fixtures, run the
 cross-family judge over the same fixtures, report judge-human agreement.
 Advisory only -- never modifies a composite score or a gate outcome.
 
-Pure compute here; the CLI (cli.py) owns file I/O and the live-history seam.
+Fixture and calibration-report file I/O live here; the CLI (cli.py) owns
+argument parsing, the default-judge-model lookup, and the live-history
+capture seam. This module never imports temporalio (its judge import is
+TYPE_CHECKING-guarded).
 """
 from __future__ import annotations
 

@@ -1,7 +1,5 @@
 from datetime import datetime, timezone
 
-import pytest
-
 from sdlc.benchmarks.calibration import (
     CalibrationFixture, CalibrationReport, run_calibration, rubric_sha_of,
 )
