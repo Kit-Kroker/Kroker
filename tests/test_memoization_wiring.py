@@ -34,12 +34,13 @@ def test_run_uses_cached_stage_for_clarify_architect_plan(feature_class):
 
 
 def test_cached_stage_resolves_the_model_itself(feature_class):
-    """_cached_stage looks up STAGE_MODELS[stage] internally, mirroring its
-    PROMPT_SHAS[stage] lookup — one resolution point, so the two stage-keyed
-    maps cannot disagree about what a stage is."""
+    """_cached_stage resolves the model internally via resolve_role_model,
+    mirroring its PROMPT_SHAS[stage] lookup — one resolution point, so the
+    two stage-keyed maps cannot disagree about what a stage is. E-37 moved
+    the lookup behind resolve_role_model so a per-run override moves the key."""
     methods = _methods(feature_class)
     src = ast.unparse(methods["_cached_stage"])
-    assert "STAGE_MODELS[stage]" in src
+    assert "resolve_role_model(cfg, stage)" in src
     assert "PROMPT_SHAS[stage]" in src
 
 
