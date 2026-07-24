@@ -237,6 +237,13 @@ Teams adopting coding agents today face four gaps:
   level. Calibration is an offline measurement tool; it SHALL NOT modify
   scores or gate outcomes automatically -- low agreement is a rubric defect
   to be fixed, not an automatic adjustment.
+- **FR-111 (new scope)** opt-in `deep_review` transcript lens -- an advisory
+  proposer that reads the *scrubbed* `HarnessSession` (FR-109) as data, once
+  per task, ADR-6 family-independent of `dev`. It records an anti-cheat signal
+  (oracle peeking / hardcoded answers / test gaming / backtracking) and a
+  richer verdict for observability and benchmark aggregation; it NEVER gates
+  the merge. Off by default (`deep_review_enabled=False`). The clean-context
+  reviewer (FR-204) remains the sole blocking lens.
 
 ## 7. Non-functional requirements
 
