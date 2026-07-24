@@ -193,7 +193,7 @@ benchmark is tractable: an axis is a config sweep, not a fork.
 | Axis | What varies | Where it lives today | Roadmap dependency |
 |---|---|---|---|
 | **Harness** | `claude -p` vs `opencode run` vs **cursor (to add)** | `harness/adapters.py`, `HARNESSES` (FR-203) | new adapter must normalise into `HarnessRunResult` (§4) |
-| **Model × role** | which model drives each of 11 roles | `STAGE_MODELS` + `agents.yaml` per-role `model` | `cfg.roles` not yet per-project — **E-26** blocks per-run overrides |
+| **Model × role** | which model drives each of 11 roles | `STAGE_MODELS` + `agents.yaml` per-role `model` | landed (E-37): per-cell arms + `--role-model`, ADR-6 per run |
 | **Memory** | Hindsight on/off/watermark, `project` vs `+org` banks | `MemoryConfig` (`memory.enabled` default `False`) | org bank has no writers — **E-25**; retro closes the loop — stage 14 |
 | **Case** | greenfield feature specs of graded complexity | `benchmarks/cases/` | only single-run-sized cases exist — need a decomposition-forcing case (§5) |
 
@@ -241,13 +241,15 @@ precisely Cursor's $1,339-vs-$10,565 experiment, expressed in your config.
 
 *E-33 landed this: `RunSummary.roles` carries per-role dollars on every run; proposer `BenchmarkRecord.cost` is now populated, so `mean_cost_usd` is real for proposer cells.*
 
-Blocker to be honest about: `cfg.roles` is a hardcoded mirror of `agents.yaml`
+Blocker to be honest about: `cfg.roles` was a hardcoded mirror of `agents.yaml`
 because `PipelineConfig()` is constructed *inside* the workflow (E-26). A
 per-cell model sweep needs the override to resolve at the boundary
-(`benchmarks/workflow.py`) and satisfy ADR-6 *per run*. **E-26 is therefore a
-prerequisite for a full model×role sweep**, not an optional nicety. Without it
-you can still sweep the harness axis and the memory axis, just not per-role
-models per cell.
+(`benchmarks/workflow.py`) and satisfy ADR-6 *per run*. **E-37 landed this:**
+each cell now carries a named `Arm` (role→model mix); `_cell_config` builds
+`cfg.roles` from the arm and enforces ADR-6 per run via `validate_run_roles`,
+and the CLI exposes the same override via `--role-model`. The full model×role
+sweep is now expressible; the pre-E-37 harness-only `models=[...]` form still
+works (desugared to one arm per model).
 
 ### 3.3 Memory axis — the measurement the whole stack was built for
 
@@ -423,9 +425,9 @@ undercut, not by size.
    prioritisation instrument and the trust layer under every rubric number.*
 
 6. **Per-role model sweep** — resolve `cfg.roles` at the benchmark boundary
-   (**E-26**) so each cell can override role→model and satisfy ADR-6 per run.
-   *The full model×role matrix; deferred because the harness and memory axes
-   deliver most of the insight without it and E-26 is real work.*
+   (**E-37**, folds E-26) so each cell overrides role→model and satisfies
+   ADR-6 per run. *The full model×role matrix. Landed: per-cell `Arm`s +
+   `--role-model`, judge family validated at expansion (answers OQ-B2).*
 
 Items already banked that this design builds on: E-4 (prompt eval loop),
 E-12/E-13 (nightly project reflect), E-27 (benchmark harness + rubric judging),
@@ -441,11 +443,15 @@ adapters).
   matrix produces a trustworthy signal rather than noise? Cursor ran one task
   across four mixes; Abdullin spent half a project on the environment. Likely
   10–30 cases, but this needs its own calibration.
-- **OQ-B2 — Judge independence under model sweep.** ADR-6 forbids the judge
-  sharing a family with the *producer*. When the model×role axis sweeps
-  producer families, the judge family must move to stay independent per cell.
-  Does `judge_artifact` re-resolve the judge per cell, or is it fixed? (Ties to
-  E-26 and OQ-E2.)
+- **OQ-B2 — Judge independence under model sweep. ANSWERED 2026-07-24 (E-37).**
+  ADR-6 forbids the judge sharing a family with the *producer*. When the
+  model×role axis sweeps producer families, the judge family must move to stay
+  independent per cell. Resolution: the judge is **fixed per case** (one
+  `judge_model` on `CaseSpec`), and `expand_matrix` validates at expansion that
+  its family differs from **every producer model in every arm** of the matrix.
+  It does not re-resolve per cell — the guard is up front, so a case whose
+  judge collides with any arm's producer family is rejected before any cell
+  runs. (Ties to OQ-E2.)
 - **OQ-B3 — Research grounding gate for benchmark cells (E-29). ANSWERED
   2026-07-23.** Benchmark cells run with the hard grounding verifier
   unchanged; a violation is a recorded research-stage `FAIL` in the cell's
