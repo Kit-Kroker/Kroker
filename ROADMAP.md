@@ -307,7 +307,13 @@ FR-404 records that `reflect()` exists and is registered but is **never called**
   variant was considered for E-34 and deliberately not built
   (`2026-07-23-cat-cafe-tier-a-oracle-design.md` §2). OQ-B3 answered
   accordingly. The verifier itself is unchanged — no loosening.
-- [ ] **E-26** Make `cfg.roles` genuinely per-project (US-4) without reintroducing drift. `PipelineConfig.roles` is a hardcoded mirror of `agents.yaml`'s harness roles because `PipelineConfig()` is constructed *inside* the workflow (`feature.py:602`), so its default cannot read the file without breaking sandbox purity. The boot mirror-check makes drift fail closed, but it also means a per-project override must resolve at the boundary (`cli.py`, `benchmarks/workflow.py`) and satisfy ADR-6 *per run*, not just at boot. **Nothing populates `cfg.roles` today**, which is the only reason the mirror can be a static assertion.
+- [x] **E-26** Make `cfg.roles` genuinely per-project (US-4) without reintroducing drift. `PipelineConfig.roles` is a hardcoded mirror of `agents.yaml`'s harness roles because `PipelineConfig()` is constructed *inside* the workflow (`feature.py:602`), so its default cannot read the file without breaking sandbox purity. The boot mirror-check makes drift fail closed, but it also means a per-project override must resolve at the boundary (`cli.py`, `benchmarks/workflow.py`) and satisfy ADR-6 *per run*, not just at boot. **Nothing populates `cfg.roles` today**, which is the only reason the mirror can be a static assertion.
+  *Landed by E-37:* `cfg.roles` is now resolved per run at both boundaries —
+  the benchmark cell (per-arm `role_models`) and the CLI (`--role-model`) —
+  with per-run ADR-6 enforced via `validate_run_roles`. The static boot
+  mirror-check is unchanged; the default `PipelineConfig()` still mirrors the
+  harness roles, and overrides are applied at the boundary, not inside the
+  sandbox.
 
 ### 9.4 `pre_tool` unifies containment with gates → FR-703, NFR-5, FR-301
 
@@ -488,13 +494,19 @@ is marked **(new scope)** and needs a PRD line before it is real.
   deliberately deferred. Spec
   `docs/superpowers/specs/2026-07-24-error-heatmap-and-rubric-calibration-design.md`,
   plan `docs/superpowers/plans/2026-07-24-error-heatmap-and-rubric-calibration.md`.
-- [ ] **E-37** Per-role model sweep at the benchmark boundary. Resolve
+- [x] **E-37** Per-role model sweep at the benchmark boundary. Resolve
   `cfg.roles` per cell (folds **E-26**) so each cell overrides role→model and
   satisfies ADR-6 *per run*, not just at boot — the full model×role matrix
   (US-4). Deferred last: the harness (E-35) and memory (E-32) axes deliver most
   of the insight without it, and E-26 is real work. Ties to **OQ-B2** (the
   judge family must move per cell to stay ADR-6-independent of the swept
   producer family) and **OQ-E2**.
+  *Landed:* per-run `resolve_role_model` (proposers + memo key) + shared
+  `check_adr6_families`/`validate_run_roles` + named `Arm`s on `CaseSpec`
+  (harness `models` desugared for back-compat) + fixed-judge-validated-at-
+  expansion (answers OQ-B2) + `--role-model` CLI surface (folds E-26, US-4).
+  Spec `docs/superpowers/specs/2026-07-24-per-role-model-sweep-design.md`,
+  plan `docs/superpowers/plans/2026-07-24-per-role-model-sweep.md`.
 
 - [x] **E-38 (new scope; ADR-16)** Capture-always harness sessions. Every
   harness run emits a **canonical `HarnessSession`** (normalised transcript:
@@ -556,7 +568,7 @@ is marked **(new scope)** and needs a PRD line before it is real.
   `docs/superpowers/specs/2026-07-24-deep-review-transcript-lens-design.md`,
   plan `docs/superpowers/plans/2026-07-24-deep-review-transcript-lens.md`.
 **Open questions (tracked in `docs/BENCHMARK.md §7`):** OQ-B1 minimum trustworthy
-corpus size; OQ-B2 judge independence under model sweep (→ E-37); OQ-B3 **answered** (E-29 closed: grounding failure = recorded stage `FAIL`, run continues); OQ-B4 the regression-gate half of E-4 as a CI gate (→ OQ-E2); OQ-B7
+corpus size; OQ-B2 judge independence under model sweep **answered** (E-37: judge fixed per case, family validated at expansion against every arm); OQ-B3 **answered** (E-29 closed: grounding failure = recorded stage `FAIL`, run continues); OQ-B4 the regression-gate half of E-4 as a CI gate (→ OQ-E2); OQ-B7
 session-retention policy **decided** (full on fail/benchmark/attempts>0,
 `SessionDigest` on clean-green, aggregates kept pre-truncation, scrub
 fail-closed before the branch — E-38); **only the full-transcript TTL is
