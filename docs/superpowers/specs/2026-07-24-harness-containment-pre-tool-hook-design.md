@@ -187,9 +187,12 @@ returned path authoritative. A hook that recomputed the path would
 mis-evaluate every out-of-worktree check on precisely the runs that already
 hit trouble.
 
-### 3. `src/sdlc/harness/hook_cli.py` — the entry point
+### 3. `src/sdlc/harness/hook.py` — the entry point
 
-Registered as `sdlc harness-hook`. Reads the `PreToolUse` JSON on stdin,
+Invoked as `python -m sdlc.harness.hook` — **its own module, not a `cli.py`
+subcommand.** There is no `sdlc` console script, and `cli.py:main()` builds a
+Temporal client; the hook runs once per tool call, so importing the workflow
+stack there would tax every tool the agent uses. Reads the `PreToolUse` JSON on stdin,
 calls `evaluate`, writes the decision to stdout:
 
 ```json
@@ -338,7 +341,7 @@ enter any `content_key`.
 - `containment.py` is pure → the rule matrix is a plain unit-test table,
   including the `<task>.N` worktree-path case and symlink/relative-path
   escapes.
-- `hook_cli.py` → stdin→stdout contract tests, plus the exception-becomes-deny
+- `hook.py` → stdin→stdout contract tests, plus the exception-becomes-deny
   case.
 - `apply_containment` → assert on the built command and the emitted settings
   JSON; no CLI executed.
