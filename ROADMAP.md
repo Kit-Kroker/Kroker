@@ -280,7 +280,7 @@ We track notifications, cross-run inbox, dashboard backend, and MCP server as fo
   could inherit it). Adds `channels/transport.py` — query/match/signal/verify —
   so E-8/E-10/E-11 do not each reimplement it. Spec:
   `docs/superpowers/specs/2026-07-19-cli-refit-onto-channel-contract-design.md`.
-- [ ] **E-8** Cross-run inbox as a query over pending gates (FR-305, FR-603's missing verb) — the first capability the contract buys that we don't already have.
+- [x] **E-8** Cross-run inbox as a query over pending gates (FR-305, FR-603's missing verb) — the first capability the contract buys that we don't already have. *Landed:* `sdlc/channels/inbox.py` (`fetch_inbox`) plus the CLI inbox verb over the existing Layer A/B contract. Plan `docs/superpowers/plans/2026-07-22-cross-run-inbox.md`.
 - [ ] **E-9** Notify activity + reminder timer + fallback approver (FR-303). Today: timeout→auto-reject only.
 - [ ] **E-10** FastAPI dashboard backend as a channel adapter, replacing the Vue frontend's mock API (FR-601, US-6, ADR-8).
 - [ ] **E-11** MCP server as a channel adapter — list/detail/inbox/answer/decide/start (FR-602, US-7).
@@ -461,7 +461,7 @@ is marked **(new scope)** and needs a PRD line before it is real.
   red when risk detection is stubbed out. Spec
   `docs/superpowers/specs/2026-07-23-cat-cafe-tier-a-oracle-design.md`,
   plan `docs/superpowers/plans/2026-07-23-cat-cafe-tier-a-oracle.md`.
-- [ ] **E-35** `cursor` harness adapter — third point on the harness axis,
+- [x] **E-35** `cursor` harness adapter — third point on the harness axis,
   normalised into `HarnessRunResult` (tokens, cost, `context_window`,
   `compacted`, resume handle) and version-pinned at boot (FR-203; folds the
   intent of **E-24**). Value is not "cursor vs claude in the abstract" — it is
@@ -469,6 +469,9 @@ is marked **(new scope)** and needs a PRD line before it is real.
   DeterministicQualityGate on the held-out oracles**, a comparison no external
   leaderboard provides. Ordered *after* E-33 so the economics fields exist to
   receive it; until the adapter fills them, cursor cells are quality-only.
+  *Landed:* `CursorHarness` + `check_harness_versions` in
+  `harness/adapters.py`, registered in `worker.py`. Plan
+  `docs/superpowers/plans/2026-07-23-cursor-harness-adapter.md`.
 - [x] **E-36 (new scope)** Error heatmap (`case × stage`) + rubric-calibration
   tracking. The heatmap aggregates gate rejections, fix-loop iterations, and
   oracle failures per stage per case (FR-704 export is the data source, NFR-4) —
