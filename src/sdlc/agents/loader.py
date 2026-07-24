@@ -182,6 +182,38 @@ def load_registry(path: str | os.PathLike | None = None) -> dict[str, RoleConfig
     return roles
 
 
+def check_adr6_families(role_models: dict[str, str]) -> None:
+    """The ADR-6 model-family inequality invariant, over a resolved
+    role->model map. `dev` and `reviewer` must differ in family; if
+    `deep_review` is present it must differ from `dev`. This is the single
+    implementation reused at boot (validate_registry) and per run
+    (validate_run_roles)."""
+    dev = role_models.get("dev")
+    rev = role_models.get("reviewer")
+    if dev is None or rev is None:
+        raise RegistryError(
+            "ADR-6 check requires both 'dev' and 'reviewer' models")
+    if model_family(dev) == model_family(rev):
+        raise RegistryError(
+            f"ADR-6 violation: reviewer family '{model_family(rev)}' "
+            f"equals the family of 'dev' — anti-collusion review requires a "
+            f"different model family than the developer's authoring model")
+    dr = role_models.get("deep_review")
+    if dr is not None and model_family(dr) == model_family(dev):
+        raise RegistryError(
+            f"ADR-6 violation: deep_review family '{model_family(dr)}' "
+            f"equals the family of 'dev' — the transcript lens must not "
+            f"correlate with the authoring model")
+
+
+def validate_run_roles(role_models: dict[str, str]) -> None:
+    """Per-run ADR-6 enforcement at a boundary that constructs a non-default
+    role→model map (benchmark arm, CLI --role-model). Registry-structural
+    checks (harness inequality, research provider) stay at boot; this guards
+    only what a per-run override can break: model-family inequality."""
+    check_adr6_families(role_models)
+
+
 def validate_registry(roles: dict[str, RoleConfig]) -> None:
     """Fail closed on any structural violation.
 
@@ -201,25 +233,17 @@ def validate_registry(roles: dict[str, RoleConfig]) -> None:
         if roles[name].model is None:
             raise RegistryError(f"role '{name}' must declare a model")
     dev, rev = roles["dev"], roles["reviewer"]
-    if model_family(dev.model) == model_family(rev.model):
-        raise RegistryError(
-            f"ADR-6 violation: reviewer family '{model_family(rev.model)}' "
-            f"equals the family of 'dev' — anti-collusion review requires a "
-            f"different model family than the developer's authoring model")
+    role_models = {"dev": dev.model, "reviewer": rev.model}
+    if "deep_review" in roles:
+        if roles["deep_review"].model is None:
+            raise RegistryError("role 'deep_review' must declare a model")
+        role_models["deep_review"] = roles["deep_review"].model
+    check_adr6_families(role_models)
     if rev.kind == "harness" and rev.harness is not None \
             and rev.harness == dev.harness:
         raise RegistryError(
             "deep-review harness reviewer must use a different harness than "
             "the developer")
-    if "deep_review" in roles:
-        dr = roles["deep_review"]
-        if dr.model is None:
-            raise RegistryError("role 'deep_review' must declare a model")
-        if model_family(dr.model) == model_family(dev.model):
-            raise RegistryError(
-                f"ADR-6 violation: deep_review family "
-                f"'{model_family(dr.model)}' equals the family of 'dev' — the "
-                f"transcript lens must not correlate with the authoring model")
     for name, cfg in roles.items():
         if cfg.kind != "research":
             continue
