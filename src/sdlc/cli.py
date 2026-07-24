@@ -43,6 +43,19 @@ _OUTCOME = {
 DECISION_CMDS = ("approve", "reject", "revise", "answer")
 
 
+def _needs_temporal_client(args) -> bool:
+    """True if this invocation must connect to Temporal. calibrate is fully
+    local (calibrate <rubric> is offline file+judge work; calibrate capture is
+    a stub that only prints a seam message) — mirroring how every `benchmark`
+    subcommand is client-free."""
+    local_only = (
+        args.cmd == "benchmark"
+        or (args.cmd == "schedules" and args.sched_cmd == "list")
+        or (args.cmd == "eval" and args.target != "capture")
+        or args.cmd == "calibrate")
+    return not local_only
+
+
 def add_decision_parsers(sub) -> None:
     """The four human-in-the-loop verbs. No --round: the round is read off
     the pending item, so a reply can never land on a stale round (E-7)."""
@@ -139,11 +152,7 @@ async def main() -> None:
         raise SystemExit(1)
 
     client = None
-    _local_only = (args.cmd == "benchmark"
-                   or (args.cmd == "schedules" and args.sched_cmd == "list")
-                   or (args.cmd == "eval" and args.target != "capture")
-                   or (args.cmd == "calibrate" and args.target != "capture"))
-    if not _local_only:
+    if _needs_temporal_client(args):
         client = await Client.connect(
             os.environ.get("TEMPORAL_HOST", "localhost:7233"),
             data_converter=pydantic_data_converter)
