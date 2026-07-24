@@ -96,9 +96,43 @@ class SessionDigest(BaseModel):
     failed_commands: int = 0       # command events with exit_code not in (0, None)
     model_turns: int = 0
     compacted: bool = False
+    denials: int = 0               # E-16: blocked tool calls
     input_tokens: int | None = None
     output_tokens: int | None = None
     decision_skeleton: list[str] = Field(default_factory=list)
+
+
+class ContainmentLayer(str, Enum):
+    """Where a containment rule is enforced (E-15/E-16, ADR-17)."""
+    NATIVE = "native"   # declarative deny inside the harness CLI's own config
+    HOOK = "hook"       # per-call inspection callback
+
+
+class ToolDenial(BaseModel):
+    """One blocked tool call. Small and bounded — travels inline on
+    HarnessRunResult, same discipline as SessionDigest."""
+    tool: str
+    rule_id: str
+    layer: ContainmentLayer
+    reason: str
+    target: str | None = None     # path or command line (scrubbed)
+
+
+class ContainmentReport(BaseModel):
+    """What containment was ACTUALLY in force for a run. Partial coverage
+    is recorded rather than refused, so a harness with fewer layers is
+    visibly less contained instead of silently so (spec §5)."""
+    enabled: bool = False
+    layers_active: list[ContainmentLayer] = Field(default_factory=list)
+    rules_enforced: list[str] = Field(default_factory=list)
+    rules_unenforceable: list[str] = Field(default_factory=list)
+
+
+class ContainmentConfig(BaseModel):
+    """FR-703 containment knobs. `strict` promotes partial layer coverage
+    from 'recorded' to 'refuse to start'."""
+    policy_path: str | None = None      # None -> $SDLC_CONTAINMENT_POLICY -> discovery
+    strict: bool = False
 
 
 class IdeaBrief(BaseModel):
@@ -212,6 +246,10 @@ class HarnessRunResult(BaseModel):
     # serialize into workflow state.
     session_ref: ArtifactRef | None = None
     session_digest: SessionDigest | None = None
+    # E-15/E-16: containment outcome. Bounded and inline — the workflow and
+    # the E-36 heatmap read these without loading the session artifact.
+    denials: list[ToolDenial] = Field(default_factory=list)
+    containment: ContainmentReport | None = None
     _raw_stdout: str = PrivateAttr(default="")
 
     def near_context_ceiling(self, fraction: float = 0.75) -> bool:
@@ -632,6 +670,10 @@ class PipelineConfig(BaseModel):
     research_enabled: bool = False          # FR-107: off by default; the
                                             # default pipeline is unchanged
                                             # until a project opts in
+    containment_enabled: bool = False       # FR-703: off by default; the
+                                            # policy is a fence, not a
+                                            # sandbox — see ADR-17
+    containment: ContainmentConfig = Field(default_factory=ContainmentConfig)
     review_enabled: bool = True             # FR-204: run the clean-context
                                             # reviewer per task; disable to trade
                                             # the anti-collusion check for cost
