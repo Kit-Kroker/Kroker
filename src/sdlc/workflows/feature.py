@@ -527,9 +527,9 @@ class FeatureWorkflow:
                 f"\n[transcript truncated; digest follows]\n"
                 f"{run.session_digest.model_dump_json()}"
                 if loaded.truncated and run.session_digest is not None else "")
-            spend = RoleUsage(role="deep_review", model=STAGE_MODELS["deep_review"])
+            spend = RoleUsage(role="deep_review", model=resolve_role_model(cfg, "deep_review"))
             report = (await self._run_role(
-                cfg, "deep_review", STAGE_MODELS["deep_review"], t_deep_review,
+                cfg, "deep_review", resolve_role_model(cfg, "deep_review"), t_deep_review,
                 "Frozen contract assertions:\n- " + "\n- ".join(assertions)
                 + f"\nDiff:\n{diff['patch']}"
                 + "\nScrubbed harness transcript (how the diff was reached):\n"
@@ -542,7 +542,7 @@ class FeatureWorkflow:
                 judge="deep_review",
                 outcome=(BenchmarkOutcome.FAIL if report.cheat_detected
                          else BenchmarkOutcome.PASS),
-                model=STAGE_MODELS["deep_review"], spend=spend,
+                model=resolve_role_model(cfg, "deep_review"), spend=spend,
                 task_id=task.id))
             if report.cheat_detected:
                 await self._retain(
@@ -771,8 +771,8 @@ class FeatureWorkflow:
                 DiffInput(worktree=worktree, branch_point=handle.branch_point),
                 **ACT,
             )
-            qa_spend = RoleUsage(role="qa", model=STAGE_MODELS["qa"])
-            qa = (await self._run_role(cfg, "qa", STAGE_MODELS["qa"], t_qa,
+            qa_spend = RoleUsage(role="qa", model=resolve_role_model(cfg, "qa"))
+            qa = (await self._run_role(cfg, "qa", resolve_role_model(cfg, "qa"), t_qa,
                 "Frozen contract assertions:\n- " + "\n- ".join(assertions)
                 + f"\nTest results: {qa_raw.model_dump_json()}"
                 + f"\nDiff stat:\n{diff['stat']}"
@@ -810,7 +810,7 @@ class FeatureWorkflow:
             # clarifier/architect/planner; scoring.py means over them natively.
             _qa_quality = await self._judge(
                 cfg, qa.model_dump_json(), "qa",
-                author_model=STAGE_MODELS["qa"])
+                author_model=resolve_role_model(cfg, "qa"))
             await self._record(cfg, self._stage_record(
                 cfg, stage="qa", role="qa",
                 started=_attempt_started, ended=workflow.now(),
@@ -818,7 +818,7 @@ class FeatureWorkflow:
                 outcome=(BenchmarkOutcome.PASS
                          if (qa.tests_passed and not qa.issues)
                          else BenchmarkOutcome.FAIL),
-                model=STAGE_MODELS["qa"], spend=qa_spend,
+                model=resolve_role_model(cfg, "qa"), spend=qa_spend,
                 task_id=task.id, attempt=attempt - 1))
 
             review_ok = review is None or review.approve
@@ -1102,10 +1102,10 @@ class FeatureWorkflow:
             cfg, cfg.memory.project_bank, query=f"clarify:{idea.title}",
             filters={"stage": "clarify"})
 
-        clarify_spend = RoleUsage(role="clarify", model=STAGE_MODELS["clarify"])
+        clarify_spend = RoleUsage(role="clarify", model=resolve_role_model(cfg, "clarify"))
 
         async def _run_clarify():
-            return (await self._run_role(cfg, "clarify", STAGE_MODELS["clarify"], t_clarify,
+            return (await self._run_role(cfg, "clarify", resolve_role_model(cfg, "clarify"), t_clarify,
                 idea.model_dump_json()
                 + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
                    if snapshot.items else ""), into=clarify_spend)).output
@@ -1144,13 +1144,13 @@ class FeatureWorkflow:
                            question_id=q.id, answered_by=answered)
         _ended = workflow.now()
         _quality = await self._judge(cfg, reqs.model_dump_json(), "clarifier",
-                                     author_model=STAGE_MODELS["clarify"])
+                                     author_model=resolve_role_model(cfg, "clarify"))
         await self._record(cfg, self._stage_record(
             cfg, stage="clarify", role="clarify",
             started=_started, ended=_ended,
             quality_score=_quality.score, judge=_quality.judge,
             outcome=BenchmarkOutcome.PASS,
-            model=STAGE_MODELS["clarify"], spend=clarify_spend))
+            model=resolve_role_model(cfg, "clarify"), spend=clarify_spend))
         await self._retain(
             cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
             text=f"clarify: {reqs.summary}",
@@ -1166,7 +1166,7 @@ class FeatureWorkflow:
             cfg, cfg.memory.project_bank, query=f"architect:{idea.title}",
             filters={"stage": "architect"})
 
-        arch_spend = RoleUsage(role="architect", model=STAGE_MODELS["architect"])
+        arch_spend = RoleUsage(role="architect", model=resolve_role_model(cfg, "architect"))
 
         async def _run_architect(guidance: str | None):
             prompt = (f"mode={idea.mode.value}\n{reqs.model_dump_json()}"
@@ -1205,7 +1205,7 @@ class FeatureWorkflow:
                 memory_watermark=self._memory_watermark)
 
             async def _produce():
-                return (await self._run_role(cfg, "architect", STAGE_MODELS["architect"], t_architect, prompt, deps=architect_deps, into=arch_spend)).output
+                return (await self._run_role(cfg, "architect", resolve_role_model(cfg, "architect"), t_architect, prompt, deps=architect_deps, into=arch_spend)).output
             arch, _ = await self._cached_stage(
                 cfg, "architect",
                 reqs.model_dump_json() + (guidance or ""),
@@ -1216,14 +1216,14 @@ class FeatureWorkflow:
                                                  _run_architect)
         _ended = workflow.now()
         _quality = await self._judge(cfg, arch.model_dump_json(), "architect",
-                                     author_model=STAGE_MODELS["architect"])
+                                     author_model=resolve_role_model(cfg, "architect"))
         await self._record(cfg, self._stage_record(
             cfg, stage="architecture", role="architect",
             started=_started, ended=_ended,
             quality_score=_quality.score, judge=_quality.judge,
             outcome=(BenchmarkOutcome.PASS if gate.approved
                      else BenchmarkOutcome.REVISED),
-            model=STAGE_MODELS["architect"], spend=arch_spend))
+            model=resolve_role_model(cfg, "architect"), spend=arch_spend))
         await self._retain(
             cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
             text=f"architect: {arch.overview}",
@@ -1238,7 +1238,7 @@ class FeatureWorkflow:
             cfg, cfg.memory.project_bank, query=f"plan:{idea.title}",
             filters={"stage": "plan"})
 
-        plan_spend = RoleUsage(role="planner", model=STAGE_MODELS["plan"])
+        plan_spend = RoleUsage(role="planner", model=resolve_role_model(cfg, "plan"))
 
         async def _run_plan(guidance: str | None):
             prompt = (arch.model_dump_json()
@@ -1248,7 +1248,7 @@ class FeatureWorkflow:
                          if guidance else ""))
 
             async def _produce():
-                return (await self._run_role(cfg, "planner", STAGE_MODELS["plan"], t_planner, prompt, into=plan_spend)).output
+                return (await self._run_role(cfg, "planner", resolve_role_model(cfg, "plan"), t_planner, prompt, into=plan_spend)).output
             plan, _ = await self._cached_stage(
                 cfg, "plan",
                 arch.model_dump_json() + (guidance or ""),
@@ -1258,14 +1258,14 @@ class FeatureWorkflow:
         plan, gate = await self._revisable_stage("plan", cfg, _run_plan)
         _ended = workflow.now()
         _quality = await self._judge(cfg, plan.model_dump_json(), "planner",
-                                     author_model=STAGE_MODELS["plan"])
+                                     author_model=resolve_role_model(cfg, "plan"))
         await self._record(cfg, self._stage_record(
             cfg, stage="plan", role="planner",
             started=_started, ended=_ended,
             quality_score=_quality.score, judge=_quality.judge,
             outcome=(BenchmarkOutcome.PASS if gate.approved
                      else BenchmarkOutcome.REVISED),
-            model=STAGE_MODELS["plan"], spend=plan_spend))
+            model=resolve_role_model(cfg, "plan"), spend=plan_spend))
         await self._retain(
             cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
             text=f"plan: {len(plan.tasks)} tasks",
@@ -1348,8 +1348,8 @@ class FeatureWorkflow:
             f"- {r.task_id}: tests_passed={r.qa.tests_passed if r.qa else 'n/a'}"
             f" failing={r.qa.failing_tests if r.qa else []}"
             for r in done.values())
-        analyst_spend = RoleUsage(role="analyst", model=STAGE_MODELS["analyze"])
-        analysis: AnalysisReport = (await self._run_role(cfg, "analyst", STAGE_MODELS["analyze"], t_analyst,
+        analyst_spend = RoleUsage(role="analyst", model=resolve_role_model(cfg, "analyze"))
+        analysis: AnalysisReport = (await self._run_role(cfg, "analyst", resolve_role_model(cfg, "analyze"), t_analyst,
             "Acceptance criteria (task_id in brackets):\n" + _criteria_lines
             + "\nAggregate test output:\n" + _qa_lines
             + f"\nIntegration diff stat:\n{integration_diff['stat']}"
@@ -1362,7 +1362,7 @@ class FeatureWorkflow:
             judge="contract",
             outcome=(BenchmarkOutcome.PASS if not untraced
                      else BenchmarkOutcome.FAIL),
-            model=STAGE_MODELS["analyze"], spend=analyst_spend))
+            model=resolve_role_model(cfg, "analyze"), spend=analyst_spend))
         await self._retain(
             cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
             text=f"analyze: {len(authoritative)} criteria, "
@@ -1557,7 +1557,7 @@ class FeatureWorkflow:
             quality_score=None, judge="llm_judge",
             outcome=(BenchmarkOutcome.PASS if gate.approved
                      else BenchmarkOutcome.REVISED),
-            model=STAGE_MODELS["devops"]))
+            model=resolve_role_model(cfg, "devops")))
         if not gate.approved:
             return f"merged-not-deployed:{pr_url}"
         await workflow.execute_activity(
