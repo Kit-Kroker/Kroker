@@ -33,6 +33,7 @@ from .activities import (
 )
 from .agents.loader import load_registry, validate_registry
 from .agents.roles import ALL_TEMPORAL_AGENTS
+from .artifacts.read import load_session
 from .artifacts.retention import apply_session_retention
 from .benchmarks.judge import judge_artifact, load_case_assets
 from .benchmarks.oracle import grade_oracle
@@ -90,6 +91,7 @@ async def main() -> None:
             export_run_artifacts,
             price_usage,
             apply_session_retention,
+            load_session,
             verify_brief_activity,
             *agent_activities,
         ],
