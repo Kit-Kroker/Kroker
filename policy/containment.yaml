@@ -1,0 +1,52 @@
+# Harness containment policy (FR-703, E-15/E-16, ADR-17).
+#
+# `layer` declares the MINIMUM capability a rule needs, not the only place it
+# runs: each adapter enforces every rule at every layer it has (spec §4a).
+# On claude that means `layer: native` rules ALSO run through the hook, so the
+# denial is observable, while the native deny stays as the floor a buggy hook
+# cannot weaken.
+#
+# This is a fence, not a sandbox. Egress rules are tool-level: a socket opened
+# from inside an allowed Bash call is invisible to them. Network-level egress
+# is E-21's OS/container tier.
+version: 1
+
+rules:
+  - id: no-out-of-worktree-write
+    layer: hook                 # needs per-call path resolution
+    tools: [Write, Edit, NotebookEdit]
+    predicate: path_outside_worktree
+    reason: "Writes are scoped to the task worktree."
+
+  - id: no-recursive-force-delete
+    layer: native
+    tools: [Bash]
+    predicate: command_matches
+    patterns:
+      - "rm -rf *"
+      - "rm -fr *"
+      - "rm -r -f *"
+    reason: "Destructive recursive delete."
+
+  - id: no-agent-config-write
+    layer: native
+    tools: [Write, Edit, NotebookEdit]
+    predicate: path_matches
+    patterns:
+      - "**/.claude/**"
+      - "**/.opencode/**"
+      - "**/.cursor/**"
+      - "**/opencode.json"
+    reason: "The agent may not rewrite its own permission config."
+
+  - id: egress-allowlist
+    layer: hook
+    tools: [WebFetch, WebSearch, Bash]
+    predicate: host_not_allowlisted
+    allow_hosts:
+      - api.anthropic.com
+      - github.com
+      - pypi.org
+      - files.pythonhosted.org
+      - registry.npmjs.org
+    reason: "Egress is restricted to the model API, git remote, and package registries."
