@@ -18,6 +18,8 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
+    from ..agents.loader import HARNESS_ROLES, validate_run_roles
+    from ..agents.roles import STAGE_MODELS
     from ..models import (BenchmarkConfig, GateConfig, GatePolicy, HarnessKind,
                           IdeaBrief, PipelineConfig, ProjectMode, RoleConfig)
     from ..workflows.feature import FeatureWorkflow
@@ -38,26 +40,44 @@ ORACLE_ACT = dict(start_to_close_timeout=timedelta(minutes=20),
 
 
 def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
-                 harness: HarnessKind, model: str,
-                 bench_run_id: str,
+                 cell: BenchmarkCell, bench_run_id: str,
                  rubrics: dict[str, str] | None = None) -> PipelineConfig:
-    """Build a per-cell PipelineConfig: every role overridden to
-    (harness, model), benchmark fields set so FeatureWorkflow records."""
+    """Build a per-cell PipelineConfig from the cell's arm: each role in
+    role_models is overridden to its model (harness roles carry the cell's
+    harness + the base role's context budget / extra args; proposer roles are
+    kind='proposer'). ADR-6 is validated for the resolved review roles before
+    the cell runs — a violation raises, recording a failed cell rather than a
+    silent bad run."""
     cfg = base.model_copy(deep=True)
-    model_extra_args = spec.extra_args_by_model.get(model, [])
-    cfg.roles = {
-        role: RoleConfig(harness=harness, model=model,
-                         context_budget_tokens=rc.context_budget_tokens,
-                         extra_args=[*rc.extra_args, *model_extra_args])
-        for role, rc in base.roles.items()
+    resolved = cell.role_models
+    roles: dict[str, RoleConfig] = {}
+    for role, model in resolved.items():
+        if role in HARNESS_ROLES:
+            rc = base.roles.get(role)
+            roles[role] = RoleConfig(
+                harness=cell.harness, model=model,
+                context_budget_tokens=(rc.context_budget_tokens
+                                       if rc else 30_000),
+                extra_args=[*(rc.extra_args if rc else []),
+                            *spec.extra_args_by_model.get(model, [])])
+        else:
+            roles[role] = RoleConfig(kind="proposer", model=model)
+    cfg.roles = roles
+
+    # Per-run ADR-6 (Task 3): resolve the review roles, defaulting any the arm
+    # did not override to the registry model (STAGE_MODELS).
+    adr6 = {
+        "dev": resolved.get("dev", base.roles["dev"].model),
+        "reviewer": resolved.get("reviewer", STAGE_MODELS["review"]),
     }
-    # The research provider is a property of the RUN, not the repo: the
-    # registry keeps provider: fake so CI and contributors need no
-    # TAVILY_API_KEY (loader.py:221 fails closed at boot otherwise). Inject
-    # the real provider here, only for a case that asked for research.
-    # PipelineConfig.roles has no 'research' entry by default, so without
-    # this ResearchDeps falls back to provider="fake" (feature.py:686,:819)
-    # and the fake corpus raises in production.
+    if "deep_review" in STAGE_MODELS:
+        adr6["deep_review"] = resolved.get("deep_review",
+                                           STAGE_MODELS["deep_review"])
+    validate_run_roles(adr6)
+
+    # research provider is a property of the RUN, not the repo (registry keeps
+    # provider: fake so CI needs no key); inject the real provider only when a
+    # case asked for research.
     cfg.research_enabled = spec.research_enabled
     if spec.research_enabled:
         cfg.roles["research"] = RoleConfig(kind="research", provider="tavily")
@@ -65,10 +85,9 @@ def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
         case_id=spec.case_id, bench_run_id=bench_run_id,
         rubrics=dict(rubrics or {}), judge_model=spec.judge_model)
     # A benchmark matrix run is unattended — no human is present to click
-    # approve for every (harness x model) cell. Auto-approve every gate
-    # rather than let FeatureWorkflow block for gate_timeout_hours and
-    # auto-reject the whole cell. default_gate_policy covers dynamic gates
-    # not named in `gates` (e.g. the per-task `task:<id>` escalation gate).
+    # approve for every cell. Auto-approve every gate rather than let
+    # FeatureWorkflow block for gate_timeout_hours and auto-reject the cell.
+    # default_gate_policy covers dynamic gates not named in `gates`.
     cfg.gates = {name: GateConfig(policy=GatePolicy.OFF) for name in cfg.gates}
     cfg.default_gate_policy = GatePolicy.OFF
     return cfg
@@ -91,7 +110,7 @@ def _oracle_record(base_cell: BenchmarkCell, grade: OracleGrade,
     return BenchmarkRecord(
         run_id=run_id, bench_run_id=bench_run_id, case_id=base_cell.case_id,
         scope=BenchmarkScope.ORACLE, stage="oracle", role="oracle",
-        harness=base_cell.harness, model=base_cell.model,
+        harness=base_cell.harness, model=base_cell.arm_name,
         quality=QualityScore(
             score=grade.score, judge="oracle",
             components={"passed": float(grade.passed),
@@ -119,9 +138,15 @@ class BenchmarkWorkflow:
             load_case_assets, args=[spec.case_id, dict(spec.rubrics)],
             **RECORD_ACT)
         for cell in cells:
-            cfg = _cell_config(base, idea, spec, cell.harness, cell.model,
-                               bench_run_id=bench_run_id, rubrics=rubrics)
             child_id = f"{bench_run_id}/{cell.cell_id}"
+            try:
+                cfg = _cell_config(base, idea, spec, cell,
+                                   bench_run_id=bench_run_id, rubrics=rubrics)
+            except Exception as e:
+                # an ADR-6-violating arm is rejected at the boundary — the cell
+                # never runs, so there is nothing to grade; log and skip it
+                workflow.logger.warning("cell %s rejected: %s", child_id, e)
+                continue
             try:
                 await workflow.execute_child_workflow(
                     FeatureWorkflow.run, args=[idea, cfg],
