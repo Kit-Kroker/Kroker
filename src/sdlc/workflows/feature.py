@@ -741,7 +741,10 @@ class FeatureWorkflow:
                 CodingTaskInput(harness=role_cfg.harness, prompt=prompt,
                                 worktree=worktree, model=role_cfg.model,
                                 session_id=session_id,
-                                task_id=task.id, attempt=attempt),
+                                task_id=task.id, attempt=attempt,
+                                containment_enabled=cfg.containment_enabled,
+                                containment_policy_path=cfg.containment.policy_path,
+                                containment_strict=cfg.containment.strict),
                 **_long_act(role_cfg),
             )
             if run.session_ref is not None:
