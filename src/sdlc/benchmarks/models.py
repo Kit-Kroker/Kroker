@@ -6,20 +6,31 @@ the reporter can recompute under different weights without re-running.
 """
 from __future__ import annotations
 
-import re
 from datetime import datetime
 from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from ..agents.loader import HARNESS_ROLES, PROPOSER_ROLES
 from ..models import HarnessKind
 
-# cell_id feeds Temporal workflow ids and, via those, git branch names
-# (see benchmarks/workflow.py + activities.py's worktree helpers) — strip
-# characters git rejects in refs (`:`, space, `~^?*[\`) rather than only
-# the ones that happen to appear in today's model ids.
-_GIT_UNSAFE = re.compile(r"[:\s~^?*\[\\]")
+
+class Arm(BaseModel):
+    """A named role→model mix: one cell of the model×role sweep. `default`
+    (optional) sets the model for every overridable role; `role_models`
+    overrides specific roles and wins over `default`. Roles left unset (with
+    `default=None`) keep the registry default at run time."""
+    name: str
+    default: str | None = None
+    role_models: dict[str, str] = Field(default_factory=dict)
+
+    def resolve(self) -> dict[str, str]:
+        if self.default is None:
+            return dict(self.role_models)
+        base = {r: self.default for r in (HARNESS_ROLES | PROPOSER_ROLES)}
+        base.update(self.role_models)
+        return base
 
 
 class BenchmarkScope(str, Enum):
@@ -105,18 +116,22 @@ class CaseSpec(BaseModel):
     # per-model extra CLI args (e.g. opencode's `--variant` reasoning-effort
     # flag) forwarded to every role's harness invocation for that model.
     extra_args_by_model: dict[str, list[str]] = Field(default_factory=dict)
+    # E-37: named role→model mixes. Each arm is one cell (crossed with
+    # harnesses). When empty, `models` is desugared to one arm per model
+    # (harness roles only) for backward compatibility — see expand_matrix.
+    arms: list[Arm] = Field(default_factory=list)
 
 
 class BenchmarkCell(BaseModel):
-    """One cell of the matrix: a (case, harness, model) triple to execute."""
+    """One cell of the matrix: a (case, harness, arm) triple to execute."""
     case_id: str
     harness: HarnessKind
-    model: str
+    arm_name: str
+    role_models: dict[str, str] = Field(default_factory=dict)
 
     @property
     def cell_id(self) -> str:
-        safe_model = _GIT_UNSAFE.sub("-", self.model)
-        return f"{self.case_id}#{self.harness.value}#{safe_model}"
+        return f"{self.case_id}#{self.harness.value}#{self.arm_name}"
 
 
 class BenchmarkSummary(BaseModel):
