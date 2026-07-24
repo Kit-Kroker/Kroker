@@ -24,9 +24,9 @@ with workflow.unsafe.imports_passed_through():
         security_scan, setup_integration_branch,
     )
     from ..agents.roles import (
-        PROMPT_SHAS, STAGE_MODELS, t_analyst, t_architect, t_clarify,
-        t_deep_review, t_merge_verdict, t_planner, t_qa, t_research,
-        t_reviewer,
+        PROMPT_SHAS, STAGE_MODELS, STAGE_ROLES, t_analyst, t_architect,
+        t_clarify, t_deep_review, t_merge_verdict, t_planner, t_qa,
+        t_research, t_reviewer,
     )
     from ..benchmarks.judge import (
         JudgeInput, _build_judge_input, judge_artifact,
@@ -113,7 +113,19 @@ EXPORT_ACT = dict(start_to_close_timeout=timedelta(minutes=2),
 # 600s + fallback 600s + lint 300s worst case); 2 attempts like the per-task
 # test run. It does not heartbeat, so no heartbeat_timeout.
 INTEG_ACT = dict(start_to_close_timeout=timedelta(minutes=30),
-                 retry_policy=RetryPolicy(maximum_attempts=2))
+        retry_policy=RetryPolicy(maximum_attempts=2))
+
+
+def resolve_role_model(cfg: "PipelineConfig", stage: str) -> str:
+    """The model this run uses for `stage`. A per-run override in cfg.roles
+    (keyed by the registry ROLE name) wins; otherwise the registry default
+    (STAGE_MODELS[stage]). Keyed by stage because STAGE_ROLES is the one place
+    stage↔role divergence is reconciled."""
+    role = STAGE_ROLES[stage]
+    rc = cfg.roles.get(role)
+    if rc is not None and rc.model is not None:
+        return rc.model
+    return STAGE_MODELS[stage]
 
 
 def _long_act(role_cfg: RoleConfig | None = None) -> dict:
@@ -374,14 +386,13 @@ class FeatureWorkflow:
         upstream-recall-watermark) combination was already computed — the
         ADR-5 dev-loop cache. Returns (output, was_cache_hit).
 
-        The stage's model is resolved here from STAGE_MODELS rather than passed
-        in: it MUST be the model that role actually binds, or a role's model
-        change would leave the key unmoved and serve a result computed by the
-        previous model."""
+        The stage's model is resolved per-run (resolve_role_model): a per-role
+        override MUST move the key, or a stale result computed by a different
+        model would be served."""
         if not cfg.memoization_enabled:
             return await run_fn(), False
         key = content_key(stage, input_json, PROMPT_SHAS[stage],
-                          STAGE_MODELS[stage],
+                          resolve_role_model(cfg, stage),
                           self._memory_watermark or "none")
         cached = await workflow.execute_activity(
             cache_get, CacheGetInput(key=key), **MEM_ACT)
