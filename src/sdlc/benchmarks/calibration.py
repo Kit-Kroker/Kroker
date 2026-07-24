@@ -188,3 +188,82 @@ def run_calibration(rubric: str, fixtures: list[CalibrationFixture],
         epsilon=stats.epsilon, threshold=stats.threshold,
         agreement_rate=stats.agreement_rate, mae=stats.mae,
         spearman=stats.spearman, verdict=stats.verdict, computed_at=now)
+
+
+# --- Trust surfacing (E-36 Task 8): report load + render helpers ----------
+
+_CALIB_DIR = Path(__file__).resolve().parents[3] / "benchmarks" / "calibration"
+
+# record stage (BenchmarkSummary.stage) -> rubric key (calibration bucket)
+STAGE_TO_RUBRIC: dict[str, str] = {
+    "clarify": "clarifier",
+    "architecture": "architect",
+    "planning": "planner",
+    "qa": "qa",
+    "research": "research",
+    "review": "reviewer",
+    "analyze": "analyst",
+}
+
+
+def write_calibration_report(rep: CalibrationReport, rubric_dir: Path) -> Path:
+    rubric_dir.mkdir(parents=True, exist_ok=True)
+    p = rubric_dir / "calibration.json"
+    p.write_text(rep.model_dump_json(indent=2), encoding="utf-8")
+    return p
+
+
+def load_calibration_reports(
+        calib_root: Path | None = None) -> dict[str, CalibrationReport]:
+    root = calib_root if calib_root is not None else _CALIB_DIR
+    out: dict[str, CalibrationReport] = {}
+    if not Path(root).is_dir():
+        return out
+    for cj in sorted(Path(root).glob("*/calibration.json")):
+        try:
+            rep = CalibrationReport.model_validate_json(
+                cj.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        out[rep.rubric] = rep
+    return out
+
+
+def trust_for_stage(stage: str,
+                    reports: dict[str, CalibrationReport]) -> str:
+    rubric = STAGE_TO_RUBRIC.get(stage)
+    if rubric is None:
+        return "-"                       # stage has no rubric (e.g. code)
+    rep = reports.get(rubric)
+    return f"{rep.agreement_rate:.2f}" if rep else "uncalibrated"
+
+
+def render_calibration_markdown(
+        reports: dict[str, CalibrationReport]) -> str:
+    if not reports:
+        return ""
+    lines = ["", "## Rubric calibration", "",
+             "| rubric | n | agreement | MAE | spearman | verdict |",
+             "|---|---|---|---|---|---|"]
+    for rubric in sorted(reports):
+        r = reports[rubric]
+        lines.append(f"| {rubric} | {r.n_fixtures} | {r.agreement_rate:.2f} | "
+                     f"{r.mae:.3f} | {r.spearman:.2f} | {r.verdict} |")
+    return "\n".join(lines) + "\n"
+
+
+def render_calibration_html(
+        reports: dict[str, CalibrationReport]) -> str:
+    if not reports:
+        return ""
+    from html import escape
+    rows = "".join(
+        f"<tr><td>{escape(rubric)}</td><td>{reports[rubric].n_fixtures}</td>"
+        f"<td>{reports[rubric].agreement_rate:.2f}</td>"
+        f"<td>{reports[rubric].mae:.3f}</td>"
+        f"<td>{reports[rubric].spearman:.2f}</td>"
+        f"<td>{escape(reports[rubric].verdict)}</td></tr>"
+        for rubric in sorted(reports))
+    return ("<h2>Rubric calibration</h2><table><tr><th>rubric</th><th>n</th>"
+            "<th>agreement</th><th>MAE</th><th>spearman</th><th>verdict</th></tr>"
+            + rows + "</table>")

@@ -49,15 +49,18 @@ def build_parser() -> argparse.ArgumentParser:
 
 def dispatch_report(bench: str,
                     root: str | None = None) -> str:
+    from .calibration import load_calibration_reports, render_calibration_html
     from .report import (
-        _read_all, resolve_language_map, write_heatmap)
+        _read_all, resolve_language_map, write_heatmap,
+        write_report_with_calibration)
     records = _read_all(bench, root)
     summaries = aggregate(bench, CompositeWeights(), root=root, _records=records)
-    md = render_markdown(summaries)
+    calibration = load_calibration_reports()
+    md = render_markdown(summaries, calibration=calibration)
     out_dir = Path(root if root is not None else _root()) / bench
-    write_report(summaries, str(out_dir / "report.md"))
+    write_report_with_calibration(summaries, str(out_dir / "report.md"), calibration)
     lang = resolve_language_map(sorted({r.case_id for r in records}))
-    write_heatmap(records, out_dir, lang)
+    write_heatmap(records, out_dir, lang, render_calibration_html(calibration))
     return md
 
 

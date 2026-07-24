@@ -91,3 +91,18 @@ def test_write_heatmap_emits_both_files(tmp_path):
     assert html_p.exists() and json_p.exists()
     assert html_p.name == "heatmap.html" and json_p.name == "heatmap.json"
     assert "<!doctype html>" in html_p.read_text(encoding="utf-8")
+
+
+def test_render_markdown_appends_calibration_when_provided():
+    from datetime import datetime, timezone
+    from sdlc.benchmarks.calibration import CalibrationReport
+    from sdlc.benchmarks.report import aggregate, render_markdown
+    from sdlc.benchmarks.models import CompositeWeights
+    sums = aggregate("b1", CompositeWeights(),
+                     _records=[_rec("sonnet", 0.9, 1.0, 100)])
+    rep = CalibrationReport(
+        rubric="architect", judge_model="j", n_fixtures=10, epsilon=0.15,
+        threshold=0.75, agreement_rate=0.8, mae=0.1, spearman=0.7,
+        verdict="calibrated", computed_at=datetime(2026, 7, 24, tzinfo=timezone.utc))
+    md = render_markdown(sums, calibration={"architect": rep})
+    assert "Rubric calibration" in md

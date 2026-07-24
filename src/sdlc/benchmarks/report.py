@@ -40,15 +40,17 @@ def _read_all(bench_run_id: str, root: str | None) -> list[BenchmarkRecord]:
     return out
 
 
-def render_markdown(summaries: list[BenchmarkSummary]) -> str:
+def render_markdown(summaries: list[BenchmarkSummary], calibration=None) -> str:
+    from .calibration import render_calibration_markdown, trust_for_stage
+    calibration = calibration or {}
     if not summaries:
         return "# Benchmark report\n\nNo records found.\n"
     lines = [
         "# Benchmark report",
         "",
         "| case | stage | harness | model | n | quality | cost ($) | "
-        "wall (s) | composite |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "wall (s) | composite | trust |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for s in summaries:
         def fmt(x):
@@ -60,7 +62,8 @@ def render_markdown(summaries: list[BenchmarkSummary]) -> str:
             f"| {s.case_id} | {s.stage} | "
             f"{s.harness.value if s.harness else 'proposer'} | {s.model} | "
             f"{s.n} | {fmt(s.mean_quality)} | {fmt(s.mean_cost_usd)} | "
-            f"{fmt(s.mean_wall_clock_s)} | {fmt(s.composite)} |"
+            f"{fmt(s.mean_wall_clock_s)} | {fmt(s.composite)} | "
+            f"{trust_for_stage(s.stage, calibration)} |"
         )
     errored = [s for s in summaries if s.errors]
     if errored:
@@ -68,12 +71,19 @@ def render_markdown(summaries: list[BenchmarkSummary]) -> str:
         for s in errored:
             for err in s.errors:
                 lines.append(f"- **{s.case_id} / {s.stage}** ({s.model}): {err}")
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines) + "\n" + render_calibration_markdown(calibration)
 
 
 def write_report(summaries: list[BenchmarkSummary], out_path: str) -> None:
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     Path(out_path).write_text(render_markdown(summaries), encoding="utf-8")
+
+
+def write_report_with_calibration(summaries: list[BenchmarkSummary],
+                                  out_path: str, calibration) -> None:
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(out_path).write_text(render_markdown(summaries, calibration),
+                              encoding="utf-8")
 
 
 def resolve_language_map(case_ids: list[str],
@@ -96,13 +106,13 @@ def resolve_language_map(case_ids: list[str],
     return out
 
 
-def write_heatmap(records, out_dir: Path,
-                  language_by_case: dict[str, str]) -> tuple[Path, Path]:
+def write_heatmap(records, out_dir: Path, language_by_case: dict[str, str],
+                  calibration_html: str = "") -> tuple[Path, Path]:
     hm = build_heatmap(records, language_by_case)
     out_dir.mkdir(parents=True, exist_ok=True)
     html_p = out_dir / "heatmap.html"
     json_p = out_dir / "heatmap.json"
-    html_p.write_text(render_heatmap_html(hm), encoding="utf-8")
+    html_p.write_text(render_heatmap_html(hm, calibration_html), encoding="utf-8")
     json_p.write_text(render_heatmap_json(hm), encoding="utf-8")
     return html_p, json_p
 
@@ -111,10 +121,12 @@ def write_heatmap(records, out_dir: Path,
 async def finalize_benchmark_report(bench_run_id: str) -> str:
     """Activity: read all records, aggregate, write report.md AND the
     heatmap.{html,json} beside it. All file I/O lives here."""
+    from .calibration import load_calibration_reports, render_calibration_html
     records = _read_all(bench_run_id, None)
     summaries = aggregate(bench_run_id, CompositeWeights(), _records=records)
     out_dir = Path(_root()) / bench_run_id
-    write_report(summaries, str(out_dir / "report.md"))
+    calibration = load_calibration_reports()
+    write_report_with_calibration(summaries, str(out_dir / "report.md"), calibration)
     lang = resolve_language_map(sorted({r.case_id for r in records}))
-    write_heatmap(records, out_dir, lang)
+    write_heatmap(records, out_dir, lang, render_calibration_html(calibration))
     return str(out_dir / "report.md")
