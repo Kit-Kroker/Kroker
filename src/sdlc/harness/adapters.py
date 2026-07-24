@@ -20,12 +20,19 @@ import os
 import re
 import shutil
 import subprocess
+import sys
+import tempfile
 import time
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from pathlib import Path
 
-from ..models import HarnessKind, HarnessRunResult, HarnessSession, SessionEvent
+from ..models import (
+    ContainmentLayer, ContainmentReport, HarnessKind, HarnessRunResult,
+    HarnessSession, SessionEvent, ToolDenial,
+)
+from .containment import Policy, Rule, target_of
 
 SUMMARY_MAX = 4000  # keep Temporal payloads small
 
@@ -51,6 +58,14 @@ def context_window_for(model: str | None) -> int | None:
         if key in m:
             return win
     return None
+
+
+def _split_reason(text: str) -> tuple[str, str]:
+    """Split the hook's `[rule-id] reason` back apart."""
+    if text.startswith("[") and "] " in text:
+        rid, _, rest = text[1:].partition("] ")
+        return rid, rest
+    return "unknown", text
 
 
 # Env allowlist (Finding #8): the harness receives ONLY these vars from the
@@ -140,6 +155,24 @@ class CodingHarness(ABC):
         session with no events — a harness without a normaliser degrades
         to digest-of-nothing rather than failing capture."""
         return HarnessSession(harness=self.kind)
+
+    # ADR-17: what this CLI can actually enforce. A harness declaring an
+    # empty set fails closed when containment is enabled, rather than
+    # running unpoliced and looking contained.
+    containment: frozenset[ContainmentLayer] = frozenset()
+
+    def apply_containment(self, policy: Policy,
+                          req: HarnessRequest) -> ContainmentReport:
+        """Compile `policy` into this CLI's own mechanisms, mutating `req`.
+        Base default: enforce nothing and say so."""
+        return ContainmentReport(
+            enabled=True, layers_active=[],
+            rules_unenforceable=[r.id for r in policy.rules])
+
+    def normalise_denials(self, stdout: str) -> list[ToolDenial]:
+        """Blocked tool calls from this harness's stream (ADR-17, mirroring
+        normalise_session). Base default: none reported."""
+        return []
 
     async def run(self, req: HarnessRequest,
                   heartbeat=None) -> HarnessRunResult:
@@ -260,6 +293,100 @@ class ClaudeCodeHarness(CodingHarness):
             cmd += ["--resume", req.session_id]
         return cmd + req.extra_args
 
+    containment = frozenset({ContainmentLayer.NATIVE, ContainmentLayer.HOOK})
+
+    def apply_containment(self, policy: Policy,
+                          req: HarnessRequest) -> ContainmentReport:
+        """Both layers, deliberately overlapping (spec §4a).
+
+        `permissions.deny` is the floor a buggy hook cannot weaken (verified:
+        a hook's `allow` cannot bypass a deny rule). The hook is the layer
+        that is OBSERVABLE — a native deny blocks correctly but reports
+        `permission_denials: []`, so every rule is ALSO hooked here.
+        """
+        hooks = [{
+            "matcher": "|".join(sorted({t for r in policy.rules
+                                        for t in r.tools})),
+            "hooks": [{"type": "command", "command": self._hook_command(req)}],
+        }] if policy.rules else []
+
+        deny = [p for r in policy.rules if ContainmentLayer.NATIVE is r.layer
+                for p in self._native_patterns(r)]
+
+        doc = {"hooks": {"PreToolUse": hooks}, "permissions": {"deny": deny}}
+
+        # OUTSIDE the worktree, always: writes inside the worktree are
+        # permitted by design, so a settings file placed there is a file the
+        # agent may rewrite — it could edit its own policy.
+        fd, path = tempfile.mkstemp(prefix="sdlc-containment-",
+                                    suffix=".json")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(doc, fh)
+
+        req.extra_args = [*req.extra_args, "--settings", path,
+                          "--include-hook-events"]
+        return ContainmentReport(
+            enabled=True,
+            layers_active=[ContainmentLayer.NATIVE, ContainmentLayer.HOOK],
+            rules_enforced=[r.id for r in policy.rules],
+            rules_unenforceable=[])
+
+    @staticmethod
+    def _hook_command(req: HarnessRequest) -> str:
+        """Absolute interpreter path: the child's PATH is allowlisted and may
+        resolve a different `python` than the worker's venv. Forward slashes
+        because claude runs hooks through Git Bash on Windows."""
+        exe = Path(sys.executable).as_posix()
+        wt = Path(req.cwd).as_posix()
+        return (f'"{exe}" -m sdlc.harness.hook --worktree "{wt}"')
+
+    @staticmethod
+    def _native_patterns(rule: Rule) -> list[str]:
+        """Translate OUR pattern syntax into claude's `Tool(arg)` deny form.
+        The policy author never writes CLI-specific syntax."""
+        out: list[str] = []
+        for tool in rule.tools:
+            for pat in rule.patterns:
+                out.append(f"{tool}({pat})")
+        return out
+
+    def normalise_denials(self, stdout: str) -> list[ToolDenial]:
+        """`result.permission_denials` is the structured spine (tool_name /
+        tool_use_id / tool_input). It carries no rule id, so the rule id is
+        recovered from the `[rule-id] ` prefix the hook writes into the
+        reason, surfaced in `hook_response.output`."""
+        reasons: list[str] = []
+        denials: list[ToolDenial] = []
+        for ln in stdout.strip().splitlines():
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                ev = json.loads(ln)
+            except json.JSONDecodeError:
+                continue
+            if (ev.get("subtype") == "hook_response"
+                    and ev.get("hook_event") == "PreToolUse"):
+                try:
+                    hso = json.loads(ev.get("output") or "{}")
+                    hso = hso.get("hookSpecificOutput") or {}
+                except json.JSONDecodeError:
+                    continue
+                if hso.get("permissionDecision") == "deny":
+                    reasons.append(hso.get("permissionDecisionReason") or "")
+            elif ev.get("type") == "result":
+                for i, pd in enumerate(ev.get("permission_denials") or []):
+                    rule_id, reason = _split_reason(
+                        reasons[i] if i < len(reasons) else "")
+                    tool_input = pd.get("tool_input") or {}
+                    denials.append(ToolDenial(
+                        tool=pd.get("tool_name") or "unknown",
+                        rule_id=rule_id, layer=ContainmentLayer.HOOK,
+                        reason=reason,
+                        target=target_of(pd.get("tool_name") or "",
+                                         tool_input)))
+        return denials
+
     def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
         session_id = cost = summary = None
         input_tokens = output_tokens = None
@@ -347,6 +474,12 @@ class ClaudeCodeHarness(CodingHarness):
                 out_tok = usage.get("output_tokens")
                 events.append(SessionEvent(kind="result",
                                            text=(ev.get("result") or "")[:2000]))
+        # E-16: denials are part of the transcript, so the digest counts
+        # them on clean-green runs too (the same reasoning as OQ-B7's
+        # keep-aggregates-pre-truncation rule).
+        for d in self.normalise_denials(stdout):
+            events.append(SessionEvent(
+                kind="tool_denied", tool=d.tool, target=d.target))
         return HarnessSession(harness=self.kind, session_id=session_id,
                               model=model, events=events, cost_usd=cost,
                               input_tokens=in_tok, output_tokens=out_tok)

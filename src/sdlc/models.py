@@ -64,6 +64,7 @@ class SessionEvent(BaseModel):
     adapters map their native streams onto this schema."""
     kind: str          # model_turn | tool_call | tool_result | file_read
                        # | file_write | command | compaction | result
+                       # | tool_denied
     tool: str | None = None
     target: str | None = None      # file path or command line (scrubbed)
     exit_code: int | None = None
