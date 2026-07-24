@@ -32,7 +32,7 @@ from ..models import (
     ContainmentLayer, ContainmentReport, HarnessKind, HarnessRunResult,
     HarnessSession, SessionEvent, ToolDenial,
 )
-from .containment import Policy, Rule, target_of
+from .containment import Policy, Predicate, Rule, target_of
 
 SUMMARY_MAX = 4000  # keep Temporal payloads small
 
@@ -521,6 +521,69 @@ class OpenCodeHarness(CodingHarness):
         cmd.append(req.prompt)            # positional, must come last
         return cmd
 
+    # `--pure` (build_cmd) disables external plugins, which are opencode's
+    # only hook mechanism. The native permission block is what remains.
+    containment = frozenset({ContainmentLayer.NATIVE})
+
+    def apply_containment(self, policy: Policy,
+                          req: HarnessRequest) -> ContainmentReport:
+        """Compile native-layer rules into opencode's `permission` config.
+
+        opencode (1.18.4, verified) has NO `--config` flag and no config-path
+        env var: it discovers `opencode.json` from the working directory
+        (cwd = the task worktree). So unlike claude's out-of-worktree
+        `--settings`, the deny config MUST live inside the worktree. It is
+        self-protecting: the same compilation emits `permission.edit` denies
+        for agent-config paths (incl. `opencode.json`) from the
+        `no-agent-config-write` rule, so the agent cannot rewrite its own
+        policy via the tools opencode gives it. `--auto` is "auto-approve
+        what is NOT explicitly denied", so a `deny` here really bites.
+        CAVEAT: this writes into a tracked repo file when one exists; the
+        merge below preserves any existing keys.
+        """
+        perms: dict[str, dict[str, str]] = {}
+        enforced: list[str] = []
+        unenforceable: list[str] = []
+        for rule in policy.rules:
+            if ContainmentLayer.HOOK is rule.layer:
+                unenforceable.append(rule.id)   # needs a hook we do not have
+                continue
+            if rule.predicate is Predicate.COMMAND_MATCHES:
+                bucket = perms.setdefault("bash", {})
+            elif rule.predicate is Predicate.PATH_MATCHES:
+                bucket = perms.setdefault("edit", {})
+            else:
+                # native but needs per-call resolution (path_outside_worktree,
+                # host_not_allowlisted) — a static config cannot express it.
+                unenforceable.append(rule.id)
+                continue
+            for pat in rule.patterns:
+                bucket[pat] = "deny"
+            enforced.append(rule.id)
+
+        # Merge into the worktree's opencode.json so an existing config
+        # (e.g. the repo's plugin block) is preserved, not clobbered.
+        path = Path(req.cwd) / "opencode.json"
+        doc: dict = {}
+        if path.is_file():
+            try:
+                doc = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(doc, dict):
+                    doc = {}
+            except json.JSONDecodeError:
+                doc = {}                       # JSONC/unparseable -> start fresh
+        existing = doc.get("permission")
+        if isinstance(existing, dict):
+            for tool, rules in perms.items():
+                existing.setdefault(tool, {}).update(rules)
+            perms = existing
+        doc["permission"] = perms
+        path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
+
+        return ContainmentReport(
+            enabled=True, layers_active=[ContainmentLayer.NATIVE],
+            rules_enforced=enforced, rules_unenforceable=unenforceable)
+
     def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
         """Parse opencode's ``--format json`` event stream.
 
@@ -655,6 +718,12 @@ class CursorHarness(CodingHarness):
         if self.force:
             cmd.append("--force")
         return cmd + req.extra_args
+
+    # containment: inherits the base frozenset() — cursor-agent surfaces
+    # neither a deny-config nor a hook flag, so it FAILS CLOSED when
+    # containment is enabled (ADR-17). This is a deliberate, known cost:
+    # cursor cells drop out of a contained benchmark sweep rather than
+    # running unpoliced beside contained ones.
 
     def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
         session_id = cost = summary = None
