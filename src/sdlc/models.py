@@ -236,6 +236,7 @@ class TaskResult(BaseModel):
     handoff: HandoffSummary | None = None   # FR-805
     qa: QAReport | None = None              # NEW: evidence for the merge gate
     review: ReviewReport | None = None      # FR-204: clean-context review evidence
+    deep_review: "DeepReviewReport | None" = None   # E-39: advisory lens
     notes: str = ""
 
 
@@ -286,6 +287,31 @@ class ReviewReport(BaseModel):
     @property
     def blocking_findings(self) -> list[ReviewFinding]:
         return [f for f in self.findings if f.severity in ("critical", "high")]
+
+
+class IntegrityFlag(BaseModel):
+    """One anti-cheat observation drawn from the scrubbed transcript (E-39)."""
+    kind: Literal["oracle_peeking", "hardcoded_answer",
+                  "test_gaming", "excessive_backtracking"]
+    detail: str
+    evidence: str            # a quote/reference from the scrubbed transcript
+
+
+class DeepReviewReport(BaseModel):
+    """Advisory full-transcript lens (E-39). Reads the SCRUBBED HarnessSession
+    as data — never the raw session, never via resume. Model family is
+    ADR-6-independent of dev. NEVER blocks: the clean-context reviewer
+    (ReviewReport) is the sole blocking lens; this report is recorded and
+    retained for signal only. Fields are evidence-first."""
+    findings: list[ReviewFinding] = Field(default_factory=list)
+    integrity_flags: list[IntegrityFlag] = Field(default_factory=list)
+    summary: str = ""
+    approve: bool = True          # advisory opinion only
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+
+    @property
+    def cheat_detected(self) -> bool:
+        return bool(self.integrity_flags)
 
 
 class CriterionTrace(BaseModel):
@@ -609,6 +635,8 @@ class PipelineConfig(BaseModel):
     review_enabled: bool = True             # FR-204: run the clean-context
                                             # reviewer per task; disable to trade
                                             # the anti-collusion check for cost
+    deep_review_enabled: bool = False       # FR-111/E-39: opt-in transcript
+                                            # lens; advisory, off by default
     coverage_threshold: float = Field(default=0.0, ge=0.0, le=100.0)
     # FR-106: diff-scoped coverage (0..100) the advisory `coverage` check must
     # clear. Default 0.0 = effectively off until a project opts in AND its test

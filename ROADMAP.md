@@ -532,7 +532,7 @@ is marked **(new scope)** and needs a PRD line before it is real.
   here; TTL still open. Spec
   `docs/superpowers/specs/2026-07-23-capture-always-harness-sessions-design.md`,
   plan `docs/superpowers/plans/2026-07-23-capture-always-harness-sessions.md`.
-- [ ] **E-39 (new scope)** `deep_review` — an optional, opt-in review tier that
+- [x] **E-39 (new scope)** `deep_review` — an optional, opt-in review tier that
   reads the scrubbed `HarnessSession` (E-38) as **data**. This is Cursor's
   full-transcript lens, and it deliberately does what the default reviewer must
   not: see *how* the diff was reached (backtracking, oracle peeking, hardcoded
@@ -546,6 +546,15 @@ is marked **(new scope)** and needs a PRD line before it is real.
   one for another. Requires the ADR-6 boundary to be restated precisely (E-38's
   ADR-16 note does this): *default review starts clean and never resumes the
   developer's session; `deep_review` reads the scrubbed session as data.*
+  *Landed:* `DeepReviewReport`/`IntegrityFlag` + optional `agents/deep_review/`
+  role (ADR-6 family clause vs `dev`) + `load_session` claim-check read +
+  advisory `_run_deep_review` in `_dev_task` (once per task, records a
+  `deep_review` stage record for the E-36 heatmap, retains integrity flags,
+  never gates). Off by default (`deep_review_enabled`). PRD line: FR-111.
+  Deferred follow-ons: a blocking/harness-based deep-review tier and
+  report.html rendering of the verdict. Spec
+  `docs/superpowers/specs/2026-07-24-deep-review-transcript-lens-design.md`,
+  plan `docs/superpowers/plans/2026-07-24-deep-review-transcript-lens.md`.
 **Open questions (tracked in `docs/BENCHMARK.md §7`):** OQ-B1 minimum trustworthy
 corpus size; OQ-B2 judge independence under model sweep (→ E-37); OQ-B3 **answered** (E-29 closed: grounding failure = recorded stage `FAIL`, run continues); OQ-B4 the regression-gate half of E-4 as a CI gate (→ OQ-E2); OQ-B7
 session-retention policy **decided** (full on fail/benchmark/attempts>0,

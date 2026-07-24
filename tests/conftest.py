@@ -111,4 +111,15 @@ def write_registry_dir(root, version=1):
     (r / "tools" / "web_search.py").write_bytes(
         b"async def web_search(query: str, max_results: int = 5) -> list:\n"
         b"    return []\n")
+    # Optional deep_review role (E-39): a plain proposer, non-dev family.
+    dr = root / "deep_review"
+    dr.mkdir(exist_ok=True)
+    (dr / "agent.yaml").write_bytes(
+        b"kind: proposer\nmodel: anthropic:glm-5.2\n")
+    (dr / "instructions.md").write_bytes(b"deep review the transcript")
+    (dr / "agent.py").write_bytes(
+        b"from pydantic_ai import Agent\n"
+        b"def build(model, instructions, model_settings):\n"
+        b"    return Agent(model, name='deep_review_agent',\n"
+        b"                 system_prompt=instructions)\n")
     return root

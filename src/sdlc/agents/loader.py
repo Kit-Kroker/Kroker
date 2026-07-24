@@ -56,7 +56,7 @@ REQUIRED_ROLES = HARNESS_ROLES | PROPOSER_ROLES
 # pipeline boots without running the stage, but agents/research/ is still a
 # KNOWN directory so the unknown-directory check keeps biting. This EXTENDS
 # the fail-closed check; it does not weaken it.
-OPTIONAL_ROLES: frozenset[str] = frozenset({"research"})
+OPTIONAL_ROLES: frozenset[str] = frozenset({"research", "deep_review"})
 
 # REQUIRED_ROLES gates PRESENCE (a missing one fails boot).
 # KNOWN_ROLES gates RECOGNITION (an unknown directory fails boot).
@@ -211,6 +211,15 @@ def validate_registry(roles: dict[str, RoleConfig]) -> None:
         raise RegistryError(
             "deep-review harness reviewer must use a different harness than "
             "the developer")
+    if "deep_review" in roles:
+        dr = roles["deep_review"]
+        if dr.model is None:
+            raise RegistryError("role 'deep_review' must declare a model")
+        if model_family(dr.model) == model_family(dev.model):
+            raise RegistryError(
+                f"ADR-6 violation: deep_review family "
+                f"'{model_family(dr.model)}' equals the family of 'dev' — the "
+                f"transcript lens must not correlate with the authoring model")
     for name, cfg in roles.items():
         if cfg.kind != "research":
             continue

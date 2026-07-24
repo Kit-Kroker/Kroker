@@ -423,6 +423,11 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
   session, never via resume-handle), stays ADR-6 family-independent of the
   developer, and is an **additional** decorrelated lens, not a replacement
   for clean-context review — so it additionally rejects same harness+family.
+  Default review starts clean and never resumes the developer's session. The
+  optional `deep_review` tier (FR-111/E-39) reads the *scrubbed* HarnessSession
+  as data — never the raw session, never via resume-handle — is ADR-6
+  family-independent of `dev`, and is advisory-only: an additional lens, never a
+  replacement for the clean-context reviewer.
   Structural, not prompt-based.
 - **ADR-7 Repairs execute through the factory.** MaintenanceWorkflow starts
   brownfield children for code fixes; autonomy never bypasses gates.
