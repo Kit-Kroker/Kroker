@@ -512,37 +512,37 @@ class FeatureWorkflow:
         try:
             loaded = await workflow.execute_activity(
                 load_session, LoadSessionInput(ref=run.session_ref), **ACT)
+            transcript = loaded.text + (
+                f"\n[transcript truncated; digest follows]\n"
+                f"{run.session_digest.model_dump_json()}"
+                if loaded.truncated and run.session_digest is not None else "")
+            spend = RoleUsage(role="deep_review", model=STAGE_MODELS["deep_review"])
+            report = (await self._run_role(
+                cfg, "deep_review", STAGE_MODELS["deep_review"], t_deep_review,
+                "Frozen contract assertions:\n- " + "\n- ".join(assertions)
+                + f"\nDiff:\n{diff['patch']}"
+                + "\nScrubbed harness transcript (how the diff was reached):\n"
+                + transcript, into=spend)).output
+            await self._record(cfg, self._stage_record(
+                cfg, stage="deep_review", role="deep_review",
+                started=_started, ended=workflow.now(),
+                quality_score=(0.0 if report.cheat_detected or not report.approve
+                               else 1.0),
+                judge="deep_review",
+                outcome=(BenchmarkOutcome.FAIL if report.cheat_detected
+                         else BenchmarkOutcome.PASS),
+                model=STAGE_MODELS["deep_review"], spend=spend,
+                task_id=task.id))
+            if report.cheat_detected:
+                await self._retain(
+                    cfg, MemoryKind.GOTCHA, cfg.memory.project_bank,
+                    text=f"deep_review flagged task {task.id}: "
+                         + "; ".join(f"{f.kind}: {f.detail}"
+                                     for f in report.integrity_flags),
+                    metadata={"task_id": task.id,
+                              "run_id": workflow.info().workflow_id})
         except Exception:
             return None
-        transcript = loaded.text + (
-            f"\n[transcript truncated; digest follows]\n"
-            f"{run.session_digest.model_dump_json()}"
-            if loaded.truncated and run.session_digest is not None else "")
-        spend = RoleUsage(role="deep_review", model=STAGE_MODELS["deep_review"])
-        report = (await self._run_role(
-            cfg, "deep_review", STAGE_MODELS["deep_review"], t_deep_review,
-            "Frozen contract assertions:\n- " + "\n- ".join(assertions)
-            + f"\nDiff:\n{diff['patch']}"
-            + "\nScrubbed harness transcript (how the diff was reached):\n"
-            + transcript, into=spend)).output
-        await self._record(cfg, self._stage_record(
-            cfg, stage="deep_review", role="deep_review",
-            started=_started, ended=workflow.now(),
-            quality_score=(0.0 if report.cheat_detected or not report.approve
-                           else 1.0),
-            judge="deep_review",
-            outcome=(BenchmarkOutcome.FAIL if report.cheat_detected
-                     else BenchmarkOutcome.PASS),
-            model=STAGE_MODELS["deep_review"], spend=spend,
-            task_id=task.id))
-        if report.cheat_detected:
-            await self._retain(
-                cfg, MemoryKind.GOTCHA, cfg.memory.project_bank,
-                text=f"deep_review flagged task {task.id}: "
-                     + "; ".join(f"{f.kind}: {f.detail}"
-                                 for f in report.integrity_flags),
-                metadata={"task_id": task.id,
-                          "run_id": workflow.info().workflow_id})
         return report
 
     async def _check_budget(self, cfg: PipelineConfig) -> None:
