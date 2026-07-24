@@ -25,7 +25,8 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..agents.roles import (
         PROMPT_SHAS, STAGE_MODELS, t_analyst, t_architect, t_clarify,
-        t_merge_verdict, t_planner, t_qa, t_research, t_reviewer,
+        t_deep_review, t_merge_verdict, t_planner, t_qa, t_research,
+        t_reviewer,
     )
     from ..benchmarks.judge import (
         JudgeInput, _build_judge_input, judge_artifact,
@@ -54,9 +55,11 @@ with workflow.unsafe.imports_passed_through():
     from ..pricing import PriceUsageInput, price_usage
     from ..artifacts.retention import (RetentionInput, apply_session_retention,
                                        keep_full_transcripts)
+    from ..artifacts.read import LoadSessionInput, load_session
     from ..models import (
         AnalysisReport, ArchitectureSpec, ArtifactRef, ClarifiedRequirements,
-        CoverageReport, DevTask, ExecutionMode, GateConfig, GateDecision,
+        CoverageReport, DeepReviewReport, DevTask, ExecutionMode, GateConfig,
+        GateDecision,
         GateOutcome, GatePolicy, HandoffSummary, IdeaBrief,
         ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig,
         RecallSnapshot, ResearchBrief, RetainItem, RoleConfig,
@@ -495,6 +498,53 @@ class FeatureWorkflow:
             cost_usd=usd, into=into)
         return result
 
+    async def _run_deep_review(self, cfg, run, contract, assertions, diff,
+                               task) -> "DeepReviewReport | None":
+        """E-39 advisory lens: read the SCRUBBED harness transcript as data and
+        emit a DeepReviewReport. Recorded + retained for signal ONLY — never
+        consulted in the task's success condition. Once per task, over the
+        final HarnessRunResult. Best-effort: any failure returns None so an
+        observability lens can never fail delivery."""
+        if not (cfg.deep_review_enabled and t_deep_review is not None
+                and run is not None and run.session_ref is not None):
+            return None
+        _started = workflow.now()
+        try:
+            loaded = await workflow.execute_activity(
+                load_session, LoadSessionInput(ref=run.session_ref), **ACT)
+        except Exception:
+            return None
+        transcript = loaded.text + (
+            f"\n[transcript truncated; digest follows]\n"
+            f"{run.session_digest.model_dump_json()}"
+            if loaded.truncated and run.session_digest is not None else "")
+        spend = RoleUsage(role="deep_review", model=STAGE_MODELS["deep_review"])
+        report = (await self._run_role(
+            cfg, "deep_review", STAGE_MODELS["deep_review"], t_deep_review,
+            "Frozen contract assertions:\n- " + "\n- ".join(assertions)
+            + f"\nDiff:\n{diff['patch']}"
+            + "\nScrubbed harness transcript (how the diff was reached):\n"
+            + transcript, into=spend)).output
+        await self._record(cfg, self._stage_record(
+            cfg, stage="deep_review", role="deep_review",
+            started=_started, ended=workflow.now(),
+            quality_score=(0.0 if report.cheat_detected or not report.approve
+                           else 1.0),
+            judge="deep_review",
+            outcome=(BenchmarkOutcome.FAIL if report.cheat_detected
+                     else BenchmarkOutcome.PASS),
+            model=STAGE_MODELS["deep_review"], spend=spend,
+            task_id=task.id))
+        if report.cheat_detected:
+            await self._retain(
+                cfg, MemoryKind.GOTCHA, cfg.memory.project_bank,
+                text=f"deep_review flagged task {task.id}: "
+                     + "; ".join(f"{f.kind}: {f.detail}"
+                                 for f in report.integrity_flags),
+                metadata={"task_id": task.id,
+                          "run_id": workflow.info().workflow_id})
+        return report
+
     async def _check_budget(self, cfg: PipelineConfig) -> None:
         """E-33/FR-701 run-budget enforcement. Called at SERIAL points only
         (stage boundaries + the task loop after merges) — never inside a
@@ -762,6 +812,8 @@ class FeatureWorkflow:
 
             review_ok = review is None or review.approve
             if qa.tests_passed and not qa.issues and review_ok:
+                deep = await self._run_deep_review(
+                    cfg, run, contract, assertions, diff, task)
                 handoff = HandoffSummary(
                     task_id=task.id,
                     what_changed=[task.title],
@@ -771,7 +823,7 @@ class FeatureWorkflow:
                 return TaskResult(task_id=task.id, status="done",
                                   attempts=attempt, branch=handle.branch,
                                   run=run, handoff=handoff, qa=qa_raw,
-                                  review=review)
+                                  review=review, deep_review=deep)
 
             if attempt > cfg.max_fix_attempts:
                 break
@@ -826,6 +878,8 @@ class FeatureWorkflow:
             f"task:{task.id}", cfg,
             context=GateContext(task_id=task.id, analysis=analysis,
                                 attempts=cfg.max_fix_attempts + 1))
+        deep = await self._run_deep_review(
+            cfg, run, contract, assertions, diff, task)
         return TaskResult(
             task_id=task.id,
             status="done" if decision.approved else "quarantined",
@@ -833,6 +887,7 @@ class FeatureWorkflow:
             branch=handle.branch,
             qa=qa_raw,
             review=review,
+            deep_review=deep,
             notes=decision.comments or "",
         )
 
