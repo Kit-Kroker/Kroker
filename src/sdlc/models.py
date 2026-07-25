@@ -98,6 +98,7 @@ class SessionDigest(BaseModel):
     model_turns: int = 0
     compacted: bool = False
     denials: int = 0               # E-16: blocked tool calls
+    escalations: int = 0           # E-17: tool calls that raised a gate
     input_tokens: int | None = None
     output_tokens: int | None = None
     decision_skeleton: list[str] = Field(default_factory=list)
@@ -117,6 +118,10 @@ class ToolDenial(BaseModel):
     layer: ContainmentLayer
     reason: str
     target: str | None = None     # path or command line (scrubbed)
+    # E-17: this denial was an ESCALATE rule the hook could not escalate
+    # (batched call, or an unreadable transcript). No human was asked. It is
+    # marked so the BATCHED outcome stays countable — see EscalationOutcome.
+    escalation_declined: bool = False
 
 
 class ContainmentReport(BaseModel):
@@ -127,6 +132,9 @@ class ContainmentReport(BaseModel):
     layers_active: list[ContainmentLayer] = Field(default_factory=list)
     rules_enforced: list[str] = Field(default_factory=list)
     rules_unenforceable: list[str] = Field(default_factory=list)
+    # E-17: rules that can actually raise a gate on THIS harness. Empty on a
+    # harness without `defer`, so degradation is visible rather than silent.
+    rules_escalatable: list[str] = Field(default_factory=list)
 
 
 class ContainmentConfig(BaseModel):
@@ -134,6 +142,50 @@ class ContainmentConfig(BaseModel):
     from 'recorded' to 'refuse to start'."""
     policy_path: str | None = None      # None -> $SDLC_CONTAINMENT_POLICY -> discovery
     strict: bool = False
+
+
+class DeferredToolUse(BaseModel):
+    """A tool call the harness suspended at, awaiting a human decision
+    (E-17). Built activity-side from the CLI's `deferred_tool_use` payload;
+    travels inline on HarnessRunResult — bounded, like ToolDenial."""
+    tool_use_id: str              # the CLI replays THIS id on resume
+    tool: str
+    input_digest: str             # canonical digest of tool_input
+    rule_id: str
+    reason: str
+    target: str | None = None     # scrubbed path/command, for the human
+
+
+class ToolGrant(BaseModel):
+    """One human decision about one suspended call. Single-use falls out of
+    tool_use_id: the replayed call reuses it, a genuinely new call gets a
+    fresh one and matches nothing."""
+    tool_use_id: str
+    tool: str
+    input_digest: str
+    rule_id: str
+    approved: bool                # False = rejected / timed out / capped
+    reason: str = ""              # reaches the model verbatim
+
+
+class EscalationOutcome(str, Enum):
+    """How an escalation ended. BATCHED and CAPPED never reached a human."""
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    TIMEOUT = "timeout"
+    CAPPED = "capped"
+    BATCHED = "batched"
+
+
+class ToolEscalation(BaseModel):
+    """The workflow's record of one escalation, for events.jsonl + E-36."""
+    tool: str
+    rule_id: str
+    target: str | None = None
+    outcome: EscalationOutcome
+    decided_by: str = ""          # "" when nobody was asked
+    round: int = 0                # the (gate, round) identity; 0 = no gate
+
 
 
 class IdeaBrief(BaseModel):
@@ -250,6 +302,7 @@ class HarnessRunResult(BaseModel):
     # E-15/E-16: containment outcome. Bounded and inline — the workflow and
     # the E-36 heatmap read these without loading the session artifact.
     denials: list[ToolDenial] = Field(default_factory=list)
+    deferred: DeferredToolUse | None = None      # E-17: suspended tool call
     containment: ContainmentReport | None = None
     _raw_stdout: str = PrivateAttr(default="")
 
@@ -661,6 +714,8 @@ class PipelineConfig(BaseModel):
                              model="zai-coding-plan/glm-5.2"),
     })
     max_fix_attempts: int = 2                # then escalate to human
+    max_tool_escalations: int = 3            # E-17: gates raised per task
+                                             # attempt; past this, deny
     max_gate_rounds: int = 2                # FR-301: bounded revision loop;
                                             # exhaustion escalates to a hard
                                             # human gate
