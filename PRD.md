@@ -221,10 +221,17 @@ Teams adopting coding agents today face four gaps:
   (model API and git remote only); at fleet scale a container per run. The
   harness environment SHALL be an **allowlist** (curated toolchain vars +
   injected repo-scoped, short-TTL credentials), never the worker's full
-  environment. Destructive-action denial (out-of-worktree writes, `rm -rf`,
+  environment.   Destructive-action denial (out-of-worktree writes, `rm -rf`,
   non-allowlisted network) SHALL be enforced in the `pre_tool` hook, with
   native config (`--allowedTools` / `opencode.json`) as the inner layer — a
   worktree is not a sandbox.
+  *(Partially landed 2026-07-24, E-15/E-16: `policy/containment.yaml` +
+  a `PreToolUse` hook enforce out-of-worktree writes, recursive deletes,
+  agent-config rewrites, and a host allowlist, with denials recorded as
+  `ToolDenial` on `HarnessRunResult`. Egress is **tool-level only** — a
+  socket opened from inside an allowed `Bash` call is not visible to it.
+  Network-level egress and the restricted-OS-user/container tier remain
+  open under E-21.)*
 - FR-704: An observability export SHALL render run history to
   `events.jsonl` + `report.html`.
 - **FR-110 (new scope) — Rubric-judge calibration.** Before a rubric's

@@ -57,6 +57,11 @@ class Rule(BaseModel):
 class Policy(BaseModel):
     version: int
     rules: list[Rule] = Field(default_factory=list)
+    # Absolute path the asset was loaded from (None for hand-built policies).
+    # The hook needs it: claude runs the hook with cwd = the task worktree
+    # (a temp dir), so the hook's own discovery would fail — the adapter
+    # forwards this path as `--policy` to make the hook cwd-independent.
+    source_path: Path | None = None
 
 
 def _discover_policy_file() -> Path | None:
@@ -109,7 +114,7 @@ def load_policy(path: str | os.PathLike | None = None) -> Policy:
         except Exception as e:                    # noqa: BLE001 - re-typed
             raise ContainmentError(
                 f"invalid rule {rid!r} in {p}: {e}") from e
-    return Policy(version=version, rules=rules)
+    return Policy(version=version, rules=rules, source_path=p.resolve())
 
 
 class Verdict(BaseModel):

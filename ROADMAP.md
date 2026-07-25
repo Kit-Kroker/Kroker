@@ -125,7 +125,7 @@
 ### Governance & ops (FR-700)
 - [x] **FR-701** run-level budgets — research ships the FIRST run-level counters (`max_searches`/`max_fetches`/`max_cost_usd`), stage-scoped and enforced inside the tools; E-19 remains the general version. *Landed (E-33):* run-level token/cost counters in `RunSummary.roles` + a `run_budget_usd` budget gate that escalates through the FR-301/302 gate machinery on crossing (approve = one more increment, reject = `rejected:budget`). Stage-scoped research budgets (FR-107) unchanged.
 - [ ] ⚠️ **FR-702** claim-check `ArtifactRef` / 2MB discipline — `ArtifactRef` model exists but diffs travel inline; no `CodeArtifact` union; no size guard. Sessions are now a real claim-check consumer (`ArtifactStore` / `harness_session`, E-38), but diffs still travel inline, so FR-702 stays open.
-- [ ] ⚠️ **FR-703** egress policy — **research is the pipeline's first outbound egress, and it arrives before the egress policy.** Still env-allowlist only; no `pre_tool` hook, no egress tier. This spec is E-18's first consumer, not its implementation.
+- [ ] ⚠️ **FR-703** egress policy — **research is the pipeline's first outbound egress, and it arrives before the egress policy.** *Partially landed (2026-07-24, E-15/E-16):* the `pre_tool` hook now exists and denies out-of-worktree writes, recursive deletes, agent-config rewrites, and non-allowlisted hosts (tool-level). Egress is still env-allowlist + tool-level only — network-level egress and the OS/container tier remain open (E-21).
 - [ ] **FR-704** observability export (`events.jsonl` + `report.html`) — no `observability/` module.
 
 ---
@@ -136,7 +136,7 @@
 - [ ] **NFR-2** Scale / two pools — single task queue `"ai-sdlc"`; contra ADR-9.
 - [ ] — **NFR-3** Latency (5s/2s) — untested, not falsifiable from code.
 - [ ] ⚠️ **NFR-4** Auditability — Temporal history reconstructs runs; no `events.jsonl`/`report.html` export.
-- [ ] ⚠️ **NFR-5** Security — env allowlist done; OS user, container, `pre_tool` hook, egress, scoped-cred injection absent.
+- [ ] ⚠️ **NFR-5** Security — env allowlist done; `pre_tool` hook landed (2026-07-24, E-15/E-16, tool-level destructive-action + egress denial); OS user, container, network-level egress, scoped-cred injection still absent (E-20/E-21).
 - [x] **NFR-6** Reproducibility vs memoization — watermark-pinned recall + content-addressed cache.
 - [x] **NFR-7** Portability — `MemoryConfig.backend` defaults to `fake`; real Hindsight client for self-hosting.
 
@@ -182,6 +182,8 @@
 - [x] **ADR-13** Serial-by-default; resume-bounded; context by reference (`near_context_ceiling` wired).
 - [x] **ADR-14** Integration by running branch (fully wired).
 - [x] **ADR-15** Language-agnostic toolchain by marker file (`src/sdlc/toolchain/`) — Python reference adapter end-to-end; Go/TS/Rust are E-30a/b/c.
+- [x] **ADR-16** Harness sessions as first-class, claim-checked artifacts (E-38).
+- [x] **ADR-17** Containment as a declared harness capability — native inner, hook outer, fail closed (E-15/E-16).
 
 ---
 
@@ -319,10 +321,10 @@ FR-404 records that `reflect()` exists and is registered but is **never called**
 
 Eve marks individual tools `needsApproval`. FR-703 wants a `pre_tool` hook and has none. These are the same hook — a denial is a policy decision, an approval request is a gate. Building `pre_tool` as an escalation into the *existing* gate machinery gets both, instead of growing containment and human-in-the-loop as two separate subsystems.
 
-- [ ] **E-15** `pre_tool` hook seam in `harness/adapters.py`, called for every harness tool invocation.
-- [ ] **E-16** Policy denial path — deny by rule, no human involved (FR-703).
-- [ ] **E-17** Approval escalation: a `needsApproval`-class tool call raises a gate through existing FR-301/FR-302 machinery rather than a parallel mechanism.
-- [ ] **E-18** harness/egress containment — **re-ranked up.** §8 item 4 ranked it fourth on the strength of `pre_tool`; an unpoliced outbound egress (research, FR-703) is a second, independent argument. The research stage fetches arbitrary URLs through a provider with only an env allowlist between it and the worker's network.
+- [x] **E-15** `pre_tool` hook seam in `harness/adapters.py`, called for every harness tool invocation. *Landed (2026-07-24):* a declared `containment` capability per `CodingHarness` + a fail-closed `PreToolUse` hook (`python -m sdlc.harness.hook`); spec `docs/superpowers/specs/2026-07-24-harness-containment-pre-tool-hook-design.md`, plan `docs/superpowers/plans/2026-07-24-harness-containment-pre-tool-hook.md`, ADR-17.
+- [x] **E-16** Policy denial path — deny by rule, no human involved (FR-703). *Landed (2026-07-24):* one versioned asset `policy/containment.yaml` + four predicates + `ToolDenial` records on `HarnessRunResult`/`SessionDigest`; verified live against claude 2.1.219.
+- [ ] **E-17** Approval escalation: a `needsApproval`-class tool call raises a gate through existing FR-301/FR-302 machinery rather than a parallel mechanism. **Blocker dissolved (2026-07-24):** claude exposes a `defer` permission decision — a headless session pauses at a tool call and resumes via `-p --resume` for the hook to re-evaluate. The escalation therefore never needs an activity to await a workflow signal; it reuses the resume handle the adapters already own.
+- [ ] ⚠️ **E-18** harness/egress containment — **re-ranked up.** §8 item 4 ranked it fourth on the strength of `pre_tool`; an unpoliced outbound egress (research, FR-703) is a second, independent argument. The research stage fetches arbitrary URLs through a provider with only an env allowlist between it and the worker's network. *Partially landed (2026-07-24, E-15/E-16):* tool-level egress denial (`WebFetch`/`WebSearch`/`Bash` host allowlist) now exists via the hook; network-level egress (a socket opened inside an allowed `Bash` call) remains open and is E-21's OS/container tier.
 
 ### 9.5 Sandbox / Connect / Gateway → NFR-5, FR-701, FR-703
 
@@ -338,7 +340,7 @@ Independent reviews of eve converge on observability as its weak point: silent d
 
 - [x] **E-22** `observability/` module emitting `events.jsonl` (FR-704, NFR-4). *Folded into E-32:* `observability/trace.py` (`RunEvent`) + `observability/export.py::render_events_jsonl` render the in-workflow trace to `events.jsonl`; written by the `export_run_artifacts` activity.
 - [x] **E-23** `report.html` export from the event stream (FR-704). *Folded into E-32:* `observability/export.py::render_report_html` renders a self-contained `report.html` from the `RunSummary`.
-- [ ] **E-24** Pin harness/adapter versions and assert them at boot — eve's dependency-drift failure mode applies directly to `HARNESSES` (FR-203).
+- [ ] **E-24** Pin harness/adapter versions and assert them at boot — eve's dependency-drift failure mode applies directly to `HARNESSES` (FR-203). *Note (2026-07-24):* version drift confirmed live — `ClaudeCodeHarness.expected_version` pins `2.1.218`; installed is `2.1.219` (the version E-15/E-16's hook contract was verified against). `check_harness_versions` will flag this once it runs.
 
 ### 9.7 Suggested ordering
 

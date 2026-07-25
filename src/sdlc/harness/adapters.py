@@ -307,7 +307,8 @@ class ClaudeCodeHarness(CodingHarness):
         hooks = [{
             "matcher": "|".join(sorted({t for r in policy.rules
                                         for t in r.tools})),
-            "hooks": [{"type": "command", "command": self._hook_command(req)}],
+            "hooks": [{"type": "command",
+                       "command": self._hook_command(req, policy.source_path)}],
         }] if policy.rules else []
 
         deny = [p for r in policy.rules if ContainmentLayer.NATIVE is r.layer
@@ -332,13 +333,19 @@ class ClaudeCodeHarness(CodingHarness):
             rules_unenforceable=[])
 
     @staticmethod
-    def _hook_command(req: HarnessRequest) -> str:
+    def _hook_command(req: HarnessRequest,
+                      source_path: "Path | None" = None) -> str:
         """Absolute interpreter path: the child's PATH is allowlisted and may
         resolve a different `python` than the worker's venv. Forward slashes
-        because claude runs hooks through Git Bash on Windows."""
+        because claude runs hooks through Git Bash on Windows. The policy
+        path is passed explicitly because the hook's cwd is the worktree (a
+        temp dir), where repo-root discovery would fail."""
         exe = Path(sys.executable).as_posix()
         wt = Path(req.cwd).as_posix()
-        return (f'"{exe}" -m sdlc.harness.hook --worktree "{wt}"')
+        cmd = f'"{exe}" -m sdlc.harness.hook --worktree "{wt}"'
+        if source_path is not None:
+            cmd += f' --policy "{Path(source_path).as_posix()}"'
+        return cmd
 
     @staticmethod
     def _native_patterns(rule: Rule) -> list[str]:
