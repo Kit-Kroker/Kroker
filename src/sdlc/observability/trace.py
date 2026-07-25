@@ -20,6 +20,7 @@ class RunEventKind(str, Enum):
     CLARIFICATION_ASKED = "clarification_asked"
     CLARIFICATION_ANSWERED = "clarification_answered"
     FIX_ATTEMPT = "fix_attempt"
+    TOOL_ESCALATION = "tool_escalation"
     MODEL_USAGE = "model_usage"
     MEMORY_RETAINED = "memory_retained"
     RUN_FINISHED = "run_finished"
