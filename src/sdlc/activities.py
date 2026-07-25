@@ -16,7 +16,7 @@ import stat
 import subprocess
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import defusedxml.ElementTree as DET
 from defusedxml.common import DefusedXmlException
@@ -38,6 +38,7 @@ from .models import (
     QAReport,
     SecurityFinding,
     SecurityReport,
+    ToolGrant,
 )
 
 
@@ -391,6 +392,9 @@ class CodingTaskInput:
     containment_enabled: bool = False
     containment_policy_path: str | None = None
     containment_strict: bool = False
+    # E-17: human decisions about suspended tool calls. Written to a grants
+    # file activity-side and read by the hook; empty on a first attempt.
+    grants: list[ToolGrant] = field(default_factory=list)
 
 
 def _resolve_containment(harness, inp: CodingTaskInput,
@@ -414,7 +418,7 @@ def _resolve_containment(harness, inp: CodingTaskInput,
 
     if req is None:                     # unit-test path: compile a probe
         req = HarnessRequest(prompt=inp.prompt, cwd=inp.worktree)
-    report = harness.apply_containment(policy, req)
+    report = harness.apply_containment(policy, req, inp.grants)
 
     if inp.containment_strict and report.rules_unenforceable:
         raise ContainmentError(
@@ -443,9 +447,12 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
     result.containment = report
     try:
         result.denials = harness.normalise_denials(result._raw_stdout)
+        result.deferred = harness.normalise_deferral(result._raw_stdout)
     except Exception:                     # noqa: BLE001
         # Best-effort, exactly like capture_session: losing the RECORD of a
         # denial must never fail a task whose denial was already enforced.
+        # A lost deferral simply means no escalation is raised — the call
+        # was already suspended by the hook, not allowed.
         _log.warning("denial normalisation failed", exc_info=True)
     # E-38: capture the transcript. Raw stdout rides a PrivateAttr — it
     # exists only inside this activity and is never written unscrubbed.

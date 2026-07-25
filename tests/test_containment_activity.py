@@ -1,10 +1,13 @@
 """E-15: fail-closed wiring in run_coding_task."""
+import json
+from pathlib import Path
+
 import pytest
 
 from sdlc.activities import CodingTaskInput, _resolve_containment
-from sdlc.harness.adapters import ClaudeCodeHarness, CursorHarness, OpenCodeHarness
+from sdlc.harness.adapters import HARNESSES, ClaudeCodeHarness, CursorHarness, HarnessRequest, OpenCodeHarness
 from sdlc.harness.containment import ContainmentError
-from sdlc.models import ContainmentLayer
+from sdlc.models import ContainmentLayer, HarnessKind, ToolGrant
 
 POLICY_YAML = """
 version: 1
@@ -70,3 +73,36 @@ def test_missing_policy_fails_closed(tmp_path):
                           containment_policy_path=str(tmp_path / "absent.yaml"))
     with pytest.raises(ContainmentError):
         _resolve_containment(ClaudeCodeHarness(), inp)
+
+
+def test_grants_reach_the_compiled_hook_command(tmp_path, monkeypatch):
+    """The activity's job is to get the workflow's decision to the hook."""
+    policy = tmp_path / "containment.yaml"
+    policy.write_text(
+        "version: 1\nrules:\n"
+        "  - id: no-out-of-worktree-write\n    layer: hook\n"
+        "    action: escalate\n    tools: [Write]\n"
+        "    predicate: path_outside_worktree\n    reason: scoped\n",
+        encoding="utf-8")
+    grant = ToolGrant(tool_use_id="toolu_1", tool="Write",
+                      input_digest="deadbeef",
+                      rule_id="no-out-of-worktree-write", approved=True)
+    inp = CodingTaskInput(
+        harness=HarnessKind.CLAUDE_CODE, prompt="go", worktree=str(tmp_path),
+        containment_enabled=True, containment_policy_path=str(policy),
+        grants=[grant])
+    req = HarnessRequest(prompt="go", cwd=str(tmp_path))
+    _, report = _resolve_containment(HARNESSES[HarnessKind.CLAUDE_CODE],
+                                     inp, req)
+    settings = json.loads(Path(
+        req.extra_args[req.extra_args.index("--settings") + 1]
+    ).read_text(encoding="utf-8"))
+    hook_cmd = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    assert "--grants" in hook_cmd
+    assert report.rules_escalatable == ["no-out-of-worktree-write"]
+
+
+def test_coding_task_input_defaults_to_no_grants(tmp_path):
+    inp = CodingTaskInput(harness=HarnessKind.CLAUDE_CODE, prompt="go",
+                          worktree=str(tmp_path))
+    assert inp.grants == []
