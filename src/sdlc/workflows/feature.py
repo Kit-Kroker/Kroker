@@ -58,6 +58,7 @@ with workflow.unsafe.imports_passed_through():
     from ..artifacts.read import LoadSessionInput, load_session
     from ..models import (
         AnalysisReport, ArchitectureSpec, ArtifactRef, ClarifiedRequirements,
+        DeferredToolUse, EscalationOutcome, ToolDenial, ToolEscalation, ToolGrant,
         CoverageReport, DeepReviewReport, DevTask, ExecutionMode, GateConfig,
         GateDecision,
         GateOutcome, GatePolicy, HandoffSummary, IdeaBrief,
@@ -245,6 +246,29 @@ def _spec_summary(artifact: object) -> str:
             or type(artifact).__name__)
 
 
+def escalations_from_denials(denials: list[ToolDenial]) -> list[ToolEscalation]:
+    """Denials the hook could not escalate (batched call, unreadable
+    transcript). No human was asked, so there is no gate and no round — but
+    they must still be countable, or the size of the solo-only hole would be
+    invisible (E-17 §6)."""
+    return [ToolEscalation(tool=d.tool, rule_id=d.rule_id, target=d.target,
+                           outcome=EscalationOutcome.BATCHED)
+            for d in denials if d.escalation_declined]
+
+
+def _escalation_summary(task_id: str, title: str,
+                        deferred: DeferredToolUse) -> str:
+    """What the human is actually deciding, rendered into the GateContext
+    field the E-6 channel contract already renders (the same way the budget
+    gate puts its cost table there)."""
+    return (f"Task {task_id} ({title}) is blocked on a tool call.\n"
+            f"  tool:   {deferred.tool}\n"
+            f"  target: {deferred.target or '(none)'}\n"
+            f"  rule:   {deferred.rule_id} — {deferred.reason}\n"
+            "Approve to permit exactly this one call; reject to refuse it "
+            "(the task continues either way).")
+
+
 @workflow.defn
 class FeatureWorkflow:
     def __init__(self) -> None:
@@ -271,6 +295,12 @@ class FeatureWorkflow:
         self._role_usage: dict[str, RoleUsage] = {}
         self._budget_threshold: float = 0.0
         self._budget_crossings: int = 0
+        # E-17: monotonic gate round for tool-approval escalations. ONE
+        # counter for the whole run: _dev_task runs concurrently across tasks
+        # in wave mode, and workflow code is single-threaded, so a shared
+        # counter keeps (gate, round) unique and replay-deterministic where a
+        # per-task round would collide.
+        self._escalation_round: int = 0
 
     # ----------------------- benchmark recording ------------------------
 
@@ -556,6 +586,29 @@ class FeatureWorkflow:
             return None
         return report
 
+    async def _record_escalation(self, cfg: PipelineConfig, task: DevTask,
+                                 esc: ToolEscalation) -> None:
+        """Trace event (events.jsonl / report.html) plus a benchmark record
+        so E-36's case x stage heatmap sees approval friction."""
+        self._emit(RunEventKind.TOOL_ESCALATION, stage="tool_approval",
+                   task_id=task.id, tool=esc.tool, rule_id=esc.rule_id,
+                   outcome=esc.outcome.value, decided_by=esc.decided_by,
+                   round=str(esc.round),
+                   **({"target": esc.target} if esc.target else {}))
+        now = workflow.now()
+        # `judge` is a constrained Literal on QualityScore — "policy" is not a
+        # member. A gate-decided outcome is a human override; a capped or
+        # batched one was decided deterministically, with nobody asked.
+        judge = "human_override" if esc.decided_by == "human" else "contract"
+        await self._record(cfg, self._stage_record(
+            cfg, stage="tool_approval", role="human",
+            started=now, ended=now,
+            quality_score=None, judge=judge,
+            outcome=(BenchmarkOutcome.PASS
+                     if esc.outcome is EscalationOutcome.APPROVED
+                     else BenchmarkOutcome.ESCALATED),
+            model="human", task_id=task.id))
+
     async def _check_budget(self, cfg: PipelineConfig) -> None:
         """E-33/FR-701 run-budget enforcement. Called at SERIAL points only
         (stage boundaries + the task loop after merges) — never inside a
@@ -736,17 +789,75 @@ class FeatureWorkflow:
             _attempt_started = workflow.now()
             self._emit(RunEventKind.FIX_ATTEMPT, stage="code",
                        task_id=task.id, attempt=str(attempt))
-            run = await workflow.execute_activity(
-                run_coding_task,
-                CodingTaskInput(harness=role_cfg.harness, prompt=prompt,
-                                worktree=worktree, model=role_cfg.model,
-                                session_id=session_id,
-                                task_id=task.id, attempt=attempt,
-                                containment_enabled=cfg.containment_enabled,
-                                containment_policy_path=cfg.containment.policy_path,
-                                containment_strict=cfg.containment.strict),
-                **_long_act(role_cfg),
-            )
+            # E-17: the harness may SUSPEND at a tool call an escalate rule
+            # matched (claude's `defer`). The child process has already
+            # exited, so the durable wait belongs here, in the workflow —
+            # then we resume the same session with the human's decision.
+            grants: list[ToolGrant] = []
+            asked = 0
+            capped = False
+            while True:
+                run = await workflow.execute_activity(
+                    run_coding_task,
+                    CodingTaskInput(harness=role_cfg.harness, prompt=prompt,
+                                    worktree=worktree, model=role_cfg.model,
+                                    session_id=session_id,
+                                    task_id=task.id, attempt=attempt,
+                                    containment_enabled=cfg.containment_enabled,
+                                    containment_policy_path=cfg.containment.policy_path,
+                                    containment_strict=cfg.containment.strict,
+                                    grants=grants),
+                    **_long_act(role_cfg),
+                )
+                for esc in escalations_from_denials(run.denials):
+                    await self._record_escalation(cfg, task, esc)
+                if run.deferred is None or capped:
+                    break
+                # Resuming for an approval is NOT a failure resume: it costs
+                # neither a fix attempt nor the FR-802 resume budget.
+                session_id = run.session_id
+                if asked >= cfg.max_tool_escalations:
+                    capped = True
+                    grants = [ToolGrant(
+                        tool_use_id=run.deferred.tool_use_id,
+                        tool=run.deferred.tool,
+                        input_digest=run.deferred.input_digest,
+                        rule_id=run.deferred.rule_id, approved=False,
+                        reason="escalation cap reached")]
+                    await self._record_escalation(
+                        cfg, task,
+                        ToolEscalation(tool=run.deferred.tool,
+                                       rule_id=run.deferred.rule_id,
+                                       target=run.deferred.target,
+                                       outcome=EscalationOutcome.CAPPED,
+                                       decided_by="policy"))
+                    continue          # one more resume, only to deliver the deny
+                asked += 1
+                self._escalation_round += 1
+                decision = await self._gate(
+                    "tool_approval", cfg, round=self._escalation_round,
+                    context=GateContext(spec_summary=_escalation_summary(
+                        task.id, task.title, run.deferred)),
+                    default_policy=GatePolicy.HARD)
+                grants = [ToolGrant(
+                    tool_use_id=run.deferred.tool_use_id,
+                    tool=run.deferred.tool,
+                    input_digest=run.deferred.input_digest,
+                    rule_id=run.deferred.rule_id,
+                    approved=decision.approved,
+                    reason=decision.comments or "")]
+                await self._record_escalation(
+                    cfg, task,
+                    ToolEscalation(
+                        tool=run.deferred.tool, rule_id=run.deferred.rule_id,
+                        target=run.deferred.target,
+                        outcome=(EscalationOutcome.APPROVED
+                                 if decision.approved
+                                 else EscalationOutcome.TIMEOUT
+                                 if decision.decided_by == "timeout"
+                                 else EscalationOutcome.REJECTED),
+                        decided_by=decision.decided_by,
+                        round=self._escalation_round))
             if run.session_ref is not None:
                 self._session_refs.append(run.session_ref)
 
