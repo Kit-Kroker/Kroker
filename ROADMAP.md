@@ -123,7 +123,7 @@
 - [ ] ⚠️ **FR-205** proposer MAY/MUST NOT validators — only inline dependency-cycle check; no dedicated `validators.py`.
 
 ### Human-in-the-loop (FR-300)
-- [ ] ⚠️ **FR-301** hard/soft/off + threshold + revise + `MAX_GATE_ROUNDS` — wired for architecture/plan/merge; soft still confidence-only (no deterministic-check AND-clause); no calibration monitoring.
+- [ ] ⚠️ **FR-301** hard/soft/off + threshold + revise + `MAX_GATE_ROUNDS` — wired for architecture/plan/merge; soft still confidence-only (no deterministic-check AND-clause); no calibration monitoring. Tool-call approval now escalates into this same machinery (E-17), so a `pre_tool` denial and a human gate are one mechanism.
 - [x] **FR-302** idempotent signals, `(gate, round)` identity, first-decision-wins.
 - [ ] ⚠️ **FR-303** notifications + durable timers — timeout→auto-reject only; no notify activity, no reminder timer, no fallback-approver.
 - [ ] ⚠️ **FR-304** decisions recorded/queryable — fields captured + retained as text; no structured queryable decision log.
@@ -151,7 +151,7 @@
 ### Governance & ops (FR-700)
 - [x] **FR-701** run-level budgets — research ships the FIRST run-level counters (`max_searches`/`max_fetches`/`max_cost_usd`), stage-scoped and enforced inside the tools; E-19 remains the general version. *Landed (E-33):* run-level token/cost counters in `RunSummary.roles` + a `run_budget_usd` budget gate that escalates through the FR-301/302 gate machinery on crossing (approve = one more increment, reject = `rejected:budget`). Stage-scoped research budgets (FR-107) unchanged.
 - [ ] ⚠️ **FR-702** claim-check `ArtifactRef` / 2MB discipline — `ArtifactRef` model exists but diffs travel inline; no `CodeArtifact` union; no size guard. Sessions are now a real claim-check consumer (`ArtifactStore` / `harness_session`, E-38), but diffs still travel inline, so FR-702 stays open.
-- [ ] ⚠️ **FR-703** egress policy — **research is the pipeline's first outbound egress, and it arrives before the egress policy.** *Partially landed (2026-07-24, E-15/E-16):* the `pre_tool` hook now exists and denies out-of-worktree writes, recursive deletes, agent-config rewrites, and non-allowlisted hosts (tool-level). Egress is still env-allowlist + tool-level only — network-level egress and the OS/container tier remain open (E-21).
+- [ ] ⚠️ **FR-703** egress policy — **research is the pipeline's first outbound egress, and it arrives before the egress policy.** *Partially landed (2026-07-24, E-15/E-16):* the `pre_tool` hook now exists and denies out-of-worktree writes, recursive deletes, agent-config rewrites, and non-allowlisted hosts (tool-level); approval escalation for `action: escalate` rules lands via the same hook (E-17). Egress is still env-allowlist + tool-level only — network-level egress and the OS/container tier remain open (E-21).
 - [ ] **FR-704** observability export (`events.jsonl` + `report.html`) — no `observability/` module.
 
 ### Context & continuity (FR-800) — *documented in PRD 2026-07-25, no new scope*
@@ -305,7 +305,7 @@ as tracked rather than accidental.
 1. ~~**Close P1 honestly** — CI-runnable end-to-end run through `FeatureWorkflow` + wire the `security_no_critical` absolute check.~~ **Done** on `feat/p1-consolidation` (`3cfbe62`…`41c9185`); plan `docs/superpowers/plans/2026-07-15-p1-consolidation.md`.
 2. ~~**Analyze/Analyst stage** — unlocks coverage + criterion→test traceability advisory checks (FR-106).~~ **Done** on `feat/analyst-stage`; plan `docs/superpowers/plans/2026-07-16-analyst-stage.md`, spec `docs/superpowers/specs/2026-07-16-analyst-stage-traceability-coverage-design.md`.
 3. ~~**retro/reflect wiring** (FR-404) — starts accumulating the SC-4/SC-6 calibration signal. Tasks: **E-12, E-13** (§9.3).~~ **Partially done** — schedule mechanism + nightly project reflect ship (E-12/E-13); plan `docs/superpowers/plans/2026-07-16-schedules-as-files-and-nightly-reflect.md`. Signal only accrues on runs with `memory.enabled=true` (defaults `False`). Org half blocked on **E-25**; the retro *stage* (§1 item 13, `RunSummary`) is still unbuilt (**E-32**). *Follow-on:* the benchmark instrument (§9.8) is what turns the accruing signal into the SC-1..6 numbers — held-out grade (**E-30/E-31**) and per-role economics (**E-33**) are the load-bearing measurement work, ranked there by invariant undercut.
-4. **Harness containment** beyond env allowlist — `pre_tool` hook + egress (FR-703/NFR-5). Tasks: **E-15…E-18** (§9.4) — note the hook and the gate are one mechanism, not two.
+4. ~~**Harness containment**~~ — `pre_tool` hook ✅ (E-15/E-16) + approval escalation ✅ (E-17); egress beyond tool-level remains **E-21**. Tasks: **E-15…E-18** (§9.4) — note the hook and the gate are one mechanism, not two.
 5. **Operability** — dashboard FastAPI backend + MCP + cross-run inbox (FR-305/601/602). Tasks: **E-6…E-11** (§9.2) — these four items are one contract plus thin adapters, so E-6/E-7 land before any surface.
 6. **Post-P1 roadmap** — MaintenanceWorkflow/DAPER (**E-14**), two worker pools, run budgets (**E-19**), observability export (**E-22, E-23**), brownfield mode, claim-check.
 7. **Repo hardening via agents-as-folders** — closes §7's prompts-as-assets drift. Tasks: **E-1, E-2, E-4** (§9.1). *Re-ranked down*: the memoization payoff that justified it was already banked (see §9.1), and the ADR-6 hole it sat next to is closed. Cheapest self-contained item on this list, but now purely reorganisation.
@@ -414,11 +414,24 @@ FR-404 records that `reflect()` exists and is registered but is **never called**
 
 ### 9.4 `pre_tool` unifies containment with gates → FR-703, NFR-5, FR-301
 
-Eve marks individual tools `needsApproval`. FR-703 wants a `pre_tool` hook and has none. These are the same hook — a denial is a policy decision, an approval request is a gate. Building `pre_tool` as an escalation into the *existing* gate machinery gets both, instead of growing containment and human-in-the-loop as two separate subsystems.
+Eve marks individual tools `needsApproval`. FR-703 wants a `pre_tool` hook and has none. These are the same hook — a denial is a policy decision, an approval request is a gate. Both halves now exist: E-16 denies by rule, E-17 escalates by rule into the FR-301/302 gate. The remaining gap in §9.4 is E-18's network-level tier, which is E-21.
 
 - [x] **E-15** `pre_tool` hook seam in `harness/adapters.py`, called for every harness tool invocation. *Landed (2026-07-24):* a declared `containment` capability per `CodingHarness` + a fail-closed `PreToolUse` hook (`python -m sdlc.harness.hook`); spec `docs/superpowers/specs/2026-07-24-harness-containment-pre-tool-hook-design.md`, plan `docs/superpowers/plans/2026-07-24-harness-containment-pre-tool-hook.md`, ADR-17.
 - [x] **E-16** Policy denial path — deny by rule, no human involved (FR-703). *Landed (2026-07-24):* one versioned asset `policy/containment.yaml` + four predicates + `ToolDenial` records on `HarnessRunResult`/`SessionDigest`; verified live against claude 2.1.219.
-- [ ] **E-17** Approval escalation: a `needsApproval`-class tool call raises a gate through existing FR-301/FR-302 machinery rather than a parallel mechanism. **Blocker dissolved (2026-07-24):** claude exposes a `defer` permission decision — a headless session pauses at a tool call and resumes via `-p --resume` for the hook to re-evaluate. The escalation therefore never needs an activity to await a workflow signal; it reuses the resume handle the adapters already own.
+- [x] **E-17** Approval escalation: a `needsApproval`-class tool call raises a
+  gate through existing FR-301/FR-302 machinery rather than a parallel
+  mechanism. *Landed (2026-07-25):* `action: escalate` on a containment rule
+  → the hook emits claude's `defer` → the run ends with
+  `stop_reason: tool_deferred` → the **workflow** owns the durable wait
+  (`tool_approval` gate) → the session resumes with a **single-use** grant
+  bound to `tool_use_id` + input digest. `defer` is **solo-only**: the hook
+  counts sibling `tool_use` blocks via `transcript_path` and denies rather
+  than emitting a defer the CLI would discard (a discarded defer would fall
+  through to `acceptEdits` and be ALLOWED). Every non-approve path — reject,
+  timeout, cap, batched — resumes with a rejecting grant and the task
+  continues, so a refusal never throws away a session. Spec
+  `docs/superpowers/specs/2026-07-25-tool-approval-escalation-design.md`,
+  plan `docs/superpowers/plans/2026-07-25-tool-approval-escalation.md`.
 - [ ] ⚠️ **E-18** harness/egress containment — **re-ranked up.** §8 item 4 ranked it fourth on the strength of `pre_tool`; an unpoliced outbound egress (research, FR-703) is a second, independent argument. The research stage fetches arbitrary URLs through a provider with only an env allowlist between it and the worker's network. *Partially landed (2026-07-24, E-15/E-16):* tool-level egress denial (`WebFetch`/`WebSearch`/`Bash` host allowlist) now exists via the hook; network-level egress (a socket opened inside an allowed `Bash` call) remains open and is E-21's OS/container tier.
 
 ### 9.5 Sandbox / Connect / Gateway → NFR-5, FR-701, FR-703
@@ -435,7 +448,7 @@ Independent reviews of eve converge on observability as its weak point: silent d
 
 - [x] **E-22** `observability/` module emitting `events.jsonl` (FR-704, NFR-4). *Folded into E-32:* `observability/trace.py` (`RunEvent`) + `observability/export.py::render_events_jsonl` render the in-workflow trace to `events.jsonl`; written by the `export_run_artifacts` activity.
 - [x] **E-23** `report.html` export from the event stream (FR-704). *Folded into E-32:* `observability/export.py::render_report_html` renders a self-contained `report.html` from the `RunSummary`.
-- [ ] **E-24** Pin harness/adapter versions and assert them at boot — eve's dependency-drift failure mode applies directly to `HARNESSES` (FR-203). *Note (2026-07-24):* version drift confirmed live — `ClaudeCodeHarness.expected_version` pins `2.1.218`; installed is `2.1.219` (the version E-15/E-16's hook contract was verified against). `check_harness_versions` will flag this once it runs.
+- [ ] **E-24** Pin harness/adapter versions and assert them at boot — eve's dependency-drift failure mode applies directly to `HARNESSES` (FR-203). *Note (2026-07-24):* version drift confirmed live — `ClaudeCodeHarness.expected_version` pins `2.1.218`; installed is `2.1.220` (E-17 verified `defer` against it). `check_harness_versions` will flag this once it runs.
 
 ### 9.7 Suggested ordering
 
@@ -446,7 +459,7 @@ Not a commitment, and deliberately not "by section":
 3. ~~**E-6**~~ landed (`feat/channel-contract`) → ~~**E-7**~~ landed
    (`feat/cli-channel-refit`) → **E-8** — the CLI refit proved the contract;
    E-8 is the first *new* capability it buys.
-4. **E-15 → E-17** — the hook seam, then gate reuse.
+4. ~~**E-15 → E-17**~~ — landed.
 5. **E-22** — before the surfaces in E-9/E-10/E-11 multiply the ways delivery can fail silently.
 
 E-19/E-20/E-21 and E-14 are post-P1. E-5 is not scheduled.

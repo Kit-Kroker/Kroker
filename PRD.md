@@ -273,7 +273,7 @@ Teams adopting coding agents today face four gaps:
   environment.   Destructive-action denial (out-of-worktree writes, `rm -rf`,
   non-allowlisted network) SHALL be enforced in the `pre_tool` hook, with
   native config (`--allowedTools` / `opencode.json`) as the inner layer — a
-  worktree is not a sandbox.
+  worktree is not a sandbox. A rule may be declared `escalate` rather than `deny`, in which case the blocked call raises a human gate through FR-301/FR-302; an approval covers exactly one call.
   *(Partially landed 2026-07-24, E-15/E-16: `policy/containment.yaml` +
   a `PreToolUse` hook enforce out-of-worktree writes, recursive deletes,
   agent-config rewrites, and a host allowlist, with denials recorded as

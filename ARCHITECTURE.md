@@ -542,6 +542,15 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
   (a socket opened inside an allowed `Bash` call is invisible); the
   OS-user/container tier is E-21.
 
+  *Extended 2026-07-25 (E-17):* the same hook carries approval, not only
+  denial. claude's `permissionDecision: "defer"` suspends the call and ends
+  the print-mode run, so the durable wait lives in the workflow's existing
+  gate rather than in an activity awaiting a signal. `defer` is print-mode
+  only and **solo-only** — a defer emitted for a batched call is discarded
+  and the call falls through to `acceptEdits` — so the hook counts sibling
+  tool_use blocks and denies when it cannot guarantee a solo defer.
+  Degradation is always toward deny.
+
 ## 13. Technology summary
 
 | Concern | Choice | Notes |
