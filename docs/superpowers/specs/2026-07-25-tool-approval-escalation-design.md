@@ -320,8 +320,16 @@ raised and `decided_by` is empty.
 
 `BATCHED` is deliberately its own outcome rather than folded into `REJECTED`:
 it is the **measurable size of the solo-only hole in real runs**, instead of a
-limitation asserted in prose. `target` is scrubbed on the same path
-`ToolDenial.target` already uses, before it reaches a gate context a human reads.
+limitation asserted in prose.
+
+**`DeferredToolUse.target` is scrubbed where it is built**, in
+`normalise_deferral`, via the same `memory/scrub.py` the session pipeline uses.
+This is stricter than the inline `ToolDenial.target` beside it, which today is
+scrubbed only inside the session artifact (`scrub_session`) and not on
+`HarnessRunResult` — and deliberately so: a denial target is read by machines,
+whereas an escalation target is rendered into a gate a **human** reads, which is
+an exposure denials never had. Tightening the inline denial field to match is
+worth doing and is not in this increment's scope.
 
 ### 7. Error handling
 
