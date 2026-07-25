@@ -13,6 +13,8 @@ Order: explicit arg -> $SDLC_CONTAINMENT_POLICY -> repo-root discovery.
 from __future__ import annotations
 
 import fnmatch
+import hashlib
+import json
 import os
 import re
 from enum import Enum
@@ -22,7 +24,7 @@ from urllib.parse import urlparse
 import yaml
 from pydantic import BaseModel, Field
 
-from ..models import ContainmentLayer
+from ..models import ContainmentLayer, ToolGrant
 
 POLICY_PATH_ENV = "SDLC_CONTAINMENT_POLICY"
 
@@ -230,3 +232,56 @@ def evaluate(policy: Policy, tool: str, tool_input: dict,
             return Verdict(allow=False, rule_id=rule.id, reason=rule.reason,
                            action=rule.action)
     return Verdict(allow=True)
+
+
+# The hook writes this marker into the reason string after the `[rule-id] `
+# prefix when it matched an ESCALATE rule but could not escalate. Both the
+# hook (writer) and the adapter (reader) import it from here so the two can
+# never drift apart.
+ESCALATION_UNAVAILABLE = "escalation unavailable"
+
+
+def is_declined_reason(text: str) -> bool:
+    """True when a denial reason says an escalation was declined, not that a
+    rule simply denies. The rule-id prefix has already been stripped."""
+    return text.startswith(ESCALATION_UNAVAILABLE)
+
+
+def digest_tool_input(tool_input: dict) -> str:
+    """Canonical digest of a tool call's input. Used by BOTH the activity
+    (building a grant) and the hook (matching one), so canonicalisation can
+    never disagree between them."""
+    canonical = json.dumps(tool_input, sort_keys=True,
+                           separators=(",", ":"), ensure_ascii=False,
+                           default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def match_grant(grants: list[ToolGrant], tool: str, tool_use_id: str,
+                tool_input: dict) -> ToolGrant | None:
+    """The grant for exactly this call, or None. All three of tool name,
+    tool_use_id and input digest must agree — the id gives single-use (the
+    CLI replays the original id; a new call gets a new one) and the digest
+    guards against id reuse carrying a different payload."""
+    if not tool_use_id:
+        return None
+    digest = digest_tool_input(tool_input)
+    for g in grants:
+        if (g.tool_use_id == tool_use_id and g.tool == tool
+                and g.input_digest == digest):
+            return g
+    return None
+
+
+def load_grants(path: str | os.PathLike | None) -> list[ToolGrant]:
+    """Read the grants asset the adapter wrote. A missing path or file means
+    'no decision yet', which makes an escalate rule escalate — the safe
+    direction. Malformed content raises: a grants file we cannot parse must
+    not silently become 'no grants', which would re-ask a decided call."""
+    if path is None:
+        return []
+    p = Path(path)
+    if not p.is_file():
+        return []
+    raw = json.loads(p.read_text(encoding="utf-8"))
+    return [ToolGrant.model_validate(e) for e in raw]
