@@ -518,6 +518,29 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
   **never** the default clean-context reviewer (ADR-6). *Trade-off:* a
   storage + scrub cost on every run, in exchange for making agent behaviour
   (not just its output diff) a first-class, measurable signal. **New scope.**
+- **ADR-17** Containment as a declared harness capability — a `CodingHarness`
+  declares which layers it can enforce (`native` / `hook`); the policy is one
+  versioned asset (`policy/containment.yaml`) compiled per adapter. Native
+  config is the **inner** layer and the hook the outer one, which is
+  structural rather than conventional: a hook's `allow` cannot bypass a
+  `permissions.deny` rule (verified against claude 2.1.219). Because a native
+  denial is **not** structurally reported (`permission_denials` is empty for
+  it) while a hook denial is, `layer:` declares a rule's *minimum* capability
+  and each adapter enforces at every layer it has. Total absence of layers
+  fails closed (cursor); partial coverage is recorded in `ContainmentReport`,
+  never silent; `strict` promotes partial coverage to a refusal. The hook
+  (`python -m sdlc.harness.hook`) is its own import-light module — it runs
+  once per tool call and must not import Temporal/pydantic_ai — and receives
+  the policy path explicitly (`--policy`), because its cwd is the task
+  worktree (a temp dir) where repo-root discovery would fail. **Adapter
+  reality (unequal mechanisms):** claude compiles to `permissions.deny` +
+  `hooks.PreToolUse` (full, observable); opencode (1.18.4) has no config flag
+  and no config env var, so its native deny is written into the worktree's
+  own `opencode.json` — self-protecting via the `edit` deny the same
+  compilation emits for agent-config paths; cursor surfaces neither and fails
+  closed. **This is a fence, not a sandbox:** egress denial is tool-level only
+  (a socket opened inside an allowed `Bash` call is invisible); the
+  OS-user/container tier is E-21.
 
 ## 13. Technology summary
 

@@ -24,4 +24,7 @@ logfire = ["logfire[pydantic-ai]>=3"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
-markers = ["slow: builds a venv or otherwise takes >10s"]
+markers = [
+    "slow: builds a venv or otherwise takes >10s",
+    "live: spawns a real harness CLI and spends tokens; skipped unless SDLC_LIVE_TESTS=1",
+]
