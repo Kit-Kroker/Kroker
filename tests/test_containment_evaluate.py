@@ -1,7 +1,7 @@
 """E-16: the rule matrix. Pure — no subprocess, no CLI."""
 import pytest
 
-from sdlc.harness.containment import Policy, Rule, Verdict, evaluate
+from sdlc.harness.containment import Action, Policy, Rule, Verdict, evaluate
 from sdlc.models import ContainmentLayer
 
 POLICY = Policy(version=1, rules=[
@@ -124,3 +124,23 @@ def test_unknown_tool_is_allowed(worktree):
 def test_first_matching_rule_wins_and_carries_its_reason(worktree):
     v = evaluate(POLICY, "Write", {"file_path": "/etc/passwd"}, worktree)
     assert v.reason == "Writes are scoped to the task worktree."
+
+
+def test_verdict_carries_the_matched_rules_action(tmp_path):
+    policy = Policy(version=1, rules=[
+        Rule(id="esc", layer=ContainmentLayer.HOOK, action=Action.ESCALATE,
+             tools=["Write"], predicate="path_outside_worktree",
+             reason="scoped"),
+    ])
+    v = evaluate(policy, "Write", {"file_path": "/etc/passwd"}, str(tmp_path))
+    assert v.allow is False
+    assert v.action is Action.ESCALATE
+
+
+def test_allow_verdict_action_defaults_to_deny(tmp_path):
+    """An allow verdict has no matched rule; `action` must not imply one."""
+    policy = Policy(version=1, rules=[])
+    v = evaluate(policy, "Write", {"file_path": f"{tmp_path}/a.py"},
+                 str(tmp_path))
+    assert v.allow is True
+    assert v.action is Action.DENY
