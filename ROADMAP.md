@@ -39,6 +39,24 @@
 > phase exits are gated on measurement that does not run yet — P3's exit is
 > literally *"SC-4 and SC-6 measurable"*, and SC-1/2/3 are all `—`.
 
+> **2026-07-25 — two new user groups, four new requirement families.** PRD v1.1
+> adds repository **triage** (FR-900), the **capability & risk audit** (FR-910,
+> porting the EDCR methodology from
+> [`BrownKit`](https://github.com/MaksimShevtsov/BrownKit)), the **service
+> platform** (FR-1000), and the **product-outcome loop** (FR-1100). New work
+> lands as **E-40…E-71** (§§10–13). Three framings worth keeping in view:
+> (a) **triage is a separate, cheaper tier than the audit, and gates it** — EDCR
+> is enterprise-brownfield machinery (BIAN/TM Forum/ACORD/HL7 blueprints,
+> Java/Maven sample) and pointing it at a three-week-old vibe-coded repo
+> produces a capability model over structure that does not exist; (b) the port's
+> real value is **enforceability** — BrownKit's gates and 14 acceptance criteria
+> are prose graded by the model that produced the artifacts, and here they
+> become `CheckResult`s computed by pure code; (c) **BrownKit's `not-collected`
+> discipline flows back into the existing contracts** (FR-915) — the factory's
+> `QAReport.coverage_pct: float | None` conflates a measured zero with a
+> never-measured value, which is a defect in a product that sells measurement.
+> Spec `docs/superpowers/specs/2026-07-25-brownfield-assessment-and-outcome-measurement-design.md`.
+
 ---
 
 ## 0. Phase summary (PRD §9)
@@ -51,6 +69,14 @@
   Memory (recall/retain/watermark) ✅ and soft gates ✅ done; SC-4/SC-6 not yet measurable (need retro/reflect wiring + real runs). **The retro stage that makes them measurable is E-32** (§9.8); the on/off memory delta is the measurement E-31/E-33 exist to run.
 - [ ] **P4** — MCP surface, maintenance loop (DAPER), fleet scale → *SC-1..3 at target*
   Not started.
+- [ ] **P5** — Triage + tidy-up (Tier 0/1), operator-run, single tenant → *one unfamiliar repository triaged, a mechanical backlog fixed through governed runs, before/after delta recorded*
+  Not started (§10, E-40…E-44). **Does not depend on P7** — operator-run delivery on repositories you are authorised to run needs neither tenancy nor self-serve onboarding.
+- [ ] **P6** — Capability & risk audit (Tier 2) + evidence bundle → *one repository audited end-to-end with SC-7 held and a bundle handed over*
+  Not started (§11, E-45…E-56). Gated on P5's readiness verdict (FR-903), not merely sequenced after it.
+- [ ] **P7** — Hosted multi-tenant service → *NFR-8 adversarial test green; FR-1002 container tier live; a tenant onboards unassisted*
+  Not started (§12, E-57…E-63). **FR-1002 is the gating item for admitting any external tenant**, not a hardening task: today a customer's `npm install` executes as the worker user with the worker's toolchain and unrestricted network egress.
+- [ ] **P8** — Product outcome loop → *one hypothesis pre-registered, shipped, and decided by its own rule (SC-11/SC-12)*
+  Not started (§13, E-64…E-71). E-67 (`DeployPlan`/`DeployReport`) is needed by ordinary feature runs too — DAG stage 13 is a single hardcoded `make deploy ENV=staging` today.
 
 ---
 
@@ -128,6 +154,61 @@
 - [ ] ⚠️ **FR-703** egress policy — **research is the pipeline's first outbound egress, and it arrives before the egress policy.** *Partially landed (2026-07-24, E-15/E-16):* the `pre_tool` hook now exists and denies out-of-worktree writes, recursive deletes, agent-config rewrites, and non-allowlisted hosts (tool-level). Egress is still env-allowlist + tool-level only — network-level egress and the OS/container tier remain open (E-21).
 - [ ] **FR-704** observability export (`events.jsonl` + `report.html`) — no `observability/` module.
 
+### Context & continuity (FR-800) — *documented in PRD 2026-07-25, no new scope*
+
+Live since P1, never written into the PRD until now. Listed so the family reads
+as tracked rather than accidental.
+
+- [x] **FR-801** per-role `context_budget_tokens` enforced at prompt assembly (`models.py:496`).
+- [x] **FR-802** `max_session_resumes` with stack-mismatch override (`feature.py:211,695`).
+- [x] **FR-803** `ValidationContract` frozen at planning (`models.py:184`).
+- [x] **FR-804** materialized diff for clean-context validators (`activities.py:502`).
+- [x] **FR-805** `HandoffSummary` task→task continuity (`models.py:202,275`).
+- [ ] ⚠️ **FR-806** prompts as versioned assets in the memo hash — prompt bytes are hashed into `content_key` ✅; the edit → offline eval → deploy loop is E-4.
+
+### Assessment, Tier 0 — triage (FR-900) *(new scope; PRD v1.1)*
+
+- [ ] **FR-901** triage stage → `RepoTriage` + readiness verdict; completes on repos that do not build (E-42).
+- [ ] **FR-902** hygiene signal set via FR-108 adapters, one implementation per signal (E-41).
+- [ ] **FR-903** readiness gate blocking Tier 2, overridable by audited decision (E-42).
+- [ ] **FR-904** `mechanically_fixable` → brownfield child runs + before/after re-triage (E-44).
+
+### Assessment, Tier 2 — capability & risk audit (FR-910) *(new scope; PRD v1.1)*
+
+- [ ] **FR-911** `AssessmentWorkflow` EDCR DAG, report-after-assess, no phase-status file (E-45); `/enrich` as a declared stage input rather than a phase (E-56).
+- [ ] **FR-912** deterministic scan memoized on `(tree hash, signal version)`; cross-source confidence (E-46).
+- [ ] **FR-913** `CapabilityMap` with content-derived stable ids + coverage floor + orphan classification — **also satisfies FR-102** (E-47/E-48). Blocked on **OQ-6** (what canonical key survives refactoring).
+- [ ] **FR-914** byte-exact quote verification against the pinned commit, fail-closed — shares FR-107's verifier (E-43).
+- [ ] **FR-915** `not_collected` / `unknown` vs measured value; **retrofits `QAReport.coverage_pct`** (E-40).
+- [ ] **FR-916** STRIDE + vuln classification + control coverage + composites with 1–3 specific drivers (E-49).
+- [ ] **FR-917** risk thresholds as deterministic gate checks; FP dispositions as audited overrides (E-50).
+- [ ] **FR-918** acceptance criteria computed by code, not self-asserted; cross-reference integrity **absolute** (E-51).
+- [ ] **FR-919** spec seeds → brownfield child runs; seed criteria become run acceptance criteria (E-53).
+- [ ] **FR-920** re-assessment, incremental re-scan, per-capability risk delta as first-class output (E-54).
+- [ ] **FR-921** evidence bundle: manifest + five role reports + verification status + gates + fix-run sessions (E-52).
+- [ ] **FR-922** per-phase budgets; exhaustion escalates, partials marked partial (E-55).
+
+### Service platform (FR-1000) *(new scope; PRD v1.1)*
+
+- [ ] **FR-1001** tenancy by construction — namespace + store prefix + bank namespace; resolves OQ-4 (E-58).
+- [ ] **FR-1002** untrusted-code isolation — per-run container, non-root, network-level egress allowlist. **Precondition for any external tenant** (E-21 + E-57).
+- [ ] **FR-1003** repo connection — app install, short-TTL repo-scoped tokens, PR-only delivery, webhooks (E-59).
+- [ ] **FR-1004** identity/authz; real principal in `GateDecision` — closes FR-304's identity gap (E-60).
+- [ ] **FR-1005** metered per-tenant cost from FR-701 counters (E-61).
+- [ ] **FR-1006** on-prem single-tenant *or* hosted; configurable model provider (E-62).
+- [ ] **FR-1007** per-tenant retention + audited purge (E-63).
+
+### Product outcome (FR-1100) *(new scope; PRD v1.1)*
+
+- [ ] **FR-1101** `Hypothesis` at intake, gated before any code (E-64).
+- [ ] **FR-1102** pre-registration freeze + hash, reusing FR-803 semantics (E-65).
+- [ ] **FR-1103** metric → instrumentation → emitted-event traceability via the FR-106 mechanism (E-66).
+- [ ] **FR-1104** `DeployPlan`/`DeployReport` — **closes DAG stage 13 for all runs** (E-67).
+- [ ] **FR-1105** hosting + analytics adapters, one reference each; no substrate reimplementation (E-68/E-69).
+- [ ] **FR-1106** durable observation window → collect → evaluate → keep/kill/extend gate (E-70). See **OQ-9**.
+- [ ] **FR-1107** PoC mode: bounded, disposable, marked so it never accrues as debt (E-71).
+- [ ] **FR-1108** `inconclusive` is a valid verdict; never a favourable read on insufficient data (E-70).
+
 ---
 
 ## 3. Non-functional requirements (PRD §7)
@@ -139,6 +220,9 @@
 - [ ] ⚠️ **NFR-5** Security — env allowlist done; `pre_tool` hook landed (2026-07-24, E-15/E-16, tool-level destructive-action + egress denial); OS user, container, network-level egress, scoped-cred injection still absent (E-20/E-21).
 - [x] **NFR-6** Reproducibility vs memoization — watermark-pinned recall + content-addressed cache.
 - [x] **NFR-7** Portability — `MemoryConfig.backend` defaults to `fake`; real Hindsight client for self-hosting.
+- [ ] **NFR-8** Tenant isolation proven by adversarial cross-tenant read/recall test — no tenant concept exists yet (E-58).
+- [ ] **NFR-9** Hostile input — the factory currently assumes repositories are its own. Build scripts, test code, and manifests of a connected repo are attacker-controlled and executed (E-57).
+- [ ] — **NFR-10** Assessment reproducibility — not falsifiable until the assessment exists; the deterministic half is E-41/E-46, the fused-layer variance half needs runs.
 
 ---
 
@@ -150,6 +234,12 @@
 - [ ] — **SC-4** repeat-clarification <10% by run 10 — needs reflect wiring (FR-404) + runs. **The per-run signal now accrues:** the retro stage (E-32) emits a `RunSummary` carrying `clarifications[].answered_by` (`human`/`suggested`/`unanswered`) on every terminal path. The cross-run *aggregation* into a repeat-clarification rate remains the benchmark's job (§9.8), via the memory-on cells that generate the run-10 series.
 - [x] **SC-5** zero deploys past a failed **absolute** check — empty/vacuous-task bypass fixed, absolute failure is terminal, and the `security_no_critical` floor is now emitted by the `security_scan` activity and wired as an absolute merge-gate check (`feature.py:807,818`). `tests/test_security_floor.py` asserts a critical finding blocks deploy.
 - [ ] — **SC-6** soft-gate override <5% — mechanism exists; not measurable without runs + reflect. **The per-run signal now accrues:** the retro stage (E-32) emits `RunSummary.gates[]` with `policy`/`decided_by`/`confidence`/`overrides` (ARCHITECTURE §10 calibration compare). The cross-run *aggregation* into an override rate remains the benchmark's job (§9.8).
+- [ ] — **SC-7** grounding integrity: 100% of `grounded` findings re-verify byte-exact, zero fabricated path/line refs when sampled — **the assessment product's SC-5**: one violation is a defect, not a percentage. Mechanism is E-43; the sampled audit needs real assessments.
+- [ ] — **SC-8** capability coverage ≥90% with classified orphans on ≥80% of readiness-passing repos — needs E-47 + a corpus.
+- [ ] — **SC-9** remediation efficacy: reduced composite for the targeted capability in ≥80% of accepted items, no new critical — needs E-54's delta.
+- [ ] — **SC-10** assessment economics per repo-size band — needs E-55 budgets + runs; without this the work cannot be priced.
+- [ ] — **SC-11** ≥95% of experiments decided by the pre-registered rule with no *unaudited* post-hoc change — needs E-65.
+- [ ] — **SC-12** 100% of hypothesis metrics traced to an emitted event before the deploy gate — needs E-66.
 
 ---
 
@@ -162,6 +252,11 @@
 - [x] **US-5** dev/reviewer different model family; registry rejects same-family — enforced at boot, against `dev` (the role that actually codes) since `2026-07-16-registry-drives-every-role`.
 - [ ] **US-6** stakeholder one-screen fleet view — no dashboard backend.
 - [ ] **US-7** MCP conversational gate approval — no MCP server.
+- [ ] **US-8** client connects a repo → readiness verdict + checkable hygiene list (E-41/E-42/E-43).
+- [ ] **US-9** client approves a tidy-up backlog → PR per item + before/after delta (E-44).
+- [ ] **US-10** assessor hands over a bundle whose every claim resolves to evidence (E-51/E-52).
+- [ ] **US-11** product owner's decision rule frozen at approval, verdict computed against it (E-64/E-65/E-70).
+- [ ] **US-12** platform engineer onboards an isolated tenant (E-57/E-58).
 
 ---
 
@@ -589,3 +684,269 @@ every later analysis (heatmap, anti-cheat, harvesting) reads from.
 one language end-to-end so the first SC signal isn't blocked on N adapters;
 E-30a/b/c follow the corpus, not precede it. E-30/E-32 unblock the most: the
 first gives an objective grade, the second closes P3 and three capabilities.
+
+---
+
+## 10. Tier 0 — repository triage & tidy-up (`E-40`…`E-44`) → FR-900, FR-102, FR-108, NG5
+
+**Why a separate tier.** The EDCR methodology (§11) is enterprise-brownfield
+machinery: its blueprints are BIAN, TM Forum, ACORD, HL7, ARTS, APQC, and its
+worked example is Java/Maven/Jenkins/JaCoCo. It decomposes a system that *has*
+structure. A vibe-coded repository has none — it may not build, has no tests, has
+`.env` committed and the service key in the client bundle, and half its files are
+untouched generator scaffolding. Point EDCR at it and file→capability coverage
+has nothing to map to, every QA composite degenerates to `unknown`, and you pay
+for per-capability STRIDE reasoning about a structure that does not exist.
+
+Tier 0 answers the question that actually comes first — *what state is this repo
+in?* — deterministically and cheaply, and **gates** Tier 2 on the answer
+(FR-903). It is also the tier whose findings are mostly *mechanically* fixable,
+which makes it the shortest path to a demonstrable assess → fix → prove loop.
+
+- [ ] **E-40 — `Measurement` type + `RepoTriage` contracts** → FR-915, FR-901.
+  A `Measurement` that distinguishes a measured value from `not_collected`
+  (with a recorded reason) and from `unknown`, plus the `RepoTriage` artifact.
+  **This one lands in live code and improves the existing pipeline immediately:**
+  `QAReport.coverage_pct: float | None` currently makes a measured 0% and a
+  never-measured value indistinguishable to the advisory coverage check, so the
+  gate cannot tell "this diff has no tests" from "we failed to instrument". The
+  idea is imported wholesale from BrownKit, which treats `not-collected` as a
+  first-class state and forbids defaulting to zero — a discipline the factory
+  currently lacks.
+- [ ] **E-41 — deterministic hygiene signals** → FR-902, FR-108.
+  Build and run probe; secret scan including **credentials reachable from
+  client-side bundles**; dependency health (unpinned / known-vulnerable /
+  unused / duplicated); dead and generator-scaffold code; framework-default
+  misconfiguration (unauthenticated routes, permissive CORS, world-readable
+  storage); size and duplication outliers; missing baseline practice. Each is an
+  activity behind the FR-108 adapter that already resolves by marker file.
+  **One implementation per signal, deliberately:** BrownKit ships bash,
+  PowerShell *and* Python variants of `detect-stack`, `find-secrets`,
+  `git-churn`, `parse-coverage`, `list-manifests` — three behaviours to keep in
+  sync and three ways for a finding to differ by host. Client-bundle secret
+  reachability is called out separately because it is the highest-yield
+  vibe-code finding and no generic secret scanner looks for it.
+- [ ] **E-42 — `TriageWorkflow` + readiness verdict + readiness gate** → FR-901,
+  FR-903. Readiness (buildable / runnable / tests present / structure
+  discernible) computed from deterministic signals **only**, so triage completes
+  on a repository where an LLM would have nothing to reason about. An
+  unbuildable repo is a finding, not an error. The gate resolves through the
+  FR-301/302 machinery, so an operator can override with an audited decision.
+- [ ] **E-43 — grounding verifier** → FR-914, shares FR-107's implementation.
+  `verify(path, span, quote, commit) -> grounded | unverified`, fail-closed, one
+  implementation serving both the research stage (quote vs. fetched bytes) and
+  assessment (quote vs. committed bytes). **Land this before any finding-emitting
+  stage exists**, so no stage can ever ship an unverified claim labelled
+  grounded — retrofitting this invariant after four finding-producing phases
+  exist is how audits become unfalsifiable. Open: **OQ-7**, inline per finding
+  vs. a batch gate before storage.
+- [ ] **E-44 — tidy-up fix runs + re-triage** → FR-904, NG5.
+  `mechanically_fixable` findings become brownfield `FeatureWorkflow` child runs
+  (one PR per accepted item, never a direct patch), then triage re-runs and the
+  before/after delta is recorded. This is the first end-to-end proof of the
+  assess → fix → prove loop, on the cheapest and lowest-risk class of fix.
+
+## 11. Tier 2 — the EDCR port (`E-45`…`E-56`) → FR-910
+
+**What the port is actually for.** BrownKit's methodology is sound and its
+artifact set is well specified; what it cannot do is *enforce itself*. `/gate`
+writes no files and explicitly permits continuation when `/assess` never ran.
+`/finish`'s 14 acceptance criteria are graded by the same model that produced the
+artifacts being graded. `*Source: ...*` cross-references are audited by an LLM
+asked to check its own citations. Ported here, each of those becomes a
+`CheckResult` computed by pure code from typed artifacts, with the
+absolute/advisory split of FR-106 — which is the entire reason to do this inside
+the factory rather than as prompts.
+
+- [ ] **E-45 — `AssessmentWorkflow` EDCR DAG shell** → FR-911.
+  init → scan → discover → assess → **report** → generate → finish.
+  Two deliberate deviations from the source methodology: **(a)** `report` runs
+  *after* `assess` — the methodology numbers report 4th and assess 5th, but
+  reports render risk scores only `assess` produces, and `/finish` requires all
+  five reports complete; **(b)** `workflow.json` is **not ported** — its
+  `phases[].status/started_at/completed_at/artifacts` is a hand-rolled durable
+  state machine, which is exactly what Temporal history already is.
+  `/enrich`, `/gate` and `/validate` are not stages (→ E-56, E-50, E-53).
+- [ ] **E-46 — scan phase** → FR-912. S1–S5 capability signals, SS1–SS4
+  security, QS1–QS4 QA. Cross-source confidence: three or more independent
+  sources = high, two = medium, one = low — never the depth of one source. Memo
+  key `(repository tree hash, signal version)` per FR-103, so re-assessing an
+  unchanged repo is a cache hit and editing one signal's logic invalidates
+  exactly that signal.
+- [ ] **E-47 — `CapabilityMap`** → FR-913, **FR-102**. L1 with content-derived
+  stable `BC-NNN`, L2 operations, entity ownership (exactly one owner or a
+  surfaced conflict), file→capability coverage floor (default 0.90), orphans
+  classified attached | infrastructure | dead. **This is where the assessment
+  product and the core pipeline converge**: it satisfies FR-102's `CodebaseMap`,
+  so building it for the audit also unblocks P2 brownfield feature runs.
+  **Blocked on OQ-6** — a content key over file paths breaks when files move, one
+  over entity names breaks on rename, and until that is settled "stable
+  identifiers" is aspiration and every cross-reference in the bundle is fragile.
+- [ ] **E-48 — discover proposers** → FR-913. D1 cohesion/coupling/boundary
+  clarity; D2 action per candidate (`CONFIRM | SPLIT | MERGE | DE-SCOPE |
+  FLAG`); D3 coverage verification with orphan disposition; D4 lock; D5 L2
+  decomposition with entity ownership (`OWNS / CREATES / MANAGES / TRACKS /
+  READS`); D6 security context; D6a QA context using E-40's `not_collected`;
+  D7 consolidated domain model; D8 industry-blueprint comparison where `MISSING`
+  is context, not failure. Guardrail worth porting verbatim: *delivery channels
+  and deployment boundaries are not capabilities*.
+- [ ] **E-49 — `UnifiedRiskMap` + risk proposers** → FR-916. Conforms to the
+  `unified-risk-map` v1.0 schema: composite in [0,1] or an `unknown`/`partial`
+  sentinel; drivers `minItems: 1, maxItems: 3` with a real minimum length, so a
+  generic label cannot pass as a driver. STRIDE per capability with explicit
+  rationale for inapplicable categories; vulnerabilities `confirmed | probable |
+  potential`; five control families; cross-capability shared vulnerabilities,
+  cascading failures, weak trust boundaries, privilege-escalation chains.
+- [ ] **E-50 — assessment gate checks** → FR-917, FR-106, FR-304.
+  BLOCK on a confirmed unaccepted vulnerability, a testability blocker in a
+  high-criticality capability, or composite ≥ 0.8; WARN 0.6–0.79; else PASS.
+  False-positive dispositions (`false_positive | mitigated_elsewhere |
+  accepted_risk`) become audited overrides that persist across re-runs.
+- [ ] **E-51 — acceptance criteria as code** → FR-918. The 14 terminal criteria
+  and every per-phase exit criterion as `CheckResult`s computed from typed
+  artifacts. Cross-reference integrity — every capability, threat, vulnerability
+  and testability id cited anywhere resolves to a real record — is an
+  **absolute** check, because a bundle with a dangling reference is not a
+  weaker audit, it is an unverifiable one.
+- [ ] **E-52 — role reports + evidence bundle** → FR-921, FR-704.
+  Architect / developer / SDET / security / stakeholder reports plus a
+  machine-readable manifest, every finding carrying its verification status, all
+  gate results with overrides, and the `HarnessSession` transcripts of fix runs.
+  Folds into the FR-704 export rather than opening a second reporting path.
+- [ ] **E-53 — spec seeds → brownfield child runs** → FR-919, NG5.
+  Capability-scoped seeds naming only files that exist; each accepted seed starts
+  a brownfield `FeatureWorkflow` child. `/validate`'s criteria (D1–D4 boundary
+  and ownership, A1–A3 vulnerability regression / control presence / data
+  sensitivity, G1–G3 coverage / testability seams / non-functional constraints)
+  become that run's acceptance criteria, so **the fix is graded against the
+  assessment that motivated it**. This is the join BrownKit cannot close on its
+  own, and it is the product's central claim.
+- [ ] **E-54 — re-assessment + per-capability delta** → FR-920. Incremental
+  re-scan of capabilities whose files changed; composite delta as a first-class
+  artifact. Feeds SC-9.
+- [ ] **E-55 — per-phase assessment budgets** → FR-922, FR-701. Assessment input
+  size is the customer's choice, not the factory's — the only stage family where
+  that is true. Exhaustion escalates; partial results are marked partial.
+- [ ] **E-56 — `/enrich` as a declared stage input** → FR-911, FR-402 pattern.
+  The capability slice (structure, entity contracts, blast radius, QA
+  constraints, threats, external dependencies) as a hashed declared input to a
+  brownfield feature run — not a command, and not something an agent fetches
+  ad hoc.
+
+## 12. Service platform (`E-57`…`E-63`) → FR-1000, NFR-8, NFR-9
+
+**E-57 and E-58 are preconditions for admitting an external tenant, not
+hardening.** Everything in §§10–11 can be delivered by an operator on
+repositories they are authorised to run; none of it can be offered self-serve
+until these land.
+
+- [ ] **E-57 — untrusted-input threat model + adversarial tests** → FR-1002,
+  NFR-9; extends **E-21**. E-21 covers the container / restricted-OS-user tier;
+  E-57 is the threat model and the tests that prove it — a repository whose test
+  suite exfiltrates the environment, whose build script writes outside the
+  worktree, whose `postinstall` opens a socket. FR-703's own note concedes the
+  gap: egress enforcement is tool-level, so *"a socket opened from inside an
+  allowed `Bash` call is not visible to it"*. Running a stranger's
+  `npm install` today is arbitrary code execution as the worker user with the
+  worker's toolchain and unrestricted network.
+- [ ] **E-58 — tenancy by construction** → FR-1001, NFR-8; **resolves OQ-4**.
+  Temporal namespace + artifact-store prefix + memory-bank namespace per tenant,
+  with an adversarial test that attempts a cross-tenant artifact read and a
+  cross-tenant recall. Memory is the sharpest edge: cross-run learning is the
+  factory's differentiator and, without a tenant boundary, its first
+  data-breach path — client A's gotchas recalled into client B's run.
+- [ ] **E-59 — repository connection** → FR-1003, FR-703. VCS app install per
+  tenant; short-TTL, repo-scoped tokens minted per run and never persisted
+  (FR-703 specifies these and nothing implements them); PR-only delivery;
+  webhooks for commit and PR events.
+- [ ] **E-60 — identity & authorization** → FR-1004; closes FR-304's gap.
+  Authenticated principals on every surface and a real principal recorded in
+  every `GateDecision`. FR-304 already records *who approved what* — there is
+  simply no principal to record, which is fine for one operator at a CLI and
+  void as an audit trail you hand to a client.
+- [ ] **E-61 — metered per-tenant cost** → FR-1005, FR-701. The FR-701 counters
+  already aggregate harness JSON cost and model usage per run; this attributes
+  and exports them per tenant with enforceable ceilings.
+- [ ] **E-62 — on-prem packaging + configurable model provider** → FR-1006,
+  NFR-7. One artifact, single-tenant on-prem or multi-tenant hosted; the
+  customer may supply their own model credentials or gateway.
+- [ ] **E-63 — retention & audited purge** → FR-1007. Per-tenant retention for
+  evidence, transcripts and memory; a deletion request purges artifacts, banks
+  and transcripts, and the purge itself is audited.
+
+## 13. Product outcome (`E-64`…`E-71`) → FR-1100
+
+**The framing.** The factory measures *itself* very well — SC-1..6, the
+benchmark matrix, rubric calibration (FR-110), capture-always transcripts
+(FR-109). It measures **the product it ships: nothing**. FR-1100 closes that,
+and the reason it is tractable rather than a second company is NG7: hosting,
+feature flagging and analytics are *adapters over what the customer already
+runs*, following FR-108's pattern. What remains is squarely this codebase's
+competence — a frozen contract, a traceability check, a durable timer, and a gate.
+
+- [ ] **E-64 — `Hypothesis` contracts + intake gate** → FR-1101. Metric,
+  expected direction, minimum effect worth shipping, decision rule, kill
+  condition, observation window — gated before any code is written.
+- [ ] **E-65 — pre-registration freeze** → FR-1102. The decision rule is frozen
+  and hashed at approval, reusing `ValidationContract.frozen` semantics
+  (FR-803). A post-hoc change is a new audited gate round with both versions
+  retained. **This is the differentiating mechanic**: the owner commits to how
+  they will decide before they see the data, and the factory is what makes that
+  commitment structural rather than cultural.
+- [ ] **E-66 — metric traceability** → FR-1103, FR-106. Every hypothesis metric
+  must trace to ≥1 instrumentation task and ≥1 emitted event, enforced by the
+  same deterministic mechanism as criterion→test traceability. An
+  uninstrumented hypothesis cannot reach deploy — which is the single most
+  common way a "measured" feature ships unmeasurable.
+- [ ] **E-67 — `DeployPlan` / `DeployReport`** → FR-1104. Environment, flag and
+  cohort, rollback, smoke-tested deployment vs. PR merge. **Closes DAG stage 13
+  for all runs**, not only experiments: today the stage is a single hardcoded
+  `make deploy ENV=staging` with no plan/report split. Needed regardless of
+  whether the outcome loop ships.
+- [ ] **E-68 — deployment target adapters** → FR-1105, NG7. Resolved from
+  config, one reference adapter, no hosting substrate of our own.
+- [ ] **E-69 — analytics source adapters** → FR-1105, NG7. One reference
+  adapter. See **OQ-9**: the factory would read a metric from a
+  customer-controlled source to decide keep/kill, which is FR-914's grounding
+  problem inside a system we do not control and currently has no good answer.
+- [ ] **E-70 — durable observation + verdict gate** → FR-1106, FR-1108. A
+  Temporal timer spans the observation window — the one thing Temporal is
+  uniquely suited to here, since a 14-day wait is exactly what NFR-1 already
+  guarantees. On expiry: collect, evaluate the pre-registered rule, open a
+  keep / kill / extend gate. Insufficient data yields `inconclusive`, never a
+  favourable read (FR-915 applied to product metrics).
+- [ ] **E-71 — PoC mode** → FR-1107. Bounded budget, explicitly disposable
+  output, preview deployment, recorded decision, and marked so it never silently
+  accrues as production debt.
+
+## 14. Suggested ordering across §§10–13
+
+Not a commitment. Ranked by what each item unblocks and by which invariants get
+harder to install later:
+
+1. **E-40 + E-43** — the two invariants. Both are small, both land in *existing*
+   code paths, and both improve the current pipeline on their own (`Measurement`
+   fixes the coverage-check ambiguity; the verifier is shared with FR-107's
+   research stage). Installing "no unverified claim may be labelled grounded"
+   before any finding-producing stage exists is far cheaper than retrofitting it
+   across four of them.
+2. **E-41 → E-42 → E-44** — triage and tidy-up. The cheapest shippable product,
+   almost entirely deterministic, and it needs neither tenancy nor containment
+   because it can be operator-run. E-44 is the first item that proves the whole
+   assess → fix → prove claim end to end.
+3. **E-47 (with E-46)** — `CapabilityMap`. Unblocks P2 brownfield whether or not
+   the audit ships, which makes it the highest-leverage item in §11. **Settle
+   OQ-6 first** — it is genuinely blocking, not a detail.
+4. **E-67** — `DeployPlan`/`DeployReport`. Closes stage 13 for ordinary feature
+   runs; the outcome loop needs it, but so does P1's own deploy stage.
+5. **E-57 + E-58** — the moment an external, self-serve tenant is on the table
+   these stop being optional. Not required for operator-run delivery, so their
+   position depends entirely on whether P7 is the near-term goal.
+6. Then audit depth (**E-48 → E-49 → E-50 → E-51 → E-52 → E-53 → E-54 → E-55 →
+   E-56**), service (**E-59…E-63**), and the outcome loop (**E-64 → E-65 →
+   E-66 → E-68/E-69 → E-70 → E-71**).
+
+**Deliberate:** §10 ships before §11 even though §11 is the more impressive
+product. Triage is what tells you whether the audit is worth running (FR-903),
+its findings are the ones that are mechanically fixable, and it is the only tier
+that works on the repositories most likely to arrive first.
