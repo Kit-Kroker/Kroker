@@ -414,7 +414,7 @@
     <a href="../SDLC-spec-v2.md">SDLC-spec-v2.md</a> ·
     <a href="../PRD.md">PRD.md</a>
     <br>
-    Status: <strong>Design input — not yet reconciled into ROADMAP.md</strong> ·
+    Status: <strong>Design doc — reconciled into ROADMAP.md §9.8 (E-30…E-39; most landed)</strong> ·
     Companion to <code>ROADMAP.md</code>, <code>SDLC-spec-v2.md</code>, <code>ARCHITECTURE.md</code>, <code>PRD.md</code>.
   </p>
 
@@ -532,13 +532,13 @@
       <td class="name">Benchmark harness</td>
       <td><span class="pill done">done</span></td>
       <td><code>benchmarks/workflow.py</code> (<strong>E-27</strong>) — runs golden cases through the real <code>FeatureWorkflow</code>, judges per-stage artifacts against rubrics via the cross-family <code>judge_artifact</code>. Two cases today, both sized for a single short factory run.</td>
-      <td class="note">Single-run-sized only — decomposition unexercised.</td>
+      <td class="note">Decomposition now exercised — cat-café carries a held-out oracle (E-34).</td>
     </tr>
     <tr>
       <td class="name">Cross-family judge</td>
       <td><span class="pill done">done</span></td>
       <td><code>judge_artifact</code> with the <strong>ADR-6</strong> family-inequality invariant — the judge never shares an authoring model family with the producer. The “decorrelated review lens”, already load-bearing.</td>
-      <td class="note">Needs calibration before phase-exit trust (<a href="#sec2">§2 Tier B</a>).</td>
+      <td class="note">Calibration tracking landed (E-36 / FR-110) — trust level beside every rubric score (<a href="#sec2">§2 Tier B</a>).</td>
     </tr>
     <tr>
       <td class="name">Prompt eval loop</td>
@@ -548,15 +548,15 @@
     </tr>
     <tr>
       <td class="name">Cost attribution</td>
-      <td><span class="pill partial">partial</span></td>
-      <td>Exists <em>in benchmarks only</em> today (<strong>E-19</strong>). <code>HarnessRunResult</code> carries <code>input_tokens</code>, <code>output_tokens</code>, <code>context_window</code>, <code>compacted</code>; TemporalAgent usage records carry the proposer side.</td>
-      <td class="note">Numbers collected; not yet aggregated into run-level counters.</td>
+      <td><span class="pill done">done</span></td>
+      <td>Promoted from benchmarks-only to run-level counters and attributed <strong>per role</strong> (<strong>E-33</strong>, folds <strong>E-19</strong>): a single <code>_run_role</code> egress + the <code>price_usage</code> activity feed <code>RunSummary.roles</code> (dollars per role, every run); proposer <code>BenchmarkRecord.cost</code> is populated, so <code>mean_cost_usd</code> is real.</td>
+      <td class="note">FR-701 run-budget gate also wired (<code>run_budget_usd</code>).</td>
     </tr>
     <tr>
       <td class="name">CLI surface</td>
       <td><span class="pill done">done</span></td>
       <td><code>sdlc … benchmark</code> verb already exists (<strong>FR-603</strong>).</td>
-      <td class="note">Cross-run inbox still missing (FR-305).</td>
+      <td class="note">Cross-run inbox landed (E-8): <code>sdlc inbox</code> over the channel contract (FR-305).</td>
     </tr>
     <tr>
       <td class="name">Eval-aware memoization</td>
@@ -574,26 +574,28 @@
 </table>
 
 <div class="limits">
-  <h3>Three limits the roadmap already admits — this design must fix them</h3>
+  <h3>Three limits the roadmap used to admit — two now closed, one partial</h3>
   <ol>
     <li>
-      <span class="ln"><strong>No held-out grade wired end-to-end.</strong></span>
-      The coverage seam (<code>measure_coverage</code>) reads <code>coverage.xml</code> from the <em>integration</em>
-      worktree, but <code>run_test_suite</code> runs per-task in <em>task</em> worktrees, so the artifact never lands
-      where the gate looks (ROADMAP §1 stage 12, <strong>FR-106</strong>). Until this is closed there is no objective,
-      test-based grade — only rubric judgments.
+      <span class="ln"><strong>Held-out grade — CLOSED (E-30 + E-31).</strong></span>
+      The coverage seam is wired: <code>run_integration_checks</code> runs coverage-instrumented tests against the merged
+      integration head through the Python <code>ToolchainAdapter</code>, landing <code>coverage.xml</code> where
+      <code>measure_coverage</code> reads (the original <strong>FR-106</strong> gap), and <code>grade_oracle</code> runs
+      each case's held-out suite as a fraction-passing grade (<strong>E-31</strong>). Other languages wait on E-30a/b/c.
     </li>
     <li>
-      <span class="ln"><strong>Decomposition is unexercised.</strong></span>
-      Both benchmark cases are single-run-sized, so planner decomposition — the load-bearing variable in real work — is
-      unexercised (<strong>E-27</strong>). Cursor’s whole result is about decomposition quality; the factory cannot see
-      it yet.
+      <span class="ln"><strong>Decomposition — CLOSED (E-34).</strong></span>
+      The cat-café case now freezes an interface contract (ASGI <code>app:app</code>) and ships a held-out
+      <code>oracle/</code>, so planner decomposition — the load-bearing variable in real work — is finally exercised and
+      objectively graded. Cursor's whole result is about decomposition quality; the factory can now see it.
     </li>
     <li>
-      <span class="ln"><strong>The learning loop is open.</strong></span>
-      <code>reflect()</code> is registered but the retro <em>stage</em> (14) never runs (<code>RunSummary</code> unbuilt);
-      nothing writes to <code>org_bank</code> (<strong>E-25</strong>). So SC-4/SC-6 have no signal to measure, and
-      Abdullin’s second loop (distil production into eval cases) has no intake.
+      <span class="ln"><strong>The learning loop — PARTIAL (E-32 done; E-25 open).</strong></span>
+      The retro <em>stage</em> (14) now runs on every terminal path: it builds <code>RunSummary</code> from an in-workflow
+      trace, calls <code>reflect(project_bank)</code>, and exports <code>events.jsonl</code> + <code>report.html</code>
+      (<strong>E-32</strong>). SC-4/SC-6 per-run signal now accrues. Still open: nothing writes to
+      <code>org_bank</code> (<strong>E-25</strong>), so the cross-run aggregation and Abdullin's loop-B intake remain the
+      benchmark's job.
     </li>
   </ol>
 </div>
@@ -607,38 +609,38 @@
 </p>
 
 <div class="grid-3">
-  <div class="tier notstarted">
+  <div class="tier done">
     <span class="ttag">Tier A · objective, ungameable</span>
     <h3>Held-out acceptance tests</h3>
-    <p><span class="pill notstarted">not started</span> <span class="newscope">(new scope)</span></p>
+    <p><span class="pill done">done</span> <span class="newscope">(new scope)</span></p>
     <p>
       The Cursor pattern: a test suite the factory is <strong>never told exists</strong>, run against the produced code,
-      graded as fraction passing. Authored <em>with</em> the case; the gap between the factory’s own criterion→test
+      graded as fraction passing. Authored <em>with</em> the case; the gap between the factory's own criterion→test
       mapping and the hidden oracle is itself a signal.
     </p>
     <ul class="tight">
-      <li><strong>Ground-truth artifact:</strong> <code>benchmarks/cases/&lt;case&gt;/oracle/</code> — suite + fixtures, held out of the workflow’s context, run in a clean checkout <strong>through the case’s <code>ToolchainAdapter</code></strong> (<strong>ADR-15</strong>).</li>
-      <li><strong>Language by marker file</strong> in the produced repo (<code>pyproject.toml</code> / <code>package.json</code> / <code>go.mod</code> / <code>Cargo.toml</code>); manifest-vs-detected mismatch is itself a signal.</li>
+      <li><strong>Ground-truth artifact:</strong> <code>benchmarks/cases/&lt;case&gt;/oracle/</code> — suite + fixtures, held out of the workflow's context, run in a clean checkout <strong>through the case's <code>ToolchainAdapter</code></strong> (<strong>ADR-15</strong>). <em>Landed (E-31): <code>grade_oracle</code> runs after each benchmark child via JUnit XML; cat-café + todo-api ship oracles.</em></li>
+      <li><strong>Language by marker file</strong> in the produced repo (<code>pyproject.toml</code> / <code>package.json</code> / <code>go.mod</code> / <code>Cargo.toml</code>); manifest-vs-detected mismatch is itself a signal. <em>Python reference only (E-30); Go/TS/Rust = E-30a/b/c.</em></li>
       <li>Coverage → Cobertura XML; security floor → semgrep / SARIF; gate stays language-agnostic (<strong>ADR-15, E-30</strong>).</li>
-      <li><strong>Anti-cheat (Cursor’s manual review, made routine):</strong> (i) oracle held out of worktree/prompt/recall + post-run diff-coverage check; (ii) <strong>session inspection</strong> via <code>HarnessSession</code> (<strong>E-38</strong>) + the <code>deep_review</code> lens (<strong>E-39</strong>) — did the agent peek at a hidden test, hardcode answers, or fit to a discovered oracle? <span class="newscope">(new scope vs E-27)</span></li>
+      <li><strong>Anti-cheat (Cursor's manual review, made routine):</strong> (i) oracle-held-out assertion <em>landed (E-31)</em> + diff-coverage "built evenly" check <em>open (E-31a)</em>; (ii) <strong>session inspection</strong> via <code>HarnessSession</code> (<strong>E-38</strong>) + the <code>deep_review</code> lens (<strong>E-39</strong>) — did the agent peek at a hidden test, hardcode answers, or fit to a discovered oracle? <span class="newscope">(new scope vs E-27)</span></li>
     </ul>
     <p class="footnote">
-      <strong>Unblocks on:</strong> the coverage/test-execution seam (<a href="#sec1">§1 limit 1</a>). Single highest-leverage fix in the whole document — see <a href="#sec6">§6</a>.
+      <strong>Landed (E-30 + E-31):</strong> the coverage seam and the held-out oracle are wired end-to-end (Python) — the single highest-leverage fix in the whole document is done. <strong>E-31a</strong> (diff-coverage anti-cheat) and <strong>E-30a/b/c</strong> (other languages) remain — see <a href="#sec6">§6</a>.
     </p>
   </div>
 
-  <div class="tier partial">
+  <div class="tier done">
     <span class="ttag">Tier B · subjective, already built</span>
     <h3>Rubric judging</h3>
-    <p><span class="pill partial">partial — built, calibration gap</span></p>
+    <p><span class="pill done">done — rubrics + calibration tracking</span></p>
     <p>
       The <strong>E-27</strong> mechanism: a rubric per stage, scored by the cross-family judge. The only way to grade
       non-code stages (clarify quality, architecture soundness, research grounding) where no oracle can exist. Already
       wired for <code>clarifier</code> / <code>architect</code> / <code>planner</code> and, since E-27, <code>qa</code> / <code>research</code>.
     </p>
     <ul class="tight">
-      <li><strong>Calibration requirement (non-negotiable):</strong> before a rubric’s score is trusted in a phase-exit decision, hand-score 20–30 fixtures and confirm judge agreement (report the agreement rate; low agreement = rubric defect, not model defect). Track per rubric. <span class="newscope">(new scope)</span></li>
-      <li><strong>Known open defect:</strong> research grounding is unreachable for a mid-tier author model — <code>verify_brief</code> fails closed on byte-exact quote matching and <code>glm-5.2</code> plateaus at 3 violations (<strong>E-29</strong>). Until E-29 lands, research rubric scores are unit-tested but unproven end-to-end; a benchmark reporting a research score today reports a number the pipeline can’t yet earn live.</li>
+      <li><strong>Calibration requirement (non-negotiable):</strong> before a rubric's score is trusted in a phase-exit decision, hand-score 20–30 fixtures and confirm judge agreement (report the agreement rate; low agreement = rubric defect, not model defect). Track per rubric. <em>Landed (E-36 / FR-110): <code>sdlc calibrate &lt;rubric&gt;</code> reports within-epsilon agreement + MAE + Spearman, surfaced as a trust level beside every rubric score.</em></li>
+      <li><strong>Known open defect:</strong> research grounding is unreachable for a mid-tier author model — <code>verify_brief</code> fails closed on byte-exact quote matching and <code>glm-5.2</code> plateaus at 3 violations (<strong>E-29</strong>). Benchmark cells handle this decided in <strong>OQ-B3</strong> (a grounding failure is a recorded research-stage <code>FAIL</code>; the run continues), so a cell's research grade is earnable but never a silently-unearnable number.</li>
     </ul>
   </div>
 
@@ -683,27 +685,27 @@
   <tbody>
     <tr>
       <td class="name">Harness</td>
-      <td><code>claude -p</code> vs <code>opencode run</code> vs <strong>cursor (to add)</strong></td>
+      <td><code>claude -p</code> vs <code>opencode run</code> vs <code>cursor</code></td>
       <td><code>harness/adapters.py</code>, <code>HARNESSES</code> (<strong>FR-203</strong>)</td>
-      <td class="note">New adapter must normalise into <code>HarnessRunResult</code> (<a href="#sec4">§4</a>); cursor pinning = <strong>E-24</strong>.</td>
+      <td class="note">Cursor adapter landed (E-35, folds E-24) — <code>CursorHarness</code> normalises into <code>HarnessRunResult</code>, registered in <code>worker.py</code>; version-pin declared but unpinned pending a real CLI (<a href="#sec4">§4</a>).</td>
     </tr>
     <tr>
       <td class="name">Model × role</td>
       <td>Which model drives each of 11 roles</td>
       <td><code>STAGE_MODELS</code> + <code>agents.yaml</code> per-role <code>model</code></td>
-      <td class="note"><code>cfg.roles</code> not yet per-project — <strong>E-26</strong> blocks per-run overrides.</td>
+      <td class="note">Landed (E-37, folds E-26): per-cell <code>Arm</code>s + <code>--role-model</code>; ADR-6 enforced per run via <code>validate_run_roles</code>.</td>
     </tr>
     <tr>
       <td class="name">Memory</td>
       <td>Hindsight on/off/watermark; <code>project</code> vs <code>+org</code> banks</td>
       <td><code>MemoryConfig</code> (<code>memory.enabled</code> default <code>False</code>)</td>
-      <td class="note">Org bank has no writers — <strong>E-25</strong>; retro closes the loop — stage 14.</td>
+      <td class="note">Retro stage 14 landed (E-32); <code>org_bank</code> writer still open — <strong>E-25</strong>.</td>
     </tr>
     <tr>
       <td class="name">Case</td>
       <td>Greenfield feature specs of graded complexity</td>
       <td><code>benchmarks/cases/</code></td>
-      <td class="note">Only single-run-sized cases exist — need a decomposition-forcing case (<a href="#sec5">§5</a>).</td>
+      <td class="note">Decomposition case landed — cat-café carries a held-out oracle (E-34); see <a href="#sec5">§5</a>.</td>
     </tr>
   </tbody>
 </table>
@@ -726,13 +728,15 @@
   <code>claude -p</code> vs <code>opencode</code> vs <code>cursor</code> <em>on your SDLC, through your
   DeterministicQualityGate, on your held-out oracles</em>. That comparison cannot be bought or borrowed.
 </p>
-<p>
-  Hard requirement (FR-203 + the <code>HarnessRunResult</code> contract): a new harness adapter must normalise its output
-  — tokens, cost, <code>context_window</code>, <code>compacted</code>, session-resume handle — into
-  <code>HarnessRunResult</code>. If cursor reports cost/usage in a different shape, that translation is the adapter’s job
-  (<strong>E-24</strong> also wants its version pinned and asserted at boot). Until the adapter fills those fields, the
-  <strong>economics axis is blind for that harness</strong> — quality without cost, which defeats half the point.
-</p>
+  <p>
+    Hard requirement (FR-203 + the <code>HarnessRunResult</code> contract): a new harness adapter must normalise its output
+    — tokens, cost, <code>context_window</code>, <code>compacted</code>, session-resume handle — into
+    <code>HarnessRunResult</code>. <strong>Landed (E-35, folds E-24):</strong> <code>CursorHarness</code> is registered in
+    <code>worker.py</code>, normalising <code>stream-json</code> into <code>HarnessRunResult</code>; the version pin is
+    declared (<code>expected_version</code>) but left <code>None</code> until a real <code>cursor-agent --version</code>
+    can be captured, and cursor's <code>total_cost_usd</code> may be absent — so cursor cells can still be quality-only
+    until the adapter sees real cost output.
+  </p>
 
 <h3 id="sec3-2">3.2 Model × role — the economics result to reproduce</h3>
 <p>
@@ -741,13 +745,14 @@
   benchmark should attribute <strong>dollars per role</strong>, not tokens, because planner-family tokens cost multiples
   of worker-family tokens — precisely Cursor’s $1,339-vs-$10,565 experiment, expressed in your config.
 </p>
-<p>
-  <strong>Blocker to be honest about:</strong> <code>cfg.roles</code> is a hardcoded mirror of <code>agents.yaml</code>
-  because <code>PipelineConfig()</code> is constructed <em>inside</em> the workflow (<strong>E-26</strong>). A per-cell
-  model sweep needs the override to resolve at the boundary (<code>benchmarks/workflow.py</code>) and satisfy ADR-6
-  <em>per run</em>. <strong>E-26 is therefore a prerequisite for a full model×role sweep</strong>, not an optional
-  nicety. Without it you can still sweep the harness and memory axes, just not per-role models per cell.
-</p>
+  <p>
+    <strong>Landed (E-37, folds E-26):</strong> <code>cfg.roles</code> was a hardcoded mirror of <code>agents.yaml</code>
+    because <code>PipelineConfig()</code> is constructed <em>inside</em> the workflow. The override now resolves at the
+    boundary — each cell carries a named <code>Arm</code> (role→model mix), <code>_cell_config</code> builds
+    <code>cfg.roles</code> from it, and <code>validate_run_roles</code> enforces ADR-6 <em>per run</em>; the CLI exposes
+    the same override via <code>--role-model</code>. The full model×role sweep is now expressible (the pre-E-37
+    harness-only <code>models=[...]</code> form still works, desugared to one arm per model).
+  </p>
 
 <h3 id="sec3-3">3.3 Memory axis — the measurement the whole stack was built for</h3>
 <p>
@@ -756,13 +761,15 @@
   <code>memory.enabled=true</code>. The delta in quality (and fix-loop cost — recalled gotchas should make attempt N+1
   cheaper) is the value of memory.
 </p>
-<p>
-  Why it can’t run yet, precisely: SC-4 (“repeat-clarification &lt;10% by run 10”) and SC-6 (“soft-gate override
-  &lt;5%”) both need <em>reflect wiring + real runs</em>. The nightly project reflect ships (<strong>E-12/E-13</strong>)
-  but only accrues signal on runs with <code>memory.enabled=true</code> (default false); the retro stage that writes
-  <code>RunSummary</code> is unbuilt (stage 14); and nothing writes to <code>org_bank</code> (<strong>E-25</strong>).
-  So the memory axis is gated on closing the learning loop — <a href="#sec6">§6</a>’s second priority.
-</p>
+  <p>
+    Why it still can't run fully, precisely: SC-4 ("repeat-clarification &lt;10% by run 10") and SC-6 ("soft-gate override
+    &lt;5%") both need <em>reflect wiring + real runs</em>. The per-run signal now accrues — the retro stage (14,
+    <strong>E-32</strong>) emits a <code>RunSummary</code> (carrying <code>clarifications[].answered_by</code> and
+    <code>gates[]</code>) on every terminal path and calls <code>reflect(project_bank)</code> (gated on
+    <code>memory.enabled</code>, default false). Still open: nothing writes to <code>org_bank</code> (<strong>E-25</strong>),
+    so the cross-run aggregation into a run-10 series / override rate remains the benchmark's job. The memory axis is
+    gated on that last step — <a href="#sec6">§6</a>'s second priority.
+  </p>
 
 <!-- ============================================================ -->
 <h2 id="sec4">4. Metrics — beyond a single pass rate <span class="count">BENCHMARK §4 · a row per run</span></h2>
@@ -835,10 +842,10 @@
       <em>“large enough to require decomposition and small enough to specify completely.”</em>
     </p>
     <p>
-      The cat-café case meets the “specifiable” half but not the “decomposition” half —
-      <strong>the top corpus gap is one case that forces genuine planner decomposition</strong>
-      (multiple vertical slices, real inter-task contracts): the load-bearing variable Cursor’s entire result turns on
-      and the one the current suite cannot see.
+      <strong>Closed (E-34):</strong> cat-café now freezes an interface contract (ASGI <code>app:app</code>,
+      <code>/telemetry</code>, <code>/floorplan</code>, <code>/cats</code>) and ships a held-out <code>oracle/</code>
+      (<code>language: python</code>), validated in CI against a reference impl (<code>tests/fixtures/cat_cafe_ref/</code>).
+      The decomposition-forcing kata — the load-bearing variable Cursor's entire result turns on — is finally graded.
     </p>
   </div>
 
@@ -862,8 +869,8 @@
       what the retro stage (14) + <code>RunSummary</code> are for.
     </p>
     <p>
-      Closing that stage (<a href="#sec6">§6 priority 2</a>) turns production runs into eval intake automatically.
-      Until then, cases are hand-authored only.
+      The retro stage (<a href="#sec6">§6 priority 2</a>) now runs (E-32), but the loop-B intake still needs an
+      <code>org_bank</code> writer (E-25) to consolidate across runs; until then, cases are hand-authored only.
     </p>
   </div>
 </div>
@@ -899,8 +906,8 @@
       worktree where <code>measure_coverage</code> reads (the original <strong>FR-106</strong> gap) — then add the Tier-A
       held-out oracle on that one language (<strong>E-31</strong>). Without this there is no objective grade and every
       other metric sits on rubric-only judging. <strong>Deliberately Python-first;</strong> further languages
-      (<strong>E-30a/b/c</strong>) follow the corpus. <code>DeterministicQualityGate</code> already has
-      <code>build_integration_green</code>, <code>lint_clean</code>, <code>security_no_critical</code> — the sqllogictest moment.
+      (<strong>E-30a/b/c</strong>) follow the corpus.       <code>DeterministicQualityGate</code> already has
+      <code>build_integration_green</code>, <code>lint_clean</code>, <code>security_no_critical</code> — the sqllogictest moment. <strong>Landed (E-30 + E-31):</strong> Python adapter + held-out oracle wired end-to-end; E-30a/b/c (other languages) and E-31a (diff-coverage anti-cheat) remain.
     </div>
   </li>
   <li>
@@ -908,7 +915,7 @@
     <div class="rk-note">
       Build the retro stage (14): emit <code>RunSummary</code>, call the already-registered <code>reflect()</code>, and give
       <code>org_bank</code> a writer (<strong>E-25</strong>). <em>Unblocks SC-4 and SC-6 (P3’s exit criterion), turns on the
-      memory axis (<a href="#sec3-3">§3.3</a>), and opens Abdullin’s loop-B case intake (<a href="#sec5">§5</a>).</em>
+      memory axis (<a href="#sec3-3">§3.3</a>), and opens Abdullin’s loop-B case intake (<a href="#sec5">§5</a>).</em> <strong>Landed (E-32):</strong> retro stage + <code>RunSummary</code> + <code>events.jsonl</code>/<code>report.html</code> on every terminal path; only the <code>org_bank</code> writer (E-25) stays open, so SC-4/SC-6 signal accrues per run but cross-run aggregation does not.
     </div>
   </li>
   <li>
@@ -917,7 +924,7 @@
       Promote cost bookkeeping from benchmarks-only to run-level counters (<strong>E-19</strong>), attribute per role
       (<a href="#sec4">§4.2</a>), and author the decomposition-forcing kata (<a href="#sec5">§5</a>). <em>Now the economics
       graph in Cursor’s style is reproducible on your data, and the axis that matters most (decomposition) is finally
-      exercised.</em>
+      exercised.</em> <strong>Landed (E-33 + E-34):</strong> per-role run-level cost + <code>run_budget_usd</code> gate (folds E-19) and the cat-café decomposition oracle.
     </div>
   </li>
   <li>
@@ -925,22 +932,21 @@
     <div class="rk-note">
       Third point on the harness axis (<a href="#sec3-1">§3.1</a>), normalised into <code>HarnessRunResult</code>,
       version-pinned at boot (<strong>E-24</strong>). <em>Do this after <a href="#sec6">§6.3</a> so the economics fields
-      exist to receive it; otherwise cursor’s cells are quality-only.</em>
+      exist to receive it; otherwise cursor’s cells are quality-only.</em> <strong>Landed (E-35, folds E-24):</strong> <code>CursorHarness</code> registered; pin declared-but-unpinned and cost may be absent, so cells can still be quality-only.
     </div>
   </li>
   <li>
     <div class="rk-title">Error heatmap + calibration harness.</div>
     <div class="rk-note">
       The <code>case × stage</code> aggregation (<a href="#sec4">§4.4</a>) and the rubric-calibration agreement tracking
-      (<a href="#sec2">§2 Tier B</a>). <em>The prioritisation instrument and the trust layer under every rubric number.</em>
+      (<a href="#sec2">§2 Tier B</a>). <em>The prioritisation instrument and the trust layer under every rubric number.</em> <strong>Landed (E-36 / FR-110):</strong> <code>heatmap.{html,json}</code> written by <code>finalize_benchmark_report</code>; <code>sdlc calibrate</code> + trust level beside every rubric score.
     </div>
   </li>
   <li>
     <div class="rk-title">Per-role model sweep.</div>
     <div class="rk-note">
       Resolve <code>cfg.roles</code> at the benchmark boundary (<strong>E-26</strong>) so each cell can override role→model
-      and satisfy ADR-6 per run. <em>The full model×role matrix; deferred because the harness and memory axes deliver most
-      of the insight without it and E-26 is real work.</em>
+      and satisfy ADR-6 per run. <em>The full model×role matrix.</em> <strong>Landed (E-37, folds E-26):</strong> per-cell <code>Arm</code>s + <code>--role-model</code>; judge family validated at expansion against every arm (answers <strong>OQ-B2</strong>).
     </div>
   </li>
 </ol>
@@ -948,7 +954,10 @@
 <p style="font-size:12.5px; color:var(--muted); margin-top:14px;">
   <strong>Items already banked that this design builds on:</strong>
   E-4 (prompt eval loop), E-12/E-13 (nightly project reflect), E-27 (benchmark harness + rubric judging),
-  FR-103/NFR-6 (eval-aware memoization), FR-201/FR-203 (registry + harness adapters).
+  FR-103/NFR-6 (eval-aware memoization), FR-201/FR-203 (registry + harness adapters) — plus, since the last refresh,
+  E-30/E-31 (toolchain + held-out oracle), E-32 (retro + RunSummary), E-33 (per-role cost), E-34 (decomposition case),
+  E-35 (cursor adapter), E-36 (heatmap + calibration), E-37 (per-role sweep), E-38 (capture-always sessions),
+  E-39 (deep_review lens). Open: E-30a/b/c, E-31a, E-25.
 </p>
 
 <!-- ============================================================ -->
@@ -966,26 +975,28 @@
   </div>
 </div>
 
-<div class="oq">
+<div class="oq decided">
   <span class="oq-id">OQ-B2</span>
   <div>
-    <span class="oq-title">Judge independence under model sweep → <strong>E-37</strong>.</span>
+    <span class="oq-title">Judge independence under model sweep → <strong>E-37</strong> — ANSWERED 2026-07-24.</span>
     <div class="oq-body">
-      ADR-6 forbids the judge sharing a family with the <em>producer</em>. When the model×role axis sweeps producer
-      families, the judge family must move to stay independent per cell. Does <code>judge_artifact</code> re-resolve the
-      judge per cell, or is it fixed? Ties to <strong>E-26</strong> and <strong>OQ-E2</strong>.
+      ADR-6 forbids the judge sharing a family with the <em>producer</em>. Resolution: the judge is <strong>fixed per
+      case</strong> (one <code>judge_model</code> on <code>CaseSpec</code>), and <code>expand_matrix</code> validates at
+      expansion that its family differs from every producer model in every arm — so a case whose judge collides with any
+      arm's producer family is rejected before any cell runs. (Ties to <strong>OQ-E2</strong>.)
     </div>
   </div>
 </div>
 
-<div class="oq">
+<div class="oq decided">
   <span class="oq-id">OQ-B3</span>
   <div>
-    <span class="oq-title">Research grounding gate → <strong>E-29</strong>.</span>
+    <span class="oq-title">Research grounding gate → <strong>E-29</strong> — ANSWERED 2026-07-23.</span>
     <div class="oq-body">
-      Until E-29, research grades are unproven live. Do benchmark cells that need research (a) treat findings as advisory,
-      (b) pin a higher-fidelity research model, or (c) wait for E-29? The E-29 note lays out exactly these three options;
-      the benchmark should pick one explicitly rather than silently reporting an unearnable number.
+      Benchmark cells run with the hard grounding verifier unchanged; a violation is a recorded research-stage
+      <code>FAIL</code> in the cell's record — retain and digest are skipped and the run continues on the idea alone.
+      Research rubric judging happens only on grounded briefs, so a cell's research grade is earnable but not guaranteed —
+      never an unearnable number silently reported.
     </div>
   </div>
 </div>
@@ -1040,13 +1051,13 @@
       <em>capture → scrub (fail-closed) → then branch full-vs-digest</em>; a scrub failure stores nothing, either way.
       <strong>Still open: the TTL on full transcripts</strong> — keep failed/benchmark sessions indefinitely, or purge
       N days after the run is triaged? That is the only remaining sub-decision; the scrub is non-negotiable and
-      fail-closed regardless.
+      fail-closed regardless. <strong>Implemented (E-38 / ADR-16):</strong> capture → fail-closed scrub → full <code>harness_session</code> transcript + <code>SessionDigest</code> stored by <code>run_coding_task</code>; retro downgrades clean-green non-benchmark runs to digest-only. Full-transcript TTL is the one remaining open sub-point.
     </div>
   </div>
 </div>
 
 <div class="footer">
-  Generated from <a href="../BENCHMARK.md">BENCHMARK.md</a>. Adds no scope to
+  Generated 2026-07-25 from <a href="../BENCHMARK.md">BENCHMARK.md</a>. Adds no scope to
   <a href="../PRD.md">PRD.md</a>; every <span class="newscope">(new scope)</span> marker is a measurement capability
   that needs a PRD line before it becomes a real requirement. Everything else is an <code>E-</code>-style plan for
   measuring requirements already open in the tracker.

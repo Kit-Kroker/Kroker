@@ -349,16 +349,19 @@
 
 <h1>Research Stage Schema &amp; Architecture</h1>
 <p class="meta">
-  FR-107 · wired in <code>src/sdlc/workflows/feature.py:695</code> ·
+  FR-107 · wired in <code>src/sdlc/workflows/feature.py:1014</code> ·
   spec: <code>docs/superpowers/specs/2026-07-17-research-agent-grounded-briefs-design.md</code> ·
   contract source-of-truth: <code>src/sdlc/models.py</code>
 </p>
 <p class="lede">
   The research stage is an <strong>optional, human-gated, off-by-default</strong> pre-clarify
   stage (FR-107). A single proposer agent consults four sequential tools against a per-run budget,
-  emits a schema-validated <code>ResearchBrief</code>, and a <strong>pure verifier</strong> fails
-  the stage closed if any &ldquo;grounded&rdquo; quote is not a verbatim substring of bytes fetched
-  <em>this run</em>. The brief is <strong>not memoized</strong>; only its canonical digest feeds
+  emits a schema-validated <code>ResearchBrief</code>, and a <strong>pure verifier</strong> flags
+  any &ldquo;grounded&rdquo; quote that is not a verbatim substring of bytes fetched
+  <em>this run</em>. The verifier is byte-exact (whitespace-normalized only); a failed brief
+  records the stage as <code>FAIL</code> (retain + digest skipped) and the run <strong>continues on
+  the idea alone</strong> &mdash; fail-and-continue, not a block (E-29, 2026-07-20). The brief is
+  <strong>not memoized</strong>; only its canonical digest feeds
   downstream content keys. Verified findings enter memory as <em>leads</em>, never as grounded
   claims &mdash; recall cannot restore grounded status without re-verification.
 </p>
@@ -453,7 +456,7 @@
 <div class="callout warn">
   <span class="label">Off by default, not memoized.</span>
   A served memo would mean pages were <em>not</em> fetched this run, so a brief cannot be cached
-  (<code>feature.py:695</code> comment, spec finding 4). Only the canonical
+  (<code>feature.py:1014</code> comment, spec finding 4). Only the canonical
   <code>brief_digest()</code> contributes to downstream content keys (spec finding 3).
 </div>
 
@@ -461,7 +464,7 @@
 <h2 id="brief">2. The contract: <code>ResearchBrief</code> <span class="count">schema</span></h2>
 
 <p>
-  Defined at <code>src/sdlc/models.py:311</code>. Field order is <strong>reasoning order</strong>
+  Defined at <code>src/sdlc/models.py:425</code>. Field order is <strong>reasoning order</strong>
   (schema-guided reasoning, SGR): decompose &rarr; gather &rarr; what the bytes say &rarr; what I
   concluded &rarr; where sources disagree &rarr; what I could not answer &rarr; summary &rarr; ref
   &rarr; confidence. <code>tests/test_research_models.py</code> pins the order; a reorder is a
@@ -505,13 +508,13 @@
 
 <div class="grid-2">
   <div class="card soft">
-    <h4>SubQuestion <span class="pill asset">models.py:266</span></h4>
+    <h4>SubQuestion <span class="pill asset">models.py:380</span></h4>
     <pre><span class="k">class</span> SubQuestion:
     id: str
     question: str</pre>
   </div>
   <div class="card soft">
-    <h4>ConsultedSource <span class="pill asset">models.py:271</span></h4>
+    <h4>ConsultedSource <span class="pill asset">models.py:385</span></h4>
     <pre><span class="k">class</span> ConsultedSource:
     url: str
     title: str = <span class="s">""</span>
@@ -519,7 +522,7 @@
     relevance: str = <span class="s">""</span>     <span class="c"># "high" / "peripheral"</span></pre>
   </div>
   <div class="card soft">
-    <h4>GroundedFinding <span class="pill asset">models.py:279</span></h4>
+    <h4>GroundedFinding <span class="pill asset">models.py:393</span></h4>
     <pre><span class="k">class</span> GroundedFinding:
     source_url: str
     quote: str            <span class="c"># verbatim, fetched THIS run</span>
@@ -531,7 +534,7 @@
     </p>
   </div>
   <div class="card soft">
-    <h4>InferredFinding <span class="pill asset">models.py:289</span></h4>
+    <h4>InferredFinding <span class="pill asset">models.py:403</span></h4>
     <pre><span class="k">class</span> InferredFinding:
     reasoning: str
     claim: str
@@ -542,7 +545,7 @@
     </p>
   </div>
   <div class="card soft">
-    <h4>Contradiction <span class="pill asset">models.py:298</span></h4>
+    <h4>Contradiction <span class="pill asset">models.py:412</span></h4>
     <pre><span class="k">class</span> Contradiction:
     topic: str
     positions: list[str] = []
@@ -550,7 +553,7 @@
     unresolved: bool = <span class="k">True</span></pre>
   </div>
   <div class="card soft">
-    <h4>Gap <span class="pill asset">models.py:305</span></h4>
+    <h4>Gap <span class="pill asset">models.py:419</span></h4>
     <pre><span class="k">class</span> Gap:
     sub_question_id: str
     what_is_missing: str
@@ -642,7 +645,7 @@
       </tr>
       <tr>
         <td>workflow wiring</td>
-        <td class="mono">src/sdlc/workflows/feature.py:695</td>
+        <td class="mono">src/sdlc/workflows/feature.py:1014</td>
         <td><span class="pill det">deterministic</span></td>
         <td>Builds <code>ResearchDeps</code>, calls <code>t_research.run</code>, runs verify activity, gates, retains, judges, records.</td>
       </tr>
@@ -689,7 +692,7 @@
       <rect x="10" y="174" width="600" height="68" rx="6" fill="rgba(9,105,218,0.05)" stroke="#0969da" stroke-dasharray="4 3"/>
       <text x="22" y="192" font-size="11" fill="#0969da" font-weight="700">WORKFLOW (deterministic)  src/sdlc/workflows/feature.py</text>
       <rect x="22" y="202" width="570" height="32" rx="4" fill="#ffffff" stroke="#0969da"/>
-      <text x="32" y="222">stage wiring @ :695  ·  _gate @ :378  ·  _retain @ :302  ·  _judge @ :255</text>
+      <text x="32" y="222">stage wiring @ :1014  ·  _gate @ :586  ·  _retain @ :366  ·  _judge @ :319</text>
 
       <rect x="630" y="174" width="290" height="68" rx="6" fill="rgba(207,34,46,0.05)" stroke="#cf222e" stroke-dasharray="4 3"/>
       <text x="642" y="192" font-size="11" fill="#cf222e" font-weight="700">I/O  runs/&lt;run_id&gt;/research/</text>
@@ -796,7 +799,7 @@
 </p>
 
 <div class="card soft">
-  <h4>Constants <span class="pill asset">deps.py:25</span></h4>
+  <h4>Constants <span class="pill asset">deps.py:26</span></h4>
   <pre><span class="k">SEARCH_COST_USD</span> = <span class="n">0.01</span>     <span class="c"># per web_search</span>
 <span class="k">FETCH_COST_USD</span>  = <span class="n">0.02</span>     <span class="c"># per fetch_page</span>
 <span class="c"># read_repo and recall_leads are free.</span></pre>
@@ -869,15 +872,16 @@
 </div>
 
 <div class="card soft">
-  <h4><code>normalize()</code> <span class="pill asset">verify.py:36</span></h4>
+  <h4><code>normalize()</code> <span class="pill asset">verify.py:47</span></h4>
   <pre>_WS         = re.compile(r<span class="s">"\s+"</span>)
 _APOSTROPHE = re.compile(r<span class="s">"['‘’`�]"</span>)   <span class="c"># straight, curly, backtick, U+FFFD</span>
+_MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c"># literal markdown bold markers</span>
 
 <span class="k">def</span> normalize(text: str) -&gt; str:
-    <span class="c"># 1. drop apostrophe / quote-glyph noise (symmetric)</span>
+    <span class="c"># 1. drop apostrophe / quote-glyph + markdown-bold noise (symmetric)</span>
     <span class="c"># 2. collapse whitespace runs to one space</span>
     <span class="c"># 3. strip ends</span>
-    <span class="k">return</span> _WS.sub(<span class="s">" "</span>, _APOSTROPHE.sub(<span class="s">""</span>, text)).strip()</pre>
+    <span class="k">return</span> _WS.sub(<span class="s">" "</span>, _MD_BOLD.sub(<span class="s">""</span>, _APOSTROPHE.sub(<span class="s">""</span>, text))).strip()</pre>
   <p style="margin:8px 0 0;font-size:12.5px;color:var(--muted)">
     Case is <strong>preserved</strong>; all other punctuation is preserved.
   </p>
@@ -892,6 +896,15 @@ _APOSTROPHE = re.compile(r<span class="s">"['‘’`�]"</span>)   <span class=
   closes that specific hole without weakening word-level matching.
 </div>
 
+<div class="callout">
+  <span class="label">Provenance of the <code>_MD_BOLD</code> carve-out.</span>
+  Same cat-cafe-monitoring smoke run (2026-07-20): Tavily's HTML-to-text for the Indoor positioning
+  system Wikipedia page left literal markdown <code>**bold**</code> markers in otherwise-plain
+  prose &mdash; <em>"provide accuracy between **1-5 meters**"</em> on the page, quoted without the
+  <code>**</code>. Stripping <code>**</code> symmetrically (same pattern as the apostrophe
+  carve-out) closes that hole without weakening word-level matching.
+</div>
+
 <div class="card soft">
   <h4>File layout</h4>
   <pre><span class="k">def</span> page_filename(url: str) -&gt; str:
@@ -903,7 +916,7 @@ _APOSTROPHE = re.compile(r<span class="s">"['‘’`�]"</span>)   <span class=
 </div>
 
 <div class="card soft">
-  <h4><code>verify_brief()</code> <span class="pill det">deterministic</span> <span class="pill asset">verify.py:59</span></h4>
+  <h4><code>verify_brief()</code> <span class="pill det">deterministic</span> <span class="pill asset">verify.py:71</span></h4>
   <pre><span class="k">class</span> Violation(BaseModel):
     kind: <span class="s">"quote_not_found"</span> | <span class="s">"source_never_fetched"</span>
     source_url: str
@@ -920,13 +933,20 @@ _APOSTROPHE = re.compile(r<span class="s">"['‘’`�]"</span>)   <span class=
 </div>
 
 <div class="card warn">
-  <h3>Fail-closed semantics</h3>
+  <h3>Fail-and-continue semantics (E-29, 2026-07-20)</h3>
   <p style="margin-top:0">
-    The workflow treats a <strong>non-empty</strong> violations list as a hard stage failure: the
-    stage status becomes <code>rejected:research.grounding</code> and the run returns that string
-    (<code>feature.py:735</code>). This is <strong>not</strong> a <code>ModelRetry</code>: TemporalAgent
-    silently drops <code>@agent.output_validator</code> (Task 1 finding A), so grounding is
-    enforced as a <strong>post-run activity</strong> rather than an output validator.
+    A <strong>non-empty</strong> violations list records the research stage as
+    <code>outcome=FAIL</code> (<code>judge="error"</code>, error string
+    <code>rejected:research.grounding: &hellip;</code>) at <code>feature.py:1056</code>, but the run
+    does <strong>not</strong> stop: <code>brief_digest_val</code> stays <code>""</code> (retain +
+    digest skipped) and everything after research proceeds <strong>on the idea alone</strong>, same
+    as a research-disabled run. The verifier itself is unchanged &mdash; still byte-exact contiguous
+    quotes, whitespace-normalized only; E-29 loosened the <em>outcome</em>, not the check. (This is
+    <strong>not</strong> a <code>ModelRetry</code>: TemporalAgent silently drops
+    <code>@agent.output_validator</code> &mdash; Task 1 finding A &mdash; so grounding is enforced as a
+    <strong>post-run activity</strong> rather than an output validator.) Rubric judging of the brief
+    runs only in the clean (<code>else</code>) branch, so a cell's research grade is earnable but not
+    guaranteed.
   </p>
 </div>
 
@@ -943,7 +963,7 @@ _APOSTROPHE = re.compile(r<span class="s">"['‘’`�]"</span>)   <span class=
 </div>
 
 <div class="card soft">
-  <h4><code>VERIFY_ACT</code> temporal policy <span class="pill asset">feature.py:86</span></h4>
+  <h4><code>VERIFY_ACT</code> temporal policy <span class="pill asset">feature.py:97</span></h4>
   <pre>VERIFY_ACT = dict(
     start_to_close_timeout = timedelta(minutes=1),
     retry_policy           = RetryPolicy(maximum_attempts=1),
@@ -955,7 +975,7 @@ _APOSTROPHE = re.compile(r<span class="s">"['‘’`�]"</span>)   <span class=
 </div>
 
 <div class="card soft">
-  <h4><code>brief_digest()</code> <span class="pill asset">verify.py:75</span></h4>
+  <h4><code>brief_digest()</code> <span class="pill asset">verify.py:87</span></h4>
   <pre><span class="k">def</span> brief_digest(brief) -&gt; str:
     pairs = sorted((f.source_url, f.claim) <span class="k">for</span> f <span class="k">in</span> brief.grounded_findings)
     payload = json.dumps(pairs, sort_keys=True, separators=(<span class="s">","</span>, <span class="s">":"</span>))
@@ -1013,7 +1033,7 @@ _APOSTROPHE = re.compile(r<span class="s">"['‘’`�]"</span>)   <span class=
   <div class="card">
     <h3>1. Top-level stage <span class="pill det">workflow</span></h3>
     <p style="margin-top:0">
-      <code>feature.py:700</code> &mdash; runs once before clarify when
+      <code>feature.py:1019</code> &mdash; runs once before clarify when
       <code>cfg.research_enabled and t_research is not None</code>. The workflow builds
       <code>ResearchDeps</code>, awaits <code>t_research.run(idea_json, deps=deps).output</code>,
       verifies, gates, retains, judges, records.
@@ -1179,7 +1199,7 @@ _APOSTROPHE = re.compile(r<span class="s">"['‘’`�]"</span>)   <span class=
 
       <!-- branch on violations -->
       <text x="90" y="372" text-anchor="middle" font-size="10" fill="#cf222e" font-weight="600">if violations:</text>
-      <text x="90" y="388" text-anchor="middle" font-size="10" fill="#cf222e">return "rejected:research.grounding"</text>
+      <text x="90" y="388" text-anchor="middle" font-size="10" fill="#cf222e">stage FAIL; run continues</text>
       <rect x="20" y="356" width="140" height="44" rx="3" fill="rgba(207,34,46,0.06)" stroke="#cf222e" stroke-dasharray="3 2"/>
 
       <text x="460" y="416" text-anchor="middle" font-size="10" fill="#1f2328">9. brief_digest() → clarify content_key</text>
@@ -1196,8 +1216,8 @@ _APOSTROPHE = re.compile(r<span class="s">"['‘’`�]"</span>)   <span class=
 </div>
 
 <p style="font-size:12.5px;color:var(--muted)">
-  Source: <code>feature.py:695&ndash;755</code>. The blue arrows are workflow &rarr; activity
-  invocations; purple arrows are return values. Red is the fail-closed path.
+  Source: <code>feature.py:1014&ndash;1095</code>. The blue arrows are workflow &rarr; activity
+  invocations; purple arrows are return values. Red is the fail-and-continue path (E-29).
 </p>
 
 <!-- ================================================================= -->
@@ -1208,7 +1228,8 @@ _APOSTROPHE = re.compile(r<span class="s">"['‘’`�]"</span>)   <span class=
   <p style="margin-top:0">
     Task 1 finding A. Grounding is therefore enforced as a <strong>post-run activity</strong>
     (<code>verify_brief_activity</code>) rather than via an output validator. The workflow
-    inspects the returned violations list and fails the stage closed.
+    inspects the returned violations list and records the stage as <code>FAIL</code> &mdash; the
+    run continues on the idea alone (E-29 fail-and-continue).
   </p>
 </div>
 
@@ -1229,7 +1250,10 @@ _APOSTROPHE = re.compile(r<span class="s">"['‘’`�]"</span>)   <span class=
     A raised <code>ValueError</code> on an out-of-root path becomes a Temporal
     <code>ApplicationFailure</code> retried with no cap &mdash; observed hanging a greenfield run
     indefinitely. Return <code>"[refusing to read outside the repo root: &hellip;]"</code> instead;
-    the model reads it and moves on. Same pattern as the missing-file branch.
+    the model reads it and moves on. Same pattern as the missing-file branch. The
+    <code>read_repo</code> trigger is patched, but the broader hazard &mdash; <strong>any</strong>
+    research tool raising a non-transient error loops the run with no attempt cap &mdash; remains
+    open (E-28).
   </p>
 </div>
 
@@ -1302,14 +1326,14 @@ _APOSTROPHE = re.compile(r<span class="s">"['‘’`�]"</span>)   <span class=
 
   <div class="layer">WORKFLOW<br>src/sdlc/workflows/</div>
   <div class="files">
-    <p><span class="mono">feature.py:695&ndash;755</span> &mdash; research stage wiring (the only deterministic caller).</p>
-    <p><span class="mono">feature.py:86</span> &mdash; <code>VERIFY_ACT</code> policy (1 min, 1 attempt).</p>
-    <p><span class="mono">feature.py:255 / :302 / :378</span> &mdash; <code>_judge</code>, <code>_retain</code>, <code>_gate</code> helpers reused by the stage.</p>
+    <p><span class="mono">feature.py:1014&ndash;1095</span> &mdash; research stage wiring (the only deterministic caller).</p>
+    <p><span class="mono">feature.py:97</span> &mdash; <code>VERIFY_ACT</code> policy (1 min, 1 attempt).</p>
+    <p><span class="mono">feature.py:319 / :366 / :586</span> &mdash; <code>_judge</code>, <code>_retain</code>, <code>_gate</code> helpers reused by the stage.</p>
   </div>
 
   <div class="layer">CONTRACT<br>src/sdlc/</div>
   <div class="files">
-    <p><span class="mono">models.py:266&ndash;324</span> &mdash; <code>SubQuestion</code>, <code>ConsultedSource</code>, <code>GroundedFinding</code>, <code>InferredFinding</code>, <code>Contradiction</code>, <code>Gap</code>, <code>ResearchBrief</code>.</p>
+    <p><span class="mono">models.py:380&ndash;438</span> &mdash; <code>SubQuestion</code>, <code>ConsultedSource</code>, <code>GroundedFinding</code>, <code>InferredFinding</code>, <code>Contradiction</code>, <code>Gap</code>, <code>ResearchBrief</code>.</p>
     <p><span class="mono">models.py</span> (<code>RoleConfig</code>) &mdash; <code>kind=research</code>, <code>provider</code>, <code>tool_files</code>.</p>
   </div>
 
@@ -1342,7 +1366,7 @@ _APOSTROPHE = re.compile(r<span class="s">"['‘’`�]"</span>)   <span class=
   <a href="architecture-schema.html">&larr; architecture-schema.html</a>
   <a href="../PRD.md">PRD &sect; FR-107</a>
   <a href="../ARCHITECTURE.md">ARCHITECTURE.md &sect;3</a>
-  <span style="float:right">Contract source-of-truth: <code>src/sdlc/models.py</code> &middot; workflow wiring: <code>feature.py:695</code></span>
+  <span style="float:right">Contract source-of-truth: <code>src/sdlc/models.py</code> &middot; workflow wiring: <code>feature.py:1014</code></span>
 </footer>
 
 </body>

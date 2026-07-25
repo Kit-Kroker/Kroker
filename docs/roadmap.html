@@ -527,7 +527,7 @@
     <a href="../SDLC-spec-v2.md">SDLC-spec-v2.md</a> ·
     <a href="../BENCHMARK.md">BENCHMARK.md</a> (§9.8)
     <br>
-    Last verified: <strong>2026-07-19</strong> ·
+    Last verified: <strong>2026-07-25</strong> ·
     Method: every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code.
   </p>
 
@@ -578,13 +578,13 @@
 <main id="detail"></main>
 
 <footer>
-  Regenerated 2026-07-22 from <a href="../ROADMAP.md">ROADMAP.md</a> (last verified 2026-07-19; §9.8 benchmark &amp; evaluation items E-30…E-39 added).
+  Regenerated 2026-07-25 from <a href="../ROADMAP.md">ROADMAP.md</a> (last verified 2026-07-25; retro stage, toolchain adapter, harness sessions, containment, per-role cost/model sweep, cursor adapter, heatmap/calibration and deep-review lens all landed since the 2026-07-19 snapshot).
   To refresh, re-extract items per the rule documented inline in this file's <code>&lt;script&gt;</code> block.
 </footer>
 
 <script>
 /* =========================================================================
- * DATA — hand-extracted from ROADMAP.md (verified 2026-07-19).
+ * DATA — hand-extracted from ROADMAP.md (verified 2026-07-25).
  *
  * Extraction rules (mechanical):
  *   [x]            -> status: "done"
@@ -602,7 +602,7 @@
  * ========================================================================= */
 const ROADMAP = {
   meta: {
-    lastVerified: "2026-07-19",
+    lastVerified: "2026-07-25",
     sourceFile: "ROADMAP.md"
   },
 
@@ -615,10 +615,10 @@ const ROADMAP = {
       title: "Brownfield, dashboard + notifications, fix loops, cross-harness review",
       exit:  "first brownfield feature merged via PR",
       note:  "Cross-harness review ✅ and fix loops ✅ landed early; brownfield mode, dashboard backend, and notifications not started." },
-    { id: "P3", pct: 50, status: "partial",
+    { id: "P3", pct: 70, status: "partial",
       title: "Hindsight memory + confidence-gated soft gates",
       exit:  "SC-4 and SC-6 measurable",
-      note:  "Memory (recall/retain/watermark) ✅ and soft gates ✅ done; SC-4/SC-6 not yet measurable (need retro/reflect wiring + real runs). The retro stage that makes them measurable is E-32 (§9.8); the on/off memory delta is the measurement E-31/E-33 exist to run." },
+      note:  "Memory (recall/retain/watermark) ✅ and soft gates ✅ done. The retro stage (E-32) now lands: every terminal path emits a RunSummary + fires reflect(project_bank) + exports events.jsonl/report.html, so the SC-4/SC-6 per-run signal (clarifications[].answered_by, gates[].overrides) accrues. Still not [x]: the cross-run aggregation into actual SC-4/SC-6 numbers is the benchmark's job (§9.8, E-36), and the org_bank writer stays unbuilt (E-25)." },
     { id: "P4", pct: 0, status: "notstarted",
       title: "MCP surface, maintenance loop (DAPER), fleet scale",
       exit:  "SC-1..3 at target",
@@ -630,7 +630,7 @@ const ROADMAP = {
     { n: 1,  name: "constitution",  status: "notstarted", note: "no Constitution model, no stage." },
     { n: 2,  name: "context",       status: "notstarted", note: "Cartographer. No CodebaseMap, no cartography.py, no brownfield delta." },
     { n: 3,  name: "requirements",  status: "notstarted", note: "Product. Conflated into clarify; no standalone Product proposer / Requirements artifact." },
-    { n: 4,  name: "research",      status: "partial",    note: "FR-107 grounded brief before clarify. Scaffolded, off by default (research_enabled)." },
+    { n: 4,  name: "research",      status: "partial",    note: "FR-107 grounded brief before clarify. Scaffolded, off by default (research_enabled). Grounding failure now fail-and-continue (E-29): the stage records FAIL and the run proceeds on the idea alone; verifier unchanged." },
     { n: 5,  name: "clarify",       status: "done",       note: "Clarifier + gate; open-question wait on answer_question; recall/retain/memoization wired." },
     { n: 6,  name: "architecture",  status: "done",       note: "Architect + gate, with REVISE loop (_revisable_stage)." },
     { n: 7,  name: "planning",      status: "done",       note: "Planner + gate, with REVISE loop." },
@@ -638,15 +638,15 @@ const ROADMAP = {
     { n: 9,  name: "review",        status: "done",       note: "clean-context reviewer_agent (t_reviewer) run in _dev_task; blocking findings fold into the fix loop. (new)" },
     { n: 10, name: "analyze",       status: "done",       note: "Analyst clean-context proposer (t_analyst) emits AnalysisReport; workflow enforces criterion→test traceability (FR-106)." },
     { n: 11, name: "qa",            status: "done",       note: "+ Resolver. clean-context t_qa + bounded fix loop. Note: default max_fix_attempts=2, PRD says QA loop 3 — numeric drift." },
-    { n: 12, name: "quality_gate",  status: "partial",    note: "DeterministicQualityGate ✅; 6 checks built. Security absolute floor ✅; traceability ✅; coverage blocked on test suite running in integration worktree." },
+    { n: 12, name: "quality_gate",  status: "partial",    note: "DeterministicQualityGate ✅; 6 checks built. Security absolute floor ✅; traceability ✅; coverage seam closed by E-30 — run_integration_checks now runs coverage-instrumented tests on the merged integration head, landing coverage.xml where measure_coverage reads (Python adapter end-to-end; Go/TS/Rust = E-30a/b/c). Still advisory unless coverage_threshold set." },
     { n: 13, name: "deploy",        status: "partial",    note: "single hardcoded make deploy ENV=staging; no DeployPlan/DeployReport split, no smoke-test vs PR-merge distinction." },
-    { n: 14, name: "retro",         status: "notstarted", note: "reflect() activity exists and is registered but never called; no RunSummary, no export." }
+    { n: 14, name: "retro",         status: "done",       note: "On every terminal path the workflow builds a RunSummary from an in-workflow RunEvent trace, retains it + fire-and-forgets reflect(project_bank) (gated on memory.enabled), and exports events.jsonl + report.html via export_run_artifacts (E-32; folds E-22/E-23). org_bank-writer half stays unbuilt (E-25); retro is project scope only." }
   ],
 
   items: [
     /* FR-100 — Pipeline */
     { id: "FR-101", section: "FR", status: "partial",    title: "15-stage durable DAG",
-      note: "7/15 stages (see §1).", recent: false },
+      note: "8/15 stages (see §1) — stage 14 retro now live (E-32).", recent: true },
     { id: "FR-102", section: "FR", status: "notstarted", title: "greenfield/brownfield classify + CodebaseMap + delta",
       note: "No classifier, no CodebaseMap, no brownfield delta.", recent: false },
     { id: "FR-103", section: "FR", status: "done",       title: "memoization, per-run watermark, audit-record-always-kept",
@@ -656,9 +656,11 @@ const ROADMAP = {
     { id: "FR-105", section: "FR", status: "partial",    title: "fix loops",
       note: "QA loop ✅, review findings now fold into it ✅; loop-count defaults drift from spec (2 vs 3).", recent: true },
     { id: "FR-106", section: "FR", status: "partial",    title: "deterministic absolute/advisory gate",
-      note: "classification ✅ and load-bearing; security absolute-floor ✅; traceability ✅; coverage wired as deterministic diff-scoped seam ✅ (real instrumentation future work).", recent: true },
+      note: "classification ✅ and load-bearing; security absolute-floor ✅; traceability ✅; coverage seam closed by E-30 (run_integration_checks lands coverage.xml on the merged integration head; Python end-to-end, Go/TS/Rust = E-30a/b/c).", recent: true },
     { id: "FR-107", section: "FR", status: "partial",    title: "grounded research stage (new scope)",
-      note: "ResearchBrief, quote-verified against bytes fetched this run, off by default (research_enabled). Landed behind the PRD amendment adding FR-107; 2026-07-17-research-agent-grounded-briefs.", recent: true },
+      note: "ResearchBrief, quote-verified against bytes fetched this run, off by default (research_enabled). Grounding failure is now fail-and-continue (E-29): stage records FAIL, run proceeds on the idea alone; verifier unchanged. 2026-07-17-research-agent-grounded-briefs.", recent: true },
+    { id: "FR-108", section: "FR", status: "done",       title: "language-agnostic toolchain adapter (new scope; ADR-15)",
+      note: "ToolchainAdapter/TOOLCHAINS resolved by marker file, canonical Cobertura + SARIF, Python reference end-to-end; run_integration_checks closes the FR-106 coverage-crossing gap. Go/TS/Rust = E-30a/b/c.", recent: true },
 
     /* FR-200 — Agents */
     { id: "FR-201", section: "FR", status: "done",       title: "versioned config/agents.yaml registry (role/kind/model)",
@@ -681,8 +683,8 @@ const ROADMAP = {
       note: "timeout→auto-reject only; no notify activity, no reminder timer, no fallback-approver.", recent: false },
     { id: "FR-304", section: "FR", status: "partial",    title: "decisions recorded/queryable",
       note: "fields captured + retained as text; no structured queryable decision log.", recent: false },
-    { id: "FR-305", section: "FR", status: "notstarted", title: "cross-run decision inbox",
-      note: "no surface lists everything awaiting a human.", recent: false },
+    { id: "FR-305", section: "FR", status: "partial",    title: "cross-run decision inbox",
+      note: "CLI cross-run inbox landed (E-8: `sdlc inbox` lists pending decisions across runs over the channel contract); dashboard/MCP inbox surfaces still absent (E-10/E-11).", recent: true },
 
     /* FR-400 — Memory */
     { id: "FR-401", section: "FR", status: "done",       title: "retain stage summaries / fix-loop gotchas / gate decisions",
@@ -692,7 +694,7 @@ const ROADMAP = {
     { id: "FR-403", section: "FR", status: "done",       title: "non-blocking retain, fire-and-forget with retries, PII/secret scrub hook",
       note: "memory/scrub.py.", recent: false },
     { id: "FR-404", section: "FR", status: "partial",    title: "nightly reflect",
-      note: "project half live: schedules/nightly-reflect.yaml → ReflectWorkflow → reflect(), applied via sdlc schedules apply (E-12/E-13). Org half unmet: nothing retains to org_bank (E-25).", recent: true },
+      note: "project half live: schedules/nightly-reflect.yaml → ReflectWorkflow → reflect(), applied via sdlc schedules apply (E-12/E-13); the retro stage (E-32) now also calls reflect(project_bank) per run (best-effort, gated on memory.enabled). Org half unmet: nothing retains to org_bank (E-25).", recent: true },
 
     /* FR-500 — Maintenance */
     { id: "FR-501", section: "FR", status: "notstarted", title: "DAPER proactive workflow (timer + nudge)",
@@ -708,19 +710,19 @@ const ROADMAP = {
     { id: "FR-602", section: "FR", status: "notstarted", title: "MCP server (list/detail/inbox/answer/decide/start)",
       note: "no interfaces/mcp/.", recent: false },
     { id: "FR-603", section: "FR", status: "partial",    title: "CLI — start/status/answer/approve/revise/reject/benchmark",
-      note: "revise landed with E-7; gate rounds are now derived from the pending item, not typed by the operator; missing cross-run inbox (FR-305).", recent: false },
+      note: "revise landed with E-7; gate rounds derived from the pending item. Cross-run inbox landed (E-8: sdlc inbox verb); --role-model per-run override landed (E-37, US-4). Dashboard/MCP surfaces still absent (E-10/E-11).", recent: true },
     { id: "FR-604", section: "FR", status: "done",       title: "stateless shells, no interface DB",
       note: "true for CLI.", recent: false },
 
     /* FR-700 — Governance & ops */
-    { id: "FR-701", section: "FR", status: "partial",    title: "run-level budgets",
-      note: "research ships the FIRST run-level counters (max_searches/max_fetches/max_cost_usd), stage-scoped and enforced inside the tools; E-19 remains the general version.", recent: true },
+    { id: "FR-701", section: "FR", status: "done",       title: "run-level budgets",
+      note: "Run-level token/cost counters in RunSummary.roles + a run_budget_usd budget gate that escalates through the FR-301/302 gate machinery on crossing (E-33, folds E-19). Research keeps its stage-scoped max_searches/max_fetches/max_cost_usd counters.", recent: true },
     { id: "FR-702", section: "FR", status: "partial",    title: "claim-check ArtifactRef / 2MB discipline",
-      note: "ArtifactRef model exists but diffs travel inline; no CodeArtifact union; no size guard.", recent: false },
+      note: "Sessions are now a real claim-check consumer (ArtifactStore / harness_session, E-38); diffs still travel inline, no CodeArtifact union, no size guard — so FR-702 stays open.", recent: true },
     { id: "FR-703", section: "FR", status: "partial",    title: "egress policy",
-      note: "research is the pipeline's first outbound egress, and it arrives before the egress policy. Still env-allowlist only; no pre_tool hook, no egress tier. E-18's first consumer, not its implementation.", recent: true },
-    { id: "FR-704", section: "FR", status: "notstarted", title: "observability export (events.jsonl + report.html)",
-      note: "no observability/ module.", recent: false },
+      note: "pre_tool hook landed (E-15/E-16, ADR-17): denies out-of-worktree writes, recursive deletes, agent-config rewrites and non-allowlisted hosts (tool-level). Network-level egress + OS/container tier still open (E-21).", recent: true },
+    { id: "FR-704", section: "FR", status: "partial",    title: "observability export (events.jsonl + report.html)",
+      note: "observability/ module now exists; events.jsonl + report.html rendered from the in-workflow RunEvent trace and written by export_run_artifacts (E-32; folds E-22/E-23).", recent: true },
 
     /* NFR */
     { id: "NFR-1", section: "NFR", status: "done",       title: "Durability — Temporal-native",
@@ -730,9 +732,9 @@ const ROADMAP = {
     { id: "NFR-3", section: "NFR", status: "notmeasurable", title: "Latency (5s/2s)",
       note: "untested, not falsifiable from code.", recent: false },
     { id: "NFR-4", section: "NFR", status: "partial",    title: "Auditability",
-      note: "Temporal history reconstructs runs; no events.jsonl/report.html export.", recent: false },
+      note: "Temporal history reconstructs runs; events.jsonl + report.html now exported from the retro-stage RunEvent trace (E-32). No structured queryable decision log yet (FR-304).", recent: true },
     { id: "NFR-5", section: "NFR", status: "partial",    title: "Security",
-      note: "env allowlist done; OS user, container, pre_tool hook, egress, scoped-cred injection absent.", recent: false },
+      note: "env allowlist done; pre_tool hook landed (tool-level destructive-action + egress denial, E-15/E-16, ADR-17); OS user, container, network-level egress, scoped-cred injection still absent (E-20/E-21).", recent: true },
     { id: "NFR-6", section: "NFR", status: "done",       title: "Reproducibility vs memoization",
       note: "watermark-pinned recall + content-addressed cache.", recent: false },
     { id: "NFR-7", section: "NFR", status: "done",       title: "Portability",
@@ -740,17 +742,17 @@ const ROADMAP = {
 
     /* SC */
     { id: "SC-1", section: "SC", status: "notmeasurable", title: "≥80% runs reach merge gate unattended",
-      note: "not measurable (no fleet runs).", recent: false },
+      note: "not measurable (no fleet runs). Vehicle: the benchmark matrix (§9.8, E-34); cases can now carry a held-out grade (E-31 landed), so the gate is the next load-bearing piece.", recent: true },
     { id: "SC-2", section: "SC", status: "notmeasurable", title: "≤15 min operator time",
       note: "not measurable.", recent: false },
     { id: "SC-3", section: "SC", status: "notmeasurable", title: "fix-loop success ≥70%",
-      note: "mechanism exists; no aggregate metric captured.", recent: false },
+      note: "mechanism exists; captured per run as a coordination metric by the benchmark heatmap (E-36): fix-loop attempts vs resolution, per stage. No aggregate yet.", recent: true },
     { id: "SC-4", section: "SC", status: "notmeasurable", title: "repeat-clarification <10% by run 10",
-      note: "needs reflect wiring (FR-404) + runs.", recent: false },
+      note: "per-run signal now accrues: retro stage (E-32) emits RunSummary.clarifications[].answered_by (human/suggested/unanswered) on every terminal path. The cross-run aggregation into a repeat-clarification rate remains the benchmark's job (§9.8).", recent: true },
     { id: "SC-5", section: "SC", status: "done",          title: "zero deploys past a failed absolute check",
       note: "empty/vacuous-task bypass fixed, absolute failure is terminal, security_no_critical floor emitted by security_scan and wired as absolute merge-gate check (feature.py:807,818). tests/test_security_floor.py asserts a critical finding blocks deploy.", recent: true },
     { id: "SC-6", section: "SC", status: "notmeasurable", title: "soft-gate override <5%",
-      note: "mechanism exists; not measurable without runs + reflect.", recent: false },
+      note: "per-run signal now accrues: retro stage (E-32) emits RunSummary.gates[] (policy/decided_by/confidence/overrides). The cross-run aggregation into an override rate remains the benchmark's job (§9.8).", recent: true },
 
     /* US */
     { id: "US-1", section: "US", status: "partial",    title: "clarify + one-click suggested answers",
@@ -786,15 +788,21 @@ const ROADMAP = {
     { id: "ADR-9",  section: "ADR", status: "notstarted", title: "Two worker pools by capability",
       note: "single queue.", recent: false },
     { id: "ADR-10", section: "ADR", status: "partial",    title: "Claim-check for large payloads",
-      note: "ArtifactRef exists but not load-bearing.", recent: false },
+      note: "ArtifactRef now load-bearing for harness sessions (ArtifactStore / harness_session, E-38); diffs still travel inline so still partial.", recent: true },
     { id: "ADR-11", section: "ADR", status: "partial",    title: "Deterministic DAG",
-      note: "holds for the 8 live stages; 6 stages absent.", recent: false },
+      note: "holds for the 8 live stages (retro joined, E-32); 6 stages still absent.", recent: true },
     { id: "ADR-12", section: "ADR", status: "done",       title: "Contract-first, clean-context validators",
       note: "QA ✅ and review ✅ both clean-context. (now complete)", recent: true },
     { id: "ADR-13", section: "ADR", status: "done",       title: "Serial-by-default; resume-bounded; context by reference",
       note: "near_context_ceiling wired.", recent: false },
     { id: "ADR-14", section: "ADR", status: "done",       title: "Integration by running branch",
       note: "fully wired.", recent: false },
+    { id: "ADR-15", section: "ADR", status: "done",       title: "Language-agnostic toolchain by marker file",
+      note: "src/sdlc/toolchain/ — Python reference adapter end-to-end; Go/TS/Rust are E-30a/b/c.", recent: true },
+    { id: "ADR-16", section: "ADR", status: "done",       title: "Harness sessions as first-class, claim-checked artifacts",
+      note: "canonical HarnessSession/SessionDigest per adapter normaliser, claim-checked via ArtifactStore (E-38).", recent: true },
+    { id: "ADR-17", section: "ADR", status: "done",       title: "Containment as a declared harness capability",
+      note: "native inner, hook outer, fail closed; pre_tool hook + policy/containment.yaml (E-15/E-16).", recent: true },
 
     /* STRUCT (§7) */
     { id: "STRUCT-1", section: "STRUCT", status: "partial",    title: "Layered src/factory/ tree",
@@ -823,8 +831,8 @@ const ROADMAP = {
       note: "structured pending_decisions() workflow query (Layer A, sdlc/pending.py) feeding a pure render/translate adapter (Layer B, sdlc/channels/contract.py), with deliver an opt-in PushChannel. All four render variants collapse to the two FR-302 signals on reply. Contract only — no new surface; E-7 refits the CLI as the proof. Layer B landed under sdlc/channels/ not interfaces/channels/: pyproject packages only src/. Spec: docs/superpowers/specs/2026-07-18-channel-contract-over-fr302-design.md.", recent: true },
     { id: "E-7",  section: "E", status: "done", title: "Refit the existing CLI (answer/approve/reject/revise) onto the contract",
       note: "The contract held; the CLI and the query did not. Three defects fell out: --round defaulted to 1 so a post-REVISE approve was silently deduped under a success message; revise had no verb despite GateOutcome.REVISE and US-2 marked done; and pending_decisions() over-reported answered clarify questions (answer_question never popped _pending — an E-6 bug fixed here). Adds channels/transport.py (query/match/signal/verify) so E-8/E-10/E-11 don't reimplement it. Spec: 2026-07-19-cli-refit-onto-channel-contract.", recent: true },
-    { id: "E-8",  section: "E", status: "notstarted", title: "Cross-run inbox as a query over pending gates (FR-305, FR-603's missing verb)",
-      note: "the first capability the contract buys that we don't already have.", recent: false },
+    { id: "E-8", section: "E", status: "done", title: "Cross-run inbox as a query over pending gates (FR-305, FR-603's missing verb)",
+      note: "Landed: sdlc/channels/inbox.py (fetch_inbox) + the CLI inbox verb over the existing Layer A/B contract.", recent: true },
     { id: "E-9",  section: "E", status: "notstarted", title: "Notify activity + reminder timer + fallback approver (FR-303)",
       note: "Today: timeout→auto-reject only.", recent: false },
     { id: "E-10", section: "E", status: "notstarted", title: "FastAPI dashboard backend as a channel adapter, replacing the Vue frontend's mock API",
@@ -837,75 +845,77 @@ const ROADMAP = {
       note: "Corrected from \"invoking the existing reflect() activity\": Temporal Schedules start workflows, not activities, hence the wrapper. Corrected from \"project + org scope\": see E-25.", recent: true },
     { id: "E-14", section: "E", status: "notstarted", title: "DAPER maintenance timer + nudge as a schedule asset (FR-501)",
       note: "Blocked on MaintenanceWorkflow existing at all.", recent: false },
-    { id: "E-15", section: "E", status: "notstarted", title: "pre_tool hook seam in harness/adapters.py, called for every harness tool invocation",
-      note: "", recent: false },
-    { id: "E-16", section: "E", status: "notstarted", title: "Policy denial path — deny by rule, no human involved (FR-703)",
-      note: "", recent: false },
+    { id: "E-15", section: "E", status: "done", title: "pre_tool hook seam in harness/adapters.py, called for every harness tool invocation",
+      note: "Landed (2026-07-24): a declared containment capability per CodingHarness + a fail-closed PreToolUse hook (python -m sdlc.harness.hook). ADR-17.", recent: true },
+    { id: "E-16", section: "E", status: "done", title: "Policy denial path — deny by rule, no human involved (FR-703)",
+      note: "Landed (2026-07-24): one versioned asset policy/containment.yaml + four predicates + ToolDenial records on HarnessRunResult/SessionDigest; verified live against claude 2.1.219.", recent: true },
     { id: "E-17", section: "E", status: "notstarted", title: "Approval escalation: a needsApproval-class tool call raises a gate through existing FR-301/FR-302 machinery",
-      note: "rather than a parallel mechanism.", recent: false },
-    { id: "E-18", section: "E", status: "notstarted", title: "harness/egress containment — re-ranked up",
-      note: "§8 item 4 ranked it fourth on the strength of pre_tool; an unpoliced outbound egress (research, FR-703) is a second, independent argument. The research stage fetches arbitrary URLs through a provider with only an env allowlist between it and the worker's network.", recent: true },
-    { id: "E-19", section: "E", status: "notstarted", title: "Single model egress point yielding run-level token/cost counters (FR-701)",
-      note: "Today cost bookkeeping \"exists in benchmarks only\"; one egress point is how to get run counters without touching every call site. Prerequisite for the run-budget escalation half of FR-701.", recent: false },
+      note: "Blocker dissolved (2026-07-24): claude exposes a defer permission decision — a headless session pauses at a tool call and resumes via -p --resume for the hook to re-evaluate, reusing the resume handle the adapters already own.", recent: true },
+    { id: "E-18", section: "E", status: "partial", title: "harness/egress containment — re-ranked up",
+      note: "Tool-level egress denial (WebFetch/WebSearch/Bash host allowlist) now exists via the hook (E-15/E-16); network-level egress (a socket opened inside an allowed Bash call) remains open and is E-21's OS/container tier.", recent: true },
+    { id: "E-19", section: "E", status: "done", title: "Single model egress point yielding run-level token/cost counters (FR-701)",
+      note: "Folded into E-33: _run_role is the single egress point; run-level counters live in RunSummary.roles.", recent: true },
     { id: "E-20", section: "E", status: "notstarted", title: "Short-lived, task-scoped credential injection with an audit trail binding each action to a user (Connect's model)",
       note: "the \"scoped-cred injection absent\" gap in NFR-5.", recent: false },
     { id: "E-21", section: "E", status: "notstarted", title: "OS-user / container isolation tier (Sandbox's model)",
       note: "the missing tier in FR-703.", recent: false },
-    { id: "E-22", section: "E", status: "notstarted", title: "observability/ module emitting events.jsonl (FR-704, NFR-4)",
-      note: "before the surfaces in E-9/E-10/E-11 multiply the ways delivery can fail silently.", recent: false },
-    { id: "E-23", section: "E", status: "notstarted", title: "report.html export from the event stream (FR-704)",
-      note: "", recent: false },
-    { id: "E-24", section: "E", status: "notstarted", title: "Pin harness/adapter versions and assert them at boot",
-      note: "eve's dependency-drift failure mode applies directly to HARNESSES (FR-203).", recent: false },
+    { id: "E-22", section: "E", status: "done", title: "observability/ module emitting events.jsonl (FR-704, NFR-4)",
+      note: "Folded into E-32: observability/trace.py (RunEvent) + observability/export.py::render_events_jsonl render the in-workflow trace to events.jsonl, written by export_run_artifacts.", recent: true },
+    { id: "E-23", section: "E", status: "done", title: "report.html export from the event stream (FR-704)",
+      note: "Folded into E-32: observability/export.py::render_report_html renders a self-contained report.html from the RunSummary.", recent: true },
+    { id: "E-24", section: "E", status: "done", title: "Pin harness/adapter versions and assert them at boot",
+      note: "Warn-on-drift version pin at boot for all harnesses via check_harness_versions (folded via E-35). Live drift confirmed: ClaudeCodeHarness pins 2.1.218 vs installed 2.1.219.", recent: true },
     { id: "E-25", section: "E", status: "notstarted", title: "Nothing retains to org_bank",
       note: "MemoryConfig defines it (models.py:376) but every _retain call site in feature.py passes project_bank. Cross-project consolidation (reflect(org), SDLC-spec §279) therefore has no writers. This, not scheduling, is the remaining blocker on FR-404's org half. Needs a decision on what belongs in an org bank — likely (new scope).", recent: false },
-    { id: "E-26", section: "E", status: "notstarted", title: "Make cfg.roles genuinely per-project (US-4) without reintroducing drift",
-      note: "PipelineConfig.roles is a hardcoded mirror of agents.yaml's harness roles because PipelineConfig() is constructed inside the workflow (feature.py:602), so its default cannot read the file without breaking sandbox purity. The boot mirror-check makes drift fail closed, but it also means a per-project override must resolve at the boundary (cli.py, benchmarks/workflow.py) and satisfy ADR-6 per run, not just at boot. Nothing populates cfg.roles today.", recent: false },
+    { id: "E-26", section: "E", status: "done", title: "Make cfg.roles genuinely per-project (US-4) without reintroducing drift",
+      note: "Landed by E-37: cfg.roles is now resolved per run at both boundaries — the benchmark cell (per-arm role_models) and the CLI (--role-model) — with per-run ADR-6 enforced via validate_run_roles. The static boot mirror-check is unchanged.", recent: true },
     { id: "E-27", section: "E", status: "done",       title: "Cat café monitoring golden case + qa/research rubric judging",
       note: "A kata large enough to require decomposition and small enough to specify completely. Authoring it surfaced that only 3 rubric keys reached the judge (clarifier/architect/planner): qa emits a judgeable artifact that only feeds the deterministic code record, and research hardcoded judge=\"contract\" with no _judge call. Added CaseSpec.research_enabled (default False) with a per-case injected provider: tavily (registry stays fake so CI needs no key), both _judge calls, and five rubrics. Smoke run reached research live (real Tavily+glm) and grounded the exact risk threshold the research rubric targets (>35 bpm at rest), but ends at rejected:research.grounding — the fail-closed verifier requires byte-exact contiguous quotes and glm-5.2 cannot reliably reproduce special chars/tabular data (8→3 violations, then plateau). So live judge scoring of research/qa is unit-tested but unproven end-to-end; unblocks when E-29 or E-30 lands. Spec: 2026-07-19-cat-cafe-monitoring-benchmark.", recent: true },
     { id: "E-28", section: "E", status: "notstarted", title: "Research tool-call activities retry a deterministic failure with no attempt cap",
       note: "E-27's smoke run hung when read_repo raised ValueError on an out-of-cwd path: the pydantic-ai temporal tool-call wrapper retried it forever (attempt 11+). Fixed the immediate trigger (read_repo now returns a refusal string), but the underlying hazard remains — any research tool that raises a non-transient error loops the whole run. Needs a bounded/non_retryable retry policy on agent__research_agent__toolset__*__call_tool, or a rule that research tools return errors as strings rather than raise.", recent: false },
-    { id: "E-29", section: "E", status: "notstarted", title: "Research grounding unreachable for a mid-tier author model",
-      note: "verify_brief (research/verify.py) fails closed unless every grounded_finding.quote is a byte-exact contiguous substring (whitespace-normalized only) of a page fetched this run. glm-5.2 reliably violates this on special characters (en-dash, curly quotes) and tabular content — E-27 plateaued at 3 violations after two prompt fixes cut it from 8. Options: (a) normalize more aggressively in the verifier (dash/quote folding — but every loosening is a hole, each needs a test); (b) a per-case research-model override to a higher-fidelity family (interacts with ADR-6 + E-26); (c) accept research as advisory (inferred_findings) rather than a hard gate for benchmark cells. Blocks live proof of E-27's research-stage judging.", recent: false },
+    { id: "E-29", section: "E", status: "done", title: "Research grounding unreachable for a mid-tier author model",
+      note: "Closed by the 2026-07-20 fail-and-continue decision (option c): a grounding violation now fails the research stage (recorded FAIL; retain + digest skipped) and the run continues on the idea alone. Rubric judging of the brief happens only when grounding passes, so a cell's research grade is earnable but not guaranteed. The verifier itself is unchanged — no loosening.", recent: true },
 
     /* §9.8 — Benchmark & evaluation (SC-1..6, FR-106, FR-404, FR-701, FR-702, FR-704, ADR-15, ADR-16) */
-    { id: "E-30",  section: "E", status: "notstarted", title: "ToolchainAdapter + coverage seam, language-agnostic (new scope; ADR-15)",
-      note: "A pipeline capability, not a benchmark fix — run_test_suite/run_lint/security_scan/measure_coverage are stage 11/12 production activities the benchmark merely exercises, and generated projects can be Python/TS/Go/Rust, so the grade cannot be language-agnostic unless those stages are. A TOOLCHAINS registry beside HARNESSES resolves by marker file in the produced repo (pyproject.toml/package.json/go.mod/Cargo.toml — detect what was built, not what was intended), normalising build()/test()/lint()/coverage() into the existing TestReport. Canonical coverage = Cobertura XML (each adapter only translates into it; no change to the gate reader); absolute security floor = semgrep → SARIF (one multi-language tool keeps security_no_critical/SC-5 a single check). Delivers: interface + registry + marker detection + canonical formats + the Python adapter end-to-end as reference + the artifact crossing the merge into the integration worktree where the seam reads (the original FR-106 gap). Highest-leverage item — without it there is no objective test-based grade and every benchmark number rests on rubric-only judging.", recent: true },
+    { id: "E-30",  section: "E", status: "done", title: "ToolchainAdapter + coverage seam, language-agnostic (new scope; ADR-15)",
+      note: "Landed: PRD FR-108 + ADR-15; src/sdlc/toolchain/ (adapter + Python reference + SARIF seam) and run_integration_checks close the FR-106 gap (coverage.xml crosses into the integration worktree) and make build_integration_green a real integration run. Go/TS/Rust (E-30a/b/c) remain open; the held-out oracle (E-31) landed.", recent: true },
     { id: "E-30a", section: "E", status: "notstarted", title: "Go ToolchainAdapter",
       note: "The second adapter (go test -cover → Cobertura via gocover-cobertura; go vet/golangci-lint; semgrep). Incremental, same shape as the Python reference; validates the abstraction on a non-Python language.", recent: false },
     { id: "E-30b", section: "E", status: "notstarted", title: "TypeScript/JS ToolchainAdapter",
       note: "vitest/jest + c8/nyc → Cobertura; eslint; semgrep.", recent: false },
     { id: "E-30c", section: "E", status: "notstarted", title: "Rust ToolchainAdapter",
       note: "cargo-llvm-cov → Cobertura; clippy; semgrep. E-30a/b/c are deliberately sub-numbered: each is the N-th adapter, identical in shape, added on demand as the corpus (E-34) needs that language — not a fork, exactly like adding a harness.", recent: false },
-    { id: "E-31",  section: "E", status: "notstarted", title: "Tier-A held-out oracle in benchmark cases (new scope)",
-      note: "benchmarks/cases/<case>/oracle/ — a suite + fixtures held out of the workflow's context (never in a worktree, prompt, or recall), run against the produced code through the case's ToolchainAdapter (E-30), graded as fraction passing. Each case manifest declares language:; the runner dispatches to the matching adapter, and manifest-language vs marker-detected language is itself a mismatch signal. Adds the Cursor anti-cheat as a routine assertion (oracle-is-held-out check + a diff-coverage built-evenly-not-to-the-test check). Extends E-27, which judges rubrics only. Depends on E-30.", recent: true },
-    { id: "E-32",  section: "E", status: "notstarted", title: "Retro stage 14: emit RunSummary, call reflect(), export trace + metrics",
-      note: "Closes the learning loop (§1 stage 14; FR-404; NFR-4; SDLC-spec §1/§6). Three payoffs from one stage: unblocks SC-4/SC-6 (P3's exit), turns on the memory benchmark axis (on/off delta, §9.8 economics), and opens the loop-B intake where production runs become eval cases. The org_bank-writer half stays E-25 (needs the what-belongs-in-an-org-bank decision); E-32 is the stage itself, project scope.", recent: true },
-    { id: "E-33",  section: "E", status: "notstarted", title: "Per-role cost attribution (folds E-19)",
-      note: "Promote cost from benchmarks-only (§9.5) to run-level counters and attribute dollars per role, not per token (FR-701). The Cursor economics result restated for this registry: the expensive roles are the deciding proposers (architect on opus-4-8), the volume is in the executing harness roles — so per-role $ is the number that moves ($1,339 vs $10,565 on the same task). HarnessRunResult already carries the token/context/compacted fields; this is the aggregation + the proposer-side TemporalAgent usage join.", recent: false },
-    { id: "E-34",  section: "E", status: "notstarted", title: "A decomposition-forcing benchmark case (new scope)",
-      note: "Both current cases are sized for a single short factory run, so planner decomposition — the load-bearing variable in real work — is unexercised (E-27's own finding), which is exactly the variable Cursor's entire result turns on. The bar E-27 set holds: large enough to require decomposition (multiple vertical slices + real inter-task contracts), small enough to specify completely.", recent: false },
-    { id: "E-35",  section: "E", status: "notstarted", title: "cursor harness adapter — third point on the harness axis (folds E-24)",
-      note: "Normalised into HarnessRunResult (tokens, cost, context_window, compacted, resume handle) and version-pinned at boot (FR-203; folds E-24). Value is not cursor vs claude in the abstract — it is measuring claude -p vs opencode vs cursor through the DeterministicQualityGate on the held-out oracles, a comparison no external leaderboard provides. Ordered after E-33 so the economics fields exist to receive it; until the adapter fills them, cursor cells are quality-only.", recent: false },
-    { id: "E-36",  section: "E", status: "notstarted", title: "Error heatmap (case × stage) + rubric-calibration tracking (new scope)",
-      note: "The heatmap aggregates gate rejections, fix-loop iterations, and oracle failures per stage per case (FR-704 export is the data source, NFR-4) — Abdullin's prioritisation instrument, answering which stage on which case class costs most, so what to fix next. Calibration tracking attaches a judge-agreement rate to every rubric score (hand-score 20–30 fixtures per rubric) so a Tier-B number is never read without its trust level.", recent: false },
-    { id: "E-37",  section: "E", status: "notstarted", title: "Per-role model sweep at the benchmark boundary (folds E-26)",
-      note: "Resolve cfg.roles per cell (folds E-26) so each cell overrides role→model and satisfies ADR-6 per run, not just at boot — the full model×role matrix (US-4). Deferred last: the harness (E-35) and memory (E-32) axes deliver most of the insight without it, and E-26 is real work. Ties to OQ-B2 (the judge family must move per cell to stay ADR-6-independent of the swept producer family) and OQ-E2.", recent: false },
-    { id: "E-38",  section: "E", status: "notstarted", title: "Capture-always harness sessions (new scope; ADR-16)",
-      note: "Every harness run emits a canonical HarnessSession (normalised transcript: tool-calls, file reads/writes, commands + exit status, model turns) as a claim-checked ArtifactRef{kind: harness_session} on HarnessRunResult (ADR-3/§4). Because it is captured on every run, three things are hot-path invariants, not options: (a) claim-check is unconditional — the transcript is megabytes and never touches workflow state (the second reason to finally close FR-702); (b) the memory scrub (pre_retain) runs over the session before it is stored, fail-closed like the SC-5 security floor; (c) retention follows a decided policy: full transcript on fail/benchmark/attempts>0 (the diagnostic cases), a structured SessionDigest on clean-green runs — never blind byte-truncation; the §4.3 waste aggregates + decision-skeleton are computed pre-truncation and always kept. Ordering is strict — capture → scrub (fail-closed) → then branch full-vs-digest. This is the concrete P5 trajectory-harvesting seam (ARCHITECTURE §10): the session is most of what events.jsonl/report.html should render (E-22/E-23) and the extraction point for trajectory eval + small-model distillation. Invariant: capturing the developer's session does not let the default reviewer read it — see E-39. Full-transcript TTL is the one open sub-point (OQ-B7).", recent: true },
-    { id: "E-39",  section: "E", status: "notstarted", title: "deep_review — optional review tier reading the scrubbed HarnessSession (new scope)",
-      note: "An optional, opt-in review tier that reads the scrubbed HarnessSession (E-38) as data. This is Cursor's full-transcript lens, and it deliberately does what the default reviewer must not: see how the diff was reached (backtracking, oracle peeking, hardcoded answers), feeding both the anti-cheat check and a richer verdict. Three guardrails, all load-bearing: it reads the scrubbed artifact, never the raw session and never via resume-handle; its model stays ADR-6 family-independent of the developer; and it is an additional lens, not a replacement — clean-context review (ADR-6/ADR-12) remains the default, because Cursor's value is decorrelated lenses stacking, not swapping one for another.", recent: true }
+    { id: "E-31",  section: "E", status: "done", title: "Tier-A held-out oracle in benchmark cases (new scope)",
+      note: "Landed: BenchmarkScope.ORACLE + CaseSpec.language + pure grading logic + the benchmark-only grade_oracle activity (src/sdlc/benchmarks/oracle.py), invoked strictly after each child (held out by construction). Fraction-passing grade via JUnit XML + manifest-language adapter dispatch + manifest-vs-marker mismatch signal + oracle-is-held-out assertion. todo-api is the Python reference (ASGI app:app).", recent: true },
+    { id: "E-31a", section: "E", status: "notstarted", title: "Anti-cheat B: diff-coverage \"built evenly, not to the test\" check",
+      note: "E-31 catches the model writing into the oracle dir; E-31a closes the second half — produced code not overfit to the visible criterion→test mapping vs the hidden oracle. Reuses the E-30 coverage seam; adds a per-file diff-coverage gate signal alongside the fraction-passing grade.", recent: false },
+    { id: "E-32",  section: "E", status: "done", title: "Retro stage 14: emit RunSummary, call reflect(), export trace + metrics",
+      note: "Landed: stage 14 builds a RunSummary from an in-workflow RunEvent trace, retains it + fire-and-forgets reflect(project_bank), and exports events.jsonl + report.html via export_run_artifacts. Folds E-22/E-23. Unblocks SC-4/SC-6 per-run; opens the memory benchmark axis and loop-B intake. org_bank-writer half stays E-25.", recent: true },
+    { id: "E-33",  section: "E", status: "done", title: "Per-role cost attribution (folds E-19)",
+      note: "Landed: single workflow egress (_run_role) + MODEL_USAGE events + price_usage activity (genai-prices, replay-safe) + RunSummary.roles rollup + report.html role table + proposer CostBag fill, AND FR-701's run-level budget gate (run_budget_usd, hard gate via FR-301/302, approve = one increment, reject = rejected:budget). Research provider spend stays stage-scoped.", recent: true },
+    { id: "E-34",  section: "E", status: "done", title: "A decomposition-forcing benchmark case (new scope)",
+      note: "Landed via cat-café (E-27), not a new case: cat-café now freezes an interface contract (ASGI app:app, /telemetry, /floorplan, /cats) and ships a held-out oracle/ graded through E-31 (language: python). Reference implementation fixture validates the oracle (green on ref, red when risk detection is stubbed).", recent: true },
+    { id: "E-35",  section: "E", status: "done", title: "cursor harness adapter — third point on the harness axis (folds E-24)",
+      note: "Landed: CursorHarness + check_harness_versions in harness/adapters.py, registered in worker.py HARNESSES. Version-pinned/warn-on-drift at boot (folds E-24). Cursor cells are quality-only until economics fields fill from real runs.", recent: true },
+    { id: "E-36",  section: "E", status: "done", title: "Error heatmap (case × stage) + rubric-calibration tracking (new scope)",
+      note: "Landed (PRD FR-110): src/sdlc/benchmarks/heatmap.py (case × stage rework-density grid) written by finalize_benchmark_report as heatmap.{html,json}; calibration.py + `sdlc calibrate <rubric>` report within-epsilon agreement + MAE + Spearman over human-scored fixtures, surfaced as a trust level beside every rubric score. Session-derived waste + calibration-as-CI-gate deferred.", recent: true },
+    { id: "E-37",  section: "E", status: "done", title: "Per-role model sweep at the benchmark boundary (folds E-26)",
+      note: "Landed (folds E-26, US-4): per-run resolve_role_model (proposers + memo key) + shared check_adr6_families/validate_run_roles + named Arms on CaseSpec + fixed-judge-validated-at-expansion (answers OQ-B2) + --role-model CLI surface.", recent: true },
+    { id: "E-38", section: "E", status: "done", title: "Capture-always harness sessions (new scope; ADR-16)",
+      note: "Landed (PRD FR-109): HarnessSession/SessionDigest + per-adapter normalisers (claude stream-json, opencode event stream), ArtifactStore seam with file:// backend (src/sdlc/artifacts/), fail-closed capture in run_coding_task, retro-time OQ-B7 retention (full on fail/benchmark/attempts>0, digest on clean-green; aggregates kept pre-truncation), env-gated Logfire slice. Diff claim-check (FR-702 proper) and report rendering deliberately not here; full-transcript TTL still open (OQ-B7).", recent: true },
+    { id: "E-39", section: "E", status: "done", title: "deep_review — optional review tier reading the scrubbed HarnessSession (new scope)",
+      note: "Landed (PRD FR-111): DeepReviewReport/IntegrityFlag + optional agents/deep_review/ role (ADR-6 family clause vs dev) + load_session claim-check read + advisory _run_deep_review in _dev_task (once per task, records a deep_review stage record for the E-36 heatmap, retains integrity flags, never gates). Off by default (deep_review_enabled). Default clean-context review (ADR-6/ADR-12) unchanged.", recent: true }
   ],
 
   /* §8 — Recommended next increments (narrative, ranked) */
   next: [
     { rank: 1, status: "done", text: "<strong>Close P1 honestly</strong> — CI-runnable end-to-end run through FeatureWorkflow + wire the security_no_critical absolute check. <strong>Done</strong> on feat/p1-consolidation (3cfbe62…41c9185)." },
     { rank: 2, status: "done", text: "<strong>Analyze/Analyst stage</strong> — unlocks coverage + criterion→test traceability advisory checks (FR-106). <strong>Done</strong> on feat/analyst-stage." },
-    { rank: 3, status: "partial", text: "<strong>retro/reflect wiring</strong> (FR-404) — starts accumulating the SC-4/SC-6 calibration signal. <strong>Partially done</strong> — schedule mechanism + nightly project reflect ship (E-12/E-13). Org half blocked on E-25; the retro <em>stage</em> (§1 item 13, RunSummary) is still unbuilt (<strong>E-32</strong>). <em>Follow-on:</em> the benchmark instrument (§9.8) is what turns the accruing signal into the SC-1..6 numbers — held-out grade (<strong>E-30/E-31</strong>) and per-role economics (<strong>E-33</strong>) are the load-bearing measurement work." },
-    { rank: 4, status: "notstarted", text: "<strong>Harness containment</strong> beyond env allowlist — pre_tool hook + egress (FR-703/NFR-5). Tasks: E-15…E-18 — note the hook and the gate are one mechanism, not two." },
-    { rank: 5, status: "notstarted", text: "<strong>Operability</strong> — dashboard FastAPI backend + MCP + cross-run inbox (FR-305/601/602). Tasks: E-6…E-11 — these four items are one contract plus thin adapters, so E-6/E-7 land before any surface." },
-    { rank: 6, status: "notstarted", text: "<strong>Post-P1 roadmap</strong> — MaintenanceWorkflow/DAPER (E-14), two worker pools, run budgets (E-19), observability export (E-22, E-23), brownfield mode, claim-check." },
-    { rank: 7, status: "partial", text: "<strong>Repo hardening via agents-as-folders</strong> — closes §7's prompts-as-assets drift. Tasks: E-1, E-2, E-4. <em>Re-ranked down</em>: the memoization payoff that justified it was already banked, and the ADR-6 hole it sat next to is closed. Cheapest self-contained item on this list, but now purely reorganisation." }
+    { rank: 3, status: "done", text: "<strong>retro/reflect wiring</strong> (FR-404) — starts accumulating the SC-4/SC-6 calibration signal. <strong>Done</strong> — schedule mechanism + nightly project reflect (E-12/E-13) and the retro <em>stage</em> itself (E-32: RunSummary + reflect(project_bank) + events.jsonl/report.html on every terminal path). Org half still blocked on <strong>E-25</strong> (no org_bank writers). The benchmark instrument that turns the accruing signal into SC-1..6 numbers also landed: held-out grade (<strong>E-30/E-31</strong>) and per-role economics (<strong>E-33</strong>)." },
+    { rank: 4, status: "partial", text: "<strong>Harness containment</strong> beyond env allowlist — pre_tool hook + egress (FR-703/NFR-5). <strong>Partially landed</strong> — declared containment capability + fail-closed PreToolUse hook + policy/containment.yaml (E-15/E-16, ADR-17) and tool-level egress denial (E-18 partial). Network-level egress + OS/container tier remain (E-21); approval escalation (E-17) blocker dissolved but not built." },
+    { rank: 5, status: "partial", text: "<strong>Operability</strong> — dashboard FastAPI backend + MCP + cross-run inbox (FR-305/601/602). <strong>Cross-run inbox landed</strong> (E-8: <code>sdlc inbox</code>); dashboard backend (E-10) and MCP server (E-11) still absent — both are thin adapters over the E-6/E-7 channel contract." },
+    { rank: 6, status: "partial", text: "<strong>Post-P1 roadmap</strong> — MaintenanceWorkflow/DAPER (E-14), two worker pools, run budgets, observability export, brownfield mode, claim-check. <strong>Run budgets landed</strong> (E-33, folds E-19) and <strong>observability export landed</strong> (E-32, folds E-22/E-23); DAPER (E-14), two worker pools, brownfield mode (FR-102), and full claim-check (FR-702 diffs) remain." },
+    { rank: 7, status: "done", text: "<strong>Repo hardening via agents-as-folders</strong> — closes §7's prompts-as-assets drift. <strong>Done</strong> — E-1 (agents/&lt;role&gt;/ loader), E-2 (instructions.md → PROMPT_SHAS), E-4 (prompt eval loop) all landed." }
   ]
 };
 
@@ -1134,11 +1144,11 @@ function renderDetail() {
     <ol class="next-list">
       <li class="done"><strong>E-12, E-13</strong> — smallest, and the only items that start the SC-4/SC-6 signal.</li>
       <li class="done"><strong>E-1 → E-2 → E-3</strong> — landed. E-3 subsumed by the registry increment.</li>
-      <li><strong>E-6</strong> landed → <strong>E-7</strong> landed → <strong>E-8</strong> — the CLI refit proved the contract; E-8 is the first new capability it buys.</li>
-      <li><strong>E-15 → E-17</strong> — the hook seam, then gate reuse.</li>
-      <li><strong>E-22</strong> — before the surfaces in E-9/E-10/E-11 multiply the ways delivery can fail silently.</li>
+      <li class="done"><strong>E-6 → E-7 → E-8</strong> — all landed. The CLI refit proved the contract; E-8 (cross-run inbox) is the first new capability it bought.</li>
+      <li class="done"><strong>E-15 → E-16</strong> — landed (the hook seam + policy denial, ADR-17); <strong>E-17</strong> blocker dissolved (claude <em>defer</em>) but not built.</li>
+      <li class="done"><strong>E-22</strong> — folded into E-32 (events.jsonl/report.html), landed.</li>
     </ol>
-    <p style="color:var(--muted);font-size:12px">E-19/E-20/E-21 and E-14 are post-P1. E-5 is not scheduled.</p>
+    <p style="color:var(--muted);font-size:12px">E-19 folded into E-33 (landed); E-20/E-21 and E-14 are post-P1. E-5 is not scheduled.</p>
   `;
   host.appendChild(order);
 
@@ -1149,13 +1159,13 @@ function renderDetail() {
     <h2>Suggested ordering — benchmark &amp; evaluation <span style="font-weight:400;color:var(--muted);font-size:13px">— §9.8</span></h2>
     <p style="color:var(--muted);font-size:13px;margin-top:0;">Ranked, as everywhere in §8/§9.7, by which measurement invariant is undercut — not by effort.</p>
     <ol class="next-list">
-      <li><strong>E-30</strong> (interface + <strong>Python reference</strong>, the grade) → <strong>E-31</strong> (held-out oracle on that one language) → <strong>E-32</strong> (the loop, also unblocks P3).</li>
-      <li><strong>E-38</strong> — capture-always sessions: observability + anti-cheat foundation, feeds E-22/E-23/P5. Ranked high on purpose: it is the substrate every later analysis reads from.</li>
-      <li><strong>E-33 + E-34</strong> — economics + the decomposition case.</li>
-      <li><strong>E-30a/b/c</strong> — add languages as the corpus needs them.</li>
-      <li><strong>E-35</strong> — the cursor point → <strong>E-36</strong> (heatmap + calibration, sliceable by language) → <strong>E-39</strong> (deep-review lens, reads the session) → <strong>E-37</strong> (per-role sweep).</li>
+      <li class="done"><strong>E-30</strong> (interface + <strong>Python reference</strong>, the grade) → <strong>E-31</strong> (held-out oracle on that one language) → <strong>E-32</strong> (the loop, also unblocks P3) — all landed.</li>
+      <li class="done"><strong>E-38</strong> — capture-always sessions: observability + anti-cheat foundation, feeds E-22/E-23/P5. Ranked high on purpose: it is the substrate every later analysis reads from.</li>
+      <li class="done"><strong>E-33 + E-34</strong> — economics + the decomposition case.</li>
+      <li><strong>E-30a/b/c</strong> — add languages as the corpus needs them (still open; only the Python reference exists).</li>
+      <li class="done"><strong>E-35</strong> — the cursor point → <strong>E-36</strong> (heatmap + calibration, sliceable by language) → <strong>E-39</strong> (deep-review lens, reads the session) → <strong>E-37</strong> (per-role sweep) — all landed.</li>
     </ol>
-    <p style="color:var(--muted);font-size:12px"><strong>Deliberate:</strong> the pipeline goes multi-language <em>incrementally</em> — E-30 proves one language end-to-end so the first SC signal isn't blocked on N adapters; E-30a/b/c follow the corpus, not precede it. E-30/E-32 unblock the most: the first gives an objective grade, the second closes P3 and three capabilities.</p>
+    <p style="color:var(--muted);font-size:12px"><strong>Deliberate:</strong> the pipeline goes multi-language <em>incrementally</em> — E-30 proved one language end-to-end so the first SC signal wasn't blocked on N adapters; E-30a/b/c follow the corpus, not precede it. E-30/E-32 unblock the most: the first gives an objective grade, the second closes P3 and three capabilities.</p>
   `;
   host.appendChild(benchOrder);
 }

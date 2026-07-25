@@ -323,7 +323,7 @@
 <body>
 
 <h1>Architecture Schema</h1>
-<p class="meta">Agentic SDLC Factory &middot; Status overlay on <code>ARCHITECTURE.md</code> &middot; Verified <code>2026-07-19</code> against <code>src/sdlc/</code>, <code>interfaces/</code>, <code>tests/</code>, <code>config/</code>, <code>agents/</code></p>
+<p class="meta">Agentic SDLC Factory &middot; Status overlay on <code>ARCHITECTURE.md</code> &middot; Verified <code>2026-07-25</code> against <code>src/sdlc/</code>, <code>interfaces/</code>, <code>tests/</code>, <code>config/</code>, <code>agents/</code></p>
 <p class="meta">Companion to <a href="roadmap.html">Implementation Roadmap</a> &middot; Sources: <code>ARCHITECTURE.md</code>, <code>ROADMAP.md</code></p>
 
 <p class="lede">
@@ -340,8 +340,8 @@
   <span class="chip"><span class="dot notstarted"></span> Not started</span>
   <span class="chip"><span class="dot notmeasurable"></span> Not falsifiable from code alone</span>
   <span style="margin-left:auto; align-self:center;">
-    Pipeline: <strong>7 / 15</strong> stages live &middot;
-    ADRs: <strong>9 / 16</strong> satisfied &middot;
+    Pipeline: <strong>8 / 15</strong> stages live &middot;
+    ADRs: <strong>12 / 17</strong> satisfied &middot;
     Phase: <strong>P1 closed</strong>, P2/P3 partial, P4 not started
   </span>
 </div>
@@ -417,7 +417,7 @@
   <text x="460" y="280" text-anchor="middle" font-size="13" font-weight="700" fill="#1f2328">Harness worker</text>
   <text x="460" y="298" text-anchor="middle" font-size="10" fill="#57606a">target queue: <tspan font-family="ui-monospace" fill="#1f2328">ai-sdlc-harness</tspan></text>
   <text x="460" y="314" text-anchor="middle" font-size="10" fill="#57606a">claude -p &middot; opencode run &middot; worktrees</text>
-  <text x="460" y="332" text-anchor="middle" font-size="10" fill="#57606a">adapters + observability ✅ ; isolation tier ✗</text>
+    <text x="460" y="332" text-anchor="middle" font-size="10" fill="#57606a">adapters + observability ✅ ; containment tool-level</text>
 
   <!-- Stateful (right) -->
   <text x="620" y="246" class="layer-label">Stateful</text>
@@ -427,7 +427,7 @@
 
   <rect x="620" y="304" width="240" height="40" rx="6" fill="#ffffff" stroke="#bf8700" stroke-width="1.5"/>
   <text x="740" y="322" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">Hindsight + Postgres</text>
-  <text x="740" y="336" text-anchor="middle" font-size="10" fill="#bf8700">recall/retain ✅ &middot; reflect partial &middot; org bank empty</text>
+    <text x="740" y="336" text-anchor="middle" font-size="10" fill="#bf8700">recall/retain ✅ &middot; reflect per-run ✅ &middot; org bank empty</text>
 
   <!-- Edges: surfaces -> temporal -->
   <line x1="90"  y1="112" x2="280" y2="158" stroke="#57606a" stroke-width="1" marker-end="url(#arr)"/>
@@ -452,7 +452,7 @@
 </p>
 
 <!-- =========================================================== -->
-<h2>Pipeline DAG <span class="count">ARCHITECTURE &sect;3 &middot; 7 / 15 stages live</span></h2>
+<h2>Pipeline DAG <span class="count">ARCHITECTURE &sect;3 &middot; 8 / 15 stages live</span></h2>
 
 <div class="dag-wrap">
 <svg viewBox="0 0 1080 280" width="100%" height="280" xmlns="http://www.w3.org/2000/svg">
@@ -580,7 +580,7 @@
   <rect x="140" y="133" width="110" height="54" rx="6" fill="rgba(191,135,0,0.14)" stroke="#bf8700" stroke-width="1.5"/>
   <text x="195" y="155" text-anchor="middle" font-size="11" font-weight="700" fill="#1f2328">12 · quality_gate</text>
   <text x="195" y="171" text-anchor="middle" font-size="9" fill="#57606a">6 checks; abs floor ✅</text>
-  <text x="195" y="182" text-anchor="middle" font-size="9" fill="#57606a">coverage path blocked</text>
+  <text x="195" y="182" text-anchor="middle" font-size="9" fill="#57606a">coverage seam ✅ (E-30)</text>
   <line x1="270" y1="160" x2="250" y2="160" stroke="#57606a" marker-end="url(#darr)"/>
 
   <!-- merge gate -->
@@ -599,9 +599,9 @@
   <text x="395" y="252" text-anchor="middle" font-size="8" fill="#bf8700">G</text>
   <line x1="360" y1="247" x2="375" y2="247" stroke="#57606a" marker-end="url(#darr)"/>
 
-  <rect x="420" y="225" width="110" height="44" rx="6" fill="rgba(87,96,106,0.10)" stroke="#57606a" stroke-width="1.5"/>
+  <rect x="420" y="225" width="110" height="44" rx="6" fill="rgba(26,127,55,0.12)" stroke="#1a7f37" stroke-width="1.5"/>
   <text x="475" y="245" text-anchor="middle" font-size="11" font-weight="700" fill="#1f2328">14 · retro</text>
-  <text x="475" y="261" text-anchor="middle" font-size="9" fill="#57606a">no RunSummary</text>
+  <text x="475" y="261" text-anchor="middle" font-size="9" fill="#1a7f37">RunSummary + reflect</text>
   <line x1="415" y1="247" x2="420" y2="247" stroke="#57606a" marker-end="url(#darr)"/>
 
   <!-- reflect callout -->
@@ -643,7 +643,7 @@
       <td class="name">Orchestration<br><code>Temporal server</code></td>
       <td class="status"><span class="pill done">ADR-1 ✅</span></td>
       <td>run state, history, signals, timers, schedules, visibility</td>
-      <td class="note">Native durability; <code>events.jsonl</code> export not built (FR-704).</td>
+      <td class="note">Native durability; <code>events.jsonl</code>/<code>report.html</code> export now shipped from the retro stage (FR-704 partial).</td>
     </tr>
     <tr>
       <td class="name">Workflows<br><code>workflows/factory.py</code></td>
@@ -671,15 +671,15 @@
     </tr>
     <tr>
       <td class="name">Retro / reflect<br><code>workflows/retro.py</code></td>
-      <td class="status"><span class="pill partial">activity exists</span></td>
-      <td>scheduled reflect (org + project banks)</td>
-      <td class="note"><code>reflect()</code> registered; nightly project schedule ships (E-12/E-13). Org bank has zero writers (E-25). No <code>RunSummary</code>.</td>
+      <td class="status"><span class="pill done">per-run ✅</span></td>
+      <td>per-run retro (RunSummary + reflect) + scheduled reflect (org + project banks)</td>
+      <td class="note">Stage 14 live (E-32): <code>RunSummary</code> from in-workflow trace, per-run <code>reflect(project_bank)</code>, <code>export_run_artifacts</code>. Nightly project schedule ships (E-12/E-13); org bank still has zero writers (E-25).</td>
     </tr>
     <tr>
       <td class="name">Harness adapters<br><code>harness/adapters.py</code></td>
-      <td class="status"><span class="pill done">2 adapters ✅</span></td>
-      <td><code>claude -p</code>, <code>opencode run</code>; harness-agnostic workflow</td>
-      <td class="note">Heartbeats, checkpoint commits, cost capture ✅. Versions not pinned at boot (E-24).</td>
+      <td class="status"><span class="pill done">3 adapters ✅</span></td>
+      <td><code>claude -p</code>, <code>opencode run</code>, <code>cursor-agent</code>; harness-agnostic workflow</td>
+      <td class="note">Heartbeats, checkpoint commits, cost capture ✅. Versions pinned at boot, warn-on-drift (E-24 via E-35). Declared <code>containment</code> capability + fail-closed <code>PreToolUse</code> hook (E-15/E-16, ADR-17); cursor fails closed. Canonical <code>HarnessSession</code> capture per run (E-38, ADR-16).</td>
     </tr>
     <tr>
       <td class="name">Repo activities<br><code>activities/repo.py</code></td>
@@ -691,7 +691,7 @@
       <td class="name">QA activities<br><code>activities/qa.py</code></td>
       <td class="status"><span class="pill done">lint + security ✅</span></td>
       <td>tests, coverage, lint, security scan</td>
-      <td class="note"><code>security_no_critical</code> absolute floor wired (SC-5). Coverage seam blocked on test-run location (FR-106 note).</td>
+      <td class="note"><code>security_no_critical</code> absolute floor wired (SC-5). Coverage seam closed — Cobertura via <code>ToolchainAdapter</code> crosses into the integration worktree (E-30, ADR-15; Python end-to-end; Go/TS/Rust = E-30a/b/c).</td>
     </tr>
     <tr>
       <td class="name">Memory activities<br><code>activities/memory.py</code></td>
@@ -743,15 +743,15 @@
     </tr>
     <tr>
       <td class="name">Hooks<br><code>hooks/</code></td>
-      <td class="status"><span class="pill partial">env allowlist only</span></td>
+      <td class="status"><span class="pill partial">hook + allowlist</span></td>
       <td><code>pre_tool</code> risk classes, budgets, env allowlist</td>
-      <td class="note">Env allowlist ✅. No <code>pre_tool</code> hook (E-15), no egress tier (E-18), no OS-user/container tier (E-21).</td>
+      <td class="note">Env allowlist ✅. Fail-closed <code>PreToolUse</code> hook landed (E-15/E-16, ADR-17): denies out-of-worktree writes, recursive deletes, agent-config rewrites, non-allowlisted hosts (tool-level). Network-level egress + OS-user/container tier still open (E-18/E-21).</td>
     </tr>
     <tr>
       <td class="name">Observability<br><code>observability/</code></td>
-      <td class="status"><span class="pill notstarted">not started</span></td>
+      <td class="status"><span class="pill done">retro export ✅</span></td>
       <td>history &rarr; <code>events.jsonl</code> / <code>report.html</code>; trajectory export</td>
-      <td class="note">FR-704 / NFR-4. Independent evidence (eve review) ranks this above "nice-to-have".</td>
+      <td class="note"><code>observability/</code> ships <code>RunEvent</code> trace + <code>render_events_jsonl</code>/<code>render_report_html</code>, written by the <code>export_run_artifacts</code> activity in the retro stage (E-32; FR-704 partial / NFR-4). Trajectory harvesting via claim-checked <code>HarnessSession</code> (E-38, ADR-16).</td>
     </tr>
     <tr>
       <td class="name">Worker<br><code>worker.py</code></td>
@@ -801,13 +801,13 @@
     <ul class="tight">
       <li><span class="pill done">done</span> 11 roles in <code>agents.yaml</code>: 3 harness + 8 proposer.</li>
       <li><span class="pill done">done</span> Automation class via <code>TemporalAgent</code> (Pydantic AI).</li>
-      <li><span class="pill done">done</span> Harness protocol with 2 adapters; <code>HarnessRunResult</code> normalised.</li>
-      <li><span class="pill notstarted">todo</span> <code>session_ref: ArtifactRef{kind: harness_session}</code> on <code>HarnessRunResult</code> — a claim-checked, scrubbed canonical <code>HarnessSession</code> transcript captured on every run (ADR-16); clean-green runs keep a structured <code>SessionDigest</code>, fail/benchmark/retried runs keep the full transcript.</li>
+      <li><span class="pill done">done</span> Harness protocol with 3 adapters; <code>HarnessRunResult</code> + canonical <code>HarnessSession</code> normalised per adapter (E-38).</li>
+      <li><span class="pill done">done</span> <code>session_ref: ArtifactRef{kind: harness_session}</code> on <code>HarnessRunResult</code> — a claim-checked, scrubbed canonical <code>HarnessSession</code> transcript captured on every run (ADR-16, E-38); clean-green runs keep a structured <code>SessionDigest</code>, fail/benchmark/retried runs keep the full transcript. <code>ArtifactStore</code> seam (file:// backend); scrub runs fail-closed before the full-vs-digest branch.</li>
       <li><span class="pill done">done</span> Model-family inequality enforced at boot (ADR-6).</li>
       <li><span class="pill done">done</span> Reviewer is clean-context proposer (ADR-12).</li>
       <li><span class="pill partial">partial</span> Context by reference + budgets; <code>CodebaseMap</code> slice missing.</li>
-      <li><span class="pill notstarted">todo</span> Optional harness <em>deep-review</em> tier (ADR-6 opt-in) — default <code>review</code> never resumes the developer's session; the opt-in tier reads the scrubbed <code>HarnessSession</code> as data (ADR-6 + ADR-16).</li>
-      <li><span class="pill partial">partial</span> Model tiering per role; cost attributed in benchmarks only (E-19 will fix).</li>
+      <li><span class="pill partial">partial</span> Optional harness <em>deep-review</em> tier (ADR-6 opt-in, E-39) — advisory <code>_run_deep_review</code> in <code>_dev_task</code> reads the scrubbed <code>HarnessSession</code> as data via <code>load_session</code>, emits <code>DeepReviewReport</code>/<code>IntegrityFlag</code>, never gates. Default <code>review</code> still never resumes the developer's session. Off by default (<code>deep_review_enabled</code>).</li>
+      <li><span class="pill done">done</span> Model tiering per role; cost attributed per role per run — single egress (<code>_run_role</code>) + <code>MODEL_USAGE</code> events + <code>price_usage</code> + <code>RunSummary.roles</code> rollup, with a <code>run_budget_usd</code> hard gate (E-33, FR-701; folds E-19).</li>
     </ul>
   </div>
 
@@ -859,11 +859,11 @@
       <li><span class="pill done">done</span> Absolute vs advisory check classification; absolute floor bites (SC-5).</li>
       <li><span class="pill done">done</span> Audit: Temporal history + artifact store reconstruct every decision.</li>
       <li><span class="pill done">done</span> Prompts as versioned assets with eval loop (E-2/E-4).</li>
-      <li><span class="pill partial">partial</span> Harness containment — env allowlist only; no OS user / container / <code>pre_tool</code> (E-15/E-18/E-21).</li>
-      <li><span class="pill partial">partial</span> Risk classing — env allowlist instead of <code>pre_tool</code> hook.</li>
-      <li><span class="pill partial">partial</span> Budgets per run — research only (E-19 brings general).</li>
-      <li><span class="pill partial">partial</span> <code>ArtifactRef</code> exists; diffs travel inline; no 2MB guard (FR-702).</li>
-      <li><span class="pill notstarted">todo</span> Observability export <code>events.jsonl</code> / <code>report.html</code> (FR-704).</li>
+      <li><span class="pill partial">partial</span> Harness containment — env allowlist + fail-closed <code>PreToolUse</code> hook landed (E-15/E-16, ADR-17; tool-level destructive + egress denial); OS user / container / network-level egress still open (E-18/E-21).</li>
+      <li><span class="pill done">done</span> Risk classing — <code>pre_tool</code> hook denies by rule (out-of-worktree writes, <code>rm -rf</code>, agent-config rewrites, non-allowlisted hosts); declared <code>containment</code> capability per adapter (E-15/E-16, ADR-17).</li>
+      <li><span class="pill done">done</span> Budgets per run — <code>run_budget_usd</code> hard gate via FR-301/302 (E-33, folds E-19); research stage-scoped budgets unchanged.</li>
+      <li><span class="pill partial">partial</span> <code>ArtifactRef</code> load-bearing for sessions (<code>ArtifactStore</code>, E-38/ADR-16); diffs still travel inline, no 2MB guard (FR-702).</li>
+      <li><span class="pill done">done</span> Observability export <code>events.jsonl</code> / <code>report.html</code> shipped from the retro stage (E-32, FR-704 partial).</li>
       <li><span class="pill notstarted">todo</span> Trajectory harvesting seam (P5).</li>
     </ul>
   </div>
@@ -876,7 +876,7 @@
       <li><span class="pill partial">partial</span> Human absent at gate &rarr; timeout→auto-reject only (no reminder/fallback).</li>
       <li><span class="pill done">done</span> Fix loops exhausted &rarr; escalation gate (accept / retry-with-guidance / quarantine).</li>
       <li><span class="pill done">done</span> Quarantined task &rarr; dependents blocked, clean failure.</li>
-      <li><span class="pill partial">partial</span> Payload &gt; limits &rarr; claim-check refs; no runtime guard.</li>
+      <li><span class="pill partial">partial</span> Payload &gt; limits &rarr; sessions claim-checked (<code>ArtifactStore</code>, E-38); diffs still inline, no runtime guard (FR-702).</li>
       <li><span class="pill done">done</span> Hindsight down &rarr; empty snapshot (logged).</li>
       <li><span class="pill done">done</span> Prompt edited mid-fleet &rarr; memoization hash invalidates affected stages only.</li>
     </ul>
@@ -900,7 +900,7 @@
   <div class="phase">
     <div class="tag"><span class="label">P3 — Memory</span><span class="pill partial">partial</span></div>
     <div class="desc">Hindsight memory + confidence-gated soft gates.</div>
-    <div class="exit"><strong>Exit:</strong> SC-4 and SC-6 measurable. Memory (recall/retain/watermark) ✅ and soft gates ✅ done; criteria not yet measurable (need retro/reflect wiring + real runs).</div>
+    <div class="exit"><strong>Exit:</strong> SC-4 and SC-6 measurable. Memory (recall/retain/watermark) ✅, soft gates ✅, and the retro stage (E-32) now accrues the per-run SC-4/SC-6 signal; criteria not yet measurable (need cross-run aggregation + real runs).</div>
   </div>
   <div class="phase">
     <div class="tag"><span class="label">P4 — Fleet</span><span class="pill notstarted">not started</span></div>
@@ -929,22 +929,22 @@
     <ol class="tight" style="padding-left:20px;">
       <li><span class="pill done">done</span> Close P1 honestly.</li>
       <li><span class="pill done">done</span> Analyze / Analyst stage.</li>
-      <li><span class="pill partial">partial</span> retro/reflect wiring (project ✅, org blocked on E-25).</li>
-      <li><span class="pill notstarted">todo</span> Harness containment beyond env allowlist (E-15…E-18).</li>
+      <li><span class="pill done">done</span> retro/reflect wiring — per-run retro stage live (E-32); project ✅, org blocked on E-25.</li>
+      <li><span class="pill partial">partial</span> Harness containment — <code>pre_tool</code> hook landed (E-15/E-16); network-level + OS/container tier open (E-18/E-21).</li>
       <li><span class="pill notstarted">todo</span> Operability — dashboard FastAPI + MCP + cross-run inbox (E-6…E-11).</li>
-      <li><span class="pill notstarted">todo</span> Post-P1 roadmap — DAPER, two pools, budgets, observability, brownfield, claim-check.</li>
+      <li><span class="pill partial">partial</span> Post-P1 roadmap — DAPER/todo, two pools/todo, budgets ✅ (E-33), observability ✅ (E-32), brownfield/todo, claim-check partial (E-38 sessions; diffs inline).</li>
       <li><span class="pill partial">partial</span> Repo hardening via agents-as-folders — E-1/E-2/E-4 done; remaining is reorganisation.</li>
     </ol>
   </div>
 </div>
 
 <!-- =========================================================== -->
-<h2>Architecture decision records <span class="count">ARCHITECTURE &sect;12 &middot; 9 / 16 satisfied</span></h2>
+<h2>Architecture decision records <span class="count">ARCHITECTURE &sect;12 &middot; 12 / 17 satisfied</span></h2>
 
 <div class="adr-grid">
   <div class="adr done">
     <div class="head"><span class="title">Temporal owns state</span><span class="id">ADR-1</span></div>
-    <p class="why">Durable timers, signals, retries, visibility for free. <code>events.jsonl</code> demoted to export (unbuilt).</p>
+    <p class="why">Durable timers, signals, retries, visibility for free. <code>events.jsonl</code> demoted to export — now shipped from the retro stage (E-32).</p>
   </div>
   <div class="adr done">
     <div class="head"><span class="title">Pydantic AI proposers + harness CLIs</span><span class="id">ADR-2</span></div>
@@ -980,7 +980,7 @@
   </div>
   <div class="adr partial">
     <div class="head"><span class="title">Claim-check for large payloads</span><span class="id">ADR-10</span></div>
-    <p class="why"><code>ArtifactRef</code> exists but not load-bearing; diffs travel inline; no 2MB guard.</p>
+    <p class="why"><code>ArtifactRef</code> now load-bearing for sessions (<code>ArtifactStore</code>, E-38); diffs still travel inline; no 2MB guard.</p>
   </div>
   <div class="adr partial">
     <div class="head"><span class="title">Deterministic DAG, deliberately</span><span class="id">ADR-11</span></div>
@@ -998,18 +998,22 @@
     <div class="head"><span class="title">Integration by running branch</span><span class="id">ADR-14</span></div>
     <p class="why"><code>sdlc/&lt;run_id&gt;/integration</code> accumulates task work; merge PR is <code>integration → base</code>. Fully wired.</p>
   </div>
-  <div class="adr notstarted">
+  <div class="adr done">
     <div class="head"><span class="title">Toolchain adapters for language-agnostic evaluation</span><span class="id">ADR-15</span></div>
-    <p class="why">Generated projects are multi-language, so the stage-11/12 quality activities (<code>run_test_suite</code>, <code>run_lint</code>, <code>security_scan</code>, <code>measure_coverage</code>) cannot hardcode one toolchain. A <code>ToolchainAdapter</code> registry (<code>TOOLCHAINS</code>, beside <code>HARNESSES</code>) resolves by <strong>marker file in the produced repo</strong> (<code>pyproject.toml</code>/<code>package.json</code>/<code>go.mod</code>/<code>Cargo.toml</code> — the built artifact decides, not the Architect's stated stack) and normalises <code>build()/test()/lint()/coverage()</code> into the existing <code>TestReport</code>. Two format invariants keep the deterministic gate language-agnostic and unchanged: canonical coverage = <strong>Cobertura XML</strong> (each adapter translates into it; <code>measure_coverage</code> already reads <code>coverage.xml</code>); absolute security floor = <strong>semgrep → SARIF</strong> (one multi-language tool so <code>security_no_critical</code>/SC-5 stays a single check, not per-language sprawl). Same shape as the ADR-2/3 harness adapter: adding a language is adding an adapter, never a fork. Rollout incremental — Python reference adapter first; further languages on demand as the benchmark corpus needs them (ROADMAP §9.8, E-30/E-30a-c). <strong>New scope.</strong></p>
+    <p class="why">Stage-11/12 quality activities cannot hardcode one toolchain. A <code>ToolchainAdapter</code> registry (<code>TOOLCHAINS</code>, beside <code>HARNESSES</code>) resolves by <strong>marker file in the produced repo</strong> (<code>pyproject.toml</code>/<code>package.json</code>/<code>go.mod</code>/<code>Cargo.toml</code>); canonical coverage = <strong>Cobertura XML</strong>, absolute security floor = <strong>semgrep → SARIF</strong>, so the deterministic gate stays language-agnostic and unchanged. <strong>Landed (E-30):</strong> registry + marker detection + Python reference end-to-end; <code>run_integration_checks</code> closes the FR-106 coverage-crossing gap. Go/TS/Rust = E-30a/b/c.</p>
   </div>
-  <div class="adr notstarted">
+  <div class="adr done">
     <div class="head"><span class="title">Harness sessions as first-class, claim-checked artifacts</span><span class="id">ADR-16</span></div>
-    <p class="why">Every harness run emits a canonical <code>HarnessSession</code> — a normalised transcript (tool-calls, file reads/writes, commands + exit status, model turns) — as <code>session_ref: ArtifactRef{kind: harness_session}</code> on <code>HarnessRunResult</code> (§4). Normalising the transcript is the <strong>harness adapter's</strong> job, beside the resume-handle it already owns (<code>claude --resume</code> / <code>opencode -s</code>) — same registry/pattern as the toolchain adapter (ADR-15). Because capture is <strong>always-on</strong>, three invariants are hot-path, not options: (a) claim-check unconditional (transcripts are large, never touch workflow state — the second reason FR-702 must close, beside diffs); (b) the memory scrub (<code>pre_retain</code>) runs over the session <strong>before</strong> storage, <strong>fail-closed</strong> like the SC-5 security floor; (c) retention follows a decided policy — full transcript on fail/benchmark/any run with <strong>&gt;0</strong> fix-loop attempts, a structured <code>SessionDigest</code> (§4.3 waste aggregates + decision-skeleton, computed pre-truncation and always kept) on clean-green runs, never a blind byte-truncation; scrub runs fail-closed <strong>before</strong> the full-vs-digest branch (full-transcript TTL is the one open sub-point, OQ-B7). The session is the concrete <strong>P5 trajectory seam</strong> (§10). Consumers: offline benchmark/anti-cheat, the opt-in <code>deep_review</code> lens (ADR-6, E-39), trajectory harvesting, retro distillation — <strong>never</strong> the default clean-context reviewer (ADR-6). <strong>New scope.</strong></p>
+    <p class="why">Every harness run emits a canonical <code>HarnessSession</code> as <code>session_ref: ArtifactRef{kind: harness_session}</code> on <code>HarnessRunResult</code>. Always-on ⇒ claim-check unconditional, scrub fail-closed before storage, retention decided (full on fail/benchmark/attempts&gt;0, <code>SessionDigest</code> on clean-green). <strong>Landed (E-38):</strong> per-adapter normalisers (claude stream-json, opencode event stream) + <code>ArtifactStore</code> (file:// backend) + fail-closed capture in <code>run_coding_task</code> + retro-time OQ-B7 retention. The P5 trajectory seam; <code>deep_review</code> reads it as data (E-39). Full-transcript TTL still open (OQ-B7).</p>
+  </div>
+  <div class="adr done">
+    <div class="head"><span class="title">Containment as a declared harness capability</span><span class="id">ADR-17</span></div>
+    <p class="why">A <code>CodingHarness</code> declares which layers it enforces (<code>native</code>/<code>hook</code>); one versioned <code>policy/containment.yaml</code> compiles per adapter. Native is the inner layer, hook the outer; total absence of layers fails closed (cursor), partial coverage recorded in <code>ContainmentReport</code>. <strong>Landed (E-15/E-16):</strong> fail-closed <code>PreToolUse</code> hook (<code>python -m sdlc.harness.hook</code>) + four predicates + <code>ToolDenial</code> on <code>HarnessRunResult</code>/<code>SessionDigest</code>. A fence, not a sandbox — denial is tool-level only; OS/container/network tier is E-21.</p>
   </div>
 </div>
 
 <div class="footer">
-  Sources: <code>ARCHITECTURE.md</code> (Draft v1.0, 2026-07-02) and <code>ROADMAP.md</code> (last verified 2026-07-19).
+  Sources: <code>ARCHITECTURE.md</code> (Draft v1.0, 2026-07-02) and <code>ROADMAP.md</code> (last verified 2026-07-25).
   Status reflects code in <code>src/sdlc/</code>, <code>interfaces/</code>, <code>tests/</code>, <code>config/</code>, <code>agents/</code> &mdash; not prior audit claims.
   Companion pages: <a href="roadmap.html">roadmap.html</a> (full FR/NFR/SC/US checklist) &middot; <a href="benchmark.html">benchmark.html</a> (evaluation design).
 </div>
