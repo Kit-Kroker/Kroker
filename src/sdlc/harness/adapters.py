@@ -28,11 +28,15 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..memory.scrub import scrub
 from ..models import (
-    ContainmentLayer, ContainmentReport, HarnessKind, HarnessRunResult,
-    HarnessSession, SessionEvent, ToolDenial,
+    ContainmentLayer, ContainmentReport, DeferredToolUse, HarnessKind,
+    HarnessRunResult, HarnessSession, SessionEvent, ToolDenial, ToolGrant,
 )
-from .containment import Policy, Predicate, Rule, target_of
+from .containment import (
+    Action, Policy, Predicate, Rule, digest_tool_input, is_declined_reason,
+    target_of,
+)
 
 SUMMARY_MAX = 4000  # keep Temporal payloads small
 
@@ -161,13 +165,24 @@ class CodingHarness(ABC):
     # running unpoliced and looking contained.
     containment: frozenset[ContainmentLayer] = frozenset()
 
-    def apply_containment(self, policy: Policy,
-                          req: HarnessRequest) -> ContainmentReport:
+    # E-17: whether this CLI can SUSPEND a tool call for a human decision.
+    # claude has `defer`; nothing else does. A harness declaring False keeps
+    # escalate rules as plain denials, reported via rules_escalatable.
+    supports_escalation: bool = False
+
+    def apply_containment(self, policy: Policy, req: HarnessRequest,
+                          grants: list[ToolGrant] | None = None
+                          ) -> ContainmentReport:
         """Compile `policy` into this CLI's own mechanisms, mutating `req`.
         Base default: enforce nothing and say so."""
         return ContainmentReport(
             enabled=True, layers_active=[],
             rules_unenforceable=[r.id for r in policy.rules])
+
+    def normalise_deferral(self, stdout: str) -> DeferredToolUse | None:
+        """The tool call this run suspended at, if any (E-17, mirroring
+        normalise_denials). Base default: this harness cannot suspend."""
+        return None
 
     def normalise_denials(self, stdout: str) -> list[ToolDenial]:
         """Blocked tool calls from this harness's stream (ADR-17, mirroring
@@ -294,21 +309,29 @@ class ClaudeCodeHarness(CodingHarness):
         return cmd + req.extra_args
 
     containment = frozenset({ContainmentLayer.NATIVE, ContainmentLayer.HOOK})
+    supports_escalation = True
 
-    def apply_containment(self, policy: Policy,
-                          req: HarnessRequest) -> ContainmentReport:
-        """Both layers, deliberately overlapping (spec §4a).
+    def apply_containment(self, policy: Policy, req: HarnessRequest,
+                          grants: list[ToolGrant] | None = None
+                          ) -> ContainmentReport:
+        """Both layers, deliberately overlapping (E-15 spec §4a).
 
         `permissions.deny` is the floor a buggy hook cannot weaken (verified:
         a hook's `allow` cannot bypass a deny rule). The hook is the layer
         that is OBSERVABLE — a native deny blocks correctly but reports
         `permission_denials: []`, so every rule is ALSO hooked here.
+
+        E-17: an ESCALATE rule is hook-only by construction (load_policy
+        refuses `escalate` + `layer: native`), because a native deny would
+        block the very call the human approved.
         """
+        grants_path = self._write_grants(grants)
         hooks = [{
             "matcher": "|".join(sorted({t for r in policy.rules
                                         for t in r.tools})),
             "hooks": [{"type": "command",
-                       "command": self._hook_command(req, policy.source_path)}],
+                       "command": self._hook_command(req, policy.source_path,
+                                                     grants_path)}],
         }] if policy.rules else []
 
         deny = [p for r in policy.rules if ContainmentLayer.NATIVE is r.layer
@@ -330,11 +353,26 @@ class ClaudeCodeHarness(CodingHarness):
             enabled=True,
             layers_active=[ContainmentLayer.NATIVE, ContainmentLayer.HOOK],
             rules_enforced=[r.id for r in policy.rules],
-            rules_unenforceable=[])
+            rules_unenforceable=[],
+            rules_escalatable=[r.id for r in policy.rules
+                               if r.action is Action.ESCALATE])
+
+    @staticmethod
+    def _write_grants(grants: list[ToolGrant] | None) -> str | None:
+        """Grants live outside the worktree for the same reason the settings
+        file does: the agent may write anywhere inside it, so an in-worktree
+        grants file would be a file it could forge."""
+        if not grants:
+            return None
+        fd, path = tempfile.mkstemp(prefix="sdlc-grants-", suffix=".json")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump([g.model_dump() for g in grants], fh)
+        return path
 
     @staticmethod
     def _hook_command(req: HarnessRequest,
-                      source_path: "Path | None" = None) -> str:
+                      source_path: "Path | None" = None,
+                      grants_path: str | None = None) -> str:
         """Absolute interpreter path: the child's PATH is allowlisted and may
         resolve a different `python` than the worker's venv. Forward slashes
         because claude runs hooks through Git Bash on Windows. The policy
@@ -345,6 +383,8 @@ class ClaudeCodeHarness(CodingHarness):
         cmd = f'"{exe}" -m sdlc.harness.hook --worktree "{wt}"'
         if source_path is not None:
             cmd += f' --policy "{Path(source_path).as_posix()}"'
+        if grants_path is not None:
+            cmd += f' --grants "{Path(grants_path).as_posix()}"'
         return cmd
 
     @staticmethod
@@ -390,9 +430,54 @@ class ClaudeCodeHarness(CodingHarness):
                         tool=pd.get("tool_name") or "unknown",
                         rule_id=rule_id, layer=ContainmentLayer.HOOK,
                         reason=reason,
+                        escalation_declined=is_declined_reason(reason),
                         target=target_of(pd.get("tool_name") or "",
                                          tool_input)))
         return denials
+
+    def normalise_deferral(self, stdout: str) -> DeferredToolUse | None:
+        """The `result` event carries `stop_reason: "tool_deferred"` plus a
+        structured `deferred_tool_use` (verified against 2.1.220). The rule
+        id and reason come from the hook's own defer event, the same channel
+        normalise_denials reads."""
+        rule_id, reason = "unknown", ""
+        deferred = None
+        for ln in stdout.strip().splitlines():
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                ev = json.loads(ln)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(ev, dict):
+                continue
+            if (ev.get("subtype") == "hook_response"
+                    and ev.get("hook_event") == "PreToolUse"):
+                try:
+                    hso = json.loads(ev.get("output") or "{}")
+                    hso = hso.get("hookSpecificOutput") or {}
+                except json.JSONDecodeError:
+                    continue
+                if hso.get("permissionDecision") == "defer":
+                    rule_id, reason = _split_reason(
+                        hso.get("permissionDecisionReason") or "")
+            elif (ev.get("type") == "result"
+                    and ev.get("stop_reason") == "tool_deferred"):
+                deferred = ev.get("deferred_tool_use") or {}
+        if not deferred:
+            return None
+        tool = deferred.get("name") or "unknown"
+        tool_input = deferred.get("input") or {}
+        raw_target = target_of(tool, tool_input)
+        return DeferredToolUse(
+            tool_use_id=deferred.get("id") or "",
+            tool=tool,
+            input_digest=digest_tool_input(tool_input),
+            rule_id=rule_id, reason=reason,
+            # Scrubbed here, not later: this target is rendered into a gate a
+            # HUMAN reads, an exposure denial targets never had.
+            target=scrub(raw_target) if raw_target else raw_target)
 
     def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
         session_id = cost = summary = None
@@ -487,6 +572,12 @@ class ClaudeCodeHarness(CodingHarness):
         for d in self.normalise_denials(stdout):
             events.append(SessionEvent(
                 kind="tool_denied", tool=d.tool, target=d.target))
+        
+        deferred = self.normalise_deferral(stdout)
+        if deferred is not None:
+            events.append(SessionEvent(kind="tool_deferred",
+                                       tool=deferred.tool,
+                                       target=deferred.target))
         return HarnessSession(harness=self.kind, session_id=session_id,
                               model=model, events=events, cost_usd=cost,
                               input_tokens=in_tok, output_tokens=out_tok)
@@ -532,8 +623,9 @@ class OpenCodeHarness(CodingHarness):
     # only hook mechanism. The native permission block is what remains.
     containment = frozenset({ContainmentLayer.NATIVE})
 
-    def apply_containment(self, policy: Policy,
-                          req: HarnessRequest) -> ContainmentReport:
+    def apply_containment(self, policy: Policy, req: HarnessRequest,
+                          grants: list[ToolGrant] | None = None
+                          ) -> ContainmentReport:
         """Compile native-layer rules into opencode's `permission` config.
 
         opencode (1.18.4, verified) has NO `--config` flag and no config-path
