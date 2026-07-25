@@ -39,6 +39,8 @@ def digest_of(session: HarnessSession) -> SessionDigest:
             d.compacted = True
         elif ev.kind == "tool_denied":
             d.denials += 1
+        elif ev.kind == "tool_deferred":
+            d.escalations += 1
         if ev.kind in _TOOL_KINDS and len(skeleton) < SKELETON_MAX:
             skeleton.append(f"{ev.tool or ev.kind} {ev.target or ''}".strip())
     d.file_rereads = sum(n - 1 for n in reads.values() if n > 1)
