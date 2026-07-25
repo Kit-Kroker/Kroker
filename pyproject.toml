@@ -23,8 +23,17 @@ logfire = ["logfire[pydantic-ai]>=3"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+# Default run = fast unit tests only. `slow` (venv builds, real pip installs)
+# and `temporal` (each test spawns its own ephemeral Temporal dev-server
+# subprocess via WorkflowEnvironment.start_time_skipping; 22 such tests
+# contend and freeze the suite when run together) are opt-in:
+#   pytest                          # fast unit only
+#   pytest -m temporal              # integration tests only
+#   pytest -m "slow or temporal"    # everything
+#   pytest -m ""                    # truly everything (overrides addopts)
+addopts = "-q -m 'not slow and not temporal'"
 markers = [
     "slow: builds a venv or otherwise takes >10s",
+    "temporal: spawns an ephemeral Temporal dev-server via WorkflowEnvironment",
     "live: spawns a real harness CLI and spends tokens; skipped unless SDLC_LIVE_TESTS=1",
 ]

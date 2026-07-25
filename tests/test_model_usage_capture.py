@@ -25,6 +25,8 @@ with workflow.unsafe.imports_passed_through():
     from sdlc.workflows.feature import FeatureWorkflow
     from tests.fakes.fake_agents import fake_agent_activities
 
+pytestmark = pytest.mark.temporal
+
 TASK_QUEUE = "usage"
 
 

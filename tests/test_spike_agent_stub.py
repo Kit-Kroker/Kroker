@@ -20,6 +20,10 @@ with workflow.unsafe.imports_passed_through():
     from sdlc.agents.roles import t_clarify
     from tests.fakes.fake_agents import fake_agent_activities
 
+
+pytestmark = pytest.mark.temporal
+
+
 CANNED = ClarifiedRequirements(
     summary="CANNED-SUMMARY",
     functional_requirements=["fr1"],

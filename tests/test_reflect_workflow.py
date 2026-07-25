@@ -17,6 +17,8 @@ from sdlc.memory.activities import ReflectInput
 with workflow.unsafe.imports_passed_through():
     from sdlc.workflows.reflect import ReflectScheduleInput, ReflectWorkflow
 
+pytestmark = pytest.mark.temporal
+
 TASK_QUEUE = "reflect-test"
 
 REFLECTED: list[str] = []

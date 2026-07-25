@@ -42,6 +42,9 @@ with workflow.unsafe.imports_passed_through():
     from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
 
 
+pytestmark = pytest.mark.temporal
+
+
 class _Out(BaseModel):
     text: str
 
@@ -129,7 +132,7 @@ class _CodeModeWorkflow:
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(strict=True, reason="Task 1 finding B: CodeMode's run_code cannot be exercised via TestModel under TemporalAgent (Monty rejects dummy code; infinite retry). Recorded decision-gate output; see FINDING block.")
+@pytest.mark.skip(reason="Task 1 finding B: CodeMode's run_code cannot be exercised via TestModel under TemporalAgent — Monty rejects TestModel's dummy code, Temporal retries the failing activity forever with no bound. The body's asyncio.wait_for(timeout=60) used to convert that hang into a deterministic TimeoutError but every run paid 60s for it. See FINDING B below; this stays skip until a real-LLM integration test proves the path.")
 async def test_codemode_run_code_executes_through_temporal_agent():
     # NOTE: asyncio.wait_for bounds an observed INDEFINITE HANG. With plain
     # TestModel(call_tools=['run_code']), CodeMode's Monty type-checker
