@@ -66,6 +66,55 @@ happened (`TestReport`, `DeployReport`).
   (`claude --resume` / `opencode -s`) so context is preserved. Then escalate.
 - qa failure → Test-Error-Resolver, `MAX_REPAIR_ATTEMPTS = 3` (unchanged).
 
+### 1.1 Sibling workflows — assessment and triage are NOT stages
+
+*(Added 2026-07-25 with PRD v1.1. See `PRD.md` FR-900/FR-910 and `ROADMAP.md`
+§§10–11.)*
+
+The `FactoryWorkflow` DAG above takes a **decided** unit of work to a deployed
+feature. Two new workflows take a **repository** as their input instead, and
+neither is a stage in the table above:
+
+| Workflow | Input | DAG | Terminal artifact |
+|---|---|---|---|
+| `TriageWorkflow` (FR-900) | repo @ commit | deterministic signal set → readiness verdict | `RepoTriage` |
+| `AssessmentWorkflow` (FR-910) | repo @ commit | EDCR: init → scan → discover → assess → report → generate → finish | `UnifiedRiskMap` + evidence bundle |
+
+They are siblings of `FactoryWorkflow`, not extensions of it, because their
+stage contract differs at the root: a `FactoryWorkflow` stage is a pure function
+of hashed *declared* inputs producing an artifact that advances one feature,
+whereas an assessment phase reads a repository the factory did not author and
+produces findings *about* it. Modelling them as stages 15–21 would put an entire
+second DAG inside a workflow whose gates, budgets, and memo keys are shaped for
+feature delivery.
+
+**How they connect to this DAG — three seams, all one-directional:**
+
+1. **`CapabilityMap` satisfies stage 2.** The `discover` phase's output
+   (FR-913) *is* the `CodebaseMap` that stage 2 (Cartographer, FR-102) requires.
+   Building it for the audit is what makes brownfield `FactoryWorkflow` runs
+   possible; there is one artifact, not two.
+2. **Findings enter as ordinary runs.** A triage finding classed
+   `mechanically_fixable` (FR-904) and an accepted specification seed (FR-919)
+   each start a **brownfield `FactoryWorkflow` child run** at stage 0 — never a
+   direct patch (PRD NG5, mirroring FR-502's rule for repair actions). The
+   seed's validation criteria become that run's acceptance criteria, so a fix is
+   graded against the assessment that motivated it.
+3. **Assessment context is a declared stage input.** The capability slice a
+   brownfield run needs (structure, entity contracts, blast radius, QA
+   constraints, threats, dependencies) enters as a hashed declared input, the
+   same shape as `RecallSnapshot` (FR-402) — not as an ad-hoc lookup, so §1's
+   "every stage is a pure function of hashed inputs" survives intact.
+
+**Gate ordering note.** Tier 2 is gated on Tier 0's readiness verdict (FR-903):
+a repository that does not build or whose structure is not legible is reported
+as a precondition failure, not capability-mapped (ADR-18).
+
+**A note on stage 13.** `DeployPlan` → `DeployReport` is specified in the table
+above but implemented as a single hardcoded deploy command; FR-1104 (E-67)
+builds the split this row already describes. The product-outcome loop (FR-1100)
+depends on it, but so does this DAG.
+
 ---
 
 ## 2. Agent roster & configurable registry

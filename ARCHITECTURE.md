@@ -541,6 +541,39 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
   closed. **This is a fence, not a sandbox:** egress denial is tool-level only
   (a socket opened inside an allowed `Bash` call is invisible); the
   OS-user/container tier is E-21.
+- **ADR-18** Triage precedes capability modelling — a repository that does not
+  build, or whose structure is not discernible, is **not** capability-mapped;
+  the factory reports the precondition as unmet (FR-903) instead of emitting a
+  low-confidence model. The forcing case is the repository class the assessment
+  product exists for: the EDCR methodology is enterprise-brownfield machinery
+  (BIAN / TM Forum / ACORD / HL7 blueprints), and against a three-week-old
+  vibe-coded repo its ≥90% file→capability coverage has nothing to map to,
+  every QA composite degenerates to `unknown`, and per-capability STRIDE
+  reasoning is paid for over structure that does not exist. So Tier 0 triage
+  (FR-900) is a distinct, cheaper, deterministic tier that **gates** Tier 2
+  (FR-910) rather than a first pass of it. *Trade-off:* two artifact families
+  and two workflows instead of one, in exchange for never shipping a
+  confident-looking capability model derived from absent structure — a wrong
+  answer here is not a weaker audit, it is a misleading one. **New scope.**
+- **ADR-19** Deployment targets and product-analytics sources are **adapters,
+  not substrate** — resolved from configuration exactly as toolchains are
+  (ADR-15), with one reference adapter each and no hosting, feature-flagging,
+  or analytics implementation of our own (NG7). This is what keeps the
+  product-outcome loop (FR-1100) an adjacent capability rather than a second
+  product: what remains after the substrate is excluded is a frozen contract, a
+  traceability check, a durable timer, and a gate — all mechanisms this system
+  already has. *Trade-off:* the factory's verdict depends on a metric read from
+  a system it does not control, which is FR-914's grounding problem outside our
+  trust boundary and is recorded unresolved as **OQ-9**. **New scope.**
+- **ADR-20** Pre-registration reuses contract-freeze semantics — an
+  experiment's decision rule is frozen and hashed at the hypothesis gate
+  precisely as `ValidationContract` freezes at planning (FR-803), and a
+  post-hoc change is a new audited gate round retaining both versions, never a
+  silent rewrite. One freeze mechanism, one audit shape, and the property that
+  carries the value (the rule cannot be edited once the data is visible) is
+  inherited rather than reinvented. *Trade-off:* rigidity is the point — an
+  owner who genuinely learns something mid-window must pay an audited round to
+  act on it, which is the cost of the guarantee. **New scope.**
 
 ## 13. Technology summary
 
