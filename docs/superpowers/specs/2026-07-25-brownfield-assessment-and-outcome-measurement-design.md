@@ -179,7 +179,9 @@ FR-108) leaves work that is squarely in this codebase's competence:
 `DeployPlan`/`DeployReport` (FR-1104) also closes DAG stage 13 for ordinary
 feature runs, so it earns its place regardless.
 
-## 7. Proposed ADRs
+## 7. ADRs
+
+Recorded in `ARCHITECTURE.md` §12 and tracked in `ROADMAP.md` §6.
 
 - **ADR-18 — Triage precedes capability modelling.** A repository that does not
   build or whose structure is not discernible is not capability-mapped; the
