@@ -44,9 +44,17 @@ class Predicate(str, Enum):
     HOST_NOT_ALLOWLISTED = "host_not_allowlisted"
 
 
+class Action(str, Enum):
+    """What a matched rule does. DENY is E-16's behaviour and the default;
+    ESCALATE raises a human gate through FR-301/FR-302 (E-17)."""
+    DENY = "deny"
+    ESCALATE = "escalate"
+
+
 class Rule(BaseModel):
     id: str
     layer: ContainmentLayer      # MINIMUM capability required (spec §4a)
+    action: Action = Action.DENY   # E-17; DENY keeps every E-16 rule as-is
     tools: list[str]
     predicate: Predicate
     reason: str
@@ -111,6 +119,13 @@ def load_policy(path: str | os.PathLike | None = None) -> Policy:
         seen.add(rid)
         try:
             rules.append(Rule.model_validate(entry))
+            if (rules[-1].action is Action.ESCALATE
+                    and rules[-1].layer is ContainmentLayer.NATIVE):
+                raise ContainmentError(
+                    f"rule {rid!r} in {p} sets action: escalate with layer: "
+                    f"native. A native `permissions.deny` strictly beats a hook "
+                    f"allow, so an approved call would still be blocked — the "
+                    f"gate would be theatre. Escalating rules must be layer: hook.")
         except Exception as e:                    # noqa: BLE001 - re-typed
             raise ContainmentError(
                 f"invalid rule {rid!r} in {p}: {e}") from e
@@ -121,6 +136,7 @@ class Verdict(BaseModel):
     allow: bool
     rule_id: str | None = None
     reason: str | None = None
+    action: Action = Action.DENY   # the matched rule's action; DENY when allowed
 
 
 _URL_RE = re.compile(r"https?://[^\s'\"|;>)]+", re.IGNORECASE)
@@ -211,5 +227,6 @@ def evaluate(policy: Policy, tool: str, tool_input: dict,
     returned path is authoritative (activities.py:260-274)."""
     for rule in policy.rules:
         if _rule_denies(rule, tool, tool_input, worktree):
-            return Verdict(allow=False, rule_id=rule.id, reason=rule.reason)
+            return Verdict(allow=False, rule_id=rule.id, reason=rule.reason,
+                           action=rule.action)
     return Verdict(allow=True)

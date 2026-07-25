@@ -1,8 +1,10 @@
 """E-15/E-16: policy asset parsing and resolution."""
 import pytest
 
+from pathlib import Path
+
 from sdlc.harness.containment import (
-    ContainmentError, Predicate, load_policy,
+    Action, ContainmentError, Predicate, load_policy,
 )
 from sdlc.models import ContainmentLayer
 
@@ -80,3 +82,53 @@ def test_shipped_asset_parses_and_covers_fr703():
     assert "no-recursive-force-delete" in ids
     assert "no-agent-config-write" in ids
     assert "egress-allowlist" in ids
+
+
+def test_rules_default_to_deny(tmp_path):
+    """Every rule that landed with E-16 keeps its exact behaviour."""
+    p = tmp_path / "p.yaml"
+    p.write_text(
+        "version: 1\nrules:\n"
+        "  - id: r\n    layer: hook\n    tools: [Write]\n"
+        "    predicate: path_outside_worktree\n    reason: nope\n",
+        encoding="utf-8")
+    policy = load_policy(p)
+    assert policy.rules[0].action is Action.DENY
+
+
+def test_escalate_action_parses(tmp_path):
+    p = tmp_path / "p.yaml"
+    p.write_text(
+        "version: 1\nrules:\n"
+        "  - id: r\n    layer: hook\n    action: escalate\n"
+        "    tools: [Write]\n"
+        "    predicate: path_outside_worktree\n    reason: nope\n",
+        encoding="utf-8")
+    assert load_policy(p).rules[0].action is Action.ESCALATE
+
+
+def test_escalate_on_a_native_rule_is_refused(tmp_path):
+    """permissions.deny strictly beats a hook allow (E-15 §0), so a natively
+    compiled rule could never be approved — the gate would be theatre."""
+    p = tmp_path / "p.yaml"
+    p.write_text(
+        "version: 1\nrules:\n"
+        "  - id: r\n    layer: native\n    action: escalate\n"
+        "    tools: [Bash]\n"
+        "    predicate: command_matches\n    patterns: ['rm -rf *']\n"
+        "    reason: nope\n",
+        encoding="utf-8")
+    with pytest.raises(ContainmentError, match="escalate"):
+        load_policy(p)
+
+
+def test_shipped_asset_escalates_only_the_out_of_worktree_write():
+    """The mechanism must run on the DEFAULT policy, not only in tests
+    (E-27's lesson), and the hard denials must stay hard."""
+    policy = load_policy(Path(__file__).parents[1] / "policy"
+                         / "containment.yaml")
+    by_action = {r.id: r.action for r in policy.rules}
+    assert by_action["no-out-of-worktree-write"] is Action.ESCALATE
+    assert by_action["no-recursive-force-delete"] is Action.DENY
+    assert by_action["no-agent-config-write"] is Action.DENY
+    assert by_action["egress-allowlist"] is Action.DENY
