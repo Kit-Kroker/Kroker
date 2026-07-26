@@ -56,6 +56,9 @@ with workflow.unsafe.imports_passed_through():
     from ..artifacts.retention import (RetentionInput, apply_session_retention,
                                        keep_full_transcripts)
     from ..artifacts.read import LoadSessionInput, load_session
+    from ..notify.contract import NotifyInput, NotifyReason, Results
+    from ..notify.schedule import build_schedule
+    from ..notify.activities import notify
     from ..models import (
         AnalysisReport, ArchitectureSpec, ArtifactRef, ClarifiedRequirements,
         DeferredToolUse, EscalationOutcome, ToolDenial, ToolEscalation, ToolGrant,
@@ -93,6 +96,17 @@ RECORD_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
                   retry_policy=RetryPolicy(maximum_attempts=5))
 MEM_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
                retry_policy=RetryPolicy(maximum_attempts=5))
+# E-9: delivery is best-effort and must never delay a gate. A single attempt:
+# the notify activity already attempts every configured route internally, and
+# retrying with backoff would block _wait_for_decision's deadline walk (and
+# hang the time-skipping test env, whose retry backoff is real-time). A failed
+# delivery is traced immediately via GATE_NOTIFIED instead.
+# schedule_to_start_timeout bounds the missing-worker case (a notify task no
+# worker can start -- e.g. a test worker that does not register notify) so it
+# fails fast and is caught by _notify instead of hanging the gate forever.
+NOTIFY_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
+                  schedule_to_start_timeout=timedelta(seconds=5),
+                  retry_policy=RetryPolicy(maximum_attempts=1))
 # Code-review C2: deterministic substring check — retrying cannot change the
 # outcome, so maximum_attempts=1 (no retries). Matches the *_ACT convention.
 VERIFY_ACT = dict(
@@ -408,6 +422,51 @@ class FeatureWorkflow:
         except Exception:
             pass
 
+    async def _notify(self, pending, reason, opened_at, deadline) -> None:
+        """Fire-and-forget delivery. Mirrors _retain: a transport failure can
+        never block, fail, or delay a gate. Unlike _retain it does not swallow
+        silently -- the outcome is traced, because a notification that failed
+        to deliver must be visible (spec 6, ROADMAP 9.6)."""
+        gate = getattr(pending, "gate", None) or pending.key
+        try:
+            out: Results = await workflow.execute_activity(
+                notify,
+                NotifyInput(run_id=workflow.info().workflow_id,
+                            pending=pending, reason=reason,
+                            opened_at=opened_at, now=workflow.now(),
+                            deadline=deadline),
+                **NOTIFY_ACT)
+        except Exception as e:                # noqa: BLE001
+            self._emit(RunEventKind.GATE_NOTIFIED, stage=gate, gate=gate,
+                       reason=reason.value, notifier="unresolved",
+                       delivered="false", error=str(e)[:200])
+            return
+        for r in out.results:
+            self._emit(RunEventKind.GATE_NOTIFIED, stage=gate, gate=gate,
+                       reason=reason.value, notifier=r.notifier,
+                       delivered="true" if r.delivered else "false",
+                       **({"error": r.error[:200]} if r.error else {}))
+
+    async def _wait_for_decision(self, key, pending, schedule, expires):
+        """Wait for the gate's signal, firing each notification as its
+        deadline passes. Returns the decision, or None when the gate expired
+        undecided. Exits the instant the signal lands, so there is nothing to
+        cancel -- the reason this is a loop rather than a detached
+        coroutine."""
+        opened_at = schedule[0][0]
+        decided = lambda: key in self._gate_decisions      # noqa: E731
+        for at, reason in schedule:
+            try:
+                await workflow.wait_condition(
+                    decided, timeout=at - workflow.now())
+                return self._gate_decisions[key]
+            except TimeoutError:
+                await self._notify(pending, reason, opened_at, expires)
+        if expires is None:                    # HOLD: wait without a deadline
+            await workflow.wait_condition(decided)
+            return self._gate_decisions[key]
+        return None
+
     async def _cached_stage(self, cfg: PipelineConfig, stage: str,
                             input_json: str,
                             output_type: type, run_fn) -> tuple[object, bool]:
@@ -643,10 +702,10 @@ class FeatureWorkflow:
                     confidence: float | None = None,
                     default_policy: GatePolicy | None = None) -> GateDecision:
         """Durable HITL gate with policy-based auto-approval."""
-        policy = cfg.gates.get(
+        gate_cfg = cfg.gates.get(
             name,
-            GateConfig(policy=default_policy or cfg.default_gate_policy),
-        ).policy
+            GateConfig(policy=default_policy or cfg.default_gate_policy))
+        policy = gate_cfg.policy
         key = gate_key(name, round)
 
         if policy == GatePolicy.OFF:
@@ -656,20 +715,22 @@ class FeatureWorkflow:
         elif policy == GatePolicy.SOFT and auto_decision and auto_decision.approved:
             decision = auto_decision
         else:
-            self._pending[key] = gate_pending(name, round, context)
+            pending = gate_pending(name, round, context)
+            self._pending[key] = pending
             self._status = f"awaiting:{name}"
             self._emit(RunEventKind.GATE_AWAITED, stage=name,
                        gate=name, round=str(round))
+            schedule, expires = build_schedule(
+                gate_cfg, cfg.gate_timeout_hours, workflow.now())
             try:
-                await workflow.wait_condition(
-                    lambda: key in self._gate_decisions,
-                    timeout=timedelta(hours=cfg.gate_timeout_hours),
-                )
-                decision = self._gate_decisions[key]
-            except TimeoutError:
-                decision = GateDecision(gate=name, round=round,
-                                        outcome=GateOutcome.REJECT,
-                                        decided_by="timeout")
+                decided = await self._wait_for_decision(
+                    key, pending, schedule, expires)
+                if decided is not None:
+                    decision = decided
+                else:
+                    decision = GateDecision(gate=name, round=round,
+                                            outcome=GateOutcome.REJECT,
+                                            decided_by="timeout")
             finally:
                 self._status = "running"
                 self._pending.pop(key, None)

@@ -17,6 +17,7 @@ class RunEventKind(str, Enum):
     STAGE_ENDED = "stage_ended"
     GATE_AWAITED = "gate_awaited"
     GATE_DECIDED = "gate_decided"
+    GATE_NOTIFIED = "gate_notified"
     CLARIFICATION_ASKED = "clarification_asked"
     CLARIFICATION_ANSWERED = "clarification_answered"
     FIX_ATTEMPT = "fix_attempt"
