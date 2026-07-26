@@ -1,0 +1,36 @@
+# E-9 (FR-303) -- where gate notifications go. Versioned asset, like
+# policy/containment.yaml: a route change is a reviewable file diff.
+#
+# A route is "<notifier>" or "<notifier>:<target>". Targets beginning with $
+# are read from the environment, so webhook URLs -- which are bearer
+# credentials -- never enter the repository. An unset variable DROPS the
+# route rather than sending to a literal "$NAME".
+#
+# `escalate` delivers to primary AND fallback. Every other reason goes to
+# primary only. A fallback widens who is TOLD; it confers no authority --
+# FR-302's first-decision-wins already settles who decides (E-60 owns
+# identity).
+version: 1
+
+# Absolute base for deep links. Null until the dashboard (E-10) exists, at
+# which point notifications gain a URL beside the CLI commands.
+base_url: null
+
+# Hosts a `webhook` route may POST to. A notify webhook is the pipeline's
+# second outbound egress after research (FR-703), so it is allowlisted
+# explicitly and fails closed. Subdomain matching follows the containment
+# hook's rule (sdlc.harness.containment.host_allowed).
+allow_hosts:
+  - hooks.slack.com
+  - discord.com
+
+default:
+  primary: log
+  fallback: log
+
+# Per-gate overrides. Example:
+# gates:
+#   merge:
+#     primary: webhook:$SDLC_NOTIFY_WEBHOOK
+#     fallback: webhook:$SDLC_NOTIFY_ONCALL_WEBHOOK
+gates: {}
