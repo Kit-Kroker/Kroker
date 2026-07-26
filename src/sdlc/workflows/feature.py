@@ -67,7 +67,8 @@ with workflow.unsafe.imports_passed_through():
         GateOutcome, GatePolicy, HandoffSummary, IdeaBrief,
         ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig,
         RecallSnapshot, ResearchBrief, RetainItem, RoleConfig,
-        RoleUsage, RunSummary, SecurityReport, TaskResult, gate_key,
+        RoleUsage, RunSummary, SecurityReport, TaskResult, TimeoutAction,
+        gate_key,
     )
     from ..pending import (
         GateContext, PendingDecision, clarify_pending, gate_pending,
@@ -728,9 +729,16 @@ class FeatureWorkflow:
                 if decided is not None:
                     decision = decided
                 else:
-                    decision = GateDecision(gate=name, round=round,
-                                            outcome=GateOutcome.REJECT,
-                                            decided_by="timeout")
+                    # Expired undecided. HOLD never reaches here -- its
+                    # schedule has no final deadline, so _wait_for_decision
+                    # waits without one.
+                    decision = GateDecision(
+                        gate=name, round=round, decided_by="timeout",
+                        outcome=(GateOutcome.APPROVE
+                                 if gate_cfg.on_timeout is TimeoutAction.APPROVE
+                                 else GateOutcome.REJECT),
+                        comments=f"no decision within "
+                                 f"{cfg.gate_timeout_hours}h")
             finally:
                 self._status = "running"
                 self._pending.pop(key, None)
