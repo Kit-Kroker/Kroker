@@ -185,8 +185,13 @@ def _hosts_in(tool: str, tool_input: dict) -> list[str]:
     return [h for h in hosts if h]
 
 
-def _host_allowed(host: str, allow_hosts: list[str]) -> bool:
-    """Exact match or subdomain of an allowlisted host."""
+def host_allowed(host: str, allow_hosts: list[str]) -> bool:
+    """Exact match or subdomain of an allowlisted host.
+
+    Public because E-9's WebhookNotifier reuses it: two implementations of
+    this rule would drift, and a host allowed for WebFetch but denied for a
+    notification (or the reverse) is a policy hole.
+    """
     h = host.lower()
     return any(h == a.lower() or h.endswith("." + a.lower())
                for a in allow_hosts)
@@ -217,7 +222,7 @@ def _rule_denies(rule: Rule, tool: str, tool_input: dict,
 
     if rule.predicate is Predicate.HOST_NOT_ALLOWLISTED:
         hosts = _hosts_in(tool, tool_input)
-        return any(not _host_allowed(h, rule.allow_hosts) for h in hosts)
+        return any(not host_allowed(h, rule.allow_hosts) for h in hosts)
 
     return False
 
