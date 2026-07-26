@@ -139,3 +139,34 @@ async def test_exploding_notifier_leaves_every_gate_decidable(
 
     assert result.startswith("deployed:"), result
     assert summary is not None
+
+
+@pytest.mark.asyncio
+async def test_full_timer_sequence_fires_in_order_then_expires(
+        tmp_path, monkeypatch):
+    """With no decision ever sent: opened -> remind (50%) -> escalate (80%)
+    -> expire, in order, and the gate then rejects."""
+    SENT.clear()
+    monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
+    cfg = e2e_config()
+    cfg.gate_timeout_hours = 10
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=[FeatureWorkflow],
+                          activities=_activities(recording_notify),
+                          plugins=[PydanticAIPlugin()]):
+            handle = await env.client.start_workflow(
+                FeatureWorkflow.run, args=[greenfield_idea(), cfg],
+                id=f"seq-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+            with env.auto_time_skipping_disabled():
+                await _wait_for_status(handle, "awaiting:clarify")
+                for qid in QUESTION_IDS:
+                    await handle.signal(FeatureWorkflow.answer_question,
+                                        args=[qid, "yes"])
+                await _wait_for_status(handle, "awaiting:architecture")
+            result = await handle.result()
+
+    arch = [reason for gate, reason in SENT if gate == "architecture"]
+    assert arch == ["opened", "remind", "escalate", "expire"], arch
+    assert result.startswith("rejected:"), result
