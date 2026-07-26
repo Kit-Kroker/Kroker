@@ -46,6 +46,7 @@ from .memory.activities import (
     capture_watermark, recall_snapshot, reflect, retain,
 )
 from .observability.activities import export_run_artifacts
+from .notify.activities import notify
 from .pricing import price_usage
 from .research.verify import verify_brief_activity
 from .workflows.feature import FeatureWorkflow
@@ -89,6 +90,7 @@ async def main() -> None:
             recall_snapshot, retain, capture_watermark, reflect,
             cache_get, cache_put,
             export_run_artifacts,
+            notify,
             price_usage,
             apply_session_retention,
             load_session,
