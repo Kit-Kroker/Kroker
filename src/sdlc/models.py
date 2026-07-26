@@ -37,11 +37,25 @@ class GateOutcome(str, Enum):
     REVISE = "revise"      # loop back with guidance (Finding #6)
 
 
+class TimeoutAction(str, Enum):
+    """What an expired gate does (FR-303). REJECT is today's behaviour and
+    the default everywhere except `merge` -- see PipelineConfig.gates."""
+    REJECT = "reject"      # terminal, decided_by="timeout"
+    APPROVE = "approve"
+    HOLD = "hold"          # no final deadline; stays pending and visible
+
+
 class GateConfig(BaseModel):
     """Per-gate policy + the confidence bar a SOFT gate must clear to
-    auto-approve (FR-301). threshold is read only when policy == SOFT."""
+    auto-approve (FR-301), plus the E-9 timer schedule. threshold is read
+    only when policy == SOFT; the *_after_hours fields fall back to a
+    fraction of PipelineConfig.gate_timeout_hours when None (see
+    sdlc.notify.schedule.build_schedule)."""
     policy: GatePolicy = GatePolicy.HARD
     threshold: float = Field(default=0.8, ge=0.0, le=1.0)
+    on_timeout: TimeoutAction = TimeoutAction.REJECT
+    remind_after_hours: int | None = Field(default=None, gt=0)
+    escalate_after_hours: int | None = Field(default=None, gt=0)
 
     @classmethod
     def _coerce(cls, v: "GateConfig | GatePolicy | str | dict") -> "GateConfig":
@@ -685,7 +699,11 @@ class PipelineConfig(BaseModel):
         "clarify": GateConfig(policy=GatePolicy.HARD),
         "architecture": GateConfig(policy=GatePolicy.HARD),
         "plan": GateConfig(policy=GatePolicy.SOFT),
-        "merge": GateConfig(policy=GatePolicy.HARD),
+        # E-9: a merge gate that expires would discard a run which passed
+        # every absolute check. Holding keeps it pending and visible in the
+        # E-8 inbox instead. Every other gate keeps today's reject.
+        "merge": GateConfig(policy=GatePolicy.HARD,
+                            on_timeout=TimeoutAction.HOLD),
         "deploy": GateConfig(policy=GatePolicy.HARD),
     })
     # Policy for gates not named in `gates` above — e.g. the per-task
