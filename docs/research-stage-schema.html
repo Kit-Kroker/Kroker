@@ -349,9 +349,10 @@
 
 <h1>Research Stage Schema &amp; Architecture</h1>
 <p class="meta">
-  FR-107 · wired in <code>src/sdlc/workflows/feature.py:1014</code> ·
+  FR-107 · wired in <code>src/sdlc/workflows/feature.py:1125</code> ·
   spec: <code>docs/superpowers/specs/2026-07-17-research-agent-grounded-briefs-design.md</code> ·
-  contract source-of-truth: <code>src/sdlc/models.py</code>
+  contract source-of-truth: <code>src/sdlc/models.py</code> ·
+  verified 2026-07-26 against <code>src/sdlc/workflows/feature.py</code>
 </p>
 <p class="lede">
   The research stage is an <strong>optional, human-gated, off-by-default</strong> pre-clarify
@@ -456,7 +457,7 @@
 <div class="callout warn">
   <span class="label">Off by default, not memoized.</span>
   A served memo would mean pages were <em>not</em> fetched this run, so a brief cannot be cached
-  (<code>feature.py:1014</code> comment, spec finding 4). Only the canonical
+  (<code>feature.py:1125</code> comment, spec finding 4). Only the canonical
   <code>brief_digest()</code> contributes to downstream content keys (spec finding 3).
 </div>
 
@@ -645,7 +646,7 @@
       </tr>
       <tr>
         <td>workflow wiring</td>
-        <td class="mono">src/sdlc/workflows/feature.py:1014</td>
+        <td class="mono">src/sdlc/workflows/feature.py:1125</td>
         <td><span class="pill det">deterministic</span></td>
         <td>Builds <code>ResearchDeps</code>, calls <code>t_research.run</code>, runs verify activity, gates, retains, judges, records.</td>
       </tr>
@@ -937,7 +938,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
   <p style="margin-top:0">
     A <strong>non-empty</strong> violations list records the research stage as
     <code>outcome=FAIL</code> (<code>judge="error"</code>, error string
-    <code>rejected:research.grounding: &hellip;</code>) at <code>feature.py:1056</code>, but the run
+    <code>rejected:research.grounding: &hellip;</code>) at <code>feature.py:1179</code>, but the run
     does <strong>not</strong> stop: <code>brief_digest_val</code> stays <code>""</code> (retain +
     digest skipped) and everything after research proceeds <strong>on the idea alone</strong>, same
     as a research-disabled run. The verifier itself is unchanged &mdash; still byte-exact contiguous
@@ -963,7 +964,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
 </div>
 
 <div class="card soft">
-  <h4><code>VERIFY_ACT</code> temporal policy <span class="pill asset">feature.py:97</span></h4>
+  <h4><code>VERIFY_ACT</code> temporal policy <span class="pill asset">feature.py:98</span></h4>
   <pre>VERIFY_ACT = dict(
     start_to_close_timeout = timedelta(minutes=1),
     retry_policy           = RetryPolicy(maximum_attempts=1),
@@ -1033,7 +1034,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
   <div class="card">
     <h3>1. Top-level stage <span class="pill det">workflow</span></h3>
     <p style="margin-top:0">
-      <code>feature.py:1019</code> &mdash; runs once before clarify when
+      <code>feature.py:1130</code> &mdash; runs once before clarify when
       <code>cfg.research_enabled and t_research is not None</code>. The workflow builds
       <code>ResearchDeps</code>, awaits <code>t_research.run(idea_json, deps=deps).output</code>,
       verifies, gates, retains, judges, records.
@@ -1216,7 +1217,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
 </div>
 
 <p style="font-size:12.5px;color:var(--muted)">
-  Source: <code>feature.py:1014&ndash;1095</code>. The blue arrows are workflow &rarr; activity
+  Source: <code>feature.py:1125&ndash;1206</code>. The blue arrows are workflow &rarr; activity
   invocations; purple arrows are return values. Red is the fail-and-continue path (E-29).
 </p>
 
@@ -1326,9 +1327,9 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
 
   <div class="layer">WORKFLOW<br>src/sdlc/workflows/</div>
   <div class="files">
-    <p><span class="mono">feature.py:1014&ndash;1095</span> &mdash; research stage wiring (the only deterministic caller).</p>
-    <p><span class="mono">feature.py:97</span> &mdash; <code>VERIFY_ACT</code> policy (1 min, 1 attempt).</p>
-    <p><span class="mono">feature.py:319 / :366 / :586</span> &mdash; <code>_judge</code>, <code>_retain</code>, <code>_gate</code> helpers reused by the stage.</p>
+    <p><span class="mono">feature.py:1125&ndash;1206</span> &mdash; research stage wiring (the only deterministic caller).</p>
+    <p><span class="mono">feature.py:98</span> &mdash; <code>VERIFY_ACT</code> policy (1 min, 1 attempt).</p>
+    <p><span class="mono">feature.py:349 / :396 / :639</span> &mdash; <code>_judge</code>, <code>_retain</code>, <code>_gate</code> helpers reused by the stage.</p>
   </div>
 
   <div class="layer">CONTRACT<br>src/sdlc/</div>
@@ -1366,7 +1367,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
   <a href="architecture-schema.html">&larr; architecture-schema.html</a>
   <a href="../PRD.md">PRD &sect; FR-107</a>
   <a href="../ARCHITECTURE.md">ARCHITECTURE.md &sect;3</a>
-  <span style="float:right">Contract source-of-truth: <code>src/sdlc/models.py</code> &middot; workflow wiring: <code>feature.py:1014</code></span>
+  <span style="float:right">Contract source-of-truth: <code>src/sdlc/models.py</code> &middot; workflow wiring: <code>feature.py:1125</code></span>
 </footer>
 
 </body>

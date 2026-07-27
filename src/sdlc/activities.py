@@ -14,6 +14,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -30,7 +31,7 @@ from .gate import (
 )
 from .harness.adapters import HARNESSES, HarnessRequest
 from .harness.containment import ContainmentError, load_policy
-from .toolchain.adapters import detect
+from .toolchain.adapters import ToolchainKind, detect
 from .models import (
     CoverageReport,
     HarnessKind,
@@ -523,6 +524,44 @@ class QAInput:
     timeout_s: int = 600
 
 
+# Matches an explicit Windows `py -X.Y` launcher pin, e.g. the `py -3.11
+# -m pytest` a contract writes when AGENTS.md mandates "Python 3.11".
+_PY_LAUNCHER_VERSION_RE = re.compile(r"(?<![\w.-])py\s+-(\d+\.\d+)\b")
+
+
+async def _ensure_py_launcher_versions(cmd: str, cwd: str) -> str | None:
+    """A contract's test/lint command may pin an exact interpreter via the
+    Windows `py -X.Y` launcher, mirroring an AGENTS.md-mandated stack
+    (e.g. "Python 3.11 is the mandated stack"). That pin is worthless if
+    the version was never installed on this host: `py -X.Y` fails
+    immediately with "No runtime installed that matches X.Y" *before* the
+    command's own install step (e.g. `pip install -e .[dev]`) ever runs —
+    so a fully correct implementation reads back as a QA failure with a
+    launcher error, indistinguishable from a real test failure.
+
+    Best-effort provision any missing version via `py install X.Y` so the
+    command the contract actually wrote gets a chance to run. Windows-only
+    (the `py` launcher doesn't exist elsewhere) and never raises — a
+    provisioning failure just falls through to the command's own (equally
+    informative) launcher error."""
+    if not sys.platform.startswith("win"):
+        return None
+    versions = sorted(set(_PY_LAUNCHER_VERSION_RE.findall(cmd)))
+    notes = []
+    for version in versions:
+        code, _ = await _bounded_shell(f"py -{version} --version", cwd, 15)
+        if code == 0:
+            continue
+        install_code, out = await _bounded_shell(
+            f"py install {version}", cwd, 300)
+        notes.append(
+            f"py -{version} was not installed on this host; "
+            f"auto-provisioned via `py install {version}` "
+            + ("succeeded" if install_code == 0
+               else f"failed: {out[-500:]}"))
+    return "\n".join(notes) if notes else None
+
+
 @activity.defn
 async def run_test_suite(inp: QAInput) -> QAReport:
     """Bounded by timeout_s (default 10 min): a contract-specified command
@@ -533,6 +572,9 @@ async def run_test_suite(inp: QAInput) -> QAReport:
     genuine hang burns the full hour AND, once retries are exhausted,
     fails as an uncaught activity error that crashes the whole workflow
     rather than being handled as a normal (fixable) task failure."""
+    provisioning = await _ensure_py_launcher_versions(inp.test_cmd, inp.worktree)
+    if provisioning:
+        _log.info("run_test_suite: %s", provisioning)
     proc = await asyncio.create_subprocess_shell(
         inp.test_cmd, cwd=inp.worktree,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
@@ -552,10 +594,14 @@ async def run_test_suite(inp: QAInput) -> QAReport:
     out = out_b.decode(errors="replace")
     failing = [ln.split(" ")[0] for ln in out.splitlines()
                if ln.startswith("FAILED")]
+    issues: list[str] = []
+    if proc.returncode != 0:
+        issues = [out[-2000:]]
+        if provisioning:
+            issues.insert(0, provisioning)
     return QAReport(tests_passed=proc.returncode == 0,
                     failing_tests=failing[:50],
-                    issues=[] if proc.returncode == 0
-                    else [out[-2000:]])
+                    issues=issues)
 
 
 @dataclass
@@ -572,6 +618,9 @@ async def run_lint(inp: LintInput) -> tuple[bool, str]:
     the gate's CheckResult.detail. Bounded by timeout_s — see
     run_test_suite's docstring for why an unbounded shell command is
     dangerous here."""
+    provisioning = await _ensure_py_launcher_versions(inp.lint_cmd, inp.worktree)
+    if provisioning:
+        _log.info("run_lint: %s", provisioning)
     proc = await asyncio.create_subprocess_shell(
         inp.lint_cmd, cwd=inp.worktree,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
@@ -585,7 +634,10 @@ async def run_lint(inp: LintInput) -> tuple[bool, str]:
         return False, (f"lint command timed out after {inp.timeout_s}s "
                        f"(cmd: {inp.lint_cmd!r})")
     out = out_b.decode(errors="replace")
-    return proc.returncode == 0, out[-2000:]
+    detail = out[-2000:]
+    if provisioning and proc.returncode != 0:
+        detail = f"{provisioning}\n{detail}"
+    return proc.returncode == 0, detail
 
 
 # Minimal deterministic security ruleset (FR-106 absolute floor). Each entry
@@ -695,12 +747,18 @@ async def measure_coverage(inp: CoverageInput) -> CoverageReport:
                                  f"over {len(rates)} changed file(s)")
 
 
-async def _bounded_shell(cmd: str, cwd: str, timeout_s: int) -> tuple[int, str]:
+async def _bounded_shell(cmd: str, cwd: str, timeout_s: int,
+                         env: dict[str, str] | None = None) -> tuple[int, str]:
     """Run a shell command bounded by timeout_s, combining stdout+stderr.
     On timeout: kill and return (-1, message). See run_test_suite's docstring
-    for why an unbounded shell command is dangerous in an activity."""
+    for why an unbounded shell command is dangerous in an activity.
+
+    env=None inherits the activity process's own environment (the prior,
+    only behaviour); passing an override (e.g. a worktree-local venv's PATH
+    from _ensure_python_env) does NOT merge with it automatically — callers
+    must pass a full environment dict."""
     proc = await asyncio.create_subprocess_shell(
-        cmd, cwd=cwd,
+        cmd, cwd=cwd, env=env,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
     try:
         out_b, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
@@ -717,6 +775,7 @@ class IntegrationChecksInput:
     changed_files: list[str]
     test_timeout_s: int = 600
     lint_timeout_s: int = 300
+    setup_timeout_s: int = 300
 
 
 @dataclass
@@ -725,6 +784,63 @@ class IntegrationChecks:
     qa: QAReport
     lint_clean: bool
     lint_detail: str
+
+
+_VENV_DIR_NAME = ".sdlc-venv"
+
+
+async def _ensure_python_env(
+        worktree: str, timeout_s: int) -> tuple[dict[str, str] | None, str | None]:
+    """ToolchainAdapter is intentionally PURE (ADR-15): it returns bare
+    command strings like "pytest -q ..." / "ruff check .", never touching a
+    subprocess. Those bare commands only mean anything if pytest/ruff are
+    on PATH *and* the produced project's own dependencies are importable —
+    neither is true of the activity worker's ambient environment, which has
+    no relationship to whatever stack a given benchmark case's produced repo
+    declares. Running the adapter's commands unmodified there reads back as
+    a QA failure indistinguishable from a real bug in the generated code.
+
+    Provisions an isolated venv at ``<worktree>/.sdlc-venv``, reused across
+    calls (idempotent — created once, installed into on every call so a
+    later merge's new dependencies are picked up). Returns an environment
+    dict with that venv's script directory prepended to PATH, for the
+    caller to pass into _bounded_shell. Install failures are tolerated, not
+    fatal: a produced project with no packaging metadata (e.g. a flat
+    single-module fixture) still gets a real pytest/ruff via the explicit
+    fallback install below, exactly as the pre-venv bare-PATH behaviour
+    depended on pytest's own same-directory import fallback — only venv
+    creation itself (i.e. "this host has no usable Python at all") is
+    fatal, exactly like a missing toolchain adapter is non-fatal one level
+    up."""
+    venv_dir = os.path.join(worktree, _VENV_DIR_NAME)
+    bin_dir = "Scripts" if sys.platform.startswith("win") else "bin"
+    venv_bin = os.path.join(venv_dir, bin_dir)
+    exe_suffix = ".exe" if sys.platform.startswith("win") else ""
+    py_exe = os.path.join(venv_bin, f"python{exe_suffix}")
+
+    if not os.path.isdir(venv_dir):
+        code, out = await _bounded_shell(
+            f'"{sys.executable}" -m venv "{venv_dir}"', worktree, timeout_s)
+        if code != 0:
+            return None, f"venv creation failed: {out[-1000:]}"
+
+    # Best-effort: install the produced project's own declared deps first
+    # (so pydantic etc. resolve), then unconditionally guarantee the tools
+    # the adapter's commands need — belt-and-suspenders for a project whose
+    # [dev] extra forgot pytest/ruff, or has no packaging metadata at all.
+    await _bounded_shell(
+        f'"{py_exe}" -m pip install -q -e ".[dev]"', worktree, timeout_s)
+    await _bounded_shell(
+        f'"{py_exe}" -m pip install -q -e "{worktree}"', worktree, timeout_s)
+    await _bounded_shell(
+        f'"{py_exe}" -m pip install -q pytest pytest-cov ruff',
+        worktree, timeout_s)
+
+    env = dict(os.environ)
+    env["PATH"] = venv_bin + os.pathsep + env.get("PATH", "")
+    env["VIRTUAL_ENV"] = venv_dir
+    env.pop("PYTHONHOME", None)
+    return env, None
 
 
 # pytest usage-error exit code: unrecognized args (e.g. --cov when pytest-cov is
@@ -754,14 +870,23 @@ async def run_integration_checks(
                         issues=["no toolchain adapter for this worktree"]),
             lint_clean=True, lint_detail="no toolchain adapter (not linted)")
 
+    env = None
+    if adapter.kind is ToolchainKind.PYTHON:
+        env, setup_error = await _ensure_python_env(inp.worktree, inp.setup_timeout_s)
+        if setup_error:
+            qa = QAReport(tests_passed=False, issues=[setup_error])
+            return IntegrationChecks(
+                toolchain=adapter.kind.value, qa=qa,
+                lint_clean=False, lint_detail=setup_error)
+
     code, out = await _bounded_shell(
-        adapter.test_cmd(coverage=True), inp.worktree, inp.test_timeout_s)
+        adapter.test_cmd(coverage=True), inp.worktree, inp.test_timeout_s, env=env)
     if code == _PYTEST_USAGE_ERROR:
         # Coverage tooling unavailable — get the honest green signal without it.
         prefix = ("coverage instrumentation unavailable (pytest usage error); "
                   "coverage left unmeasured\n")
         code, out = await _bounded_shell(
-            adapter.test_cmd(coverage=False), inp.worktree, inp.test_timeout_s)
+            adapter.test_cmd(coverage=False), inp.worktree, inp.test_timeout_s, env=env)
         out = prefix + out
     failing = [ln.split(" ")[0] for ln in out.splitlines()
                if ln.startswith("FAILED")]
@@ -769,7 +894,7 @@ async def run_integration_checks(
                   issues=[] if code == 0 else [out[-2000:]])
 
     lcode, ldetail = await _bounded_shell(
-        adapter.lint_cmd(), inp.worktree, inp.lint_timeout_s)
+        adapter.lint_cmd(), inp.worktree, inp.lint_timeout_s, env=env)
     return IntegrationChecks(
         toolchain=adapter.kind.value, qa=qa,
         lint_clean=lcode == 0, lint_detail=ldetail[-2000:])

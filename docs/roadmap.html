@@ -578,7 +578,7 @@
 <main id="detail"></main>
 
 <footer>
-  Regenerated 2026-07-25 from <a href="../ROADMAP.md">ROADMAP.md</a> (last verified 2026-07-25; retro stage, toolchain adapter, harness sessions, containment, per-role cost/model sweep, cursor adapter, heatmap/calibration and deep-review lens all landed since the 2026-07-19 snapshot).
+  Regenerated 2026-07-26 from <a href="../ROADMAP.md">ROADMAP.md</a> (last verified 2026-07-25; since the 2026-07-19 snapshot: retro stage, toolchain adapter, harness sessions, containment + approval escalation (E-17), per-role cost/model sweep, cursor adapter, heatmap/calibration and deep-review lens all landed; PRD v1.1 added triage / audit / service / outcome scope — phases P5–P8, FR-800/900/910/1000/1100, NFR-8/9/10, SC-7–12, US-8–12, ADR-18/19/20, E-40…E-71 — recorded here as not started).
   To refresh, re-extract items per the rule documented inline in this file's <code>&lt;script&gt;</code> block.
 </footer>
 
@@ -622,7 +622,23 @@ const ROADMAP = {
     { id: "P4", pct: 0, status: "notstarted",
       title: "MCP surface, maintenance loop (DAPER), fleet scale",
       exit:  "SC-1..3 at target",
-      note:  "Not started." }
+      note:  "Not started." },
+    { id: "P5", pct: 0, status: "notstarted",
+      title: "Triage + tidy-up (Tier 0/1), operator-run, single tenant",
+      exit:  "one unfamiliar repository triaged, a mechanical backlog fixed through governed runs, before/after delta recorded",
+      note:  "Not started (E-40…E-44). Does not depend on P7 — operator-run delivery on repositories you are authorised to run needs neither tenancy nor self-serve onboarding." },
+    { id: "P6", pct: 0, status: "notstarted",
+      title: "Capability & risk audit (Tier 2) + evidence bundle",
+      exit:  "one repository audited end-to-end with SC-7 held and a bundle handed over",
+      note:  "Not started (E-45…E-56). Gated on P5's readiness verdict (FR-903), not merely sequenced after it." },
+    { id: "P7", pct: 0, status: "notstarted",
+      title: "Hosted multi-tenant service",
+      exit:  "NFR-8 adversarial test green; FR-1002 container tier live; a tenant onboards unassisted",
+      note:  "Not started (E-57…E-63). FR-1002 is the gating item for admitting any external tenant, not a hardening task: today a customer's npm install executes as the worker user with unrestricted network egress." },
+    { id: "P8", pct: 0, status: "notstarted",
+      title: "Product outcome loop",
+      exit:  "one hypothesis pre-registered, shipped, and decided by its own rule (SC-11/SC-12)",
+      note:  "Not started (E-64…E-71). E-67 (DeployPlan/DeployReport) is needed by ordinary feature runs too — DAG stage 13 is a single hardcoded make deploy ENV=staging today." }
   ],
 
   stages: [
@@ -676,7 +692,7 @@ const ROADMAP = {
 
     /* FR-300 — Human-in-the-loop */
     { id: "FR-301", section: "FR", status: "partial",    title: "hard/soft/off + threshold + revise + MAX_GATE_ROUNDS",
-      note: "wired for architecture/plan/merge; soft still confidence-only (no deterministic-check AND-clause); no calibration monitoring.", recent: false },
+      note: "wired for architecture/plan/merge; soft still confidence-only (no deterministic-check AND-clause); no calibration monitoring. Tool-call approval now escalates into this same machinery (E-17), so a pre_tool denial and a human gate are one mechanism.", recent: true },
     { id: "FR-302", section: "FR", status: "done",       title: "idempotent signals, (gate, round) identity, first-decision-wins",
       note: "", recent: false },
     { id: "FR-303", section: "FR", status: "partial",    title: "notifications + durable timers",
@@ -720,9 +736,93 @@ const ROADMAP = {
     { id: "FR-702", section: "FR", status: "partial",    title: "claim-check ArtifactRef / 2MB discipline",
       note: "Sessions are now a real claim-check consumer (ArtifactStore / harness_session, E-38); diffs still travel inline, no CodeArtifact union, no size guard — so FR-702 stays open.", recent: true },
     { id: "FR-703", section: "FR", status: "partial",    title: "egress policy",
-      note: "pre_tool hook landed (E-15/E-16, ADR-17): denies out-of-worktree writes, recursive deletes, agent-config rewrites and non-allowlisted hosts (tool-level). Network-level egress + OS/container tier still open (E-21).", recent: true },
+      note: "pre_tool hook landed (E-15/E-16, ADR-17): denies out-of-worktree writes, recursive deletes, agent-config rewrites and non-allowlisted hosts (tool-level). Approval escalation for action: escalate rules lands via the same hook (E-17). Network-level egress + OS/container tier still open (E-21).", recent: true },
     { id: "FR-704", section: "FR", status: "partial",    title: "observability export (events.jsonl + report.html)",
       note: "observability/ module now exists; events.jsonl + report.html rendered from the in-workflow RunEvent trace and written by export_run_artifacts (E-32; folds E-22/E-23).", recent: true },
+
+    /* FR-800 — Context & continuity (documented 2026-07-25, no new scope) */
+    { id: "FR-801", section: "FR", status: "done",       title: "per-role context_budget_tokens enforced at prompt assembly",
+      note: "models.py.", recent: false },
+    { id: "FR-802", section: "FR", status: "done",       title: "max_session_resumes with stack-mismatch override",
+      note: "feature.py.", recent: false },
+    { id: "FR-803", section: "FR", status: "done",       title: "ValidationContract frozen at planning",
+      note: "models.py.", recent: false },
+    { id: "FR-804", section: "FR", status: "done",       title: "materialized diff for clean-context validators",
+      note: "activities.py.", recent: false },
+    { id: "FR-805", section: "FR", status: "done",       title: "HandoffSummary task→task continuity",
+      note: "models.py.", recent: false },
+    { id: "FR-806", section: "FR", status: "partial",    title: "prompts as versioned assets in the memo hash",
+      note: "prompt bytes hashed into content_key; the edit → offline eval → deploy loop is E-4.", recent: false },
+
+    /* FR-900 — Tier 0 triage (new scope; PRD v1.1) */
+    { id: "FR-901", section: "FR", status: "notstarted", title: "triage stage → RepoTriage + readiness verdict (E-42)",
+      note: "completes on repos that do not build.", recent: false },
+    { id: "FR-902", section: "FR", status: "notstarted", title: "hygiene signal set via FR-108 adapters, one implementation per signal (E-41)",
+      note: "", recent: false },
+    { id: "FR-903", section: "FR", status: "notstarted", title: "readiness gate blocking Tier 2, overridable by audited decision (E-42)",
+      note: "", recent: false },
+    { id: "FR-904", section: "FR", status: "notstarted", title: "mechanically_fixable → brownfield child runs + before/after re-triage (E-44)",
+      note: "", recent: false },
+
+    /* FR-910 — Tier 2 capability & risk audit (new scope; PRD v1.1) */
+    { id: "FR-911", section: "FR", status: "notstarted", title: "AssessmentWorkflow EDCR DAG, report-after-assess (E-45)",
+      note: "/enrich as a declared stage input rather than a phase (E-56).", recent: false },
+    { id: "FR-912", section: "FR", status: "notstarted", title: "deterministic scan memoized on (tree hash, signal version); cross-source confidence (E-46)",
+      note: "", recent: false },
+    { id: "FR-913", section: "FR", status: "notstarted", title: "CapabilityMap with content-derived stable ids + coverage floor + orphan classification (E-47/E-48)",
+      note: "also satisfies FR-102. Blocked on OQ-6 (what canonical key survives refactoring).", recent: false },
+    { id: "FR-914", section: "FR", status: "notstarted", title: "byte-exact quote verification, fail-closed — shares FR-107's verifier (E-43)",
+      note: "", recent: false },
+    { id: "FR-915", section: "FR", status: "notstarted", title: "not_collected / unknown vs measured value; retrofits QAReport.coverage_pct (E-40)",
+      note: "", recent: false },
+    { id: "FR-916", section: "FR", status: "notstarted", title: "STRIDE + vuln classification + control coverage + composites with 1–3 drivers (E-49)",
+      note: "", recent: false },
+    { id: "FR-917", section: "FR", status: "notstarted", title: "risk thresholds as deterministic gate checks; FP dispositions as audited overrides (E-50)",
+      note: "", recent: false },
+    { id: "FR-918", section: "FR", status: "notstarted", title: "acceptance criteria computed by code; cross-reference integrity absolute (E-51)",
+      note: "", recent: false },
+    { id: "FR-919", section: "FR", status: "notstarted", title: "spec seeds → brownfield child runs; seed criteria become run acceptance criteria (E-53)",
+      note: "", recent: false },
+    { id: "FR-920", section: "FR", status: "notstarted", title: "re-assessment, incremental re-scan, per-capability risk delta (E-54)",
+      note: "", recent: false },
+    { id: "FR-921", section: "FR", status: "notstarted", title: "evidence bundle: manifest + five role reports + verification status + gates + fix-run sessions (E-52)",
+      note: "", recent: false },
+    { id: "FR-922", section: "FR", status: "notstarted", title: "per-phase budgets; exhaustion escalates, partials marked partial (E-55)",
+      note: "", recent: false },
+
+    /* FR-1000 — Service platform (new scope; PRD v1.1) */
+    { id: "FR-1001", section: "FR", status: "notstarted", title: "tenancy by construction — namespace + store prefix + bank namespace (E-58)",
+      note: "resolves OQ-4.", recent: false },
+    { id: "FR-1002", section: "FR", status: "notstarted", title: "untrusted-code isolation — per-run container, non-root, network-level egress allowlist (E-21 + E-57)",
+      note: "precondition for any external tenant.", recent: false },
+    { id: "FR-1003", section: "FR", status: "notstarted", title: "repo connection — app install, short-TTL repo-scoped tokens, PR-only, webhooks (E-59)",
+      note: "", recent: false },
+    { id: "FR-1004", section: "FR", status: "notstarted", title: "identity/authz; real principal in GateDecision (E-60)",
+      note: "closes FR-304's identity gap.", recent: false },
+    { id: "FR-1005", section: "FR", status: "notstarted", title: "metered per-tenant cost from FR-701 counters (E-61)",
+      note: "", recent: false },
+    { id: "FR-1006", section: "FR", status: "notstarted", title: "on-prem single-tenant or hosted; configurable model provider (E-62)",
+      note: "", recent: false },
+    { id: "FR-1007", section: "FR", status: "notstarted", title: "per-tenant retention + audited purge (E-63)",
+      note: "", recent: false },
+
+    /* FR-1100 — Product outcome (new scope; PRD v1.1) */
+    { id: "FR-1101", section: "FR", status: "notstarted", title: "Hypothesis at intake, gated before any code (E-64)",
+      note: "", recent: false },
+    { id: "FR-1102", section: "FR", status: "notstarted", title: "pre-registration freeze + hash, reusing FR-803 semantics (E-65)",
+      note: "", recent: false },
+    { id: "FR-1103", section: "FR", status: "notstarted", title: "metric → instrumentation → emitted-event traceability via FR-106 mechanism (E-66)",
+      note: "", recent: false },
+    { id: "FR-1104", section: "FR", status: "notstarted", title: "DeployPlan/DeployReport — closes DAG stage 13 for all runs (E-67)",
+      note: "", recent: false },
+    { id: "FR-1105", section: "FR", status: "notstarted", title: "hosting + analytics adapters, one reference each (E-68/E-69)",
+      note: "no substrate reimplementation.", recent: false },
+    { id: "FR-1106", section: "FR", status: "notstarted", title: "durable observation window → collect → evaluate → keep/kill/extend gate (E-70)",
+      note: "see OQ-9.", recent: false },
+    { id: "FR-1107", section: "FR", status: "notstarted", title: "PoC mode: bounded, disposable, marked so it never accrues as debt (E-71)",
+      note: "", recent: false },
+    { id: "FR-1108", section: "FR", status: "notstarted", title: "inconclusive is a valid verdict; never a favourable read on insufficient data (E-70)",
+      note: "", recent: false },
 
     /* NFR */
     { id: "NFR-1", section: "NFR", status: "done",       title: "Durability — Temporal-native",
@@ -739,6 +839,12 @@ const ROADMAP = {
       note: "watermark-pinned recall + content-addressed cache.", recent: false },
     { id: "NFR-7", section: "NFR", status: "done",       title: "Portability",
       note: "MemoryConfig.backend defaults to fake; real Hindsight client for self-hosting.", recent: false },
+    { id: "NFR-8", section: "NFR", status: "notstarted", title: "Tenant isolation proven by adversarial cross-tenant read/recall test",
+      note: "no tenant concept exists yet (E-58).", recent: false },
+    { id: "NFR-9", section: "NFR", status: "notstarted", title: "Hostile input — repos attacker-controlled",
+      note: "build scripts, test code, manifests executed today (E-57).", recent: false },
+    { id: "NFR-10", section: "NFR", status: "notmeasurable", title: "Assessment reproducibility",
+      note: "not falsifiable until the assessment exists; deterministic half is E-41/E-46, fused-layer variance needs runs.", recent: false },
 
     /* SC */
     { id: "SC-1", section: "SC", status: "notmeasurable", title: "≥80% runs reach merge gate unattended",
@@ -753,6 +859,18 @@ const ROADMAP = {
       note: "empty/vacuous-task bypass fixed, absolute failure is terminal, security_no_critical floor emitted by security_scan and wired as absolute merge-gate check (feature.py:807,818). tests/test_security_floor.py asserts a critical finding blocks deploy.", recent: true },
     { id: "SC-6", section: "SC", status: "notmeasurable", title: "soft-gate override <5%",
       note: "per-run signal now accrues: retro stage (E-32) emits RunSummary.gates[] (policy/decided_by/confidence/overrides). The cross-run aggregation into an override rate remains the benchmark's job (§9.8).", recent: true },
+    { id: "SC-7", section: "SC", status: "notmeasurable", title: "grounding integrity: 100% of grounded findings re-verify byte-exact",
+      note: "the assessment product's SC-5: one violation is a defect. Mechanism is E-43; sampled audit needs real assessments.", recent: false },
+    { id: "SC-8", section: "SC", status: "notmeasurable", title: "capability coverage ≥90% with classified orphans on ≥80% of readiness-passing repos",
+      note: "needs E-47 + a corpus.", recent: false },
+    { id: "SC-9", section: "SC", status: "notmeasurable", title: "remediation efficacy: reduced composite for the targeted capability in ≥80% of accepted items",
+      note: "needs E-54's delta.", recent: false },
+    { id: "SC-10", section: "SC", status: "notmeasurable", title: "assessment economics per repo-size band",
+      note: "needs E-55 budgets + runs; without this the work cannot be priced.", recent: false },
+    { id: "SC-11", section: "SC", status: "notmeasurable", title: "≥95% of experiments decided by the pre-registered rule with no unaudited post-hoc change",
+      note: "needs E-65.", recent: false },
+    { id: "SC-12", section: "SC", status: "notmeasurable", title: "100% of hypothesis metrics traced to an emitted event before the deploy gate",
+      note: "needs E-66.", recent: false },
 
     /* US */
     { id: "US-1", section: "US", status: "partial",    title: "clarify + one-click suggested answers",
@@ -769,6 +887,16 @@ const ROADMAP = {
       note: "no dashboard backend.", recent: false },
     { id: "US-7", section: "US", status: "notstarted", title: "MCP conversational gate approval",
       note: "no MCP server.", recent: false },
+    { id: "US-8", section: "US", status: "notstarted", title: "client connects a repo → readiness verdict + checkable hygiene list",
+      note: "E-41/E-42/E-43.", recent: false },
+    { id: "US-9", section: "US", status: "notstarted", title: "client approves a tidy-up backlog → PR per item + before/after delta",
+      note: "E-44.", recent: false },
+    { id: "US-10", section: "US", status: "notstarted", title: "assessor hands over a bundle whose every claim resolves to evidence",
+      note: "E-51/E-52.", recent: false },
+    { id: "US-11", section: "US", status: "notstarted", title: "product owner's decision rule frozen at approval, verdict computed against it",
+      note: "E-64/E-65/E-70.", recent: false },
+    { id: "US-12", section: "US", status: "notstarted", title: "platform engineer onboards an isolated tenant",
+      note: "E-57/E-58.", recent: false },
 
     /* ADR */
     { id: "ADR-1",  section: "ADR", status: "done",       title: "Temporal owns state",                              note: "", recent: false },
@@ -803,6 +931,12 @@ const ROADMAP = {
       note: "canonical HarnessSession/SessionDigest per adapter normaliser, claim-checked via ArtifactStore (E-38).", recent: true },
     { id: "ADR-17", section: "ADR", status: "done",       title: "Containment as a declared harness capability",
       note: "native inner, hook outer, fail closed; pre_tool hook + policy/containment.yaml (E-15/E-16).", recent: true },
+    { id: "ADR-18", section: "ADR", status: "notstarted", title: "Triage precedes capability modelling",
+      note: "an unbuildable or structurally-illegible repo is reported as a precondition failure, never capability-mapped (FR-903, E-42).", recent: false },
+    { id: "ADR-19", section: "ADR", status: "notstarted", title: "Deployment targets and analytics sources are adapters, not substrate",
+      note: "FR-1105, NG7, E-68/E-69. Unresolved consequence: OQ-9.", recent: false },
+    { id: "ADR-20", section: "ADR", status: "notstarted", title: "Pre-registration reuses ValidationContract freeze semantics",
+      note: "FR-1102, FR-803, E-65.", recent: false },
 
     /* STRUCT (§7) */
     { id: "STRUCT-1", section: "STRUCT", status: "partial",    title: "Layered src/factory/ tree",
@@ -849,8 +983,8 @@ const ROADMAP = {
       note: "Landed (2026-07-24): a declared containment capability per CodingHarness + a fail-closed PreToolUse hook (python -m sdlc.harness.hook). ADR-17.", recent: true },
     { id: "E-16", section: "E", status: "done", title: "Policy denial path — deny by rule, no human involved (FR-703)",
       note: "Landed (2026-07-24): one versioned asset policy/containment.yaml + four predicates + ToolDenial records on HarnessRunResult/SessionDigest; verified live against claude 2.1.219.", recent: true },
-    { id: "E-17", section: "E", status: "notstarted", title: "Approval escalation: a needsApproval-class tool call raises a gate through existing FR-301/FR-302 machinery",
-      note: "Blocker dissolved (2026-07-24): claude exposes a defer permission decision — a headless session pauses at a tool call and resumes via -p --resume for the hook to re-evaluate, reusing the resume handle the adapters already own.", recent: true },
+    { id: "E-17", section: "E", status: "done", title: "Approval escalation: a needsApproval-class tool call raises a gate through existing FR-301/FR-302 machinery",
+      note: "Landed (2026-07-25): action: escalate on a containment rule → the hook emits claude's defer → the run ends with stop_reason: tool_deferred → the workflow owns the durable wait (tool_approval gate) → the session resumes with a single-use grant bound to tool_use_id + input digest. defer is solo-only: the hook counts sibling tool_use blocks via transcript_path and denies rather than emitting a defer the CLI would discard. Every non-approve path — reject, timeout, cap, batched — resumes with a rejecting grant, so a refusal never throws away a session. Spec: 2026-07-25-tool-approval-escalation.", recent: true },
     { id: "E-18", section: "E", status: "partial", title: "harness/egress containment — re-ranked up",
       note: "Tool-level egress denial (WebFetch/WebSearch/Bash host allowlist) now exists via the hook (E-15/E-16); network-level egress (a socket opened inside an allowed Bash call) remains open and is E-21's OS/container tier.", recent: true },
     { id: "E-19", section: "E", status: "done", title: "Single model egress point yielding run-level token/cost counters (FR-701)",
@@ -863,8 +997,8 @@ const ROADMAP = {
       note: "Folded into E-32: observability/trace.py (RunEvent) + observability/export.py::render_events_jsonl render the in-workflow trace to events.jsonl, written by export_run_artifacts.", recent: true },
     { id: "E-23", section: "E", status: "done", title: "report.html export from the event stream (FR-704)",
       note: "Folded into E-32: observability/export.py::render_report_html renders a self-contained report.html from the RunSummary.", recent: true },
-    { id: "E-24", section: "E", status: "done", title: "Pin harness/adapter versions and assert them at boot",
-      note: "Warn-on-drift version pin at boot for all harnesses via check_harness_versions (folded via E-35). Live drift confirmed: ClaudeCodeHarness pins 2.1.218 vs installed 2.1.219.", recent: true },
+    { id: "E-24", section: "E", status: "notstarted", title: "Pin harness/adapter versions and assert them at boot",
+      note: "check_harness_versions is wired in (E-35) but does not yet fail/act on drift. Version drift confirmed live: ClaudeCodeHarness.expected_version pins 2.1.218; installed is 2.1.220 (E-17 verified defer against it). check_harness_versions will flag this once it runs.", recent: true },
     { id: "E-25", section: "E", status: "notstarted", title: "Nothing retains to org_bank",
       note: "MemoryConfig defines it (models.py:376) but every _retain call site in feature.py passes project_bank. Cross-project consolidation (reflect(org), SDLC-spec §279) therefore has no writers. This, not scheduling, is the remaining blocker on FR-404's org half. Needs a decision on what belongs in an org bank — likely (new scope).", recent: false },
     { id: "E-26", section: "E", status: "done", title: "Make cfg.roles genuinely per-project (US-4) without reintroducing drift",
@@ -904,7 +1038,79 @@ const ROADMAP = {
     { id: "E-38", section: "E", status: "done", title: "Capture-always harness sessions (new scope; ADR-16)",
       note: "Landed (PRD FR-109): HarnessSession/SessionDigest + per-adapter normalisers (claude stream-json, opencode event stream), ArtifactStore seam with file:// backend (src/sdlc/artifacts/), fail-closed capture in run_coding_task, retro-time OQ-B7 retention (full on fail/benchmark/attempts>0, digest on clean-green; aggregates kept pre-truncation), env-gated Logfire slice. Diff claim-check (FR-702 proper) and report rendering deliberately not here; full-transcript TTL still open (OQ-B7).", recent: true },
     { id: "E-39", section: "E", status: "done", title: "deep_review — optional review tier reading the scrubbed HarnessSession (new scope)",
-      note: "Landed (PRD FR-111): DeepReviewReport/IntegrityFlag + optional agents/deep_review/ role (ADR-6 family clause vs dev) + load_session claim-check read + advisory _run_deep_review in _dev_task (once per task, records a deep_review stage record for the E-36 heatmap, retains integrity flags, never gates). Off by default (deep_review_enabled). Default clean-context review (ADR-6/ADR-12) unchanged.", recent: true }
+      note: "Landed (PRD FR-111): DeepReviewReport/IntegrityFlag + optional agents/deep_review/ role (ADR-6 family clause vs dev) + load_session claim-check read + advisory _run_deep_review in _dev_task (once per task, records a deep_review stage record for the E-36 heatmap, retains integrity flags, never gates). Off by default (deep_review_enabled). Default clean-context review (ADR-6/ADR-12) unchanged.", recent: true },
+
+    /* §10 — Tier 0 triage & tidy-up (FR-900) */
+    { id: "E-40", section: "E", status: "notstarted", title: "Measurement type + RepoTriage contracts (FR-915, FR-901)",
+      note: "A Measurement that distinguishes a measured value from not_collected (with a recorded reason) and from unknown, plus the RepoTriage artifact. Lands in live code and improves the existing pipeline immediately: QAReport.coverage_pct: float | None currently makes a measured 0% and a never-measured value indistinguishable to the advisory coverage check. Imported from BrownKit, which treats not-collected as a first-class state and forbids defaulting to zero.", recent: false },
+    { id: "E-41", section: "E", status: "notstarted", title: "deterministic hygiene signals (FR-902, FR-108)",
+      note: "Build and run probe; secret scan including credentials reachable from client-side bundles; dependency health (unpinned / known-vulnerable / unused / duplicated); dead and generator-scaffold code; framework-default misconfiguration; size and duplication outliers; missing baseline practice. Each an activity behind the FR-108 adapter. One implementation per signal, deliberately.", recent: false },
+    { id: "E-42", section: "E", status: "notstarted", title: "TriageWorkflow + readiness verdict + readiness gate (FR-901, FR-903)",
+      note: "Readiness (buildable / runnable / tests present / structure discernible) computed from deterministic signals only, so triage completes on a repository where an LLM would have nothing to reason about. An unbuildable repo is a finding, not an error. The gate resolves through the FR-301/302 machinery, so an operator can override with an audited decision.", recent: false },
+    { id: "E-43", section: "E", status: "notstarted", title: "grounding verifier (FR-914, shares FR-107)",
+      note: "verify(path, span, quote, commit) -> grounded | unverified, fail-closed, one implementation serving both the research stage and assessment. Land before any finding-emitting stage exists, so no stage can ship an unverified claim labelled grounded. Open: OQ-7, inline per finding vs. a batch gate before storage.", recent: false },
+    { id: "E-44", section: "E", status: "notstarted", title: "tidy-up fix runs + re-triage (FR-904, NG5)",
+      note: "mechanically_fixable findings become brownfield FeatureWorkflow child runs (one PR per accepted item, never a direct patch), then triage re-runs and the before/after delta is recorded. The first end-to-end proof of the assess → fix → prove loop, on the cheapest and lowest-risk class of fix.", recent: false },
+
+    /* §11 — Tier 2 EDCR port (FR-910) */
+    { id: "E-45", section: "E", status: "notstarted", title: "AssessmentWorkflow EDCR DAG shell (FR-911)",
+      note: "init → scan → discover → assess → report → generate → finish. Two deviations: report runs after assess (it renders risk scores only assess produces); workflow.json is not ported (its hand-rolled durable state machine is what Temporal history already is). /enrich, /gate, /validate are not stages (→ E-56, E-50, E-53).", recent: false },
+    { id: "E-46", section: "E", status: "notstarted", title: "scan phase (FR-912)",
+      note: "S1–S5 capability signals, SS1–SS4 security, QS1–QS4 QA. Cross-source confidence: three+ sources = high, two = medium, one = low. Memo key (repository tree hash, signal version) per FR-103, so re-assessing an unchanged repo is a cache hit and editing one signal's logic invalidates exactly that signal.", recent: false },
+    { id: "E-47", section: "E", status: "notstarted", title: "CapabilityMap (FR-913, FR-102)",
+      note: "L1 content-derived stable BC-NNN, L2 operations, entity ownership (exactly one owner or a surfaced conflict), file→capability coverage floor (0.90), orphans classified attached | infrastructure | dead. Where the assessment product and the core pipeline converge: it satisfies FR-102's CodebaseMap. Blocked on OQ-6 (stable identifiers across refactoring).", recent: false },
+    { id: "E-48", section: "E", status: "notstarted", title: "discover proposers (FR-913)",
+      note: "D1 cohesion/coupling/boundary clarity; D2 action per candidate (CONFIRM | SPLIT | MERGE | DE-SCOPE | FLAG); D3 coverage verification with orphan disposition; D4 lock; D5 L2 decomposition with entity ownership; D6 security context; D6a QA context using E-40's not_collected; D7 consolidated domain model; D8 industry-blueprint comparison. Guardrail: delivery channels and deployment boundaries are not capabilities.", recent: false },
+    { id: "E-49", section: "E", status: "notstarted", title: "UnifiedRiskMap + risk proposers (FR-916)",
+      note: "Conforms to the unified-risk-map v1.0 schema: composite in [0,1] or an unknown/partial sentinel; drivers minItems 1, maxItems 3 with a real minimum length. STRIDE per capability with explicit rationale for inapplicable categories; vulnerabilities confirmed | probable | potential; five control families; cross-capability shared vulnerabilities and cascading failures.", recent: false },
+    { id: "E-50", section: "E", status: "notstarted", title: "assessment gate checks (FR-917, FR-106, FR-304)",
+      note: "BLOCK on a confirmed unaccepted vulnerability, a testability blocker in a high-criticality capability, or composite ≥ 0.8; WARN 0.6–0.79; else PASS. False-positive dispositions (false_positive | mitigated_elsewhere | accepted_risk) become audited overrides that persist across re-runs.", recent: false },
+    { id: "E-51", section: "E", status: "notstarted", title: "acceptance criteria as code (FR-918)",
+      note: "The 14 terminal criteria and every per-phase exit criterion as CheckResults computed from typed artifacts. Cross-reference integrity — every capability, threat, vulnerability and testability id cited anywhere resolves to a real record — is an absolute check, because a bundle with a dangling reference is not a weaker audit, it is an unverifiable one.", recent: false },
+    { id: "E-52", section: "E", status: "notstarted", title: "role reports + evidence bundle (FR-921, FR-704)",
+      note: "Architect / developer / SDET / security / stakeholder reports plus a machine-readable manifest, every finding carrying its verification status, all gate results with overrides, and the HarnessSession transcripts of fix runs. Folds into the FR-704 export rather than opening a second reporting path.", recent: false },
+    { id: "E-53", section: "E", status: "notstarted", title: "spec seeds → brownfield child runs (FR-919, NG5)",
+      note: "Capability-scoped seeds naming only files that exist; each accepted seed starts a brownfield FeatureWorkflow child. /validate's criteria (D1–D4, A1–A3, G1–G3) become that run's acceptance criteria, so the fix is graded against the assessment that motivated it. The join BrownKit cannot close on its own.", recent: false },
+    { id: "E-54", section: "E", status: "notstarted", title: "re-assessment + per-capability delta (FR-920)",
+      note: "Incremental re-scan of capabilities whose files changed; composite delta as a first-class artifact. Feeds SC-9.", recent: false },
+    { id: "E-55", section: "E", status: "notstarted", title: "per-phase assessment budgets (FR-922, FR-701)",
+      note: "Assessment input size is the customer's choice, not the factory's — the only stage family where that is true. Exhaustion escalates; partial results are marked partial.", recent: false },
+    { id: "E-56", section: "E", status: "notstarted", title: "/enrich as a declared stage input (FR-911, FR-402 pattern)",
+      note: "The capability slice (structure, entity contracts, blast radius, QA constraints, threats, external dependencies) as a hashed declared input to a brownfield feature run — not a command, and not something an agent fetches ad hoc.", recent: false },
+
+    /* §12 — Service platform (FR-1000, NFR-8, NFR-9) */
+    { id: "E-57", section: "E", status: "notstarted", title: "untrusted-input threat model + adversarial tests (FR-1002, NFR-9; extends E-21)",
+      note: "E-21 covers the container / restricted-OS-user tier; E-57 is the threat model and the tests that prove it — a repository whose test suite exfiltrates the environment, whose build script writes outside the worktree, whose postinstall opens a socket. FR-703 concedes the gap: egress enforcement is tool-level, so a socket opened from inside an allowed Bash call is not visible to it.", recent: false },
+    { id: "E-58", section: "E", status: "notstarted", title: "tenancy by construction (FR-1001, NFR-8; resolves OQ-4)",
+      note: "Temporal namespace + artifact-store prefix + memory-bank namespace per tenant, with an adversarial test that attempts a cross-tenant artifact read and a cross-tenant recall. Memory is the sharpest edge: cross-run learning is the factory's differentiator and, without a tenant boundary, its first data-breach path — client A's gotchas recalled into client B's run.", recent: false },
+    { id: "E-59", section: "E", status: "notstarted", title: "repository connection (FR-1003, FR-703)",
+      note: "VCS app install per tenant; short-TTL, repo-scoped tokens minted per run and never persisted (FR-703 specifies these and nothing implements them); PR-only delivery; webhooks for commit and PR events.", recent: false },
+    { id: "E-60", section: "E", status: "notstarted", title: "identity & authorization (FR-1004; closes FR-304)",
+      note: "Authenticated principals on every surface and a real principal recorded in every GateDecision. FR-304 already records who approved what — there is simply no principal to record, which is fine for one operator at a CLI and void as an audit trail you hand to a client.", recent: false },
+    { id: "E-61", section: "E", status: "notstarted", title: "metered per-tenant cost (FR-1005, FR-701)",
+      note: "The FR-701 counters already aggregate harness JSON cost and model usage per run; this attributes and exports them per tenant with enforceable ceilings.", recent: false },
+    { id: "E-62", section: "E", status: "notstarted", title: "on-prem packaging + configurable model provider (FR-1006, NFR-7)",
+      note: "One artifact, single-tenant on-prem or multi-tenant hosted; the customer may supply their own model credentials or gateway.", recent: false },
+    { id: "E-63", section: "E", status: "notstarted", title: "retention & audited purge (FR-1007)",
+      note: "Per-tenant retention for evidence, transcripts and memory; a deletion request purges artifacts, banks and transcripts, and the purge itself is audited.", recent: false },
+
+    /* §13 — Product outcome (FR-1100) */
+    { id: "E-64", section: "E", status: "notstarted", title: "Hypothesis contracts + intake gate (FR-1101)",
+      note: "Metric, expected direction, minimum effect worth shipping, decision rule, kill condition, observation window — gated before any code is written.", recent: false },
+    { id: "E-65", section: "E", status: "notstarted", title: "pre-registration freeze (FR-1102)",
+      note: "The decision rule is frozen and hashed at approval, reusing ValidationContract.frozen semantics (FR-803). A post-hoc change is a new audited gate round with both versions retained. The differentiating mechanic: the owner commits to how they will decide before they see the data, structurally rather than culturally.", recent: false },
+    { id: "E-66", section: "E", status: "notstarted", title: "metric traceability (FR-1103, FR-106)",
+      note: "Every hypothesis metric must trace to ≥1 instrumentation task and ≥1 emitted event, enforced by the same deterministic mechanism as criterion→test traceability. An uninstrumented hypothesis cannot reach deploy — the single most common way a measured feature ships unmeasurable.", recent: false },
+    { id: "E-67", section: "E", status: "notstarted", title: "DeployPlan / DeployReport (FR-1104)",
+      note: "Environment, flag and cohort, rollback, smoke-tested deployment vs. PR merge. Closes DAG stage 13 for all runs, not only experiments: today it is a single hardcoded make deploy ENV=staging with no plan/report split. Needed regardless of whether the outcome loop ships.", recent: false },
+    { id: "E-68", section: "E", status: "notstarted", title: "deployment target adapters (FR-1105, NG7)",
+      note: "Resolved from config, one reference adapter, no hosting substrate of our own. ADR-19.", recent: false },
+    { id: "E-69", section: "E", status: "notstarted", title: "analytics source adapters (FR-1105, NG7)",
+      note: "One reference adapter. See OQ-9: the factory would read a metric from a customer-controlled source to decide keep/kill, which is FR-914's grounding problem inside a system we do not control.", recent: false },
+    { id: "E-70", section: "E", status: "notstarted", title: "durable observation + verdict gate (FR-1106, FR-1108)",
+      note: "A Temporal timer spans the observation window — the one thing Temporal is uniquely suited to here, since a 14-day wait is exactly what NFR-1 already guarantees. On expiry: collect, evaluate the pre-registered rule, open a keep / kill / extend gate. Insufficient data yields inconclusive, never a favourable read.", recent: false },
+    { id: "E-71", section: "E", status: "notstarted", title: "PoC mode (FR-1107)",
+      note: "Bounded budget, explicitly disposable output, preview deployment, recorded decision, and marked so it never silently accrues as production debt.", recent: false }
   ],
 
   /* §8 — Recommended next increments (narrative, ranked) */
@@ -912,7 +1118,7 @@ const ROADMAP = {
     { rank: 1, status: "done", text: "<strong>Close P1 honestly</strong> — CI-runnable end-to-end run through FeatureWorkflow + wire the security_no_critical absolute check. <strong>Done</strong> on feat/p1-consolidation (3cfbe62…41c9185)." },
     { rank: 2, status: "done", text: "<strong>Analyze/Analyst stage</strong> — unlocks coverage + criterion→test traceability advisory checks (FR-106). <strong>Done</strong> on feat/analyst-stage." },
     { rank: 3, status: "done", text: "<strong>retro/reflect wiring</strong> (FR-404) — starts accumulating the SC-4/SC-6 calibration signal. <strong>Done</strong> — schedule mechanism + nightly project reflect (E-12/E-13) and the retro <em>stage</em> itself (E-32: RunSummary + reflect(project_bank) + events.jsonl/report.html on every terminal path). Org half still blocked on <strong>E-25</strong> (no org_bank writers). The benchmark instrument that turns the accruing signal into SC-1..6 numbers also landed: held-out grade (<strong>E-30/E-31</strong>) and per-role economics (<strong>E-33</strong>)." },
-    { rank: 4, status: "partial", text: "<strong>Harness containment</strong> beyond env allowlist — pre_tool hook + egress (FR-703/NFR-5). <strong>Partially landed</strong> — declared containment capability + fail-closed PreToolUse hook + policy/containment.yaml (E-15/E-16, ADR-17) and tool-level egress denial (E-18 partial). Network-level egress + OS/container tier remain (E-21); approval escalation (E-17) blocker dissolved but not built." },
+    { rank: 4, status: "partial", text: "<strong>Harness containment</strong> beyond env allowlist — pre_tool hook + egress (FR-703/NFR-5). <strong>Partially landed</strong> — declared containment capability + fail-closed PreToolUse hook + policy/containment.yaml (E-15/E-16, ADR-17) and tool-level egress denial (E-18 partial). Network-level egress + OS/container tier remain (E-21); approval escalation (E-17) landed (defer → tool_approval gate → single-use grant)." },
     { rank: 5, status: "partial", text: "<strong>Operability</strong> — dashboard FastAPI backend + MCP + cross-run inbox (FR-305/601/602). <strong>Cross-run inbox landed</strong> (E-8: <code>sdlc inbox</code>); dashboard backend (E-10) and MCP server (E-11) still absent — both are thin adapters over the E-6/E-7 channel contract." },
     { rank: 6, status: "partial", text: "<strong>Post-P1 roadmap</strong> — MaintenanceWorkflow/DAPER (E-14), two worker pools, run budgets, observability export, brownfield mode, claim-check. <strong>Run budgets landed</strong> (E-33, folds E-19) and <strong>observability export landed</strong> (E-32, folds E-22/E-23); DAPER (E-14), two worker pools, brownfield mode (FR-102), and full claim-check (FR-702 diffs) remain." },
     { rank: 7, status: "done", text: "<strong>Repo hardening via agents-as-folders</strong> — closes §7's prompts-as-assets drift. <strong>Done</strong> — E-1 (agents/&lt;role&gt;/ loader), E-2 (instructions.md → PROMPT_SHAS), E-4 (prompt eval loop) all landed." }
@@ -1145,7 +1351,7 @@ function renderDetail() {
       <li class="done"><strong>E-12, E-13</strong> — smallest, and the only items that start the SC-4/SC-6 signal.</li>
       <li class="done"><strong>E-1 → E-2 → E-3</strong> — landed. E-3 subsumed by the registry increment.</li>
       <li class="done"><strong>E-6 → E-7 → E-8</strong> — all landed. The CLI refit proved the contract; E-8 (cross-run inbox) is the first new capability it bought.</li>
-      <li class="done"><strong>E-15 → E-16</strong> — landed (the hook seam + policy denial, ADR-17); <strong>E-17</strong> blocker dissolved (claude <em>defer</em>) but not built.</li>
+      <li class="done"><strong>E-15 → E-16 → E-17</strong> — all landed (the hook seam + policy denial, ADR-17; then approval escalation through the same gate machinery — defer → tool_approval gate → single-use grant).</li>
       <li class="done"><strong>E-22</strong> — folded into E-32 (events.jsonl/report.html), landed.</li>
     </ol>
     <p style="color:var(--muted);font-size:12px">E-19 folded into E-33 (landed); E-20/E-21 and E-14 are post-P1. E-5 is not scheduled.</p>
@@ -1168,6 +1374,23 @@ function renderDetail() {
     <p style="color:var(--muted);font-size:12px"><strong>Deliberate:</strong> the pipeline goes multi-language <em>incrementally</em> — E-30 proved one language end-to-end so the first SC signal wasn't blocked on N adapters; E-30a/b/c follow the corpus, not precede it. E-30/E-32 unblock the most: the first gives an objective grade, the second closes P3 and three capabilities.</p>
   `;
   host.appendChild(benchOrder);
+
+  /* §14 — Suggested ordering across §§10–13 (triage / audit / service / outcome) */
+  const crossOrder = document.createElement("section");
+  crossOrder.id = "cross-ordering";
+  crossOrder.innerHTML = `
+    <h2>Suggested ordering — assessment, service &amp; outcome <span style="font-weight:400;color:var(--muted);font-size:13px">— §14</span></h2>
+    <p style="color:var(--muted);font-size:13px;margin-top:0;">Ranked by what each item unblocks and by which invariants get harder to install later. §10 ships before §11 even though §11 is the more impressive product: triage tells you whether the audit is worth running, its findings are mechanically fixable, and it is the only tier that works on the repositories most likely to arrive first.</p>
+    <ol class="next-list">
+      <li><strong>E-40 + E-43</strong> — the two invariants. Both small, both land in existing code paths, both improve the current pipeline on their own. Installing “no unverified claim may be labelled grounded” before any finding-producing stage exists is far cheaper than retrofitting it across four of them.</li>
+      <li><strong>E-41 → E-42 → E-44</strong> — triage and tidy-up. The cheapest shippable product, almost entirely deterministic, needs neither tenancy nor containment (operator-run). E-44 is the first item that proves the assess → fix → prove claim end to end.</li>
+      <li><strong>E-47 (with E-46)</strong> — CapabilityMap. Unblocks P2 brownfield whether or not the audit ships; highest-leverage item in §11. Settle OQ-6 first — it is genuinely blocking, not a detail.</li>
+      <li><strong>E-67</strong> — DeployPlan/DeployReport. Closes stage 13 for ordinary feature runs; the outcome loop needs it, but so does P1's own deploy stage.</li>
+      <li><strong>E-57 + E-58</strong> — the moment an external, self-serve tenant is on the table these stop being optional. Not required for operator-run delivery.</li>
+      <li>Then audit depth (<strong>E-48 → E-49 → E-50 → E-51 → E-52 → E-53 → E-54 → E-55 → E-56</strong>), service (<strong>E-59…E-63</strong>), and the outcome loop (<strong>E-64 → E-65 → E-66 → E-68/E-69 → E-70 → E-71</strong>).</li>
+    </ol>
+  `;
+  host.appendChild(crossOrder);
 }
 
 /* =========================================================================

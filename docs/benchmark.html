@@ -436,9 +436,15 @@
 
   <p class="lede">
     The factory already has a benchmark harness (<code>benchmarks/workflow.py</code>, <strong>E-27</strong>)
-    and a prompt eval loop (<code>sdlc eval</code>, <strong>E-4</strong>). What it does not yet have is a
-    <em>measurement design</em>: a stated ground-truth strategy, the metrics each success criterion needs,
-    and the wiring that turns <strong>SC-1..SC-6</strong> from “not measurable” into numbers. This doc is that design.
+    and a prompt eval loop (<code>sdlc eval</code>, <strong>E-4</strong>). The <em>measurement design</em> — a
+    stated ground-truth strategy, the metrics each success criterion needs, and the wiring that turns
+    <strong>SC-1..SC-6</strong> from “not measurable” into numbers — is now reconciled into
+    <code>ROADMAP.md §9.8</code>, and most of the instrument has landed: the held-out oracle
+    (<strong>E-30/E-31</strong>), per-role cost (<strong>E-33</strong>), retro + <code>RunSummary</code>
+    (<strong>E-32</strong>), the error heatmap + rubric calibration (<strong>E-36</strong>), capture-always sessions
+    (<strong>E-38</strong>), and the <code>deep_review</code> lens (<strong>E-39</strong>). The remaining gaps are the
+    open items — <strong>E-30a/b/c</strong> (other languages), <strong>E-31a</strong> (overfit anti-cheat), and
+    <strong>E-28</strong> (research retry cap). This doc is that design.
   </p>
 
   <div class="contents">
@@ -494,9 +500,11 @@
     <h3>The factory’s own state <span class="tag-link">ROADMAP §0 / SC-1..6</span></h3>
     <p>
       SC-1 through SC-6 are marked <span class="pill notmeasurable">not measurable</span> or mechanism-exists-no-metric.
-      The pipeline can ship a feature end-to-end (P1 done), but it cannot yet tell you <em>how well</em> or
-      <em>how cheaply</em> it does so across a fleet. The benchmark is the missing instrument, and the precondition
-      for P3’s exit and everything in P4.
+      The pipeline can ship a feature end-to-end (P1 done), and the instrument that turns that into numbers is now
+      mostly built: <em>how cheaply</em> is measurable per run via <code>RunSummary.roles</code>
+      (<strong>E-33</strong>), and <em>how well</em> is measurable for Python cases via the held-out oracle
+      (<strong>E-30/E-31</strong>). Cross-language coverage (<strong>E-30a/b/c</strong>) and the overfit anti-cheat
+      (<strong>E-31a</strong>) stay open — the precondition for P3’s exit and everything in P4.
     </p>
   </div>
 </div>
@@ -949,6 +957,31 @@
       and satisfy ADR-6 per run. <em>The full model×role matrix.</em> <strong>Landed (E-37, folds E-26):</strong> per-cell <code>Arm</code>s + <code>--role-model</code>; judge family validated at expansion against every arm (answers <strong>OQ-B2</strong>).
     </div>
   </li>
+  <li>
+    <div class="rk-title">Capture-always harness sessions.</div>
+    <div class="rk-note">
+      Every harness run now emits a canonical <code>HarnessSession</code> (normalised transcript: tool-calls, file
+      reads/writes, commands + exit status, model turns) as a claim-checked artifact, captured through a fail-closed
+      scrub (<strong>ADR-16, E-38</strong>). <em>The observability + anti-cheat substrate every later analysis reads
+      from — the §4.3 waste aggregates, the E-36 heatmap, and P5 trajectory harvesting.</em> Ranked high on purpose:
+      it is what E-39 and the heatmap read from. <strong>Landed (E-38):</strong>
+      <code>HarnessSession</code>/<code>SessionDigest</code> + per-adapter normalisers + <code>ArtifactStore</code>
+      seam; full transcript on fail/benchmark/any retry, a structured <code>SessionDigest</code> on clean-green with
+      waste aggregates kept pre-truncation (full-transcript TTL is the one open sub-point, <strong>OQ-B7</strong>).
+    </div>
+  </li>
+  <li>
+    <div class="rk-title">The <code>deep_review</code> transcript lens.</div>
+    <div class="rk-note">
+      An optional, opt-in review tier that reads the scrubbed <code>HarnessSession</code> (<strong>E-38</strong>) as
+      <em>data</em> — Cursor’s full-transcript lens, doing what the default reviewer must not (see <em>how</em> the
+      diff was reached: backtracking, oracle peeking, hardcoded answers). Feeds the anti-cheat check
+      (<a href="#sec2">§2 Tier A</a>, <a href="#sec4">§4.4</a>) and a richer verdict. <strong>Landed (E-39):</strong>
+      <code>DeepReviewReport</code>/<code>IntegrityFlag</code> + optional <code>agents/deep_review/</code> role
+      (ADR-6 family clause vs <code>dev</code>) + advisory <code>_run_deep_review</code> in <code>_dev_task</code>,
+      off by default (<code>deep_review_enabled</code>); records a stage record for the E-36 heatmap, never gates.
+    </div>
+  </li>
 </ol>
 
 <p style="font-size:12.5px; color:var(--muted); margin-top:14px;">
@@ -957,7 +990,7 @@
   FR-103/NFR-6 (eval-aware memoization), FR-201/FR-203 (registry + harness adapters) — plus, since the last refresh,
   E-30/E-31 (toolchain + held-out oracle), E-32 (retro + RunSummary), E-33 (per-role cost), E-34 (decomposition case),
   E-35 (cursor adapter), E-36 (heatmap + calibration), E-37 (per-role sweep), E-38 (capture-always sessions),
-  E-39 (deep_review lens). Open: E-30a/b/c, E-31a, E-25.
+  E-39 (deep_review lens). Open: E-30a/b/c, E-31a, E-25, E-28.
 </p>
 
 <!-- ============================================================ -->
@@ -1057,7 +1090,7 @@
 </div>
 
 <div class="footer">
-  Generated 2026-07-25 from <a href="../BENCHMARK.md">BENCHMARK.md</a>. Adds no scope to
+  Generated 2026-07-26 from <a href="../BENCHMARK.md">BENCHMARK.md</a>. Adds no scope to
   <a href="../PRD.md">PRD.md</a>; every <span class="newscope">(new scope)</span> marker is a measurement capability
   that needs a PRD line before it becomes a real requirement. Everything else is an <code>E-</code>-style plan for
   measuring requirements already open in the tracker.
