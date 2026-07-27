@@ -61,3 +61,56 @@ def test_dispatch_report_also_writes_heatmap(tmp_path):
     dispatch_report("b1", root=str(tmp_path))
     assert (tmp_path / "b1" / "heatmap.html").exists()
     assert (tmp_path / "b1" / "heatmap.json").exists()
+
+
+def test_parser_accepts_history_subcommand():
+    from sdlc.benchmarks.cli import build_parser
+    p = build_parser()
+    args = p.parse_args(["benchmark", "history", "--case", "c1"])
+    assert args.cmd == "benchmark"
+    assert args.bench_cmd == "history"
+    assert args.case == "c1"
+
+
+def test_dispatch_history_raises_without_tasks_yaml(tmp_path):
+    from sdlc.benchmarks.cli import dispatch_history
+    import pytest as _pytest
+    with _pytest.raises(ValueError, match="no tasks.yaml"):
+        dispatch_history("no-such-case", root=str(tmp_path))
+
+
+def test_dispatch_history_writes_all_four_files(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta
+    from sdlc.benchmarks.cli import dispatch_history
+    from sdlc.benchmarks.models import (
+        BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag)
+    from sdlc.benchmarks.recorder import RecordStore
+    from sdlc.models import HarnessKind
+
+    cases_dir = tmp_path / "cases"
+    (cases_dir / "c1").mkdir(parents=True)
+    (cases_dir / "c1" / "tasks.yaml").write_text(
+        "tasks:\n  - id: t01\n    error_class: functional\n"
+        "    oracle_tests: [\"x::y\"]\n", encoding="utf-8")
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(cases_dir))
+
+    runs_root = tmp_path / "runs"
+    t = datetime(2026, 7, 20, 10)
+    rec = BenchmarkRecord(
+        run_id="b1/c1#opencode#m1", bench_run_id="b1", case_id="c1",
+        scope=BenchmarkScope.ORACLE_TASK, stage="oracle", task_id="t01",
+        role="oracle", harness=HarnessKind.OPENCODE, model="m1",
+        quality=QualityScore(score=1.0, judge="oracle"),
+        speed=SpeedBag(wall_clock_s=1.0, started_at=t,
+                      ended_at=t + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.PASS)
+    RecordStore(root=str(runs_root), bench_run_id="b1").append(rec)
+
+    tm_path, em_path = dispatch_history("c1", root=str(runs_root))
+    out_dir = runs_root / "_history" / "c1"
+    assert (out_dir / "task-matrix.html").exists()
+    assert (out_dir / "task-matrix.json").exists()
+    assert (out_dir / "error-matrix.html").exists()
+    assert (out_dir / "error-matrix.json").exists()
+    assert tm_path == str(out_dir / "task-matrix.html")
+    assert em_path == str(out_dir / "error-matrix.html")

@@ -45,6 +45,9 @@ def build_parser() -> argparse.ArgumentParser:
     rep = bsub.add_parser("report")
     rep.add_argument("--bench", required=True)
 
+    hist = bsub.add_parser("history")
+    hist.add_argument("--case", required=True)
+
     cal = sub.add_parser("calibrate")
     cal.add_argument("rubric")
     cal.add_argument("--judge-model", default=None, dest="judge_model")
@@ -68,6 +71,34 @@ def dispatch_report(bench: str,
     lang = resolve_language_map(sorted({r.case_id for r in records}))
     write_heatmap(records, out_dir, lang, render_calibration_html(calibration))
     return md
+
+
+def dispatch_history(case_id: str, root: str | None = None) -> tuple[str, str]:
+    from .error_matrix import (
+        build_error_matrix, render_error_matrix_html, render_error_matrix_json)
+    from .report import scan_case_records
+    from .task_matrix import (
+        build_task_matrix, render_task_matrix_html, render_task_matrix_json)
+    from .tasks import load_task_suite
+
+    suite = load_task_suite(case_id)
+    if suite is None:
+        raise ValueError(f"no tasks.yaml for case {case_id!r}; nothing to build")
+    records = scan_case_records(case_id, root)
+    tm = build_task_matrix(case_id, records, suite)
+    em = build_error_matrix(case_id, records, suite)
+
+    out_dir = Path(root if root is not None else _root()) / "_history" / case_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "task-matrix.html").write_text(
+        render_task_matrix_html(tm), encoding="utf-8")
+    (out_dir / "task-matrix.json").write_text(
+        render_task_matrix_json(tm), encoding="utf-8")
+    (out_dir / "error-matrix.html").write_text(
+        render_error_matrix_html(em), encoding="utf-8")
+    (out_dir / "error-matrix.json").write_text(
+        render_error_matrix_json(em), encoding="utf-8")
+    return str(out_dir / "task-matrix.html"), str(out_dir / "error-matrix.html")
 
 
 def dispatch_calibrate(rubric: str, *, judge_model: str | None,
@@ -123,3 +154,7 @@ def main_async(args: argparse.Namespace) -> None:
         print(asyncio.run(_run_drift(args.since)))
     elif args.bench_cmd == "report":
         print(dispatch_report(args.bench))
+    elif args.bench_cmd == "history":
+        tm_path, em_path = dispatch_history(args.case)
+        print(tm_path)
+        print(em_path)

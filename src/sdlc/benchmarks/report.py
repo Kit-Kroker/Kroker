@@ -40,6 +40,20 @@ def _read_all(bench_run_id: str, root: str | None) -> list[BenchmarkRecord]:
     return out
 
 
+def scan_case_records(case_id: str, root: str | None = None) -> list[BenchmarkRecord]:
+    """Read every record for case_id across EVERY bench_run_id directory
+    under root (default: recorder._root()). Powers the cross-run task/error
+    matrices -- scan-on-demand, no separate history store to keep in sync."""
+    base = Path(root if root is not None else _root())
+    if not base.is_dir():
+        return []
+    out: list[BenchmarkRecord] = []
+    for bench_dir in sorted(p for p in base.iterdir() if p.is_dir()):
+        out.extend(r for r in _read_all(bench_dir.name, root)
+                   if r.case_id == case_id)
+    return out
+
+
 def render_markdown(summaries: list[BenchmarkSummary], calibration=None) -> str:
     from .calibration import render_calibration_markdown, trust_for_stage
     calibration = calibration or {}

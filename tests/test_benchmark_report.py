@@ -106,3 +106,54 @@ def test_render_markdown_appends_calibration_when_provided():
         verdict="calibrated", computed_at=datetime(2026, 7, 24, tzinfo=timezone.utc))
     md = render_markdown(sums, calibration={"architect": rep})
     assert "Rubric calibration" in md
+
+
+def test_scan_case_records_reads_across_multiple_bench_run_ids(tmp_path):
+    from datetime import datetime, timedelta
+    from sdlc.benchmarks.models import (
+        BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag)
+    from sdlc.benchmarks.recorder import RecordStore
+    from sdlc.benchmarks.report import scan_case_records
+    from sdlc.models import HarnessKind
+    t = datetime(2026, 7, 20, 10)
+
+    def rec(run, task_id):
+        return BenchmarkRecord(
+            run_id=f"{run}/c1#opencode#m1", bench_run_id=run, case_id="c1",
+            scope=BenchmarkScope.ORACLE_TASK, stage="oracle", task_id=task_id,
+            role="oracle", harness=HarnessKind.OPENCODE, model="m1",
+            quality=QualityScore(score=1.0, judge="oracle"),
+            speed=SpeedBag(wall_clock_s=1.0, started_at=t,
+                          ended_at=t + timedelta(seconds=1)),
+            outcome=BenchmarkOutcome.PASS)
+
+    RecordStore(root=str(tmp_path), bench_run_id="b1").append(rec("b1", "t01"))
+    RecordStore(root=str(tmp_path), bench_run_id="b2").append(rec("b2", "t01"))
+
+    records = scan_case_records("c1", root=str(tmp_path))
+    assert {r.bench_run_id for r in records} == {"b1", "b2"}
+
+
+def test_scan_case_records_filters_other_cases(tmp_path):
+    from datetime import datetime, timedelta
+    from sdlc.benchmarks.models import (
+        BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag)
+    from sdlc.benchmarks.recorder import RecordStore
+    from sdlc.benchmarks.report import scan_case_records
+    from sdlc.models import HarnessKind
+    t = datetime(2026, 7, 20, 10)
+    rec = BenchmarkRecord(
+        run_id="b1/other#opencode#m1", bench_run_id="b1", case_id="other-case",
+        scope=BenchmarkScope.ORACLE_TASK, stage="oracle", task_id="t01",
+        role="oracle", harness=HarnessKind.OPENCODE, model="m1",
+        quality=QualityScore(score=1.0, judge="oracle"),
+        speed=SpeedBag(wall_clock_s=1.0, started_at=t,
+                      ended_at=t + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.PASS)
+    RecordStore(root=str(tmp_path), bench_run_id="b1").append(rec)
+    assert scan_case_records("c1", root=str(tmp_path)) == []
+
+
+def test_scan_case_records_empty_root_returns_empty(tmp_path):
+    from sdlc.benchmarks.report import scan_case_records
+    assert scan_case_records("c1", root=str(tmp_path / "does-not-exist")) == []
