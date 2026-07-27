@@ -66,3 +66,58 @@ def test_language_match():
     assert language_match("python", "python") is True
     assert language_match("python", "typescript") is False
     assert language_match("python", None) is False
+
+
+from sdlc.benchmarks.oracle import grade_testcases_from_junit
+
+JUNIT_WITH_FILE_ATTR = (
+    '<testsuites><testsuite tests="3" failures="1" errors="0" skipped="0">'
+    '<testcase classname="test_crud" name="test_create_todo" '
+    'file="test_crud.py"/>'
+    '<testcase classname="test_crud" name="test_delete_todo" '
+    'file="test_crud.py"><failure/></testcase>'
+    '<testcase classname="test_crud" name="test_skipped" '
+    'file="test_crud.py"><skipped/></testcase>'
+    '</testsuite></testsuites>'
+)
+
+JUNIT_NO_FILE_ATTR = (
+    '<testsuite tests="1" failures="0" errors="0" skipped="0">'
+    '<testcase classname="test_crud" name="test_x"/></testsuite>'
+)
+
+JUNIT_NO_CLASSNAME = (
+    '<testsuite tests="1" failures="0" errors="0" skipped="0">'
+    '<testcase name="test_x"/></testsuite>'
+)
+
+
+def test_grade_testcases_keys_by_file_and_name_when_file_attr_present():
+    results = grade_testcases_from_junit(JUNIT_WITH_FILE_ATTR)
+    assert results == {
+        "test_crud.py::test_create_todo": True,
+        "test_crud.py::test_delete_todo": False,
+    }
+    # the skipped test is dropped entirely -- neither pass nor fail
+    assert "test_crud.py::test_skipped" not in results
+
+
+def test_grade_testcases_falls_back_to_classname_when_no_file_attr():
+    results = grade_testcases_from_junit(JUNIT_NO_FILE_ATTR)
+    assert results == {"test_crud::test_x": True}
+
+
+def test_grade_testcases_falls_back_to_name_when_neither_present():
+    results = grade_testcases_from_junit(JUNIT_NO_CLASSNAME)
+    assert results == {"test_x": True}
+
+
+def test_grade_testcases_error_child_is_failure():
+    xml = ('<testsuite tests="1" failures="0" errors="1" skipped="0">'
+          '<testcase name="a"><error/></testcase></testsuite>')
+    assert grade_testcases_from_junit(xml) == {"a": False}
+
+
+def test_grade_testcases_empty_or_malformed_returns_empty_dict():
+    assert grade_testcases_from_junit("") == {}
+    assert grade_testcases_from_junit("<not-xml") == {}

@@ -51,6 +51,43 @@ def grade_from_junit(xml_text: str) -> tuple[float | None, int, int, str]:
     return passed / graded, passed, graded, f"{passed}/{graded} oracle tests passed"
 
 
+def grade_testcases_from_junit(xml_text: str) -> dict[str, bool]:
+    """Parse individual <testcase> elements into {"node_id": passed}.
+
+    The key prefers pytest's own file::name node-id shape (using the
+    `file` attribute pytest's junit-xml already emits per testcase), so a
+    case author's tasks.yaml oracle_tests entries can read exactly like a
+    pytest node-id (e.g. "test_crud.py::test_create_todo"). Falls back to
+    classname::name, then bare name, for hand-written JUnit fixtures that
+    omit `file`. A <skipped> testcase is dropped entirely -- neither pass
+    nor fail, mirroring grade_from_junit's denominator discipline.
+    Malformed/empty XML yields {} rather than raising."""
+    if not xml_text.strip():
+        return {}
+    try:
+        root = DET.fromstring(xml_text)
+        suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+    except Exception:
+        return {}
+    out: dict[str, bool] = {}
+    for s in suites:
+        for tc in s.iter("testcase"):
+            if tc.find("skipped") is not None:
+                continue
+            name = tc.get("name", "")
+            file_attr = tc.get("file")
+            classname = tc.get("classname", "")
+            if file_attr:
+                key = f"{file_attr}::{name}"
+            elif classname:
+                key = f"{classname}::{name}"
+            else:
+                key = name
+            failed = tc.find("failure") is not None or tc.find("error") is not None
+            out[key] = not failed
+    return out
+
+
 def held_out_ok(changed_files: list[str], oracle_dirname: str = "oracle") -> bool:
     """False iff the produced diff authored anything at/under the oracle dir.
 
