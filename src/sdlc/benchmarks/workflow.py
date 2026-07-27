@@ -122,6 +122,29 @@ def _oracle_record(base_cell: BenchmarkCell, grade: OracleGrade,
         outcome=outcome, error=err)
 
 
+def _oracle_task_records(base_cell: BenchmarkCell, grade: OracleGrade,
+                         bench_run_id: str, run_id: str,
+                         started: datetime, ended: datetime
+                         ) -> list[BenchmarkRecord]:
+    """One record per TaskGrade in grade.task_grades. error_class is not
+    stored on the record -- task_matrix.py / error_matrix.py join it from
+    tasks.yaml by (case_id, task_id) at aggregation time, so the write path
+    only needs the scope + the already-existing task_id field."""
+    out: list[BenchmarkRecord] = []
+    for t in grade.task_grades:
+        outcome = (BenchmarkOutcome.PASS if (t.score or 0.0) >= 1.0
+                  else BenchmarkOutcome.FAIL)
+        out.append(BenchmarkRecord(
+            run_id=run_id, bench_run_id=bench_run_id, case_id=base_cell.case_id,
+            scope=BenchmarkScope.ORACLE_TASK, stage="oracle", task_id=t.task_id,
+            role="oracle", harness=base_cell.harness, model=base_cell.arm_name,
+            quality=QualityScore(score=t.score, judge=t.judge),
+            speed=SpeedBag(wall_clock_s=(ended - started).total_seconds(),
+                          started_at=started, ended_at=ended),
+            outcome=outcome))
+    return out
+
+
 @workflow.defn
 class BenchmarkWorkflow:
     @workflow.run
@@ -163,13 +186,20 @@ class BenchmarkWorkflow:
                     OracleInput(case_id=spec.case_id,
                                 repo_url=spec.repo_url or "",
                                 run_id=child_id, language=spec.language,
-                                base_branch=idea.base_branch),
+                                base_branch=idea.base_branch,
+                                author_model=cell.role_models.get("dev", ""),
+                                judge_model=spec.judge_model),
                     **ORACLE_ACT)
+                ended = workflow.now()
                 await workflow.execute_activity(
                     record_benchmark,
                     _oracle_record(cell, grade, bench_run_id, child_id,
-                                   started, workflow.now()),
+                                   started, ended),
                     **RECORD_ACT)
+                for rec in _oracle_task_records(cell, grade, bench_run_id,
+                                                child_id, started, ended):
+                    await workflow.execute_activity(
+                        record_benchmark, rec, **RECORD_ACT)
 
         # All file I/O (aggregate + write_report) is isolated in this
         # activity — workflow code stays deterministic and replay-safe.

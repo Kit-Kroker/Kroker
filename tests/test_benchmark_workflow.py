@@ -4,9 +4,12 @@ class is registered and runnable-shaped. A full time-skipping integration
 test lives in Task 13's golden-case smoke run."""
 from datetime import datetime, timezone
 
-from sdlc.benchmarks.models import BenchmarkCell, BenchmarkScope, CaseSpec
+from sdlc.benchmarks.models import (BenchmarkCell, BenchmarkOutcome,
+                                    BenchmarkScope, CaseSpec)
 from sdlc.benchmarks.oracle import OracleGrade
-from sdlc.benchmarks.workflow import BenchmarkWorkflow, _cell_config, _oracle_record
+from sdlc.benchmarks.tasks import TaskGrade
+from sdlc.benchmarks.workflow import (BenchmarkWorkflow, _cell_config,
+                                      _oracle_record, _oracle_task_records)
 from sdlc.models import (GatePolicy, HarnessKind, PipelineConfig, ProjectMode,
                          IdeaBrief)
 
@@ -184,3 +187,50 @@ def test_cell_config_research_role_is_not_harness_overridden():
                        _harness_cell("zai-coding-plan/glm-5.2"),
                        bench_run_id="b1")
     assert cfg.roles["research"].harness is None
+
+
+def _grade_with_tasks(*task_grades):
+    return OracleGrade(
+        score=0.5, passed=1, total=2, language_manifest="python",
+        language_detected="python", language_match=True,
+        held_out_ok=True, detail="1/2", task_grades=list(task_grades))
+
+
+def test_oracle_task_records_one_per_task_grade():
+    t0 = datetime(2026, 7, 23, tzinfo=timezone.utc)
+    t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=timezone.utc)
+    grade = _grade_with_tasks(
+        TaskGrade(task_id="t01", error_class="functional", score=1.0,
+                  judge="oracle", detail="1/1"),
+        TaskGrade(task_id="t02", error_class="security", score=0.0,
+                  judge="llm_judge", detail="rubric-graded"))
+    recs = _oracle_task_records(_cell(), grade, "b1",
+                                "b1/todo-api#opencode#m", t0, t1)
+    assert len(recs) == 2
+    assert {r.task_id for r in recs} == {"t01", "t02"}
+    r01 = next(r for r in recs if r.task_id == "t01")
+    assert r01.scope is BenchmarkScope.ORACLE_TASK
+    assert r01.stage == "oracle" and r01.role == "oracle"
+    assert r01.quality.score == 1.0 and r01.quality.judge == "oracle"
+    assert r01.outcome is BenchmarkOutcome.PASS
+    r02 = next(r for r in recs if r.task_id == "t02")
+    assert r02.outcome is BenchmarkOutcome.FAIL
+
+
+def test_oracle_task_records_none_score_is_fail():
+    from sdlc.benchmarks.models import BenchmarkOutcome as BO
+    t0 = datetime(2026, 7, 23, tzinfo=timezone.utc)
+    t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=timezone.utc)
+    grade = _grade_with_tasks(
+        TaskGrade(task_id="t01", error_class="functional", score=None,
+                  judge="error", detail="oops"))
+    recs = _oracle_task_records(_cell(), grade, "b1", "run1", t0, t1)
+    assert recs[0].outcome is BO.FAIL
+    assert recs[0].quality.score is None
+
+
+def test_oracle_task_records_empty_when_no_task_grades():
+    t0 = datetime(2026, 7, 23, tzinfo=timezone.utc)
+    t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=timezone.utc)
+    recs = _oracle_task_records(_cell(), _grade(), "b1", "run1", t0, t1)
+    assert recs == []
