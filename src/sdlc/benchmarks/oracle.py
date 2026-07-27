@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import defusedxml.ElementTree as DET
@@ -19,6 +19,8 @@ from temporalio import activity
 
 from ..activities import _bounded_shell, _git
 from ..toolchain.adapters import TOOLCHAINS, ToolchainKind, detect
+from .judge import JudgeInput, _judge_sync
+from .tasks import TaskGrade, grade_tasks, load_task_suite
 
 
 def grade_from_junit(xml_text: str) -> tuple[float | None, int, int, str]:
@@ -112,6 +114,8 @@ class OracleInput:
     language: str          # manifest-declared (CaseSpec.language)
     base_branch: str = "main"
     test_timeout_s: int = 600
+    author_model: str = ""          # cell's dev model; only rubric tasks need it
+    judge_model: str | None = None  # spec.judge_model; only rubric tasks need it
 
 
 @dataclass
@@ -124,6 +128,7 @@ class OracleGrade:
     language_match: bool
     held_out_ok: bool
     detail: str
+    task_grades: list[TaskGrade] = field(default_factory=list)
 
 
 def _cases_dir() -> Path:
@@ -135,11 +140,12 @@ def _cases_dir() -> Path:
         str(Path(__file__).resolve().parents[3] / "benchmarks" / "cases")))
 
 
-def _grade(score, passed, total, lang, detected, held, detail) -> OracleGrade:
+def _grade(score, passed, total, lang, detected, held, detail,
+          task_grades: list[TaskGrade] | None = None) -> OracleGrade:
     return OracleGrade(
         score=score, passed=passed, total=total, language_manifest=lang,
         language_detected=detected, language_match=language_match(lang, detected),
-        held_out_ok=held, detail=detail)
+        held_out_ok=held, detail=detail, task_grades=task_grades or [])
 
 
 @activity.defn
@@ -185,7 +191,43 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
         except OSError:
             xml_text = ""
         score, passed, total, detail = grade_from_junit(xml_text)
-        return _grade(score, passed, total, lang, detected, held, detail)
+        task_grades: list[TaskGrade] = []
+        try:
+            suite = load_task_suite(inp.case_id)
+            if suite is not None:
+                testcase_results = grade_testcases_from_junit(xml_text)
+                # pytest's `file` attribute is relative to its invocation
+                # cwd (wt) and OS-native-separated, e.g. "oracle\test_x.py"
+                # on Windows -- normalize to the bare, forward-slash,
+                # oracle-dir-relative form (e.g. "test_x.py") so it matches
+                # a case author's tasks.yaml oracle_tests node ids, which
+                # are written relative to the oracle/ dir itself.
+                testcase_results = {
+                    k.replace("\\", "/").removeprefix("oracle/"): v
+                    for k, v in testcase_results.items()
+                }
+                judge_scores: dict[str, float] = {}
+                needs_diff = any(t.rubric for t in suite.tasks)
+                full_diff = ""
+                if needs_diff:
+                    diff_res = _git(
+                        ["diff", f"{inp.base_branch}...HEAD"], wt)
+                    full_diff = diff_res.stdout
+                for t in suite.tasks:
+                    if t.rubric:
+                        qs = _judge_sync(JudgeInput(
+                            artifact_json=full_diff, rubric=t.rubric,
+                            author_model=inp.author_model,
+                            judge_model=inp.judge_model))
+                        if qs.score is not None:
+                            judge_scores[t.id] = qs.score
+                task_grades = grade_tasks(suite, testcase_results, judge_scores)
+        except Exception:
+            # a broken tasks.yaml or judge call never fails the case-level
+            # oracle grade -- it just contributes no task grades.
+            task_grades = []
+        return _grade(score, passed, total, lang, detected, held, detail,
+                     task_grades=task_grades)
     except Exception as e:  # fail-safe: a broken grader never fails a cell
         return _grade(None, 0, 0, lang, None, True, f"grade_oracle error: {e}")
     finally:
