@@ -100,3 +100,7 @@ def test_case_spec_language_defaults_none_and_accepts_value():
                 judge_model="openai/gpt-5.2")
     assert CaseSpec(**base).language is None
     assert CaseSpec(**base, language="python").language == "python"
+
+
+def test_oracle_task_scope_exists():
+    assert BenchmarkScope.ORACLE_TASK.value == "oracle_task"

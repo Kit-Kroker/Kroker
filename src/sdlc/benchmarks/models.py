@@ -37,6 +37,7 @@ class BenchmarkScope(str, Enum):
     STAGE = "stage"
     TASK_ATTEMPT = "task_attempt"
     ORACLE = "oracle"
+    ORACLE_TASK = "oracle_task"
 
 
 class BenchmarkOutcome(str, Enum):
