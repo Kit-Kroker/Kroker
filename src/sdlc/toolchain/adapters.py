@@ -70,9 +70,14 @@ class PythonToolchain(ToolchainAdapter):
     def oracle_test_cmd(self, oracle_path: str, report_out: str) -> str:
         # -p no:cacheprovider: never write .pytest_cache into the produced
         # repo (keeps the throwaway worktree clean). --junitxml lands the
-        # canonical report the grader parses.
+        # canonical report the grader parses. -o junit_family=legacy: pytest's
+        # default xunit2 family strips the testcase `file` attribute, which
+        # grade_testcases_from_junit (oracle.py) relies on to build the
+        # "file.py::test_name" node ids that tasks.yaml oracle_tests entries
+        # reference -- legacy keeps that attribute on the report.
         return (f"pytest {oracle_path} -q "
-                f"--junitxml={report_out} -p no:cacheprovider")
+                f"--junitxml={report_out} -p no:cacheprovider "
+                f"-o junit_family=legacy")
 
 
 TOOLCHAINS: dict[ToolchainKind, ToolchainAdapter] = {
