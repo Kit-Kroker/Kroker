@@ -57,6 +57,13 @@ def build_heatmap(records: list[BenchmarkRecord],
     acc: dict[tuple[str, str], dict[str, int]] = defaultdict(
         lambda: {"gate": 0, "fix": 0, "oracle": 0})
     for r in records:
+        if r.scope is BenchmarkScope.ORACLE_TASK:
+            # task-level detail belongs in the task/error matrices (E-36
+            # follow-on), not this case x stage rework-density heatmap.
+            # ORACLE_TASK records share stage="oracle" with the case-level
+            # ORACLE record but there is no gate on the oracle stage, so
+            # counting them here would double the reported rework density.
+            continue
         is_oracle = r.scope is BenchmarkScope.ORACLE
         stage = ORACLE_STAGE if is_oracle else r.stage
         key = (r.case_id, stage)

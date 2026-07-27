@@ -71,6 +71,34 @@ def test_empty_records_give_empty_heatmap():
     assert hm.max_density == 0.0
 
 
+def test_oracle_task_records_excluded_from_rework_density():
+    # a case-level ORACLE record plus several ORACLE_TASK records (E-31 task
+    # matrix) for the same case/run must produce the SAME heatmap cell as if
+    # the ORACLE_TASK records were entirely absent -- there is no gate on the
+    # oracle stage, so task-level fails/revises must not be double-counted
+    # as gate_rejects.
+    without_tasks = [
+        _rec(run="r1", stage="oracle", scope=BenchmarkScope.ORACLE,
+             outcome=BenchmarkOutcome.FAIL),
+    ]
+    with_tasks = without_tasks + [
+        _rec(run="r1", stage="oracle", scope=BenchmarkScope.ORACLE_TASK,
+             outcome=BenchmarkOutcome.FAIL, fix=1),
+        _rec(run="r1", stage="oracle", scope=BenchmarkScope.ORACLE_TASK,
+             outcome=BenchmarkOutcome.REVISED, fix=2),
+        _rec(run="r1", stage="oracle", scope=BenchmarkScope.ORACLE_TASK,
+             outcome=BenchmarkOutcome.ESCALATED),
+    ]
+    hm_without = build_heatmap(without_tasks)
+    hm_with = build_heatmap(with_tasks)
+    cell_without = next(c for c in hm_without.cells if c.stage == ORACLE_STAGE)
+    cell_with = next(c for c in hm_with.cells if c.stage == ORACLE_STAGE)
+    assert cell_with.gate_rejects == cell_without.gate_rejects == 0
+    assert cell_with.oracle_fails == cell_without.oracle_fails == 1
+    assert cell_with.fix_attempts == cell_without.fix_attempts == 0
+    assert cell_with.density == cell_without.density
+
+
 def test_oracle_non_fail_rework_not_counted_as_oracle_failure():
     recs = [
         _rec(run="r1", stage="oracle", scope=BenchmarkScope.ORACLE,
