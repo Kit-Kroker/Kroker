@@ -594,6 +594,17 @@ async def run_test_suite(inp: QAInput) -> QAReport:
     out = out_b.decode(errors="replace")
     failing = [ln.split(" ")[0] for ln in out.splitlines()
                if ln.startswith("FAILED")]
+    # pytest's dedicated exit code for "collected zero tests" (distinct from
+    # 1 = tests ran and some failed). A task whose own scope doesn't add
+    # tests yet (e.g. an early module task in a task-per-commit greenfield
+    # build, before the dedicated test-writing tasks land) legitimately has
+    # nothing to fail — scoring that identically to a real test failure
+    # makes the task's QA gate unpassable no matter what the agent writes.
+    # Gated on the exit code AND pytest's own "no tests ran" text so an
+    # unrelated non-pytest command that happens to also exit 5 is never
+    # mistaken for this case.
+    if proc.returncode == 5 and "no tests ran" in out:
+        return QAReport(tests_passed=True, failing_tests=[], issues=[])
     issues: list[str] = []
     if proc.returncode != 0:
         issues = [out[-2000:]]

@@ -971,14 +971,20 @@ class FeatureWorkflow:
                     + f"\nTest results: {qa_raw.model_dump_json()}"
                     + f"\nDiff:\n{diff['patch']}")).output
 
+            # `qa_raw.tests_passed` is the actual subprocess exit code;
+            # `qa.tests_passed` is the LLM QA agent's OWN retyped guess at
+            # the same fact (its instructions ask it to judge contract
+            # compliance, not to re-derive this bit) and can disagree with
+            # ground truth. The pass/fail gate must anchor on qa_raw here —
+            # an LLM opinion must never overwrite a deterministic signal.
+            task_passed = qa_raw.tests_passed and not qa.issues
+
             await self._record(cfg, self._stage_record(
                 cfg, stage="code", role=task.role,
                 started=_attempt_started, ended=workflow.now(),
-                quality_score=(1.0 if (qa.tests_passed and not qa.issues)
-                               else 0.0),
+                quality_score=(1.0 if task_passed else 0.0),
                 judge="contract",
-                outcome=(BenchmarkOutcome.PASS
-                         if (qa.tests_passed and not qa.issues)
+                outcome=(BenchmarkOutcome.PASS if task_passed
                          else BenchmarkOutcome.FAIL),
                 model=role_cfg.model,
                 harness=role_cfg.harness,
@@ -998,14 +1004,13 @@ class FeatureWorkflow:
                 cfg, stage="qa", role="qa",
                 started=_attempt_started, ended=workflow.now(),
                 quality_score=_qa_quality.score, judge=_qa_quality.judge,
-                outcome=(BenchmarkOutcome.PASS
-                         if (qa.tests_passed and not qa.issues)
+                outcome=(BenchmarkOutcome.PASS if task_passed
                          else BenchmarkOutcome.FAIL),
                 model=resolve_role_model(cfg, "qa"), spend=qa_spend,
                 task_id=task.id, attempt=attempt - 1))
 
             review_ok = review is None or review.approve
-            if qa.tests_passed and not qa.issues and review_ok:
+            if task_passed and review_ok:
                 deep = await self._run_deep_review(
                     cfg, run, contract, assertions, diff, task)
                 handoff = HandoffSummary(

@@ -29,7 +29,7 @@ def test_deep_review_is_advisory_not_in_success_condition():
     # _run_deep_review CALL lives inside the block bodies by design -- that
     # is advisory recording, not gating.)
     src = _src()
-    pred = "if qa.tests_passed and not qa.issues and review_ok:"
+    pred = "if task_passed and review_ok:"
     assert pred in src
     idx = src.find(pred)
     line = src[idx: src.find("\n", idx)]
