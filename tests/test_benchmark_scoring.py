@@ -68,6 +68,39 @@ def test_custom_weights_change_ranking():
     assert s["opus"].composite > s["sonnet"].composite
 
 
+def _oracle_rec(case, harness, model, q, *, scope=BenchmarkScope.ORACLE,
+                task_id=None):
+    t = datetime(2026, 7, 27, 10)
+    return BenchmarkRecord(
+        run_id="r", bench_run_id="b", case_id=case, scope=scope,
+        stage="oracle", task_id=task_id, role="oracle", harness=harness,
+        model=model, quality=QualityScore(score=q, judge="oracle"),
+        speed=SpeedBag(wall_clock_s=1.0, started_at=t,
+                       ended_at=t + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.PASS)
+
+
+def test_oracle_task_records_excluded_from_oracle_summary():
+    # ORACLE_TASK records (E-31 task matrix) share stage="oracle" and the
+    # cell's harness/model with the case-level ORACLE record. They must NOT
+    # merge into the same BenchmarkSummary row -- that would inflate n and
+    # blend mean_quality/composite the moment a case has tasks.yaml tasks.
+    oracle_only = [
+        _oracle_rec("c1", HarnessKind.CLAUDE_CODE, "sonnet", q=0.8),
+    ]
+    with_tasks = oracle_only + [
+        _oracle_rec("c1", HarnessKind.CLAUDE_CODE, "sonnet", q=1.0,
+                    scope=BenchmarkScope.ORACLE_TASK, task_id="t01"),
+        _oracle_rec("c1", HarnessKind.CLAUDE_CODE, "sonnet", q=0.0,
+                    scope=BenchmarkScope.ORACLE_TASK, task_id="t02"),
+    ]
+    s_only = _summarize(oracle_only)
+    s_with = _summarize(with_tasks)
+    assert s_with["sonnet"].n == s_only["sonnet"].n == 1
+    assert s_with["sonnet"].mean_quality == s_only["sonnet"].mean_quality == 0.8
+    assert s_with["sonnet"].composite == s_only["sonnet"].composite
+
+
 def test_multiple_records_averaged_per_cell():
     recs = [
         _rec("c1", HarnessKind.CLAUDE_CODE, "sonnet", q=0.8, usd=1.0, secs=100),

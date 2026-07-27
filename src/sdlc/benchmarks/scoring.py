@@ -10,7 +10,7 @@ from collections import defaultdict
 from statistics import mean
 
 from ..models import HarnessKind
-from .models import BenchmarkRecord, BenchmarkSummary, CompositeWeights
+from .models import BenchmarkRecord, BenchmarkScope, BenchmarkSummary, CompositeWeights
 
 
 def _safe_mean(xs: list[float]) -> float | None:
@@ -22,6 +22,12 @@ def compute_summaries(
     weights: CompositeWeights | None = None,
 ) -> list[BenchmarkSummary]:
     w = weights or CompositeWeights()
+    # ORACLE_TASK records (E-31 task matrix) share stage="oracle" and the
+    # cell's harness/model with the case-level ORACLE record; they belong to
+    # the task/error matrices, not this per-cell summary, so they're
+    # excluded before grouping to avoid inflating n / blending mean_quality
+    # and composite into the oracle summary row.
+    records = [r for r in records if r.scope is not BenchmarkScope.ORACLE_TASK]
     # group raw records by cell identity
     by_cell: dict[tuple[str, str, str | None, str], list[BenchmarkRecord]] = (
         defaultdict(list))
