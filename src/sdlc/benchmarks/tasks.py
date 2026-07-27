@@ -85,3 +85,39 @@ def load_task_suite(case_id: str, cases_dir: Path | None = None) -> TaskSuite | 
         return None
     data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     return TaskSuite(case_id=case_id, tasks=data.get("tasks", []))
+
+
+def grade_tasks(suite: TaskSuite, testcase_results: dict[str, bool],
+                judge_scores: dict[str, float]) -> list[TaskGrade]:
+    """Combine already-computed JUnit + judge results into per-task grades.
+
+    Pure -- no I/O. testcase_results is {"file::name": passed} from
+    grade_testcases_from_junit (oracle.py); judge_scores is {task_id: score}
+    for whichever rubric tasks the caller already judged."""
+    out: list[TaskGrade] = []
+    for t in suite.tasks:
+        if t.oracle_tests:
+            found = [testcase_results[nid] for nid in t.oracle_tests
+                    if nid in testcase_results]
+            if not found:
+                out.append(TaskGrade(
+                    task_id=t.id, error_class=t.error_class, score=None,
+                    judge="error",
+                    detail=f"none of {t.oracle_tests} found in oracle report"))
+                continue
+            passed_n = sum(1 for ok in found if ok)
+            out.append(TaskGrade(
+                task_id=t.id, error_class=t.error_class,
+                score=passed_n / len(found), judge="oracle",
+                detail=f"{passed_n}/{len(found)} mapped oracle tests passed"))
+        else:
+            score = judge_scores.get(t.id)
+            if score is None:
+                out.append(TaskGrade(
+                    task_id=t.id, error_class=t.error_class, score=None,
+                    judge="error", detail="judge did not return a score"))
+            else:
+                out.append(TaskGrade(
+                    task_id=t.id, error_class=t.error_class, score=score,
+                    judge="llm_judge", detail="rubric-graded"))
+    return out

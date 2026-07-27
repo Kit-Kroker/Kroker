@@ -81,3 +81,58 @@ def test_load_task_suite_raises_on_malformed_file(tmp_path):
         encoding="utf-8")
     with pytest.raises(ValidationError):
         load_task_suite("c1", cases_dir=tmp_path)
+
+
+from sdlc.benchmarks.tasks import TaskGrade, grade_tasks
+
+
+def _suite(*tasks: TaskSpec) -> TaskSuite:
+    return TaskSuite(case_id="c1", tasks=list(tasks))
+
+
+def test_grade_tasks_oracle_mapped_all_pass():
+    suite = _suite(TaskSpec(id="t01", error_class="functional",
+                           oracle_tests=["a.py::test_x"]))
+    grades = grade_tasks(suite, {"a.py::test_x": True}, {})
+    assert grades == [TaskGrade(task_id="t01", error_class="functional",
+                               score=1.0, judge="oracle",
+                               detail="1/1 mapped oracle tests passed")]
+
+
+def test_grade_tasks_oracle_mapped_multi_test_partial():
+    suite = _suite(TaskSpec(id="t01", error_class="functional",
+                           oracle_tests=["a.py::x", "a.py::y"]))
+    grades = grade_tasks(suite, {"a.py::x": True, "a.py::y": False}, {})
+    assert grades[0].score == 0.5
+    assert grades[0].judge == "oracle"
+
+
+def test_grade_tasks_oracle_mapped_none_found_is_error():
+    suite = _suite(TaskSpec(id="t01", error_class="functional",
+                           oracle_tests=["missing::test"]))
+    grades = grade_tasks(suite, {"other::test": True}, {})
+    assert grades[0].score is None
+    assert grades[0].judge == "error"
+    assert "missing::test" in grades[0].detail
+
+
+def test_grade_tasks_rubric_mapped_uses_judge_score():
+    suite = _suite(TaskSpec(id="t02", error_class="security", rubric="r"))
+    grades = grade_tasks(suite, {}, {"t02": 0.75})
+    assert grades[0].score == 0.75
+    assert grades[0].judge == "llm_judge"
+
+
+def test_grade_tasks_rubric_mapped_missing_score_is_error():
+    suite = _suite(TaskSpec(id="t02", error_class="security", rubric="r"))
+    grades = grade_tasks(suite, {}, {})
+    assert grades[0].score is None
+    assert grades[0].judge == "error"
+
+
+def test_grade_tasks_preserves_task_order():
+    suite = _suite(
+        TaskSpec(id="t02", error_class="security", rubric="r"),
+        TaskSpec(id="t01", error_class="functional", oracle_tests=["a::b"]))
+    grades = grade_tasks(suite, {"a::b": True}, {"t02": 1.0})
+    assert [g.task_id for g in grades] == ["t02", "t01"]
