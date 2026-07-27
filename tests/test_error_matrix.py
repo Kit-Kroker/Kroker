@@ -77,3 +77,35 @@ def test_build_error_matrix_error_classes_in_canonical_order():
 def test_build_error_matrix_empty_records():
     em = build_error_matrix("c1", [], _suite())
     assert em.cells == [] and em.arms == [] and em.max_value == 0.0
+
+
+def test_build_error_matrix_n_runs_scoped_per_error_class():
+    """Test heterogeneous coverage: one arm, two runs with different error classes.
+
+    Run 1: scores only functional (t01), security (t02) gets score=None
+    Run 2: scores both functional (t01) and security (t02)
+
+    Expected: functional has n_runs=2 (both runs contributed),
+              security has n_runs=1 (only run 2 contributed)
+    """
+    recs = [
+        # Run b1: only functional task scores, security task skipped (score=None)
+        _rec(run="b1", model="m1", task_id="t01", score=0.5),
+        # Run b2: both functional and security tasks score
+        _rec(run="b2", model="m1", task_id="t01", score=0.8),
+        _rec(run="b2", model="m1", task_id="t02", score=0.2),
+    ]
+    em = build_error_matrix("c1", recs, _suite())
+
+    functional = next(c for c in em.cells if c.arm_key == "opencode#m1"
+                     and c.error_class == "functional")
+    security = next(c for c in em.cells if c.arm_key == "opencode#m1"
+                   and c.error_class == "security")
+
+    # Functional: both runs contributed (b1: score=0.5, b2: score=0.8)
+    assert functional.n_runs == 2
+    assert functional.avg_failure_mass == (0.5 + 0.2) / 2  # (1-0.5 + 1-0.8) / 2
+
+    # Security: only run b2 contributed (b1 had score=None, filtered out)
+    assert security.n_runs == 1
+    assert security.avg_failure_mass == 0.8  # (1-0.2) / 1

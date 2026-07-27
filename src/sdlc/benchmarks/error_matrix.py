@@ -39,20 +39,20 @@ def build_error_matrix(case_id: str, records: list[BenchmarkRecord],
 
     # failure mass per (bench_run_id, arm_key, error_class) run-instance
     mass: dict[tuple[str, str, str], float] = defaultdict(float)
-    runs_by_arm: dict[str, set[str]] = defaultdict(set)
+    runs_by_arm_class: dict[tuple[str, str], set[str]] = defaultdict(set)
     for r in recs:
         arm_key = f"{r.harness.value if r.harness else ''}#{r.model}"
         cls = class_by_task[r.task_id]
         mass[(r.bench_run_id, arm_key, cls)] += (1.0 - r.quality.score)
-        runs_by_arm[arm_key].add(r.bench_run_id)
+        runs_by_arm_class[(arm_key, cls)].add(r.bench_run_id)
 
     totals: dict[tuple[str, str], float] = defaultdict(float)
-    for (bench_run_id, arm_key, cls), m in mass.items():
+    for (_bench_run_id, arm_key, cls), m in mass.items():
         totals[(arm_key, cls)] += m
 
     cells: list[ErrorMatrixCell] = []
     for (arm_key, cls), total in totals.items():
-        n_runs = max(len(runs_by_arm[arm_key]), 1)
+        n_runs = len(runs_by_arm_class[(arm_key, cls)])
         cells.append(ErrorMatrixCell(
             error_class=cls, arm_key=arm_key,
             avg_failure_mass=total / n_runs, n_runs=n_runs))
