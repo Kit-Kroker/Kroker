@@ -90,6 +90,32 @@ def grade_testcases_from_junit(xml_text: str) -> dict[str, bool]:
     return out
 
 
+DIFF_JUDGE_MAX_CHARS = 20_000
+
+
+def _truncate_diff(text: str, max_chars: int = DIFF_JUDGE_MAX_CHARS) -> str:
+    """Cap the diff sent to the judge so an oversized diff can't blow up
+    token cost or make judge output unreliable -- keeps rubric grading a
+    deterministic, boundable operation regardless of how large a produced
+    diff gets. Short text passes through unchanged; long text is cut to
+    ``max_chars`` with a clear marker noting how much was omitted."""
+    if len(text) <= max_chars:
+        return text
+    omitted = len(text) - max_chars
+    return f"{text[:max_chars]}\n...[diff truncated, {omitted} chars omitted]"
+
+
+def _safe_heartbeat() -> None:
+    """activity.heartbeat() outside a real Temporal activity execution
+    context (e.g. a plain-async-function test call) raises RuntimeError --
+    swallow that so a liveness signal never breaks the fail-safe discipline
+    that governs this module (a heartbeat call must never crash a grade)."""
+    try:
+        activity.heartbeat()
+    except Exception:
+        pass
+
+
 def held_out_ok(changed_files: list[str], oracle_dirname: str = "oracle") -> bool:
     """False iff the produced diff authored anything at/under the oracle dir.
 
@@ -212,9 +238,15 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
                 if needs_diff:
                     diff_res = _git(
                         ["diff", f"{inp.base_branch}...HEAD"], wt)
-                    full_diff = diff_res.stdout
+                    full_diff = _truncate_diff(diff_res.stdout)
                 for t in suite.tasks:
                     if t.rubric:
+                        # heartbeat before each blocking, synchronous judge
+                        # call -- a case with many rubric tasks is a long
+                        # un-heartbeated stretch inside a 20-min, 1-attempt
+                        # activity otherwise, and a timeout would lose the
+                        # whole cell's oracle grade, not just task grades.
+                        _safe_heartbeat()
                         qs = _judge_sync(JudgeInput(
                             artifact_json=full_diff, rubric=t.rubric,
                             author_model=inp.author_model,

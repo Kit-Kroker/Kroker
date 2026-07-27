@@ -1,6 +1,6 @@
 """Pure grading logic for the held-out oracle (E-31)."""
 from sdlc.benchmarks.oracle import (
-    grade_from_junit, held_out_ok, language_match,
+    _truncate_diff, grade_from_junit, held_out_ok, language_match,
 )
 
 JUNIT_MIXED = (
@@ -121,3 +121,23 @@ def test_grade_testcases_error_child_is_failure():
 def test_grade_testcases_empty_or_malformed_returns_empty_dict():
     assert grade_testcases_from_junit("") == {}
     assert grade_testcases_from_junit("<not-xml") == {}
+
+
+def test_truncate_diff_passes_short_text_through_unchanged():
+    text = "a" * 100
+    assert _truncate_diff(text, max_chars=20000) == text
+
+
+def test_truncate_diff_at_exact_boundary_unchanged():
+    text = "a" * 20000
+    assert _truncate_diff(text, max_chars=20000) == text
+
+
+def test_truncate_diff_truncates_long_text_with_marker():
+    text = "a" * 25000
+    out = _truncate_diff(text, max_chars=20000)
+    assert out.startswith("a" * 20000)
+    assert out != text
+    assert len(out) > 20000   # marker appended
+    assert "truncated" in out
+    assert "5000" in out   # chars omitted count
