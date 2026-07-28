@@ -19,6 +19,7 @@ description: |
 mode: greenfield
 language: python
 repo_url: D:/own/sdlc-scratch-repos/todo-api-greenfield
+research_enabled: true
 harnesses:
   - opencode
 models:

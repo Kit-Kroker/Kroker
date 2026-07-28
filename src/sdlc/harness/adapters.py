@@ -80,6 +80,12 @@ ENV_ALLOWLIST: tuple[str, ...] = (
     "PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "TMP", "TEMP",
     "SYSTEMROOT", "SYSTEMDRIVE", "USERPROFILE", "PATHEXT", "COMSPEC",
     "GIT_EXEC_PATH", "GIT_SSH", "SSH_AUTH_SOCK",
+    # Without these, Windows' Python install manager (`py install`) can't
+    # find its real cache/install root and silently falls back to a
+    # relative "Python/" directory inside the task's cwd — which then gets
+    # swept into the checkpoint commit by `git add -A` and collides with
+    # integration's own copy of the same fallback during merge.
+    "LOCALAPPDATA", "APPDATA",
 )
 
 
