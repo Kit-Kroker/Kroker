@@ -571,12 +571,31 @@ async def run_test_suite(inp: QAInput) -> QAReport:
     (60 min by default) — and since run_test_suite never heartbeats, a
     genuine hang burns the full hour AND, once retries are exhausted,
     fails as an uncaught activity error that crashes the whole workflow
-    rather than being handled as a normal (fixable) task failure."""
+    rather than being handled as a normal (fixable) task failure.
+
+    Runs against a provisioned per-worktree venv (`_ensure_python_env`),
+    exactly like run_integration_checks -- this is the per-TASK QA gate, so
+    running the bare test_cmd against the activity worker's ambient
+    environment (which has no relationship to the produced project's own
+    dependencies) would fail every task on ModuleNotFoundError regardless
+    of code quality, indistinguishable from a real bug (see
+    bench-cat-cafe-monitoring-1785186777: 45/45 code-stage attempts failed
+    this way while the same worktrees passed cleanly once re-run against a
+    real venv)."""
     provisioning = await _ensure_py_launcher_versions(inp.test_cmd, inp.worktree)
     if provisioning:
         _log.info("run_test_suite: %s", provisioning)
+    env = None
+    adapter = detect(inp.worktree)
+    if adapter is not None and adapter.kind is ToolchainKind.PYTHON:
+        env, setup_error = await _ensure_python_env(inp.worktree, inp.timeout_s)
+        if setup_error:
+            issues = [setup_error]
+            if provisioning:
+                issues.insert(0, provisioning)
+            return QAReport(tests_passed=False, failing_tests=[], issues=issues)
     proc = await asyncio.create_subprocess_shell(
-        inp.test_cmd, cwd=inp.worktree,
+        inp.test_cmd, cwd=inp.worktree, env=env,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
     )
     try:
