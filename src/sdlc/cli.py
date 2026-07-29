@@ -117,13 +117,12 @@ async def main() -> None:
     sa.add_argument("--prune", action="store_true",
                     help="delete server schedules that have no yaml asset")
 
-    from .benchmarks.cli import build_parser as _bench_parser
-    # delegate benchmark subcommands to the benchmarks.cli parser
     bp = sub.add_parser("benchmark")
     bsub = bp.add_subparsers(dest="bench_cmd", required=True)
     br = bsub.add_parser("run"); br.add_argument("--case", required=True)
     bd = bsub.add_parser("drift"); bd.add_argument("--since", type=int, default=168)
     bf = bsub.add_parser("report"); bf.add_argument("--bench", required=True)
+    bh = bsub.add_parser("history"); bh.add_argument("--case", required=True)
 
     ev = sub.add_parser("eval")
     ev.add_argument("target", help="a role name, or 'capture'")
@@ -195,6 +194,12 @@ async def main() -> None:
             return
         if args.bench_cmd == "drift":
             print("drift requires a live Temporal client; see ARCHITECTURE.md section 8.")
+            return
+        if args.bench_cmd == "history":
+            from .benchmarks.cli import dispatch_history
+            tm_path, em_path = dispatch_history(args.case)
+            print(tm_path)
+            print(em_path)
             return
 
     if args.cmd == "schedules":

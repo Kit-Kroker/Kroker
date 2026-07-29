@@ -1,0 +1,25 @@
+tasks:
+  - id: create
+    error_class: functional
+    oracle_tests:
+      - test_crud.py::test_create_returns_id_and_echoes_title
+  - id: list
+    error_class: functional
+    oracle_tests:
+      - test_crud.py::test_list_contains_created_item
+  - id: get_by_id
+    error_class: functional
+    oracle_tests:
+      - test_crud.py::test_get_by_id_roundtrips
+  - id: update
+    error_class: functional
+    oracle_tests:
+      - test_crud.py::test_update_reflects_changes
+  - id: delete
+    error_class: data_integrity
+    oracle_tests:
+      - test_crud.py::test_delete_then_get_is_404
+  - id: get_missing
+    error_class: error_handling
+    oracle_tests:
+      - test_crud.py::test_get_missing_is_404

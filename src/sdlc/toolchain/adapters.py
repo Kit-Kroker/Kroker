@@ -25,7 +25,10 @@ class ToolchainKind(str, Enum):
 
 class ToolchainAdapter(ABC):
     kind: ToolchainKind
-    marker: str          # marker filename at the repo root detect() resolves by
+    # candidate marker filenames at the repo root detect() resolves by --
+    # any one present is enough; a project may use only one of several
+    # valid conventions (e.g. Python: pyproject.toml OR requirements.txt).
+    markers: tuple[str, ...]
 
     @abstractmethod
     def test_cmd(self, coverage: bool = True) -> str:
@@ -53,7 +56,7 @@ class ToolchainAdapter(ABC):
 
 class PythonToolchain(ToolchainAdapter):
     kind = ToolchainKind.PYTHON
-    marker = "pyproject.toml"
+    markers = ("pyproject.toml", "requirements.txt", "setup.py", "setup.cfg")
 
     def test_cmd(self, coverage: bool = True) -> str:
         # --maxfail bounds output like the per-task QA command. pytest-cov
@@ -92,6 +95,7 @@ def detect(worktree: str) -> ToolchainAdapter | None:
     Resolves by what was BUILT (marker file), never the contract's claimed
     stack — a marker/claim mismatch is itself a signal (ADR-15)."""
     for adapter in TOOLCHAINS.values():
-        if os.path.isfile(os.path.join(worktree, adapter.marker)):
+        if any(os.path.isfile(os.path.join(worktree, marker))
+               for marker in adapter.markers):
             return adapter
     return None
