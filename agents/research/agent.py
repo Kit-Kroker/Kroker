@@ -32,12 +32,7 @@ def build(model: str, instructions: str, model_settings: ModelSettings,
     roles it receives tool_paths and provider — supplied by build_agents AFTER
     the whole registry validated (validation precedes import).
 
-    (Amended 2026-07-17: the original design used CodeMode to collapse the
-    tool fan-out into one run_code activity with a shared in-process budget
-    counter. Task 1's spike proved CodeMode untestable via TestModel under
-    TemporalAgent, so the human-authorised fallback ships plain sequential
-    tools. The shared-counter guarantee is a Task 8 concern.)"""
-    
+    """
     capabilities = []
     if provider != "fake":
         get_wrapped_exa_search = _import_exa_wrapper()
