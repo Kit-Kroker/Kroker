@@ -7,6 +7,14 @@ from pydantic_ai.settings import ModelSettings
 from sdlc.models import ResearchBrief
 from sdlc.research.deps import ResearchDeps
 
+from pydantic_ai_harness import CodeMode
+def _import_exa_wrapper():
+    path = str(Path(__file__).parent / "exa_wrapper.py")
+    spec = importlib.util.spec_from_file_location("_sdlc_exa_wrapper", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return getattr(mod, "get_wrapped_exa_search")
+
 
 def _import_tool(path: str):
     """Import one agents/research/tools/<name>.py by PATH under a private
@@ -29,6 +37,15 @@ def build(model: str, instructions: str, model_settings: ModelSettings,
     counter. Task 1's spike proved CodeMode untestable via TestModel under
     TemporalAgent, so the human-authorised fallback ships plain sequential
     tools. The shared-counter guarantee is a Task 8 concern.)"""
+    
+    capabilities = []
+    if provider != "fake":
+        get_wrapped_exa_search = _import_exa_wrapper()
+        capabilities = [
+            CodeMode(),
+            get_wrapped_exa_search()(include_deep_search=True)
+        ]
+        
     agent = Agent(
         model,
         name="research_agent",              # Temporal activity name — NEVER rename
@@ -36,7 +53,10 @@ def build(model: str, instructions: str, model_settings: ModelSettings,
         output_type=ResearchBrief,
         model_settings=model_settings,
         system_prompt=instructions,
+        capabilities=capabilities
     )
     for path in tool_paths:
+        if "web_search" in path or "fetch_page" in path:
+            continue
         agent.tool(_import_tool(path))      # @agent.tool: each takes RunContext
     return agent

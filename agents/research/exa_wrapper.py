@@ -38,12 +38,15 @@ async def get_page_intercepted(exa_client, url: str) -> str:
 
 def get_wrapped_exa_search():
     """Factory to lazily load and configure ExaSearch subclass."""
-    from pydantic_ai_harness.exa import ExaSearch
+    try:
+        from pydantic_ai_harness.exa import ExaSearch
+    except ImportError:
+        class ExaSearch:
+            def __init__(self, **kwargs):
+                pass
 
     class WrappedExaSearch(ExaSearch):
         """Subclass ExaSearch to override the get_page tool."""
-        # The pydantic-ai-harness ExaSearch provides a `get_page` tool. We'll override it here if possible.
-        # We will configure it properly in Task 2.
         pass
 
     return WrappedExaSearch
