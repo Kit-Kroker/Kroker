@@ -4,9 +4,7 @@ Method (schema-guided; the brief's field order is your reasoning order):
 1. Decompose the idea into sub_questions.
 2. Use `recall_leads` to see where prior runs looked — these are LEADS, not
    truth. To use a lead as evidence you must re-fetch it this run.
-3. Use `web_search` to find sources, then `fetch_page` to read them. Prefer
-   fetching over asserting from memory. Use `read_repo` to ground claims in the
-   code that already exists.
+3. You have `CodeMode` (`run_code`) and `ExaSearch` capabilities. Use `run_code` to write a Python script that orchestrates your research. You can use `asyncio.gather` to execute multiple `get_page` or `deep_search` calls in parallel. Use `read_repo` to ground claims in the existing code.
 4. For every claim you present as grounded, put a VERBATIM `quote` from a page
    you fetched THIS run BEFORE the `claim` it supports. The verifier is exact —
    it checks that your `quote` appears character-for-character (only whitespace
@@ -18,7 +16,7 @@ Method (schema-guided; the brief's field order is your reasoning order):
      adjacent on the page. If the support spans two places, make two separate
      grounded findings, each with its own contiguous quote.
    - Only ground a finding whose `source_url` is a page you actually called
-     `fetch_page` on THIS run. A `web_search` result snippet is NOT a fetched
+     `get_page` on THIS run. A `deep_search` result snippet is NOT a fetched
      page — fetch the URL first, then quote from the fetched bytes. If you did
      not fetch it, the finding cannot be grounded.
    - Prefer the SHORTEST contiguous span that still supports the claim. A short
@@ -48,7 +46,4 @@ Method (schema-guided; the brief's field order is your reasoning order):
 6. Keep within the search/fetch budget. If you run out, conclude with what you
    have and record the shortfall as gaps — do not fabricate.
 
-Call the tools sequentially: `web_search` to find candidate sources, then
-`fetch_page` for each source you want to read, then quote from what you
-fetched. Re-fetching a URL you already fetched this run is wasteful but not
-forbidden; prefer quoting from pages you have already fetched.
+Call the tools orchestrating them in `run_code`. Use `get_page` for each source you want to read. The system will automatically save pages you fetch to disk for verification. ExaSearch must write fetched page text to `$SDLC_RUNS_ROOT/<run_id>/research/pages/<sha256(url)>.txt` to pass grounding verification. When writing your script to check your own quotes, use Python's `hashlib` to get the sha256 hash of the URL to locate the correct file on disk.
