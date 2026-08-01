@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from pydantic_ai import RunContext
 
-from sdlc.research.deps import Budget, BudgetExceeded, ResearchDeps
+from sdlc.research.deps import ResearchDeps
 
 AGENTS_TOOLS = Path(__file__).resolve().parents[1] / "agents" / "research" / "tools"
 
@@ -32,42 +32,10 @@ def deps(monkeypatch, tmp_path):
                         max_fetches=2, max_cost_usd=1.0)
 
 
-@pytest.mark.asyncio
-async def test_web_search_returns_hits_and_charges_budget(deps):
-    web_search = _load_tool("web_search")
-    hits = await web_search(_ctx(deps), "retry library", max_results=5)
-    assert hits and hits[0]["url"]
-    assert deps.budget.searches == 1
-
-
-@pytest.mark.asyncio
-async def test_fetch_page_writes_the_page_and_charges_budget(deps):
-    from sdlc.research.verify import page_filename, pages_dir
-    fetch_page = _load_tool("fetch_page")
-    url = "https://docs.example.com/retrylib"
-    page = await fetch_page(_ctx(deps), url)
-    assert "handles retries natively" in page["text"]
-    written = pages_dir("r1") / page_filename(url)
-    assert written.is_file()
-    assert deps.budget.fetches == 1
-
-
-@pytest.mark.asyncio
-async def test_search_budget_cap_raises(deps):
-    web_search = _load_tool("web_search")
-    await web_search(_ctx(deps), "retry", max_results=1)
-    await web_search(_ctx(deps), "retry", max_results=1)
-    with pytest.raises(BudgetExceeded):
-        await web_search(_ctx(deps), "retry", max_results=1)
-
-
-@pytest.mark.asyncio
-async def test_fetch_budget_cap_raises(deps):
-    fetch_page = _load_tool("fetch_page")
-    await fetch_page(_ctx(deps), "https://docs.example.com/retrylib")
-    await fetch_page(_ctx(deps), "https://docs.example.com/httpx")
-    with pytest.raises(BudgetExceeded):
-        await fetch_page(_ctx(deps), "https://docs.example.com/retrylib")
+# web_search/fetch_page (and their budget-cap tests) were removed with them
+# in favor of the Exa-backed toolset -- see tests/test_exa_wrapper.py for the
+# charge_persisted-based coverage of web_search/get_page/deep_search now that
+# they're the tools actually in the agent's toolset.
 
 
 @pytest.mark.asyncio
