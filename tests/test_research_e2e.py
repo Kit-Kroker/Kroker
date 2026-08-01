@@ -19,7 +19,7 @@ from sdlc.activities import evaluate_gate  # pure — reused, not faked
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
 from sdlc.models import (
     GateConfig, GateDecision, GateOutcome, GatePolicy, GroundedFinding,
-    PipelineConfig, ResearchBrief,
+    PipelineConfig, ResearchBrief, ResearchConfig,
 )
 from sdlc.research.verify import verify_brief_activity
 from tests.fakes.canned import (
@@ -200,6 +200,52 @@ async def test_research_stage_degrades_instead_of_blocking_on_grounding_violatio
                     FeatureWorkflow.run,
                     args=[greenfield_idea(), cfg],
                     id=f"e2e-research-violation-{uuid.uuid4()}",
+                    task_queue=TASK_QUEUE)
+                driver = asyncio.create_task(_drive(handle))
+                result = await handle.result()
+                await driver
+
+    assert result.startswith("deployed:"), result
+
+
+@pytest.mark.asyncio
+async def test_research_stage_degrades_instead_of_crashing_on_usage_limit_exceeded():
+    """bench-todo-api-greenfield-1785485669: the research stage burned past
+    pydantic-ai's default UsageLimits(request_limit=50) and the raised
+    UsageLimitExceeded propagated all the way out of t_research.run(),
+    crashing the entire FeatureWorkflow -- every other stage's records were
+    lost along with it, not just the research stage's.
+
+    max_requests=0 forces pydantic-ai's own usage limiter to raise
+    UsageLimitExceeded on the very first request, deterministically
+    reproducing that failure mode without depending on a flaky model. The
+    workflow must catch it (feature.py wraps t_research.run in try/except)
+    and substitute a degraded ResearchBrief, continuing to clarify/deploy
+    exactly like test_research_stage_runs_and_hands_off -- not crash."""
+    activities = [evaluate_gate, verify_brief_activity, *GIT_FAKES,
+                  *_research_fake_activities(),
+                  *fake_agent_activities(AGENT_SPECS)]
+    cfg = PipelineConfig(
+        research_enabled=True,
+        research=ResearchConfig(max_requests=0),
+        gates={"research": GateConfig(policy=GatePolicy.OFF),
+               "architecture": GateConfig(policy=GatePolicy.OFF),
+               "plan": GateConfig(policy=GatePolicy.OFF),
+               "deploy": GateConfig(policy=GatePolicy.HARD)},
+        memoization_enabled=False,
+        review_enabled=True,
+    )
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        with env.auto_time_skipping_disabled():
+            async with Worker(
+                    env.client, task_queue=TASK_QUEUE,
+                    workflows=[FeatureWorkflow], activities=activities,
+                    plugins=[PydanticAIPlugin()]):
+                handle = await env.client.start_workflow(
+                    FeatureWorkflow.run,
+                    args=[greenfield_idea(), cfg],
+                    id=f"e2e-research-usagelimit-{uuid.uuid4()}",
                     task_queue=TASK_QUEUE)
                 driver = asyncio.create_task(_drive(handle))
                 result = await handle.result()

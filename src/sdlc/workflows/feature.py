@@ -62,7 +62,7 @@ with workflow.unsafe.imports_passed_through():
     from ..models import (
         AnalysisReport, ArchitectureSpec, ArtifactRef, ClarifiedRequirements,
         DeferredToolUse, EscalationOutcome, ToolDenial, ToolEscalation, ToolGrant,
-        CoverageReport, DeepReviewReport, DevTask, ExecutionMode, GateConfig,
+        CoverageReport, DeepReviewReport, DevTask, ExecutionMode, Gap, GateConfig,
         GateDecision,
         GateOutcome, GatePolicy, HandoffSummary, IdeaBrief,
         ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig,
@@ -73,11 +73,13 @@ with workflow.unsafe.imports_passed_through():
     from ..pending import (
         GateContext, PendingDecision, clarify_pending, gate_pending,
     )
-    from ..research.deps import ResearchDeps
+    from ..research.deps import BudgetExceeded, ResearchDeps
     from ..research.retain import verified_findings_to_retain
     from ..research.verify import (
         brief_digest, verify_brief_activity,
     )
+    from pydantic_ai import UsageLimits
+    from pydantic_ai.exceptions import UsageLimitExceeded
 
 ACT = dict(start_to_close_timeout=timedelta(minutes=10),
            retry_policy=RetryPolicy(maximum_attempts=3))
@@ -220,6 +222,25 @@ def _contract_shell_cmd(commands: list[str] | None, default: str) -> str:
     if not commands:
         return default
     return " && ".join(commands)
+
+
+def _degraded_research_brief(exc: Exception) -> ResearchBrief:
+    """Substitute for the research stage's output when t_research.run() is
+    cut off by BudgetExceeded (the persisted search/fetch/cost cap) or
+    UsageLimitExceeded (pydantic-ai's request_limit) — mirrors
+    research_subquery's mid-run fallback (research/toolset.py) so the
+    primary stage degrades the same way: no findings, the shortfall
+    recorded as a gap, never a crash that takes the whole run down with it
+    (bench-todo-api-greenfield-1785485669: an uncaught UsageLimitExceeded
+    here killed the entire FeatureWorkflow, losing every other stage's
+    records along with it). Empty grounded_findings means
+    verify_brief_activity always returns zero violations, so this flows
+    through the normal post-research code unchanged."""
+    return ResearchBrief(
+        gaps=[Gap(sub_question_id="research-stage",
+                  what_is_missing="the research stage did not complete",
+                  why_it_matters=str(exc))],
+        summary=f"Research stopped early: {exc}")
 
 
 _TEST_OUTPUT_MAX = 1500
@@ -1262,17 +1283,27 @@ class FeatureWorkflow:
                 memory_base_url=cfg.memory.base_url,
                 memory_bank=cfg.memory.project_bank,
                 memory_watermark=self._memory_watermark)
-            # NOTE (accepted loss, 2026-07-17 human decision): the budget
-            # counter on deps.budget accumulates correctly for direct/test
-            # invocation, but under TemporalAgent each tool activity receives
-            # a fresh deserialized copy, so charge() never raises mid-run.
-            # Per-run budget enforcement is effectively absent under
-            # temporalization; restoring it needs a disk-persisted counter
-            # (deferred — not this task).
+            # The in-memory deps.budget on `deps` above does NOT accumulate
+            # under TemporalAgent (each tool call is a separate activity that
+            # deserializes its own fresh copy); the actual bound comes from
+            # WrappedExaSearchToolset charging budget_store.charge_persisted
+            # (disk-backed, keyed by run_id) before each Exa call. That cap
+            # sits well under usage_limits below, so a struggling run should
+            # hit BudgetExceeded first; UsageLimitExceeded is the backstop for
+            # anything that gets past it (bench-todo-api-greenfield-1785485669:
+            # an uncaught UsageLimitExceeded here killed the whole
+            # FeatureWorkflow, not just the research stage).
             research_spend = RoleUsage(role="research",
                                        model=STAGE_MODELS.get("research", "unknown"))
-            brief: ResearchBrief = (await self._run_role(cfg, "research", STAGE_MODELS.get("research", "unknown"), t_research,
-                idea.model_dump_json(), deps=deps, into=research_spend)).output
+            try:
+                brief: ResearchBrief = (await self._run_role(
+                    cfg, "research", STAGE_MODELS.get("research", "unknown"),
+                    t_research, idea.model_dump_json(), deps=deps,
+                    usage_limits=UsageLimits(
+                        request_limit=cfg.research.max_requests),
+                    into=research_spend)).output
+            except (BudgetExceeded, UsageLimitExceeded) as exc:
+                brief = _degraded_research_brief(exc)
             # Task 7 fallback (Task 1 finding A): the original
             # @agent.output_validator was silently dropped by TemporalAgent, so
             # grounding is enforced here as a post-run ACTIVITY. Reads page

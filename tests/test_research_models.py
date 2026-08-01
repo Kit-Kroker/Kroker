@@ -59,3 +59,4 @@ def test_pipeline_config_research_defaults_off_and_bounded():
     assert cfg.research.max_searches == 5
     assert cfg.research.max_fetches == 10
     assert cfg.research.max_cost_usd == 1.0
+    assert cfg.research.max_requests == 40
