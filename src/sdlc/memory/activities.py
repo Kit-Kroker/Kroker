@@ -33,7 +33,7 @@ class RecallInput:
     filters: dict[str, str] = field(default_factory=dict)
     watermark: str | None = None
     backend: str = "fake"
-    base_url: str = "http://localhost:8088"
+    base_url: str = "http://localhost:8888"
 
 
 @activity.defn
@@ -58,7 +58,7 @@ async def recall_snapshot(inp: RecallInput) -> RecallSnapshot:
 class RetainInput:
     item: RetainItem
     backend: str = "fake"
-    base_url: str = "http://localhost:8088"
+    base_url: str = "http://localhost:8888"
 
 
 @activity.defn
@@ -74,7 +74,7 @@ async def retain(inp: RetainInput) -> None:
 class WatermarkInput:
     bank: str
     backend: str = "fake"
-    base_url: str = "http://localhost:8088"
+    base_url: str = "http://localhost:8888"
 
 
 @activity.defn
@@ -87,7 +87,7 @@ async def capture_watermark(inp: WatermarkInput) -> str:
 class ReflectInput:
     bank: str
     backend: str = "fake"
-    base_url: str = "http://localhost:8088"
+    base_url: str = "http://localhost:8888"
 
 
 @activity.defn

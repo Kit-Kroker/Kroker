@@ -26,7 +26,7 @@ REFLECT_ACT = dict(start_to_close_timeout=timedelta(minutes=10),
 class ReflectScheduleInput(BaseModel):
     banks: list[str] = Field(min_length=1)
     backend: str = "fake"
-    base_url: str = "http://localhost:8088"
+    base_url: str = "http://localhost:8888"
 
 
 @workflow.defn

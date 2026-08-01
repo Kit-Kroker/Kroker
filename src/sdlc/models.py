@@ -7,6 +7,7 @@ artifact store / git; only references travel through Temporal history
 """
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from enum import Enum
 from typing import Literal
@@ -625,13 +626,23 @@ class RetainItem(BaseModel):
     metadata: dict[str, str] = Field(default_factory=dict)
 
 
+def _memory_backend_default() -> Literal["fake", "hindsight"]:
+    value = os.environ.get("SDLC_MEMORY_BACKEND", "fake")
+    return value if value in ("fake", "hindsight") else "fake"
+
+
 class MemoryConfig(BaseModel):
     """FR-400. `watermark=None` means "capture fresh at run start"; setting
     it pins a run to a prior freeze point (ADR-5 explicit "refresh
     memory")."""
-    enabled: bool = False
-    backend: Literal["fake", "hindsight"] = "fake"
-    base_url: str = "http://localhost:8088"
+    enabled: bool = Field(
+        default_factory=lambda: os.environ.get(
+            "SDLC_MEMORY_ENABLED", "false").lower() == "true")
+    backend: Literal["fake", "hindsight"] = Field(
+        default_factory=_memory_backend_default)
+    base_url: str = Field(
+        default_factory=lambda: os.environ.get(
+            "SDLC_MEMORY_BASE_URL", "http://localhost:8888"))
     org_bank: str = "org"
     project_bank: str = "project:default"
     watermark: str | None = None
@@ -646,7 +657,7 @@ class ScheduleAction(BaseModel):
     workflow: str
     banks: list[str] = Field(min_length=1)
     backend: Literal["fake", "hindsight"] = "fake"
-    base_url: str = "http://localhost:8088"
+    base_url: str = "http://localhost:8888"
 
     @field_validator("workflow")
     @classmethod
@@ -688,6 +699,13 @@ class ResearchConfig(BaseModel):
     max_searches: int = 5
     max_fetches: int = 10
     max_cost_usd: float = 1.0
+    max_requests: int = 40
+    """Cap passed as pydantic-ai's UsageLimits(request_limit=...) around the
+    research agent run. Independent of the tool-call bounds above: those cap
+    web_search/get_page/deep_search calls the agent makes; this caps total
+    model requests (every run_code turn, retry, and structured-output
+    validation pass), staying under pydantic-ai's own default of 50 so an
+    exhaustion is ours to catch and degrade, not an uncaught crash."""
 
 
 class PipelineConfig(BaseModel):

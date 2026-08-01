@@ -11,4 +11,4 @@ action:
   banks:
     - "project:default"
   backend: hindsight
-  base_url: "http://localhost:8088"
+  base_url: "http://localhost:8888"

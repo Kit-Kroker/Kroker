@@ -45,7 +45,7 @@ class ResearchDeps(BaseModel):
     max_fetches: int
     max_cost_usd: float
     memory_backend: str = "fake"
-    memory_base_url: str = "http://localhost:8088"
+    memory_base_url: str = "http://localhost:8888"
     memory_bank: str = "project:default"
     memory_watermark: str | None = None
     budget: Budget = Field(default_factory=Budget)

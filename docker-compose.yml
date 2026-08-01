@@ -11,9 +11,20 @@ services:
     # with Postgres/Cassandra persistence.
     command: ["server", "start-dev"]
 
+  hindsight:
+    image: ghcr.io/vectorize-io/hindsight:latest
+    pull_policy: always
+    ports:
+      - "8888:8888"   # API
+      - "9999:9999"   # Web UI
+    env_file: [".env"]
+    volumes:
+      - hindsight-data:/home/hindsight/.pg0
+    restart: unless-stopped
+
   worker:
     build: .
-    depends_on: ["temporal"]
+    depends_on: ["temporal", "hindsight"]
     environment:
       TEMPORAL_HOST: "temporal:7233"
     env_file: [".env"]
@@ -27,3 +38,4 @@ services:
 volumes:
   worker-worktrees:
   worker-repos:
+  hindsight-data:
