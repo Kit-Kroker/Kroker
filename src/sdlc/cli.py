@@ -119,7 +119,12 @@ async def main() -> None:
 
     bp = sub.add_parser("benchmark")
     bsub = bp.add_subparsers(dest="bench_cmd", required=True)
-    br = bsub.add_parser("run"); br.add_argument("--case", required=True)
+    br = bsub.add_parser("run")
+    br.add_argument("--case", required=True)
+    br.add_argument("--gate-policy", choices=["off", "soft", "hard"],
+                    default=None, dest="gate_policy",
+                    help="override the case's gate_policy for every gate "
+                         "in the child FeatureWorkflow")
     bd = bsub.add_parser("drift"); bd.add_argument("--since", type=int, default=168)
     bf = bsub.add_parser("report"); bf.add_argument("--bench", required=True)
     bh = bsub.add_parser("history"); bh.add_argument("--case", required=True)
@@ -190,7 +195,7 @@ async def main() -> None:
             return
         if args.bench_cmd == "run":
             from .benchmarks.cli import _run_matrix
-            print(await _run_matrix(args.case))
+            print(await _run_matrix(args.case, args.gate_policy))
             return
         if args.bench_cmd == "drift":
             print("drift requires a live Temporal client; see ARCHITECTURE.md section 8.")

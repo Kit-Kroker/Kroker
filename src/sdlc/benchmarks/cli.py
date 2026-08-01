@@ -14,7 +14,7 @@ from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 import yaml
 
-from ..models import HarnessKind
+from ..models import GatePolicy, HarnessKind
 from ..worker import TASK_QUEUE
 from .models import CaseSpec
 from .workflow import BenchmarkWorkflow
@@ -38,6 +38,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = bsub.add_parser("run")
     run.add_argument("--case", required=True)
+    run.add_argument("--gate-policy", choices=["off", "soft", "hard"],
+                     default=None, dest="gate_policy",
+                     help="override the case's gate_policy for every gate "
+                          "in the child FeatureWorkflow (default: use the "
+                          "case's own setting, SOFT unless the case file "
+                          "says otherwise)")
 
     drift = bsub.add_parser("drift")
     drift.add_argument("--since", type=int, default=168)   # hours
@@ -125,8 +131,10 @@ def dispatch_calibrate(rubric: str, *, judge_model: str | None,
             f"spearman={rep.spearman:.2f} -> {rep.verdict}")
 
 
-async def _run_matrix(case_path: str) -> str:
+async def _run_matrix(case_path: str, gate_policy: str | None = None) -> str:
     spec = load_case_spec(case_path)
+    if gate_policy is not None:
+        spec = spec.model_copy(update={"gate_policy": GatePolicy(gate_policy)})
     client = await Client.connect(
         "localhost:7233", data_converter=pydantic_data_converter)
     handle = await client.start_workflow(
@@ -149,7 +157,7 @@ def main_async(args: argparse.Namespace) -> None:
     if args.cmd != "benchmark":
         return
     if args.bench_cmd == "run":
-        print(asyncio.run(_run_matrix(args.case)))
+        print(asyncio.run(_run_matrix(args.case, args.gate_policy)))
     elif args.bench_cmd == "drift":
         print(asyncio.run(_run_drift(args.since)))
     elif args.bench_cmd == "report":

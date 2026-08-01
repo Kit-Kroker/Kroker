@@ -20,7 +20,7 @@ from temporalio.common import RetryPolicy
 with workflow.unsafe.imports_passed_through():
     from ..agents.loader import HARNESS_ROLES, validate_run_roles
     from ..agents.roles import STAGE_MODELS
-    from ..models import (BenchmarkConfig, GateConfig, GatePolicy, HarnessKind,
+    from ..models import (BenchmarkConfig, GateConfig, HarnessKind,
                           IdeaBrief, PipelineConfig, ProjectMode, RoleConfig)
     from ..workflows.feature import FeatureWorkflow
     from .judge import load_case_assets
@@ -84,12 +84,14 @@ def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
     cfg.benchmark = BenchmarkConfig(
         case_id=spec.case_id, bench_run_id=bench_run_id,
         rubrics=dict(rubrics or {}), judge_model=spec.judge_model)
-    # A benchmark matrix run is unattended — no human is present to click
-    # approve for every cell. Auto-approve every gate rather than let
-    # FeatureWorkflow block for gate_timeout_hours and auto-reject the cell.
-    # default_gate_policy covers dynamic gates not named in `gates`.
-    cfg.gates = {name: GateConfig(policy=GatePolicy.OFF) for name in cfg.gates}
-    cfg.default_gate_policy = GatePolicy.OFF
+    # A benchmark matrix run is unattended by default, so every gate in the
+    # child FeatureWorkflow runs under spec.gate_policy (SOFT unless the case
+    # or --gate-policy overrides it) rather than the case's own gates dict —
+    # a HARD policy here blocks a cell on gate_timeout_hours if nothing
+    # answers the escalation. default_gate_policy covers dynamic gates not
+    # named in `gates` (e.g. the per-task `task:<id>` escalation gate).
+    cfg.gates = {name: GateConfig(policy=spec.gate_policy) for name in cfg.gates}
+    cfg.default_gate_policy = spec.gate_policy
     return cfg
 
 

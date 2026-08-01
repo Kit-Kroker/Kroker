@@ -13,7 +13,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from ..agents.loader import HARNESS_ROLES, PROPOSER_ROLES
-from ..models import HarnessKind
+from ..models import GatePolicy, HarnessKind
 
 
 class Arm(BaseModel):
@@ -121,6 +121,14 @@ class CaseSpec(BaseModel):
     # harnesses). When empty, `models` is desugared to one arm per model
     # (harness roles only) for backward compatibility — see expand_matrix.
     arms: list[Arm] = Field(default_factory=list)
+    # Every gate in the child FeatureWorkflow runs under this policy (SOFT:
+    # auto-approve on a passing quality signal, else escalate; HARD: always
+    # escalate; OFF: always auto-approve). SOFT is the default so a task that
+    # exhausts its fix budget still gets judged instead of rubber-stamped
+    # into a merge-time rejection. HARD will block a cell on
+    # PipelineConfig.gate_timeout_hours (default 48h) if nothing answers the
+    # escalation — pass --gate-policy off for a fire-and-forget batch run.
+    gate_policy: GatePolicy = GatePolicy.SOFT
 
 
 class BenchmarkCell(BaseModel):

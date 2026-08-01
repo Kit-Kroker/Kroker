@@ -127,18 +127,31 @@ def test_cell_config_forwards_per_model_extra_args():
         assert rc.extra_args == []
 
 
-def test_cell_config_auto_approves_every_gate():
-    # a benchmark run is unattended — no human to click approve, so every
-    # gate must be forced to OFF regardless of the base config's policy
+def test_cell_config_defaults_every_gate_to_soft():
+    # SOFT is CaseSpec.gate_policy's default: a task that exhausts its fix
+    # budget still gets judged instead of rubber-stamped into a merge-time
+    # rejection, regardless of the base config's per-gate policy.
     base = PipelineConfig()
-    assert any(g.policy != GatePolicy.OFF for g in base.gates.values())
+    assert any(g.policy != GatePolicy.SOFT for g in base.gates.values())
     idea = IdeaBrief(title="t", description="d", mode=ProjectMode.GREENFIELD)
     cfg = _cell_config(base, idea, _spec(), _harness_cell("openai/gpt-5.2"),
                        bench_run_id="b1")
-    assert all(g.policy == GatePolicy.OFF for g in cfg.gates.values())
+    assert all(g.policy == GatePolicy.SOFT for g in cfg.gates.values())
     assert set(cfg.gates) == set(base.gates)
-    # dynamic gates not named in cfg.gates (e.g. task:<id> escalation)
-    # must also auto-approve — otherwise an unattended cell still blocks
+    # dynamic gates not named in cfg.gates (e.g. task:<id> escalation) must
+    # honor the same policy
+    assert cfg.default_gate_policy == GatePolicy.SOFT
+
+
+def test_cell_config_honors_spec_gate_policy_override():
+    # --gate-policy off (a fire-and-forget batch run) must still force every
+    # gate, including dynamic ones, to auto-approve
+    base = PipelineConfig()
+    idea = IdeaBrief(title="t", description="d", mode=ProjectMode.GREENFIELD)
+    spec = _spec().model_copy(update={"gate_policy": GatePolicy.OFF})
+    cfg = _cell_config(base, idea, spec, _harness_cell("openai/gpt-5.2"),
+                       bench_run_id="b1")
+    assert all(g.policy == GatePolicy.OFF for g in cfg.gates.values())
     assert cfg.default_gate_policy == GatePolicy.OFF
 
 

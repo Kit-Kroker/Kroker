@@ -63,6 +63,47 @@ def test_dispatch_report_also_writes_heatmap(tmp_path):
     assert (tmp_path / "b1" / "heatmap.json").exists()
 
 
+def test_parser_run_gate_policy_defaults_to_none():
+    p = build_parser()
+    args = p.parse_args(["benchmark", "run", "--case", "c1.yaml"])
+    assert args.gate_policy is None
+
+
+def test_parser_run_accepts_gate_policy_override():
+    p = build_parser()
+    args = p.parse_args(
+        ["benchmark", "run", "--case", "c1.yaml", "--gate-policy", "hard"])
+    assert args.gate_policy == "hard"
+
+
+def test_run_matrix_overrides_spec_gate_policy(tmp_path, monkeypatch):
+    from sdlc.benchmarks.cli import _run_matrix
+    from sdlc.models import GatePolicy
+
+    case = tmp_path / "case.yaml"
+    case.write_text(
+        "case_id: add-login\nidea_summary: add login\nmode: greenfield\n"
+        "harnesses: [opencode]\nmodels: [anthropic:claude-sonnet-4-6]\n"
+        "judge_model: openai/gpt-5.2\nrubrics: {}\n", encoding="utf-8")
+
+    captured: dict = {}
+
+    async def _fake_connect(*a, **kw):
+        class _Client:
+            async def start_workflow(self, _run, spec_json, **kw2):
+                captured["spec_json"] = spec_json
+                class _Handle:
+                    async def result(self_inner):
+                        return "ok"
+                return _Handle()
+        return _Client()
+
+    monkeypatch.setattr("sdlc.benchmarks.cli.Client.connect", _fake_connect)
+    import asyncio
+    asyncio.run(_run_matrix(str(case), "hard"))
+    assert '"gate_policy":"hard"' in captured["spec_json"]
+
+
 def test_parser_accepts_history_subcommand():
     from sdlc.benchmarks.cli import build_parser
     p = build_parser()
