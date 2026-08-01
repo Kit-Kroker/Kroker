@@ -40,6 +40,60 @@ async def test_security_scan_flags_eval_of_input(tmp_path: pathlib.Path):
     assert report.critical >= 1
 
 
+@pytest.mark.asyncio
+async def test_security_scan_skips_the_provisioned_venv(tmp_path: pathlib.Path):
+    """`_ensure_python_env` creates `.sdlc-venv` INSIDE the worktree, so by
+    merge time the scan walks a full site-packages tree. Stdlib and vendored
+    third-party code is dense with `eval(` and `shell=True`, so the ABSOLUTE
+    security_no_critical check became unpassable for any Python case once QA
+    had run (bench-todo-api-greenfield-1785444047: 14 critical findings, 14
+    of 14 inside .sdlc-venv, 0 from produced code)."""
+    vendored = tmp_path / ".sdlc-venv" / "Lib" / "site-packages" / "pygments"
+    vendored.mkdir(parents=True)
+    (vendored / "formatters.py").write_text(
+        "def load(name):\n    return eval(name)\n", encoding="utf-8")
+    (tmp_path / "app.py").write_text("def add(a, b):\n    return a + b\n",
+                                     encoding="utf-8")
+
+    report = await security_scan(SecurityScanInput(worktree=str(tmp_path)))
+
+    assert report.critical == 0, report.findings
+
+
+@pytest.mark.asyncio
+async def test_security_scan_skips_vendored_dependency_trees(
+        tmp_path: pathlib.Path):
+    """Same reasoning for the conventions the produced project itself brings:
+    a dependency's source is not the diff under review."""
+    for vendor_dir in (".venv", "venv", "node_modules"):
+        pkg = tmp_path / vendor_dir / "pkg"
+        pkg.mkdir(parents=True)
+        (pkg / "index.js").write_text("module.exports = (s) => eval(s);\n",
+                                      encoding="utf-8")
+
+    report = await security_scan(SecurityScanInput(worktree=str(tmp_path)))
+
+    assert report.critical == 0, report.findings
+
+
+@pytest.mark.asyncio
+async def test_security_scan_still_flags_produced_code_beside_a_venv(
+        tmp_path: pathlib.Path):
+    """Pruning must not turn the gate off — a real finding in the produced
+    tree is still caught with a provisioned venv present."""
+    vendored = tmp_path / ".sdlc-venv" / "Lib" / "site-packages"
+    vendored.mkdir(parents=True)
+    (vendored / "noise.py").write_text("eval('1')\n", encoding="utf-8")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "danger.py").write_text(
+        "def run(s):\n    return eval(s)\n", encoding="utf-8")
+
+    report = await security_scan(SecurityScanInput(worktree=str(tmp_path)))
+
+    assert report.critical == 1
+    assert report.findings[0].path.endswith("danger.py")
+
+
 from sdlc.gate import CheckClass, build_check, evaluate_quality_gate
 
 

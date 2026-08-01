@@ -684,6 +684,29 @@ _SECURITY_RULES: list[tuple[re.Pattern, str, str, str]] = [
 
 _SECURITY_SCAN_EXTENSIONS = (".py", ".js", ".ts", ".go", ".rb", ".java")
 
+# Provisioned by _ensure_python_env inside the worktree; declared up here
+# because _SCAN_SKIP_DIRS (evaluated at import) must exclude it.
+_VENV_DIR_NAME = ".sdlc-venv"
+
+# Ordered: the base file first, so a dev file's own `-r requirements.txt`
+# is already satisfied and a pin in the dev file wins on conflict.
+_REQUIREMENTS_FILES = ("requirements.txt", "requirements-dev.txt",
+                       "requirements/base.txt", "requirements/dev.txt")
+
+# Directories that hold dependency source rather than the work under review.
+# `.sdlc-venv` is ours -- _ensure_python_env creates it INSIDE the worktree,
+# so by merge time the scan would walk a whole site-packages tree. Stdlib and
+# vendored packages are dense with `eval(` and `shell=True`, which made the
+# ABSOLUTE security_no_critical check unpassable for any Python case once QA
+# had run (bench-todo-api-greenfield-1785444047: 14 critical findings, all 14
+# inside .sdlc-venv, none from produced code). The rest are the equivalent
+# conventions a produced project brings on its own.
+_SCAN_SKIP_DIRS = frozenset({
+    ".git", _VENV_DIR_NAME, ".venv", "venv", "env", "node_modules",
+    "__pycache__", ".tox", ".mypy_cache", ".pytest_cache", "site-packages",
+    "vendor", "dist", "build", ".next",
+})
+
 
 @dataclass
 class SecurityScanInput:
@@ -698,8 +721,8 @@ async def security_scan(inp: SecurityScanInput) -> SecurityReport:
     findings: list[SecurityFinding] = []
     root = inp.worktree
     for dirpath, dirnames, filenames in os.walk(root):
-        if ".git" in dirnames:
-            dirnames.remove(".git")
+        # In-place slice assignment is what prunes os.walk's descent.
+        dirnames[:] = [d for d in dirnames if d not in _SCAN_SKIP_DIRS]
         for fname in filenames:
             if not fname.endswith(_SECURITY_SCAN_EXTENSIONS):
                 continue
@@ -816,9 +839,6 @@ class IntegrationChecks:
     lint_detail: str
 
 
-_VENV_DIR_NAME = ".sdlc-venv"
-
-
 async def _ensure_python_env(
         worktree: str, timeout_s: int) -> tuple[dict[str, str] | None, str | None]:
     """ToolchainAdapter is intentionally PURE (ADR-15): it returns bare
@@ -862,6 +882,18 @@ async def _ensure_python_env(
         f'"{py_exe}" -m pip install -q -e ".[dev]"', worktree, timeout_s)
     await _bounded_shell(
         f'"{py_exe}" -m pip install -q -e "{worktree}"', worktree, timeout_s)
+    # Both `-e` installs above hard-error on a project carrying no
+    # pyproject.toml/setup.py ("does not appear to be a Python project") —
+    # yet `requirements.txt` is itself one of PythonToolchain's markers, so
+    # such a project IS routed here and would otherwise get a venv holding
+    # pytest and none of its own dependencies. Every task then failed on
+    # ModuleNotFoundError regardless of code quality
+    # (bench-todo-api-greenfield-1785444047: 12/12 code attempts; the same
+    # tree passed 41/41 once requirements.txt was installed).
+    for req in _REQUIREMENTS_FILES:
+        if os.path.isfile(os.path.join(worktree, req)):
+            await _bounded_shell(
+                f'"{py_exe}" -m pip install -q -r "{req}"', worktree, timeout_s)
     await _bounded_shell(
         f'"{py_exe}" -m pip install -q pytest pytest-cov ruff',
         worktree, timeout_s)

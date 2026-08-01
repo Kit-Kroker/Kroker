@@ -222,6 +222,38 @@ def _contract_shell_cmd(commands: list[str] | None, default: str) -> str:
     return " && ".join(commands)
 
 
+_TEST_OUTPUT_MAX = 1500
+
+
+def _fix_loop_issues(qa, qa_raw, review) -> str:
+    """Assemble the retry prompt's issue list from BOTH judges.
+
+    The task gate anchors on `qa_raw.tests_passed` — the subprocess exit code
+    — because an LLM opinion must never overwrite a deterministic signal. The
+    retry prompt has to carry that same evidence, or the agent is asked to fix
+    something it cannot see: a clean-context QA that judges the diff
+    contract-compliant while pytest is red leaves the LLM-side issue list
+    empty, and the fix loop then sends `Fix them:\\n- ` with nothing after the
+    dash (bench-todo-api-greenfield-1785444047: 8 of 12 attempts burned
+    re-confirming the stack directive while the real ModuleNotFoundError was
+    never shown). Returns "" when neither judge has anything actionable —
+    callers must treat that as a harness fault, not another attempt."""
+    deterministic: list[str] = []
+    if not qa_raw.tests_passed:
+        if qa_raw.issues:
+            deterministic.append(
+                "test command failed:\n"
+                + "\n".join(qa_raw.issues)[-_TEST_OUTPUT_MAX:])
+        if qa_raw.failing_tests:
+            deterministic.append(
+                "failing tests: " + ", ".join(qa_raw.failing_tests[:25]))
+    review_issues = (
+        [f"{f.severity}: {f.assertion} — {f.detail}"
+         for f in review.blocking_findings] if review else [])
+    return "\n- ".join(
+        list(qa.issues or qa.failing_tests) + deterministic + review_issues)
+
+
 def _should_resume_session(qa, resumes: int, max_resumes: int,
                            near_ceiling: bool) -> bool:
     """FR-802 resume budget, with a stack-mismatch override: a session
@@ -1027,11 +1059,20 @@ class FeatureWorkflow:
             if attempt > cfg.max_fix_attempts:
                 break
 
-            review_issues = (
-                [f"{f.severity}: {f.assertion} — {f.detail}"
-                 for f in review.blocking_findings] if review else [])
-            issues = "\n- ".join(
-                list(qa.issues or qa.failing_tests) + review_issues)
+            issues = _fix_loop_issues(qa, qa_raw, review)
+            if not issues:
+                # The task failed its gate, yet neither judge produced a
+                # single actionable statement — there is nothing to put in a
+                # retry prompt, so re-attempting only re-rolls the dice at
+                # full cost. That combination means the gate fired on
+                # something the loop cannot express (historically: harness
+                # provisioning), so stop and surface it rather than burning
+                # the remaining budget on a blank instruction.
+                workflow.logger.warning(
+                    "task %s attempt %s failed with no actionable feedback "
+                    "(qa_raw.tests_passed=%s) - abandoning fix loop",
+                    task.id, attempt, qa_raw.tests_passed)
+                break
             await self._retain(
                 cfg, MemoryKind.GOTCHA, cfg.memory.project_bank,
                 text=f"task {task.id} ({task.title}) attempt {attempt} failed: "
@@ -1072,17 +1113,23 @@ class FeatureWorkflow:
                 )
 
         # Escalate: human decides whether to accept, retry, or quarantine.
-        analysis = "\n- ".join(qa.issues or qa.failing_tests) if qa else ""
+        # The analysis carries the SAME evidence the fix loop got — a human
+        # asked to adjudicate a task whose only real failure was a red test
+        # command must be shown that command's output, not an empty list.
+        analysis = _fix_loop_issues(qa, qa_raw, review) if qa else ""
         decision = await self._gate(
             f"task:{task.id}", cfg,
             context=GateContext(task_id=task.id, analysis=analysis,
-                                attempts=cfg.max_fix_attempts + 1))
+                                attempts=attempt))
         deep = await self._run_deep_review(
             cfg, run, contract, assertions, diff, task)
         return TaskResult(
             task_id=task.id,
             status="done" if decision.approved else "quarantined",
-            attempts=cfg.max_fix_attempts + 1,
+            # `attempt`, not the ceiling: the loop can now exit early when it
+            # has no actionable feedback to retry on, and the benchmark's
+            # fix_attempts column has to reflect what was actually spent.
+            attempts=attempt,
             branch=handle.branch,
             qa=qa_raw,
             review=review,
