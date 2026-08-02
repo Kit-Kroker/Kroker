@@ -3,7 +3,6 @@ through here — workflow code never touches a backend directly
 (ARCHITECTURE.md §2, 'memory is I/O')."""
 from __future__ import annotations
 
-import hashlib
 import logging
 from dataclasses import dataclass, field
 
@@ -12,6 +11,7 @@ from temporalio import activity
 from ..models import RecallSnapshot, RetainItem
 from .fake import FakeMemory
 from .protocol import Memory
+from .query_hash import recall_query_hash
 from .scrub import scrub
 
 logger = logging.getLogger(__name__)
@@ -46,9 +46,8 @@ async def recall_snapshot(inp: RecallInput) -> RecallSnapshot:
                                    inp.watermark)
     except Exception:
         logger.warning("recall degraded to empty snapshot", exc_info=True)
-        query_hash = hashlib.sha256(
-            f"{inp.bank}|{inp.query}|{sorted(inp.filters.items())}".encode()
-        ).hexdigest()
+        query_hash = recall_query_hash(inp.bank, inp.query, inp.filters,
+                                       inp.watermark)
         return RecallSnapshot(query_hash=query_hash, bank=inp.bank,
                               watermark=inp.watermark or "unknown",
                               items=[], degraded=True)

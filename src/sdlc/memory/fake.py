@@ -2,13 +2,12 @@
 container required."""
 from __future__ import annotations
 
-import hashlib
 from collections import defaultdict
 from dataclasses import dataclass, field
 
 from ..models import RecallSnapshot, RetainItem
 from .protocol import Memory
-
+from .query_hash import recall_query_hash
 
 @dataclass
 class _Entry:
@@ -42,9 +41,7 @@ class FakeMemory(Memory):
             if e.version <= cutoff
             and all(e.metadata.get(k) == v for k, v in filters.items())
         ]
-        query_hash = hashlib.sha256(
-            f"{bank}|{query}|{sorted(filters.items())}|{cutoff}".encode()
-        ).hexdigest()
+        query_hash = recall_query_hash(bank, query, filters, str(cutoff))
         return RecallSnapshot(query_hash=query_hash, bank=bank,
                               watermark=str(cutoff), items=matches[-10:])
 
