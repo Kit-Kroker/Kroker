@@ -14,8 +14,11 @@ from datetime import datetime, timezone
 import httpx
 
 from ..models import RecallSnapshot, RetainItem
-from .hindsight_api import BANK_PATH, RETAIN_PATH
+from .hindsight_api import (
+    BANK_PATH, RECALL_LIMIT_FIELD, RECALL_PATH, RETAIN_PATH,
+)
 from .protocol import Memory
+from .query_hash import recall_query_hash
 
 _UNSAFE = re.compile(r"[^A-Za-z0-9_-]")
 
@@ -83,6 +86,50 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# Filter keys recall can honour -- the promoted tags plus the always-written
+# kind tag.
+_FILTERABLE = frozenset(TAG_PROMOTED_KEYS) | {"kind"}
+
+RECALL_KEEP = 10          # matches FakeMemory's slice size
+OVER_FETCH = 3            # advisory: recall asks for ~3x what it keeps
+# RECALL_LIMIT_FIELD is max_tokens (Task 1 Step 4), not a result count, so
+# over-fetching means requesting a generous token budget rather than
+# RECALL_KEEP * OVER_FETCH. 4096 is the schema default; enough headroom that
+# the watermark cutoff can discard without starving the snapshot.
+RECALL_TOKEN_BUDGET = 4096
+
+
+def _filter_tags(filters: dict[str, str]) -> list[str]:
+    """Raises rather than silently returning unfiltered results. Hindsight
+    cannot filter on metadata at query time, so a key with no promoted tag
+    would otherwise produce a filtered-looking call that matched everything."""
+    unfilterable = sorted(set(filters) - _FILTERABLE)
+    if unfilterable:
+        raise ValueError(
+            f"recall filter keys {unfilterable} are not promoted to Hindsight "
+            f"tags, and Hindsight cannot filter on metadata; add them to "
+            f"TAG_PROMOTED_KEYS (filterable today: {sorted(_FILTERABLE)})")
+    return [f"{k}:{v}" for k, v in sorted(filters.items())]
+
+
+def _parse_iso(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _within_watermark(result: dict, watermark: str | None) -> bool:
+    if watermark is None:
+        return True
+    stamp = result.get("mentioned_at")
+    if not stamp:
+        # Cannot prove it predates the freeze, so it does not enter a pinned
+        # run. Keeps the NFR-6 guarantee honest at the cost of a rare drop.
+        return False
+    try:
+        return _parse_iso(stamp) <= _parse_iso(watermark)
+    except ValueError:
+        return False
+
+
 class HindsightMemory(Memory):
     def __init__(self, base_url: str, tenant: str = "default",
                  api_key: str | None = None, timeout_s: float = 30.0):
@@ -137,7 +184,28 @@ class HindsightMemory(Memory):
 
     async def recall(self, bank: str, query: str, filters: dict[str, str],
                      watermark: str | None) -> RecallSnapshot:
-        raise NotImplementedError
+        await self.ensure_bank(bank)
+        payload: dict[str, object] = {
+            "query": query,
+            RECALL_LIMIT_FIELD: RECALL_TOKEN_BUDGET,
+        }
+        tags = _filter_tags(filters)
+        if tags:
+            # all_strict: every tag must match AND untagged memories are
+            # excluded. The permissive default would match everything, which
+            # is the filter-shaped no-op this client exists to remove.
+            payload["tags"] = tags
+            payload["tags_match"] = "all_strict"
+
+        resp = await self._client.post(self._path(RECALL_PATH, bank),
+                                       json=payload)
+        resp.raise_for_status()
+        results = resp.json().get("results", [])
+        kept = [r["text"] for r in results
+                if _within_watermark(r, watermark)][:RECALL_KEEP]
+        return RecallSnapshot(
+            query_hash=recall_query_hash(bank, query, filters, watermark),
+            bank=bank, watermark=watermark or _now_iso(), items=kept)
 
     async def reflect(self, bank: str) -> None:
         raise NotImplementedError
