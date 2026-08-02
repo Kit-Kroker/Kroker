@@ -6,8 +6,10 @@ own OpenAPI schema. Callers only ever see the Memory protocol, so swapping
 this module or base_url leaves workflow code untouched."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -15,7 +17,8 @@ import httpx
 
 from ..models import RecallSnapshot, RetainItem
 from .hindsight_api import (
-    BANK_PATH, RECALL_LIMIT_FIELD, RECALL_PATH, RETAIN_PATH,
+    BANK_PATH, CONSOLIDATE_PATH, OPERATION_PATH,
+    RECALL_LIMIT_FIELD, RECALL_PATH, RETAIN_PATH,
 )
 from .protocol import Memory
 from .query_hash import recall_query_hash
@@ -130,6 +133,21 @@ def _within_watermark(result: dict, watermark: str | None) -> bool:
         return False
 
 
+# ReflectWorkflow's REFLECT_ACT allows 10 minutes; give up just inside it so
+# the client raises something diagnosable instead of Temporal killing the
+# activity on a timeout that says nothing about consolidation. Both values are
+# unmeasured -- tune against a real bank.
+POLL_INTERVAL_S = 5.0
+POLL_DEADLINE_S = 540.0
+
+_TERMINAL_OK = {"completed", "complete", "succeeded", "success"}
+_TERMINAL_BAD = {"failed", "cancelled", "canceled", "error"}
+
+
+class ConsolidationFailed(RuntimeError):
+    pass
+
+
 class HindsightMemory(Memory):
     def __init__(self, base_url: str, tenant: str = "default",
                  api_key: str | None = None, timeout_s: float = 30.0):
@@ -208,4 +226,36 @@ class HindsightMemory(Memory):
             bank=bank, watermark=watermark or _now_iso(), items=kept)
 
     async def reflect(self, bank: str) -> None:
-        raise NotImplementedError
+        """Consolidation, not the /reflect question-answering endpoint --
+        that runs an agent loop and returns prose the nightly job discards.
+        Polls to a terminal state: without it ReflectWorkflow reports success
+        for a consolidation that failed, the silent no-op its own docstring
+        names as the failure mode it exists to prevent."""
+        await self.ensure_bank(bank)
+        resp = await self._client.post(self._path(CONSOLIDATE_PATH, bank))
+        resp.raise_for_status()
+        operation_id = (resp.json() or {}).get("operation_id")
+        if not operation_id:
+            return  # consolidation ran synchronously
+        await self._await_operation(bank, operation_id)
+
+    async def _await_operation(self, bank: str, operation_id: str) -> None:
+        deadline = time.monotonic() + POLL_DEADLINE_S
+        status = "unknown"
+        while True:
+            resp = await self._client.get(
+                self._path(OPERATION_PATH, bank, operation_id=operation_id))
+            resp.raise_for_status()
+            body = resp.json() or {}
+            status = str(body.get("status", "unknown")).lower()
+            if status in _TERMINAL_OK:
+                return
+            if status in _TERMINAL_BAD:
+                raise ConsolidationFailed(
+                    f"consolidation of {bank} ended {status}: "
+                    f"{body.get('error_message') or 'no detail'}")
+            if time.monotonic() >= deadline:
+                raise ConsolidationFailed(
+                    f"consolidation of {bank} did not finish within "
+                    f"{POLL_DEADLINE_S:.0f}s (last status {status})")
+            await asyncio.sleep(POLL_INTERVAL_S)
