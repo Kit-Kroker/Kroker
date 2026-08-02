@@ -331,23 +331,35 @@ assert the fabricated API; keeping them green means keeping the fiction.
   container and the run recorded in the commit message**. A green CI suite is
   not evidence for this line — that is what §1.1 already got wrong once.
 
-## 8. Known unknowns
+## 8. Known unknowns — resolved against the running container
 
-- **Two documented paths conflict.** `hindsight.vectorize.io/developer/api/retain`
-  gives `POST …/memories/retain` while the API reference index lists
-  `POST …/memories`; recall is documented as both `…/recall` and
-  `…/memories/recall`. §6 step 1 resolves this from the container's own schema.
-  No path is hardcoded before that step.
-- **Which parameter bounds the result count** on recall — `max_tokens`,
-  `budget` or `limit` — is documented inconsistently, so §3.4's over-fetch is
-  expressed against whichever the vendored schema exposes.
-- **Consolidation latency is unmeasured**, so §3.5's 5s/9min poll budget and
-  `REFLECT_ACT`'s 10-minute ceiling may need tuning against a real bank.
-- **Bank-id character rules** are unconfirmed (§3.1).
-- **Whether `mentioned_at` echoes the `timestamp` we send** on retain is
-  assumed by §2, not verified. If Hindsight instead stamps its own receipt
-  time, the cutoff still works but reintroduces worker/server clock skew as an
-  error term. §5.2's third assertion is what would expose this.
+- **Retain and recall paths** (resolved 2026-08-02): retain is
+  `POST /v1/default/banks/{bank_id}/memories` — the published docs' `/memories/retain`
+  does not exist on the container. Recall is `POST …/memories/recall` (matches one
+  of the two documented forms). Consolidate is `POST …/consolidate`. The tenant
+  segment is the literal `default` in every served path (single-tenant image), not
+  `{tenant}`; constants keep `{tenant}` so a configured tenant still substitutes
+  through `_path`. Operations are bank-scoped:
+  `GET …/banks/{bank_id}/operations/{operation_id}`, not tenant-scoped.
+- **Result-count parameter** (resolved): the recall request has no count field.
+  Results are bounded by `max_tokens` (integer, default 4096) or the `budget` enum
+  (low/mid/high). The client sends `max_tokens=4096`; the over-fetch test asserts
+  the field is present and generous rather than asserting a result-count multiple.
+- **Consolidation latency** (measured): against a one-item bank on this container,
+  retain's async fact extraction completes in ~4s and consolidation in ~3s. The 5s
+  poll interval and 540s deadline in `hindsight_client.py` are generous for this
+  workload; tune against a real multi-memory bank.
+- **Bank-id character rules** (confirmed): the container tolerates colons in bank
+  ids (both `project:probe` and `project-probe` return 200). `_bank_id()` sanitises
+  to `-` anyway — defensive, not load-bearing.
+- **`mentioned_at` echoes the sent `timestamp`** (confirmed by the live test): a
+  retain with `timestamp: "2026-08-01T00:00:00Z"` produces a recall result with
+  `mentioned_at: "2026-08-01T00:00:00+00:00"`. The watermark cutoff is therefore
+  like-for-like against the worker clock; no server-skew error term.
+- **Retain response requires `async`** (discovered): the retain 200 response schema
+  requires `success`, `bank_id`, `items_count`, and `async`. The contract transport
+  catches any canned response missing these. Operation-status responses use
+  `operation_id`/`status` (not `id`/`type`).
 
 ## 9. Out of scope
 

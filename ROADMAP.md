@@ -218,8 +218,8 @@ as tracked rather than accidental.
 - [ ] — **NFR-3** Latency (5s/2s) — untested, not falsifiable from code.
 - [ ] ⚠️ **NFR-4** Auditability — Temporal history reconstructs runs; no `events.jsonl`/`report.html` export.
 - [ ] ⚠️ **NFR-5** Security — env allowlist done; `pre_tool` hook landed (2026-07-24, E-15/E-16, tool-level destructive-action + egress denial); OS user, container, network-level egress, scoped-cred injection still absent (E-20/E-21).
-- [x] **NFR-6** Reproducibility vs memoization — watermark-pinned recall + content-addressed cache.
-- [x] **NFR-7** Portability — `MemoryConfig.backend` defaults to `fake`; real Hindsight client for self-hosting.
+- [x] **NFR-6** Reproducibility vs memoization — watermark-pinned recall + content-addressed cache. *Pinning is exact on `fake` (entry-count cutoff) and a `mentioned_at` cutoff on `hindsight`, which has no point-in-time read: memories retained after the freeze cannot enter a stage input, but ranking is still contaminated by them and post-freeze consolidation can mint observations carrying pre-freeze timestamps. `2026-08-02-hindsight-real-integration-design` §2.1.*
+- [x] **NFR-7** Portability — `MemoryConfig.backend` defaults to `fake`; real Hindsight client for self-hosting, verified against a live container by `tests/test_hindsight_live.py` (the client shipped before 2026-08-02 implemented an invented API and could not have worked).
 - [ ] **NFR-8** Tenant isolation proven by adversarial cross-tenant read/recall test — no tenant concept exists yet (E-58).
 - [ ] **NFR-9** Hostile input — the factory currently assumes repositories are its own. Build scripts, test code, and manifests of a connected repo are attacker-controlled and executed (E-57).
 - [ ] — **NFR-10** Assessment reproducibility — not falsifiable until the assessment exists; the deterministic half is E-41/E-46, the fused-layer variance half needs runs.
