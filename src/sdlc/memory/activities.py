@@ -3,8 +3,8 @@ through here — workflow code never touches a backend directly
 (ARCHITECTURE.md §2, 'memory is I/O')."""
 from __future__ import annotations
 
-import hashlib
 import logging
+import os
 from dataclasses import dataclass, field
 
 from temporalio import activity
@@ -12,6 +12,7 @@ from temporalio import activity
 from ..models import RecallSnapshot, RetainItem
 from .fake import FakeMemory
 from .protocol import Memory
+from .query_hash import recall_query_hash
 from .scrub import scrub
 
 logger = logging.getLogger(__name__)
@@ -20,9 +21,14 @@ _fake_singleton = FakeMemory()
 
 
 def _backend(base_url: str, backend: str) -> Memory:
+    """Tenant and API key come from the environment, never from the activity
+    input -- RecallInput/RetainInput are serialized into Temporal history."""
     if backend == "hindsight":
         from .hindsight_client import HindsightMemory
-        return HindsightMemory(base_url=base_url)
+        return HindsightMemory(
+            base_url=base_url,
+            tenant=os.environ.get("SDLC_MEMORY_TENANT", "default"),
+            api_key=os.environ.get("SDLC_MEMORY_API_KEY") or None)
     return _fake_singleton
 
 
@@ -46,9 +52,8 @@ async def recall_snapshot(inp: RecallInput) -> RecallSnapshot:
                                    inp.watermark)
     except Exception:
         logger.warning("recall degraded to empty snapshot", exc_info=True)
-        query_hash = hashlib.sha256(
-            f"{inp.bank}|{inp.query}|{sorted(inp.filters.items())}".encode()
-        ).hexdigest()
+        query_hash = recall_query_hash(inp.bank, inp.query, inp.filters,
+                                       inp.watermark)
         return RecallSnapshot(query_hash=query_hash, bank=inp.bank,
                               watermark=inp.watermark or "unknown",
                               items=[], degraded=True)
