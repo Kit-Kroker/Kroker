@@ -16,7 +16,12 @@ def test_retain_item_requires_kind_bank_text():
     assert item.metadata["run_id"] == "r1"
 
 
-def test_pipeline_config_has_disabled_memory_by_default():
+def test_pipeline_config_has_disabled_memory_by_default(monkeypatch):
+    # MemoryConfig reads SDLC_MEMORY_* from os.environ at construction time;
+    # .env leaks into the environment when other tests import load_dotenv, so
+    # strip the vars this test asserts defaults for.
+    for var in ("SDLC_MEMORY_ENABLED", "SDLC_MEMORY_BACKEND"):
+        monkeypatch.delenv(var, raising=False)
     cfg = PipelineConfig()
     assert cfg.memory.enabled is False
     assert cfg.memory.backend == "fake"
