@@ -4,6 +4,7 @@ through here — workflow code never touches a backend directly
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 
 from temporalio import activity
@@ -20,9 +21,14 @@ _fake_singleton = FakeMemory()
 
 
 def _backend(base_url: str, backend: str) -> Memory:
+    """Tenant and API key come from the environment, never from the activity
+    input -- RecallInput/RetainInput are serialized into Temporal history."""
     if backend == "hindsight":
         from .hindsight_client import HindsightMemory
-        return HindsightMemory(base_url=base_url)
+        return HindsightMemory(
+            base_url=base_url,
+            tenant=os.environ.get("SDLC_MEMORY_TENANT", "default"),
+            api_key=os.environ.get("SDLC_MEMORY_API_KEY") or None)
     return _fake_singleton
 
 
