@@ -13,7 +13,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from ..agents.loader import HARNESS_ROLES, PROPOSER_ROLES
-from ..models import GatePolicy, HarnessKind
+from ..models import GatePolicy, HarnessKind, SessionDigest
 
 
 class Arm(BaseModel):
@@ -65,6 +65,41 @@ class SpeedBag(BaseModel):
     ended_at: datetime
 
 
+class WasteBag(BaseModel):
+    """BENCHMARK.md §4.3 coordination-and-waste aggregates for one coding
+    attempt: activity that did not advance the goal. Projected from
+    SessionDigest, minus the unbounded decision_skeleton and the token
+    fields CostBag already owns.
+
+    A record carries `waste=None` when no harness session was captured --
+    proposer stages have no transcript at all. None means NOT MEASURED and
+    must render blank; an all-zero bag would be indistinguishable from a
+    genuinely clean run.
+    """
+    tool_calls: int = 0
+    file_reads: int = 0
+    file_rereads: int = 0      # same path read more than once
+    files_written: int = 0     # distinct paths written
+    rewrite_churn: int = 0     # paths written more than once
+    failed_commands: int = 0   # command events with non-zero exit
+    model_turns: int = 0
+    denials: int = 0           # E-16: blocked tool calls
+    escalations: int = 0       # E-17: tool calls that raised a gate
+    compacted: bool = False
+
+    @classmethod
+    def from_digest(cls, d: SessionDigest | None) -> "WasteBag | None":
+        if d is None:
+            return None
+        return cls(
+            tool_calls=d.tool_calls, file_reads=d.file_reads,
+            file_rereads=d.file_rereads, files_written=d.files_written,
+            rewrite_churn=d.rewrite_churn,
+            failed_commands=d.failed_commands, model_turns=d.model_turns,
+            denials=d.denials, escalations=d.escalations,
+            compacted=d.compacted)
+
+
 class BenchmarkRecord(BaseModel):
     # identity
     run_id: str
@@ -82,6 +117,7 @@ class BenchmarkRecord(BaseModel):
     quality: QualityScore
     cost: CostBag = Field(default_factory=CostBag)
     speed: SpeedBag
+    waste: WasteBag | None = None           # None = no session captured
     outcome: BenchmarkOutcome
     fix_attempts: int = 0
     error: str | None = None

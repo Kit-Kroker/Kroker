@@ -107,7 +107,7 @@ unit-testable without a worker, and the new ones inherit it.
 
 ### 3.1 Schema
 
-`BenchmarkRecord` gains `waste: WasteBag = Field(default_factory=WasteBag)`.
+`BenchmarkRecord` gains `waste: WasteBag | None = None`.
 The default means every record already on disk parses unchanged.
 
 ```python
@@ -127,9 +127,10 @@ class WasteBag(BaseModel):
     compacted: bool = False
 
     @classmethod
-    def from_digest(cls, d: SessionDigest | None) -> "WasteBag":
-        """Empty bag when d is None — an absent session is 'not measured',
-        never 'measured zero'."""
+    def from_digest(cls, d: SessionDigest | None) -> "WasteBag | None":
+        """None when d is None. An absent session is 'not measured', never
+        'measured zero' -- an all-zero bag is indistinguishable from a
+        genuinely clean run, which §3.3's blank-not-zero rule forbids."""
 ```
 
 `WasteBag` is a distinct model rather than embedding `SessionDigest` directly
