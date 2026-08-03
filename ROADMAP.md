@@ -229,11 +229,19 @@ as tracked rather than accidental.
 ## 4. Success criteria (PRD §8)
 
 - [ ] — **SC-1** ≥80% runs reach merge gate unattended — not measurable (no fleet runs). Vehicle: the benchmark matrix (§9.8, E-34) is where unattended-reach rate is aggregated; cases can now carry a held-out grade (E-31 landed), so the gate is the next load-bearing piece.
+  **Aggregation landed** (`benchmarks/sc_rollup.py`, `sdlc benchmark score`);
+  the number is n/a until 5+ runs exist.
 - [ ] — **SC-2** ≤15 min operator time — not measurable.
 - [ ] — **SC-3** fix-loop success ≥70% — mechanism exists; no aggregate metric captured. Captured per run as a coordination metric by the benchmark (§9.8, E-36 heatmap): fix-loop attempts vs resolution, per stage.
+  **Aggregation landed** (`benchmarks/sc_rollup.py`, `sdlc benchmark score`);
+  the number is n/a until 5+ runs exist.
 - [ ] — **SC-4** repeat-clarification <10% by run 10 — needs reflect wiring (FR-404) + runs. **The per-run signal now accrues:** the retro stage (E-32) emits a `RunSummary` carrying `clarifications[].answered_by` (`human`/`suggested`/`unanswered`) on every terminal path. The cross-run *aggregation* into a repeat-clarification rate remains the benchmark's job (§9.8), via the memory-on cells that generate the run-10 series.
+  **Aggregation landed** (`benchmarks/sc_rollup.py`, `sdlc benchmark score`);
+  the number is n/a until 5+ runs exist.
 - [x] **SC-5** zero deploys past a failed **absolute** check — empty/vacuous-task bypass fixed, absolute failure is terminal, and the `security_no_critical` floor is now emitted by the `security_scan` activity and wired as an absolute merge-gate check (`feature.py:807,818`). `tests/test_security_floor.py` asserts a critical finding blocks deploy.
 - [ ] — **SC-6** soft-gate override <5% — mechanism exists; not measurable without runs + reflect. **The per-run signal now accrues:** the retro stage (E-32) emits `RunSummary.gates[]` with `policy`/`decided_by`/`confidence`/`overrides` (ARCHITECTURE §10 calibration compare). The cross-run *aggregation* into an override rate remains the benchmark's job (§9.8).
+  **Aggregation landed** (`benchmarks/sc_rollup.py`, `sdlc benchmark score`);
+  the number is n/a until 5+ runs exist.
 - [ ] — **SC-7** grounding integrity: 100% of `grounded` findings re-verify byte-exact, zero fabricated path/line refs when sampled — **the assessment product's SC-5**: one violation is a defect, not a percentage. Mechanism is E-43; the sampled audit needs real assessments.
 - [ ] — **SC-8** capability coverage ≥90% with classified orphans on ≥80% of readiness-passing repos — needs E-47 + a corpus.
 - [ ] — **SC-9** remediation efficacy: reduced composite for the targeted capability in ≥80% of accepted items, no new critical — needs E-54's delta.
@@ -603,8 +611,11 @@ is marked **(new scope)** and needs a PRD line before it is real.
   `src/sdlc/benchmarks/calibration.py` + `sdlc calibrate <rubric>` report
   within-epsilon agreement + MAE + Spearman over human-scored fixtures,
   surfaced as a trust level beside every rubric score (PRD FR-110). Session-
-  derived waste (E-38) as a heatmap input and calibration-as-CI-gate (OQ-B4)
-  deliberately deferred. Spec
+  derived waste (E-38) as a heatmap input **landed 2026-08-03** via
+  `WasteBag` on `BenchmarkRecord` + `benchmarks/waste_matrix.py` (task x arm,
+  six metrics); calibration-as-CI-gate (OQ-B4) still deferred. Spec
+  `docs/superpowers/specs/2026-08-03-completing-the-measurement-instrument-design.md`,
+  plan `docs/superpowers/plans/2026-08-03-completing-the-measurement-instrument.md`. Spec
   `docs/superpowers/specs/2026-07-24-error-heatmap-and-rubric-calibration-design.md`,
   plan `docs/superpowers/plans/2026-07-24-error-heatmap-and-rubric-calibration.md`.
 - [x] **E-37** Per-role model sweep at the benchmark boundary. Resolve

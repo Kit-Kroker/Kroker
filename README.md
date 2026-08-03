@@ -27,6 +27,19 @@ python -m sdlc.cli approve --id feature-add-sso --gate architecture
 python -m sdlc.cli benchmark --case cat-cafe   # run the eval harness (see docs/BENCHMARK.md)
 ```
 
+Scoring stored benchmark runs needs no running Temporal (it reads records on disk):
+
+```
+# score everything on disk (seconds, no Temporal needed)
+python -m sdlc.cli benchmark score --all
+
+# one matrix run, re-weighted
+python -m sdlc.cli benchmark score --bench <bench_run_id> --weights 0.7,0.2,0.1
+
+# one case across its whole history
+python -m sdlc.cli benchmark score --case cat-cafe-monitoring
+```
+
 ## Run
 1. `temporal server start-dev`
 2. `pip install -e .` then `python -m sdlc.worker`

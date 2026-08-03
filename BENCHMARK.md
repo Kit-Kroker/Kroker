@@ -329,6 +329,10 @@ measure work that didn't advance the goal.
   computed **pre-truncation** (E-38 retention policy), so they are kept on
   clean-green runs too — where only a `SessionDigest`, not the full
   transcript, is retained — and the heatmap never goes blind on green.
+- *Landed 2026-08-03:* `WasteBag` on `BenchmarkRecord` +
+  `benchmarks/waste_matrix.py`. Six gridded metrics; volume metrics and
+  `compacted` ride on the record without a grid. Coding tasks only --
+  proposer stages have no transcript by construction.
 
 ### 4.4 The error heatmap (Abdullin's prioritisation instrument)
 
@@ -340,6 +344,12 @@ This is Abdullin's `error heatmap` and it answers the only question that matters
 between iterations: *which stage, on which class of case, is costing the most —
 and therefore what do I fix next.* It is strictly more useful than a scalar and
 it is the natural home for every §4.1–4.3 metric.
+
+*Status (2026-08-03):* the case x stage heatmap is one of five grids written
+by `sdlc benchmark score` (`heatmap`, `task-matrix`, `error-matrix`,
+`waste-matrix`, `sc-rollup`), each emitted as `{.html,.json}` into the score
+directory. The session-derived waste that feeds it landed in the same pass
+(see §4.3).
 
 ---
 
@@ -423,6 +433,15 @@ undercut, not by size.
 5. **Error heatmap + calibration harness** — the `case × stage` aggregation
    (§4.4) and the rubric-calibration agreement tracking (§2 Tier B). *The
    prioritisation instrument and the trust layer under every rubric number.*
+   **Landed 2026-08-03:** the heatmap is one of five grids written by
+   `sdlc benchmark score`; calibration reports via `sdlc calibrate <rubric>`
+   (E-36, landed earlier). The instrument now has three loops:
+
+   | Loop | Command | Cost | Answers |
+   |---|---|---|---|
+   | Prompt A/B, one stage | `sdlc eval <role>` | seconds | did this prompt edit help on a captured fixture |
+   | Re-score stored evidence | `sdlc benchmark score` | seconds | what do the runs I already have say, under these weights |
+   | Full matrix | `sdlc benchmark run` | hours | what does this architecture change do end-to-end |
 
 6. **Per-role model sweep** — resolve `cfg.roles` at the benchmark boundary
    (**E-37**, folds E-26) so each cell overrides role→model and satisfies
