@@ -29,4 +29,8 @@ async def export_run_artifacts(inp: RunExportInput) -> str:
         render_events_jsonl(inp.trace), encoding="utf-8")
     (run_dir / "report.html").write_text(
         render_report_html(inp.summary), encoding="utf-8")
+    # summary.json is RunSummary as DATA. report.html above is a lossy
+    # human view of the same object; the SC rollup needs the structure.
+    (run_dir / "summary.json").write_text(
+        inp.summary.model_dump_json(indent=2), encoding="utf-8")
     return str(run_dir)
