@@ -11,6 +11,7 @@ def test_scoring_path_modules_import():
     import sdlc.benchmarks.score            # noqa: F401
     import sdlc.benchmarks.sc_rollup        # noqa: F401
     import sdlc.benchmarks.waste_matrix     # noqa: F401
+    import sdlc.benchmarks.experiments  # noqa: F401
     from sdlc.benchmarks.cli import dispatch_score      # noqa: F401
 
 

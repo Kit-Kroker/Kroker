@@ -138,6 +138,22 @@ async def main() -> None:
                     help="composite weights as quality,cost,speed; "
                          "defaults to benchmarks/config.yaml")
 
+    bx = bsub.add_parser("experiment")
+    bxsub = bx.add_subparsers(dest="exp_cmd", required=True)
+    bxn = bxsub.add_parser("new")
+    bxn.add_argument("--name", required=True)
+    bxn.add_argument("--axis", required=True,
+                     choices=["prompt", "model", "harness", "schema",
+                              "tool_org", "memory"])
+    bxn.add_argument("--change", required=True,
+                     help="one line: what is under test")
+    bxn.add_argument("--baseline", required=True, help="a bench_run_id")
+    bxn.add_argument("--commit", default="")
+    bxn.add_argument("--hypothesis", default="")
+    bxc = bxsub.add_parser("compare")
+    bxc.add_argument("--experiment", required=True)
+    bxc.add_argument("--candidate", required=True, help="a bench_run_id")
+
     ev = sub.add_parser("eval")
     ev.add_argument("target", help="a role name, or 'capture'")
     ev.add_argument("--from", dest="from_run", help="run id (capture only)")
@@ -203,6 +219,18 @@ async def main() -> None:
             print(dispatch_score(bench=args.bench, case=args.case,
                                  all_=args.all_, out=args.out,
                                  weights=args.weights))
+            return
+        if args.bench_cmd == "experiment":
+            from .benchmarks.cli import (dispatch_experiment_compare,
+                                         dispatch_experiment_new)
+            if args.exp_cmd == "new":
+                print(dispatch_experiment_new(
+                    name=args.name, axis=args.axis, change=args.change,
+                    baseline=args.baseline, commit=args.commit,
+                    hypothesis=args.hypothesis))
+            else:
+                print(dispatch_experiment_compare(
+                    experiment=args.experiment, candidate=args.candidate))
             return
         if args.bench_cmd == "run":
             from .benchmarks.cli import _run_matrix

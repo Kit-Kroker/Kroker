@@ -80,6 +80,56 @@ def dispatch_score(*, bench: str | None = None, case: str | None = None,
     return "\n".join(str(p) for p in written)
 
 
+def dispatch_experiment_new(*, name: str, axis: str, change: str,
+                            baseline: str, commit: str = "",
+                            hypothesis: str = "",
+                            exp_dir: str | None = None) -> str:
+    from .experiments import experiments_dir, new_experiment, save_experiment
+    exp = new_experiment(name=name, axis=axis, change=change,
+                         baseline=baseline, commit=commit,
+                         hypothesis=hypothesis)
+    base = Path(exp_dir) if exp_dir else experiments_dir()
+    p = save_experiment(exp, base / f"{exp.id}.yaml")
+    return (f"{p}\n\nRun the candidate matrix, then:\n"
+            f"  sdlc benchmark experiment compare --experiment {exp.id} "
+            f"--candidate <bench_id>\n"
+            f"Then write `verdict: keep` or `verdict: rollback` yourself "
+            f"and commit the file.")
+
+
+def dispatch_experiment_compare(*, experiment: str, candidate: str,
+                                exp_dir: str | None = None,
+                                root: str | None = None) -> str:
+    """Hard-errors on a missing bench_id. Reporting degrades; comparison
+    does not -- a silent half-comparison produces a verdict on partial data."""
+    from .evidence import load_evidence
+    from .experiments import (compute_deltas, experiments_dir,
+                              load_experiment, render_deltas_markdown,
+                              save_experiment)
+    from .score import load_config_weights
+
+    base = Path(exp_dir) if exp_dir else experiments_dir()
+    path = base / f"{experiment}.yaml"
+    if not path.is_file():
+        raise SystemExit(f"no experiment {experiment!r} at {path}")
+
+    exp = load_experiment(path)
+    baseline_ev = load_evidence(bench=exp.baseline, root=root)
+    candidate_ev = load_evidence(bench=candidate, root=root)
+    for label, ev in (("baseline", baseline_ev), ("candidate", candidate_ev)):
+        if not ev.records:
+            raise SystemExit(
+                f"{label} bench {ev.selector!r} has no records; refusing to "
+                f"compare against nothing")
+
+    exp.candidate = candidate
+    exp.deltas = compute_deltas(baseline_ev, candidate_ev,
+                                load_config_weights())
+    save_experiment(exp, path)
+    return (render_deltas_markdown(exp.deltas)
+            + f"\nWritten to {path}. Verdict is yours to write.\n")
+
+
 def dispatch_calibrate(rubric: str, *, judge_model: str | None,
                        epsilon: float, threshold: float,
                        calib_root=None) -> str:
