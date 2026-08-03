@@ -2,7 +2,7 @@
 
   python -m sdlc.cli benchmark run    --case benchmarks/cases/add-login/case.yaml
   python -m sdlc.cli benchmark drift  --since 168
-  python -m sdlc.cli benchmark report --bench <id>
+  python -m sdlc.cli benchmark score  --bench <id> | --case <id> | --all
 """
 from __future__ import annotations
 
@@ -10,17 +10,12 @@ import argparse
 import asyncio
 from pathlib import Path
 
-from temporalio.client import Client
-from temporalio.contrib.pydantic import pydantic_data_converter
 import yaml
 
 from ..models import GatePolicy, HarnessKind
 from ..worker import TASK_QUEUE
 from .models import CaseSpec
 from .workflow import BenchmarkWorkflow
-from .report import aggregate, render_markdown
-from .models import CompositeWeights
-from .recorder import _root
 
 
 def load_case_spec(path: str) -> CaseSpec:
@@ -48,11 +43,17 @@ def build_parser() -> argparse.ArgumentParser:
     drift = bsub.add_parser("drift")
     drift.add_argument("--since", type=int, default=168)   # hours
 
-    rep = bsub.add_parser("report")
-    rep.add_argument("--bench", required=True)
-
-    hist = bsub.add_parser("history")
-    hist.add_argument("--case", required=True)
+    bs = bsub.add_parser("score")
+    bsg = bs.add_mutually_exclusive_group(required=True)
+    bsg.add_argument("--bench", help="one bench_run_id")
+    bsg.add_argument("--case", help="every bench run for one case")
+    bsg.add_argument("--all", action="store_true", dest="all_",
+                     help="every bench run for every case")
+    bs.add_argument("--out", default=None,
+                    help="output dir (default: <root>/<selector>/score)")
+    bs.add_argument("--weights", default=None, metavar="Q,C,S",
+                    help="composite weights as quality,cost,speed; "
+                         "defaults to benchmarks/config.yaml")
 
     cal = sub.add_parser("calibrate")
     cal.add_argument("rubric")
@@ -62,49 +63,21 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def dispatch_report(bench: str,
-                    root: str | None = None) -> str:
-    from .calibration import load_calibration_reports, render_calibration_html
-    from .report import (
-        _read_all, resolve_language_map, write_heatmap,
-        write_report_with_calibration)
-    records = _read_all(bench, root)
-    summaries = aggregate(bench, CompositeWeights(), root=root, _records=records)
-    calibration = load_calibration_reports()
-    md = render_markdown(summaries, calibration=calibration)
-    out_dir = Path(root if root is not None else _root()) / bench
-    write_report_with_calibration(summaries, str(out_dir / "report.md"), calibration)
-    lang = resolve_language_map(sorted({r.case_id for r in records}))
-    write_heatmap(records, out_dir, lang, render_calibration_html(calibration))
-    return md
+def dispatch_score(*, bench: str | None = None, case: str | None = None,
+                   all_: bool = False, out: str | None = None,
+                   weights: str | None = None,
+                   root: str | None = None) -> str:
+    """Read every evidence store for one selector and write the full score
+    directory. Seconds, no Temporal client, no worker."""
+    from .evidence import load_evidence
+    from .score import (default_out_dir, load_config_weights, parse_weights,
+                        write_score)
 
-
-def dispatch_history(case_id: str, root: str | None = None) -> tuple[str, str]:
-    from .error_matrix import (
-        build_error_matrix, render_error_matrix_html, render_error_matrix_json)
-    from .report import scan_case_records
-    from .task_matrix import (
-        build_task_matrix, render_task_matrix_html, render_task_matrix_json)
-    from .tasks import load_task_suite
-
-    suite = load_task_suite(case_id)
-    if suite is None:
-        raise ValueError(f"no tasks.yaml for case {case_id!r}; nothing to build")
-    records = scan_case_records(case_id, root)
-    tm = build_task_matrix(case_id, records, suite)
-    em = build_error_matrix(case_id, records, suite)
-
-    out_dir = Path(root if root is not None else _root()) / "_history" / case_id
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "task-matrix.html").write_text(
-        render_task_matrix_html(tm), encoding="utf-8")
-    (out_dir / "task-matrix.json").write_text(
-        render_task_matrix_json(tm), encoding="utf-8")
-    (out_dir / "error-matrix.html").write_text(
-        render_error_matrix_html(em), encoding="utf-8")
-    (out_dir / "error-matrix.json").write_text(
-        render_error_matrix_json(em), encoding="utf-8")
-    return str(out_dir / "task-matrix.html"), str(out_dir / "error-matrix.html")
+    ev = load_evidence(bench=bench, case=case, all_=all_, root=root)
+    w = parse_weights(weights) if weights else load_config_weights()
+    out_dir = Path(out) if out else default_out_dir(ev.selector, root)
+    written = write_score(ev, out_dir, w)
+    return "\n".join(str(p) for p in written)
 
 
 def dispatch_calibrate(rubric: str, *, judge_model: str | None,
@@ -132,6 +105,9 @@ def dispatch_calibrate(rubric: str, *, judge_model: str | None,
 
 
 async def _run_matrix(case_path: str, gate_policy: str | None = None) -> str:
+    from temporalio.client import Client
+    from temporalio.contrib.pydantic import pydantic_data_converter
+
     spec = load_case_spec(case_path)
     if gate_policy is not None:
         spec = spec.model_copy(update={"gate_policy": GatePolicy(gate_policy)})
@@ -160,9 +136,9 @@ def main_async(args: argparse.Namespace) -> None:
         print(asyncio.run(_run_matrix(args.case, args.gate_policy)))
     elif args.bench_cmd == "drift":
         print(asyncio.run(_run_drift(args.since)))
-    elif args.bench_cmd == "report":
-        print(dispatch_report(args.bench))
-    elif args.bench_cmd == "history":
-        tm_path, em_path = dispatch_history(args.case)
-        print(tm_path)
-        print(em_path)
+    elif args.bench_cmd == "score":
+        print(dispatch_score(bench=getattr(args, "bench", None),
+                             case=getattr(args, "case", None),
+                             all_=getattr(args, "all_", False),
+                             out=getattr(args, "out", None),
+                             weights=getattr(args, "weights", None)))

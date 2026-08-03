@@ -126,8 +126,17 @@ async def main() -> None:
                     help="override the case's gate_policy for every gate "
                          "in the child FeatureWorkflow")
     bd = bsub.add_parser("drift"); bd.add_argument("--since", type=int, default=168)
-    bf = bsub.add_parser("report"); bf.add_argument("--bench", required=True)
-    bh = bsub.add_parser("history"); bh.add_argument("--case", required=True)
+    bs = bsub.add_parser("score")
+    bsg = bs.add_mutually_exclusive_group(required=True)
+    bsg.add_argument("--bench", help="one bench_run_id")
+    bsg.add_argument("--case", help="every bench run for one case")
+    bsg.add_argument("--all", action="store_true", dest="all_",
+                     help="every bench run for every case")
+    bs.add_argument("--out", default=None,
+                    help="output dir (default: <root>/<selector>/score)")
+    bs.add_argument("--weights", default=None, metavar="Q,C,S",
+                    help="composite weights as quality,cost,speed; "
+                         "defaults to benchmarks/config.yaml")
 
     ev = sub.add_parser("eval")
     ev.add_argument("target", help="a role name, or 'capture'")
@@ -189,9 +198,11 @@ async def main() -> None:
         return
 
     if args.cmd == "benchmark":
-        from .benchmarks.cli import dispatch_report
-        if args.bench_cmd == "report":
-            print(dispatch_report(args.bench))
+        if args.bench_cmd == "score":
+            from .benchmarks.cli import dispatch_score
+            print(dispatch_score(bench=args.bench, case=args.case,
+                                 all_=args.all_, out=args.out,
+                                 weights=args.weights))
             return
         if args.bench_cmd == "run":
             from .benchmarks.cli import _run_matrix
@@ -199,12 +210,6 @@ async def main() -> None:
             return
         if args.bench_cmd == "drift":
             print("drift requires a live Temporal client; see ARCHITECTURE.md section 8.")
-            return
-        if args.bench_cmd == "history":
-            from .benchmarks.cli import dispatch_history
-            tm_path, em_path = dispatch_history(args.case)
-            print(tm_path)
-            print(em_path)
             return
 
     if args.cmd == "schedules":
