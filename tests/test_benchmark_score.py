@@ -106,3 +106,12 @@ def test_report_markdown_is_ascii_only(tmp_path):
     write_score(ev, tmp_path, CompositeWeights())
     md = (tmp_path / "report.md").read_text(encoding="utf-8")
     md.encode("ascii")
+
+
+def test_waste_matrix_written_even_without_tasks_yaml(tmp_path, monkeypatch):
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(tmp_path / "no-cases"))
+    ev = Evidence(records=[_rec(task="t01", waste=WasteBag(tool_calls=9))],
+                  selector="b1")
+    written = write_score(ev, tmp_path, CompositeWeights())
+    assert "waste-matrix.html" in {p.name for p in written}
+    assert "t01" in (tmp_path / "waste-matrix.html").read_text(encoding="utf-8")

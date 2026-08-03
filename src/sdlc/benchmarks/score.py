@@ -97,30 +97,49 @@ def _render_notes(notes: list[str]) -> str:
 
 def _write_case_matrices(ev: Evidence, out_dir: Path,
                          notes: list[str]) -> list[Path]:
-    """Per-case task and error matrices. A case with no tasks.yaml is
-    skipped with a note -- today dispatch_history raises here (cli.py:92),
-    and only todo-api-greenfield has the file."""
+    """Per-case grids. The waste matrix takes no tasks.yaml dependency and
+    is written for every case; the task and error matrices need the suite
+    and are skipped with a note when it is absent (today dispatch_history
+    raises here, cli.py:92)."""
     from .error_matrix import (build_error_matrix, render_error_matrix_html,
                                render_error_matrix_json)
     from .task_matrix import (build_task_matrix, render_task_matrix_html,
                               render_task_matrix_json)
     from .tasks import load_task_suite
+    from .waste_matrix import (build_waste_matrix, render_waste_matrix_html,
+                               render_waste_matrix_json)
 
     written: list[Path] = []
     cases = sorted({r.case_id for r in ev.records})
     for case_id in cases:
+        d = out_dir if len(cases) == 1 else out_dir / case_id
+        d.mkdir(parents=True, exist_ok=True)
+
         try:
             suite = load_task_suite(case_id)
         except Exception as e:                               # noqa: BLE001
             notes.append(f"case {case_id}: malformed tasks.yaml, task and "
                          f"error matrices skipped ({e})")
-            continue
+            suite = None
+
+        wm = build_waste_matrix(case_id, ev.records, suite)
+        for name, text in (
+            ("waste-matrix.html", render_waste_matrix_html(wm)),
+            ("waste-matrix.json", render_waste_matrix_json(wm)),
+        ):
+            p = d / name
+            p.write_text(text, encoding="utf-8")
+            written.append(p)
+        if not wm.cells:
+            notes.append(f"case {case_id}: no harness waste recorded "
+                         f"(runs predating waste capture, or no coding tasks)")
+
         if suite is None:
-            notes.append(f"case {case_id}: no tasks.yaml, task and error "
-                         f"matrices skipped")
+            if not any(f"case {case_id}: malformed" in n for n in notes):
+                notes.append(f"case {case_id}: no tasks.yaml, task and error "
+                             f"matrices skipped")
             continue
-        d = out_dir if len(cases) == 1 else out_dir / case_id
-        d.mkdir(parents=True, exist_ok=True)
+
         tm = build_task_matrix(case_id, ev.records, suite)
         em = build_error_matrix(case_id, ev.records, suite)
         for name, text in (

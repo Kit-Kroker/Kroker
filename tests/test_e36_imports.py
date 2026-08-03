@@ -9,6 +9,7 @@ def test_benchmark_and_calibration_modules_import():
 def test_scoring_path_modules_import():
     import sdlc.benchmarks.evidence         # noqa: F401
     import sdlc.benchmarks.score            # noqa: F401
+    import sdlc.benchmarks.waste_matrix     # noqa: F401
     from sdlc.benchmarks.cli import dispatch_score      # noqa: F401
 
 
