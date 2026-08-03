@@ -33,7 +33,7 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..benchmarks.models import (
         BenchmarkOutcome, BenchmarkRecord, BenchmarkScope,
-        QualityScore, SpeedBag,
+        QualityScore, SpeedBag, WasteBag,
     )
     from ..benchmarks.recorder import record_benchmark
     from ..gate import (
@@ -385,6 +385,7 @@ class FeatureWorkflow:
                       fix_attempts: int = 0,
                       task_id: str | None = None,
                       attempt: int | None = None,
+                      waste: "WasteBag | None" = None,
                       error: str | None = None) -> BenchmarkRecord:
         scope = (BenchmarkScope.TASK_ATTEMPT if task_id is not None
                  else BenchmarkScope.STAGE)
@@ -398,6 +399,7 @@ class FeatureWorkflow:
             cost=cost_bag_from_spend(spend, cost_usd),
             speed=SpeedBag(wall_clock_s=(ended - started).total_seconds(),
                            started_at=started, ended_at=ended),
+            waste=waste,
             outcome=outcome, fix_attempts=fix_attempts, error=error,
         )
 
@@ -1042,6 +1044,7 @@ class FeatureWorkflow:
                 model=role_cfg.model,
                 harness=role_cfg.harness,
                 cost_usd=run.cost_usd,
+                waste=WasteBag.from_digest(run.session_digest),
                 fix_attempts=attempt - 1,
                 task_id=task.id, attempt=attempt - 1))
 
