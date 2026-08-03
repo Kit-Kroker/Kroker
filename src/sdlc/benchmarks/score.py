@@ -62,6 +62,8 @@ def write_score(ev: Evidence, out_dir: Path,
     from .calibration import load_calibration_reports, render_calibration_html
     from .report import (aggregate, render_markdown, resolve_language_map,
                          write_heatmap)
+    from .sc_rollup import (build_sc_rollup, render_sc_rollup_html,
+                            render_sc_rollup_json, render_sc_rollup_markdown)
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -78,7 +80,15 @@ def write_score(ev: Evidence, out_dir: Path,
 
     written += _write_case_matrices(ev, out_dir, notes)
 
+    rollup = build_sc_rollup(ev.summaries, ev.records)
+    for name, text in (("sc-rollup.html", render_sc_rollup_html(rollup)),
+                       ("sc-rollup.json", render_sc_rollup_json(rollup))):
+        p = out_dir / name
+        p.write_text(text, encoding="utf-8")
+        written.append(p)
+
     md = render_markdown(summaries, calibration=calibration)
+    md += render_sc_rollup_markdown(rollup)
     md += _render_notes(notes)
     report_p = out_dir / "report.md"
     report_p.write_text(md, encoding="utf-8")

@@ -115,3 +115,12 @@ def test_waste_matrix_written_even_without_tasks_yaml(tmp_path, monkeypatch):
     written = write_score(ev, tmp_path, CompositeWeights())
     assert "waste-matrix.html" in {p.name for p in written}
     assert "t01" in (tmp_path / "waste-matrix.html").read_text(encoding="utf-8")
+
+
+def test_sc_rollup_written_and_appended_to_report(tmp_path):
+    ev = Evidence(records=[_rec()], selector="b1")
+    written = write_score(ev, tmp_path, CompositeWeights())
+    assert {"sc-rollup.html", "sc-rollup.json"} <= {p.name for p in written}
+    md = (tmp_path / "report.md").read_text(encoding="utf-8")
+    assert "Success criteria" in md
+    assert "SC-1" in md
