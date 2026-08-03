@@ -53,7 +53,7 @@ description: |
   the 24-hour window are computed from telemetry timestamps.
 mode: greenfield
 language: python
-repo_url: D:/own/sdlc-scratch-repos/cat-cafe-monitoring
+repo_url: /srv/scratch-repos/cat-cafe-monitoring
 research_enabled: true
 harnesses:
   - opencode

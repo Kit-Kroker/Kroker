@@ -18,13 +18,13 @@ description: |
   importable as `app:app`.
 mode: greenfield
 language: python
-repo_url: D:/own/sdlc-scratch-repos/todo-api-greenfield
+repo_url: /srv/scratch-repos/todo-api-greenfield
 research_enabled: true
 harnesses:
   - opencode
 models:
   - zai-coding-plan/glm-5.2
-judge_model: openai/gpt-5.2     # different family than the author (ADR-6)
+judge_model: google:gemini-3.5-flash     # different family than the author (ADR-6)
 extra_args_by_model:
   zai-coding-plan/glm-5.2:
     - --variant

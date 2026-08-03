@@ -5,11 +5,11 @@ services:
       - "7233:7233"   # gRPC
       - "8233:8233"   # Web UI
     environment:
-      TEMPORAL_ADDRESS: "localhost:7233"
+      TEMPORAL_ADDRESS: "temporal:7233"
     # `temporal cli start` runs an embedded server — enough for a single-node
     # dev/mini-prod setup. For real production swap in the full Temporal Server
     # with Postgres/Cassandra persistence.
-    command: ["server", "start-dev"]
+    command: ["server", "start-dev", "--ip", "0.0.0.0"]
 
   hindsight:
     image: ghcr.io/vectorize-io/hindsight:latest
@@ -33,6 +33,8 @@ services:
       - worker-worktrees:/tmp/sdlc/worktrees
       # repos cloned / pushed to by the pipeline live here
       - worker-repos:/srv/repos
+      # host-side scratch repos referenced by benchmark case.yaml repo_url
+      - D:/own/sdlc-scratch-repos:/srv/scratch-repos
     restart: unless-stopped
 
 volumes:
