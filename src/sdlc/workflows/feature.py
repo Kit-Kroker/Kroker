@@ -1479,20 +1479,35 @@ class FeatureWorkflow:
             # FeatureWorkflow, not just the research stage).
             research_spend = RoleUsage(role="research",
                                        model=STAGE_MODELS.get("research", "unknown"))
-            findings = await self._fan_out_research(cfg, idea, deps,
+            try:
+                findings = await self._fan_out_research(cfg, idea, deps,
+                                                        research_spend)
+                if all(f.failed for f in findings):
+                    # No brief to synthesize -- and no point paying for the
+                    # call. Degrade the STAGE, never the run (2026-07-20
+                    # decision).
+                    brief = _degraded_research_brief(
+                        RuntimeError("every sub-question failed"))
+                else:
+                    brief, synth_usage = await workflow.execute_activity(
+                        synthesize_brief,
+                        SynthesizeInput(idea_json=idea.model_dump_json(),
+                                        findings=findings,
+                                        model=STAGE_MODELS.get("research", "unknown")),
+                        **RESEARCH_SYNTH_ACT)
+                    await self._fold_research_usage(cfg, synth_usage,
                                                     research_spend)
-            brief, synth_usage = await workflow.execute_activity(
-                synthesize_brief,
-                SynthesizeInput(idea_json=idea.model_dump_json(),
-                                findings=findings,
-                                model=STAGE_MODELS.get("research", "unknown")),
-                **RESEARCH_SYNTH_ACT)
-            await self._fold_research_usage(cfg, synth_usage, research_spend)
-            if all(f.failed for f in findings):
-                # Every sub-question failed: nothing to build a brief from.
-                # Degrade the STAGE, never the run (2026-07-20 decision).
-                brief = _degraded_research_brief(
-                    RuntimeError("every sub-question failed"))
+            except Exception as exc:
+                # Fan-out / synthesis model-call failure degrades the STAGE,
+                # never the run (spec §8 tier 1;
+                # bench-todo-api-greenfield-1785485669: an uncaught
+                # UsageLimitExceeded once killed the whole FeatureWorkflow,
+                # not just the research stage). Grounding violations are NOT
+                # exceptions -- they fail the stage closed below -- so this
+                # broad guard only catches model-call failures (a
+                # plan/synthesize ActivityError after its retries exhaust).
+                brief = _degraded_research_brief(exc)
+                findings = []
             # Task 7 fallback (Task 1 finding A): the original
             # @agent.output_validator was silently dropped by TemporalAgent, so
             # grounding is enforced here as a post-run ACTIVITY. Reads page
@@ -1540,21 +1555,28 @@ class FeatureWorkflow:
                         # degrades a run; it never stops one.
                         break
                     gaps, conflicts = _refine_seed(brief)
-                    findings += await self._fan_out_research(
-                        cfg, idea, deps, research_spend,
-                        id_offset=len(findings),
-                        guidance=gate.guidance or "",
-                        gaps=gaps, contradictions=conflicts)
-                    # Re-merge over ALL findings: round one is never discarded.
-                    brief, synth_usage = await workflow.execute_activity(
-                        synthesize_brief,
-                        SynthesizeInput(
-                            idea_json=idea.model_dump_json(),
-                            findings=findings,
-                            model=STAGE_MODELS.get("research", "unknown")),
-                        **RESEARCH_SYNTH_ACT)
-                    await self._fold_research_usage(cfg, synth_usage,
-                                                    research_spend)
+                    try:
+                        findings += await self._fan_out_research(
+                            cfg, idea, deps, research_spend,
+                            id_offset=len(findings),
+                            guidance=gate.guidance or "",
+                            gaps=gaps, contradictions=conflicts)
+                        # Re-merge over ALL findings: round one is never discarded.
+                        brief, synth_usage = await workflow.execute_activity(
+                            synthesize_brief,
+                            SynthesizeInput(
+                                idea_json=idea.model_dump_json(),
+                                findings=findings,
+                                model=STAGE_MODELS.get("research", "unknown")),
+                            **RESEARCH_SYNTH_ACT)
+                        await self._fold_research_usage(cfg, synth_usage,
+                                                        research_spend)
+                    except Exception:
+                        # Refine-round model failure: keep the prior VERIFIED
+                        # brief and stop refining rather than discard round one
+                        # or crash the run. Research degrades; it never stops
+                        # the pipeline (spec §8).
+                        break
                     # Round-2 findings must be verified too.
                     violations = await workflow.execute_activity(
                         verify_brief_activity,

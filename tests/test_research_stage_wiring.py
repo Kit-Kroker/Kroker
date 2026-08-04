@@ -58,3 +58,17 @@ def test_research_stage_verifies_grounding_post_run():
     src = _run_method_src()
     assert "verify_brief_activity" in src
     assert "rejected:research.grounding" in src
+
+
+def test_research_stage_degrades_on_model_call_failure():
+    """Spec §8 tier 1: a plan/synthesize model-call failure (ActivityError
+    after its retries exhaust) must degrade the STAGE to a
+    _degraded_research_brief, never crash the FeatureWorkflow
+    (bench-todo-api-greenfield-1785485669: an uncaught UsageLimitExceeded
+    once killed the whole run, not just research). The fan-out + synthesis
+    sit inside a broad try/except that substitutes the degraded brief;
+    sub-question failures degrade individually inside the activity."""
+    src = _run_method_src()
+    assert "_fan_out_research" in src
+    assert "except Exception as exc:" in src
+    assert "_degraded_research_brief(exc)" in src

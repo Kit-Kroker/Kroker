@@ -1,15 +1,13 @@
-"""The primary research stage (feature.py) runs t_research.run() with no
-try/except at all -- a pydantic-ai UsageLimitExceeded (the request_limit
-ceiling) or a BudgetExceeded (the persisted search/fetch/cost cap, see
-budget_store.py) propagates straight out and crashes the whole
-FeatureWorkflow, taking down every other stage's records with it
-(bench-todo-api-greenfield-1785485669: the research stage alone burned past
-pydantic-ai's default request_limit=50, and the entire benchmark cell
-recorded nothing but a stale oracle grade). research/toolset.py's
-research_subquery already has the right shape for this -- catch the
-exhaustion and substitute a partial ResearchBrief with the shortfall
-recorded as a gap, exactly like an ordinary budget-exhausted mid-run call --
-these tests pin the primary stage's version of that same fallback."""
+"""The research stage never lets a model-call failure escape to the workflow
+runner. Per-sub-question exhaustion (BudgetExceeded / UsageLimitExceeded) is
+caught inside research_subquestion and turned into a gap; a plan or synthesis
+ActivityError (after its retries exhaust) is caught at the stage call site
+and substitutes a _degraded_research_brief (spec §8 tier 1;
+bench-todo-api-greenfield-1785485669: an uncaught UsageLimitExceeded once
+killed the whole FeatureWorkflow, taking every other stage's records with
+it). _degraded_research_brief is the shape both paths land on -- these tests
+pin it: no findings, the shortfall recorded as a gap, empty grounded_findings
+so verify_brief passes it through the ordinary success path."""
 from pydantic_ai.exceptions import UsageLimitExceeded
 
 from sdlc.models import ResearchBrief
