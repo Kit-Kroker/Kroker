@@ -23,3 +23,32 @@ def test_per_sub_question_caps_keep_their_values():
 def test_run_ceiling_covers_the_default_fan_out_width():
     cfg = ResearchConfig()
     assert cfg.max_run_cost_usd >= cfg.max_sub_questions * cfg.max_cost_usd
+
+
+from sdlc.models import (ResearchBrief, ResearchPlan, RoleUsage, SubQuestion,
+                         SubQuestionFinding)
+
+
+def test_research_plan_carries_usage():
+    # Returning a bare list of sub-questions silently drops one model call per
+    # run -- the exact bug this type exists to prevent.
+    plan = ResearchPlan()
+    assert isinstance(plan.usage, RoleUsage)
+    assert plan.sub_questions == []
+
+
+def test_sub_question_finding_carries_usage_and_a_brief():
+    f = SubQuestionFinding(
+        sub_question=SubQuestion(id="sq-0", question="what?"),
+        brief=ResearchBrief(summary="s"))
+    assert isinstance(f.usage, RoleUsage)
+    assert f.failed is False
+    assert f.error == ""
+
+
+def test_sub_question_finding_can_represent_a_permanent_failure():
+    f = SubQuestionFinding(
+        sub_question=SubQuestion(id="sq-1", question="what?"),
+        brief=ResearchBrief(), failed=True, error="RefusalError: declined")
+    assert f.failed
+    assert "declined" in f.error

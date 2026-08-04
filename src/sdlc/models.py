@@ -445,6 +445,22 @@ class AnalysisReport(BaseModel):
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
+class RoleUsage(BaseModel):
+    """One role's accumulated model spend across the run (E-33).
+
+    cost_usd None is load-bearing: tokens are facts from the run; dollars
+    are a lookup that can fail. A pricing miss must never discard tokens,
+    so the field stays None until the first successfully priced call."""
+    role: str                       # "architect", "dev", "clarify", ...
+    model: str                      # last model seen for the role
+    calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    cost_usd: float | None = None
+
+
 class SubQuestion(BaseModel):
     id: str
     question: str
@@ -504,6 +520,34 @@ class ResearchBrief(BaseModel):
     summary: str = ""
     brief_ref: ArtifactRef | None = None
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class ResearchPlan(BaseModel):
+    """The planner's output, WITH its model spend.
+
+    Carrying `usage` is why this type exists rather than a bare
+    list[SubQuestion]: fan-out moves the model call activity-side, out of
+    _run_role's reach, so an activity that calls a model must hand its usage
+    back or the spend is silently lost (E-33 amendment, fan-out design §7)."""
+    sub_questions: list[SubQuestion] = Field(default_factory=list)
+    usage: RoleUsage = Field(
+        default_factory=lambda: RoleUsage(role="research", model="unknown"))
+
+
+class SubQuestionFinding(BaseModel):
+    """One sub-question's result: its own partial ResearchBrief plus spend.
+
+    `failed=True` means the sub-question exhausted its retries or hit a
+    non-retryable error. Its siblings survive -- a partial answer from three
+    of four sub-questions is worth far more than nothing -- and the merge
+    turns this into a Gap so a short brief is explained rather than just
+    short."""
+    sub_question: SubQuestion
+    brief: ResearchBrief = Field(default_factory=ResearchBrief)
+    usage: RoleUsage = Field(
+        default_factory=lambda: RoleUsage(role="research", model="unknown"))
+    failed: bool = False
+    error: str = ""
 
 
 class CoverageReport(BaseModel):
@@ -805,22 +849,6 @@ class PipelineConfig(BaseModel):
     # E-33/FR-701: run-level USD budget. 0.0 = off (the coverage_threshold
     # opt-in pattern). When crossed, the workflow raises a hard "budget"
     # gate; approve grants one more increment of this amount.
-
-
-class RoleUsage(BaseModel):
-    """One role's accumulated model spend across the run (E-33).
-
-    cost_usd None is load-bearing: tokens are facts from the run; dollars
-    are a lookup that can fail. A pricing miss must never discard tokens,
-    so the field stays None until the first successfully priced call."""
-    role: str                       # "architect", "dev", "clarify", ...
-    model: str                      # last model seen for the role
-    calls: int = 0
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cache_read_tokens: int = 0
-    cache_write_tokens: int = 0
-    cost_usd: float | None = None
 
 
 class StageOutcome(BaseModel):
