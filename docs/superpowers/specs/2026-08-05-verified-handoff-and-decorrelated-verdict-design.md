@@ -185,12 +185,38 @@ materialized diff + test output. Deliberately *not* the session — that is
 reviewers is what makes disagreement interpretable: it measures family and
 persona variance, not information asymmetry.
 
-**Decorrelation is structural.** `check_adr6_families` extends from a two-way
-to a three-way constraint: `family(adversary) ∉ {family(dev), family(reviewer)}`.
+**Decorrelation is structural — and by model identity, not provider prefix.**
+
+`model_family()` (`agents/loader.py:71-75`) splits on the first `:` or `/`, so
+it compares *providers*. Against the shipped registry that check is wrong in
+both directions:
+
+| Role | Model | `model_family()` |
+|---|---|---|
+| `dev` | `zai-coding-plan/glm-5.2` | `zai-coding-plan` |
+| `reviewer` | `anthropic:glm-5.2` | `anthropic` |
+| `deep_review` | `anthropic:glm-5.2` | `anthropic` |
+
+It **accepts** dev vs reviewer — different prefixes, but the same underlying
+`glm-5.2` weights on both sides of the anti-collusion boundary, so ADR-6 is
+satisfied nominally and void substantively. And it would **reject**
+`anthropic:claude-sonnet-4-6` against `anthropic:glm-5.2` — genuinely
+different models sharing a prefix.
+
+So the adversary's constraint compares **model identity** (the segment after
+the provider prefix), not the prefix: `model_id(adversary) ∉ {model_id(dev),
+model_id(reviewer)}`. This is a new function, `model_id()`, used by a new
+check for a new role. `check_adr6_families`'s existing dev/reviewer clause is
+deliberately **left untouched** so no existing benchmark baseline shifts.
+
 Enforced at load via `validate_run_roles` and per-cell at benchmark expansion,
-where E-37 already validates families per run. Persona alone does not break
-shared training priors — that is ADR-6's whole argument — so the hostile
-prompt rides on top of family inequality, not instead of it.
+where E-37 already validates per run. Persona alone does not break shared
+training priors — that is ADR-6's whole argument — so the hostile prompt rides
+on top of model inequality, not instead of it.
+
+The adversary ships as `anthropic:claude-sonnet-4-6`: different weights from
+both `dev` and `reviewer`, and per ARCHITECTURE §4's tiering table, adversarial
+instruction-following is exactly the capability this role needs.
 
 ### 3.2 Invocation — the approve-side asymmetry
 
@@ -362,3 +388,13 @@ not discovered at deploy time.
 - **OQ-A3** — `deep_review` and `adversary` are both non-DAG lenses now living
   in `CANONICAL_STAGES`. If more accumulate, the heatmap's stage axis stops
   being the SDLC DAG. Revisit at the third such lens.
+- **OQ-A4 (raised by this spec, deliberately out of its scope)** — `dev` and
+  `reviewer` currently run **the same model**, `glm-5.2`, behind different
+  provider prefixes (§3.1). ADR-6's anti-collusion invariant is therefore
+  enforced structurally and satisfied vacuously in the shipped registry: the
+  judge shares every weight, and every failure mode, with the author. Fixing it
+  means moving `reviewer` off `glm-5.2` and strengthening `model_family` to
+  compare model identity everywhere — which invalidates every existing
+  benchmark baseline, since past numbers were produced under the vacuous
+  pairing. That trade is a standalone decision and is **not** taken here.
+  `deep_review` has the same defect for the same reason.
