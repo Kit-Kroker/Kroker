@@ -7,13 +7,19 @@ or the spend is silently lost (E-33 amendment, fan-out design §7).
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
+
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
+from pydantic_ai.exceptions import UsageLimitExceeded
+from pydantic_ai.usage import UsageLimits
 from temporalio import activity
 
-from ..models import (Contradiction, Gap, ResearchPlan, RoleUsage,
-                      SubQuestion)
-from .prompts import PLAN_SYSTEM
+from ..models import (Contradiction, Gap, ResearchBrief, ResearchPlan,
+                      RoleUsage, SubQuestion, SubQuestionFinding)
+from .deps import BudgetExceeded, ResearchDeps
+from .prompts import PLAN_SYSTEM, sub_question_prompt
 
 
 class _PlannerOutput(BaseModel):
@@ -98,3 +104,111 @@ async def plan_research(inp: PlanInput, _model=None) -> ResearchPlan:
         sub_questions=[SubQuestion(id=f"sq-{inp.id_offset + i}", question=t)
                        for i, t in enumerate(texts)],
         usage=_usage_of(result, inp.model))
+
+
+# Comfortably below the workflow's heartbeat_timeout (see feature.py's
+# RESEARCH_SQ_ACT). The invariant to preserve is:
+#   HEARTBEAT_INTERVAL_SECONDS < heartbeat_timeout < start_to_close
+HEARTBEAT_INTERVAL_SECONDS = 15.0
+
+
+class SubQuestionInput(BaseModel):
+    sub_question: SubQuestion
+    deps: ResearchDeps
+    model: str
+    max_requests: int
+    max_run_cost_usd: float
+
+
+@contextlib.asynccontextmanager
+async def _heartbeating(interval: float | None = None):
+    """Heartbeat on a TIMER for as long as the block runs.
+
+    A sub-question legitimately runs for minutes, and the server cannot tell
+    "still thinking" from "instance went away". Heartbeating on a timer
+    decouples liveness from call duration, so a lost worker is detected in
+    ~60s instead of at start_to_close.
+
+    The interval resolves from the module global at CALL time, not as a
+    default argument -- otherwise tests cannot shorten it, and an untestable
+    heartbeat is one you discover never fired in production."""
+    interval = HEARTBEAT_INTERVAL_SECONDS if interval is None else interval
+
+    async def tick() -> None:
+        while True:
+            await asyncio.sleep(interval)
+            activity.heartbeat()
+
+    task = asyncio.create_task(tick())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
+def _degraded(sub: SubQuestion, exc: Exception) -> ResearchBrief:
+    """A bound was hit. Conclude with what we have and record the shortfall as
+    a gap -- ResearchConfig's documented contract. Never grounded, so
+    verify_brief passes it through the ordinary success path."""
+    return ResearchBrief(
+        gaps=[Gap(sub_question_id=sub.id,
+                  what_is_missing=sub.question,
+                  why_it_matters=f"research stopped early: {exc}")],
+        summary=f"Research stopped early: {exc}")
+
+
+@activity.defn
+async def research_subquestion(inp: SubQuestionInput,
+                               _model=None, _agent=None) -> SubQuestionFinding:
+    """Research ONE sub-question. The fan-out unit.
+
+    Runs the PLAIN research_agent, not the TemporalAgent: inside an activity
+    pydantic-ai falls back to in-process execution, so deps.budget accumulates
+    for real within the run while budget_store enforces the persisted caps
+    underneath (the pattern research/toolset.py already established for the
+    architect's mid-run call).
+
+    `_model` / `_agent` are test seams; production passes neither.
+    """
+    sub = inp.sub_question
+    if _agent is None:
+        from sdlc.agents.roles import research_agent
+        if research_agent is None:
+            raise RuntimeError(
+                "research agent is not available (agents/research/ missing)")
+        agent = research_agent
+    else:
+        agent = _agent
+
+    # Each sub-question charges its OWN scope so one cannot drain the run.
+    deps = inp.deps.model_copy(update={"budget": inp.deps.budget.model_copy()})
+
+    usage = RoleUsage(role="research", model=inp.model)
+    try:
+        async with _heartbeating():
+            kwargs = dict(deps=deps,
+                          usage_limits=UsageLimits(
+                              request_limit=inp.max_requests))
+            if _model is not None:
+                kwargs["model"] = _model
+            result = await agent.run(sub_question_prompt(sub.question),
+                                     **kwargs)
+    except (BudgetExceeded, UsageLimitExceeded) as exc:
+        # Expected exhaustion: degrade. NEVER re-raise -- the counter is
+        # persisted, so a retry hits the same exhausted cap and burns six
+        # attempts with backoff for a guaranteed failure.
+        activity.logger.info("sub-question %s degraded: %s", sub.id, exc)
+        return SubQuestionFinding(sub_question=sub,
+                                  brief=_degraded(sub, exc), usage=usage)
+    except asyncio.CancelledError:
+        # Graceful shutdown cancels in-flight activities. Heartbeat on the way
+        # out so the server learns immediately rather than waiting out
+        # start_to_close before rescheduling.
+        activity.heartbeat()
+        activity.logger.warning("sub-question %s cancelled mid-flight", sub.id)
+        raise
+
+    return SubQuestionFinding(sub_question=sub, brief=result.output,
+                              usage=_usage_of(result, inp.model))

@@ -48,7 +48,7 @@ from .memory.activities import (
 from .observability.activities import export_run_artifacts
 from .notify.activities import notify
 from .pricing import price_usage
-from .research.stage import plan_research
+from .research.stage import plan_research, research_subquestion
 from .research.verify import verify_brief_activity
 from .workflows.feature import FeatureWorkflow
 from .workflows.reflect import ReflectWorkflow
@@ -97,6 +97,7 @@ async def main() -> None:
             load_session,
             verify_brief_activity,
             plan_research,
+            research_subquestion,
             *agent_activities,
         ],
     )
