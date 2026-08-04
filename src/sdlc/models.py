@@ -692,20 +692,46 @@ class ScheduleAsset(BaseModel):
 
 
 class ResearchConfig(BaseModel):
-    """Stage-scoped, per-run research bounds (spec §3). Enforced INSIDE the
-    tool functions, not the prompt. Exceeding one raises an ordinary error and
-    the shortfall lands in the brief's `gaps`. The first run-level counters in
-    the codebase — E-19 remains the general version."""
-    max_searches: int = 5
-    max_fetches: int = 10
-    max_cost_usd: float = 1.0
+    """Research bounds (spec §3). Enforced INSIDE the tool functions, not the
+    prompt. Exceeding one raises an ordinary error and the shortfall lands in
+    the brief's `gaps`.
+
+    SCOPE CHANGE (2026-08-04 fan-out design): max_searches/max_fetches/
+    max_cost_usd/max_requests are PER SUB-QUESTION, not per run. Dividing a
+    5-search pool across 4 sub-questions gives 1 search each -- shallower than
+    the single-agent stage it replaces, which defeats the point. The run-level
+    bound is max_run_cost_usd, enforced on the shared "run" budget scope.
+    """
+    max_sub_questions: int = 4
+    """Fan-out width. A HARD SLICE applied to the planner's output, never a
+    request the model is trusted to honour: measured behaviour is that a
+    planner always returns the top of whatever range it is given, even for a
+    yes/no lookup. Also the practical concurrency bound, since each
+    sub-question runs an agent with its own CodeMode sandbox."""
+
+    max_searches: int = 5               # per sub-question
+    max_fetches: int = 10               # per sub-question
+    max_cost_usd: float = 1.0           # per sub-question
+
+    max_run_cost_usd: float = 4.0
+    """Hard whole-run ceiling across every sub-question and every refine
+    round, on the shared "run" budget scope. Deliberately equal to
+    max_sub_questions * max_cost_usd: a refine round draws down what round
+    one left unspent rather than being granted a fresh allowance."""
+
+    max_refine_rounds: int = 1
+    """Rounds of gate-driven refinement after the first brief. A refine
+    triggers a whole second fan-out, so this is a spend ceiling as much as a
+    complexity ceiling. Exhausting it proceeds with the current brief -- it
+    is never a rejection."""
+
     max_requests: int = 40
-    """Cap passed as pydantic-ai's UsageLimits(request_limit=...) around the
-    research agent run. Independent of the tool-call bounds above: those cap
-    web_search/get_page/deep_search calls the agent makes; this caps total
-    model requests (every run_code turn, retry, and structured-output
-    validation pass), staying under pydantic-ai's own default of 50 so an
-    exhaustion is ours to catch and degrade, not an uncaught crash."""
+    """Cap passed as pydantic-ai's UsageLimits(request_limit=...) around ONE
+    sub-question's agent run. Independent of the tool-call bounds above:
+    those cap web_search/get_page/deep_search calls; this caps total model
+    requests (every turn, retry, and structured-output validation pass),
+    staying under pydantic-ai's own default of 50 so an exhaustion is ours to
+    catch and degrade, not an uncaught crash."""
 
 
 class PipelineConfig(BaseModel):
