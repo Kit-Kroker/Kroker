@@ -48,6 +48,15 @@ class ResearchDeps(BaseModel):
     memory_base_url: str = "http://localhost:8888"
     memory_bank: str = "project:default"
     memory_watermark: str | None = None
+    scope: str = "run"
+    """Which persisted budget counter this call charges. The fan-out sets it
+    to "sq-<id>" so one sub-question's spending cannot drain its siblings'
+    allowance; "run" is the shared whole-run counter."""
+
+    max_run_cost_usd: float = 4.0
+    """The whole-run ceiling, charged alongside `scope` on every call. Carried
+    on deps because the toolset charges activity-side and has no other route
+    to the config."""
     budget: Budget = Field(default_factory=Budget)
 
 

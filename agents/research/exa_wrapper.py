@@ -3,7 +3,7 @@ import logging
 
 from pydantic_ai import RunContext
 
-from sdlc.research.budget_store import charge_persisted
+from sdlc.research.budget_store import charge_scoped
 from sdlc.research.deps import ResearchDeps
 from sdlc.research.verify import write_page
 
@@ -24,12 +24,16 @@ def get_wrapped_exa_search():
 
             async def web_search(self, ctx: RunContext[ResearchDeps],
                                  query: str) -> ToolReturn[str]:
-                await charge_persisted(ctx.deps, search=1)
+                await charge_scoped(
+                    ctx.deps, search=1, scope=ctx.deps.scope,
+                    run_max_cost_usd=ctx.deps.max_run_cost_usd)
                 return await super().web_search(query)
 
             async def get_page(self, ctx: RunContext[ResearchDeps],
                                url: str) -> ToolReturn[str]:
-                await charge_persisted(ctx.deps, fetch=1)
+                await charge_scoped(
+                    ctx.deps, fetch=1, scope=ctx.deps.scope,
+                    run_max_cost_usd=ctx.deps.max_run_cost_usd)
                 result = await super().get_page(url)
 
                 content = result.return_value
@@ -45,7 +49,9 @@ def get_wrapped_exa_search():
 
             async def deep_search(self, ctx: RunContext[ResearchDeps],
                                   question: str) -> ToolReturn[str]:
-                await charge_persisted(ctx.deps, search=1)
+                await charge_scoped(
+                    ctx.deps, search=1, scope=ctx.deps.scope,
+                    run_max_cost_usd=ctx.deps.max_run_cost_usd)
                 return await super().deep_search(question)
 
         class WrappedExaSearch(ExaSearch):

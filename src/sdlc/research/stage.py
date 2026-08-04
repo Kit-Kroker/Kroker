@@ -183,7 +183,11 @@ async def research_subquestion(inp: SubQuestionInput,
         agent = _agent
 
     # Each sub-question charges its OWN scope so one cannot drain the run.
-    deps = inp.deps.model_copy(update={"budget": inp.deps.budget.model_copy()})
+    deps = inp.deps.model_copy(update={
+        "budget": inp.deps.budget.model_copy(),
+        "scope": sub.id,
+        "max_run_cost_usd": inp.max_run_cost_usd,
+    })
 
     usage = RoleUsage(role="research", model=inp.model)
     try:

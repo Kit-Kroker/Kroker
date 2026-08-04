@@ -71,3 +71,41 @@ async def test_charge_scoped_does_not_charge_the_scope_when_the_run_ceiling_trip
         await charge_scoped(_deps(max_fetches=10), fetch=1,
                             scope="sq-1", run_max_cost_usd=0.03)
     assert not budget_path("r1", "sq-1").exists()
+
+
+@pytest.mark.asyncio
+async def test_research_subquestion_charges_its_own_scope():
+    # The per-sub-question allowance is only real if the toolset charges the
+    # sub-question's scope rather than the shared run counter.
+    from sdlc.models import ResearchBrief, SubQuestion
+    from sdlc.research.stage import SubQuestionInput, research_subquestion
+
+    inp = SubQuestionInput(
+        sub_question=SubQuestion(id="sq-7", question="q"),
+        deps=_deps(), model="test-model", max_requests=40,
+        max_run_cost_usd=4.0)
+
+    captured = {}
+
+    class _U:
+        input_tokens = output_tokens = 0
+        cache_read_tokens = cache_write_tokens = 0
+
+    class _Agent:
+        async def run(self, prompt, **kw):
+            captured["scope"] = kw["deps"].scope
+            captured["run_max"] = kw["deps"].max_run_cost_usd
+
+            class _R:
+                output = ResearchBrief(summary="s")
+                usage = _U()
+            return _R()
+
+    await research_subquestion(inp, _agent=_Agent())
+    assert captured["scope"] == "sq-7"
+    assert captured["run_max"] == 4.0
+
+
+def test_research_deps_defaults_to_the_run_scope():
+    d = _deps()
+    assert d.scope == "run"
