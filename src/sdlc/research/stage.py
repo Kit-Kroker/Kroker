@@ -222,10 +222,16 @@ async def research_subquestion(inp: SubQuestionInput,
 class _SynthesisOutput(BaseModel):
     """EXACTLY the three fields the model is allowed to write. Making this a
     closed type is the enforcement of "synthesis may not author grounded
-    findings" -- there is simply nowhere for it to put one."""
+    findings" -- there is simply nowhere for it to put one.
+
+    Field constraints are enforced HERE, not on ResearchBrief: the brief is
+    assembled via model_copy(update=...), which bypasses pydantic validation,
+    so ResearchBrief.confidence's ge/le is inert on this path. Putting the
+    bound on _SynthesisOutput catches an out-of-range value at the boundary
+    where pydantic-ai validates the model's structured output."""
     summary: str = ""
     contradictions: list[Contradiction] = Field(default_factory=list)
-    confidence: float = 0.0
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
 class SynthesizeInput(BaseModel):

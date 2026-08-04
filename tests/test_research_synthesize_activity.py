@@ -92,3 +92,18 @@ async def test_field_order_is_preserved():
         "summary": "s", "confidence": 0.5, "contradictions": []}))
     assert list(out.model_dump().keys()) == list(
         ResearchBrief().model_dump().keys())
+
+
+def test_synthesis_confidence_is_bound_to_the_unit_interval():
+    # The brief is assembled via model_copy(update=...), which bypasses
+    # validation, so ResearchBrief.confidence's ge/le is inert on the synthesis
+    # path. The bound must live on _SynthesisOutput -- the boundary where
+    # pydantic-ai validates the model's structured output. An out-of-range
+    # value is rejected here, not silently landed in the brief.
+    from pydantic import ValidationError
+
+    from sdlc.research.stage import _SynthesisOutput
+
+    with pytest.raises(ValidationError):
+        _SynthesisOutput(confidence=42.0)
+    assert _SynthesisOutput(confidence=0.7).confidence == 0.7
