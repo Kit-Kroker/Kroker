@@ -1481,12 +1481,13 @@ class FeatureWorkflow:
                                        model=STAGE_MODELS.get("research", "unknown"))
             findings = await self._fan_out_research(cfg, idea, deps,
                                                     research_spend)
-            brief: ResearchBrief = await workflow.execute_activity(
+            brief, synth_usage = await workflow.execute_activity(
                 synthesize_brief,
                 SynthesizeInput(idea_json=idea.model_dump_json(),
                                 findings=findings,
                                 model=STAGE_MODELS.get("research", "unknown")),
                 **RESEARCH_SYNTH_ACT)
+            await self._fold_research_usage(cfg, synth_usage, research_spend)
             if all(f.failed for f in findings):
                 # Every sub-question failed: nothing to build a brief from.
                 # Degrade the STAGE, never the run (2026-07-20 decision).
@@ -1545,13 +1546,15 @@ class FeatureWorkflow:
                         guidance=gate.guidance or "",
                         gaps=gaps, contradictions=conflicts)
                     # Re-merge over ALL findings: round one is never discarded.
-                    brief = await workflow.execute_activity(
+                    brief, synth_usage = await workflow.execute_activity(
                         synthesize_brief,
                         SynthesizeInput(
                             idea_json=idea.model_dump_json(),
                             findings=findings,
                             model=STAGE_MODELS.get("research", "unknown")),
                         **RESEARCH_SYNTH_ACT)
+                    await self._fold_research_usage(cfg, synth_usage,
+                                                    research_spend)
                     # Round-2 findings must be verified too.
                     violations = await workflow.execute_activity(
                         verify_brief_activity,

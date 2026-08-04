@@ -272,17 +272,25 @@ def _synthesis_prompt(inp: SynthesizeInput, merged: ResearchBrief) -> str:
 
 
 @activity.defn
-async def synthesize_brief(inp: SynthesizeInput, _model=None) -> ResearchBrief:
+async def synthesize_brief(inp: SynthesizeInput,
+                           _model=None) -> tuple[ResearchBrief, RoleUsage]:
     """Merge N partial briefs into one ResearchBrief.
 
     Structure comes from code (merge_briefs), prose from the model. The model
     is handed a closed output type with three fields, so it CANNOT author a
     grounded finding -- a fabricated quote would be caught by verify_brief, but
     only by turning an ordinary run into a fail-closed stage failure.
+
+    Returns the brief AND its model spend. Fan-out moved the model call
+    activity-side, out of _run_role's reach, so an activity that calls a model
+    must hand its usage back or the spend is silently lost (E-33 amendment,
+    spec §7) -- the same rule ResearchPlan and SubQuestionFinding exist to
+    enforce. The empty-findings path makes no model call and returns a
+    zero-spend RoleUsage.
     """
     merged = merge_briefs(inp.findings)
     if not inp.findings:
-        return merged
+        return merged, RoleUsage(role="research", model=inp.model)
 
     agent = Agent(_model or inp.model, output_type=_SynthesisOutput,
                   system_prompt=SYNTHESIS_SYSTEM)
@@ -297,4 +305,4 @@ async def synthesize_brief(inp: SynthesizeInput, _model=None) -> ResearchBrief:
         # single agent turn and is the depth payoff of fanning out.
         "contradictions": merged.contradictions + out.contradictions,
         "confidence": out.confidence,
-    })
+    }), _usage_of(result, inp.model)
