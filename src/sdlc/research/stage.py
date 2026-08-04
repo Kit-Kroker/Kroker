@@ -19,7 +19,8 @@ from temporalio import activity
 from ..models import (Contradiction, Gap, ResearchBrief, ResearchPlan,
                       RoleUsage, SubQuestion, SubQuestionFinding)
 from .deps import BudgetExceeded, ResearchDeps
-from .prompts import PLAN_SYSTEM, sub_question_prompt
+from .merge import merge_briefs
+from .prompts import PLAN_SYSTEM, SYNTHESIS_SYSTEM, sub_question_prompt
 
 
 class _PlannerOutput(BaseModel):
@@ -216,3 +217,78 @@ async def research_subquestion(inp: SubQuestionInput,
 
     return SubQuestionFinding(sub_question=sub, brief=result.output,
                               usage=_usage_of(result, inp.model))
+
+
+class _SynthesisOutput(BaseModel):
+    """EXACTLY the three fields the model is allowed to write. Making this a
+    closed type is the enforcement of "synthesis may not author grounded
+    findings" -- there is simply nowhere for it to put one."""
+    summary: str = ""
+    contradictions: list[Contradiction] = Field(default_factory=list)
+    confidence: float = 0.0
+
+
+class SynthesizeInput(BaseModel):
+    idea_json: str
+    findings: list[SubQuestionFinding]
+    model: str
+
+
+def _numbered_sources(brief: ResearchBrief) -> str:
+    """The numbered source list, built BEFORE the model is prompted.
+
+    Order matters and is the whole reason this is a separate function. Building
+    the list after the call makes citation impossible: the model never saw the
+    numbers, so it had none to cite. Built first and handed over, the numbers
+    the model cites and the numbers the brief carries come from one object and
+    cannot drift."""
+    return "".join(
+        f"[{n}] {s.title or s.url} — {s.url}\n"
+        for n, s in enumerate(brief.sources_consulted, start=1))
+
+
+def _synthesis_prompt(inp: SynthesizeInput, merged: ResearchBrief) -> str:
+    parts = [f"Original question / feature idea:\n\n{inp.idea_json}\n",
+             "\nWhat the analysts found:\n"]
+    for f in inp.findings:
+        parts.append(f"\n--- On: {f.sub_question.question}\n")
+        if f.failed:
+            parts.append(f"(this sub-question did not complete: {f.error})\n")
+            continue
+        parts.append(f"{f.brief.summary}\n")
+        for g in f.brief.grounded_findings:
+            parts.append(f"  * {g.claim} — {g.source_url}\n")
+    sources = _numbered_sources(merged)
+    if sources:
+        parts.append("\nNumbered sources — cite ONLY these numbers:\n")
+        parts.append(sources)
+    return "".join(parts)
+
+
+@activity.defn
+async def synthesize_brief(inp: SynthesizeInput, _model=None) -> ResearchBrief:
+    """Merge N partial briefs into one ResearchBrief.
+
+    Structure comes from code (merge_briefs), prose from the model. The model
+    is handed a closed output type with three fields, so it CANNOT author a
+    grounded finding -- a fabricated quote would be caught by verify_brief, but
+    only by turning an ordinary run into a fail-closed stage failure.
+    """
+    merged = merge_briefs(inp.findings)
+    if not inp.findings:
+        return merged
+
+    agent = Agent(_model or inp.model, output_type=_SynthesisOutput,
+                  system_prompt=SYNTHESIS_SYSTEM)
+    result = await agent.run(_synthesis_prompt(inp, merged))
+    out = result.output
+
+    return merged.model_copy(update={
+        "summary": out.summary,
+        # Within-sub-question conflicts (already in `merged`) PLUS the
+        # cross-sub-question ones only visible now that independent
+        # investigations sit side by side. The second kind is unreachable in a
+        # single agent turn and is the depth payoff of fanning out.
+        "contradictions": merged.contradictions + out.contradictions,
+        "confidence": out.confidence,
+    })
