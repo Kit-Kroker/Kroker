@@ -75,6 +75,19 @@ def model_family(model: str) -> str:
     return re.split(r"[:/]", model, maxsplit=1)[0].strip().lower()
 
 
+def model_id(model: str) -> str:
+    """The model itself, with any provider prefix stripped:
+    'anthropic:glm-5.2' -> 'glm-5.2'; 'zai-coding-plan/glm-5.2' -> 'glm-5.2'.
+    A string with no separator IS the id. Case-insensitive.
+
+    model_family() answers "who serves it"; this answers "what is it". The
+    adversary's constraint needs the second: two prefixes over the same
+    weights decorrelate nothing.
+    """
+    parts = re.split(r"[:/]", model, maxsplit=1)
+    return parts[-1].strip().lower()
+
+
 def _discover_agents_dir() -> Path | None:
     """Walk up from cwd for a checkout containing BOTH marker files. Dev and
     tests only — production sets $SDLC_AGENTS_DIR explicitly."""
@@ -206,12 +219,35 @@ def check_adr6_families(role_models: dict[str, str]) -> None:
             f"correlate with the authoring model")
 
 
+def check_adversary_model(role_models: dict[str, str]) -> None:
+    """The adversary must not BE either model it is decorrelating from.
+
+    Deliberately by model id, not family: the shipped registry runs `dev`
+    and `reviewer` on the same glm-5.2 behind different providers, so a
+    family check here would wave through a second copy of the reviewer.
+    (That dev/reviewer pairing is spec OQ-A4 and is NOT changed here --
+    check_adr6_families keeps its existing semantics so no benchmark
+    baseline shifts.) No-op when the optional role is absent.
+    """
+    adv = role_models.get("adversary")
+    if adv is None:
+        return
+    for other in ("dev", "reviewer"):
+        peer = role_models.get(other)
+        if peer is not None and model_id(adv) == model_id(peer):
+            raise RegistryError(
+                f"ADR-6 violation: adversary model '{adv}' is the same model "
+                f"as '{other}' ('{peer}') -- a second opinion from the same "
+                f"weights is not a second opinion")
+
+
 def validate_run_roles(role_models: dict[str, str]) -> None:
     """Per-run ADR-6 enforcement at a boundary that constructs a non-default
     role→model map (benchmark arm, CLI --role-model). Registry-structural
     checks (harness inequality, research provider) stay at boot; this guards
     only what a per-run override can break: model-family inequality."""
     check_adr6_families(role_models)
+    check_adversary_model(role_models)
 
 
 def validate_registry(roles: dict[str, RoleConfig]) -> None:
@@ -239,6 +275,8 @@ def validate_registry(roles: dict[str, RoleConfig]) -> None:
             raise RegistryError("role 'deep_review' must declare a model")
         role_models["deep_review"] = roles["deep_review"].model
     check_adr6_families(role_models)
+    check_adversary_model({n: c.model for n, c in roles.items()
+                           if c.model is not None})
     if rev.kind == "harness" and rev.harness is not None \
             and rev.harness == dev.harness:
         raise RegistryError(
