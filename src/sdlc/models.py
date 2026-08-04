@@ -265,13 +265,26 @@ class ValidationContract(BaseModel):
     frozen: bool = True                     # set at plan gate; immutable after
 
 
+class HandoffClaim(BaseModel):
+    """One assertion about the work, carrying the evidence for it.
+    Evidence-first, mirroring IntegrityFlag."""
+    text: str
+    evidence: str            # quote/reference from the scrubbed HarnessSession
+
+
 class HandoffSummary(BaseModel):
-    """FR-805: structured task-to-task handoff (intra-run continuity)."""
+    """FR-805: structured task-to-task handoff (intra-run continuity).
+
+    Split by provenance: `files_touched` is computed from the materialized
+    diff by the workflow, so no model can misreport it. The claim lists are
+    extracted from the scrubbed session -- the diff cannot state WHY an
+    approach was chosen or what was knowingly left undone.
+    """
     task_id: str
-    what_changed: list[str]
-    decisions_made: list[str] = Field(default_factory=list)
-    open_concerns: list[str] = Field(default_factory=list)
     files_touched: list[str] = Field(default_factory=list)
+    what_changed: list[HandoffClaim] = Field(default_factory=list)
+    decisions_made: list[HandoffClaim] = Field(default_factory=list)
+    open_concerns: list[HandoffClaim] = Field(default_factory=list)
 
 
 class DevTask(BaseModel):
