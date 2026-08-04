@@ -8,6 +8,7 @@ add none without a test proving the specific false-failure it fixes."""
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import os
 import re
@@ -18,6 +19,8 @@ from pydantic import BaseModel
 from temporalio import activity
 
 from ..models import ResearchBrief
+
+_TMP_COUNTER = itertools.count()
 
 _WS = re.compile(r"\s+")
 
@@ -60,6 +63,33 @@ def pages_dir(run_id: str) -> Path:
     Resolved activity-side only — the workflow never computes this."""
     root = Path(os.environ.get("SDLC_RUNS_ROOT", "runs"))
     return root / run_id / "research" / "pages"
+
+
+def write_page(run_id: str, url: str, text: str) -> Path:
+    """Write a fetched page atomically and return its path.
+
+    os.replace() is atomic on POSIX and Windows alike, so a concurrent reader
+    sees either the complete old file or the complete new one. Plain
+    write_text() truncates first, and a reader interleaved between truncate
+    and write gets a partial file -- which verify_brief reports as
+    quote_not_found, failing the stage closed for no reason. Fan-out makes
+    two sub-questions fetching the same URL an ordinary event, so this is
+    load-bearing rather than defensive.
+
+    The temp file carries the PID and a counter so two processes writing the
+    same URL cannot collide on the temp path itself.
+    """
+    d = pages_dir(run_id)
+    d.mkdir(parents=True, exist_ok=True)
+    final = d / page_filename(url)
+    tmp = final.with_suffix(f".{os.getpid()}.{next(_TMP_COUNTER)}.tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, final)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return final
 
 
 class Violation(BaseModel):

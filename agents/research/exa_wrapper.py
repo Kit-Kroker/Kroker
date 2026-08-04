@@ -5,7 +5,7 @@ from pydantic_ai import RunContext
 
 from sdlc.research.budget_store import charge_persisted
 from sdlc.research.deps import ResearchDeps
-from sdlc.research.verify import page_filename, pages_dir
+from sdlc.research.verify import write_page
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +37,7 @@ def get_wrapped_exa_search():
                     content = str(content)
 
                 try:
-                    out_path = pages_dir(ctx.deps.run_id) / page_filename(url)
-                    out_path.parent.mkdir(parents=True, exist_ok=True)
-                    out_path.write_text(content, encoding="utf-8")
+                    write_page(ctx.deps.run_id, url, content)
                 except Exception as e:
                     logger.error(f"Failed to write intercept for {url}: {e}")
 
