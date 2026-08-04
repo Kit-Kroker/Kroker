@@ -26,8 +26,8 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..agents.roles import (
         PROMPT_SHAS, STAGE_MODELS, STAGE_ROLES, t_analyst, t_architect,
-        t_clarify, t_deep_review, t_merge_verdict, t_planner, t_qa,
-        t_research, t_reviewer,
+        t_clarify, t_deep_review, t_handoff, t_merge_verdict, t_planner,
+        t_qa, t_research, t_reviewer,
     )
     from ..benchmarks.judge import (
         JudgeInput, _build_judge_input, judge_artifact,
@@ -72,6 +72,7 @@ with workflow.unsafe.imports_passed_through():
         TimeoutAction,
         gate_key,
     )
+    from ..handoff import claim_survival_score, cross_check_claims
     from ..pending import (
         GateContext, PendingDecision, clarify_pending, gate_pending,
     )
@@ -309,6 +310,31 @@ def _refine_seed(brief: "ResearchBrief") -> tuple[list, list]:
 
 
 _TEST_OUTPUT_MAX = 1500
+
+
+_HANDOFF_TAIL = 5
+
+
+def _handoff_notes(prior_handoffs: list) -> list[str]:
+    """FR-801/805: scoped context for the NEXT task.
+
+    Claim TEXT only -- evidence quotes are for the cross-check and the
+    benchmark record, and pasting transcript excerpts into a fresh prompt
+    is how authoring context leaks sideways. A handoff with no claims
+    contributes no line at all: 'task-3: no concerns' is noise that taught
+    the reader nothing for every run this channel has existed.
+    """
+    notes: list[str] = []
+    for h in prior_handoffs[-_HANDOFF_TAIL:]:
+        parts: list[str] = []
+        for label, claims in (("did", h.what_changed),
+                              ("decided", h.decisions_made),
+                              ("concerns", h.open_concerns)):
+            if claims:
+                parts.append(f"{label}: " + "; ".join(c.text for c in claims))
+        if parts:
+            notes.append(f"- {h.task_id}: " + " | ".join(parts))
+    return notes
 
 
 def _fix_loop_issues(qa, qa_raw, review) -> str:
@@ -888,6 +914,59 @@ class FeatureWorkflow:
             return None
         return report
 
+    async def _run_handoff(self, cfg, run, contract, assertions, diff,
+                           task) -> "HandoffSummary":
+        """FR-805: extract task-to-task claims from the scrubbed session.
+
+        files_touched is filled HERE from the diff, never by the model, so
+        the extractor structurally cannot misreport which files changed.
+        Best-effort: any failure returns the mechanical handoff rather than
+        failing a task that already passed.
+        """
+        files = diff["files"]
+        fallback = HandoffSummary(task_id=task.id, files_touched=files)
+        if not (t_handoff is not None and run is not None
+                and run.session_ref is not None):
+            return fallback
+        _started = workflow.now()
+        try:
+            loaded = await workflow.execute_activity(
+                load_session, LoadSessionInput(ref=run.session_ref), **ACT)
+            model = resolve_role_model(cfg, "handoff")
+            spend = RoleUsage(role="handoff", model=model)
+            out = (await self._run_role(
+                cfg, "handoff", model, t_handoff,
+                "Frozen contract assertions:\n- " + "\n- ".join(assertions)
+                + f"\nDiff:\n{diff['patch']}"
+                + "\nScrubbed harness transcript:\n" + loaded.text,
+                into=spend)).output
+
+            kept_total = 0
+            dropped_total = 0
+            fields = {}
+            for name in ("what_changed", "decisions_made", "open_concerns"):
+                kept, dropped = cross_check_claims(
+                    getattr(out, name), files)
+                fields[name] = kept
+                kept_total += len(kept)
+                dropped_total += dropped
+
+            handoff = HandoffSummary(task_id=task.id, files_touched=files,
+                                     **fields)
+            await self._record(cfg, self._stage_record(
+                cfg, stage="handoff", role="handoff",
+                started=_started, ended=workflow.now(),
+                quality_score=claim_survival_score(kept_total, dropped_total),
+                judge="handoff", outcome=BenchmarkOutcome.PASS,
+                model=model, spend=spend, task_id=task.id,
+                fix_attempts=0))
+            return handoff
+        except Exception:
+            workflow.logger.warning(
+                "handoff extraction failed for task %s; using mechanical "
+                "handoff", task.id, exc_info=True)
+            return fallback
+
     async def _record_escalation(self, cfg: PipelineConfig, task: DevTask,
                                  esc: ToolEscalation) -> None:
         """Trace event (events.jsonl / report.html) plus a benchmark record
@@ -1074,10 +1153,7 @@ class FeatureWorkflow:
                       else task.acceptance_criteria)
         # FR-801/805: scoped context — contract + recent handoff concerns,
         # never other tasks' transcripts.
-        handoff_notes = [
-            f"- {h.task_id}: {'; '.join(h.open_concerns) or 'no concerns'}"
-            for h in prior_handoffs[-5:]
-        ]
+        handoff_notes = _handoff_notes(prior_handoffs)
         stack_directive = _contract_stack_directive(contract)
         prompt = (
             f"Task: {task.title}\n{task.description}\n"
@@ -1256,12 +1332,8 @@ class FeatureWorkflow:
             if task_passed and review_ok:
                 deep = await self._run_deep_review(
                     cfg, run, contract, assertions, diff, task)
-                handoff = HandoffSummary(
-                    task_id=task.id,
-                    what_changed=[task.title],
-                    files_touched=diff["files"],
-                    open_concerns=[],
-                )
+                handoff = await self._run_handoff(
+                    cfg, run, contract, assertions, diff, task)
                 return TaskResult(task_id=task.id, status="done",
                                   attempts=attempt, branch=handle.branch,
                                   run=run, handoff=handoff, qa=qa_raw,
