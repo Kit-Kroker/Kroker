@@ -1,0 +1,10 @@
+# Spec 3.1: the decorrelated second opinion. Runs ONLY when the primary
+# reviewer approves -- a rejection is already headed for the fix loop, so the
+# expensive error is a false approve.
+#
+# The model must not BE dev's or reviewer's model (check_adversary_model,
+# by model id -- NOT by provider prefix; see spec OQ-A4). claude-sonnet-4-6
+# is genuinely different weights from glm-5.2 and ARCHITECTURE section 4 puts
+# adversarial instruction-following on exactly this tier.
+kind: proposer
+model: anthropic:claude-sonnet-4-6

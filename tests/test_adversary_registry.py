@@ -52,3 +52,24 @@ def test_absent_adversary_is_a_noop():
         "dev": "zai-coding-plan/glm-5.2",
         "reviewer": "anthropic:glm-5.2",
     })
+
+
+def test_adversary_role_ships_and_is_wired():
+    from sdlc.agents import roles
+    from sdlc.models import ReviewReport
+
+    assert roles.adversary_agent is not None
+    assert roles.adversary_agent.output_type is ReviewReport
+    assert roles.t_adversary in roles.ALL_TEMPORAL_AGENTS
+    assert roles.STAGE_ROLES["adversary"] == "adversary"
+
+
+def test_shipped_registry_satisfies_the_adversary_check():
+    """The registry as shipped must pass its own invariant."""
+    from sdlc.agents.loader import check_adversary_model, load_registry
+
+    registry = load_registry()
+    check_adversary_model({n: c.model for n, c in registry.items()
+                           if c.model is not None})
+    assert model_id(registry["adversary"].model) != model_id(
+        registry["reviewer"].model)

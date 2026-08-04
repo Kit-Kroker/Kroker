@@ -27,6 +27,7 @@ PRE_MIGRATION_AGENT_NAMES = {
     "research": "research_agent",
     "deep_review": "deep_review_agent",
     "handoff": "handoff_agent",
+    "adversary": "adversary_agent",
 }
 
 

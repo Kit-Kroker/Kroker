@@ -64,6 +64,10 @@ deep_review_agent = AGENTS.get("deep_review")
 # Optional handoff extractor (FR-805). Present iff agents/handoff/ ships.
 handoff_agent = AGENTS.get("handoff")
 
+# Optional adversarial reviewer (spec part 2). Present iff agents/adversary/
+# ships; the LENS runs only under cfg.adversarial_review_enabled (feature.py).
+adversary_agent = AGENTS.get("adversary")
+
 # Stage name -> registry role. Stage names (feature.py's pipeline vocabulary)
 # and role names (the registry's) genuinely differ — 'plan'/'planner',
 # 'review'/'reviewer', 'analyze'/'analyst', 'devops'/'devops_planner'. This
@@ -80,6 +84,7 @@ STAGE_ROLES: dict[str, str] = {
     "research": "research",             # optional; present iff the folder ships
     "deep_review": "deep_review",       # optional; present iff the folder ships
     "handoff": "handoff",               # optional; present iff the folder ships
+    "adversary": "adversary",           # optional; present iff the folder ships
 }
 
 # Both maps are keyed by stage and looked up together in _cached_stage. Keep
@@ -129,6 +134,10 @@ t_handoff = (
     TemporalAgent(handoff_agent, activity_config=AGENT_ACTIVITY_CONFIG)
     if handoff_agent is not None else None)
 
+t_adversary = (
+    TemporalAgent(adversary_agent, activity_config=AGENT_ACTIVITY_CONFIG)
+    if adversary_agent is not None else None)
+
 ALL_TEMPORAL_AGENTS = [t_clarify, t_architect, t_planner, t_qa,
                        t_reviewer, t_analyst, t_merge_verdict, t_devops]
 if t_research is not None:
@@ -137,3 +146,5 @@ if t_deep_review is not None:
     ALL_TEMPORAL_AGENTS.append(t_deep_review)
 if t_handoff is not None:
     ALL_TEMPORAL_AGENTS.append(t_handoff)
+if t_adversary is not None:
+    ALL_TEMPORAL_AGENTS.append(t_adversary)
