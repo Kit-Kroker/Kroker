@@ -50,7 +50,12 @@ class BenchmarkOutcome(str, Enum):
 class QualityScore(BaseModel):
     score: float | None = None              # 0.0..1.0; None when judge errored
     components: dict[str, float] = Field(default_factory=dict)
-    judge: Literal["contract", "llm_judge", "human_override", "error", "oracle"]
+    # Non-DAG lenses (deep_review/adversary/handoff) are judges too. Omitting
+    # one here is not a type error at the call site -- _stage_record passes
+    # `judge: str` straight through -- it is a ValidationError swallowed by the
+    # caller's `except Exception`. tests/test_judge_literal.py pins the set.
+    judge: Literal["contract", "llm_judge", "human_override", "error",
+                   "oracle", "deep_review", "adversary", "handoff"]
 
 
 class CostBag(BaseModel):

@@ -880,6 +880,11 @@ class FeatureWorkflow:
                     metadata={"task_id": task.id,
                               "run_id": workflow.info().workflow_id})
         except Exception:
+            # A lens must never fail delivery -- but a silent swallow is how
+            # the judge-Literal defect survived unnoticed across every run.
+            workflow.logger.warning(
+                "deep_review lens failed for task %s; continuing without it",
+                task.id, exc_info=True)
             return None
         return report
 
