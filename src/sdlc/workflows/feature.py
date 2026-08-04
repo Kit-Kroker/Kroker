@@ -293,6 +293,21 @@ def _findings_from_results(subs: list[SubQuestion],
     return out
 
 
+def _should_refine(round_n: int, cfg: "ResearchConfig") -> bool:
+    """Whether a REVISE at `round_n` gets another wave. Exhaustion is NOT a
+    rejection -- the stage proceeds with the brief it has."""
+    return round_n <= cfg.max_refine_rounds
+
+
+def _refine_seed(brief: "ResearchBrief") -> tuple[list, list]:
+    """What round two should target: everything round one could not resolve.
+
+    Richer than a free-text note, because the SGR brief already carries the
+    machine-readable version. Resolved contradictions are excluded -- they are
+    answered, and re-researching them spends the run ceiling on finished work."""
+    return list(brief.gaps), [c for c in brief.contradictions if c.unresolved]
+
+
 _TEST_OUTPUT_MAX = 1500
 
 
@@ -1511,24 +1526,75 @@ class FeatureWorkflow:
                     error=f"rejected:research.grounding: {err}"))
             else:
                 brief_digest_val = brief_digest(brief)
-                gate = await self._gate("research", cfg)
-                if not gate.approved:
-                    return "rejected:research"
-                for item in verified_findings_to_retain(
-                        brief, workflow.info().workflow_id,
-                        bank=cfg.memory.project_bank):
-                    await self._retain(cfg, item.kind, item.bank, item.text,
-                                       item.metadata)
-                _r_quality = await self._judge(
-                    cfg, brief.model_dump_json(), "research",
-                    author_model=STAGE_MODELS.get("research", "unknown"))
-                await self._record(cfg, self._stage_record(
-                    cfg, stage="research", role="research",
-                    started=_r_started, ended=workflow.now(),
-                    quality_score=_r_quality.score, judge=_r_quality.judge,
-                    outcome=BenchmarkOutcome.PASS,
-                    model=STAGE_MODELS.get("research", "unknown"),
-                    spend=research_spend))
+                round_n = 1
+                while True:
+                    gate = await self._gate("research", cfg, round=round_n)
+                    if gate.outcome == GateOutcome.APPROVE:
+                        break
+                    if gate.outcome == GateOutcome.REJECT:
+                        return "rejected:research"
+                    # REVISE
+                    if not _should_refine(round_n, cfg.research):
+                        # Exhausted: proceed with what we have. Research
+                        # degrades a run; it never stops one.
+                        break
+                    gaps, conflicts = _refine_seed(brief)
+                    findings += await self._fan_out_research(
+                        cfg, idea, deps, research_spend,
+                        id_offset=len(findings),
+                        guidance=gate.guidance or "",
+                        gaps=gaps, contradictions=conflicts)
+                    # Re-merge over ALL findings: round one is never discarded.
+                    brief = await workflow.execute_activity(
+                        synthesize_brief,
+                        SynthesizeInput(
+                            idea_json=idea.model_dump_json(),
+                            findings=findings,
+                            model=STAGE_MODELS.get("research", "unknown")),
+                        **RESEARCH_SYNTH_ACT)
+                    # Round-2 findings must be verified too.
+                    violations = await workflow.execute_activity(
+                        verify_brief_activity,
+                        args=[brief, workflow.info().workflow_id],
+                        **VERIFY_ACT)
+                    if violations:
+                        self._status = "research_failed"
+                        brief_digest_val = ""
+                        break
+                    brief_digest_val = brief_digest(brief)
+                    round_n += 1
+                if brief_digest_val:
+                    # Grounded brief (possibly after a refine round): retain,
+                    # judge, and record PASS.
+                    for item in verified_findings_to_retain(
+                            brief, workflow.info().workflow_id,
+                            bank=cfg.memory.project_bank):
+                        await self._retain(cfg, item.kind, item.bank,
+                                           item.text, item.metadata)
+                    _r_quality = await self._judge(
+                        cfg, brief.model_dump_json(), "research",
+                        author_model=STAGE_MODELS.get("research", "unknown"))
+                    await self._record(cfg, self._stage_record(
+                        cfg, stage="research", role="research",
+                        started=_r_started, ended=workflow.now(),
+                        quality_score=_r_quality.score, judge=_r_quality.judge,
+                        outcome=BenchmarkOutcome.PASS,
+                        model=STAGE_MODELS.get("research", "unknown"),
+                        spend=research_spend))
+                else:
+                    # A refine round failed grounding: record FAIL, mirroring
+                    # the initial-violations path. retain is skipped (nothing
+                    # from an unverified brief is trustworthy) and the run
+                    # proceeds on the idea alone, same as a research-disabled
+                    # run.
+                    await self._record(cfg, self._stage_record(
+                        cfg, stage="research", role="research",
+                        started=_r_started, ended=workflow.now(),
+                        quality_score=None, judge="error",
+                        outcome=BenchmarkOutcome.FAIL,
+                        model=STAGE_MODELS.get("research", "unknown"),
+                        spend=research_spend,
+                        error="rejected:research.grounding (refine)"))
 
         # E-33: serial budget check after the research section (runs whether
         # research is on or off; off-by-default research adds no spend here).
