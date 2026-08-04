@@ -6,6 +6,7 @@ signal waits with a per-gate policy (hard / soft / off).
 """
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import datetime, timedelta
 
@@ -66,20 +67,22 @@ with workflow.unsafe.imports_passed_through():
         GateDecision,
         GateOutcome, GatePolicy, HandoffSummary, IdeaBrief,
         ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig,
-        RecallSnapshot, ResearchBrief, RetainItem, RoleConfig,
-        RoleUsage, RunSummary, SecurityReport, TaskResult, TimeoutAction,
+        RecallSnapshot, ResearchBrief, ResearchPlan, RetainItem, RoleConfig,
+        RoleUsage, RunSummary, SecurityReport, SubQuestionFinding, TaskResult,
+        TimeoutAction,
         gate_key,
     )
     from ..pending import (
         GateContext, PendingDecision, clarify_pending, gate_pending,
     )
-    from ..research.deps import BudgetExceeded, ResearchDeps
+    from ..research.deps import ResearchDeps
     from ..research.retain import verified_findings_to_retain
+    from ..research.stage import (PlanInput, SubQuestionInput, SynthesizeInput,
+                                  plan_research, research_subquestion,
+                                  synthesize_brief)
     from ..research.verify import (
         brief_digest, verify_brief_activity,
     )
-    from pydantic_ai import UsageLimits
-    from pydantic_ai.exceptions import UsageLimitExceeded
 
 ACT = dict(start_to_close_timeout=timedelta(minutes=10),
            retry_policy=RetryPolicy(maximum_attempts=3))
@@ -132,6 +135,34 @@ EXPORT_ACT = dict(start_to_close_timeout=timedelta(minutes=2),
 # test run. It does not heartbeat, so no heartbeat_timeout.
 INTEG_ACT = dict(start_to_close_timeout=timedelta(minutes=30),
         retry_policy=RetryPolicy(maximum_attempts=2))
+
+# Fan-out research. Durations follow the shape measured by the prior art:
+# planning is short and schema-constrained; a sub-question runs a full agent
+# with search and page fetches and legitimately takes minutes.
+RESEARCH_PLAN_ACT = dict(
+    start_to_close_timeout=timedelta(minutes=5),
+    retry_policy=RetryPolicy(maximum_attempts=3))
+# The heartbeat is the important knob. A sub-question can run for many
+# minutes, so without heartbeating the server waits out the full
+# start_to_close before rescheduling a lost worker; with it, ~60s.
+# Invariant: stage.HEARTBEAT_INTERVAL_SECONDS < heartbeat_timeout <
+# start_to_close_timeout.
+RESEARCH_SQ_ACT = dict(
+    start_to_close_timeout=timedelta(minutes=20),
+    heartbeat_timeout=timedelta(seconds=60),
+    retry_policy=RetryPolicy(
+        initial_interval=timedelta(seconds=2),
+        backoff_coefficient=2.0,
+        maximum_interval=timedelta(seconds=60),
+        maximum_attempts=6,
+        # The budget counter is PERSISTED to disk, so a retry meets the same
+        # exhausted cap: six guaranteed failures with backoff. The activity
+        # already degrades these internally; this is the belt-and-braces for
+        # any path that lets one escape.
+        non_retryable_error_types=["BudgetExceeded", "UsageLimitExceeded"]))
+RESEARCH_SYNTH_ACT = dict(
+    start_to_close_timeout=timedelta(minutes=10),
+    retry_policy=RetryPolicy(maximum_attempts=3))
 
 
 def resolve_role_model(cfg: "PipelineConfig", stage: str) -> str:
@@ -241,6 +272,25 @@ def _degraded_research_brief(exc: Exception) -> ResearchBrief:
                   what_is_missing="the research stage did not complete",
                   why_it_matters=str(exc))],
         summary=f"Research stopped early: {exc}")
+
+
+def _findings_from_results(subs: list[SubQuestion],
+                           results: list) -> list[SubQuestionFinding]:
+    """Turn gather(..., return_exceptions=True) output into findings.
+
+    Sub-questions are INDEPENDENT -- that is the premise of the fan-out. Letting
+    one exception propagate would cancel the gather and discard every sibling
+    finding already paid for. A partial brief from three of four sub-questions
+    is worth far more than nothing, so a failure becomes a failed finding that
+    the merge turns into a Gap."""
+    out: list[SubQuestionFinding] = []
+    for sub, result in zip(subs, results):
+        if isinstance(result, BaseException):
+            out.append(SubQuestionFinding(
+                sub_question=sub, failed=True, error=str(result)))
+        else:
+            out.append(result)
+    return out
 
 
 _TEST_OUTPUT_MAX = 1500
@@ -697,6 +747,79 @@ class FeatureWorkflow:
             cache_write_tokens=u.cache_write_tokens or 0,
             cost_usd=usd, into=into)
         return result
+
+    async def _fan_out_research(self, cfg: PipelineConfig, idea,
+                                deps: "ResearchDeps",
+                                spend: RoleUsage,
+                                id_offset: int = 0,
+                                guidance: str = "",
+                                gaps: list | None = None,
+                                contradictions: list | None = None
+                                ) -> list[SubQuestionFinding]:
+        """One wave: plan -> N parallel sub-questions. The caller synthesizes
+        a brief over the returned findings.
+
+        Returns the raw per-sub-question findings so a refine round can
+        EXTEND the finding list rather than discarding round one."""
+        model = STAGE_MODELS.get("research", "unknown")
+
+        plan: ResearchPlan = await workflow.execute_activity(
+            plan_research,
+            PlanInput(idea_json=idea.model_dump_json(),
+                      max_sub_questions=cfg.research.max_sub_questions,
+                      model=model, id_offset=id_offset, guidance=guidance,
+                      gaps=gaps or [], contradictions=contradictions or []),
+            **RESEARCH_PLAN_ACT)
+        await self._fold_research_usage(cfg, plan.usage, spend)
+
+        # THE fan-out. return_exceptions=True because the sub-questions are
+        # independent: one failure must not cancel the gather and throw away
+        # siblings already paid for.
+        results = await asyncio.gather(*[
+            workflow.execute_activity(
+                research_subquestion,
+                SubQuestionInput(
+                    sub_question=sq, deps=deps, model=model,
+                    max_requests=cfg.research.max_requests,
+                    max_run_cost_usd=cfg.research.max_run_cost_usd),
+                **RESEARCH_SQ_ACT)
+            for sq in plan.sub_questions
+        ], return_exceptions=True)
+
+        findings = _findings_from_results(plan.sub_questions, results)
+        for f in findings:
+            await self._fold_research_usage(cfg, f.usage, spend)
+        return findings
+
+    async def _fold_research_usage(self, cfg: PipelineConfig,
+                                   usage: RoleUsage,
+                                   into: RoleUsage) -> None:
+        """E-33 amendment: fan-out moved the model call activity-side, so
+        _run_role cannot wrap it. The activity hands usage back and the
+        workflow prices it here -- one accounting path preserved, only the
+        call site moved."""
+        if not (usage.input_tokens or usage.output_tokens):
+            return
+        usd: float | None = None
+        try:
+            usd = await workflow.execute_activity(
+                price_usage,
+                PriceUsageInput(
+                    model=usage.model,
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    cache_read_tokens=usage.cache_read_tokens,
+                    cache_write_tokens=usage.cache_write_tokens),
+                **PRICE_ACT)
+        except Exception:
+            usd = None
+        self._track_usage(
+            role="research", model=usage.model,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cache_read_tokens=usage.cache_read_tokens,
+            cache_write_tokens=usage.cache_write_tokens,
+            cost_usd=usd, into=into)
 
     async def _run_deep_review(self, cfg, run, contract, assertions, diff,
                                task) -> "DeepReviewReport | None":
@@ -1330,27 +1453,30 @@ class FeatureWorkflow:
                 memory_base_url=cfg.memory.base_url,
                 memory_bank=cfg.memory.project_bank,
                 memory_watermark=self._memory_watermark)
-            # The in-memory deps.budget on `deps` above does NOT accumulate
-            # under TemporalAgent (each tool call is a separate activity that
-            # deserializes its own fresh copy); the actual bound comes from
-            # WrappedExaSearchToolset charging budget_store.charge_persisted
-            # (disk-backed, keyed by run_id) before each Exa call. That cap
-            # sits well under usage_limits below, so a struggling run should
-            # hit BudgetExceeded first; UsageLimitExceeded is the backstop for
-            # anything that gets past it (bench-todo-api-greenfield-1785485669:
-            # an uncaught UsageLimitExceeded here killed the whole
+            # Budget enforcement under fan-out: each sub-question charges its
+            # OWN persisted scope ("sq-<id>") plus the shared "run" ceiling via
+            # charge_scoped inside the toolset, so one sub-question cannot
+            # drain the run. research_subquestion degrades a BudgetExceeded /
+            # UsageLimitExceeded into a gap rather than re-raising -- the
+            # counter is persisted, so a retry would hit the same exhausted
+            # cap six times with backoff (bench-todo-api-greenfield-1785485669:
+            # an uncaught UsageLimitExceeded once killed the whole
             # FeatureWorkflow, not just the research stage).
             research_spend = RoleUsage(role="research",
                                        model=STAGE_MODELS.get("research", "unknown"))
-            try:
-                brief: ResearchBrief = (await self._run_role(
-                    cfg, "research", STAGE_MODELS.get("research", "unknown"),
-                    t_research, idea.model_dump_json(), deps=deps,
-                    usage_limits=UsageLimits(
-                        request_limit=cfg.research.max_requests),
-                    into=research_spend)).output
-            except (BudgetExceeded, UsageLimitExceeded) as exc:
-                brief = _degraded_research_brief(exc)
+            findings = await self._fan_out_research(cfg, idea, deps,
+                                                    research_spend)
+            brief: ResearchBrief = await workflow.execute_activity(
+                synthesize_brief,
+                SynthesizeInput(idea_json=idea.model_dump_json(),
+                                findings=findings,
+                                model=STAGE_MODELS.get("research", "unknown")),
+                **RESEARCH_SYNTH_ACT)
+            if all(f.failed for f in findings):
+                # Every sub-question failed: nothing to build a brief from.
+                # Degrade the STAGE, never the run (2026-07-20 decision).
+                brief = _degraded_research_brief(
+                    RuntimeError("every sub-question failed"))
             # Task 7 fallback (Task 1 finding A): the original
             # @agent.output_validator was silently dropped by TemporalAgent, so
             # grounding is enforced here as a post-run ACTIVITY. Reads page
