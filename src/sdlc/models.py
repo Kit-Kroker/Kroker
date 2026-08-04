@@ -854,6 +854,12 @@ class PipelineConfig(BaseModel):
                                             # the anti-collusion check for cost
     deep_review_enabled: bool = False       # FR-111/E-39: opt-in transcript
                                             # lens; advisory, off by default
+    adversarial_review_enabled: bool = False   # spec part 2: decorrelated
+                                            # second opinion on the APPROVING
+                                            # path only. Off by default -- it
+                                            # changes hot-path outcomes and
+                                            # costs a call per approving
+                                            # attempt. Swept as a benchmark arm.
     coverage_threshold: float = Field(default=0.0, ge=0.0, le=100.0)
     # FR-106: diff-scoped coverage (0..100) the advisory `coverage` check must
     # clear. Default 0.0 = effectively off until a project opts in AND its test

@@ -25,9 +25,9 @@ with workflow.unsafe.imports_passed_through():
         security_scan, setup_integration_branch,
     )
     from ..agents.roles import (
-        PROMPT_SHAS, STAGE_MODELS, STAGE_ROLES, t_analyst, t_architect,
-        t_clarify, t_deep_review, t_handoff, t_merge_verdict, t_planner,
-        t_qa, t_research, t_reviewer,
+        PROMPT_SHAS, STAGE_MODELS, STAGE_ROLES, t_adversary, t_analyst,
+        t_architect, t_clarify, t_deep_review, t_handoff, t_merge_verdict,
+        t_planner, t_qa, t_research, t_reviewer,
     )
     from ..benchmarks.judge import (
         JudgeInput, _build_judge_input, judge_artifact,
@@ -337,7 +337,7 @@ def _handoff_notes(prior_handoffs: list) -> list[str]:
     return notes
 
 
-def _fix_loop_issues(qa, qa_raw, review) -> str:
+def _fix_loop_issues(qa, qa_raw, review, adversary=None) -> str:
     """Assemble the retry prompt's issue list from BOTH judges.
 
     The task gate anchors on `qa_raw.tests_passed` — the subprocess exit code
@@ -349,7 +349,12 @@ def _fix_loop_issues(qa, qa_raw, review) -> str:
     dash (bench-todo-api-greenfield-1785444047: 8 of 12 attempts burned
     re-confirming the stack directive while the real ModuleNotFoundError was
     never shown). Returns "" when neither judge has anything actionable —
-    callers must treat that as a harness fault, not another attempt."""
+    callers must treat that as a harness fault, not another attempt.
+
+    `adversary` is the optional decorrelated second opinion (spec part 2).
+    Its blocking findings join the primary's, because on a split the primary
+    approved and contributed nothing -- without the union the retry prompt
+    would carry no instruction at all."""
     deterministic: list[str] = []
     if not qa_raw.tests_passed:
         if qa_raw.issues:
@@ -359,9 +364,11 @@ def _fix_loop_issues(qa, qa_raw, review) -> str:
         if qa_raw.failing_tests:
             deterministic.append(
                 "failing tests: " + ", ".join(qa_raw.failing_tests[:25]))
-    review_issues = (
-        [f"{f.severity}: {f.assertion} — {f.detail}"
-         for f in review.blocking_findings] if review else [])
+    review_issues = [
+        f"{f.severity}: {f.assertion} — {f.detail}"
+        for r in (review, adversary) if r is not None
+        for f in r.blocking_findings
+    ]
     return "\n- ".join(
         list(qa.issues or qa.failing_tests) + deterministic + review_issues)
 
@@ -914,6 +921,58 @@ class FeatureWorkflow:
             return None
         return report
 
+    async def _run_adversary(self, cfg, contract, assertions, diff, qa_raw,
+                             task) -> "ReviewReport | None":
+        """Spec 3.2: the decorrelated second opinion, on the APPROVING path
+        only -- a rejection is already headed for the fix loop.
+
+        Clean-context, exactly like the primary: contract + diff + test
+        output, never the session (that is deep_review's job). Identical
+        inputs are what make disagreement interpretable as model variance
+        rather than information asymmetry.
+
+        FAIL-OPEN: any failure returns None, which the caller treats as
+        agreement. The primary reviewer is the sole designated blocking
+        lens; a lens added for safety must not become a new way to fail.
+        (Deliberately asymmetric to the E-38 scrub, which is fail-closed:
+        a leaked credential is unrecoverable, a missed opinion is not.)
+        """
+        if not (cfg.adversarial_review_enabled and t_adversary is not None):
+            return None
+        _started = workflow.now()
+        model = resolve_role_model(cfg, "adversary")
+        try:
+            spend = RoleUsage(role="adversary", model=model)
+            report = (await self._run_role(
+                cfg, "adversary", model, t_adversary,
+                "Frozen contract assertions:\n- " + "\n- ".join(assertions)
+                + f"\nDiff:\n{diff['patch']}"
+                + f"\nTest output:\n{'; '.join(qa_raw.issues or [])}",
+                into=spend)).output
+            await self._record(cfg, self._stage_record(
+                cfg, stage="adversary", role="adversary",
+                started=_started, ended=workflow.now(),
+                quality_score=(1.0 if report.approve else 0.0),
+                judge="adversary",
+                outcome=(BenchmarkOutcome.PASS if report.approve
+                         else BenchmarkOutcome.FAIL),
+                model=model, spend=spend, task_id=task.id,
+                fix_attempts=0))          # cause row: volume lives on code/qa
+            if not report.approve:
+                await self._retain(
+                    cfg, MemoryKind.GOTCHA, cfg.memory.project_bank,
+                    text=f"adversary split from reviewer on task {task.id}: "
+                         + "; ".join(f"{f.assertion}: {f.detail}"
+                                     for f in report.blocking_findings),
+                    metadata={"task_id": task.id,
+                              "run_id": workflow.info().workflow_id})
+            return report
+        except Exception:
+            workflow.logger.warning(
+                "adversary lens failed for task %s; treating as agreement",
+                task.id, exc_info=True)
+            return None
+
     async def _run_handoff(self, cfg, run, contract, assertions, diff,
                            task) -> "HandoffSummary":
         """FR-805: extract task-to-task claims from the scrubbed session.
@@ -1329,20 +1388,45 @@ class FeatureWorkflow:
                 task_id=task.id, attempt=attempt - 1))
 
             review_ok = review is None or review.approve
+            if review is not None:
+                # The primary's verdict has never been recorded, so
+                # review-driven rework showed as fix_attempts on code/qa with
+                # no cause row at all. Disagreement is a RELATION between two
+                # records; the adversary's is meaningless without this one.
+                await self._record(cfg, self._stage_record(
+                    cfg, stage="review", role="reviewer",
+                    started=_attempt_started, ended=workflow.now(),
+                    quality_score=(1.0 if review.approve else 0.0),
+                    judge="contract",
+                    outcome=(BenchmarkOutcome.PASS if review.approve
+                             else BenchmarkOutcome.FAIL),
+                    model=resolve_role_model(cfg, "review"),
+                    task_id=task.id, attempt=attempt - 1,
+                    fix_attempts=0))      # cause row; volume lives on code/qa
+
+            adversary = None
             if task_passed and review_ok:
-                deep = await self._run_deep_review(
-                    cfg, run, contract, assertions, diff, task)
-                handoff = await self._run_handoff(
-                    cfg, run, contract, assertions, diff, task)
-                return TaskResult(task_id=task.id, status="done",
-                                  attempts=attempt, branch=handle.branch,
-                                  run=run, handoff=handoff, qa=qa_raw,
-                                  review=review, deep_review=deep)
+                # Approving path only: a rejection is already headed for the
+                # fix loop, so the expensive error is a false approve.
+                adversary = await self._run_adversary(
+                    cfg, contract, assertions, diff, qa_raw, task)
+                if adversary is None or adversary.approve:
+                    deep = await self._run_deep_review(
+                        cfg, run, contract, assertions, diff, task)
+                    handoff = await self._run_handoff(
+                        cfg, run, contract, assertions, diff, task)
+                    return TaskResult(task_id=task.id, status="done",
+                                      attempts=attempt, branch=handle.branch,
+                                      run=run, handoff=handoff, qa=qa_raw,
+                                      review=review, deep_review=deep)
+                # Split: fall through to the retry path below. max_fix_attempts
+                # still bounds it, and exhaustion enters the existing
+                # accept / retry-with-guidance / quarantine gate unchanged.
 
             if attempt > cfg.max_fix_attempts:
                 break
 
-            issues = _fix_loop_issues(qa, qa_raw, review)
+            issues = _fix_loop_issues(qa, qa_raw, review, adversary)
             if not issues:
                 # The task failed its gate, yet neither judge produced a
                 # single actionable statement — there is nothing to put in a
