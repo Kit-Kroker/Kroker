@@ -1,0 +1,6 @@
+# FR-805: extracts task-to-task handoff claims from the SCRUBBED harness
+# session. Narrow extraction, not judgment -- ARCHITECTURE section 4 tiering
+# puts this on a small fast model. Editing the model here is configuration,
+# not a code change.
+kind: proposer
+model: anthropic:glm-5.2

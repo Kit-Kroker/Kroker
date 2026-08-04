@@ -56,7 +56,7 @@ REQUIRED_ROLES = HARNESS_ROLES | PROPOSER_ROLES
 # pipeline boots without running the stage, but agents/research/ is still a
 # KNOWN directory so the unknown-directory check keeps biting. This EXTENDS
 # the fail-closed check; it does not weaken it.
-OPTIONAL_ROLES: frozenset[str] = frozenset({"research", "deep_review"})
+OPTIONAL_ROLES: frozenset[str] = frozenset({"research", "deep_review", "handoff", "adversary"})
 
 # REQUIRED_ROLES gates PRESENCE (a missing one fails boot).
 # KNOWN_ROLES gates RECOGNITION (an unknown directory fails boot).

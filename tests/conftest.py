@@ -122,4 +122,28 @@ def write_registry_dir(root, version=1):
         b"def build(model, instructions, model_settings):\n"
         b"    return Agent(model, name='deep_review_agent',\n"
         b"                 system_prompt=instructions)\n")
+    # Optional handoff extractor (FR-805): a plain proposer. No ADR-6
+    # constraint applies to it -- it is extraction, not review.
+    ho = root / "handoff"
+    ho.mkdir(exist_ok=True)
+    (ho / "agent.yaml").write_bytes(
+        b"kind: proposer\nmodel: anthropic:glm-5.2\n")
+    (ho / "instructions.md").write_bytes(b"extract the handoff")
+    (ho / "agent.py").write_bytes(
+        b"from pydantic_ai import Agent\n"
+        b"def build(model, instructions, model_settings):\n"
+        b"    return Agent(model, name='handoff_agent',\n"
+        b"                 system_prompt=instructions)\n")
+    # Optional adversarial reviewer (spec part 2): a different MODEL ID from
+    # dev/reviewer (both glm-5.2 here) so check_adversary_model passes.
+    adv = root / "adversary"
+    adv.mkdir(exist_ok=True)
+    (adv / "agent.yaml").write_bytes(
+        b"kind: proposer\nmodel: anthropic:claude-sonnet-4-6\n")
+    (adv / "instructions.md").write_bytes(b"adversarially review the diff")
+    (adv / "agent.py").write_bytes(
+        b"from pydantic_ai import Agent\n"
+        b"def build(model, instructions, model_settings):\n"
+        b"    return Agent(model, name='adversary_agent',\n"
+        b"                 system_prompt=instructions)\n")
     return root

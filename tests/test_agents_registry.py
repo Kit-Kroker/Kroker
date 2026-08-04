@@ -88,7 +88,8 @@ from tests.conftest import write_registry_dir as _write_registry_dir
 
 
 def test_optional_roles_contains_research_and_deep_review():
-    assert OPTIONAL_ROLES == frozenset({"research", "deep_review"})
+    assert OPTIONAL_ROLES == frozenset(
+        {"research", "deep_review", "handoff", "adversary"})
     assert KNOWN_ROLES == REQUIRED_ROLES | OPTIONAL_ROLES
 
 
