@@ -5,6 +5,11 @@ think (clarify, architect, plan, QA, quality gate, devops); coding harnesses
 do (`claude -p`, `opencode run`) inside isolated git worktrees.
 
 ## Roles
+Governed by the versioned registry in `agents/` (`agents/registry.yaml` +
+one `agents/<role>/` folder per role) and validated at worker boot
+(`src/sdlc/agents/loader.py`) — 3 harness + 8 required proposer + 4 optional
+proposer roles.
+
 | Role | Kind | Runs as |
 |---|---|---|
 | clarify | Pydantic AI (TemporalAgent) | activity via TemporalAgent |
@@ -14,6 +19,11 @@ do (`claude -p`, `opencode run`) inside isolated git worktrees.
 | qa analyst | Pydantic AI + test-suite activity | activities |
 | quality gate | `DeterministicQualityGate` (pure code) + advisory `MergeVerdict` (Pydantic AI, soft-gate only) | `evaluate_gate` activity + TemporalAgent |
 | reviewer | coding harness (different model/harness than dev) | activity |
+| analyst | Pydantic AI, clean-context | activity via TemporalAgent |
+| research *(optional, `research_enabled`)* | Pydantic AI, fans out (`plan_research` → `research_subquestion` × N → `synthesize_brief`) | activities; provider `fake` (CI) / `tavily` / `exa` (ExaSearch + Harness `run_code`, needs `EXA_API_KEY`) |
+| deep_review *(optional, `deep_review_enabled`)* | Pydantic AI, reads the scrubbed harness transcript | activity via TemporalAgent, advisory only |
+| handoff *(optional, `handoff_enabled`, FR-805)* | Pydantic AI, extracts task→task claims from the scrubbed session | activity via TemporalAgent, best-effort |
+| adversary *(optional, `adversarial_review_enabled`)* | Pydantic AI, decorrelated second opinion (different model identity than dev+reviewer) on the approving path | activity via TemporalAgent, advisory, fail-open |
 
 ## Human-in-the-loop
 Gates: clarify, architecture, plan, merge, deploy — each `hard` / `soft` /
@@ -41,14 +51,25 @@ python -m sdlc.cli benchmark score --case cat-cafe-monitoring
 ```
 
 ## Run
+**Local:**
 1. `temporal server start-dev`
 2. `pip install -e .` then `python -m sdlc.worker`
 3. `python -m sdlc.cli start ...`
 
+**Docker Compose** (`docker-compose.yml`): brings up Temporal, a real
+[Hindsight](https://github.com/vectorize-io/hindsight) memory backend, and the
+worker together, all reading secrets from `.env` (`env_file:`) — copy
+`.env.example` to `.env` first. The worker image installs the `logfire` extra
+so `logfire_setup.configure()` doesn't crash-loop on a missing module when
+`LOGFIRE_TOKEN` is set. `docker compose up`.
+
 ## Develop
 - `pip install -e .[dev]` then `python -m pytest` (needs `git` on PATH).
-- Importing the workflow/agents currently requires `ANTHROPIC_API_KEY` set
-  (agents are constructed at import); a dummy value works for import-only.
+- Importing the workflow/agents currently requires `ANTHROPIC_API_KEY` /
+  `OPENAI_API_KEY` / `EXA_API_KEY` set (agents are constructed at import,
+  including the shipped research role's `provider: exa` ExaSearch client);
+  `tests/conftest.py` sets dummy values for import-only, so `pytest` needs no
+  real keys.
 - Added a new module and hit `ModuleNotFoundError`? Re-run `pip install -e .`
   (setuptools' editable wheel doesn't auto-discover new files).
 - See [`docs/foundation.md`](docs/foundation.md) for the contracts, activities,
@@ -56,6 +77,16 @@ python -m sdlc.cli benchmark score --case cat-cafe-monitoring
   [`docs/architecture-review-2026-07.md`](docs/architecture-review-2026-07.md)
   for the design decisions and implementation status.
 - See [`docs/BENCHMARK.md`](docs/BENCHMARK.md) for the benchmark & evaluation design — the four measurement axes (harness / model×role / memory / case), how success criteria SC-1..6 get their numbers, and the E-30…E-37 increments.
+- Self-contained schema docs (no build step, open directly in a browser),
+  each checked against actual code:
+  [`docs/roadmap.html`](docs/roadmap.html) (every FR/NFR/SC/US/ADR + the
+  15-stage DAG vs code), [`docs/architecture-schema.html`](docs/architecture-schema.html),
+  [`docs/agents-schema.html`](docs/agents-schema.html) (registry lifecycle,
+  every role, ADR-6/adversary model-inequality checks),
+  [`docs/research-stage-schema.html`](docs/research-stage-schema.html) (the
+  research fan-out stage, provider seam, ExaSearch wiring),
+  [`docs/benchmark.html`](docs/benchmark.html) /
+  [`docs/benchmark-analysis.html`](docs/benchmark-analysis.html).
 
 ## Notes
 - Payloads through Temporal stay small (claim-check for specs/diffs/logs).
@@ -71,3 +102,17 @@ python -m sdlc.cli benchmark score --case cat-cafe-monitoring
 - Harness is a config axis, not a fork: `claude -p` and `opencode run` are
   registry entries (`HARNESSES`), so a third adapter (e.g. `cursor`) drops in
   once it normalises into `HarnessRunResult`. The benchmark sweeps this axis.
+- Hard gates that time out notify (log/webhook adapters) on reminder,
+  escalation, and expiry timers rather than silently auto-rejecting (FR-303);
+  a green run holds for a human rather than being discarded.
+- A decorrelated **adversary** lens (`agents/adversary/`) runs only on the
+  approving path as a non-DAG, fail-open second opinion — decorrelated by
+  model *identity* (`model_id()`), not provider prefix, so two prefixes over
+  the same weights don't count as independent. Off by default.
+- Every terminal run emits a `RunSummary` (retro stage) and exports
+  `events.jsonl` / `report.html` / `summary.json`; `sdlc benchmark score`
+  aggregates across runs into the SC-rollup + heatmap/task/error/waste
+  matrices, plus an `agreement_matrix` for the adversary lens.
+- Memory (Hindsight) defaults to a fake in-process backend; the real client
+  (`memory/hindsight_client.py`) talks to a live Hindsight container (see
+  Docker Compose above).
