@@ -125,3 +125,51 @@ def test_handoff_is_fail_open_and_never_reaches_a_validator():
     # nothing else -- never into a review or QA call.
     assert "_run_review(" not in body
     assert "_run_adversary(" not in body
+
+
+# --- review-defect regressions -------------------------------------------------
+
+def test_adversary_receives_the_same_test_info_as_the_primary():
+    """Identical information is what makes disagreement interpretable as model
+    variance, not information asymmetry (spec 3.1). The adversary must see the
+    full QAReport the primary sees -- not an issues-only digest that is empty
+    on the approving path and biases it toward rejection."""
+    src = _src()
+    adv = src[src.find("async def _run_adversary"): src.find("async def _run_handoff")]
+    assert "qa_raw.model_dump_json()" in adv
+    assert "Test output:" not in adv
+
+
+def test_non_blocking_adversary_rejection_does_not_abandon_the_task():
+    """A reject whose findings are all medium/low has no actionable instruction;
+    it must be treated as agreement, not fall through to ``if not issues: break``
+    which silently abandons a task that passed its gate. blocking_findings is
+    actionable; the boolean alone is not -- same rule as the primary."""
+    src = _src()
+    idx = src.find("await self._run_adversary")
+    assert idx != -1
+    gate = src[idx: idx + 800]
+    assert "not adversary.blocking_findings" in gate
+
+
+def test_review_record_names_the_model_that_actually_ran():
+    """The reviewer agent is built at import on the registry model and always
+    RUNS that model (the call site's model arg is pricing-only); cfg.roles
+    ['reviewer'] is dead config by design (registry-drives-every-role spec).
+    So the record must use STAGE_MODELS.get('review'), never
+    resolve_role_model -- which would credit an inert arm override."""
+    src = _src()
+    assert 'resolve_role_model(cfg, "review")' not in src
+
+
+def test_adversary_never_runs_without_a_primary_reviewer():
+    """The adversary is a SECOND opinion; it presupposes a first. When review
+    is disabled (review is None) it must not run -- the primary reviewer is the
+    sole designated blocking lens, which is the justification for this lens
+    being fail-open."""
+    src = _src()
+    pred = src.find("if task_passed and review_ok:")
+    call = src.find("await self._run_adversary")
+    assert pred != -1 and call > pred
+    assert "review is not None" in src[pred:call], (
+        "the adversary must be guarded by primary-reviewer presence")

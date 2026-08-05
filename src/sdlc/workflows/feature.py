@@ -946,8 +946,8 @@ class FeatureWorkflow:
             report = (await self._run_role(
                 cfg, "adversary", model, t_adversary,
                 "Frozen contract assertions:\n- " + "\n- ".join(assertions)
-                + f"\nDiff:\n{diff['patch']}"
-                + f"\nTest output:\n{'; '.join(qa_raw.issues or [])}",
+                + f"\nTest results: {qa_raw.model_dump_json()}"
+                + f"\nDiff:\n{diff['patch']}",
                 into=spend)).output
             await self._record(cfg, self._stage_record(
                 cfg, stage="adversary", role="adversary",
@@ -1400,17 +1400,29 @@ class FeatureWorkflow:
                     judge="contract",
                     outcome=(BenchmarkOutcome.PASS if review.approve
                              else BenchmarkOutcome.FAIL),
-                    model=resolve_role_model(cfg, "review"),
+                    model=STAGE_MODELS.get("review", "unknown"),
                     task_id=task.id, attempt=attempt - 1,
                     fix_attempts=0))      # cause row; volume lives on code/qa
 
             adversary = None
             if task_passed and review_ok:
                 # Approving path only: a rejection is already headed for the
-                # fix loop, so the expensive error is a false approve.
-                adversary = await self._run_adversary(
-                    cfg, contract, assertions, diff, qa_raw, task)
-                if adversary is None or adversary.approve:
+                # fix loop, so the expensive error is a false approve. The
+                # adversary is a SECOND opinion -- it presupposes a first, so
+                # it never runs when review is disabled (review is None); the
+                # primary reviewer is the sole designated blocking lens, which
+                # is the entire justification for this lens being fail-open.
+                if review is not None:
+                    adversary = await self._run_adversary(
+                        cfg, contract, assertions, diff, qa_raw, task)
+                # A split fails the attempt ONLY when the adversary has
+                # actionable (critical/high) findings. A reject with no
+                # blocking findings has nothing to put in a retry prompt -- it
+                # would hit the ``if not issues: break`` below and silently
+                # abandon a task that passed its gate. Same rule as the primary:
+                # blocking_findings is actionable, the boolean is not.
+                if adversary is None or adversary.approve \
+                        or not adversary.blocking_findings:
                     deep = await self._run_deep_review(
                         cfg, run, contract, assertions, diff, task)
                     handoff = await self._run_handoff(

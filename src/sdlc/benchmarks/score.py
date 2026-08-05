@@ -147,7 +147,7 @@ def _write_case_matrices(ev: Evidence, out_dir: Path,
             notes.append(f"case {case_id}: no harness waste recorded "
                          f"(runs predating waste capture, or no coding tasks)")
 
-        am = build_agreement_matrix(case_id, ev.records, None)
+        am = build_agreement_matrix(case_id, ev.records, suite)
         for name, text in (
             ("agreement-matrix.html", render_agreement_matrix_html(am)),
             ("agreement-matrix.json", render_agreement_matrix_json(am)),
