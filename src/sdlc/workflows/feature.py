@@ -1005,18 +1005,21 @@ class FeatureWorkflow:
             dropped_total = 0
             fields = {}
             for name in ("what_changed", "decisions_made", "open_concerns"):
-                kept, dropped = cross_check_claims(
-                    getattr(out, name), files)
-                fields[name] = kept
-                kept_total += len(kept)
-                dropped_total += dropped
+                checked = cross_check_claims(
+                    getattr(out, name), files, session_text=loaded.text)
+                fields[name] = checked.kept
+                kept_total += len(checked.kept)
+                dropped_total += checked.dropped_paths + checked.dropped_quotes
 
             handoff = HandoffSummary(task_id=task.id, files_touched=files,
                                      **fields)
             await self._record(cfg, self._stage_record(
                 cfg, stage="handoff", role="handoff",
                 started=_started, ended=workflow.now(),
-                quality_score=claim_survival_score(kept_total, dropped_total),
+                # .value is None when no claims were extracted, which is
+                # exactly what quality_score must carry -- never a 0.0.
+                quality_score=claim_survival_score(
+                    kept_total, dropped_total).value,
                 judge="handoff", outcome=BenchmarkOutcome.PASS,
                 model=model, spend=spend, task_id=task.id,
                 fix_attempts=0))

@@ -8,6 +8,10 @@ from __future__ import annotations
 
 import re
 
+from pydantic import BaseModel
+
+from .grounding import Profile, verify_quote
+from .measurement import Measurement
 from .models import HandoffClaim
 
 # A path-ish token: at least one separator and a dotted final segment.
@@ -23,37 +27,62 @@ def _paths_in(text: str) -> set[str]:
     return {_normalise(m) for m in _PATH_RE.findall(text or "")}
 
 
+class CrossCheckResult(BaseModel):
+    """Kept claims plus the two drop reasons, counted separately: a claim
+    naming a file the diff never touched and a claim quoting something nobody
+    said are different extractor failures, and the waste metrics should not
+    average them together."""
+    kept: list[HandoffClaim] = []
+    dropped_paths: int = 0
+    dropped_quotes: int = 0
+
+
 def cross_check_claims(
     claims: list[HandoffClaim],
     files_touched: list[str],
-) -> tuple[list[HandoffClaim], int]:
-    """Keep claims whose referenced paths are all in `files_touched`.
+    session_text: str | None = None,
+) -> CrossCheckResult:
+    """Keep claims whose referenced paths are all in `files_touched` AND whose
+    evidence quote appears in `session_text`.
 
-    A claim naming NO path survives: design decisions ("chose cookie
-    sessions over JWT") legitimately reference no file, and dropping them
-    would discard exactly the content the diff cannot supply.
+    A claim naming NO path survives: design decisions ("chose cookie sessions
+    over JWT") legitimately reference no file, and dropping them would discard
+    exactly the content the diff cannot supply. A claim with NO evidence text
+    survives on the same rationale -- absence of a quote is not a fabricated
+    quote.
 
-    Returns (kept, dropped_count).
+    `session_text=None` skips quote verification entirely (E-43, spec §5): if
+    capture failed there is no haystack, and absence of the haystack is not
+    evidence against the quote. Dropping every quoted claim over an
+    infrastructure failure would silently empty the handoff, which is a
+    delivery failure by another name.
+
+    VERBATIM_BYTES profile: a stored transcript is bytes we wrote, not
+    third-party extractor output, so none of EXTRACTED_TEXT's loosenings apply.
     """
     allowed = {_normalise(f) for f in files_touched}
-    kept: list[HandoffClaim] = []
-    dropped = 0
+    result = CrossCheckResult()
     for c in claims:
         referenced = _paths_in(c.text) | _paths_in(c.evidence)
-        if referenced <= allowed:
-            kept.append(c)
-        else:
-            dropped += 1
-    return kept, dropped
+        if not referenced <= allowed:
+            result.dropped_paths += 1
+            continue
+        if (session_text is not None and c.evidence.strip()
+                and not verify_quote(c.evidence, session_text,
+                                     Profile.VERBATIM_BYTES)):
+            result.dropped_quotes += 1
+            continue
+        result.kept.append(c)
+    return result
 
 
-def claim_survival_score(kept: int, dropped: int) -> float | None:
+def claim_survival_score(kept: int, dropped: int) -> Measurement:
     """Fraction of claims that survived the cross-check.
 
-    None when there were no claims at all -- nothing was measured, and a
-    0.0 would claim it was (waste_matrix.py's rule).
+    NOT_COLLECTED when there were no claims at all -- nothing was measured,
+    and a 0.0 would claim it was (FR-915; waste_matrix.py's rule).
     """
     total = kept + dropped
     if total == 0:
-        return None
-    return kept / total
+        return Measurement.not_collected("no claims extracted")
+    return Measurement.measured(kept / total)
