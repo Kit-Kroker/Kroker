@@ -41,12 +41,22 @@ def test_quote_not_found_is_a_violation(runs_root):
     assert [v.kind for v in vios] == ["quote_not_found"]
 
 
-def test_source_never_fetched_is_a_violation(runs_root):
+def test_source_unavailable_is_a_violation(runs_root):
     # No page file written for this url -> recalled-lead demotion (finding 5).
     brief = ResearchBrief(grounded_findings=[GroundedFinding(
         source_url="https://x/never", quote="anything", claim="c")])
     vios = verify.verify_brief(brief, "r1")
-    assert [v.kind for v in vios] == ["source_never_fetched"]
+    assert [v.kind for v in vios] == ["source_unavailable"]
+    assert vios[0].source == "https://x/never"
+
+
+def test_empty_quote_is_a_violation_not_a_free_pass(runs_root):
+    """`"" in haystack` is True, so before the shared verifier an empty quote
+    grounded trivially against any fetched page."""
+    _write_page("r1", "https://x/1", "some content")
+    brief = ResearchBrief(grounded_findings=[GroundedFinding(
+        source_url="https://x/1", quote="   ", claim="c")])
+    assert [v.kind for v in verify.verify_brief(brief, "r1")] == ["quote_empty"]
 
 
 def test_whitespace_runs_collapse_but_case_is_preserved(runs_root):

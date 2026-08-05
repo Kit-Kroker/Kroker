@@ -1,57 +1,27 @@
-"""Pure verification of a ResearchBrief against bytes fetched this run, plus the
-canonical brief_digest. No network, no provider — just page files and strings.
+"""Verification of a ResearchBrief against bytes fetched this run, plus the
+canonical brief_digest. The substring match itself lives in `sdlc/grounding.py`
+(EXTRACTED_TEXT profile); this module owns the page lookup that decides which
+bytes each quote is checked against. No network, no provider — just page files
+and strings.
 
 The rule (spec §5): `grounded` means the quote is a substring of the page fetched
-THIS run for its source_url. Whitespace runs collapse to a single space before
-comparison; case is preserved. Every further loosening is a hole in the check —
-add none without a test proving the specific false-failure it fixes."""
+THIS run for its source_url, under grounding's EXTRACTED_TEXT profile. Every
+further loosening is a hole in the check — add none without a test proving the
+specific false-failure it fixes."""
 from __future__ import annotations
 
 import hashlib
 import itertools
 import json
 import os
-import re
 from pathlib import Path
-from typing import Literal
 
-from pydantic import BaseModel
 from temporalio import activity
 
+from ..grounding import Profile, Violation, quote_violation
 from ..models import ResearchBrief
 
 _TMP_COUNTER = itertools.count()
-
-_WS = re.compile(r"\s+")
-
-# Proven false-failure (cat-cafe-monitoring smoke run, 2026-07-20): Tavily's
-# PDF extractor decoded a source's curly apostrophe (U+2019) as U+FFFD
-# (REPLACEMENT CHARACTER) — "owner�s phone" on the page, "owner's phone"
-# in an otherwise word-for-word-verbatim quote. Not a model error; the byte
-# was already lost upstream of us. Apostrophe/quote variants (straight,
-# curly, backtick, and the replacement character standing in for one) are
-# low-signal punctuation — dropping them symmetrically on both the quote and
-# the page text closes this specific hole without weakening word-level
-# matching.
-_APOSTROPHE = re.compile(r"['‘’`�]")
-
-# Proven false-failure (cat-cafe-monitoring smoke run, 2026-07-20): Tavily's
-# HTML-to-text extraction for en.wikipedia.org/wiki/Indoor_positioning_system
-# left literal markdown emphasis markers (`**bold**`) inside otherwise-plain
-# prose — "provide accuracy between **1-5 meters**, making them suitable".
-# The model quoted the underlying sentence without the `**` (nobody reads
-# markup as content), which is faithful to the source's meaning and wording
-# but breaks a byte-exact substring check. Stripping `**` symmetrically from
-# both the quote and the page text closes this hole the same way apostrophe
-# normalization does above.
-_MD_BOLD = re.compile(r"\*\*")
-
-
-def normalize(text: str) -> str:
-    """Collapse whitespace runs to one space, drop apostrophe/quote-glyph
-    noise (see _APOSTROPHE) and markdown bold markers (see _MD_BOLD);
-    preserve case and all other punctuation."""
-    return _WS.sub(" ", _MD_BOLD.sub("", _APOSTROPHE.sub("", text))).strip()
 
 
 def page_filename(url: str) -> str:
@@ -92,25 +62,22 @@ def write_page(run_id: str, url: str, text: str) -> Path:
     return final
 
 
-class Violation(BaseModel):
-    kind: Literal["quote_not_found", "source_never_fetched"]
-    source_url: str
-    quote: str
-
-
 def verify_brief(brief: ResearchBrief, run_id: str) -> list[Violation]:
+    """Verify every grounded finding against the page fetched THIS run for its
+    source_url. EXTRACTED_TEXT profile: these bytes came out of a third-party
+    HTML/PDF extractor, which is what justifies its two loosenings."""
     d = pages_dir(run_id)
     violations: list[Violation] = []
     for f in brief.grounded_findings:
         page = d / page_filename(f.source_url)
         if not page.is_file():
-            violations.append(Violation(kind="source_never_fetched",
-                                        source_url=f.source_url, quote=f.quote))
+            violations.append(Violation(kind="source_unavailable",
+                                        source=f.source_url, quote=f.quote))
             continue
-        haystack = normalize(page.read_text(encoding="utf-8"))
-        if normalize(f.quote) not in haystack:
-            violations.append(Violation(kind="quote_not_found",
-                                        source_url=f.source_url, quote=f.quote))
+        v = quote_violation(f.quote, page.read_text(encoding="utf-8"),
+                            Profile.EXTRACTED_TEXT, source=f.source_url)
+        if v is not None:
+            violations.append(v)
     return violations
 
 
@@ -142,7 +109,7 @@ class GroundingViolation(Exception):
     def __init__(self, violations: list[Violation]):
         self.violations = violations
         lines = "\n".join(
-            f"- {v.kind}: {v.source_url}: {v.quote!r}" for v in violations)
+            f"- {v.kind}: {v.source}: {v.quote!r}" for v in violations)
         super().__init__(
             "Grounded findings are not verified against bytes fetched this run. "
             "The research stage fails closed. Fix the quote to a verbatim span "

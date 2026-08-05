@@ -11,7 +11,7 @@ from .verify import verify_brief
 def verified_findings_to_retain(brief: ResearchBrief, run_id: str,
                                 bank: str = "project:default"
                                 ) -> list[RetainItem]:
-    bad = {(v.source_url, v.quote) for v in verify_brief(brief, run_id)}
+    bad = {(v.source, v.quote) for v in verify_brief(brief, run_id)}
     items: list[RetainItem] = []
     for f in brief.grounded_findings:
         if (f.source_url, f.quote) in bad:

@@ -43,7 +43,7 @@ _RESEARCH = ResearchBrief(summary="found nothing external", confidence=0.5)
 # fetched this run. verify_brief_activity reads
 # $SDLC_RUNS_ROOT/<run_id>/research/pages/<sha256(url)>.txt — no such file
 # exists for "https://x/never-fetched" under the test's empty tmp_path, so the
-# activity RETURNS [Violation(kind="source_never_fetched", ...)]. The
+# activity RETURNS [Violation(kind="source_unavailable", ...)]. The
 # workflow records the research stage as FAILed and proceeds (2026-07-20
 # decision — see test_research_stage_degrades_instead_of_blocking_on_
 # grounding_violation below). This still exercises the fail-closed READ of
@@ -174,7 +174,7 @@ async def test_research_stage_degrades_instead_of_blocking_on_grounding_violatio
     The research gate policy is OFF (auto-approve) so the gate doesn't block
     before verification runs. $SDLC_RUNS_ROOT points at an empty tmp_path —
     no page file for the violating URL, so the activity returns
-    [Violation(kind="source_never_fetched", ...)] and the workflow inspects it
+    [Violation(kind="source_unavailable", ...)] and the workflow inspects it
     (`if violations:`), records a FAIL stage record, and continues."""
     monkeypatch.setenv("SDLC_RUNS_ROOT", str(tmp_path))
     activities = [evaluate_gate, verify_brief_activity, *GIT_FAKES,

@@ -1703,7 +1703,7 @@ class FeatureWorkflow:
                 # as a research-disabled run.
                 self._status = "research_failed"
                 err = "; ".join(
-                    f"{v.kind}: {v.source_url}: {v.quote[:80]!r}"
+                    f"{v.kind}: {v.source}: {v.quote[:80]!r}"
                     for v in violations)
                 await self._record(cfg, self._stage_record(
                     cfg, stage="research", role="research",

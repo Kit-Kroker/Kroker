@@ -40,7 +40,7 @@ def test_recalled_lead_in_grounded_fails_verification(runs_root):
         GroundedFinding(source_url="https://x/recalled", quote="from memory",
                         claim="c")])
     vios = verify.verify_brief(brief, "r1")
-    assert [v.kind for v in vios] == ["source_never_fetched"]
+    assert [v.kind for v in vios] == ["source_unavailable"]
     assert verified_findings_to_retain(brief, "r1") == []
 
 
@@ -57,8 +57,8 @@ async def test_verify_brief_activity_returns_violations(runs_root):
         GroundedFinding(source_url="https://x/none", quote="x", claim="c")])
     violations = await verify_brief_activity(brief, "r1")
     assert violations
-    assert violations[0].source_url == "https://x/none"
-    assert violations[0].kind == "source_never_fetched"
+    assert violations[0].source == "https://x/none"
+    assert violations[0].kind == "source_unavailable"
 
 
 @pytest.mark.asyncio
