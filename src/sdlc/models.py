@@ -363,8 +363,14 @@ class TaskResult(BaseModel):
 
 
 class QAReport(BaseModel):
+    """Clean-context QA evidence for the merge gate.
+
+    Deliberately carries NO coverage number: coverage is measured
+    deterministically into CoverageReport (FR-106), and a model-asserted
+    figure beside a measured one is a second registry for one fact -- the
+    failure mode the agents.yaml / cfg.roles work already paid for once.
+    """
     tests_passed: bool
-    coverage_pct: float | None = None
     failing_tests: list[str] = Field(default_factory=list)
     issues: list[str] = Field(default_factory=list)
     stack_mismatch: bool = False            # diff uses a fundamentally

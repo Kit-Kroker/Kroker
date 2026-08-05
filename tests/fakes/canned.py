@@ -48,7 +48,7 @@ PLAN = ImplementationPlan(
     confidence=0.95,
 )
 
-QA_OK = QAReport(tests_passed=True, coverage_pct=100.0)
+QA_OK = QAReport(tests_passed=True)
 REVIEW_OK = ReviewReport(approve=True, confidence=0.95)
 MERGE_OK = MergeVerdict(approve=True, confidence=0.95, rationale="clean")
 

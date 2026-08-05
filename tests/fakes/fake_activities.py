@@ -49,7 +49,7 @@ async def fake_get_task_diff(inp: DiffInput) -> dict:
 
 @activity.defn(name="run_test_suite")
 async def fake_run_test_suite(inp: QAInput) -> QAReport:
-    return QAReport(tests_passed=True, coverage_pct=100.0)
+    return QAReport(tests_passed=True)
 
 
 @activity.defn(name="run_lint")
