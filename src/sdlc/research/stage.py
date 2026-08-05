@@ -78,8 +78,7 @@ def _plan_prompt(inp: PlanInput) -> str:
     return "".join(parts)
 
 
-@activity.defn
-async def plan_research(inp: PlanInput, _model=None) -> ResearchPlan:
+async def _plan_research_impl(inp: PlanInput, _model=None) -> ResearchPlan:
     """Decompose the idea into independent sub-questions.
 
     `_model` is a test seam only: production passes None and the activity
@@ -105,6 +104,26 @@ async def plan_research(inp: PlanInput, _model=None) -> ResearchPlan:
         sub_questions=[SubQuestion(id=f"sq-{inp.id_offset + i}", question=t)
                        for i, t in enumerate(texts)],
         usage=_usage_of(result, inp.model))
+
+
+@activity.defn(name="plan_research")
+async def plan_research(inp: PlanInput) -> ResearchPlan:
+    """Thin activity wrapper around `_plan_research_impl`.
+
+    Temporal derives an activity's arg type hints from its FULL signature,
+    then discards ALL of them the moment the payload count sent by the
+    caller doesn't match that signature's param count (see
+    `_type_hints_from_func` / `worker/_activity.py`'s "only use arg type
+    hints if they match the input count"). `_plan_research_impl`'s `_model`
+    seam is never passed by `workflow.execute_activity` (only `inp` is), so
+    keeping `_model` on the `@activity.defn` function itself silently turned
+    off type hints on every real call -- `inp` decoded as a plain dict
+    instead of `PlanInput`, crashing on `inp.model`. Splitting the seam out
+    into an undecorated impl (called directly by tests, bypassing Temporal
+    serialization) keeps the registered activity's signature exactly what
+    real callers send.
+    """
+    return await _plan_research_impl(inp)
 
 
 # Comfortably below the workflow's heartbeat_timeout (see feature.py's
@@ -160,9 +179,9 @@ def _degraded(sub: SubQuestion, exc: Exception) -> ResearchBrief:
         summary=f"Research stopped early: {exc}")
 
 
-@activity.defn
-async def research_subquestion(inp: SubQuestionInput,
-                               _model=None, _agent=None) -> SubQuestionFinding:
+async def _research_subquestion_impl(inp: SubQuestionInput,
+                                     _model=None, _agent=None
+                                     ) -> SubQuestionFinding:
     """Research ONE sub-question. The fan-out unit.
 
     Runs the PLAIN research_agent, not the TemporalAgent: inside an activity
@@ -219,6 +238,14 @@ async def research_subquestion(inp: SubQuestionInput,
                               usage=_usage_of(result, inp.model))
 
 
+@activity.defn(name="research_subquestion")
+async def research_subquestion(inp: SubQuestionInput) -> SubQuestionFinding:
+    """Thin activity wrapper -- see `plan_research`'s wrapper docstring for
+    why the `_model`/`_agent` test seams cannot live on the registered
+    activity's own signature."""
+    return await _research_subquestion_impl(inp)
+
+
 class _SynthesisOutput(BaseModel):
     """EXACTLY the three fields the model is allowed to write. Making this a
     closed type is the enforcement of "synthesis may not author grounded
@@ -271,9 +298,8 @@ def _synthesis_prompt(inp: SynthesizeInput, merged: ResearchBrief) -> str:
     return "".join(parts)
 
 
-@activity.defn
-async def synthesize_brief(inp: SynthesizeInput,
-                           _model=None) -> tuple[ResearchBrief, RoleUsage]:
+async def _synthesize_brief_impl(inp: SynthesizeInput, _model=None
+                                 ) -> tuple[ResearchBrief, RoleUsage]:
     """Merge N partial briefs into one ResearchBrief.
 
     Structure comes from code (merge_briefs), prose from the model. The model
@@ -306,3 +332,12 @@ async def synthesize_brief(inp: SynthesizeInput,
         "contradictions": merged.contradictions + out.contradictions,
         "confidence": out.confidence,
     }), _usage_of(result, inp.model)
+
+
+@activity.defn(name="synthesize_brief")
+async def synthesize_brief(inp: SynthesizeInput
+                           ) -> tuple[ResearchBrief, RoleUsage]:
+    """Thin activity wrapper -- see `plan_research`'s wrapper docstring for
+    why the `_model` test seam cannot live on the registered activity's own
+    signature."""
+    return await _synthesize_brief_impl(inp)

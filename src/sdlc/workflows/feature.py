@@ -2246,12 +2246,20 @@ class FeatureWorkflow:
             metadata={"gate": "merge", "round": "1",
                       "run_id": workflow.info().workflow_id})
 
-        pr_url = await workflow.execute_activity(
-            open_pull_request,
-            PROpenInput(worktree=self._integration_wt, title=idea.title,
-                        body=arch.overview, base_branch=idea.base_branch),
-            **ACT,
-        )
+        if cfg.benchmark.case_id is not None:
+            # Benchmark repos are local scratch checkouts with no `origin`
+            # remote and no GitHub host to open a PR against -- pushing
+            # would always fail past this point, turning an otherwise
+            # clean run into a spurious FeatureWorkflow failure after every
+            # real signal (build/lint/security/merge) already passed.
+            pr_url = "skipped:benchmark-run-has-no-remote"
+        else:
+            pr_url = await workflow.execute_activity(
+                open_pull_request,
+                PROpenInput(worktree=self._integration_wt, title=idea.title,
+                            body=arch.overview, base_branch=idea.base_branch),
+                **ACT,
+            )
 
         # 6. DEPLOY gate → deploy
         _started = workflow.now()

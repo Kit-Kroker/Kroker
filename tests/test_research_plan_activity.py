@@ -7,7 +7,7 @@ import pytest
 from pydantic_ai.models.test import TestModel
 
 from sdlc.models import Contradiction, Gap, ResearchPlan
-from sdlc.research.stage import PlanInput, _plan_prompt, plan_research
+from sdlc.research.stage import PlanInput, _plan_prompt, _plan_research_impl as plan_research
 
 
 def _inp(**kw) -> PlanInput:
