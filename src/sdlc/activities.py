@@ -807,6 +807,33 @@ async def measure_coverage(inp: CoverageInput) -> CoverageReport:
     return CoverageReport(coverage=Measurement.measured(pct))
 
 
+@dataclass
+class CommittedBytesInput:
+    repo_dir: str
+    path: str
+    commit_sha: str
+
+
+@activity.defn
+async def read_committed_bytes(inp: CommittedBytesInput) -> str | None:
+    """E-43/FR-914's third byte-source: the file's content at a pinned commit,
+    for verifying a quote against `path@commit_sha`.
+
+    Returns None -- never raises -- when the path or sha does not resolve
+    (deleted file, bad sha, not a repository). The caller records a
+    `source_unavailable` Violation; fail-closed means "unverified", not
+    "crash". Pure read: no checkout, no worktree mutation, so it is
+    reproducible across Temporal retries.
+    """
+    try:
+        proc = _git(["show", f"{inp.commit_sha}:{inp.path}"], cwd=inp.repo_dir)
+    except OSError:
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout
+
+
 async def _bounded_shell(cmd: str, cwd: str, timeout_s: int,
                          env: dict[str, str] | None = None) -> tuple[int, str]:
     """Run a shell command bounded by timeout_s, combining stdout+stderr.
