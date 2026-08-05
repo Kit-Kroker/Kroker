@@ -14,6 +14,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, PrivateAttr, field_validator
 
+from .measurement import CollectionState, Measurement
+
 
 class ProjectMode(str, Enum):
     GREENFIELD = "greenfield"
@@ -565,12 +567,12 @@ class SubQuestionFinding(BaseModel):
 
 class CoverageReport(BaseModel):
     """Diff-scoped coverage evidence for the advisory `coverage` check.
-    `measured=False` means no coverage artifact was emitted by the run's test
-    commands — the seam could not measure, so the check passes rather than
-    forcing a spurious human override every run."""
-    measured: bool
-    diff_pct: float | None = None       # 0..100 over changed files
-    detail: str = ""
+
+    FR-915: a non-MEASURED state means the seam could not measure, so the
+    advisory check passes as a no-op rather than forcing a spurious human
+    override every run. A MEASURED 0.0 is a real zero and is graded as one.
+    """
+    coverage: Measurement
 
 
 class GateDecision(BaseModel):

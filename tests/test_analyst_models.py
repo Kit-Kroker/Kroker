@@ -1,4 +1,5 @@
 """AnalysisReport / CriterionTrace / CoverageReport contracts + config field."""
+from sdlc.measurement import Measurement
 from sdlc.models import (
     AnalysisReport, CoverageReport, CriterionTrace, PipelineConfig, ReviewFinding,
 )
@@ -27,8 +28,8 @@ def test_analysis_report_carries_findings_and_traces():
 
 
 def test_coverage_report_unmeasured():
-    c = CoverageReport(measured=False)
-    assert c.diff_pct is None
+    c = CoverageReport(coverage=Measurement.not_collected("no artifact"))
+    assert c.coverage.value is None
 
 
 def test_pipeline_config_coverage_threshold_defaults_off():

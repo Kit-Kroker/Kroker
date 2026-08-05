@@ -41,6 +41,7 @@ from .models import (
     SecurityReport,
     ToolGrant,
 )
+from .measurement import Measurement
 
 
 _log = logging.getLogger(__name__)
@@ -757,19 +758,21 @@ async def measure_coverage(inp: CoverageInput) -> CoverageReport:
     The file is generated inside a harness worktree (untrusted, ARCHITECTURE.md
     §10), so it is parsed with defusedxml to block XXE / entity-expansion DoS.
 
-    measured=False (check passes as a no-op) when there is no coverage.xml, it
-    is unparseable/malicious, or none of the changed files appear in it — an
-    unbuilt measurement must never force a human override."""
+    NOT_COLLECTED (check passes as a no-op) when there is no coverage.xml, it
+    is unparseable/malicious, or none of the changed files appear in it; UNKNOWN
+    when a changed file's line-rate is non-finite. An unbuilt measurement must
+    never force a human override."""
     path = os.path.join(inp.worktree, "coverage.xml")
     if not os.path.isfile(path):
-        return CoverageReport(measured=False,
-                              detail="no coverage.xml (seam not measured)")
+        return CoverageReport(coverage=Measurement.not_collected(
+            "no coverage.xml (seam not measured)"))
     try:
         root = DET.parse(path).getroot()
     except (DefusedXmlException, DET.ParseError, OSError):
-        return CoverageReport(measured=False,
-                              detail="coverage.xml unparseable or unsafe")
+        return CoverageReport(coverage=Measurement.not_collected(
+            "coverage.xml unparseable or unsafe"))
     rates: list[float] = []
+    skipped_non_finite = 0
     for cls in root.iter("class"):
         fname = cls.get("filename") or ""
         if any(fname == cf or fname.endswith("/" + cf) or cf.endswith("/" + fname)
@@ -779,15 +782,20 @@ async def measure_coverage(inp: CoverageInput) -> CoverageReport:
             except ValueError:
                 continue
             if not math.isfinite(rate):
-                # Hostile/corrupt input (nan, inf) — never let it propagate
-                # into diff_pct, where e.g. `nan >= threshold` silently
-                # evaluates False and fabricates an advisory failure.
+                # Hostile/corrupt input (nan, inf) -- never let it propagate
+                # into a measured value, where e.g. `nan >= threshold` silently
+                # evaluates False and fabricates an advisory failure. An
+                # attempt DID produce output, so this is `unknown`, not
+                # `not_collected` (FR-915).
+                skipped_non_finite += 1
                 continue
             rates.append(max(0.0, min(100.0, rate * 100.0)))
     if not rates:
-        return CoverageReport(
-            measured=False,
-            detail="no changed file found in coverage.xml (seam not measured)")
+        if skipped_non_finite:
+            return CoverageReport(coverage=Measurement.unknown(
+                f"{skipped_non_finite} changed-file line-rate(s) non-finite"))
+        return CoverageReport(coverage=Measurement.not_collected(
+            "no changed file found in coverage.xml (seam not measured)"))
     # Unweighted mean of per-class line-rates — an approximation of true
     # diff coverage, not a line-weighted average. A 500-line file at 50%
     # and a 5-line file at 100% average to 75% here, though true line
@@ -795,9 +803,7 @@ async def measure_coverage(inp: CoverageInput) -> CoverageReport:
     # per-stack instrumentation should replace this with a weighted
     # (lines-covered / lines-valid) computation.
     pct = sum(rates) / len(rates)
-    return CoverageReport(measured=True, diff_pct=pct,
-                          detail=f"diff-scoped coverage {pct:.1f}% "
-                                 f"over {len(rates)} changed file(s)")
+    return CoverageReport(coverage=Measurement.measured(pct))
 
 
 async def _bounded_shell(cmd: str, cwd: str, timeout_s: int,

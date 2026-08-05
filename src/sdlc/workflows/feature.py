@@ -41,6 +41,7 @@ with workflow.unsafe.imports_passed_through():
         CheckClass, CheckResult, GateOverride, GateReport, QualityGateInput,
         build_check,
     )
+    from ..measurement import CollectionState, Measurement
     from ..memoization.activities import (
         CacheGetInput, CachePutInput, cache_get, cache_put,
     )
@@ -2152,12 +2153,13 @@ class FeatureWorkflow:
                         else "every acceptance criterion traces to >=1 test")),
             build_check(
                 "coverage",
-                (True if not cov.measured
-                 else (cov.diff_pct or 0.0) >= cfg.coverage_threshold),
+                (True if cov.coverage.state is not CollectionState.MEASURED
+                 else cov.coverage.value >= cfg.coverage_threshold),
                 CheckClass.ADVISORY,
-                detail=(cov.detail if not cov.measured
-                        else f"diff coverage {cov.diff_pct:.1f}% vs threshold "
-                             f"{cfg.coverage_threshold:.1f}%")),
+                detail=(cov.coverage.reason
+                        if cov.coverage.state is not CollectionState.MEASURED
+                        else f"diff coverage {cov.coverage.value:.1f}% vs "
+                             f"threshold {cfg.coverage_threshold:.1f}%")),
         ]
         gate_report: GateReport = await workflow.execute_activity(
             evaluate_gate, QualityGateInput(checks=checks), **ACT)

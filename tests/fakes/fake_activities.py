@@ -15,6 +15,7 @@ from sdlc.activities import (
 from sdlc.models import (
     CoverageReport, HarnessRunResult, QAReport, SecurityReport,
 )
+from sdlc.measurement import Measurement
 from sdlc.pricing import price_usage
 
 
@@ -78,8 +79,8 @@ async def fake_security_scan(inp: SecurityScanInput) -> SecurityReport:
 
 @activity.defn(name="measure_coverage")
 async def fake_measure_coverage(inp: CoverageInput) -> CoverageReport:
-    # No coverage artifact in this offline run -> unmeasured, check passes.
-    return CoverageReport(measured=False, detail="fake: unmeasured")
+    # No coverage artifact in this offline run -> not collected, check passes.
+    return CoverageReport(coverage=Measurement.not_collected("fake: unmeasured"))
 
 
 @activity.defn(name="run_integration_checks")

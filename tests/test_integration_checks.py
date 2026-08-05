@@ -7,6 +7,7 @@ from sdlc.activities import (
     CoverageInput, IntegrationChecksInput, measure_coverage,
     run_integration_checks,
 )
+from sdlc.measurement import CollectionState
 
 PYPROJECT = "[project]\nname = 'fixture'\nversion = '0.0.0'\n"
 MODULE = "def covered():\n    return 1\n\n\ndef uncovered():\n    return 2\n"
@@ -51,8 +52,8 @@ async def test_integration_checks_produces_real_coverage(tmp_path):
     # The gate reader now finds the artifact and measures a diff-scoped %.
     cov = await measure_coverage(CoverageInput(
         worktree=str(tmp_path), changed_files=["mod.py"]))
-    assert cov.measured is True
-    assert 0.0 < (cov.diff_pct or 0.0) < 100.0  # covered + uncovered => partial
+    assert cov.coverage.state is CollectionState.MEASURED
+    assert 0.0 < cov.coverage.value < 100.0  # covered + uncovered => partial
 
 
 @pytest.mark.asyncio
