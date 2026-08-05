@@ -125,7 +125,7 @@
 - [x] **9 · review** — clean-context `reviewer_agent` (`t_reviewer`) run in `_dev_task`; blocking findings fold into the fix loop. **(new)**
 - [x] **10 · analyze (Analyst)** — Analyst clean-context proposer (`t_analyst`) emits `AnalysisReport`; workflow enforces criterion→test traceability against the plan's authoritative criteria (FR-106).
 - [x] **11 · qa (+ Resolver)** — clean-context `t_qa` + bounded fix loop (folded into stage 7). *Note: default `max_fix_attempts=2`, PRD says QA loop 3 — numeric drift.*
-- [ ] ⚠️ **12 · quality_gate** — `DeterministicQualityGate` mechanism ✅; 6 checks built (`build_integration_green`, `lint_clean`, `security_no_critical` absolute; `review_severity`, `traceability`, `coverage` advisory). Absolute security floor now wired ✅; traceability enforced ✅; coverage via deterministic Cobertura seam — **E-30 closes the FR-106 crossing gap**: `run_integration_checks` now runs coverage-instrumented tests against the merged integration head, landing `coverage.xml` where `measure_coverage` reads (Python adapter end-to-end; Go/TS/Rust via E-30a/b/c). Still an advisory no-op unless `coverage_threshold` is set.
+- [ ] ⚠️ **12 · quality_gate** — `DeterministicQualityGate` mechanism ✅; 7 checks built (`build_integration_green`, `lint_clean`, `security_no_critical`, `security_scan_collected` absolute; `review_severity`, `traceability`, `coverage` advisory). Absolute security floor now wired ✅ — the floor now carries `security_scan_collected` beside `security_no_critical`, so a scan that never collected (e.g. a malformed SARIF) can no longer read as a clean absolute floor (FR-915, 2026-08-06); traceability enforced ✅; coverage via deterministic Cobertura seam — **E-30 closes the FR-106 crossing gap**: `run_integration_checks` now runs coverage-instrumented tests against the merged integration head, landing `coverage.xml` where `measure_coverage` reads (Python adapter end-to-end; Go/TS/Rust via E-30a/b/c). Still an advisory no-op unless `coverage_threshold` is set.
 - [ ] ⚠️ **13 · deploy** — single hardcoded `make deploy ENV=staging`; no `DeployPlan`/`DeployReport` split, no smoke-test vs PR-merge distinction.
 - [x] **14 · retro** — on every terminal path the workflow builds a `RunSummary` from an in-workflow `RunEvent` trace, retains it + fires-and-forgets `reflect(project_bank)` (gated on `memory.enabled`), and exports `events.jsonl` + `report.html` via the `export_run_artifacts` activity (E-32). The `org_bank`-writer half stays unbuilt (E-25); retro is project scope only.
 
@@ -206,8 +206,8 @@ as tracked rather than accidental.
 - [ ] **FR-911** `AssessmentWorkflow` EDCR DAG, report-after-assess, no phase-status file (E-45); `/enrich` as a declared stage input rather than a phase (E-56).
 - [ ] **FR-912** deterministic scan memoized on `(tree hash, signal version)`; cross-source confidence (E-46).
 - [ ] **FR-913** `CapabilityMap` with content-derived stable ids + coverage floor + orphan classification — **also satisfies FR-102** (E-47/E-48). Blocked on **OQ-6** (what canonical key survives refactoring).
-- [ ] **FR-914** byte-exact quote verification against the pinned commit, fail-closed — shares FR-107's verifier (E-43). *Designed 2026-08-06 (`grounding.py`: one substring invariant, two normalization profiles, verdict-only); not implemented.*
-- [ ] **FR-915** `not_collected` / `unknown` vs measured value (E-40). *Designed 2026-08-06 (`measurement.py`, retrofitted onto `CoverageReport`/`SecurityReport`/`claim_survival_score`); not implemented. The `QAReport.coverage_pct` framing is stale — that field is unread and gets deleted; the load-bearing case is the SARIF-malformed-reads-as-clean hole on the absolute floor.*
+- [ ] **FR-914** byte-exact quote verification against the pinned commit, fail-closed — shares FR-107's verifier (E-43). *Partially landed 2026-08-06 (`grounding.py`: one substring invariant, two normalization profiles, verdict-only) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The verifier + research/handoff/deep-review consumers landed; stays open until an assessment stage consumes the `read_committed_bytes` commit source.*
+- [ ] **FR-915** `not_collected` / `unknown` vs measured value (E-40). *Contract half landed 2026-08-06 (`measurement.py`, retrofitted onto `CoverageReport`/`SecurityReport`/`claim_survival_score`; `QAReport.coverage_pct` deleted) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The `RepoTriage`/triage half is deferred to E-41; the load-bearing case was the SARIF-malformed-reads-as-clean hole on the absolute floor.*
 - [ ] **FR-916** STRIDE + vuln classification + control coverage + composites with 1–3 specific drivers (E-49).
 - [ ] **FR-917** risk thresholds as deterministic gate checks; FP dispositions as audited overrides (E-50).
 - [ ] **FR-918** acceptance criteria computed by code, not self-asserted; cross-reference integrity **absolute** (E-51).
@@ -758,25 +758,18 @@ in?* — deterministically and cheaply, and **gates** Tier 2 on the answer
 (FR-903). It is also the tier whose findings are mostly *mechanically* fixable,
 which makes it the shortest path to a demonstrable assess → fix → prove loop.
 
-- [ ] **E-40 — `Measurement` type + `RepoTriage` contracts** → FR-915, FR-901.
-  A `Measurement` that distinguishes a measured value from `not_collected`
-  (with a recorded reason) and from `unknown`, plus the `RepoTriage` artifact.
-  **This one lands in live code and improves the existing pipeline immediately.**
-  The idea is imported wholesale from BrownKit, which treats `not-collected` as a
-  first-class state and forbids defaulting to zero — a discipline the factory
-  currently lacks. The mechanism is a model validator, so the illegal state
-  (`NOT_COLLECTED` carrying a value) is *unconstructible*, not merely discouraged.
-  *Designed 2026-08-06, not implemented.* The design takes the `Measurement` half
-  only; `RepoTriage` moves to E-41 (design D2). Corrections to the framing above:
-  `QAReport.coverage_pct` is **unread** — E-30 already gave `CoverageReport` a
-  `measured: bool` + `detail` discipline, so the field is deleted rather than
-  retyped, and `CoverageReport`/`SecurityReport`/`claim_survival_score` are what
-  get retrofitted. The load-bearing case is the **absolute floor**: a malformed
-  SARIF currently produces `critical=0`, indistinguishable from a clean scan, so
-  `security_no_critical` splits into `security_scan_collected` +
-  `security_no_critical`, both forced `ABSOLUTE` by `ABSOLUTE_FLOOR`.
-  Spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`,
-  plan `docs/superpowers/plans/2026-08-06-measurement-and-shared-grounding-verifier.md`.
+- [ ] ⚠️ **E-40 — `Measurement` type + `RepoTriage` contracts** → FR-915, FR-901.
+  *`Measurement` landed (2026-08-06)*: `src/sdlc/measurement.py`, retrofitted
+  onto `CoverageReport`, `SecurityReport` and `claim_survival_score`, with
+  `QAReport.coverage_pct` deleted as a second registry for a measured fact.
+  The roadmap's original framing of the defect was stale — the merge gate
+  reads `CoverageReport` (which E-30 had already given a `measured` flag), and
+  the live conflation worth fixing was on the **absolute** floor:
+  `report_from_sarif` returned `critical=0` for a malformed document. That is
+  now `not_collected`, and `security_no_critical` split into
+  `security_scan_collected` + `security_no_critical` so an unmeasurable floor
+  cannot be silently satisfied. **`RepoTriage` deferred to E-41**, where the
+  signals that populate it are designed. FR-915 stays open until then.
 - [ ] **E-41 — deterministic hygiene signals** → FR-902, FR-108.
   Build and run probe; secret scan including **credentials reachable from
   client-side bundles**; dependency health (unpinned / known-vulnerable /
@@ -796,29 +789,19 @@ which makes it the shortest path to a demonstrable assess → fix → prove loop
   on a repository where an LLM would have nothing to reason about. An
   unbuildable repo is a finding, not an error. The gate resolves through the
   FR-301/302 machinery, so an operator can override with an audited decision.
-- [ ] **E-43 — grounding verifier** → FR-914, shares FR-107's implementation.
-  `verify(path, span, quote, commit) -> grounded | unverified`, fail-closed, one
-  implementation serving both the research stage (quote vs. fetched bytes) and
-  assessment (quote vs. committed bytes). **Land this before any finding-emitting
-  stage exists**, so no stage can ever ship an unverified claim labelled
-  grounded — retrofitting this invariant after four finding-producing phases
-  exist is how audits become unfalsifiable. Open: **OQ-7**, inline per finding
-  vs. a batch gate before storage.
-  *Designed 2026-08-06, not implemented.* Correction to the framing above: it is
-  **not** an invariant awaiting a consumer. `HandoffClaim.evidence` and
-  `IntegrityFlag.evidence` are two *live* consumers whose model-asserted quotes
-  are unverified today — the first is injected into downstream tasks' prompts,
-  the second supports an anti-cheat accusation. Shape as designed: `grounding.py`
-  owns one substring invariant and **two normalization profiles that must never
-  be merged** (`EXTRACTED_TEXT` carries two loosenings proven by specific Tavily
-  extraction bugs; `VERBATIM_BYTES` carries neither, because `**` is meaningful
-  Python and quote glyphs are meaningful inside string literals). The verifier
-  **never decides consequences**: research fails its stage, handoff and
-  deep-review drop the item, assessment will fail closed. Callers supply the
-  bytes — a `read_committed_bytes` activity lands unwired for the future
-  assessment path, so OQ-7 is untouched.
-  Spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`,
-  plan `docs/superpowers/plans/2026-08-06-measurement-and-shared-grounding-verifier.md`.
+- [x] **E-43 — grounding verifier** → FR-914, shares FR-107's implementation.
+  *Landed (2026-08-06):* `src/sdlc/grounding.py` owns the one substring
+  invariant with **two normalization profiles** — `EXTRACTED_TEXT` (research's
+  two documented Tavily loosenings) and `VERBATIM_BYTES` (code and
+  transcripts, where `**` and quote glyphs are meaningful). Sharing the
+  implementation without sharing the profile is the load-bearing decision.
+  Three byte-sources: fetched pages (research, unchanged semantics), stored
+  sessions (**two live holes closed** — `HandoffClaim.evidence` and
+  `IntegrityFlag.evidence` were model-asserted and unverified), and
+  `read_committed_bytes` for `path@sha` (tested, registered, no caller until
+  E-41). Also closed a live hole in the shipped research check: an empty quote
+  grounded trivially, since `"" in haystack` is True. FR-914 stays open until
+  an assessment stage consumes the commit source. **OQ-7 untouched.**
 - [ ] **E-44 — tidy-up fix runs + re-triage** → FR-904, NG5.
   `mechanically_fixable` findings become brownfield `FeatureWorkflow` child runs
   (one PR per accepted item, never a direct patch), then triage re-runs and the
