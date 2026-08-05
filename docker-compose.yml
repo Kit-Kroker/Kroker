@@ -27,17 +27,34 @@ services:
     depends_on: ["temporal", "hindsight"]
     environment:
       TEMPORAL_HOST: "temporal:7233"
+      # merge activity commits on the pipeline's behalf; git refuses to
+      # commit with no identity configured ("Committer identity unknown")
+      GIT_AUTHOR_NAME: "SDLC Benchmark Worker"
+      GIT_AUTHOR_EMAIL: "sdlc-benchmark@localhost"
+      GIT_COMMITTER_NAME: "SDLC Benchmark Worker"
+      GIT_COMMITTER_EMAIL: "sdlc-benchmark@localhost"
     env_file: [".env"]
     volumes:
       # worktrees need persistent storage across activity retries
       - worker-worktrees:/tmp/sdlc/worktrees
       # repos cloned / pushed to by the pipeline live here
       - worker-repos:/srv/repos
+      # benchmark records/reports/matrices (LocalFileStore, recorder.py) —
+      # otherwise part of the container's writable layer and wiped on every
+      # rebuild/recreate (lost 5 runs' worth of today's history to exactly
+      # this before adding the mount)
+      - worker-runs:/app/runs
       # host-side scratch repos referenced by benchmark case.yaml repo_url
       - D:/own/sdlc-scratch-repos:/srv/scratch-repos
+      # share the host's opencode auth + provider catalog so harness runs can
+      # resolve providers (e.g. zai-coding-plan) the container never logged
+      # into itself; read-only so the container can't clobber host state
+      - C:/Users/start/.local/share/opencode/auth.json:/root/.local/share/opencode/auth.json:ro
+      - C:/Users/start/.cache/opencode/models.json:/root/.cache/opencode/models.json:ro
     restart: unless-stopped
 
 volumes:
   worker-worktrees:
   worker-repos:
+  worker-runs:
   hindsight-data:
