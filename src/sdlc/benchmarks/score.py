@@ -118,6 +118,9 @@ def _write_case_matrices(ev: Evidence, out_dir: Path,
     from .tasks import load_task_suite
     from .waste_matrix import (build_waste_matrix, render_waste_matrix_html,
                                render_waste_matrix_json)
+    from .agreement_matrix import (build_agreement_matrix,
+                                   render_agreement_matrix_html,
+                                   render_agreement_matrix_json)
 
     written: list[Path] = []
     cases = sorted({r.case_id for r in ev.records})
@@ -143,6 +146,15 @@ def _write_case_matrices(ev: Evidence, out_dir: Path,
         if not wm.cells:
             notes.append(f"case {case_id}: no harness waste recorded "
                          f"(runs predating waste capture, or no coding tasks)")
+
+        am = build_agreement_matrix(case_id, ev.records, None)
+        for name, text in (
+            ("agreement-matrix.html", render_agreement_matrix_html(am)),
+            ("agreement-matrix.json", render_agreement_matrix_json(am)),
+        ):
+            p = d / name
+            p.write_text(text, encoding="utf-8")
+            written.append(p)
 
         if suite is None:
             if not any(f"case {case_id}: malformed" in n for n in notes):

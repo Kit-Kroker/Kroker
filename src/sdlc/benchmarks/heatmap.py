@@ -13,12 +13,19 @@ from pydantic import BaseModel, Field
 
 from .models import BenchmarkOutcome, BenchmarkRecord, BenchmarkScope
 
+# 'review', 'adversary', 'handoff' and 'deep_review' are LENSES, not DAG
+# stages. They are listed so they render in a sensible column order rather
+# than the trailing unknown bucket. Their records carry fix_attempts=0 --
+# retry volume belongs to code/qa, and counting it here too would treat one
+# disagreement as three units of rework. If more lenses accumulate, this axis
+# stops being the SDLC DAG (spec OQ-A3).
 # Record-vocabulary stage order (SDLC-spec 15-stage DAG); the synthetic
 # ``oracle`` column trails. Only columns with an observed cell are rendered.
 CANONICAL_STAGES: list[str] = [
     "intake", "constitution", "context", "requirements", "research",
-    "clarify", "architecture", "planning", "code", "review", "analyze",
-    "qa", "quality_gate", "deploy", "retro",
+    "clarify", "architecture", "planning", "code", "review", "adversary",
+    "handoff", "deep_review", "analyze", "qa", "quality_gate", "deploy",
+    "retro",
 ]
 ORACLE_STAGE = "oracle"
 
