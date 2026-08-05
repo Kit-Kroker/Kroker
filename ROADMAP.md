@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-07-19 (against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
+| Last verified | 2026-08-06 (E-40/E-43 against `src/sdlc/`; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -56,6 +56,34 @@
 > `QAReport.coverage_pct: float | None` conflates a measured zero with a
 > never-measured value, which is a defect in a product that sells measurement.
 > Spec `docs/superpowers/specs/2026-07-25-brownfield-assessment-and-outcome-measurement-design.md`.
+
+> **2026-08-06 — E-40/E-43 designed and planned, not yet implemented.** The two
+> §14 invariants now have an approved design
+> (`docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`)
+> and a task-by-task plan
+> (`docs/superpowers/plans/2026-08-06-measurement-and-shared-grounding-verifier.md`).
+> No code has landed: `src/sdlc/measurement.py` and `src/sdlc/grounding.py` do
+> not exist, so both items stay `[ ]`. Reading the code before designing against
+> it produced **three corrections to this tracker's own framing**, recorded here
+> because the roadmap was wrong, not merely incomplete:
+> (a) **E-40's stated defect is stale** — the merge gate reads `CoverageReport`,
+> which E-30 already gave a `measured: bool` + `detail` discipline;
+> `QAReport.coverage_pct` is an LLM-asserted field that *nothing reads* (it is
+> deleted, not retyped);
+> (b) **the sharper FR-915 instance is on the absolute floor** — `report_from_sarif`
+> returns `SecurityReport(critical=0, findings=[])` for a malformed or partial
+> SARIF, byte-identical to a clean scan, and `security_no_critical` is the
+> **absolute** SC-5 check, so a broken scanner reads as a passing security floor.
+> Latent today (nothing shells semgrep; the regex scan always collects) — which
+> is exactly when the guard is cheap to install. The check splits into
+> `security_scan_collected` + `security_no_critical`, both in `ABSOLUTE_FLOOR`;
+> (c) **E-43 is not an invariant awaiting a consumer** — `HandoffClaim.evidence`
+> and `IntegrityFlag.evidence` are *two live consumers* carrying unverified
+> model-asserted quotes into downstream prompts and anti-cheat accusations
+> today. The verifier ships with two normalization profiles that must never be
+> merged (`EXTRACTED_TEXT` for third-party extractor output, `VERBATIM_BYTES`
+> for code and stored transcripts), and it never decides consequences — research
+> fails its stage, the two lenses drop the item.
 
 ---
 
@@ -178,8 +206,8 @@ as tracked rather than accidental.
 - [ ] **FR-911** `AssessmentWorkflow` EDCR DAG, report-after-assess, no phase-status file (E-45); `/enrich` as a declared stage input rather than a phase (E-56).
 - [ ] **FR-912** deterministic scan memoized on `(tree hash, signal version)`; cross-source confidence (E-46).
 - [ ] **FR-913** `CapabilityMap` with content-derived stable ids + coverage floor + orphan classification — **also satisfies FR-102** (E-47/E-48). Blocked on **OQ-6** (what canonical key survives refactoring).
-- [ ] **FR-914** byte-exact quote verification against the pinned commit, fail-closed — shares FR-107's verifier (E-43).
-- [ ] **FR-915** `not_collected` / `unknown` vs measured value; **retrofits `QAReport.coverage_pct`** (E-40).
+- [ ] **FR-914** byte-exact quote verification against the pinned commit, fail-closed — shares FR-107's verifier (E-43). *Designed 2026-08-06 (`grounding.py`: one substring invariant, two normalization profiles, verdict-only); not implemented.*
+- [ ] **FR-915** `not_collected` / `unknown` vs measured value (E-40). *Designed 2026-08-06 (`measurement.py`, retrofitted onto `CoverageReport`/`SecurityReport`/`claim_survival_score`); not implemented. The `QAReport.coverage_pct` framing is stale — that field is unread and gets deleted; the load-bearing case is the SARIF-malformed-reads-as-clean hole on the absolute floor.*
 - [ ] **FR-916** STRIDE + vuln classification + control coverage + composites with 1–3 specific drivers (E-49).
 - [ ] **FR-917** risk thresholds as deterministic gate checks; FP dispositions as audited overrides (E-50).
 - [ ] **FR-918** acceptance criteria computed by code, not self-asserted; cross-reference integrity **absolute** (E-51).
@@ -242,7 +270,7 @@ as tracked rather than accidental.
 - [ ] — **SC-6** soft-gate override <5% — mechanism exists; not measurable without runs + reflect. **The per-run signal now accrues:** the retro stage (E-32) emits `RunSummary.gates[]` with `policy`/`decided_by`/`confidence`/`overrides` (ARCHITECTURE §10 calibration compare). The cross-run *aggregation* into an override rate remains the benchmark's job (§9.8).
   **Aggregation landed** (`benchmarks/sc_rollup.py`, `sdlc benchmark score`);
   the number is n/a until 5+ runs exist.
-- [ ] — **SC-7** grounding integrity: 100% of `grounded` findings re-verify byte-exact, zero fabricated path/line refs when sampled — **the assessment product's SC-5**: one violation is a defect, not a percentage. Mechanism is E-43; the sampled audit needs real assessments.
+- [ ] — **SC-7** grounding integrity: 100% of `grounded` findings re-verify byte-exact, zero fabricated path/line refs when sampled — **the assessment product's SC-5**: one violation is a defect, not a percentage. Mechanism is E-43 (designed 2026-08-06, not implemented); the sampled audit needs real assessments.
 - [ ] — **SC-8** capability coverage ≥90% with classified orphans on ≥80% of readiness-passing repos — needs E-47 + a corpus.
 - [ ] — **SC-9** remediation efficacy: reduced composite for the targeted capability in ≥80% of accepted items, no new critical — needs E-54's delta.
 - [ ] — **SC-10** assessment economics per repo-size band — needs E-55 budgets + runs; without this the work cannot be priced.
@@ -733,13 +761,22 @@ which makes it the shortest path to a demonstrable assess → fix → prove loop
 - [ ] **E-40 — `Measurement` type + `RepoTriage` contracts** → FR-915, FR-901.
   A `Measurement` that distinguishes a measured value from `not_collected`
   (with a recorded reason) and from `unknown`, plus the `RepoTriage` artifact.
-  **This one lands in live code and improves the existing pipeline immediately:**
-  `QAReport.coverage_pct: float | None` currently makes a measured 0% and a
-  never-measured value indistinguishable to the advisory coverage check, so the
-  gate cannot tell "this diff has no tests" from "we failed to instrument". The
-  idea is imported wholesale from BrownKit, which treats `not-collected` as a
+  **This one lands in live code and improves the existing pipeline immediately.**
+  The idea is imported wholesale from BrownKit, which treats `not-collected` as a
   first-class state and forbids defaulting to zero — a discipline the factory
-  currently lacks.
+  currently lacks. The mechanism is a model validator, so the illegal state
+  (`NOT_COLLECTED` carrying a value) is *unconstructible*, not merely discouraged.
+  *Designed 2026-08-06, not implemented.* The design takes the `Measurement` half
+  only; `RepoTriage` moves to E-41 (design D2). Corrections to the framing above:
+  `QAReport.coverage_pct` is **unread** — E-30 already gave `CoverageReport` a
+  `measured: bool` + `detail` discipline, so the field is deleted rather than
+  retyped, and `CoverageReport`/`SecurityReport`/`claim_survival_score` are what
+  get retrofitted. The load-bearing case is the **absolute floor**: a malformed
+  SARIF currently produces `critical=0`, indistinguishable from a clean scan, so
+  `security_no_critical` splits into `security_scan_collected` +
+  `security_no_critical`, both forced `ABSOLUTE` by `ABSOLUTE_FLOOR`.
+  Spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`,
+  plan `docs/superpowers/plans/2026-08-06-measurement-and-shared-grounding-verifier.md`.
 - [ ] **E-41 — deterministic hygiene signals** → FR-902, FR-108.
   Build and run probe; secret scan including **credentials reachable from
   client-side bundles**; dependency health (unpinned / known-vulnerable /
@@ -767,6 +804,21 @@ which makes it the shortest path to a demonstrable assess → fix → prove loop
   grounded — retrofitting this invariant after four finding-producing phases
   exist is how audits become unfalsifiable. Open: **OQ-7**, inline per finding
   vs. a batch gate before storage.
+  *Designed 2026-08-06, not implemented.* Correction to the framing above: it is
+  **not** an invariant awaiting a consumer. `HandoffClaim.evidence` and
+  `IntegrityFlag.evidence` are two *live* consumers whose model-asserted quotes
+  are unverified today — the first is injected into downstream tasks' prompts,
+  the second supports an anti-cheat accusation. Shape as designed: `grounding.py`
+  owns one substring invariant and **two normalization profiles that must never
+  be merged** (`EXTRACTED_TEXT` carries two loosenings proven by specific Tavily
+  extraction bugs; `VERBATIM_BYTES` carries neither, because `**` is meaningful
+  Python and quote glyphs are meaningful inside string literals). The verifier
+  **never decides consequences**: research fails its stage, handoff and
+  deep-review drop the item, assessment will fail closed. Callers supply the
+  bytes — a `read_committed_bytes` activity lands unwired for the future
+  assessment path, so OQ-7 is untouched.
+  Spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`,
+  plan `docs/superpowers/plans/2026-08-06-measurement-and-shared-grounding-verifier.md`.
 - [ ] **E-44 — tidy-up fix runs + re-triage** → FR-904, NG5.
   `mechanically_fixable` findings become brownfield `FeatureWorkflow` child runs
   (one PR per accepted item, never a direct patch), then triage re-runs and the
@@ -951,12 +1003,15 @@ competence — a frozen contract, a traceability check, a durable timer, and a g
 Not a commitment. Ranked by what each item unblocks and by which invariants get
 harder to install later:
 
-1. **E-40 + E-43** — the two invariants. Both are small, both land in *existing*
-   code paths, and both improve the current pipeline on their own (`Measurement`
-   fixes the coverage-check ambiguity; the verifier is shared with FR-107's
-   research stage). Installing "no unverified claim may be labelled grounded"
-   before any finding-producing stage exists is far cheaper than retrofitting it
-   across four of them.
+1. **E-40 + E-43** — the two invariants. **Designed and planned 2026-08-06; next
+   to implement.** Both are small, both land in *existing* code paths, and both
+   improve the current pipeline on their own (`Measurement` closes the
+   malformed-SARIF-reads-as-clean hole on the absolute floor; the verifier is
+   shared with FR-107's research stage and with two live consumers — handoff
+   claims and deep-review integrity flags — that carry unverified quotes today).
+   Installing "no unverified claim may be labelled grounded" before any
+   finding-producing stage exists is far cheaper than retrofitting it across
+   four of them.
 2. **E-41 → E-42 → E-44** — triage and tidy-up. The cheapest shippable product,
    almost entirely deterministic, and it needs neither tenancy nor containment
    because it can be operator-run. E-44 is the first item that proves the whole
