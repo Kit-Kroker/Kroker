@@ -40,7 +40,7 @@ class Budget(BaseModel):
 
 class ResearchDeps(BaseModel):
     run_id: str
-    provider: Literal["tavily", "fake"]
+    provider: Literal["tavily", "exa", "fake"]
     max_searches: int
     max_fetches: int
     max_cost_usd: float

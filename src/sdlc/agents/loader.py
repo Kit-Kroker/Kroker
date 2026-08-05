@@ -288,10 +288,15 @@ def validate_registry(roles: dict[str, RoleConfig]) -> None:
         if cfg.provider is None:
             raise RegistryError(
                 f"role '{name}' is kind=research and must name a provider "
-                f"(tavily or fake); ADR-6 does not apply — it reviews nothing")
+                f"(tavily, exa, or fake); ADR-6 does not apply — it reviews "
+                f"nothing")
         if cfg.provider == "tavily" and not os.environ.get("TAVILY_API_KEY"):
             raise RegistryError(
                 f"role '{name}' declares provider: tavily but TAVILY_API_KEY is "
+                f"not set — fail closed. Use provider: fake for CI/offline.")
+        if cfg.provider == "exa" and not os.environ.get("EXA_API_KEY"):
+            raise RegistryError(
+                f"role '{name}' declares provider: exa but EXA_API_KEY is "
                 f"not set — fail closed. Use provider: fake for CI/offline.")
     _validate_pipeline_mirror(roles)
 

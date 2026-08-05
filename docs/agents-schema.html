@@ -204,11 +204,11 @@
 
 <h1>Agents Schema &amp; Architecture</h1>
 <p class="meta">
-  13 agents &middot; <code>agents/&lt;role&gt;/</code> registry &middot;
+  15 agents &middot; <code>agents/&lt;role&gt;/</code> registry &middot;
   loader: <code>src/sdlc/agents/loader.py</code> &middot;
   runtime: <code>src/sdlc/agents/roles.py</code> &middot;
   workflow callsites: <code>src/sdlc/workflows/feature.py</code> &middot;
-  contract source-of-truth: <code>src/sdlc/models.py</code> &middot; Verified <code>2026-07-26</code> against <code>config/agents.yaml</code> + <code>agents/</code>
+  contract source-of-truth: <code>src/sdlc/models.py</code> &middot; Verified <code>2026-08-05</code> against <code>config/agents.yaml</code> + <code>agents/</code> + <code>benchmarks/</code>
 </p>
 <p class="lede">
   Every role is a folder. The folder name <strong>is</strong> the role name, the API surface, and
@@ -242,6 +242,8 @@
   <a href="#devops">devops</a>
   <a href="#test">test</a>
   <a href="#research">research</a>
+  <a href="#adversary">adversary</a>
+  <a href="#handoff">handoff</a>
   <a href="#filemap" class="major">File map</a>
 </div>
 
@@ -266,14 +268,17 @@
 
 <div class="grid-3">
   <div class="card">
-    <h3 style="margin-top:0">Proposer <span class="pill proposer">8 roles</span></h3>
+    <h3 style="margin-top:0">Proposer <span class="pill proposer">8 required + 4 optional</span></h3>
     <p style="margin:0">
-      <strong>clarify, architect, planner, qa, reviewer, analyst, merge_verdict, devops_planner.</strong>
+      <strong>Required (8): clarify, architect, planner, qa, reviewer, analyst, merge_verdict, devops_planner.</strong>
       One LLM call (via Pydantic AI) emitting a schema-validated Pydantic artifact. Never touch the
       repo, never call tools <em>except</em> architect (research tool). Wrapped in
-      <code>TemporalAgent</code> so model calls offload to activities. An optional advisory
-      proposer, <strong>deep_review</strong> (E-39, off by default), reads the scrubbed harness
-      transcript; its model family must differ from <code>dev</code>.
+      <code>TemporalAgent</code> so model calls offload to activities. <strong>Optional (4):</strong>
+      <strong>research</strong> (FR-107, now fans out, off by default);
+      <strong>deep_review</strong> (E-39) reads the scrubbed harness transcript, advisory, never gates;
+      <strong>handoff</strong> (FR-805) extracts task-to-task claims from the scrubbed session;
+      <strong>adversary</strong> (decorrelated second opinion) runs only on the approving path, off by
+      default. Each optional proposer is guarded by its own <code>*_enabled</code> flag.
     </p>
   </div>
   <div class="card">
@@ -318,8 +323,8 @@
       <tr>
         <td><span class="pill det">2. validate</span></td>
         <td class="mono">validate_registry()</td>
-        <td>Required-role presence; <code>dev</code>/<code>reviewer</code> model declared; <strong>ADR-6 cross-family check</strong> (dev/reviewer, and deep_review vs dev when present); research <code>provider</code> set; <code>TAVILY_API_KEY</code> reachable for <code>provider: tavily</code>; PipelineConfig mirror.</td>
-        <td>Missing role; same-family dev/reviewer; deep_review same family as dev (when present); harness reviewer on same harness as dev; research without provider; tavily without key; PipelineConfig drift.</td>
+        <td>Required-role presence; <code>dev</code>/<code>reviewer</code> model declared; <strong>ADR-6 cross-family check</strong> (dev/reviewer, and deep_review vs dev when present); research <code>provider</code> set; <code>TAVILY_API_KEY</code> reachable for <code>provider: tavily</code>, <code>EXA_API_KEY</code> reachable for <code>provider: exa</code>; PipelineConfig mirror.</td>
+        <td>Missing role; same-family dev/reviewer; deep_review same family as dev (when present); harness reviewer on same harness as dev; research without provider; tavily/exa without key; PipelineConfig drift.</td>
       </tr>
       <tr>
         <td><span class="pill agent">3. build</span></td>
@@ -340,7 +345,7 @@
 </div>
 
 <!-- ================================================================ -->
-<h2 id="matrix">Matrix <span class="count">13 agents &times; key attributes</span></h2>
+<h2 id="matrix">Matrix <span class="count">15 agents &times; key attributes</span></h2>
 
 <p>
   Three name spaces are distinct and easy to confuse: <strong>stage</strong> (the workflow's
@@ -349,8 +354,12 @@
   <code>agent.py</code>). They diverge for four roles. The <strong>model</strong> column is each
   role's default from <code>STAGE_MODELS</code>; since E-37 a benchmark arm or
   <code>--role-model</code> override resolves it per run and re-checks ADR-6 via
-  <code>validate_run_roles</code>. <em>deep_review</em> is optional (off by default,
-  <code>cfg.deep_review_enabled</code>).
+  <code>validate_run_roles</code>. <em>deep_review</em>, <em>adversary</em>, and <em>handoff</em>
+  are optional lenses (off / conditional by default: <code>cfg.deep_review_enabled</code>,
+  <code>cfg.adversarial_review_enabled</code>; handoff runs on the success path when present).
+  <em>adversary</em> and <em>handoff</em> are <strong>non-DAG lenses</strong> (advisory / per-task),
+  not pipeline stages &mdash; they live in <code>CANONICAL_STAGES</code> only so they render in DAG
+  order on the heatmap.
 </p>
 
 <div class="table-wrap">
@@ -380,6 +389,8 @@
       <tr><td class="mono">test</td>             <td><span class="pill harness">harness</span></td>  <td class="mono">code (test tasks)</td><td class="mono">&mdash;</td>               <td class="mono">zai-coding-plan/glm-5.2</td><td class="mono">HarnessRunResult</td>          <td class="mono">opencode</td></tr>
       <tr><td class="mono">research</td>         <td><span class="pill research">research</span></td><td class="mono">research</td>       <td class="mono">research_agent</td>         <td class="mono">anthropic:glm-5.2</td>     <td class="mono">ResearchBrief</td>            <td>&mdash;</td></tr>
       <tr><td class="mono">deep_review</td>      <td><span class="pill proposer">proposer</span></td><td class="mono">deep_review</td>  <td class="mono">deep_review_agent</td>     <td class="mono">anthropic:glm-5.2</td>     <td class="mono">DeepReviewReport</td>        <td>&mdash;</td></tr>
+      <tr><td class="mono">adversary</td>        <td><span class="pill proposer">proposer</span></td><td class="mono">adversary (non-DAG lens)</td><td class="mono">adversary_agent</td>     <td class="mono">anthropic:claude-sonnet-4-6</td><td class="mono">ReviewReport</td>             <td>&mdash;</td></tr>
+      <tr><td class="mono">handoff</td>          <td><span class="pill proposer">proposer</span></td><td class="mono">handoff (non-DAG lens)</td><td class="mono">handoff_agent</td>       <td class="mono">anthropic:glm-5.2</td>     <td class="mono">HandoffSummary</td>          <td>&mdash;</td></tr>
     </tbody>
   </table>
 </div>
@@ -528,6 +539,15 @@
   </svg>
 </div>
 
+<div class="callout">
+  <span class="label">Non-DAG lenses on the per-task loop.</span>
+  The per-task loop now carries two optional lenses that are <strong>not</strong> new DAG stages:
+  an <strong>adversary</strong> second opinion that runs <em>only</em> on the approve path
+  (<code>review_ok</code>) and a <strong>handoff</strong> extraction that runs once on the success
+  path. They appear in <code>CANONICAL_STAGES</code> only so the heatmap renders them in DAG order;
+  they do not advance the stage axis.
+</div>
+
 <!-- ================================================================ -->
 <h2 id="classes">Agent class &rarr; Temporal construct <span class="count">ADR-2</span></h2>
 
@@ -540,7 +560,7 @@
   <table>
     <thead><tr><th>class</th><th>Temporal construct</th><th>our roles</th></tr></thead>
     <tbody>
-      <tr><td>Automation (one LLM call)</td><td class="mono">activity via TemporalAgent</td><td>clarify, architect, planner, reviewer, qa, analyst, merge_verdict, devops_planner, research, deep_review (optional)</td></tr>
+      <tr><td>Automation (one LLM call)</td><td class="mono">activity via TemporalAgent</td><td>clarify, architect, planner, reviewer, qa, analyst, merge_verdict, devops_planner, research, deep_review, adversary, handoff (optional)</td></tr>
       <tr><td>Long-running (tools, iteration)</td><td class="mono">heartbeating activity</td><td>dev, test, devops (via <code>run_coding_task</code>)</td></tr>
       <tr><td>Conversational</td><td class="mono">external client ↔ workflow signals/queries</td><td>operators via MCP / dashboard / CLI (not agents)</td></tr>
       <tr><td>Proactive</td><td class="mono">workflow (timer / Schedule)</td><td>MaintenanceWorkflow, nightly reflect (not agents)</td></tr>
@@ -574,6 +594,8 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
       <tr><td>clarify, research</td><td>narrow classification / extraction / grounded search</td><td>small fast model (research can be lifted)</td></tr>
       <tr><td>merge_verdict</td><td>advisory opinion on already-passing build</td><td>conservative frontier</td></tr>
       <tr><td>deep_review (optional)</td><td>integrity lens over the scrubbed transcript (E-39)</td><td><strong>different family than <code>dev</code></strong> (ADR-6); advisory, never gates</td></tr>
+      <tr><td>adversary (optional)</td><td>decorrelated second opinion on the approve path (spec pt.2)</td><td><strong>different model identity than <code>dev</code> AND <code>reviewer</code></strong> (by <code>model_id()</code>, not provider prefix); ships as <code>claude-sonnet-4-6</code>; advisory, fail-open, never the sole blocking lens</td></tr>
+      <tr><td>handoff (optional)</td><td>narrow extraction from scrubbed session (FR-805)</td><td>small fast model (<code>glm-5.2</code>)</td></tr>
     </tbody>
   </table>
 </div>
@@ -608,6 +630,39 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
     <span class="c"># 'anthropic:glm-5.2'  -&gt; 'anthropic'</span>
     <span class="c"># 'zai-coding-plan/glm-5.2' -&gt; 'zai-coding-plan'</span>
     <span class="k">return</span> re.split(r<span class="s">"[:/]"</span>, model, maxsplit=1)[0].strip().lower()</pre>
+</div>
+
+<div class="card soft">
+  <h4>The adversary clause (NEW) <span class="pill asset">loader.py:222</span></h4>
+  <pre><span class="k">def</span> model_id(model: str) -&gt; str:                       <span class="c"># loader.py:78</span>
+    <span class="c"># 'anthropic:glm-5.2'       -&gt; 'glm-5.2'</span>
+    <span class="c"># 'zai-coding-plan/glm-5.2' -&gt; 'glm-5.2'</span>
+    <span class="c"># model_family() answers "who serves it"; this answers "what is it".</span>
+    <span class="k">return</span> re.split(r<span class="s">"[:/]"</span>, model, maxsplit=1)[-1].strip().lower()
+
+<span class="k">def</span> check_adversary_model(role_models):                <span class="c"># NEW, separate from check_adr6_families</span>
+    adv = role_models.get(<span class="s">"adversary"</span>)
+    <span class="k">if</span> adv <span class="k">is None</span>: <span class="k">return</span>                              <span class="c"># no-op when the optional role is absent</span>
+    <span class="k">for</span> other <span class="k">in</span> (<span class="s">"dev"</span>, <span class="s">"reviewer"</span>):
+        peer = role_models.get(other)
+        <span class="k">if</span> peer <span class="k">is not None and</span> model_id(adv) == model_id(peer):
+            <span class="k">raise</span> RegistryError(<span class="s">"adversary is the same model as "</span> + other)</pre>
+  <p style="margin:6px 0 0;font-size:12.5px;color:var(--muted)">
+    The adversary constraint is <code>model_id(adversary) &notin; {model_id(dev), model_id(reviewer)}</code>
+    &mdash; <strong>by model identity, not provider prefix</strong>. Two prefixes over the same weights
+    decorrelate nothing.
+  </p>
+</div>
+
+<div class="callout warn">
+  <span class="label">OQ-A4: dev/reviewer nominal vs. substantive.</span>
+  The shipped registry runs <code>dev</code> (<code>zai-coding-plan/glm-5.2</code>) and
+  <code>reviewer</code> (<code>anthropic:glm-5.2</code>) on the same <code>glm-5.2</code> weights
+  behind different provider prefixes. The existing <code>check_adr6_families</code> dev/reviewer
+  clause is therefore <em>satisfied nominally but void substantively</em> for the shipped registry.
+  It is <strong>deliberately left untouched</strong> so no benchmark baseline shifts; the adversary
+  clause above is the new, stricter identity check that actually enforces decorrelation for the
+  second-opinion lens.
 </div>
 
 <div class="callout warn">
@@ -743,6 +798,8 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
       <tr><td>analyst</td>          <td>acceptance criteria + integration diff + aggregate test output</td><td><strong>any implementer's summary, reasoning, or session</strong></td></tr>
       <tr><td>merge_verdict</td>    <td>QA report + reviewer summary + diff stats</td><td>raw sessions</td></tr>
       <tr><td>research</td>         <td>idea; pages it fetches this run; recalled leads</td><td>another stage's raw transcript</td></tr>
+      <tr><td>adversary</td>        <td>same clean-context inputs as reviewer (frozen contract + materialised diff + test output)</td><td><strong>the dev's session</strong> (that is deep_review's job) and <strong>the primary reviewer's reasoning</strong></td></tr>
+      <tr><td>handoff</td>          <td>materialised diff + scrubbed HarnessSession (via <code>load_session</code>) + frozen contract assertions</td><td>validators of <strong>this</strong> task (handoff flows to downstream tasks only)</td></tr>
     </tbody>
   </table>
 </div>
@@ -1295,8 +1352,8 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
   <span class="kv">stage: <b>research (optional, FR-107)</b></span>
   <span class="kv">output: <b>ResearchBrief</b></span>
   <span class="kv">model: <b>anthropic:glm-5.2</b></span>
-  <span class="kv">provider: <b>fake (CI) / tavily (needs TAVILY_API_KEY)</b></span>
-  <span class="kv">tools: <b>recall_leads, web_search, fetch_page, read_repo</b></span>
+  <span class="kv">provider: <b>fake (CI, ships) / tavily (needs TAVILY_API_KEY) / exa (needs EXA_API_KEY)</b></span>
+  <span class="kv">tools: <b>recall_leads, read_repo, ExaSearch (web_search, get_page, deep_search) + run_code &mdash; only when provider: exa</b></span>
 </div>
 
 <p>
@@ -1306,6 +1363,18 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
   substring of bytes fetched <em>this run</em>. The brief is not memoized; only its canonical
   digest feeds downstream content keys.
 </p>
+
+<div class="callout">
+  <span class="label">Now fans out (2026-08-04 design).</span>
+  The stage is three activities: <code>plan_research</code> (decompose into &le;N sub-questions),
+  <code>research_subquestion</code> (the fan-out unit &mdash; runs the plain research agent
+  in-process so <code>deps.budget</code> accumulates; each sub-question charges its own per-scope
+  budget so one cannot drain the run), and <code>synthesize_brief</code> (deterministic
+  <code>merge_briefs</code> then one model call over a <strong>closed output type</strong>
+  <code>_SynthesisOutput</code> &mdash; the model has no field to author a grounded finding). A
+  bounded refine round is wired to <code>GateOutcome.REVISE</code> (a replan = a plan with a seed).
+  See <a href="research-stage-schema.html">research-stage-schema.html</a> for the deep treatment.
+</div>
 
 <div class="card soft">
   <h4>The contract: <code>ResearchBrief</code> field order (SGR) <span class="pill asset">models.py:311</span></h4>
@@ -1326,9 +1395,10 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
     <thead><tr><th>tool</th><th>charges</th><th>persists</th><th>rule</th></tr></thead>
     <tbody>
       <tr><td class="mono">recall_leads</td><td>nothing</td><td>nothing</td><td>Recalled findings are LEADS, never truth. Watermark-pinned, filtered to <code>stage=research</code>.</td></tr>
-      <tr><td class="mono">web_search</td><td>1 search</td><td>nothing</td><td>Snippet is NOT a fetched page &mdash; must call <code>fetch_page</code> before quoting.</td></tr>
-      <tr><td class="mono">fetch_page</td><td>1 fetch</td><td class="mono">runs/&lt;id&gt;/research/pages/&lt;sha&gt;.txt</td><td>So the verifier can check quotes against bytes fetched <em>this run</em>.</td></tr>
       <tr><td class="mono">read_repo</td><td>nothing</td><td>nothing</td><td>Rooted repo read; traversal outside root refused <strong>by returning a string, never by raising</strong>.</td></tr>
+      <tr><td class="mono">web_search / deep_search</td><td>1 search (via <code>charge_scoped</code>)</td><td>nothing</td><td>Only injected when <code>provider: exa</code>. Snippet is NOT a fetched page &mdash; must call <code>get_page</code> before quoting.</td></tr>
+      <tr><td class="mono">get_page</td><td>1 fetch</td><td class="mono">runs/&lt;id&gt;/research/pages/&lt;sha&gt;.txt (via <code>verify.write_page</code>)</td><td>Only injected when <code>provider: exa</code>. So the verifier can check quotes against bytes fetched <em>this run</em>.</td></tr>
+      <tr><td class="mono">run_code (CodeMode)</td><td>nothing</td><td>nothing</td><td>Harness capability, only injected when <code>provider: exa</code>.</td></tr>
     </tbody>
   </table>
 </div>
@@ -1339,6 +1409,132 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
   <code>research_subquery</code>), provider seam, sequence diagram, and all gotchas &mdash; see
   <a href="research-stage-schema.html">docs/research-stage-schema.html</a>.
 </p>
+
+<!-- ################################################################ -->
+<h2 id="adversary">13. adversary <span class="pill proposer">proposer &middot; decorrelated second opinion &middot; non-DAG lens</span></h2>
+
+<div class="agent-banner">
+  <span class="name">adversary</span>
+  <span class="kv">activity: <b>adversary_agent</b></span>
+  <span class="kv">stage: <b>adversary (non-DAG lens, approve path only)</b></span>
+  <span class="kv">output: <b>ReviewReport</b></span>
+  <span class="kv">model: <b>anthropic:claude-sonnet-4-6</b></span>
+  <span class="kv">enabled by: <b>cfg.adversarial_review_enabled</b> (off by default)</span>
+  <span class="kv">files: <b>agents/adversary/{agent.py, agent.yaml, instructions.md}</b></span>
+</div>
+
+<p>
+  Decorrelated second opinion (spec pt.2). Runs <strong>ONLY when the primary reviewer approves</strong>
+  &mdash; <code>review_ok = review is None or review.approve</code> &mdash; because a rejection is
+  already bound for the fix loop, so the expensive failure mode is a <em>false approve</em>. Holds no
+  tools, no repo, no session: it receives the same clean-context inputs as the reviewer (frozen
+  contract assertions + materialized diff + test output) and emits the same <code>ReviewReport</code>
+  contract, so findings merge into the fix loop with no new plumbing. <strong>Fail-open</strong>: a
+  failed adversary call counts as agreement; the primary reviewer remains the sole designated blocking
+  lens (deliberately asymmetric to E-38's fail-closed scrub).
+</p>
+
+<div class="grid-2">
+  <div class="card soft">
+    <h4>On agreement vs. split <span class="pill det">workflows/feature.py</span></h4>
+    <ul style="margin:6px 0 0">
+      <li><strong>Agree (both approve):</strong> task proceeds on the success path.</li>
+      <li><strong>Split (adversary rejects):</strong> attempt is treated as failed; <code>_fix_loop_issues</code> returns the <strong>UNION</strong> of both reviewers' findings to seed the retry.</li>
+      <li><strong>Adversary call fails:</strong> fail-open &rarr; agreement; the run never blocks on the optional lens.</li>
+    </ul>
+  </div>
+  <div class="card soft">
+    <h4>Decorrelation by model identity <span class="pill asset">loader.py:222</span></h4>
+    <p style="margin:6px 0 0">
+      The constraint is <code>model_id(adversary) &notin; {model_id(dev), model_id(reviewer)}</code>
+      &mdash; by <strong>model identity, not provider prefix</strong>. A second opinion from the same
+      weights is not a second opinion. See the ADR-6 section for the new <code>check_adversary_model</code>
+      clause.
+    </p>
+  </div>
+</div>
+
+<div class="callout warn">
+  <span class="label">Ships as claude-sonnet-4-6.</span>
+  ARCHITECTURE &sect;4 places adversarial instruction-following on that tier; <code>claude-sonnet-4-6</code>
+  is genuinely different weights from the glm-5.2 family that dev/reviewer run, so the model-identity
+  check holds for the shipped registry. The lens is <strong>advisory and fail-open; it is never the
+  sole blocking lens</strong>.
+</div>
+
+<!-- ################################################################ -->
+<h2 id="handoff">14. handoff <span class="pill proposer">proposer &middot; task-to-task extraction &middot; non-DAG lens</span></h2>
+
+<div class="agent-banner">
+  <span class="name">handoff</span>
+  <span class="kv">activity: <b>handoff_agent</b></span>
+  <span class="kv">stage: <b>handoff (non-DAG lens, success path only)</b></span>
+  <span class="kv">output: <b>HandoffSummary</b></span>
+  <span class="kv">model: <b>anthropic:glm-5.2</b></span>
+  <span class="kv">spec: <b>FR-805</b></span>
+  <span class="kv">files: <b>agents/handoff/{agent.py, agent.yaml, instructions.md}</b></span>
+</div>
+
+<p>
+  Verified task-to-task handoff (FR-805). Narrow <strong>extraction</strong>, not judgment &mdash;
+  runs <strong>once per task on the success path</strong>, beside <code>_run_deep_review</code>. Reads
+  the <strong>scrubbed</strong> <code>HarnessSession</code> (via the existing <code>load_session</code>
+  activity) plus the materialized diff and frozen contract assertions, and emits the three claim lists
+  the next dev prompt injects. <strong>Best-effort</strong>: any failure falls back to the mechanical
+  handoff (the diff itself) &mdash; a passing task is never failed by the extractor.
+</p>
+
+<h3>The contract: <code>HandoffSummary</code> <span class="pill asset">models.py:275</span></h3>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>field</th><th>type</th><th>rule</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">task_id</td><td class="mono">str</td><td>Set by the orchestrator (the model is told to leave it blank).</td></tr>
+      <tr><td class="mono">files_touched</td><td class="mono">list[str]</td><td>Computed deterministically from <code>diff["files"]</code> &mdash; the extractor cannot misreport it.</td></tr>
+      <tr><td class="mono">what_changed</td><td class="mono">list[HandoffClaim]</td><td>What this task actually did, in the author's own terms.</td></tr>
+      <tr><td class="mono">decisions_made</td><td class="mono">list[HandoffClaim]</td><td>Choices the diff alone cannot explain (why this approach; what alternative was rejected).</td></tr>
+      <tr><td class="mono">open_concerns</td><td class="mono">list[HandoffClaim]</td><td>Knowingly left undone, worked around, or flagged mid-session &mdash; verbatim.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="grid-2">
+  <div class="card soft">
+    <h4><code>HandoffClaim</code> <span class="pill asset">models.py:268</span></h4>
+    <pre><span class="k">class</span> HandoffClaim(BaseModel):
+    text: str        <span class="c"># the assertion</span>
+    evidence: str    <span class="c"># exact transcript quote / reference</span></pre>
+    <p style="margin:6px 0 0;font-size:12.5px;color:var(--muted)">
+      Evidence-first, mirroring <code>IntegrityFlag</code>: every claim must carry a quote from the
+      scrubbed session, never an invention.
+    </p>
+  </div>
+  <div class="card soft">
+    <h4>Deterministic cross-check <span class="pill asset">handoff.py:26</span></h4>
+    <pre>cross_check_claims(claims, files_touched)
+  -&gt; (kept, dropped_count)
+<span class="c"># Pure function, no LLM: a claim naming a path</span>
+<span class="c"># NOT in files_touched is dropped &amp; counted.</span>
+<span class="c"># A claim naming NO path survives (design</span>
+<span class="c"># decisions legitimately reference no file).</span>
+claim_survival_score(kept, dropped) -&gt; fraction
+  <span class="c"># None when there were no claims at all.</span></pre>
+  </div>
+</div>
+
+<div class="callout warn">
+  <span class="label">Invariant: flows downstream only.</span>
+  Handoff output is injected into the <em>next</em> dev prompt (<code>what_changed</code>,
+  <code>decisions_made</code>, AND <code>open_concerns</code>); it <strong>never reaches this task's
+  validators</strong>. The extractor reads the dev session &mdash; routing its output to the reviewer
+  would correlate the judge with authoring context (ADR-6).
+</div>
+
+<div class="callout warn">
+  <span class="label">Migration note.</span>
+  The <code>HandoffSummary</code> field-type change (<code>list[str]</code> &rarr;
+  <code>list[HandoffClaim]</code>) breaks in-flight runs; drain before deploy.
+</div>
 
 <!-- ################################################################ -->
 <h2 id="filemap">File map <span class="count">by layer</span></h2>
@@ -1354,6 +1550,8 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
     <p><span class="mono">analyst/{agent.py, agent.yaml, instructions.md}</span></p>
     <p><span class="mono">merge_verdict/{agent.py, agent.yaml, instructions.md}</span></p>
     <p><span class="mono">deep_review/{agent.py, agent.yaml, instructions.md}</span> &mdash; optional advisory proposer (E-39); reads scrubbed session; family &ne; dev</p>
+    <p><span class="mono">adversary/{agent.py, agent.yaml, instructions.md}</span> &mdash; decorrelated second opinion (spec pt.2); approve path only; <code>model_id</code> &ne; dev &amp; reviewer</p>
+    <p><span class="mono">handoff/{agent.py, agent.yaml, instructions.md}</span> &mdash; FR-805 task-to-task extraction; reads scrubbed session; small fast model</p>
     <p><span class="mono">devops_planner/{agent.py, agent.yaml, instructions.md}</span> &mdash; builds <code>devops_agent</code></p>
     <p><span class="mono">dev/agent.yaml</span>, <span class="mono">test/agent.yaml</span>, <span class="mono">devops/agent.yaml</span> &mdash; harness roles, prompt+agent.py forbidden</p>
     <p><span class="mono">research/{agent.py, agent.yaml, instructions.md, tools/}</span></p>
@@ -1384,6 +1582,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
     <p><span class="mono">CriterionTrace, AnalysisReport</span> (:242, :249)</p>
     <p><span class="mono">MergeVerdict</span> (:410)</p>
     <p><span class="mono">DeepReviewReport + IntegrityFlag</span> (:339) &mdash; E-39 advisory lens</p>
+    <p><span class="mono">HandoffClaim, HandoffSummary</span> (:268, :275) &mdash; FR-805 task-to-task handoff</p>
     <p><span class="mono">ResearchBrief + nested</span> (:266-324)</p>
     <p><span class="mono">RoleConfig</span> &mdash; <code>kind</code>, <code>harness</code>, <code>model</code>, <code>provider</code>, <code>tool_files</code>, <code>instructions</code>, <code>context_budget_tokens</code>.</p>
   </div>
@@ -1393,8 +1592,9 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
     <p><span class="mono">:26-27</span> &mdash; imports <code>t_*</code> TemporalAgents + <code>STAGE_MODELS</code>/<code>PROMPT_SHAS</code>.</p>
     <p><span class="mono">:318</span> &mdash; <code>_cached_stage</code> (memoization; <code>STAGE_MODELS</code> keyed lookup).</p>
     <p><span class="mono">:379, :419</span> &mdash; <code>_gate</code>, <code>_revisable_stage</code>.</p>
-    <p><span class="mono">:470</span> &mdash; <code>_dev_task</code> (dev harness + qa + reviewer per-task loop).</p>
+    <p><span class="mono">:470</span> &mdash; <code>_dev_task</code> (dev harness + qa + reviewer per-task loop; + adversary on approve path, + handoff on success path).</p>
     <p><span class="mono">:695</span> &mdash; research stage wiring (optional, FR-107).</p>
+    <p><span class="mono">:976</span> &mdash; <code>_run_handoff</code> (FR-805 handoff extraction, success path).</p>
     <p><span class="mono">:776</span> clarify stage; <span class="mono">:869</span> architect; <span class="mono">:909</span> planner; <span class="mono">:1006</span> analyst; <span class="mono">:1142</span> merge_verdict.</p>
   </div>
 
@@ -1408,6 +1608,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
     <p><span class="mono">activities.py</span> &mdash; flattened activity module (target layout in <code>ARCHITECTURE.md &sect;14</code> splits this by concern). Holds <code>create_worktree</code> (:257), <code>run_coding_task</code> (:381), <code>run_test_suite</code> (:449), <code>get_task_diff</code>, <code>merge_into_integration</code>, <code>setup_integration_branch</code>, <code>run_lint</code>, <code>security_scan</code>.</p>
     <p><span class="mono">memory/activities.py</span> &mdash; <code>recall_snapshot</code>, <code>retain</code>.</p>
     <p><span class="mono">memoization/activities.py</span> &mdash; <code>cache_get</code>, <code>cache_put</code> (content-addressed; ADR-5).</p>
+    <p><span class="mono">handoff.py</span> &mdash; deterministic half of the handoff (FR-805): <code>cross_check_claims</code> (:26), <code>claim_survival_score</code> (:50). Pure functions, no LLM.</p>
   </div>
 
   <div class="layer">TESTS<br>tests/</div>

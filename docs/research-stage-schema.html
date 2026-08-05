@@ -349,16 +349,21 @@
 
 <h1>Research Stage Schema &amp; Architecture</h1>
 <p class="meta">
-  FR-107 · wired in <code>src/sdlc/workflows/feature.py:1125</code> ·
-  spec: <code>docs/superpowers/specs/2026-07-17-research-agent-grounded-briefs-design.md</code> ·
+  FR-107 · wired in <code>src/sdlc/workflows/feature.py:1625</code> ·
+  fan-out activities in <code>src/sdlc/research/stage.py</code> ·
+  spec: <code>docs/superpowers/specs/2026-08-04-research-fan-out-design.md</code> ·
   contract source-of-truth: <code>src/sdlc/models.py</code> ·
-  verified 2026-07-26 against <code>src/sdlc/workflows/feature.py</code>
+  verified 2026-08-05 against <code>src/sdlc/</code>, <code>agents/research/</code>, <code>benchmarks/</code>
 </p>
 <p class="lede">
   The research stage is an <strong>optional, human-gated, off-by-default</strong> pre-clarify
-  stage (FR-107). A single proposer agent consults four sequential tools against a per-run budget,
-  emits a schema-validated <code>ResearchBrief</code>, and a <strong>pure verifier</strong> flags
-  any &ldquo;grounded&rdquo; quote that is not a verbatim substring of bytes fetched
+  stage (FR-107). Since the 2026-08-04 fan-out design it is no longer one agent turn: the workflow
+  <strong>fans out</strong> &mdash; <code>plan_research</code> decomposes the idea into
+  &le;<code>max_sub_questions</code> independent sub-questions, N parallel
+  <code>research_subquestion</code> activities each run the plain research agent in-process against
+  their <strong>own per-scope budget</strong>, and <code>synthesize_brief</code> merges the partial
+  briefs (deterministic) then makes one model call over them. A <strong>pure verifier</strong> then
+  flags any &ldquo;grounded&rdquo; quote that is not a verbatim substring of bytes fetched
   <em>this run</em>. The verifier is byte-exact (whitespace-normalized only); a failed brief
   records the stage as <code>FAIL</code> (retain + digest skipped) and the run <strong>continues on
   the idea alone</strong> &mdash; fail-and-continue, not a block (E-29, 2026-07-20). The brief is
@@ -370,8 +375,8 @@
 <div class="toc" role="navigation">
   <a href="#placement">1. Placement</a>
   <a href="#brief">2. ResearchBrief</a>
-  <a href="#components">3. Components</a>
-  <a href="#tools">4. Four Tools</a>
+  <a href="#components">3. Components &amp; Fan-out</a>
+  <a href="#tools">4. Tool Layer</a>
   <a href="#budget">5. Budget</a>
   <a href="#verifier">6. Verifier</a>
   <a href="#memory">7. Memory</a>
@@ -457,7 +462,7 @@
 <div class="callout warn">
   <span class="label">Off by default, not memoized.</span>
   A served memo would mean pages were <em>not</em> fetched this run, so a brief cannot be cached
-  (<code>feature.py:1125</code> comment, spec finding 4). Only the canonical
+  (<code>feature.py:1625</code> comment, spec finding 4). Only the canonical
   <code>brief_digest()</code> contributes to downstream content keys (spec finding 3).
 </div>
 
@@ -465,7 +470,7 @@
 <h2 id="brief">2. The contract: <code>ResearchBrief</code> <span class="count">schema</span></h2>
 
 <p>
-  Defined at <code>src/sdlc/models.py:425</code>. Field order is <strong>reasoning order</strong>
+  Defined at <code>src/sdlc/models.py:522</code>. Field order is <strong>reasoning order</strong>
   (schema-guided reasoning, SGR): decompose &rarr; gather &rarr; what the bytes say &rarr; what I
   concluded &rarr; where sources disagree &rarr; what I could not answer &rarr; summary &rarr; ref
   &rarr; confidence. <code>tests/test_research_models.py</code> pins the order; a reorder is a
@@ -509,13 +514,13 @@
 
 <div class="grid-2">
   <div class="card soft">
-    <h4>SubQuestion <span class="pill asset">models.py:380</span></h4>
+    <h4>SubQuestion <span class="pill asset">models.py:477</span></h4>
     <pre><span class="k">class</span> SubQuestion:
     id: str
     question: str</pre>
   </div>
   <div class="card soft">
-    <h4>ConsultedSource <span class="pill asset">models.py:385</span></h4>
+    <h4>ConsultedSource <span class="pill asset">models.py:482</span></h4>
     <pre><span class="k">class</span> ConsultedSource:
     url: str
     title: str = <span class="s">""</span>
@@ -523,7 +528,7 @@
     relevance: str = <span class="s">""</span>     <span class="c"># "high" / "peripheral"</span></pre>
   </div>
   <div class="card soft">
-    <h4>GroundedFinding <span class="pill asset">models.py:393</span></h4>
+    <h4>GroundedFinding <span class="pill asset">models.py:490</span></h4>
     <pre><span class="k">class</span> GroundedFinding:
     source_url: str
     quote: str            <span class="c"># verbatim, fetched THIS run</span>
@@ -535,7 +540,7 @@
     </p>
   </div>
   <div class="card soft">
-    <h4>InferredFinding <span class="pill asset">models.py:403</span></h4>
+    <h4>InferredFinding <span class="pill asset">models.py:500</span></h4>
     <pre><span class="k">class</span> InferredFinding:
     reasoning: str
     claim: str
@@ -546,7 +551,7 @@
     </p>
   </div>
   <div class="card soft">
-    <h4>Contradiction <span class="pill asset">models.py:412</span></h4>
+    <h4>Contradiction <span class="pill asset">models.py:509</span></h4>
     <pre><span class="k">class</span> Contradiction:
     topic: str
     positions: list[str] = []
@@ -554,7 +559,7 @@
     unresolved: bool = <span class="k">True</span></pre>
   </div>
   <div class="card soft">
-    <h4>Gap <span class="pill asset">models.py:419</span></h4>
+    <h4>Gap <span class="pill asset">models.py:516</span></h4>
     <pre><span class="k">class</span> Gap:
     sub_question_id: str
     what_is_missing: str
@@ -563,15 +568,171 @@
 </div>
 
 <!-- ================================================================= -->
-<h2 id="components">3. Components <span class="count">layer map</span></h2>
+<h2 id="components">3. Components &amp; fan-out architecture <span class="count">plan → N sub-questions → synthesize</span></h2>
 
 <p>
   Two layers: <strong>assets</strong> (what you edit to change behaviour &mdash; prompt, registry
   entry, tool implementations) live under <code>agents/research/</code>; <strong>code</strong>
-  (what makes assets work &mdash; provider protocol, budget, verifier, retain) lives under
+  (what makes assets work &mdash; fan-out activities, merge, budget, verifier, retain) lives under
   <code>src/sdlc/research/</code>. The workflow wiring in
   <code>src/sdlc/workflows/feature.py</code> is the only deterministic caller.
 </p>
+
+<h3>The fan-out: three activities, not one turn</h3>
+<p>
+  The stage is now <strong>plan &rarr; N &times; sub-question (parallel) &rarr; synthesize</strong>,
+  with a bounded <strong>refine</strong> round on <code>GateOutcome.REVISE</code>. All three
+  activities live in <code>src/sdlc/research/stage.py</code> and are registered in
+  <code>worker.py</code>. <strong>Every model call is activity-side</strong> &mdash; fan-out moved
+  them out of <code>_run_role</code>'s reach &mdash; so each return type carries a
+  <code>RoleUsage</code> (E-33 amendment, &sect;usage below).
+</p>
+
+<div class="diagram">
+  <svg viewBox="0 0 940 210" role="img" aria-label="Research fan-out: plan, N sub-questions, synthesize, verify, gate">
+    <defs>
+      <marker id="fanarr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L6,3 L0,6 Z" fill="#57606a"/>
+      </marker>
+    </defs>
+    <g font-family="var(--sans)" font-size="12" text-anchor="middle">
+      <!-- plan_research -->
+      <rect x="20" y="80" width="130" height="50" rx="6" fill="rgba(9,105,218,0.10)" stroke="#0969da" stroke-width="2"/>
+      <text x="85" y="102" font-weight="600" fill="#0969da">plan_research</text>
+      <text x="85" y="118" font-size="10" fill="#57606a">decompose → ≤ max_sub_questions</text>
+
+      <!-- N sub-questions (parallel) -->
+      <rect x="240" y="50" width="170" height="34" rx="5" fill="rgba(26,127,55,0.10)" stroke="#1a7f37"/>
+      <text x="325" y="71" fill="#1a7f37">research_subquestion</text>
+      <rect x="240" y="90" width="170" height="34" rx="5" fill="rgba(26,127,55,0.10)" stroke="#1a7f37" stroke-dasharray="3 2"/>
+      <text x="325" y="111" fill="#1a7f37">research_subquestion</text>
+      <rect x="240" y="130" width="170" height="34" rx="5" fill="rgba(26,127,55,0.10)" stroke="#1a7f37" stroke-dasharray="3 2"/>
+      <text x="325" y="151" fill="#57606a">… (parallel, heartbeating)</text>
+
+      <!-- synthesize -->
+      <rect x="490" y="80" width="150" height="50" rx="6" fill="rgba(9,105,218,0.10)" stroke="#0969da" stroke-width="2"/>
+      <text x="565" y="102" font-weight="600" fill="#0969da">synthesize_brief</text>
+      <text x="565" y="118" font-size="10" fill="#57606a">merge_briefs + 1 model call</text>
+
+      <!-- verify -->
+      <rect x="700" y="80" width="110" height="50" rx="6" fill="rgba(130,80,223,0.10)" stroke="#8250df" stroke-width="2"/>
+      <text x="755" y="102" font-weight="600" fill="#8250df">verify_brief</text>
+      <text x="755" y="118" font-size="10" fill="#57606a">byte-exact</text>
+
+      <!-- gate -->
+      <polygon points="880,80 920,105 880,130 840,105" fill="rgba(154,103,0,0.10)" stroke="#9a6700"/>
+      <text x="880" y="108" font-size="10">gate</text>
+
+      <!-- arrows plan -> sq -->
+      <g stroke="#57606a" stroke-width="1" fill="none" marker-end="url(#fanarr)">
+        <line x1="150" y1="105" x2="240" y2="67"/>
+        <line x1="150" y1="105" x2="240" y2="107"/>
+        <line x1="150" y1="105" x2="240" y2="147"/>
+        <line x1="410" y1="67"  x2="490" y2="105"/>
+        <line x1="410" y1="107" x2="490" y2="105"/>
+        <line x1="410" y1="147" x2="490" y2="105"/>
+        <line x1="640" y1="105" x2="700" y2="105"/>
+        <line x1="810" y1="105" x2="840" y2="105"/>
+      </g>
+      <!-- revise loop back to plan -->
+      <path d="M880,80 Q880,30 85,30 L85,80" stroke="#9a6700" stroke-width="1" fill="none" stroke-dasharray="3 2" marker-end="url(#fanarr)"/>
+      <text x="480" y="24" font-size="10" fill="#9a6700">REVISE → replan (seeded with guidance + gaps + contradictions), second wave, re-merge, re-verify</text>
+    </g>
+  </svg>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <h3><code>plan_research</code> <span class="pill act">activity</span> <span class="pill asset">stage.py:109</span></h3>
+    <p class="meta">returns <code>ResearchPlan</code> &nbsp;{sub_questions, usage}</p>
+    <p>
+      One schema-constrained model call whose output type is a <strong>flat list of strings</strong>
+      (<code>_PlannerOutput</code>, <code class="mono">stage.py:26</code>). <strong>Ids are assigned
+      by us, not the model</strong> &mdash; <code>sq-&lt;offset+i&gt;</code> &mdash; so they stay
+      stable and offsettable across refine rounds (round-2 ids never collide with round-1). The
+      result is <strong>sliced</strong> to <code>max_sub_questions</code>: measured behaviour is
+      that a planner returns the top of whatever range it is given, so the config value, not the
+      question, decides the width. <strong>Degrades</strong> to one whole-idea investigation if it
+      returns nothing.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3><code>research_subquestion</code> <span class="pill act">activity</span> <span class="pill asset">stage.py:241</span> &middot; the fan-out unit</h3>
+    <p class="meta">returns <code>SubQuestionFinding</code>{sub_question, brief, usage}</p>
+    <p>
+      Runs the <strong>plain <code>research_agent</code> in-process</strong>, not the
+      <code>TemporalAgent</code> &mdash; the pattern <code>research/toolset.py</code> set for the
+      architect's mid-run call &mdash; so <code>deps.budget</code> <strong>accumulates for
+      real</strong> while <code>budget_store</code> enforces the persisted caps underneath.
+    </p>
+    <ul>
+      <li><strong>Own per-scope budget.</strong> <code>ResearchDeps.scope = sub.id</code>
+        (<code class="mono">stage.py:208</code>) plus the shared <code>"run"</code> ceiling via
+        <code>charge_scoped</code> &mdash; one sub-question cannot drain the run.</li>
+      <li><strong>Heartbeats on a timer</strong> (<code>HEARTBEAT_INTERVAL_SECONDS = 15</code>,
+        <code class="mono">stage.py:132</code>); invariant
+        <code>interval &lt; heartbeat_timeout &lt; start_to_close</code>.</li>
+      <li><strong>Degrades on <code>BudgetExceeded</code> / <code>UsageLimitExceeded</code></strong>
+        &mdash; <strong>never re-raises</strong> (the persisted counter would retry into the same
+        cap); shortfall recorded as a <code>Gap</code> (<code class="mono">stage.py:171</code>),
+        siblings survive.</li>
+      <li><strong>Handles <code>CancelledError</code></strong> with a heartbeat on the way out.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3><code>synthesize_brief</code> <span class="pill act">activity</span> <span class="pill asset">stage.py:337</span></h3>
+    <p class="meta">returns <code>(ResearchBrief, RoleUsage)</code></p>
+    <p>
+      <strong>Deterministic <code>merge_briefs</code> first</strong> (structure from code,
+      <code>research/merge.py</code>), <strong>then one model call</strong> with a <strong>closed
+      output type</strong> <code>_SynthesisOutput{summary, contradictions, confidence}</code>
+      (<code class="mono">stage.py:249</code>). The model <strong>cannot author a grounded
+      finding</strong> &mdash; there is no field for one.
+    </p>
+    <ul>
+      <li><strong>Confidence bound enforced here:</strong> the brief is assembled via
+        <code>model_copy(update=...)</code>, which bypasses pydantic validation, so
+        <code>ResearchBrief.confidence</code>'s <code>ge/le</code> is inert on this path; the
+        <code>0.0&ndash;1.0</code> bound lives on <code>_SynthesisOutput</code>.</li>
+      <li><strong>Numbered source list built BEFORE the model is prompted</strong>
+        (<code>_numbered_sources</code>, <code class="mono">stage.py:270</code>) so cited numbers
+        and brief numbers cannot drift.</li>
+      <li><strong>Cross-sub-question contradictions</strong> (visible only once independent
+        investigations sit side by side) are added here.</li>
+      <li><strong>Empty-findings path makes no model call</strong> &rarr; zero-spend
+        <code>RoleUsage</code>.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>Refine round <span class="pill det">REVISE</span> <span class="pill asset">feature.py:1717</span></h3>
+    <p class="meta">bounded by <code>max_refine_rounds</code></p>
+    <p>
+      <code>GateOutcome.REVISE</code> no longer collapses to reject. A replan is a <strong>plan with
+      a seed</strong>: the human's <code>guidance</code> plus machine-readable <code>Gap</code>s and
+      unresolved <code>Contradiction</code>s from round one (<code>PlanInput</code>,
+      <code class="mono">stage.py:32</code>). Round-1 findings are <strong>never discarded</strong>
+      &mdash; the refine wave researches only new sub-questions and re-merges over the accumulated
+      set; the run-scope counter persists, so round 2 draws down the same <code>max_run_cost_usd</code>.
+      Exhausting rounds <strong>proceeds</strong> with the current brief, never rejects.
+    </p>
+  </div>
+</div>
+
+<div class="callout">
+  <span class="label">Usage accounting (E-33 amendment).</span>
+  Fan-out moved model calls activity-side, out of <code>_run_role</code>'s reach, so an activity
+  that calls a model <strong>must hand its usage back or the spend is silently lost</strong>. Every
+  model-carrying return type &mdash; <code>ResearchPlan</code>, <code>SubQuestionFinding</code>, the
+  <code>synthesize_brief</code> tuple &mdash; carries a <code>RoleUsage</code>; the workflow folds
+  each through <code>_fold_research_usage</code> (<code class="mono">feature.py:842</code>).
+  <code>price_usage</code> still happens <strong>workflow-side</strong> (replay-safe). The
+  empty-findings path makes no model call and returns a zero-spend <code>RoleUsage</code>.
+</div>
+
+<h3>Layer map</h3>
 
 <div class="table-wrap">
   <table>
@@ -600,13 +761,43 @@
         <td>agent builder</td>
         <td class="mono">agents/research/agent.py</td>
         <td><span class="pill agent">agent</span></td>
-        <td>Constructs the Pydantic AI <code>Agent</code> with <code>output_type=ResearchBrief</code>; imports each tool by path under a private module name.</td>
+        <td>Constructs the Pydantic AI <code>Agent</code> with <code>output_type=ResearchBrief</code>; imports <code>recall_leads</code> + <code>read_repo</code> by path, and (when <code>provider == "exa"</code>) injects <strong>ExaSearch</strong> + Harness <strong>CodeMode</strong> as capabilities.</td>
       </tr>
       <tr>
-        <td>tools (4)</td>
+        <td>ExaSearch wrapper</td>
+        <td class="mono">agents/research/exa_wrapper.py</td>
+        <td><span class="pill agent">agent</span> <span class="pill io">I/O</span></td>
+        <td><code>WrappedExaSearchToolset</code>: routes <code>web_search</code> / <code>get_page</code> / <code>deep_search</code> through <code>charge_scoped</code> and mirrors <code>get_page</code> text into the page cache via <code>verify.write_page</code>.</td>
+      </tr>
+      <tr>
+        <td>tools</td>
         <td class="mono">agents/research/tools/*.py</td>
         <td><span class="pill agent">agent</span> <span class="pill act">activity</span></td>
-        <td><code>recall_leads</code>, <code>web_search</code>, <code>fetch_page</code>, <code>read_repo</code>. See <a href="#tools">&sect;4</a>.</td>
+        <td>Plain tools: <code>recall_leads</code>, <code>read_repo</code>. (The old <code>web_search</code> / <code>fetch_page</code> source files are removed &mdash; ExaSearch replaces them.) See <a href="#tools">&sect;4</a>.</td>
+      </tr>
+      <tr>
+        <td>fan-out activities</td>
+        <td class="mono">src/sdlc/research/stage.py</td>
+        <td><span class="pill act">activity</span></td>
+        <td><code>plan_research</code>, <code>research_subquestion</code>, <code>synthesize_brief</code> &mdash; the three activities that replaced the single agent turn. See <a href="#components">&sect;3</a>.</td>
+      </tr>
+      <tr>
+        <td>merge</td>
+        <td class="mono">src/sdlc/research/merge.py</td>
+        <td><span class="pill det">deterministic</span></td>
+        <td><code>merge_briefs()</code>: deterministic assembly of N partial briefs (corroboration preserved; exact triples deduped).</td>
+      </tr>
+      <tr>
+        <td>persisted budget</td>
+        <td class="mono">src/sdlc/research/budget_store.py</td>
+        <td><span class="pill det">deterministic</span> <span class="pill io">I/O</span></td>
+        <td>Per-scope counters at <code>budget-&lt;scope&gt;.json</code>; <code>charge_scoped()</code> bills <code>"run"</code> + <code>"sq-&lt;id&gt;"</code>.</td>
+      </tr>
+      <tr>
+        <td>prompts</td>
+        <td class="mono">src/sdlc/research/prompts.py</td>
+        <td><span class="pill asset">asset</span></td>
+        <td><code>PLAN_SYSTEM</code>, <code>SYNTHESIS_SYSTEM</code>, <code>sub_question_prompt()</code>.</td>
       </tr>
       <tr>
         <td>budget &amp; deps</td>
@@ -646,9 +837,9 @@
       </tr>
       <tr>
         <td>workflow wiring</td>
-        <td class="mono">src/sdlc/workflows/feature.py:1125</td>
+        <td class="mono">src/sdlc/workflows/feature.py:1625</td>
         <td><span class="pill det">deterministic</span></td>
-        <td>Builds <code>ResearchDeps</code>, calls <code>t_research.run</code>, runs verify activity, gates, retains, judges, records.</td>
+        <td>Builds <code>ResearchDeps</code>, fans out (<code>_fan_out_research</code> @ <code class="mono">:799</code>), verifies, gates (approve/reject/<strong>revise</strong>), retains, judges, records.</td>
       </tr>
     </tbody>
   </table>
@@ -667,7 +858,7 @@
       <rect x="342" y="38" width="100" height="32" rx="4" fill="#ffffff" stroke="#bf8700"/>
       <text x="352" y="58">agent.py</text>
       <rect x="452" y="38" width="280" height="32" rx="4" fill="#ffffff" stroke="#bf8700"/>
-      <text x="462" y="58">tools/{recall_leads,web_search,fetch_page,read_repo}.py</text>
+      <text x="462" y="58">tools/*.py + exa_wrapper.py</text>
     </g>
 
     <!-- CODE layer -->
@@ -675,17 +866,17 @@
       <rect x="10" y="92"  width="910" height="68" rx="6" fill="rgba(130,80,223,0.06)" stroke="#8250df" stroke-dasharray="4 3"/>
       <text x="22" y="110" font-size="11" fill="#8250df" font-weight="700">CODE  src/sdlc/research/</text>
       <rect x="22"  y="120" width="100" height="32" rx="4" fill="#ffffff" stroke="#8250df"/>
-      <text x="32" y="140">deps.py</text>
+      <text x="32" y="140">stage.py</text>
       <rect x="132" y="120" width="120" height="32" rx="4" fill="#ffffff" stroke="#8250df"/>
-      <text x="142" y="140">protocol.py</text>
+      <text x="142" y="140">merge.py</text>
       <rect x="262" y="120" width="180" height="32" rx="4" fill="#ffffff" stroke="#8250df"/>
-      <text x="272" y="140">verify.py  (pure + activity)</text>
+      <text x="272" y="140">verify.py + write_page</text>
       <rect x="452" y="120" width="120" height="32" rx="4" fill="#ffffff" stroke="#8250df"/>
-      <text x="462" y="140">retain.py</text>
+      <text x="462" y="140">budget_store.py</text>
       <rect x="582" y="120" width="120" height="32" rx="4" fill="#ffffff" stroke="#8250df"/>
-      <text x="592" y="140">toolset.py</text>
+      <text x="592" y="140">deps.py</text>
       <rect x="712" y="120" width="190" height="32" rx="4" fill="#ffffff" stroke="#8250df"/>
-      <text x="722" y="140">{tavily.py, fake.py}</text>
+      <text x="722" y="140">toolset + retain</text>
     </g>
 
     <!-- WORKFLOW + FS layer -->
@@ -693,12 +884,12 @@
       <rect x="10" y="174" width="600" height="68" rx="6" fill="rgba(9,105,218,0.05)" stroke="#0969da" stroke-dasharray="4 3"/>
       <text x="22" y="192" font-size="11" fill="#0969da" font-weight="700">WORKFLOW (deterministic)  src/sdlc/workflows/feature.py</text>
       <rect x="22" y="202" width="570" height="32" rx="4" fill="#ffffff" stroke="#0969da"/>
-      <text x="32" y="222">stage wiring @ :1014  ·  _gate @ :586  ·  _retain @ :366  ·  _judge @ :319</text>
+      <text x="32" y="222">wiring @ :1625  ·  _fan_out @ :799  ·  _gate @ :1079  ·  _retain @ :608  ·  _judge @ :561</text>
 
       <rect x="630" y="174" width="290" height="68" rx="6" fill="rgba(207,34,46,0.05)" stroke="#cf222e" stroke-dasharray="4 3"/>
       <text x="642" y="192" font-size="11" fill="#cf222e" font-weight="700">I/O  runs/&lt;run_id&gt;/research/</text>
-      <rect x="642" y="202" width="265" height="32" rx="4" fill="#ffffff" stroke="#cf222e"/>
-      <text x="652" y="222">pages/&lt;sha256(url)&gt;.txt</text>
+      <rect x="642" y="202" width="275" height="32" rx="4" fill="#ffffff" stroke="#cf222e"/>
+      <text x="652" y="222">pages/&lt;sha&gt;.txt  +  budget-&lt;scope&gt;.json</text>
     </g>
 
     <!-- arrows: assets -> code -> workflow -> io -->
@@ -713,16 +904,36 @@
     </defs>
   </svg>
 </div>
+<p style="font-size:12.5px;color:var(--muted);margin-top:6px">
+  The CODE layer also holds <code>protocol.py</code>, <code>prompts.py</code>, <code>tavily.py</code>,
+  <code>fake.py</code> &mdash; see the table above and the <a href="#filemap">file map</a>. New since
+  fan-out: <code>stage.py</code>, <code>merge.py</code>, <code>budget_store.py</code>, <code>prompts.py</code>.
+</p>
 
 <!-- ================================================================= -->
-<h2 id="tools">4. The four tools <span class="count">sequential, charged, persisted</span></h2>
+<h2 id="tools">4. The tool layer <span class="count">charged, persisted, grounded</span></h2>
 
 <p>
-  The agent calls tools <strong>sequentially</strong>: <code>recall_leads</code> &rarr;
-  <code>web_search</code> &rarr; <code>fetch_page</code> &rarr; quote from fetched bytes;
-  <code>read_repo</code> is free-standing and uncharged. This is the human-authorised fallback
-  after the 2026-07-17 decision to drop CodeMode (untestable under TemporalAgent via TestModel).
+  Each <code>research_subquestion</code> runs the research agent, which gathers via two routes:
+  the <strong>plain budget-charged tools</strong> (<code>recall_leads</code>, <code>read_repo</code>),
+  and &mdash; since 2026-07-29 &mdash; <strong>ExaSearch</strong> (<code>web_search</code>,
+  <code>get_page</code>, <code>deep_search</code> via <code>WrappedExaSearchToolset</code>) plus the
+  Harness <strong><code>run_code</code></strong> capability, injected selectively when
+  <code>provider == "exa"</code>. The old <code>web_search.py</code> / <code>fetch_page.py</code>
+  source files are removed; ExaSearch replaces them. Whatever the route, every search/fetch is
+  charged against the sub-question's persisted scope and every fetched page is written to
+  <code>pages/&lt;sha&gt;.txt</code> so grounding verification still applies byte-for-byte.
 </p>
+
+<div class="callout">
+  <span class="label">ExaSearch + <code>run_code</code> (2026-07-29).</span>
+  <code>WrappedExaSearchToolset</code> routes Exa's tools through <code>charge_scoped</code> (1 search
+  for <code>web_search</code>/<code>deep_search</code>, 1 fetch for <code>get_page</code>) and mirrors
+  <code>get_page</code> text into the page cache via <code>verify.write_page</code>. <code>run_code</code>
+  lets the agent orchestrate parallel calls from a script. This supersedes the 2026-07-17 &ldquo;drop
+  CodeMode&rdquo; fallback: CodeMode is back, scoped to the research agent, and testable via the
+  in-process fan-out path.
+</div>
 
 <div class="grid-2">
   <div class="card">
@@ -740,32 +951,47 @@
   </div>
 
   <div class="card">
-    <h3><code>web_search</code> <span class="pill agent">agent</span> <span class="pill io">network</span></h3>
-    <p class="meta"><code>agents/research/tools/web_search.py</code></p>
-    <pre>web_search(ctx, query: str, max_results: int = 5)
-    -&gt; [{url, title, snippet}]</pre>
+    <h3>ExaSearch: <code>web_search</code> / <code>deep_search</code> <span class="pill agent">agent</span> <span class="pill io">network</span></h3>
+    <p class="meta"><code>agents/research/exa_wrapper.py</code> &middot; <code>WrappedExaSearchToolset</code></p>
+    <pre>web_search(ctx, query) -&gt; hits
+deep_search(ctx, question) -&gt; hits</pre>
     <p>
-      Charges <strong>1 search</strong> against the per-run budget (raises
-      <code>BudgetExceeded</code> when exhausted). Returns provider hits.
+      Each call charges <strong>1 search</strong> against the sub-question's persisted scope (via
+      <code>charge_scoped</code>, which also bills the shared <code>"run"</code> ceiling). Returns
+      Exa hits.
     </p>
     <p style="margin:0;font-size:12.5px;color:var(--muted)">
       Charges: 1 search &middot; Persists: nothing &middot;
-      <strong>A search-result snippet is NOT a fetched page</strong> &mdash; must call <code>fetch_page</code> before quoting.
+      <strong>A search-result snippet is NOT a fetched page</strong> &mdash; must call <code>get_page</code> before quoting.
     </p>
   </div>
 
   <div class="card">
-    <h3><code>fetch_page</code> <span class="pill agent">agent</span> <span class="pill io">network + FS</span></h3>
-    <p class="meta"><code>agents/research/tools/fetch_page.py</code></p>
-    <pre>fetch_page(ctx, url: str) -&gt; {url, text}</pre>
+    <h3>ExaSearch: <code>get_page</code> <span class="pill agent">agent</span> <span class="pill io">network + FS</span></h3>
+    <p class="meta"><code>agents/research/exa_wrapper.py</code> &rarr; <code>verify.write_page</code></p>
+    <pre>get_page(ctx, url) -&gt; page text</pre>
     <p>
       Charges <strong>1 fetch</strong>. <strong>Persists the fetched text to
-      <code>runs/&lt;run_id&gt;/research/pages/&lt;sha256(url)&gt;.txt</code></strong> so the verifier
-      can check quotes against bytes fetched <em>this run</em>.
+      <code>runs/&lt;run_id&gt;/research/pages/&lt;sha256(url)&gt;.txt</code></strong> (through
+      <code>verify.write_page</code>) so the verifier can check quotes against bytes fetched
+      <em>this run</em>. This is the grounding seam &mdash; without it, no quote can verify.
     </p>
     <p style="margin:0;font-size:12.5px;color:var(--muted)">
       Charges: 1 fetch &middot; Persists: page text to <code>pages/&lt;sha&gt;.txt</code>
     </p>
+  </div>
+
+  <div class="card">
+    <h3><code>run_code</code> (CodeMode) <span class="pill agent">agent</span> <span class="pill io">sandbox</span></h3>
+    <p class="meta">Harness capability (<code>pydantic_ai_harness.CodeMode</code>)</p>
+    <pre>run_code(ctx, script) -&gt; result</pre>
+    <p>
+      Lets the agent author and run a Python script to orchestrate its own research &mdash; e.g.
+      <code>asyncio.gather</code> over several <code>get_page</code> / <code>deep_search</code>
+      calls. Charges nothing itself; the calls it makes charge normally. Injected only when
+      <code>provider == "exa"</code>.
+    </p>
+    <p style="margin:0;font-size:12.5px;color:var(--muted)">Charges: nothing (sub-calls charge) &middot; Persists: nothing directly</p>
   </div>
 
   <div class="card">
@@ -791,19 +1017,23 @@
 </div>
 
 <!-- ================================================================= -->
-<h2 id="budget">5. Budget enforcement <span class="count">pre-check &amp; accounting</span></h2>
+<h2 id="budget">5. Budget enforcement <span class="count">per-scope, persisted, real</span></h2>
 
 <p>
-  Defined in <code>src/sdlc/research/deps.py</code>. The budget is a mutable pydantic model on
-  <code>ResearchDeps</code>; <code>charge()</code> <strong>enforces bounds before the work, then
-  accounts for it</strong>.
+  Bounds live in <code>ResearchConfig</code> (<code class="mono">models.py:751</code>) and are
+  enforced inside the tool functions. Since fan-out, the caps are <strong>per sub-question</strong>
+  (<code>max_searches</code> / <code>max_fetches</code> / <code>max_cost_usd</code>) plus a shared
+  whole-run ceiling (<code>max_run_cost_usd</code>). <code>charge()</code>
+  (<code class="mono">deps.py:63</code>) enforces bounds before the work and accounts for it;
+  <code>charge_scoped()</code> (<code class="mono">budget_store.py:93</code>) bills both the
+  <code>"run"</code> scope and the <code>"sq-&lt;id&gt;"</code> scope against persisted counters.
 </p>
 
 <div class="card soft">
   <h4>Constants <span class="pill asset">deps.py:26</span></h4>
-  <pre><span class="k">SEARCH_COST_USD</span> = <span class="n">0.01</span>     <span class="c"># per web_search</span>
-<span class="k">FETCH_COST_USD</span>  = <span class="n">0.02</span>     <span class="c"># per fetch_page</span>
-<span class="c"># read_repo and recall_leads are free.</span></pre>
+  <pre><span class="k">SEARCH_COST_USD</span> = <span class="n">0.01</span>     <span class="c"># per web_search / deep_search</span>
+<span class="k">FETCH_COST_USD</span>  = <span class="n">0.02</span>     <span class="c"># per get_page</span>
+<span class="c"># read_repo, recall_leads and run_code are free.</span></pre>
 </div>
 
 <div class="card soft">
@@ -816,18 +1046,36 @@
 <span class="k">class</span> ResearchDeps(BaseModel):
     run_id: str
     provider: <span class="s">"tavily"</span> | <span class="s">"fake"</span>
-    max_searches: int
-    max_fetches:  int
-    max_cost_usd: float
+    max_searches: int            <span class="c"># PER sub-question</span>
+    max_fetches:  int            <span class="c"># PER sub-question</span>
+    max_cost_usd: float          <span class="c"># PER sub-question</span>
+    max_run_cost_usd: float = <span class="n">4.0</span>  <span class="c"># NEW: shared whole-run ceiling</span>
+    scope: str = <span class="s">"run"</span>            <span class="c"># NEW: "sq-&lt;id&gt;" under fan-out</span>
     memory_backend:    str = <span class="s">"fake"</span>
-    memory_base_url:   str = <span class="s">"http://localhost:8088"</span>
+    memory_base_url:   str = <span class="s">"http://localhost:8888"</span>
     memory_bank:       str = <span class="s">"project:default"</span>
     memory_watermark:  str | <span class="k">None</span> = <span class="k">None</span>
     budget: Budget = Field(default_factory=Budget)</pre>
 </div>
 
 <div class="card soft">
-  <h4><code>charge()</code> <span class="pill asset">deps.py:54</span></h4>
+  <h4><code>charge_scoped()</code> <span class="pill asset">budget_store.py:93</span></h4>
+  <pre><span class="k">async def</span> charge_scoped(deps, *, search=0, fetch=0,
+                        scope, run_max_cost_usd) -&gt; <span class="k">None</span>:
+    run_deps = deps.model_copy(update={<span class="s">"max_cost_usd"</span>: run_max_cost_usd,
+                                       <span class="s">"max_searches"</span>: 10**9,
+                                       <span class="s">"max_fetches"</span>:  10**9})
+    <span class="k">await</span> charge_persisted(run_deps, ..., scope=<span class="s">"run"</span>)   <span class="c"># run ceiling first</span>
+    <span class="k">await</span> charge_persisted(deps,     ..., scope=scope)       <span class="c"># then sq-&lt;id&gt;</span></pre>
+  <p style="margin:6px 0 0;font-size:12.5px;color:var(--muted)">
+    Counters persist at <code>runs/&lt;run_id&gt;/research/budget-&lt;scope&gt;.json</code> (one per
+    <code>"run"</code> + each <code>"sq-&lt;id&gt;"</code>), written under a lock. The run counter is
+    billed <strong>first</strong>, so a sub-question is never charged for work the run ceiling refused.
+  </p>
+</div>
+
+<div class="card soft">
+  <h4><code>charge()</code> <span class="pill asset">deps.py:63</span></h4>
   <pre><span class="k">def</span> charge(deps, *, search=0, fetch=0) -&gt; <span class="k">None</span>:
     b = deps.budget
     <span class="k">if</span> search <span class="k">and</span> b.searches + search &gt; deps.max_searches:
@@ -842,15 +1090,18 @@
     b.cost_usd = projected</pre>
 </div>
 
-<div class="callout bad">
-  <span class="label">Known gap (accepted loss, 2026-07-17 human decision).</span>
-  <code>deps.budget</code> accumulates correctly for <strong>direct / test invocation</strong> and
-  within a single non-temporal <code>agent.run()</code>. <strong>Under
-  <code>TemporalAgent</code></strong> each tool call is a separate activity that receives its own
-  deserialised copy of <code>deps</code>, so mutations do not flow back &mdash;
-  <code>charge()</code> never raises mid-run. Restoring real per-run enforcement needs a
-  disk-persisted counter at <code>runs/&lt;run_id&gt;/research/budget.json</code> (deferred &mdash;
-  Task 8 follow-up).
+<div class="callout">
+  <span class="label">Budget is now really enforced (2026-08-04 fan-out).</span>
+  The old advisory-only hazard (each tool activity got a fresh deserialised <code>deps</code>, so
+  <code>charge()</code> never raised under <code>TemporalAgent</code>) is gone for the stage path.
+  <code>research_subquestion</code> runs the plain agent <strong>in-process</strong>, so
+  <code>deps.budget</code> accumulates within the run, and <code>budget_store.py</code> keeps
+  <strong>persisted per-scope counters</strong> &mdash; so one sub-question cannot drain the run and
+  a retry meets the same exhausted cap. <code>BudgetExceeded</code> /
+  <code>UsageLimitExceeded</code> are classified <strong>non-retryable</strong>
+  (<code>RESEARCH_SQ_ACT</code>, <code class="mono">feature.py:151</code>) and the activity degrades
+  them into a <code>Gap</code> rather than re-raise. The <code>research_subquery</code> (architect
+  mid-run) path was always in-process and remains exempt.
 </div>
 
 <!-- ================================================================= -->
@@ -873,7 +1124,7 @@
 </div>
 
 <div class="card soft">
-  <h4><code>normalize()</code> <span class="pill asset">verify.py:47</span></h4>
+  <h4><code>normalize()</code> <span class="pill asset">verify.py:50</span></h4>
   <pre>_WS         = re.compile(r<span class="s">"\s+"</span>)
 _APOSTROPHE = re.compile(r<span class="s">"['‘’`�]"</span>)   <span class="c"># straight, curly, backtick, U+FFFD</span>
 _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c"># literal markdown bold markers</span>
@@ -913,11 +1164,18 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
 
 <span class="k">def</span> pages_dir(run_id: str) -&gt; Path:
     root = Path(os.environ.get(<span class="s">"SDLC_RUNS_ROOT"</span>, <span class="s">"runs"</span>))
-    <span class="k">return</span> root / run_id / <span class="s">"research"</span> / <span class="s">"pages"</span></pre>
+    <span class="k">return</span> root / run_id / <span class="s">"research"</span> / <span class="s">"pages"</span>
+
+<span class="k">def</span> write_page(run_id, url, text) -&gt; Path:   <span class="c"># verify.py:68 — the WRITE side of the seam</span>
+    ...atomically write pages/&lt;sha&gt;.txt...</pre>
+  <p style="margin:6px 0 0;font-size:12.5px;color:var(--muted)">
+    ExaSearch's <code>get_page</code> calls <code>write_page</code> so the bytes it fetched are the
+    bytes <code>verify_brief</code> reads.
+  </p>
 </div>
 
 <div class="card soft">
-  <h4><code>verify_brief()</code> <span class="pill det">deterministic</span> <span class="pill asset">verify.py:71</span></h4>
+  <h4><code>verify_brief()</code> <span class="pill det">deterministic</span> <span class="pill asset">verify.py:101</span></h4>
   <pre><span class="k">class</span> Violation(BaseModel):
     kind: <span class="s">"quote_not_found"</span> | <span class="s">"source_never_fetched"</span>
     source_url: str
@@ -938,7 +1196,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
   <p style="margin-top:0">
     A <strong>non-empty</strong> violations list records the research stage as
     <code>outcome=FAIL</code> (<code>judge="error"</code>, error string
-    <code>rejected:research.grounding: &hellip;</code>) at <code>feature.py:1179</code>, but the run
+    <code>rejected:research.grounding: &hellip;</code>) at <code>feature.py:1708</code>, but the run
     does <strong>not</strong> stop: <code>brief_digest_val</code> stays <code>""</code> (retain +
     digest skipped) and everything after research proceeds <strong>on the idea alone</strong>, same
     as a research-disabled run. The verifier itself is unchanged &mdash; still byte-exact contiguous
@@ -964,7 +1222,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
 </div>
 
 <div class="card soft">
-  <h4><code>VERIFY_ACT</code> temporal policy <span class="pill asset">feature.py:98</span></h4>
+  <h4><code>VERIFY_ACT</code> temporal policy <span class="pill asset">feature.py:119</span></h4>
   <pre>VERIFY_ACT = dict(
     start_to_close_timeout = timedelta(minutes=1),
     retry_policy           = RetryPolicy(maximum_attempts=1),
@@ -976,7 +1234,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
 </div>
 
 <div class="card soft">
-  <h4><code>brief_digest()</code> <span class="pill asset">verify.py:87</span></h4>
+  <h4><code>brief_digest()</code> <span class="pill asset">verify.py:117</span></h4>
   <pre><span class="k">def</span> brief_digest(brief) -&gt; str:
     pairs = sorted((f.source_url, f.claim) <span class="k">for</span> f <span class="k">in</span> brief.grounded_findings)
     payload = json.dumps(pairs, sort_keys=True, separators=(<span class="s">","</span>, <span class="s">":"</span>))
@@ -1026,21 +1284,24 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
 <h2 id="entry-points">8. Two entry points, one agent <span class="count">stage vs mid-run</span></h2>
 
 <p>
-  One core (the research agent); two callers. Both draw down the <strong>same per-run
-  budget</strong>.
+  One core (the research agent); two callers. Both charge the <strong>same shared whole-run
+  ceiling</strong> (<code>max_run_cost_usd</code>).
 </p>
 
 <div class="grid-2">
   <div class="card">
     <h3>1. Top-level stage <span class="pill det">workflow</span></h3>
     <p style="margin-top:0">
-      <code>feature.py:1130</code> &mdash; runs once before clarify when
+      <code>feature.py:1630</code> &mdash; runs once before clarify when
       <code>cfg.research_enabled and t_research is not None</code>. The workflow builds
-      <code>ResearchDeps</code>, awaits <code>t_research.run(idea_json, deps=deps).output</code>,
-      verifies, gates, retains, judges, records.
+      <code>ResearchDeps</code>, then <strong>fans out</strong>: <code>plan_research</code> &rarr;
+      <code>_fan_out_research</code> (N &times; <code>research_subquestion</code>) &rarr;
+      <code>synthesize_brief</code>, then verifies, gates (approve / reject / <strong>revise</strong>),
+      retains, judges, records.
     </p>
     <p style="margin:0;font-size:12.5px;color:var(--muted)">
-      Tool calls fan out as <strong>Temporal activities</strong>.
+      Each sub-question is its own <strong>Temporal activity</strong>; the agent inside runs
+      <strong>in-process</strong> so its budget accumulates.
     </p>
   </div>
   <div class="card">
@@ -1061,12 +1322,14 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
 </div>
 
 <div class="callout warn">
-  <span class="label">Asymmetric budget behaviour between the two entry points.</span>
-  Because <code>research_subquery</code> runs in-process under the architect's activity, a raised
-  <code>BudgetExceeded</code> is <em>caught</em> there and degrades to a brief with the shortfall
-  recorded in <code>gaps</code> (matching <code>ResearchConfig</code>'s documented contract).
-  Leaving it uncaught would escape the activity's Temporal boundary as an uncapped
-  <code>ApplicationFailure</code> retry storm.
+  <span class="label">Both in-process paths degrade on budget exhaustion.</span>
+  Because each <code>research_subquestion</code> (stage) and <code>research_subquery</code>
+  (architect) runs the agent <em>in-process</em>, a raised <code>BudgetExceeded</code> /
+  <code>UsageLimitExceeded</code> is <em>caught</em> there and degrades to a brief with the shortfall
+  recorded in <code>gaps</code> (matching <code>ResearchConfig</code>'s documented contract) &mdash;
+  never re-raised. The counter is persisted, so leaving it uncaught would escape the activity's
+  Temporal boundary and retry into the same exhausted cap as an uncapped
+  <code>ApplicationFailure</code> storm.
 </div>
 
 <!-- ================================================================= -->
@@ -1117,11 +1380,27 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
   </table>
 </div>
 
+<div class="callout">
+  <span class="label">ExaSearch is now the stage's web mechanism (2026-07-29; tightened to <code>provider: exa</code> 2026-08-05).</span>
+  The fan-out stage no longer drives Tavily directly: <code>agents/research/agent.py</code> injects
+  <strong>ExaSearch</strong> (<code>WrappedExaSearchToolset</code>) + Harness <code>run_code</code>
+  as agent capabilities only when <code>provider == "exa"</code> &mdash; <code>tavily</code> no
+  longer implicitly gets the web capability injected (it used to, under the old
+  <code>provider != "fake"</code> check; that was a bug, since the <code>tavily</code> value names
+  the <code>protocol.py</code> seam below, not ExaSearch). <code>RoleConfig.provider</code> is now
+  <code>Literal["tavily", "exa", "fake"]</code>; <code>agents/loader.py</code> fails closed at boot
+  if <code>provider: exa</code> is declared without <code>EXA_API_KEY</code> reachable, mirroring the
+  existing <code>tavily</code>/<code>TAVILY_API_KEY</code> check. The <code>tavily</code> provider and
+  the <code>protocol.py</code> seam above remain (used by the <code>research_subquery</code> tool path
+  and tests); the shipped <code>agents/research/agent.yaml</code> now ships with
+  <code>provider: exa</code>.
+</div>
+
 <p>
   Provider choice is <strong>per-case</strong>, not global: <code>RoleConfig.provider</code> on
   the <code>kind=research</code> role. Benchmark cases inject a provider at runtime
-  (<code>BenchmarkConfig</code>), so a benchmark can drive the real Tavily without changing the
-  registry default.
+  (<code>BenchmarkConfig</code>), so a benchmark can drive the real ExaSearch path without changing
+  the registry default.
 </p>
 
 <!-- ================================================================= -->
@@ -1134,13 +1413,16 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
 </p>
 
 <div class="diagram seq">
-  <svg viewBox="0 0 940 540" role="img" aria-label="End-to-end sequence diagram">
+  <svg viewBox="0 0 940 600" role="img" aria-label="End-to-end fan-out sequence diagram">
     <defs>
       <marker id="seqarr" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto">
         <path d="M0,0 L8,4 L0,8 Z" fill="#57606a"/>
       </marker>
       <marker id="seqarrR" markerWidth="9" markerHeight="9" refX="0" refY="4" orient="auto">
         <path d="M8,0 L0,4 L8,8 Z" fill="#8250df"/>
+      </marker>
+      <marker id="seqarrW" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 Z" fill="#9a6700"/>
       </marker>
     </defs>
 
@@ -1149,76 +1431,103 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
       <rect x="10"  y="10" width="160" height="32" rx="4" fill="#ffffff" stroke="#0969da"/>
       <text x="90"  y="30" fill="#0969da" font-weight="600">FactoryWorkflow</text>
 
-      <rect x="190" y="10" width="140" height="32" rx="4" fill="#ffffff" stroke="#1a7f37"/>
-      <text x="260" y="30" fill="#1a7f37" font-weight="600">t_research.run</text>
+      <rect x="190" y="10" width="180" height="32" rx="4" fill="#ffffff" stroke="#1a7f37"/>
+      <text x="280" y="30" fill="#1a7f37" font-weight="600">plan / sub-q / synthesize</text>
 
-      <rect x="350" y="10" width="180" height="32" rx="4" fill="#ffffff" stroke="#1a7f37"/>
-      <text x="440" y="30" fill="#1a7f37" font-weight="600">tool activities</text>
+      <rect x="390" y="10" width="190" height="32" rx="4" fill="#ffffff" stroke="#1a7f37"/>
+      <text x="485" y="30" fill="#1a7f37" font-weight="600">ExaSearch + tools (per sub-q)</text>
 
-      <rect x="550" y="10" width="170" height="32" rx="4" fill="#ffffff" stroke="#cf222e"/>
-      <text x="635" y="30" fill="#cf222e" font-weight="600">runs/&lt;id&gt;/research/</text>
+      <rect x="600" y="10" width="170" height="32" rx="4" fill="#ffffff" stroke="#cf222e"/>
+      <text x="685" y="30" fill="#cf222e" font-weight="600">runs/&lt;id&gt;/research/</text>
 
-      <rect x="740" y="10" width="180" height="32" rx="4" fill="#ffffff" stroke="#8250df"/>
-      <text x="830" y="30" fill="#8250df" font-weight="600">verify + retain + judge</text>
+      <rect x="790" y="10" width="140" height="32" rx="4" fill="#ffffff" stroke="#8250df"/>
+      <text x="860" y="30" fill="#8250df" font-weight="600">verify + retain</text>
 
       <!-- lifelines -->
       <g stroke="#d0d7de" stroke-dasharray="3 3">
-        <line x1="90"  y1="42" x2="90"  y2="520"/>
-        <line x1="260" y1="42" x2="260" y2="520"/>
-        <line x1="440" y1="42" x2="440" y2="520"/>
-        <line x1="635" y1="42" x2="635" y2="520"/>
-        <line x1="830" y1="42" x2="830" y2="520"/>
+        <line x1="90"  y1="42" x2="90"  y2="585"/>
+        <line x1="280" y1="42" x2="280" y2="585"/>
+        <line x1="485" y1="42" x2="485" y2="585"/>
+        <line x1="685" y1="42" x2="685" y2="585"/>
+        <line x1="860" y1="42" x2="860" y2="585"/>
       </g>
 
       <!-- messages -->
       <g fill="#1f2328">
-        <text x="175" y="74" text-anchor="middle" font-size="10">1. build ResearchDeps (budget, provider, watermark)</text>
-        <line x1="90" y1="80" x2="255" y2="80" stroke="#57606a" marker-end="url(#seqarr)"/>
+        <!-- 1. plan -->
+        <text x="185" y="70" text-anchor="middle" font-size="10">1. build ResearchDeps · execute_activity(plan_research, idea, max_sub_questions)</text>
+        <line x1="90" y1="76" x2="275" y2="76" stroke="#57606a" marker-end="url(#seqarr)"/>
 
-        <text x="350" y="114" text-anchor="middle" font-size="10">2. run(idea_json, deps) → fans tool calls as activities</text>
-        <line x1="260" y1="120" x2="435" y2="120" stroke="#57606a" marker-end="url(#seqarr)"/>
+        <!-- 2. plan return -->
+        <text x="185" y="102" text-anchor="middle" font-size="10">2. → ResearchPlan{sub_questions, usage}</text>
+        <line x1="275" y1="108" x2="95" y2="108" stroke="#8250df" marker-end="url(#seqarrR)"/>
 
-        <text x="538" y="150" text-anchor="middle" font-size="10">3. web_search(url hits) · recall_leads(leads) · read_repo(file)</text>
-        <line x1="440" y1="156" x2="630" y2="156" stroke="#57606a" marker-end="url(#seqarr)"/>
+        <!-- 3. fan out -->
+        <text x="287" y="134" text-anchor="middle" font-size="10">3. gather( research_subquestion ×N ) — parallel, heartbeating, return_exceptions=True</text>
+        <line x1="90" y1="140" x2="480" y2="140" stroke="#57606a" marker-end="url(#seqarr)"/>
 
-        <text x="538" y="184" text-anchor="middle" font-size="10">4. fetch_page(url) writes &lt;sha&gt;.txt</text>
-        <line x1="440" y1="190" x2="630" y2="190" stroke="#57606a" marker-end="url(#seqarr)"/>
+        <!-- 4. tools -->
+        <text x="585" y="166" text-anchor="middle" font-size="10">4. web_search / deep_search · get_page · recall_leads · read_repo · run_code</text>
+        <line x1="485" y1="172" x2="680" y2="172" stroke="#57606a" marker-end="url(#seqarr)"/>
 
-        <text x="350" y="218" text-anchor="middle" font-size="10">5. returns brief (ResearchBrief, schema-validated)</text>
-        <line x1="255" y1="224" x2="95" y2="224" stroke="#8250df" marker-end="url(#seqarrR)"/>
+        <!-- 5. persist + charge -->
+        <text x="585" y="196" text-anchor="middle" font-size="10">5. charge_scoped(sq + run) · writes pages/&lt;sha&gt;.txt + budget-&lt;scope&gt;.json</text>
+        <line x1="485" y1="202" x2="680" y2="202" stroke="#cf222e" marker-end="url(#seqarr)"/>
+
+        <!-- 6. findings return -->
+        <text x="287" y="228" text-anchor="middle" font-size="10">6. → SubQuestionFinding{sub_question, brief, usage}  (Gap on degrade)</text>
+        <line x1="480" y1="234" x2="95" y2="234" stroke="#8250df" marker-end="url(#seqarrR)"/>
+
+        <!-- 7. synthesize -->
+        <text x="185" y="260" text-anchor="middle" font-size="10">7. execute_activity(synthesize_brief): merge_briefs (det.) + 1 model call</text>
+        <line x1="90" y1="266" x2="275" y2="266" stroke="#57606a" marker-end="url(#seqarr)"/>
+
+        <!-- 8. brief return -->
+        <text x="185" y="290" text-anchor="middle" font-size="10">8. → (ResearchBrief, RoleUsage)</text>
+        <line x1="275" y1="296" x2="95" y2="296" stroke="#8250df" marker-end="url(#seqarrR)"/>
+
+        <!-- 9. verify -->
+        <text x="475" y="322" text-anchor="middle" font-size="10">9. execute_activity(verify_brief_activity, brief, run_id)</text>
+        <line x1="90" y1="328" x2="855" y2="328" stroke="#57606a" marker-end="url(#seqarr)"/>
+
+        <!-- 10. read pages -->
+        <text x="770" y="354" text-anchor="middle" font-size="10">10. reads pages/&lt;sha&gt;.txt · normalize(quote) in normalize(text)?</text>
+        <line x1="855" y1="360" x2="690" y2="360" stroke="#cf222e" marker-end="url(#seqarr)"/>
+
+        <!-- 11. violations return -->
+        <text x="475" y="386" text-anchor="middle" font-size="10">11. → list[Violation] (empty = clean)</text>
+        <line x1="855" y1="392" x2="95" y2="392" stroke="#8250df" marker-end="url(#seqarrR)"/>
       </g>
 
-      <!-- verify call -->
-      <text x="460" y="262" text-anchor="middle" font-size="10" fill="#1f2328">6. execute_activity(verify_brief_activity, brief, run_id)</text>
-      <line x1="95" y1="268" x2="825" y2="268" stroke="#57606a" marker-end="url(#seqarr)"/>
-
-      <text x="730" y="296" text-anchor="middle" font-size="10" fill="#1f2328">7. reads pages/&lt;sha&gt;.txt · normalize(quote) in normalize(text)?</text>
-      <line x1="825" y1="302" x2="640" y2="302" stroke="#cf222e" marker-end="url(#seqarr)"/>
-
-      <text x="460" y="332" text-anchor="middle" font-size="10" fill="#1f2328">8. returns list[Violation] (empty = clean)</text>
-      <line x1="825" y1="338" x2="95" y2="338" stroke="#8250df" marker-end="url(#seqarrR)"/>
-
       <!-- branch on violations -->
-      <text x="90" y="372" text-anchor="middle" font-size="10" fill="#cf222e" font-weight="600">if violations:</text>
-      <text x="90" y="388" text-anchor="middle" font-size="10" fill="#cf222e">stage FAIL; run continues</text>
-      <rect x="20" y="356" width="140" height="44" rx="3" fill="rgba(207,34,46,0.06)" stroke="#cf222e" stroke-dasharray="3 2"/>
+      <text x="90" y="424" text-anchor="middle" font-size="10" fill="#cf222e" font-weight="600">if violations:</text>
+      <text x="90" y="440" text-anchor="middle" font-size="10" fill="#cf222e">stage FAIL; run continues (E-29)</text>
+      <rect x="20" y="408" width="150" height="40" rx="3" fill="rgba(207,34,46,0.06)" stroke="#cf222e" stroke-dasharray="3 2"/>
 
-      <text x="460" y="416" text-anchor="middle" font-size="10" fill="#1f2328">9. brief_digest() → clarify content_key</text>
-      <line x1="95" y1="410" x2="825" y2="410" stroke="#57606a" marker-end="url(#seqarr)"/>
-      <line x1="825" y1="424" x2="95" y2="424" stroke="#8250df" marker-end="url(#seqarrR)"/>
+      <!-- 12. gate -->
+      <text x="475" y="468" text-anchor="middle" font-size="10" fill="#1f2328">12. _gate("research") → approve | reject | REVISE</text>
+      <line x1="90" y1="474" x2="855" y2="474" stroke="#57606a" marker-end="url(#seqarr)"/>
 
-      <text x="460" y="448" text-anchor="middle" font-size="10" fill="#1f2328">10. _gate("research") → approved? _retain(verified_findings_to_retain) · _judge("research") · _record</text>
-      <line x1="95" y1="454" x2="825" y2="454" stroke="#57606a" marker-end="url(#seqarr)"/>
+      <!-- 13. revise loop -->
+      <text x="475" y="500" text-anchor="middle" font-size="10" fill="#9a6700">13. REVISE → replan(guidance+gaps+contradictions) · 2nd wave · re-merge · re-verify</text>
+      <path d="M860,470 Q860,440 90,440" stroke="#9a6700" stroke-width="1" fill="none" stroke-dasharray="3 2" marker-end="url(#seqarrW)"/>
 
-      <text x="460" y="494" text-anchor="middle" font-size="10" fill="#1f2328">11. brief_digest_val flows into clarify's cached_stage input</text>
-      <line x1="95" y1="500" x2="255" y2="500" stroke="#57606a" stroke-dasharray="2 2"/>
+      <!-- 14. retain/judge/record -->
+      <text x="475" y="536" text-anchor="middle" font-size="10" fill="#1f2328">14. brief_digest() → clarify · _retain(verified) · _judge("research") · _record</text>
+      <line x1="90" y1="542" x2="855" y2="542" stroke="#57606a" marker-end="url(#seqarr)"/>
+
+      <!-- 15. digest downstream -->
+      <text x="185" y="572" text-anchor="middle" font-size="10" fill="#1f2328">15. brief_digest_val flows into clarify's cached_stage input</text>
+      <line x1="90" y1="578" x2="275" y2="578" stroke="#57606a" stroke-dasharray="2 2"/>
     </g>
   </svg>
 </div>
 
 <p style="font-size:12.5px;color:var(--muted)">
-  Source: <code>feature.py:1125&ndash;1206</code>. The blue arrows are workflow &rarr; activity
-  invocations; purple arrows are return values. Red is the fail-and-continue path (E-29).
+  Source: <code>feature.py:1625&ndash;1800</code> + <code>research/stage.py</code>. Gray arrows are
+  workflow &rarr; activity invocations; purple arrows are return values; red is the page-cache /
+  fail-and-continue path (E-29); the dashed amber loop is the bounded <code>REVISE</code> refine
+  round.
 </p>
 
 <!-- ================================================================= -->
@@ -1234,14 +1543,15 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
   </p>
 </div>
 
-<div class="card bad">
-  <h3>2. Budget counter is advisory-only under <code>TemporalAgent</code></h3>
+<div class="card warn">
+  <h3>2. Budget was advisory-only under <code>TemporalAgent</code> &mdash; fixed by fan-out</h3>
   <p style="margin-top:0">
-    Each tool activity receives a fresh deserialised copy of <code>deps</code>, so
-    <code>charge()</code> never raises mid-run in the temporalised path. Real per-run enforcement
-    needs a disk-persisted counter (<code>runs/&lt;run_id&gt;/research/budget.json</code>) &mdash;
-    deferred (Task 8 follow-up). The <code>research_subquery</code> path is exempt: it runs
-    in-process under the architect's activity.
+    Under the old single-<code>t_research.run</code> stage each tool activity received a fresh
+    deserialised <code>deps</code>, so <code>charge()</code> never raised mid-run. The 2026-08-04
+    fan-out removed that hazard: <code>research_subquestion</code> runs the plain agent
+    <strong>in-process</strong> (so <code>deps.budget</code> accumulates) and
+    <code>budget_store.py</code> keeps persisted per-scope counters. The
+    <code>research_subquery</code> (architect) path was always in-process and remains exempt.
   </p>
 </div>
 
@@ -1269,13 +1579,13 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
 </div>
 
 <div class="card warn">
-  <h3>5. CodeMode was the original mechanism &mdash; dropped 2026-07-17</h3>
+  <h3>5. CodeMode was dropped 2026-07-17 &mdash; restored (scoped) 2026-07-29</h3>
   <p style="margin-top:0">
-    The original design used CodeMode to collapse the tool fan-out into one
-    <code>run_code</code> activity with a shared in-process budget counter. Task 1's spike proved
-    CodeMode untestable via <code>TestModel</code> under <code>TemporalAgent</code>, so the
-    human-authorised fallback ships <strong>plain sequential tools</strong>. The shared-counter
-    guarantee is a Task 8 concern.
+    The original design used CodeMode, then dropped it 2026-07-17 (untestable via
+    <code>TestModel</code> under <code>TemporalAgent</code>). It is now back, scoped to the research
+    agent only: ExaSearch (<code>WrappedExaSearchToolset</code>) + the Harness <code>run_code</code>
+    capability are injected when <code>provider == "exa"</code>, and the in-process fan-out path
+    keeps them testable. The plain <code>recall_leads</code> / <code>read_repo</code> tools remain.
   </p>
 </div>
 
@@ -1305,51 +1615,65 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
   <div class="layer">ASSET<br>agents/research/</div>
   <div class="files">
     <p><span class="mono">instructions.md</span> &mdash; the prompt: method, verbatim-quoting rules, fail-closed warning.</p>
-    <p><span class="mono">agent.yaml</span> &mdash; <code>kind: research</code>, model, provider.</p>
-    <p><span class="mono">agent.py</span> &mdash; builds the Pydantic AI <code>Agent</code>, imports each tool by path.</p>
+    <p><span class="mono">agent.yaml</span> &mdash; <code>kind: research</code>, model, provider (ships <code>exa</code>; requires <code>EXA_API_KEY</code> at boot).</p>
+    <p><span class="mono">agent.py</span> &mdash; builds the Pydantic AI <code>Agent</code>; imports <code>recall_leads</code> + <code>read_repo</code>; injects ExaSearch + <code>run_code</code> when <code>provider == "exa"</code>.</p>
+    <p><span class="mono">exa_wrapper.py</span> &mdash; <code>WrappedExaSearchToolset</code>: routes <code>web_search</code>/<code>get_page</code>/<code>deep_search</code> through <code>charge_scoped</code> + <code>verify.write_page</code>.</p>
     <p><span class="mono">tools/recall_leads.py</span> &mdash; recall prior findings as leads.</p>
-    <p><span class="mono">tools/web_search.py</span> &mdash; provider search, charges 1 search.</p>
-    <p><span class="mono">tools/fetch_page.py</span> &mdash; provider fetch + persist to <code>pages/&lt;sha&gt;.txt</code>, charges 1 fetch.</p>
     <p><span class="mono">tools/read_repo.py</span> &mdash; rooted repo read, graceful refusal.</p>
+    <p style="font-size:12px;color:var(--muted);margin-top:4px"><em>The old <code>tools/web_search.py</code> / <code>tools/fetch_page.py</code> source files are removed &mdash; ExaSearch replaces them.</em></p>
   </div>
 
   <div class="layer">CODE<br>src/sdlc/research/</div>
   <div class="files">
     <p><span class="mono">__init__.py</span> &mdash; package docstring; assets vs code separation.</p>
+    <p><span class="mono">stage.py</span> &mdash; the fan-out activities: <code>plan_research</code>, <code>research_subquestion</code>, <code>synthesize_brief</code> (+ heartbeating, degrade, closed <code>_SynthesisOutput</code>).</p>
+    <p><span class="mono">merge.py</span> &mdash; <code>merge_briefs()</code>: deterministic N-brief assembly (corroboration preserved, exact triples deduped).</p>
+    <p><span class="mono">budget_store.py</span> &mdash; persisted per-scope counters; <code>charge_scoped()</code> bills <code>"run"</code> + <code>"sq-&lt;id&gt;"</code>.</p>
     <p><span class="mono">deps.py</span> &mdash; <code>ResearchDeps</code>, <code>Budget</code>, <code>charge()</code>, cost constants.</p>
+    <p><span class="mono">prompts.py</span> &mdash; <code>PLAN_SYSTEM</code>, <code>SYNTHESIS_SYSTEM</code>, <code>sub_question_prompt()</code>.</p>
     <p><span class="mono">protocol.py</span> &mdash; <code>SearchProvider</code> ABC, <code>SearchHit</code>, <code>FetchedPage</code>, <code>make_provider()</code>.</p>
-    <p><span class="mono">tavily.py</span> &mdash; real provider over Tavily HTTP API.</p>
+    <p><span class="mono">tavily.py</span> &mdash; real provider over Tavily HTTP API (tool/legacy path).</p>
     <p><span class="mono">fake.py</span> &mdash; offline canned-corpus provider for CI.</p>
-    <p><span class="mono">verify.py</span> &mdash; <code>normalize()</code>, <code>verify_brief()</code>, <code>verify_brief_activity</code>, <code>brief_digest()</code>, <code>GroundingViolation</code>, <code>Violation</code>.</p>
+    <p><span class="mono">verify.py</span> &mdash; <code>normalize()</code>, <code>write_page()</code>, <code>verify_brief()</code>, <code>verify_brief_activity</code>, <code>brief_digest()</code>, <code>GroundingViolation</code>, <code>Violation</code>.</p>
     <p><span class="mono">retain.py</span> &mdash; <code>verified_findings_to_retain()</code>.</p>
     <p><span class="mono">toolset.py</span> &mdash; <code>research_subquery()</code> (architect mid-run entry).</p>
   </div>
 
   <div class="layer">WORKFLOW<br>src/sdlc/workflows/</div>
   <div class="files">
-    <p><span class="mono">feature.py:1125&ndash;1206</span> &mdash; research stage wiring (the only deterministic caller).</p>
-    <p><span class="mono">feature.py:98</span> &mdash; <code>VERIFY_ACT</code> policy (1 min, 1 attempt).</p>
-    <p><span class="mono">feature.py:349 / :396 / :639</span> &mdash; <code>_judge</code>, <code>_retain</code>, <code>_gate</code> helpers reused by the stage.</p>
+    <p><span class="mono">feature.py:1625&ndash;1800</span> &mdash; research stage wiring (the only deterministic caller).</p>
+    <p><span class="mono">feature.py:799</span> &mdash; <code>_fan_out_research</code> (plan &rarr; N sub-questions &rarr; gather); <code>:842</code> <code>_fold_research_usage</code>; <code>:303</code> <code>_refine_seed</code>.</p>
+    <p><span class="mono">feature.py:143 / :151 / :164</span> &mdash; <code>RESEARCH_PLAN_ACT</code>, <code>RESEARCH_SQ_ACT</code>, <code>RESEARCH_SYNTH_ACT</code> policies.</p>
+    <p><span class="mono">feature.py:119</span> &mdash; <code>VERIFY_ACT</code> policy (1 min, 1 attempt).</p>
+    <p><span class="mono">feature.py:561 / :608 / :1079</span> &mdash; <code>_judge</code>, <code>_retain</code>, <code>_gate</code> helpers reused by the stage.</p>
   </div>
 
   <div class="layer">CONTRACT<br>src/sdlc/</div>
   <div class="files">
-    <p><span class="mono">models.py:380&ndash;438</span> &mdash; <code>SubQuestion</code>, <code>ConsultedSource</code>, <code>GroundedFinding</code>, <code>InferredFinding</code>, <code>Contradiction</code>, <code>Gap</code>, <code>ResearchBrief</code>.</p>
+    <p><span class="mono">models.py:461&ndash;563</span> &mdash; <code>RoleUsage</code>, <code>SubQuestion</code>, <code>ConsultedSource</code>, <code>GroundedFinding</code>, <code>InferredFinding</code>, <code>Contradiction</code>, <code>Gap</code>, <code>ResearchBrief</code>, <code>ResearchPlan</code>, <code>SubQuestionFinding</code>.</p>
+    <p><span class="mono">models.py:751</span> &mdash; <code>ResearchConfig</code> (<code>max_sub_questions</code>, per-sub-question caps, <code>max_run_cost_usd</code>, <code>max_refine_rounds</code>).</p>
     <p><span class="mono">models.py</span> (<code>RoleConfig</code>) &mdash; <code>kind=research</code>, <code>provider</code>, <code>tool_files</code>.</p>
   </div>
 
   <div class="layer">I/O<br>runs/&lt;run_id&gt;/research/</div>
   <div class="files">
-    <p><span class="mono">pages/&lt;sha256(url)&gt;.txt</span> &mdash; persisted page bytes, written by <code>fetch_page</code>, read by <code>verify_brief_activity</code>.</p>
+    <p><span class="mono">pages/&lt;sha256(url)&gt;.txt</span> &mdash; persisted page bytes, written by <code>get_page</code> (via <code>verify.write_page</code>), read by <code>verify_brief_activity</code>.</p>
+    <p><span class="mono">budget-&lt;scope&gt;.json</span> &mdash; persisted counters (one <code>"run"</code> + each <code>"sq-&lt;id&gt;"</code>), locked writes by <code>budget_store</code>.</p>
   </div>
 
   <div class="layer">TESTS</div>
   <div class="files">
     <p><span class="mono">tests/test_research_models.py</span> &mdash; pins SGR field order.</p>
-    <p><span class="mono">tests/test_research_verify.py</span> &mdash; <code>verify_brief</code> cases (substring, normalization, source-never-fetched).</p>
-    <p><span class="mono">tests/test_research_grounding.py</span> &mdash; grounding + retain selection.</p>
+    <p><span class="mono">tests/test_research_plan_activity.py</span> &mdash; <code>plan_research</code> (slice, ids, empty-degrade).</p>
+    <p><span class="mono">tests/test_research_subquestion_activity.py</span> &mdash; <code>research_subquestion</code> (in-process, budget degrade, heartbeat).</p>
+    <p><span class="mono">tests/test_research_synthesize_activity.py</span> &mdash; <code>synthesize_brief</code> (closed output type, numbered sources, empty path).</p>
+    <p><span class="mono">tests/test_research_merge.py</span> &mdash; corroboration vs exact-triple dedupe; digest stability.</p>
+    <p><span class="mono">tests/test_research_budget_{store,scope}.py</span> &mdash; persisted per-scope + run counters.</p>
+    <p><span class="mono">tests/test_research_refine_round.py</span> &mdash; REVISE seed, id offset, re-merge, re-verify.</p>
+    <p><span class="mono">tests/test_research_{fanout,stage}_wiring.py</span> &mdash; full stage path through the workflow.</p>
+    <p><span class="mono">tests/test_research_prompt_cacheable.py</span> &mdash; byte-identical cacheable prefix over the burst.</p>
+    <p><span class="mono">tests/test_research_verify.py</span>, <span class="mono">test_research_grounding.py</span> &mdash; verifier + retain selection (unchanged).</p>
     <p><span class="mono">tests/test_research_tools.py</span> &mdash; tool behaviour incl. graceful-refuse path.</p>
-    <p><span class="mono">tests/test_research_e2e.py</span> &mdash; full stage path through the workflow.</p>
     <p><span class="mono">tests/test_architect_research_tool.py</span> &mdash; the mid-run entry point.</p>
   </div>
 
@@ -1357,8 +1681,9 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
   <div class="files">
     <p><span class="mono">PRD.md</span> &mdash; <a href="../PRD.md">FR-107 (Grounded research)</a>.</p>
     <p><span class="mono">ARCHITECTURE.md</span> &mdash; <a href="../ARCHITECTURE.md">&sect;3 Pipeline architecture</a> (DAG).</p>
-    <p><span class="mono">docs/superpowers/specs/2026-07-17-research-agent-grounded-briefs-design.md</span> &mdash; full design spec.</p>
-    <p><span class="mono">docs/superpowers/plans/2026-07-17-research-agent-grounded-briefs.md</span> &mdash; implementation plan.</p>
+    <p><span class="mono">docs/superpowers/specs/2026-08-04-research-fan-out-design.md</span> &mdash; <strong>current authority</strong> (plan &rarr; N &rarr; synthesize, refine, usage accounting).</p>
+    <p><span class="mono">docs/superpowers/specs/2026-07-17-research-agent-grounded-briefs-design.md</span> &mdash; original grounded-brief design (partly superseded).</p>
+    <p><span class="mono">docs/superpowers/specs/2026-07-29-research-agent-exa-harness-design.md</span> &mdash; ExaSearch + Harness <code>run_code</code> design.</p>
     <p><span class="mono">docs/architecture-schema.html</span> &mdash; <a href="architecture-schema.html">whole-factory schema</a>.</p>
   </div>
 </div>
@@ -1367,7 +1692,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
   <a href="architecture-schema.html">&larr; architecture-schema.html</a>
   <a href="../PRD.md">PRD &sect; FR-107</a>
   <a href="../ARCHITECTURE.md">ARCHITECTURE.md &sect;3</a>
-  <span style="float:right">Contract source-of-truth: <code>src/sdlc/models.py</code> &middot; workflow wiring: <code>feature.py:1125</code></span>
+  <span style="float:right">Contract source-of-truth: <code>src/sdlc/models.py</code> &middot; fan-out activities: <code>research/stage.py</code> &middot; wiring: <code>feature.py:1625</code></span>
 </footer>
 
 </body>

@@ -604,9 +604,9 @@ class RoleConfig(BaseModel):
     harness: HarnessKind | None = None      # None for proposer/research roles
     model: str | None = None                # e.g. "zai-coding-plan/glm-5.2"
     # Which search provider a kind=research role uses. None for every other
-    # kind. 'tavily' requires a reachable TAVILY_API_KEY at boot (validated in
-    # agents/loader.py); 'fake' is the CI/default opt-out.
-    provider: Literal["tavily", "fake"] | None = None
+    # kind. 'tavily' and 'exa' each require their API key reachable at boot
+    # (validated in agents/loader.py); 'fake' is the CI/default opt-out.
+    provider: Literal["tavily", "exa", "fake"] | None = None
     # Absolute paths to agents/research/tools/*.py, populated by the registry
     # loader for a kind=research role ONLY. Paths, not imported modules: the
     # loader validates them structurally (name/signature) but nothing imports

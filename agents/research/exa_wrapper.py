@@ -58,7 +58,7 @@ def get_wrapped_exa_search():
             """Subclass ExaSearch to route its tools through the budget-
             charging, page-caching WrappedExaSearchToolset."""
             def get_toolset(self):
-                return WrappedExaSearchToolset(
+                toolset = WrappedExaSearchToolset(
                     client=self.client,
                     num_results=self.num_results,
                     max_text_chars=self.max_text_chars,
@@ -67,6 +67,16 @@ def get_wrapped_exa_search():
                     exclude_domains=self.exclude_domains,
                     text_summary=self.text_summary,
                 )
+                # ExaSearchToolset.__init__ doesn't forward an `id` to
+                # FunctionToolset, so it's a "leaf" toolset (implements its
+                # own tool listing/calling) with id=None. TemporalAgent
+                # refuses to wrap such a toolset -- it needs a stable id to
+                # key the toolset's activities in workflow history. Set it
+                # directly: _id is a plain attribute behind the read-only
+                # `id` property, and this factory only ever produces one
+                # instance per research agent.
+                toolset._id = "exa_search"
+                return toolset
 
         return WrappedExaSearch
     except ImportError:

@@ -24,7 +24,11 @@ COPY benchmarks ./benchmarks
 # this COPY every gate notification silently fails to deliver, so a HITL
 # gate just sits unnotified until its timeout.
 COPY policy ./policy
-RUN pip install --no-cache-dir .
+# .env's LOGFIRE_TOKEN reaches this container via docker-compose's env_file,
+# so logfire_setup.configure() gates itself on and imports logfire -- without
+# the extra installed here, boot crash-loops on ModuleNotFoundError before
+# the worker ever polls its task queue.
+RUN pip install --no-cache-dir .[logfire]
 
 ENV TEMPORAL_HOST=temporal:7233
 ENV SDLC_WORKTREES_ROOT=/tmp/sdlc/worktrees

@@ -40,7 +40,7 @@ class _Boom:
 @pytest.mark.asyncio
 async def test_returns_a_finding_carrying_the_brief_and_usage():
     out = await research_subquestion(_inp(), _model=TestModel(
-        custom_output_args={"summary": "the timeline is 2027"}))
+        call_tools=[], custom_output_args={"summary": "the timeline is 2027"}))
     assert isinstance(out, SubQuestionFinding)
     assert out.sub_question.id == "sq-0"
     assert out.brief.summary == "the timeline is 2027"

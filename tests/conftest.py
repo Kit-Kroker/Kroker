@@ -9,11 +9,14 @@ import pytest
 
 # Importing sdlc.worker (transitively, from many test modules) pulls in
 # pydantic_ai agents that read ANTHROPIC_API_KEY / OPENAI_API_KEY at import
-# time. conftest is imported before any test module, so set placeholders here
-# at module load so collection-time agent construction succeeds. The autouse
-# _llm_api_keys fixture below still monkeypatches per-test for hygiene.
+# time, and the shipped research role (provider: exa) builds an ExaSearch
+# client that reads EXA_API_KEY at construction time. conftest is imported
+# before any test module, so set placeholders here at module load so
+# collection-time agent construction succeeds. The autouse _llm_api_keys
+# fixture below still monkeypatches per-test for hygiene.
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-dummy")
 os.environ.setdefault("OPENAI_API_KEY", "test-dummy")
+os.environ.setdefault("EXA_API_KEY", "test-dummy")
 
 
 def run_git(args: list[str], cwd: str | Path) -> str:
@@ -30,6 +33,7 @@ def _llm_api_keys(monkeypatch):
     values so deferred in-package imports inside tests never fail."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
 
 
 @pytest.fixture

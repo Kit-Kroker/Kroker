@@ -323,7 +323,7 @@
 <body>
 
 <h1>Architecture Schema</h1>
-<p class="meta">Agentic SDLC Factory &middot; Status overlay on <code>ARCHITECTURE.md</code> &middot; Verified <code>2026-07-26</code> against <code>src/sdlc/</code>, <code>interfaces/</code>, <code>tests/</code>, <code>config/</code>, <code>agents/</code></p>
+<p class="meta">Agentic SDLC Factory &middot; Status overlay on <code>ARCHITECTURE.md</code> &middot; Verified <code>2026-08-05</code> against <code>src/sdlc/</code>, <code>interfaces/</code>, <code>tests/</code>, <code>config/</code>, <code>agents/</code>, <code>benchmarks/</code></p>
 <p class="meta">Companion to <a href="roadmap.html">Implementation Roadmap</a> &middot; Sources: <code>ARCHITECTURE.md</code>, <code>ROADMAP.md</code></p>
 
 <p class="lede">
@@ -388,14 +388,14 @@
     <text x="570" y="56" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">Slack webhook</text>
     <text x="570" y="74" text-anchor="middle" font-size="10" fill="#57606a">webhook &rarr; signal</text>
     <rect x="500" y="98" width="140" height="14" fill="rgba(87,96,106,0.10)"/>
-    <text x="570" y="108" text-anchor="middle" font-size="10" font-weight="600" fill="#57606a">NOT STARTED (FR-303)</text>
+    <text x="570" y="108" text-anchor="middle" font-size="10" font-weight="600" fill="#57606a">NOT STARTED (Slack surface)</text>
 
     <rect x="660" y="32" width="180" height="58" rx="6" fill="#ffffff" stroke="#bf8700" stroke-width="1.5"/>
     <text x="750" y="56" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">Channel contract</text>
     <text x="750" y="74" text-anchor="middle" font-size="10" fill="#57606a">render / translate / deliver</text>
     <text x="750" y="86" text-anchor="middle" font-size="10" fill="#57606a">over FR-302 signals</text>
     <rect x="660" y="98" width="180" height="14" fill="rgba(191,135,0,0.14)"/>
-    <text x="750" y="108" text-anchor="middle" font-size="10" font-weight="600" fill="#bf8700">PARTIAL (E-6/E-7; E-8..11 pending)</text>
+    <text x="750" y="108" text-anchor="middle" font-size="10" font-weight="600" fill="#bf8700">PARTIAL (E-6/E-7/E-8/E-9 done; E-10/E-11 pending)</text>
   </g>
 
   <!-- Temporal server (middle) -->
@@ -616,6 +616,7 @@
   <span><span class="swatch" style="background:rgba(191,135,0,0.14); border-color:#bf8700;"></span>partial / scaffolded</span>
   <span><span class="swatch" style="background:rgba(87,96,106,0.10); border-color:#57606a;"></span>not started</span>
   <span><span class="swatch" style="background:#ffffff; border-color:#bf8700;"></span>human gate (hard / soft / off)</span>
+  <span><code>4&middot;research</code> now fans out (plan &rarr; N sub-questions &rarr; synthesize); still partial / off by default</span>
   <span style="margin-left:auto;"><code>*context</code> runs brownfield-only; skipped greenfield</span>
 </div>
 </div>
@@ -661,7 +662,7 @@
       <td class="name">Gate helper<br><code>workflows/gates.py</code></td>
       <td class="status"><span class="pill partial">soft gate partial</span></td>
       <td>signal-wait gate + <code>pending_decisions</code> publishing</td>
-      <td class="note">REVISE ✅; soft still confidence-only (no deterministic AND-clause); no reminder / fallback approver (FR-303).</td>
+      <td class="note">REVISE ✅; reminder + escalation + expiry timers + fallback approver ✅ (FR-303, E-9, via <code>notify/</code> + deadline-walking wait in <code>_gate</code>); soft still confidence-only (no deterministic AND-clause).</td>
     </tr>
     <tr>
       <td class="name">Maintenance<br><code>workflows/maintenance.py</code></td>
@@ -697,7 +698,7 @@
       <td class="name">Memory activities<br><code>activities/memory.py</code></td>
       <td class="status"><span class="pill partial">recall+retain ✅</span></td>
       <td>recall snapshot, retain, reflect, scrub</td>
-      <td class="note">Watermark-pinned recall ✅ (ADR-5). <code>RecallSnapshot</code> not separately content-addressed (FR-402).</td>
+      <td class="note">Watermark-pinned recall ✅ (ADR-5). Real Hindsight client verified against a live container (NFR-7, 2026-08-02); <code>MemoryConfig.backend</code> still defaults to <code>fake</code> for self-hosting. <code>RecallSnapshot</code> not separately content-addressed (FR-402).</td>
     </tr>
     <tr>
       <td class="name">Cartography<br><code>activities/cartography.py</code></td>
@@ -707,9 +708,9 @@
     </tr>
     <tr>
       <td class="name">Notify<br><code>activities/notify.py</code></td>
-      <td class="status"><span class="pill notstarted">not started</span></td>
-      <td>Slack / email push with deep links</td>
-      <td class="note">Tracked as E-9 with reminder timer + fallback approver.</td>
+      <td class="status"><span class="pill done">done ✅</span></td>
+      <td>schedule + routes asset + log/webhook transports + activity</td>
+      <td class="note">E-9 landed 2026-07-26 (FR-303): <code>src/sdlc/notify/</code> ships schedule + <code>policy/notifications.yaml</code> routes asset + log/webhook transports + activity (never raises). Deadline-walking wait in <code>_gate</code>, reminder + escalation + expiry timers, <code>on_timeout</code> per gate; <code>merge</code> holds rather than discarding a green run.</td>
     </tr>
     <tr>
       <td class="name">Deploy<br><code>activities/deploy.py</code></td>
@@ -719,9 +720,9 @@
     </tr>
     <tr>
       <td class="name">Agent registry<br><code>agents/loader.py</code></td>
-      <td class="status"><span class="pill done">11 roles ✅</span></td>
+      <td class="status"><span class="pill done">15 roles ✅</span></td>
       <td><code>agents/&lt;role&gt;/</code> folders &rarr; <code>TemporalAgent</code></td>
-      <td class="note">E-1/E-2 done. ADR-6 family-inequality enforced against <code>dev</code> at boot. <code>cfg.roles</code> not yet per-project (E-26).</td>
+      <td class="note">E-1/E-2 done. 3 harness + 8 required proposers + 4 optional (research, deep_review, handoff, adversary). ADR-6 family-inequality still enforced against <code>dev</code> at boot; new <code>model_id()</code>-based <code>check_adversary_model</code> guards the adversary lens (decorrelation by model identity, not provider prefix). <code>cfg.roles</code> not yet per-project (E-26).</td>
     </tr>
     <tr>
       <td class="name">Deterministic agents<br><code>agents/deterministic.py</code></td>
@@ -751,7 +752,7 @@
       <td class="name">Observability<br><code>observability/</code></td>
       <td class="status"><span class="pill done">retro export ✅</span></td>
       <td>history &rarr; <code>events.jsonl</code> / <code>report.html</code>; trajectory export</td>
-      <td class="note"><code>observability/</code> ships <code>RunEvent</code> trace + <code>render_events_jsonl</code>/<code>render_report_html</code>, written by the <code>export_run_artifacts</code> activity in the retro stage (E-32; FR-704 partial / NFR-4). Trajectory harvesting via claim-checked <code>HarnessSession</code> (E-38, ADR-16).</td>
+      <td class="note"><code>observability/</code> ships <code>RunEvent</code> trace + <code>render_events_jsonl</code>/<code>render_report_html</code> + <code>summary.json</code> (<code>RunSummary</code> as data, 2026-08-03), written by the <code>export_run_artifacts</code> activity in the retro stage (E-32; FR-704 partial / NFR-4). Trajectory harvesting via claim-checked <code>HarnessSession</code> (E-38, ADR-16).</td>
     </tr>
     <tr>
       <td class="name">Worker<br><code>worker.py</code></td>
@@ -763,13 +764,13 @@
       <td class="name">CLI<br><code>cli.py</code></td>
       <td class="status"><span class="pill done">refit on contract ✅</span></td>
       <td>start / status / answer / approve / revise / reject / benchmark</td>
-      <td class="note">E-7 done. Missing cross-run <code>inbox</code> (FR-305 / E-8).</td>
+      <td class="note">E-7 + E-8 cross-run <code>inbox</code> ✅ landed; dashboard/MCP surfaces still absent (E-10/E-11).</td>
     </tr>
     <tr>
       <td class="name">Channels<br><code>channels/</code></td>
       <td class="status"><span class="pill partial">contract only</span></td>
       <td>render / translate / deliver over FR-302 signals</td>
-      <td class="note">E-6 contract + E-7 CLI refit done. E-8..E-11 (inbox, notify, dashboard, MCP) pending.</td>
+      <td class="note">E-6 contract + E-7 CLI refit + E-8 inbox + E-9 notify ✅ done. E-10 dashboard / E-11 MCP still pending.</td>
     </tr>
     <tr>
       <td class="name">Dashboard<br><code>interfaces/dashboard/</code></td>
@@ -799,7 +800,7 @@
   <div class="card tinted">
     <h3>Agent architecture <span class="tag-link">§4</span></h3>
     <ul class="tight">
-      <li><span class="pill done">done</span> 11 roles in <code>agents.yaml</code>: 3 harness + 8 proposer.</li>
+      <li><span class="pill done">done</span> 15 roles in <code>agents.yaml</code>: 3 harness + 8 required proposers + 4 optional (research, deep_review, handoff, adversary).</li>
       <li><span class="pill done">done</span> Automation class via <code>TemporalAgent</code> (Pydantic AI).</li>
       <li><span class="pill done">done</span> Harness protocol with 3 adapters; <code>HarnessRunResult</code> + canonical <code>HarnessSession</code> normalised per adapter (E-38).</li>
       <li><span class="pill done">done</span> <code>session_ref: ArtifactRef{kind: harness_session}</code> on <code>HarnessRunResult</code> — a claim-checked, scrubbed canonical <code>HarnessSession</code> transcript captured on every run (ADR-16, E-38); clean-green runs keep a structured <code>SessionDigest</code>, fail/benchmark/retried runs keep the full transcript. <code>ArtifactStore</code> seam (file:// backend); scrub runs fail-closed before the full-vs-digest branch.</li>
@@ -807,6 +808,8 @@
       <li><span class="pill done">done</span> Reviewer is clean-context proposer (ADR-12).</li>
       <li><span class="pill partial">partial</span> Context by reference + budgets; <code>CodebaseMap</code> slice missing.</li>
       <li><span class="pill partial">partial</span> Optional harness <em>deep-review</em> tier (ADR-6 opt-in, E-39) — advisory <code>_run_deep_review</code> in <code>_dev_task</code> reads the scrubbed <code>HarnessSession</code> as data via <code>load_session</code>, emits <code>DeepReviewReport</code>/<code>IntegrityFlag</code>, never gates. Default <code>review</code> still never resumes the developer's session. Off by default (<code>deep_review_enabled</code>).</li>
+      <li><span class="pill partial">partial</span> Optional <em>adversary</em> lens (decorrelated second opinion on the approve path) — runs only when the primary reviewer approves (<code>review_ok</code>), so it targets the expensive false-approve failure mode; fail-open (a failed call counts as agreement, so the primary reviewer stays the sole blocking lens); decorrelated by <code>model_id()</code>, not provider prefix (new <code>check_adversary_model</code> guard; ADR-6 dev/reviewer clause deliberately untouched so no baseline shifts). Emits <code>ReviewReport</code>, so findings merge into the fix loop with no new plumbing. Off by default (<code>adversarial_review_enabled</code>); non-DAG lens, advisory.</li>
+      <li><span class="pill partial">partial</span> Optional <em>handoff</em> extractor (FR-805) — runs once per task on the success path beside <code>_run_deep_review</code>; reads the scrubbed <code>HarnessSession</code> via <code>load_session</code> + materialized diff + frozen contract assertions, emits <code>HandoffSummary</code> with evidence-first <code>HandoffClaim</code>s (<code>files_touched</code> computed deterministically from the diff). Deterministic file cross-check in <code>src/sdlc/handoff.py</code> drops claims citing unknown files. Best-effort (failure falls back to mechanical handoff); invariant: flows to downstream tasks only, never to this task's validators. Non-DAG lens.</li>
       <li><span class="pill done">done</span> Model tiering per role; cost attributed per role per run — single egress (<code>_run_role</code>) + <code>MODEL_USAGE</code> events + <code>price_usage</code> + <code>RunSummary.roles</code> rollup, with a <code>run_budget_usd</code> hard gate (E-33, FR-701; folds E-19).</li>
     </ul>
   </div>
@@ -819,16 +822,16 @@
       <li><span class="pill done">done</span> Idempotent signals, first-decision-wins per round.</li>
       <li><span class="pill partial">partial</span> REVISE loop on clarify/arch/plan/merge (ADR-4).</li>
       <li><span class="pill partial">partial</span> Soft gate confidence-only; no deterministic-check AND-clause.</li>
-      <li><span class="pill partial">partial</span> Timeout → auto-reject only; no reminder, no fallback approver (FR-303).</li>
+      <li><span class="pill done">done</span> Timeout policy — reminder + escalation + expiry timers + <code>on_timeout</code> per gate (FR-303, E-9); <code>merge</code> holds a green run rather than discarding it.</li>
       <li><span class="pill partial">partial</span> Decisions captured + retained as text; no structured queryable log (FR-304).</li>
-      <li><span class="pill notstarted">todo</span> Cross-run inbox (FR-305 / E-8).</li>
+      <li><span class="pill partial">partial</span> Cross-run inbox (FR-305 / E-8) — CLI <code>sdlc inbox</code> ✅; dashboard/MCP inbox surfaces still absent (E-10/E-11).</li>
     </ul>
   </div>
 
   <div class="card tinted">
     <h3>Memory (Hindsight) <span class="tag-link">§6</span></h3>
     <ul class="tight">
-      <li><span class="pill done">done</span> Self-hosted Postgres; banks <code>org</code> + <code>project:&lt;repo&gt;</code> defined.</li>
+      <li><span class="pill done">done</span> Self-hosted Postgres; banks <code>org</code> + <code>project:&lt;repo&gt;</code> defined. Real Hindsight client verified against a live container (<code>tests/test_hindsight_live.py</code>, NFR-7, 2026-08-02); <code>MemoryConfig.backend</code> still defaults to <code>fake</code> for self-hosting.</li>
       <li><span class="pill done">done</span> Recall before each stage; persisted, hashed, prompt-injected (watermark-pinned).</li>
       <li><span class="pill done">done</span> Retain on stage success / gotcha / gate feedback (FR-401).</li>
       <li><span class="pill done">done</span> Non-blocking retain + retries + PII scrub (FR-403).</li>
@@ -873,7 +876,7 @@
     <ul class="tight">
       <li><span class="pill done">done</span> Worker crash mid-harness-run &rarr; heartbeat timeout, retry from checkpoint.</li>
       <li><span class="pill done">done</span> LLM/API outage &rarr; activity retry + backoff.</li>
-      <li><span class="pill partial">partial</span> Human absent at gate &rarr; timeout→auto-reject only (no reminder/fallback).</li>
+      <li><span class="pill done">done</span> Human absent at gate &rarr; reminder + fallback approver + escalation/expiry timers + per-gate <code>on_timeout</code> (FR-303, E-9).</li>
       <li><span class="pill done">done</span> Fix loops exhausted &rarr; escalation gate (accept / retry-with-guidance / quarantine).</li>
       <li><span class="pill done">done</span> Quarantined task &rarr; dependents blocked, clean failure.</li>
       <li><span class="pill partial">partial</span> Payload &gt; limits &rarr; sessions claim-checked (<code>ArtifactStore</code>, E-38); diffs still inline, no runtime guard (FR-702).</li>
@@ -895,7 +898,7 @@
   <div class="phase">
     <div class="tag"><span class="label">P2 — Brownfield</span><span class="pill partial">partial</span></div>
     <div class="desc">Brownfield, dashboard + notifications, fix loops, cross-harness review.</div>
-    <div class="exit"><strong>Exit:</strong> first brownfield feature merged via PR. Cross-harness review ✅ and fix loops ✅ landed early; brownfield, dashboard backend, notifications not started.</div>
+    <div class="exit"><strong>Exit:</strong> first brownfield feature merged via PR. Cross-harness review ✅ and fix loops ✅ landed early; notify activity ✅ landed (FR-303); brownfield, dashboard backend, Slack surface not started.</div>
   </div>
   <div class="phase">
     <div class="tag"><span class="label">P3 — Memory</span><span class="pill partial">partial</span></div>
@@ -957,7 +960,7 @@
       <li><span class="pill done">done</span> Analyze / Analyst stage.</li>
       <li><span class="pill done">done</span> retro/reflect wiring — per-run retro stage live (E-32); project ✅, org blocked on E-25.</li>
       <li><span class="pill partial">partial</span> Harness containment — <code>pre_tool</code> hook landed (E-15/E-16); approval escalation landed (E-17, same hook → gate); network-level + OS/container tier open (E-18/E-21).</li>
-      <li><span class="pill notstarted">todo</span> Operability — dashboard FastAPI + MCP + cross-run inbox (E-6…E-11).</li>
+      <li><span class="pill partial">partial</span> Operability — cross-run inbox ✅ (E-8) + notify ✅ (E-9); dashboard FastAPI (E-10) + MCP (E-11) still todo.</li>
       <li><span class="pill partial">partial</span> Post-P1 roadmap — DAPER/todo, two pools/todo, budgets ✅ (E-33), observability ✅ (E-32), brownfield/todo, claim-check partial (E-38 sessions; diffs inline).</li>
       <li><span class="pill partial">partial</span> Repo hardening via agents-as-folders — E-1/E-2/E-4 done; remaining is reorganisation.</li>
     </ol>
@@ -1051,8 +1054,8 @@
 </div>
 
 <div class="footer">
-  Sources: <code>ARCHITECTURE.md</code> (Draft v1.0, 2026-07-02) and <code>ROADMAP.md</code> (last verified 2026-07-26).
-  Status reflects code in <code>src/sdlc/</code>, <code>interfaces/</code>, <code>tests/</code>, <code>config/</code>, <code>agents/</code> &mdash; not prior audit claims.
+  Sources: <code>ARCHITECTURE.md</code> (Draft v1.0, 2026-07-02) and <code>ROADMAP.md</code> (last verified 2026-08-05).
+  Status reflects code in <code>src/sdlc/</code>, <code>interfaces/</code>, <code>tests/</code>, <code>config/</code>, <code>agents/</code>, <code>benchmarks/</code> &mdash; not prior audit claims.
   Companion pages: <a href="roadmap.html">roadmap.html</a> (full FR/NFR/SC/US checklist) &middot; <a href="benchmark.html">benchmark.html</a> (evaluation design).
 </div>
 

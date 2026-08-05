@@ -16,7 +16,7 @@ def test_shipped_registry_loads_with_research(monkeypatch, tmp_path):
     """The repo's own agents/ tree loads and includes a research role."""
     roles = load_registry()               # shipped agents/
     assert roles["research"].kind == "research"
-    assert roles["research"].provider in ("fake", "tavily")
+    assert roles["research"].provider in ("fake", "tavily", "exa")
 
 
 def test_research_tree_loads_and_carries_tool_paths(tmp_path, monkeypatch):
@@ -43,6 +43,15 @@ def test_research_tavily_without_key_fails_closed(tmp_path, monkeypatch):
     (root / "research" / "agent.yaml").write_bytes(
         b"kind: research\nmodel: anthropic:glm-5.2\nprovider: tavily\n")
     with pytest.raises(RegistryError, match="TAVILY_API_KEY"):
+        load_registry(root)
+
+
+def test_research_exa_without_key_fails_closed(tmp_path, monkeypatch):
+    monkeypatch.delenv("EXA_API_KEY", raising=False)
+    root = write_registry_dir(tmp_path / "agents")
+    (root / "research" / "agent.yaml").write_bytes(
+        b"kind: research\nmodel: anthropic:glm-5.2\nprovider: exa\n")
+    with pytest.raises(RegistryError, match="EXA_API_KEY"):
         load_registry(root)
 
 

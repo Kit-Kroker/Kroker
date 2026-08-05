@@ -34,7 +34,7 @@ def build(model: str, instructions: str, model_settings: ModelSettings,
 
     """
     capabilities = []
-    if provider != "fake":
+    if provider == "exa":
         get_wrapped_exa_search = _import_exa_wrapper()
         capabilities = [
             CodeMode(),

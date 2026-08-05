@@ -414,7 +414,8 @@
     <a href="../SDLC-spec-v2.md">SDLC-spec-v2.md</a> ·
     <a href="../PRD.md">PRD.md</a>
     <br>
-    Status: <strong>Design doc — reconciled into ROADMAP.md §9.8 (E-30…E-39; most landed)</strong> ·
+    Status: <strong>Design doc — reconciled into ROADMAP.md §9.8 (E-30…E-39 landed; measurement instrument largely built)</strong> ·
+    Verified <strong>2026-08-05</strong> ·
     Companion to <code>ROADMAP.md</code>, <code>SDLC-spec-v2.md</code>, <code>ARCHITECTURE.md</code>, <code>PRD.md</code>.
   </p>
 
@@ -441,7 +442,9 @@
     <strong>SC-1..SC-6</strong> from “not measurable” into numbers — is now reconciled into
     <code>ROADMAP.md §9.8</code>, and most of the instrument has landed: the held-out oracle
     (<strong>E-30/E-31</strong>), per-role cost (<strong>E-33</strong>), retro + <code>RunSummary</code>
-    (<strong>E-32</strong>), the error heatmap + rubric calibration (<strong>E-36</strong>), capture-always sessions
+    (<strong>E-32</strong>), the per-role model sweep (<strong>E-37</strong>), the error heatmap + rubric
+    calibration (<strong>E-36</strong>) — now re-queryable in seconds via <code>sdlc benchmark score</code>
+    (five grids + an <code>agreement_matrix</code> for the adversary arm), capture-always sessions
     (<strong>E-38</strong>), and the <code>deep_review</code> lens (<strong>E-39</strong>). The remaining gaps are the
     open items — <strong>E-30a/b/c</strong> (other languages), <strong>E-31a</strong> (overfit anti-cheat), and
     <strong>E-28</strong> (research retry cap). This doc is that design.
@@ -816,7 +819,7 @@
       <li><strong>Gate rounds</strong> per gate — REVISE re-entries (<code>MAX_GATE_ROUNDS</code>, default 2, <strong>FR-301</strong>).</li>
       <li><strong>Escalations</strong> — how often fix loops exhausted into a hard human gate.</li>
       <li><strong>Wall-clock per stage</strong> — from Temporal history, free.</li>
-      <li><strong>Session-derived waste</strong> (from <code>HarnessSession</code>, <strong>E-38</strong>) — the richest signal the diff hides: tool-call count, file re-reads, failed commands (non-zero exits), and rewrite/backtrack churn <em>within</em> a run. The transcript shows “rewrote the auth module three times before settling”; the diff never does. Also surfaces <code>compacted</code> mid-run context loss (<strong>ADR-13</strong>) as <em>what</em> was dropped. Aggregates are computed <strong>pre-truncation</strong>, so they are kept on clean-green runs too (where only a <code>SessionDigest</code> survives) — the heatmap never goes blind on green.</li>
+      <li><strong>Session-derived waste</strong> (from <code>HarnessSession</code>, <strong>E-38</strong>) — the richest signal the diff hides: tool-call count, file re-reads, failed commands (non-zero exits), and rewrite/backtrack churn <em>within</em> a run. The transcript shows “rewrote the auth module three times before settling”; the diff never does. Also surfaces <code>compacted</code> mid-run context loss (<strong>ADR-13</strong>) as <em>what</em> was dropped. Aggregates are computed <strong>pre-truncation</strong>, so they are kept on clean-green runs too (where only a <code>SessionDigest</code> survives) — the heatmap never goes blind on green. <em>Landed 2026-08-03:</em> <code>WasteBag</code> on <code>BenchmarkRecord</code> + <code>benchmarks/waste_matrix.py</code> — six gridded metrics in a task × arm grid (coding tasks only; proposer stages have no transcript by construction); volume metrics and <code>compacted</code> ride on the record without a grid.</li>
     </ul>
   </div>
 
@@ -832,7 +835,29 @@
       costing the most — and therefore what do I fix next.</em> It is strictly more useful than a scalar and it is the
       <strong>natural home for every §4.1–4.3 metric</strong>.
     </p>
+    <p style="font-size:12px; color:var(--muted); margin-top:8px;">
+      <strong>Landed 2026-08-03.</strong> The <code>case × stage</code> heatmap is one of <strong>five grids</strong>
+      written by <code>sdlc benchmark score</code> — <code>heatmap</code>, <code>task-matrix</code>,
+      <code>error-matrix</code>, <code>waste-matrix</code>, <code>sc-rollup</code> (cross-run SC-1/3/4/6) — each emitted
+      as <code>{.html,.json}</code> into the score directory by re-scoring stored evidence in seconds. A sixth grid,
+      <code>agreement_matrix</code>, carries the adversary lens separately (see below).
+    </p>
   </div>
+</div>
+
+<div class="narrative done" style="margin:18px 0;">
+  <p>
+    <strong>New measurement lens — the adversary arm + <code>agreement_matrix</code>.</strong>
+    The <code>adversary</code> role is an optional second reviewer on the <em>approve</em> path (it runs only when the
+    primary reviewer approves, so it is pointed at the expensive false-approve failure mode), off by default
+    (<code>adversarial_review_enabled</code>). In the benchmark it is swept as an <strong>ARM</strong> — on vs off — and
+    compared on held-out oracle pass-fraction against cost. The dedicated <code>benchmarks/agreement_matrix.py</code>
+    grid reports <strong>split rate</strong> (adversary FAIL ÷ all adversary records) + <strong>cost per split</strong>
+    per task × harness#model arm, descriptively; a record with no adversary contributes no cell (no zero cell). What it
+    deliberately <em>cannot</em> tell you is whether the adversary was <em>right</em> — that is the ARM comparison
+    (adversary-on vs adversary-off on the held-out oracle), not a cell value. On a split the run fails and the fix loop
+    receives the union of both reviewers’ findings.
+  </p>
 </div>
 
 <!-- ============================================================ -->
@@ -947,7 +972,11 @@
     <div class="rk-title">Error heatmap + calibration harness.</div>
     <div class="rk-note">
       The <code>case × stage</code> aggregation (<a href="#sec4">§4.4</a>) and the rubric-calibration agreement tracking
-      (<a href="#sec2">§2 Tier B</a>). <em>The prioritisation instrument and the trust layer under every rubric number.</em> <strong>Landed (E-36 / FR-110):</strong> <code>heatmap.{html,json}</code> written by <code>finalize_benchmark_report</code>; <code>sdlc calibrate</code> + trust level beside every rubric score.
+      (<a href="#sec2">§2 Tier B</a>). <em>The prioritisation instrument and the trust layer under every rubric number.</em>
+      <strong>Landed (E-36 / FR-110, 2026-08-03):</strong> the heatmap is one of <strong>five grids</strong> written by
+      <code>sdlc benchmark score</code> (<code>heatmap</code>, <code>task-matrix</code>, <code>error-matrix</code>,
+      <code>waste-matrix</code>, <code>sc-rollup</code>); <code>sdlc calibrate &lt;rubric&gt;</code> reports within-epsilon
+      agreement + MAE + Spearman, surfaced as a trust level beside every rubric score. See the three-loops table below.
     </div>
   </li>
   <li>
@@ -983,6 +1012,43 @@
     </div>
   </li>
 </ol>
+
+<div class="narrative done" style="margin-top:16px;">
+  <p style="margin-top:0;">
+    <strong>The instrument now has three loops</strong> (BENCHMARK §6 priority 5 — landed):
+  </p>
+  <table class="matrix" style="margin:6px 0 10px;">
+    <thead>
+      <tr><th>Loop</th><th>Command</th><th>Cost</th><th>Answers</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="name">Prompt A/B, one stage</td>
+        <td><code>sdlc eval &lt;role&gt;</code></td>
+        <td>seconds</td>
+        <td class="note">did this prompt edit help on a captured fixture</td>
+      </tr>
+      <tr>
+        <td class="name">Re-score stored evidence</td>
+        <td><code>sdlc benchmark score</code></td>
+        <td>seconds</td>
+        <td class="note">what do the runs I already have say, under these weights — emits the five grids</td>
+      </tr>
+      <tr>
+        <td class="name">Full matrix</td>
+        <td><code>sdlc benchmark run</code></td>
+        <td>hours</td>
+        <td class="note">what does this architecture change do end-to-end</td>
+      </tr>
+    </tbody>
+  </table>
+  <p style="margin-bottom:0;">
+    Re-scoring is a pure function of stored evidence — <code>sdlc benchmark score</code> re-scores in seconds and emits
+    the five grids (<code>heatmap</code>, <code>task-matrix</code>, <code>error-matrix</code>, <code>waste-matrix</code>,
+    <code>sc-rollup</code>) as <code>{.html,.json}</code>; every matrix run is recorded in a git-committed experiment log
+    (<code>benchmarks/experiments.py</code>). BENCHMARK §6 priority 5 now ships.
+  </p>
+</div>
 
 <p style="font-size:12.5px; color:var(--muted); margin-top:14px;">
   <strong>Items already banked that this design builds on:</strong>
@@ -1090,7 +1156,7 @@
 </div>
 
 <div class="footer">
-  Generated 2026-07-26 from <a href="../BENCHMARK.md">BENCHMARK.md</a>. Adds no scope to
+  Verified <strong>2026-08-05</strong> against <a href="../BENCHMARK.md">BENCHMARK.md</a> + <code>src/sdlc/benchmarks/</code>. Adds no scope to
   <a href="../PRD.md">PRD.md</a>; every <span class="newscope">(new scope)</span> marker is a measurement capability
   that needs a PRD line before it becomes a real requirement. Everything else is an <code>E-</code>-style plan for
   measuring requirements already open in the tracker.
