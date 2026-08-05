@@ -54,7 +54,13 @@ class QualityGateInput(BaseModel):
 
 
 # Never demotable to advisory, whatever a project configures.
-ABSOLUTE_FLOOR: frozenset[str] = frozenset({"security_no_critical"})
+ABSOLUTE_FLOOR: frozenset[str] = frozenset({
+    "security_no_critical",
+    # FR-915: "the scan could not run" is as absolute as "the scan found a
+    # critical". Outside the floor, a call site could request ADVISORY and
+    # reopen the bypass this check exists to close.
+    "security_scan_collected",
+})
 
 
 def build_check(name: str, passed: bool, requested: CheckClass,

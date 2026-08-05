@@ -2136,6 +2136,15 @@ class FeatureWorkflow:
                         detail="aggregate of per-task pytest runs"),
             build_check("lint_clean", lint_clean, CheckClass.ABSOLUTE,
                         detail=lint_detail),
+            # FR-915: "the scan found nothing" and "no scan happened" are
+            # different facts and get different check names. Conflating them
+            # into one compound condition is the exact defect this split
+            # exists to prevent, reproduced inside the gate that prevents it.
+            build_check(
+                "security_scan_collected",
+                security.state is CollectionState.MEASURED,
+                CheckClass.ABSOLUTE,
+                detail=(security.reason or "security scan ran")),
             build_check(
                 "security_no_critical", security.critical == 0,
                 CheckClass.ABSOLUTE,

@@ -383,11 +383,17 @@ class SecurityFinding(BaseModel):
 
 class SecurityReport(BaseModel):
     """Deterministic scanner evidence for the merge gate's absolute floor
-    (FR-106/NFR-5/SC-5). `critical` is the count feeding the
-    `security_no_critical` absolute check; a minimal ruleset now, seam to a
-    real SAST later."""
+    (FR-106/NFR-5/SC-5).
+
+    FR-915: `state` is REQUIRED and has no default. A producer cannot forget
+    to say whether a scan happened, because `critical=0` from a broken scanner
+    is byte-identical to `critical=0` from a clean repository -- and the check
+    reading this is absolute.
+    """
     critical: int
     findings: list[SecurityFinding] = Field(default_factory=list)
+    state: CollectionState
+    reason: str = ""
 
 
 class ReviewFinding(BaseModel):

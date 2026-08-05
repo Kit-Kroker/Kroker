@@ -41,7 +41,7 @@ from .models import (
     SecurityReport,
     ToolGrant,
 )
-from .measurement import Measurement
+from .measurement import CollectionState, Measurement
 
 
 _log = logging.getLogger(__name__)
@@ -739,7 +739,8 @@ async def security_scan(inp: SecurityScanInput) -> SecurityReport:
                     findings.append(SecurityFinding(
                         severity=severity, rule=rule, detail=detail, path=rel))
     critical = sum(1 for f in findings if f.severity == "critical")
-    return SecurityReport(critical=critical, findings=findings)
+    return SecurityReport(critical=critical, findings=findings,
+                          state=CollectionState.MEASURED)
 
 
 @dataclass

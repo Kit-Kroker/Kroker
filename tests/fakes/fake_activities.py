@@ -15,7 +15,7 @@ from sdlc.activities import (
 from sdlc.models import (
     CoverageReport, HarnessRunResult, QAReport, SecurityReport,
 )
-from sdlc.measurement import Measurement
+from sdlc.measurement import CollectionState, Measurement
 from sdlc.pricing import price_usage
 
 
@@ -74,7 +74,8 @@ async def fake_deploy(inp: DeployInput) -> str:
 
 @activity.defn(name="security_scan")
 async def fake_security_scan(inp: SecurityScanInput) -> SecurityReport:
-    return SecurityReport(critical=0, findings=[])
+    return SecurityReport(critical=0, findings=[],
+                          state=CollectionState.MEASURED)
 
 
 @activity.defn(name="measure_coverage")

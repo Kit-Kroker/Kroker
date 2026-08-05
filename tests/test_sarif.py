@@ -38,6 +38,15 @@ def test_malformed_sarif_is_failsafe_empty(bad):
     assert findings_from_sarif(bad) == []
 
 
-def test_report_from_malformed_is_zero_critical():
+def test_report_from_malformed_is_not_collected_not_clean():
+    """The defect: critical=0 from a broken document was byte-identical to a
+    clean scan, and security_no_critical is an ABSOLUTE check."""
+    from sdlc.measurement import CollectionState
     r = report_from_sarif({"runs": [{"results": "x"}]})
+    assert r.state is CollectionState.NOT_COLLECTED
     assert r.critical == 0 and r.findings == []
+
+
+def test_report_from_well_formed_is_measured():
+    from sdlc.measurement import CollectionState
+    assert report_from_sarif(WELL_FORMED).state is CollectionState.MEASURED

@@ -5,13 +5,32 @@ import pathlib
 import pytest
 
 from sdlc.activities import SecurityScanInput, security_scan
+from sdlc.measurement import CollectionState
 from sdlc.models import SecurityReport
 
 
-def test_security_report_defaults_clean():
-    r = SecurityReport(critical=0)
+def test_security_report_requires_a_collection_state():
+    """A report cannot be built without saying whether a scan happened."""
+    import pytest as _pytest
+    from pydantic import ValidationError
+    with _pytest.raises(ValidationError):
+        SecurityReport(critical=0)
+
+
+def test_clean_scan_is_measured():
+    r = SecurityReport(critical=0, state=CollectionState.MEASURED)
     assert r.findings == []
-    assert r.critical == 0
+    assert r.state is CollectionState.MEASURED
+
+
+@pytest.mark.asyncio
+async def test_regex_scan_always_reports_measured(tmp_path: pathlib.Path):
+    """The default path always collects, so this retrofit changes no live
+    behavior -- the guard is installed before the semgrep path that would
+    trip it."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    report = await security_scan(SecurityScanInput(worktree=str(tmp_path)))
+    assert report.state is CollectionState.MEASURED
 
 
 @pytest.mark.asyncio
