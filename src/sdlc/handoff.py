@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from .grounding import Profile, verify_quote
 from .measurement import Measurement
-from .models import HandoffClaim
+from .models import HandoffClaim, IntegrityFlag
 
 # A path-ish token: at least one separator and a dotted final segment.
 # Deliberately narrow -- prose like "the API" must not read as a path.
@@ -86,3 +86,30 @@ def claim_survival_score(kept: int, dropped: int) -> Measurement:
     if total == 0:
         return Measurement.not_collected("no claims extracted")
     return Measurement.measured(kept / total)
+
+
+def verified_integrity_flags(
+    flags: list[IntegrityFlag],
+    session_text: str | None,
+) -> tuple[list[IntegrityFlag], int]:
+    """Drop deep-review integrity flags whose evidence quote is not in the
+    transcript (E-43). Returns (kept, dropped).
+
+    Same three rules as cross_check_claims: an empty quote survives, a missing
+    haystack skips verification, and the profile is VERBATIM_BYTES because a
+    stored transcript is bytes we wrote.
+
+    This lens NEVER gates, so a dropped flag only reduces what is recorded and
+    retained -- it can never fail a task.
+    """
+    if session_text is None:
+        return list(flags), 0
+    kept: list[IntegrityFlag] = []
+    dropped = 0
+    for f in flags:
+        if f.evidence.strip() and not verify_quote(
+                f.evidence, session_text, Profile.VERBATIM_BYTES):
+            dropped += 1
+            continue
+        kept.append(f)
+    return kept, dropped

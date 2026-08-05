@@ -73,7 +73,9 @@ with workflow.unsafe.imports_passed_through():
         TimeoutAction,
         gate_key,
     )
-    from ..handoff import claim_survival_score, cross_check_claims
+    from ..handoff import (
+        claim_survival_score, cross_check_claims, verified_integrity_flags,
+    )
     from ..pending import (
         GateContext, PendingDecision, clarify_pending, gate_pending,
     )
@@ -895,6 +897,18 @@ class FeatureWorkflow:
                 + f"\nDiff:\n{diff['patch']}"
                 + "\nScrubbed harness transcript (how the diff was reached):\n"
                 + transcript, into=spend)).output
+            # E-43: an accusation must point at a line the transcript
+            # contains. Verified against `transcript`, the same bytes the
+            # lens itself read. Dropping, never failing -- this lens must
+            # never fail delivery.
+            kept_flags, dropped_flags = verified_integrity_flags(
+                report.integrity_flags, transcript)
+            if dropped_flags:
+                workflow.logger.warning(
+                    "deep_review: dropped %d integrity flag(s) for task %s "
+                    "whose evidence is not in the transcript",
+                    dropped_flags, task.id)
+            report = report.model_copy(update={"integrity_flags": kept_flags})
             await self._record(cfg, self._stage_record(
                 cfg, stage="deep_review", role="deep_review",
                 started=_started, ended=workflow.now(),
