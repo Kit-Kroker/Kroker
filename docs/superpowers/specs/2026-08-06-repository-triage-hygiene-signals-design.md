@@ -194,6 +194,7 @@ class SignalResult(BaseModel):
     version: int                       # bump invalidates E-46's (tree hash, signal version) memo
     collected: Measurement             # MEASURED value = finding count
     findings: list[TriageFinding] = Field(default_factory=list)
+    metrics: dict[str, Measurement] = Field(default_factory=dict)  # readiness dimensions
 
     # NOT_COLLECTED means the signal produced nothing at all; findings alongside
     # it would be findings from a run that did not happen. Partial output is
@@ -218,17 +219,21 @@ class RepoTriage(BaseModel):
     signals: list[SignalResult] = Field(default_factory=list)
 ```
 
-`compute_readiness(signals: list[SignalResult], toolchain: str | None) ->
-Readiness` is a pure function and the **only** producer of `Verdict`. No caller
-sets it; the artifact cannot disagree with its own inputs, and E-44's re-triage
-delta and E-52's bundle read one derivation rather than each re-deriving policy
-(D4).
+`compute_readiness(signals: list[SignalResult]) -> Readiness` is a pure function
+and the **only** producer of `Verdict`. No caller sets it; the artifact cannot
+disagree with its own inputs, and E-44's re-triage delta and E-52's bundle read
+one derivation rather than each re-deriving policy (D4).
 
-`toolchain` is a second parameter rather than being read out of the signal
-results because `structure_discernible` needs both the marker resolution (which
-`build_probe` performs) and the source-file inventory (which `baseline`
-performs). Passing it explicitly keeps the function pure and keeps one signal
-from having to reach into another's findings to reconstruct it.
+Readiness dimensions travel in `SignalResult.metrics` under four reserved keys
+(`buildable`, `runnable`, `tests_present`, `structure_discernible`), so
+`compute_readiness` merges signal output without knowing which signal produced
+what. **Exactly one signal may report a given key** — a duplicate raises, which
+is FR-902's one-implementation rule enforced by code rather than by convention.
+`build_probe` owns `buildable` and `runnable`; `baseline` owns `tests_present`
+and `structure_discernible` (it resolves the toolchain itself via
+`detect_with_marker`, so the dimension has one producer, not two collaborating
+ones). A key no signal reported becomes `not_collected`, which is what makes a
+crashed signal land on `INDETERMINATE` rather than silently vanish.
 
 ## 5. FR-108 adapter extension
 
@@ -254,6 +259,15 @@ activities.
 
 ## 6. Signal 1 — `build_probe` (feeds `buildable`, `runnable`)
 
+**The probe runs in a throwaway clone, never the operator's checkout.**
+`git clone --local` + `git checkout --detach <sha>` into a temp directory, torn
+down afterwards. Two reasons, both load-bearing: `RepoTriage.commit_sha` claims
+the artifact describes a pinned commit, and probing a dirty working checkout
+measures something else entirely; and `pip install` plus a test run write into
+whatever directory they are given, which must not be the repository under
+audit. The venv is provisioned outside the clone for the same reason. The two
+read-only signals need no clone — they read the pinned tree through git.
+
 Resolve the toolchain by marker file. No marker resolves ⇒ `toolchain=None`,
 `buildable`/`runnable` = `not_collected("no recognized marker file")`, and a
 finding is recorded. An unrecognized repository is triaged, not rejected
@@ -274,6 +288,16 @@ from install alone there.
 is a thirty-minute triage, and a deterministic build failure does not become a
 success on attempt two. Captured output is tail-capped at 16 KB before entering
 the artifact.
+
+**A failed install skips the test step and yields `runnable:
+not_collected("install failed")`.** Running a suite whose dependencies are
+absent measures the failed install a second time, not runnability — recording
+that as a measured `0.0` would be exactly the conflation D4 forbids. It also
+saves the 600-second test timeout on a repository already known not to build.
+
+Likewise a step that **times out** yields `not_collected("… timed out after
+Ns")`, never a measured failure: a timeout is an absent measurement, not a
+negative result.
 
 `classify_test_exit` returning `"no_tests"` maps `runnable` to
 `not_collected("no tests to run")`, **not** to a measured `0.0`. A repository
