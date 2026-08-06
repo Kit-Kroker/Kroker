@@ -222,6 +222,17 @@ def _deploy_result(report: "DeployReport", decision: "GateDecision | None",
     return f"rolled-back:{pr_url}"
 
 
+def _deploy_verdict(report: "DeployReport") -> str:
+    """What the deploy_failed gate renders. The rollback reason plus, when
+    available, the deploy command's own output -- without it the human
+    deciding what to do next never sees what the apply actually produced
+    (F4: the common smoke-fails case)."""
+    if report.apply_detail.strip():
+        return (f"{report.rollback_reason}\n\nDeploy output:\n"
+                f"{report.apply_detail}")
+    return report.rollback_reason
+
+
 def _sanitize_tag(raw: str) -> str:
     """Turn an arbitrary workflow id into a valid image tag.
 
@@ -2420,7 +2431,7 @@ class FeatureWorkflow:
                                         classification=CheckClass.ABSOLUTE,
                                         detail=c.detail)
                             for c in report.checks],
-                    verdict=report.rollback_reason),
+                    verdict=_deploy_verdict(report)),
                 default_policy=GatePolicy.HARD)
             if (decision.outcome is GateOutcome.REVISE
                     and attempt < cfg.max_gate_rounds):

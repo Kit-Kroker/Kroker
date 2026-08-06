@@ -10,7 +10,7 @@ import pytest
 from sdlc.models import (
     DeployReport, GateDecision, GateOutcome, SmokeCheckResult, SmokeState,
 )
-from sdlc.workflows.feature import _deploy_result, _sanitize_tag
+from sdlc.workflows.feature import _deploy_result, _deploy_verdict, _sanitize_tag
 
 SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 
@@ -125,5 +125,27 @@ def test_deploy_stage_records_the_actual_result_not_the_gate():
     assert "outcome=BenchmarkOutcome.FAIL" in deploy_block
     # PASS is gated on report.deployed, recorded after the child
     assert "if report.deployed:" in deploy_block
+
+
+def _r(**over):
+    from sdlc.models import DeployReport
+    base = dict(deployed=False, environment="staging", version="v1",
+                adapter="compose", rolled_back=True, rolled_back_to="v0",
+                rollback_reason="smoke checks not passed: health=failed")
+    base.update(over)
+    return DeployReport(**base)
+
+
+def test_deploy_verdict_surfaces_the_apply_output():
+    """F4: the gate verdict must include the deploy output when present, so
+    the human sees what apply produced on the smoke-fails path."""
+    r = _r(apply_detail="image built, container up")
+    assert "image built, container up" in _deploy_verdict(r)
+    assert "smoke checks not passed" in _deploy_verdict(r)
+
+
+def test_deploy_verdict_omits_an_empty_apply_output():
+    assert _deploy_verdict(_r(apply_detail="")) == _r(apply_detail="").rollback_reason
+
 
 

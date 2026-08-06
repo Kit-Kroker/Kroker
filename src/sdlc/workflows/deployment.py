@@ -73,7 +73,8 @@ class DeploymentWorkflow:
 
         def _report(**over) -> DeployReport:
             base = dict(deployed=False, environment=inp.plan.environment,
-                        version=inp.plan.version, adapter=inp.cfg.adapter)
+                        version=inp.plan.version, adapter=inp.cfg.adapter,
+                        apply_detail=apply_detail)
             base.update(over)
             return DeployReport(**base)
 
@@ -106,6 +107,7 @@ class DeploymentWorkflow:
                            rollback_reason=reason, checks=checks)
 
         checks: list[SmokeCheckResult] = []
+        apply_detail = ""
 
         try:
             applied = await workflow.execute_activity(
@@ -114,6 +116,8 @@ class DeploymentWorkflow:
             # A partially-applied stack is exactly why rollback runs on apply
             # failure too, not only on smoke failure.
             return await _rollback(f"apply failed: {e}")
+
+        apply_detail = applied.detail
 
         checks = (await workflow.execute_activity(
             smoke_check,

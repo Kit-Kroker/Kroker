@@ -508,6 +508,7 @@ class DeployReport(BaseModel):
     version: str
     adapter: str
     endpoint: str = ""
+    apply_detail: str = ""
     checks: list[SmokeCheckResult] = Field(default_factory=list)
     rolled_back: bool = False
     rollback_reason: str = ""

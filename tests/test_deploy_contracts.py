@@ -89,3 +89,13 @@ def test_failed_deploy_with_no_previous_version_is_representable():
 def test_flag_is_recorded_not_managed():
     """NG7: name + cohort, nothing else -- we do not build flagging."""
     assert set(FeatureFlag.model_fields) == {"name", "cohort"}
+
+
+def test_report_carries_the_apply_output():
+    """F4: the deploy command's output must travel on the report so the
+    deploy_failed gate can show the human what the apply produced."""
+    r = DeployReport(deployed=False, environment="staging", version="v1",
+                     adapter="compose", rolled_back=True, rolled_back_to="v0",
+                     rollback_reason="smoke failed",
+                     apply_detail="building... done")
+    assert r.apply_detail == "building... done"
