@@ -72,9 +72,15 @@ def _git(args: list[str], cwd: str) -> subprocess.CompletedProcess:
     actual diagnostic instead of a bare ``CalledProcessError`` that loses
     git's stderr when propagated through Temporal.
     """
+    # stdin=DEVNULL (not inherited): the worker is a long-running service that
+    # may be launched without a console, and inheriting an invalid STD_INPUT
+    # handle makes DuplicateHandle fail (WinError 6/50). No git subcommand used
+    # here reads stdin, so closing it is always safe and removes a latent
+    # console-less failure mode.
     return subprocess.run(
         ["git", "-c", "safe.directory=*", *args], cwd=cwd,
-        capture_output=True, encoding="utf-8", errors="replace")
+        capture_output=True, encoding="utf-8", errors="replace",
+        stdin=subprocess.DEVNULL)
 
 
 def _chmod_retry(func, p, _exc):
