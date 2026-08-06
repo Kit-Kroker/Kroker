@@ -113,3 +113,17 @@ def test_deploy_plan_omits_http_check_without_a_base_url():
     assert "cfg.deploy.base_url" in src
     assert "_sanitize_tag" in src
 
+
+def test_deploy_stage_records_the_actual_result_not_the_gate():
+    """F3: a rolled-back / deploy-broken run must record FAIL for stage 13,
+    never the gate's premature PASS. The PASS record must follow a successful
+    child (report.deployed), and the FAIL record must follow a failed one --
+    both AFTER the child, not at the gate. (SC-5 / E-40.)"""
+    src = SRC.read_text(encoding="utf-8")
+    deploy_block = src.split("6. DEPLOY")[1]
+    # the gate-only record lives inside the merged-not-deployed branch only
+    assert "outcome=BenchmarkOutcome.FAIL" in deploy_block
+    # PASS is gated on report.deployed, recorded after the child
+    assert "if report.deployed:" in deploy_block
+
+

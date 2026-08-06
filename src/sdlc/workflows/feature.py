@@ -2372,14 +2372,15 @@ class FeatureWorkflow:
         _started = workflow.now()
         gate = await self._gate("deploy", cfg)
         _ended = workflow.now()
-        await self._record(cfg, self._stage_record(
-            cfg, stage="deploy", role="devops",
-            started=_started, ended=_ended,
-            quality_score=None, judge="llm_judge",
-            outcome=(BenchmarkOutcome.PASS if gate.approved
-                     else BenchmarkOutcome.REVISED),
-            model=resolve_role_model(cfg, "devops")))
         if not gate.approved or not cfg.deploy.enabled:
+            # The deploy stage did not run: record the gate decision only.
+            await self._record(cfg, self._stage_record(
+                cfg, stage="deploy", role="devops",
+                started=_started, ended=_ended,
+                quality_score=None, judge="llm_judge",
+                outcome=(BenchmarkOutcome.PASS if gate.approved
+                         else BenchmarkOutcome.REVISED),
+                model=resolve_role_model(cfg, "devops")))
             return f"merged-not-deployed:{pr_url}"
 
         plan = self._deploy_plan(cfg)
@@ -2395,6 +2396,15 @@ class FeatureWorkflow:
                 task_queue=workflow.info().task_queue,
             )
             if report.deployed:
+                # One record, reflecting the actual result -- never a
+                # premature PASS from the gate. (SC-5 / E-40: a reading must
+                # not read as clean when it was not.)
+                await self._record(cfg, self._stage_record(
+                    cfg, stage="deploy", role="devops",
+                    started=_started, ended=workflow.now(),
+                    quality_score=None, judge="contract",
+                    outcome=BenchmarkOutcome.PASS,
+                    model=resolve_role_model(cfg, "devops")))
                 self._status = "deployed"
                 return _deploy_result(report, None, pr_url)
 
@@ -2416,5 +2426,12 @@ class FeatureWorkflow:
                     and attempt < cfg.max_gate_rounds):
                 attempt += 1
                 continue
+            # Rolled back or deploy-broken: record FAIL, never the gate's PASS.
+            await self._record(cfg, self._stage_record(
+                cfg, stage="deploy", role="devops",
+                started=_started, ended=workflow.now(),
+                quality_score=None, judge="contract",
+                outcome=BenchmarkOutcome.FAIL,
+                model=resolve_role_model(cfg, "devops")))
             self._status = "deploy_failed"
             return _deploy_result(report, decision, pr_url)
