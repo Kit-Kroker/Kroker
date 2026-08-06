@@ -63,6 +63,13 @@ worker together, all reading secrets from `.env` (`env_file:`) — copy
 so `logfire_setup.configure()` doesn't crash-loop on a missing module when
 `LOGFIRE_TOKEN` is set. `docker compose up`.
 
+**Deploy (stage 13).** Off by default. Enable per project with
+`PipelineConfig.deploy` — `adapter: compose` (reference) or `script`
+(`make deploy` / `make rollback` / `make version`). The stage applies a
+frozen `DeployPlan`, runs its smoke checks, and auto-rolls-back on any check
+that is not `passed`, then opens a `deploy_failed` gate. A check that could
+not be evaluated is `errored` and never counts as a pass.
+
 ## Develop
 - `pip install -e .[dev]` then `python -m pytest` (needs `git` on PATH).
 - Importing the workflow/agents currently requires `ANTHROPIC_API_KEY` /

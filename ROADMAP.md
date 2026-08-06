@@ -104,7 +104,7 @@
 - [ ] **P7** — Hosted multi-tenant service → *NFR-8 adversarial test green; FR-1002 container tier live; a tenant onboards unassisted*
   Not started (§12, E-57…E-63). **FR-1002 is the gating item for admitting any external tenant**, not a hardening task: today a customer's `npm install` executes as the worker user with the worker's toolchain and unrestricted network egress.
 - [ ] **P8** — Product outcome loop → *one hypothesis pre-registered, shipped, and decided by its own rule (SC-11/SC-12)*
-  Not started (§13, E-64…E-71). E-67 (`DeployPlan`/`DeployReport`) is needed by ordinary feature runs too — DAG stage 13 is a single hardcoded `make deploy ENV=staging` today.
+  Not started (§13, E-64…E-71). E-67 (`DeployPlan`/`DeployReport`) delivered the deploy contract; the outcome loop still needs the observation/keep-kill half (E-70).
 
 ---
 
@@ -126,7 +126,7 @@
 - [x] **10 · analyze (Analyst)** — Analyst clean-context proposer (`t_analyst`) emits `AnalysisReport`; workflow enforces criterion→test traceability against the plan's authoritative criteria (FR-106).
 - [x] **11 · qa (+ Resolver)** — clean-context `t_qa` + bounded fix loop (folded into stage 7). *Note: default `max_fix_attempts=2`, PRD says QA loop 3 — numeric drift.*
 - [ ] ⚠️ **12 · quality_gate** — `DeterministicQualityGate` mechanism ✅; 7 checks built (`build_integration_green`, `lint_clean`, `security_no_critical`, `security_scan_collected` absolute; `review_severity`, `traceability`, `coverage` advisory). Absolute security floor now wired ✅ — the floor now carries `security_scan_collected` beside `security_no_critical`, so a scan that never collected (e.g. a malformed SARIF) can no longer read as a clean absolute floor (FR-915, 2026-08-06); traceability enforced ✅; coverage via deterministic Cobertura seam — **E-30 closes the FR-106 crossing gap**: `run_integration_checks` now runs coverage-instrumented tests against the merged integration head, landing `coverage.xml` where `measure_coverage` reads (Python adapter end-to-end; Go/TS/Rust via E-30a/b/c). Still an advisory no-op unless `coverage_threshold` is set.
-- [ ] ⚠️ **13 · deploy** — single hardcoded `make deploy ENV=staging`; no `DeployPlan`/`DeployReport` split, no smoke-test vs PR-merge distinction.
+- [x] ✅ **13 · deploy** — `DeployPlan`/`DeployReport` split (E-67), deterministic `DeploymentWorkflow` child owning apply → smoke → rollback, `deploy_failed` gate in the parent. Off by default (`PipelineConfig.deploy.enabled`). *Remaining: `devops_planner` does not yet author the plan — `FeatureWorkflow._deploy_plan` builds a single-liveness-check plan (see its docstring).*
 - [x] **14 · retro** — on every terminal path the workflow builds a `RunSummary` from an in-workflow `RunEvent` trace, retains it + fires-and-forgets `reflect(project_bank)` (gated on `memory.enabled`), and exports `events.jsonl` + `report.html` via the `export_run_artifacts` activity (E-32). The `org_bank`-writer half stays unbuilt (E-25); retro is project scope only.
 
 ---
@@ -231,7 +231,7 @@ as tracked rather than accidental.
 - [ ] **FR-1101** `Hypothesis` at intake, gated before any code (E-64).
 - [ ] **FR-1102** pre-registration freeze + hash, reusing FR-803 semantics (E-65).
 - [ ] **FR-1103** metric → instrumentation → emitted-event traceability via the FR-106 mechanism (E-66).
-- [ ] **FR-1104** `DeployPlan`/`DeployReport` — **closes DAG stage 13 for all runs** (E-67).
+- [x] **FR-1104** `DeployPlan`/`DeployReport` — **closes DAG stage 13 for all runs** (E-67). Delivered on `feat/deploy-contract`; spec `docs/superpowers/specs/2026-08-06-deploy-contract-design.md`.
 - [ ] **FR-1105** hosting + analytics adapters, one reference each; no substrate reimplementation (E-68/E-69).
 - [ ] **FR-1106** durable observation window → collect → evaluate → keep/kill/extend gate (E-70). See **OQ-9**.
 - [ ] **FR-1107** PoC mode: bounded, disposable, marked so it never accrues as debt (E-71).
@@ -316,7 +316,7 @@ as tracked rather than accidental.
 - [x] **ADR-16** Harness sessions as first-class, claim-checked artifacts (E-38).
 - [x] **ADR-17** Containment as a declared harness capability — native inner, hook outer, fail closed (E-15/E-16).
 - [ ] **ADR-18** Triage precedes capability modelling — an unbuildable or structurally-illegible repo is reported as a precondition failure, never capability-mapped (FR-903, E-42).
-- [ ] **ADR-19** Deployment targets and analytics sources are adapters, not substrate (FR-1105, NG7, E-68/E-69). Unresolved consequence: **OQ-9**.
+- [ ] ⚠️ **ADR-19** Deployment targets and analytics sources are adapters, not substrate (FR-1105, NG7, E-68/E-69). **Deployment half done** (E-67/E-68: `src/sdlc/deploy/adapters.py`, compose + script). Analytics half open (E-69). Unresolved consequence: **OQ-9**.
 - [ ] **ADR-20** Pre-registration reuses `ValidationContract` freeze semantics (FR-1102, FR-803, E-65).
 
 ---
@@ -960,13 +960,13 @@ competence — a frozen contract, a traceability check, a durable timer, and a g
   same deterministic mechanism as criterion→test traceability. An
   uninstrumented hypothesis cannot reach deploy — which is the single most
   common way a "measured" feature ships unmeasurable.
-- [ ] **E-67 — `DeployPlan` / `DeployReport`** → FR-1104. Environment, flag and
+- [x] **E-67 — `DeployPlan` / `DeployReport`** → FR-1104. Environment, flag and
   cohort, rollback, smoke-tested deployment vs. PR merge. **Closes DAG stage 13
   for all runs**, not only experiments: today the stage is a single hardcoded
   `make deploy ENV=staging` with no plan/report split. Needed regardless of
-  whether the outcome loop ships.
-- [ ] **E-68 — deployment target adapters** → FR-1105, NG7. Resolved from
-  config, one reference adapter, no hosting substrate of our own.
+  whether the outcome loop ships. Delivered on `feat/deploy-contract`; spec `docs/superpowers/specs/2026-08-06-deploy-contract-design.md`.
+- [x] **E-68 — deployment target adapters** → FR-1105, NG7. Resolved from
+  config, one reference adapter, no hosting substrate of our own. Delivered on `feat/deploy-contract` (`src/sdlc/deploy/adapters.py`, compose + script).
 - [ ] **E-69 — analytics source adapters** → FR-1105, NG7. One reference
   adapter. See **OQ-9**: the factory would read a metric from a
   customer-controlled source to decide keep/kill, which is FR-914's grounding
