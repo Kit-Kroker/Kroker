@@ -1155,15 +1155,20 @@ class FeatureWorkflow:
 
         TRANSITIONAL: devops_planner authoring this at the planning stage and
         the plan gate freezing it (spec D-2) is the next increment. Until
-        then the run deploys with a single liveness check, which is weak but
-        honest -- and `frozen=True` keeps the contract's shape intact so the
+        then the run deploys with at most one liveness check -- weak but
+        honest, and `frozen=True` keeps the contract's shape intact so the
         planner can start filling it without a second code path.
 
         The http liveness check is emitted ONLY when a base_url is configured:
         a script-adapter deploy has no endpoint, and an http check against an
         empty endpoint errors and would roll back every deploy (D-7 broken).
-        The version is sanitized into a valid image tag -- a benchmark child
-        id carries a '/', which is not legal as a docker tag.
+        With no base_url the plan therefore carries ZERO checks, so a script
+        deploy succeeds on a zero exit code alone -- the one case that falls
+        short of DeployReport's "deployed is earned by passing smoke checks"
+        contract. A command smoke check (the natural fix for the D-7 path)
+        lands with devops_planner. The version is sanitized into a valid
+        image tag -- a benchmark child id carries a '/', which is not legal
+        as a docker tag.
         """
         checks = []
         if cfg.deploy.base_url:
