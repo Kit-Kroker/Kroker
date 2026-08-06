@@ -222,6 +222,20 @@ def _deploy_result(report: "DeployReport", decision: "GateDecision | None",
     return f"rolled-back:{pr_url}"
 
 
+def _sanitize_tag(raw: str) -> str:
+    """Turn an arbitrary workflow id into a valid image tag.
+
+    The version becomes IMAGE_TAG for the compose adapter, and a benchmark
+    child id is `f"{bench_run_id}/{cell.cell_id}"` -- the '/' (and any other
+    char outside [A-Za-z0-9_.-]) is not legal in a docker tag. Replace invalid
+    chars with '-', and never let the result start with '.' or '-'.
+    """
+    import re
+    tag = re.sub(r"[^A-Za-z0-9_.-]", "-", raw)[:128]
+    tag = re.sub(r"^[.-]+", "", tag) or "run"
+    return tag
+
+
 class _BudgetRejected(Exception):
     """Raised at a budget-gate reject; caught in run() so the terminal
     outcome is the ordinary string "rejected:budget" and retro still runs."""
@@ -1125,7 +1139,7 @@ class FeatureWorkflow:
                 raise _BudgetRejected()
             self._budget_threshold += cfg.run_budget_usd
 
-    def _deploy_plan(self, idea, arch) -> DeployPlan:
+    def _deploy_plan(self, cfg: PipelineConfig) -> DeployPlan:
         """The frozen DeployPlan for this run.
 
         TRANSITIONAL: devops_planner authoring this at the planning stage and
@@ -1133,12 +1147,21 @@ class FeatureWorkflow:
         then the run deploys with a single liveness check, which is weak but
         honest -- and `frozen=True` keeps the contract's shape intact so the
         planner can start filling it without a second code path.
+
+        The http liveness check is emitted ONLY when a base_url is configured:
+        a script-adapter deploy has no endpoint, and an http check against an
+        empty endpoint errors and would roll back every deploy (D-7 broken).
+        The version is sanitized into a valid image tag -- a benchmark child
+        id carries a '/', which is not legal as a docker tag.
         """
+        checks = []
+        if cfg.deploy.base_url:
+            checks.append(SmokeCheck(name="liveness", kind="http",
+                                     path="/health"))
         return DeployPlan(
             environment="staging",
-            version=workflow.info().workflow_id,
-            smoke_checks=[SmokeCheck(name="liveness", kind="http",
-                                     path="/health")],
+            version=_sanitize_tag(workflow.info().workflow_id),
+            smoke_checks=checks,
         )
 
     async def _gate(self, name: str, cfg: PipelineConfig,
@@ -2359,7 +2382,7 @@ class FeatureWorkflow:
         if not gate.approved or not cfg.deploy.enabled:
             return f"merged-not-deployed:{pr_url}"
 
-        plan = self._deploy_plan(idea, arch)
+        plan = self._deploy_plan(cfg)
         attempt = 1
         while True:
             report = await workflow.execute_child_workflow(

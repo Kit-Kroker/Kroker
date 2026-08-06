@@ -175,6 +175,15 @@ async def smoke_check(inp: SmokeCheckInput) -> SmokeCheckOutput:
     for check in inp.plan.smoke_checks:
         _safe_heartbeat(check.name)
         if check.kind == "http":
+            if not inp.endpoint:
+                # No endpoint configured (e.g. a script-adapter deploy with
+                # no base_url). The check cannot be evaluated and must not
+                # read as a failure -- skipping it (not erroring) is what
+                # keeps D-7's "make deploy" target working.
+                activity.logger.info(
+                    "skipping http check %r: no endpoint configured",
+                    check.name)
+                continue
             url = inp.endpoint.rstrip("/") + "/" + check.path.lstrip("/")
             outcome = await asyncio.to_thread(
                 _http_once, url, check.expect_status, check.timeout_s)

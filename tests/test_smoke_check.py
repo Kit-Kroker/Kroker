@@ -28,6 +28,22 @@ async def test_no_checks_yields_no_results(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_http_checks_skipped_when_endpoint_is_empty(tmp_path):
+    """F1: a script-adapter deploy has no endpoint. An http check against an
+    empty endpoint cannot be evaluated and must not read as a failure (which
+    would roll back every script deploy). It is skipped, not errored."""
+    out = await smoke_check(_inp(
+        tmp_path,
+        [SmokeCheck(name="health", kind="http", path="/health"),
+         SmokeCheck(name="ok", kind="command", command="exit 0")],
+        endpoint=""))
+    # the http check is omitted; the command check still runs and passes
+    assert [r.name for r in out.results] == ["ok"]
+    assert out.results[0].state is SmokeState.PASSED
+
+
+
+@pytest.mark.asyncio
 async def test_passing_command_check(tmp_path):
     out = await smoke_check(_inp(tmp_path, [
         SmokeCheck(name="ok", kind="command", command="exit 0")]))

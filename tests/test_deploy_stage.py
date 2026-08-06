@@ -10,7 +10,7 @@ import pytest
 from sdlc.models import (
     DeployReport, GateDecision, GateOutcome, SmokeCheckResult, SmokeState,
 )
-from sdlc.workflows.feature import _deploy_result
+from sdlc.workflows.feature import _deploy_result, _sanitize_tag
 
 SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 
@@ -87,3 +87,29 @@ def test_deploy_activity_is_deleted_from_activities():
     src = pathlib.Path("src/sdlc/activities.py").read_text(encoding="utf-8")
     assert "async def deploy(" not in src
     assert "class DeployInput" not in src
+
+
+@pytest.mark.parametrize("raw, expected", [
+    # benchmark child ids carry a "/" -> invalid as a docker IMAGE_TAG
+    ("bench-1/cell-2", "bench-1-cell-2"),
+    ("feature-add-sso", "feature-add-sso"),   # already valid, untouched
+    ("a:b@c d", "a-b-c-d"),
+])
+def test_sanitize_tag_makes_a_valid_image_tag(raw, expected):
+    """F2: the workflow id becomes IMAGE_TAG; a benchmark child id like
+    'bench-1/cell-2' is not a valid docker tag and breaks compose apply."""
+    tag = _sanitize_tag(raw)
+    assert tag == expected
+    # must be a legal docker tag: [A-Za-z0-9_.-], not starting with . or -
+    import re
+    assert re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", tag), tag
+
+
+def test_deploy_plan_omits_http_check_without_a_base_url():
+    """F1: a script-adapter deploy has no endpoint, so an http liveness check
+    would error and roll back EVERY deploy. The plan must not ask for one
+    when there is nothing to resolve it against."""
+    src = SRC.read_text(encoding="utf-8")
+    assert "cfg.deploy.base_url" in src
+    assert "_sanitize_tag" in src
+
