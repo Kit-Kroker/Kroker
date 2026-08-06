@@ -527,7 +527,7 @@
     <a href="../SDLC-spec-v2.md">SDLC-spec-v2.md</a> ·
     <a href="../BENCHMARK.md">BENCHMARK.md</a> (§9.8)
     <br>
-    Last verified: <strong>2026-08-05</strong> ·
+    Last verified: <strong>2026-08-06</strong> ·
     Verified against: <code>src/sdlc/</code>, <code>interfaces/</code>, <code>tests/</code>, <code>config/</code>, <code>agents/</code>, <code>benchmarks/</code> ·
     Method: every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code.
   </p>
@@ -579,13 +579,13 @@
 <main id="detail"></main>
 
 <footer>
-  Regenerated 2026-08-05 from <a href="../ROADMAP.md">ROADMAP.md</a> (last verified 2026-08-05; since the 2026-07-26 snapshot: gate notifications + durable timers (E-9, FR-303), real Hindsight integration verified against a live container (NFR-7), the measurement instrument completed — WasteBag/waste-matrix, sc-rollup, agreement-matrix, <code>sdlc benchmark score</code> and the experiment log (E-36) — research fan-out (2026-08-04), and the verified-handoff extractor + decorrelated adversary lens (2026-08-05) all landed; <code>summary.json</code> is now persisted alongside events.jsonl/report.html).
+  Regenerated 2026-08-06 from <a href="../ROADMAP.md">ROADMAP.md</a> (last verified 2026-08-06; since the 2026-07-26 snapshot: gate notifications + durable timers (E-9, FR-303), real Hindsight integration verified against a live container (NFR-7), the measurement instrument completed — WasteBag/waste-matrix, sc-rollup, agreement-matrix, <code>sdlc benchmark score</code> and the experiment log (E-36) — research fan-out (2026-08-04), and the verified-handoff extractor + decorrelated adversary lens (2026-08-05) all landed; on 2026-08-06 the two §14 invariants landed — <code>Measurement</code> (E-40 / FR-915 contract half) and the shared grounding verifier with two normalization profiles (E-43 / FR-914), closing two live unverified-quote holes (handoff claims, deep-review integrity flags) and the malformed-SARIF-reads-as-clean absolute-floor hole; an Exa budget double-charge and the architect's shared budget scope were also fixed; <code>summary.json</code> is now persisted alongside events.jsonl/report.html).
   To refresh, re-extract items per the rule documented inline in this file's <code>&lt;script&gt;</code> block.
 </footer>
 
 <script>
 /* =========================================================================
- * DATA — hand-extracted from ROADMAP.md (verified 2026-08-05).
+ * DATA — hand-extracted from ROADMAP.md (verified 2026-08-06).
  *
  * Extraction rules (mechanical):
  *   [x]            -> status: "done"
@@ -603,7 +603,7 @@
  * ========================================================================= */
 const ROADMAP = {
   meta: {
-    lastVerified: "2026-08-05",
+    lastVerified: "2026-08-06",
     sourceFile: "ROADMAP.md"
   },
 
@@ -627,7 +627,7 @@ const ROADMAP = {
     { id: "P5", pct: 0, status: "notstarted",
       title: "Triage + tidy-up (Tier 0/1), operator-run, single tenant",
       exit:  "one unfamiliar repository triaged, a mechanical backlog fixed through governed runs, before/after delta recorded",
-      note:  "Not started (E-40…E-44). Does not depend on P7 — operator-run delivery on repositories you are authorised to run needs neither tenancy nor self-serve onboarding." },
+      note:  "Not started (E-40…E-44); E-43 landed 2026-08-06 and E-40 is partial (Measurement landed, RepoTriage deferred to E-41). Does not depend on P7 — operator-run delivery on repositories you are authorised to run needs neither tenancy nor self-serve onboarding." },
     { id: "P6", pct: 0, status: "notstarted",
       title: "Capability & risk audit (Tier 2) + evidence bundle",
       exit:  "one repository audited end-to-end with SC-7 held and a bundle handed over",
@@ -773,9 +773,9 @@ const ROADMAP = {
     { id: "FR-913", section: "FR", status: "notstarted", title: "CapabilityMap with content-derived stable ids + coverage floor + orphan classification (E-47/E-48)",
       note: "also satisfies FR-102. Blocked on OQ-6 (what canonical key survives refactoring).", recent: false },
     { id: "FR-914", section: "FR", status: "notstarted", title: "byte-exact quote verification, fail-closed — shares FR-107's verifier (E-43)",
-      note: "", recent: false },
-    { id: "FR-915", section: "FR", status: "notstarted", title: "not_collected / unknown vs measured value; retrofits QAReport.coverage_pct (E-40)",
-      note: "", recent: false },
+      note: "Partially landed 2026-08-06 (grounding.py: one substring invariant, two normalization profiles, verdict-only). Verifier + research/handoff/deep-review consumers landed; stays open until an assessment stage consumes the read_committed_bytes commit source.", recent: true },
+    { id: "FR-915", section: "FR", status: "notstarted", title: "not_collected / unknown vs measured value (E-40)",
+      note: "Contract half landed 2026-08-06 (measurement.py, retrofitted onto CoverageReport/SecurityReport/claim_survival_score; QAReport.coverage_pct deleted). RepoTriage/triage half deferred to E-41; the load-bearing case was the malformed-SARIF-reads-as-clean hole on the absolute floor.", recent: true },
     { id: "FR-916", section: "FR", status: "notstarted", title: "STRIDE + vuln classification + control coverage + composites with 1–3 drivers (E-49)",
       note: "", recent: false },
     { id: "FR-917", section: "FR", status: "notstarted", title: "risk thresholds as deterministic gate checks; FP dispositions as audited overrides (E-50)",
@@ -1042,14 +1042,14 @@ const ROADMAP = {
       note: "Landed (PRD FR-111): DeepReviewReport/IntegrityFlag + optional agents/deep_review/ role (ADR-6 family clause vs dev) + load_session claim-check read + advisory _run_deep_review in _dev_task (once per task, records a deep_review stage record for the E-36 heatmap, retains integrity flags, never gates). Off by default (deep_review_enabled). Default clean-context review (ADR-6/ADR-12) unchanged.", recent: true },
 
     /* §10 — Tier 0 triage & tidy-up (FR-900) */
-    { id: "E-40", section: "E", status: "notstarted", title: "Measurement type + RepoTriage contracts (FR-915, FR-901)",
-      note: "A Measurement that distinguishes a measured value from not_collected (with a recorded reason) and from unknown, plus the RepoTriage artifact. Lands in live code and improves the existing pipeline immediately: QAReport.coverage_pct: float | None currently makes a measured 0% and a never-measured value indistinguishable to the advisory coverage check. Imported from BrownKit, which treats not-collected as a first-class state and forbids defaulting to zero.", recent: false },
+    { id: "E-40", section: "E", status: "partial", title: "Measurement type + RepoTriage contracts (FR-915, FR-901)",
+      note: "Measurement landed 2026-08-06: src/sdlc/measurement.py retrofitted onto CoverageReport, SecurityReport and claim_survival_score, with QAReport.coverage_pct deleted. The live conflation worth fixing was on the ABSOLUTE floor (report_from_sarif returned critical=0 for a malformed document) — now not_collected, and security_no_critical split into security_scan_collected + security_no_critical. RepoTriage deferred to E-41; FR-915 stays open until then.", recent: true },
     { id: "E-41", section: "E", status: "notstarted", title: "deterministic hygiene signals (FR-902, FR-108)",
       note: "Build and run probe; secret scan including credentials reachable from client-side bundles; dependency health (unpinned / known-vulnerable / unused / duplicated); dead and generator-scaffold code; framework-default misconfiguration; size and duplication outliers; missing baseline practice. Each an activity behind the FR-108 adapter. One implementation per signal, deliberately.", recent: false },
     { id: "E-42", section: "E", status: "notstarted", title: "TriageWorkflow + readiness verdict + readiness gate (FR-901, FR-903)",
       note: "Readiness (buildable / runnable / tests present / structure discernible) computed from deterministic signals only, so triage completes on a repository where an LLM would have nothing to reason about. An unbuildable repo is a finding, not an error. The gate resolves through the FR-301/302 machinery, so an operator can override with an audited decision.", recent: false },
-    { id: "E-43", section: "E", status: "notstarted", title: "grounding verifier (FR-914, shares FR-107)",
-      note: "verify(path, span, quote, commit) -> grounded | unverified, fail-closed, one implementation serving both the research stage and assessment. Land before any finding-emitting stage exists, so no stage can ship an unverified claim labelled grounded. Open: OQ-7, inline per finding vs. a batch gate before storage.", recent: false },
+    { id: "E-43", section: "E", status: "done", title: "grounding verifier (FR-914, shares FR-107)",
+      note: "Landed 2026-08-06: src/sdlc/grounding.py owns one substring invariant with two normalization profiles (EXTRACTED_TEXT for extractor output, VERBATIM_BYTES for code/transcripts). Three byte-sources: fetched pages (research), stored sessions (two live holes closed — HandoffClaim.evidence and IntegrityFlag.evidence were model-asserted and unverified), and read_committed_bytes for path@sha (tested, registered, no caller until E-41). Also closed an empty-quote hole in the shipped research check. FR-914 stays open until an assessment stage consumes the commit source. OQ-7 untouched.", recent: true },
     { id: "E-44", section: "E", status: "notstarted", title: "tidy-up fix runs + re-triage (FR-904, NG5)",
       note: "mechanically_fixable findings become brownfield FeatureWorkflow child runs (one PR per accepted item, never a direct patch), then triage re-runs and the before/after delta is recorded. The first end-to-end proof of the assess → fix → prove loop, on the cheapest and lowest-risk class of fix.", recent: false },
 
