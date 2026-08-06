@@ -74,6 +74,31 @@ async def test_charge_scoped_does_not_charge_the_scope_when_the_run_ceiling_trip
 
 
 @pytest.mark.asyncio
+async def test_charge_scoped_with_run_scope_charges_once_not_twice():
+    """When the call's scope IS 'run' (the architect path, which doesn't fan
+    out), the run ceiling and the scope collapse to the same budget-run.json.
+    Charging both -- as charge_scoped does for sub-questions -- writes that
+    file twice, doubles the count, and makes max_searches/max_fetches bind at
+    half. The single charge must record the counter once."""
+    await charge_scoped(_deps(max_fetches=2), fetch=1, scope="run",
+                        run_max_cost_usd=4.0)
+    assert json.loads(budget_path("r1", "run").read_text())["fetches"] == 1
+
+
+@pytest.mark.asyncio
+async def test_charge_scoped_with_run_scope_enforces_count_at_full_allowance():
+    """The half-allowance symptom: max_fetches=2 must permit a 2nd fetch, not
+    trip on it because the first call already recorded 2."""
+    await charge_scoped(_deps(max_fetches=2), fetch=1, scope="run",
+                        run_max_cost_usd=4.0)
+    await charge_scoped(_deps(max_fetches=2), fetch=1, scope="run",
+                        run_max_cost_usd=4.0)
+    with pytest.raises(BudgetExceeded):
+        await charge_scoped(_deps(max_fetches=2), fetch=1, scope="run",
+                            run_max_cost_usd=4.0)
+
+
+@pytest.mark.asyncio
 async def test_research_subquestion_charges_its_own_scope():
     # The per-sub-question allowance is only real if the toolset charges the
     # sub-question's scope rather than the shared run counter.

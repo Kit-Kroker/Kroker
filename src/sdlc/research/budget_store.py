@@ -99,7 +99,20 @@ async def charge_scoped(deps: ResearchDeps, *,
     work the run ceiling refused. The run counter only enforces cost
     (search/fetch counts are per-sub-question concerns), so it is charged
     against a deps copy whose count caps are effectively unbounded.
+
+    When ``scope == "run"`` the scope IS the run ceiling (the architect path,
+    which doesn't fan out, and the default scope). The two charges collapse
+    onto the same ``budget-run.json`` -- so charging both would write it twice,
+    double the count, and make ``max_searches``/``max_fetches`` bind at half.
+    In that case charge ONCE, enforcing the count caps and the tighter of the
+    two cost caps (matching the two-charge path where neither cap may be
+    exceeded).
     """
+    if scope == "run":
+        scoped = deps.model_copy(update={
+            "max_cost_usd": min(deps.max_cost_usd, run_max_cost_usd)})
+        await charge_persisted(scoped, search=search, fetch=fetch, scope="run")
+        return
     run_deps = deps.model_copy(update={
         "max_cost_usd": run_max_cost_usd,
         "max_searches": 10**9,
