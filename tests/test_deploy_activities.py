@@ -62,9 +62,10 @@ async def test_apply_raises_on_a_nonzero_exit(tmp_path):
 @pytest.mark.asyncio
 async def test_apply_refuses_an_unfrozen_plan(tmp_path):
     """Catches 'someone edited the plan after the gate' (spec §7)."""
+    from temporalio.exceptions import ApplicationError
     inp = _inp(tmp_path, commands={"deploy": "echo shipped"})
     inp.plan.frozen = False
-    with pytest.raises(ValueError, match="frozen"):
+    with pytest.raises(ApplicationError, match="frozen"):
         await deploy_apply(inp)
 
 

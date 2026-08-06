@@ -14,10 +14,11 @@ import urllib.request
 
 from pydantic import BaseModel
 from temporalio import activity
+from temporalio.exceptions import ApplicationError
 
 from .adapters import resolve
 from ..models import (
-    DeployConfig, DeployPlan, SmokeCheck, SmokeCheckResult, SmokeState,
+    DeployConfig, DeployPlan, SmokeCheckResult, SmokeState,
 )
 
 # A version probe or an apply that hangs must not sit on the activity's
@@ -94,10 +95,12 @@ async def deploy_apply(inp: DeployActivityInput) -> ApplyResult:
     """Bring plan.version up. A zero exit means something is running -- the
     smoke checks, not this activity, decide whether it works."""
     if not inp.plan.frozen:
-        # Non-retryable by construction: retrying cannot make it frozen.
-        raise ValueError(
+        # Non-retryable: retrying cannot make a plan frozen. A bare ValueError
+        # would be retried under APPLY_ACT -- ApplicationError(non_retryable)
+        # is what actually stops Temporal retrying.
+        raise ApplicationError(
             "refusing to apply a DeployPlan that is not frozen "
-            "(it must be frozen at the plan gate)")
+            "(it must be frozen at the plan gate)", non_retryable=True)
     adapter = resolve(inp.cfg)
     code, out = await _run(adapter.apply_cmd(inp.plan), inp.repo_path,
                            adapter.env(inp.plan), APPLY_TIMEOUT_S)
