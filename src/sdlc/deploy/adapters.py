@@ -93,7 +93,7 @@ class ComposeAdapter(DeployAdapter):
 
 
 class ScriptAdapter(DeployAdapter):
-    """The generalization of the pre-E-67 `make deploy ENV=staging` shell-out.
+    """The generalization of the pre-E-67 hardcoded deploy shell-out.
     Delegates semantics to a convention the target repo already owns."""
     kind = DeployKind.SCRIPT
     DEFAULTS = {"deploy": "make deploy",
