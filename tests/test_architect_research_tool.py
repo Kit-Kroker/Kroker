@@ -17,6 +17,32 @@ def test_architect_agent_registers_a_research_tool():
     assert "research" in names
 
 
+def test_architect_deps_use_a_dedicated_budget_scope():
+    """The architect shares run_id (hence budget-run.json) with the research
+    fan-out. max_searches/max_fetches are PER-CONSUMER (each sub-question gets
+    its own budget-sq-<id>.json), so the architect must charge a dedicated
+    scope -- not the default 'run', whose count cap would bite against the
+    research stage's already-accumulated searches and leave the architect
+    unable to search on a fan-out run."""
+    feature_py = (Path(__file__).resolve().parents[1]
+                  / "src" / "sdlc" / "workflows" / "feature.py")
+    tree = ast.parse(feature_py.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "architect_deps"
+                and isinstance(node.value, ast.Call)):
+            continue
+        scope = {kw.arg: kw.value for kw in node.value.keywords}.get("scope")
+        assert (isinstance(scope, ast.Constant) and scope.value == "architect"), (
+            "architect_deps must set scope='architect' so its search/fetch "
+            "counts draw a dedicated budget-architect.json, not the shared "
+            "budget-run.json the research fan-out already charges")
+        return
+    pytest.fail("architect_deps = ResearchDeps(...) not found in feature.py")
+
+
 def test_research_subquery_shares_the_budget_object():
     """SGR Routing: a mid-run architect research call draws down the SAME
     per-run budget, so it cannot exceed the run's total by opening a second

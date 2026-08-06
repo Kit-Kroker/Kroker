@@ -1931,7 +1931,16 @@ class FeatureWorkflow:
                 memory_backend=cfg.memory.backend,
                 memory_base_url=cfg.memory.base_url,
                 memory_bank=cfg.memory.project_bank,
-                memory_watermark=self._memory_watermark)
+                memory_watermark=self._memory_watermark,
+                # max_searches/max_fetches are PER-CONSUMER (each research
+                # sub-question gets its own budget-sq-<id>.json). The architect
+                # is a peer consumer in a later stage sharing the same run_id
+                # (hence budget-run.json), so it must charge a dedicated scope:
+                # the default 'run' would let the research fan-out's accumulated
+                # searches exhaust the architect's count allowance before it
+                # starts. budget-architect.json still feeds the shared run COST
+                # ceiling via charge_scoped's run-counter step.
+                scope="architect")
 
             async def _produce():
                 return (await self._run_role(cfg, "architect", resolve_role_model(cfg, "architect"), t_architect, prompt, deps=architect_deps, into=arch_spend)).output
