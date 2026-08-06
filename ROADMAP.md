@@ -58,7 +58,7 @@
 > Spec `docs/superpowers/specs/2026-07-25-brownfield-assessment-and-outcome-measurement-design.md`.
 
 > **2026-08-06 — E-40/E-43 designed and planned, not yet implemented.** The two
-> §14 invariants now have an approved design
+> §15 invariants now have an approved design
 > (`docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`)
 > and a task-by-task plan
 > (`docs/superpowers/plans/2026-08-06-measurement-and-shared-grounding-verifier.md`).
@@ -92,7 +92,7 @@
 - [x] **P1** — Greenfield pipeline, CLI, hard gates, no memory → *one project shipped end-to-end*
   Exit criterion **demonstrated**: `tests/test_e2e_greenfield.py` drives the real `FeatureWorkflow` greenfield `IdeaBrief` → `deployed:` end-to-end in CI, and the `security_no_critical` absolute floor now bites (SC-5). Delivered on `feat/p1-consolidation` (`3cfbe62`…`41c9185`).
 - [ ] ⚠️ **P2** — Brownfield, dashboard + notifications, fix loops, cross-harness review → *first brownfield feature merged via PR*
-  Cross-harness review ✅, fix loops ✅, and notifications ✅ (E-9) landed early; brownfield mode and dashboard backend remain.
+  Cross-harness review ✅, fix loops ✅, and notifications ✅ (E-9) landed early; brownfield mode and dashboard backend remain. The backend is **E-75** (§14) — `api/http.ts:4` still rejects every call and the dashboard runs entirely on `api/mock`.
 - [ ] ⚠️ **P3** — Hindsight memory + confidence-gated soft gates → *SC-4 and SC-6 measurable*
   Memory (recall/retain/watermark) ✅ and soft gates ✅ done; SC-4/SC-6 not yet measurable (need retro/reflect wiring + real runs). **The retro stage that makes them measurable is E-32** (§9.8); the on/off memory delta is the measurement E-31/E-33 exist to run.
 - [ ] **P4** — MCP surface, maintenance loop (DAPER), fleet scale → *SC-1..3 at target*
@@ -981,7 +981,114 @@ competence — a frozen contract, a traceability check, a durable timer, and a g
   output, preview deployment, recorded decision, and marked so it never silently
   accrues as production debt.
 
-## 14. Suggested ordering across §§10–13
+## 14. Pipeline as data — graph interpreter + canvas (`E-72`…`E-77`) → FR-1200
+
+**The framing.** The 15-stage DAG is not data — it is imperative Python.
+`feature.py::_pipeline` (line 1625, in a 2,329-line file) hardcodes stage order,
+the typed handoffs between stages, the fix loops, the gate awaits and the signal
+handling. Every pipeline shape the factory can run is a shape someone wrote by
+hand. FR-1200 makes the pipeline a user-authored `PipelineGraph` executed by a
+generic interpreter, with a canvas to edit it — n8n's model, applied to the SDLC
+DAG.
+
+**Decided 2026-08-06** (brainstorm, no spec written): ports carry control flow
+(n8n-style branching, not a strict DAG of composite nodes), and the interpreter
+**replaces** `_pipeline` big-bang rather than running beside it. Three objections
+were raised and answered rather than dismissed:
+
+- (a) **Temporal determinism.** The graph is workflow *input*, pinned for the
+  run's lifetime. A canvas edit never mutates a running workflow — it writes a
+  new `content_sha` that the next run picks up. No per-edit `workflow.patched()`.
+- (b) **Typed contracts.** Ports declare payload types by existing model name
+  (`ArchitectureSpec`, `ImplementationPlan`, `TaskResult`…); edge validation
+  rejects incompatible connections. Freedom is real but type-bounded.
+- (c) **The benchmark axis.** Node types declare a `canonical_stage`, mapping any
+  graph onto the fixed `CANONICAL_STAGES` list (`benchmarks/heatmap.py:24`), so
+  the heatmap and SC rollups survive arbitrary graphs. Unmapped types record as
+  `unknown`, which `heatmap.py:96` already handles.
+
+**Cheaper than it looks.** The node handlers already exist as methods —
+`_run_clarify` (:1836), `_run_architect` (:1900), `_fan_out_research` (:803),
+`_dev_task` (:1218), `_gate` (:1105), `_run_deep_review` (:876), `_run_adversary`
+(:942), `_run_handoff` (:994), `_merge_task` (:1193), `_retro` (:1559). The work
+is replacing the *wiring*, not the stage bodies. `_revisable_stage` (:1166)
+disappears entirely: wrapping a stage in a gate-and-retry loop becomes topology.
+
+**The quiet win.** Four boolean flags (`research_enabled`, `deep_review_enabled`,
+`adversarial_review_enabled`, `handoff_enabled`) and their scattered
+`if cfg.X_enabled and t_X is not None` guards collapse into *is there a node*.
+
+- [ ] **E-72 — `PipelineGraph` model + node-type registry** → FR-1201.
+  `GraphNode` / `GraphEdge` / `NodePort` in `sdlc/graph/model.py`; nodes carry
+  `RoleConfig` (`models.py:717`) and `GateConfig` (`models.py:53`) **verbatim**
+  rather than a forked `params["model"]` string, so the registry loader's
+  validation, the ADR-6 model-inequality checks and `PROMPT_SHAS` memo
+  invalidation keep working unchanged. `content_sha()` excludes `position` and
+  `label` so tidying the canvas never invalidates a memo. Registry declares each
+  node type's ports, payload types and `canonical_stage`.
+- [ ] **E-73 — `GraphRouter` + `validate.py`** → FR-1202. **The bug budget lives
+  here.** A pure, synchronous routing state machine — no Temporal, no I/O — so
+  the hard part is table-testable in milliseconds. Owns: one-output-port-per-
+  activation branching; **round-based stale-input invalidation** (a backward edge
+  increments `round` and invalidates buffered inputs at lower rounds, or a revise
+  loop re-runs `architect` while `planner` still holds last round's spec);
+  per-edge `max_traversals` with exhaustion terminating `ESCALATED` (reproducing
+  `feature.py:1464`); fan-out/collect. Rounds are not new — `gate_key(gate,
+  round)` (`models.py`) already carries this semantics for gates; the router
+  generalises it to the whole graph. `validate.py` is the **single** source of
+  truth for legality (port compatibility, reachability, every cycle bounded,
+  one entry node) and is never reimplemented in TypeScript.
+- [ ] **E-74 — `GraphWorkflow` replaces `_pipeline`** → FR-1203. Thin Temporal
+  layer over E-73: dispatch table from `node.type` to the existing handlers,
+  which converge on `(Activation, PipelineConfig) -> Emission`; exceptions become
+  `fail` emissions so error routing is topology. `PipelineConfig` splits by scope
+  — run-scoped settings stay, per-stage settings move onto nodes,
+  `max_fix_attempts` becomes `GraphEdge.max_traversals`. Determinism rules
+  (sorted iteration, no bare `set`/`dict` walks, fixed-order `gather`) enforced
+  by a lint test, since the router is new code where they break silently.
+  `default.graph.yaml` expresses today's pipeline and is asserted to reproduce
+  its stage sequence. **Big-bang was chosen over strangler-with-parity** — run
+  the benchmark before/after anyway as a regression check; the choice was to not
+  *gate* on dual-running, not to discard free evidence.
+- [ ] **E-75 — dashboard backend** → FR-1204. **Closes the "dashboard backend
+  remains" half of P2.** There is no backend today: `api/http.ts:4` rejects every
+  call with *"Dashboard http provider not wired"* and the whole dashboard runs on
+  `api/mock`. Thinner than it looks — live run state needs no database, only two
+  new queries on `GraphWorkflow` (`graph_state()`, `graph()`) beside the existing
+  `status` / `pending_decisions` / `run_summary` (`feature.py:739`–:753). The only
+  storage is content-addressed `graphs/<sha>.yaml`. Gates and answers are the
+  existing signals. **This is the project's first network surface** — see OQ-11.
+- [ ] **E-76 — canvas** → FR-1205. `@vue-flow/core` (React Flow's Vue port, what
+  n8n itself uses; fits the existing Vue 3 + Pinia + Vite stack) plus `dagre` for
+  auto-layout of YAML-authored graphs. **One renderer, two modes**: `runState`
+  present ⇒ status rings, cost, durations, traversal counters on loop edges, live
+  gate approve/reject; `editable` ⇒ palette + inspector. Editing a *running*
+  graph is disabled by design (see (a) above). Backward edges render curved with
+  a `2/3` counter, so a post-mortem shows **why** a run looped, not merely that it
+  did. `Run.stageIdx` (`api/types.ts:20`) is a linear index that cannot express
+  graph position and becomes `currentNodes: string[]`; `StageDots.vue` survives by
+  mapping active nodes through `canonical_stage` back onto the fixed 15-stage
+  strip, so the fleet table keeps its glanceable row and cannot disagree with the
+  benchmark.
+- [ ] **E-77 — graph store + custom-graph benchmark mapping** → FR-1206. Runs
+  record their `graph_sha`, so a post-mortem always renders the graph that
+  *actually ran* rather than what the graph looks like now. Benchmark records
+  derive `fix_attempts` from inbound-fail-edge traversal counts and `round` from
+  the router, keeping the §9 measurement axes intact across hand-authored graphs.
+
+**Open questions.**
+
+- **OQ-10 — in-flight runs at cutover.** Big-bang means `FeatureWorkflow`
+  disappears. Drain first (block new runs, wait out current ones) or accept that
+  in-flight runs fail and are restarted? Unresolved; blocks E-74's landing, not
+  its design.
+- **OQ-11 — dashboard auth.** E-75 is the first server in the project, and
+  *"start a run"* and *"approve a merge gate"* are not endpoints to leave
+  unauthenticated once anything but localhost can reach them. Localhost-bind with
+  no auth is the assumed near-term answer; **E-60** (identity & authorization,
+  FR-1004) is where it stops being acceptable.
+
+## 15. Suggested ordering across §§10–14
 
 Not a commitment. Ranked by what each item unblocks and by which invariants get
 harder to install later:
@@ -1010,6 +1117,15 @@ harder to install later:
 6. Then audit depth (**E-48 → E-49 → E-50 → E-51 → E-52 → E-53 → E-54 → E-55 →
    E-56**), service (**E-59…E-63**), and the outcome loop (**E-64 → E-65 →
    E-66 → E-68/E-69 → E-70 → E-71**).
+7. **§14 (E-72…E-77) is deliberately unsequenced.** It is the only tier that
+   rewrites a core code path rather than extending one, and it competes with
+   nothing above it for invariants — the factory ships fine without it. Two
+   things argue for pulling it earlier anyway: **E-75 closes P2's outstanding
+   dashboard-backend half** regardless of whether the interpreter lands, and the
+   longer `_pipeline` accretes stages (§1 has 8 unbuilt ones), the more imperative
+   wiring the big-bang rewrite has to absorb. If §14 is wanted at all, **E-72 →
+   E-73 before §1 grows** is the cheap moment; E-75 can be lifted out and shipped
+   on its own.
 
 **Deliberate:** §10 ships before §11 even though §11 is the more impressive
 product. Triage is what tells you whether the audit is worth running (FR-903),
