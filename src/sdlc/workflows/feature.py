@@ -41,7 +41,7 @@ with workflow.unsafe.imports_passed_through():
         CheckClass, CheckResult, GateOverride, GateReport, QualityGateInput,
         build_check,
     )
-    from ..measurement import CollectionState, Measurement
+    from ..measurement import CollectionState
     from ..memoization.activities import (
         CacheGetInput, CachePutInput, cache_get, cache_put,
     )

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .grounding import Profile, verify_quote
 from .measurement import Measurement
@@ -32,7 +32,7 @@ class CrossCheckResult(BaseModel):
     naming a file the diff never touched and a claim quoting something nobody
     said are different extractor failures, and the waste metrics should not
     average them together."""
-    kept: list[HandoffClaim] = []
+    kept: list[HandoffClaim] = Field(default_factory=list)
     dropped_paths: int = 0
     dropped_quotes: int = 0
 
