@@ -53,3 +53,18 @@ def test_the_distinction_survives_a_json_round_trip():
 def test_constructors_set_the_state_they_name():
     assert Measurement.not_collected("r").state is CollectionState.NOT_COLLECTED
     assert Measurement.unknown("r").state is CollectionState.UNKNOWN
+
+
+def test_measured_non_finite_is_unconstructible():
+    """nan silently fails every comparison (nan >= threshold is False), so a
+    measured nan fabricates a failure; inf does the mirror. The producer must
+    not be the only line of defence -- E-41 reuses this type without knowing
+    that measure_coverage guards non-finite upstream."""
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValidationError):
+            Measurement.measured(bad)
+
+
+def test_measured_finite_value_constructs():
+    assert Measurement.measured(0.0).value == 0.0
+    assert Measurement.measured(80.0).value == 80.0

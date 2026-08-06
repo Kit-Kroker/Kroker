@@ -13,6 +13,7 @@ import.
 """
 from __future__ import annotations
 
+import math
 from enum import Enum
 
 from pydantic import BaseModel, model_validator
@@ -40,6 +41,15 @@ class Measurement(BaseModel):
         if self.state is CollectionState.MEASURED:
             if self.value is None:
                 raise ValueError("MEASURED requires a value")
+            if not math.isfinite(self.value):
+                # nan/inf silently corrupt downstream comparisons (nan >=
+                # threshold is False, fabricating an advisory failure). The
+                # guard belongs in the type, not the producer: E-41 reuses
+                # this type without inheriting measure_coverage's guard.
+                raise ValueError(
+                    f"MEASURED must be finite (got {self.value!r}) -- a "
+                    f"non-finite value is the conflation this type exists "
+                    f"to prevent")
         else:
             if self.value is not None:
                 raise ValueError(
