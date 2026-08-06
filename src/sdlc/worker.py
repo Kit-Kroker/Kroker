@@ -26,7 +26,7 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker
 
 from .activities import (
-    create_worktree, deploy, evaluate_gate, get_task_diff,
+    create_worktree, evaluate_gate, get_task_diff,
     measure_coverage, merge_into_integration, open_pull_request,
     read_committed_bytes, run_coding_task, run_integration_checks, run_lint,
     run_test_suite, security_scan, setup_integration_branch,
@@ -90,7 +90,7 @@ async def main() -> None:
             run_coding_task, run_integration_checks, run_lint, run_test_suite,
             security_scan,
             measure_coverage,
-            open_pull_request, deploy,
+            open_pull_request,
             deploy_current_version, deploy_apply, smoke_check, deploy_rollback,
             read_committed_bytes,
             evaluate_gate, get_task_diff, record_benchmark, judge_artifact,

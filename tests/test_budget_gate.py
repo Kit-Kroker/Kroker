@@ -21,8 +21,10 @@ from tests.fakes.canned import (
     AGENT_SPECS, QUESTION_IDS, e2e_config, greenfield_idea,
 )
 from tests.fakes.fake_activities import GIT_FAKES
+from tests.fakes.fake_deploy import DEPLOY_FAKES, reset as reset_deploy
 
 with workflow.unsafe.imports_passed_through():
+    from sdlc.workflows.deployment import DeploymentWorkflow
     from sdlc.workflows.feature import FeatureWorkflow
     from tests.fakes.fake_agents import fake_agent_activities
 
@@ -39,7 +41,7 @@ async def fixed_price(inp: PriceUsageInput) -> float | None:
 def _activities():
     fakes = [a for a in GIT_FAKES if a is not real_price_usage]
     return [evaluate_gate, export_run_artifacts, fixed_price, *fakes,
-            *fake_agent_activities(AGENT_SPECS)]
+            *DEPLOY_FAKES, *fake_agent_activities(AGENT_SPECS)]
 
 
 async def _wait_for_status(handle, target, timeout_s=10.0):
@@ -68,11 +70,13 @@ async def test_budget_crossings_regate_and_approve_extends(tmp_path,
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
     cfg = e2e_config()
     cfg.run_budget_usd = 1.5
+    cfg.deploy.enabled = True
+    reset_deploy()
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(env.client, task_queue=TASK_QUEUE,
-                              workflows=[FeatureWorkflow],
+                              workflows=[FeatureWorkflow, DeploymentWorkflow],
                               activities=_activities(),
                               plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(

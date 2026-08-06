@@ -22,8 +22,10 @@ from tests.fakes.canned import (
     AGENT_SPECS, QUESTION_IDS, e2e_config, greenfield_idea,
 )
 from tests.fakes.fake_activities import GIT_FAKES
+from tests.fakes.fake_deploy import DEPLOY_FAKES, reset as reset_deploy
 
 with workflow.unsafe.imports_passed_through():
+    from sdlc.workflows.deployment import DeploymentWorkflow
     from sdlc.workflows.feature import FeatureWorkflow
     from tests.fakes.fake_agents import fake_agent_activities
 
@@ -73,7 +75,10 @@ async def _drive_with_merge(handle):
 
 @pytest.mark.asyncio
 async def test_greenfield_run_ships_end_to_end():
-    activities = [evaluate_gate, *GIT_FAKES,
+    reset_deploy()
+    cfg = e2e_config()
+    cfg.deploy.enabled = True
+    activities = [evaluate_gate, *GIT_FAKES, *DEPLOY_FAKES,
                   *fake_agent_activities(AGENT_SPECS)]
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
@@ -91,11 +96,12 @@ async def test_greenfield_run_ships_end_to_end():
         with env.auto_time_skipping_disabled():
             async with Worker(
                     env.client, task_queue=TASK_QUEUE,
-                    workflows=[FeatureWorkflow], activities=activities,
+                    workflows=[FeatureWorkflow, DeploymentWorkflow],
+                    activities=activities,
                     plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
-                    args=[greenfield_idea(), e2e_config()],
+                    args=[greenfield_idea(), cfg],
                     id=f"e2e-{uuid.uuid4()}", task_queue=TASK_QUEUE)
                 driver = asyncio.create_task(_drive(handle))
                 result = await handle.result()
@@ -113,17 +119,22 @@ async def test_untraced_criterion_is_advisory_not_blocking():
 
     empty = ("analyst_agent", AnalysisReport, AnalysisReport(summary="none"))
     specs = [s for s in AGENT_SPECS if s[0] != "analyst_agent"] + [empty]
-    activities = [evaluate_gate, *GIT_FAKES, *fake_agent_activities(specs)]
+    reset_deploy()
+    cfg = e2e_config()
+    cfg.deploy.enabled = True
+    activities = [evaluate_gate, *GIT_FAKES, *DEPLOY_FAKES,
+                  *fake_agent_activities(specs)]
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(
                     env.client, task_queue=TASK_QUEUE,
-                    workflows=[FeatureWorkflow], activities=activities,
+                    workflows=[FeatureWorkflow, DeploymentWorkflow],
+                    activities=activities,
                     plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
-                    args=[greenfield_idea(), e2e_config()],
+                    args=[greenfield_idea(), cfg],
                     id=f"e2e-untraced-{uuid.uuid4()}", task_queue=TASK_QUEUE)
                 driver = asyncio.create_task(_drive_with_merge(handle))
                 result = await handle.result()

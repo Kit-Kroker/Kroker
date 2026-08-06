@@ -26,8 +26,10 @@ from tests.fakes.canned import (
     AGENT_SPECS, QUESTION_IDS, greenfield_idea,
 )
 from tests.fakes.fake_activities import GIT_FAKES
+from tests.fakes.fake_deploy import DEPLOY_FAKES, reset as reset_deploy
 
 with workflow.unsafe.imports_passed_through():
+    from sdlc.workflows.deployment import DeploymentWorkflow
     from sdlc.workflows.feature import FeatureWorkflow
     from tests.fakes.fake_agents import fake_agent_activities
 
@@ -123,6 +125,7 @@ async def test_research_stage_runs_and_hands_off():
     agent activity or verify_brief_activity were unregistered, the workflow
     would fail with a Temporal activity-not-found error long before clarify."""
     activities = [evaluate_gate, verify_brief_activity, *GIT_FAKES,
+                  *DEPLOY_FAKES,
                   *_research_fake_activities(),
                   *fake_agent_activities(AGENT_SPECS)]
     cfg = PipelineConfig(
@@ -136,6 +139,8 @@ async def test_research_stage_runs_and_hands_off():
         memoization_enabled=False,
         review_enabled=True,
     )
+    cfg.deploy.enabled = True
+    reset_deploy()
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
         # Disable auto-skipping: real (48h) gate timers otherwise race the
@@ -143,7 +148,8 @@ async def test_research_stage_runs_and_hands_off():
         with env.auto_time_skipping_disabled():
             async with Worker(
                     env.client, task_queue=TASK_QUEUE,
-                    workflows=[FeatureWorkflow], activities=activities,
+                    workflows=[FeatureWorkflow, DeploymentWorkflow],
+                    activities=activities,
                     plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
@@ -178,6 +184,7 @@ async def test_research_stage_degrades_instead_of_blocking_on_grounding_violatio
     (`if violations:`), records a FAIL stage record, and continues."""
     monkeypatch.setenv("SDLC_RUNS_ROOT", str(tmp_path))
     activities = [evaluate_gate, verify_brief_activity, *GIT_FAKES,
+                  *DEPLOY_FAKES,
                   *_research_fake_activities(_RESEARCH_WITH_VIOLATION),
                   *fake_agent_activities(AGENT_SPECS)]
     cfg = PipelineConfig(
@@ -189,12 +196,15 @@ async def test_research_stage_degrades_instead_of_blocking_on_grounding_violatio
         memoization_enabled=False,
         review_enabled=True,
     )
+    cfg.deploy.enabled = True
+    reset_deploy()
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(
                     env.client, task_queue=TASK_QUEUE,
-                    workflows=[FeatureWorkflow], activities=activities,
+                    workflows=[FeatureWorkflow, DeploymentWorkflow],
+                    activities=activities,
                     plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
@@ -223,6 +233,7 @@ async def test_research_stage_degrades_instead_of_crashing_on_usage_limit_exceed
     and substitute a degraded ResearchBrief, continuing to clarify/deploy
     exactly like test_research_stage_runs_and_hands_off -- not crash."""
     activities = [evaluate_gate, verify_brief_activity, *GIT_FAKES,
+                  *DEPLOY_FAKES,
                   *_research_fake_activities(),
                   *fake_agent_activities(AGENT_SPECS)]
     cfg = PipelineConfig(
@@ -235,12 +246,15 @@ async def test_research_stage_degrades_instead_of_crashing_on_usage_limit_exceed
         memoization_enabled=False,
         review_enabled=True,
     )
+    cfg.deploy.enabled = True
+    reset_deploy()
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(
                     env.client, task_queue=TASK_QUEUE,
-                    workflows=[FeatureWorkflow], activities=activities,
+                    workflows=[FeatureWorkflow, DeploymentWorkflow],
+                    activities=activities,
                     plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,

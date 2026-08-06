@@ -18,8 +18,10 @@ from sdlc.notify.contract import DeliveryResult, NotifyInput, Results
 from sdlc.observability.activities import export_run_artifacts
 from tests.fakes.canned import AGENT_SPECS, QUESTION_IDS, e2e_config, greenfield_idea
 from tests.fakes.fake_activities import GIT_FAKES
+from tests.fakes.fake_deploy import DEPLOY_FAKES, reset as reset_deploy
 
 with workflow.unsafe.imports_passed_through():
+    from sdlc.workflows.deployment import DeploymentWorkflow
     from sdlc.workflows.feature import FeatureWorkflow
     from tests.fakes.fake_agents import fake_agent_activities
 
@@ -43,7 +45,7 @@ async def exploding_notify(inp: NotifyInput) -> Results:
 
 def _activities(notify_act):
     return [evaluate_gate, export_run_artifacts, notify_act, *GIT_FAKES,
-            *fake_agent_activities(AGENT_SPECS)]
+            *DEPLOY_FAKES, *fake_agent_activities(AGENT_SPECS)]
 
 
 async def _wait_for_status(handle, target, timeout_s=10.0):
@@ -62,11 +64,13 @@ async def test_opened_notification_fires_and_signal_stops_the_rest(
     SENT.clear()
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
     cfg = e2e_config()
+    cfg.deploy.enabled = True
+    reset_deploy()
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(env.client, task_queue=TASK_QUEUE,
-                              workflows=[FeatureWorkflow],
+                              workflows=[FeatureWorkflow, DeploymentWorkflow],
                               activities=_activities(recording_notify),
                               plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
@@ -105,11 +109,13 @@ async def test_exploding_notifier_leaves_every_gate_decidable(
     """The load-bearing invariant: delivery cannot break a gate."""
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
     cfg = e2e_config()
+    cfg.deploy.enabled = True
+    reset_deploy()
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(env.client, task_queue=TASK_QUEUE,
-                              workflows=[FeatureWorkflow],
+                              workflows=[FeatureWorkflow, DeploymentWorkflow],
                               activities=_activities(exploding_notify),
                               plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(

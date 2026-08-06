@@ -15,11 +15,11 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from ..activities import (
-        CodingTaskInput, CoverageInput, DeployInput, DiffInput,
+        CodingTaskInput, CoverageInput, DiffInput,
         IntegrationChecks, IntegrationChecksInput,
         IntegrationHandle, IntegrationInput, LintInput, MergeInput,
         PROpenInput, QAInput, SecurityScanInput, WorktreeInput,
-        create_worktree, deploy, evaluate_gate, get_task_diff,
+        create_worktree, evaluate_gate, get_task_diff,
         measure_coverage, merge_into_integration, open_pull_request,
         run_coding_task, run_integration_checks, run_lint, run_test_suite,
         security_scan, setup_integration_branch,
@@ -65,15 +65,18 @@ with workflow.unsafe.imports_passed_through():
     from ..models import (
         AnalysisReport, ArchitectureSpec, ArtifactRef, ClarifiedRequirements,
         DeferredToolUse, EscalationOutcome, ToolDenial, ToolEscalation, ToolGrant,
-        CoverageReport, DeepReviewReport, DevTask, ExecutionMode, Gap, GateConfig,
+        CoverageReport, DeepReviewReport, DeployPlan, DeployReport, DevTask,
+        ExecutionMode, Gap, GateConfig,
         GateDecision,
         GateOutcome, GatePolicy, HandoffSummary, IdeaBrief,
         ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig,
         RecallSnapshot, ResearchBrief, ResearchPlan, RetainItem, RoleConfig,
-        RoleUsage, RunSummary, SecurityReport, SubQuestionFinding, TaskResult,
+        RoleUsage, RunSummary, SecurityReport, SmokeCheck, SubQuestionFinding,
+        TaskResult,
         TimeoutAction,
         gate_key,
     )
+    from .deployment import DeploymentInput, DeploymentWorkflow
     from ..handoff import (
         claim_survival_score, cross_check_claims, verified_integrity_flags,
     )
@@ -197,6 +200,26 @@ def _long_act(role_cfg: RoleConfig | None = None) -> dict:
             minutes=minutes if minutes is not None
             else LONG_ACT_HEARTBEAT_MINUTES),
         retry_policy=RetryPolicy(maximum_attempts=2))
+
+
+def _deploy_result(report: "DeployReport", decision: "GateDecision | None",
+                   pr_url: str) -> str:
+    """Map a DeployReport plus the deploy_failed gate decision onto the run's
+    terminal string. Pure, so the mapping is testable without Temporal.
+
+    `decision` is None only when the report says deployed.
+
+    A report whose rollback did NOT happen can never return `rolled-back:` --
+    the environment is live and in an unknown state, and flattening that into
+    an ordinary failure hides the one outcome needing a human immediately.
+    """
+    if report.deployed:
+        return f"deployed:{pr_url}"
+    if not report.rolled_back:
+        return f"deploy-broken:{pr_url}"
+    if decision is not None and decision.outcome is GateOutcome.REJECT:
+        return f"deploy-rejected:{pr_url}"
+    return f"rolled-back:{pr_url}"
 
 
 class _BudgetRejected(Exception):
@@ -1101,6 +1124,22 @@ class FeatureWorkflow:
                 # terminates (spec §5).
                 raise _BudgetRejected()
             self._budget_threshold += cfg.run_budget_usd
+
+    def _deploy_plan(self, idea, arch) -> DeployPlan:
+        """The frozen DeployPlan for this run.
+
+        TRANSITIONAL: devops_planner authoring this at the planning stage and
+        the plan gate freezing it (spec D-2) is the next increment. Until
+        then the run deploys with a single liveness check, which is weak but
+        honest -- and `frozen=True` keeps the contract's shape intact so the
+        planner can start filling it without a second code path.
+        """
+        return DeployPlan(
+            environment="staging",
+            version=workflow.info().workflow_id,
+            smoke_checks=[SmokeCheck(name="liveness", kind="http",
+                                     path="/health")],
+        )
 
     async def _gate(self, name: str, cfg: PipelineConfig,
                     auto_decision: GateDecision | None = None,
@@ -2306,7 +2345,7 @@ class FeatureWorkflow:
                 **ACT,
             )
 
-        # 6. DEPLOY gate → deploy
+        # 6. DEPLOY gate → DeploymentWorkflow child (E-67/FR-1104)
         _started = workflow.now()
         gate = await self._gate("deploy", cfg)
         _ended = workflow.now()
@@ -2317,13 +2356,42 @@ class FeatureWorkflow:
             outcome=(BenchmarkOutcome.PASS if gate.approved
                      else BenchmarkOutcome.REVISED),
             model=resolve_role_model(cfg, "devops")))
-        if not gate.approved:
+        if not gate.approved or not cfg.deploy.enabled:
             return f"merged-not-deployed:{pr_url}"
-        await workflow.execute_activity(
-            deploy,
-            DeployInput(environment="staging", version=idea.title,
-                        command="make deploy ENV=staging", cwd=repo_path),
-            **_long_act(cfg.roles.get("devops")),
-        )
-        self._status = "deployed"
-        return f"deployed:{pr_url}"
+
+        plan = self._deploy_plan(idea, arch)
+        attempt = 1
+        while True:
+            report = await workflow.execute_child_workflow(
+                DeploymentWorkflow.run,
+                DeploymentInput(plan=plan, cfg=cfg.deploy,
+                                repo_path=repo_path, attempt=attempt),
+                # Derived, never generated: replay must produce the same id,
+                # and a retry round stays identifiable in the Temporal UI.
+                id=f"{workflow.info().workflow_id}-deploy-{attempt}",
+                task_queue=workflow.info().task_queue,
+            )
+            if report.deployed:
+                self._status = "deployed"
+                return _deploy_result(report, None, pr_url)
+
+            # The gate opens even when the rollback itself failed -- that is
+            # the case a human most needs to see.
+            decision = await self._gate(
+                "deploy_failed", cfg, round=attempt,
+                context=GateContext(
+                    # ABSOLUTE: the human is not waving a check through --
+                    # the rollback already happened. They are deciding what
+                    # to do next.
+                    checks=[CheckResult(name=c.name, passed=c.passed,
+                                        classification=CheckClass.ABSOLUTE,
+                                        detail=c.detail)
+                            for c in report.checks],
+                    verdict=report.rollback_reason),
+                default_policy=GatePolicy.HARD)
+            if (decision.outcome is GateOutcome.REVISE
+                    and attempt < cfg.max_gate_rounds):
+                attempt += 1
+                continue
+            self._status = "deploy_failed"
+            return _deploy_result(report, decision, pr_url)

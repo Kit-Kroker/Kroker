@@ -1027,26 +1027,6 @@ async def open_pull_request(inp: PROpenInput) -> str:
     return pr.stdout.strip()  # PR url
 
 
-@dataclass
-class DeployInput:
-    environment: str
-    version: str
-    command: str  # e.g. "make deploy ENV=staging"
-    cwd: str
-
-
-@activity.defn
-async def deploy(inp: DeployInput) -> str:
-    proc = await asyncio.create_subprocess_shell(
-        inp.command, cwd=inp.cwd,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-    )
-    out_b, _ = await proc.communicate()
-    if proc.returncode != 0:
-        raise RuntimeError(f"deploy failed: {out_b.decode()[-2000:]}")
-    return out_b.decode(errors="replace")[-2000:]
-
-
 @activity.defn
 async def evaluate_gate(inp: QualityGateInput) -> GateReport:
     """Activity wrapper over the pure DeterministicQualityGate."""

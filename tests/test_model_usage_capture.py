@@ -20,8 +20,10 @@ from tests.fakes.canned import (
     AGENT_SPECS, QUESTION_IDS, e2e_config, greenfield_idea,
 )
 from tests.fakes.fake_activities import GIT_FAKES
+from tests.fakes.fake_deploy import DEPLOY_FAKES, reset as reset_deploy
 
 with workflow.unsafe.imports_passed_through():
+    from sdlc.workflows.deployment import DeploymentWorkflow
     from sdlc.workflows.feature import FeatureWorkflow
     from tests.fakes.fake_agents import fake_agent_activities
 
@@ -54,18 +56,21 @@ async def _drive(handle):
 @pytest.mark.asyncio
 async def test_model_usage_events_exported(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
+    reset_deploy()
+    cfg = e2e_config()
+    cfg.deploy.enabled = True
     activities = [evaluate_gate, export_run_artifacts, *GIT_FAKES,
-                  *fake_agent_activities(AGENT_SPECS)]
+                  *DEPLOY_FAKES, *fake_agent_activities(AGENT_SPECS)]
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(env.client, task_queue=TASK_QUEUE,
-                              workflows=[FeatureWorkflow],
+                              workflows=[FeatureWorkflow, DeploymentWorkflow],
                               activities=activities,
                               plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
-                    args=[greenfield_idea(), e2e_config()],
+                    args=[greenfield_idea(), cfg],
                     id=f"usage-{uuid.uuid4()}", task_queue=TASK_QUEUE)
                 driver = asyncio.create_task(_drive(handle))
                 result = await handle.result()

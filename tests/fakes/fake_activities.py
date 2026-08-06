@@ -7,7 +7,7 @@ from __future__ import annotations
 from temporalio import activity
 
 from sdlc.activities import (
-    CodingTaskInput, CoverageInput, DeployInput, DiffInput, IntegrationChecks,
+    CodingTaskInput, CoverageInput, DiffInput, IntegrationChecks,
     IntegrationChecksInput, IntegrationHandle,
     IntegrationInput, LintInput, MergeInput, MergeResult, PROpenInput,
     QAInput, SecurityScanInput, WorktreeHandle, WorktreeInput,
@@ -67,11 +67,6 @@ async def fake_open_pull_request(inp: PROpenInput) -> str:
     return "https://example.test/pr/1"
 
 
-@activity.defn(name="deploy")
-async def fake_deploy(inp: DeployInput) -> str:
-    return "deploy ok"
-
-
 @activity.defn(name="security_scan")
 async def fake_security_scan(inp: SecurityScanInput) -> SecurityReport:
     return SecurityReport(critical=0, findings=[],
@@ -100,7 +95,7 @@ async def fake_run_integration_checks(
 GIT_FAKES = [
     fake_setup_integration_branch, fake_create_worktree, fake_run_coding_task,
     fake_get_task_diff, fake_run_test_suite, fake_run_lint,
-    fake_merge_into_integration, fake_open_pull_request, fake_deploy,
+    fake_merge_into_integration, fake_open_pull_request,
     fake_security_scan, fake_measure_coverage, fake_run_integration_checks,
     price_usage,   # E-33: real activity — pure local table lookup, no network
 ]
