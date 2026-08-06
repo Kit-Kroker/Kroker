@@ -15,10 +15,11 @@ from dataclasses import dataclass
 from temporalio import activity
 
 from ..activities import _git
+from ..grounding import Profile, verify_quote
 from ..measurement import Measurement
 from ..toolchain.adapters import detect_with_marker
 from .models import SignalResult
-from .signals import baseline
+from .signals import baseline, secrets
 
 _log = logging.getLogger(__name__)
 
@@ -72,3 +73,43 @@ async def triage_baseline(inp: TriageSignalInput) -> SignalResult:
             signal=baseline.SIGNAL_ID, version=baseline.VERSION,
             collected=Measurement.not_collected(
                 f"baseline signal raised: {type(exc).__name__}: {exc}"))
+
+
+@activity.defn
+async def triage_secrets(inp: TriageSignalInput) -> SignalResult:
+    """FR-902 secret scan over the tracked tree at the pinned commit.
+
+    Every emitted finding's evidence is re-verified against the bytes it cites
+    (spec D5). For these deterministic rules the quote is verbatim by
+    construction, so this is a DRIFT guard -- it catches a citation that no
+    longer resolves at that path and sha -- not a hallucination guard. It
+    becomes load-bearing when E-48's LLM proposers cite the same way, and it
+    is FR-914's first commit-source consumer.
+    """
+    try:
+        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+        findings = list(secrets.env_file_findings(paths))
+        for path in paths:
+            blob = read_blob(inp.repo_dir, inp.commit_sha, path)
+            if blob is None or len(blob) > secrets.MAX_BLOB_BYTES:
+                continue
+            if "\x00" in blob:                     # binary; nothing to quote
+                continue
+            for finding in secrets.scan_text(path, blob):
+                if finding.evidence and not verify_quote(
+                        finding.evidence, blob, Profile.VERBATIM_BYTES):
+                    _log.warning(
+                        "triage secrets: dropping unverifiable evidence for "
+                        "%s at %s", finding.rule, path)
+                    continue
+                findings.append(finding)
+        return SignalResult(
+            signal=secrets.SIGNAL_ID, version=secrets.VERSION,
+            collected=Measurement.measured(float(len(findings))),
+            findings=findings)
+    except Exception as exc:                       # noqa: BLE001
+        _log.warning("triage secrets signal failed: %s", exc)
+        return SignalResult(
+            signal=secrets.SIGNAL_ID, version=secrets.VERSION,
+            collected=Measurement.not_collected(
+                f"secrets signal raised: {type(exc).__name__}: {exc}"))
