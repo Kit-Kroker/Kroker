@@ -150,6 +150,10 @@ class CaseSpec(BaseModel):
     # a grounding-verifier violation hard-returns the whole run
     # (feature.py:717).
     research_enabled: bool = False
+    # E-67: run DAG stage 13 for this case. Default False -- a deploying case
+    # needs a real target and a Docker daemon on the runner, which most cases
+    # neither have nor want.
+    deploy_enabled: bool = False
     # E-31: declares the held-out oracle's language. Set => this case opts
     # into oracle grading (BenchmarkWorkflow runs grade_oracle after the
     # child). Also the value the manifest-vs-marker mismatch signal compares

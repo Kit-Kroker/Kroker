@@ -79,6 +79,7 @@ def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
     # provider: fake so CI needs no key); inject the real provider only when a
     # case asked for research.
     cfg.research_enabled = spec.research_enabled
+    cfg.deploy.enabled = spec.deploy_enabled
     if spec.research_enabled:
         cfg.roles["research"] = RoleConfig(kind="research", provider="tavily")
     cfg.benchmark = BenchmarkConfig(
