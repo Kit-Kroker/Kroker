@@ -579,7 +579,7 @@
 <main id="detail"></main>
 
 <footer>
-  Regenerated 2026-08-06 from <a href="../ROADMAP.md">ROADMAP.md</a> (last verified 2026-08-06; since the 2026-07-26 snapshot: gate notifications + durable timers (E-9, FR-303), real Hindsight integration verified against a live container (NFR-7), the measurement instrument completed — WasteBag/waste-matrix, sc-rollup, agreement-matrix, <code>sdlc benchmark score</code> and the experiment log (E-36) — research fan-out (2026-08-04), and the verified-handoff extractor + decorrelated adversary lens (2026-08-05) all landed; on 2026-08-06 the two §14 invariants landed — <code>Measurement</code> (E-40 / FR-915 contract half) and the shared grounding verifier with two normalization profiles (E-43 / FR-914), closing two live unverified-quote holes (handoff claims, deep-review integrity flags) and the malformed-SARIF-reads-as-clean absolute-floor hole; an Exa budget double-charge and the architect's shared budget scope were also fixed; <code>summary.json</code> is now persisted alongside events.jsonl/report.html).
+  Regenerated 2026-08-06 from <a href="../ROADMAP.md">ROADMAP.md</a> (last verified 2026-08-06; since the 2026-07-26 snapshot: gate notifications + durable timers (E-9, FR-303), real Hindsight integration verified against a live container (NFR-7), the measurement instrument completed — WasteBag/waste-matrix, sc-rollup, agreement-matrix, <code>sdlc benchmark score</code> and the experiment log (E-36) — research fan-out (2026-08-04), and the verified-handoff extractor + decorrelated adversary lens (2026-08-05) all landed; on 2026-08-06 the two §15 invariants landed — <code>Measurement</code> (E-40 / FR-915 contract half) and the shared grounding verifier with two normalization profiles (E-43 / FR-914), closing two live unverified-quote holes (handoff claims, deep-review integrity flags) and the malformed-SARIF-reads-as-clean absolute-floor hole; an Exa budget double-charge and the architect's shared budget scope were also fixed; <code>summary.json</code> is now persisted alongside events.jsonl/report.html; later on 2026-08-06 the deploy contract (E-67/E-68) landed on feat/deploy-contract — DAG stage 13 now runs a deterministic <code>DeploymentWorkflow</code> child (DeployPlan/DeployReport, apply→smoke→rollback, <code>deploy_failed</code> gate) behind <code>PipelineConfig.deploy</code> (off by default), so FR-1104, ADR-19's deployment half and stage 13 itself move to done/partial, and the quality_gate absolute floor gained <code>security_scan_collected</code> (FR-915); a new §14 (pipeline-as-data — graph interpreter + canvas, E-72…E-77 → FR-1200) was designed and recorded, all not-started).
   To refresh, re-extract items per the rule documented inline in this file's <code>&lt;script&gt;</code> block.
 </footer>
 
@@ -615,7 +615,7 @@ const ROADMAP = {
     { id: "P2", pct: 50, status: "partial",
       title: "Brownfield, dashboard + notifications, fix loops, cross-harness review",
       exit:  "first brownfield feature merged via PR",
-      note:  "Cross-harness review ✅, fix loops ✅, and notifications ✅ (E-9, FR-303) landed early; brownfield mode and dashboard backend remain not started." },
+      note:  "Cross-harness review ✅, fix loops ✅, and notifications ✅ (E-9, FR-303) landed early; brownfield mode and dashboard backend remain. The backend is E-75 (§14) — api/http.ts:4 still rejects every call and the dashboard runs entirely on api/mock." },
     { id: "P3", pct: 70, status: "partial",
       title: "Hindsight memory + confidence-gated soft gates",
       exit:  "SC-4 and SC-6 measurable",
@@ -639,7 +639,7 @@ const ROADMAP = {
     { id: "P8", pct: 0, status: "notstarted",
       title: "Product outcome loop",
       exit:  "one hypothesis pre-registered, shipped, and decided by its own rule (SC-11/SC-12)",
-      note:  "Not started (E-64…E-71). E-67 (DeployPlan/DeployReport) is needed by ordinary feature runs too — DAG stage 13 is a single hardcoded make deploy ENV=staging today." }
+      note:  "Not started (E-64…E-71). E-67 (DeployPlan/DeployReport) delivered the deploy contract; the outcome loop still needs the observation/keep-kill half (E-70)." }
   ],
 
   stages: [
@@ -655,8 +655,8 @@ const ROADMAP = {
     { n: 9, name: "review",        status: "done",       note: "clean-context reviewer_agent (t_reviewer) run in _dev_task; blocking findings fold into the fix loop. (new) A decorrelated adversary lens (agents/adversary/, claude-sonnet-4-6, reusing ReviewReport) runs only on the approving path as a non-DAG advisory second opinion — fail-open, and on split the fix loop receives the union of both reviewers' findings. Off by default (adversarial_review_enabled)." },
     { n: 10, name: "analyze",       status: "done",       note: "Analyst clean-context proposer (t_analyst) emits AnalysisReport; workflow enforces criterion→test traceability (FR-106)." },
     { n: 11, name: "qa",            status: "done",       note: "+ Resolver. clean-context t_qa + bounded fix loop. Note: default max_fix_attempts=2, PRD says QA loop 3 — numeric drift." },
-    { n: 12, name: "quality_gate",  status: "partial",    note: "DeterministicQualityGate ✅; 6 checks built. Security absolute floor ✅; traceability ✅; coverage seam closed by E-30 — run_integration_checks now runs coverage-instrumented tests on the merged integration head, landing coverage.xml where measure_coverage reads (Python adapter end-to-end; Go/TS/Rust = E-30a/b/c). Still advisory unless coverage_threshold set." },
-    { n: 13, name: "deploy",        status: "partial",    note: "single hardcoded make deploy ENV=staging; no DeployPlan/DeployReport split, no smoke-test vs PR-merge distinction." },
+    { n: 12, name: "quality_gate",  status: "partial",    note: "DeterministicQualityGate ✅; 7 checks built (build_integration_green, lint_clean, security_no_critical, security_scan_collected absolute; review_severity, traceability, coverage advisory). Security absolute floor ✅ — now carries security_scan_collected beside security_no_critical, so a scan that never collected (e.g. malformed SARIF) can no longer read as a clean absolute floor (FR-915, 2026-08-06); traceability ✅; coverage seam closed by E-30 (run_integration_checks lands coverage.xml on the merged integration head; Python end-to-end, Go/TS/Rust = E-30a/b/c). Still advisory unless coverage_threshold set." },
+    { n: 13, name: "deploy",        status: "done",       note: "DeployPlan/DeployReport split (E-67), deterministic DeploymentWorkflow child owning apply → smoke → rollback, deploy_failed gate in the parent. Off by default (PipelineConfig.deploy.enabled). Remaining: devops_planner does not yet author the plan — FeatureWorkflow._deploy_plan builds a single-liveness-check plan (see its docstring)." },
     { n: 14, name: "retro",         status: "done",       note: "On every terminal path the workflow builds a RunSummary from an in-workflow RunEvent trace, retains it + fire-and-forgets reflect(project_bank) (gated on memory.enabled), and exports events.jsonl + report.html via export_run_artifacts (E-32; folds E-22/E-23). org_bank-writer half stays unbuilt (E-25); retro is project scope only." }
   ],
 
@@ -814,8 +814,8 @@ const ROADMAP = {
       note: "", recent: false },
     { id: "FR-1103", section: "FR", status: "notstarted", title: "metric → instrumentation → emitted-event traceability via FR-106 mechanism (E-66)",
       note: "", recent: false },
-    { id: "FR-1104", section: "FR", status: "notstarted", title: "DeployPlan/DeployReport — closes DAG stage 13 for all runs (E-67)",
-      note: "", recent: false },
+    { id: "FR-1104", section: "FR", status: "done", title: "DeployPlan/DeployReport — closes DAG stage 13 for all runs (E-67)",
+      note: "Delivered on feat/deploy-contract; spec docs/superpowers/specs/2026-08-06-deploy-contract-design.md.", recent: true },
     { id: "FR-1105", section: "FR", status: "notstarted", title: "hosting + analytics adapters, one reference each (E-68/E-69)",
       note: "no substrate reimplementation.", recent: false },
     { id: "FR-1106", section: "FR", status: "notstarted", title: "durable observation window → collect → evaluate → keep/kill/extend gate (E-70)",
@@ -934,8 +934,8 @@ const ROADMAP = {
       note: "native inner, hook outer, fail closed; pre_tool hook + policy/containment.yaml (E-15/E-16).", recent: true },
     { id: "ADR-18", section: "ADR", status: "notstarted", title: "Triage precedes capability modelling",
       note: "an unbuildable or structurally-illegible repo is reported as a precondition failure, never capability-mapped (FR-903, E-42).", recent: false },
-    { id: "ADR-19", section: "ADR", status: "notstarted", title: "Deployment targets and analytics sources are adapters, not substrate",
-      note: "FR-1105, NG7, E-68/E-69. Unresolved consequence: OQ-9.", recent: false },
+    { id: "ADR-19", section: "ADR", status: "partial", title: "Deployment targets and analytics sources are adapters, not substrate",
+      note: "FR-1105, NG7, E-68/E-69. Deployment half done (E-67/E-68: src/sdlc/deploy/adapters.py, compose + script). Analytics half open (E-69). Unresolved consequence: OQ-9.", recent: true },
     { id: "ADR-20", section: "ADR", status: "notstarted", title: "Pre-registration reuses ValidationContract freeze semantics",
       note: "FR-1102, FR-803, E-65.", recent: false },
 
@@ -1102,16 +1102,30 @@ const ROADMAP = {
       note: "The decision rule is frozen and hashed at approval, reusing ValidationContract.frozen semantics (FR-803). A post-hoc change is a new audited gate round with both versions retained. The differentiating mechanic: the owner commits to how they will decide before they see the data, structurally rather than culturally.", recent: false },
     { id: "E-66", section: "E", status: "notstarted", title: "metric traceability (FR-1103, FR-106)",
       note: "Every hypothesis metric must trace to ≥1 instrumentation task and ≥1 emitted event, enforced by the same deterministic mechanism as criterion→test traceability. An uninstrumented hypothesis cannot reach deploy — the single most common way a measured feature ships unmeasurable.", recent: false },
-    { id: "E-67", section: "E", status: "notstarted", title: "DeployPlan / DeployReport (FR-1104)",
-      note: "Environment, flag and cohort, rollback, smoke-tested deployment vs. PR merge. Closes DAG stage 13 for all runs, not only experiments: today it is a single hardcoded make deploy ENV=staging with no plan/report split. Needed regardless of whether the outcome loop ships.", recent: false },
-    { id: "E-68", section: "E", status: "notstarted", title: "deployment target adapters (FR-1105, NG7)",
-      note: "Resolved from config, one reference adapter, no hosting substrate of our own. ADR-19.", recent: false },
+    { id: "E-67", section: "E", status: "done", title: "DeployPlan / DeployReport (FR-1104)",
+      note: "Environment, flag and cohort, rollback, smoke-tested deployment vs. PR merge. Closes DAG stage 13 for all runs, not only experiments: previously a single hardcoded make deploy shell-out with no plan/report split. Delivered on feat/deploy-contract; spec docs/superpowers/specs/2026-08-06-deploy-contract-design.md.", recent: true },
+    { id: "E-68", section: "E", status: "done", title: "deployment target adapters (FR-1105, NG7)",
+      note: "Resolved from config, one reference adapter, no hosting substrate of our own. Delivered on feat/deploy-contract (src/sdlc/deploy/adapters.py, compose + script). ADR-19 (deployment half).", recent: true },
     { id: "E-69", section: "E", status: "notstarted", title: "analytics source adapters (FR-1105, NG7)",
       note: "One reference adapter. See OQ-9: the factory would read a metric from a customer-controlled source to decide keep/kill, which is FR-914's grounding problem inside a system we do not control.", recent: false },
     { id: "E-70", section: "E", status: "notstarted", title: "durable observation + verdict gate (FR-1106, FR-1108)",
       note: "A Temporal timer spans the observation window — the one thing Temporal is uniquely suited to here, since a 14-day wait is exactly what NFR-1 already guarantees. On expiry: collect, evaluate the pre-registered rule, open a keep / kill / extend gate. Insufficient data yields inconclusive, never a favourable read.", recent: false },
     { id: "E-71", section: "E", status: "notstarted", title: "PoC mode (FR-1107)",
-      note: "Bounded budget, explicitly disposable output, preview deployment, recorded decision, and marked so it never silently accrues as production debt.", recent: false }
+      note: "Bounded budget, explicitly disposable output, preview deployment, recorded decision, and marked so it never silently accrues as production debt.", recent: false },
+
+    /* §14 — Pipeline as data — graph interpreter + canvas (FR-1200) */
+    { id: "E-72", section: "E", status: "notstarted", title: "PipelineGraph model + node-type registry (FR-1201)",
+      note: "GraphNode/GraphEdge/NodePort in sdlc/graph/model.py; nodes carry RoleConfig + GateConfig verbatim (not a forked params string), so registry validation, ADR-6 model-inequality and PROMPT_SHAS memo invalidation keep working. content_sha() excludes position/label so tidying the canvas never invalidates a memo. Registry declares each node type's ports, payload types and canonical_stage. Designed 2026-08-06 (brainstorm, no spec yet).", recent: true },
+    { id: "E-73", section: "E", status: "notstarted", title: "GraphRouter + validate.py (FR-1202)",
+      note: "Pure synchronous routing state machine (no Temporal, no I/O) — the bug budget lives here, table-testable in ms. Owns one-output-port-per-activation branching, round-based stale-input invalidation, per-edge max_traversals with exhaustion→ESCALATED (reproducing feature.py:1464), fan-out/collect. validate.py is the single source of truth for graph legality (port compatibility, reachability, every cycle bounded, one entry node), never reimplemented in TS. Designed 2026-08-06.", recent: true },
+    { id: "E-74", section: "E", status: "notstarted", title: "GraphWorkflow replaces _pipeline (FR-1203)",
+      note: "Thin Temporal layer over E-73: dispatch from node.type to the existing handlers (_run_clarify, _run_architect, _dev_task, _gate…), converging on (Activation, PipelineConfig)→Emission; exceptions become fail emissions so error routing is topology. default.graph.yaml expresses today's pipeline and is asserted to reproduce its stage sequence. Big-bang rewrite of feature.py::_pipeline, not strangler-with-parity. Blocked by OQ-10 (in-flight runs at cutover). Designed 2026-08-06.", recent: true },
+    { id: "E-75", section: "E", status: "notstarted", title: "dashboard backend (FR-1204; closes P2 dashboard-backend half)",
+      note: "No backend today: api/http.ts:4 rejects every call, dashboard runs on api/mock. Live run state needs no DB — two new queries on GraphWorkflow (graph_state(), graph()) beside the existing status/pending_decisions/run_summary; only storage is content-addressed graphs/<sha>.yaml; gates/answers are existing signals. The project's first network surface — OQ-11: localhost-bind + no auth near-term, E-60 (FR-1004) is where it stops being acceptable. Designed 2026-08-06.", recent: true },
+    { id: "E-76", section: "E", status: "notstarted", title: "canvas (FR-1205)",
+      note: "@vue-flow/core + dagre auto-layout on the existing Vue 3 + Pinia + Vite stack. One renderer, two modes: runState ⇒ status rings/cost/durations/traversal counters on loop edges/live gate approve-reject; editable ⇒ palette + inspector. Editing a running graph disabled by design. Run.stageIdx (linear) becomes currentNodes:string[]; StageDots.vue maps active nodes through canonical_stage back onto the fixed 15-stage strip. Designed 2026-08-06.", recent: true },
+    { id: "E-77", section: "E", status: "notstarted", title: "graph store + custom-graph benchmark mapping (FR-1206)",
+      note: "Runs record their graph_sha so a post-mortem renders the graph that actually ran, not what it looks like now. Benchmark records derive fix_attempts from inbound-fail-edge traversal counts and round from the router, keeping the §9 measurement axes intact across hand-authored graphs. Designed 2026-08-06.", recent: true }
   ],
 
   /* §8 — Recommended next increments (narrative, ranked) */
