@@ -1,0 +1,21 @@
+services:
+  target:
+    build:
+      context: .
+      args:
+        APP_VERSION: ${IMAGE_TAG:-unset}
+    image: sdlc-deploy-target:${IMAGE_TAG:-unset}
+    environment:
+      HEALTHY: ${HEALTHY:-1}
+    ports:
+      - "18080:8000"
+    # TCP-level readiness so `docker compose up --wait` blocks until the port
+    # is listening -- not just until the container started. A 500 on /health
+    # (HEALTHY=0) still leaves the port open, so the broken-v2 deploy's --wait
+    # succeeds and the smoke check is what catches it.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8000), 1).close()"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 2s
