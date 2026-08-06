@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 from abc import ABC, abstractmethod
 from enum import Enum
+from typing import Literal
 
 
 class ToolchainKind(str, Enum):
@@ -29,6 +30,30 @@ class ToolchainAdapter(ABC):
     # any one present is enough; a project may use only one of several
     # valid conventions (e.g. Python: pyproject.toml OR requirements.txt).
     markers: tuple[str, ...]
+
+    # E-41 (FR-902). Concrete defaults, not abstract: a new adapter that has
+    # not thought about triage yet degrades to "no install command" and the
+    # probe records not_collected, rather than failing to instantiate.
+    test_globs: tuple[str, ...] = ()
+    lockfiles: tuple[str, ...] = ()
+
+    def install_cmd(self, marker: str) -> str | None:
+        """Dependency-install command for the marker detect_with_marker
+        matched, or None where the language has none. Takes the marker
+        because one adapter can serve several conventions (Python:
+        pyproject.toml vs requirements.txt) and the adapter stays pure --
+        it never looks at the filesystem to decide."""
+        return None
+
+    def classify_test_exit(
+            self, code: int) -> Literal["ran", "failed_to_run", "no_tests"]:
+        """Whether the suite RAN, as distinct from whether it PASSED.
+
+        Load-bearing for the triage `runnable` dimension: "tests ran and some
+        failed" and "the suite could not be collected" are different readiness
+        facts, and the exit-code mapping is per-language. The default is the
+        conservative one for a language whose runner has not been mapped."""
+        return "ran" if code == 0 else "failed_to_run"
 
     @abstractmethod
     def test_cmd(self, coverage: bool = True) -> str:
@@ -57,6 +82,29 @@ class ToolchainAdapter(ABC):
 class PythonToolchain(ToolchainAdapter):
     kind = ToolchainKind.PYTHON
     markers = ("pyproject.toml", "requirements.txt", "setup.py", "setup.cfg")
+
+    test_globs = ("test_*.py", "*_test.py", "tests/**/*.py")
+    # requirements.txt is deliberately NOT here: it is a manifest that may or
+    # may not pin. Whether it pins is E-41a's dependency-health question.
+    lockfiles = ("uv.lock", "poetry.lock", "Pipfile.lock")
+
+    def install_cmd(self, marker: str) -> str | None:
+        if marker == "requirements.txt":
+            return "pip install -r requirements.txt"
+        # Non-editable: `pip install -e .` writes *.egg-info into the tree
+        # under audit, and triage must not mutate what it measures. PEP 517
+        # builds `pip install .` in a temporary directory.
+        return "pip install ."
+
+    def classify_test_exit(
+            self, code: int) -> Literal["ran", "failed_to_run", "no_tests"]:
+        # pytest exit codes: 0 ok, 1 tests failed, 2 interrupted,
+        # 3 internal error, 4 usage error, 5 no tests collected.
+        if code in (0, 1):
+            return "ran"
+        if code == 5:
+            return "no_tests"
+        return "failed_to_run"
 
     def test_cmd(self, coverage: bool = True) -> str:
         # --maxfail bounds output like the per-task QA command. pytest-cov
@@ -88,14 +136,24 @@ TOOLCHAINS: dict[ToolchainKind, ToolchainAdapter] = {
 }
 
 
+def detect_with_marker(worktree: str) -> tuple[ToolchainAdapter, str] | None:
+    """Return (adapter, the marker filename that matched) or None.
+
+    E-41 needs to know WHICH marker matched, because install_cmd differs
+    between a packaging marker and a requirements file while the adapter
+    itself stays pure. detect() is the unchanged one-value form."""
+    for adapter in TOOLCHAINS.values():
+        for marker in adapter.markers:
+            if os.path.isfile(os.path.join(worktree, marker)):
+                return adapter, marker
+    return None
+
+
 def detect(worktree: str) -> ToolchainAdapter | None:
     """Return the first adapter whose marker file exists at the worktree root,
     or None for an unrecognized/absent marker (caller degrades gracefully).
 
     Resolves by what was BUILT (marker file), never the contract's claimed
     stack — a marker/claim mismatch is itself a signal (ADR-15)."""
-    for adapter in TOOLCHAINS.values():
-        if any(os.path.isfile(os.path.join(worktree, marker))
-               for marker in adapter.markers):
-            return adapter
-    return None
+    found = detect_with_marker(worktree)
+    return found[0] if found else None
