@@ -962,9 +962,9 @@ competence — a frozen contract, a traceability check, a durable timer, and a g
   common way a "measured" feature ships unmeasurable.
 - [x] **E-67 — `DeployPlan` / `DeployReport`** → FR-1104. Environment, flag and
   cohort, rollback, smoke-tested deployment vs. PR merge. **Closes DAG stage 13
-  for all runs**, not only experiments: today the stage is a single hardcoded
-  `make deploy ENV=staging` with no plan/report split. Needed regardless of
-  whether the outcome loop ships. Delivered on `feat/deploy-contract`; spec `docs/superpowers/specs/2026-08-06-deploy-contract-design.md`.
+  for all runs**, not only experiments: previously the stage was a single
+  hardcoded `make deploy` shell-out with no plan/report split. Delivered on
+  `feat/deploy-contract`; spec `docs/superpowers/specs/2026-08-06-deploy-contract-design.md`.
 - [x] **E-68 — deployment target adapters** → FR-1105, NG7. Resolved from
   config, one reference adapter, no hosting substrate of our own. Delivered on `feat/deploy-contract` (`src/sdlc/deploy/adapters.py`, compose + script).
 - [ ] **E-69 — analytics source adapters** → FR-1105, NG7. One reference
