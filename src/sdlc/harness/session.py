@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from collections import Counter
 
+from pydantic import ValidationError
+
 from ..memory.scrub import scrub
 from ..models import HarnessSession, SessionDigest, SessionEvent
 
@@ -70,3 +72,60 @@ def session_to_jsonl(session: HarnessSession) -> str:
     head = session.model_dump_json(exclude={"events"})
     lines = [head] + [ev.model_dump_json() for ev in session.events]
     return "\n".join(lines) + "\n"
+
+
+def session_to_text(session: HarnessSession) -> str:
+    """Canonical PLAIN-TEXT rendering of a session: one line per event, in the
+    prose form the handoff/deep_review prompts describe.
+
+    Code review #1: the store holds JSONL and load_session returns it raw, but
+    eliciting and verifying prose evidence against raw JSONL drops legitimate
+    claims (a model following its prompt quotes ``file_read oracle/test_app.py``
+    which is not a substring of the JSON object). The model and the grounding
+    verifier must see the SAME representation, and this is it: a faithful quote
+    is a substring, because ``<kind> <target>`` matches the prompts' worked
+    examples.
+    """
+    return _events_to_text(session.events)
+
+
+def session_text_from_jsonl(jsonl: str) -> str:
+    """Render the plain-text view directly from a stored JSONL transcript (the
+    form ``load_session`` returns), so the verifier grounds on the same prose
+    the model was shown.
+
+    Tolerates a truncated trailing line: ``load_session`` byte-caps at
+    ``DEEP_REVIEW_MAX_BYTES``, so the final event line can be cut mid-JSON;
+    a partial line is skipped rather than crashing the render. The first line
+    is the session-metadata header, not an event.
+    """
+    events: list[SessionEvent] = []
+    for i, line in enumerate(jsonl.splitlines()):
+        if i == 0 or not line.strip():
+            continue                       # header / blank
+        try:
+            events.append(SessionEvent.model_validate_json(line))
+        except ValidationError:
+            continue                       # truncated/partial trailing line
+    return _events_to_text(events)
+
+
+def _events_to_text(events: list[SessionEvent]) -> str:
+    lines = [_event_to_line(ev) for ev in events]
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
+def _event_to_line(ev: SessionEvent) -> str:
+    # Prose-style, matching the prompts' worked examples: '<kind> <target>'.
+    if ev.target:
+        lead = f"{ev.kind} {ev.target}"
+    elif ev.tool:
+        lead = f"{ev.kind} {ev.tool}"
+    else:
+        lead = ev.kind
+    tail = ""
+    if ev.kind == "command" and ev.exit_code is not None:
+        tail = f" (exit {ev.exit_code})"
+    if ev.text:
+        tail = (tail + " " if tail else "") + ev.text
+    return lead + tail

@@ -4,7 +4,8 @@ import json
 from sdlc.models import (ArtifactRef, HarnessKind, HarnessRunResult,
                          HarnessSession, SessionDigest, SessionEvent)
 from sdlc.harness.session import (SKELETON_MAX, digest_of, scrub_session,
-                                  session_to_jsonl)
+                                  session_text_from_jsonl, session_to_jsonl,
+                                  session_to_text)
 
 
 def _session(events):
@@ -75,3 +76,38 @@ def test_session_to_jsonl_header_plus_one_line_per_event():
     head = json.loads(lines[0])
     assert head["session_id"] == "s1" and "events" not in head
     assert json.loads(lines[1])["kind"] == "model_turn"
+
+
+def test_session_to_text_renders_one_line_per_event_in_prose_style():
+    """The plain-text view the handoff/deep_review prompts describe and the
+    grounding verifier checks against (code review #1). A faithful quote is
+    a substring: '<kind> <target>' matches the prompts' worked examples."""
+    text = session_to_text(_session([
+        SessionEvent(kind="file_read", target="oracle/test_app.py"),
+        SessionEvent(kind="command", target="pytest", exit_code=0),
+        SessionEvent(kind="model_turn", text="I'll use cookies here"),
+    ]))
+    assert "file_read oracle/test_app.py" in text
+    assert "command pytest (exit 0)" in text
+    assert "I'll use cookies here" in text
+
+
+def test_session_text_from_jsonl_round_trips_the_stored_format():
+    """load_session returns the raw JSONL the store holds; the verifier must
+    see the same prose view the rendered prompt shows, derived from it."""
+    s = _session([SessionEvent(kind="file_read", target="oracle/test_app.py")])
+    assert "file_read oracle/test_app.py" in session_text_from_jsonl(
+        session_to_jsonl(s))
+
+
+def test_session_text_from_jsonl_skips_a_partial_trailing_line():
+    """load_session byte-caps at 512KB; the last line can be truncated
+    mid-JSON. A partial event line must be skipped, not crash the render."""
+    full = session_to_jsonl(_session([
+        SessionEvent(kind="file_read", target="a.py"),
+        SessionEvent(kind="file_write", target="b.py")]))
+    cut = full.rfind('"file_write"')              # inside the last event line
+    truncated = full[:cut] + '{"kind":"file_write","target":"b'   # partial
+    text = session_text_from_jsonl(truncated)
+    assert "file_read a.py" in text
+    assert "file_write" not in text               # partial line dropped

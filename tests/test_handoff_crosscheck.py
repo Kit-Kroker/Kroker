@@ -8,10 +8,24 @@ stops it inventing the quote that supports the claim.
 """
 from sdlc.grounding import Profile, verify_quote
 from sdlc.handoff import claim_survival_score, cross_check_claims
+from sdlc.harness.session import session_text_from_jsonl, session_to_jsonl
 from sdlc.measurement import CollectionState
-from sdlc.models import HandoffClaim
+from sdlc.models import HandoffClaim, HarnessKind, HarnessSession, SessionEvent
 
-SESSION = "file_write src/app.py\nI'll use cookies here\nfile_write src/app.py"
+
+def _render(events):
+    """Build the haystack the way the workflow does: store as JSONL, then
+    render the plain-text view the verifier sees (code review #1). Hand-typed
+    plain-text fixtures hid the JSONL/prose mismatch this test exists to catch."""
+    return session_text_from_jsonl(session_to_jsonl(
+        HarnessSession(harness=HarnessKind.CLAUDE_CODE, events=events)))
+
+
+SESSION = _render([
+    SessionEvent(kind="file_write", target="src/app.py"),
+    SessionEvent(kind="model_turn", text="I'll use cookies here"),
+    SessionEvent(kind="file_write", target="src/app.py"),
+])
 
 
 def test_claim_naming_touched_file_survives():

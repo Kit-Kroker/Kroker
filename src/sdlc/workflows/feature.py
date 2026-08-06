@@ -58,6 +58,7 @@ with workflow.unsafe.imports_passed_through():
     from ..artifacts.retention import (RetentionInput, apply_session_retention,
                                        keep_full_transcripts)
     from ..artifacts.read import LoadSessionInput, load_session
+    from ..harness.session import session_text_from_jsonl
     from ..notify.contract import NotifyInput, NotifyReason, Results
     from ..notify.schedule import build_schedule
     from ..notify.activities import notify
@@ -886,7 +887,9 @@ class FeatureWorkflow:
         try:
             loaded = await workflow.execute_activity(
                 load_session, LoadSessionInput(ref=run.session_ref), **ACT)
-            transcript = loaded.text + (
+            # Code review #1: render the plain-text view both prompts and the
+            # verifier ground on -- raw JSONL would drop legitimate evidence.
+            transcript = session_text_from_jsonl(loaded.text) + (
                 f"\n[transcript truncated; digest follows]\n"
                 f"{run.session_digest.model_dump_json()}"
                 if loaded.truncated and run.session_digest is not None else "")
@@ -1008,11 +1011,16 @@ class FeatureWorkflow:
                 load_session, LoadSessionInput(ref=run.session_ref), **ACT)
             model = resolve_role_model(cfg, "handoff")
             spend = RoleUsage(role="handoff", model=model)
+            # Code review #1: the store holds JSONL, but the prompt elicits
+            # prose evidence and the verifier must ground on the SAME bytes the
+            # model saw -- so both consume the rendered plain-text view, not
+            # raw JSONL (which would drop every legitimate claim).
+            session_text = session_text_from_jsonl(loaded.text)
             out = (await self._run_role(
                 cfg, "handoff", model, t_handoff,
                 "Frozen contract assertions:\n- " + "\n- ".join(assertions)
                 + f"\nDiff:\n{diff['patch']}"
-                + "\nScrubbed harness transcript:\n" + loaded.text,
+                + "\nScrubbed harness transcript:\n" + session_text,
                 into=spend)).output
 
             kept_total = 0
@@ -1020,7 +1028,7 @@ class FeatureWorkflow:
             fields = {}
             for name in ("what_changed", "decisions_made", "open_concerns"):
                 checked = cross_check_claims(
-                    getattr(out, name), files, session_text=loaded.text)
+                    getattr(out, name), files, session_text=session_text)
                 fields[name] = checked.kept
                 kept_total += len(checked.kept)
                 dropped_total += checked.dropped_paths + checked.dropped_quotes
