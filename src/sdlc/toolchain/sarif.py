@@ -44,12 +44,24 @@ def _first_location_path(res: dict) -> str:
 
 
 def findings_from_sarif(doc: dict) -> list[SecurityFinding]:
+    return _findings_and_skipped(doc)[0]
+
+
+def _findings_and_skipped(doc: dict) -> tuple[list[SecurityFinding], int]:
+    """Walk a SARIF doc's results arrays. Returns (findings, skipped_result_entries).
+
+    `skipped` counts result entries that were present but not a dict we could
+    parse into a SecurityFinding. report_from_sarif uses it to tell a clean
+    scan (results empty or fully parsed) from an unreadable one (results had
+    entries but none parsed) -- code review #2.
+    """
     findings: list[SecurityFinding] = []
+    skipped = 0
     if not isinstance(doc, dict):
-        return findings
+        return findings, skipped
     runs = doc.get("runs")
     if not isinstance(runs, list):
-        return findings
+        return findings, skipped
     for run in runs:
         if not isinstance(run, dict):
             continue
@@ -58,6 +70,7 @@ def findings_from_sarif(doc: dict) -> list[SecurityFinding]:
             continue
         for res in results:
             if not isinstance(res, dict):
+                skipped += 1
                 continue
             severity = _LEVEL_TO_SEVERITY.get(res.get("level", "warning"), "high")
             message = res.get("message")
@@ -67,7 +80,7 @@ def findings_from_sarif(doc: dict) -> list[SecurityFinding]:
                 rule=str(res.get("ruleId") or "sarif"),
                 detail=str(detail or ""),
                 path=_first_location_path(res)))
-    return findings
+    return findings, skipped
 
 
 def report_from_sarif(doc: dict) -> SecurityReport:
@@ -78,7 +91,16 @@ def report_from_sarif(doc: dict) -> SecurityReport:
     if not _is_well_formed(doc):
         return SecurityReport(critical=0, state=CollectionState.NOT_COLLECTED,
                               reason="SARIF document malformed or partial")
-    findings = findings_from_sarif(doc)
+    findings, skipped = _findings_and_skipped(doc)
+    # Code review #2: a results array that had entries but yielded zero
+    # parseable findings is an unreadable scan, byte-identical to nothing if
+    # it read MEASURED -- the exact conflation one level below the document
+    # shape check. A genuinely empty results list (clean scan) has skipped=0
+    # and stays MEASURED.
+    if not findings and skipped:
+        return SecurityReport(
+            critical=0, state=CollectionState.NOT_COLLECTED,
+            reason=f"SARIF results array had {skipped} entry/ies, none parseable")
     critical = sum(1 for f in findings if f.severity == "critical")
     return SecurityReport(critical=critical, findings=findings,
                           state=CollectionState.MEASURED)
