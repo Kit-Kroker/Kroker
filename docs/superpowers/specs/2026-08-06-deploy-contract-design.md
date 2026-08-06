@@ -137,11 +137,12 @@ flowchart TB
 
 | Activity | Retry policy | Notes |
 |---|---|---|
+| `deploy_current_version` | 3 attempts | Read-only and idempotent, so retrying is free. Best-effort read of what is running now, BEFORE anything changes. |
 | `deploy_apply` | 2 attempts | Long-running, heartbeating via the existing `_long_act` treatment — an image build takes minutes. Build failures are deterministic; the second attempt exists for registry/network blips. Refuses a plan with `frozen=False`. |
 | `smoke_check` | 1 attempt | Polls for readiness within `readiness_timeout_s`, then runs each check exactly once. **Never raises on an assertion failure** — transport problems become `errored` results. Retrying here would mask the signal being collected; readiness polling is the activity's job, not the retry policy's. |
 | `deploy_rollback` | 5 attempts, backoff | The safety operation. A failed rollback is the worst outcome in the system, so it is retried hardest. |
 
-`current_version_cmd` runs *before* apply, inside `deploy_apply`, so `rolled_back_to` is known before anything changes.
+`deploy_current_version` is a **separate activity** running before `deploy_apply`, so the prior version lands in workflow state before anything changes. Folding it into `deploy_apply` would lose it whenever apply raises — which is exactly when §7 requires a rollback. A failed or empty probe returns `None` and is not an error; it means there is no rollback target.
 
 ### 5.2 Parent wiring
 
