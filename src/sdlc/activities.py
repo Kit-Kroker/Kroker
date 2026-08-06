@@ -819,14 +819,23 @@ async def read_committed_bytes(inp: CommittedBytesInput) -> str | None:
     """E-43/FR-914's third byte-source: the file's content at a pinned commit,
     for verifying a quote against `path@commit_sha`.
 
-    Returns None -- never raises -- when the path or sha does not resolve
-    (deleted file, bad sha, not a repository). The caller records a
-    `source_unavailable` Violation; fail-closed means "unverified", not
-    "crash". Pure read: no checkout, no worktree mutation, so it is
-    reproducible across Temporal retries.
+    Returns None -- never raises -- when the path or sha does not resolve, OR
+    when the path resolves to something other than a file: `git show sha:dir`
+    returns the tree listing with exit 0, which is not the file's bytes (code
+    review #4). An empty file resolves to "" (its actual bytes) -- callers
+    must distinguish None (unresolved) from "" (resolved empty) rather than
+    use truthiness.
+
+    The caller records a `source_unavailable` Violation; fail-closed means
+    "unverified", not "crash". Pure read: no checkout, no worktree mutation,
+    so it is reproducible across Temporal retries.
     """
+    ref = f"{inp.commit_sha}:{inp.path}"
     try:
-        proc = _git(["show", f"{inp.commit_sha}:{inp.path}"], cwd=inp.repo_dir)
+        kind = _git(["cat-file", "-t", ref], cwd=inp.repo_dir)
+        if kind.returncode != 0 or kind.stdout.strip() != "blob":
+            return None
+        proc = _git(["show", ref], cwd=inp.repo_dir)
     except OSError:
         return None
     if proc.returncode != 0:
