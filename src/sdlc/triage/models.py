@@ -78,3 +78,53 @@ class RepoTriage(BaseModel):
     toolchain: str | None = None                # None is a finding, not an error
     readiness: Readiness
     signals: list[SignalResult] = Field(default_factory=list)
+
+
+# The four reserved metric keys carrying FR-901's readiness dimensions.
+# Exactly ONE signal may report each: build_probe owns buildable/runnable,
+# baseline owns tests_present/structure_discernible. A duplicate is FR-902's
+# one-implementation rule being broken, so compute_readiness raises rather
+# than silently preferring one producer.
+M_BUILDABLE = "buildable"
+M_RUNNABLE = "runnable"
+M_TESTS_PRESENT = "tests_present"
+M_STRUCTURE = "structure_discernible"
+READINESS_KEYS: tuple[str, ...] = (
+    M_BUILDABLE, M_RUNNABLE, M_TESTS_PRESENT, M_STRUCTURE)
+
+
+def compute_readiness(signals: list[SignalResult]) -> Readiness:
+    """The ONLY producer of Verdict (spec D4). No caller sets it, so the
+    artifact cannot disagree with its own inputs.
+
+    Any dimension that is not MEASURED -- because a signal reported
+    not_collected/unknown, or because no signal reported it at all -- forces
+    INDETERMINATE. An unmeasured dimension never reads as READY: that is the
+    conflation E-40 removed from SecurityReport, and FR-903 gates the Tier 2
+    audit on this verdict.
+    """
+    reported: dict[str, Measurement] = {}
+    for sig in sorted(signals, key=lambda s: s.signal):
+        for key, m in sig.metrics.items():
+            if key not in READINESS_KEYS:
+                continue                      # signals may carry other metrics
+            if key in reported:
+                raise ValueError(
+                    f"readiness key {key!r} reported by more than one signal "
+                    f"(second was {sig.signal!r}) -- exactly one signal owns "
+                    f"each dimension (FR-902)")
+            reported[key] = m
+
+    dims = {
+        key: reported.get(key)
+        or Measurement.not_collected(f"no signal reported {key}")
+        for key in READINESS_KEYS
+    }
+
+    if any(m.state is not CollectionState.MEASURED for m in dims.values()):
+        verdict = Verdict.INDETERMINATE
+    elif all((m.value or 0.0) > 0 for m in dims.values()):
+        verdict = Verdict.READY
+    else:
+        verdict = Verdict.NOT_READY
+    return Readiness(**dims, verdict=verdict)
