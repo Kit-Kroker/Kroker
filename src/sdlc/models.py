@@ -907,6 +907,20 @@ class ResearchConfig(BaseModel):
     catch and degrade, not an uncaught crash."""
 
 
+class DeployConfig(BaseModel):
+    """FR-1105: the hosting target is an adapter resolved from configuration,
+    not a choice an agent makes. Off by default (D-9)."""
+    enabled: bool = False
+    adapter: Literal["compose", "script"] = "compose"
+    # compose: base URL http smoke checks resolve against. The port is a
+    # deployment fact the planner cannot know at plan time, so it lives here
+    # rather than in the frozen DeployPlan.
+    base_url: str | None = None
+    # script: overrides for the deploy/rollback/version make targets.
+    commands: dict[str, str] = Field(default_factory=dict)
+    readiness_timeout_s: int = Field(default=60, ge=1)
+
+
 class PipelineConfig(BaseModel):
     execution_mode: ExecutionMode = ExecutionMode.SERIAL
     max_session_resumes: int = 3            # FR-802: past this, fresh session
@@ -958,6 +972,7 @@ class PipelineConfig(BaseModel):
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     memoization_enabled: bool = False
     research: ResearchConfig = Field(default_factory=ResearchConfig)
+    deploy: DeployConfig = Field(default_factory=DeployConfig)
     research_enabled: bool = False          # FR-107: off by default; the
                                             # default pipeline is unchanged
                                             # until a project opts in
