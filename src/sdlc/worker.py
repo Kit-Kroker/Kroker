@@ -53,6 +53,10 @@ from .research.stage import (plan_research, research_subquestion,
 from .research.verify import verify_brief_activity
 from .workflows.feature import FeatureWorkflow
 from .workflows.reflect import ReflectWorkflow
+from .deploy.activities import (
+    deploy_apply, deploy_current_version, deploy_rollback, smoke_check,
+)
+from .workflows.deployment import DeploymentWorkflow
 
 TASK_QUEUE = "ai-sdlc"
 
@@ -79,13 +83,15 @@ async def main() -> None:
     worker = Worker(
         client,
         task_queue=TASK_QUEUE,
-        workflows=[FeatureWorkflow, BenchmarkWorkflow, ReflectWorkflow],
+        workflows=[FeatureWorkflow, BenchmarkWorkflow, ReflectWorkflow,
+                   DeploymentWorkflow],
         activities=[
             create_worktree, setup_integration_branch, merge_into_integration,
             run_coding_task, run_integration_checks, run_lint, run_test_suite,
             security_scan,
             measure_coverage,
             open_pull_request, deploy,
+            deploy_current_version, deploy_apply, smoke_check, deploy_rollback,
             read_committed_bytes,
             evaluate_gate, get_task_diff, record_benchmark, judge_artifact,
             load_case_assets, finalize_benchmark_report,
