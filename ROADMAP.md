@@ -196,8 +196,11 @@ as tracked rather than accidental.
 
 ### Assessment, Tier 0 — triage (FR-900) *(new scope; PRD v1.1)*
 
-- [ ] **FR-901** triage stage → `RepoTriage` + readiness verdict; completes on repos that do not build (E-42).
-- [ ] **FR-902** hygiene signal set via FR-108 adapters, one implementation per signal (E-41).
+- [ ] **FR-901** triage stage → `RepoTriage` + readiness verdict; completes on repos that do not build (E-42). *Artifact landed with E-41 (2026-08-06); the stage and the readiness gate are E-42.*
+- [ ] ⚠️ **FR-902** hygiene signal set via FR-108 adapters, one implementation
+  per signal — three of seven landed (build probe, secrets incl. client-bundle
+  reachability, baseline practice); dependency health, dead/scaffold code,
+  framework misconfig and size/duplication outliers are E-41a–d.
 - [ ] **FR-903** readiness gate blocking Tier 2, overridable by audited decision (E-42).
 - [ ] **FR-904** `mechanically_fixable` → brownfield child runs + before/after re-triage (E-44).
 
@@ -206,7 +209,7 @@ as tracked rather than accidental.
 - [ ] **FR-911** `AssessmentWorkflow` EDCR DAG, report-after-assess, no phase-status file (E-45); `/enrich` as a declared stage input rather than a phase (E-56).
 - [ ] **FR-912** deterministic scan memoized on `(tree hash, signal version)`; cross-source confidence (E-46).
 - [ ] **FR-913** `CapabilityMap` with content-derived stable ids + coverage floor + orphan classification — **also satisfies FR-102** (E-47/E-48). Blocked on **OQ-6** (what canonical key survives refactoring).
-- [ ] **FR-914** byte-exact quote verification against the pinned commit, fail-closed — shares FR-107's verifier (E-43). *Partially landed 2026-08-06 (`grounding.py`: one substring invariant, two normalization profiles, verdict-only) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The verifier + research/handoff/deep-review consumers landed; stays open until an assessment stage consumes the `read_committed_bytes` commit source.*
+- [ ] **FR-914** byte-exact quote verification against the pinned commit, fail-closed — shares FR-107's verifier (E-43). *Partially landed 2026-08-06 (`grounding.py`: one substring invariant, two normalization profiles, verdict-only) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The verifier + research/handoff/deep-review consumers landed; the commit source gained its first consumer with E-41's secrets signal (2026-08-06), which re-verifies every emitted evidence quote against the pinned commit; stays open until an LLM-proposing assessment stage cites the same way, which is where the check stops being a drift guard.*
 - [ ] **FR-915** `not_collected` / `unknown` vs measured value (E-40). *Contract half landed 2026-08-06 (`measurement.py`, retrofitted onto `CoverageReport`/`SecurityReport`/`claim_survival_score`; `QAReport.coverage_pct` deleted) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The `RepoTriage`/triage half is deferred to E-41; the load-bearing case was the SARIF-malformed-reads-as-clean hole on the absolute floor.*
 - [ ] **FR-916** STRIDE + vuln classification + control coverage + composites with 1–3 specific drivers (E-49).
 - [ ] **FR-917** risk thresholds as deterministic gate checks; FP dispositions as audited overrides (E-50).
@@ -249,7 +252,7 @@ as tracked rather than accidental.
 - [x] **NFR-6** Reproducibility vs memoization — watermark-pinned recall + content-addressed cache. *Pinning is exact on `fake` (entry-count cutoff) and a `mentioned_at` cutoff on `hindsight`, which has no point-in-time read: memories retained after the freeze cannot enter a stage input, but ranking is still contaminated by them and post-freeze consolidation can mint observations carrying pre-freeze timestamps. `2026-08-02-hindsight-real-integration-design` §2.1.*
 - [x] **NFR-7** Portability — `MemoryConfig.backend` defaults to `fake`; real Hindsight client for self-hosting, verified against a live container by `tests/test_hindsight_live.py` (the client shipped before 2026-08-02 implemented an invented API and could not have worked).
 - [ ] **NFR-8** Tenant isolation proven by adversarial cross-tenant read/recall test — no tenant concept exists yet (E-58).
-- [ ] **NFR-9** Hostile input — the factory currently assumes repositories are its own. Build scripts, test code, and manifests of a connected repo are attacker-controlled and executed (E-57).
+- [ ] **NFR-9** Hostile input — the factory currently assumes repositories are its own. Build scripts, test code, and manifests of a connected repo are attacker-controlled and executed (E-57). **E-41's build probe is the first stage that knowingly executes a foreign repository's code** (bounded, in a throwaway clone, as the worker user with network access). Operator-run only until E-57/E-21.
 - [ ] — **NFR-10** Assessment reproducibility — not falsifiable until the assessment exists; the deterministic half is E-41/E-46, the fused-layer variance half needs runs.
 
 ---
@@ -768,21 +771,30 @@ which makes it the shortest path to a demonstrable assess → fix → prove loop
   `report_from_sarif` returned `critical=0` for a malformed document. That is
   now `not_collected`, and `security_no_critical` split into
   `security_scan_collected` + `security_no_critical` so an unmeasurable floor
-  cannot be silently satisfied. **`RepoTriage` deferred to E-41**, where the
-  signals that populate it are designed. FR-915 stays open until then.
-- [ ] **E-41 — deterministic hygiene signals** → FR-902, FR-108.
-  Build and run probe; secret scan including **credentials reachable from
-  client-side bundles**; dependency health (unpinned / known-vulnerable /
-  unused / duplicated); dead and generator-scaffold code; framework-default
-  misconfiguration (unauthenticated routes, permissive CORS, world-readable
-  storage); size and duplication outliers; missing baseline practice. Each is an
-  activity behind the FR-108 adapter that already resolves by marker file.
-  **One implementation per signal, deliberately:** BrownKit ships bash,
-  PowerShell *and* Python variants of `detect-stack`, `find-secrets`,
-  `git-churn`, `parse-coverage`, `list-manifests` — three behaviours to keep in
-  sync and three ways for a finding to differ by host. Client-bundle secret
-  reachability is called out separately because it is the highest-yield
-  vibe-code finding and no generic secret scanner looks for it.
+  cannot be silently satisfied. **`RepoTriage` landed with E-41** (2026-08-06),
+  where the signals that populate it are designed. FR-915's triage half is
+  therefore closed.
+- [ ] ⚠️ **E-41 — deterministic hygiene signals** → FR-902, FR-108.
+  *Contracts + seam + three signals landed (2026-08-06):* `src/sdlc/triage/`
+  ships `RepoTriage`/`TriageFinding`/`Readiness` (closing the half **E-40**
+  deferred here), a one-activity-per-signal seam, and **build probe**,
+  **secret scan** (including client-bundle-reachable credentials) and
+  **baseline practice**. Readiness is three-valued: any dimension that is not
+  MEASURED forces `INDETERMINATE`, so an unmeasured repository can never read
+  as ready for the FR-903 gate. The build probe **executes the triaged
+  repository's own code** in a throwaway clone at the pinned commit — an
+  operator-authorization trust boundary, not a solved one (see NFR-9; removed
+  by E-57/E-21). Remaining four families are **E-41a–d**. Spec
+  `docs/superpowers/specs/2026-08-06-repository-triage-hygiene-signals-design.md`,
+  plan `docs/superpowers/plans/2026-08-06-repository-triage-hygiene-signals.md`.
+- [ ] **E-41a** dependency health — unpinned / known-vulnerable / unused /
+  duplicated, behind the FR-108 adapter.
+- [ ] **E-41b** dead and generator-scaffold code. Also sharpens
+  `structure_discernible`, which E-41 ships as a deliberate floor (a repository
+  that is entirely untouched scaffolding currently passes it).
+- [ ] **E-41c** framework-default misconfiguration — unauthenticated routes,
+  permissive CORS, world-readable storage.
+- [ ] **E-41d** size and duplication outliers.
 - [ ] **E-42 — `TriageWorkflow` + readiness verdict + readiness gate** → FR-901,
   FR-903. Readiness (buildable / runnable / tests present / structure
   discernible) computed from deterministic signals **only**, so triage completes

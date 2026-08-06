@@ -51,6 +51,9 @@ from .pricing import price_usage
 from .research.stage import (plan_research, research_subquestion,
                              synthesize_brief)
 from .research.verify import verify_brief_activity
+from .triage.activities import (
+    triage_baseline, triage_build_probe, triage_secrets,
+)
 from .workflows.feature import FeatureWorkflow
 from .workflows.reflect import ReflectWorkflow
 from .deploy.activities import (
@@ -107,6 +110,7 @@ async def main() -> None:
             plan_research,
             research_subquestion,
             synthesize_brief,
+            triage_baseline, triage_secrets, triage_build_probe,
             *agent_activities,
         ],
     )
