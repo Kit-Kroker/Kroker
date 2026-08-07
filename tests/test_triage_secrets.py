@@ -158,6 +158,16 @@ def test_no_env_tracked_means_no_env_findings():
     assert secrets.env_file_findings(["src/a.py"]) == []
 
 
+def test_is_over_size_limit_counts_bytes_not_characters():
+    # The bound is on bytes; a str of mostly-multibyte chars must be measured
+    # by its UTF-8 length, not its character count.
+    assert not secrets.is_over_size_limit("x" * secrets.MAX_BLOB_BYTES)
+    assert secrets.is_over_size_limit("x" * (secrets.MAX_BLOB_BYTES + 1))
+    # U+FFFF is 3 UTF-8 bytes: ~333k such characters already exceed 1MB of bytes
+    # even though their character count is well under MAX_BLOB_BYTES.
+    assert secrets.is_over_size_limit("\uffff" * 333334)
+
+
 def test_nested_env_files_are_matched():
     # The monorepo shape: backend service + web app each carry a nested .env.
     found = secrets.env_file_findings(["backend/.env", "apps/web/.env.local"])

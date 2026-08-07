@@ -95,7 +95,7 @@ async def triage_secrets(inp: TriageSignalInput) -> SignalResult:
         findings = list(secrets.env_file_findings(paths))
         for path in paths:
             blob = read_blob(inp.repo_dir, inp.commit_sha, path)
-            if blob is None or len(blob) > secrets.MAX_BLOB_BYTES:
+            if blob is None or secrets.is_over_size_limit(blob):
                 continue
             if "\x00" in blob:                     # binary; nothing to quote
                 continue
