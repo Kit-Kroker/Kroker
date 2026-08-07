@@ -21,7 +21,7 @@ from temporalio import activity
 from ..activities import _bounded_shell, _git
 from ..grounding import Profile, verify_quote
 from ..measurement import Measurement
-from ..toolchain.adapters import detect_with_marker
+from ..toolchain.adapters import detect_with_marker, detect_with_marker_from_paths
 from .models import SignalResult
 from .signals import baseline, build_probe, secrets
 
@@ -68,7 +68,7 @@ async def triage_baseline(inp: TriageSignalInput) -> SignalResult:
         if ".gitignore" in paths:
             gitignore = read_blob(inp.repo_dir, inp.commit_sha,
                                   ".gitignore") or ""
-        found = detect_with_marker(inp.repo_dir)
+        found = detect_with_marker_from_paths(paths)
         return baseline.evaluate(paths, gitignore,
                                  found[0] if found else None)
     except Exception as exc:                       # noqa: BLE001 -- see docstring

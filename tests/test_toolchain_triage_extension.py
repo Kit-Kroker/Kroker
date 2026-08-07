@@ -7,6 +7,7 @@ import pytest
 
 from sdlc.toolchain.adapters import (
     PythonToolchain, ToolchainKind, detect, detect_with_marker,
+    detect_with_marker_from_paths,
 )
 
 
@@ -57,3 +58,23 @@ def test_detect_with_marker_is_none_for_unrecognized_tree(tmp_path):
 def test_detect_still_returns_just_the_adapter(tmp_path):
     (tmp_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
     assert detect(str(tmp_path)).kind is ToolchainKind.PYTHON
+
+
+def test_detect_with_marker_from_paths_matches_a_root_marker():
+    found = detect_with_marker_from_paths(
+        ["pyproject.toml", "src/app.py", "README.md"])
+    assert found is not None
+    adapter, marker = found
+    assert adapter.kind is ToolchainKind.PYTHON
+    assert marker == "pyproject.toml"
+
+
+def test_detect_with_marker_from_paths_ignores_a_nested_marker():
+    # A marker nested under a subdir is not a root-level toolchain marker.
+    assert detect_with_marker_from_paths(
+        ["src/pyproject.toml", "app.py"]) is None
+
+
+def test_detect_with_marker_from_paths_is_none_for_unrecognized_paths():
+    assert detect_with_marker_from_paths(
+        ["README.md", "docs/guide.md"]) is None

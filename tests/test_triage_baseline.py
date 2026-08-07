@@ -153,3 +153,26 @@ async def test_activity_reports_not_collected_on_a_bad_sha(tmp_path):
         repo_dir=str(tmp_path), commit_sha="0" * 40))
     assert r.collected.state is CollectionState.NOT_COLLECTED
     assert r.findings == []
+
+
+@pytest.mark.asyncio
+async def test_activity_resolves_toolchain_from_pinned_commit_not_worktree(tmp_path):
+    # D6: the toolchain is resolved from the pinned commit's tracked tree,
+    # never the operator's live working checkout. A clean, tested repo whose
+    # checkout merely lost the marker file must still resolve Python and count
+    # its tests -- resolving from the worktree would drop the toolchain,
+    # fabricate a no_tests finding and force INDETERMINATE readiness.
+    sha = _commit_repo(tmp_path, {
+        "pyproject.toml": "[project]\n",
+        "uv.lock": "",
+        "README.md": "x\n",
+        ".gitignore": ".env\n",
+        ".github/workflows/ci.yml": "",
+        "tests/test_app.py": "def test():\n    pass\n",
+    })
+    (tmp_path / "pyproject.toml").unlink()      # gone from the checkout, not the commit
+    r = await triage_baseline(
+        TriageSignalInput(repo_dir=str(tmp_path), commit_sha=sha))
+    assert r.collected.state is CollectionState.MEASURED
+    assert "no_tests" not in _rules(r)
+    assert r.metrics[M_TESTS_PRESENT].value == 1.0

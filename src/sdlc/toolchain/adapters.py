@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from enum import Enum
 from typing import Literal
 
@@ -145,6 +146,25 @@ def detect_with_marker(worktree: str) -> tuple[ToolchainAdapter, str] | None:
     for adapter in TOOLCHAINS.values():
         for marker in adapter.markers:
             if os.path.isfile(os.path.join(worktree, marker)):
+                return adapter, marker
+    return None
+
+
+def detect_with_marker_from_paths(
+        paths: Sequence[str]) -> tuple[ToolchainAdapter, str] | None:
+    """The pinned-commit form of detect_with_marker: resolve (adapter, marker)
+    from repo-relative tracked paths instead of statting a checkout.
+
+    Markers are root-level files, so a marker is present at the pinned commit
+    iff its bare name is among the root-level paths (``git ls-tree`` emits
+    forward-slash repo-relative paths, root files carry no separator). Triage
+    signals over a pinned commit MUST use this, not detect_with_marker on the
+    repo_dir: the operator's live working checkout can diverge from commit_sha,
+    so resolving the toolchain from it produces false findings (spec D6)."""
+    root = {p for p in paths if "/" not in p}
+    for adapter in TOOLCHAINS.values():
+        for marker in adapter.markers:
+            if marker in root:
                 return adapter, marker
     return None
 
