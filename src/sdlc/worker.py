@@ -40,6 +40,9 @@ from .benchmarks.oracle import grade_oracle
 from .benchmarks.recorder import record_benchmark
 from .benchmarks.report import finalize_benchmark_report
 from .benchmarks.workflow import BenchmarkWorkflow
+from .board.activities import (attach_task_evidence,
+                               publish_artifact_version,
+                               set_task_authoritative, sync_plan_tasks)
 from .harness.adapters import check_harness_versions
 from .memoization.activities import cache_get, cache_put
 from .memory.activities import (
@@ -106,6 +109,8 @@ async def main() -> None:
             price_usage,
             apply_session_retention,
             load_session,
+            publish_artifact_version, sync_plan_tasks,
+            set_task_authoritative, attach_task_evidence,
             verify_brief_activity,
             plan_research,
             research_subquestion,
