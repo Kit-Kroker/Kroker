@@ -143,7 +143,7 @@ PRICE_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
 EXPORT_ACT = dict(start_to_close_timeout=timedelta(minutes=2),
                   retry_policy=RetryPolicy(maximum_attempts=1))
 
-# E-40: the board is NOT best-effort like EXPORT_ACT. Agents read tasks from
+# E-78: the board is NOT best-effort like EXPORT_ACT. Agents read tasks from
 # it, so a lost write is a correctness bug, not a missing report. The store's
 # writes are idempotent (sync uses ON CONFLICT DO NOTHING), so retrying is
 # safe.
@@ -576,7 +576,7 @@ class FeatureWorkflow:
         # counter keeps (gate, round) unique and replay-deterministic where a
         # per-task round would collide.
         self._escalation_round: int = 0
-        # E-40: surrogate artifact_version.id of the current plan, captured
+        # E-78: surrogate artifact_version.id of the current plan, captured
         # when the plan stage publishes. Task board writes key off it.
         self._plan_version: int | None = None
 
@@ -613,7 +613,7 @@ class FeatureWorkflow:
             outcome=outcome, fix_attempts=fix_attempts, error=error,
         )
 
-    # ----------------------- board (E-40) -------------------------------
+    # ----------------------- board (E-78) -------------------------------
 
     async def _board_publish(self, cfg: PipelineConfig, key: str,
                              content_json: str, *, approved: bool = True
@@ -2169,10 +2169,13 @@ class FeatureWorkflow:
             cfg, "plan", plan.model_dump_json(), approved=gate.approved)
         if not gate.approved:
             return "rejected:plan"
-        await self._board_sync_tasks(cfg, self._plan_version, plan.tasks)
         graph_error = _validate_task_graph(plan.tasks)
         if graph_error:
             return f"failed:plan-validation:{graph_error}"
+        # Sync tasks only after the graph is valid — an invalid plan would
+        # otherwise leave PENDING rows that never move and permanently skew
+        # /stats for the project.
+        await self._board_sync_tasks(cfg, self._plan_version, plan.tasks)
 
         # 4. DEV / TEST / DEVOPS tasks — ADR-13: serial by default;
         # wave mode parallelizes, but tasks sharing declared overlaps
@@ -2187,8 +2190,19 @@ class FeatureWorkflow:
             _merge_task (Resolution B: merging inside run_one would race
             the integration worktree under wave mode's asyncio.gather)."""
             await self._board_task_status(cfg, t.id, TaskStatus.IN_PROGRESS)
-            r = await self._dev_task(t, repo_path, self._integration_head,
-                                     cfg, handoffs)
+            try:
+                r = await self._dev_task(t, repo_path, self._integration_head,
+                                         cfg, handoffs)
+            except Exception as exc:
+                # _dev_task's own fix loop is exhausted before it raises, so a
+                # propagating exception means the run is aborting. Record a
+                # terminal status so the board (which agents read for live
+                # state) does not leave this task looking forever in_progress
+                # — indistinguishable from a task still running.
+                await self._board_task_status(
+                    cfg, t.id, TaskStatus.FAILED,
+                    error=f"unhandled: {type(exc).__name__}: {exc}")
+                raise
             _BOARD_STATUS = {"done": TaskStatus.DONE,
                              "failed": TaskStatus.FAILED,
                              "quarantined": TaskStatus.QUARANTINED}

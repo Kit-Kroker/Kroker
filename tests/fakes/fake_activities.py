@@ -125,16 +125,22 @@ async def fake_attach_task_evidence(inp: AttachEvidenceInput) -> ArtifactRef:
                        uri="file:///fake/evidence", sha256="0" * 64)
 
 
+# E-78: same-named no-op fakes for the board activities. The workflow now
+# issues board writes at clarify/architecture/plan/task; the e2e worker
+# registers these so dispatch resolves without touching a real SQLite DB
+# (the store's behaviour is unit-tested in test_board_*.py). Exported
+# separately as BOARD_FAKES so a temporal test can swap them out for the real
+# activities and exercise the board end-to-end (test_board_workflow.py).
+BOARD_FAKES = [
+    fake_publish_artifact_version, fake_sync_plan_tasks,
+    fake_set_task_authoritative, fake_attach_task_evidence,
+]
+
 GIT_FAKES = [
     fake_setup_integration_branch, fake_create_worktree, fake_run_coding_task,
     fake_get_task_diff, fake_run_test_suite, fake_run_lint,
     fake_merge_into_integration, fake_open_pull_request,
     fake_security_scan, fake_measure_coverage, fake_run_integration_checks,
     price_usage,   # E-33: real activity — pure local table lookup, no network
-    # E-40: same-named no-op fakes for the board activities. The workflow now
-    # issues board writes at clarify/architecture/plan/task; the e2e worker
-    # registers these so dispatch resolves without touching a real SQLite DB
-    # (the store's behaviour is unit-tested in test_board_*.py).
-    fake_publish_artifact_version, fake_sync_plan_tasks,
-    fake_set_task_authoritative, fake_attach_task_evidence,
+    *BOARD_FAKES,
 ]

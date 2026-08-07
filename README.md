@@ -63,6 +63,19 @@ worker together, all reading secrets from `.env` (`env_file:`) — copy
 so `logfire_setup.configure()` doesn't crash-loop on a missing module when
 `LOGFIRE_TOKEN` is set. `docker compose up`.
 
+**Agent board API.** Optional, read-mostly service over the board the pipeline
+writes as it runs (`$SDLC_BOARD_DB`, default `runs/board.sqlite3`):
+
+```bash
+uvicorn interfaces.dashboard.api.main:app --host 127.0.0.1 --port 8500
+```
+
+`GET /projects/{p}` for artifacts + task rollup, `/artifacts/{key}` for version
+lineage, `/tasks?status=`, `/events` for the change log, `/stats` for board
+counters. Agents claim work with `POST /projects/{p}/tasks/{id}/claim` and an
+`If-Match: <row_version>` header. **Bind to localhost** — there is no auth yet,
+and the `X-Actor` header identifying a writer is self-asserted (ROADMAP OQ-11).
+
 **Deploy (stage 13).** Off by default. Enable per project with
 `PipelineConfig.deploy` — `adapter: compose` (reference) or `script`
 (`make deploy` / `make rollback` / `make version`). The stage applies a
@@ -104,6 +117,12 @@ not be evaluated is `errored` and never counts as a pass.
   normalised, scrubbed, claim-checked transcript (ADR-16) — so *how* a diff
   was reached is a first-class signal, not just the diff. The default
   reviewer never reads it; the opt-in `deep_review` lens does (ADR-6).
+- The **agent board** (ADR-21) persists what only Temporal history used to
+  hold: `requirements` / `architecture` / `plan` versioned per project with
+  lineage, plus task status and an append-only change log. Two status columns —
+  the workflow writes `authoritative_status`, agents may only move the live
+  `status`. Stats and scoring read the former, so a confused agent corrupts the
+  live view and nothing else, and replay stays the source of truth.
 - Cross-harness review: configure `roles["reviewer"]` with a different
   harness/model family than `roles["dev"]`.
 - Harness is a config axis, not a fork: `claude -p` and `opencode run` are

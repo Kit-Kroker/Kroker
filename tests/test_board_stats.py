@@ -72,3 +72,25 @@ def test_stats_counts_events(seeded):
     s = store.stats("proj")
     # 1 artifact publish + 2 task creations
     assert s.event_count == 3
+
+
+def test_attach_evidence_re_execution_is_idempotent(seeded):
+    """Temporal re-execution of attach_task_evidence must not double the
+    evidence rows. Dedupes on (task, run_id, kind, sha256)."""
+    store, vid = seeded
+    ref1 = store.attach_task_evidence("proj", vid, "T01", "run-1", "qa",
+                                      b'{"passed":true}')
+    ref2 = store.attach_task_evidence("proj", vid, "T01", "run-1", "qa",
+                                      b'{"passed":true}')
+    assert ref1.sha256 == ref2.sha256
+    ev = store.list_evidence("proj", vid, "T01")
+    assert len(ev) == 1, "re-execution must not duplicate evidence"
+
+
+def test_attach_evidence_distinct_content_both_kept(seeded):
+    """Two QA runs that produce different reports are separate observations,
+    not a retry — both are kept."""
+    store, vid = seeded
+    store.attach_task_evidence("proj", vid, "T01", "run-1", "qa", b'{"a":1}')
+    store.attach_task_evidence("proj", vid, "T01", "run-1", "qa", b'{"b":2}')
+    assert len(store.list_evidence("proj", vid, "T01")) == 2

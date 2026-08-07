@@ -12,6 +12,7 @@ harmless because blobs are content-addressed and unreferenced.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import sqlite3
 from datetime import datetime, timezone
@@ -81,6 +82,29 @@ class BoardStore:
                 "INSERT INTO project(key,repo,created_at) VALUES (?,?,?) "
                 "ON CONFLICT(key) DO NOTHING", (key, repo, _now()))
 
+    def list_projects(self) -> list[tuple[str, str]]:
+        """(key, repo) for every project, ordered by key. The HTTP layer maps
+        these to its response model; the store owns the SQL so a Postgres
+        backend can swap in without touching callers."""
+        rows = self._conn.execute(
+            "SELECT key, repo FROM project ORDER BY key").fetchall()
+        return [(r["key"], r["repo"]) for r in rows]
+
+    def get_project(self, project: str) -> tuple[str, str]:
+        """(key, repo) for one project, raising NotFoundError if absent."""
+        row = self._conn.execute(
+            "SELECT key, repo FROM project WHERE key=?", (project,)).fetchone()
+        if row is None:
+            raise NotFoundError(f"no project {project!r}")
+        return row["key"], row["repo"]
+
+    def list_artifacts(self, project: str) -> list[BoardArtifact]:
+        """Every artifact row for a project, ordered by key."""
+        rows = self._conn.execute(
+            "SELECT project,key,current_version,status FROM artifact "
+            "WHERE project=? ORDER BY key", (project,)).fetchall()
+        return [BoardArtifact(**dict(r)) for r in rows]
+
     # ---- artifacts ---------------------------------------------------
 
     def publish_artifact_version(
@@ -88,8 +112,29 @@ class BoardStore:
             status: ArtifactStatus = ArtifactStatus.CURRENT,
             actor: str) -> tuple[ArtifactRef, int]:
         """Append a version. CURRENT moves the pointer and supersedes the
-        previous version; REJECTED records history and moves nothing."""
+        previous version; REJECTED records history and moves nothing.
+
+        Idempotent under Temporal re-execution: if this run already published
+        byte-identical content for this (project, key), return the existing
+        version rather than creating a duplicate with a bogus supersedes link.
+        Scoped to run_id — Temporal re-execution is always within one workflow
+        run, so a *different* run publishing identical content (the common
+        case under _cached_stage memoization) still appends its own version."""
+        sha = hashlib.sha256(content).hexdigest()
         with self._write():
+            prior = self._conn.execute(
+                "SELECT id, sha256, uri FROM artifact_version "
+                "WHERE project=? AND key=? AND run_id=? AND sha256=? "
+                "ORDER BY id LIMIT 1",
+                (project, key, run_id, sha)).fetchone()
+            if prior is not None:
+                # The pointer and event were already moved by the first
+                # execution; a re-execution changes nothing.
+                return (ArtifactRef(kind="board_artifact",
+                                    uri=prior["uri"],
+                                    sha256=prior["sha256"]),
+                        int(prior["id"]))
+
             row = self._conn.execute(
                 "SELECT COALESCE(MAX(n),0) FROM artifact_version "
                 "WHERE project=? AND key=?", (project, key)).fetchone()
@@ -227,9 +272,17 @@ class BoardStore:
             fix_attempts: int | None = None, error: str | None = None,
             branch: str | None = None) -> BoardTask:
         """Workflow write. Validates against authoritative_status — an agent
-        having moved `status` must never unlock a workflow transition."""
+        having moved `status` must never unlock a workflow transition.
+
+        Idempotent under Temporal re-execution: if authoritative_status is
+        already the target (the write already committed but its completion
+        wasn't reported), return the row unchanged rather than raising
+        InvalidTransition — otherwise all retries fail identically and a
+        transient worker blip permanently fails the run."""
         with self._write():
             task = self.get_task(project, plan_version, task_id)
+            if task.authoritative_status == status:
+                return task            # already applied; re-execution is a no-op
             check_task_transition(task.authoritative_status, status)
             self._conn.execute(
                 "UPDATE task SET status=?, authoritative_status=?,"
@@ -275,15 +328,30 @@ class BoardStore:
                              task_id: str, run_id: str, kind: str,
                              content: bytes) -> ArtifactRef:
         """Per-run, immutable observation about one attempt. Unlike project
-        artifacts these are never versioned and never move a pointer."""
+        artifacts these are never versioned and never move a pointer.
+
+        Idempotent under Temporal re-execution: dedupes on
+        (task, run_id, kind, sha256) so a retried activity doesn't double the
+        rows. Distinct content (a genuinely different report) is kept."""
         if kind not in EVIDENCE_KINDS:
             raise ValueError(
                 f"evidence kind {kind!r} not in {sorted(EVIDENCE_KINDS)}")
         self.get_task(project, plan_version, task_id)     # 404 if absent
-        ref = self._blobs.put(
-            "board_evidence", run_id,
-            f"{task_id}-{kind}.json", content)
+        sha = hashlib.sha256(content).hexdigest()
         with self._write():
+            prior = self._conn.execute(
+                "SELECT sha256, uri FROM task_evidence "
+                "WHERE project=? AND plan_version=? AND task_id=? "
+                "AND run_id=? AND kind=? AND sha256=? LIMIT 1",
+                (project, plan_version, task_id, run_id, kind, sha)
+            ).fetchone()
+            if prior is not None:
+                return ArtifactRef(kind="board_evidence",
+                                   uri=prior["uri"],
+                                   sha256=prior["sha256"])
+            ref = self._blobs.put(
+                "board_evidence", run_id,
+                f"{task_id}-{kind}.json", content)
             self._conn.execute(
                 "INSERT INTO task_evidence(project,plan_version,task_id,"
                 "run_id,kind,sha256,uri,created_at) VALUES (?,?,?,?,?,?,?,?)",

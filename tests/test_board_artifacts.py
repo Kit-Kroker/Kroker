@@ -84,3 +84,57 @@ def test_versions_are_independent_per_key(store):
                                    actor="workflow:r")
     assert store.list_versions("proj", "plan")[0].n == 1
     assert store.list_versions("proj", "architecture")[0].n == 1
+
+
+def test_publish_re_execution_is_idempotent_on_identical_content(store):
+    """Temporal re-executes an activity whose completion wasn't reported.
+    A repeated publish of byte-identical content must return the existing
+    version — not create a duplicate with a bogus supersedes link, and not
+    append a second event."""
+    ref1, v1 = store.publish_artifact_version(
+        "proj", "architecture", "run-1", b'{"overview":"same"}',
+        actor="workflow:run-1")
+    ref2, v2 = store.publish_artifact_version(
+        "proj", "architecture", "run-1", b'{"overview":"same"}',
+        actor="workflow:run-1")
+    assert v1 == v2, "re-execution must return the same version id"
+    assert ref1.sha256 == ref2.sha256
+    versions = store.list_versions("proj", "architecture")
+    assert [x.n for x in versions] == [1], "no duplicate version row"
+    events = [e for e in store.list_events("proj")
+              if e.subject == "artifact:architecture"]
+    assert len(events) == 1, "no duplicate event for the re-execution"
+
+
+def test_publish_different_content_still_versions(store):
+    """Idempotency keys on content (sha256), so genuinely new content
+    still produces a new version — the dedupe is retry-safety, not a cap."""
+    _, v1 = store.publish_artifact_version("proj", "architecture", "r", b"a",
+                                           actor="workflow:r")
+    _, v2 = store.publish_artifact_version("proj", "architecture", "r", b"b",
+                                           actor="workflow:r")
+    assert v2 != v1
+    assert [x.n for x in store.list_versions("proj", "architecture")] == [1, 2]
+
+
+def test_cross_run_republish_with_identical_content_is_distinct(store):
+    """Dedupe is scoped to run_id: Temporal re-execution is always within one
+    workflow run, so (project, key, run_id, sha256) catches retries. A second
+    RUN publishing byte-identical content (the common case under
+    _cached_stage memoization) must still append its own version — each run
+    is visible on the board, with its own event and run_id."""
+    _, v1 = store.publish_artifact_version(
+        "proj", "architecture", "run-1", b'{"overview":"same"}',
+        actor="workflow:run-1")
+    _, v2 = store.publish_artifact_version(
+        "proj", "architecture", "run-2", b'{"overview":"same"}',
+        actor="workflow:run-2")
+    assert v1 != v2, "a different run must get its own version"
+    versions = store.list_versions("proj", "architecture")
+    assert [x.n for x in versions] == [1, 2]
+    assert {x.run_id for x in versions} == {"run-1", "run-2"}
+    art = store.get_artifact("proj", "architecture")
+    assert art.current_version == v2   # run-2's version is now current
+    events = [e for e in store.list_events("proj")
+              if e.subject == "artifact:architecture"]
+    assert len(events) == 2, "each run appends its own event"

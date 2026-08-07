@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-08-06 (E-40/E-43 against `src/sdlc/`; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
+| Last verified | 2026-08-07 (E-78 against `src/sdlc/board/` + full suite; E-40/E-43 2026-08-06; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -308,7 +308,7 @@ as tracked rather than accidental.
 - [x] **ADR-5** Memoization + watermark; auditability/memoization split
 - [x] **ADR-6** Anti-collusion review (model-family inequality, clean-context reviewer) — *the boot check validated `agents.yaml`'s `developer` entry, which nothing ran; `cfg.roles["dev"]` did the coding. Re-aimed at `dev` and the two registries mirror-checked at boot (`2026-07-16-registry-drives-every-role`).*
 - [ ] **ADR-7** Repairs execute through the factory — maintenance loop absent.
-- [ ] ⚠️ **ADR-8** Interfaces as stateless shells — true for CLI; dashboard backend absent.
+- [ ] ⚠️ **ADR-8** Interfaces as stateless shells — true for CLI; *operator* dashboard backend still absent (E-75). The agent board API (E-78) is a stateful surface by design, not drift: it serves durable cross-run state no live workflow holds. ADR-21 records the exception; ARCHITECTURE.md §8 now scopes the "stateless shells" claim to operator surfaces.
 - [ ] **ADR-9** Two worker pools by capability — single queue.
 - [ ] ⚠️ **ADR-10** Claim-check for large payloads — `ArtifactRef` exists but not load-bearing.
 - [ ] ⚠️ **ADR-11** Deterministic DAG — holds for the 8 live stages; 6 stages absent.
@@ -321,6 +321,7 @@ as tracked rather than accidental.
 - [ ] **ADR-18** Triage precedes capability modelling — an unbuildable or structurally-illegible repo is reported as a precondition failure, never capability-mapped (FR-903, E-42).
 - [ ] ⚠️ **ADR-19** Deployment targets and analytics sources are adapters, not substrate (FR-1105, NG7, E-68/E-69). **Deployment half done** (E-67/E-68: `src/sdlc/deploy/adapters.py`, compose + script). Analytics half open (E-69). Unresolved consequence: **OQ-9**.
 - [ ] **ADR-20** Pre-registration reuses `ValidationContract` freeze semantics (FR-1102, FR-803, E-65).
+- [x] **ADR-21** Agent board as a durable projection; `authoritative_status` (workflow-written) vs `status` (agent-writable) keeps replay the source of truth (E-78).
 
 ---
 
@@ -1069,7 +1070,11 @@ disappears entirely: wrapping a stage in a gate-and-retry loop becomes topology.
   new queries on `GraphWorkflow` (`graph_state()`, `graph()`) beside the existing
   `status` / `pending_decisions` / `run_summary` (`feature.py:739`–:753). The only
   storage is content-addressed `graphs/<sha>.yaml`. Gates and answers are the
-  existing signals. **This is the project's first network surface** — see OQ-11.
+  existing signals. ~~**This is the project's first network surface**~~ —
+  **superseded 2026-08-07:** E-78's board API got there first, so OQ-11's auth
+  question is already live and no longer gated on E-75. E-75's own claim that
+  *live run state* needs no database still holds; the board stores durable
+  cross-run state, which is a different concern.
 - [ ] **E-76 — canvas** → FR-1205. `@vue-flow/core` (React Flow's Vue port, what
   n8n itself uses; fits the existing Vue 3 + Pinia + Vite stack) plus `dagre` for
   auto-layout of YAML-authored graphs. **One renderer, two modes**: `runState`
@@ -1094,7 +1099,11 @@ disappears entirely: wrapping a stage in a gate-and-retry loop becomes topology.
   disappears. Drain first (block new runs, wait out current ones) or accept that
   in-flight runs fail and are restarted? Unresolved; blocks E-74's landing, not
   its design.
-- **OQ-11 — dashboard auth.** E-75 is the first server in the project, and
+- **OQ-11 — dashboard auth.** ⚠️ **Now live, not hypothetical (2026-08-07).**
+  E-78's board API is already serving unauthenticated, and its two agent write
+  routes trust a self-asserted `X-Actor` header — so the audit log's "who moved
+  what" is spoofable by anything that can reach the port. Localhost-bind is the
+  current containment. Was framed as: E-75 is the first server in the project, and
   *"start a run"* and *"approve a merge gate"* are not endpoints to leave
   unauthenticated once anything but localhost can reach them. Localhost-bind with
   no auth is the assumed near-term answer; **E-60** (identity & authorization,
@@ -1143,3 +1152,74 @@ harder to install later:
 product. Triage is what tells you whether the audit is worth running (FR-903),
 its findings are the ones that are mechanically fixable, and it is the only tier
 that works on the repositories most likely to arrive first.
+
+---
+
+## 16. Agent board — persistent artifact & task state (`E-78`) → FR-1300…FR-1303
+
+**Landed 2026-08-07.** Spec: `docs/superpowers/specs/2026-08-07-agent-board-design.md`.
+Contracts: `src/sdlc/board/`. ADR-21.
+
+> ⚠️ **Numbering correction.** Code comments introduced with this work label it
+> `E-40` (`feature.py` `BOARD_ACT`, `models.py` `PipelineConfig.project_key`).
+> **E-40 is already `Measurement` + `RepoTriage` contracts** (§10). The board is
+> **E-78**; those comments are stale and should be corrected in place.
+
+**Problem it closed.** Typed stage artifacts (`ClarifiedRequirements`,
+`ArchitectureSpec`, `ImplementationPlan`, `DevTask[]`) reached only five
+destinations — Temporal history, the next stage's prompt, a hash-keyed
+memoization file, a one-line memory summary, and a `StageOutcome` row carrying
+no content. Answering *"what design did run 019fb994 propose?"* required a
+replay, and no task had a status anything could query mid-flight.
+
+- [x] **FR-1300 — project-level artifact versioning.** `requirements`,
+  `architecture`, `plan` versioned per project with `supersedes` lineage across
+  runs; bodies in the claim-check store (`board_artifact` kind), graph in
+  SQLite. A gate-rejected artifact is recorded as history with
+  `status="rejected"` and does not move the pointer.
+- [x] **FR-1301 — task lifecycle.** `pending → in_progress →
+  done|failed|blocked|quarantined`, one state-machine table
+  (`board/transitions.py`) shared by both writers. Tasks key off
+  `(project, plan_version, task_id)` because `DevTask.id` is planner-assigned
+  per run — `T01` in plan v2 need not be `T01` in v1.
+- [x] **FR-1302 — append-only change log + board counters.** Every accepted
+  transition writes one `event` row with actor and authority; rejected writes
+  write none. `/stats` exposes only board-owned counters (transition counts,
+  fix attempts, errors, time-in-status, `status`/`authoritative_status`
+  divergence). **Deliberately disjoint from `benchmarks/`** — quality/cost/speed
+  rollup stays there; duplicating it would yield two scores that disagree. The
+  join key (`run_id`, `stage`, `task_id` on `BenchmarkRecord`) exists for a
+  later spec.
+- [x] **FR-1303 — dual write path with optimistic concurrency.** Workflow
+  writes content through Temporal activities in-process (no HTTP dependency);
+  agents write status through FastAPI with `If-Match: <row_version>`. Both
+  reach one `BoardStore`, so exactly one place can move a status.
+
+**Known gaps (not blocking, recorded rather than fixed).**
+
+- ⚠️ **Publish dedupe is broader than retry-safety needs.**
+  `publish_artifact_version` dedupes on `(project, key, sha256)` with no
+  `run_id`, while `attach_task_evidence` correctly scopes to `(…, run_id, kind,
+  sha256)`. Because `_cached_stage` memoization returns byte-identical
+  artifacts for identical inputs, a re-run of the same idea leaves **no trace**
+  — no version, no event, `run_id` still the first run's. Temporal
+  re-execution is always same-run, so scoping the dedupe by `run_id` restores
+  cross-run fidelity without losing idempotency.
+- ⚠️ **`X-Actor` is self-asserted** — see OQ-11, now live.
+- `/tasks?status=` filters live `status` while `/stats` counts
+  `authoritative_status`. Intentional (an agent wants the live view to avoid
+  claimed tasks), undocumented at the API surface.
+- `tests/test_board_workflow.py` is the only place a workflow runs against a
+  real board; the rest of the temporal suite registers no-op `BOARD_FAKES`.
+  That test's worker does not register `notify`, so a future timing shift
+  surfaces as a confusing unregistered-activity error rather than an assertion.
+
+**Deferred: the agent orchestrator.** The originating idea was to replace the
+pipeline with proposers plus an agent that reads board state and dispatches to
+harnesses. Deferred, not rejected — it would trade replay determinism, gate
+semantics (`GatePolicy`, `TimeoutAction`, `_check_budget` at serial
+boundaries), and benchmark signal-to-noise for flexibility the board already
+delivers. Temporal reading the board and dispatching yields dynamic task
+graphs, resume, and re-entry without that cost. Once the board is in use the
+orchestrator can be **measured** against the workflow rather than adopted on
+faith. See ADR-21.

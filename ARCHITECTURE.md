@@ -4,6 +4,7 @@
 |---|---|
 | Status | Draft v1.0 |
 | Date | 2026-07-02 |
+| Last amended | 2026-08-07 — agent board (§§1, 2, 8, 13, 14; ADR-21) |
 | Related | `PRD.md`, `SDLC-spec.md` (v2 + v2.1) — contracts in `src/factory/models/` are the source of truth |
 
 ---
@@ -41,6 +42,8 @@ flowchart TB
     HR --> WT[Task worktrees<br/>sandboxed coding]
     SA --> HS[(Hindsight<br/>org + project banks)]
     SA --> AR[(Artifact store + git remote<br/>claim-check · PR · CI)]
+    SA --> BD[(Agent board<br/>SQLite graph · claim-check bodies)]
+    BD -.->|read-only queries| OP
     PA --> LLM[Model APIs]
 ```
 
@@ -61,6 +64,7 @@ through its validated diff artifact.
 | Deterministic stages | constitution, quality gate, summary/export | LLM calls |
 | Hindsight | world facts, experiences, mental models per bank | overriding validators or contracts |
 | Artifact store | specs, diffs, reports, recall snapshots (claim-check) | — |
+| Agent board | project-level artifact versions + lineage, task status lifecycle, append-only change log | deciding anything; being the source of truth for what a run did |
 | Operator surfaces | rendering queries, sending signals | owning state (no interface DB) |
 
 ## 3. Pipeline architecture
@@ -280,8 +284,11 @@ bounds history.
 
 ## 8. Interfaces
 
-All surfaces are stateless shells over three Temporal primitives — queries
-(`status`, `stages`, `pending_decisions`), signals, visibility lists:
+*Operator* surfaces are stateless shells over three Temporal primitives —
+queries (`status`, `stages`, `pending_decisions`), signals, visibility lists.
+The **agent board API** is the one deliberate exception: it serves durable
+cross-run state that no live workflow holds, so it reads its own store rather
+than a running workflow. Operator surfaces still own no state.
 
 - **Dashboard** (FastAPI + single-page UI): fleet rail, 15-stage spine,
   decision inbox (accept-suggestion one-click, inline custom answers,
@@ -290,6 +297,13 @@ All surfaces are stateless shells over three Temporal primitives — queries
 - **MCP server**: `list_runs, run_detail, decision_inbox, answer_question,
   decide_gate, start_feature` — any MCP client becomes an operator surface.
 - **CLI**: same operations for scripting.
+- **Agent board API** (FastAPI, `sdlc/board/api.py`): the machine-facing
+  surface. Reads — projects, artifact versions with lineage and content, tasks
+  filtered by status, the event log, board counters. Writes — exactly two
+  routes (`POST …/claim`, `PATCH …/{task_id}`), both requiring `If-Match:
+  <row_version>`, both **observational**: they move the live view, never
+  `authoritative_status`. Serves agents first; the dashboard is a secondary
+  consumer.
 - **Temporal Web UI**: admin/debug (full history, retries) — linked, not
   rebuilt.
 
@@ -584,6 +598,48 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
   tool_use blocks and denies when it cannot guarantee a solo defer.
   Degradation is always toward deny.
 
+- **ADR-21 The agent board is a durable projection, never a second source of
+  truth.** Typed stage artifacts (`ClarifiedRequirements`, `ArchitectureSpec`,
+  `ImplementationPlan`, `DevTask[]`) previously existed only in Temporal
+  history, so "what design did run X propose?" required a replay and nothing
+  could carry a *status*. The board makes them addressable: immutable bodies in
+  the claim-check store, a mutable graph in SQLite, versioned per project with
+  lineage across runs. Agents may move task status; the workflow alone writes
+  `authoritative_status`. **That split is the whole design.** Statistics,
+  scoring, and any human reading "what happened" consume
+  `authoritative_status` only, so an agent that crashes mid-claim,
+  double-claims, or reports optimistically corrupts the live view and nothing
+  else — Temporal history still reconstructs the run, preserving §12's
+  auditability invariant. Divergence between the two columns is itself a
+  surfaced signal. Storage splits on the mutable/immutable line because they
+  have different needs: bodies want content addressing (sha256, already built
+  for ADR-16), state wants transactions. SQLite supplies serialization from the
+  standard library — `BEGIN IMMEDIATE` plus a `row_version` compare-and-swap is
+  what makes two agents racing for one task yield one winner and one `409`.
+  *Rejected:* a git-backed board in the target repo (most reviewable, but status
+  churn becomes merge conflicts and every claim is a commit) and extending
+  Hindsight (already project-scoped, but a semantic recall system has no state
+  machine and no compare-and-swap). *Trade-off:* one SQLite file is correct for
+  a single worker container and must become Postgres before a second one — the
+  same threshold at which `server start-dev` has to go. **New scope.**
+
+  *Idempotency is a load-bearing requirement, not a nicety.* Temporal executes
+  activities at least once: an activity that commits and then loses its worker
+  before reporting completion is re-run. Board writes must therefore absorb
+  re-execution — a repeated terminal transition is a no-op returning the
+  current row, not an `InvalidTransition`, because the latter fails identically
+  on every retry and turns a transient worker blip into a permanently failed
+  run.
+
+  *Deferred, deliberately:* replacing the deterministic pipeline with an LLM
+  scheduler that reads the board and dispatches. Externalizing state is what
+  makes dynamic task graphs, resume, and re-entry possible, and Temporal can
+  read the board and dispatch without surrendering replay. Building the
+  orchestrator on top later means it can be *measured* against the workflow
+  rather than adopted on faith; adopting it now would trade replay,
+  gate semantics, and benchmark signal-to-noise for flexibility already
+  obtained.
+
 ## 13. Technology summary
 
 | Concern | Choice | Notes |
@@ -593,6 +649,7 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
 | Coding harnesses | Claude Code (`claude -p`), OpenCode (`opencode run`) | adapter protocol; `--attach` to warm opencode serve |
 | Memory | Hindsight (vectorize-io) + Postgres | banks + metadata filters |
 | Artifacts | S3-compatible object store + git | claim-check |
+| Agent board | SQLite (WAL, `BEGIN IMMEDIATE`) for the mutable graph; claim-check store for bodies | stdlib, no new infra; Postgres is a second backend behind `BoardStore` at the same threshold `server start-dev` must go |
 | Dashboard API | FastAPI + fastapi-request-pipeline | API-key auth, rate limit |
 | Chat surface | MCP (FastMCP server) | Claude/goose/IDE clients |
 | Spec conventions | Spec Kit / OpenSpec formats | consumed, not reimplemented |
@@ -646,6 +703,13 @@ agentic-sdlc/
 │   ├── harness/               # CodingHarness protocol; claude_code.py, opencode.py
 │   ├── agents/                # loader.py (agents.yaml → TemporalAgent), deterministic.py
 │   ├── memory/                # Hindsight client wrapper, scrub.py
+│   ├── board/                 # ADR-21: project-level artifact versions + task status
+│   │   ├── models.py          #   BoardArtifact/ArtifactVersion/BoardTask/BoardEvent
+│   │   ├── schema.py          #   idempotent SQLite DDL; $SDLC_BOARD_DB
+│   │   ├── transitions.py     #   task state machine (one table, both writers)
+│   │   ├── store.py           #   BoardStore — all SQL, transactions, optimistic locking
+│   │   ├── activities.py      #   workflow write path (in-process, no HTTP)
+│   │   └── api.py             #   agent read/write path (FastAPI)
 │   ├── memoization/           # content-addressed activity cache; per-run watermark (ADR-5)
 │   ├── hooks/                 # risk classes (pre_tool), budgets, env allowlist
 │   ├── observability/         # history → events.jsonl/report.html; trajectory export (P5)
@@ -665,6 +729,8 @@ agentic-sdlc/
 │   ├── workflow.py            #   runs cases through FeatureWorkflow; per-cell harness/model/memory
 │   └── cases/<case>/          #   feature spec + rubrics; oracle/ = held-out acceptance suite (E-31)
 └── runs/                      # runtime, gitignored: worktrees, artifacts, report.html
+    ├── board.sqlite3          #   the board's mutable graph ($SDLC_BOARD_DB)
+    └── <run_id>/artifacts/    #   published artifact bodies, <key>-v<n>.json
 ```
 
 A reference implementation of the core loop (models, harness adapters,

@@ -323,7 +323,7 @@
 <body>
 
 <h1>Architecture Schema</h1>
-<p class="meta">Agentic SDLC Factory &middot; Status overlay on <code>ARCHITECTURE.md</code> &middot; Verified <code>2026-08-05</code> against <code>src/sdlc/</code>, <code>interfaces/</code>, <code>tests/</code>, <code>config/</code>, <code>agents/</code>, <code>benchmarks/</code></p>
+<p class="meta">Agentic SDLC Factory &middot; Status overlay on <code>ARCHITECTURE.md</code> &middot; Verified <code>2026-08-07</code> against <code>src/sdlc/</code> (incl. <code>board/</code>, <code>deploy/</code>, <code>triage/</code>, <code>measurement.py</code>, <code>grounding.py</code>), <code>interfaces/</code>, <code>tests/</code>, <code>config/</code>, <code>agents/</code>, <code>benchmarks/</code></p>
 <p class="meta">Companion to <a href="roadmap.html">Implementation Roadmap</a> &middot; Sources: <code>ARCHITECTURE.md</code>, <code>ROADMAP.md</code></p>
 
 <p class="lede">
@@ -340,9 +340,9 @@
   <span class="chip"><span class="dot notstarted"></span> Not started</span>
   <span class="chip"><span class="dot notmeasurable"></span> Not falsifiable from code alone</span>
   <span style="margin-left:auto; align-self:center;">
-    Pipeline: <strong>8 / 15</strong> stages live &middot;
-    ADRs: <strong>11 / 20</strong> satisfied &middot;
-    Phase: <strong>P1 closed</strong>, P2/P3 partial, P4–P8 not started
+    Pipeline: <strong>9 / 15</strong> stages live &middot;
+    ADRs: <strong>12 / 21</strong> satisfied &middot;
+    Phase: <strong>P1 closed</strong>, P2/P3/P5 partial, P4/P6/P7/P8 not started
   </span>
 </div>
 
@@ -350,7 +350,7 @@
 <h2>Deployment topology <span class="count">ARCHITECTURE &sect;9</span></h2>
 
 <div class="topo">
-<svg viewBox="0 0 880 360" width="100%" height="360" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 880 410" width="100%" height="410" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
       <path d="M0,0 L7,3 L0,6 z" fill="#57606a"/>
@@ -373,7 +373,7 @@
     <rect x="180" y="32" width="140" height="58" rx="6" fill="#ffffff" stroke="#bf8700" stroke-width="1.5"/>
     <text x="250" y="56" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">Dashboard</text>
     <text x="250" y="74" text-anchor="middle" font-size="10" fill="#57606a">Vue 3 frontend (mock)</text>
-    <text x="250" y="86" text-anchor="middle" font-size="10" fill="#57606a">no FastAPI backend</text>
+    <text x="250" y="86" text-anchor="middle" font-size="10" fill="#57606a">board API only; SPA backend E-75</text>
     <rect x="180" y="98" width="140" height="14" fill="rgba(191,135,0,0.14)"/>
     <text x="250" y="108" text-anchor="middle" font-size="10" font-weight="600" fill="#bf8700">PARTIAL (FR-601)</text>
 
@@ -429,6 +429,12 @@
   <text x="740" y="322" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">Hindsight + Postgres</text>
     <text x="740" y="336" text-anchor="middle" font-size="10" fill="#bf8700">recall/retain ✅ &middot; reflect per-run ✅ &middot; org bank empty</text>
 
+  <rect x="620" y="352" width="240" height="46" rx="6" fill="#ffffff" stroke="#1a7f37" stroke-width="1.5"/>
+  <text x="740" y="370" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">Agent board (SQLite)</text>
+    <text x="740" y="384" text-anchor="middle" font-size="10" fill="#1a7f37">artifacts + task lifecycle ✅ (ADR-21)</text>
+    <text x="740" y="394" text-anchor="middle" font-size="10" fill="#57606a">workflow writes in-proc; agents via FastAPI</text>
+  <line x1="300" y1="348" x2="620" y2="368" stroke="#57606a" stroke-width="1" marker-end="url(#arr)"/>
+
   <!-- Edges: surfaces -> temporal -->
   <line x1="90"  y1="112" x2="280" y2="158" stroke="#57606a" stroke-width="1" marker-end="url(#arr)"/>
   <line x1="250" y1="112" x2="350" y2="158" stroke="#57606a" stroke-width="1" marker-end="url(#arr)"/>
@@ -447,12 +453,13 @@
 
 <p style="font-size:12.5px; color:var(--muted); margin-top:8px;">
   Green border = component present &amp; on the live path. Amber = mechanism exists but
-  incomplete. Grey = unbuilt. Every interface is a stateless shell over three Temporal
-  primitives (queries, signals, visibility) &mdash; ADR-8.
+  incomplete. Grey = unbuilt. Operator interfaces are stateless shells over three Temporal
+  primitives (queries, signals, visibility) &mdash; ADR-8; the agent board is a deliberate
+  stateful exception (ADR-21) serving durable cross-run state no live workflow holds.
 </p>
 
 <!-- =========================================================== -->
-<h2>Pipeline DAG <span class="count">ARCHITECTURE &sect;3 &middot; 8 / 15 stages live</span></h2>
+<h2>Pipeline DAG <span class="count">ARCHITECTURE &sect;3 &middot; 9 / 15 stages live</span></h2>
 
 <div class="dag-wrap">
 <svg viewBox="0 0 1080 280" width="100%" height="280" xmlns="http://www.w3.org/2000/svg">
@@ -591,9 +598,9 @@
   <!-- Row 3: 13 deploy, 14 retro -->
   <path d="M 90 160 L 60 160 L 60 240 L 250 240" fill="none" stroke="#57606a" marker-end="url(#darr)"/>
 
-  <rect x="250" y="225" width="110" height="44" rx="6" fill="rgba(191,135,0,0.14)" stroke="#bf8700" stroke-width="1.5"/>
+  <rect x="250" y="225" width="110" height="44" rx="6" fill="rgba(26,127,55,0.12)" stroke="#1a7f37" stroke-width="1.5"/>
   <text x="305" y="245" text-anchor="middle" font-size="11" font-weight="700" fill="#1f2328">13 · deploy</text>
-  <text x="305" y="261" text-anchor="middle" font-size="9" fill="#57606a">hardcoded make</text>
+  <text x="305" y="261" text-anchor="middle" font-size="9" fill="#1a7f37">DeployPlan/Report</text>
 
   <polygon points="395,237 415,249 395,261 375,249" fill="#ffffff" stroke="#bf8700" stroke-width="1.5"/>
   <text x="395" y="252" text-anchor="middle" font-size="8" fill="#bf8700">G</text>
@@ -648,9 +655,9 @@
     </tr>
     <tr>
       <td class="name">Workflows<br><code>workflows/factory.py</code></td>
-      <td class="status"><span class="pill done">8 stages wired</span></td>
+      <td class="status"><span class="pill done">9 stages wired</span></td>
       <td>deterministic DAG, gate waits, fix-loop bounds, scheduling</td>
-      <td class="note">Class is <code>FeatureWorkflow</code>; docs call it <code>FactoryWorkflow</code>. 7 of 15 stages absent.</td>
+      <td class="note">Class is <code>FeatureWorkflow</code>; docs call it <code>FactoryWorkflow</code>. 6 of 15 stages absent. Stage 13 runs a deterministic <code>DeploymentWorkflow</code> child behind a <code>deploy_failed</code> gate (E-67); board writes wired into clarify/arch/plan/task stages (E-78).</td>
     </tr>
     <tr>
       <td class="name">Per-task loop<br><code>workflows/task.py</code></td>
@@ -692,7 +699,7 @@
       <td class="name">QA activities<br><code>activities/qa.py</code></td>
       <td class="status"><span class="pill done">lint + security ✅</span></td>
       <td>tests, coverage, lint, security scan</td>
-      <td class="note"><code>security_no_critical</code> absolute floor wired (SC-5). Coverage seam closed — Cobertura via <code>ToolchainAdapter</code> crosses into the integration worktree (E-30, ADR-15; Python end-to-end; Go/TS/Rust = E-30a/b/c).</td>
+      <td class="note"><code>security_no_critical</code> absolute floor wired (SC-5). Coverage seam closed — Cobertura via <code>ToolchainAdapter</code> crosses into the integration worktree (E-30, ADR-15; Python end-to-end; Go/TS/Rust = E-30a/b/c). E-40 (2026-08-06): a <code>Measurement</code> type now distinguishes measured-zero from not-collected on <code>CoverageReport</code>/<code>SecurityReport</code>; the absolute floor split into <code>security_scan_collected</code> + <code>security_no_critical</code> so a malformed/partial SARIF can no longer read as a clean floor (FR-915). <code>grounding.py</code> (E-43) byte-verifies evidence quotes for handoff/deep-review/research.</td>
     </tr>
     <tr>
       <td class="name">Memory activities<br><code>activities/memory.py</code></td>
@@ -714,9 +721,15 @@
     </tr>
     <tr>
       <td class="name">Deploy<br><code>activities/deploy.py</code></td>
-      <td class="status"><span class="pill partial">hardcoded path</span></td>
-      <td><code>DeployPlan</code> / <code>DeployReport</code> split, smoke vs PR</td>
-      <td class="note">Today: <code>make deploy ENV=staging</code>. No model split, no smoke distinction.</td>
+      <td class="status"><span class="pill done">contract ✅</span></td>
+      <td><code>DeployPlan</code> / <code>DeployReport</code> split, deterministic child, smoke vs PR, adapters</td>
+      <td class="note">E-67/E-68 landed: <code>deploy/</code> ships a deterministic <code>DeploymentWorkflow</code> child (apply → smoke → rollback) behind a <code>deploy_failed</code> gate, with compose + script adapters (<code>deploy/adapters.py</code>); off by default (<code>PipelineConfig.deploy</code>). Remaining: <code>devops_planner</code> does not yet author the plan — <code>_deploy_plan</code> builds a single-liveness-check plan.</td>
+    </tr>
+    <tr>
+      <td class="name">Agent board<br><code>board/</code></td>
+      <td class="status"><span class="pill done">done ✅</span></td>
+      <td>project artifact versioning + task lifecycle + change log + query API</td>
+      <td class="note">E-78 / ADR-21 (2026-08-07): <code>board/</code> ships <code>BoardStore</code> over SQLite (WAL, <code>BEGIN IMMEDIATE</code>) — <code>requirements</code>/<code>architecture</code>/<code>plan</code> versioned with <code>supersedes</code> lineage (bodies claim-checked); task lifecycle <code>pending→in_progress→done|failed|blocked|quarantined</code>; append-only <code>event</code> log; <code>authoritative_status</code> (workflow-only) vs <code>status</code> (agent-writable) keeps replay the source of truth. Workflow writes in-process via activities; agents write via FastAPI <code>If-Match</code> (<code>board/api.py</code>). <code>/stats</code> disjoint from <code>benchmarks/</code>. <code>X-Actor</code> self-asserted (OQ-11); single-worker only — Postgres beyond one container.</td>
     </tr>
     <tr>
       <td class="name">Agent registry<br><code>agents/loader.py</code></td>
@@ -911,9 +924,9 @@
     <div class="exit"><strong>Exit:</strong> SC-1..3 at target. Not started.</div>
   </div>
   <div class="phase">
-    <div class="tag"><span class="label">P5 — Triage</span><span class="pill notstarted">not started</span></div>
+    <div class="tag"><span class="label">P5 — Triage</span><span class="pill partial">partial</span></div>
     <div class="desc">Repo triage + tidy-up (Tier 0/1), operator-run, single tenant.</div>
-    <div class="exit"><strong>Exit:</strong> one repo triaged, a mechanical backlog fixed through governed runs, before/after delta recorded (E-40…E-44). Needs neither tenancy nor containment.</div>
+    <div class="exit"><strong>Exit:</strong> one repo triaged, a mechanical backlog fixed through governed runs, before/after delta recorded (E-40…E-44). Needs neither tenancy nor containment. Contracts + seam + three signals landed (E-40/E-41/E-43, 2026-08-06): <code>RepoTriage</code>, <code>Measurement</code>, the grounding verifier, build/secrets/baseline-practice signals; <code>TriageWorkflow</code> + readiness gate (E-42) and tidy-up runs (E-44) remain.</div>
   </div>
   <div class="phase">
     <div class="tag"><span class="label">P6 — Audit</span><span class="pill notstarted">not started</span></div>
@@ -961,14 +974,14 @@
       <li><span class="pill done">done</span> retro/reflect wiring — per-run retro stage live (E-32); project ✅, org blocked on E-25.</li>
       <li><span class="pill partial">partial</span> Harness containment — <code>pre_tool</code> hook landed (E-15/E-16); approval escalation landed (E-17, same hook → gate); network-level + OS/container tier open (E-18/E-21).</li>
       <li><span class="pill partial">partial</span> Operability — cross-run inbox ✅ (E-8) + notify ✅ (E-9); dashboard FastAPI (E-10) + MCP (E-11) still todo.</li>
-      <li><span class="pill partial">partial</span> Post-P1 roadmap — DAPER/todo, two pools/todo, budgets ✅ (E-33), observability ✅ (E-32), brownfield/todo, claim-check partial (E-38 sessions; diffs inline).</li>
+      <li><span class="pill partial">partial</span> Post-P1 roadmap — DAPER/todo, two pools/todo, budgets ✅ (E-33), observability ✅ (E-32), deploy contract ✅ (E-67/E-68), agent board ✅ (E-78/ADR-21), triage partial (E-40/E-41/E-43), brownfield/todo, claim-check partial (E-38 sessions; diffs inline).</li>
       <li><span class="pill partial">partial</span> Repo hardening via agents-as-folders — E-1/E-2/E-4 done; remaining is reorganisation.</li>
     </ol>
   </div>
 </div>
 
 <!-- =========================================================== -->
-<h2>Architecture decision records <span class="count">ARCHITECTURE &sect;12 &middot; 11 / 20 satisfied</span></h2>
+<h2>Architecture decision records <span class="count">ARCHITECTURE &sect;12 &middot; 12 / 21 satisfied</span></h2>
 
 <div class="adr-grid">
   <div class="adr done">
@@ -1001,7 +1014,7 @@
   </div>
   <div class="adr partial">
     <div class="head"><span class="title">Interfaces as stateless shells</span><span class="id">ADR-8</span></div>
-    <p class="why">True for CLI; dashboard backend absent; MCP not started.</p>
+    <p class="why">True for CLI; dashboard backend absent; MCP not started. <strong>Exception:</strong> the agent board API (ADR-21) is a stateful surface by design — it serves durable cross-run state no live workflow holds. ARCHITECTURE.md &sect;8 scopes the "stateless shells" claim to operator surfaces.</p>
   </div>
   <div class="adr notstarted">
     <div class="head"><span class="title">Two worker pools by capability</span><span class="id">ADR-9</span></div>
@@ -1043,18 +1056,22 @@
     <div class="head"><span class="title">Triage precedes capability modelling</span><span class="id">ADR-18</span></div>
     <p class="why">An unbuildable or structurally-illegible repo is reported as a precondition failure, never capability-mapped (FR-903, E-42). Triage is a separate, cheaper tier than the audit and gates it.</p>
   </div>
-  <div class="adr notstarted">
+  <div class="adr partial">
     <div class="head"><span class="title">Deployment &amp; analytics as adapters, not substrate</span><span class="id">ADR-19</span></div>
-    <p class="why">Hosting, feature flagging and analytics are adapters over what the customer already runs (FR-1105, NG7, E-68/E-69). Unresolved consequence: OQ-9.</p>
+    <p class="why">Hosting, feature flagging and analytics are adapters over what the customer already runs (FR-1105, NG7, E-68/E-69). <strong>Deployment half done</strong> (E-67/E-68: <code>src/sdlc/deploy/adapters.py</code>, compose + script). Analytics half open (E-69). Unresolved consequence: OQ-9.</p>
   </div>
   <div class="adr notstarted">
     <div class="head"><span class="title">Pre-registration reuses ValidationContract freeze</span><span class="id">ADR-20</span></div>
     <p class="why">The decision rule is frozen and hashed at approval, reusing FR-803's freeze semantics (FR-1102, E-65).</p>
   </div>
+  <div class="adr done">
+    <div class="head"><span class="title">Agent board as a durable projection</span><span class="id">ADR-21</span></div>
+    <p class="why"><strong>Landed (E-78, 2026-08-07).</strong> Project artifacts + task status are projected into a durable store (SQLite) so they are addressable and queryable while a run is in flight. <code>authoritative_status</code> (workflow-written, from real stage outcomes) vs <code>status</code> (agent-writable) keeps Temporal replay the source of truth — statistics read authoritative only. Workflow writes in-process via activities; agents write via FastAPI with <code>If-Match</code>; both reach one <code>BoardStore</code>. Deliberately disjoint from <code>benchmarks/</code> rollup; deliberately not an LLM orchestrator (deferred).</p>
+  </div>
 </div>
 
 <div class="footer">
-  Sources: <code>ARCHITECTURE.md</code> (Draft v1.0, 2026-07-02) and <code>ROADMAP.md</code> (last verified 2026-08-05).
+  Sources: <code>ARCHITECTURE.md</code> (Draft v1.0, 2026-07-02) and <code>ROADMAP.md</code> (last verified 2026-08-07).
   Status reflects code in <code>src/sdlc/</code>, <code>interfaces/</code>, <code>tests/</code>, <code>config/</code>, <code>agents/</code>, <code>benchmarks/</code> &mdash; not prior audit claims.
   Companion pages: <a href="roadmap.html">roadmap.html</a> (full FR/NFR/SC/US checklist) &middot; <a href="benchmark.html">benchmark.html</a> (evaluation design).
 </div>

@@ -527,7 +527,7 @@
     <a href="../SDLC-spec-v2.md">SDLC-spec-v2.md</a> ·
     <a href="../BENCHMARK.md">BENCHMARK.md</a> (§9.8)
     <br>
-    Last verified: <strong>2026-08-06</strong> ·
+    Last verified: <strong>2026-08-07</strong> ·
     Verified against: <code>src/sdlc/</code>, <code>interfaces/</code>, <code>tests/</code>, <code>config/</code>, <code>agents/</code>, <code>benchmarks/</code> ·
     Method: every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code.
   </p>
@@ -579,13 +579,13 @@
 <main id="detail"></main>
 
 <footer>
-  Regenerated 2026-08-06 from <a href="../ROADMAP.md">ROADMAP.md</a> (last verified 2026-08-06; since the 2026-07-26 snapshot: gate notifications + durable timers (E-9, FR-303), real Hindsight integration verified against a live container (NFR-7), the measurement instrument completed — WasteBag/waste-matrix, sc-rollup, agreement-matrix, <code>sdlc benchmark score</code> and the experiment log (E-36) — research fan-out (2026-08-04), and the verified-handoff extractor + decorrelated adversary lens (2026-08-05) all landed; on 2026-08-06 the two §15 invariants landed — <code>Measurement</code> (E-40 / FR-915 contract half) and the shared grounding verifier with two normalization profiles (E-43 / FR-914), closing two live unverified-quote holes (handoff claims, deep-review integrity flags) and the malformed-SARIF-reads-as-clean absolute-floor hole; an Exa budget double-charge and the architect's shared budget scope were also fixed; <code>summary.json</code> is now persisted alongside events.jsonl/report.html; later on 2026-08-06 the deploy contract (E-67/E-68) landed on feat/deploy-contract — DAG stage 13 now runs a deterministic <code>DeploymentWorkflow</code> child (DeployPlan/DeployReport, apply→smoke→rollback, <code>deploy_failed</code> gate) behind <code>PipelineConfig.deploy</code> (off by default), so FR-1104, ADR-19's deployment half and stage 13 itself move to done/partial, and the quality_gate absolute floor gained <code>security_scan_collected</code> (FR-915); a new §14 (pipeline-as-data — graph interpreter + canvas, E-72…E-77 → FR-1200) was designed and recorded, all not-started).
+  Regenerated 2026-08-07 from <a href="../ROADMAP.md">ROADMAP.md</a> (last verified 2026-08-07; since the 2026-07-26 snapshot: gate notifications + durable timers (E-9, FR-303), real Hindsight integration verified against a live container (NFR-7), the measurement instrument completed — WasteBag/waste-matrix, sc-rollup, agreement-matrix, <code>sdlc benchmark score</code> and the experiment log (E-36) — research fan-out (2026-08-04), and the verified-handoff extractor + decorrelated adversary lens (2026-08-05) all landed; on 2026-08-06 the two §15 invariants landed — <code>Measurement</code> (E-40 / FR-915 contract half) and the shared grounding verifier with two normalization profiles (E-43 / FR-914), closing two live unverified-quote holes (handoff claims, deep-review integrity flags) and the malformed-SARIF-reads-as-clean absolute-floor hole; an Exa budget double-charge and the architect's shared budget scope were also fixed; <code>summary.json</code> is now persisted alongside events.jsonl/report.html; later on 2026-08-06 the deploy contract (E-67/E-68) landed on feat/deploy-contract — DAG stage 13 now runs a deterministic <code>DeploymentWorkflow</code> child (DeployPlan/DeployReport, apply→smoke→rollback, <code>deploy_failed</code> gate) behind <code>PipelineConfig.deploy</code> (off by default), so FR-1104, ADR-19's deployment half and stage 13 itself move to done/partial, and the quality_gate absolute floor gained <code>security_scan_collected</code> (FR-915); a new §14 (pipeline-as-data — graph interpreter + canvas, E-72…E-77 → FR-1200) was designed and recorded, all not-started; on 2026-08-07 the triage signal registry landed (E-41: RepoTriage/TriageFinding/Readiness contracts + build-probe, secret-scan and baseline-practice signals, registered on the worker — closing FR-915's triage half and FR-902 → partial), and the agent board landed on feat/agent-board (E-78 / FR-1300…FR-1303 / ADR-21): a durable SQLite projection of project artifacts + task state with a FastAPI query API and an authoritative-vs-observational status split that keeps replay the source of truth; OQ-11 (dashboard/board auth) is now live, not hypothetical).
   To refresh, re-extract items per the rule documented inline in this file's <code>&lt;script&gt;</code> block.
 </footer>
 
 <script>
 /* =========================================================================
- * DATA — hand-extracted from ROADMAP.md (verified 2026-08-06).
+ * DATA — hand-extracted from ROADMAP.md (verified 2026-08-07).
  *
  * Extraction rules (mechanical):
  *   [x]            -> status: "done"
@@ -603,7 +603,7 @@
  * ========================================================================= */
 const ROADMAP = {
   meta: {
-    lastVerified: "2026-08-06",
+    lastVerified: "2026-08-07",
     sourceFile: "ROADMAP.md"
   },
 
@@ -624,10 +624,10 @@ const ROADMAP = {
       title: "MCP surface, maintenance loop (DAPER), fleet scale",
       exit:  "SC-1..3 at target",
       note:  "Not started." },
-    { id: "P5", pct: 0, status: "notstarted",
+    { id: "P5", pct: 25, status: "partial",
       title: "Triage + tidy-up (Tier 0/1), operator-run, single tenant",
       exit:  "one unfamiliar repository triaged, a mechanical backlog fixed through governed runs, before/after delta recorded",
-      note:  "Not started (E-40…E-44); E-43 landed 2026-08-06 and E-40 is partial (Measurement landed, RepoTriage deferred to E-41). Does not depend on P7 — operator-run delivery on repositories you are authorised to run needs neither tenancy nor self-serve onboarding." },
+      note:  "Partial (E-40…E-44). Contracts + seam + three of seven hygiene signals landed 2026-08-06/07: RepoTriage/TriageFinding/Readiness (E-40/E-41), the Measurement type + absolute-floor split (E-40/FR-915), the shared grounding verifier (E-43/FR-914), and build-probe + secret-scan (incl. client-bundle reachability) + baseline-practice signals (E-41). Readiness is three-valued — any unmeasured dimension forces INDESTERMINATE, so an unmeasured repo can never read as ready for the FR-903 gate. Remaining: TriageWorkflow + readiness gate (E-42), the other four signal families (E-41a–d), tidy-up fix runs (E-44). Does not depend on P7 — operator-run delivery needs neither tenancy nor self-serve onboarding." },
     { id: "P6", pct: 0, status: "notstarted",
       title: "Capability & risk audit (Tier 2) + evidence bundle",
       exit:  "one repository audited end-to-end with SC-7 held and a bundle handed over",
@@ -663,7 +663,7 @@ const ROADMAP = {
   items: [
     /* FR-100 — Pipeline */
     { id: "FR-101", section: "FR", status: "partial",    title: "15-stage durable DAG",
-      note: "8/15 stages (see §1) — stage 14 retro now live (E-32).", recent: true },
+      note: "9/15 stages live (see §1) — stage 13 deploy now runs a DeploymentWorkflow child (E-67); stage 14 retro live (E-32).", recent: true },
     { id: "FR-102", section: "FR", status: "notstarted", title: "greenfield/brownfield classify + CodebaseMap + delta",
       note: "No classifier, no CodebaseMap, no brownfield delta.", recent: false },
     { id: "FR-103", section: "FR", status: "done",       title: "memoization, per-run watermark, audit-record-always-kept",
@@ -758,8 +758,8 @@ const ROADMAP = {
     /* FR-900 — Tier 0 triage (new scope; PRD v1.1) */
     { id: "FR-901", section: "FR", status: "notstarted", title: "triage stage → RepoTriage + readiness verdict (E-42)",
       note: "completes on repos that do not build.", recent: false },
-    { id: "FR-902", section: "FR", status: "notstarted", title: "hygiene signal set via FR-108 adapters, one implementation per signal (E-41)",
-      note: "", recent: false },
+    { id: "FR-902", section: "FR", status: "partial", title: "hygiene signal set via FR-108 adapters, one implementation per signal (E-41)",
+      note: "Three of seven landed 2026-08-07 (E-41): build probe, secret scan (incl. client-bundle-reachable credentials, re-verified against the pinned commit), and baseline practice. Remaining four families are E-41a–d (dependency health, dead/scaffold code, framework misconfig, size/duplication outliers).", recent: true },
     { id: "FR-903", section: "FR", status: "notstarted", title: "readiness gate blocking Tier 2, overridable by audited decision (E-42)",
       note: "", recent: false },
     { id: "FR-904", section: "FR", status: "notstarted", title: "mechanically_fixable → brownfield child runs + before/after re-triage (E-44)",
@@ -774,8 +774,8 @@ const ROADMAP = {
       note: "also satisfies FR-102. Blocked on OQ-6 (what canonical key survives refactoring).", recent: false },
     { id: "FR-914", section: "FR", status: "notstarted", title: "byte-exact quote verification, fail-closed — shares FR-107's verifier (E-43)",
       note: "Partially landed 2026-08-06 (grounding.py: one substring invariant, two normalization profiles, verdict-only). Verifier + research/handoff/deep-review consumers landed; stays open until an assessment stage consumes the read_committed_bytes commit source.", recent: true },
-    { id: "FR-915", section: "FR", status: "notstarted", title: "not_collected / unknown vs measured value (E-40)",
-      note: "Contract half landed 2026-08-06 (measurement.py, retrofitted onto CoverageReport/SecurityReport/claim_survival_score; QAReport.coverage_pct deleted). RepoTriage/triage half deferred to E-41; the load-bearing case was the malformed-SARIF-reads-as-clean hole on the absolute floor.", recent: true },
+    { id: "FR-915", section: "FR", status: "partial", title: "not_collected / unknown vs measured value (E-40)",
+      note: "Both halves landed. Contract half 2026-08-06 (measurement.py retrofitted onto CoverageReport/SecurityReport/claim_survival_score; QAReport.coverage_pct deleted). RepoTriage/triage half landed 2026-08-07 with E-41 (RepoTriage/TriageFinding carry Measurement). The load-bearing case was the malformed-SARIF-reads-as-clean hole on the absolute floor (now not_collected).", recent: true },
     { id: "FR-916", section: "FR", status: "notstarted", title: "STRIDE + vuln classification + control coverage + composites with 1–3 drivers (E-49)",
       note: "", recent: false },
     { id: "FR-917", section: "FR", status: "notstarted", title: "risk thresholds as deterministic gate checks; FP dispositions as audited overrides (E-50)",
@@ -824,6 +824,16 @@ const ROADMAP = {
       note: "", recent: false },
     { id: "FR-1108", section: "FR", status: "notstarted", title: "inconclusive is a valid verdict; never a favourable read on insufficient data (E-70)",
       note: "", recent: false },
+
+    /* FR-1300 — Agent board (E-78; ADR-21) — landed 2026-08-07 */
+    { id: "FR-1300", section: "FR", status: "done", title: "project-level artifact versioning (E-78)",
+      note: "requirements / architecture / plan versioned per project with supersedes lineage across runs; bodies in the claim-check store (board_artifact kind), graph in SQLite. A gate-rejected artifact is recorded with status=\"rejected\" and does not move the pointer.", recent: true },
+    { id: "FR-1301", section: "FR", status: "done", title: "task lifecycle (E-78)",
+      note: "pending → in_progress → done|failed|blocked|quarantined, one state-machine table (board/transitions.py) shared by both writers. Tasks key off (project, plan_version, task_id) because DevTask.id is planner-assigned per run.", recent: true },
+    { id: "FR-1302", section: "FR", status: "done", title: "append-only change log + board counters (E-78)",
+      note: "Every accepted transition writes one event row with actor + authority; rejected writes write none. /stats exposes only board-owned counters. Deliberately disjoint from benchmarks/ rollup — the join key (run_id, stage, task_id on BenchmarkRecord) exists for a later spec.", recent: true },
+    { id: "FR-1303", section: "FR", status: "done", title: "dual write path with optimistic concurrency (E-78)",
+      note: "Workflow writes content through Temporal activities in-process (no HTTP dependency); agents write status through FastAPI with If-Match: <row_version>. Both reach one BoardStore, so exactly one place can move a status. Single-worker only — Postgres beyond one container.", recent: true },
 
     /* NFR */
     { id: "NFR-1", section: "NFR", status: "done",       title: "Durability — Temporal-native",
@@ -913,7 +923,7 @@ const ROADMAP = {
     { id: "ADR-7",  section: "ADR", status: "notstarted", title: "Repairs execute through the factory",
       note: "maintenance loop absent.", recent: false },
     { id: "ADR-8",  section: "ADR", status: "partial",    title: "Interfaces as stateless shells",
-      note: "true for CLI; dashboard backend absent.", recent: false },
+      note: "true for CLI; dashboard backend absent (E-75). The agent board API (E-78) is a stateful surface by design, not drift — it serves durable cross-run state no live workflow holds. ADR-21 records the exception; ARCHITECTURE.md §8 scopes the \"stateless shells\" claim to operator surfaces.", recent: true },
     { id: "ADR-9",  section: "ADR", status: "notstarted", title: "Two worker pools by capability",
       note: "single queue.", recent: false },
     { id: "ADR-10", section: "ADR", status: "partial",    title: "Claim-check for large payloads",
@@ -938,6 +948,8 @@ const ROADMAP = {
       note: "FR-1105, NG7, E-68/E-69. Deployment half done (E-67/E-68: src/sdlc/deploy/adapters.py, compose + script). Analytics half open (E-69). Unresolved consequence: OQ-9.", recent: true },
     { id: "ADR-20", section: "ADR", status: "notstarted", title: "Pre-registration reuses ValidationContract freeze semantics",
       note: "FR-1102, FR-803, E-65.", recent: false },
+    { id: "ADR-21", section: "ADR", status: "done", title: "Agent board as a durable projection (E-78)",
+      note: "Landed 2026-08-07. Project artifacts + task status projected into a durable store (SQLite) so they are addressable and queryable mid-flight. authoritative_status (workflow-written, from real stage outcomes) vs status (agent-writable) keeps Temporal replay the source of truth — stats read authoritative only. Workflow writes in-process via activities; agents via FastAPI If-Match; both reach one BoardStore. Disjoint from benchmarks/; not an LLM orchestrator (deferred).", recent: true },
 
     /* STRUCT (§7) */
     { id: "STRUCT-1", section: "STRUCT", status: "partial",    title: "Layered src/factory/ tree",
@@ -1043,9 +1055,9 @@ const ROADMAP = {
 
     /* §10 — Tier 0 triage & tidy-up (FR-900) */
     { id: "E-40", section: "E", status: "partial", title: "Measurement type + RepoTriage contracts (FR-915, FR-901)",
-      note: "Measurement landed 2026-08-06: src/sdlc/measurement.py retrofitted onto CoverageReport, SecurityReport and claim_survival_score, with QAReport.coverage_pct deleted. The live conflation worth fixing was on the ABSOLUTE floor (report_from_sarif returned critical=0 for a malformed document) — now not_collected, and security_no_critical split into security_scan_collected + security_no_critical. RepoTriage deferred to E-41; FR-915 stays open until then.", recent: true },
-    { id: "E-41", section: "E", status: "notstarted", title: "deterministic hygiene signals (FR-902, FR-108)",
-      note: "Build and run probe; secret scan including credentials reachable from client-side bundles; dependency health (unpinned / known-vulnerable / unused / duplicated); dead and generator-scaffold code; framework-default misconfiguration; size and duplication outliers; missing baseline practice. Each an activity behind the FR-108 adapter. One implementation per signal, deliberately.", recent: false },
+      note: "Measurement landed 2026-08-06 (src/sdlc/measurement.py retrofitted onto CoverageReport, SecurityReport and claim_survival_score; QAReport.coverage_pct deleted). The live conflation worth fixing was on the ABSOLUTE floor (report_from_sarif returned critical=0 for a malformed document) — now not_collected, and security_no_critical split into security_scan_collected + security_no_critical. RepoTriage/TriageFinding/Readiness landed with E-41 (2026-08-07), closing the triage half of FR-915.", recent: true },
+    { id: "E-41", section: "E", status: "partial", title: "deterministic hygiene signals (FR-902, FR-108)",
+      note: "Contracts + seam + three signals landed 2026-08-07: RepoTriage/TriageFinding/Readiness (closing E-40's deferred half), a one-activity-per-signal seam, and build probe, secret scan (incl. client-bundle-reachable credentials) and baseline practice. Readiness is three-valued — any unmeasured dimension forces INDETERMINATE, so an unmeasured repo never reads as ready for the FR-903 gate. The build probe executes the triaged repo's own code in a throwaway clone at the pinned commit (operator-authorization boundary, not solved — NFR-9; E-57/E-21). Remaining four families are E-41a–d (dependency health, dead/scaffold code, framework misconfig, size/duplication outliers).", recent: true },
     { id: "E-42", section: "E", status: "notstarted", title: "TriageWorkflow + readiness verdict + readiness gate (FR-901, FR-903)",
       note: "Readiness (buildable / runnable / tests present / structure discernible) computed from deterministic signals only, so triage completes on a repository where an LLM would have nothing to reason about. An unbuildable repo is a finding, not an error. The gate resolves through the FR-301/302 machinery, so an operator can override with an audited decision.", recent: false },
     { id: "E-43", section: "E", status: "done", title: "grounding verifier (FR-914, shares FR-107)",
@@ -1125,7 +1137,11 @@ const ROADMAP = {
     { id: "E-76", section: "E", status: "notstarted", title: "canvas (FR-1205)",
       note: "@vue-flow/core + dagre auto-layout on the existing Vue 3 + Pinia + Vite stack. One renderer, two modes: runState ⇒ status rings/cost/durations/traversal counters on loop edges/live gate approve-reject; editable ⇒ palette + inspector. Editing a running graph disabled by design. Run.stageIdx (linear) becomes currentNodes:string[]; StageDots.vue maps active nodes through canonical_stage back onto the fixed 15-stage strip. Designed 2026-08-06.", recent: true },
     { id: "E-77", section: "E", status: "notstarted", title: "graph store + custom-graph benchmark mapping (FR-1206)",
-      note: "Runs record their graph_sha so a post-mortem renders the graph that actually ran, not what it looks like now. Benchmark records derive fix_attempts from inbound-fail-edge traversal counts and round from the router, keeping the §9 measurement axes intact across hand-authored graphs. Designed 2026-08-06.", recent: true }
+      note: "Runs record their graph_sha so a post-mortem renders the graph that actually ran, not what it looks like now. Benchmark records derive fix_attempts from inbound-fail-edge traversal counts and round from the router, keeping the §9 measurement axes intact across hand-authored graphs. Designed 2026-08-06.", recent: true },
+
+    /* §16 — Agent board (FR-1300…FR-1303; ADR-21) — landed 2026-08-07 */
+    { id: "E-78", section: "E", status: "done", title: "Agent board — persistent artifact & task state with a query API (FR-1300…FR-1303)",
+      note: "Landed 2026-08-07 (feat/agent-board). src/sdlc/board/: BoardStore over SQLite (WAL, BEGIN IMMEDIATE) — project artifacts versioned with supersedes lineage (bodies claim-checked via the existing ArtifactStore), task lifecycle with one shared state-machine table, an append-only event log, and /stats. Two writers, one enforcement point: workflow writes in-process via activities; agents write status via FastAPI with If-Match. authoritative_status (workflow-only) vs status (agent-writable) keeps replay the source of truth. Numbering note: code comments mislabel this E-40; it is E-78 (E-40 is Measurement+RepoTriage). Known gaps: publish dedupe broader than retry-safety needs; X-Actor self-asserted (OQ-11, now live). Spec docs/superpowers/specs/2026-08-07-agent-board-design.md.", recent: true }
   ],
 
   /* §8 — Recommended next increments (narrative, ranked) */
@@ -1135,7 +1151,7 @@ const ROADMAP = {
     { rank: 3, status: "done", text: "<strong>retro/reflect wiring</strong> (FR-404) — starts accumulating the SC-4/SC-6 calibration signal. <strong>Done</strong> — schedule mechanism + nightly project reflect (E-12/E-13) and the retro <em>stage</em> itself (E-32: RunSummary + reflect(project_bank) + events.jsonl/report.html on every terminal path). Org half still blocked on <strong>E-25</strong> (no org_bank writers). The benchmark instrument that turns the accruing signal into SC-1..6 numbers also landed: held-out grade (<strong>E-30/E-31</strong>) and per-role economics (<strong>E-33</strong>)." },
     { rank: 4, status: "partial", text: "<strong>Harness containment</strong> beyond env allowlist — pre_tool hook + egress (FR-703/NFR-5). <strong>Partially landed</strong> — declared containment capability + fail-closed PreToolUse hook + policy/containment.yaml (E-15/E-16, ADR-17) and tool-level egress denial (E-18 partial). Network-level egress + OS/container tier remain (E-21); approval escalation (E-17) landed (defer → tool_approval gate → single-use grant)." },
     { rank: 5, status: "partial", text: "<strong>Operability</strong> — dashboard FastAPI backend + MCP + cross-run inbox (FR-305/601/602). <strong>Cross-run inbox landed</strong> (E-8: <code>sdlc inbox</code>); dashboard backend (E-10) and MCP server (E-11) still absent — both are thin adapters over the E-6/E-7 channel contract." },
-    { rank: 6, status: "partial", text: "<strong>Post-P1 roadmap</strong> — MaintenanceWorkflow/DAPER (E-14), two worker pools, run budgets, observability export, brownfield mode, claim-check. <strong>Run budgets landed</strong> (E-33, folds E-19) and <strong>observability export landed</strong> (E-32, folds E-22/E-23); DAPER (E-14), two worker pools, brownfield mode (FR-102), and full claim-check (FR-702 diffs) remain." },
+    { rank: 6, status: "partial", text: "<strong>Post-P1 roadmap</strong> — MaintenanceWorkflow/DAPER (E-14), two worker pools, run budgets, observability export, deploy contract, agent board, brownfield mode, claim-check. <strong>Run budgets landed</strong> (E-33, folds E-19), <strong>observability export landed</strong> (E-32, folds E-22/E-23), <strong>deploy contract landed</strong> (E-67/E-68), and <strong>agent board landed</strong> (E-78/ADR-21); DAPER (E-14), two worker pools, brownfield mode (FR-102), and full claim-check (FR-702 diffs) remain." },
     { rank: 7, status: "done", text: "<strong>Repo hardening via agents-as-folders</strong> — closes §7's prompts-as-assets drift. <strong>Done</strong> — E-1 (agents/&lt;role&gt;/ loader), E-2 (instructions.md → PROMPT_SHAS), E-4 (prompt eval loop) all landed." }
   ]
 };

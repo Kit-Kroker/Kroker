@@ -78,33 +78,23 @@ def create_app(store_factory: Callable[[], BoardStore] | None = None
             raise HTTPException(404, f"project {project!r} has no current plan")
         return art.current_version
 
-    def _require_project(store: BoardStore, project: str) -> dict:
-        row = store._conn.execute(
-            "SELECT key, repo FROM project WHERE key=?",
-            (project,)).fetchone()
-        if row is None:
-            raise HTTPException(404, f"no project {project!r}")
-        return {"key": row["key"], "repo": row["repo"]}
-
-    app.state.require_project = _require_project
-    app.state.current_plan_version = _current_plan_version
-    app.state.get_store = get_store
+    def _require_project(store: BoardStore, project: str) -> tuple[str, str]:
+        try:
+            return store.get_project(project)
+        except NotFoundError as e:
+            raise HTTPException(404, str(e)) from e
 
     @app.get("/projects", response_model=list[ProjectSummary])
     def list_projects(store: BoardStore = Depends(get_store)):
-        rows = store._conn.execute(
-            "SELECT key, repo FROM project ORDER BY key").fetchall()
-        return [ProjectSummary(key=r["key"], repo=r["repo"]) for r in rows]
+        return [ProjectSummary(key=k, repo=r)
+                for k, r in store.list_projects()]
 
     @app.get("/projects/{project}", response_model=ProjectDetail)
     def get_project(project: str, store: BoardStore = Depends(get_store)):
-        meta = _require_project(store, project)
-        rows = store._conn.execute(
-            "SELECT project,key,current_version,status FROM artifact "
-            "WHERE project=? ORDER BY key", (project,)).fetchall()
+        key, repo = _require_project(store, project)
         return ProjectDetail(
-            key=meta["key"], repo=meta["repo"],
-            artifacts=[BoardArtifact(**dict(r)) for r in rows],
+            key=key, repo=repo,
+            artifacts=store.list_artifacts(project),
             stats=store.stats(project))
 
     @app.get("/projects/{project}/artifacts/{key}",
@@ -149,6 +139,11 @@ def create_app(store_factory: Callable[[], BoardStore] | None = None
     def list_tasks(project: str, status: TaskStatus | None = None,
                    run_id: str | None = None, plan: int | None = None,
                    store: BoardStore = Depends(get_store)):
+        # `status` here filters the LIVE view (BoardTask.status) — what an
+        # agent reads to avoid a task another agent already claimed. This is
+        # deliberately NOT authoritative_status: /stats counts the
+        # authoritative column so scoring is unaffected by optimistic agent
+        # writes, while /tasks?status= shows the live view agents act on.
         _require_project(store, project)
         pv = plan if plan is not None else _current_plan_version(store,
                                                                  project)
@@ -185,7 +180,13 @@ def create_app(store_factory: Callable[[], BoardStore] | None = None
                      detail: str) -> BoardTask:
         """Shared body for both agent routes. Every rejection maps to a
         status code here; the store raised, so nothing was written and no
-        event row exists — the change log records real changes only."""
+        event row exists — the change log records real changes only.
+
+        X-Actor is self-asserted by the caller: any client can claim any
+        identity. This is scope-correct (the spec assumes an unauthenticated
+        internal network), but it means the audit trail's trustworthiness
+        rests on the caller being honest — enforce identity upstream of this
+        endpoint before relying on `actor` for accountability."""
         _require_project(store, project)
         if if_match is None:
             raise HTTPException(

@@ -171,3 +171,23 @@ def test_two_threads_claiming_one_task_yield_one_winner(tmp_path):
 
     assert sorted(results) == ["conflict", "won"], \
         f"exactly one claim must win, got {results}"
+
+
+def test_authoritative_re_execution_is_idempotent(store, plan_v):
+    """Temporal is at-least-once: an activity that committed but whose
+    completion wasn't reported re-executes. A repeated DONE must not raise
+    InvalidTransition (which would burn all 5 retry attempts identically and
+    permanently fail the run at a task boundary)."""
+    store.set_task_authoritative("proj", plan_v, "T01",
+                                 TaskStatus.IN_PROGRESS, actor="workflow:r")
+    store.set_task_authoritative("proj", plan_v, "T01", TaskStatus.DONE,
+                                 actor="workflow:r")
+    # Re-execution of the same authoritative write: a no-op, not an error.
+    t = store.set_task_authoritative("proj", plan_v, "T01", TaskStatus.DONE,
+                                     actor="workflow:r")
+    assert t.authoritative_status is TaskStatus.DONE
+    # No event is appended for the no-op re-execution.
+    before = len(store.list_events("proj"))
+    store.set_task_authoritative("proj", plan_v, "T01", TaskStatus.DONE,
+                                 actor="workflow:r")
+    assert len(store.list_events("proj")) == before
