@@ -924,6 +924,10 @@ class DeployConfig(BaseModel):
 
 class PipelineConfig(BaseModel):
     execution_mode: ExecutionMode = ExecutionMode.SERIAL
+    # Board identity (E-40). Deliberately NOT MemoryConfig.project_bank:
+    # that addresses Hindsight, this addresses the board SQLite. Two stores,
+    # two identifiers — sharing one by accident couples unrelated lifetimes.
+    project_key: str = "default"
     max_session_resumes: int = 3            # FR-802: past this, fresh session
                                             # seeded with a handoff — compaction
                                             # is failure, never continued
