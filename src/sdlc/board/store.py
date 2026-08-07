@@ -19,7 +19,8 @@ from datetime import datetime, timezone
 from ..artifacts.store import LocalFileStore
 from ..models import ArtifactRef, DevTask
 from .models import (ArtifactStatus, ArtifactVersion, Authority, BoardArtifact,
-                     BoardEvent, BoardTask, TaskStatus)
+                     BoardEvent, BoardStats, BoardTask, TaskEvidence,
+                     TaskStatus)
 from .schema import apply_schema, connect, db_path
 from .transitions import check_task_transition
 
@@ -267,6 +268,62 @@ class BoardStore:
                         Authority.OBSERVATIONAL, task.status.value,
                         status.value, detail=detail)
         return self.get_task(project, plan_version, task_id)
+
+    # ---- evidence ----------------------------------------------------
+
+    def attach_task_evidence(self, project: str, plan_version: int,
+                             task_id: str, run_id: str, kind: str,
+                             content: bytes) -> ArtifactRef:
+        """Per-run, immutable observation about one attempt. Unlike project
+        artifacts these are never versioned and never move a pointer."""
+        if kind not in EVIDENCE_KINDS:
+            raise ValueError(
+                f"evidence kind {kind!r} not in {sorted(EVIDENCE_KINDS)}")
+        self.get_task(project, plan_version, task_id)     # 404 if absent
+        ref = self._blobs.put(
+            "board_evidence", run_id,
+            f"{task_id}-{kind}.json", content)
+        with self._write():
+            self._conn.execute(
+                "INSERT INTO task_evidence(project,plan_version,task_id,"
+                "run_id,kind,sha256,uri,created_at) VALUES (?,?,?,?,?,?,?,?)",
+                (project, plan_version, task_id, run_id, kind,
+                 ref.sha256, ref.uri, _now()))
+        return ref
+
+    def list_evidence(self, project: str, plan_version: int,
+                      task_id: str) -> list[TaskEvidence]:
+        rows = self._conn.execute(
+            "SELECT * FROM task_evidence WHERE project=? AND plan_version=? "
+            "AND task_id=? ORDER BY id",
+            (project, plan_version, task_id)).fetchall()
+        return [TaskEvidence(**dict(r)) for r in rows]
+
+    # ---- stats -------------------------------------------------------
+
+    def stats(self, project: str) -> BoardStats:
+        """Board-owned counters only. Counted status is authoritative_status:
+        an agent's optimistic write must never move a number that scoring
+        or a human reads as truth."""
+        by_status = {
+            r["authoritative_status"]: r["n"] for r in self._conn.execute(
+                "SELECT authoritative_status, COUNT(*) AS n FROM task "
+                "WHERE project=? GROUP BY authoritative_status",
+                (project,)).fetchall()}
+        agg = self._conn.execute(
+            "SELECT COALESCE(SUM(fix_attempts),0) AS fixes,"
+            " COALESCE(SUM(error IS NOT NULL),0) AS errs,"
+            " COALESCE(SUM(status<>authoritative_status),0) AS diverged"
+            " FROM task WHERE project=?", (project,)).fetchone()
+        events = self._conn.execute(
+            "SELECT COUNT(*) FROM event WHERE project=?",
+            (project,)).fetchone()[0]
+        return BoardStats(
+            project=project, tasks_by_status=by_status,
+            total_fix_attempts=int(agg["fixes"]),
+            tasks_with_error=int(agg["errs"]),
+            diverged_tasks=int(agg["diverged"]),
+            event_count=int(events))
 
 
 class _Tx:
