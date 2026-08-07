@@ -72,6 +72,17 @@ def test_install_timeout_is_not_collected_not_a_measured_failure():
     assert "install_failed" not in _rules(r)
 
 
+def test_install_timeout_runnable_reason_says_timed_out_not_failed():
+    # The runnable reason exists to say precisely why runnability was not
+    # measured; a timeout must read as a timeout, not as an install failure.
+    r = bp.interpret(True, install=TIMEOUT, build=None, test=None,
+                     test_verdict=None)
+    m = r.metrics[M_RUNNABLE]
+    assert m.state is CollectionState.NOT_COLLECTED
+    assert "timed out" in m.reason
+    assert "failed" not in m.reason
+
+
 def test_build_failure_makes_buildable_zero():
     r = bp.interpret(True, install=OK, build=FAIL, test=None,
                      test_verdict=None)

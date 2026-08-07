@@ -106,9 +106,12 @@ def interpret(toolchain_found: bool,
 
     # --- runnable ------------------------------------------------------
     if install is not None and not install_ok:
-        # Deliberate: the test step is skipped, not merely ignored.
+        # Deliberate: the test step is skipped, not merely ignored. The reason
+        # must say precisely why runnability was not measured -- a timeout is an
+        # absent measurement, a non-zero exit is a measured-zero buildable.
+        why = "timed out" if install.code == TIMEOUT_CODE else "failed"
         runnable = Measurement.not_collected(
-            "install failed, so a test run would re-measure that rather than "
+            f"install {why}, so a test run would re-measure that rather than "
             "runnability")
     elif test is None:
         runnable = Measurement.not_collected(
