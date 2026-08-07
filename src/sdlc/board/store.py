@@ -17,10 +17,11 @@ import sqlite3
 from datetime import datetime, timezone
 
 from ..artifacts.store import LocalFileStore
-from ..models import ArtifactRef
+from ..models import ArtifactRef, DevTask
 from .models import (ArtifactStatus, ArtifactVersion, Authority, BoardArtifact,
-                     BoardEvent)
+                     BoardEvent, BoardTask, TaskStatus)
 from .schema import apply_schema, connect, db_path
+from .transitions import check_task_transition
 
 
 class BoardError(Exception):
@@ -167,6 +168,105 @@ class BoardStore:
             args.append(subject)
         rows = self._conn.execute(sql + " ORDER BY id", args).fetchall()
         return [BoardEvent(**dict(r)) for r in rows]
+
+    # ---- tasks -------------------------------------------------------
+
+    def sync_plan_tasks(self, project: str, plan_version: int, run_id: str,
+                        tasks: list[DevTask], *, actor: str) -> int:
+        """Insert one PENDING row per DevTask. Idempotent — re-running a
+        workflow (Temporal retry, replay) must not duplicate or reset rows.
+        Returns the number of rows actually inserted."""
+        inserted = 0
+        with self._write():
+            for t in tasks:
+                cur = self._conn.execute(
+                    "INSERT INTO task(project,plan_version,task_id,run_id,"
+                    "status,authoritative_status,row_version,fix_attempts,"
+                    "error,branch,updated_at) "
+                    "VALUES (?,?,?,?,?,?,1,0,NULL,NULL,?) "
+                    "ON CONFLICT(project,plan_version,task_id) DO NOTHING",
+                    (project, plan_version, t.id, run_id,
+                     TaskStatus.PENDING.value, TaskStatus.PENDING.value,
+                     _now()))
+                if cur.rowcount:
+                    inserted += 1
+                    self._event(project,
+                                f"task:{plan_version}:{t.id}", actor,
+                                Authority.AUTHORITATIVE, None,
+                                TaskStatus.PENDING.value, detail=t.title)
+        return inserted
+
+    def get_task(self, project: str, plan_version: int,
+                 task_id: str) -> BoardTask:
+        row = self._conn.execute(
+            "SELECT * FROM task WHERE project=? AND plan_version=? "
+            "AND task_id=?", (project, plan_version, task_id)).fetchone()
+        if row is None:
+            raise NotFoundError(
+                f"no task {task_id!r} in plan {plan_version} of {project!r}")
+        return BoardTask(**dict(row))
+
+    def list_tasks(self, project: str, plan_version: int, *,
+                   status: TaskStatus | None = None,
+                   run_id: str | None = None) -> list[BoardTask]:
+        sql = "SELECT * FROM task WHERE project=? AND plan_version=?"
+        args: list = [project, plan_version]
+        if status is not None:
+            sql += " AND status=?"
+            args.append(status.value)
+        if run_id is not None:
+            sql += " AND run_id=?"
+            args.append(run_id)
+        rows = self._conn.execute(sql + " ORDER BY task_id", args).fetchall()
+        return [BoardTask(**dict(r)) for r in rows]
+
+    def set_task_authoritative(
+            self, project: str, plan_version: int, task_id: str,
+            status: TaskStatus, *, actor: str,
+            fix_attempts: int | None = None, error: str | None = None,
+            branch: str | None = None) -> BoardTask:
+        """Workflow write. Validates against authoritative_status — an agent
+        having moved `status` must never unlock a workflow transition."""
+        with self._write():
+            task = self.get_task(project, plan_version, task_id)
+            check_task_transition(task.authoritative_status, status)
+            self._conn.execute(
+                "UPDATE task SET status=?, authoritative_status=?,"
+                " row_version=row_version+1,"
+                " fix_attempts=COALESCE(?,fix_attempts),"
+                " error=COALESCE(?,error), branch=COALESCE(?,branch),"
+                " updated_at=? "
+                "WHERE project=? AND plan_version=? AND task_id=?",
+                (status.value, status.value, fix_attempts, error, branch,
+                 _now(), project, plan_version, task_id))
+            self._event(project, f"task:{plan_version}:{task_id}", actor,
+                        Authority.AUTHORITATIVE,
+                        task.authoritative_status.value, status.value)
+        return self.get_task(project, plan_version, task_id)
+
+    def set_task_observational(
+            self, project: str, plan_version: int, task_id: str,
+            status: TaskStatus, *, actor: str, expect_row_version: int,
+            detail: str = "") -> BoardTask:
+        """Agent write. Moves the live view only; authoritative_status is
+        untouched, so scoring and replay are unaffected by an agent that
+        crashes mid-claim or reports optimistically."""
+        with self._write():
+            task = self.get_task(project, plan_version, task_id)
+            if task.row_version != expect_row_version:
+                raise ConflictError(
+                    f"row_version {expect_row_version} is stale; "
+                    f"current is {task.row_version}")
+            check_task_transition(task.status, status)
+            self._conn.execute(
+                "UPDATE task SET status=?, row_version=row_version+1,"
+                " updated_at=? "
+                "WHERE project=? AND plan_version=? AND task_id=?",
+                (status.value, _now(), project, plan_version, task_id))
+            self._event(project, f"task:{plan_version}:{task_id}", actor,
+                        Authority.OBSERVATIONAL, task.status.value,
+                        status.value, detail=detail)
+        return self.get_task(project, plan_version, task_id)
 
 
 class _Tx:
