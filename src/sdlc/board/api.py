@@ -13,13 +13,14 @@ from __future__ import annotations
 
 from typing import Callable
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from ..artifacts.store import ref_to_path
 from .models import (ArtifactVersion, BoardArtifact, BoardEvent, BoardStats,
                      BoardTask, TaskEvidence, TaskStatus)
-from .store import BoardStore, NotFoundError
+from .store import (BoardStore, ConflictError, InvalidTransition,
+                    NotFoundError)
 
 MAX_CONTENT_BYTES = 512 * 1024
 
@@ -49,6 +50,11 @@ class VersionContent(BaseModel):
 class TaskDetail(BaseModel):
     task: BoardTask
     evidence: list[TaskEvidence]
+
+
+class TaskPatch(BaseModel):
+    status: TaskStatus
+    detail: str = ""
 
 
 def create_app(store_factory: Callable[[], BoardStore] | None = None
@@ -172,6 +178,57 @@ def create_app(store_factory: Callable[[], BoardStore] | None = None
     def get_stats(project: str, store: BoardStore = Depends(get_store)):
         _require_project(store, project)
         return store.stats(project)
+
+    def _agent_write(store: BoardStore, project: str, task_id: str,
+                     status: TaskStatus, plan: int | None,
+                     if_match: str | None, actor: str,
+                     detail: str) -> BoardTask:
+        """Shared body for both agent routes. Every rejection maps to a
+        status code here; the store raised, so nothing was written and no
+        event row exists — the change log records real changes only."""
+        _require_project(store, project)
+        if if_match is None:
+            raise HTTPException(
+                428, "If-Match: <row_version> is required for agent writes")
+        try:
+            expect = int(if_match)
+        except ValueError as e:
+            raise HTTPException(400, "If-Match must be an integer") from e
+        pv = plan if plan is not None else _current_plan_version(store,
+                                                                 project)
+        try:
+            return store.set_task_observational(
+                project, pv, task_id, status, actor=actor,
+                expect_row_version=expect, detail=detail)
+        except NotFoundError as e:
+            raise HTTPException(404, str(e)) from e
+        except ConflictError as e:
+            raise HTTPException(409, str(e)) from e
+        except InvalidTransition as e:
+            raise HTTPException(422, str(e)) from e
+
+    @app.post("/projects/{project}/tasks/{task_id}/claim",
+              response_model=BoardTask)
+    def claim_task(project: str, task_id: str, plan: int | None = None,
+                   if_match: str | None = Header(default=None,
+                                                 alias="If-Match"),
+                   x_actor: str = Header(default="agent:unknown",
+                                         alias="X-Actor"),
+                   store: BoardStore = Depends(get_store)):
+        return _agent_write(store, project, task_id, TaskStatus.IN_PROGRESS,
+                            plan, if_match, x_actor, detail="claim")
+
+    @app.patch("/projects/{project}/tasks/{task_id}",
+               response_model=BoardTask)
+    def patch_task(project: str, task_id: str, patch: TaskPatch,
+                   plan: int | None = None,
+                   if_match: str | None = Header(default=None,
+                                                 alias="If-Match"),
+                   x_actor: str = Header(default="agent:unknown",
+                                         alias="X-Actor"),
+                   store: BoardStore = Depends(get_store)):
+        return _agent_write(store, project, task_id, patch.status, plan,
+                            if_match, x_actor, detail=patch.detail)
 
     return app
 
