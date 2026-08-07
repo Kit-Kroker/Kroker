@@ -55,8 +55,26 @@ _CLIENT_BUNDLE_VAR = re.compile(
     r"_[A-Z0-9_]*(?:SECRET|SERVICE_ROLE|PRIVATE_KEY)[A-Z0-9_]*)\b")
 
 _GENERIC_ASSIGNMENT = re.compile(
-    r"""(?i)\b(?:secret|token|password|passwd|api[_-]?key)\b\s*[:=]\s*"""
-    r"""["']([^"'\s]{8,})["']""")
+    r"""(?ix)                                    # case-insensitive, verbose
+    \b                                          # start of the identifier
+    ( [\w$-]*                                   # ...prefix (may be empty)
+      (?: secret | token | password | passwd | api[_-]?key )
+      [\w$-]*                                   # ...suffix
+    )                                           # a compound name like
+                                                # API_SECRET / DB_PASSWORD /
+                                                # STRIPE_SECRET_KEY matches:
+                                                # the keyword may sit anywhere
+                                                # in the identifier. There is
+                                                # deliberately NO trailing \b
+                                                # -- _ is a word char, so \b
+                                                # would refuse every compound
+                                                # this exists to catch.
+    \s* [:=] \s*
+    (?: " ([^"\n]{8,}) "                        # double-quoted value
+      | ' ([^'\n]{8,}) '                        # single-quoted value
+      | ([^\s"']{8,})                           # or unquoted (.env KEY=value)
+    )
+    """)
 
 
 def _looks_random(value: str) -> bool:
@@ -100,11 +118,13 @@ def scan_text(path: str, text: str) -> list[TriageFinding]:
                 f"client bundle, so the value ships to every browser.",
                 FixClass.JUDGEMENT, path, lineno, quote))
         for match in _GENERIC_ASSIGNMENT.finditer(line):
-            if _looks_random(match.group(1)):
+            # value is group 2 (double-quoted), 3 (single-quoted) or 4 (unquoted)
+            value = match.group(2) or match.group(3) or match.group(4)
+            if value and _looks_random(value):
                 findings.append(_finding(
                     "generic_secret_assignment", "low",
-                    "A secret-named variable is assigned a high-entropy "
-                    "literal. Verify whether it is a live credential.",
+                    f"{match.group(1)} is assigned a high-entropy literal. "
+                    f"Verify whether it is a live credential.",
                     FixClass.JUDGEMENT, path, lineno, quote))
     return findings
 

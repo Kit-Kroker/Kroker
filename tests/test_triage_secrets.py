@@ -80,6 +80,33 @@ def test_generic_rule_flags_a_high_entropy_value_at_low_severity():
     assert found[0].severity == "low"
 
 
+@pytest.mark.parametrize("line", [
+    'API_SECRET = "ak_live_0123456789abcdefXYZ"',        # compound, quoted
+    'DB_PASSWORD = "supersecretvalue12345678"',           # compound, quoted
+    'STRIPE_SECRET_KEY = "sk_live_0123456789abcdefAB"',   # compound, quoted
+    'AUTH_TOKEN = "tok_live_0123456789abcdefXY"',         # compound, quoted
+    'jwtSecret = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"', # camelCase, quoted
+])
+def test_generic_rule_matches_compound_variable_names(line):
+    # The \b-on-keyword form missed every compound name: _ is a word char, so
+    # there is no boundary before SECRET in API_SECRET.
+    found = secrets.scan_text("src/config.py", line)
+    assert "generic_secret_assignment" in _rules(found)
+
+
+def test_generic_rule_matches_unquoted_env_assignment():
+    # .env syntax: KEY=value with no quotes. The compound name plus a
+    # high-entropy unquoted value is the flagship vibe-code leak shape.
+    found = secrets.scan_text(
+        "backend/.env", "API_SECRET=ak_live_0123456789abcdefxyz")
+    assert "generic_secret_assignment" in _rules(found)
+
+
+def test_generic_rule_still_ignores_a_compound_name_with_a_placeholder():
+    found = secrets.scan_text("s.py", 'DB_PASSWORD = "changeme"')
+    assert found == []
+
+
 # ---- client-bundle reachability ---------------------------------------
 
 @pytest.mark.parametrize("var", [
@@ -171,6 +198,23 @@ async def test_gitignored_local_env_produces_no_finding(tmp_path):
     r = await triage_secrets(
         TriageSignalInput(repo_dir=str(tmp_path), commit_sha=sha))
     assert r.findings == []
+
+
+@pytest.mark.asyncio
+async def test_activity_flags_a_nested_env_in_a_monorepo(tmp_path):
+    # The reviewer's flagship: a backend/.env nested under a service dir, holding
+    # a service-role JWT on a compound variable name. A nested .env must report
+    # secret_committed -- the file itself is the leak, regardless of its lines.
+    sha = _commit_repo(tmp_path, {
+        "backend/.env":
+            "SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\n",
+        "src/app.py": "x = 1\n",
+    })
+    r = await triage_secrets(
+        TriageSignalInput(repo_dir=str(tmp_path), commit_sha=sha))
+    rules = _rules(r.findings)
+    assert "secret_committed" in rules
+    assert "env_file_tracked" in rules
 
 
 @pytest.mark.asyncio
