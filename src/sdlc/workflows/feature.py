@@ -37,6 +37,12 @@ with workflow.unsafe.imports_passed_through():
         QualityScore, SpeedBag, WasteBag,
     )
     from ..benchmarks.recorder import record_benchmark
+    from ..board.activities import (AttachEvidenceInput,
+                                    PublishArtifactInput, SetTaskStatusInput,
+                                    SyncPlanTasksInput, attach_task_evidence,
+                                    publish_artifact_version,
+                                    set_task_authoritative, sync_plan_tasks)
+    from ..board.models import ArtifactStatus, TaskStatus
     from ..gate import (
         CheckClass, CheckResult, GateOverride, GateReport, QualityGateInput,
         build_check,
@@ -136,6 +142,13 @@ PRICE_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
 # export must never change the run's return string).
 EXPORT_ACT = dict(start_to_close_timeout=timedelta(minutes=2),
                   retry_policy=RetryPolicy(maximum_attempts=1))
+
+# E-40: the board is NOT best-effort like EXPORT_ACT. Agents read tasks from
+# it, so a lost write is a correctness bug, not a missing report. The store's
+# writes are idempotent (sync uses ON CONFLICT DO NOTHING), so retrying is
+# safe.
+BOARD_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
+                 retry_policy=RetryPolicy(maximum_attempts=5))
 
 # E-30: run_integration_checks runs a real test suite + lint against the merged
 # integration head. Generous start_to_close (> the activity's internal test
@@ -563,6 +576,9 @@ class FeatureWorkflow:
         # counter keeps (gate, round) unique and replay-deterministic where a
         # per-task round would collide.
         self._escalation_round: int = 0
+        # E-40: surrogate artifact_version.id of the current plan, captured
+        # when the plan stage publishes. Task board writes key off it.
+        self._plan_version: int | None = None
 
     # ----------------------- benchmark recording ------------------------
 
@@ -596,6 +612,65 @@ class FeatureWorkflow:
             waste=waste,
             outcome=outcome, fix_attempts=fix_attempts, error=error,
         )
+
+    # ----------------------- board (E-40) -------------------------------
+
+    async def _board_publish(self, cfg: PipelineConfig, key: str,
+                             content_json: str, *, approved: bool = True
+                             ) -> int:
+        """Publish one project artifact version. A rejected gate still writes
+        history — the pointer just does not move."""
+        run_id = workflow.info().workflow_id
+        result = await workflow.execute_activity(
+            publish_artifact_version,
+            PublishArtifactInput(
+                project=cfg.project_key, key=key, run_id=run_id,
+                content_json=content_json, actor=f"workflow:{run_id}",
+                status=(ArtifactStatus.CURRENT if approved
+                        else ArtifactStatus.REJECTED)),
+            **BOARD_ACT)
+        return result.version_id
+
+    async def _board_sync_tasks(self, cfg: PipelineConfig,
+                                plan_version: int,
+                                tasks: list[DevTask]) -> None:
+        run_id = workflow.info().workflow_id
+        await workflow.execute_activity(
+            sync_plan_tasks,
+            SyncPlanTasksInput(
+                project=cfg.project_key, plan_version=plan_version,
+                run_id=run_id, tasks=tasks, actor=f"workflow:{run_id}"),
+            **BOARD_ACT)
+
+    async def _board_task_status(self, cfg: PipelineConfig, task_id: str,
+                                 status: TaskStatus, *,
+                                 fix_attempts: int | None = None,
+                                 error: str | None = None,
+                                 branch: str | None = None) -> None:
+        if self._plan_version is None:
+            return                      # no plan published (early rejection)
+        run_id = workflow.info().workflow_id
+        await workflow.execute_activity(
+            set_task_authoritative,
+            SetTaskStatusInput(
+                project=cfg.project_key, plan_version=self._plan_version,
+                task_id=task_id, status=status, actor=f"workflow:{run_id}",
+                fix_attempts=fix_attempts, error=error, branch=branch),
+            **BOARD_ACT)
+
+    async def _board_evidence(self, cfg: PipelineConfig, task_id: str,
+                              kind: str, content_json: str) -> None:
+        if self._plan_version is None:
+            return
+        await workflow.execute_activity(
+            attach_task_evidence,
+            AttachEvidenceInput(
+                project=cfg.project_key, plan_version=self._plan_version,
+                task_id=task_id, run_id=workflow.info().workflow_id,
+                kind=kind, content_json=content_json),
+            **BOARD_ACT)
+
+    # ----------------------- benchmark recording ------------------------
 
     async def _record(self, cfg: PipelineConfig, record: BenchmarkRecord
                       ) -> None:
@@ -1958,6 +2033,7 @@ class FeatureWorkflow:
             quality_score=_quality.score, judge=_quality.judge,
             outcome=BenchmarkOutcome.PASS,
             model=resolve_role_model(cfg, "clarify"), spend=clarify_spend))
+        await self._board_publish(cfg, "requirements", reqs.model_dump_json())
         await self._retain(
             cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
             text=f"clarify: {reqs.summary}",
@@ -2045,6 +2121,8 @@ class FeatureWorkflow:
             text=f"architect: {arch.overview}",
             metadata={"stage": "architect", "run_id": workflow.info().workflow_id})
         await self._check_budget(cfg)   # E-33: serial boundary after architect
+        await self._board_publish(cfg, "architecture", arch.model_dump_json(),
+                                  approved=gate.approved)
         if not gate.approved:
             return "rejected:architecture"
 
@@ -2087,8 +2165,11 @@ class FeatureWorkflow:
             text=f"plan: {len(plan.tasks)} tasks",
             metadata={"stage": "plan", "run_id": workflow.info().workflow_id})
         await self._check_budget(cfg)   # E-33: serial boundary after planner
+        self._plan_version = await self._board_publish(
+            cfg, "plan", plan.model_dump_json(), approved=gate.approved)
         if not gate.approved:
             return "rejected:plan"
+        await self._board_sync_tasks(cfg, self._plan_version, plan.tasks)
         graph_error = _validate_task_graph(plan.tasks)
         if graph_error:
             return f"failed:plan-validation:{graph_error}"
@@ -2105,8 +2186,22 @@ class FeatureWorkflow:
             """Execute the task only. Merging is a separate concern — see
             _merge_task (Resolution B: merging inside run_one would race
             the integration worktree under wave mode's asyncio.gather)."""
+            await self._board_task_status(cfg, t.id, TaskStatus.IN_PROGRESS)
             r = await self._dev_task(t, repo_path, self._integration_head,
                                      cfg, handoffs)
+            _BOARD_STATUS = {"done": TaskStatus.DONE,
+                             "failed": TaskStatus.FAILED,
+                             "quarantined": TaskStatus.QUARANTINED}
+            await self._board_task_status(
+                cfg, t.id, _BOARD_STATUS[r.status],
+                fix_attempts=r.attempts, branch=r.branch,
+                error=(r.notes or None
+                       if r.status != "done" else None))
+            for kind, report in (("qa", r.qa), ("review", r.review),
+                                 ("deep_review", r.deep_review)):
+                if report is not None:
+                    await self._board_evidence(cfg, t.id, kind,
+                                               report.model_dump_json())
             done[r.task_id] = r
             if r.handoff:
                 handoffs.append(r.handoff)

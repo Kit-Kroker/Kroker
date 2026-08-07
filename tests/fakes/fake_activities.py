@@ -13,10 +13,15 @@ from sdlc.activities import (
     QAInput, SecurityScanInput, WorktreeHandle, WorktreeInput,
 )
 from sdlc.models import (
-    CoverageReport, HarnessRunResult, QAReport, SecurityReport,
+    ArtifactRef, CoverageReport, HarnessRunResult, QAReport, SecurityReport,
 )
 from sdlc.measurement import CollectionState, Measurement
 from sdlc.pricing import price_usage
+
+from sdlc.board.activities import (AttachEvidenceInput,
+                                   PublishArtifactInput,
+                                   PublishArtifactResult, SetTaskStatusInput,
+                                   SyncPlanTasksInput)
 
 
 @activity.defn(name="setup_integration_branch")
@@ -92,10 +97,44 @@ async def fake_run_integration_checks(
         lint_clean=True, lint_detail="fake: no adapter (not linted)")
 
 
+@activity.defn(name="publish_artifact_version")
+async def fake_publish_artifact_version(
+        inp: PublishArtifactInput) -> PublishArtifactResult:
+    # version_id must be a non-None int so FeatureWorkflow._plan_version is
+    # set (the task-loop board writes early-return when it is None). The
+    # value itself is irrelevant — the fakes never touch a real DB.
+    return PublishArtifactResult(
+        ref=ArtifactRef(kind="board_artifact",
+                        uri="file:///fake/board", sha256="0" * 64),
+        version_id=1)
+
+
+@activity.defn(name="sync_plan_tasks")
+async def fake_sync_plan_tasks(inp: SyncPlanTasksInput) -> int:
+    return len(inp.tasks)
+
+
+@activity.defn(name="set_task_authoritative")
+async def fake_set_task_authoritative(inp: SetTaskStatusInput) -> None:
+    return None
+
+
+@activity.defn(name="attach_task_evidence")
+async def fake_attach_task_evidence(inp: AttachEvidenceInput) -> ArtifactRef:
+    return ArtifactRef(kind="board_evidence",
+                       uri="file:///fake/evidence", sha256="0" * 64)
+
+
 GIT_FAKES = [
     fake_setup_integration_branch, fake_create_worktree, fake_run_coding_task,
     fake_get_task_diff, fake_run_test_suite, fake_run_lint,
     fake_merge_into_integration, fake_open_pull_request,
     fake_security_scan, fake_measure_coverage, fake_run_integration_checks,
     price_usage,   # E-33: real activity — pure local table lookup, no network
+    # E-40: same-named no-op fakes for the board activities. The workflow now
+    # issues board writes at clarify/architecture/plan/task; the e2e worker
+    # registers these so dispatch resolves without touching a real SQLite DB
+    # (the store's behaviour is unit-tested in test_board_*.py).
+    fake_publish_artifact_version, fake_sync_plan_tasks,
+    fake_set_task_authoritative, fake_attach_task_evidence,
 ]
