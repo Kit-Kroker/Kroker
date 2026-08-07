@@ -19,6 +19,8 @@ from ..models import ArtifactRef
 _SUBDIRS = {
     "harness_session": "sessions",
     "harness_session_digest": "sessions",
+    "board_artifact": "artifacts",
+    "board_evidence": "evidence",
 }
 
 
