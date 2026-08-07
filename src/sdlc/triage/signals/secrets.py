@@ -61,25 +61,33 @@ _CLIENT_BUNDLE_VAR = re.compile(
     r"\b((?:NEXT_PUBLIC|VITE|REACT_APP|NUXT_PUBLIC|EXPO_PUBLIC|PUBLIC|GATSBY)"
     r"_[A-Z0-9_]*(?:SECRET|SERVICE_ROLE|PRIVATE_KEY)[A-Z0-9_]*)\b")
 
+# What counts as a secret-shaped name. The two rules MUST agree: the
+# client-bundle rule recognises SECRET|SERVICE_ROLE|PRIVATE_KEY, so the generic
+# rule recognises the same three plus token/password/passwd/api_key. service_role
+# and private_key are included so a leaked service-role JWT or private key in a
+# NON-.env file (compose, CI, shell) is also caught -- inside a .env the
+# file-level secret_committed rule already covers them.
+#
+# Segment-delimited, not a substring: the keyword must sit between separators
+# (_/$/-) or the identifier edge. This drops `token` inside TOKENIZER (a real
+# false positive in every ML repo) at the cost of camelCase jwtSecret (no
+# separator before Secret) -- a deliberate precision/recall trade for a rule
+# that is low severity by design.
+_SECRET_KEYWORD = (
+    r"secret|token|password|passwd|api[_-]?key"
+    r"|service[_-]?role|private[_-]?key")
+_SECRET_KEYWORD_RE = re.compile(
+    rf"(?:^|[_$-])(?:{_SECRET_KEYWORD})(?:[_$-]|$)", re.IGNORECASE)
+
+# Captures an identifier and its assignment value (double-quoted, single-quoted
+# or unquoted .env KEY=value). The secret-shape decision is _SECRET_KEYWORD_RE
+# applied to the captured identifier, keeping this regex a plain capture.
 _GENERIC_ASSIGNMENT = re.compile(
-    r"""(?ix)                                    # case-insensitive, verbose
-    \b                                          # start of the identifier
-    ( [\w$-]*                                   # ...prefix (may be empty)
-      (?: secret | token | password | passwd | api[_-]?key )
-      [\w$-]*                                   # ...suffix
-    )                                           # a compound name like
-                                                # API_SECRET / DB_PASSWORD /
-                                                # STRIPE_SECRET_KEY matches:
-                                                # the keyword may sit anywhere
-                                                # in the identifier. There is
-                                                # deliberately NO trailing \b
-                                                # -- _ is a word char, so \b
-                                                # would refuse every compound
-                                                # this exists to catch.
-    \s* [:=] \s*
-    (?: " ([^"\n]{8,}) "                        # double-quoted value
-      | ' ([^'\n]{8,}) '                        # single-quoted value
-      | ([^\s"']{8,})                           # or unquoted (.env KEY=value)
+    r"""(?ix)
+    \b ( [A-Za-z_$][\w$-]* ) \s* [:=] \s*
+    (?: " ([^"\n]{8,}) "
+      | ' ([^'\n]{8,}) '
+      | ([^\s"']{8,})
     )
     """)
 
@@ -125,12 +133,14 @@ def scan_text(path: str, text: str) -> list[TriageFinding]:
                 f"client bundle, so the value ships to every browser.",
                 FixClass.JUDGEMENT, path, lineno, quote))
         for match in _GENERIC_ASSIGNMENT.finditer(line):
+            ident = match.group(1)
             # value is group 2 (double-quoted), 3 (single-quoted) or 4 (unquoted)
             value = match.group(2) or match.group(3) or match.group(4)
-            if value and _looks_random(value):
+            if (value and _looks_random(value)
+                    and _SECRET_KEYWORD_RE.search(ident)):
                 findings.append(_finding(
                     "generic_secret_assignment", "low",
-                    f"{match.group(1)} is assigned a high-entropy literal. "
+                    f"{ident} is assigned a high-entropy literal. "
                     f"Verify whether it is a live credential.",
                     FixClass.JUDGEMENT, path, lineno, quote))
     return findings

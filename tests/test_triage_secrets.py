@@ -85,13 +85,31 @@ def test_generic_rule_flags_a_high_entropy_value_at_low_severity():
     'DB_PASSWORD = "supersecretvalue12345678"',           # compound, quoted
     'STRIPE_SECRET_KEY = "sk_live_0123456789abcdefAB"',   # compound, quoted
     'AUTH_TOKEN = "tok_live_0123456789abcdefXY"',         # compound, quoted
-    'jwtSecret = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"', # camelCase, quoted
+    # service_role / private_key: the client-bundle vocabulary, now recognised
+    # by the generic rule too so a leaked service-role JWT or private key in a
+    # NON-.env file (compose, CI, shell) is caught.
+    'SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiJ9XYZab"',
+    'STRIPE_PRIVATE_KEY = "sk_live_0123456789abcdefAB12"',
 ])
 def test_generic_rule_matches_compound_variable_names(line):
-    # The \b-on-keyword form missed every compound name: _ is a word char, so
-    # there is no boundary before SECRET in API_SECRET.
+    # The keyword may sit anywhere in the identifier, delimited by _/$/- or the
+    # edge, so compound names match.
     found = secrets.scan_text("src/config.py", line)
     assert "generic_secret_assignment" in _rules(found)
+
+
+@pytest.mark.parametrize("line", [
+    'TOKENIZER_MODEL = "sentence-transformers/all-MiniLM"',   # token in tokenizer
+    'tokenizer_path = "models/tokenizer-v2-final.json"',
+    'jwtSecret = "eyJhbGciOiJIUzI1NiJ9abcdefg"',              # camelCase, no sep
+])
+def test_generic_rule_ignores_keyword_substrings_and_unsplit_camelcase(line):
+    # Segment-delimited matching: `token` inside TOKENIZER is a substring of a
+    # larger word, not a segment, so it does not fire (a real false positive in
+    # every ML repo). camelCase jwtSecret has no separator before Secret, so it
+    # does not fire either -- the accepted recall cost of the precision trade.
+    found = secrets.scan_text("src/config.py", line)
+    assert "generic_secret_assignment" not in _rules(found), line
 
 
 def test_generic_rule_matches_unquoted_env_assignment():
