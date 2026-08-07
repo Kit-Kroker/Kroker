@@ -131,6 +131,20 @@ def test_no_env_tracked_means_no_env_findings():
     assert secrets.env_file_findings(["src/a.py"]) == []
 
 
+def test_nested_env_files_are_matched():
+    # The monorepo shape: backend service + web app each carry a nested .env.
+    found = secrets.env_file_findings(["backend/.env", "apps/web/.env.local"])
+    by_rule = {f.rule: f for f in found}
+    assert set(by_rule) == {"secret_committed", "env_file_tracked"}
+    # secret_committed names every matched file so rotation covers all of them.
+    assert "backend/.env" in by_rule["secret_committed"].detail
+    assert "apps/web/.env.local" in by_rule["secret_committed"].detail
+
+
+def test_nested_env_example_is_not_flagged():
+    assert secrets.env_file_findings(["apps/web/.env.example"]) == []
+
+
 # ---- activity ----------------------------------------------------------
 
 @pytest.mark.asyncio

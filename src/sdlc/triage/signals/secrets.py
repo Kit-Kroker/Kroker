@@ -14,6 +14,7 @@ negative. Naming that surface is what keeps the finding trustworthy.
 """
 from __future__ import annotations
 
+import posixpath
 import re
 from collections.abc import Sequence
 
@@ -108,12 +109,20 @@ def scan_text(path: str, text: str) -> list[TriageFinding]:
     return findings
 
 
+def _is_env_file(path: str) -> bool:
+    """A committed .env at any depth -- the common monorepo shape keeps them
+    nested (backend/.env, apps/web/.env.local), and spec D7 says ".env present
+    in the tracked tree", not ".env at the root". Examples are excluded by
+    basename so apps/web/.env.example does not count."""
+    base = posixpath.basename(path)
+    return base == ".env" or (
+        base.startswith(".env.") and base not in _ENV_EXAMPLES)
+
+
 def env_file_findings(paths: Sequence[str]) -> list[TriageFinding]:
-    """A tracked .env, split into the two halves of spec D7."""
+    """A tracked .env (root or nested), split into the two halves of spec D7."""
     tracked = set(paths)
-    env_files = sorted(p for p in tracked
-                       if p == ".env" or (p.startswith(".env.")
-                                          and p not in _ENV_EXAMPLES))
+    env_files = sorted(p for p in tracked if _is_env_file(p))
     if not env_files:
         return []
     listed = ", ".join(env_files)
