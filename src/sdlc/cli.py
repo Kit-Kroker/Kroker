@@ -12,6 +12,9 @@
   python -m sdlc.cli schedules apply
   python -m sdlc.cli eval capture --from feature-add-sso --case add-login-greenfield
   python -m sdlc.cli eval reviewer --against HEAD
+  python -m sdlc.cli triage --repo /path/to/repo [--commit HEAD]
+  python -m sdlc.cli triage --repo /path/to/repo --no-build-probe
+  python -m sdlc.cli triage show --id triage-myrepo-a1b2c3d
 """
 from __future__ import annotations
 
@@ -28,6 +31,7 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from .models import GateOutcome, IdeaBrief, PipelineConfig, ProjectMode
 from .worker import TASK_QUEUE
 from .workflows.feature import FeatureWorkflow
+from .workflows.triage import TriageInput, TriageWorkflow
 
 
 def slug(text: str) -> str:
@@ -177,6 +181,20 @@ async def main() -> None:
     from .capability.cli import add_capability_parser
     add_capability_parser(sub)
 
+    tr = sub.add_parser("triage")
+    trsub = tr.add_subparsers(dest="triage_cmd")
+    tr.add_argument("--repo", help="path to an already-cloned repository")
+    tr.add_argument("--commit", default="HEAD")
+    tr.add_argument("--no-build-probe", action="store_true",
+                    dest="no_build_probe",
+                    help="skip the one signal that executes the repo's own "
+                         "code; readiness becomes INDETERMINATE")
+    tr.add_argument("--advisory-source", default="none",
+                    help="'osv' enables a declared outbound vulnerability "
+                         "lookup; default collects nothing")
+    ts = trsub.add_parser("show")
+    ts.add_argument("--id", required=True)
+
     args = p.parse_args()
 
     if args.cmd == "eval" and args.target == "capture" \
@@ -302,6 +320,29 @@ async def main() -> None:
     if args.cmd == "capability":
         from .capability.cli import run_capability
         raise SystemExit(run_capability(args))
+
+    if args.cmd == "triage" and args.triage_cmd == "show":
+        handle = client.get_workflow_handle(args.id)
+        report = await handle.query("triage")
+        print("no triage yet" if report is None
+              else report.model_dump_json(indent=2))
+        return
+
+    if args.cmd == "triage":
+        if not args.repo:
+            raise SystemExit("triage requires --repo")
+        repo = os.path.abspath(args.repo)
+        wf_id = f"triage-{slug(os.path.basename(repo))}"
+        handle = await client.start_workflow(
+            TriageWorkflow.run,
+            TriageInput(repo_dir=repo, commit=args.commit,
+                        build_probe=not args.no_build_probe,
+                        advisory_source=args.advisory_source),
+            id=wf_id, task_queue=TASK_QUEUE)
+        print(f"started {handle.id}")
+        print("NOTE: the build probe executes this repository's own code as "
+              "the worker user. Operator-run only (NFR-9).")
+        return
 
     if args.cmd == "inbox":
         from .channels.inbox import fetch_inbox, render_inbox

@@ -56,10 +56,12 @@ from .research.stage import (plan_research, research_subquestion,
 from .research.verify import verify_brief_activity
 from .triage.activities import (
     triage_baseline, triage_build_probe, triage_dependencies,
-    triage_misconfig, triage_outliers, triage_scaffold, triage_secrets,
+    triage_misconfig, triage_outliers, triage_resolve_commit,
+    triage_scaffold, triage_secrets,
 )
 from .workflows.feature import FeatureWorkflow
 from .workflows.reflect import ReflectWorkflow
+from .workflows.triage import TriageWorkflow
 from .deploy.activities import (
     deploy_apply, deploy_current_version, deploy_rollback, smoke_check,
 )
@@ -91,7 +93,7 @@ async def main() -> None:
         client,
         task_queue=TASK_QUEUE,
         workflows=[FeatureWorkflow, BenchmarkWorkflow, ReflectWorkflow,
-                   DeploymentWorkflow],
+                   DeploymentWorkflow, TriageWorkflow],
         activities=[
             create_worktree, setup_integration_branch, merge_into_integration,
             run_coding_task, run_integration_checks, run_lint, run_test_suite,
@@ -118,7 +120,7 @@ async def main() -> None:
             synthesize_brief,
             triage_baseline, triage_secrets, triage_build_probe,
             triage_dependencies, triage_scaffold, triage_misconfig,
-            triage_outliers,
+            triage_outliers, triage_resolve_commit,
             *agent_activities,
         ],
     )
