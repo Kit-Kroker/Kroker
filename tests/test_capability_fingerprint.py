@@ -48,6 +48,26 @@ def test_absent_tier_is_renormalized_away_not_scored_zero():
     assert SignalTier.CONTRACT not in contrib
 
 
+def test_locational_only_overlap_is_not_comparable():
+    # Evidence floor (review #3): Locational is the cheapest signal to change
+    # in a repo, so a pair sharing nothing but a file path must not score.
+    # Renormalization would otherwise give that lone tier full weight (1.0)
+    # and hand a stored id to an unrelated co-located capability. This is the
+    # mirror of test_absent_tier_is_renormalized_away_not_scored_zero: there,
+    # renorm helps (a strong tier is absent); here, the same rule hurts.
+    a = _fp(contract=["POST /a"], locational=["src/core/x.py"])
+    b = _fp(locational=["src/core/x.py"])      # shares only the path
+    assert score(a, b, DEFAULT_TIER_WEIGHTS) is None
+
+
+def test_locational_shared_alongside_a_stronger_tier_is_comparable():
+    # The floor blocks only Locational-sole overlap, not any pair that also
+    # shares a non-Locational tier.
+    a = _fp(structural=["Auth"], locational=["src/x.py"])
+    b = _fp(structural=["Auth"], locational=["src/x.py"])
+    assert score(a, b, DEFAULT_TIER_WEIGHTS) is not None
+
+
 def test_contract_tier_dominates_a_full_structural_rename():
     # Every symbol and path renamed; routes and tables untouched.
     a = _fp(contract=["POST /login"], structural=["OldAuth"],

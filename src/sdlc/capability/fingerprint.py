@@ -53,6 +53,17 @@ def score(a: CapabilityFingerprint, b: CapabilityFingerprint,
     if not shared:
         return None
 
+    # Evidence floor (review #3, spec amendment 2026-08-08): a match must
+    # rest on at least one non-Locational tier. Locational is the cheapest
+    # signal to change in a repo, so a pair sharing nothing but a file path
+    # is not evidence of identity -- and renormalization would otherwise give
+    # that lone tier full weight (1.0), handing a stored id to an unrelated
+    # co-located capability. The spec's renormalization rationale targets the
+    # strong-tier-absent case; this floor is the mirror that stops the same
+    # rule from amplifying the weakest tier when it is the only overlap.
+    if all(t is SignalTier.LOCATIONAL for t in shared):
+        return None
+
     denominator = sum(weights[t] for t in shared)
     if denominator <= 0.0:
         return None

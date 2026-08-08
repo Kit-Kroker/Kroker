@@ -148,6 +148,18 @@ no routes and no tables. Counting an absent Contract tier as zero would bias
 systematically against exactly those capabilities whose other signals are also
 weakest, so absent tiers are excluded from the denominator rather than scored 0.
 
+> **Amendment (2026-08-08, review #3): evidence floor.** Renormalization is the
+> right call when a *strong* tier is absent. It is the wrong call when
+> *Locational* — the cheapest signal in a repo to change, and the one a refactor
+> alters most carelessly — is the only overlap: renormalization would give that
+> lone tier full weight (a perfect score) and hand a stored id to an unrelated
+> co-located capability. The spec's renormalization rationale targets the
+> strong-tier-absent case and was silent on weak-only. Resolved by an evidence
+> floor: **a pair is not comparable (score returns `None`) when Locational is the
+> only shared tier.** A match must rest on at least one non-Locational tier.
+> Locational still contributes when a stronger tier is also shared; it simply
+> cannot carry a match alone.
+
 ### Assignment: greedy, not optimal
 
 Matching is bipartite and must be one-to-one. The naive per-capability
