@@ -98,6 +98,19 @@ def _absorb(source: CapabilityIdentity, correction: IdentityCorrection,
         raise ValueError(
             f"unknown capability '{correction.target_bc_id}'")
 
+    if target.status is not IdentityStatus.ACTIVE:
+        # A non-active target is either MERGED (absorbing into it would build
+        # a cycle, and the inheriting row is excluded from matching so the
+        # fingerprint inheritance is silently discarded) or RETIRED. Neither
+        # is recoverable from the CLI. Name the live head so the operator can
+        # re-issue against it.
+        head = _live_head(target.bc_id, rows)
+        suffix = (f" (live head is '{head}'; re-issue with --into {head})"
+                  if head != target.bc_id else "")
+        raise ValueError(
+            f"cannot {correction.operation.value} into "
+            f"'{target.bc_id}': it is {target.status.value}{suffix}")
+
     if (source.status is IdentityStatus.MERGED
             and source.merged_into == target.bc_id):
         return None
@@ -108,6 +121,27 @@ def _absorb(source: CapabilityIdentity, correction: IdentityCorrection,
         "merged_into": target.bc_id})
     survivor = target.model_copy(update={"fingerprint": source.fingerprint})
     return [absorbed, survivor]
+
+
+def _live_head(bc_id: str, rows: dict[str, CapabilityIdentity]) -> str:
+    """Follow merged_into to the active row, to name it in an error message.
+
+    A MERGED row's merged_into points at a row that was ACTIVE at merge time
+    (the guard above enforces it for every new write), so in a well-formed
+    registry the walk terminates in one step. The `seen` set is defensive: a
+    registry damaged before that guard existed could carry a cycle, and
+    looping inside an error path would be its own bug.
+    """
+    seen: set[str] = set()
+    cur = bc_id
+    while cur in rows and cur not in seen:
+        seen.add(cur)
+        row = rows[cur]
+        if row.status is IdentityStatus.MERGED and row.merged_into:
+            cur = row.merged_into
+        else:
+            return cur
+    return bc_id
 
 
 def _split(source: CapabilityIdentity, correction: IdentityCorrection,

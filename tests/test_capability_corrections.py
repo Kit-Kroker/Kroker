@@ -137,3 +137,62 @@ def test_correction_bumps_the_registry_version(store):
     apply_correction(store, "p", _correction(
         CorrectionOp.MERGE, "BC-001", "BC-002"))
     assert store.registry_version("p") == before + 1
+
+
+# --- review #1: a merge must never target a non-active row --------------
+
+def test_reversed_merge_cannot_create_a_cycle(store):
+    # The operator-recovery case: merge the wrong direction, then try to
+    # reverse it. Without the guard, BC-002 -> BC-001 makes both rows MERGED
+    # into each other, so resolve() has no candidate and mints a new id on
+    # every assessment forever; a client walking merged_into loops infinitely.
+    _seed(store, _identity("BC-001", _fp("POST /a")),
+          _identity("BC-002", _fp("POST /b")))
+    apply_correction(store, "p", _correction(
+        CorrectionOp.MERGE, "BC-001", "BC-002"))
+    with pytest.raises(ValueError):
+        apply_correction(store, "p", _correction(
+            CorrectionOp.MERGE, "BC-002", "BC-001"))
+    rows = _by_id(store)
+    assert rows["BC-002"].status is IdentityStatus.ACTIVE
+    assert rows["BC-001"].merged_into == "BC-002"
+
+
+def test_merge_into_a_merged_target_names_the_live_head(store):
+    # The silent-discard variant: BC-001 is merged, so it is excluded from
+    # matching. Absorbing BC-003 into it would discard the fingerprint
+    # inheritance that makes a correction stick. Reject and point at the head.
+    _seed(store, _identity("BC-001", _fp("POST /a")),
+          _identity("BC-002", _fp("POST /b")),
+          _identity("BC-003", _fp("POST /c")))
+    apply_correction(store, "p", _correction(
+        CorrectionOp.MERGE, "BC-001", "BC-002"))
+    with pytest.raises(ValueError, match="BC-002"):
+        apply_correction(store, "p", _correction(
+            CorrectionOp.MERGE, "BC-003", "BC-001"))
+
+
+def test_merge_head_follows_a_transitive_chain(store):
+    # BC-001 -> BC-002 -> BC-003. Naming BC-003 (the active head), not BC-002,
+    # is what tells the operator where to retarget.
+    _seed(store, _identity("BC-001", _fp("POST /a")),
+          _identity("BC-002", _fp("POST /b")),
+          _identity("BC-003", _fp("POST /c")),
+          _identity("BC-004", _fp("POST /d")))
+    apply_correction(store, "p", _correction(
+        CorrectionOp.MERGE, "BC-001", "BC-002"))
+    apply_correction(store, "p", _correction(
+        CorrectionOp.MERGE, "BC-002", "BC-003"))
+    with pytest.raises(ValueError, match="BC-003"):
+        apply_correction(store, "p", _correction(
+            CorrectionOp.MERGE, "BC-004", "BC-001"))
+
+
+def test_merge_into_a_retired_target_is_rejected(store):
+    _seed(store, _identity("BC-001", _fp("POST /a"),
+                           status=IdentityStatus.RETIRED,
+                           retired_reason=RetiredReason.NOT_OBSERVED),
+          _identity("BC-002", _fp("POST /b")))
+    with pytest.raises(ValueError, match="retired"):
+        apply_correction(store, "p", _correction(
+            CorrectionOp.MERGE, "BC-002", "BC-001"))
