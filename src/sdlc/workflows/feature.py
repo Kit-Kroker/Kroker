@@ -735,9 +735,9 @@ class FeatureWorkflow(GateHost):
                    gate=name, round=str(round))
 
     async def _on_gate_decided(self, name: str, round: int,
-                               policy: GatePolicy,
-                               decision: GateDecision) -> None:
-        conf = self._last_gate_confidence
+                               policy: GatePolicy, decision: GateDecision,
+                               confidence: float | None = None) -> None:
+        conf = confidence
         self._emit(
             RunEventKind.GATE_DECIDED, stage=name,
             gate=name, round=str(round), policy=policy.value,

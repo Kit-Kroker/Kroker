@@ -53,10 +53,6 @@ class GateHost:
         # (question id, or gate_key(gate, round)). Rendered by sdlc.channels.
         self._pending: dict[str, PendingDecision] = {}
         self._status: str = "starting"
-        # E-42: the hook signature does not carry `confidence`, so _gate stashes
-        # it here. FeatureWorkflow._on_gate_decided reads it to preserve
-        # RunSummary.gates[].confidence, which SC-6's calibration compare reads.
-        self._last_gate_confidence: float | None = None
 
     # ------------------------- hooks (no-op) ---------------------------
 
@@ -64,9 +60,16 @@ class GateHost:
         """A gate has opened and is now waiting on a human."""
 
     async def _on_gate_decided(self, name: str, round: int,
-                               policy: GatePolicy,
-                               decision: GateDecision) -> None:
-        """A gate has been decided, by a human, a policy, or a timeout."""
+                               policy: GatePolicy, decision: GateDecision,
+                               confidence: float | None = None) -> None:
+        """A gate has been decided, by a human, a policy, or a timeout.
+
+        `confidence` is a PARAMETER, never instance state: gates interleave.
+        Wave mode runs _dev_task concurrently (feature.py's asyncio.gather), so
+        a second gate opening while this one awaits a human would overwrite a
+        stashed value and silently drop RunSummary.gates[].confidence, which
+        SC-6's calibration compare reads.
+        """
 
     async def _on_notified(self, gate: str, reason: NotifyReason,
                            notifier: str, delivered: bool,
@@ -150,7 +153,6 @@ class GateHost:
                     confidence: float | None = None,
                     default_policy: GatePolicy | None = None) -> GateDecision:
         """Durable HITL gate with policy-based auto-approval."""
-        self._last_gate_confidence = confidence
         gate_cfg = settings.gates.get(
             name,
             GateConfig(policy=default_policy or settings.default_gate_policy))
@@ -190,5 +192,5 @@ class GateHost:
                 self._status = "running"
                 self._pending.pop(key, None)
 
-        await self._on_gate_decided(name, round, policy, decision)
+        await self._on_gate_decided(name, round, policy, decision, confidence)
         return decision

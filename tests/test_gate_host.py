@@ -35,6 +35,27 @@ def test_hooks_are_no_ops_on_the_base():
         assert inspect.iscoroutinefunction(getattr(GateHost, name)), name
 
 
+def test_confidence_reaches_the_hook_as_a_parameter():
+    """Review fix. It was briefly stashed on the instance
+    (`self._last_gate_confidence`), which two interleaving gates would
+    overwrite -- wave mode runs _dev_task concurrently, and a gate that opens
+    while another awaits a human would silently drop
+    RunSummary.gates[].confidence, which SC-6's calibration compare reads.
+
+    Per-call by construction beats per-call by luck: assert the parameter
+    exists and no instance slot survives to be clobbered.
+    """
+    sig = inspect.signature(GateHost._on_gate_decided)
+    assert "confidence" in sig.parameters, (
+        "_on_gate_decided must take confidence as a parameter, not read it "
+        "off shared instance state")
+    assert not hasattr(GateHost(), "_last_gate_confidence")
+
+    # FeatureWorkflow's override must accept it too, or _gate's call breaks.
+    assert "confidence" in inspect.signature(
+        FeatureWorkflow._on_gate_decided).parameters
+
+
 @pytest.fixture
 def frozen_now(monkeypatch):
     """submit_gate_decision stamps decided_at with workflow.now(), which

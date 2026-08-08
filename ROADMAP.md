@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-08-07 (E-78 against `src/sdlc/board/` + full suite; E-40/E-43 2026-08-06; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
+| Last verified | 2026-08-09 (E-42 against `src/sdlc/workflows/{gates,triage}.py` + `pytest -m temporal`, with three review defects fixed; E-47a 2026-08-08 against `src/sdlc/capability/`; E-78 2026-08-07 against `src/sdlc/board/`; E-40/E-43 2026-08-06; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 

@@ -127,6 +127,18 @@ Three hooks then, all no-op by default, all overridden in exactly one place.
 `NOTIFY_ACT` (`feature.py:127`) moves to `gates.py` with `_notify`; it has no
 other caller.
 
+**`confidence` is a hook parameter, never instance state.** *Corrected
+2026-08-09, post-implementation review.* `_gate` folds `confidence` into the
+`GATE_DECIDED` event, and the first implementation stashed it on the instance
+(`self._last_gate_confidence`) to get it across the hook boundary. That
+reintroduces as shared state what was previously a local parameter: gates
+interleave — wave mode runs `_dev_task` concurrently under `asyncio.gather` —
+so a gate opening while another awaits a human would overwrite the stash and
+silently drop `RunSummary.gates[].confidence`, which SC-6's calibration
+compare reads. `_on_gate_decided` takes `confidence` as its fifth parameter
+instead. (Contrast `_escalation_round`, where a shared counter is *correct*
+precisely because it must be monotonic across concurrent tasks.)
+
 ### D5 — Top-level workflow, `sdlc triage`, local path only
 
 Triage's value is standalone: an operator runs it on a repository they may
@@ -136,7 +148,19 @@ Tier 0 onto a pipeline whose brownfield mode (FR-102) does not exist yet.
 Input is a **path on disk**, because every E-41 activity takes `repo_dir` +
 `commit_sha`. Cloning from a URL is FR-1003/E-59's job; operator-run on an
 already-authorised local clone is precisely the trust boundary NFR-9 and
-E-41 spec D2 describe. Workflow id: `triage-<slug(basename)>-<short-sha>`.
+E-41 spec D2 describe.
+
+**Workflow id: `triage-<slug(basename)>-<UTC timestamp>`.** *Corrected
+2026-08-09, post-implementation review.* This spec originally said
+`-<short-sha>`, which cannot be built: the sha is resolved by
+`triage_resolve_commit` **inside** the workflow (D7), and the id must exist
+before the workflow starts. The first implementation dropped the suffix
+entirely, which was worse than either — Temporal refuses to start a workflow
+whose id is already `RUNNING`, so a bare `triage-<slug>` meant a triage parked
+on the readiness gate (`HARD` by default, 48h) blocked the next triage of that
+repository, and E-44's assess → fix → **re-triage** loop is the first thing
+that would have hit it. The timestamp supplies the distinctness the sha was
+there to provide; the artifact still carries `commit_sha` for provenance.
 
 ### D6 — The build probe is on by default, and skipping it is honest, not special-cased
 

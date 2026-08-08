@@ -14,7 +14,7 @@
   python -m sdlc.cli eval reviewer --against HEAD
   python -m sdlc.cli triage --repo /path/to/repo [--commit HEAD]
   python -m sdlc.cli triage --repo /path/to/repo --no-build-probe
-  python -m sdlc.cli triage show --id triage-myrepo-a1b2c3d
+  python -m sdlc.cli triage show --id triage-myrepo-20260809T101500Z
 """
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ import argparse
 import asyncio
 import os
 import re
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 
@@ -36,6 +37,24 @@ from .workflows.triage import TriageInput, TriageWorkflow
 
 def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+def triage_workflow_id(repo: str, now: datetime | None = None) -> str:
+    """A distinct id per triage RUN, not per repository.
+
+    Spec D5 asked for `triage-<slug>-<short-sha>`, which is not available here:
+    the sha is resolved by triage_resolve_commit INSIDE the workflow, and the
+    id must exist before the workflow starts. A UTC timestamp supplies the
+    distinctness the sha was there to provide.
+
+    Distinctness is load-bearing, not cosmetic. Temporal refuses to start a
+    workflow whose id is already RUNNING, so a bare `triage-<slug>` means a
+    triage parked on the readiness gate (HARD by default, 48h) blocks the next
+    triage of that repository -- and E-44's assess -> fix -> RE-TRIAGE loop is
+    the first thing that would hit it.
+    """
+    stamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
+    return f"triage-{slug(os.path.basename(repo))}-{stamp}"
 
 
 _OUTCOME = {
@@ -323,7 +342,11 @@ async def main() -> None:
 
     if args.cmd == "triage" and args.triage_cmd == "show":
         handle = client.get_workflow_handle(args.id)
-        report = await handle.query("triage")
+        # Query by METHOD, not by name: a string query carries no result type,
+        # so the converter returns raw decoded JSON (a dict) and every model
+        # method on it is an AttributeError. transport.py:139 queries by name
+        # and validates with a TypeAdapter for the same reason.
+        report = await handle.query(TriageWorkflow.triage)
         print("no triage yet" if report is None
               else report.model_dump_json(indent=2))
         return
@@ -332,7 +355,7 @@ async def main() -> None:
         if not args.repo:
             raise SystemExit("triage requires --repo")
         repo = os.path.abspath(args.repo)
-        wf_id = f"triage-{slug(os.path.basename(repo))}"
+        wf_id = triage_workflow_id(repo)
         handle = await client.start_workflow(
             TriageWorkflow.run,
             TriageInput(repo_dir=repo, commit=args.commit,

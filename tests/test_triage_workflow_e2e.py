@@ -199,6 +199,39 @@ async def test_the_triage_query_serves_the_artifact():
     assert served.readiness.verdict is Verdict.READY
 
 
+async def test_the_cli_show_path_renders_json():
+    """Review fix (critical). `sdlc triage show` crashed on every invocation:
+    it queried by NAME, which carries no result type, so the converter returned
+    a plain dict and `.model_dump_json()` was an AttributeError.
+
+    This walks the CLI's exact path -- untyped handle, then the typed query --
+    and renders, which is the step that used to blow up. The old test suite
+    missed it because every other test queries via the METHOD, and the wiring
+    test only grepped cli.py for strings.
+    """
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=[TriageWorkflow], activities=ACTIVITIES):
+            wf_id = f"triage-{uuid.uuid4()}"
+            handle = await env.client.start_workflow(
+                TriageWorkflow.run, TriageInput(repo_dir="/r"),
+                id=wf_id, task_queue=TASK_QUEUE)
+            await handle.result()
+
+            # get_workflow_handle, exactly as cli.py does -- an UNTYPED handle.
+            cli_handle = env.client.get_workflow_handle(wf_id)
+            by_name = await cli_handle.query("triage")
+            report = await cli_handle.query(TriageWorkflow.triage)
+
+    # The bug, pinned: querying by name really does yield an un-rendered dict.
+    assert isinstance(by_name, dict)
+    assert not hasattr(by_name, "model_dump_json")
+    # The fix: the typed query renders.
+    rendered = report.model_dump_json(indent=2)
+    assert '"commit_sha"' in rendered
+    assert "a" * 40 in rendered
+
+
 async def test_a_human_approves_through_the_channel_transport():
     """Spec section 5: channels/transport.py resolves signals and queries BY
     NAME and imports nothing workflow-specific, so `sdlc approve --gate
