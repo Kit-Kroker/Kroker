@@ -9,6 +9,7 @@ against path@sha by construction.
 """
 from __future__ import annotations
 
+import asyncio
 import fnmatch
 import logging
 import os
@@ -185,7 +186,11 @@ async def triage_dependencies(inp: TriageDependencyInput) -> SignalResult:
         declared = dependencies.parse_manifests(manifests)
         lockfile_present = bool(adapter) and any(
             lf in set(paths) for lf in adapter.lockfiles)
-        advisories = resolve_advisory_source(inp.advisory_source).lookup(
+        source = resolve_advisory_source(inp.advisory_source)
+        # The OSV lookup uses blocking urllib in a loop; run it off the
+        # event loop so 200 packages × 20s timeout does not pin the worker.
+        advisories = await asyncio.to_thread(
+            source.lookup,
             adapter.ecosystem if adapter else None,
             sorted({d.name for d in declared}))
 
