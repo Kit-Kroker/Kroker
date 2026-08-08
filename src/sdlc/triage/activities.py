@@ -42,6 +42,41 @@ class TriageSignalInput:
     commit_sha: str
 
 
+@dataclass
+class TriagePinInput:
+    repo_dir: str
+    commit: str = "HEAD"        # an UNRESOLVED ref -- see TriagePin
+
+
+@dataclass
+class TriagePin:
+    commit_sha: str
+    toolchain: str | None
+
+
+@activity.defn
+async def triage_resolve_commit(inp: TriagePinInput) -> TriagePin:
+    """E-42 D7. Resolve the ref to a concrete sha and detect the toolchain in
+    one call: RepoTriage.toolchain needs an answer and every signal detects the
+    adapter independently anyway.
+
+    Deliberately NOT never-raising, unlike the signal activities: a commit that
+    does not resolve is not a not_collected dimension, it is the absence of the
+    tree the whole artifact claims to describe.
+    """
+    proc = _git(["rev-parse", "--verify", f"{inp.commit}^{{commit}}"],
+                cwd=inp.repo_dir)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"commit {inp.commit!r} does not resolve in {inp.repo_dir}: "
+            f"{proc.stderr.strip()}")
+    commit_sha = proc.stdout.strip()
+
+    found = detect_with_marker_from_paths(tracked_paths(inp.repo_dir, commit_sha))
+    return TriagePin(commit_sha=commit_sha,
+                     toolchain=found[0].kind.value if found else None)
+
+
 def tracked_paths(repo_dir: str, commit_sha: str) -> list[str]:
     """Repo-relative posix paths tracked at commit_sha. Raises RuntimeError
     when the sha does not resolve -- the activity turns that into
