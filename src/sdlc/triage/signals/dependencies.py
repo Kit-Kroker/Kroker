@@ -183,28 +183,56 @@ def parse_manifests(blobs: Mapping[str, str]) -> list[Declared]:
     return out
 
 
-_IMPORT = re.compile(
-    r"^[ \t]*(?:from[ \t]+(?P<from>[A-Za-z_][\w.]*)"
-    r"|import[ \t]+(?P<import>[A-Za-z_][\w.]*"
-    r"(?:[ \t]*,[ \t]*[A-Za-z_][\w.]*)*))",
+_FROM_IMPORT = re.compile(
+    r"^[ \t]*from[ \t]+(?P<path>[\w.]+)[ \t]+import[ \t]+(?P<names>[^\n#]+)",
+    re.MULTILINE)
+
+_PLAIN_IMPORT = re.compile(
+    r"^[ \t]*import[ \t]+(?P<names>[^\n#]+)",
     re.MULTILINE)
 
 
+def _add_name(out: set[str], raw: str) -> None:
+    """Extract the first identifier from `raw`, handling aliases and dots.
+
+    `A as B` yields A; `A.B` yields A then B; `*` and non-identifier tokens
+    are skipped."""
+    first = raw.strip().strip("()").split()
+    if not first or first[0] == "as":
+        return
+    for seg in first[0].split("."):
+        if seg and seg[0].isalpha() and seg != "*":
+            out.add(seg)
+
+
 def imported_modules(texts: Iterable[str]) -> set[str]:
-    """Top-level module names imported anywhere in the given source.
+    """Module names imported anywhere in the given source.
+
+    Captures ALL segments of dotted import paths (``from sdlc.triage import
+    models`` yields sdlc, triage, AND models), not just the root segment. The
+    root-only behaviour caused scaffold's unreferenced_module to flag 97 of
+    128 files in a real repo: ``from sdlc.triage.signals import scaffold``
+    yielded only "sdlc", so "scaffold" never appeared in the imported set.
 
     Regex, not AST, deliberately: this runs over every source file and must
     survive a file that does not parse, which is common in the repositories
-    Tier 0 triages.
+    Tier 0 triages. Relative imports (``from .models import X``) are handled
+    to the extent a pathless regex allows: the module segments after the
+    leading dots are captured.
     """
     out: set[str] = set()
     for text in texts:
-        for match in _IMPORT.finditer(text):
-            chunk = match.group("from") or match.group("import") or ""
-            for part in chunk.split(","):
-                top = part.strip().split(".")[0]
-                if top:
-                    out.add(top)
+        for match in _FROM_IMPORT.finditer(text):
+            # All segments of the from-path (strip leading dots for relative)
+            for seg in match.group("path").lstrip(".").split("."):
+                if seg and seg[0].isalpha():
+                    out.add(seg)
+            # Names imported from the module
+            for name in match.group("names").split(","):
+                _add_name(out, name)
+        for match in _PLAIN_IMPORT.finditer(text):
+            for name in match.group("names").split(","):
+                _add_name(out, name)
     return out
 
 

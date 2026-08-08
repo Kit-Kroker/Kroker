@@ -178,8 +178,23 @@ def test_imported_modules_reads_both_import_forms():
            "from pathlib import Path\n"
            "from sdlc.triage import models\n"
            "    import json\n")
-    assert dep.imported_modules([src]) == {"os", "sys", "pathlib", "sdlc",
-                                           "json"}
+    result = dep.imported_modules([src])
+    # All path segments AND from-import names are captured, not just roots:
+    # "from sdlc.triage import models" yields sdlc, triage, AND models.
+    assert result == {"os", "sys", "pathlib", "Path", "sdlc", "triage",
+                      "models", "json"}
+
+
+def test_imported_modules_captures_aliased_and_dotted_names():
+    src = ("import numpy as np\n"
+           "from sdlc.signals import dependencies as dep\n"
+           "from .helpers import util\n")
+    result = dep.imported_modules([src])
+    assert "numpy" in result
+    assert "sdlc" in result and "signals" in result
+    assert "dependencies" in result     # from-import name, not just path
+    assert "helpers" in result          # relative import segment
+    assert "util" in result             # from-import name from relative
 
 
 def test_direct_dependencies_metric_counts_distinct_names():
