@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from .signals import baseline, build_probe, secrets
+from .signals import baseline, build_probe, dependencies, secrets
 
 
 class SignalSpec(BaseModel):
@@ -27,4 +27,7 @@ SIGNALS: dict[str, SignalSpec] = {
     build_probe.SIGNAL_ID: SignalSpec(
         id=build_probe.SIGNAL_ID, version=build_probe.VERSION,
         activity="triage_build_probe"),
+    dependencies.SIGNAL_ID: SignalSpec(
+        id=dependencies.SIGNAL_ID, version=dependencies.VERSION,
+        activity="triage_dependencies"),
 }

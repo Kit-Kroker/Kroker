@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import posixpath
 import shutil
 import sys
 import tempfile
@@ -22,9 +23,10 @@ from ..activities import _bounded_shell, _git
 from ..grounding import Profile, verify_quote
 from ..measurement import Measurement
 from ..toolchain.adapters import detect_with_marker, detect_with_marker_from_paths
+from .advisories import resolve_advisory_source
 from .gitread import read_tree
 from .models import SignalResult
-from .signals import baseline, build_probe, secrets
+from .signals import baseline, build_probe, dependencies, secrets
 
 _log = logging.getLogger(__name__)
 
@@ -114,6 +116,78 @@ async def triage_secrets(inp: TriageSignalInput) -> SignalResult:
             signal=secrets.SIGNAL_ID, version=secrets.VERSION,
             collected=Measurement.not_collected(
                 f"secrets signal raised: {type(exc).__name__}: {exc}"))
+
+
+def _verified(result: SignalResult, blobs: dict[str, str]) -> SignalResult:
+    """Drop any finding whose evidence does not verify against the bytes it
+    cites (spec D5).
+
+    For deterministic rules the quote is verbatim by construction, so this is
+    a DRIFT guard -- it catches a citation that no longer resolves at that
+    path and sha -- not a hallucination guard. It becomes load-bearing when
+    E-48's LLM proposers cite the same way (FR-914).
+    """
+    kept = []
+    for finding in result.findings:
+        if not finding.evidence:
+            kept.append(finding)
+            continue
+        blob = blobs.get(finding.path)
+        if blob is not None and verify_quote(
+                finding.evidence, blob, Profile.VERBATIM_BYTES):
+            kept.append(finding)
+        else:
+            _log.warning("triage %s: dropping unverifiable evidence for %s "
+                         "at %s", result.signal, finding.rule, finding.path)
+    return result.model_copy(update={"findings": kept})
+
+
+@dataclass
+class TriageDependencyInput:
+    repo_dir: str
+    commit_sha: str
+    # Spec D11: the default collects nothing. Naming a source here is an
+    # explicit operator act, and it is a declared outbound egress (FR-703).
+    advisory_source: str = "none"
+
+
+@activity.defn
+async def triage_dependencies(inp: TriageDependencyInput) -> SignalResult:
+    """FR-902 dependency health (E-41a). Never raises."""
+    try:
+        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+        found = detect_with_marker_from_paths(paths)
+        adapter = found[0] if found else None
+
+        manifest_names = set(adapter.manifests) if adapter else set()
+        source_exts = tuple(adapter.source_extensions) if adapter else ()
+        wanted = sorted(
+            p for p in paths
+            if posixpath.basename(p) in manifest_names
+            or (source_exts and p.endswith(source_exts)))
+
+        blobs = dict(read_tree(inp.repo_dir, inp.commit_sha, wanted))
+        manifests = {p: t for p, t in blobs.items()
+                     if posixpath.basename(p) in manifest_names}
+        sources = [t for p, t in blobs.items() if p not in manifests]
+
+        declared = dependencies.parse_manifests(manifests)
+        lockfile_present = bool(adapter) and any(
+            lf in set(paths) for lf in adapter.lockfiles)
+        advisories = resolve_advisory_source(inp.advisory_source).lookup(
+            adapter.ecosystem if adapter else None,
+            sorted({d.name for d in declared}))
+
+        result = dependencies.evaluate(
+            declared, lockfile_present,
+            dependencies.imported_modules(sources), advisories)
+        return _verified(result, blobs)
+    except Exception as exc:                       # noqa: BLE001
+        _log.warning("triage dependencies signal failed: %s", exc)
+        return SignalResult(
+            signal=dependencies.SIGNAL_ID, version=dependencies.VERSION,
+            collected=Measurement.not_collected(
+                f"dependencies signal raised: {type(exc).__name__}: {exc}"))
 
 
 @dataclass
