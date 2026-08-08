@@ -6,6 +6,7 @@ grounding.py must not: a dependency here would appear as a reviewable import.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from enum import Enum
 from typing import Literal
 
@@ -72,11 +73,34 @@ class Readiness(BaseModel):
     verdict: Verdict
 
 
+class ReadinessOverride(BaseModel):
+    """FR-903: an audited decision to proceed despite a verdict that is not
+    READY (E-42 D1).
+
+    Local and pure -- this module must not import models.py, so GateDecision
+    cannot appear here; TriageWorkflow maps one to the other.
+
+    `approved_by` carries GateDecision.decided_by VERBATIM: it is the CLASS of
+    decider, so "policy" (gate OFF) and "timeout" (on_timeout=APPROVE) stay
+    legible as non-human on the face of the artifact. `reviewer` is the
+    operator identity -- optional and self-asserted, the gap FR-1004 exists to
+    close. Mirrored rather than hidden: a bundle claiming a named human
+    approved a not-ready repository, on a field anyone can set, would be worse
+    than one that says "human" and leaves the principal unproven.
+    """
+    approved_by: Literal["human", "policy", "timeout"]
+    reviewer: str | None = None
+    reason: str
+    decided_at: datetime
+    gate_round: int
+
+
 class RepoTriage(BaseModel):
     repo_dir: str
     commit_sha: str                             # triage is pinned at a commit
     toolchain: str | None = None                # None is a finding, not an error
     readiness: Readiness
+    override: ReadinessOverride | None = None
     signals: list[SignalResult] = Field(default_factory=list)
 
 
