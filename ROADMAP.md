@@ -97,8 +97,8 @@
   Memory (recall/retain/watermark) ✅ and soft gates ✅ done; SC-4/SC-6 not yet measurable (need retro/reflect wiring + real runs). **The retro stage that makes them measurable is E-32** (§9.8); the on/off memory delta is the measurement E-31/E-33 exist to run.
 - [ ] **P4** — MCP surface, maintenance loop (DAPER), fleet scale → *SC-1..3 at target*
   Not started.
-- [ ] **P5** — Triage + tidy-up (Tier 0/1), operator-run, single tenant → *one unfamiliar repository triaged, a mechanical backlog fixed through governed runs, before/after delta recorded*
-  Not started (§10, E-40…E-44). **Does not depend on P7** — operator-run delivery on repositories you are authorised to run needs neither tenancy nor self-serve onboarding.
+- [ ] ⚠️ **P5** — Triage + tidy-up (Tier 0/1), operator-run, single tenant → *one unfamiliar repository triaged, a mechanical backlog fixed through governed runs, before/after delta recorded*
+  Triage verdict half landed: E-40/E-41/E-42/E-43 all `[x]`. Only **E-44** (tidy-up fix runs + re-triage) is outstanding, which is also the only item the exit criterion's "before/after delta" needs. Operator-run only; **does not depend on P7** — delivery on repositories you are authorised to run needs neither tenancy nor self-serve onboarding.
 - [ ] **P6** — Capability & risk audit (Tier 2) + evidence bundle → *one repository audited end-to-end with SC-7 held and a bundle handed over*
   Not started (§11, E-45…E-56). Gated on P5's readiness verdict (FR-903), not merely sequenced after it.
 - [ ] **P7** — Hosted multi-tenant service → *NFR-8 adversarial test green; FR-1002 container tier live; a tenant onboards unassisted*
@@ -197,20 +197,20 @@ as tracked rather than accidental.
 
 ### Assessment, Tier 0 — triage (FR-900) *(new scope; PRD v1.1)*
 
-- [ ] **FR-901** triage stage → `RepoTriage` + readiness verdict; completes on repos that do not build (E-42). *Artifact landed with E-41 (2026-08-06); the stage and the readiness gate are E-42.*
+- [x] **FR-901** triage stage → `RepoTriage` + readiness verdict; completes on repos that do not build (E-42). *The `RepoTriage` artifact landed with E-41 (2026-08-06); the stage and the readiness gate landed with E-42 (2026-08-08) — `TriageWorkflow` pins a commit, fans out the seven deterministic signals, and `compute_readiness` produces the verdict. Completes on repositories that do not build: the build probe reports `not_ready` dimensions, not an error.*
 - [x] **FR-902** hygiene signal set via FR-108 adapters, one implementation
   per signal — **seven of seven landed**: build probe, secrets (incl.
   client-bundle reachability), baseline practice (E-41), plus dependency
   health, generator-scaffold/dead code, framework-default misconfig, and
   size/duplication outliers (E-41a–d, 2026-08-08).
-- [ ] **FR-903** readiness gate blocking Tier 2, overridable by audited decision (E-42).
+- [x] **FR-903** readiness gate blocking Tier 2, overridable by audited decision (E-42). *The gate resolves through the existing FR-301/302 machinery (now in `GateHost`); a verdict that is not READY opens a `readiness` gate, and an APPROVE records a `ReadinessOverride` on the artifact. E-45's admission rule is `verdict is READY or override is not None`.*
 - [ ] **FR-904** `mechanically_fixable` → brownfield child runs + before/after re-triage (E-44).
 
 ### Assessment, Tier 2 — capability & risk audit (FR-910) *(new scope; PRD v1.1)*
 
 - [ ] **FR-911** `AssessmentWorkflow` EDCR DAG, report-after-assess, no phase-status file (E-45); `/enrich` as a declared stage input rather than a phase (E-56).
 - [ ] **FR-912** deterministic scan memoized on `(tree hash, signal version)`; cross-source confidence (E-46).
-- [ ] **FR-913** `CapabilityMap` with stable ids + coverage floor + orphan classification — **also satisfies FR-102** (E-47a/E-47b/E-47c/E-48). **Unblocked 2026-08-08** — OQ-6 resolved: ids are surrogate (assigned once, re-attached by similarity), not content-derived. The word "content-derived" was struck from this requirement; it is what kept OQ-6 open. Design: `docs/superpowers/specs/2026-08-08-oq6-capability-identity-design.md`.
+- [ ] ⚠️ **FR-913** `CapabilityMap` with stable ids + coverage floor + orphan classification — **also satisfies FR-102** (E-47a/E-47b/E-47c/E-48). **Identity half landed 2026-08-08 (E-47a):** surrogate `BC-NNN` ids, weighted-Jaccard re-attachment, audited `IdentityCorrection` (`src/sdlc/capability/`). Coverage floor + orphans (E-47b) and L2/entity-ownership (E-47c) still open.
 - [ ] **FR-914** byte-exact quote verification against the pinned commit, fail-closed — shares FR-107's verifier (E-43). *Partially landed 2026-08-06 (`grounding.py`: one substring invariant, two normalization profiles, verdict-only) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The verifier + research/handoff/deep-review consumers landed; the commit source gained its first consumer with E-41's secrets signal (2026-08-06), which re-verifies every emitted evidence quote against the pinned commit; stays open until an LLM-proposing assessment stage cites the same way, which is where the check stops being a drift guard.*
 - [ ] **FR-915** `not_collected` / `unknown` vs measured value (E-40). *Contract half landed 2026-08-06 (`measurement.py`, retrofitted onto `CoverageReport`/`SecurityReport`/`claim_survival_score`; `QAReport.coverage_pct` deleted) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The `RepoTriage`/triage half is deferred to E-41; the load-bearing case was the SARIF-malformed-reads-as-clean hole on the absolute floor.*
 - [ ] **FR-916** STRIDE + vuln classification + control coverage + composites with 1–3 specific drivers (E-49).
@@ -293,7 +293,7 @@ as tracked rather than accidental.
 - [x] **US-5** dev/reviewer different model family; registry rejects same-family — enforced at boot, against `dev` (the role that actually codes) since `2026-07-16-registry-drives-every-role`.
 - [ ] **US-6** stakeholder one-screen fleet view — no dashboard backend.
 - [ ] **US-7** MCP conversational gate approval — no MCP server.
-- [ ] **US-8** client connects a repo → readiness verdict + checkable hygiene list (E-41/E-42/E-43).
+- [ ] ⚠️ **US-8** client connects a repo → readiness verdict + checkable hygiene list (E-41/E-42/E-43). *Verdict half landed (E-42): the readiness gate and the operator CLI (`sdlc triage`) ship. The checkable-hygiene-list half — a per-finding fix-backlog you can act on — is **E-44**.*
 - [ ] **US-9** client approves a tidy-up backlog → PR per item + before/after delta (E-44).
 - [ ] **US-10** assessor hands over a bundle whose every claim resolves to evidence (E-51/E-52).
 - [ ] **US-11** product owner's decision rule frozen at approval, verdict computed against it (E-64/E-65/E-70).
@@ -320,7 +320,7 @@ as tracked rather than accidental.
 - [x] **ADR-15** Language-agnostic toolchain by marker file (`src/sdlc/toolchain/`) — Python reference adapter end-to-end; Go/TS/Rust are E-30a/b/c.
 - [x] **ADR-16** Harness sessions as first-class, claim-checked artifacts (E-38).
 - [x] **ADR-17** Containment as a declared harness capability — native inner, hook outer, fail closed (E-15/E-16).
-- [ ] **ADR-18** Triage precedes capability modelling — an unbuildable or structurally-illegible repo is reported as a precondition failure, never capability-mapped (FR-903, E-42).
+- [x] **ADR-18** Triage precedes capability modelling — an unbuildable or structurally-illegible repo is reported as a precondition failure, never capability-mapped (FR-903, E-42). *The readiness gate enforces it; E-45's admission rule is `verdict is READY or override is not None`.*
 - [ ] ⚠️ **ADR-19** Deployment targets and analytics sources are adapters, not substrate (FR-1105, NG7, E-68/E-69). **Deployment half done** (E-67/E-68: `src/sdlc/deploy/adapters.py`, compose + script). Analytics half open (E-69). Unresolved consequence: **OQ-9**.
 - [ ] **ADR-20** Pre-registration reuses `ValidationContract` freeze semantics (FR-1102, FR-803, E-65).
 - [x] **ADR-21** Agent board as a durable projection; `authoritative_status` (workflow-written) vs `status` (agent-writable) keeps replay the source of truth (E-78).
@@ -813,12 +813,22 @@ which makes it the shortest path to a demonstrable assess → fix → prove loop
 - [x] **E-41d** size and duplication outliers — absolute adapter-supplied
   thresholds, not percentiles, so the numbers survive E-44's before/after
   delta. Both size rules are STRUCTURAL.
-- [ ] **E-42 — `TriageWorkflow` + readiness verdict + readiness gate** → FR-901,
+- [x] **E-42 — `TriageWorkflow` + readiness verdict + readiness gate** → FR-901,
   FR-903. Readiness (buildable / runnable / tests present / structure
   discernible) computed from deterministic signals **only**, so triage completes
   on a repository where an LLM would have nothing to reason about. An
   unbuildable repo is a finding, not an error. The gate resolves through the
   FR-301/302 machinery, so an operator can override with an audited decision.
+  *Landed (2026-08-08).* Two sub-decisions worth recording because neither was
+  in the roadmap's one-line description: **(D2)** `FeatureWorkflow`'s gate
+  mechanics were extracted into a `GateHost` mixin (`src/sdlc/workflows/gates.py`)
+  so a second workflow can host a gate without restating FR-302's
+  first-decision-wins rule; **(D8a)** `SignalSpec.readiness_keys` declares which
+  readiness dimensions each signal owes, so a skipped or failed signal reports
+  `not_collected` for exactly those keys rather than leaving the dimension
+  unreported. Spec
+  `docs/superpowers/specs/2026-08-08-triage-workflow-and-readiness-gate-design.md`,
+  plan `docs/superpowers/plans/2026-08-08-triage-workflow-and-readiness-gate.md`.
 - [x] **E-43 — grounding verifier** → FR-914, shares FR-107's implementation.
   *Landed (2026-08-06):* `src/sdlc/grounding.py` owns the one substring
   invariant with **two normalization profiles** — `EXTRACTED_TEXT` (research's
@@ -871,7 +881,7 @@ the factory rather than as prompts.
   pipeline converge**: together they satisfy FR-102's `CodebaseMap`, so building
   them for the audit also unblocks P2 brownfield feature runs. FR-102 needs all
   three, not E-47a alone.
-  - [ ] **E-47a — capability identity** → FR-913. Stable `BC-NNN` as a
+  - [x] **E-47a — capability identity** → FR-913. Stable `BC-NNN` as a
     **surrogate** key: allocated once, persisted with its fingerprint,
     re-attached on later scans by weighted-Jaccard similarity over signal tiers
     ordered by cost-to-change (contract > behavioral > structural > locational).
@@ -1155,10 +1165,11 @@ harder to install later:
    Installing "no unverified claim may be labelled grounded" before any
    finding-producing stage exists is far cheaper than retrofitting it across
    four of them.
-2. **E-41 → E-42 → E-44** — triage and tidy-up. The cheapest shippable product,
-   almost entirely deterministic, and it needs neither tenancy nor containment
-   because it can be operator-run. E-44 is the first item that proves the whole
-   assess → fix → prove claim end to end.
+2. ~~**E-41 → E-42** → E-44~~ — triage and tidy-up. **E-41/E-42 landed;** the
+   chain is now **E-44** alone. The cheapest shippable product, almost entirely
+   deterministic, and it needs neither tenancy nor containment because it can be
+   operator-run. E-44 is the first item that proves the whole assess → fix →
+   prove claim end to end.
 3. **E-47a → E-47b/E-47c (with E-46)** — `CapabilityMap`. Unblocks P2 brownfield
    whether or not the audit ships, which makes it the highest-leverage item in
    §11. **OQ-6 settled 2026-08-08** — the blocker is cleared and the item is
