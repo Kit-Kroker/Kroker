@@ -78,3 +78,71 @@ def test_detect_with_marker_from_paths_ignores_a_nested_marker():
 def test_detect_with_marker_from_paths_is_none_for_unrecognized_paths():
     assert detect_with_marker_from_paths(
         ["README.md", "docs/guide.md"]) is None
+
+
+# ---- E-41a-d adapter extension ---------------------------------------
+
+from sdlc.toolchain.adapters import PythonToolchain, ToolchainAdapter
+
+
+class _Bare(ToolchainAdapter):
+    """An adapter that has not thought about triage. It must instantiate and
+    degrade, not fail (spec section 4)."""
+    kind = None
+    markers = ()
+
+    def test_cmd(self, coverage: bool = True) -> str:
+        return "true"
+
+    def lint_cmd(self) -> str:
+        return "true"
+
+    def oracle_test_cmd(self, oracle_path: str, report_out: str) -> str:
+        return "true"
+
+
+def test_a_triage_unaware_adapter_degrades_rather_than_failing():
+    a = _Bare()
+    assert a.manifests == ()
+    assert a.ecosystem is None
+    assert a.source_extensions == ()
+    assert a.max_file_loc == 0          # 0 disables the rule
+    assert a.max_function_loc == 0
+    assert a.min_clone_loc == 30
+    assert a.function_spans("def f():\n    pass\n") is None
+
+
+def test_python_declares_its_triage_facts():
+    a = PythonToolchain()
+    assert a.manifests == ("pyproject.toml", "requirements.txt")
+    assert a.ecosystem == "PyPI"
+    assert a.source_extensions == (".py",)
+    assert a.max_file_loc == 800
+    assert a.max_function_loc == 100
+
+
+def test_function_spans_reports_name_and_line_range():
+    text = ("import os\n"
+            "\n"
+            "def small():\n"
+            "    return 1\n"
+            "\n"
+            "async def big():\n"
+            "    x = 1\n"
+            "    return x\n")
+    spans = PythonToolchain().function_spans(text)
+    assert ("small", 3, 4) in spans
+    assert ("big", 6, 8) in spans
+
+
+def test_function_spans_finds_methods_inside_classes():
+    text = "class C:\n    def m(self):\n        return 1\n"
+    assert ("m", 2, 3) in PythonToolchain().function_spans(text)
+
+
+def test_unparseable_python_is_an_empty_list_not_none():
+    # None means "this language has no parser here", which makes the metric
+    # not_collected. A file we CAN parse and that simply is not valid Python
+    # has no spans -- that is a measured zero, and conflating the two would
+    # report an unparseable file as an unmeasurable language.
+    assert PythonToolchain().function_spans("def (:\n") == []

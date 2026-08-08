@@ -12,6 +12,7 @@ never runs a subprocess. Execution lives in Temporal activities
 """
 from __future__ import annotations
 
+import ast
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -37,6 +38,32 @@ class ToolchainAdapter(ABC):
     # probe records not_collected, rather than failing to instantiate.
     test_globs: tuple[str, ...] = ()
     lockfiles: tuple[str, ...] = ()
+
+    # E-41a-d (spec section 4). Same degradation rule: empty tuples and
+    # disabled thresholds mean "rule skipped, metric not_collected", never a
+    # silent zero. Language-level facts ONLY -- framework fingerprints and
+    # misconfiguration rules live in their signal modules, because one
+    # language serves many frameworks (spec D15).
+    manifests: tuple[str, ...] = ()          # files declaring direct deps
+    ecosystem: str | None = None             # OSV ecosystem name
+    source_extensions: tuple[str, ...] = ()  # what counts as source
+    max_file_loc: int = 0                    # 0 disables the rule
+    max_function_loc: int = 0                # 0 disables the rule
+    min_clone_loc: int = 30                  # duplication window, in lines
+
+    def function_spans(self, text: str) -> list[tuple[str, int, int]] | None:
+        """(name, first line, last line) for every function in `text`, or
+        None when this language has no parser here.
+
+        None is what makes E-41d's `oversized_function` metric
+        not_collected rather than absent: a language we cannot parse is not
+        a language with no long functions.
+
+        Pure -- text in, spans out, no subprocess and no filesystem. The same
+        kind of member as `classify_test_exit`: a per-language
+        *interpretation*, not a command string (ADR-15, spec D15).
+        """
+        return None
 
     def install_cmd(self, marker: str) -> str | None:
         """Dependency-install command for the marker detect_with_marker
@@ -88,6 +115,28 @@ class PythonToolchain(ToolchainAdapter):
     # requirements.txt is deliberately NOT here: it is a manifest that may or
     # may not pin. Whether it pins is E-41a's dependency-health question.
     lockfiles = ("uv.lock", "poetry.lock", "Pipfile.lock")
+
+    manifests = ("pyproject.toml", "requirements.txt")
+    ecosystem = "PyPI"
+    source_extensions = (".py",)
+    # Absolute, not percentile (spec D14): Tier 0 asks what state this
+    # repository is in, not which file is worst inside it, and E-44's
+    # before/after delta needs numbers comparable across repositories.
+    max_file_loc = 800
+    max_function_loc = 100
+
+    def function_spans(self, text: str) -> list[tuple[str, int, int]] | None:
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            # We CAN parse Python; this file simply is not valid Python. That
+            # is a measured zero spans, not an unmeasurable language, so it
+            # must not return None.
+            return []
+        return sorted(
+            (node.name, node.lineno, node.end_lineno or node.lineno)
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)))
 
     def install_cmd(self, marker: str) -> str | None:
         if marker == "requirements.txt":
