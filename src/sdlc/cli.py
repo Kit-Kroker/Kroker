@@ -52,7 +52,8 @@ def _needs_temporal_client(args) -> bool:
         args.cmd == "benchmark"
         or (args.cmd == "schedules" and args.sched_cmd == "list")
         or (args.cmd == "eval" and args.target != "capture")
-        or args.cmd == "calibrate")
+        or args.cmd == "calibrate"
+        or args.cmd == "capability")
     return not local_only
 
 
@@ -172,6 +173,9 @@ async def main() -> None:
     cal.add_argument("--judge-model", default=None, dest="judge_model")
     cal.add_argument("--epsilon", type=float, default=0.15)
     cal.add_argument("--threshold", type=float, default=0.75)
+
+    from .capability.cli import add_capability_parser
+    add_capability_parser(sub)
 
     args = p.parse_args()
 
@@ -294,6 +298,10 @@ async def main() -> None:
         print(dispatch_calibrate(args.target, judge_model=args.judge_model,
                                  epsilon=args.epsilon, threshold=args.threshold))
         return
+
+    if args.cmd == "capability":
+        from .capability.cli import run_capability
+        raise SystemExit(run_capability(args))
 
     if args.cmd == "inbox":
         from .channels.inbox import fetch_inbox, render_inbox
