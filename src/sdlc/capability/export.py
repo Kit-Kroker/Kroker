@@ -27,11 +27,17 @@ EXPORT_VERSION = 1
 
 
 def fingerprint_sha256(fp: CapabilityFingerprint) -> str:
-    """Stable digest over the canonical tier members. The model validator
-    already sorted and deduped them, so equal observations hash equal
-    regardless of discovery order."""
+    """Stable digest over the canonical tier members and collection state.
+
+    The model validator already sorted and deduped the members, so equal
+    observations hash equal regardless of discovery order. The collection
+    state is part of the digest: a MEASURED fingerprint and a NOT_COLLECTED
+    one with identical tiers are not the same observation -- conflating them
+    in the client-facing artifact is exactly the ambiguity measurement.py
+    exists to prevent."""
     canonical = json.dumps(
-        {t.value: fp.tiers.get(t, []) for t in SignalTier},
+        {"tiers": {t.value: fp.tiers.get(t, []) for t in SignalTier},
+         "collected": fp.collected.state.value},
         sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 

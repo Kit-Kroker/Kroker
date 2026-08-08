@@ -32,6 +32,21 @@ def test_hash_changes_when_a_member_changes():
         fingerprint_sha256(_fp("POST /b"))
 
 
+def test_hash_distinguishes_identical_tiers_by_collection_state():
+    # The digest hashed only the tier members, so a MEASURED fingerprint and
+    # a NOT_COLLECTED one with identical tiers collided -- the exact
+    # conflation measurement.py exists to prevent, reappearing in the
+    # client-facing artifact. "Same hash means nothing changed" cannot hold
+    # when "measured and empty" is indistinguishable from "we could not
+    # measure."
+    tiers = {SignalTier.CONTRACT: ["POST /a"]}
+    measured = CapabilityFingerprint(tiers=tiers,
+                                     collected=Measurement.measured(1.0))
+    uncollected = CapabilityFingerprint(
+        tiers=tiers, collected=Measurement.not_collected("parse fail"))
+    assert fingerprint_sha256(measured) != fingerprint_sha256(uncollected)
+
+
 def test_export_carries_no_raw_fingerprint_members():
     payload = build_export("p", [_identity("BC-001", _fp("POST /secret"))])
     assert "POST /secret" not in json.dumps(payload)
