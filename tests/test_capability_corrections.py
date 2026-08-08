@@ -196,3 +196,23 @@ def test_merge_into_a_retired_target_is_rejected(store):
     with pytest.raises(ValueError, match="retired"):
         apply_correction(store, "p", _correction(
             CorrectionOp.MERGE, "BC-002", "BC-001"))
+
+
+# --- review #2: the correction reason must be retained, not discarded ----
+
+def test_correction_reason_is_recorded_in_the_event(store):
+    # corrections.py says reason "is retained as a calibration signal" and
+    # _audited rejects a blank one. apply() was writing row.status.value into
+    # event.detail and dropping the reason entirely -- validated, required,
+    # thrown away. The detail column is where it belongs.
+    _seed(store, _identity("BC-001", _fp("POST /a")),
+          _identity("BC-002", _fp("POST /b")))
+    apply_correction(store, "p", IdentityCorrection(
+        operation=CorrectionOp.MERGE, approved_by="maks",
+        reason="THE HUMAN JUSTIFICATION",
+        source_bc_id="BC-001", target_bc_id="BC-002"))
+    detail = store._conn.execute(
+        "SELECT detail FROM capability_event WHERE bc_id = ? "
+        "AND operation = ? ORDER BY id DESC LIMIT 1",
+        ("BC-001", "merge")).fetchone()[0]
+    assert "THE HUMAN JUSTIFICATION" in detail

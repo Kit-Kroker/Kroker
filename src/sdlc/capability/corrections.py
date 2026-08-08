@@ -76,7 +76,8 @@ def apply_correction(store: CapabilityIdentityStore, project: str,
 
     return store.apply(project, changed, expected_version=version,
                        actor=correction.approved_by,
-                       operation=correction.operation.value)
+                       operation=correction.operation.value,
+                       detail=correction.reason)
 
 
 def _absorb(source: CapabilityIdentity, correction: IdentityCorrection,

@@ -52,8 +52,13 @@ class CapabilityIdentityStore(ABC):
     @abstractmethod
     def apply(self, project: str, rows: Sequence[CapabilityIdentity], *,
               expected_version: int, actor: str = "system",
-              operation: str = "resolve") -> int:
-        """Upsert rows in one transaction. Returns the new registry_version."""
+              operation: str = "resolve",
+              detail: str | None = None) -> int:
+        """Upsert rows in one transaction. Returns the new registry_version.
+
+        `detail` overrides the per-row event detail (which otherwise records
+        row.status.value); a correction passes its human reason here so the
+        calibration signal the contracts claim to retain is actually kept."""
 
     @abstractmethod
     def allocator(self, project: str) -> Callable[[], str]:
@@ -89,7 +94,8 @@ class BoardIdentityStore(CapabilityIdentityStore):
 
     def apply(self, project: str, rows: Sequence[CapabilityIdentity], *,
               expected_version: int, actor: str = "system",
-              operation: str = "resolve") -> int:
+              operation: str = "resolve",
+              detail: str | None = None) -> int:
         # BEGIN IMMEDIATE takes the write lock up front (mirroring
         # board/store.py's _Tx), so the version read and the row writes are
         # one atomic transaction. connect() uses isolation_level=None, so the
@@ -129,7 +135,8 @@ class BoardIdentityStore(CapabilityIdentityStore):
                     "INSERT INTO capability_event (project, bc_id, actor, "
                     "operation, detail, created_at) VALUES (?,?,?,?,?,?)",
                     (project, row.bc_id, actor, operation,
-                     row.status.value, _now()))
+                     detail if detail is not None else row.status.value,
+                     _now()))
             self._conn.execute(
                 "UPDATE capability_registry SET registry_version = ?, "
                 "next_ordinal = MAX(next_ordinal, ?) WHERE project = ?",
