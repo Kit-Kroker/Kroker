@@ -22,7 +22,7 @@ from temporalio import activity
 
 from ..activities import _bounded_shell, _git
 from ..grounding import Profile, verify_quote
-from ..measurement import Measurement
+from ..measurement import CollectionState, Measurement
 from ..toolchain.adapters import detect_with_marker, detect_with_marker_from_paths
 from .advisories import resolve_advisory_source
 from .gitread import is_over_size_limit, read_tree
@@ -145,7 +145,12 @@ def _verified(result: SignalResult, blobs: dict[str, str]) -> SignalResult:
         else:
             _log.warning("triage %s: dropping unverifiable evidence for %s "
                          "at %s", result.signal, finding.rule, finding.path)
-    return result.model_copy(update={"findings": kept})
+    # collected.value is the finding COUNT. Dropping a finding without
+    # updating it reports a count the artifact's findings list contradicts.
+    update: dict[str, object] = {"findings": kept}
+    if result.collected.state is CollectionState.MEASURED:
+        update["collected"] = Measurement.measured(float(len(kept)))
+    return result.model_copy(update=update)
 
 
 @dataclass
