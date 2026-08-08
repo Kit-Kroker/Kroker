@@ -69,6 +69,15 @@ def resolve(proposed: Sequence[ProposedCapability],
     """
     candidates = [r for r in registry if r.status is not IdentityStatus.MERGED]
 
+    seen_keys: set[str] = set()
+    for p in proposed:
+        if p.local_key in seen_keys:
+            raise ValueError(
+                f"duplicate local_key '{p.local_key}' in proposed; local_key "
+                f"is the caller's per-assessment handle and must be unique "
+                f"across one resolve() call")
+        seen_keys.add(p.local_key)
+
     scored: dict[tuple[str, str], tuple[float, dict[SignalTier, float]]] = {}
     uncomputable: list[str] = []
     for p in proposed:

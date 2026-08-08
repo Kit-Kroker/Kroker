@@ -1,6 +1,8 @@
 """FR-913 identity resolution (E-47a)."""
 import itertools
 
+import pytest
+
 from sdlc.capability.matcher import resolve
 from sdlc.capability.models import (
     AdvisoryKind, AttachMethod, CapabilityFingerprint, CapabilityIdentity,
@@ -170,3 +172,27 @@ def test_resolution_is_deterministic_across_input_order():
                      allocate=_allocator())
     assert ({(a.local_key, a.bc_id) for a in first.attachments}
             == {(a.local_key, a.bc_id) for a in second.attachments})
+
+
+# --- review #4: duplicate local_key hands one id to two capabilities -----
+
+def test_duplicate_local_key_is_rejected():
+    # Nothing upstream enforces local_key uniqueness (discover, E-48, is the
+    # producer). Two proposed capabilities sharing a handle would both attach
+    # to the same bc_id -- the one-to-one violation assign() exists to prevent,
+    # reached by walking around it. Fail loudly; there is no sensible recovery.
+    proposed = [
+        ProposedCapability(local_key="dup", fingerprint=_fp(contract=["POST /a"])),
+        ProposedCapability(local_key="dup", fingerprint=_fp(contract=["POST /b"])),
+    ]
+    with pytest.raises(ValueError, match="dup"):
+        resolve(proposed, [], allocate=_allocator())
+
+
+def test_unique_local_keys_resolve_normally():
+    proposed = [
+        ProposedCapability(local_key="c0", fingerprint=_fp(contract=["POST /a"])),
+        ProposedCapability(local_key="c1", fingerprint=_fp(contract=["POST /b"])),
+    ]
+    r = resolve(proposed, [], allocate=_allocator())
+    assert {a.local_key for a in r.attachments} == {"c0", "c1"}
