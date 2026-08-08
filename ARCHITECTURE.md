@@ -505,6 +505,13 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
   per-language translation shim, in exchange for a grade that holds across every
   language the factory can emit. **New scope** vs a Python-only pipeline —
   likely a PRD line for the multi-language capability, not only this ADR.
+  *2026-08-08 (E-41a–d):* the adapter gains its first pure per-language
+  **parser** member, `function_spans`, beside its command strings. It runs no
+  subprocess and touches no filesystem, so ADR-15's purity rule holds; it is
+  the same kind of member as `classify_test_exit` — a per-language
+  interpretation rather than a command. Framework fingerprints and
+  misconfiguration rules deliberately do **not** live here: one language
+  serves many frameworks.
 - **ADR-16 Harness sessions as first-class, claim-checked artifacts.**
   Every harness run emits a canonical `HarnessSession` — a normalised
   transcript (tool-calls, file reads/writes, commands + exit status, model

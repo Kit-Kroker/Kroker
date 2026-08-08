@@ -180,6 +180,7 @@
 - [x] **FR-701** run-level budgets — research ships the FIRST run-level counters (`max_searches`/`max_fetches`/`max_cost_usd`), stage-scoped and enforced inside the tools; E-19 remains the general version. *Landed (E-33):* run-level token/cost counters in `RunSummary.roles` + a `run_budget_usd` budget gate that escalates through the FR-301/302 gate machinery on crossing (approve = one more increment, reject = `rejected:budget`). Stage-scoped research budgets (FR-107) unchanged.
 - [ ] ⚠️ **FR-702** claim-check `ArtifactRef` / 2MB discipline — `ArtifactRef` model exists but diffs travel inline; no `CodeArtifact` union; no size guard. Sessions are now a real claim-check consumer (`ArtifactStore` / `harness_session`, E-38), but diffs still travel inline, so FR-702 stays open.
 - [ ] ⚠️ **FR-703** egress policy — **research is the pipeline's first outbound egress, and it arrives before the egress policy.** *Partially landed (2026-07-24, E-15/E-16):* the `pre_tool` hook now exists and denies out-of-worktree writes, recursive deletes, agent-config rewrites, and non-allowlisted hosts (tool-level); approval escalation for `action: escalate` rules lands via the same hook (E-17). Egress is still env-allowlist + tool-level only — network-level egress and the OS/container tier remain open (E-21).
+  *2026-08-08 (E-41a):* `OsvAdvisorySource` adds the pipeline's **second** declared outbound egress after research (FR-107) — declared, opt-in, and off by default. It is still env/tool-level only; E-21 remains the network tier.
 - [ ] **FR-704** observability export (`events.jsonl` + `report.html`) — no `observability/` module.
 
 ### Context & continuity (FR-800) — *documented in PRD 2026-07-25, no new scope*
@@ -197,10 +198,11 @@ as tracked rather than accidental.
 ### Assessment, Tier 0 — triage (FR-900) *(new scope; PRD v1.1)*
 
 - [ ] **FR-901** triage stage → `RepoTriage` + readiness verdict; completes on repos that do not build (E-42). *Artifact landed with E-41 (2026-08-06); the stage and the readiness gate are E-42.*
-- [ ] ⚠️ **FR-902** hygiene signal set via FR-108 adapters, one implementation
-  per signal — three of seven landed (build probe, secrets incl. client-bundle
-  reachability, baseline practice); dependency health, dead/scaffold code,
-  framework misconfig and size/duplication outliers are E-41a–d.
+- [x] **FR-902** hygiene signal set via FR-108 adapters, one implementation
+  per signal — **seven of seven landed**: build probe, secrets (incl.
+  client-bundle reachability), baseline practice (E-41), plus dependency
+  health, generator-scaffold/dead code, framework-default misconfig, and
+  size/duplication outliers (E-41a–d, 2026-08-08).
 - [ ] **FR-903** readiness gate blocking Tier 2, overridable by audited decision (E-42).
 - [ ] **FR-904** `mechanically_fixable` → brownfield child runs + before/after re-triage (E-44).
 
@@ -775,7 +777,7 @@ which makes it the shortest path to a demonstrable assess → fix → prove loop
   cannot be silently satisfied. **`RepoTriage` landed with E-41** (2026-08-06),
   where the signals that populate it are designed. FR-915's triage half is
   therefore closed.
-- [ ] ⚠️ **E-41 — deterministic hygiene signals** → FR-902, FR-108.
+- [x] **E-41 — deterministic hygiene signals** → FR-902, FR-108.
   *Contracts + seam + three signals landed (2026-08-06):* `src/sdlc/triage/`
   ships `RepoTriage`/`TriageFinding`/`Readiness` (closing the half **E-40**
   deferred here), a one-activity-per-signal seam, and **build probe**,
@@ -785,17 +787,32 @@ which makes it the shortest path to a demonstrable assess → fix → prove loop
   as ready for the FR-903 gate. The build probe **executes the triaged
   repository's own code** in a throwaway clone at the pinned commit — an
   operator-authorization trust boundary, not a solved one (see NFR-9; removed
-  by E-57/E-21). Remaining four families are **E-41a–d**. Spec
+  by E-57/E-21). Spec
   `docs/superpowers/specs/2026-08-06-repository-triage-hygiene-signals-design.md`,
   plan `docs/superpowers/plans/2026-08-06-repository-triage-hygiene-signals.md`.
-- [ ] **E-41a** dependency health — unpinned / known-vulnerable / unused /
-  duplicated, behind the FR-108 adapter.
-- [ ] **E-41b** dead and generator-scaffold code. Also sharpens
-  `structure_discernible`, which E-41 ships as a deliberate floor (a repository
-  that is entirely untouched scaffolding currently passes it).
-- [ ] **E-41c** framework-default misconfiguration — unauthenticated routes,
-  permissive CORS, world-readable storage.
-- [ ] **E-41d** size and duplication outliers.
+- [x] **E-41a** dependency health — unpinned / duplicated / known-vulnerable /
+  unused direct dependencies behind the FR-108 adapter's `manifests` and
+  `ecosystem`. The advisory database is an `AdvisorySource` seam whose
+  default collects nothing: a lookup that did not happen reports
+  `not_collected`, never zero vulnerabilities. `OsvAdvisorySource` is the one
+  reference implementation, opt-in and off by default.
+- [x] **E-41b** dead and generator-scaffold code, and **the new owner of
+  `structure_discernible`** — `compute_readiness` admits exactly one signal
+  per readiness key, so the dimension moved off `baseline` (now v2) rather
+  than being reported twice. Detection is fingerprint-first with git history
+  corroborating severity only: history alone misfires hardest on the
+  single-initial-commit repositories Tier 0 targets. **The floor is raised,
+  not removed** — a repository that is entirely untouched output of a
+  generator we hold no fingerprint for still passes the dimension.
+- [x] **E-41c** framework-default misconfiguration — permissive CORS, debug
+  mode, wildcard `ALLOWED_HOSTS`, the Django placeholder `SECRET_KEY`, and
+  world-readable storage rules. `unauthenticated_app` is whole-application
+  scoped and fires once per repository; per-route auth reasoning is E-46/E-49.
+  `secrets` (now v2) excludes the Django placeholder, so one line yields one
+  finding from one signal.
+- [x] **E-41d** size and duplication outliers — absolute adapter-supplied
+  thresholds, not percentiles, so the numbers survive E-44's before/after
+  delta. Both size rules are STRUCTURAL.
 - [ ] **E-42 — `TriageWorkflow` + readiness verdict + readiness gate** → FR-901,
   FR-903. Readiness (buildable / runnable / tests present / structure
   discernible) computed from deterministic signals **only**, so triage completes
