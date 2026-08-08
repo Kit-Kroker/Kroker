@@ -81,8 +81,11 @@ class TreeReader:
         equivalence is what makes the `secrets` migration safe, and it is
         asserted in tests rather than assumed.
 
-        An over-size blob yields None, but its payload is still consumed:
-        leaving bytes in the pipe would desynchronise every later read.
+        A tree/tag/commit object's payload IS consumed before returning None:
+        leaving bytes in the pipe would desynchronise every later read, which
+        is the failure mode a batched reader has and a per-file spawn cannot.
+        A missing or ambiguous path carries no payload, so there is nothing
+        to drain.
         """
         proc = self._proc
         if proc is None:
@@ -93,13 +96,15 @@ class TreeReader:
         parts = header.split()
         # "<oid> SP blob SP <size>" on success; "<input> SP missing" and
         # "<input> SP ambiguous" carry no payload; a tree/tag/commit object
-        # is a well-formed header we still refuse.
-        if len(parts) != 3 or parts[1] != "blob":
+        # is a well-formed 3-part header whose payload MUST be drained or the
+        # stream desyncs and every later read parses the previous object's
+        # bytes as a header.
+        if len(parts) != 3:
             return None
         size = int(parts[2])
         payload = proc.stdout.read(size)
         proc.stdout.read(1)                        # the trailing LF
-        if size > MAX_BLOB_BYTES:
+        if parts[1] != "blob":
             return None
         return payload.decode(errors="replace")
 
@@ -108,10 +113,14 @@ def read_tree(repo_dir: str, commit_sha: str,
               paths: Sequence[str]) -> Iterator[tuple[str, str]]:
     """(path, text) for every path resolving to a readable text blob.
 
-    Skips non-blobs, over-size blobs and binary content -- the three skips
-    `secrets` applies today, hoisted so every signal inherits them instead of
-    re-deciding. Paths are read in the order given, so a caller's sorted input
-    yields deterministic output.
+    Skips non-blobs and binary content. The size cap is NOT applied here:
+    it is a `secrets`-specific concern (a minified bundle costs more to
+    regex than the finding is worth), not a reader concern. E-41d's
+    oversized_file rule reads through this function and MUST see large
+    files. Callers that want the cap apply `is_over_size_limit` themselves.
+
+    Paths are read in the order given, so a caller's sorted input yields
+    deterministic output.
     """
     with TreeReader(repo_dir, commit_sha) as reader:
         for path in paths:

@@ -27,7 +27,7 @@ def _commit_repo(root, files: dict[str, str]) -> str:
     _run(["git", "commit", "-q", "-m", "one"], root)
     return subprocess.run(["git", "rev-parse", "HEAD"], cwd=root,
                           capture_output=True, encoding="utf-8",
-                          check=True).stdout.strip()
+                          check=True, stdin=subprocess.DEVNULL).stdout.strip()
 
 
 @pytest.fixture
@@ -79,7 +79,7 @@ def test_read_tree_skips_binary_and_unreadable_paths(tmp_path):
     _run(["git", "commit", "-q", "-m", "two"], tmp_path)
     sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmp_path,
                          capture_output=True, encoding="utf-8",
-                         check=True).stdout.strip()
+                         check=True, stdin=subprocess.DEVNULL).stdout.strip()
     paths = tracked_paths(str(tmp_path), sha)
     got = dict(read_tree(str(tmp_path), sha, paths))
     assert got == {"a.py": "x = 1\n", "b.py": "y = 2\n"}
@@ -90,3 +90,23 @@ def test_is_over_size_limit_counts_bytes_not_characters():
     assert is_over_size_limit("x" * (MAX_BLOB_BYTES + 1))
     # Three-byte characters exceed the byte limit at a third of the count.
     assert is_over_size_limit("\uffff" * 333334)
+
+
+def test_a_tree_object_does_not_desync_the_stream(repo):
+    # A directory resolves to a tree OBJECT, which cat-file --batch emits
+    # with a payload. If that payload is not drained, the next read parses
+    # the tree's bytes as a header and every later read is wrong. This is
+    # the failure mode a batched reader has and a per-file spawn cannot.
+    repo_dir, sha = repo
+    with TreeReader(repo_dir, sha) as reader:
+        assert reader.read("src") is None               # tree: payload drained
+        assert reader.read("src/app.py") == "x = 1\n"   # must still read
+        assert reader.read("pyproject.toml") == "[project]\nname = 'x'\n"
+
+
+def test_a_tree_object_then_a_missing_path_stay_in_sync(repo):
+    repo_dir, sha = repo
+    with TreeReader(repo_dir, sha) as reader:
+        assert reader.read("src") is None               # tree: drain payload
+        assert reader.read("nope.py") is None            # missing: no payload
+        assert reader.read("src/app.py") == "x = 1\n"   # must still read

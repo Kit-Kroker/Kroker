@@ -181,7 +181,7 @@ def _commit(root, files: dict[str, str], message: str) -> str:
     _run(["git", "commit", "-q", "-m", message], root)
     return subprocess.run(["git", "rev-parse", "HEAD"], cwd=root,
                           capture_output=True, encoding="utf-8",
-                          check=True).stdout.strip()
+                          check=True, stdin=subprocess.DEVNULL).stdout.strip()
 
 
 def test_touch_counts_is_none_for_a_single_commit_repo(tmp_path):

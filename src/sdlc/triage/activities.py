@@ -25,7 +25,7 @@ from ..grounding import Profile, verify_quote
 from ..measurement import Measurement
 from ..toolchain.adapters import detect_with_marker, detect_with_marker_from_paths
 from .advisories import resolve_advisory_source
-from .gitread import read_tree
+from .gitread import is_over_size_limit, read_tree
 from .models import SignalResult
 from .signals import (
     baseline, build_probe, dependencies, misconfig, outliers, scaffold,
@@ -102,6 +102,8 @@ async def triage_secrets(inp: TriageSignalInput) -> SignalResult:
         findings = list(secrets.env_file_findings(paths))
         for path, blob in read_tree(inp.repo_dir, inp.commit_sha,
                                     sorted(paths)):
+            if is_over_size_limit(blob):
+                continue
             for finding in secrets.scan_text(path, blob):
                 if finding.evidence and not verify_quote(
                         finding.evidence, blob, Profile.VERBATIM_BYTES):

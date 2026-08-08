@@ -186,7 +186,7 @@ def _commit_repo(root, files: dict[str, str]) -> str:
     _run(["git", "commit", "-q", "-m", "one"], root)
     return subprocess.run(["git", "rev-parse", "HEAD"], cwd=root,
                           capture_output=True, encoding="utf-8",
-                          check=True).stdout.strip()
+                          check=True, stdin=subprocess.DEVNULL).stdout.strip()
 
 
 @pytest.mark.asyncio
