@@ -98,11 +98,22 @@ def test_an_imported_module_is_not_unreferenced():
 
 # ---- M_STRUCTURE, the migrated dimension (D12) ------------------------
 
-def test_structure_is_not_collected_without_a_toolchain():
+def test_structure_is_measured_without_a_toolchain():
+    # Structure is language-agnostic: a repo with source files has structure
+    # even without a resolved adapter. This was a regression from baseline v1,
+    # which used a broad extension list and scored 1.0 for the same input.
     r = scaffold.evaluate(["src/a.py"], {"src/a.py": "x = 1\n"}, None, None)
     m = r.metrics[M_STRUCTURE]
-    assert m.state is CollectionState.NOT_COLLECTED
-    assert "marker" in m.reason
+    assert m.state is CollectionState.MEASURED
+    assert m.value == 1.0
+
+
+def test_structure_is_measured_for_a_js_only_repo_with_no_adapter():
+    # The repos most FINGERPRINTS target (create-next-app, create-react-app)
+    # resolve no adapter. Structure must still be assessable there.
+    r = scaffold.evaluate(["src/App.jsx"], {"src/App.jsx": "export default 1\n"},
+                          None, None)
+    assert r.metrics[M_STRUCTURE].value == 1.0
 
 
 def test_structure_is_zero_when_a_toolchain_resolves_but_no_source_exists():

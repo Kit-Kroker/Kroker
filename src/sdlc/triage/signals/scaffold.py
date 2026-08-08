@@ -38,6 +38,16 @@ M_SCAFFOLD_FILES = "scaffold_files"
 # generator's manage.py, and one surviving default file is not scaffolding.
 SCAFFOLD_RATIO_THRESHOLD = 0.9
 
+# Language-agnostic source extensions for the STRUCTURE assessment. The
+# adapter's source_extensions is language-specific and only PythonToolchain
+# exists today, so gating structure on it would make the dimension
+# permanently not_collected for the JS/TS repos most FINGERPRINTS target.
+# Structure asks "does this repo have real code?", which is not a
+# per-language question. Dead-code detection (unreferenced_module) DOES use
+# the adapter's extensions, because import parsing is language-specific.
+_SOURCE_EXTENSIONS = (".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".rs",
+                      ".java", ".rb", ".php", ".cs", ".kt", ".swift")
+
 # Paths that are entrypoints by convention and therefore never "unreferenced"
 # merely because nothing imports them.
 _ENTRYPOINT_STEMS = frozenset({
@@ -124,14 +134,17 @@ def evaluate(paths: Sequence[str], blobs: Mapping[str, str],
                  if fnmatch.fnmatch(path, fp.path_glob)
                  and fp.marker in blobs[path])))
 
+    # Dead-code detection is language-specific: it needs the adapter's source
+    # extensions and test globs, because import parsing is per-language. A repo
+    # with no resolved adapter gets no unreferenced_module findings.
     exts = tuple(toolchain.source_extensions) if toolchain else ()
     test_globs = tuple(toolchain.test_globs) if toolchain else ()
-    source = [p for p in sorted(paths) if exts and p.endswith(exts)]
+    dead_source = [p for p in sorted(paths) if exts and p.endswith(exts)]
 
-    if source:
+    if dead_source:
         imported = imported_modules(
-            blobs[p] for p in source if p in blobs)
-        for path in source:
+            blobs[p] for p in dead_source if p in blobs)
+        for path in dead_source:
             stem = posixpath.splitext(posixpath.basename(path))[0]
             if stem in _ENTRYPOINT_STEMS:
                 continue
@@ -147,13 +160,19 @@ def evaluate(paths: Sequence[str], blobs: Mapping[str, str],
                 f"Deleting code is a decision, not a mechanical patch.",
                 FixClass.JUDGEMENT, path))
 
-    if toolchain is None:
-        structure = Measurement.not_collected(
-            "no toolchain marker resolved, so structure is not assessable")
-    elif not source:
+    # Structure is language-AGNOSTIC: "does this repo have real code?" is not
+    # a per-language question. Using the adapter's extensions here would make
+    # the dimension permanently not_collected for the JS/TS repos most
+    # FINGERPRINTS target (no JS adapter exists), and would score 0.0 for a
+    # Python-marker repo whose only source is .js — a regression from
+    # baseline v1's broad extension list.
+    structure_source = [p for p in sorted(paths)
+                        if p.endswith(_SOURCE_EXTENSIONS)]
+    if not structure_source:
         structure = Measurement.measured(0.0)
     else:
-        ratio = len([p for p in source if p in scaffolded]) / len(source)
+        ratio = len([p for p in structure_source if p in scaffolded]) \
+            / len(structure_source)
         structure = Measurement.measured(
             0.0 if ratio >= SCAFFOLD_RATIO_THRESHOLD else 1.0)
 
