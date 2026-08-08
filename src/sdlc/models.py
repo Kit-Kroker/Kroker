@@ -71,6 +71,18 @@ class GateConfig(BaseModel):
         return cls(policy=GatePolicy(v))
 
 
+class GateSettings(BaseModel):
+    """The three fields a durable HITL gate reads (E-42 D3).
+
+    Extracted so GateHost does not depend on PipelineConfig: a triage run has
+    roles, memory, research and deploy config it will never use, and taking the
+    whole object would drag all of it into triage's input contract.
+    """
+    gates: dict[str, GateConfig] = Field(default_factory=dict)
+    default_gate_policy: GatePolicy = GatePolicy.HARD
+    gate_timeout_hours: int = 48
+
+
 class ArtifactRef(BaseModel):
     """Claim-check reference to a large artifact (spec, diff, report)."""
     kind: str                      # e.g. "spec", "plan", "qa_report", "diff"
@@ -1004,6 +1016,13 @@ class PipelineConfig(BaseModel):
     # E-33/FR-701: run-level USD budget. 0.0 = off (the coverage_threshold
     # opt-in pattern). When crossed, the workflow raises a hard "budget"
     # gate; approve grants one more increment of this amount.
+
+    def gate_settings(self) -> GateSettings:
+        """Project the three gate fields. `gates` is copied, not aliased --
+        a workflow handed these must not be able to mutate the config."""
+        return GateSettings(gates=dict(self.gates),
+                            default_gate_policy=self.default_gate_policy,
+                            gate_timeout_hours=self.gate_timeout_hours)
 
 
 class StageOutcome(BaseModel):
