@@ -71,6 +71,8 @@ def clone_groups(blobs: Mapping[str, str],
     Within-file repetition is not reported: a file that repeats itself is
     this signal's oversized_file finding, not a cross-file duplication one.
     """
+    if window <= 0:
+        return []          # every single line would match: meaningless
     index: dict[str, list[tuple[str, int, int]]] = {}
     for path in sorted(blobs):
         lines = normalized_lines(blobs[path])
@@ -147,11 +149,16 @@ def evaluate(blobs: Mapping[str, str],
                         f"{toolchain.max_function_loc}-line limit. Splitting "
                         f"it is design work.",
                         FixClass.STRUCTURAL, path, start))
-        fn_metric = (
-            Measurement.measured(float(max_fn)) if parsed_any
-            else Measurement.not_collected(
+        if parsed_any:
+            fn_metric = Measurement.measured(float(max_fn))
+        elif not blobs:
+            fn_metric = Measurement.not_collected(
+                "no source files to parse, so function length was not "
+                "measured")
+        else:
+            fn_metric = Measurement.not_collected(
                 "this toolchain declares no function parser, so function "
-                "length was not measured"))
+                "length was not measured")
 
     total_lines = sum(len(t.splitlines()) for t in blobs.values())
     window = toolchain.min_clone_loc if toolchain else 30

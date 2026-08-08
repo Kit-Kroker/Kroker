@@ -42,6 +42,16 @@ def test_a_matching_path_with_no_marker_is_not_scaffolding():
     assert scaffold.scaffolded_paths({"README.md": "# My project\n"}) == {}
 
 
+def test_django_settings_fingerprint_does_not_overlap_misconfig():
+    # The scaffold fingerprint uses Django's comment marker, not the
+    # SECRET_KEY line, so the same file does not yield two findings from two
+    # signals (scaffold + misconfig) on one line.
+    settings = ('# SECURITY WARNING: keep the secret key used in production secret!\n'
+                "SECRET_KEY = 'django-insecure-abc123'\n")
+    assert scaffold.scaffolded_paths({"myapp/settings.py": settings}) == \
+        {"myapp/settings.py": "django-admin"}
+
+
 # ---- history corroboration (D13) --------------------------------------
 
 def test_history_escalates_an_untouched_scaffold_file():
@@ -61,6 +71,15 @@ def test_no_history_leaves_severity_at_the_fingerprint_level():
         is CollectionState.NOT_COLLECTED
     # The SIGNAL still collected -- the fingerprints ran.
     assert r.collected.state is CollectionState.MEASURED
+
+
+def test_a_path_absent_from_touch_counts_does_not_escalate():
+    # A path missing from touch_counts (beyond max_commits, or an unmatchable
+    # quoting artifact) must NOT escalate to medium — the safe direction is
+    # to stay at the fingerprint-level severity.
+    r = scaffold.evaluate(
+        ["src/App.js"], {"src/App.js": CRA_APP}, {"other.py": 5}, None)
+    assert r.findings[0].severity == "low"
 
 
 def test_scaffolding_is_judgement_not_mechanical():

@@ -84,7 +84,7 @@ FINGERPRINTS: tuple[Fingerprint, ...] = (
                 marker="Django's command-line utility for administrative "
                        "tasks"),
     Fingerprint(generator="django-admin", path_glob="*/settings.py",
-                marker="SECRET_KEY = 'django-insecure-"),
+                marker="keep the secret key used in production secret"),
 )
 
 
@@ -119,8 +119,11 @@ def evaluate(paths: Sequence[str], blobs: Mapping[str, str],
     findings: list[TriageFinding] = []
 
     for path, generator in sorted(scaffolded.items()):
-        untouched = touch_counts is not None \
-            and touch_counts.get(path, 0) <= 1
+        # A path absent from touch_counts (beyond max_commits, or an
+        # unmatchable quoting artifact) must NOT escalate: the safe direction
+        # for a false-positive-prone rule is to stay at the fingerprint level.
+        count = touch_counts.get(path) if touch_counts else None
+        untouched = count is not None and count <= 1
         findings.append(_finding(
             "generator_scaffold", "medium" if untouched else "low",
             f"{path} is unmodified {generator} output"

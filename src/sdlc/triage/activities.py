@@ -227,7 +227,8 @@ def commit_touch_counts(repo_dir: str, commit_sha: str,
     re-creations, not reproducibility at a pinned commit -- and since history
     only adjusts severity, a re-import degrades sharpness, never correctness.
     """
-    proc = _git(["log", f"--max-count={max_commits}", "--name-only",
+    proc = _git(["-c", "core.quotepath=false", "log",
+                 f"--max-count={max_commits}", "--name-only",
                  "--format=%x00", commit_sha], cwd=repo_dir)
     if proc.returncode != 0:
         return None
