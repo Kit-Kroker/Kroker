@@ -18,15 +18,18 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
-    from ..measurement import Measurement
-    from ..models import GateSettings
+    from ..measurement import CollectionState, Measurement
+    from ..models import GateDecision, GateOutcome, GateSettings
+    from ..pending import GateContext
     from ..triage.activities import (
         TriageDependencyInput, TriagePin, TriagePinInput, TriageProbeInput,
         TriageSignalInput, triage_baseline, triage_build_probe,
         triage_dependencies, triage_misconfig, triage_outliers,
         triage_resolve_commit, triage_scaffold, triage_secrets,
     )
-    from ..triage.models import RepoTriage, SignalResult, compute_readiness
+    from ..triage.models import (
+        ReadinessOverride, RepoTriage, SignalResult, Verdict, compute_readiness,
+    )
     from ..triage.registry import SIGNALS
     from .gates import GateHost
 
@@ -69,6 +72,49 @@ def skipped_signal(signal_id: str, reason: str) -> SignalResult:
         collected=Measurement.not_collected(reason),
         metrics={key: Measurement.not_collected(reason)
                  for key in spec.readiness_keys})
+
+
+def _readiness_summary(t: RepoTriage) -> str:
+    """ASCII render for the gate's pending item. Names the verdict, the
+    dimensions that blocked it, and the finding counts by severity."""
+    r = t.readiness
+    dims = {"buildable": r.buildable, "runnable": r.runnable,
+            "tests_present": r.tests_present,
+            "structure_discernible": r.structure_discernible}
+    blocking = []
+    for name, m in dims.items():
+        if m.state is not CollectionState.MEASURED:
+            blocking.append(f"  {name}: not measured ({m.reason})")
+        elif (m.value or 0.0) <= 0:
+            blocking.append(f"  {name}: 0")
+    counts: dict[str, int] = {}
+    for s in t.signals:
+        for f in s.findings:
+            counts[f.severity] = counts.get(f.severity, 0) + 1
+    order = ("critical", "high", "medium", "low")
+    tally = ", ".join(f"{sev}: {counts[sev]}" for sev in order
+                      if sev in counts) or "none"
+    return (f"verdict: {r.verdict.value}\n"
+            f"commit: {t.commit_sha}\n"
+            f"toolchain: {t.toolchain or 'unknown'}\n"
+            f"blocking:\n" + ("\n".join(blocking) or "  none") + "\n"
+            f"findings ({tally})")
+
+
+def override_from(decision: GateDecision) -> ReadinessOverride | None:
+    """FR-903. Every APPROVE records an override -- one rule, no special
+    cases -- with approved_by carrying decided_by VERBATIM, so "policy"
+    (gate OFF) and "timeout" (on_timeout=APPROVE) stay legible as non-human.
+    E-45 may narrow its admission rule to human approvals; what this refuses
+    to do is discard the distinction."""
+    if not decision.approved:
+        return None
+    return ReadinessOverride(
+        approved_by=decision.decided_by,      # Literal["human","policy","timeout"]
+        reviewer=decision.reviewer,           # self-asserted identity (FR-1004)
+        reason=decision.comments or "",
+        decided_at=decision.decided_at or workflow.now(),
+        gate_round=decision.round)
 
 
 @workflow.defn
@@ -135,6 +181,43 @@ class TriageWorkflow(GateHost):
 
     @workflow.run
     async def run(self, inp: TriageInput) -> RepoTriage:
+        for round in range(1, inp.max_gate_rounds + 1):
+            self._triage = await self._assess(inp)
+            verdict = self._triage.readiness.verdict
+            if verdict is Verdict.READY:
+                self._status = "triaged:ready"
+                return self._triage
+
+            decision = await self._gate(
+                "readiness", inp.gates, round=round,
+                context=GateContext(
+                    spec_summary=_readiness_summary(self._triage)))
+
+            if decision.outcome is GateOutcome.REVISE:
+                # D9: the operator fixed something. Re-resolve and look again
+                # -- round 2 legitimately describes a different commit.
+                continue
+            if decision.approved:
+                self._triage.override = override_from(decision)
+                self._status = f"triaged:{verdict.value}+override"
+            else:
+                self._status = "blocked:readiness"
+            return self._triage
+
+        # D9: rounds exhausted. One final gate decides proceed-anyway vs stop;
+        # no auto_decision is passed, so a SOFT policy also waits.
         self._triage = await self._assess(inp)
-        self._status = f"triaged:{self._triage.readiness.verdict.value}"
+        verdict = self._triage.readiness.verdict
+        if verdict is Verdict.READY:
+            self._status = "triaged:ready"
+            return self._triage
+        decision = await self._gate(
+            "readiness", inp.gates, round=inp.max_gate_rounds + 1,
+            context=GateContext(
+                spec_summary=_readiness_summary(self._triage)))
+        if decision.approved:
+            self._triage.override = override_from(decision)
+            self._status = f"triaged:{verdict.value}+override"
+        else:
+            self._status = "blocked:readiness"
         return self._triage
