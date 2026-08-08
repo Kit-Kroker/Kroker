@@ -15,17 +15,11 @@ from collections.abc import Sequence
 from ...measurement import Measurement
 from ...toolchain.adapters import ToolchainAdapter
 from ..models import (
-    FixClass, M_STRUCTURE, M_TESTS_PRESENT, SignalResult, TriageFinding,
+    FixClass, M_TESTS_PRESENT, SignalResult, TriageFinding,
 )
 
 SIGNAL_ID = "baseline"
-VERSION = 1
-
-# A deliberate floor, not a judgement about structure quality (spec D8/§8):
-# E-41b's generator-scaffold detection is what sharpens it. Until then a
-# repository that is entirely untouched scaffolding passes this dimension.
-_SOURCE_EXTENSIONS = (".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".rs",
-                      ".java", ".rb", ".php", ".cs", ".kt", ".swift")
+VERSION = 2
 
 _CI_GLOBS = (".github/workflows/*.yml", ".github/workflows/*.yaml",
              ".gitlab-ci.yml", "Jenkinsfile", ".circleci/config.yml",
@@ -120,18 +114,13 @@ def evaluate(paths: Sequence[str], gitignore_text: str,
             "configuration is undiscoverable.",
             FixClass.MECHANICAL))
 
-    if toolchain is None:
-        structure = Measurement.not_collected(
-            "no toolchain marker resolved, so structure is not assessable")
-    else:
-        has_source = any(p.endswith(_SOURCE_EXTENSIONS) for p in tracked)
-        structure = Measurement.measured(1.0 if has_source else 0.0)
-
     return SignalResult(
         signal=SIGNAL_ID, version=VERSION,
         collected=Measurement.measured(float(len(findings))),
         findings=findings,
         metrics={
+            # structure_discernible moved to the scaffold signal (E-41b,
+            # spec D12): exactly one signal may own a readiness key, and the
+            # sharpened dimension needs fingerprints this signal does not have.
             M_TESTS_PRESENT: Measurement.measured(float(len(test_files))),
-            M_STRUCTURE: structure,
         })

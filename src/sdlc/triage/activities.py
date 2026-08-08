@@ -9,6 +9,7 @@ against path@sha by construction.
 """
 from __future__ import annotations
 
+import fnmatch
 import logging
 import os
 import posixpath
@@ -26,7 +27,7 @@ from ..toolchain.adapters import detect_with_marker, detect_with_marker_from_pat
 from .advisories import resolve_advisory_source
 from .gitread import read_tree
 from .models import SignalResult
-from .signals import baseline, build_probe, dependencies, secrets
+from .signals import baseline, build_probe, dependencies, scaffold, secrets
 
 _log = logging.getLogger(__name__)
 
@@ -188,6 +189,66 @@ async def triage_dependencies(inp: TriageDependencyInput) -> SignalResult:
             signal=dependencies.SIGNAL_ID, version=dependencies.VERSION,
             collected=Measurement.not_collected(
                 f"dependencies signal raised: {type(exc).__name__}: {exc}"))
+
+
+def commit_touch_counts(repo_dir: str, commit_sha: str,
+                        max_commits: int = 2000) -> dict[str, int] | None:
+    """path -> commits touching it, over at most `max_commits` commits ending
+    at `commit_sha`. None when history yields no usable signal (spec D13).
+
+    A single-commit repository returns None rather than "everything touched
+    once": the latter is true and useless, and it would escalate every
+    fingerprinted file in exactly the repositories Tier 0 sees most.
+
+    Deterministic given the same repository and sha (NFR-10). What history
+    does not survive is a squash or re-import, which changes stability across
+    re-creations, not reproducibility at a pinned commit -- and since history
+    only adjusts severity, a re-import degrades sharpness, never correctness.
+    """
+    proc = _git(["log", f"--max-count={max_commits}", "--name-only",
+                 "--format=%x00", commit_sha], cwd=repo_dir)
+    if proc.returncode != 0:
+        return None
+    if proc.stdout.count("\x00") <= 1:
+        return None
+    counts: dict[str, int] = {}
+    for line in proc.stdout.splitlines():
+        if not line or line.startswith("\x00"):
+            continue
+        counts[line.strip()] = counts.get(line.strip(), 0) + 1
+    return counts
+
+
+@activity.defn
+async def triage_scaffold(inp: TriageSignalInput) -> SignalResult:
+    """FR-902 generator scaffolding and dead code (E-41b). Never raises."""
+    try:
+        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+        found = detect_with_marker_from_paths(paths)
+        adapter = found[0] if found else None
+        exts = tuple(adapter.source_extensions) if adapter else ()
+
+        # Fingerprints target specific paths; source extensions cover the
+        # dead-code half and the structure ratio. Reading their union keeps
+        # this to one pass.
+        wanted = sorted({
+            p for p in paths
+            if (exts and p.endswith(exts))
+            or any(fnmatch.fnmatch(p, fp.path_glob)
+                   for fp in scaffold.FINGERPRINTS)})
+        blobs = dict(read_tree(inp.repo_dir, inp.commit_sha, wanted))
+
+        result = scaffold.evaluate(
+            paths, blobs,
+            commit_touch_counts(inp.repo_dir, inp.commit_sha),
+            adapter)
+        return _verified(result, blobs)
+    except Exception as exc:                       # noqa: BLE001
+        _log.warning("triage scaffold signal failed: %s", exc)
+        return SignalResult(
+            signal=scaffold.SIGNAL_ID, version=scaffold.VERSION,
+            collected=Measurement.not_collected(
+                f"scaffold signal raised: {type(exc).__name__}: {exc}"))
 
 
 @dataclass

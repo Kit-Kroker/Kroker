@@ -2,10 +2,13 @@
 be able to drift from the modules it names."""
 from sdlc.triage import activities as triage_activities
 from sdlc.triage.registry import SIGNALS, SignalSpec
-from sdlc.triage.signals import baseline, build_probe, dependencies, secrets
+from sdlc.triage.signals import (
+    baseline, build_probe, dependencies, scaffold, secrets,
+)
 
 _MODULES = {"baseline": baseline, "secrets": secrets,
-            "build_probe": build_probe, "dependencies": dependencies}
+            "build_probe": build_probe, "dependencies": dependencies,
+            "scaffold": scaffold}
 
 
 def test_registry_covers_exactly_the_three_signals():

@@ -9,7 +9,7 @@ from sdlc.triage.activities import (
     TriageSignalInput, read_blob, tracked_paths, triage_baseline,
 )
 from sdlc.triage.models import (
-    FixClass, M_STRUCTURE, M_TESTS_PRESENT,
+    FixClass, M_TESTS_PRESENT,
 )
 from sdlc.triage.signals import baseline
 
@@ -55,7 +55,6 @@ def test_clean_repo_yields_no_findings():
     assert r.findings == []
     assert r.collected.state is CollectionState.MEASURED
     assert r.metrics[M_TESTS_PRESENT].value == 1.0
-    assert r.metrics[M_STRUCTURE].value == 1.0
 
 
 def test_vibe_repo_yields_the_expected_rule_set():
@@ -88,19 +87,6 @@ def test_no_tests_is_structural_not_mechanical():
     f = next(f for f in r.findings if f.rule == "no_tests")
     assert f.fix_class is FixClass.STRUCTURAL
     assert r.metrics[M_TESTS_PRESENT].value == 0.0
-
-
-def test_structure_not_collected_without_a_toolchain():
-    r = baseline.evaluate(["src/a.py", "README.md"], "", None)
-    m = r.metrics[M_STRUCTURE]
-    assert m.state is CollectionState.NOT_COLLECTED
-    assert "marker" in m.reason
-
-
-def test_structure_is_zero_when_toolchain_resolves_but_no_source_exists():
-    r = baseline.evaluate(["pyproject.toml", "README.md"], "",
-                          PythonToolchain())
-    assert r.metrics[M_STRUCTURE].value == 0.0
 
 
 def test_env_example_present_suppresses_the_finding():
