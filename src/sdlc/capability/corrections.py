@@ -164,10 +164,20 @@ def _split(source: CapabilityIdentity, correction: IdentityCorrection,
         kept[tier] = [m for m in members if m not in moving]
         taken[tier] = [m for m in members if m in moving]
 
-    if not any(taken.values()):
+    moved = {m for members in taken.values() for m in members}
+    unmatched = sorted(moving - moved)
+    if unmatched:
+        # A typo in one --member would otherwise move the rest and report
+        # success, silently dropping the entry that matched nothing.
         raise ValueError(
-            f"partition {sorted(moving)} matched no member of "
-            f"{source.bc_id}; nothing to split out")
+            f"partition members not present in {source.bc_id}: {unmatched}")
+    if not any(kept.values()):
+        # Moving every member would leave the source as an empty husk -- no
+        # shared tier can match again, and its export digest collides with
+        # every other empty fingerprint.
+        raise ValueError(
+            f"partition {sorted(moving)} moves every member of "
+            f"{source.bc_id}; splitting it all out would leave an empty husk")
 
     new_id = allocate()
     minted = CapabilityIdentity(

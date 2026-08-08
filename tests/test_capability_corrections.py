@@ -239,3 +239,25 @@ def test_self_reattach_is_rejected(store):
     with pytest.raises(ValueError, match="itself"):
         apply_correction(store, "p", _correction(
             CorrectionOp.REATTACH, "BC-001", "BC-001"))
+
+
+# --- review #6: a split must not empty the source nor swallow a typo -----
+
+def test_split_that_empties_the_source_is_rejected(store):
+    # Naming every member in the partition left BC-001 as an empty husk: no
+    # shared tier can ever match again (score() returns None), and its export
+    # digest is identical to every other empty fingerprint.
+    _seed(store, _identity("BC-001", _fp("POST /a", "POST /b")))
+    with pytest.raises(ValueError, match="husk"):
+        apply_correction(store, "p", _correction(
+            CorrectionOp.SPLIT, "BC-001", partition=["POST /a", "POST /b"]))
+
+
+def test_split_with_a_non_matching_member_is_rejected(store):
+    # A typo in one --member would otherwise move the matching members and
+    # report success, silently dropping the typo'd entry.
+    _seed(store, _identity("BC-001", _fp("POST /a", "POST /b")))
+    with pytest.raises(ValueError, match="not present"):
+        apply_correction(store, "p", _correction(
+            CorrectionOp.SPLIT, "BC-001",
+            partition=["POST /a", "TYPO"]))
