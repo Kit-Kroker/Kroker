@@ -114,6 +114,15 @@ class BoardIdentityStore(CapabilityIdentityStore):
                 "next_ordinal) VALUES (?, 0, 1) "
                 "ON CONFLICT(project) DO NOTHING", (project,))
             for row in rows:
+                if row.project != project:
+                    # apply() writes under the `project` argument, not
+                    # row.project; without this guard a row built for one
+                    # project lands in another silently, and load() rebrands
+                    # it with the argument project so the mismatch is then
+                    # unobservable. Per-project isolation cannot survive that.
+                    raise IdentityStoreError(
+                        f"row {row.bc_id} carries project='{row.project}' but "
+                        f"apply() was called for '{project}'")
                 self._conn.execute(
                     "INSERT INTO capability_identity (project, bc_id, "
                     "first_seen_run, status, retired_reason, merged_into, "

@@ -6,7 +6,7 @@ from sdlc.capability.models import (
     SignalTier,
 )
 from sdlc.capability.store import (
-    BoardIdentityStore, IdentityConflictError,
+    BoardIdentityStore, IdentityConflictError, IdentityStoreError,
 )
 from sdlc.measurement import Measurement
 
@@ -124,3 +124,26 @@ def test_allocator_mint_then_persist_keeps_them_in_lockstep(store):
     minted = [alloc(), alloc()]             # BC-001, BC-002 reserved at mint
     store.apply("p", [_identity(b) for b in minted], expected_version=0)
     assert store.allocator("p")() == "BC-003"
+
+
+# --- review #8: apply() must not silently relocate a row across projects --
+
+def test_apply_rejects_a_row_built_for_a_different_project(store):
+    # apply() bound the `project` argument rather than row.project, so a row
+    # constructed for project "other" landed under "p" with no error -- and
+    # load() reconstructed it with the argument project, making the mismatch
+    # unobservable afterwards. A silent cross-project write is exactly the
+    # kind of thing per-project isolation exists to prevent.
+    wrong = CapabilityIdentity(bc_id="BC-001", project="other",
+                               first_seen_run="r0",
+                               fingerprint=_fp(contract=["POST /a"]))
+    with pytest.raises(IdentityStoreError):
+        store.apply("p", [wrong], expected_version=0)
+    assert store.load("p") == []            # nothing written
+
+
+def test_apply_accepts_rows_whose_project_matches(store):
+    right = CapabilityIdentity(bc_id="BC-001", project="p", first_seen_run="r0",
+                               fingerprint=_fp(contract=["POST /a"]))
+    store.apply("p", [right], expected_version=0)
+    assert [r.bc_id for r in store.load("p")] == ["BC-001"]
