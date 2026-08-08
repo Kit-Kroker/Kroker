@@ -9,7 +9,8 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from .signals import (
-    baseline, build_probe, dependencies, misconfig, scaffold, secrets,
+    baseline, build_probe, dependencies, misconfig, outliers, scaffold,
+    secrets,
 )
 
 
@@ -38,4 +39,7 @@ SIGNALS: dict[str, SignalSpec] = {
     misconfig.SIGNAL_ID: SignalSpec(
         id=misconfig.SIGNAL_ID, version=misconfig.VERSION,
         activity="triage_misconfig"),
+    outliers.SIGNAL_ID: SignalSpec(
+        id=outliers.SIGNAL_ID, version=outliers.VERSION,
+        activity="triage_outliers"),
 }

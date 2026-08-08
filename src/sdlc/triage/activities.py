@@ -28,7 +28,8 @@ from .advisories import resolve_advisory_source
 from .gitread import read_tree
 from .models import SignalResult
 from .signals import (
-    baseline, build_probe, dependencies, misconfig, scaffold, secrets,
+    baseline, build_probe, dependencies, misconfig, outliers, scaffold,
+    secrets,
 )
 
 _log = logging.getLogger(__name__)
@@ -276,6 +277,27 @@ async def triage_misconfig(inp: TriageSignalInput) -> SignalResult:
             signal=misconfig.SIGNAL_ID, version=misconfig.VERSION,
             collected=Measurement.not_collected(
                 f"misconfig signal raised: {type(exc).__name__}: {exc}"))
+
+
+@activity.defn
+async def triage_outliers(inp: TriageSignalInput) -> SignalResult:
+    """FR-902 size and duplication outliers (E-41d). Never raises."""
+    try:
+        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+        found = detect_with_marker_from_paths(paths)
+        adapter = found[0] if found else None
+        exts = tuple(adapter.source_extensions) if adapter else ()
+        wanted = sorted(p for p in paths if exts and p.endswith(exts))
+        blobs = dict(read_tree(inp.repo_dir, inp.commit_sha, wanted))
+        # No evidence quotes: a size or duplication finding cites a file and
+        # a line, not a line's text, so _verified would be a no-op.
+        return outliers.evaluate(blobs, adapter)
+    except Exception as exc:                       # noqa: BLE001
+        _log.warning("triage outliers signal failed: %s", exc)
+        return SignalResult(
+            signal=outliers.SIGNAL_ID, version=outliers.VERSION,
+            collected=Measurement.not_collected(
+                f"outliers signal raised: {type(exc).__name__}: {exc}"))
 
 
 @dataclass
