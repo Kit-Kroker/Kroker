@@ -100,6 +100,20 @@ def parse_requirements(manifest: str, text: str) -> list[Declared]:
     return out
 
 
+def _poetry_constraint(spec: object) -> str:
+    """Extract a version constraint from a Poetry dependency spec.
+
+    Poetry uses ``"^2.0"`` (caret) or ``{version = ">=7.0", extras = [...]}``.
+    The caret/tilde form floats and is correctly reported as unpinned by
+    _is_pinned (which looks for ``==``). A local path (``{path = "..."}``)
+    has no version and is reported as unconstrained."""
+    if isinstance(spec, str):
+        return spec
+    if isinstance(spec, dict):
+        return str(spec.get("version", ""))
+    return ""
+
+
 def parse_pyproject(manifest: str, text: str) -> list[Declared]:
     """Direct dependencies from [project] and [project.optional-dependencies].
 
@@ -111,16 +125,44 @@ def parse_pyproject(manifest: str, text: str) -> list[Declared]:
         data = tomllib.loads(text)
     except tomllib.TOMLDecodeError:
         return []
+    out: list[Declared] = []
+
+    # PEP 621: [project.dependencies] and [project.optional-dependencies]
     project = data.get("project") or {}
     specs: list[str] = list(project.get("dependencies") or [])
     for group in (project.get("optional-dependencies") or {}).values():
         specs.extend(group or [])
-    out: list[Declared] = []
     for spec in specs:
         match = _REQ.match(str(spec))
         if match:
             out.append(_declared(match.group("name"), str(spec), manifest,
                                  match.group("spec")))
+
+    # Poetry: [tool.poetry.dependencies] is a dict, not a list. poetry.lock
+    # is in PythonToolchain.lockfiles, so Poetry repos are in scope, and a
+    # silent MEASURED 0 here is the conflation this signal exists to prevent.
+    # tomllib gives parsed values, not verbatim text, so raw="" and evidence
+    # is not set: _verified keeps findings without evidence, and the drift
+    # guard is a no-op for rules whose quote is not verbatim-reconstructable.
+    poetry = (data.get("tool") or {}).get("poetry") or {}
+    poetry_deps = poetry.get("dependencies") or {}
+    if isinstance(poetry_deps, dict):
+        for name, spec in poetry_deps.items():
+            if name == "python":
+                continue                  # Python version constraint, not a dep
+            constraint = _poetry_constraint(spec)
+            out.append(Declared(
+                name=normalize(name), raw="", manifest=manifest,
+                constraint=constraint))
+    for group in (poetry.get("group") or {}).values():
+        group_deps = (group or {}).get("dependencies") or {}
+        if isinstance(group_deps, dict):
+            for name, spec in group_deps.items():
+                constraint = _poetry_constraint(spec)
+                out.append(Declared(
+                    name=normalize(name), raw="", manifest=manifest,
+                    constraint=constraint))
+
     return out
 
 

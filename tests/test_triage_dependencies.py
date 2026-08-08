@@ -53,6 +53,35 @@ def test_names_are_normalized_pep503():
         == "python-dateutil"
 
 
+def test_poetry_dependencies_are_parsed():
+    text = ('[tool.poetry.dependencies]\n'
+            'python = "^3.10"\n'
+            'requests = "^2.0"\n'
+            'pytest = {version = ">=7.0", extras = ["test"]}\n')
+    got = {d.name: d.constraint
+           for d in dep.parse_pyproject("pyproject.toml", text)}
+    assert "python" not in got              # version constraint, not a dep
+    assert got["requests"] == "^2.0"
+    assert got["pytest"] == ">=7.0"
+
+
+def test_poetry_group_dependencies_are_parsed():
+    text = ('[tool.poetry.group.dev.dependencies]\n'
+            'ruff = "*"\n')
+    got = {d.name: d.constraint
+           for d in dep.parse_pyproject("pyproject.toml", text)}
+    assert got["ruff"] == "*"
+
+
+def test_pep621_and_poetry_deps_are_both_read():
+    text = ('[project]\n'
+            'dependencies = ["flask"]\n\n'
+            '[tool.poetry.dependencies]\n'
+            'requests = "^2.0"\n')
+    names = {d.name for d in dep.parse_pyproject("pyproject.toml", text)}
+    assert names == {"flask", "requests"}
+
+
 # ---- rules ------------------------------------------------------------
 
 def test_unpinned_fires_for_floating_and_absent_constraints():
@@ -210,5 +239,16 @@ async def test_activity_reports_not_collected_on_a_bad_sha(tmp_path):
     _commit_repo(tmp_path, {"pyproject.toml": PYPROJECT})
     r = await triage_dependencies(TriageDependencyInput(
         repo_dir=str(tmp_path), commit_sha="0" * 40))
+    assert r.collected.state is CollectionState.NOT_COLLECTED
+    assert r.findings == []
+
+
+@pytest.mark.asyncio
+async def test_activity_reports_not_collected_when_no_adapter_resolves(tmp_path):
+    # No recognized marker → no manifests identifiable → not_collected, not
+    # a silent MEASURED 0.0 for direct_dependencies.
+    sha = _commit_repo(tmp_path, {"package.json": '{"name": "app"}\n'})
+    r = await triage_dependencies(TriageDependencyInput(
+        repo_dir=str(tmp_path), commit_sha=sha))
     assert r.collected.state is CollectionState.NOT_COLLECTED
     assert r.findings == []

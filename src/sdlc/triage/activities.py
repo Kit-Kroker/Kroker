@@ -171,8 +171,16 @@ async def triage_dependencies(inp: TriageDependencyInput) -> SignalResult:
         found = detect_with_marker_from_paths(paths)
         adapter = found[0] if found else None
 
-        manifest_names = set(adapter.manifests) if adapter else set()
-        source_exts = tuple(adapter.source_extensions) if adapter else ()
+        if adapter is None:
+            return SignalResult(
+                signal=dependencies.SIGNAL_ID,
+                version=dependencies.VERSION,
+                collected=Measurement.not_collected(
+                    "no toolchain marker resolved, so no manifests are "
+                    "identifiable and direct_dependencies was not measured"))
+
+        manifest_names = set(adapter.manifests)
+        source_exts = tuple(adapter.source_extensions)
         wanted = sorted(
             p for p in paths
             if posixpath.basename(p) in manifest_names
@@ -184,14 +192,13 @@ async def triage_dependencies(inp: TriageDependencyInput) -> SignalResult:
         sources = [t for p, t in blobs.items() if p not in manifests]
 
         declared = dependencies.parse_manifests(manifests)
-        lockfile_present = bool(adapter) and any(
-            lf in set(paths) for lf in adapter.lockfiles)
+        lockfile_present = any(lf in set(paths) for lf in adapter.lockfiles)
         source = resolve_advisory_source(inp.advisory_source)
         # The OSV lookup uses blocking urllib in a loop; run it off the
         # event loop so 200 packages × 20s timeout does not pin the worker.
         advisories = await asyncio.to_thread(
             source.lookup,
-            adapter.ecosystem if adapter else None,
+            adapter.ecosystem,
             sorted({d.name for d in declared}))
 
         result = dependencies.evaluate(
