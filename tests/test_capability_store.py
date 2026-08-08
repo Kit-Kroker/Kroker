@@ -100,3 +100,27 @@ def test_reopening_the_same_db_sees_prior_state(tmp_path):
     assert [r.bc_id for r in second.load("p")] == ["BC-001"]
     assert second.registry_version("p") == 1
     second.close()
+
+
+# --- review #10: the never-reuse invariant must hold at mint time --------
+
+def test_allocator_never_reuses_across_invocations_without_apply(store):
+    # resolve() returns minted ids inside IdentityAttachment objects, not as
+    # CapabilityIdentity rows. A caller that persists only the matched/retired
+    # set leaves next_ordinal unmoved -- so the next run's allocator must not
+    # hand out an id the previous run already minted. That is invariant 1:
+    # ids are never reused, the single assumption the surrogate-key design
+    # rests on. Reserving the ordinal at mint time (not at apply time) is what
+    # makes it structural instead of trusting the caller.
+    first = store.allocator("p")()          # mint BC-001, persist nothing
+    second = store.allocator("p")()         # fresh closure, no apply between
+    assert first == "BC-001"
+    assert second == "BC-002"               # advanced past the burned id
+    assert first != second
+
+
+def test_allocator_mint_then_persist_keeps_them_in_lockstep(store):
+    alloc = store.allocator("p")
+    minted = [alloc(), alloc()]             # BC-001, BC-002 reserved at mint
+    store.apply("p", [_identity(b) for b in minted], expected_version=0)
+    assert store.allocator("p")() == "BC-003"

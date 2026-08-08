@@ -141,15 +141,30 @@ class BoardIdentityStore(CapabilityIdentityStore):
         return expected_version + 1
 
     def allocator(self, project: str) -> Callable[[], str]:
-        row = self._conn.execute(
-            "SELECT next_ordinal FROM capability_registry WHERE project = ?",
-            (project,)).fetchone()
-        counter = (row[0] if row else 1) - 1
+        # Ensure the registry row exists so the mint-time UPDATE has a row to
+        # advance. (apply() does the same insert inside its own transaction;
+        # this is idempotent and covers the resolve() path, which mints before
+        # any apply.)
+        self._conn.execute(
+            "INSERT INTO capability_registry (project, registry_version, "
+            "next_ordinal) VALUES (?, 0, 1) "
+            "ON CONFLICT(project) DO NOTHING", (project,))
 
         def _allocate() -> str:
-            nonlocal counter
-            counter += 1
-            return f"BC-{counter:03d}"
+            # Reserve the ordinal AT MINT TIME, atomically. The never-reuse
+            # invariant (an id is never handed to a second capability) cannot
+            # rest on the caller persisting minted rows: resolve() returns ids
+            # inside IdentityAttachment objects, not as CapabilityIdentity
+            # rows, so a caller that persists only the matched/retired set
+            # would leave next_ordinal unmoved and remint the same ids next
+            # run. Advancing the counter here on every call means a
+            # minted-but-unpersisted id is burned (a gap), never reused --
+            # which is what invariant 1 actually requires.
+            advanced = self._conn.execute(
+                "UPDATE capability_registry SET next_ordinal = next_ordinal + 1 "
+                "WHERE project = ? RETURNING next_ordinal",
+                (project,)).fetchone()
+            return f"BC-{advanced[0] - 1:03d}"
 
         return _allocate
 
