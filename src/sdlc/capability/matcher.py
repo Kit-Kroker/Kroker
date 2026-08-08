@@ -99,6 +99,17 @@ def resolve(proposed: Sequence[ProposedCapability],
     result = ResolutionResult()
     claimed_ids = set(assigned.values())
 
+    # Mint ids in sorted-local_key order, in a pass separate from the
+    # attachment loop. allocate() called inline inside `for p in proposed:`
+    # would mint in caller order, so reordering the input handed different
+    # bc_ids to the same local_keys -- an NFR-10 break for an identifier the
+    # design calls client-cited.
+    minted: dict[str, str] = {
+        lk: allocate()
+        for lk in sorted(p.local_key for p in proposed
+                         if p.local_key not in assigned)
+    }
+
     for p in proposed:
         bc_id = assigned.get(p.local_key)
         if bc_id is not None:
@@ -111,7 +122,7 @@ def resolve(proposed: Sequence[ProposedCapability],
                              epsilon)
             continue
 
-        new_id = allocate()
+        new_id = minted[p.local_key]
         lost_to = _lost_above_threshold(p.local_key, scored, claimed_ids,
                                         t_match)
         result.attachments.append(IdentityAttachment(

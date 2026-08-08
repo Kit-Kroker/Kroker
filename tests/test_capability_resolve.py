@@ -196,3 +196,21 @@ def test_unique_local_keys_resolve_normally():
     ]
     r = resolve(proposed, [], allocate=_allocator())
     assert {a.local_key for a in r.attachments} == {"c0", "c1"}
+
+
+# --- review #7: minted ids must be deterministic across input order ------
+
+def test_minted_ids_are_deterministic_across_input_order():
+    # resolve() minted inside `for p in proposed:` in submission order, so
+    # reversing the input handed different bc_ids to the same local_keys --
+    # an NFR-10 break for an identifier the design calls client-cited, and
+    # one the existing determinism test missed because its three proposed all
+    # matched the registry (nothing was ever minted). Minting must key off a
+    # stable order, not the caller's.
+    fps = {k: _fp(contract=[f"POST /{k}"]) for k in ("x", "y")}
+    proposed = [ProposedCapability(local_key=k, fingerprint=fps[k])
+                for k in ("x", "y")]
+    first = resolve(proposed, [], allocate=_allocator())
+    second = resolve(list(reversed(proposed)), [], allocate=_allocator())
+    assert {a.local_key: a.bc_id for a in first.attachments} == \
+           {a.local_key: a.bc_id for a in second.attachments}
