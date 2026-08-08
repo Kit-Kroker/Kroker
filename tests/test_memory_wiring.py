@@ -46,8 +46,10 @@ def test_run_calls_retain_for_stage_summaries(feature_class):
 
 def test_gate_helper_retains_gate_feedback(feature_class):
     methods = _methods(feature_class)
-    assert "_gate" in methods
-    assert _calls_self_method(methods["_gate"], "_retain")
+    # E-42: _gate moved to GateHost; the retain is now in the _on_gate_decided
+    # hook override, which runs for every gate decision (human, policy, timeout).
+    assert "_on_gate_decided" in methods
+    assert _calls_self_method(methods["_on_gate_decided"], "_retain")
 
 
 def test_dev_task_retains_gotcha_on_fix_loop(feature_class):

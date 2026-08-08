@@ -65,9 +65,7 @@ with workflow.unsafe.imports_passed_through():
                                        keep_full_transcripts)
     from ..artifacts.read import LoadSessionInput, load_session
     from ..harness.session import session_text_from_jsonl
-    from ..notify.contract import NotifyInput, NotifyReason, Results
-    from ..notify.schedule import build_schedule
-    from ..notify.activities import notify
+    from ..notify.contract import NotifyReason
     from ..models import (
         AnalysisReport, ArchitectureSpec, ArtifactRef, ClarifiedRequirements,
         DeferredToolUse, EscalationOutcome, ToolDenial, ToolEscalation, ToolGrant,
@@ -79,16 +77,13 @@ with workflow.unsafe.imports_passed_through():
         RecallSnapshot, ResearchBrief, ResearchPlan, RetainItem, RoleConfig,
         RoleUsage, RunSummary, SecurityReport, SmokeCheck, SubQuestionFinding,
         TaskResult,
-        TimeoutAction,
-        gate_key,
     )
     from .deployment import DeploymentInput, DeploymentWorkflow
+    from .gates import GateHost
     from ..handoff import (
         claim_survival_score, cross_check_claims, verified_integrity_flags,
     )
-    from ..pending import (
-        GateContext, PendingDecision, clarify_pending, gate_pending,
-    )
+    from ..pending import GateContext, clarify_pending
     from ..research.deps import ResearchDeps
     from ..research.retain import verified_findings_to_retain
     from ..research.stage import (PlanInput, SubQuestionInput, SynthesizeInput,
@@ -116,17 +111,6 @@ RECORD_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
                   retry_policy=RetryPolicy(maximum_attempts=5))
 MEM_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
                retry_policy=RetryPolicy(maximum_attempts=5))
-# E-9: delivery is best-effort and must never delay a gate. A single attempt:
-# the notify activity already attempts every configured route internally, and
-# retrying with backoff would block _wait_for_decision's deadline walk (and
-# hang the time-skipping test env, whose retry backoff is real-time). A failed
-# delivery is traced immediately via GATE_NOTIFIED instead.
-# schedule_to_start_timeout bounds the missing-worker case (a notify task no
-# worker can start -- e.g. a test worker that does not register notify) so it
-# fails fast and is caught by _notify instead of hanging the gate forever.
-NOTIFY_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
-                  schedule_to_start_timeout=timedelta(seconds=5),
-                  retry_policy=RetryPolicy(maximum_attempts=1))
 # Code-review C2: deterministic substring check — retrying cannot change the
 # outcome, so maximum_attempts=1 (no retries). Matches the *_ACT convention.
 VERIFY_ACT = dict(
@@ -545,20 +529,19 @@ def _escalation_summary(task_id: str, title: str,
 
 
 @workflow.defn
-class FeatureWorkflow:
+class FeatureWorkflow(GateHost):
     def __init__(self) -> None:
-        self._gate_decisions: dict[str, GateDecision] = {}
+        super().__init__()
         self._question_answers: dict[str, str] = {}
-        self._status: str = "starting"
         self._memory_watermark: str | None = None
+        # E-42: cfg is threaded as a parameter everywhere else; the gate hooks
+        # run inside GateHost and cannot receive it, so run() stashes it here.
+        self._cfg: PipelineConfig | None = None
         # ADR-14: one sdlc/<run_id>/integration branch accumulates completed
         # task work. _integration_head advances after each successful merge;
         # _integration_wt is the worktree path (set once at run start, stable).
         self._integration_head: str | None = None
         self._integration_wt: str | None = None
-        # E-6: structured pending-decision registry, keyed by resolution key
-        # (question id, or gate_key(gate, round)). Rendered by sdlc.channels.
-        self._pending: dict[str, PendingDecision] = {}
         # E-32: append-only domain trace; source for RunSummary + events.jsonl.
         self._trace: list[RunEvent] = []
         self._seq: int = 0
@@ -747,50 +730,37 @@ class FeatureWorkflow:
         except Exception:
             pass
 
-    async def _notify(self, pending, reason, opened_at, deadline) -> None:
-        """Fire-and-forget delivery. Mirrors _retain: a transport failure can
-        never block, fail, or delay a gate. Unlike _retain it does not swallow
-        silently -- the outcome is traced, because a notification that failed
-        to deliver must be visible (spec 6, ROADMAP 9.6)."""
-        gate = getattr(pending, "gate", None) or pending.key
-        try:
-            out: Results = await workflow.execute_activity(
-                notify,
-                NotifyInput(run_id=workflow.info().workflow_id,
-                            pending=pending, reason=reason,
-                            opened_at=opened_at, now=workflow.now(),
-                            deadline=deadline),
-                **NOTIFY_ACT)
-        except Exception as e:                # noqa: BLE001
-            self._emit(RunEventKind.GATE_NOTIFIED, stage=gate, gate=gate,
-                       reason=reason.value, notifier="unresolved",
-                       delivered="false", error=str(e)[:200])
-            return
-        for r in out.results:
-            self._emit(RunEventKind.GATE_NOTIFIED, stage=gate, gate=gate,
-                       reason=reason.value, notifier=r.notifier,
-                       delivered="true" if r.delivered else "false",
-                       **({"error": r.error[:200]} if r.error else {}))
+    async def _on_gate_awaited(self, name: str, round: int) -> None:
+        self._emit(RunEventKind.GATE_AWAITED, stage=name,
+                   gate=name, round=str(round))
 
-    async def _wait_for_decision(self, key, pending, schedule, expires):
-        """Wait for the gate's signal, firing each notification as its
-        deadline passes. Returns the decision, or None when the gate expired
-        undecided. Exits the instant the signal lands, so there is nothing to
-        cancel -- the reason this is a loop rather than a detached
-        coroutine."""
-        opened_at = schedule[0][0]
-        decided = lambda: key in self._gate_decisions      # noqa: E731
-        for at, reason in schedule:
-            try:
-                await workflow.wait_condition(
-                    decided, timeout=at - workflow.now())
-                return self._gate_decisions[key]
-            except TimeoutError:
-                await self._notify(pending, reason, opened_at, expires)
-        if expires is None:                    # HOLD: wait without a deadline
-            await workflow.wait_condition(decided)
-            return self._gate_decisions[key]
-        return None
+    async def _on_gate_decided(self, name: str, round: int,
+                               policy: GatePolicy,
+                               decision: GateDecision) -> None:
+        conf = self._last_gate_confidence
+        self._emit(
+            RunEventKind.GATE_DECIDED, stage=name,
+            gate=name, round=str(round), policy=policy.value,
+            decided_by=decision.decided_by,
+            approved=("true" if decision.approved else "false"),
+            **({"confidence": str(conf)} if conf is not None else {}))
+        cfg = self._cfg
+        if cfg is None:
+            return
+        await self._retain(
+            cfg, MemoryKind.GATE_FEEDBACK, cfg.memory.project_bank,
+            text=f"gate {name}#{round}: {decision.outcome.value}"
+                f"{' — ' + decision.comments if decision.comments else ''}",
+            metadata={"gate": name, "round": str(round),
+                      "run_id": workflow.info().workflow_id})
+
+    async def _on_notified(self, gate: str, reason: NotifyReason,
+                           notifier: str, delivered: bool,
+                           error: str = "") -> None:
+        self._emit(RunEventKind.GATE_NOTIFIED, stage=gate, gate=gate,
+                   reason=reason.value, notifier=notifier,
+                   delivered="true" if delivered else "false",
+                   **({"error": error} if error else {}))
 
     async def _cached_stage(self, cfg: PipelineConfig, stage: str,
                             input_json: str,
@@ -820,35 +790,14 @@ class FeatureWorkflow:
         return result, False
 
     # ---------------- signals / queries (the HITL surface) --------------
-
-    @workflow.signal
-    def submit_gate_decision(self, decision: GateDecision) -> None:
-        # Idempotent per (gate, round): first decision for a round wins.
-        key = gate_key(decision.gate, decision.round)
-        if key not in self._gate_decisions:
-            decision.decided_at = workflow.now()
-            self._gate_decisions[key] = decision
-        # _pending means "not yet decided" for every variant (E-7).
-        self._pending.pop(key, None)
+    # E-42: submit_gate_decision / status / pending_gate / pending_decisions
+    # moved to GateHost. answer_question stays here -- clarify is a
+    # feature-pipeline concept, and the triage workflow has no questions.
 
     @workflow.signal
     def answer_question(self, question_id: str, answer: str) -> None:
         self._question_answers.setdefault(question_id, answer)
         self._pending.pop(question_id, None)
-
-    @workflow.query
-    def status(self) -> str:
-        return self._status
-
-    @workflow.query
-    def pending_gate(self) -> str | None:
-        return self._status if self._status.startswith("awaiting:") else None
-
-    @workflow.query
-    def pending_decisions(self) -> list[PendingDecision]:
-        """Structured items a human currently owes a decision on (E-6).
-        Empty when nothing is awaiting. Rendered by sdlc.channels."""
-        return list(self._pending.values())
 
     @workflow.query
     def run_summary(self) -> RunSummary | None:
@@ -1214,7 +1163,7 @@ class FeatureWorkflow:
                 for u in self._role_usage.values()
                 if u.cost_usd is not None)
             decision = await self._gate(
-                "budget", cfg, round=self._budget_crossings,
+                "budget", cfg.gate_settings(), round=self._budget_crossings,
                 context=GateContext(spec_summary=(
                     f"Run cost ${total:.4f} >= budget "
                     f"${self._budget_threshold:.2f}\n{rows}")),
@@ -1255,67 +1204,6 @@ class FeatureWorkflow:
             smoke_checks=checks,
         )
 
-    async def _gate(self, name: str, cfg: PipelineConfig,
-                    auto_decision: GateDecision | None = None,
-                    round: int = 1,
-                    context: GateContext | None = None,
-                    confidence: float | None = None,
-                    default_policy: GatePolicy | None = None) -> GateDecision:
-        """Durable HITL gate with policy-based auto-approval."""
-        gate_cfg = cfg.gates.get(
-            name,
-            GateConfig(policy=default_policy or cfg.default_gate_policy))
-        policy = gate_cfg.policy
-        key = gate_key(name, round)
-
-        if policy == GatePolicy.OFF:
-            decision = GateDecision(gate=name, round=round,
-                                    outcome=GateOutcome.APPROVE,
-                                    decided_by="policy")
-        elif policy == GatePolicy.SOFT and auto_decision and auto_decision.approved:
-            decision = auto_decision
-        else:
-            pending = gate_pending(name, round, context)
-            self._pending[key] = pending
-            self._status = f"awaiting:{name}"
-            self._emit(RunEventKind.GATE_AWAITED, stage=name,
-                       gate=name, round=str(round))
-            schedule, expires = build_schedule(
-                gate_cfg, cfg.gate_timeout_hours, workflow.now())
-            try:
-                decided = await self._wait_for_decision(
-                    key, pending, schedule, expires)
-                if decided is not None:
-                    decision = decided
-                else:
-                    # Expired undecided. HOLD never reaches here -- its
-                    # schedule has no final deadline, so _wait_for_decision
-                    # waits without one.
-                    decision = GateDecision(
-                        gate=name, round=round, decided_by="timeout",
-                        outcome=(GateOutcome.APPROVE
-                                 if gate_cfg.on_timeout is TimeoutAction.APPROVE
-                                 else GateOutcome.REJECT),
-                        comments=f"no decision within "
-                                 f"{cfg.gate_timeout_hours}h")
-            finally:
-                self._status = "running"
-                self._pending.pop(key, None)
-
-        self._emit(
-            RunEventKind.GATE_DECIDED, stage=name,
-            gate=name, round=str(round), policy=policy.value,
-            decided_by=decision.decided_by,
-            approved=("true" if decision.approved else "false"),
-            **({"confidence": str(confidence)} if confidence is not None else {}))
-        await self._retain(
-            cfg, MemoryKind.GATE_FEEDBACK, cfg.memory.project_bank,
-            text=f"gate {name}#{round}: {decision.outcome.value}"
-                f"{' — ' + decision.comments if decision.comments else ''}",
-            metadata={"gate": name, "round": str(round),
-                      "run_id": workflow.info().workflow_id})
-        return decision
-
     async def _revisable_stage(self, name: str, cfg: PipelineConfig,
                                run_fn) -> tuple[object, GateDecision]:
         """Run a proposer stage, gate it, and on REVISE re-run with the
@@ -1330,7 +1218,7 @@ class FeatureWorkflow:
             auto = _auto_decision_for(
                 name, cfg, getattr(artifact, "confidence", None))
             decision = await self._gate(
-                name, cfg, auto_decision=auto, round=round,
+                name, cfg.gate_settings(), auto_decision=auto, round=round,
                 context=GateContext(spec_summary=_spec_summary(artifact)),
                 confidence=getattr(artifact, "confidence", None))
             if decision.outcome is not GateOutcome.REVISE:
@@ -1339,7 +1227,7 @@ class FeatureWorkflow:
         # Exhausted: one final HARD gate decides accept-anyway vs abandon.
         artifact = await run_fn(guidance)
         decision = await self._gate(
-            name, cfg, round=cfg.max_gate_rounds + 1,
+            name, cfg.gate_settings(), round=cfg.max_gate_rounds + 1,
             context=GateContext(spec_summary=_spec_summary(artifact)))
         return artifact, decision
 
@@ -1460,7 +1348,7 @@ class FeatureWorkflow:
                 asked += 1
                 self._escalation_round += 1
                 decision = await self._gate(
-                    "tool_approval", cfg, round=self._escalation_round,
+                    "tool_approval", cfg.gate_settings(), round=self._escalation_round,
                     context=GateContext(spec_summary=_escalation_summary(
                         task.id, task.title, run.deferred)),
                     default_policy=GatePolicy.HARD)
@@ -1676,7 +1564,7 @@ class FeatureWorkflow:
         # command must be shown that command's output, not an empty list.
         analysis = _fix_loop_issues(qa, qa_raw, review) if qa else ""
         decision = await self._gate(
-            f"task:{task.id}", cfg,
+            f"task:{task.id}", cfg.gate_settings(),
             context=GateContext(task_id=task.id, analysis=analysis,
                                 attempts=attempt))
         deep = await self._run_deep_review(
@@ -1701,6 +1589,7 @@ class FeatureWorkflow:
     async def run(self, idea: IdeaBrief,
                   cfg: PipelineConfig | None = None) -> str:
         cfg = cfg or PipelineConfig()
+        self._cfg = cfg
         self._budget_threshold = cfg.run_budget_usd    # E-33
         try:
             result = await self._pipeline(idea, cfg)
@@ -1896,7 +1785,7 @@ class FeatureWorkflow:
                 brief_digest_val = brief_digest(brief)
                 round_n = 1
                 while True:
-                    gate = await self._gate("research", cfg, round=round_n)
+                    gate = await self._gate("research", cfg.gate_settings(), round=round_n)
                     if gate.outcome == GateOutcome.APPROVE:
                         break
                     if gate.outcome == GateOutcome.REJECT:
@@ -2423,7 +2312,7 @@ class FeatureWorkflow:
                 if c.name in gate_report.blocking
                 and c.classification is CheckClass.ADVISORY]
             gate = await self._gate(
-                "merge", cfg,
+                "merge", cfg.gate_settings(),
                 context=GateContext(checks=gate_report.checks))
             if not gate.approved:
                 return "rejected:merge:advisory"
@@ -2457,7 +2346,7 @@ class FeatureWorkflow:
                     # Soft policy + (negative verdict OR confidence below
                     # threshold) = escalate to human.
                     gate = await self._gate(
-                        "merge", cfg,
+                        "merge", cfg.gate_settings(),
                         context=GateContext(checks=gate_report.checks))
                     if not gate.approved:
                         return "rejected:merge:soft-verdict"
@@ -2495,7 +2384,7 @@ class FeatureWorkflow:
 
         # 6. DEPLOY gate → DeploymentWorkflow child (E-67/FR-1104)
         _started = workflow.now()
-        gate = await self._gate("deploy", cfg)
+        gate = await self._gate("deploy", cfg.gate_settings())
         _ended = workflow.now()
         if not gate.approved or not cfg.deploy.enabled:
             # The deploy stage did not run: record the gate decision only.
@@ -2536,7 +2425,7 @@ class FeatureWorkflow:
             # The gate opens even when the rollback itself failed -- that is
             # the case a human most needs to see.
             decision = await self._gate(
-                "deploy_failed", cfg, round=attempt,
+                "deploy_failed", cfg.gate_settings(), round=attempt,
                 context=GateContext(
                     # ABSOLUTE: the human is not waving a check through --
                     # the rollback already happened. They are deciding what

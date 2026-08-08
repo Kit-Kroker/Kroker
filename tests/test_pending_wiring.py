@@ -6,6 +6,7 @@ from sdlc.pending import StageGatePending
 from sdlc.workflows.feature import FeatureWorkflow
 
 SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+GATES_SRC = pathlib.Path("src/sdlc/workflows/gates.py")
 
 
 def test_new_workflow_has_empty_pending_registry():
@@ -27,16 +28,17 @@ def test_gate_accepts_context_param():
     assert "context" in sig.parameters
 
 
-def test_feature_source_wires_pending_population():
-    src = SRC.read_text(encoding="utf-8")
-    # the query exists and is registered
-    assert "def pending_decisions(" in src
-    # clarify wait and gate wait both populate the registry
-    assert "clarify_pending(" in src
-    assert "gate_pending(" in src
-    assert "self._pending" in src
-    # gate population is cleared on resolution
-    assert "self._pending.pop(" in src
+def test_gate_surface_wires_pending_population():
+    """E-42: the query and the pending registry moved to GateHost; the
+    clarify half stayed in FeatureWorkflow."""
+    gates = GATES_SRC.read_text(encoding="utf-8")
+    assert "def pending_decisions(" in gates
+    assert "gate_pending(" in gates
+    assert "self._pending" in gates
+    assert "self._pending.pop(" in gates
+
+    feature = SRC.read_text(encoding="utf-8")
+    assert "clarify_pending(" in feature
 
 
 import datetime as dt

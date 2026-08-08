@@ -2,7 +2,7 @@ import pathlib
 
 from sdlc.models import PipelineConfig, gate_key
 
-SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+SRC = pathlib.Path("src/sdlc/workflows/gates.py")
 
 
 def test_gate_decisions_keyed_by_round():
