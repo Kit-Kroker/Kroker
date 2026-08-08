@@ -635,11 +635,14 @@ P2, since it is how FR-102's `CodebaseMap` gets built.
 - OQ-5: Is there a repository class for which Tier 0 triage *is* the whole
   product and Tier 2 never pays for itself? A packaging question, answerable
   only against real repositories — do not guess it in advance.
-- OQ-6: **Blocking FR-913.** What canonical key makes a `BC-NNN` identifier
-  content-derived *and* stable across refactoring? A key over file paths breaks
-  when files move; a key over entity names breaks on rename. Without an answer,
-  "stable identifiers" is aspiration and every cross-reference in the evidence
-  bundle is fragile.
+- OQ-6: **Resolved (2026-08-08):** no canonical key does both, and the question
+  contained the error. Content-derived *and* stable are in tension — every
+  derivation runs over facts a refactor may change, so a key over file paths
+  breaks when files move and a key over entity names breaks on rename, exactly
+  as asked. `BC-NNN` is therefore a **surrogate** key: allocated once, persisted
+  with its fingerprint, and re-attached on later scans by similarity matching
+  (`git`'s rename detection, not a hash). FR-913's "content-derived" is struck.
+  Design: `docs/superpowers/specs/2026-08-08-oq6-capability-identity-design.md`.
 - OQ-7: Does FR-914 quote verification run inline per finding or as a batch
   gate before storage? Per-finding is simpler and fail-closed by default; batch
   is cheaper on an assessment producing thousands of findings.

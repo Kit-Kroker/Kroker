@@ -136,7 +136,7 @@
 ### Pipeline (FR-100)
 - [ ] ⚠️ **FR-101** 15-stage durable DAG — 7/15 stages (see §1).
 - [ ] **FR-102** greenfield/brownfield classify + `CodebaseMap` + delta.
-- [x] **FR-103** memoization, per-run watermark, audit-record-always-kept (`memoization/cache.py`, `content_key`, `_cached_stage`) — each stage's memo key now carries *its own* role's model (`STAGE_MODELS`), so a per-role model change invalidates exactly that stage. `brief_digest` keeps memoization alive once a non-memoized stage (research) feeds memoized ones: the brief contributes only a canonical (source_url, claim) digest to `content_key`, so identical facts hit and new facts invalidate clarify/architect/planner.
+- [x] **FR-103** memoization, per-run watermark, audit-record-always-kept (`memoization/cache.py`, `content_key`, `_cached_stage`) — each stage's memo key now carries *its own* role's model (`STAGE_MODELS`), so a per-role model change invalidates exactly that stage. `brief_digest` keeps memoization alive once a non-memoized stage (research) feeds memoized ones: the brief contributes only a canonical (source_url, claim) digest to `content_key`, so identical facts hit and new facts invalidate clarify/architect/planner. ⚠️ **Amendment pending (E-47a, 2026-08-08):** E-46's `(tree hash, signal version)` key gains a third term, `identity_registry_version` — the `CapabilityMap` is a function of the tree *and* the identity registry, so re-assessing an unchanged tree is no longer unconditionally a cache hit. Deliberately coarse (any identity write invalidates the whole map for that project); the map is a single artifact with no per-capability memoization to preserve.
 - [x] **FR-104** integration branch, per-task worktree, own-branch-point diff (ADR-14 fully wired).
 - [ ] ⚠️ **FR-105** fix loops — QA loop ✅, review findings now fold into it ✅; loop-count defaults drift from spec (2 vs 3).
 - [ ] ⚠️ **FR-106** deterministic absolute/advisory gate — classification ✅ and load-bearing; security absolute-floor check now wired ✅ (`security_no_critical`); traceability enforced ✅; coverage wired as a deterministic diff-scoped seam ✅ (Python instrumentation landed via E-30; Go/TS/Rust via E-30a/b/c).
@@ -210,7 +210,7 @@ as tracked rather than accidental.
 
 - [ ] **FR-911** `AssessmentWorkflow` EDCR DAG, report-after-assess, no phase-status file (E-45); `/enrich` as a declared stage input rather than a phase (E-56).
 - [ ] **FR-912** deterministic scan memoized on `(tree hash, signal version)`; cross-source confidence (E-46).
-- [ ] **FR-913** `CapabilityMap` with content-derived stable ids + coverage floor + orphan classification — **also satisfies FR-102** (E-47/E-48). Blocked on **OQ-6** (what canonical key survives refactoring).
+- [ ] **FR-913** `CapabilityMap` with stable ids + coverage floor + orphan classification — **also satisfies FR-102** (E-47a/E-47b/E-47c/E-48). **Unblocked 2026-08-08** — OQ-6 resolved: ids are surrogate (assigned once, re-attached by similarity), not content-derived. The word "content-derived" was struck from this requirement; it is what kept OQ-6 open. Design: `docs/superpowers/specs/2026-08-08-oq6-capability-identity-design.md`.
 - [ ] **FR-914** byte-exact quote verification against the pinned commit, fail-closed — shares FR-107's verifier (E-43). *Partially landed 2026-08-06 (`grounding.py`: one substring invariant, two normalization profiles, verdict-only) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The verifier + research/handoff/deep-review consumers landed; the commit source gained its first consumer with E-41's secrets signal (2026-08-06), which re-verifies every emitted evidence quote against the pinned commit; stays open until an LLM-proposing assessment stage cites the same way, which is where the check stops being a drift guard.*
 - [ ] **FR-915** `not_collected` / `unknown` vs measured value (E-40). *Contract half landed 2026-08-06 (`measurement.py`, retrofitted onto `CoverageReport`/`SecurityReport`/`claim_survival_score`; `QAReport.coverage_pct` deleted) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The `RepoTriage`/triage half is deferred to E-41; the load-bearing case was the SARIF-malformed-reads-as-clean hole on the absolute floor.*
 - [ ] **FR-916** STRIDE + vuln classification + control coverage + composites with 1–3 specific drivers (E-49).
@@ -276,7 +276,7 @@ as tracked rather than accidental.
   **Aggregation landed** (`benchmarks/sc_rollup.py`, `sdlc benchmark score`);
   the number is n/a until 5+ runs exist.
 - [ ] — **SC-7** grounding integrity: 100% of `grounded` findings re-verify byte-exact, zero fabricated path/line refs when sampled — **the assessment product's SC-5**: one violation is a defect, not a percentage. Mechanism is E-43 (designed 2026-08-06, not implemented); the sampled audit needs real assessments.
-- [ ] — **SC-8** capability coverage ≥90% with classified orphans on ≥80% of readiness-passing repos — needs E-47 + a corpus.
+- [ ] — **SC-8** capability coverage ≥90% with classified orphans on ≥80% of readiness-passing repos — needs **E-47a + E-47b** (the coverage floor and orphan classification are E-47b; it needs E-47a's identified capability set to classify against) + a corpus. Not E-47c.
 - [ ] — **SC-9** remediation efficacy: reduced composite for the targeted capability in ≥80% of accepted items, no new critical — needs E-54's delta.
 - [ ] — **SC-10** assessment economics per repo-size band — needs E-55 budgets + runs; without this the work cannot be priced.
 - [ ] — **SC-11** ≥95% of experiments decided by the pre-registered rule with no *unaudited* post-hoc change — needs E-65.
@@ -865,15 +865,30 @@ the factory rather than as prompts.
   key `(repository tree hash, signal version)` per FR-103, so re-assessing an
   unchanged repo is a cache hit and editing one signal's logic invalidates
   exactly that signal.
-- [ ] **E-47 — `CapabilityMap`** → FR-913, **FR-102**. L1 with content-derived
-  stable `BC-NNN`, L2 operations, entity ownership (exactly one owner or a
-  surfaced conflict), file→capability coverage floor (default 0.90), orphans
-  classified attached | infrastructure | dead. **This is where the assessment
-  product and the core pipeline converge**: it satisfies FR-102's `CodebaseMap`,
-  so building it for the audit also unblocks P2 brownfield feature runs.
-  **Blocked on OQ-6** — a content key over file paths breaks when files move, one
-  over entity names breaks on rename, and until that is settled "stable
-  identifiers" is aspiration and every cross-reference in the bundle is fragile.
+- **E-47 — `CapabilityMap`** → FR-913, **FR-102**. **Split three ways
+  2026-08-08**; the single item carried four independent clauses and was too
+  large for one plan. **This is where the assessment product and the core
+  pipeline converge**: together they satisfy FR-102's `CodebaseMap`, so building
+  them for the audit also unblocks P2 brownfield feature runs. FR-102 needs all
+  three, not E-47a alone.
+  - [ ] **E-47a — capability identity** → FR-913. Stable `BC-NNN` as a
+    **surrogate** key: allocated once, persisted with its fingerprint,
+    re-attached on later scans by weighted-Jaccard similarity over signal tiers
+    ordered by cost-to-change (contract > behavioral > structural > locational).
+    Greedy one-to-one assignment, not Hungarian — an id clients cite must not
+    move because an unrelated capability's score changed. Board authoritative;
+    `.sdlc/capabilities.json` is a hash-only export (a digest cannot drive
+    similarity matching). Ambiguity is decided deterministically and reversed by
+    an audited `IdentityCorrection` modelled on `gate.py`'s `GateOverride` —
+    CLI-only until **OQ-11** closes, since `X-Actor` is self-asserted.
+    **Resolves OQ-6.** Amends FR-103 (§2). Does not block on E-48: the
+    matcher is pure and tests against synthetic fingerprints.
+    Design: `docs/superpowers/specs/2026-08-08-oq6-capability-identity-design.md`.
+  - [ ] **E-47b — coverage floor + orphans** → FR-913. file→capability coverage
+    floor (default 0.90), orphans classified attached | infrastructure | dead.
+    Needs E-47a — an orphan is defined against an identified capability set.
+  - [ ] **E-47c — L2 operations + entity ownership** → FR-913. L2 decomposition,
+    entity ownership (exactly one owner or a surfaced conflict). Needs E-47a.
 - [ ] **E-48 — discover proposers** → FR-913. D1 cohesion/coupling/boundary
   clarity; D2 action per candidate (`CONFIRM | SPLIT | MERGE | DE-SCOPE |
   FLAG`); D3 coverage verification with orphan disposition; D4 lock; D5 L2
@@ -1144,9 +1159,13 @@ harder to install later:
    almost entirely deterministic, and it needs neither tenancy nor containment
    because it can be operator-run. E-44 is the first item that proves the whole
    assess → fix → prove claim end to end.
-3. **E-47 (with E-46)** — `CapabilityMap`. Unblocks P2 brownfield whether or not
-   the audit ships, which makes it the highest-leverage item in §11. **Settle
-   OQ-6 first** — it is genuinely blocking, not a detail.
+3. **E-47a → E-47b/E-47c (with E-46)** — `CapabilityMap`. Unblocks P2 brownfield
+   whether or not the audit ships, which makes it the highest-leverage item in
+   §11. **OQ-6 settled 2026-08-08** — the blocker is cleared and the item is
+   ready to plan. Take **E-47a first**: it resolves identity, the other two
+   attach findings to it, and it is the only one of the three that needs no
+   proposer (pure matcher, synthetic-fingerprint tests). FR-102 still needs all
+   three.
 4. **E-67** — `DeployPlan`/`DeployReport`. Closes stage 13 for ordinary feature
    runs; the outcome loop needs it, but so does P1's own deploy stage.
 5. **E-57 + E-58** — the moment an external, self-serve tenant is on the table
