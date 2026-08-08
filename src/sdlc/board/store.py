@@ -1,14 +1,19 @@
 # src/sdlc/board/store.py
 """BoardStore: the single enforcement point for board state.
 
-All SQL lives here. Both writers reach the board through this class — the
-workflow via board/activities.py (in-process), agents via board/api.py — so
-there is exactly one place that can move a status.
+All board-state SQL lives here — artifacts, tasks, events. Both writers reach
+the board through this class — the workflow via board/activities.py
+(in-process), agents via board/api.py — so there is exactly one place that can
+move a status.
 
 Blobs go to the claim-check store (immutable, sha256-addressed); this class
 owns only the mutable graph. Ordering inside a publish is: write the blob,
 then commit the row. A crash between the two leaves an orphan blob, which is
 harmless because blobs are content-addressed and unreferenced.
+
+Capability identity (E-47a) is a different domain with its own enforcement
+point, capability/store.py; its DDL still lives in schema.py, which owns every
+table in this database file.
 """
 from __future__ import annotations
 

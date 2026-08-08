@@ -79,6 +79,35 @@ CREATE INDEX IF NOT EXISTS idx_task_project_status
     ON task(project, authoritative_status);
 CREATE INDEX IF NOT EXISTS idx_version_project_key
     ON artifact_version(project, key, n);
+
+CREATE TABLE IF NOT EXISTS capability_registry (
+    project          TEXT PRIMARY KEY,
+    registry_version INTEGER NOT NULL DEFAULT 0,
+    next_ordinal     INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS capability_identity (
+    project        TEXT NOT NULL,
+    bc_id          TEXT NOT NULL,
+    first_seen_run TEXT NOT NULL,
+    status         TEXT NOT NULL,
+    retired_reason TEXT,
+    merged_into    TEXT,
+    derived_from   TEXT,
+    fingerprint    TEXT NOT NULL,
+    updated_at     TEXT NOT NULL,
+    PRIMARY KEY (project, bc_id)
+);
+
+CREATE TABLE IF NOT EXISTS capability_event (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    project    TEXT NOT NULL,
+    bc_id      TEXT NOT NULL,
+    actor      TEXT NOT NULL,
+    operation  TEXT NOT NULL,
+    detail     TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
 """
 
 DEFAULT_DB = "runs/board.sqlite3"
