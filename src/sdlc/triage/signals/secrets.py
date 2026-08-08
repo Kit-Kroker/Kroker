@@ -23,17 +23,6 @@ from ..models import FixClass, TriageFinding
 SIGNAL_ID = "secrets"
 VERSION = 1
 
-# Blobs larger than this are skipped: a minified bundle or a checked-in asset
-# costs more to regex than the finding is worth, and E-41d owns size outliers.
-MAX_BLOB_BYTES = 1_000_000
-
-
-def is_over_size_limit(text: str) -> bool:
-    """True when the blob's UTF-8 byte length exceeds MAX_BLOB_BYTES. Compares
-    bytes, not ``len(str)`` characters, so multibyte content is bounded honestly
-    (a minified CJK bundle is far larger in bytes than in characters)."""
-    return len(text.encode("utf-8")) > MAX_BLOB_BYTES
-
 _ENV_EXAMPLES = (".env.example", ".env.sample", ".env.template")
 
 # (rule, pattern, detail). All critical, all JUDGEMENT: a matched provider

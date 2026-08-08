@@ -22,6 +22,7 @@ from ..activities import _bounded_shell, _git
 from ..grounding import Profile, verify_quote
 from ..measurement import Measurement
 from ..toolchain.adapters import detect_with_marker, detect_with_marker_from_paths
+from .gitread import read_tree
 from .models import SignalResult
 from .signals import baseline, build_probe, secrets
 
@@ -93,12 +94,8 @@ async def triage_secrets(inp: TriageSignalInput) -> SignalResult:
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
         findings = list(secrets.env_file_findings(paths))
-        for path in paths:
-            blob = read_blob(inp.repo_dir, inp.commit_sha, path)
-            if blob is None or secrets.is_over_size_limit(blob):
-                continue
-            if "\x00" in blob:                     # binary; nothing to quote
-                continue
+        for path, blob in read_tree(inp.repo_dir, inp.commit_sha,
+                                    sorted(paths)):
             for finding in secrets.scan_text(path, blob):
                 if finding.evidence and not verify_quote(
                         finding.evidence, blob, Profile.VERBATIM_BYTES):

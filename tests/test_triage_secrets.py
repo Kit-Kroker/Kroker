@@ -177,13 +177,14 @@ def test_no_env_tracked_means_no_env_findings():
 
 
 def test_is_over_size_limit_counts_bytes_not_characters():
-    # The bound is on bytes; a str of mostly-multibyte chars must be measured
-    # by its UTF-8 length, not its character count.
-    assert not secrets.is_over_size_limit("x" * secrets.MAX_BLOB_BYTES)
-    assert secrets.is_over_size_limit("x" * (secrets.MAX_BLOB_BYTES + 1))
-    # U+FFFF is 3 UTF-8 bytes: ~333k such characters already exceed 1MB of bytes
+    # Moved to gitread (spec D10): one size bound for every consumer of the
+    # reader, not one per signal.
+    from sdlc.triage.gitread import MAX_BLOB_BYTES, is_over_size_limit
+    assert not is_over_size_limit("x" * MAX_BLOB_BYTES)
+    assert is_over_size_limit("x" * (MAX_BLOB_BYTES + 1))
+    # Three-byte characters exceed the byte limit at a third of the count,
     # even though their character count is well under MAX_BLOB_BYTES.
-    assert secrets.is_over_size_limit("\uffff" * 333334)
+    assert is_over_size_limit("\uffff" * 333334)
 
 
 def test_nested_env_files_are_matched():
