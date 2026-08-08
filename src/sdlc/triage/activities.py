@@ -27,7 +27,9 @@ from ..toolchain.adapters import detect_with_marker, detect_with_marker_from_pat
 from .advisories import resolve_advisory_source
 from .gitread import read_tree
 from .models import SignalResult
-from .signals import baseline, build_probe, dependencies, scaffold, secrets
+from .signals import (
+    baseline, build_probe, dependencies, misconfig, scaffold, secrets,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -249,6 +251,31 @@ async def triage_scaffold(inp: TriageSignalInput) -> SignalResult:
             signal=scaffold.SIGNAL_ID, version=scaffold.VERSION,
             collected=Measurement.not_collected(
                 f"scaffold signal raised: {type(exc).__name__}: {exc}"))
+
+
+@activity.defn
+async def triage_misconfig(inp: TriageSignalInput) -> SignalResult:
+    """FR-902 framework-default misconfiguration (E-41c). Never raises."""
+    try:
+        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+        found = detect_with_marker_from_paths(paths)
+        exts = tuple(found[0].source_extensions) if found else ()
+        # Config lives beside source: storage rules and IaC policies are the
+        # world_readable_storage rule's whole subject and carry no source
+        # extension.
+        config_suffixes = (".rules", ".json", ".yml", ".yaml", ".toml",
+                           ".ini", ".cfg", ".env")
+        wanted = sorted(p for p in paths
+                        if (exts and p.endswith(exts))
+                        or p.endswith(config_suffixes))
+        blobs = dict(read_tree(inp.repo_dir, inp.commit_sha, wanted))
+        return _verified(misconfig.evaluate(blobs), blobs)
+    except Exception as exc:                       # noqa: BLE001
+        _log.warning("triage misconfig signal failed: %s", exc)
+        return SignalResult(
+            signal=misconfig.SIGNAL_ID, version=misconfig.VERSION,
+            collected=Measurement.not_collected(
+                f"misconfig signal raised: {type(exc).__name__}: {exc}"))
 
 
 @dataclass

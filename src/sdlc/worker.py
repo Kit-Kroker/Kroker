@@ -56,7 +56,7 @@ from .research.stage import (plan_research, research_subquestion,
 from .research.verify import verify_brief_activity
 from .triage.activities import (
     triage_baseline, triage_build_probe, triage_dependencies,
-    triage_scaffold, triage_secrets,
+    triage_misconfig, triage_scaffold, triage_secrets,
 )
 from .workflows.feature import FeatureWorkflow
 from .workflows.reflect import ReflectWorkflow
@@ -117,7 +117,7 @@ async def main() -> None:
             research_subquestion,
             synthesize_brief,
             triage_baseline, triage_secrets, triage_build_probe,
-            triage_dependencies, triage_scaffold,
+            triage_dependencies, triage_scaffold, triage_misconfig,
             *agent_activities,
         ],
     )

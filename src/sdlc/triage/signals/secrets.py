@@ -21,7 +21,7 @@ from collections.abc import Sequence
 from ..models import FixClass, TriageFinding
 
 SIGNAL_ID = "secrets"
-VERSION = 1
+VERSION = 2
 
 _ENV_EXAMPLES = (".env.example", ".env.sample", ".env.template")
 
@@ -91,6 +91,13 @@ def _looks_random(value: str) -> bool:
     return len(value) >= 16 and len(set(value)) >= 10
 
 
+# Owned by the misconfig signal (E-41c), not by this one: `django-insecure-`
+# is a value `django-admin startproject` writes, which makes it a framework
+# DEFAULT rather than credential MATERIAL. One line must not yield a finding
+# from two signals, or the report double-counts its own severity.
+_GENERATOR_PLACEHOLDER = re.compile(r"^django-insecure-")
+
+
 def _finding(rule: str, severity: str, detail: str, fix_class: FixClass,
              path: str = "", line: int | None = None,
              evidence: str = "") -> TriageFinding:
@@ -126,7 +133,8 @@ def scan_text(path: str, text: str) -> list[TriageFinding]:
             # value is group 2 (double-quoted), 3 (single-quoted) or 4 (unquoted)
             value = match.group(2) or match.group(3) or match.group(4)
             if (value and _looks_random(value)
-                    and _SECRET_KEYWORD_RE.search(ident)):
+                    and _SECRET_KEYWORD_RE.search(ident)
+                    and not _GENERATOR_PLACEHOLDER.match(value)):
                 findings.append(_finding(
                     "generic_secret_assignment", "low",
                     f"{ident} is assigned a high-entropy literal. "

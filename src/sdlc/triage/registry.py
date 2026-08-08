@@ -9,7 +9,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from .signals import (
-    baseline, build_probe, dependencies, scaffold, secrets,
+    baseline, build_probe, dependencies, misconfig, scaffold, secrets,
 )
 
 
@@ -35,4 +35,7 @@ SIGNALS: dict[str, SignalSpec] = {
     scaffold.SIGNAL_ID: SignalSpec(
         id=scaffold.SIGNAL_ID, version=scaffold.VERSION,
         activity="triage_scaffold"),
+    misconfig.SIGNAL_ID: SignalSpec(
+        id=misconfig.SIGNAL_ID, version=misconfig.VERSION,
+        activity="triage_misconfig"),
 }
