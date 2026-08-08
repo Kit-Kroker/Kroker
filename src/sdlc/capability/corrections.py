@@ -99,6 +99,10 @@ def _absorb(source: CapabilityIdentity, correction: IdentityCorrection,
         raise ValueError(
             f"unknown capability '{correction.target_bc_id}'")
 
+    if source.bc_id == target.bc_id:
+        raise ValueError(
+            f"cannot {correction.operation.value} '{source.bc_id}' into itself")
+
     if target.status is not IdentityStatus.ACTIVE:
         # A non-active target is either MERGED (absorbing into it would build
         # a cycle, and the inheriting row is excluded from matching so the

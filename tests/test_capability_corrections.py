@@ -216,3 +216,26 @@ def test_correction_reason_is_recorded_in_the_event(store):
         "AND operation = ? ORDER BY id DESC LIMIT 1",
         ("BC-001", "merge")).fetchone()[0]
     assert "THE HUMAN JUSTIFICATION" in detail
+
+
+# --- review #5: a self-merge is a no-op that lies about success ----------
+
+def test_self_merge_is_rejected_and_does_not_bump_version(store):
+    # merge --from BC-001 --into BC-001 returned exit 0, bumped the version,
+    # and wrote a spurious 'merged' event while the row was unchanged (the
+    # survivor overwrites the absorbed row in the same transaction). The
+    # invalid self-merge object existed in memory and survived only by write
+    # ordering. Reject it outright instead.
+    _seed(store, _identity("BC-001", _fp("POST /a")))
+    before = store.registry_version("p")
+    with pytest.raises(ValueError, match="itself"):
+        apply_correction(store, "p", _correction(
+            CorrectionOp.MERGE, "BC-001", "BC-001"))
+    assert store.registry_version("p") == before
+
+
+def test_self_reattach_is_rejected(store):
+    _seed(store, _identity("BC-001", _fp("POST /a")))
+    with pytest.raises(ValueError, match="itself"):
+        apply_correction(store, "p", _correction(
+            CorrectionOp.REATTACH, "BC-001", "BC-001"))
