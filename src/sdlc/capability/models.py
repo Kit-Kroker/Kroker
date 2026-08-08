@@ -29,9 +29,12 @@ class SignalTier(str, Enum):
 
 # Provisional. Calibration targets (benchmarks/calibration.py), never
 # inlined at a call site -- every consumer takes them as a parameter.
+# Contract must outweigh every internal tier combined so that an assessment
+# preserving the contract while rewriting every symbol, path, and test still
+# resolves to the same id (test_capability_refactor_corpus).
 DEFAULT_TIER_WEIGHTS: dict[SignalTier, float] = {
-    SignalTier.CONTRACT: 0.50,
-    SignalTier.BEHAVIORAL: 0.25,
+    SignalTier.CONTRACT: 0.55,
+    SignalTier.BEHAVIORAL: 0.20,
     SignalTier.STRUCTURAL: 0.15,
     SignalTier.LOCATIONAL: 0.10,
 }
