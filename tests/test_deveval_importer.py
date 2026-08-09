@@ -196,3 +196,52 @@ def test_detect_network_evidence_names_file_and_line(tmp_path):
     p.write_text("x = 1\nimport requests\n", encoding="utf-8")
     _, evidence = detect_network([p])
     assert "test_q.py:2" in evidence[0]
+
+
+from sdlc.benchmarks.importers.deveval import (build_case_dict, case_id_for,
+                                               frozen_contract,
+                                               render_case_yaml)
+
+
+def test_case_id_is_slugged_and_prefixed():
+    assert case_id_for("ArXiv_digest") == "deveval-arxiv-digest"
+    assert case_id_for("particle-swarm-optimization") == (
+        "deveval-particle-swarm-optimization")
+
+
+def test_frozen_contract_contains_both_artifacts_and_a_freeze_notice():
+    c = frozen_contract("# Tree\n- mod.py\n", "```mermaid\nclassDiagram\n```")
+    assert "mod.py" in c
+    assert "classDiagram" in c
+    assert "frozen" in c.lower()
+
+
+def test_build_case_dict_matches_the_CaseSpec_contract():
+    """The emitted dict must construct a CaseSpec, or `benchmark run` dies
+    on a case the importer swore was valid."""
+    case = build_case_dict(
+        case_id="deveval-x", prd="# Introduction\nA tool.\n",
+        contract="CONTRACT", language="python",
+        judge_model="google:gemini-3.5-flash", network_required=False,
+        repo_url="/srv/scratch-repos/deveval-x")
+    assert case["case_id"] == "deveval-x"
+    assert case["language"] == "python"
+    assert case["network_required"] is False
+    assert "CONTRACT" in case["description"]
+    assert "A tool." in case["description"]
+
+
+def test_render_case_yaml_round_trips_through_load_case_spec(tmp_path):
+    from sdlc.benchmarks.cli import load_case_spec
+    case = build_case_dict(
+        case_id="deveval-x", prd="# Introduction\nA tool.\n",
+        contract="CONTRACT", language="python",
+        judge_model="google:gemini-3.5-flash", network_required=True,
+        repo_url="/srv/scratch-repos/deveval-x")
+    p = tmp_path / "case.yaml"
+    p.write_text(render_case_yaml(case), encoding="utf-8")
+    spec = load_case_spec(str(p))
+    assert spec.case_id == "deveval-x"
+    assert spec.network_required is True
+    assert spec.language == "python"
+    assert spec.judge_model == "google:gemini-3.5-flash"
