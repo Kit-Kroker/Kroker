@@ -1,4 +1,4 @@
-"""P1 end-to-end proof (orchestration-level, offline, deterministic).
+﻿"""P1 end-to-end proof (orchestration-level, offline, deterministic).
 
 Runs the REAL FeatureWorkflow on a time-skipping worker with faked model +
 activity seams, drives it through every gate via signals, and asserts it
@@ -15,7 +15,7 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 
-from sdlc.activities import evaluate_gate  # pure — reused, not faked
+from sdlc.activities import evaluate_gate  # pure â€” reused, not faked
 from sdlc.gate import CheckClass
 from sdlc.models import GateDecision, GateOutcome
 from tests.fakes.canned import (
@@ -46,12 +46,12 @@ async def _wait_for_status(handle, target: str, timeout_s: float = 10.0):
 
 
 async def _drive(handle):
-    # 1. clarify — answer the one open question
+    # 1. clarify â€” answer the one open question
     await _wait_for_status(handle, "awaiting:clarify")
     for qid in QUESTION_IDS:
         await handle.signal(FeatureWorkflow.answer_question,
                             args=[qid, "yes"])
-    # 2. architecture, plan, deploy gates — approve each (merge auto-passes
+    # 2. architecture, plan, deploy gates â€” approve each (merge auto-passes
     #    clean, so it never enters awaiting:merge).
     for gate in ("architecture", "plan", "deploy"):
         await _wait_for_status(handle, f"awaiting:{gate}")
@@ -87,7 +87,7 @@ async def test_greenfield_run_ships_end_to_end():
         # time-skipping test server auto-advances its clock to the next
         # timer the instant the client goes idle, which can race ahead of
         # our signal delivery over the wire and fire a timeout->REJECT
-        # before the driver's `await handle.signal(...)` lands — especially
+        # before the driver's `await handle.signal(...)` lands â€” especially
         # under load (e.g. running alongside the rest of the suite).
         # Disabling auto time-skipping for the whole run (entered before the
         # workflow even starts, so there's no window for the race) keeps the
@@ -101,7 +101,7 @@ async def test_greenfield_run_ships_end_to_end():
                     plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg],
+                    args=[greenfield_idea(), cfg, None],
                     id=f"e2e-{uuid.uuid4()}", task_queue=TASK_QUEUE)
                 driver = asyncio.create_task(_drive(handle))
                 result = await handle.result()
@@ -114,7 +114,7 @@ async def test_greenfield_run_ships_end_to_end():
 async def test_untraced_criterion_is_advisory_not_blocking():
     """An Analyst that maps nothing still ships end-to-end under HARD merge:
     traceability is ADVISORY, so the human merge gate (auto-approved here via
-    the driver) waves it through — it never becomes a terminal absolute block."""
+    the driver) waves it through â€” it never becomes a terminal absolute block."""
     from sdlc.models import AnalysisReport
 
     empty = ("analyst_agent", AnalysisReport, AnalysisReport(summary="none"))
@@ -134,7 +134,7 @@ async def test_untraced_criterion_is_advisory_not_blocking():
                     plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg],
+                    args=[greenfield_idea(), cfg, None],
                     id=f"e2e-untraced-{uuid.uuid4()}", task_queue=TASK_QUEUE)
                 driver = asyncio.create_task(_drive_with_merge(handle))
                 result = await handle.result()

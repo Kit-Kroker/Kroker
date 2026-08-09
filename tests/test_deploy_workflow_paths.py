@@ -1,4 +1,4 @@
-"""Spec section 8: the six stage-13 paths, driven through the real
+﻿"""Spec section 8: the six stage-13 paths, driven through the real
 FeatureWorkflow with mocked deploy activities. No Docker, no fake adapter --
 the adapters themselves are never involved."""
 from __future__ import annotations
@@ -81,7 +81,7 @@ async def _run(cfg, tmp_path, monkeypatch, tag, driver=None):
                                       *fake_agent_activities(AGENT_SPECS)],
                           plugins=[PydanticAIPlugin()]):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run, args=[greenfield_idea(), cfg],
+                FeatureWorkflow.run, args=[greenfield_idea(), cfg, None],
                 id=f"{tag}-{uuid.uuid4()}", task_queue=tag)
             if driver is not None:
                 with env.auto_time_skipping_disabled():

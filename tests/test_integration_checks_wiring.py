@@ -17,11 +17,11 @@ FEATURE = pathlib.Path(
 _TREE = ast.parse(FEATURE)
 
 
-def _pipeline_node():
+def _build_and_merge_node():
     for n in ast.walk(_TREE):
-        if isinstance(n, ast.AsyncFunctionDef) and n.name == "_pipeline":
+        if isinstance(n, ast.AsyncFunctionDef) and n.name == "_build_and_merge":
             return n
-    raise AssertionError("_pipeline not found")
+    raise AssertionError("_build_and_merge not found")
 
 
 def _activity_calls_in_order(node) -> list[str]:
@@ -40,7 +40,7 @@ def _activity_calls_in_order(node) -> list[str]:
 
 
 def test_merge_stage_runs_integration_checks_then_coverage_then_gate():
-    order = _activity_calls_in_order(_pipeline_node())
+    order = _activity_calls_in_order(_build_and_merge_node())
     assert "run_integration_checks" in order, \
         "merge stage must call run_integration_checks"
     assert "measure_coverage" in order and "evaluate_gate" in order
@@ -52,7 +52,7 @@ def test_merge_stage_runs_integration_checks_then_coverage_then_gate():
 
 def test_measure_coverage_called_exactly_once_in_pipeline():
     # It moved from analyze to merge — must not be left in both places.
-    assert _activity_calls_in_order(_pipeline_node()).count(
+    assert _activity_calls_in_order(_build_and_merge_node()).count(
         "measure_coverage") == 1
 
 

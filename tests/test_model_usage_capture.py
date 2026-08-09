@@ -1,4 +1,4 @@
-"""E-33: every proposer call and every harness attempt emits a MODEL_USAGE
+﻿"""E-33: every proposer call and every harness attempt emits a MODEL_USAGE
 event, visible in the exported events.jsonl."""
 from __future__ import annotations
 
@@ -70,7 +70,7 @@ async def test_model_usage_events_exported(tmp_path, monkeypatch):
                               plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg],
+                    args=[greenfield_idea(), cfg, None],
                     id=f"usage-{uuid.uuid4()}", task_queue=TASK_QUEUE)
                 driver = asyncio.create_task(_drive(handle))
                 result = await handle.result()

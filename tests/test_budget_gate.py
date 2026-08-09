@@ -1,4 +1,4 @@
-"""E-33: the run-budget gate — crossings re-gate per increment, approve
+﻿"""E-33: the run-budget gate â€” crossings re-gate per increment, approve
 extends, reject terminates with retro intact, default-off changes nothing
 (the whole existing suite is that last proof)."""
 from __future__ import annotations
@@ -63,7 +63,7 @@ async def _signal_gate(handle, gate, round, outcome):
 async def test_budget_crossings_regate_and_approve_extends(tmp_path,
                                                            monkeypatch):
     """budget=$1.50, $1/call. Happy-path metered calls in order: clarify,
-    architect, planner, qa, reviewer, analyst (merge_verdict skipped —
+    architect, planner, qa, reviewer, analyst (merge_verdict skipped â€”
     merge gate is HARD not SOFT; fake dev harness carries no dollars).
     Crossings: $2>=1.5 (r1, after architecture), $3>=3.0 (r2, after plan),
     $5>=4.5 (r3, task loop), $6>=6.0 (r4, after analyst)."""
@@ -81,7 +81,7 @@ async def test_budget_crossings_regate_and_approve_extends(tmp_path,
                               plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg],
+                    args=[greenfield_idea(), cfg, None],
                     id=f"budget-{uuid.uuid4()}", task_queue=TASK_QUEUE)
 
                 async def drive():
@@ -132,7 +132,7 @@ async def test_budget_reject_terminates_with_retro(tmp_path, monkeypatch):
                               plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg],
+                    args=[greenfield_idea(), cfg, None],
                     id=f"budget-rej-{uuid.uuid4()}", task_queue=TASK_QUEUE)
 
                 async def drive():

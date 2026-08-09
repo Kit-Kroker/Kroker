@@ -1,4 +1,4 @@
-"""E-17: a deferred tool call raises a real gate, the decision reaches the
+﻿"""E-17: a deferred tool call raises a real gate, the decision reaches the
 resumed session as a grant, and escalating costs neither a fix attempt nor a
 session resume."""
 from __future__ import annotations
@@ -108,7 +108,7 @@ async def test_deferral_raises_a_gate_and_the_grant_reaches_the_resume(
                               activities=_activities(defer_once),
                               plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run, args=[greenfield_idea(), cfg],
+                    FeatureWorkflow.run, args=[greenfield_idea(), cfg, None],
                     id=f"esc-{uuid.uuid4()}", task_queue=TASK_QUEUE)
 
                 async def drive():
@@ -171,7 +171,7 @@ async def test_rejection_is_delivered_and_the_task_continues(
                               activities=_activities(defer_once),
                               plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run, args=[greenfield_idea(), cfg],
+                    FeatureWorkflow.run, args=[greenfield_idea(), cfg, None],
                     id=f"esc-rej-{uuid.uuid4()}", task_queue=TASK_QUEUE)
 
                 async def drive():
@@ -233,7 +233,7 @@ async def test_the_cap_stops_asking_and_the_loop_terminates(
                               activities=_activities(always_defer),
                               plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run, args=[greenfield_idea(), cfg],
+                    FeatureWorkflow.run, args=[greenfield_idea(), cfg, None],
                     id=f"esc-cap-{uuid.uuid4()}", task_queue=TASK_QUEUE)
 
                 async def drive():
@@ -266,7 +266,7 @@ async def test_the_cap_stops_asking_and_the_loop_terminates(
                 summary = await handle.query(FeatureWorkflow.run_summary)
 
     # Exactly one gate raised, then a refusal delivered, then no more
-    # approval resumes — bounded regardless of how the harness behaves.
+    # approval resumes â€” bounded regardless of how the harness behaves.
     assert len([g for g in summary.gates if g.gate == "tool_approval"]) == 1
     capped = [c for c in calls if c.grants and not c.grants[0].approved]
     assert len(capped) >= 1
@@ -274,7 +274,7 @@ async def test_the_cap_stops_asking_and_the_loop_terminates(
 
 
 def test_declined_denials_become_batched_escalation_records():
-    """A denial the hook could not escalate must be countable (§6)."""
+    """A denial the hook could not escalate must be countable (Â§6)."""
     from sdlc.workflows.feature import escalations_from_denials
     denials = [
         ToolDenial(tool="Write", rule_id="r", layer=ContainmentLayer.HOOK,

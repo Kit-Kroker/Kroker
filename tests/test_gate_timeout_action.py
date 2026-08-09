@@ -1,4 +1,4 @@
-"""E-9 Task 1: per-gate timeout semantics. Only `merge` changes default
+﻿"""E-9 Task 1: per-gate timeout semantics. Only `merge` changes default
 behaviour; every other gate keeps today's reject.
 
 E-9 Task 8 (appended): the workflow honours on_timeout -- REJECT stays reject,
@@ -92,7 +92,7 @@ async def test_architecture_gate_timeout_still_rejects(tmp_path, monkeypatch):
                                       *fake_agent_activities(AGENT_SPECS)],
                           plugins=[PydanticAIPlugin()]):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run, args=[greenfield_idea(), cfg],
+                FeatureWorkflow.run, args=[greenfield_idea(), cfg, None],
                 id=f"timeout-{uuid.uuid4()}", task_queue="timeout")
             with env.auto_time_skipping_disabled():
                 await _wait_for_status(handle, "awaiting:clarify")
@@ -123,7 +123,7 @@ async def test_hold_keeps_the_gate_pending_past_its_nominal_deadline(
                                       *fake_agent_activities(AGENT_SPECS)],
                           plugins=[PydanticAIPlugin()]):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run, args=[greenfield_idea(), cfg],
+                FeatureWorkflow.run, args=[greenfield_idea(), cfg, None],
                 id=f"hold-{uuid.uuid4()}", task_queue="hold")
             with env.auto_time_skipping_disabled():
                 await _wait_for_status(handle, "awaiting:clarify")

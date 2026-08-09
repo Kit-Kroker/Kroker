@@ -75,7 +75,8 @@ with workflow.unsafe.imports_passed_through():
         GateOutcome, GatePolicy, HandoffSummary, IdeaBrief,
         ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig,
         RecallSnapshot, ResearchBrief, ResearchPlan, RetainItem, RoleConfig,
-        RoleUsage, RunSummary, SecurityReport, SmokeCheck, SubQuestionFinding,
+        RoleUsage, RunSummary, SecurityReport, SeededWork, SmokeCheck,
+        SubQuestionFinding,
         TaskResult,
     )
     from .deployment import DeploymentInput, DeploymentWorkflow
@@ -1587,12 +1588,13 @@ class FeatureWorkflow(GateHost):
 
     @workflow.run
     async def run(self, idea: IdeaBrief,
-                  cfg: PipelineConfig | None = None) -> str:
+                  cfg: PipelineConfig | None = None,
+                  seeded: SeededWork | None = None) -> str:
         cfg = cfg or PipelineConfig()
         self._cfg = cfg
         self._budget_threshold = cfg.run_budget_usd    # E-33
         try:
-            result = await self._pipeline(idea, cfg)
+            result = await self._pipeline(idea, cfg, seeded)
         except _BudgetRejected:
             result = "rejected:budget"
         await self._retro(cfg, idea, result)
@@ -1664,7 +1666,8 @@ class FeatureWorkflow(GateHost):
             # Retro must never change the run outcome (best-effort stage).
             pass
 
-    async def _pipeline(self, idea: IdeaBrief, cfg: PipelineConfig) -> str:
+    async def _pipeline(self, idea: IdeaBrief, cfg: PipelineConfig,
+                        seeded: SeededWork | None = None) -> str:
         if cfg.memory.enabled:
             self._memory_watermark = cfg.memory.watermark or (
                 await workflow.execute_activity(
@@ -1689,6 +1692,16 @@ class FeatureWorkflow(GateHost):
         )
         self._integration_head = integration.head_sha
         self._integration_wt = integration.worktree_path
+
+        # E-44 D1: a seeded run enters at stage 4. Research, clarify,
+        # architecture and planning decide WHAT to build; a mechanical triage
+        # finding already answers that, and clarify's open-question wait would
+        # park a tidy-up run on a question the finding contains.
+        if seeded is not None:
+            arch, plan = seeded.arch, seeded.plan
+            self._status = "coding"
+            return await self._build_and_merge(idea, cfg, arch, plan,
+                                               repo_path)
 
         # 0. RESEARCH (FR-107) — optional, human-gated, NOT memoized. A served
         # memo means pages were not fetched this run, so a brief cannot be
@@ -2066,6 +2079,15 @@ class FeatureWorkflow(GateHost):
         # /stats for the project.
         await self._board_sync_tasks(cfg, self._plan_version, plan.tasks)
 
+        return await self._build_and_merge(idea, cfg, arch, plan, repo_path)
+
+    async def _build_and_merge(self, idea: IdeaBrief, cfg: PipelineConfig,
+                               arch: ArchitectureSpec,
+                               plan: ImplementationPlan,
+                               repo_path: str) -> str:
+        """Stages 4-6: tasks, merge gate, PR, deploy. Shared by the ordinary
+        pipeline and by E-44's seeded entry point -- one implementation of
+        'how a governed change reaches a PR' (D1)."""
         # 4. DEV / TEST / DEVOPS tasks — ADR-13: serial by default;
         # wave mode parallelizes, but tasks sharing declared overlaps
         # serialize regardless. Handoffs flow task -> task (FR-805).

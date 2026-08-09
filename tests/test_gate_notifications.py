@@ -1,4 +1,4 @@
-"""E-9 Task 7: the timers fire in order, stop on the signal, and cannot
+﻿"""E-9 Task 7: the timers fire in order, stop on the signal, and cannot
 break the gate. Time-skipping so a 48h schedule runs in milliseconds."""
 from __future__ import annotations
 
@@ -74,7 +74,7 @@ async def test_opened_notification_fires_and_signal_stops_the_rest(
                               activities=_activities(recording_notify),
                               plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run, args=[greenfield_idea(), cfg],
+                    FeatureWorkflow.run, args=[greenfield_idea(), cfg, None],
                     id=f"notify-{uuid.uuid4()}", task_queue=TASK_QUEUE)
 
                 async def drive():
@@ -119,7 +119,7 @@ async def test_exploding_notifier_leaves_every_gate_decidable(
                               activities=_activities(exploding_notify),
                               plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run, args=[greenfield_idea(), cfg],
+                    FeatureWorkflow.run, args=[greenfield_idea(), cfg, None],
                     id=f"notify-boom-{uuid.uuid4()}", task_queue=TASK_QUEUE)
 
                 async def drive():
@@ -163,7 +163,7 @@ async def test_full_timer_sequence_fires_in_order_then_expires(
                           activities=_activities(recording_notify),
                           plugins=[PydanticAIPlugin()]):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run, args=[greenfield_idea(), cfg],
+                FeatureWorkflow.run, args=[greenfield_idea(), cfg, None],
                 id=f"seq-{uuid.uuid4()}", task_queue=TASK_QUEUE)
             with env.auto_time_skipping_disabled():
                 await _wait_for_status(handle, "awaiting:clarify")

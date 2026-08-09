@@ -1,8 +1,8 @@
-"""BenchmarkWorkflow — the matrix runner.
+﻿"""BenchmarkWorkflow â€” the matrix runner.
 
-For each (case × harness × model) cell, start a FeatureWorkflow child with
+For each (case Ã— harness Ã— model) cell, start a FeatureWorkflow child with
 the cell's roles overridden and benchmark config set. Collect nothing in-
-workflow — the record_benchmark activity writes each record to the file
+workflow â€” the record_benchmark activity writes each record to the file
 store; after all cells complete, the finalize_benchmark_report activity
 aggregates and writes the report.
 
@@ -46,7 +46,7 @@ def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
     role_models is overridden to its model (harness roles carry the cell's
     harness + the base role's context budget / extra args; proposer roles are
     kind='proposer'). ADR-6 is validated for the resolved review roles before
-    the cell runs — a violation raises, recording a failed cell rather than a
+    the cell runs â€” a violation raises, recording a failed cell rather than a
     silent bad run."""
     cfg = base.model_copy(deep=True)
     resolved = cell.role_models
@@ -87,7 +87,7 @@ def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
         rubrics=dict(rubrics or {}), judge_model=spec.judge_model)
     # A benchmark matrix run is unattended by default, so every gate in the
     # child FeatureWorkflow runs under spec.gate_policy (SOFT unless the case
-    # or --gate-policy overrides it) rather than the case's own gates dict —
+    # or --gate-policy overrides it) rather than the case's own gates dict â€”
     # a HARD policy here blocks a cell on gate_timeout_hours if nothing
     # answers the escalation. default_gate_policy covers dynamic gates not
     # named in `gates` (e.g. the per-task `task:<id>` escalation gate).
@@ -169,13 +169,13 @@ class BenchmarkWorkflow:
                 cfg = _cell_config(base, idea, spec, cell,
                                    bench_run_id=bench_run_id, rubrics=rubrics)
             except Exception as e:
-                # an ADR-6-violating arm is rejected at the boundary — the cell
+                # an ADR-6-violating arm is rejected at the boundary â€” the cell
                 # never runs, so there is nothing to grade; log and skip it
                 workflow.logger.warning("cell %s rejected: %s", child_id, e)
                 continue
             try:
                 await workflow.execute_child_workflow(
-                    FeatureWorkflow.run, args=[idea, cfg],
+                    FeatureWorkflow.run, args=[idea, cfg, None],
                     id=child_id, task_queue=workflow.info().task_queue,
                 )
             except Exception as e:
@@ -205,7 +205,7 @@ class BenchmarkWorkflow:
                         record_benchmark, rec, **RECORD_ACT)
 
         # All file I/O (aggregate + write_report) is isolated in this
-        # activity — workflow code stays deterministic and replay-safe.
+        # activity â€” workflow code stays deterministic and replay-safe.
         report_path = await workflow.execute_activity(
             finalize_benchmark_report, bench_run_id, **RECORD_ACT)
         return report_path

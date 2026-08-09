@@ -20,8 +20,9 @@ def test_merge_stage_calls_evaluate_gate_before_merge_verdict(
         feature_tree, feature_src):
     """SC-5: the deterministic gate is a hard precondition. Its activity
     call must textually precede any t_merge_verdict.run call in the pipeline."""
-    # E-32: the pipeline body lives in _pipeline now (run wraps it + _retro).
-    run = _fn(feature_tree, "_pipeline")
+    # E-44: stages 4-6 live in _build_and_merge now (_pipeline wraps 0-3 + the
+    # seeded entry point, run wraps _pipeline + _retro).
+    run = _fn(feature_tree, "_build_and_merge")
     src = ast.get_source_segment(feature_src, run)
     assert src is not None
     g = src.find("evaluate_gate")

@@ -1,4 +1,4 @@
-"""E-32 retro stage: fires on every terminal path, populates run_summary(),
+﻿"""E-32 retro stage: fires on every terminal path, populates run_summary(),
 and never lets an export failure change the run's outcome."""
 from __future__ import annotations
 
@@ -86,7 +86,7 @@ async def test_retro_populates_run_summary_on_deploy(tmp_path, monkeypatch):
                               plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg],
+                    args=[greenfield_idea(), cfg, None],
                     id=f"retro-{uuid.uuid4()}", task_queue=TASK_QUEUE)
                 driver = asyncio.create_task(_drive(handle))
                 result = await handle.result()
@@ -127,7 +127,7 @@ async def test_retro_fires_on_rejected_path(tmp_path, monkeypatch):
                               plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
-                    args=[greenfield_idea(), e2e_config()],
+                    args=[greenfield_idea(), e2e_config(), None],
                     id=f"retro-rej-{uuid.uuid4()}", task_queue=TASK_QUEUE)
                 driver = asyncio.create_task(_drive_reject_arch(handle))
                 result = await handle.result()
@@ -155,7 +155,7 @@ async def test_export_failure_does_not_change_outcome(tmp_path, monkeypatch):
                               plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg],
+                    args=[greenfield_idea(), cfg, None],
                     id=f"retro-boom-{uuid.uuid4()}", task_queue=TASK_QUEUE)
                 driver = asyncio.create_task(_drive(handle))
                 result = await handle.result()
@@ -182,7 +182,7 @@ async def test_retention_invoked_keep_full_on_rejected_path(tmp_path, monkeypatc
                               plugins=[PydanticAIPlugin()]):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
-                    args=[greenfield_idea(), e2e_config()],
+                    args=[greenfield_idea(), e2e_config(), None],
                     id=f"retro-ret-{uuid.uuid4()}", task_queue=TASK_QUEUE)
                 driver = asyncio.create_task(_drive_reject_arch(handle))
                 await handle.result()

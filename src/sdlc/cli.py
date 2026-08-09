@@ -248,6 +248,7 @@ async def main() -> None:
                 IdeaBrief(title=args.title, description=args.description,
                           mode=ProjectMode(args.mode), repo_url=args.repo),
                 cfg,
+                None,
             ],
             id=wf_id, task_queue=TASK_QUEUE,
         )
