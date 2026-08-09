@@ -308,3 +308,21 @@ def test_convert_repo_refuses_to_overwrite(tmp_path):
     _convert(tmp_path)
     with pytest.raises(FileExistsError):
         _convert(tmp_path)
+
+
+def test_convert_repo_emits_the_oracle_path_shim(tmp_path):
+    """grade_oracle runs bare `pytest oracle` from the repo root, which does
+    not put cwd on sys.path. Without this conftest every imported case errors
+    at collection regardless of the produced code."""
+    _convert(tmp_path)
+    shim = tmp_path / "deveval-mini-calc" / "oracle" / "conftest.py"
+    assert shim.is_file()
+    assert "sys.path.insert" in shim.read_text(encoding="utf-8")
+
+
+def test_oracle_shim_is_not_collected_as_a_task(tmp_path):
+    """conftest.py must not become a draft task -- it is not a test file."""
+    from sdlc.benchmarks.tasks import load_task_suite
+    _convert(tmp_path)
+    suite = load_task_suite("deveval-mini-calc", cases_dir=tmp_path)
+    assert "conftest" not in {t.id for t in suite.tasks}

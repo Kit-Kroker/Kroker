@@ -229,6 +229,25 @@ architecture design, reference implementation, and test suites are the
 original authors' work, reorganised into this repository's case layout.
 """
 
+ORACLE_CONFTEST = '''"""Held-out oracle path shim (E-79, generated).
+
+grade_oracle runs the adapter's `pytest oracle ...` from the produced
+repository root, and bare pytest does NOT put the working directory on
+sys.path. DevEval suites import the produced modules by name (e.g.
+`from calc import add`), so without this shim every imported case errors at
+collection regardless of how good the produced code is.
+
+Mirrors benchmarks/cases/cat-cafe-monitoring/oracle/conftest.py.
+"""
+import os
+import sys
+
+# The produced repo root is the parent of this oracle/ dir once copied in.
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+'''
+
 # Never copied into reference/: docs are inputs, tests are the oracle, and
 # DevEval's own scaffolding is not part of the gold implementation.
 _REFERENCE_EXCLUDES = {
@@ -282,6 +301,8 @@ def convert_repo(src: Path, dest_root: Path, *,
     # oracle/ -- both tiers, subdirs preserved so node-ids stay stable
     _copy_tree(unit_src, case_dir / "oracle" / cfg.unit_tests)
     _copy_tree(accept_src, case_dir / "oracle" / cfg.acceptance_tests)
+    (case_dir / "oracle" / "conftest.py").write_text(
+        ORACLE_CONFTEST, encoding="utf-8")
 
     # reference_artifacts/ -- E-80's pinning input
     ra = case_dir / "reference_artifacts"
