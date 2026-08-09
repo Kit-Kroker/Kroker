@@ -1,0 +1,25 @@
+# Reviewed 2026-08-09 (E-79 import vetting, plan Task 10 step 5).
+# Regrouped from the generated test-file draft into PRD-level
+# requirements so functional completeness is requirement-weighted.
+tasks:
+- id: renko_indicator
+  error_class: functional
+  oracle_tests:
+  - acceptance_tests/test_indicators.py::test_renko
+  - unit_tests/test_renko.py::test_Renko_box_periodic_close
+- id: line_break_indicator
+  error_class: functional
+  oracle_tests:
+  - acceptance_tests/test_indicators.py::test_linebreak
+- id: pnf_indicator
+  error_class: functional
+  oracle_tests:
+  - unit_tests/test_pnf.py::test_get_bar_ohlc_data_close
+  - unit_tests/test_pnf.py::test_get_bar_ohlc_data_hl
+  - unit_tests/test_pnf.py::test_get_ohlc_data_close
+  - unit_tests/test_pnf.py::test_get_state
+  - unit_tests/test_pnf.py::test_roundit
+- id: dataframe_validation
+  error_class: data_integrity
+  oracle_tests:
+  - unit_tests/test_instrument.py::test_validate_df

@@ -139,6 +139,17 @@ _NETWORK_MARKERS = re.compile(
     re.IGNORECASE)
 
 
+# Source repositories whose network markers were read during the E-79 import
+# vetting pass (2026-08-09) and judged not to be real egress. The detector is
+# deliberately over-broad, so clearances are recorded HERE rather than as a
+# hand-edit to a generated case.yaml, which the next import would clobber.
+#   geotext -- two comments citing download.geonames.org; the city/country
+#              data is vendored, and its oracle passes offline.
+#   lice    -- one URL inside a printed "thanks, contribute here" help string.
+# Evidence lines are still recorded on the ImportReport either way.
+NETWORK_VETTED_OFFLINE: frozenset[str] = frozenset({"geotext", "lice"})
+
+
 def detect_network(paths: list[Path]) -> tuple[bool, list[str]]:
     """Scan files for signs the code reaches the network.
 
@@ -387,6 +398,8 @@ def convert_repo(src: Path, dest_root: Path, *,
     scanned = (sorted((case_dir / "oracle").rglob("*.py"))
                + sorted(ref.rglob("*.py")))
     network_required, evidence = detect_network(scanned)
+    if repo_name in NETWORK_VETTED_OFFLINE:
+        network_required = False
 
     contract = frozen_contract(
         (ra / "architecture_design.md").read_text(encoding="utf-8"),

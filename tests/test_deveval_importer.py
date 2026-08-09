@@ -419,3 +419,31 @@ def test_convert_repo_does_not_copy_source_packages_into_the_oracle(tmp_path):
     case = out / "deveval-mini-calc"
     assert not (case / "oracle" / "pkg").exists()
     assert (case / "reference" / "pkg" / "mod.py").is_file()
+
+
+def test_vetted_false_positive_clears_the_network_flag(tmp_path):
+    """geotext and lice matched only on a comment and a help string. The
+    clearance is recorded in the importer so a re-import reproduces it,
+    rather than being a hand-edit a re-import would clobber."""
+    from sdlc.benchmarks.importers import deveval as dv
+    src = _fixture_copy(tmp_path)
+    (src / "calc.py").write_text(
+        "# see http://example.com for the algorithm\n"
+        "def add(a, b):\n    return a + b\n", encoding="utf-8")
+    out = tmp_path / "cases"
+
+    flagged = convert_repo(src, out, judge_model="google:gemini-3.5-flash")
+    assert flagged.network_required is True
+
+    import shutil as _sh
+    _sh.rmtree(out)
+    orig = dv.NETWORK_VETTED_OFFLINE
+    dv.NETWORK_VETTED_OFFLINE = orig | {"mini_calc"}
+    try:
+        cleared = convert_repo(src, out,
+                               judge_model="google:gemini-3.5-flash")
+    finally:
+        dv.NETWORK_VETTED_OFFLINE = orig
+    assert cleared.network_required is False
+    # the evidence survives the clearance -- the reason is auditable
+    assert cleared.network_evidence

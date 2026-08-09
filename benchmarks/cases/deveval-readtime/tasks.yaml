@@ -1,0 +1,37 @@
+# Reviewed 2026-08-09 (E-79 import vetting, plan Task 10 step 5).
+# Regrouped from the generated test-file draft into PRD-level
+# requirements so functional completeness is requirement-weighted.
+tasks:
+- id: plain_text_content
+  error_class: functional
+  oracle_tests:
+  - acceptance_tests/test_readtime.py::test_plain_text
+- id: html_content
+  error_class: functional
+  oracle_tests:
+  - acceptance_tests/test_readtime.py::test_html
+- id: markdown_content
+  error_class: functional
+  oracle_tests:
+  - acceptance_tests/test_readtime.py::test_markdown
+- id: custom_wpm_rate
+  error_class: functional
+  oracle_tests:
+  - unit_tests/test_custom_wpm.py::test_custom_wpm
+  - unit_tests/test_custom_wpm.py::test_custom_wpm_html
+  - unit_tests/test_custom_wpm.py::test_custom_wpm_markdown
+- id: boundary_transitions
+  error_class: functional
+  oracle_tests:
+  - unit_tests/test_transitions.py::test_transitions
+- id: result_arithmetic
+  error_class: api_contract
+  oracle_tests:
+  - acceptance_tests/test_readtime.py::test_can_add
+- id: input_validation
+  error_class: error_handling
+  oracle_tests:
+  - unit_tests/test_check_data.py::test_invalid_format
+  - unit_tests/test_check_data.py::test_plain_text_empty
+  - unit_tests/test_check_data.py::test_plain_text_null
+  - unit_tests/test_check_data.py::test_unsupported_format
