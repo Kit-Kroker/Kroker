@@ -6,6 +6,7 @@ grounding.py must not: a dependency here would appear as a reviewable import.
 """
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime
 from enum import Enum
 from typing import Literal
@@ -39,6 +40,12 @@ class TriageFinding(BaseModel):
     line: int | None = None
     evidence: str = ""                          # verbatim quote from path@commit_sha
     fix_class: FixClass
+    # E-44 D3: rule-scoped discriminator, supplied by the signal when a rule
+    # can fire more than once for one path. "" is correct for a rule that
+    # fires at most once per path. NEVER derived from `line`: a fix landing
+    # above a finding shifts it, and a delta keyed on it would report a
+    # phantom resolved+new pair.
+    key: str = ""
 
 
 class SignalResult(BaseModel):
@@ -152,3 +159,46 @@ def compute_readiness(signals: list[SignalResult]) -> Readiness:
     else:
         verdict = Verdict.NOT_READY
     return Readiness(**dims, verdict=verdict)
+
+
+def finding_identity(f: TriageFinding) -> str:
+    """E-44 D3. The identity a before/after delta matches on.
+
+    Sited here rather than in delta.py because SignalResult's uniqueness
+    validator needs it, and delta.py imports this module -- the other
+    direction would close an import cycle.
+    """
+    return f"{f.signal}:{f.rule}:{f.path}:{f.key}"
+
+
+def evidence_key(text: str) -> str:
+    """A short stable discriminator for matched text.
+
+    Used by rules whose only natural discriminator IS the matched line
+    (misconfig's regex rules, secrets' provider rules). Hashed rather than
+    stored raw so an identity is bounded in length and readable in a report;
+    the raw line is already carried in `evidence`, so this hides nothing that
+    is not disclosed elsewhere.
+    """
+    return hashlib.sha256(
+        text.encode("utf-8", "replace")).hexdigest()[:12]
+
+
+def dedupe_by_identity(findings: list[TriageFinding]) -> list[TriageFinding]:
+    """Keep the first finding for each identity, in order.
+
+    Two findings sharing an identity are the same fact reported twice -- the
+    same credential on two lines of one file, the same `DEBUG = True` in two
+    places. Reporting both double-counts the severity tally, and the E-44
+    delta cannot key on them. Collapsing to the first occurrence is the
+    behaviour SignalResult's validator (Task 2) then enforces.
+    """
+    seen: set[str] = set()
+    out: list[TriageFinding] = []
+    for f in findings:
+        identity = finding_identity(f)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        out.append(f)
+    return out
