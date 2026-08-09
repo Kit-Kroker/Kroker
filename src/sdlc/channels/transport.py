@@ -5,8 +5,9 @@ with these args on the workflow handle." This module is that transport --
 query, match, signal, verify -- written once so every surface (CLI now;
 E-8 inbox, E-10 dashboard, E-11 MCP later) reuses it.
 
-Signals and queries go by NAME. Nothing here imports FeatureWorkflow, so the
-module stays workflow- and surface-agnostic.
+Signals and queries go by NAME. Nothing here imports a workflow class, so
+the module stays workflow- and surface-agnostic: the same approve verb
+reaches a feature run, a triage, or a tidy-up unchanged.
 
 All operator-facing strings are ASCII: the Windows console cannot print
 non-ASCII (see the `schedules list` arrow fix).

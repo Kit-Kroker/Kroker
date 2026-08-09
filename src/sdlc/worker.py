@@ -26,7 +26,7 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker
 
 from .activities import (
-    create_worktree, evaluate_gate, get_task_diff,
+    build_verification_branch, create_worktree, evaluate_gate, get_task_diff,
     measure_coverage, merge_into_integration, open_pull_request,
     read_committed_bytes, run_coding_task, run_integration_checks, run_lint,
     run_test_suite, security_scan, setup_integration_branch,
@@ -61,6 +61,7 @@ from .triage.activities import (
 )
 from .workflows.feature import FeatureWorkflow
 from .workflows.reflect import ReflectWorkflow
+from .workflows.tidyup import TidyUpWorkflow
 from .workflows.triage import TriageWorkflow
 from .deploy.activities import (
     deploy_apply, deploy_current_version, deploy_rollback, smoke_check,
@@ -93,9 +94,10 @@ async def main() -> None:
         client,
         task_queue=TASK_QUEUE,
         workflows=[FeatureWorkflow, BenchmarkWorkflow, ReflectWorkflow,
-                   DeploymentWorkflow, TriageWorkflow],
+                   DeploymentWorkflow, TriageWorkflow, TidyUpWorkflow],
         activities=[
             create_worktree, setup_integration_branch, merge_into_integration,
+            build_verification_branch,
             run_coding_task, run_integration_checks, run_lint, run_test_suite,
             security_scan,
             measure_coverage,

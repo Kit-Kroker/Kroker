@@ -15,6 +15,9 @@
   python -m sdlc.cli triage --repo /path/to/repo [--commit HEAD]
   python -m sdlc.cli triage --repo /path/to/repo --no-build-probe
   python -m sdlc.cli triage show --id triage-myrepo-20260809T101500Z
+  python -m sdlc.cli tidyup --repo /path/to/repo
+  python -m sdlc.cli tidyup select --id tidyup-myrepo-20260809T101500Z --identities a,b
+  python -m sdlc.cli tidyup show --id tidyup-myrepo-20260809T101500Z
 """
 from __future__ import annotations
 
@@ -32,6 +35,7 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from .models import GateOutcome, IdeaBrief, PipelineConfig, ProjectMode
 from .worker import TASK_QUEUE
 from .workflows.feature import FeatureWorkflow
+from .workflows.tidyup import TidyUpInput, TidyUpWorkflow
 from .workflows.triage import TriageInput, TriageWorkflow
 
 
@@ -55,6 +59,15 @@ def triage_workflow_id(repo: str, now: datetime | None = None) -> str:
     """
     stamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
     return f"triage-{slug(os.path.basename(repo))}-{stamp}"
+
+
+def tidyup_workflow_id(repo: str, now: datetime | None = None) -> str:
+    """A distinct id per tidy-up RUN, for the same reason triage_workflow_id
+    carries a stamp (E-42 D5): Temporal refuses to start a workflow whose id
+    is already RUNNING, so a bare `tidyup-<slug>` would let one tidy-up parked
+    on the gate block the next one for that repository."""
+    stamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
+    return f"tidyup-{slug(os.path.basename(repo))}-{stamp}"
 
 
 _OUTCOME = {
@@ -109,8 +122,11 @@ def selector_for(args):
             Reply(outcome=_OUTCOME[args.cmd], text=args.comment))
 
 
-async def main() -> None:
-    load_dotenv()
+def build_parser() -> argparse.ArgumentParser:
+    """The operator CLI's argument parser. Extracted to module level so the
+    tidyup-cli wiring test can exercise the same parser main() uses, and so
+    `tidyup select`/`tidyup show` subcommands resolve identically in tests
+    and at runtime."""
     p = argparse.ArgumentParser()
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -214,7 +230,31 @@ async def main() -> None:
     ts = trsub.add_parser("show")
     ts.add_argument("--id", required=True)
 
-    args = p.parse_args()
+    tu = sub.add_parser("tidyup")
+    tusub = tu.add_subparsers(dest="tidyup_cmd")
+    tu.add_argument("--repo", help="path to an already-cloned repository")
+    tu.add_argument("--commit", default="HEAD")
+    tu.add_argument("--no-build-probe", action="store_true",
+                    dest="no_build_probe")
+    tu.add_argument("--advisory-source", default="none")
+    tu.add_argument("--base-branch", default="main", dest="base_branch")
+    tu.add_argument("--max-fix-runs", type=int, default=10,
+                    dest="max_fix_runs",
+                    help="cap on fix runs; the excess is deferred and "
+                         "recorded, never dropped silently")
+    tus = tusub.add_parser("select")
+    tus.add_argument("--id", required=True)
+    tus.add_argument("--identities", required=True,
+                     help="comma-separated finding identities to fix; "
+                          "omit the verb entirely to fix all of them")
+    tush = tusub.add_parser("show")
+    tush.add_argument("--id", required=True)
+    return p
+
+
+async def main() -> None:
+    load_dotenv()
+    args = build_parser().parse_args()
 
     if args.cmd == "eval" and args.target == "capture" \
             and not (args.from_run and args.case):
@@ -366,6 +406,41 @@ async def main() -> None:
         print(f"started {handle.id}")
         print("NOTE: the build probe executes this repository's own code as "
               "the worker user. Operator-run only (NFR-9).")
+        return
+
+    if args.cmd == "tidyup" and args.tidyup_cmd == "show":
+        handle = client.get_workflow_handle(args.id)
+        report = await handle.query(TidyUpWorkflow.report)
+        print("no tidy-up report yet" if report is None
+              else report.model_dump_json(indent=2))
+        return
+
+    if args.cmd == "tidyup" and args.tidyup_cmd == "select":
+        handle = client.get_workflow_handle(args.id)
+        identities = [s.strip() for s in args.identities.split(",")
+                      if s.strip()]
+        await handle.signal(TidyUpWorkflow.select_items, identities)
+        print(f"selected {len(identities)} finding(s); "
+              f"approve with: sdlc approve --id {args.id} --gate tidy_up")
+        return
+
+    if args.cmd == "tidyup":
+        if not args.repo:
+            raise SystemExit("tidyup requires --repo")
+        repo = os.path.abspath(args.repo)
+        wf_id = tidyup_workflow_id(repo)
+        handle = await client.start_workflow(
+            TidyUpWorkflow.run,
+            TidyUpInput(repo_dir=repo, commit=args.commit,
+                        build_probe=not args.no_build_probe,
+                        advisory_source=args.advisory_source,
+                        base_branch=args.base_branch,
+                        max_fix_runs=args.max_fix_runs),
+            id=wf_id, task_queue=TASK_QUEUE)
+        print(f"started {handle.id}")
+        print("NOTE: the build probe AND the fix runs execute this "
+              "repository's own code as the worker user. Operator-run only "
+              "(NFR-9).")
         return
 
     if args.cmd == "inbox":
