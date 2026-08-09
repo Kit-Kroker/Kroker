@@ -57,11 +57,19 @@ def collect_node_ids(test_root: Path, prefix: str) -> list[str]:
     shape must match grade_oracle's normalization (oracle.py:231), which
     strips the "oracle/" prefix and converts to forward slashes.
 
+    Both of pytest's default discovery patterns are matched -- `test_*.py`
+    and `*_test.py`. DevEval's Hybrid_Images and chakin use the suffix form
+    (unit_test.py, acceptance_test.py); collecting only the prefix form
+    would silently drop suites pytest does run, producing node-ids that
+    never match the grader's report.
+
     Raises SyntaxError on an unparseable test file -- fail loud.
     """
     root = Path(test_root)
     out: list[str] = []
-    for path in sorted(root.rglob("test_*.py")):
+    discovered = sorted(set(root.rglob("test_*.py"))
+                        | set(root.rglob("*_test.py")))
+    for path in discovered:
         rel = path.relative_to(root).as_posix()
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         names: list[str] = []
@@ -264,6 +272,10 @@ class ImportReport(BaseModel):
     n_tasks: int
     n_oracle_tests: int
     reference_files: int
+    # DevEval's `hone` declares dependencies: "" -- a real corpus property,
+    # not a defect. The env-setup metric that consumes reference_env/ needs
+    # to know the difference between "no deps" and "deps not captured".
+    has_dependency_file: bool = True
 
 
 def _copy_tree(src: Path, dest: Path) -> None:
@@ -291,10 +303,16 @@ def convert_repo(src: Path, dest_root: Path, *,
     accept_src = src / cfg.acceptance_tests
     for required in (src / cfg.prd, src / cfg.uml_class,
                      src / cfg.uml_sequence, src / cfg.architecture_design,
-                     src / cfg.dependencies, unit_src, accept_src):
+                     unit_src, accept_src):
         if not required.exists():
             raise FileNotFoundError(f"{repo_name}: declared path missing: "
                                     f"{required}")
+    dep_rel = cfg.dependencies.strip()
+    dep_src = (src / dep_rel) if dep_rel else None
+    if dep_src is not None and not dep_src.is_file():
+        raise FileNotFoundError(
+            f"{repo_name}: declared dependencies path is not a file: "
+            f"{dep_src}")
 
     case_dir.mkdir(parents=True)
 
@@ -303,6 +321,23 @@ def convert_repo(src: Path, dest_root: Path, *,
     _copy_tree(accept_src, case_dir / "oracle" / cfg.acceptance_tests)
     (case_dir / "oracle" / "conftest.py").write_text(
         ORACLE_CONFTEST, encoding="utf-8")
+
+    # Upstream suites resolve fixtures against dirname(dirname(__file__)),
+    # which was the repo root and becomes oracle/ once the tests are nested
+    # one level deeper. Any root directory holding no Python is data, so it
+    # rides along inside oracle/ to keep the oracle self-contained. Dirs
+    # containing .py are source and must NOT be here -- that would let the
+    # oracle import the gold implementation.
+    declared_dirs = {cfg.unit_tests, cfg.acceptance_tests,
+                     cfg.usage_examples or "", "docs"}
+    for entry in sorted(src.iterdir()):
+        if not entry.is_dir() or entry.name in declared_dirs:
+            continue
+        if entry.name in _REFERENCE_EXCLUDES:
+            continue
+        if any(entry.rglob("*.py")):
+            continue
+        _copy_tree(entry, case_dir / "oracle" / entry.name)
 
     # reference_artifacts/ -- E-80's pinning input
     ra = case_dir / "reference_artifacts"
@@ -315,7 +350,8 @@ def convert_repo(src: Path, dest_root: Path, *,
     # reference_env/ -- imported now, consumed by a future env-setup metric
     re_dir = case_dir / "reference_env"
     re_dir.mkdir()
-    shutil.copyfile(src / cfg.dependencies, re_dir / "requirements.txt")
+    if dep_src is not None:
+        shutil.copyfile(dep_src, re_dir / "requirements.txt")
     if cfg.usage_examples and (src / cfg.usage_examples).is_dir():
         _copy_tree(src / cfg.usage_examples, re_dir / "examples")
 
@@ -323,8 +359,12 @@ def convert_repo(src: Path, dest_root: Path, *,
     ref = case_dir / "reference"
     ref.mkdir()
     reference_files = 0
+    # A root-level requirements.txt (TextCNN, chakin, geotext, lice) belongs
+    # to reference_env/, not to the gold implementation.
     skip = _REFERENCE_EXCLUDES | {cfg.unit_tests, cfg.acceptance_tests,
                                   cfg.usage_examples or ""}
+    if dep_src is not None and dep_src.parent == src:
+        skip = skip | {dep_src.name}
     for entry in sorted(src.iterdir()):
         if entry.name in skip:
             continue
@@ -366,4 +406,5 @@ def convert_repo(src: Path, dest_root: Path, *,
         case_id=case_id, source_repo=repo_name,
         network_required=network_required, network_evidence=evidence,
         n_tasks=len(suite["tasks"]), n_oracle_tests=len(node_ids),
-        reference_files=reference_files)
+        reference_files=reference_files,
+        has_dependency_file=dep_src is not None)

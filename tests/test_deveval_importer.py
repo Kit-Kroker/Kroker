@@ -326,3 +326,96 @@ def test_oracle_shim_is_not_collected_as_a_task(tmp_path):
     _convert(tmp_path)
     suite = load_task_suite("deveval-mini-calc", cases_dir=tmp_path)
     assert "conftest" not in {t.id for t in suite.tasks}
+
+
+def _fixture_copy(tmp_path, **manifest_overrides):
+    """A writable copy of the mini_calc fixture with manifest tweaks."""
+    import shutil
+    src = tmp_path / "src" / "mini_calc"
+    shutil.copytree(FIXTURE, src)
+    cfg = json.loads((src / "repo_config.json").read_text(encoding="utf-8"))
+    cfg.update(manifest_overrides)
+    (src / "repo_config.json").write_text(json.dumps(cfg), encoding="utf-8")
+    return src
+
+
+def test_convert_repo_handles_a_repo_with_no_dependency_file(tmp_path):
+    """DevEval's `hone` declares dependencies: "" -- a real corpus property,
+    not a defect, so it must import rather than raise."""
+    src = _fixture_copy(tmp_path, dependencies="")
+    out = tmp_path / "cases"
+    report = convert_repo(src, out, judge_model="google:gemini-3.5-flash")
+    assert report.has_dependency_file is False
+    assert not (out / "deveval-mini-calc" / "reference_env"
+                / "requirements.txt").exists()
+    assert (out / "deveval-mini-calc" / "case.yaml").is_file()
+
+
+def test_convert_repo_keeps_a_root_level_requirements_out_of_reference(
+        tmp_path):
+    """TextCNN/chakin/geotext/lice declare requirements.txt at the repo root;
+    it belongs to reference_env/, not to the gold implementation."""
+    import shutil
+    src = _fixture_copy(tmp_path, dependencies="requirements.txt")
+    shutil.copyfile(src / "docs" / "requirements.txt", src / "requirements.txt")
+    out = tmp_path / "cases"
+    report = convert_repo(src, out, judge_model="google:gemini-3.5-flash")
+    case = out / "deveval-mini-calc"
+    assert report.has_dependency_file is True
+    assert (case / "reference_env" / "requirements.txt").is_file()
+    assert not (case / "reference" / "requirements.txt").exists()
+
+
+def test_collect_node_ids_matches_pytest_suffix_pattern(tmp_path):
+    """pytest discovers `test_*.py` AND `*_test.py`. DevEval's Hybrid_Images
+    and chakin name their suites unit_test.py / acceptance_test.py, so a
+    collector that globbed only the prefix form silently dropped them."""
+    d = tmp_path / "unit_tests"
+    d.mkdir()
+    (d / "unit_test.py").write_text("def test_one(): pass", encoding="utf-8")
+    (d / "test_two.py").write_text("def test_two(): pass", encoding="utf-8")
+    assert collect_node_ids(d, "unit_tests") == [
+        "unit_tests/test_two.py::test_two",
+        "unit_tests/unit_test.py::test_one"]
+
+
+def test_collect_node_ids_does_not_double_count_a_dual_match(tmp_path):
+    """`test_thing_test.py` matches both patterns -- collect it once."""
+    d = tmp_path / "unit_tests"
+    d.mkdir()
+    (d / "test_thing_test.py").write_text(
+        "def test_x(): pass", encoding="utf-8")
+    assert collect_node_ids(d, "unit_tests") == [
+        "unit_tests/test_thing_test.py::test_x"]
+
+
+def test_convert_repo_copies_root_data_dirs_into_the_oracle(tmp_path):
+    """Upstream tests resolve fixtures against dirname(dirname(__file__)),
+    which was the repo root but becomes oracle/ after conversion. hone,
+    readtime, stocktrends, lice and Hybrid_Images all ship such a data dir;
+    without it their suites fail on FileNotFoundError, not on code quality."""
+    src = _fixture_copy(tmp_path)
+    (src / "data_file").mkdir()
+    (src / "data_file" / "sample.csv").write_text("a,b\n1,2\n",
+                                                  encoding="utf-8")
+    out = tmp_path / "cases"
+    convert_repo(src, out, judge_model="google:gemini-3.5-flash")
+    case = out / "deveval-mini-calc"
+    # the oracle must be self-contained ...
+    assert (case / "oracle" / "data_file" / "sample.csv").is_file()
+    # ... and the reference keeps its copy, since implementations read it too
+    assert (case / "reference" / "data_file" / "sample.csv").is_file()
+
+
+def test_convert_repo_does_not_copy_source_packages_into_the_oracle(tmp_path):
+    """Only no-Python data dirs ride along; shipping a source package inside
+    oracle/ would let the oracle import the gold implementation."""
+    src = _fixture_copy(tmp_path)
+    pkg = src / "pkg"
+    pkg.mkdir()
+    (pkg / "mod.py").write_text("X = 1\n", encoding="utf-8")
+    out = tmp_path / "cases"
+    convert_repo(src, out, judge_model="google:gemini-3.5-flash")
+    case = out / "deveval-mini-calc"
+    assert not (case / "oracle" / "pkg").exists()
+    assert (case / "reference" / "pkg" / "mod.py").is_file()
