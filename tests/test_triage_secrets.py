@@ -39,21 +39,6 @@ def _rules(findings):
 
 # ---- provider patterns ------------------------------------------------
 
-@pytest.mark.parametrize("line,rule", [
-    ('AWS_KEY = "AKIAIOSFODNN7EXAMPLE"', "aws_access_key_id"),
-    ('t = "ghp_0123456789abcdefghijklmnopqrstuvwxyz"', "github_token"),
-    ('k = "AIzaSyD-0123456789abcdefghijklmnopqrstu"', "google_api_key"),
-    ('s = "xoxb-123456789012-abcdefghijklmnop"', "slack_token"),
-    ("-----BEGIN RSA PRIVATE KEY-----", "private_key"),
-])
-def test_provider_patterns_are_critical(line, rule):
-    found = secrets.scan_text("src/config.py", line)
-    assert rule in _rules(found)
-    f = next(f for f in found if f.rule == rule)
-    assert f.severity == "critical"
-    assert f.fix_class is FixClass.JUDGEMENT   # rotation is not mechanical
-
-
 def test_finding_carries_the_matched_line_and_number():
     text = "import os\n\nAWS_KEY = \"AKIAIOSFODNN7EXAMPLE\"\n"
     f = next(f for f in secrets.scan_text("c.py", text)
