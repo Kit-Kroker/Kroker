@@ -111,3 +111,55 @@ def test_collect_node_ids_raises_on_unparseable_test(tmp_path):
     (d / "test_a.py").write_text("def test_(:\n", encoding="utf-8")
     with pytest.raises(SyntaxError):
         collect_node_ids(d, "unit_tests")
+
+
+from sdlc.benchmarks.importers.deveval import (draft_task_suite,
+                                               render_tasks_yaml)
+
+
+def test_draft_task_suite_groups_by_test_file():
+    ids = ["unit_tests/test_check_date.py::test_a",
+           "unit_tests/test_check_date.py::test_b",
+           "acceptance_tests/test_cli.py::test_c"]
+    suite = draft_task_suite(ids)
+    assert suite["tasks"] == [
+        {"id": "cli", "error_class": "functional",
+         "oracle_tests": ["acceptance_tests/test_cli.py::test_c"]},
+        {"id": "check_date", "error_class": "functional",
+         "oracle_tests": ["unit_tests/test_check_date.py::test_a",
+                          "unit_tests/test_check_date.py::test_b"]},
+    ]
+
+
+def test_draft_task_suite_ids_are_unique():
+    """Same stem in two dirs must not collide -- TaskSuite rejects dupes."""
+    ids = ["unit_tests/test_core.py::test_a",
+           "acceptance_tests/test_core.py::test_b"]
+    suite = draft_task_suite(ids)
+    task_ids = [t["id"] for t in suite["tasks"]]
+    assert len(task_ids) == len(set(task_ids))
+
+
+def test_draft_task_suite_validates_against_the_real_loader(tmp_path):
+    """The emitted draft must load through benchmarks.tasks.load_task_suite,
+    or the case is dead on arrival."""
+    from sdlc.benchmarks.tasks import load_task_suite
+    ids = ["unit_tests/test_a.py::test_one"]
+    case = tmp_path / "deveval-x"
+    case.mkdir()
+    (case / "tasks.yaml").write_text(
+        render_tasks_yaml(draft_task_suite(ids)), encoding="utf-8")
+    suite = load_task_suite("deveval-x", cases_dir=tmp_path)
+    assert suite is not None
+    assert suite.tasks[0].oracle_tests == ["unit_tests/test_a.py::test_one"]
+
+
+def test_render_tasks_yaml_carries_a_review_banner():
+    text = render_tasks_yaml(draft_task_suite(
+        ["unit_tests/test_a.py::test_one"]))
+    assert "REVIEW" in text
+
+
+def test_draft_task_suite_rejects_empty():
+    with pytest.raises(ValueError):
+        draft_task_suite([])

@@ -14,6 +14,7 @@ import ast
 import json
 from pathlib import Path
 
+import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -68,3 +69,52 @@ def collect_node_ids(test_root: Path, prefix: str) -> list[str]:
                     names.append(node.name)
         out.extend(f"{prefix}/{rel}::{n}" for n in sorted(set(names)))
     return sorted(out)
+
+
+DRAFT_BANNER = (
+    "# DRAFT -- REVIEW BEFORE USE (E-79, spec 3.4).\n"
+    "# Generated at test-FILE granularity from DevEval's unit_test_linking.\n"
+    "# Functional completeness is requirement-weighted, so a human must\n"
+    "# regroup these into real requirements and set each error_class.\n"
+    "# Valid error_class values: functional, security, performance,\n"
+    "# data_integrity, error_handling, api_contract.\n")
+
+
+def _task_id(rel_file: str) -> str:
+    """"unit_tests/test_check_date.py" -> "check_date"; a directory prefix is
+    kept only when it is needed to keep ids unique (TaskSuite rejects dupes).
+    """
+    stem = Path(rel_file).stem
+    return stem[len("test_"):] if stem.startswith("test_") else stem
+
+
+def draft_task_suite(node_ids: list[str]) -> dict:
+    """Group node-ids by test file into a draft tasks.yaml structure.
+
+    Every task is emitted as error_class "functional" -- guessing a richer
+    classification from a filename would produce confident, wrong error-class
+    matrices. The human review pass sets these.
+    """
+    if not node_ids:
+        raise ValueError("no oracle test node-ids; refusing to draft an "
+                         "empty task suite")
+    by_file: dict[str, list[str]] = {}
+    for nid in node_ids:
+        by_file.setdefault(nid.split("::", 1)[0], []).append(nid)
+
+    stems = [_task_id(f) for f in sorted(by_file)]
+    collide = {s for s in stems if stems.count(s) > 1}
+
+    tasks = []
+    for rel_file in sorted(by_file):
+        base = _task_id(rel_file)
+        if base in collide:
+            parent = Path(rel_file).parent.as_posix().replace("/", "-")
+            base = f"{parent}-{base}" if parent not in ("", ".") else base
+        tasks.append({"id": base, "error_class": "functional",
+                      "oracle_tests": sorted(by_file[rel_file])})
+    return {"tasks": tasks}
+
+
+def render_tasks_yaml(suite: dict) -> str:
+    return DRAFT_BANNER + yaml.safe_dump(suite, sort_keys=False)
