@@ -1,6 +1,7 @@
 import pytest
 
-from sdlc.benchmarks.matrix import SameFamilyJudgeError, expand_matrix
+from sdlc.benchmarks.matrix import (NetworkRequiredCaseError,
+                                    SameFamilyJudgeError, expand_matrix)
 from sdlc.benchmarks.models import Arm, CaseSpec
 from sdlc.models import HarnessKind
 
@@ -72,6 +73,22 @@ def test_judge_rejects_family_shared_with_any_arm_model():
         judge="openai/gpt-5.2")     # judge shares family with an arm producer
     with pytest.raises(SameFamilyJudgeError):
         expand_matrix(spec)
+
+
+def test_network_required_case_is_refused_at_expansion():
+    """NFR-5: a case whose oracle needs live egress must not run until the
+    E-21 network tier exists. Refusal happens at expansion, alongside the
+    ADR-6 judge check, so it lands before any cell starts."""
+    spec = _spec(["zai-coding-plan/glm-5.2"]).model_copy(
+        update={"network_required": True})
+    with pytest.raises(NetworkRequiredCaseError):
+        expand_matrix(spec)
+
+
+def test_network_required_defaults_false_and_expands():
+    spec = _spec(["zai-coding-plan/glm-5.2"])
+    assert spec.network_required is False
+    assert len(expand_matrix(spec)) == 2
 
 
 def test_backward_compat_models_desugar_to_harness_arms():

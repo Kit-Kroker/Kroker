@@ -10,6 +10,10 @@ class SameFamilyJudgeError(ValueError):
     pass
 
 
+class NetworkRequiredCaseError(ValueError):
+    pass
+
+
 def _family(model: str) -> str:
     # "anthropic:claude-sonnet-4-6" → "anthropic"; "openai/gpt-5.2" → "openai"
     sep = ":" if ":" in model else "/"
@@ -29,6 +33,11 @@ def _arms_for(spec: CaseSpec) -> list[Arm]:
 
 
 def expand_matrix(spec: CaseSpec) -> list[BenchmarkCell]:
+    if spec.network_required:
+        raise NetworkRequiredCaseError(
+            f"case {spec.case_id!r} declares network_required: its oracle "
+            f"needs live egress, which NFR-5 forbids until the E-21 network "
+            f"tier exists. The case is quarantined, not broken.")
     arms = _arms_for(spec)
     judge_family = _family(spec.judge_model)
     # every model a producer role is explicitly set to, across all arms
