@@ -245,3 +245,66 @@ def test_render_case_yaml_round_trips_through_load_case_spec(tmp_path):
     assert spec.network_required is True
     assert spec.language == "python"
     assert spec.judge_model == "google:gemini-3.5-flash"
+
+
+from sdlc.benchmarks.importers.deveval import ImportReport, convert_repo
+
+FIXTURE = Path(__file__).resolve().parent / "fixtures" / "mini_calc"
+
+
+def _convert(tmp_path):
+    return convert_repo(FIXTURE, tmp_path,
+                        judge_model="google:gemini-3.5-flash")
+
+
+def test_convert_repo_writes_every_expected_path(tmp_path):
+    report = _convert(tmp_path)
+    case = tmp_path / "deveval-mini-calc"
+    assert isinstance(report, ImportReport)
+    for rel in ("case.yaml", "tasks.yaml", "ATTRIBUTION.md",
+                "oracle/unit_tests/test_calc.py",
+                "oracle/acceptance_tests/test_cli.py",
+                "reference/calc.py",
+                "reference_artifacts/UML_class.md",
+                "reference_artifacts/UML_sequence.md",
+                "reference_artifacts/architecture_design.md",
+                "reference_env/requirements.txt",
+                "reference_env/examples/run.sh"):
+        assert (case / rel).is_file(), f"missing {rel}"
+
+
+def test_convert_repo_keeps_docs_and_tests_out_of_reference(tmp_path):
+    """reference/ is the gold implementation only -- shipping the oracle
+    inside it would hand E-81 the answer key."""
+    _convert(tmp_path)
+    ref = tmp_path / "deveval-mini-calc" / "reference"
+    assert not (ref / "unit_tests").exists()
+    assert not (ref / "acceptance_tests").exists()
+    assert not (ref / "docs").exists()
+    assert not (ref / "repo_config.json").exists()
+
+
+def test_convert_repo_case_yaml_loads_and_tasks_validate(tmp_path):
+    from sdlc.benchmarks.cli import load_case_spec
+    from sdlc.benchmarks.tasks import load_task_suite
+    _convert(tmp_path)
+    spec = load_case_spec(str(tmp_path / "deveval-mini-calc" / "case.yaml"))
+    assert spec.case_id == "deveval-mini-calc"
+    suite = load_task_suite("deveval-mini-calc", cases_dir=tmp_path)
+    assert suite is not None
+    assert {t.id for t in suite.tasks} == {"calc", "cli"}
+
+
+def test_convert_repo_report_counts(tmp_path):
+    report = _convert(tmp_path)
+    assert report.case_id == "deveval-mini-calc"
+    assert report.n_tasks == 2
+    assert report.n_oracle_tests == 3
+    assert report.network_required is False
+    assert report.reference_files == 1
+
+
+def test_convert_repo_refuses_to_overwrite(tmp_path):
+    _convert(tmp_path)
+    with pytest.raises(FileExistsError):
+        _convert(tmp_path)

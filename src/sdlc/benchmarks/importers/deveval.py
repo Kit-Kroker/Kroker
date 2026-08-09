@@ -13,6 +13,7 @@ from __future__ import annotations
 import ast
 import json
 import re
+import shutil
 from pathlib import Path
 
 import yaml
@@ -206,3 +207,142 @@ def render_case_yaml(case: dict) -> str:
             "# Source: open-compass/DevEval, dataset CC BY 4.0.\n"
             "# See ATTRIBUTION.md in this directory.\n"
             + yaml.safe_dump(case, sort_keys=False, allow_unicode=True))
+
+
+ATTRIBUTION = """\
+# Attribution
+
+This benchmark case is derived from **DevEval**.
+
+> Bowen Li, Wenhan Wu, Ziwei Tang, Lin Shi, John Yang, Jinyang Li, Shunyu
+> Yao, Chen Qian, Binyuan Hui, Qicheng Zhang, Zhiyin Yu, He Du, Ping Yang,
+> Dahua Lin, Chao Peng, Kai Chen. "Prompting Large Language Models to Tackle
+> the Full Software Development Lifecycle: A Case Study." COLING 2025,
+> pages 7511-7531.
+
+Source: https://github.com/open-compass/DevEval
+Source repository: `benchmark_data/{language}/{repo_name}`
+Dataset licence: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+
+Converted by `sdlc benchmark import-deveval` (E-79). The PRD, UML diagrams,
+architecture design, reference implementation, and test suites are the
+original authors' work, reorganised into this repository's case layout.
+"""
+
+# Never copied into reference/: docs are inputs, tests are the oracle, and
+# DevEval's own scaffolding is not part of the gold implementation.
+_REFERENCE_EXCLUDES = {
+    "docs", "examples", "repo_config.json", "setup_shell_script.sh",
+    "README.md", "__pycache__", ".git", ".gitignore",
+}
+
+
+class ImportReport(BaseModel):
+    case_id: str
+    source_repo: str
+    network_required: bool
+    network_evidence: list[str] = Field(default_factory=list)
+    n_tasks: int
+    n_oracle_tests: int
+    reference_files: int
+
+
+def _copy_tree(src: Path, dest: Path) -> None:
+    shutil.copytree(src, dest,
+                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+
+
+def convert_repo(src: Path, dest_root: Path, *,
+                 judge_model: str) -> ImportReport:
+    """Convert one DevEval repository into a Kroker case directory.
+
+    Fails loud: a missing declared path, a malformed manifest, or an existing
+    destination raises rather than emitting a half-built case.
+    """
+    src = Path(src)
+    cfg = load_repo_config(src)
+    repo_name = src.name
+    case_id = case_id_for(repo_name)
+    case_dir = Path(dest_root) / case_id
+    if case_dir.exists():
+        raise FileExistsError(
+            f"{case_dir} already exists; delete it to re-import")
+
+    unit_src = src / cfg.unit_tests
+    accept_src = src / cfg.acceptance_tests
+    for required in (src / cfg.prd, src / cfg.uml_class,
+                     src / cfg.uml_sequence, src / cfg.architecture_design,
+                     src / cfg.dependencies, unit_src, accept_src):
+        if not required.exists():
+            raise FileNotFoundError(f"{repo_name}: declared path missing: "
+                                    f"{required}")
+
+    case_dir.mkdir(parents=True)
+
+    # oracle/ -- both tiers, subdirs preserved so node-ids stay stable
+    _copy_tree(unit_src, case_dir / "oracle" / cfg.unit_tests)
+    _copy_tree(accept_src, case_dir / "oracle" / cfg.acceptance_tests)
+
+    # reference_artifacts/ -- E-80's pinning input
+    ra = case_dir / "reference_artifacts"
+    ra.mkdir()
+    for label, rel in (("UML_class.md", cfg.uml_class),
+                       ("UML_sequence.md", cfg.uml_sequence),
+                       ("architecture_design.md", cfg.architecture_design)):
+        shutil.copyfile(src / rel, ra / label)
+
+    # reference_env/ -- imported now, consumed by a future env-setup metric
+    re_dir = case_dir / "reference_env"
+    re_dir.mkdir()
+    shutil.copyfile(src / cfg.dependencies, re_dir / "requirements.txt")
+    if cfg.usage_examples and (src / cfg.usage_examples).is_dir():
+        _copy_tree(src / cfg.usage_examples, re_dir / "examples")
+
+    # reference/ -- E-81's gold implementation
+    ref = case_dir / "reference"
+    ref.mkdir()
+    reference_files = 0
+    skip = _REFERENCE_EXCLUDES | {cfg.unit_tests, cfg.acceptance_tests,
+                                  cfg.usage_examples or ""}
+    for entry in sorted(src.iterdir()):
+        if entry.name in skip:
+            continue
+        if entry.is_dir():
+            _copy_tree(entry, ref / entry.name)
+            reference_files += sum(1 for p in (ref / entry.name).rglob("*")
+                                   if p.is_file())
+        else:
+            shutil.copyfile(entry, ref / entry.name)
+            reference_files += 1
+
+    node_ids = (collect_node_ids(case_dir / "oracle" / cfg.unit_tests,
+                                 cfg.unit_tests)
+                + collect_node_ids(case_dir / "oracle" / cfg.acceptance_tests,
+                                   cfg.acceptance_tests))
+    suite = draft_task_suite(sorted(node_ids))
+    (case_dir / "tasks.yaml").write_text(
+        render_tasks_yaml(suite), encoding="utf-8")
+
+    scanned = (sorted((case_dir / "oracle").rglob("*.py"))
+               + sorted(ref.rglob("*.py")))
+    network_required, evidence = detect_network(scanned)
+
+    contract = frozen_contract(
+        (ra / "architecture_design.md").read_text(encoding="utf-8"),
+        (ra / "UML_class.md").read_text(encoding="utf-8"))
+    case = build_case_dict(
+        case_id=case_id, prd=(src / cfg.prd).read_text(encoding="utf-8"),
+        contract=contract, language=cfg.language, judge_model=judge_model,
+        network_required=network_required,
+        repo_url=f"/srv/scratch-repos/{case_id}")
+    (case_dir / "case.yaml").write_text(
+        render_case_yaml(case), encoding="utf-8")
+    (case_dir / "ATTRIBUTION.md").write_text(
+        ATTRIBUTION.format(language=cfg.language, repo_name=repo_name),
+        encoding="utf-8")
+
+    return ImportReport(
+        case_id=case_id, source_repo=repo_name,
+        network_required=network_required, network_evidence=evidence,
+        n_tasks=len(suite["tasks"]), n_oracle_tests=len(node_ids),
+        reference_files=reference_files)
