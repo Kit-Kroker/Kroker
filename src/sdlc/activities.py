@@ -385,6 +385,71 @@ async def merge_into_integration(inp: MergeInput) -> MergeResult:
 
 
 @dataclass
+class VerifyBranchInput:
+    repo_path: str
+    base_sha: str            # the commit the baseline triage pinned
+    tidyup_id: str           # the TidyUpWorkflow's id -- makes the ref unique
+    branches: list[str]      # fix-run integration branches, in accepted order
+
+
+@dataclass
+class VerifyResult:
+    ref: str
+    head_sha: str
+    merged: list[str]
+    conflicted: list[str]
+
+
+@activity.defn
+async def build_verification_branch(inp: VerifyBranchInput) -> VerifyResult:
+    """E-44 D6: the tree the after-triage measures.
+
+    open_pull_request OPENS PRs; it does not merge them, so re-triaging the
+    base branch would measure a tree containing none of the fixes. This builds
+    the 'if you merged all of these' tree instead: a local branch off the
+    pinned commit with every successful fix branch merged into it.
+
+    Local only -- never pushed. Delivery stays PR-only until FR-1003/E-59.
+
+    A conflict between two fix branches is a RESULT, not a failure: the merge
+    is aborted, the branch is recorded in `conflicted`, and the remaining
+    branches still merge. compute_delta then marks that identity UNVERIFIABLE
+    rather than PERSISTED (D5 rule 3).
+
+    Idempotent: Temporal retries activities, so the branch is force-created
+    at `base_sha` on every call and the merges replayed from there.
+    """
+    ref = f"sdlc/tidyup-verify/{inp.tidyup_id}"
+    # -B force-creates: a retry resets to base_sha rather than failing on an
+    # existing branch or compounding merges onto a half-built tree.
+    _git(["checkout", "-q", "-B", ref, inp.base_sha], inp.repo_path)
+
+    merged: list[str] = []
+    conflicted: list[str] = []
+    for branch in inp.branches:
+        result = _git(["merge", "--no-ff", "-m", f"tidy-up: {branch}", branch],
+                      inp.repo_path)
+        if result.returncode == 0:
+            merged.append(branch)
+            continue
+        # Distinguish a real conflict from an infra failure via the index's
+        # unmerged entries (locale-independent), and read it BEFORE
+        # `merge --abort`, which clears the unmerged state. Same reasoning as
+        # merge_into_integration.
+        unmerged = _git(["ls-files", "--unmerged"], inp.repo_path).stdout
+        _git(["merge", "--abort"], inp.repo_path)
+        if not unmerged.strip():
+            raise RuntimeError(
+                f"git merge of {branch} failed (not a conflict): "
+                f"{result.stderr.strip()}")
+        conflicted.append(branch)
+
+    head = _git(["rev-parse", "HEAD"], inp.repo_path).stdout.strip()
+    return VerifyResult(ref=ref, head_sha=head, merged=merged,
+                        conflicted=conflicted)
+
+
+@dataclass
 class CodingTaskInput:
     harness: HarnessKind
     prompt: str
