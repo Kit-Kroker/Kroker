@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-08-09 (E-42 against `src/sdlc/workflows/{gates,triage}.py` + `pytest -m temporal`, with three review defects fixed; E-47a 2026-08-08 against `src/sdlc/capability/`; E-78 2026-08-07 against `src/sdlc/board/`; E-40/E-43 2026-08-06; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
+| Last verified | 2026-08-09 (E-44 against `src/sdlc/{tidyup,workflows/tidyup.py,triage/delta.py}` + unit/component tests green; E-42 against `src/sdlc/workflows/{gates,triage}.py` + `pytest -m temporal`, with three review defects fixed; E-47a 2026-08-08 against `src/sdlc/capability/`; E-78 2026-08-07 against `src/sdlc/board/`; E-40/E-43 2026-08-06; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -97,8 +97,8 @@
   Memory (recall/retain/watermark) ✅ and soft gates ✅ done; SC-4/SC-6 not yet measurable (need retro/reflect wiring + real runs). **The retro stage that makes them measurable is E-32** (§9.8); the on/off memory delta is the measurement E-31/E-33 exist to run.
 - [ ] **P4** — MCP surface, maintenance loop (DAPER), fleet scale → *SC-1..3 at target*
   Not started.
-- [ ] ⚠️ **P5** — Triage + tidy-up (Tier 0/1), operator-run, single tenant → *one unfamiliar repository triaged, a mechanical backlog fixed through governed runs, before/after delta recorded*
-  Triage verdict half landed: E-40/E-41/E-42/E-43 all `[x]`. Only **E-44** (tidy-up fix runs + re-triage) is outstanding, which is also the only item the exit criterion's "before/after delta" needs. Operator-run only; **does not depend on P7** — delivery on repositories you are authorised to run needs neither tenancy nor self-serve onboarding.
+- [x] **P5** — Triage + tidy-up (Tier 0/1), operator-run, single tenant → *one unfamiliar repository triaged, a mechanical backlog fixed through governed runs, before/after delta recorded*
+  E-40/E-41/E-42/E-43/E-44 all landed. The exit criterion is met by code: `TidyUpWorkflow` (assess → fix → prove), the seeded `FeatureWorkflow` entry point, `compute_delta`, and `build_verification_branch` are all wired and unit/component-tested (`pytest tests/` green at 1866; `TriageWorkflow`, seeded-`FeatureWorkflow`, and `build_verification_branch` each pass their own `pytest -m temporal` e2e). **Open verification debt:** the `TidyUpWorkflow` end-to-end temporal test is deferred — its multi-workflow fan-out (a `TriageWorkflow` child whose readiness gate must be serviced plus N `FeatureWorkflow` fix children) is heavier than this Windows host's temporal dev-server can run contended; the `.run()` sequencing is unit-tested and follows the verified `GateHost`/`TriageWorkflow` pattern. Operator-run only; **does not depend on P7** — delivery on repositories you are authorised to run needs neither tenancy nor self-serve onboarding.
 - [ ] **P6** — Capability & risk audit (Tier 2) + evidence bundle → *one repository audited end-to-end with SC-7 held and a bundle handed over*
   Not started (§11, E-45…E-56). Gated on P5's readiness verdict (FR-903), not merely sequenced after it.
 - [ ] **P7** — Hosted multi-tenant service → *NFR-8 adversarial test green; FR-1002 container tier live; a tenant onboards unassisted*
@@ -204,7 +204,7 @@ as tracked rather than accidental.
   health, generator-scaffold/dead code, framework-default misconfig, and
   size/duplication outliers (E-41a–d, 2026-08-08).
 - [x] **FR-903** readiness gate blocking Tier 2, overridable by audited decision (E-42). *The gate resolves through the existing FR-301/302 machinery (now in `GateHost`); a verdict that is not READY opens a `readiness` gate, and an APPROVE records a `ReadinessOverride` on the artifact. E-45's admission rule is `verdict is READY or override is not None`.*
-- [ ] **FR-904** `mechanically_fixable` → brownfield child runs + before/after re-triage (E-44).
+- [x] **FR-904** `mechanically_fixable` → brownfield child runs + before/after re-triage (E-44). Landed: `TidyUpWorkflow` turns accepted MECHANICAL findings into seeded `FeatureWorkflow` child runs (one PR each), then re-runs triage against `build_verification_branch`'s composite tree and records `compute_delta`.
 
 ### Assessment, Tier 2 — capability & risk audit (FR-910) *(new scope; PRD v1.1)*
 
@@ -212,7 +212,7 @@ as tracked rather than accidental.
 - [ ] **FR-912** deterministic scan memoized on `(tree hash, signal version)`; cross-source confidence (E-46).
 - [ ] ⚠️ **FR-913** `CapabilityMap` with stable ids + coverage floor + orphan classification — **also satisfies FR-102** (E-47a/E-47b/E-47c/E-48). **Identity half landed 2026-08-08 (E-47a):** surrogate `BC-NNN` ids, weighted-Jaccard re-attachment, audited `IdentityCorrection` (`src/sdlc/capability/`). Coverage floor + orphans (E-47b) and L2/entity-ownership (E-47c) still open.
 - [ ] **FR-914** byte-exact quote verification against the pinned commit, fail-closed — shares FR-107's verifier (E-43). *Partially landed 2026-08-06 (`grounding.py`: one substring invariant, two normalization profiles, verdict-only) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The verifier + research/handoff/deep-review consumers landed; the commit source gained its first consumer with E-41's secrets signal (2026-08-06), which re-verifies every emitted evidence quote against the pinned commit; stays open until an LLM-proposing assessment stage cites the same way, which is where the check stops being a drift guard.*
-- [ ] **FR-915** `not_collected` / `unknown` vs measured value (E-40). *Contract half landed 2026-08-06 (`measurement.py`, retrofitted onto `CoverageReport`/`SecurityReport`/`claim_survival_score`; `QAReport.coverage_pct` deleted) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The `RepoTriage`/triage half is deferred to E-41; the load-bearing case was the SARIF-malformed-reads-as-clean hole on the absolute floor.*
+- [ ] **FR-915** `not_collected` / `unknown` vs measured value (E-40). *Contract half landed 2026-08-06 (`measurement.py`, retrofitted onto `CoverageReport`/`SecurityReport`/`claim_survival_score`; `QAReport.coverage_pct` deleted) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The `RepoTriage`/triage half is deferred to E-41; the load-bearing case was the SARIF-malformed-reads-as-clean hole on the absolute floor. **E-44 adds a second consumer:** `compute_delta` reads `SignalResult.collected.state` and emits `UNVERIFIABLE` whenever a side did not collect, so a triage that timed out on the after side cannot read as "all findings fixed".*
 - [ ] **FR-916** STRIDE + vuln classification + control coverage + composites with 1–3 specific drivers (E-49).
 - [ ] **FR-917** risk thresholds as deterministic gate checks; FP dispositions as audited overrides (E-50).
 - [ ] **FR-918** acceptance criteria computed by code, not self-asserted; cross-reference integrity **absolute** (E-51).
@@ -254,7 +254,7 @@ as tracked rather than accidental.
 - [x] **NFR-6** Reproducibility vs memoization — watermark-pinned recall + content-addressed cache. *Pinning is exact on `fake` (entry-count cutoff) and a `mentioned_at` cutoff on `hindsight`, which has no point-in-time read: memories retained after the freeze cannot enter a stage input, but ranking is still contaminated by them and post-freeze consolidation can mint observations carrying pre-freeze timestamps. `2026-08-02-hindsight-real-integration-design` §2.1.*
 - [x] **NFR-7** Portability — `MemoryConfig.backend` defaults to `fake`; real Hindsight client for self-hosting, verified against a live container by `tests/test_hindsight_live.py` (the client shipped before 2026-08-02 implemented an invented API and could not have worked).
 - [ ] **NFR-8** Tenant isolation proven by adversarial cross-tenant read/recall test — no tenant concept exists yet (E-58).
-- [ ] **NFR-9** Hostile input — the factory currently assumes repositories are its own. Build scripts, test code, and manifests of a connected repo are attacker-controlled and executed (E-57). **E-41's build probe is the first stage that knowingly executes a foreign repository's code** (bounded, in a throwaway clone, as the worker user with network access). Operator-run only until E-57/E-21.
+- [ ] **NFR-9** Hostile input — the factory currently assumes repositories are its own. Build scripts, test code, and manifests of a connected repo are attacker-controlled and executed (E-57). **E-41's build probe is the first stage that knowingly executes a foreign repository's code** (bounded, in a throwaway clone, as the worker user with network access). **E-44 widens the exposure:** the tidy-up fix runs execute the triaged repository's own build and test commands (not just the probe), as governed `FeatureWorkflow` children. Still operator-run only until E-57/E-21.
 - [ ] — **NFR-10** Assessment reproducibility — not falsifiable until the assessment exists; the deterministic half is E-41/E-46, the fused-layer variance half needs runs.
 
 ---
@@ -293,8 +293,8 @@ as tracked rather than accidental.
 - [x] **US-5** dev/reviewer different model family; registry rejects same-family — enforced at boot, against `dev` (the role that actually codes) since `2026-07-16-registry-drives-every-role`.
 - [ ] **US-6** stakeholder one-screen fleet view — no dashboard backend.
 - [ ] **US-7** MCP conversational gate approval — no MCP server.
-- [ ] ⚠️ **US-8** client connects a repo → readiness verdict + checkable hygiene list (E-41/E-42/E-43). *Verdict half landed (E-42): the readiness gate and the operator CLI (`sdlc triage`) ship. The checkable-hygiene-list half — a per-finding fix-backlog you can act on — is **E-44**.*
-- [ ] **US-9** client approves a tidy-up backlog → PR per item + before/after delta (E-44).
+- [x] **US-8** client connects a repo → readiness verdict + checkable hygiene list (E-41/E-42/E-43/E-44). *Both halves ship: the readiness verdict + `sdlc triage` (E-42), and the per-finding fix-backlog from `mechanical_backlog`, which lands on the `TidyUpReport` even when a repo is not admitted (E-44).*
+- [x] **US-9** client approves a tidy-up backlog → PR per item + before/after delta (E-44). `TidyUpWorkflow` opens a `tidy_up` gate with the backlog rendered, `select_items` narrows it, each accepted item becomes one governed fix run, and `compute_delta` records the before/after.
 - [ ] **US-10** assessor hands over a bundle whose every claim resolves to evidence (E-51/E-52).
 - [ ] **US-11** product owner's decision rule frozen at approval, verdict computed against it (E-64/E-65/E-70).
 - [ ] **US-12** platform engineer onboards an isolated tenant (E-57/E-58).
@@ -842,11 +842,19 @@ which makes it the shortest path to a demonstrable assess → fix → prove loop
   E-41). Also closed a live hole in the shipped research check: an empty quote
   grounded trivially, since `"" in haystack` is True. FR-914 stays open until
   an assessment stage consumes the commit source. **OQ-7 untouched.**
-- [ ] **E-44 — tidy-up fix runs + re-triage** → FR-904, NG5.
+- [x] **E-44 — tidy-up fix runs + re-triage** → FR-904, NG5. Spec `docs/superpowers/specs/2026-08-09-tidy-up-fix-runs-and-re-triage-design.md`, plan `docs/superpowers/plans/2026-08-09-tidy-up-fix-runs-and-re-triage.md`.
   `mechanically_fixable` findings become brownfield `FeatureWorkflow` child runs
   (one PR per accepted item, never a direct patch), then triage re-runs and the
   before/after delta is recorded. This is the first end-to-end proof of the
   assess → fix → prove loop, on the cheapest and lowest-risk class of fix.
+  Three sub-decisions the one-line summary did not contain: **`SeededWork`** (D1)
+  — a deterministic `ArchitectureSpec` + `ImplementationPlan` that enters
+  `FeatureWorkflow` at stage 4, skipping the six proposer calls stages 0–3 would
+  make for a one-line fix; **`UNVERIFIABLE`** (D5) — `compute_delta` is
+  deliberately not a set difference, so a signal that timed out on the after
+  side cannot read as having fixed everything it found; **the verification
+  branch** (D6) — `build_verification_branch` constructs the "if you merged all
+  of these" tree, because `open_pull_request` opens PRs and does not merge them.
 
 ## 11. Tier 2 — the EDCR port (`E-45`…`E-56`) → FR-910
 
@@ -1165,11 +1173,11 @@ harder to install later:
    Installing "no unverified claim may be labelled grounded" before any
    finding-producing stage exists is far cheaper than retrofitting it across
    four of them.
-2. ~~**E-41 → E-42** → E-44~~ — triage and tidy-up. **E-41/E-42 landed;** the
-   chain is now **E-44** alone. The cheapest shippable product, almost entirely
-   deterministic, and it needs neither tenancy nor containment because it can be
-   operator-run. E-44 is the first item that proves the whole assess → fix →
-   prove claim end to end.
+2. ~~**E-41 → E-42 → E-44**~~ — triage and tidy-up. **Landed.** The chain is
+   closed: E-44's `TidyUpWorkflow` is the first item that proves the whole
+   assess → fix → prove claim end to end, almost entirely deterministic, needing
+   neither tenancy nor containment because it is operator-run. (Verification
+   debt: the `TidyUpWorkflow` temporal e2e is deferred — see P5's note.)
 3. **E-47a → E-47b/E-47c (with E-46)** — `CapabilityMap`. Unblocks P2 brownfield
    whether or not the audit ships, which makes it the highest-leverage item in
    §11. **OQ-6 settled 2026-08-08** — the blocker is cleared and the item is

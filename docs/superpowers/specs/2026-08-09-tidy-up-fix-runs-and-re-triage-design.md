@@ -6,7 +6,7 @@
 | Work items | **E-44** (closes §10's Tier 0 fix half; E-42 shipped the assess half) |
 | Requirements | FR-904, FR-915; NG5; US-8 (second half), US-9; FR-104/FR-106/FR-803 reused, not re-implemented |
 | Scope input | `PRD.md` §FR-900, §NG5; `ROADMAP.md` §10 (E-44), §15 item 2; `docs/superpowers/specs/2026-08-08-triage-workflow-and-readiness-gate-design.md` §11 |
-| Status | Designed |
+| Status | Implemented |
 
 E-42 shipped triage's assess half: a durable workflow that pins a commit, fans
 out seven deterministic signals, computes a readiness verdict, and gates on it.
