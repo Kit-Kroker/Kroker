@@ -518,6 +518,28 @@ adapters).
   §4.3 digest is always kept. **TTL on kept full transcripts is the one
   remaining open sub-point.**
 
+- **OQ-B8 — Usable corpus size from DevEval. ANSWERED 2026-08-09 (E-79).**
+  **Six of ten** Python repositories are committed. Two (`ArXiv_digest`,
+  `chakin`) genuinely need live egress and are quarantined behind
+  `network_required` until E-21; two (`Hybrid_Images`, `TextCNN`) need `cv2`
+  and `torch` to reach a green verify and are re-importable on a machine that
+  has them. The corpus is now 9 cases, which is the first real data point for
+  OQ-B1's "10–30 cases" estimate.
+
+- **OQ-B9 — Cost of confirming a generated `tasks.yaml`. ANSWERED 2026-08-09
+  (E-79).** It is a **rewrite, not a light edit** — budget 15–30 minutes per
+  case. Test-file granularity is too coarse to be requirement-weighted
+  (`lice` arrived as one task holding 31 tests), so all six suites were
+  regrouped into 31 PRD-level requirements over 79 tests. The draft still
+  earns its keep by supplying exact node-id strings, but its grouping is a
+  starting point only.
+
+- **OQ-B10 — Contract-frozen vs pinned as the default for imported cases.**
+  Imported cases ship contract-frozen (reference architecture inlined in the
+  description). Once E-80 lands, should they keep that, run pinned, or run
+  both as separate arms? Running both measures how much the architect stage
+  contributes when handed the answer in prose rather than skipped outright.
+
 ---
 
 *This document adds no scope to `PRD.md`. Every `(new scope)` marker above is a
