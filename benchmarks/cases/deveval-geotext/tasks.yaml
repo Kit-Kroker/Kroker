@@ -1,0 +1,28 @@
+# Reviewed 2026-08-09 (E-79 import vetting, plan Task 10 step 5).
+# Regrouped from the generated test-file draft into PRD-level
+# requirements so functional completeness is requirement-weighted.
+tasks:
+- id: city_extraction
+  error_class: functional
+  oracle_tests:
+  - acceptance_tests/test_acceptance.py::test_city_extraction
+  - unit_tests/test_geotext.py::test_cities
+- id: country_extraction
+  error_class: functional
+  oracle_tests:
+  - acceptance_tests/test_acceptance.py::test_country_filter
+  - unit_tests/test_geotext.py::test_countries
+- id: country_mention_counts
+  error_class: functional
+  oracle_tests:
+  - acceptance_tests/test_acceptance.py::test_country_mentions_count
+  - unit_tests/test_geotext.py::test_country_mentions
+- id: nationality_extraction
+  error_class: functional
+  oracle_tests:
+  - acceptance_tests/test_acceptance.py::test_nationalities_extraction
+  - unit_tests/test_geotext.py::test_nationalities
+- id: reference_data_loading
+  error_class: data_integrity
+  oracle_tests:
+  - acceptance_tests/test_acceptance.py::test_data_loading

@@ -748,6 +748,36 @@ first gives an objective grade, the second closes P3 and three capabilities.
 
 ---
 
+- [x] **E-79 (new scope)** External benchmark corpus — import the DevEval
+  Python repositories (COLING 2025; code Apache-2.0, **dataset CC BY 4.0**) as
+  benchmark cases, delivering BENCHMARK.md §5's "public anchors (external
+  validity)". *Landed 2026-08-09:* `benchmarks/importers/deveval.py` converts
+  each repo's `repo_config.json` manifest into a case dir — PRD → description
+  with the reference architecture inlined as a **frozen contract** (the
+  cat-café pattern; DevEval oracles bind to exact module and function names,
+  so a free-form architect scores ~0), reference suites → `oracle/`, plus
+  three new sibling dirs `reference/`, `reference_artifacts/`, `reference_env/`
+  that **E-80** and **E-81** consume. `CaseSpec.network_required` quarantines
+  egress-needing cases at matrix expansion until **E-21**. Gate: every
+  imported case's oracle must score 1.0 against its own `reference/`
+  (`sdlc benchmark verify-case`), which caught four conversion defects the
+  synthetic fixture could not — see
+  `docs/deveval-import-report-2026-08-09.md`. **Six of ten repos committed;
+  corpus 3 → 9 cases (answers OQ-B1's first data point and OQ-B8).** Spec:
+  `docs/superpowers/specs/2026-08-09-benchmark-corpus-and-stage-isolation-design.md`.
+- [ ] **E-80 (new scope)** Stage isolation via pinned reference artifacts —
+  pre-seed the memo cache (`_cached_stage`) from `reference_artifacts/` so a
+  proposer stage is skipped and its output *is* the reference. DevEval's
+  modular evaluation protocol, expressed as configuration rather than a fork.
+  Turns the error heatmap from "where failure surfaced" into "which stage is
+  weak"; partial pinning measures cascade sensitivity. Fails closed.
+- [ ] **E-81 (new scope)** Completeness and test-quality metrics — functional
+  completeness (requirement-weighted, aggregated over the `TaskGrade`s
+  `tasks.yaml` already produces), stub density (deterministic placeholder scan,
+  reported never gated), and **Oracle Test** (run the QA stage's own generated
+  tests against `reference/`: a test that fails on gold code is a wrong test).
+  Measures BENCHMARK.md §4.1's traceability gap directly rather than by proxy.
+
 ## 10. Tier 0 — repository triage & tidy-up (`E-40`…`E-44`) → FR-900, FR-102, FR-108, NG5
 
 **Why a separate tier.** The EDCR methodology (§11) is enterprise-brownfield

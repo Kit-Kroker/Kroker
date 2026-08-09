@@ -1,0 +1,13 @@
+{
+  "PRD": "docs/PRD.md",
+  "UML_class": "docs/UML_class.md",
+  "UML_sequence": "docs/UML_sequence.md",
+  "architecture_design": "docs/architecture_design.md",
+  "dependencies": "docs/requirements.txt",
+  "language": "python",
+  "unit_tests": "unit_tests",
+  "acceptance_tests": "acceptance_tests",
+  "usage_examples": "examples",
+  "unit_test_linking": {"unit_tests/test_calc.py": ["calc.py"]},
+  "code_file_DAG": {"calc.py": []}
+}

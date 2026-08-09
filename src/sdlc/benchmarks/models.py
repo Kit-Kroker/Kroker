@@ -159,6 +159,11 @@ class CaseSpec(BaseModel):
     # child). Also the value the manifest-vs-marker mismatch signal compares
     # against. None => no oracle grade for this case.
     language: str | None = None
+    # E-79: the case's held-out oracle needs live network (DevEval's
+    # ArXiv_digest calls the ArXiv API; chakin downloads word vectors).
+    # Refused at matrix expansion until the E-21 network tier exists --
+    # NFR-5 assumes no egress beyond the declared research/OSV paths.
+    network_required: bool = False
     # per-model extra CLI args (e.g. opencode's `--variant` reasoning-effort
     # flag) forwarded to every role's harness invocation for that model.
     extra_args_by_model: dict[str, list[str]] = Field(default_factory=dict)

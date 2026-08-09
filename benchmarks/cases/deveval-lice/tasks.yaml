@@ -1,0 +1,56 @@
+# Reviewed 2026-08-09 (E-79 import vetting, plan Task 10 step 5).
+# Regrouped from the generated test-file draft into PRD-level
+# requirements so functional completeness is requirement-weighted.
+tasks:
+- id: license_generation
+  error_class: functional
+  oracle_tests:
+  - acceptance_tests/test_acceptance.py::test_default_license_generation
+  - acceptance_tests/test_acceptance.py::test_specified_license_generation
+  - unit_tests/test_lice.py::test_license
+  - unit_tests/test_lice.py::test_valid_license
+- id: template_variables
+  error_class: functional
+  oracle_tests:
+  - acceptance_tests/test_acceptance.py::test_license_with_organization
+  - acceptance_tests/test_acceptance.py::test_license_with_project
+  - acceptance_tests/test_acceptance.py::test_license_with_year
+  - unit_tests/test_lice.py::test_custom_organization
+  - unit_tests/test_lice.py::test_custom_project
+  - unit_tests/test_lice.py::test_extract_vars
+  - unit_tests/test_lice.py::test_list_template_vars
+  - unit_tests/test_lice.py::test_list_template_vars_with_custom_template
+- id: language_formatting
+  error_class: functional
+  oracle_tests:
+  - unit_tests/test_lice.py::test_format_license_c_language
+  - unit_tests/test_lice.py::test_format_license_python_language
+  - unit_tests/test_lice.py::test_license_header
+  - unit_tests/test_lice.py::test_list_languages_option
+  - unit_tests/test_lice.py::test_no_suffix
+  - unit_tests/test_lice.py::test_valid_suffix
+- id: custom_template_sources
+  error_class: functional
+  oracle_tests:
+  - unit_tests/test_lice.py::test_file_template
+  - unit_tests/test_lice.py::test_package_template
+  - unit_tests/test_lice.py::test_paths
+- id: output_handling
+  error_class: functional
+  oracle_tests:
+  - acceptance_tests/test_acceptance.py::test_license_with_output_file
+  - unit_tests/test_lice.py::test_output_to_file
+- id: input_validation
+  error_class: error_handling
+  oracle_tests:
+  - unit_tests/test_lice.py::test_invalid_license
+  - unit_tests/test_lice.py::test_invalid_year_extra_characters
+  - unit_tests/test_lice.py::test_invalid_year_non_numeric
+  - unit_tests/test_lice.py::test_invalid_year_not_four_digits
+  - unit_tests/test_lice.py::test_template_path_not_exist
+  - unit_tests/test_lice.py::test_unrecognized_suffix
+  - unit_tests/test_lice.py::test_valid_year
+- id: cli_help_contract
+  error_class: api_contract
+  oracle_tests:
+  - unit_tests/test_lice.py::test_help_message
