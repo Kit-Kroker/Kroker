@@ -88,6 +88,11 @@ class TidyUpReport(BaseModel):
     backlog: list[str] = Field(default_factory=list)
     accepted: list[str] = Field(default_factory=list)
     deferred: list[str] = Field(default_factory=list)
+    # Identities the operator signalled via select_items that were NOT in the
+    # backlog -- surfaced rather than silently dropped, so the count the CLI
+    # confirms and the count the workflow keeps can be reconciled from the
+    # report.
+    unrecognized: list[str] = Field(default_factory=list)
     runs: list[FixRunResult] = Field(default_factory=list)
     deltas: list[FindingDelta] = Field(default_factory=list)
     readiness_before: Verdict
@@ -111,6 +116,32 @@ def reached_a_pr(outcome: str) -> bool:
 def branches_to_verify(runs: list[FixRunResult]) -> list[str]:
     """Successful branches in accepted order (D6)."""
     return [r.branch for r in runs if r.branch and reached_a_pr(r.outcome)]
+
+
+def unrecognized_selection(selected: list[str] | None,
+                           backlog: list[str]) -> list[str]:
+    """Identities the operator signalled via select_items that were NOT in the
+    backlog. Surfaced in the report rather than dropped silently, so the count
+    the CLI confirms (the send count) and the count the workflow keeps can be
+    reconciled."""
+    if not selected:
+        return []
+    return sorted(set(selected) - set(backlog))
+
+
+def triage_gates(inp_gates: GateSettings, gating: bool) -> GateSettings:
+    """The gates handed to a TriageWorkflow child.
+
+    The BEFORE triage gates admission, so the operator's settings apply. The
+    AFTER triage only measures the verification tree to classify the delta;
+    it must not open a readiness gate and park 48h on a non-READY verdict
+    (which --no-build-probe makes INDETERMINATE by construction). OFF resolves
+    automatically; the verdict is still computed and recorded as
+    readiness_after, and the override does not feed compute_delta.
+    """
+    if gating:
+        return inp_gates
+    return GateSettings(default_gate_policy=GatePolicy.OFF)
 
 
 def _backlog_summary(pairs, deferred_from: int) -> str:
@@ -145,13 +176,13 @@ class TidyUpWorkflow(GateHost):
         self._selected = list(identities)
 
     async def _triage(self, inp: TidyUpInput, suffix: str,
-                      commit: str) -> RepoTriage:
+                      commit: str, gating: bool = True) -> RepoTriage:
         return await workflow.execute_child_workflow(
             TriageWorkflow.run,
             TriageInput(repo_dir=inp.repo_dir, commit=commit,
                         build_probe=inp.build_probe,
                         advisory_source=inp.advisory_source,
-                        gates=inp.gates),
+                        gates=triage_gates(inp.gates, gating)),
             id=f"{workflow.info().workflow_id}-triage-{suffix}",
             task_queue=workflow.info().task_queue)
 
@@ -212,10 +243,19 @@ class TidyUpWorkflow(GateHost):
             return _finish(deltas=compute_delta(before, None))
 
         self._status = "awaiting:tidy_up"
+        # The summary renders at gate-open. A selection that has ALREADY
+        # arrived narrows it (and its deferral markers); a selection that
+        # arrives during the gate-await is applied to `chosen` below, with
+        # the report's `deferred` as the post-selection truth. The summary is
+        # thus the best pre-decision view, never a commitment.
+        pre_selected = (set(self._selected) if self._selected is not None
+                        else set())
+        summary_pairs = (pairs if not pre_selected
+                         else [p for p in pairs if p[0] in pre_selected])
         decision = await self._gate(
             "tidy_up", inp.gates,
             context=GateContext(spec_summary=_backlog_summary(
-                pairs, inp.max_fix_runs)))
+                summary_pairs, inp.max_fix_runs)))
         if not decision.approved:
             self._status = "rejected:tidy_up"
             return _finish(deltas=compute_delta(before, None))
@@ -225,6 +265,9 @@ class TidyUpWorkflow(GateHost):
                   else [i for i in backlog if i in set(self._selected)])
         accepted = chosen[:inp.max_fix_runs]
         deferred = chosen[inp.max_fix_runs:]
+        # Identities the operator asked for that were never in the backlog.
+        # Surfaced in the report rather than dropped silently.
+        unrecognized = unrecognized_selection(self._selected, backlog)
         by_identity = dict(pairs)
 
         self._status = "fixing"
@@ -239,7 +282,8 @@ class TidyUpWorkflow(GateHost):
         if not branches:
             # D5 rule 4: nothing to measure, and the report says so.
             self._status = "tidied:no-branches"
-            return _finish(accepted=accepted, deferred=deferred, runs=runs,
+            return _finish(accepted=accepted, deferred=deferred,
+                           unrecognized=unrecognized, runs=runs,
                            deltas=compute_delta(before, None))
 
         self._status = "verifying"
@@ -256,9 +300,11 @@ class TidyUpWorkflow(GateHost):
         conflicted = [r.identity for r in runs
                       if r.branch and r.branch not in merged]
 
-        after = await self._triage(inp, "after", verify.head_sha)
+        after = await self._triage(inp, "after", verify.head_sha,
+                                   gating=False)
         self._status = "tidied"
         return _finish(after=after, verify_ref=verify.ref,
-                       accepted=accepted, deferred=deferred, runs=runs,
+                       accepted=accepted, deferred=deferred,
+                       unrecognized=unrecognized, runs=runs,
                        readiness_after=after.readiness.verdict,
                        deltas=compute_delta(before, after, conflicted))

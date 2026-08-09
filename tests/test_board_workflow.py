@@ -1,4 +1,4 @@
-﻿"""Temporal integration test: FeatureWorkflow writes through the REAL board.
+"""Temporal integration test: FeatureWorkflow writes through the REAL board.
 
 The rest of the temporal suite registers no-op board fakes (so it can assert
 on return strings without a DB). This file is the one place a workflow
@@ -62,7 +62,7 @@ async def _noop_notify(inp: NotifyInput) -> Results:
 
 
 def _git_fakes_without_board():
-    """GIT_FAKES minus the board fakes â€” otherwise registering both the fake
+    """GIT_FAKES minus the board fakes — otherwise registering both the fake
     and the real under the same Temporal name is a duplicate-registration
     error."""
     return [a for a in GIT_FAKES if a not in BOARD_FAKES]
@@ -153,7 +153,7 @@ async def test_shipped_run_publishes_artifacts_tasks_and_evidence(board_env):
 async def test_rejected_architecture_records_rejected_and_keeps_pointer(
         board_env):
     """A rejected design is still written as history, but the pointer must not
-    move â€” status='rejected', current_version stays None, and no tasks are
+    move — status='rejected', current_version stays None, and no tasks are
     synced (the run ends at the architecture gate)."""
     reset_deploy()
     cfg = _unattended_cfg()

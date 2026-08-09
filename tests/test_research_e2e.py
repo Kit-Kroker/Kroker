@@ -1,4 +1,4 @@
-﻿"""research -> clarify through a time-skipping worker with fake agents. Proves
+"""research -> clarify through a time-skipping worker with fake agents. Proves
 the stage runs, verifies grounding (no grounded findings -> no violation),
 gates, and hands off to clarify without a live provider."""
 from __future__ import annotations
@@ -15,7 +15,7 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from sdlc.activities import evaluate_gate  # pure â€” reused, not faked
+from sdlc.activities import evaluate_gate  # pure — reused, not faked
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
 from sdlc.models import (
     GateConfig, GateDecision, GateOutcome, GatePolicy, GroundedFinding,
@@ -38,16 +38,16 @@ pytestmark = pytest.mark.temporal
 TASK_QUEUE = "e2e-research"
 
 # The research fake: a brief with NO grounded_findings, so verify_brief_activity
-# returns an empty violations list â€” the happy path for an offline run.
+# returns an empty violations list — the happy path for an offline run.
 _RESEARCH = ResearchBrief(summary="found nothing external", confidence=0.5)
 
 # Code-review I1: a brief WITH a grounded finding whose source_url was NEVER
 # fetched this run. verify_brief_activity reads
-# $SDLC_RUNS_ROOT/<run_id>/research/pages/<sha256(url)>.txt â€” no such file
+# $SDLC_RUNS_ROOT/<run_id>/research/pages/<sha256(url)>.txt — no such file
 # exists for "https://x/never-fetched" under the test's empty tmp_path, so the
 # activity RETURNS [Violation(kind="source_unavailable", ...)]. The
 # workflow records the research stage as FAILed and proceeds (2026-07-20
-# decision â€” see test_research_stage_degrades_instead_of_blocking_on_
+# decision — see test_research_stage_degrades_instead_of_blocking_on_
 # grounding_violation below). This still exercises the fail-closed READ of
 # the violations list that the old `except GroundingViolation` could never
 # catch (C1) and the retry_policy=1 (C2): under the old raise-based form,
@@ -64,14 +64,14 @@ _RESEARCH_WITH_VIOLATION = ResearchBrief(
 
 def _research_fake_activities(brief: ResearchBrief = _RESEARCH) -> list:
     """The research agent is the only proposer with FUNCTION tools registered
-    (web_search, fetch_page, â€¦). The workflow-side model_request activity
+    (web_search, fetch_page, …). The workflow-side model_request activity
     carries the production agent's function_tools in ModelRequestParameters,
-    which reach the activity-side TestModel â€” and TestModel's default
+    which reach the activity-side TestModel — and TestModel's default
     `call_tools='all'` would then emit a tool call to each of them. The fake
     agent's toolset has none of those tools, so dispatch would raise
     'Tool web_search not found in toolset'.
 
-    Suppress that by forcing TestModel to call_tools=[] â€” emit the canned
+    Suppress that by forcing TestModel to call_tools=[] — emit the canned
     ResearchBrief directly via request_final_output, skipping the tool-call
     branch entirely. The OTHER proposer fakes (clarify/architect/etc.) have no
     function tools, so the default TestModel behaviour already produces [] for
@@ -102,12 +102,12 @@ async def _wait_for_status(handle, target: str, timeout_s: float = 30.0):
 
 
 async def _drive(handle):
-    # 1. clarify â€” answer the one open question (proves research handed off)
+    # 1. clarify — answer the one open question (proves research handed off)
     await _wait_for_status(handle, "awaiting:clarify")
     for qid in QUESTION_IDS:
         await handle.signal(FeatureWorkflow.answer_question,
                             args=[qid, "yes"])
-    # 2. deploy gate â€” architecture/plan/research are OFF (auto-approved);
+    # 2. deploy gate — architecture/plan/research are OFF (auto-approved);
     #    merge auto-passes with clean fakes. Only deploy waits on a human.
     await _wait_for_status(handle, "awaiting:deploy")
     await handle.signal(
@@ -121,7 +121,7 @@ async def test_research_stage_runs_and_hands_off():
     """With research_enabled=True the workflow MUST dispatch the research
     agent (registered as a fake) and invoke verify_brief_activity (registered
     as the production activity) before reaching clarify. Reaching
-    `awaiting:clarify` proves research ran without crashing â€” if the research
+    `awaiting:clarify` proves research ran without crashing — if the research
     agent activity or verify_brief_activity were unregistered, the workflow
     would fail with a Temporal activity-not-found error long before clarify."""
     activities = [evaluate_gate, verify_brief_activity, *GIT_FAKES,
@@ -168,17 +168,17 @@ async def test_research_stage_degrades_instead_of_blocking_on_grounding_violatio
     """2026-07-20 human decision: an ungrounded finding (source_url never
     fetched this run) must fail the research STAGE, not the whole pipeline.
     The workflow records the research stage as failed and proceeds to
-    clarify/deploy exactly as a research-disabled run would â€” it must NOT
+    clarify/deploy exactly as a research-disabled run would — it must NOT
     crash with ActivityError and must NOT return early.
 
     Earlier behavior (pre this test) hard-stopped the workflow with
     "rejected:research.grounding" on any violation. That was too blunt for
     exploring the rest of the pipeline when research grounding is inherently
     stochastic (depends on which sources the model cites and how faithfully
-    it quotes them) â€” see cat-cafe-monitoring benchmark runs.
+    it quotes them) — see cat-cafe-monitoring benchmark runs.
 
     The research gate policy is OFF (auto-approve) so the gate doesn't block
-    before verification runs. $SDLC_RUNS_ROOT points at an empty tmp_path â€”
+    before verification runs. $SDLC_RUNS_ROOT points at an empty tmp_path —
     no page file for the violating URL, so the activity returns
     [Violation(kind="source_unavailable", ...)] and the workflow inspects it
     (`if violations:`), records a FAIL stage record, and continues."""

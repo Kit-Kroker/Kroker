@@ -1,4 +1,4 @@
-﻿"""E-9 Task 7: the timers fire in order, stop on the signal, and cannot
+"""E-9 Task 7: the timers fire in order, stop on the signal, and cannot
 break the gate. Time-skipping so a 48h schedule runs in milliseconds."""
 from __future__ import annotations
 

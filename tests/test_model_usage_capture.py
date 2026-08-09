@@ -1,4 +1,4 @@
-﻿"""E-33: every proposer call and every harness attempt emits a MODEL_USAGE
+"""E-33: every proposer call and every harness attempt emits a MODEL_USAGE
 event, visible in the exported events.jsonl."""
 from __future__ import annotations
 

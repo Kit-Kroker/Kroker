@@ -1,4 +1,4 @@
-﻿"""E-32 retro stage: fires on every terminal path, populates run_summary(),
+"""E-32 retro stage: fires on every terminal path, populates run_summary(),
 and never lets an export failure change the run's outcome."""
 from __future__ import annotations
 

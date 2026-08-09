@@ -1,4 +1,4 @@
-﻿"""E-44. Pure helpers directly; sequencing through the workflow, following
+"""E-44. Pure helpers directly; sequencing through the workflow, following
 tests/test_triage_workflow.py."""
 from __future__ import annotations
 
@@ -7,7 +7,8 @@ import pytest
 from sdlc.models import GatePolicy
 from sdlc.workflows.tidyup import (
     FixRunResult, TidyUpInput, TidyUpReport, TidyUpWorkflow,
-    branches_to_verify, fix_workflow_id, reached_a_pr,
+    branches_to_verify, fix_workflow_id, reached_a_pr, triage_gates,
+    unrecognized_selection,
 )
 
 
@@ -74,3 +75,37 @@ def test_report_defaults_are_honest_about_an_unmeasured_after():
     from pydantic import ValidationError
     with pytest.raises(ValidationError):
         TidyUpReport(before=None, readiness_before=None)  # type: ignore[arg-type]
+
+
+def test_before_triage_inherits_the_operators_gates():
+    """The before-triage gates admission, so the operator's HARD readiness
+    setting applies unchanged."""
+    from sdlc.models import GateConfig, GatePolicy, GateSettings
+    hard = GateSettings(default_gate_policy=GatePolicy.HARD,
+                        gates={"readiness": GateConfig(policy=GatePolicy.HARD)})
+    assert triage_gates(hard, gating=True) is hard
+
+
+def test_after_triage_never_parks_on_a_readiness_gate():
+    """The after-triage only MEASURES the verification tree for the delta; it
+    must not open a readiness gate and park 48h. With --no-build-probe the
+    after-verdict is INDETERMINATE, which a HARD readiness gate would block
+    on. OFF resolves automatically; the verdict is still recorded."""
+    from sdlc.models import GateConfig, GatePolicy, GateSettings
+    hard = GateSettings(default_gate_policy=GatePolicy.HARD,
+                        gates={"readiness": GateConfig(policy=GatePolicy.HARD)})
+    after = triage_gates(hard, gating=False)
+    assert after.default_gate_policy is GatePolicy.OFF
+
+
+def test_unrecognized_selection_is_surfaced_not_dropped():
+    """The CLI confirms the count it SENT; the workflow keeps only the subset
+    in the backlog. The difference is surfaced in the report rather than
+    dropped silently, so the two counts can be reconciled."""
+    backlog = ["a", "b", "c"]
+    assert unrecognized_selection(["a", "x", "y"], backlog) == ["x", "y"]
+
+
+def test_unrecognized_selection_is_empty_when_no_signal_or_all_known():
+    assert unrecognized_selection(None, ["a"]) == []
+    assert unrecognized_selection(["a", "b"], ["a", "b"]) == []

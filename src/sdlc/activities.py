@@ -409,6 +409,19 @@ async def build_verification_branch(inp: VerifyBranchInput) -> VerifyResult:
     the 'if you merged all of these' tree instead: a local branch off the
     pinned commit with every successful fix branch merged into it.
 
+    Built in a WORKTREE under SDLC_WORKTREES_ROOT, never in the operator's
+    checkout. Two reasons, both load-bearing:
+
+      - ``_git`` does not ``check=True``, so a checkout that fails on a dirty
+        working tree is silent. Operating in the operator's repo would then
+        merge fix branches into whatever HEAD is on -- their main -- and
+        return a clean-looking success. That is NG5 violated by the one
+        component whose docstring says "local only".
+      - Even on the happy path, merging in the operator's repo leaves it
+        checked out on the verify branch with fix-branch files in the working
+        tree. Every other git activity in this file works in a worktree for
+        this reason.
+
     Local only -- never pushed. Delivery stays PR-only until FR-1003/E-59.
 
     A conflict between two fix branches is a RESULT, not a failure: the merge
@@ -416,19 +429,28 @@ async def build_verification_branch(inp: VerifyBranchInput) -> VerifyResult:
     branches still merge. compute_delta then marks that identity UNVERIFIABLE
     rather than PERSISTED (D5 rule 3).
 
-    Idempotent: Temporal retries activities, so the branch is force-created
-    at `base_sha` on every call and the merges replayed from there.
+    Idempotent: Temporal retries activities. ``_ensure_worktree`` reuses a
+    surviving worktree, so the head is reset to ``base_sha`` before the merges
+    replay -- a retry never compounds onto a half-built tree.
     """
     ref = f"sdlc/tidyup-verify/{inp.tidyup_id}"
-    # -B force-creates: a retry resets to base_sha rather than failing on an
-    # existing branch or compounding merges onto a half-built tree.
-    _git(["checkout", "-q", "-B", ref, inp.base_sha], inp.repo_path)
+    wt_path = os.path.join(_worktrees_root(), inp.tidyup_id, "verify")
+    worktree = _ensure_worktree(inp.repo_path, ref, wt_path, inp.base_sha)
+
+    # Replay-safe: a Temporal retry reuses the worktree but must re-merge from
+    # base_sha. reset --hard is safe here because this worktree is disposable
+    # (no operator data lives in it). Checked explicitly: _git does not raise.
+    reset = _git(["reset", "--hard", inp.base_sha], worktree)
+    if reset.returncode != 0:
+        raise RuntimeError(
+            f"git reset to base_sha {inp.base_sha} failed: "
+            f"{reset.stderr.strip() or reset.stdout.strip()}")
 
     merged: list[str] = []
     conflicted: list[str] = []
     for branch in inp.branches:
         result = _git(["merge", "--no-ff", "-m", f"tidy-up: {branch}", branch],
-                      inp.repo_path)
+                      worktree)
         if result.returncode == 0:
             merged.append(branch)
             continue
@@ -436,15 +458,15 @@ async def build_verification_branch(inp: VerifyBranchInput) -> VerifyResult:
         # unmerged entries (locale-independent), and read it BEFORE
         # `merge --abort`, which clears the unmerged state. Same reasoning as
         # merge_into_integration.
-        unmerged = _git(["ls-files", "--unmerged"], inp.repo_path).stdout
-        _git(["merge", "--abort"], inp.repo_path)
+        unmerged = _git(["ls-files", "--unmerged"], worktree).stdout
+        _git(["merge", "--abort"], worktree)
         if not unmerged.strip():
             raise RuntimeError(
                 f"git merge of {branch} failed (not a conflict): "
                 f"{result.stderr.strip()}")
         conflicted.append(branch)
 
-    head = _git(["rev-parse", "HEAD"], inp.repo_path).stdout.strip()
+    head = _git(["rev-parse", "HEAD"], worktree).stdout.strip()
     return VerifyResult(ref=ref, head_sha=head, merged=merged,
                         conflicted=conflicted)
 

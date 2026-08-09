@@ -1,4 +1,4 @@
-﻿"""Spec section 8: the six stage-13 paths, driven through the real
+"""Spec section 8: the six stage-13 paths, driven through the real
 FeatureWorkflow with mocked deploy activities. No Docker, no fake adapter --
 the adapters themselves are never involved."""
 from __future__ import annotations

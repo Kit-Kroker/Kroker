@@ -1,4 +1,4 @@
-﻿"""E-9 Task 1: per-gate timeout semantics. Only `merge` changes default
+"""E-9 Task 1: per-gate timeout semantics. Only `merge` changes default
 behaviour; every other gate keeps today's reject.
 
 E-9 Task 8 (appended): the workflow honours on_timeout -- REJECT stays reject,
