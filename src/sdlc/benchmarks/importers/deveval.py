@@ -10,6 +10,7 @@ a half-built case (the opposite of the graders' fail-safe discipline).
 """
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 
@@ -42,3 +43,28 @@ def load_repo_config(repo_dir: Path) -> RepoConfig:
     if not path.is_file():
         raise FileNotFoundError(f"no repo_config.json in {repo_dir}")
     return RepoConfig(**json.loads(path.read_text(encoding="utf-8")))
+
+
+def collect_node_ids(test_root: Path, prefix: str) -> list[str]:
+    """Every `test_*` function and method under test_root, as JUnit node-ids
+    relative to the oracle dir: "<prefix>/<relpath>::<name>".
+
+    Parsed with ast rather than imported: these are third-party test files
+    and importing them would execute module-level code. The prefix/separator
+    shape must match grade_oracle's normalization (oracle.py:231), which
+    strips the "oracle/" prefix and converts to forward slashes.
+
+    Raises SyntaxError on an unparseable test file -- fail loud.
+    """
+    root = Path(test_root)
+    out: list[str] = []
+    for path in sorted(root.rglob("test_*.py")):
+        rel = path.relative_to(root).as_posix()
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        names: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if node.name.startswith("test_"):
+                    names.append(node.name)
+        out.extend(f"{prefix}/{rel}::{n}" for n in sorted(set(names)))
+    return sorted(out)

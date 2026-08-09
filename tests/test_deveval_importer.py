@@ -57,3 +57,57 @@ def test_load_repo_config_raises_on_missing_required_key(tmp_path):
         json.dumps(broken), encoding="utf-8")
     with pytest.raises(Exception):
         load_repo_config(tmp_path)
+
+
+from sdlc.benchmarks.importers.deveval import collect_node_ids
+
+TEST_SRC = '''
+import unittest
+
+def test_module_level():
+    assert True
+
+def helper_not_a_test():
+    pass
+
+class TestThing(unittest.TestCase):
+    def test_method(self):
+        assert True
+    def setUp(self):
+        pass
+'''
+
+
+def test_collect_node_ids_finds_functions_and_methods(tmp_path):
+    d = tmp_path / "unit_tests"
+    d.mkdir()
+    (d / "test_a.py").write_text(TEST_SRC, encoding="utf-8")
+    ids = collect_node_ids(d, "unit_tests")
+    assert ids == ["unit_tests/test_a.py::test_method",
+                   "unit_tests/test_a.py::test_module_level"]
+
+
+def test_collect_node_ids_skips_non_test_files(tmp_path):
+    d = tmp_path / "unit_tests"
+    d.mkdir()
+    (d / "__init__.py").write_text("", encoding="utf-8")
+    (d / "conftest.py").write_text("def test_nope(): pass", encoding="utf-8")
+    (d / "test_a.py").write_text("def test_one(): pass", encoding="utf-8")
+    assert collect_node_ids(d, "unit_tests") == [
+        "unit_tests/test_a.py::test_one"]
+
+
+def test_collect_node_ids_uses_forward_slashes(tmp_path):
+    d = tmp_path / "unit_tests" / "sub"
+    d.mkdir(parents=True)
+    (d / "test_b.py").write_text("def test_two(): pass", encoding="utf-8")
+    ids = collect_node_ids(tmp_path / "unit_tests", "unit_tests")
+    assert ids == ["unit_tests/sub/test_b.py::test_two"]
+
+
+def test_collect_node_ids_raises_on_unparseable_test(tmp_path):
+    d = tmp_path / "unit_tests"
+    d.mkdir()
+    (d / "test_a.py").write_text("def test_(:\n", encoding="utf-8")
+    with pytest.raises(SyntaxError):
+        collect_node_ids(d, "unit_tests")
