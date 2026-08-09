@@ -877,6 +877,13 @@ the factory rather than as prompts.
   `phases[].status/started_at/completed_at/artifacts` is a hand-rolled durable
   state machine, which is exactly what Temporal history already is.
   `/enrich`, `/gate` and `/validate` are not stages (→ E-56, E-50, E-53).
+  **Admission rule (second reason to narrow to HUMAN approvals):** E-42's rule
+  is `verdict is READY or override is not None`. E-44's `TidyUpWorkflow`
+  after-triage auto-approves its own (OFF) readiness gate, so
+  `TidyUpReport.after.override.approved_by == "policy"` whenever the verify
+  tree is not READY -- a machine placeholder, not a human act. Applying the
+  current rule to that field would admit a tree nobody approved. Narrowing to
+  `approved_by == "human"` (already listed as a possible tightening) closes it.
 - [ ] **E-46 — scan phase** → FR-912. S1–S5 capability signals, SS1–SS4
   security, QS1–QS4 QA. Cross-source confidence: three or more independent
   sources = high, two = medium, one = low — never the depth of one source. Memo
