@@ -172,3 +172,42 @@ def test_dispatch_score_case_writes_all_four_matrices(tmp_path, monkeypatch):
     assert (out_dir / "error-matrix.json").exists()
     assert "task-matrix.html" in out
     assert "error-matrix.html" in out
+
+
+def test_import_deveval_converts_every_repo_under_a_language_root(tmp_path):
+    """The CLI walks benchmark_data/<language>/<repo> and reports per repo."""
+    import shutil
+    from pathlib import Path
+
+    from sdlc.benchmarks.cli import dispatch_import_deveval
+
+    fixture = (Path(__file__).resolve().parent / "fixtures" / "mini_calc")
+    src_root = tmp_path / "src" / "python"
+    src_root.mkdir(parents=True)
+    shutil.copytree(fixture, src_root / "mini_calc")
+    out = tmp_path / "cases"
+    out.mkdir()
+
+    report = dispatch_import_deveval(src=str(src_root), out=str(out))
+    assert "deveval-mini-calc" in report
+    assert (out / "deveval-mini-calc" / "case.yaml").is_file()
+
+
+def test_import_deveval_reports_network_quarantine(tmp_path):
+    import shutil
+    from pathlib import Path
+
+    from sdlc.benchmarks.cli import dispatch_import_deveval
+
+    fixture = (Path(__file__).resolve().parent / "fixtures" / "mini_calc")
+    src_root = tmp_path / "src" / "python"
+    src_root.mkdir(parents=True)
+    shutil.copytree(fixture, src_root / "mini_calc")
+    (src_root / "mini_calc" / "calc.py").write_text(
+        "import requests\n\n\ndef add(a, b):\n    return a + b\n",
+        encoding="utf-8")
+    out = tmp_path / "cases"
+    out.mkdir()
+
+    report = dispatch_import_deveval(src=str(src_root), out=str(out))
+    assert "QUARANTINED" in report

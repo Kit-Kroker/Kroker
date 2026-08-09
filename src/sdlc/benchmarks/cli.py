@@ -192,3 +192,50 @@ def main_async(args: argparse.Namespace) -> None:
                              all_=getattr(args, "all_", False),
                              out=getattr(args, "out", None),
                              weights=getattr(args, "weights", None)))
+
+
+def dispatch_import_deveval(*, src: str, out: str | None = None,
+                            judge_model: str = "google:gemini-3.5-flash",
+                            repo: str | None = None) -> str:
+    """Convert every repository under `src` (a DevEval
+    benchmark_data/<language> directory) into a case directory under `out`.
+
+    Fails loud on the first bad repository rather than importing a partial
+    corpus -- see the importer's module docstring.
+    """
+    from .importers.deveval import convert_repo
+
+    src_root = Path(src)
+    dest = Path(out) if out else (
+        Path(__file__).resolve().parents[3] / "benchmarks" / "cases")
+    repos = ([src_root / repo] if repo
+             else [d for d in sorted(src_root.iterdir()) if d.is_dir()])
+    if not repos:
+        raise SystemExit(f"no repositories under {src_root}")
+
+    lines: list[str] = []
+    for d in repos:
+        rep = convert_repo(d, dest, judge_model=judge_model)
+        flag = " QUARANTINED (network_required)" if rep.network_required else ""
+        lines.append(
+            f"{rep.case_id}: {rep.n_tasks} draft tasks, "
+            f"{rep.n_oracle_tests} oracle tests, "
+            f"{rep.reference_files} reference files{flag}")
+        for e in rep.network_evidence[:5]:
+            lines.append(f"    network: {e}")
+    lines.append("")
+    lines.append("Next: review each tasks.yaml (drafts are test-file "
+                 "granularity), then run `sdlc benchmark verify-case "
+                 "--case <case_id>` for each.")
+    return "\n".join(lines)
+
+
+def dispatch_verify_case(*, case: str, cases_root: str | None = None) -> str:
+    """Run one imported case's oracle against its own reference/."""
+    from .importers.verify import verify_case
+
+    root = Path(cases_root) if cases_root else (
+        Path(__file__).resolve().parents[3] / "benchmarks" / "cases")
+    result = verify_case(root / case)
+    head = f"{result.case_id}: {'PASS' if result.ok else 'FAIL'}"
+    return head if result.ok else f"{head}\n{result.output}"

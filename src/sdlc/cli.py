@@ -10,6 +10,8 @@
   python -m sdlc.cli schedules list
   python -m sdlc.cli schedules apply --dry-run
   python -m sdlc.cli schedules apply
+  python -m sdlc.cli benchmark import-deveval --src /path/DevEval/benchmark_data/python
+  python -m sdlc.cli benchmark verify-case --case deveval-lice
   python -m sdlc.cli eval capture --from feature-add-sso --case add-login-greenfield
   python -m sdlc.cli eval reviewer --against HEAD
   python -m sdlc.cli triage --repo /path/to/repo [--commit HEAD]
@@ -166,6 +168,17 @@ def build_parser() -> argparse.ArgumentParser:
                     help="override the case's gate_policy for every gate "
                          "in the child FeatureWorkflow")
     bd = bsub.add_parser("drift"); bd.add_argument("--since", type=int, default=168)
+    bi = bsub.add_parser("import-deveval")
+    bi.add_argument("--src", required=True,
+                    help="a DevEval benchmark_data/<language> directory")
+    bi.add_argument("--repo", default=None,
+                    help="import only this repository (default: all)")
+    bi.add_argument("--out", default=None,
+                    help="destination cases dir (default: benchmarks/cases)")
+    bi.add_argument("--judge-model", default="google:gemini-3.5-flash",
+                    dest="judge_model")
+    bv = bsub.add_parser("verify-case")
+    bv.add_argument("--case", required=True, help="a case_id")
     bs = bsub.add_parser("score")
     bsg = bs.add_mutually_exclusive_group(required=True)
     bsg.add_argument("--bench", help="one bench_run_id")
@@ -317,6 +330,16 @@ async def main() -> None:
         if args.bench_cmd == "run":
             from .benchmarks.cli import _run_matrix
             print(await _run_matrix(args.case, args.gate_policy))
+            return
+        if args.bench_cmd == "import-deveval":
+            from .benchmarks.cli import dispatch_import_deveval
+            print(dispatch_import_deveval(
+                src=args.src, out=args.out, repo=args.repo,
+                judge_model=args.judge_model))
+            return
+        if args.bench_cmd == "verify-case":
+            from .benchmarks.cli import dispatch_verify_case
+            print(dispatch_verify_case(case=args.case))
             return
         if args.bench_cmd == "drift":
             print("drift requires a live Temporal client; see ARCHITECTURE.md section 8.")
