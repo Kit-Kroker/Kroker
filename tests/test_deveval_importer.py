@@ -163,3 +163,36 @@ def test_render_tasks_yaml_carries_a_review_banner():
 def test_draft_task_suite_rejects_empty():
     with pytest.raises(ValueError):
         draft_task_suite([])
+
+
+from sdlc.benchmarks.importers.deveval import detect_network
+
+
+def test_detect_network_flags_urllib(tmp_path):
+    p = tmp_path / "test_q.py"
+    p.write_text("import urllib.request\nurllib.request.urlopen(u)\n",
+                 encoding="utf-8")
+    required, evidence = detect_network([p])
+    assert required is True
+    assert any("urllib" in e for e in evidence)
+
+
+def test_detect_network_flags_http_urls(tmp_path):
+    p = tmp_path / "test_q.py"
+    p.write_text('URL = "http://export.arxiv.org/api/query"\n',
+                 encoding="utf-8")
+    required, _ = detect_network([p])
+    assert required is True
+
+
+def test_detect_network_clean_file(tmp_path):
+    p = tmp_path / "test_q.py"
+    p.write_text("def test_add():\n    assert 1 + 1 == 2\n", encoding="utf-8")
+    assert detect_network([p]) == (False, [])
+
+
+def test_detect_network_evidence_names_file_and_line(tmp_path):
+    p = tmp_path / "test_q.py"
+    p.write_text("x = 1\nimport requests\n", encoding="utf-8")
+    _, evidence = detect_network([p])
+    assert "test_q.py:2" in evidence[0]

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from pathlib import Path
 
 import yaml
@@ -118,3 +119,32 @@ def draft_task_suite(node_ids: list[str]) -> dict:
 
 def render_tasks_yaml(suite: dict) -> str:
     return DRAFT_BANNER + yaml.safe_dump(suite, sort_keys=False)
+
+
+# Deliberately over-broad. A false positive quarantines a usable case; a
+# false negative lets a benchmark cell make live egress under NFR-5. The
+# asymmetry justifies the noise.
+_NETWORK_MARKERS = re.compile(
+    r"\b(urllib|requests|httpx|aiohttp|socket|urlopen|wget|curl)\b"
+    r"|https?://",
+    re.IGNORECASE)
+
+
+def detect_network(paths: list[Path]) -> tuple[bool, list[str]]:
+    """Scan files for signs the code reaches the network.
+
+    Returns (required, evidence) where each evidence line is
+    "<name>:<lineno>: <stripped source line>". Scans only the files given --
+    callers pass oracle tests and reference sources, never docs, whose prose
+    URLs would flag every case.
+    """
+    evidence: list[str] = []
+    for path in paths:
+        try:
+            text = Path(path).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for i, line in enumerate(text.splitlines(), start=1):
+            if _NETWORK_MARKERS.search(line):
+                evidence.append(f"{Path(path).name}:{i}: {line.strip()}")
+    return bool(evidence), evidence
