@@ -24,7 +24,7 @@ description: "# Introduction\nThe project aims to develop a Python-based impleme
   \ should be in Python.\n- The implementation should focus on clarity and ease of\
   \ understanding, making it suitable for educational purposes and practical applications.\n\
   # Requirements\n## Dependencies\n- No specific external libraries required for the\
-  \ basic PSO implementation\n# Usage\nTo use the PSO algorithm, run the following\
+  \ basic PSO implementation\n- Ship a minimal `pyproject.toml` at the repository root declaring the `pso` package under PEP 621 [project] metadata (name, version) plus a [build-system] entry (setuptools is fine), so the project is pip-installable and its language/toolchain is detectable by standard tooling. No third-party runtime dependencies are required by the package itself.\n# Usage\nTo use the PSO algorithm, run the following\
   \ script:\n~~~python\npython examples/demo.py\n~~~\n\n# Acceptance Criteria\n- The\
   \ PSO implementation should successfully optimize the given cost function within\
   \ the specified bounds.\n- The output should clearly display the iterative process\
@@ -35,7 +35,7 @@ description: "# Introduction\nThe project aims to develop a Python-based impleme
   \ these functions by name, so the\nproduced repository MUST match this file tree\
   \ and these class and function\nnames exactly. Anything not named here is your choice.\n\
   \nArchitecture (file tree):\n# Architecture Design\nBelow is a text-based representation\
-  \ of the file tree. \n```bash\n├── .gitignore\n├── examples\n│   ├── demo.py\n│\
+  \ of the file tree. \n```bash\n├── .gitignore\n├── pyproject.toml\n├── examples\n│   ├── demo.py\n│\
   \   └── demo.sh\n├── pso\n│   ├── cost_functions.py\n│   ├── __init__.py\n│   └──\
   \ pso_simple.py\n```\n\nExamples:\n\nTo use the PSO algorithm, run `sh ./examples/demo.sh`.\
   \ An example of the script `demo.sh` is shown as follows.\n```bash\n#! /bin/bash\n\
