@@ -18,10 +18,12 @@ import posixpath
 import re
 from collections.abc import Sequence
 
-from ..models import FixClass, TriageFinding
+from ..models import (
+    FixClass, TriageFinding, dedupe_by_identity, evidence_key,
+)
 
 SIGNAL_ID = "secrets"
-VERSION = 2
+VERSION = 3
 
 _ENV_EXAMPLES = (".env.example", ".env.sample", ".env.template")
 
@@ -100,10 +102,10 @@ _GENERATOR_PLACEHOLDER = re.compile(r"^django-insecure-")
 
 def _finding(rule: str, severity: str, detail: str, fix_class: FixClass,
              path: str = "", line: int | None = None,
-             evidence: str = "") -> TriageFinding:
+             evidence: str = "", key: str = "") -> TriageFinding:
     return TriageFinding(signal=SIGNAL_ID, rule=rule, severity=severity,
                          detail=detail, fix_class=fix_class, path=path,
-                         line=line, evidence=evidence)
+                         line=line, evidence=evidence, key=key)
 
 
 def scan_text(path: str, text: str) -> list[TriageFinding]:
@@ -119,7 +121,8 @@ def scan_text(path: str, text: str) -> list[TriageFinding]:
                     rule, "critical",
                     f"{detail} Rotate the credential; deleting the file does "
                     f"not revoke it.",
-                    FixClass.JUDGEMENT, path, lineno, quote))
+                    FixClass.JUDGEMENT, path, lineno, quote,
+                    key=evidence_key(quote)))
         for match in _CLIENT_BUNDLE_VAR.finditer(line):
             var = match.group(1)
             findings.append(_finding(
@@ -127,7 +130,8 @@ def scan_text(path: str, text: str) -> list[TriageFinding]:
                 f"{var} is a build-time-inlined public variable whose name "
                 f"says it holds a secret. Frameworks embed these in the "
                 f"client bundle, so the value ships to every browser.",
-                FixClass.JUDGEMENT, path, lineno, quote))
+                FixClass.JUDGEMENT, path, lineno, quote,
+                key=var))
         for match in _GENERIC_ASSIGNMENT.finditer(line):
             ident = match.group(1)
             # value is group 2 (double-quoted), 3 (single-quoted) or 4 (unquoted)
@@ -139,8 +143,10 @@ def scan_text(path: str, text: str) -> list[TriageFinding]:
                     "generic_secret_assignment", "low",
                     f"{ident} is assigned a high-entropy literal. "
                     f"Verify whether it is a live credential.",
-                    FixClass.JUDGEMENT, path, lineno, quote))
-    return findings
+                    FixClass.JUDGEMENT, path, lineno, quote,
+                    key=ident))
+    # E-44 D3: the same credential on two lines of one file is one fact.
+    return dedupe_by_identity(findings)
 
 
 def _is_env_file(path: str) -> bool:

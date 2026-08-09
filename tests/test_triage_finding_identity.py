@@ -68,3 +68,75 @@ def test_dedupe_preserves_order_and_returns_a_new_list():
     src = [_f(path="a", key="1"), _f(path="b", key="2")]
     out = dedupe_by_identity(src)
     assert out == src and out is not src
+
+
+import pytest
+from sdlc.measurement import Measurement
+from sdlc.triage.models import SignalResult
+from sdlc.triage.signals import dependencies, misconfig, outliers, secrets
+
+
+def test_signal_result_rejects_duplicate_identities():
+    """D3: the silent-collapse hazard is caught in the signal that caused it,
+    not inherited by the delta."""
+    dup = [_f(path="requirements.txt", key=""),
+           _f(path="requirements.txt", key="")]
+    with pytest.raises(ValueError, match="duplicate finding identity"):
+        SignalResult(signal="deps", version=1,
+                     collected=Measurement.measured(2.0), findings=dup)
+
+
+def test_signal_result_accepts_distinct_identities():
+    ok = [_f(path="requirements.txt", key="flask"),
+          _f(path="requirements.txt", key="requests")]
+    r = SignalResult(signal="deps", version=1,
+                     collected=Measurement.measured(2.0), findings=ok)
+    assert len(r.findings) == 2
+
+
+def test_secrets_separates_two_credentials_in_one_file():
+    text = ("AWS_A = 'AKIAIOSFODNN7EXAMPLE'\n"
+            "AWS_B = 'AKIAJJJJJJJJJJJJJJJJ'\n")
+    out = secrets.scan_text("app.py", text)
+    aws = [f for f in out if f.rule == "aws_access_key_id"]
+    assert len(aws) == 2
+    assert len({finding_identity(f) for f in aws}) == 2
+
+
+def test_secrets_collapses_the_same_credential_twice_in_one_file():
+    line = "AWS_A = 'AKIAIOSFODNN7EXAMPLE'\n"
+    out = secrets.scan_text("app.py", line + line)
+    aws = [f for f in out if f.rule == "aws_access_key_id"]
+    assert len(aws) == 1
+    assert aws[0].line == 1          # the first occurrence is kept
+
+
+def test_misconfig_separates_two_distinct_rule_hits_in_one_file():
+    blobs = {"settings.py": "DEBUG = True\napp.run(debug=True)\n"}
+    out = misconfig.evaluate(blobs)
+    debug = [f for f in out.findings if f.rule == "debug_enabled"]
+    assert len(debug) == 2
+    assert len({finding_identity(f) for f in debug}) == 2
+
+
+def test_dependencies_keys_by_package_name():
+    from sdlc.triage.signals.dependencies import Declared
+    from sdlc.triage.advisories import AdvisoryResult
+    declared = [Declared(name="flask", constraint=">=2", manifest="req.txt",
+                         line=1, raw="flask>=2"),
+                Declared(name="requests", constraint=">=1", manifest="req.txt",
+                         line=2, raw="requests>=1")]
+    out = dependencies.evaluate(
+        declared, lockfile_present=False, imported={"flask", "requests"},
+        advisories=AdvisoryResult(
+            advisories=[], collected=Measurement.measured(0.0)))
+    unpinned = [f for f in out.findings if f.rule == "unpinned_dependency"]
+    assert {f.key for f in unpinned} == {"flask", "requests"}
+
+
+@pytest.mark.parametrize("mod,expected", [
+    (secrets, 3), (misconfig, 2), (dependencies, 2), (outliers, 2)])
+def test_version_bumped(mod, expected):
+    """The SIGNALS registry contract: changing what a signal emits bumps its
+    version, so E-46's memo key invalidates exactly that signal."""
+    assert mod.VERSION == expected

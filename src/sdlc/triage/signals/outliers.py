@@ -18,10 +18,12 @@ from collections.abc import Mapping
 
 from ...measurement import Measurement
 from ...toolchain.adapters import ToolchainAdapter
-from ..models import FixClass, SignalResult, TriageFinding
+from ..models import (
+    FixClass, SignalResult, TriageFinding, dedupe_by_identity,
+)
 
 SIGNAL_ID = "outliers"
-VERSION = 1
+VERSION = 2
 
 M_MAX_FILE_LOC = "max_file_loc_seen"
 M_FUNCTION_LOC = "max_function_loc_seen"
@@ -102,10 +104,10 @@ def clone_groups(blobs: Mapping[str, str],
 
 def _finding(rule: str, severity: str, detail: str, fix_class: FixClass,
              path: str = "", line: int | None = None,
-             evidence: str = "") -> TriageFinding:
+             evidence: str = "", key: str = "") -> TriageFinding:
     return TriageFinding(signal=SIGNAL_ID, rule=rule, severity=severity,
                          detail=detail, fix_class=fix_class, path=path,
-                         line=line, evidence=evidence)
+                         line=line, evidence=evidence, key=key)
 
 
 def evaluate(blobs: Mapping[str, str],
@@ -148,7 +150,8 @@ def evaluate(blobs: Mapping[str, str],
                         f"{name}() in {path} is {loc} lines, above the "
                         f"{toolchain.max_function_loc}-line limit. Splitting "
                         f"it is design work.",
-                        FixClass.STRUCTURAL, path, start))
+                        FixClass.STRUCTURAL, path, start,
+                        key=name))
         if parsed_any:
             fn_metric = Measurement.measured(float(max_fn))
         elif not blobs:
@@ -178,7 +181,8 @@ def evaluate(blobs: Mapping[str, str],
                 f"A {window}-line block is identical across "
                 f"{', '.join(paths)}. Deduplicating requires deciding where "
                 f"the shared code belongs.",
-                FixClass.JUDGEMENT, path, line))
+                FixClass.JUDGEMENT, path, line,
+                key=",".join(paths)))
         # An approximation, and deliberately the understating one: merged
         # groups are counted at one window each even when the clone is longer,
         # and total_lines counts raw lines including blanks. A duplication
@@ -187,6 +191,7 @@ def evaluate(blobs: Mapping[str, str],
         dup_metric = Measurement.measured(
             duplicated / total_lines if total_lines else 0.0)
 
+    findings = dedupe_by_identity(findings)
     return SignalResult(
         signal=SIGNAL_ID, version=VERSION,
         collected=Measurement.measured(float(len(findings))),

@@ -68,6 +68,24 @@ class SignalResult(BaseModel):
                 f"happen. Partial output is UNKNOWN.")
         return self
 
+    @model_validator(mode="after")
+    def _identities_unique(self) -> "SignalResult":
+        """E-44 D3. Two findings with one identity are the same fact reported
+        twice: the delta cannot key on them, and the severity tally
+        double-counts. Signals collapse them with dedupe_by_identity; this
+        catches the case where a new rule forgot to supply `key` at all --
+        in the signal that caused it, not in the delta that inherits it."""
+        seen: set[str] = set()
+        for f in self.findings:
+            identity = finding_identity(f)
+            if identity in seen:
+                raise ValueError(
+                    f"{self.signal}: duplicate finding identity {identity!r} "
+                    f"-- the rule fires more than once per path and needs a "
+                    f"`key` (E-44 D3)")
+            seen.add(identity)
+        return self
+
 
 class Readiness(BaseModel):
     """FR-901's four dimensions. Every value is positive-is-good, so the

@@ -58,4 +58,4 @@ def test_every_registered_activity_is_registered_on_the_worker():
 def test_baseline_and_secrets_carry_their_bumped_versions():
     from sdlc.triage.registry import SIGNALS
     assert SIGNALS["baseline"].version == 2      # dropped M_STRUCTURE (D12)
-    assert SIGNALS["secrets"].version == 2       # django-insecure- exclusion
+    assert SIGNALS["secrets"].version == 3       # E-44 D3: finding `key`

@@ -15,10 +15,12 @@ from pydantic import BaseModel
 
 from ...measurement import Measurement
 from ..advisories import AdvisoryResult
-from ..models import FixClass, SignalResult, TriageFinding
+from ..models import (
+    FixClass, SignalResult, TriageFinding, dedupe_by_identity,
+)
 
 SIGNAL_ID = "dependencies"
-VERSION = 1
+VERSION = 2
 
 M_DIRECT = "direct_dependencies"
 M_VULNERABLE = "known_vulnerable"
@@ -256,10 +258,10 @@ def _provides(name: str) -> tuple[str, ...]:
 
 def _finding(rule: str, severity: str, detail: str, fix_class: FixClass,
              path: str = "", line: int | None = None,
-             evidence: str = "") -> TriageFinding:
+             evidence: str = "", key: str = "") -> TriageFinding:
     return TriageFinding(signal=SIGNAL_ID, rule=rule, severity=severity,
                          detail=detail, fix_class=fix_class, path=path,
-                         line=line, evidence=evidence)
+                         line=line, evidence=evidence, key=key)
 
 
 def evaluate(declared: Sequence[Declared], lockfile_present: bool,
@@ -284,7 +286,8 @@ def evaluate(declared: Sequence[Declared], lockfile_present: bool,
                 "unpinned_dependency", "medium",
                 f"{d.name} is declared without an exact version and "
                 f"{mitigation}.",
-                FixClass.MECHANICAL, d.manifest, d.line, d.raw))
+                FixClass.MECHANICAL, d.manifest, d.line, d.raw,
+                key=d.name))
 
     by_name: dict[str, set[str]] = {}
     origin: dict[str, Declared] = {}
@@ -300,7 +303,8 @@ def evaluate(declared: Sequence[Declared], lockfile_present: bool,
                 f"{name} is declared more than once with conflicting "
                 f"constraints ({constraints}); which one wins depends on "
                 f"install order.",
-                FixClass.MECHANICAL, origin[name].manifest))
+                FixClass.MECHANICAL, origin[name].manifest,
+                key=name))
 
     for adv in advisories.advisories:
         d = origin.get(normalize(adv.package))
@@ -314,7 +318,8 @@ def evaluate(declared: Sequence[Declared], lockfile_present: bool,
             # bump can break the build.
             FixClass.JUDGEMENT,
             d.manifest if d else "", d.line if d else None,
-            d.raw if d else ""))
+            d.raw if d else "",
+            key=f"{adv.package}:{adv.advisory_id}"))
 
     for name in sorted(by_name):
         if _is_tooling(name):
@@ -326,8 +331,10 @@ def evaluate(declared: Sequence[Declared], lockfile_present: bool,
             "unused_dependency", "low",
             f"{name} is declared but no source file imports it. Distribution "
             f"names and import names diverge, so confirm before removing.",
-            FixClass.MECHANICAL, d.manifest, d.line, d.raw))
+            FixClass.MECHANICAL, d.manifest, d.line, d.raw,
+            key=name))
 
+    findings = dedupe_by_identity(findings)
     return SignalResult(
         signal=SIGNAL_ID, version=VERSION,
         collected=Measurement.measured(float(len(findings))),

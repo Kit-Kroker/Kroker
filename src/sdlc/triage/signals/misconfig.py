@@ -19,10 +19,12 @@ import re
 from collections.abc import Mapping
 
 from ...measurement import Measurement
-from ..models import FixClass, SignalResult, TriageFinding
+from ..models import (
+    FixClass, SignalResult, TriageFinding, dedupe_by_identity, evidence_key,
+)
 
 SIGNAL_ID = "misconfig"
-VERSION = 1
+VERSION = 2
 
 M_FRAMEWORKS = "frameworks_detected"
 
@@ -86,10 +88,10 @@ def detect_frameworks(blobs: Mapping[str, str]) -> set[str]:
 
 def _finding(rule: str, severity: str, detail: str, fix_class: FixClass,
              path: str = "", line: int | None = None,
-             evidence: str = "") -> TriageFinding:
+             evidence: str = "", key: str = "") -> TriageFinding:
     return TriageFinding(signal=SIGNAL_ID, rule=rule, severity=severity,
                          detail=detail, fix_class=fix_class, path=path,
-                         line=line, evidence=evidence)
+                         line=line, evidence=evidence, key=key)
 
 
 def evaluate(blobs: Mapping[str, str]) -> SignalResult:
@@ -108,7 +110,8 @@ def evaluate(blobs: Mapping[str, str]) -> SignalResult:
                     detail = (detail + " Credentials are allowed alongside "
                                        "the wildcard.")
                 findings.append(_finding(rule, severity, detail, fix_class,
-                                         path, lineno, line.strip()[:400]))
+                                         path, lineno, line.strip()[:400],
+                                         key=evidence_key(line.strip()[:400])))
 
     frameworks = detect_frameworks(blobs)
     if frameworks:
@@ -125,6 +128,7 @@ def evaluate(blobs: Mapping[str, str]) -> SignalResult:
                 f"design work, not a scan.",
                 FixClass.STRUCTURAL, mutating[0]))
 
+    findings = dedupe_by_identity(findings)
     return SignalResult(
         signal=SIGNAL_ID, version=VERSION,
         collected=Measurement.measured(float(len(findings))),
