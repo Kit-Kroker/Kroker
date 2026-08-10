@@ -6,25 +6,38 @@ models.py: building pipeline contracts from triage findings is its whole job.
 from __future__ import annotations
 
 from ..models import (
-    ArchitectureDecision, ArchitectureSpec, DevTask, ImplementationPlan,
-    SeededWork, ValidationContract,
+    ArchitectureDecision,
+    ArchitectureSpec,
+    DevTask,
+    ImplementationPlan,
+    SeededWork,
+    ValidationContract,
 )
+from ..triage.admission import admits
 from ..triage.models import (
-    FixClass, RepoTriage, TriageFinding, Verdict, finding_identity,
+    FixClass,
+    RepoTriage,
+    TriageFinding,
+    finding_identity,
 )
 
 
 def admitted(triage: RepoTriage) -> bool:
-    """D7. E-42's admission rule verbatim -- the same line E-45 will use.
+    """D7. Tier 0's strictness of the ONE admission rule (E-45 D2).
 
     FR-903's gate blocks Tier 2, not tidy-up, so this is not automatic. It is
     adopted for a mechanical reason: on a repository that does not build,
     build_integration_green is an ABSOLUTE merge-gate check, so every fix run
     would produce a correct patch and then be blocked. That is N runs of model
     spend to learn what the build probe already reported.
+
+    That argument does not care WHO approved, hence require_human=False.
+    Tier 2 passes True, because an EDCR audit is expensive per-capability
+    reasoning terminating in a bundle handed to a customer (FR-921), where "a
+    human said proceed" is load-bearing.
     """
-    return (triage.readiness.verdict is Verdict.READY
-            or triage.override is not None)
+    ok, _ = admits(triage, require_human=False)
+    return ok
 
 
 def mechanical_backlog(
