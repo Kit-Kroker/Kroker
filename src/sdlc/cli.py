@@ -20,6 +20,8 @@
   python -m sdlc.cli tidyup --repo /path/to/repo
   python -m sdlc.cli tidyup select --id tidyup-myrepo-20260809T101500Z --identities a,b
   python -m sdlc.cli tidyup show --id tidyup-myrepo-20260809T101500Z
+  python -m sdlc.cli assess --repo /path/to/repo [--commit HEAD]
+  python -m sdlc.cli assess show --id assess-myrepo-20260810T101500Z
 """
 from __future__ import annotations
 
@@ -36,6 +38,7 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 
 from .models import GateOutcome, IdeaBrief, PipelineConfig, ProjectMode
 from .worker import TASK_QUEUE
+from .workflows.assessment import AssessmentInput, AssessmentWorkflow
 from .workflows.feature import FeatureWorkflow
 from .workflows.tidyup import TidyUpInput, TidyUpWorkflow
 from .workflows.triage import TriageInput, TriageWorkflow
@@ -70,6 +73,16 @@ def tidyup_workflow_id(repo: str, now: datetime | None = None) -> str:
     on the gate block the next one for that repository."""
     stamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
     return f"tidyup-{slug(os.path.basename(repo))}-{stamp}"
+
+
+def assess_workflow_id(repo: str, now: datetime | None = None) -> str:
+    """A distinct id per assessment RUN, for the same reason
+    triage_workflow_id carries a stamp (E-42 D5): Temporal refuses to start a
+    workflow whose id is already RUNNING, so a bare `assess-<slug>` would let
+    one assessment parked on its child's readiness gate (HARD by default,
+    48h) block the next assessment of that repository."""
+    stamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
+    return f"assess-{slug(os.path.basename(repo))}-{stamp}"
 
 
 _OUTCOME = {
@@ -262,6 +275,21 @@ def build_parser() -> argparse.ArgumentParser:
                           "omit the verb entirely to fix all of them")
     tush = tusub.add_parser("show")
     tush.add_argument("--id", required=True)
+
+    asr = sub.add_parser("assess")
+    asrsub = asr.add_subparsers(dest="assess_cmd")
+    asr.add_argument("--repo", help="path to an already-cloned repository")
+    asr.add_argument("--commit", default="HEAD")
+    asr.add_argument("--no-build-probe", action="store_true",
+                     dest="no_build_probe",
+                     help="skip the one signal that executes the repo's own "
+                          "code; readiness becomes INDETERMINATE, so "
+                          "admission then requires a human override")
+    asr.add_argument("--advisory-source", default="none",
+                     help="'osv' enables a declared outbound vulnerability "
+                          "lookup; default collects nothing")
+    ash = asrsub.add_parser("show")
+    ash.add_argument("--id", required=True)
     return p
 
 
@@ -464,6 +492,34 @@ async def main() -> None:
         print("NOTE: the build probe AND the fix runs execute this "
               "repository's own code as the worker user. Operator-run only "
               "(NFR-9).")
+        return
+
+    if args.cmd == "assess" and args.assess_cmd == "show":
+        handle = client.get_workflow_handle(args.id)
+        # Query by METHOD, not by name -- see the triage show handler.
+        report = await handle.query(AssessmentWorkflow.assessment)
+        print("no assessment yet" if report is None
+              else report.model_dump_json(indent=2))
+        return
+
+    if args.cmd == "assess":
+        if not args.repo:
+            raise SystemExit("assess requires --repo")
+        repo = os.path.abspath(args.repo)
+        wf_id = assess_workflow_id(repo)
+        handle = await client.start_workflow(
+            AssessmentWorkflow.run,
+            AssessmentInput(repo_dir=repo, commit=args.commit,
+                            build_probe=not args.no_build_probe,
+                            advisory_source=args.advisory_source),
+            id=wf_id, task_queue=TASK_QUEUE)
+        print(f"started {handle.id}")
+        # The FR-903 gate opens on the CHILD, so the operator needs the
+        # child's id -- `sdlc approve --id <parent>` reaches nothing.
+        print(f"NOTE: the readiness gate opens on {wf_id}-triage; approve "
+              f"with: sdlc approve --id {wf_id}-triage --gate readiness")
+        print("NOTE: the build probe executes this repository's own code as "
+              "the worker user. Operator-run only (NFR-9).")
         return
 
     if args.cmd == "inbox":

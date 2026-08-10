@@ -59,6 +59,7 @@ from .triage.activities import (
     triage_misconfig, triage_outliers, triage_resolve_commit,
     triage_scaffold, triage_secrets,
 )
+from .workflows.assessment import AssessmentWorkflow
 from .workflows.feature import FeatureWorkflow
 from .workflows.reflect import ReflectWorkflow
 from .workflows.tidyup import TidyUpWorkflow
@@ -94,7 +95,8 @@ async def main() -> None:
         client,
         task_queue=TASK_QUEUE,
         workflows=[FeatureWorkflow, BenchmarkWorkflow, ReflectWorkflow,
-                   DeploymentWorkflow, TriageWorkflow, TidyUpWorkflow],
+                   DeploymentWorkflow, TriageWorkflow, TidyUpWorkflow,
+                   AssessmentWorkflow],
         activities=[
             create_worktree, setup_integration_branch, merge_into_integration,
             build_verification_branch,
