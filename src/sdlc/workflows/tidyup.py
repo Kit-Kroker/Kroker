@@ -84,17 +84,17 @@ class FixRunResult(BaseModel):
 class TidyUpReport(BaseModel):
     before: RepoTriage
     after: RepoTriage | None = None
-    # FUTURE-CONSUMER TRAP: the after-triage measures, it does not gate, so
-    # triage_gates(..., gating=False) auto-approves its readiness gate. When
-    # the verify tree is not READY, RepoTriage.override is therefore set with
-    # approved_by == "policy" -- a machine placeholder, not a human act. That
-    # is harmless to compute_delta (it reads signals, not the override) and to
-    # the report (readiness_after is the computed verdict). It bites ONLY if a
-    # future consumer applies E-42/E-45's "verdict is READY or override is not
-    # None" admission rule to THIS field: it would admit a tree nobody human
-    # approved. E-45 narrowing its rule to HUMAN approvals closes it (the
-    # ROADMAP already lists that as a possible tightening); this note is a
-    # second reason it should.
+    # The after-triage measures, it does not gate, so triage_gates(...,
+    # gating=False) auto-approves its readiness gate. When the verify tree is
+    # not READY, RepoTriage.override is therefore set with approved_by ==
+    # "policy" -- a machine placeholder, not a human act. Harmless to
+    # compute_delta (it reads signals, not the override) and to the report
+    # (readiness_after is the computed verdict).
+    #
+    # CLOSED by E-45: Tier 2's admission rule is
+    # admits(..., require_human=True), which refuses a "policy" or "timeout"
+    # approval, so applying it to THIS field can no longer admit a tree
+    # nobody approved. Keep approved_by legible for the same reason.
     verify_ref: str | None = None
     backlog: list[str] = Field(default_factory=list)
     accepted: list[str] = Field(default_factory=list)

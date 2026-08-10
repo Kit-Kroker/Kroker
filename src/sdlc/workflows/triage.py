@@ -105,8 +105,8 @@ def override_from(decision: GateDecision) -> ReadinessOverride | None:
     """FR-903. Every APPROVE records an override -- one rule, no special
     cases -- with approved_by carrying decided_by VERBATIM, so "policy"
     (gate OFF) and "timeout" (on_timeout=APPROVE) stay legible as non-human.
-    E-45 may narrow its admission rule to human approvals; what this refuses
-    to do is discard the distinction."""
+    E-45's Tier 2 admission rule (triage/admission.py, require_human=True)
+    refuses both; what this refuses to do is discard the distinction."""
     if not decision.approved:
         return None
     return ReadinessOverride(

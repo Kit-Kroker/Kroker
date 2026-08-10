@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-08-09 (E-44 against `src/sdlc/{tidyup,workflows/tidyup.py,triage/delta.py}` + unit/component tests green; E-42 against `src/sdlc/workflows/{gates,triage}.py` + `pytest -m temporal`, with three review defects fixed; E-47a 2026-08-08 against `src/sdlc/capability/`; E-78 2026-08-07 against `src/sdlc/board/`; E-40/E-43 2026-08-06; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
+| Last verified | 2026-08-10 (E-45 against `src/sdlc/{assessment,workflows/assessment.py,triage/admission.py}` + unit/e2e tests green); 2026-08-09 (E-44 against `src/sdlc/{tidyup,workflows/tidyup.py,triage/delta.py}` + unit/component tests green; E-42 against `src/sdlc/workflows/{gates,triage}.py` + `pytest -m temporal`, with three review defects fixed; E-47a 2026-08-08 against `src/sdlc/capability/`; E-78 2026-08-07 against `src/sdlc/board/`; E-40/E-43 2026-08-06; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -99,8 +99,8 @@
   Not started.
 - [ ] ⚠️ **P5** — Triage + tidy-up (Tier 0/1), operator-run, single tenant → *one unfamiliar repository triaged, a mechanical backlog fixed through governed runs, before/after delta recorded*
   E-40/E-41/E-42/E-43/E-44 all landed in code. `[x]` here means "exit criterion **demonstrated**" (see P1 above), and no `TidyUpWorkflow` has run end-to-end yet: the four-scenario temporal e2e the plan specifies is deferred — its multi-workflow fan-out (a `TriageWorkflow` child whose readiness gate must be serviced plus N `FeatureWorkflow` fix children) is heavier than this Windows host's temporal dev-server can run contended. The components are each green under their own `pytest -m temporal` e2e (`test_triage_workflow_e2e`, `test_seeded_work`'s seeded run, `test_verification_branch`), the full unit suite is green, and `.run()` sequencing is unit-tested and follows the verified `GateHost`/`TriageWorkflow` pattern. Held at ⚠️ until the `TidyUpWorkflow` e2e runs (a CI host that can run the fan-out, or the env contention resolved). Operator-run only; **does not depend on P7**.
-- [ ] **P6** — Capability & risk audit (Tier 2) + evidence bundle → *one repository audited end-to-end with SC-7 held and a bundle handed over*
-  Not started (§11, E-45…E-56). Gated on P5's readiness verdict (FR-903), not merely sequenced after it.
+- [ ] ⚠️ **P6** — Capability & risk audit (Tier 2) + evidence bundle → *one repository audited end-to-end with SC-7 held and a bundle handed over*
+  **Opened 2026-08-10** with E-45's DAG shell; every phase body remains unbuilt (§11, E-46…E-56). Gated on P5's readiness verdict (FR-903), not merely sequenced after it — and the gate now requires a **human** approval to admit a tree that is not READY.
 - [ ] **P7** — Hosted multi-tenant service → *NFR-8 adversarial test green; FR-1002 container tier live; a tenant onboards unassisted*
   Not started (§12, E-57…E-63). **FR-1002 is the gating item for admitting any external tenant**, not a hardening task: today a customer's `npm install` executes as the worker user with the worker's toolchain and unrestricted network egress.
 - [ ] **P8** — Product outcome loop → *one hypothesis pre-registered, shipped, and decided by its own rule (SC-11/SC-12)*
@@ -204,11 +204,20 @@ as tracked rather than accidental.
   health, generator-scaffold/dead code, framework-default misconfig, and
   size/duplication outliers (E-41a–d, 2026-08-08).
 - [x] **FR-903** readiness gate blocking Tier 2, overridable by audited decision (E-42). *The gate resolves through the existing FR-301/302 machinery (now in `GateHost`); a verdict that is not READY opens a `readiness` gate, and an APPROVE records a `ReadinessOverride` on the artifact. E-45's admission rule is `verdict is READY or override is not None`.*
+  *2026-08-10 (E-45):* the rule is now one function at two strictnesses
+  (`triage/admission.py`). Tier 2 requires `approved_by == "human"`, so a
+  `policy` (gate OFF) or `timeout` approval no longer admits an audit; Tier 0
+  keeps the broader rule for the build-economics reason `backlog.admitted`
+  documents.
 - [x] **FR-904** `mechanically_fixable` → brownfield child runs + before/after re-triage (E-44). Landed: `TidyUpWorkflow` turns accepted MECHANICAL findings into seeded `FeatureWorkflow` child runs (one PR each), then re-runs triage against `build_verification_branch`'s composite tree and records `compute_delta`.
 
 ### Assessment, Tier 2 — capability & risk audit (FR-910) *(new scope; PRD v1.1)*
 
-- [ ] **FR-911** `AssessmentWorkflow` EDCR DAG, report-after-assess, no phase-status file (E-45); `/enrich` as a declared stage input rather than a phase (E-56).
+- [ ] ⚠️ **FR-911** `AssessmentWorkflow` EDCR DAG, report-after-assess, no
+  phase-status file (E-45) — **the DAG and both deviations landed 2026-08-10**;
+  six of seven phase bodies are stubs reporting `not_collected` with the E-item
+  that owes them, so an assessment that assessed nothing says so (FR-915).
+  `/enrich` as a declared stage input remains E-56.
 - [ ] **FR-912** deterministic scan memoized on `(tree hash, signal version)`; cross-source confidence (E-46).
 - [ ] ⚠️ **FR-913** `CapabilityMap` with stable ids + coverage floor + orphan classification — **also satisfies FR-102** (E-47a/E-47b/E-47c/E-48). **Identity half landed 2026-08-08 (E-47a):** surrogate `BC-NNN` ids, weighted-Jaccard re-attachment, audited `IdentityCorrection` (`src/sdlc/capability/`). Coverage floor + orphans (E-47b) and L2/entity-ownership (E-47c) still open.
 - [ ] **FR-914** byte-exact quote verification against the pinned commit, fail-closed — shares FR-107's verifier (E-43). *Partially landed 2026-08-06 (`grounding.py`: one substring invariant, two normalization profiles, verdict-only) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The verifier + research/handoff/deep-review consumers landed; the commit source gained its first consumer with E-41's secrets signal (2026-08-06), which re-verifies every emitted evidence quote against the pinned commit; stays open until an LLM-proposing assessment stage cites the same way, which is where the check stops being a drift guard.*
@@ -898,22 +907,33 @@ asked to check its own citations. Ported here, each of those becomes a
 absolute/advisory split of FR-106 — which is the entire reason to do this inside
 the factory rather than as prompts.
 
-- [ ] **E-45 — `AssessmentWorkflow` EDCR DAG shell** → FR-911.
-  init → scan → discover → assess → **report** → generate → finish.
-  Two deliberate deviations from the source methodology: **(a)** `report` runs
-  *after* `assess` — the methodology numbers report 4th and assess 5th, but
-  reports render risk scores only `assess` produces, and `/finish` requires all
-  five reports complete; **(b)** `workflow.json` is **not ported** — its
-  `phases[].status/started_at/completed_at/artifacts` is a hand-rolled durable
-  state machine, which is exactly what Temporal history already is.
-  `/enrich`, `/gate` and `/validate` are not stages (→ E-56, E-50, E-53).
-  **Admission rule (second reason to narrow to HUMAN approvals):** E-42's rule
-  is `verdict is READY or override is not None`. E-44's `TidyUpWorkflow`
-  after-triage auto-approves its own (OFF) readiness gate, so
-  `TidyUpReport.after.override.approved_by == "policy"` whenever the verify
-  tree is not READY -- a machine placeholder, not a human act. Applying the
-  current rule to that field would admit a tree nobody approved. Narrowing to
-  `approved_by == "human"` (already listed as a possible tightening) closes it.
+- [x] **E-45 — `AssessmentWorkflow` EDCR DAG shell** → FR-911. *Landed
+  2026-08-10.* init → scan → discover → assess → **report** → generate →
+  finish, with six phase bodies deliberately unbuilt (scan E-46, discover
+  E-48, assess E-49, finish E-51, report/generate E-52), each reporting
+  `not_collected` naming the item that owes it. Two deliberate deviations
+  from the source methodology: **(a)** `report` runs *after* `assess` —
+  reports render risk scores only `assess` produces; **(b)** `workflow.json`
+  is **not ported** — its `phases[].status/started_at/completed_at` is a
+  hand-rolled durable state machine, which is what Temporal history already
+  is. `/enrich`, `/gate` and `/validate` are not stages (→ E-56, E-50, E-53).
+  Three sub-decisions the one-line description did not contain:
+  **(D2)** the **admission rule is one function at two strictnesses** —
+  `triage/admission.py:admits(triage, *, require_human)`, with Tier 0's
+  `backlog.admitted` delegating at `False` and Tier 2 passing `True`. This
+  closes the `FUTURE-CONSUMER TRAP` `workflows/tidyup.py` documented: the
+  after-triage auto-approves its own OFF gate, so
+  `TidyUpReport.after.override.approved_by == "policy"`, and E-42's broader
+  rule would have admitted a tree nobody approved. Two copies of the rule
+  would agree only by coincidence, so the strictness is a parameter.
+  **(D3)** `init` runs a **`TriageWorkflow` child** and never accepts a
+  `RepoTriage` as input — the rule's whole subject is `override.approved_by`,
+  and a caller-supplied artifact is a caller-supplied value for exactly that
+  field. **(D6)** `terminal_status` is **derived**, so E-46 landing flips
+  `admitted:no-phases-implemented` → `assessed:partial` with no workflow
+  edit. Spec
+  `docs/superpowers/specs/2026-08-10-assessment-workflow-edcr-shell-design.md`,
+  plan `docs/superpowers/plans/2026-08-10-assessment-workflow-edcr-shell.md`.
 - [ ] **E-46 — scan phase** → FR-912. S1–S5 capability signals, SS1–SS4
   security, QS1–QS4 QA. Cross-source confidence: three or more independent
   sources = high, two = medium, one = low — never the depth of one source. Memo
