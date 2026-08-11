@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import inspect
 
+import pytest
+
 from sdlc.assessment.models import (
     ASSESSED, BLOCKED, NO_PHASES, PHASE_ORDER, PhaseId, PhaseResult,
     InitOutcome,
@@ -109,6 +111,18 @@ def test_assemble_orders_phases_canonically_regardless_of_arrival():
         [unbuilt(p) for p in PHASE_ORDER if p is not PhaseId.INIT]))
     a = assemble("/r", _init(), True, "verdict ready", rest)
     assert [p.phase for p in a.phases] == list(PHASE_ORDER)
+
+
+def test_assemble_rejects_a_partial_rest_on_an_admitted_run():
+    """An admitted run has no 'unreached' phases -- run() always supplies all
+    six. A missing one is a caller bug, and filling it with skipped() would
+    stamp 'not admitted' onto an artifact whose admitted field is True -- a
+    contradiction on the face of an FR-921 bundle (review finding 1). The
+    not-admitted path still fills with skipped(), whose message is then
+    truthful."""
+    partial = [unbuilt(PhaseId.SCAN)]            # one of six
+    with pytest.raises(ValueError, match="admitted"):
+        assemble("/r", _init(), True, "verdict ready", partial)
 
 
 def test_skipped_names_the_reason_it_did_not_run():

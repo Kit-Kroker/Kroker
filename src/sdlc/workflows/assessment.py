@@ -86,12 +86,23 @@ def assemble(repo_dir: str, init: InitOutcome, admitted: bool, reason: str,
     terminal_status: one place where the artifact is built means the derived
     status cannot disagree with the phase list it was derived from.
 
-    Unreached phases are filled rather than omitted, so `phases` is always
-    the whole DAG and anything rendering it can rely on that.
+    When NOT admitted, unreached phases are filled with skipped() -- whose
+    'not admitted' message is then truthful -- so `phases` is always the whole
+    DAG. When admitted, every non-init phase MUST be supplied (run() always
+    does): an admitted run has no 'unreached' phases, and filling a missing
+    one with skipped() would stamp 'not admitted' onto an artifact whose
+    admitted field is True (review finding 1).
     """
+    owed = [p for p in PHASE_ORDER if p is not PhaseId.INIT]
     by_id = {p.phase: p for p in (rest or [])}
-    phases = [init.result] + [by_id.get(p, skipped(p))
-                              for p in PHASE_ORDER if p is not PhaseId.INIT]
+    if admitted:
+        missing = [p for p in owed if p not in by_id]
+        if missing:
+            raise ValueError(
+                f"admitted run missing phase result(s) "
+                f"{[p.value for p in missing]} -- an admitted run has no "
+                f"unreached phases; supply every non-init result")
+    phases = [init.result] + [by_id.get(p, skipped(p)) for p in owed]
     t = init.triage
     return Assessment(
         repo_dir=repo_dir,
