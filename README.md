@@ -92,6 +92,16 @@ not be evaluated is `errored` and never counts as a pass.
   real keys.
 - Added a new module and hit `ModuleNotFoundError`? Re-run `pip install -e .`
   (setuptools' editable wheel doesn't auto-discover new files).
+- Prompt changes are gated (E-82):
+  `SDLC_PROMPT_EVAL=1 python -m pytest -m prompt_eval` A/B-scores each changed
+  `agents/<role>/instructions.md` against its committed baseline via promptfoo
+  (`pip install -e .[eval]`; needs Node ≥ 22.22; spends tokens). Deterministic
+  checks — output validates as the role's `output_type`, cost/latency budgets —
+  are absolute and gate; the cross-family judge is advisory and fails only on a
+  regression past a noise-aware floor. Ad hoc: `python -m sdlc.cli eval clarify
+  --case add-login-greenfield --gate`. Results land in `runs/prompt_evals/` and
+  join the benchmark record stream by `prompt_sha` **only** — they are never
+  merged into the heatmap, matrices, or SC rollup.
 - See [`docs/foundation.md`](docs/foundation.md) for the contracts, activities,
   and the deterministic gate, and
   [`docs/architecture-review-2026-07.md`](docs/architecture-review-2026-07.md)

@@ -12,8 +12,8 @@
   python -m sdlc.cli schedules apply
   python -m sdlc.cli benchmark import-deveval --src /path/DevEval/benchmark_data/python
   python -m sdlc.cli benchmark verify-case --case deveval-lice
-  python -m sdlc.cli eval clarify --case add-login-greenfield
-  python -m sdlc.cli eval reviewer --against HEAD
+  python -m sdlc.cli eval clarify --case add-login-greenfield --gate
+  python -m sdlc.cli eval planner --case cat-cafe-monitoring --n 5
   python -m sdlc.cli triage --repo /path/to/repo [--commit HEAD]
   python -m sdlc.cli triage --repo /path/to/repo --no-build-probe
   python -m sdlc.cli triage show --id triage-myrepo-20260809T101500Z
@@ -226,6 +226,10 @@ def build_parser() -> argparse.ArgumentParser:
     ev.add_argument("--against", default="HEAD")
     ev.add_argument("--n", type=int, default=1, dest="k")
     ev.add_argument("--judge-model", default=None, dest="judge_model")
+    ev.add_argument("--gate", action="store_true",
+                    help="exit non-zero on a failing verdict")
+    ev.add_argument("--view", action="store_true",
+                    help="open the promptfoo viewer after the run")
 
     cal = sub.add_parser("calibrate")
     cal.add_argument("target", help="a rubric/role name, or 'capture'")
@@ -392,15 +396,19 @@ async def main() -> None:
         return
 
     if args.cmd == "eval":
-        from .eval.cli import default_judge_model, run_eval
-        from .eval.compare import EvalError
+        from .eval.cli import EvalError, default_judge_model, run_eval
         try:
             judge = args.judge_model or default_judge_model()
-            print(run_eval(args.target, against=args.against, case=args.case,
-                           k=args.k, judge_model=judge))
+            print(run_eval(args.target, case=args.case, against=args.against,
+                           k=args.k, judge_model=judge, gate=args.gate))
         except EvalError as e:
             print(f"eval error: {e}")
             raise SystemExit(1)
+        if args.view:
+            import subprocess
+
+            from .eval.promptfoo import promptfoo_bin
+            subprocess.run([promptfoo_bin(), "view"])
         return
 
     if args.cmd == "calibrate":

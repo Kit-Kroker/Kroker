@@ -99,13 +99,13 @@ def _seeded_prompt(role: str, case_id: str, cases_root: Path) -> str:
         f"_seeded_prompt (the E-82 design doc section 4.2 lists the contents)")
 
 
-def build_fixture(role: str, case_id: str, cases_root: Path,
-                  agents_dir: Path) -> EvalFixture:
-    """Construct a role's frozen input from a golden case, deterministically.
+def validate_role(role: str) -> None:
+    """Refuse a role the eval loop cannot handle.
 
-    Memory items are empty by construction: a fixture must not depend on a
-    live memory backend, and an empty snapshot is what an unattended cell
-    sees anyway.
+    Called by run_gate BEFORE any git or filesystem work: an unknown role
+    would otherwise surface as a raw FileNotFoundError from
+    `git show HEAD:agents/<role>/instructions.md` rather than a clean,
+    actionable message.
     """
     if role in DEPS_ROLES:
         raise FixtureError(
@@ -114,6 +114,17 @@ def build_fixture(role: str, case_id: str, cases_root: Path,
     if role not in SUPPORTED_ROLES:
         raise FixtureError(f"unknown role '{role}'; supported: "
                            f"{', '.join(sorted(SUPPORTED_ROLES))}")
+
+
+def build_fixture(role: str, case_id: str, cases_root: Path,
+                  agents_dir: Path) -> EvalFixture:
+    """Construct a role's frozen input from a golden case, deterministically.
+
+    Memory items are empty by construction: a fixture must not depend on a
+    live memory backend, and an empty snapshot is what an unattended cell
+    sees anyway.
+    """
+    validate_role(role)
     spec = _load_case(case_id, cases_root)
     model = _role_model(role, agents_dir)
 

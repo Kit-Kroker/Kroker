@@ -281,7 +281,13 @@ def calibration_fixtures_from_events(
     """Pure: normalized history events -> capture fixtures (human_score None)
     for one role. A normalized event is {"activity": str, "output": str}
     where output is the produced artifact JSON. Keeps the FIRST matching
-    event, mirroring eval.fixtures_from_events."""
+    event.
+
+    Calibration still captures from history; the prompt-eval loop no longer
+    does (E-82 retired eval.fixtures_from_events in favour of constructing
+    fixtures from the same builders production calls). The two are unrelated:
+    calibration needs the artifact a real run PRODUCED, which cannot be
+    reconstructed."""
     agent = role_to_agent.get(role)
     if agent is None:
         return []

@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from .fixtures import validate_role
 from .promptfoo import promptfoo_bin
 from .promptfoo.config import build_config
 from .promptfoo.provider import resolve_instructions
@@ -49,6 +50,10 @@ def run_gate(role: str, case: str, *, repo_root: Path, cases_root: Path,
              delta_min: float = 0.05, baseline_ref: str = "HEAD",
              max_calls: int = 40,
              out_dir: Path | None = None) -> PromptGateResult:
+    # Before any git/filesystem work: an unknown role must not surface as a
+    # raw FileNotFoundError from `git show HEAD:agents/<role>/instructions.md`.
+    validate_role(role)
+
     if promptfoo_bin() is None:
         raise GateUnavailable(
             "promptfoo is not installed. `pip install -e .[eval]` — the gate "
