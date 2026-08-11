@@ -3,6 +3,12 @@ weights:
   quality: 0.6
   cost: 0.2
   speed: 0.2
-# Default judge model — must be a DIFFERENT family than any author model in
-# a case's matrix (ADR-6). The matrix expander rejects same-family configs.
-default_judge_model: openai/gpt-5.2
+# Default judge model — must differ from every author model in a case's matrix
+# by BOTH family and identity (ADR-6). The matrix expander rejects same-family
+# configs; the prompt gate additionally rejects same-identity ones.
+#
+# Gemini, not GPT: the shipped proposer roles run `anthropic:glm-5.2` against
+# ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic — the prefix is a protocol
+# label, the weights are GLM. google:gemini-3.5-flash is decorrelated on both
+# axes and authenticates from GEMINI_API_KEY, which this deployment sets.
+default_judge_model: google:gemini-3.5-flash

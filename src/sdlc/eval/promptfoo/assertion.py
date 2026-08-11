@@ -16,7 +16,7 @@ from pathlib import Path
 import yaml
 
 # Absolute: promptfoo loads this file standalone (see provider.py).
-from sdlc.agents.loader import model_family
+from sdlc.agents.loader import model_family, model_id
 from sdlc.benchmarks.judge import JudgeInput, judge_artifact
 from sdlc.eval.verdict import JUDGE_UNAVAILABLE
 
@@ -66,6 +66,19 @@ def grade(output: str, context: dict) -> dict:
                 "reason": f"ADR-6 violation: judge '{judge}' shares family "
                           f"'{model_family(judge)}' with author '{author}'. "
                           f"Pick a different family."}
+    # Family alone is not enough. A provider prefix says who SERVES a model,
+    # not what it is -- this repo runs `anthropic:glm-5.2` against
+    # ANTHROPIC_BASE_URL=api.z.ai, so `zai-coding-plan/glm-5.2` would clear
+    # the family check while being the very same weights grading their own
+    # output. loader.py:237 already guards the adversary this way; the judge
+    # needs the same guard for the same reason.
+    if model_id(judge) == model_id(author):
+        return {"pass": False, "score": 0.0,
+                "reason": f"ADR-6 violation: judge '{judge}' and author "
+                          f"'{author}' are the same model "
+                          f"'{model_id(judge)}' behind different provider "
+                          f"prefixes. Two prefixes over the same weights "
+                          f"decorrelate nothing."}
     try:
         rubric = load_rubric(v["case"], v["role"], Path(v["cases_root"]))
     except RubricError as e:

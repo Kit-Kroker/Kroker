@@ -457,23 +457,37 @@ gate run that was needed.
 - **OQ-P3 — promptfoo version pinning.** The contract test detects schema
   drift; it does not decide whether to pin exactly or float within a range.
 
-- **OQ-P4 — the judge half is unproven live.** The first live run exercised
-  config → promptfoo → real provider calls → absolute assertions → verdict,
-  and correctly reported `judge unavailable … regression NOT evaluated`. It
-  could not go further: `default_judge_model` is `openai/gpt-5.2` and no
-  `OPENAI_API_KEY` is configured, and ADR-6 forbids substituting an
-  Anthropic-family judge for the `anthropic:glm-5.2` author. So the advisory
-  judge and the noise-floor regression math have only ever run against fakes.
-  Set an OpenAI key (or add a third-family judge) and re-run
-  `SDLC_PROMPT_EVAL=1 pytest -m prompt_eval` to close this.
+- **OQ-P4 — RESOLVED 2026-08-11. The judge runs; the default judge changed.**
+  The original `openai/gpt-5.2` default had no key. `google:gemini-3.5-flash`
+  is now `default_judge_model`: it authenticates from `GEMINI_API_KEY` (which
+  this deployment sets) and is decorrelated from the proposers on both axes.
+  End-to-end verified — config → promptfoo → real provider calls → absolute
+  assertions → **real Gemini judge** → verdict.
 
-- **OQ-P5 — the absolute output-type check may be near-vacuous.** Truncating
-  `clarify`'s instructions to `"Answer briefly."` still produced a *valid*
-  `ClarifiedRequirements`: pydantic-ai enforces `output_type` through tool
-  calling, so a structured-output role essentially cannot emit a
-  schema-invalid artifact. The absolute tier's real teeth are therefore the
-  cost/latency budgets and the blank-required-string check, not schema
-  validation. Worth deciding whether the tier needs a stronger absolute
-  signal (non-trivial field lengths? a minimum requirement count?) or whether
-  the advisory judge is genuinely the only thing that can catch a degraded
-  prompt that still type-checks.
+  This surfaced a hole in the ADR-6 check. The proposers run
+  `anthropic:glm-5.2` against `ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic`,
+  so the prefix names the *protocol*, not the weights. A judge declared
+  `zai-coding-plan/glm-5.2` cleared the family check while being the same
+  model grading its own output. `assertion.py` now also compares
+  `model_id()`, matching the guard `loader.py:237` already applies to the
+  adversary: *two prefixes over the same weights decorrelate nothing.*
+
+- **OQ-P5 — sharpened: instructions carry less signal than assumed for
+  structured-output roles.** Truncating `clarify`'s instructions to
+  `"Answer briefly."` produced an artifact that was not merely schema-valid
+  but scored **1.00 from the real judge** — identical to the full prompt.
+  Two compounding causes: pydantic-ai enforces `output_type` via tool
+  calling, and the schema's own field descriptions carry much of the
+  instruction. So the absolute tier's teeth are the cost/latency budgets and
+  the blank-string check, and the advisory judge did not discriminate either.
+
+  This is the open question the increment cannot answer on its own: **what
+  prompt degradation would this gate actually catch?** Candidates worth
+  testing before trusting it — a prompt that inverts an instruction rather
+  than removing it; a stricter rubric; a judge with a lower ceiling than
+  `gemini-3.5-flash`. Until one of those demonstrably moves the score, the
+  gate is proven *operational* but not proven *sensitive*.
+
+  (Score fidelity itself is not the problem: a contract test confirms a
+  custom assertion's `0.42` survives into `results.json` unnormalised, so the
+  regression math reads real numbers.)

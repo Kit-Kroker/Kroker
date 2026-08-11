@@ -98,3 +98,27 @@ def test_get_assert_accepts_an_object_context():
 
     res = assertion.get_assert("{}", _Ctx())
     assert res["pass"] is False          # ADR-6 collision, reached the check
+
+
+def test_same_weights_behind_different_prefixes_is_refused():
+    """This repo runs `anthropic:glm-5.2` against ANTHROPIC_BASE_URL=api.z.ai,
+    so the provider prefix says who SERVES the model, not what it is.
+    `zai-coding-plan/glm-5.2` clears the family check while being the same
+    weights -- exactly what loader.py:237 guards the adversary against."""
+    res = grade('{}', _ctx(judge_model="zai-coding-plan/glm-5.2"))
+    assert res["pass"] is False
+    assert "same model" in res["reason"]
+    assert "glm-5.2" in res["reason"]
+
+
+def test_a_genuinely_decorrelated_judge_is_accepted():
+    import json as _json
+
+    _set_judge_fn(lambda inp: _json.dumps({"score": 0.9, "components": {}}))
+    try:
+        res = grade('{"open_questions": []}',
+                    _ctx(judge_model="google:gemini-3.5-flash"))
+    finally:
+        _set_judge_fn(None)
+    assert res["pass"] is True
+    assert res["score"] == 0.9
