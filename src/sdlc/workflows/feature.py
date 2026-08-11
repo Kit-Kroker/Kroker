@@ -61,6 +61,9 @@ with workflow.unsafe.imports_passed_through():
     from ..observability.trace import RunEvent, RunEventKind
     from ..observability.usage import cost_bag_from_spend, merge_usage
     from ..pricing import PriceUsageInput, price_usage
+    from ..prompts import (analyst_prompt, clarify_prompt,
+                           merge_verdict_prompt, planner_prompt, qa_prompt,
+                           reviewer_prompt)
     from ..artifacts.retention import (RetentionInput, apply_session_retention,
                                        keep_full_transcripts)
     from ..artifacts.read import LoadSessionInput, load_session
@@ -1401,10 +1404,8 @@ class FeatureWorkflow(GateHost):
             )
             qa_spend = RoleUsage(role="qa", model=resolve_role_model(cfg, "qa"))
             qa = (await self._run_role(cfg, "qa", resolve_role_model(cfg, "qa"), t_qa,
-                "Frozen contract assertions:\n- " + "\n- ".join(assertions)
-                + f"\nTest results: {qa_raw.model_dump_json()}"
-                + f"\nDiff stat:\n{diff['stat']}"
-                + f"\nDiff:\n{diff['patch']}", into=qa_spend)).output
+                qa_prompt(assertions, qa_raw.model_dump_json(),
+                          diff["stat"], diff["patch"]), into=qa_spend)).output
 
             # Second clean-context judge (FR-204): same inputs as QA — frozen
             # contract + materialized diff + test output. No narrative, no
@@ -1412,9 +1413,8 @@ class FeatureWorkflow(GateHost):
             review = None
             if cfg.review_enabled:
                 review = (await self._run_role(cfg, "reviewer", STAGE_MODELS.get("review", "unknown"), t_reviewer,
-                    "Frozen contract assertions:\n- " + "\n- ".join(assertions)
-                    + f"\nTest results: {qa_raw.model_dump_json()}"
-                    + f"\nDiff:\n{diff['patch']}")).output
+                    reviewer_prompt(assertions, qa_raw.model_dump_json(),
+                                    diff["patch"]))).output
 
             # `qa_raw.tests_passed` is the actual subprocess exit code;
             # `qa.tests_passed` is the LLM QA agent's OWN retyped guess at
@@ -1890,9 +1890,8 @@ class FeatureWorkflow(GateHost):
 
         async def _run_clarify():
             return (await self._run_role(cfg, "clarify", resolve_role_model(cfg, "clarify"), t_clarify,
-                idea.model_dump_json()
-                + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
-                   if snapshot.items else ""), into=clarify_spend)).output
+                clarify_prompt(idea.model_dump_json(), snapshot.items),
+                into=clarify_spend)).output
 
         reqs, _ = await self._cached_stage(
             cfg, "clarify", idea.model_dump_json() + brief_digest_val,
@@ -2037,11 +2036,8 @@ class FeatureWorkflow(GateHost):
         plan_spend = RoleUsage(role="planner", model=resolve_role_model(cfg, "plan"))
 
         async def _run_plan(guidance: str | None):
-            prompt = (arch.model_dump_json()
-                      + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
-                         if snapshot.items else "")
-                      + (f"\nRevision guidance from reviewer:\n{guidance}"
-                         if guidance else ""))
+            prompt = planner_prompt(arch.model_dump_json(), snapshot.items,
+                                    guidance)
 
             async def _produce():
                 return (await self._run_role(cfg, "planner", resolve_role_model(cfg, "plan"), t_planner, prompt, into=plan_spend)).output
@@ -2189,10 +2185,9 @@ class FeatureWorkflow(GateHost):
             for r in done.values())
         analyst_spend = RoleUsage(role="analyst", model=resolve_role_model(cfg, "analyze"))
         analysis: AnalysisReport = (await self._run_role(cfg, "analyst", resolve_role_model(cfg, "analyze"), t_analyst,
-            "Acceptance criteria (task_id in brackets):\n" + _criteria_lines
-            + "\nAggregate test output:\n" + _qa_lines
-            + f"\nIntegration diff stat:\n{integration_diff['stat']}"
-            + f"\nIntegration diff:\n{integration_diff['patch']}", into=analyst_spend)).output
+            analyst_prompt(_criteria_lines, _qa_lines,
+                           integration_diff["stat"],
+                           integration_diff["patch"]), into=analyst_spend)).output
         untraced = untraced_criteria(authoritative, analysis)
         await self._record(cfg, self._stage_record(
             cfg, stage="analyze", role="analyst",
@@ -2358,8 +2353,8 @@ class FeatureWorkflow(GateHost):
             # build; it can never reach this branch otherwise.
             if cfg.gates.get("merge", GateConfig()).policy == GatePolicy.SOFT:
                 verdict: MergeVerdict = (await self._run_role(cfg, "merge_verdict", STAGE_MODELS.get("merge_verdict", "unknown"), t_merge_verdict,
-                    "Advisory only — the deterministic gate already passed. "
-                    f"Task results: {[r.model_dump() for r in done.values()]}"
+                    merge_verdict_prompt([r.model_dump()
+                                          for r in done.values()])
                 )).output
                 auto = _auto_decision_for(
                     "merge", cfg,
