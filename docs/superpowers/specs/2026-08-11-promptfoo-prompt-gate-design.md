@@ -456,3 +456,24 @@ gate run that was needed.
   trigger.
 - **OQ-P3 — promptfoo version pinning.** The contract test detects schema
   drift; it does not decide whether to pin exactly or float within a range.
+
+- **OQ-P4 — the judge half is unproven live.** The first live run exercised
+  config → promptfoo → real provider calls → absolute assertions → verdict,
+  and correctly reported `judge unavailable … regression NOT evaluated`. It
+  could not go further: `default_judge_model` is `openai/gpt-5.2` and no
+  `OPENAI_API_KEY` is configured, and ADR-6 forbids substituting an
+  Anthropic-family judge for the `anthropic:glm-5.2` author. So the advisory
+  judge and the noise-floor regression math have only ever run against fakes.
+  Set an OpenAI key (or add a third-family judge) and re-run
+  `SDLC_PROMPT_EVAL=1 pytest -m prompt_eval` to close this.
+
+- **OQ-P5 — the absolute output-type check may be near-vacuous.** Truncating
+  `clarify`'s instructions to `"Answer briefly."` still produced a *valid*
+  `ClarifiedRequirements`: pydantic-ai enforces `output_type` through tool
+  calling, so a structured-output role essentially cannot emit a
+  schema-invalid artifact. The absolute tier's real teeth are therefore the
+  cost/latency budgets and the blank-required-string check, not schema
+  validation. Worth deciding whether the tier needs a stronger absolute
+  signal (non-trivial field lengths? a minimum requirement count?) or whether
+  the advisory judge is genuinely the only thing that can catch a degraded
+  prompt that still type-checks.
