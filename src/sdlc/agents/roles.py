@@ -34,11 +34,11 @@ def _model(role: str) -> str:
     is checked during load_registry above."""
     return REGISTRY[role].model
 
-# Structured-output agents emit typed tool calls; Pydantic AI's 4096-token
-# default truncates the tool-call arguments to {} on larger schemas (or when
-# the model spends tokens on reasoning first). Override via SDLC_MODEL_MAX_TOKENS.
-MODEL_SETTINGS = ModelSettings(max_tokens=int(
-    os.environ.get("SDLC_MODEL_MAX_TOKENS", "64000")))
+# Re-exported from agents/settings.py, which carries the rationale. It lives
+# there so the eval path can import the settings without triggering this
+# module's ~18s eager agent construction (E-82). This name stays importable
+# from `sdlc.agents.roles` -- feature.py and worker.py rely on it.
+from .settings import MODEL_SETTINGS  # noqa: E402
 
 AGENTS = build_agents(REGISTRY, MODEL_SETTINGS)
 

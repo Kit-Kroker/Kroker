@@ -6,6 +6,7 @@ instructions_ref -- that is the A/B axis (E-82 design doc 4.3).
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import yaml
@@ -13,6 +14,20 @@ import yaml
 from ..fixtures import build_fixture
 
 _HERE = Path(__file__).resolve().parent
+
+
+def _rel_file_url(target: Path, out_dir: Path) -> str:
+    """A `file://` URL promptfoo can actually resolve.
+
+    promptfoo joins the config's directory onto the path in a `file://`
+    provider/assertion URL. An absolute Windows path therefore becomes
+    nonsense -- `C:\\...\\tmp\\D:\\own\\Kroker\\...` -- and the worker dies with
+    OSError 22. So the path must be RELATIVE to the config's own directory,
+    which in turn requires out_dir to sit on the same drive as this package
+    (run_gate puts its scratch dir under the repo for exactly that reason).
+    Forward slashes: promptfoo parses the URL, and backslashes are escapes.
+    """
+    return "file://" + os.path.relpath(target, out_dir).replace("\\", "/")
 
 
 def build_config(role: str, case: str, *, repo_root: Path, cases_root: Path,
@@ -32,7 +47,7 @@ def build_config(role: str, case: str, *, repo_root: Path, cases_root: Path,
         "agents_dir": str(agents_dir),
         "repo_root": str(repo_root),
     }
-    provider_id = f"file://{_HERE / 'provider.py'}:call_api"
+    provider_id = f"{_rel_file_url(_HERE / 'provider.py', out_dir)}:call_api"
 
     cfg = {
         "description": f"prompt gate: {role} on {case}",
@@ -56,11 +71,11 @@ def build_config(role: str, case: str, *, repo_root: Path, cases_root: Path,
             # cosmetic to promptfoo but keeps results.json readable.
             "assert": [
                 {"type": "python",
-                 "value": f"file://{_HERE / 'absolute.py'}"},
+                 "value": _rel_file_url(_HERE / "absolute.py", out_dir)},
                 {"type": "cost", "threshold": max_cost_usd},
                 {"type": "latency", "threshold": max_latency_ms},
                 {"type": "python",
-                 "value": f"file://{_HERE / 'assertion.py'}"},
+                 "value": _rel_file_url(_HERE / "assertion.py", out_dir)},
             ],
         },
         "tests": [{"vars": {"input": fixture.prompt}}],

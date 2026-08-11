@@ -11,13 +11,14 @@ family with the author is a configuration error, not a measurement.
 """
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import yaml
 
-from ...agents.loader import model_family
-from ...benchmarks.judge import JudgeInput, judge_artifact
+# Absolute: promptfoo loads this file standalone (see provider.py).
+from sdlc.agents.loader import model_family
+from sdlc.benchmarks.judge import JudgeInput, judge_artifact
+from sdlc.eval.verdict import JUDGE_UNAVAILABLE
 
 # role -> the key used in case.yaml's `rubrics:` map. Migrated verbatim from
 # the retired eval/compare.py.
@@ -61,32 +62,43 @@ def grade(output: str, context: dict) -> dict:
     author, judge = v.get("author_model", ""), v.get("judge_model", "")
 
     if model_family(judge) == model_family(author):
-        return {"pass": False, "score": None,
+        return {"pass": False, "score": 0.0,
                 "reason": f"ADR-6 violation: judge '{judge}' shares family "
                           f"'{model_family(judge)}' with author '{author}'. "
                           f"Pick a different family."}
     try:
         rubric = load_rubric(v["case"], v["role"], Path(v["cases_root"]))
     except RubricError as e:
-        return {"pass": False, "score": None, "reason": str(e)}
+        return {"pass": False, "score": 0.0, "reason": str(e)}
 
     qs = judge_artifact.sync(JudgeInput(
         artifact_json=output, rubric=rubric, author_model=author,
         judge_model=judge))
     if qs.score is None:
-        return {"pass": True, "score": None,
-                "reason": "judge unavailable (errored) — advisory, excluded "
-                          "from the mean"}
+        # promptfoo rejects a null score and would default a missing one to
+        # 1.0, so report a placeholder number and flag it; verdict._scores
+        # drops JUDGE_UNAVAILABLE rows before averaging.
+        return {"pass": True, "score": 0.0,
+                "reason": f"{JUDGE_UNAVAILABLE}: judge errored — advisory, "
+                          f"excluded from the mean"}
     return {"pass": True, "score": qs.score,
             "reason": f"advisory rubric score {qs.score:.2f}"}
 
 
-def main() -> None:
-    """promptfoo invokes this file with argv[1]=output, argv[2]=context JSON
-    and reads a GradingResult JSON object from stdout."""
-    import json
-    print(json.dumps(grade(sys.argv[1], json.loads(sys.argv[2]))))
+def get_assert(output: str, context) -> dict:
+    """promptfoo's Python assertion entry point.
+
+    The name is fixed by promptfoo: it does
+    `getattr(script_module, "get_assert")` and calls it with the output and a
+    context carrying `vars`. (Older docs describe an argv/stdout protocol;
+    the installed CLI uses this function contract.) Returns a GradingResult
+    dict: {pass, score, reason}.
+    """
+    return grade(output, _as_dict(context))
 
 
-if __name__ == "__main__":
-    main()
+def _as_dict(context) -> dict:
+    """promptfoo may hand over a dict or an object exposing `vars`."""
+    if isinstance(context, dict):
+        return context
+    return {"vars": getattr(context, "vars", {}) or {}}

@@ -20,6 +20,15 @@ from pydantic import BaseModel, Field
 
 _ABSOLUTE_MARKER = "absolute.py"
 _JUDGE_MARKER = "assertion.py"
+
+# Sentinel prefix on an advisory judge's `reason` meaning "not measured".
+#
+# promptfoo's GradingResult requires `score` to be a NUMBER -- it rejects null
+# outright, and omitting it lets promptfoo default a passing assertion to 1.0,
+# which would silently read as a perfect judgment. So an errored judge reports
+# a numeric placeholder and flags itself here; _scores drops those rows before
+# any mean is taken. Not-measured must never become a score.
+JUDGE_UNAVAILABLE = "JUDGE_UNAVAILABLE"
 # Native promptfoo assertion types that gate (design doc 4.5). They carry no
 # `value` path, so they are recognised by `type` instead of by marker.
 _ABSOLUTE_TYPES = {"cost", "latency"}
@@ -70,10 +79,19 @@ def _label(row: dict) -> str:
 
 
 def _scores(rows: list[dict]) -> list[float | None]:
+    """Judge scores, with unavailable ones normalised to None.
+
+    A row flagged JUDGE_UNAVAILABLE carries a placeholder number that must not
+    reach the mean -- see the constant's docstring for why it cannot simply
+    be null."""
     out: list[float | None] = []
     for row in rows:
         for c in _components(row):
-            if _JUDGE_MARKER in str((c.get("assertion") or {}).get("value")):
+            if _JUDGE_MARKER not in str((c.get("assertion") or {}).get("value")):
+                continue
+            if JUDGE_UNAVAILABLE in str(c.get("reason") or ""):
+                out.append(None)
+            else:
                 out.append(c.get("score"))
     return out
 

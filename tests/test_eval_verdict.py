@@ -109,3 +109,28 @@ def test_write_result_round_trips(tmp_path):
     data = json.loads(Path(p).read_text(encoding="utf-8"))
     assert data["prompt_sha_working"] == "c3d4"
     assert data["verdict"] == "pass"
+
+
+def test_judge_unavailable_sentinel_is_excluded_from_the_mean():
+    """The assertion cannot send score=null (promptfoo rejects it) and cannot
+    omit it (promptfoo would default a passing assertion to 1.0). It sends a
+    placeholder plus the sentinel; verdict must drop those rows, or an
+    unavailable judge would read as a perfect 0.0 or 1.0 score."""
+    from sdlc.eval.verdict import JUDGE_UNAVAILABLE
+
+    res = _results([0.8], [0.8])
+    for row in res["results"]["results"]:
+        for c in row["gradingResult"]["componentResults"]:
+            if "assertion.py" in str(c["assertion"].get("value")):
+                c["score"] = 0.0
+                c["reason"] = f"{JUDGE_UNAVAILABLE}: judge errored"
+    r = decide(res)
+    assert r.judge_status is JudgeStatus.UNAVAILABLE
+    assert r.mean_baseline is None
+    assert r.verdict is GateVerdict.PASS
+
+
+def test_real_scores_survive_the_sentinel_filter():
+    r = decide(_results([0.8, 0.8], [0.8, 0.8]))
+    assert r.judge_status is JudgeStatus.MEASURED
+    assert r.mean_baseline == 0.8

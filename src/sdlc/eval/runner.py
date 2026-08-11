@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from ..agents.loader import _load_build
-from ..agents.roles import MODEL_SETTINGS
+from ..agents.settings import MODEL_SETTINGS
 from .fixtures import EvalFixture
 
 

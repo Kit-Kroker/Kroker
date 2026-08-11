@@ -36,8 +36,11 @@ def test_judge_error_is_advisory_pass_and_says_unavailable():
     finally:
         _set_judge_fn(None)
     assert res["pass"] is True                 # advisory: never gates alone
-    assert res["score"] is None                # NOT 0.0 -- not-measured
-    assert "unavailable" in res["reason"].lower()
+    # promptfoo rejects a null score, so unavailability rides on the reason
+    # sentinel; verdict._scores drops these rows before averaging.
+    from sdlc.eval.verdict import JUDGE_UNAVAILABLE
+    assert JUDGE_UNAVAILABLE in res["reason"]
+    assert isinstance(res["score"], (int, float))
 
 
 def test_adr6_violation_is_a_hard_fail():
@@ -61,3 +64,37 @@ def test_missing_rubric_names_the_file_to_author():
 def test_load_rubric_reads_the_case_file():
     text = load_rubric("cat-cafe-monitoring", "clarify", CASES)
     assert text.strip()
+
+
+def test_get_assert_is_the_entry_point_promptfoo_calls():
+    """promptfoo does getattr(module, "get_assert") -- the name is its
+    contract, not ours. Missing it fails the whole eval with
+    'module has no attribute get_assert'."""
+    import json as _json
+
+    from sdlc.benchmarks.judge import _set_judge_fn
+    from sdlc.eval.promptfoo import absolute, assertion
+
+    assert callable(assertion.get_assert)
+    assert callable(absolute.get_assert)
+
+    _set_judge_fn(lambda inp: _json.dumps({"score": 0.7, "components": {}}))
+    try:
+        res = assertion.get_assert('{"open_questions": []}', _ctx())
+    finally:
+        _set_judge_fn(None)
+    assert res["pass"] is True and res["score"] == 0.7
+
+
+def test_get_assert_accepts_an_object_context():
+    """promptfoo may hand a dict or an object exposing `vars`."""
+    from sdlc.eval.promptfoo import assertion
+
+    class _Ctx:
+        vars = {"role": "clarify", "case": "cat-cafe-monitoring",
+                "author_model": "anthropic:glm-5.2",
+                "judge_model": "anthropic:claude-sonnet-4-6",
+                "cases_root": str(CASES)}
+
+    res = assertion.get_assert("{}", _Ctx())
+    assert res["pass"] is False          # ADR-6 collision, reached the check

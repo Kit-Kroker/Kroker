@@ -14,8 +14,14 @@ import time
 from pathlib import Path
 from typing import Any
 
-from ..fixtures import load_fixture
-from ..runner import run_variant_detailed
+# ABSOLUTE imports, deliberately: promptfoo loads this file standalone via
+# importlib.spec_from_file_location, so it has no parent package and a
+# relative import dies with "attempted relative import with no known parent
+# package". `sdlc` is an installed package, so this works both ways -- loaded
+# by path here, and imported normally as sdlc.eval.promptfoo.provider by our
+# own code and tests. Same applies to absolute.py and assertion.py.
+from sdlc.eval.fixtures import load_fixture
+from sdlc.eval.runner import run_variant_detailed
 
 # Tests inject a TestModel/FunctionModel here so no real model is called.
 # Production leaves it None and the fixture's captured author model is used.
@@ -42,7 +48,10 @@ def _cost_usd(usage: Any, model: str) -> float | None:
     Returns None for an unknown model -- a missing price must not fail a
     gate, and verdict.py treats None as not-measured.
     """
-    from ...pricing import PriceUsageInput, compute_price
+    # Absolute even though it is deferred: a relative import inside a function
+    # fails the same way under promptfoo's standalone load, just later -- at
+    # call time rather than import time.
+    from sdlc.pricing import PriceUsageInput, compute_price
     return compute_price(PriceUsageInput(
         model=model,
         input_tokens=getattr(usage, "input_tokens", 0) or 0,

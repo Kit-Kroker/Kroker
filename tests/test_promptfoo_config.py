@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import shutil
+import tempfile
 from pathlib import Path
 
+import pytest
 import yaml
 
 from sdlc.eval.promptfoo.config import build_config
@@ -9,6 +12,25 @@ from sdlc.eval.promptfoo.config import build_config
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ROOT / "benchmarks" / "cases"
 AGENTS = ROOT / "agents"
+
+
+@pytest.fixture
+def tmp_path():
+    """Scratch dir UNDER THE REPO, overriding pytest's built-in tmp_path.
+
+    build_config emits provider paths relative to the config's directory
+    (promptfoo joins the two), and a relative path cannot span Windows
+    drives -- pytest's tmp_path lives on C: while the repo may be on D:.
+    run_gate has the same constraint and solves it the same way, so this
+    also keeps the tests faithful to production.
+    """
+    root = ROOT / "runs" / ".prompt_gate_tests"
+    root.mkdir(parents=True, exist_ok=True)
+    d = Path(tempfile.mkdtemp(dir=root))
+    try:
+        yield d
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def _cfg(tmp_path: Path) -> dict:

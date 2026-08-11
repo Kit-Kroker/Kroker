@@ -14,8 +14,9 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
-from ...agents.loader import _load_build
-from ...agents.roles import MODEL_SETTINGS
+# Absolute: promptfoo loads this file standalone (see provider.py).
+from sdlc.agents.loader import _load_build
+from sdlc.agents.settings import MODEL_SETTINGS
 
 
 @lru_cache(maxsize=None)
@@ -68,13 +69,10 @@ def validates_as_output_type(output: str, role: str,
     return {"pass": True, "score": 1.0, "reason": f"validates as {name}"}
 
 
-def main() -> None:
-    import sys
-    ctx = json.loads(sys.argv[2])
-    v = ctx.get("vars", {})
-    print(json.dumps(validates_as_output_type(
-        sys.argv[1], v["role"], Path(v["agents_dir"]))))
-
-
-if __name__ == "__main__":
-    main()
+def get_assert(output: str, context) -> dict:
+    """promptfoo's Python assertion entry point -- the name is fixed by
+    promptfoo (`getattr(script_module, "get_assert")`). Returns a
+    GradingResult dict: {pass, score, reason}."""
+    v = (context if isinstance(context, dict)
+         else {"vars": getattr(context, "vars", {}) or {}}).get("vars", {})
+    return validates_as_output_type(output, v["role"], Path(v["agents_dir"]))

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -36,13 +38,22 @@ def prompt_sha(role: str, ref: str, repo_root: Path, agents_dir: Path) -> str:
 
 def _run_promptfoo(config_path: Path, out_path: Path) -> None:
     binary = promptfoo_bin()
+    # Decode explicitly as UTF-8: `text=True` uses the locale encoding, which
+    # is cp1252 on Windows, and promptfoo emits UTF-8 box-drawing in its
+    # progress output -- the reader thread dies with UnicodeDecodeError before
+    # any error text reaches us.
     proc = subprocess.run(
         [binary, "eval", "-c", str(config_path), "--output", str(out_path)],
-        capture_output=True, text=True, cwd=config_path.parent)
+        capture_output=True, cwd=config_path.parent, env=os.environ)
     if not out_path.is_file():
+        err = proc.stderr.decode("utf-8", errors="replace").strip()
+        out = proc.stdout.decode("utf-8", errors="replace").strip()
+        # The actionable message ("Python worker stderr: ...") goes to stdout,
+        # not stderr, so surface both.
+        detail = (err or out)[-800:]
         raise GateUnavailable(
             f"promptfoo produced no results.json (exit {proc.returncode}): "
-            f"{proc.stderr.strip()[:400]}")
+            f"{detail}")
 
 
 def run_gate(role: str, case: str, *, repo_root: Path, cases_root: Path,
@@ -75,7 +86,15 @@ def run_gate(role: str, case: str, *, repo_root: Path, cases_root: Path,
                 f"planned {planned} model calls (repeat={repeat} × 2 "
                 f"providers × 2 calls) exceeds max_calls={max_calls}. "
                 f"Lower --n or raise the ceiling deliberately.")
-        with tempfile.TemporaryDirectory() as tmp:
+        # Scratch dir under the repo, NOT the system temp: promptfoo resolves
+        # `file://` provider paths relative to the config's directory, so the
+        # config must sit on the same drive as this package for a relative
+        # path to exist at all (Windows: C:\Temp vs D:\repo). runs/ is
+        # gitignored, so nothing generated here can be committed by accident.
+        scratch_root = repo_root / "runs" / ".prompt_gate"
+        scratch_root.mkdir(parents=True, exist_ok=True)
+        tmp = tempfile.mkdtemp(dir=scratch_root)
+        try:
             tmp_path = Path(tmp)
             cfg = build_config(role, case, repo_root=repo_root,
                                cases_root=cases_root, agents_dir=agents_dir,
@@ -84,6 +103,8 @@ def run_gate(role: str, case: str, *, repo_root: Path, cases_root: Path,
             results_path = tmp_path / "results.json"
             _run_promptfoo(cfg, results_path)
             results = json.loads(results_path.read_text(encoding="utf-8"))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
         result = decide(results, delta_min=delta_min)
         result.role, result.case = role, case
         result.prompt_sha_baseline = sha_base
