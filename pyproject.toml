@@ -44,10 +44,11 @@ testpaths = ["tests"]
 #   pytest -m temporal              # integration tests only
 #   pytest -m "slow or temporal"    # everything
 #   pytest -m ""                    # truly everything (overrides addopts)
-addopts = "-q -m 'not slow and not temporal and not docker'"
+addopts = "-q -m 'not slow and not temporal and not docker and not prompt_eval'"
 markers = [
     "slow: builds a venv or otherwise takes >10s",
     "temporal: spawns an ephemeral Temporal dev-server via WorkflowEnvironment",
     "live: spawns a real harness CLI and spends tokens; skipped unless SDLC_LIVE_TESTS=1",
+    "prompt_eval: A/B-scores a role prompt against a fixture; spends tokens; skipped unless SDLC_PROMPT_EVAL=1",
     "docker: requires a running Docker daemon; builds and runs real containers",
 ]
