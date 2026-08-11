@@ -54,3 +54,37 @@ def test_deps_role_is_refused():
     with pytest.raises(FixtureError) as e:
         build_fixture("architect", "add-login-greenfield", CASES, AGENTS)
     assert "deps" in str(e.value).lower()
+
+
+def test_planner_fixture_uses_the_frozen_architecture_seed():
+    import json
+
+    from sdlc.prompts import planner_prompt
+
+    arch = json.loads((CASES / "cat-cafe-monitoring" / "seeds"
+                       / "architecture.json").read_text(encoding="utf-8"))
+    expected = planner_prompt(json.dumps(arch, separators=(",", ":")),
+                              [], None)
+    fx = build_fixture("planner", "cat-cafe-monitoring", CASES, AGENTS)
+    assert fx.prompt == expected
+
+
+def test_qa_fixture_uses_the_frozen_seeds():
+    import json
+
+    from sdlc.prompts import qa_prompt
+
+    seeds = CASES / "cat-cafe-monitoring" / "seeds"
+    assertions = json.loads(
+        (seeds / "assertions.json").read_text(encoding="utf-8"))["assertions"]
+    qa_raw = (seeds / "qa_raw.json").read_text(encoding="utf-8").strip()
+    diff = json.loads((seeds / "diff.json").read_text(encoding="utf-8"))
+    expected = qa_prompt(assertions, qa_raw, diff["stat"], diff["patch"])
+    assert build_fixture("qa", "cat-cafe-monitoring",
+                         CASES, AGENTS).prompt == expected
+
+
+def test_missing_seed_names_the_directory():
+    with pytest.raises(FixtureError) as e:
+        build_fixture("planner", "add-login-greenfield", CASES, AGENTS)
+    assert "seeds" in str(e.value)

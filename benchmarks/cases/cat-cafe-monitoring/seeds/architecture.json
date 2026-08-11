@@ -1,0 +1,26 @@
+{
+  "overview": "Single-process Python ASGI service exposing app:app. In-memory ring buffer per cat holds the last 24h of readings; activity is derived per reading from breathing rate plus nearest-zone distance on the floor plan. Telemetry generation is a separate entrypoint so importing app:app never starts it.",
+  "decisions": [
+    {
+      "id": "AD-1",
+      "decision": "FastAPI over a bare ASGI app",
+      "rationale": "The frozen contract needs four typed JSON routes with path params and 404 semantics; FastAPI gives validation and error shapes without hand-rolling them.",
+      "alternatives_considered": ["Starlette directly", "Flask + ASGI adapter"]
+    },
+    {
+      "id": "AD-2",
+      "decision": "In-memory per-cat deque, no database",
+      "rationale": "The 24h window is computed relative to each cat's newest reading, not wall clock, and the case explicitly asks to keep it as simple as possible.",
+      "alternatives_considered": ["SQLite", "Redis"]
+    },
+    {
+      "id": "AD-3",
+      "decision": "Simulation runs only under `python app.py`",
+      "rationale": "The frozen contract requires that importing app:app must not auto-start the generator, so the driver lives behind __main__.",
+      "alternatives_considered": ["Background task on startup event"]
+    }
+  ],
+  "affected_modules": ["app.py"],
+  "new_components": ["telemetry ingest", "activity detection", "risk analysis"],
+  "risks": ["Activity thresholds are heuristic and unvalidated against real collar data"]
+}

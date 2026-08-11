@@ -1,0 +1,9 @@
+{
+  "assertions": [
+    "POST /telemetry accepts {cat_id, x, y, breathing_rate, timestamp} and returns 2xx",
+    "GET /floorplan returns 200 with zones[] of kind rest_area|litter_box|water_bowl|food_bowl",
+    "GET /cats returns 200 with [{id, x, y, activity, at_risk}]",
+    "GET /cats/{id} returns 200 with the last 24h of readings, 404 for unknown id",
+    "Importing app:app does not auto-start the telemetry generator"
+  ]
+}

@@ -1,0 +1,1 @@
+{"stat": " app.py | 42 ++++++++++\n 1 file changed, 42 insertions(+)", "patch": "diff --git a/app.py b/app.py\n@@\n+from fastapi import FastAPI\n+app = FastAPI()\n"}
