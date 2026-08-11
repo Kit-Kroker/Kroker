@@ -15,8 +15,12 @@ def test_calibrate_rubric_does_not_need_client():
     assert _needs_temporal_client(_ns(cmd="calibrate", target="architect")) is False
 
 
-def test_eval_capture_still_needs_client():
-    assert _needs_temporal_client(_ns(cmd="eval", target="capture")) is True
+def test_eval_never_needs_client_since_capture_retired():
+    """E-82 retired `eval capture` -- it was the only eval target that needed
+    a live Temporal history. Fixtures are constructed now, so every eval
+    invocation is local-only."""
+    assert _needs_temporal_client(_ns(cmd="eval", target="capture")) is False
+    assert _needs_temporal_client(_ns(cmd="eval", target="clarify")) is False
 
 
 def test_eval_rubric_does_not_need_client():

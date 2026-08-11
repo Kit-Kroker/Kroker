@@ -12,7 +12,7 @@ import yaml
 
 from ..agents.loader import _resolve_agents_dir
 from .compare import EvalError, EvalReport, compare
-from .fixtures import DEPS_ROLES, SUPPORTED_ROLES, fixtures_from_events, write_fixtures
+from .fixtures import DEPS_ROLES, SUPPORTED_ROLES
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _CASES_ROOT = _REPO_ROOT / "benchmarks" / "cases"
@@ -89,39 +89,7 @@ def run_eval(role: str, *, against: str, case: str | None, k: int,
     return render_report(report)
 
 
-async def run_capture(client, run_id: str, case: str,
-                      agents_dir: Path | None = None) -> list[Path]:
-    """Live capture: fetch a run's history, normalize to events, write fixtures.
-
-    SEAM: `_history_to_events` converts a Temporal history into the normalized
-    event dicts fixtures_from_events consumes. Like drift.py's real provider it
-    needs a live run to validate; the pure core it feeds is fully tested. A
-    fixture is trivial JSON, so hand-authoring is the offline fallback.
-    """
-    from ..agents.roles import REGISTRY
-    if agents_dir is None:
-        agents_dir = _resolve_agents_dir()
-    history = await client.get_workflow_handle(run_id).fetch_history()
-    events = _history_to_events(history)
-    fixtures = fixtures_from_events(run_id, case, events, REGISTRY)
-    return write_fixtures(fixtures, agents_dir)
-
-
-def _history_to_events(history) -> list[dict]:
-    """Temporal history -> normalized {activity, input:{messages}} dicts for
-    ActivityTaskScheduled events of proposer model-request activities. Reads
-    each scheduled event's activity_type name and decoded input payload."""
-    events: list[dict] = []
-    for ev in getattr(history, "events", history):
-        attrs = getattr(ev, "activity_task_scheduled_event_attributes", None)
-        if attrs is None:
-            continue
-        activity = attrs.activity_type.name
-        try:
-            inp = attrs.input.payloads[0].data
-            import json
-            messages_payload = json.loads(inp)
-        except Exception:
-            continue
-        events.append({"activity": activity, "input": messages_payload})
-    return events
+# `run_capture` / `_history_to_events` were retired with E-82: fixtures are
+# now CONSTRUCTED by fixtures.build_fixture from the same prompt builders
+# production calls, so a captured prompt can no longer drift from a sent one.
+# The capture seam had never run against a live Temporal history.

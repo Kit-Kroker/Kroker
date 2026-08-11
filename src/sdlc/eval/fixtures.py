@@ -1,39 +1,34 @@
-"""Fixtures for the prompt eval loop: a proposer's frozen input, captured
-from a completed run's history.
+"""Fixtures for the prompt eval loop: a proposer's frozen input, CONSTRUCTED
+from a golden case rather than captured from a run's history.
 
-Pure core here; the live Temporal->events adapter is a documented seam (see
-run_capture in cli.py), mirroring drift.py whose real HistoryProvider ships
-unimplemented and fake-tested. A fixture is trivial JSON, so it can also be
-hand-authored when a live run is not available.
+Construction beats capture because production and the generator call the same
+builder (``sdlc.prompts``), so a fixture cannot silently drift from what the
+pipeline actually sends -- divergence becomes a code change. The old
+Temporal-history capture path (``fixtures_from_events`` / ``run_capture``)
+was retired with E-82; it never ran against a live history.
 """
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
+import yaml
 from pydantic import BaseModel, Field
 
-# Role name is not always the agent name (roles.py). Reverse map, limited to
-# the six pure prompt-in/artifact-out proposers.
-_ROLE_TO_AGENT = {
-    "clarify": "clarify_agent",
-    "planner": "planner_agent",
-    "qa": "qa_analyst_agent",
-    "reviewer": "reviewer_agent",
-    "analyst": "analyst_agent",
-    "merge_verdict": "merge_verdict_agent",
-}
-AGENT_TO_ROLE: dict[str, str] = {a: r for r, a in _ROLE_TO_AGENT.items()}
-SUPPORTED_ROLES: frozenset[str] = frozenset(_ROLE_TO_AGENT)
+from ..models import IdeaBrief, ProjectMode
+from ..prompts import clarify_prompt, planner_prompt, qa_prompt
+
+# The six pure prompt-in/artifact-out proposers.
+SUPPORTED_ROLES: frozenset[str] = frozenset({
+    "clarify", "planner", "qa", "reviewer", "analyst", "merge_verdict"})
 
 # architect + research pass deps to .run(); a prompt-string fixture cannot
-# reconstruct a live deps object, so they are refused (spec finding 5).
+# reconstruct a live deps object, so they are refused.
 DEPS_ROLES: frozenset[str] = frozenset({"architect", "research"})
 
-# TemporalModel names its request activity "<agent_name>__model_request"
-# (pydantic_ai/durable_exec/temporal/_model.py).
-_REQUEST_SUFFIX = "__model_request"
+
+class FixtureError(Exception):
+    """A fixture could not be built (unknown case/role, missing seed)."""
 
 
 class EvalFixture(BaseModel):
@@ -46,59 +41,89 @@ class EvalFixture(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc))
 
 
-def _role_for_activity(activity: str) -> str | None:
-    if not activity.endswith(_REQUEST_SUFFIX):
-        return None
-    agent = activity[: -len(_REQUEST_SUFFIX)]
-    return AGENT_TO_ROLE.get(agent)          # None for deps/unsupported roles
+def _load_case(case_id: str, cases_root: Path) -> dict:
+    p = cases_root / case_id / "case.yaml"
+    if not p.is_file():
+        raise FixtureError(f"no case.yaml at {p}")
+    return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
 
 
-def extract_user_prompt(messages: list[dict[str, Any]]) -> str | None:
-    """First UserPromptPart's text from a serialized message list. The initial
-    request's user prompt is the frozen input; later requests (tool retries)
-    are ignored by taking the first."""
-    for msg in messages:
-        for part in msg.get("parts", []):
-            if part.get("part_kind") == "user-prompt":
-                content = part.get("content")
-                if isinstance(content, str):
-                    return content
-                # content can be a list of parts; join the string ones
-                if isinstance(content, list):
-                    text = "".join(c for c in content if isinstance(c, str))
-                    if text:
-                        return text
-    return None
+def _role_model(role: str, agents_dir: Path) -> str:
+    p = agents_dir / role / "agent.yaml"
+    if not p.is_file():
+        raise FixtureError(f"no agent.yaml at {p}")
+    data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    model = data.get("model")
+    if not model:
+        raise FixtureError(f"no model declared in {p}")
+    return model
 
 
-def fixtures_from_events(run_id: str, case: str, events: list[dict[str, Any]],
-                         registry: dict[str, Any]) -> list[EvalFixture]:
-    """Pure: normalized history events -> one fixture per supported proposer.
+def _idea_brief(spec: dict) -> IdeaBrief:
+    """Mirrors BenchmarkWorkflow's construction (workflow.py:157-158) so a
+    fixture's idea is identical to a benchmark cell's."""
+    return IdeaBrief(title=spec["case_id"], description=spec["description"],
+                     mode=ProjectMode(spec.get("mode", "greenfield")),
+                     repo_url=spec.get("repo_url"))
 
-    A normalized event is a dict with "activity" (str) and "input" (dict with
-    "messages": list[serialized ModelMessage]). The model is read from the
-    registry (a role's declared model), not the event: TemporalModel omits
-    model_id from the payload when the default model is used."""
-    out: dict[str, EvalFixture] = {}
-    for ev in events:
-        activity = ev.get("activity")
-        if not isinstance(activity, str):
-            continue
-        role = _role_for_activity(activity)
-        if role is None or role in out:          # skip unsupported + keep first
-            continue
-        cfg = registry.get(role)
-        if cfg is None:                          # role not in this registry
-            continue
-        messages = (ev.get("input") or {}).get("messages")
-        if not isinstance(messages, list):
-            continue
-        prompt = extract_user_prompt(messages)
-        if prompt is None:
-            continue
-        out[role] = EvalFixture(role=role, case=case, prompt=prompt,
-                                model=cfg.model, source_run_id=run_id)
-    return list(out.values())
+
+def _read_seed(case_id: str, cases_root: Path, name: str) -> str:
+    p = cases_root / case_id / "seeds" / name
+    if not p.is_file():
+        raise FixtureError(
+            f"role needs a frozen seed at {p}. Author it (see the E-82 design "
+            f"doc section 4.2 for the per-role seed contents) before "
+            f"evaluating this (role, case) pair.")
+    return p.read_text(encoding="utf-8")
+
+
+def _seeded_prompt(role: str, case_id: str, cases_root: Path) -> str:
+    """Downstream roles need an upstream artifact that case.yaml cannot
+    supply. Re-deriving it would rebuild the pipeline, so it is committed
+    frozen under benchmarks/cases/<case>/seeds/."""
+    import json
+
+    if role == "planner":
+        arch = json.loads(_read_seed(case_id, cases_root,
+                                     "architecture.json"))
+        return planner_prompt(json.dumps(arch, separators=(",", ":")),
+                              [], None)
+    if role == "qa":
+        assertions = json.loads(
+            _read_seed(case_id, cases_root, "assertions.json"))["assertions"]
+        qa_raw = _read_seed(case_id, cases_root, "qa_raw.json").strip()
+        diff = json.loads(_read_seed(case_id, cases_root, "diff.json"))
+        return qa_prompt(assertions, qa_raw, diff["stat"], diff["patch"])
+    raise FixtureError(
+        f"role '{role}' has no seed recipe; add one alongside planner/qa in "
+        f"_seeded_prompt (the E-82 design doc section 4.2 lists the contents)")
+
+
+def build_fixture(role: str, case_id: str, cases_root: Path,
+                  agents_dir: Path) -> EvalFixture:
+    """Construct a role's frozen input from a golden case, deterministically.
+
+    Memory items are empty by construction: a fixture must not depend on a
+    live memory backend, and an empty snapshot is what an unattended cell
+    sees anyway.
+    """
+    if role in DEPS_ROLES:
+        raise FixtureError(
+            f"role '{role}' carries deps; a prompt-string fixture cannot "
+            f"reconstruct a live deps object")
+    if role not in SUPPORTED_ROLES:
+        raise FixtureError(f"unknown role '{role}'; supported: "
+                           f"{', '.join(sorted(SUPPORTED_ROLES))}")
+    spec = _load_case(case_id, cases_root)
+    model = _role_model(role, agents_dir)
+
+    if role == "clarify":
+        prompt = clarify_prompt(_idea_brief(spec).model_dump_json(), [])
+    else:
+        prompt = _seeded_prompt(role, case_id, cases_root)
+
+    return EvalFixture(role=role, case=case_id, prompt=prompt, model=model,
+                       source_run_id="_built")
 
 
 def write_fixtures(fixtures: list[EvalFixture], agents_dir: Path) -> list[Path]:
