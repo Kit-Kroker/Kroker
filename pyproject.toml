@@ -26,6 +26,13 @@ where = ["src"]
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.24", "pytest-cov>=5", "jsonschema>=4"]
 logfire = ["logfire[pydantic-ai]>=3"]
+# E-82 prompt gate. Deliberately NOT in `dev`: promptfoo is Node-backed, and
+# a contributor who only runs unit tests should not have to install it.
+# NOTE the version line: PyPI `promptfoo` is the thin Python wrapper
+# (github.com/promptfoo/promptfoo-python, 0.1.x) that shells to the npm CLI,
+# whose own versions are 0.11x. Do NOT "correct" this floor to an npm number.
+# Needs Node >= 22.22 on PATH.
+eval = ["promptfoo>=0.1.4"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
