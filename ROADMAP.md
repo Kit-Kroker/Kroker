@@ -203,7 +203,7 @@ as tracked rather than accidental.
   client-bundle reachability), baseline practice (E-41), plus dependency
   health, generator-scaffold/dead code, framework-default misconfig, and
   size/duplication outliers (E-41a–d, 2026-08-08).
-- [x] **FR-903** readiness gate blocking Tier 2, overridable by audited decision (E-42). *The gate resolves through the existing FR-301/302 machinery (now in `GateHost`); a verdict that is not READY opens a `readiness` gate, and an APPROVE records a `ReadinessOverride` on the artifact. E-45's admission rule is `verdict is READY or override is not None`.*
+- [x] **FR-903** readiness gate blocking Tier 2, overridable by audited decision (E-42). *The gate resolves through the existing FR-301/302 machinery (now in `GateHost`); a verdict that is not READY opens a `readiness` gate, and an APPROVE records a `ReadinessOverride` on the artifact. E-42's admission rule was `verdict is READY or override is not None` (tightened by E-45 — see below).*
   *2026-08-10 (E-45):* the rule is now one function at two strictnesses
   (`triage/admission.py`). Tier 2 requires `approved_by == "human"`, so a
   `policy` (gate OFF) or `timeout` approval no longer admits an audit; Tier 0
@@ -329,7 +329,7 @@ as tracked rather than accidental.
 - [x] **ADR-15** Language-agnostic toolchain by marker file (`src/sdlc/toolchain/`) — Python reference adapter end-to-end; Go/TS/Rust are E-30a/b/c.
 - [x] **ADR-16** Harness sessions as first-class, claim-checked artifacts (E-38).
 - [x] **ADR-17** Containment as a declared harness capability — native inner, hook outer, fail closed (E-15/E-16).
-- [x] **ADR-18** Triage precedes capability modelling — an unbuildable or structurally-illegible repo is reported as a precondition failure, never capability-mapped (FR-903, E-42). *The readiness gate enforces it; E-45's admission rule is `verdict is READY or override is not None`.*
+- [x] **ADR-18** Triage precedes capability modelling — an unbuildable or structurally-illegible repo is reported as a precondition failure, never capability-mapped (FR-903, E-42). *The readiness gate enforces it; E-45's Tier 2 admission rule (`triage/admission.py`, `require_human=True`) refuses a non-human override, so a `policy`/`timeout` approval no longer admits an audit.*
 - [ ] ⚠️ **ADR-19** Deployment targets and analytics sources are adapters, not substrate (FR-1105, NG7, E-68/E-69). **Deployment half done** (E-67/E-68: `src/sdlc/deploy/adapters.py`, compose + script). Analytics half open (E-69). Unresolved consequence: **OQ-9**.
 - [ ] **ADR-20** Pre-registration reuses `ValidationContract` freeze semantics (FR-1102, FR-803, E-65).
 - [x] **ADR-21** Agent board as a durable projection; `authoritative_status` (workflow-written) vs `status` (agent-writable) keeps replay the source of truth (E-78).
