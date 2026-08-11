@@ -20,6 +20,23 @@ def _to_json(output: Any) -> str:
     return json.dumps(output)
 
 
+def run_variant_detailed(role: str, instructions_text: str,
+                         fixture: EvalFixture, agents_dir: Path, *,
+                         model_override: Any | None = None) -> tuple[str, Any]:
+    """As run_variant, but also returns the run's Usage.
+
+    The promptfoo provider needs it to report tokenUsage/cost -- the native
+    `cost` assertion is an ABSOLUTE gating check and would be vacuous
+    without real numbers (E-82).
+    """
+    build = _load_build(role, agents_dir / role)
+    model = model_override if model_override is not None else fixture.model
+    agent = build(model, instructions_text, MODEL_SETTINGS)
+    result = agent.run_sync(fixture.prompt)
+    # `usage` is a PROPERTY on RunResult (RunUsage), not a method.
+    return _to_json(result.output), result.usage
+
+
 def run_variant(role: str, instructions_text: str, fixture: EvalFixture,
                 agents_dir: Path, *, model_override: Any | None = None) -> str:
     """Build agents/<role>/agent.py's Agent with instructions_text as its
@@ -29,8 +46,5 @@ def run_variant(role: str, instructions_text: str, fixture: EvalFixture,
     passes nothing and the captured author model (fixture.model) is used, so
     both variants run under the same model and only the prompt differs.
     """
-    build = _load_build(role, agents_dir / role)
-    model = model_override if model_override is not None else fixture.model
-    agent = build(model, instructions_text, MODEL_SETTINGS)
-    result = agent.run_sync(fixture.prompt)
-    return _to_json(result.output)
+    return run_variant_detailed(role, instructions_text, fixture, agents_dir,
+                                model_override=model_override)[0]
