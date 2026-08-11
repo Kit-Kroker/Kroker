@@ -115,3 +115,19 @@ class Assessment(BaseModel):
                 f"{[p.value for p in PHASE_ORDER]}, got "
                 f"{[p.value for p in got]}")
         return self
+
+    @model_validator(mode="after")
+    def _terminal_status_matches_derivation(self) -> Assessment:
+        # terminal_status is DERIVED from (admitted, phases), never assigned
+        # (D6) -- enforced at the type, like the two above, so a deserialized
+        # or second-construction-path payload cannot silently disagree (E-45
+        # review finding 2). `terminal_status(...)` here is the module
+        # function; `self.terminal_status` is the field.
+        expected = terminal_status(self.admitted, self.phases)
+        if self.terminal_status != expected:
+            raise ValueError(
+                f"terminal_status {self.terminal_status!r} does not match "
+                f"the derived {expected!r} for admitted={self.admitted} "
+                f"and these phases -- the status is derived, never assigned "
+                f"(D6)")
+        return self

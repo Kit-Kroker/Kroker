@@ -95,6 +95,26 @@ def test_a_refused_assessment_still_carries_the_triage():
     assert a.triage.commit_sha == "a" * 40
 
 
+def test_terminal_status_is_enforced_on_the_artifact():
+    """D6: 'derived, never assigned' is a TYPE invariant, like the other two
+    -- so a second construction path or a deserialized payload cannot silently
+    set terminal_status='assessed' over six not_collected phases (review
+    finding 2)."""
+    from sdlc.assessment.models import terminal_status as derive
+
+    # A status that matches the derivation is accepted:
+    phases = _phases(set())
+    a = Assessment(repo_dir="/r", triage=_triage(), admitted=False,
+                   admission_reason="verdict not_ready", phases=phases,
+                   terminal_status=derive(False, phases))
+    assert a.terminal_status == BLOCKED
+    # A status that disagrees with admitted+phases is rejected:
+    with pytest.raises(ValidationError):
+        Assessment(repo_dir="/r", triage=_triage(), admitted=True,
+                   admission_reason="ok", phases=phases,
+                   terminal_status=ASSESSED)
+
+
 def test_init_outcome_defaults_to_no_triage():
     out = InitOutcome(result=PhaseResult(
         phase=PhaseId.INIT,
