@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -230,3 +231,60 @@ class ScanCandidate(BaseModel):
         self.members = sorted(set(self.members), key=CandidateMember.sort_key)
         self.possible_duplicate_of = sorted(set(self.possible_duplicate_of))
         return self
+
+
+class Sensitivity(str, Enum):
+    PII = "pii"
+    FINANCIAL = "financial"
+    AUTHENTICATION = "authentication"
+    HEALTH = "health"
+    REGULATORY = "regulatory"
+
+
+class SensitivityRecord(BaseModel):
+    """SS4. Classifies an entity, not a file: the question E-49 asks is which
+    capability handles regulated data."""
+    classification: Sensitivity
+    entity: str
+    origin: Literal["table", "model", "dto"]
+    fields: list[str]
+    # S3 entry points reading or writing the entity, by local_id. Empty when
+    # S3 reported not_collected -- the owing category's reason states that,
+    # so this must never be read as "no entry point touches PII".
+    accessed_by: list[str] = Field(default_factory=list)
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+    rule: str
+    confidence: Confidence
+
+
+class TestabilityFinding(BaseModel):
+    """QS3. Carries TriageFinding's `evidence` and `key` semantics because a
+    testability blocker is a per-capability finding E-49 scores and E-53 may
+    seed a fix run from, so it needs the same delta-stable identity.
+
+    `severity` is BrownKit's three-valued scale, not TriageFinding's four:
+    blocks/impedes/smell answers a different question than
+    critical/high/medium/low, and collapsing them loses what FR-916 needs.
+    """
+    severity: Literal["blocks", "impedes", "smell"]
+    pattern: str                    # "static-clock-access"
+    detail: str
+    recommended_seam: str
+    path: str
+    line: int | None = None
+    evidence: str = ""              # verbatim quote from path@commit_sha
+    key: str = ""                   # rule-scoped discriminator (E-44 D3)
+
+
+# pytest must not collect these -- their names begin with "test" because the
+# domain is "testability", not because they are tests (pytest honours __test__).
+TestabilityFinding.__test__ = False
+
+
+def testability_identity(f: TestabilityFinding) -> str:
+    """The identity a delta matches on. Deliberately excludes `line`, exactly
+    as triage's finding_identity does."""
+    return f"QS3:{f.pattern}:{f.path}:{f.key}"
+
+
+testability_identity.__test__ = False
