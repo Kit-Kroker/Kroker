@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 from typing import Callable
 
@@ -80,6 +81,46 @@ _JUDGE_SYSTEM_PROMPT = (
     "The overall \"score\" must reflect the artifact's rubric compliance; "
     "each component score must be grounded in a named rubric criterion."
 )
+
+_STEPS_SYSTEM_PROMPT = (
+    "You convert a grading rubric into an explicit, ordered checklist an "
+    "impartial judge will follow. Each step must be a single concrete "
+    "check, phrased so two judges would agree on whether it holds, and must "
+    "name the rubric component it belongs to. Do not score anything. "
+    "Respond with ONLY a JSON object of exactly this shape and nothing else "
+    "(no prose, no markdown fences):\n"
+    '  {"steps": ["<step>", "<step>", ...]}'
+)
+
+# (sha256(rubric), judge_model) -> steps. Baseline and working MUST be scored
+# against identical steps or the A/B comparison is not a comparison; caching
+# is what guarantees that within a process, and is why one rubric costs one
+# generation call rather than one per artifact.
+_STEP_CACHE: dict[tuple[str, str], list[str]] = {}
+
+
+def _clear_step_cache() -> None:
+    _STEP_CACHE.clear()
+
+
+def generate_steps(rubric: str, judge_model: str) -> list[str]:
+    """Phase 1: rubric text -> ordered evaluation steps.
+
+    Raises on any failure. The caller turns that into
+    QualityScore(score=None, judge="error") -- falling back to the raw rubric
+    would silently restore the single-shot judge under the staged label.
+    """
+    key = (sha256(rubric.encode()).hexdigest(), judge_model)
+    if key in _STEP_CACHE:
+        return _STEP_CACHE[key]
+    raw = _run_judge_agent(judge_model, _STEPS_SYSTEM_PROMPT,
+                           f"Rubric:\n{rubric}")
+    steps = json.loads(raw).get("steps") or []
+    if not isinstance(steps, list) or not steps:
+        raise ValueError(
+            f"step generation returned no steps for rubric sha {key[0][:12]}")
+    _STEP_CACHE[key] = [str(s) for s in steps]
+    return _STEP_CACHE[key]
 
 
 def _run_judge_agent(model, system_prompt: str, user_prompt: str) -> str:
