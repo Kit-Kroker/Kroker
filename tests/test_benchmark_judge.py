@@ -260,3 +260,91 @@ def test_build_judge_input_supports_qa_key():
     )
     assert ji is not None
     assert ji.rubric == "score determinism 0..1"
+
+
+# --- E-83: vetoes override the judge at Layer 3 -----------------------------
+
+def test_veto_failure_forces_score_zero_regardless_of_the_judge():
+    """The judge's own number is overridden. This is the whole point: an
+    LLM asked to enforce an absolute override inside a weighted mean does
+    not reliably do it."""
+    _set_judge_fn(lambda _inp: '{"score": 0.95, '
+                               '"components": {"internal_consistency": 0.9}}')
+    try:
+        qs = judge_artifact.sync(JudgeInput(
+            artifact_json='{"tests_passed": true, "failing_tests": ["t::a"],'
+                          ' "issues": []}',
+            rubric="anything",
+            author_model="anthropic:glm-5.2",
+            judge_model="google:gemini-3.5-flash",
+            vetoes_yaml="- id: internal_consistency\n"
+                        "  kind: not_both\n"
+                        "  field: tests_passed\n"
+                        "  equals: true\n"
+                        "  and_any_nonempty: [failing_tests, issues]\n"))
+    finally:
+        _set_judge_fn(None)
+    assert qs.score == 0.0
+    assert qs.components["internal_consistency"] == 0.0
+
+
+def test_no_vetoes_leaves_the_judge_score_untouched():
+    _set_judge_fn(lambda _inp: '{"score": 0.95, "components": {"a": 0.9}}')
+    try:
+        qs = judge_artifact.sync(JudgeInput(
+            artifact_json='{"tests_passed": true}', rubric="r",
+            author_model="a", judge_model="b"))
+    finally:
+        _set_judge_fn(None)
+    assert qs.score == 0.95
+
+
+def test_veto_wins_when_the_judge_errors():
+    """A veto is a measurement that SUCCEEDED. Reporting not-measured would
+    discard a real deterministic finding."""
+    def _boom(_inp):
+        raise RuntimeError("judge down")
+
+    _set_judge_fn(_boom)
+    try:
+        qs = judge_artifact.sync(JudgeInput(
+            artifact_json='{"tests_passed": true, "issues": ["x"]}',
+            rubric="r", author_model="a", judge_model="b",
+            vetoes_yaml="- id: ic\n  kind: not_both\n  field: tests_passed\n"
+                        "  equals: true\n  and_any_nonempty: [issues]\n"))
+    finally:
+        _set_judge_fn(None)
+    assert qs.score == 0.0
+    assert qs.judge != "error"
+
+
+def test_malformed_vetoes_yaml_is_not_measured():
+    """A veto file that does not parse is a config error, and a config error
+    is NOT a zero -- it is an absent measurement."""
+    _set_judge_fn(lambda _inp: '{"score": 0.9, "components": {}}')
+    try:
+        qs = judge_artifact.sync(JudgeInput(
+            artifact_json='{"tests_passed": true}', rubric="r",
+            author_model="a", judge_model="b",
+            vetoes_yaml="- id: v\n  kind: vibes\n"))
+    finally:
+        _set_judge_fn(None)
+    assert qs.score is None
+    assert qs.judge == "error"
+
+
+def test_build_judge_input_carries_the_stage_veto_text():
+    ji = _build_judge_input(
+        artifact_json="{}", rubrics={"qa": "rubric text"}, stage="qa",
+        author_model="a", judge_model="b",
+        vetoes={"qa": "- id: v\n  kind: nonempty\n  fields: [x]\n"})
+    assert ji is not None
+    assert "nonempty" in ji.vetoes_yaml
+
+
+def test_build_judge_input_defaults_vetoes_to_empty():
+    ji = _build_judge_input(
+        artifact_json="{}", rubrics={"qa": "r"}, stage="qa",
+        author_model="a", judge_model="b")
+    assert ji is not None
+    assert ji.vetoes_yaml == ""

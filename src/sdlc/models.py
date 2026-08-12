@@ -795,6 +795,7 @@ class BenchmarkConfig(BaseModel):
     case_id: str | None = None
     bench_run_id: str | None = None
     rubrics: dict[str, str] = Field(default_factory=dict)   # stage -> rubric text
+    vetoes: dict[str, str] = Field(default_factory=dict)   # stage -> veto YAML text (E-83)
     judge_model: str | None = None                          # model the judge uses
 
 

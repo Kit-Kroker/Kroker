@@ -699,6 +699,7 @@ class FeatureWorkflow(GateHost):
             stage=stage,
             author_model=author_model,
             judge_model=cfg.benchmark.judge_model,
+            vetoes=cfg.benchmark.vetoes,
         )
         if judge_input is None:
             return fallback

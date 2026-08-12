@@ -17,6 +17,7 @@ from pydantic_ai import Agent
 from temporalio import activity
 
 from .models import QualityScore
+from .vetoes import VetoConfigError, check, parse_vetoes
 
 
 @dataclass
@@ -25,11 +26,17 @@ class JudgeInput:
     rubric: str                 # rubric markdown/text for this case+stage
     author_model: str           # to assert cross-family at call time
     judge_model: str | None = None     # model the judge should USE (A1)
+    # E-83: raw YAML text of this stage's vetoes. A STRING, not parsed
+    # objects: JudgeInput crosses a Temporal activity boundary, and plain
+    # text serializes under any converter -- the same reason `rubric` and
+    # `artifact_json` are strings. Empty means no vetoes.
+    vetoes_yaml: str = ""
 
 
 def _build_judge_input(artifact_json: str, rubrics: dict[str, str],
                        stage: str, author_model: str,
-                       judge_model: str | None) -> JudgeInput | None:
+                       judge_model: str | None,
+                       vetoes: dict[str, str] | None = None) -> JudgeInput | None:
     """Build a JudgeInput iff a rubric is registered for ``stage``.
 
     ``stage`` is the rubric-map key — i.e. the keys carried on
@@ -51,6 +58,7 @@ def _build_judge_input(artifact_json: str, rubrics: dict[str, str],
         rubric=rubric,
         author_model=author_model,
         judge_model=judge_model,
+        vetoes_yaml=(vetoes or {}).get(stage, ""),
     )
 
 
@@ -105,17 +113,33 @@ def _default_judge(inp: JudgeInput) -> str:
 
 
 def _judge_sync(inp: JudgeInput) -> QualityScore:
+    # Vetoes FIRST and outside the judge's try: they are deterministic, so a
+    # malformed veto file is a config error (not measured), while a veto that
+    # FIRES is a measurement that succeeded and must survive a judge failure.
+    try:
+        vetoes = parse_vetoes(inp.vetoes_yaml)
+        artifact = json.loads(inp.artifact_json) if vetoes else {}
+        failures = check(artifact, vetoes) if vetoes else []
+    except (VetoConfigError, json.JSONDecodeError):
+        return QualityScore(score=None, judge="error")
+
     fn = _judge_fn or _default_judge
     try:
-        raw = fn(inp)
-        payload = json.loads(raw)
-        score = float(payload.get("score", 0.0))
-        score = max(0.0, min(1.0, score))      # clamp
-        components = payload.get("components") or {}
-        return QualityScore(score=score, components=components,
-                            judge="llm_judge")
+        payload = json.loads(fn(inp))
+        score = max(0.0, min(1.0, float(payload.get("score", 0.0))))
+        components = dict(payload.get("components") or {})
     except Exception:
-        return QualityScore(score=None, judge="error")
+        if not failures:
+            return QualityScore(score=None, judge="error")
+        # A veto fired. That IS a finding, and discarding it because the
+        # advisory judge fell over would throw away the sharper signal.
+        score, components = 0.0, {}
+
+    if failures:
+        for f in failures:
+            components[f.veto_id] = 0.0
+        score = 0.0
+    return QualityScore(score=score, components=components, judge="llm_judge")
 
 
 @activity.defn

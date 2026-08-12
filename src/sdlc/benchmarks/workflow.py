@@ -41,7 +41,8 @@ ORACLE_ACT = dict(start_to_close_timeout=timedelta(minutes=20),
 
 def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
                  cell: BenchmarkCell, bench_run_id: str,
-                 rubrics: dict[str, str] | None = None) -> PipelineConfig:
+                 rubrics: dict[str, str] | None = None,
+                 vetoes: dict[str, str] | None = None) -> PipelineConfig:
     """Build a per-cell PipelineConfig from the cell's arm: each role in
     role_models is overridden to its model (harness roles carry the cell's
     harness + the base role's context budget / extra args; proposer roles are
@@ -84,7 +85,8 @@ def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
         cfg.roles["research"] = RoleConfig(kind="research", provider="tavily")
     cfg.benchmark = BenchmarkConfig(
         case_id=spec.case_id, bench_run_id=bench_run_id,
-        rubrics=dict(rubrics or {}), judge_model=spec.judge_model)
+        rubrics=dict(rubrics or {}), vetoes=dict(vetoes or {}),
+        judge_model=spec.judge_model)
     # A benchmark matrix run is unattended by default, so every gate in the
     # child FeatureWorkflow runs under spec.gate_policy (SOFT unless the case
     # or --gate-policy overrides it) rather than the case's own gates dict —
@@ -163,11 +165,19 @@ class BenchmarkWorkflow:
         rubrics = await workflow.execute_activity(
             load_case_assets, args=[spec.case_id, dict(spec.rubrics)],
             **RECORD_ACT)
+        # E-83: veto files use the same {stage: path} -> {stage: text} shape as
+        # rubrics. load_case_assets is generic over file contents, so it does
+        # not care that this text is YAML. Skipped entirely when no vetoes are
+        # registered (the common case -- vetoes are opt-in per case).
+        veto_assets = await workflow.execute_activity(
+            load_case_assets, args=[spec.case_id, dict(spec.vetoes)],
+            **RECORD_ACT) if spec.vetoes else {}
         for cell in cells:
             child_id = f"{bench_run_id}/{cell.cell_id}"
             try:
                 cfg = _cell_config(base, idea, spec, cell,
-                                   bench_run_id=bench_run_id, rubrics=rubrics)
+                                   bench_run_id=bench_run_id, rubrics=rubrics,
+                                   vetoes=veto_assets)
             except Exception as e:
                 # an ADR-6-violating arm is rejected at the boundary — the cell
                 # never runs, so there is nothing to grade; log and skip it
