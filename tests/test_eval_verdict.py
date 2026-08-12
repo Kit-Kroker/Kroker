@@ -136,6 +136,40 @@ def test_real_scores_survive_the_sentinel_filter():
     assert r.mean_baseline == 0.8
 
 
+def test_assertion_failure_is_not_a_provider_error():
+    """promptfoo copies a failed assertion's reason into row.error. decide
+    must not treat that as a provider error -- an absolute failure on real
+    output is FAIL_ABSOLUTE, not ERRORED. This is the E-83 mutation suite's
+    scope_dropped case: the veto fires, and the gate must show its teeth."""
+    res = _results([0.9], [0.9])
+    work_row = res["results"]["results"][-1]
+    reason = "veto scope_preserved: required term(s) absent: litter box"
+    work_row["error"] = reason
+    for c in work_row["gradingResult"]["componentResults"]:
+        if "absolute.py" in str(c["assertion"].get("value")):
+            c["pass"] = False
+            c["reason"] = reason
+    r = decide(res)
+    assert r.verdict is GateVerdict.FAIL_ABSOLUTE
+    assert "scope_preserved" in r.reason
+
+
+def test_a_genuine_provider_error_is_still_errored():
+    """A provider error whose message is NOT an assertion reason is a real
+    'gate could not run', even though the empty output also fails the type
+    assertion (spec 6: provider error -> ERRORED, not a prompt regression)."""
+    res = _results([0.9], [0.9])
+    work_row = res["results"]["results"][-1]
+    work_row["error"] = "RuntimeError: model timed out"
+    for c in work_row["gradingResult"]["componentResults"]:
+        if "absolute.py" in str(c["assertion"].get("value")):
+            c["pass"] = False
+            c["reason"] = "empty output - cannot validate as ClarifiedRequirements"
+    r = decide(res)
+    assert r.verdict is GateVerdict.ERRORED
+    assert "model timed out" in r.reason
+
+
 def test_one_sided_judge_still_records_the_measured_mean():
     """A judge score that WAS produced must survive to the record.
 

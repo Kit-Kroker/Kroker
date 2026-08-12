@@ -130,14 +130,24 @@ def decide(results: dict, *, delta_min: float = 0.05) -> PromptGateResult:
     base_rows = [r for r in rows if _label(r) == "baseline"]
     work_rows = [r for r in rows if _label(r) == "working"]
 
-    errors = [r["error"] for r in rows if r.get("error")]
-    if errors:
+    failures = _absolute_failures(work_rows)
+    # promptfoo copies a failed assertion's reason into the row's `error`
+    # field, so row.error alone does NOT mean the provider failed -- a veto
+    # or output-type failure on a real artifact also lands there. Only an
+    # error NOT explained by an absolute failure is a genuine "gate could
+    # not run" (spec 6). The distinction is the difference between the gate
+    # having teeth (a veto fires -> FAIL_ABSOLUTE) and not (every assertion
+    # failure reads as infra noise -> ERRORED). Surfaced by the E-83
+    # mutation suite's scope_dropped case.
+    provider_error = next(
+        (r["error"] for r in rows
+         if r.get("error") and r["error"] not in failures), None)
+    if provider_error is not None:
         return PromptGateResult(
             verdict=GateVerdict.ERRORED, judge_status=JudgeStatus.UNAVAILABLE,
-            reason=f"gate could not run — provider error: {errors[0]} "
+            reason=f"gate could not run — provider error: {provider_error} "
                    f"(this is NOT a prompt regression)")
 
-    failures = _absolute_failures(work_rows)
     if failures:
         return PromptGateResult(
             verdict=GateVerdict.FAIL_ABSOLUTE,
