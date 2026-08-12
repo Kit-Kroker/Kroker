@@ -6,7 +6,7 @@
 | Work items | **E-46** (fills §11's first unbuilt phase body; unblocks E-48, and through it E-47a's first live consumer) |
 | Requirements | FR-912; FR-902 extended to Tier 2; FR-915; FR-103 (memoization); FR-108 (adapter escalation); NFR-10 |
 | Scope input | `PRD.md` §FR-910; `ROADMAP.md` §11 (E-46), §15 item 3; `D:\own\BrownKit\commands\scan.md`; `docs/superpowers/specs/2026-08-10-assessment-workflow-edcr-shell-design.md` D5/D6; `docs/superpowers/specs/2026-08-08-oq6-capability-identity-design.md` (tiers, memo amendment); `docs/superpowers/specs/2026-08-06-repository-triage-hygiene-signals-design.md` D3/D15 |
-| Status | Design approved 2026-08-12 |
+| Status | Design approved 2026-08-12; plan 1 of 3 implemented |
 
 E-45 shipped the EDCR DAG with six phase bodies stubbed, each reporting
 `not_collected` naming the item that owes it. This increment writes the first of
@@ -523,6 +523,17 @@ class SignalOutput(BaseModel):
     sources: list[SourceCandidate] = Field(default_factory=list)
     data_sensitivity: list[SensitivityRecord] = Field(default_factory=list)
     testability: list[TestabilityFinding] = Field(default_factory=list)
+
+    # NOTE (2026-08-12, plan-1 review finding 3): the three payload fields above
+    # give a home to S1-S4 (sources), S5 (candidates, on ScanResult), SS4
+    # (data_sensitivity) and QS3 (testability). Five computed halves -- SS1
+    # (TLS, input validation), SS3 (ports, env divergence, DB security, log
+    # masking), QS1 (test levels, test mapping), QS2 (coverage breakdown), QS4
+    # (CI stages, env drift) -- have NO payload type here. Plan 3 must extend
+    # SignalOutput, ScanResult, PAYLOAD_FIELD and the _unmeasured_carries_no_payload
+    # validator for each, with its own typed record shape; the plan-1 claim
+    # "plans 2-3 replace bodies, not wiring" is therefore true for 8 of 13
+    # signals and false for these 5. Recorded here so plan 3 is not surprised.
 
 
 class ScanResult(BaseModel):

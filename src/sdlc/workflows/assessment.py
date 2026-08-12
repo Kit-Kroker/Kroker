@@ -17,10 +17,22 @@ what remove that debt.
 """
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Mapping
+from datetime import timedelta
+
 from pydantic import BaseModel, Field
 from temporalio import workflow
+from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
+    from ..assessment.activities import (
+        AssessmentTree, AssessmentTreeInput, ScanSignalInput,
+        assessment_resolve_tree, scan_ci, scan_config_infra, scan_coverage,
+        scan_entrypoints, scan_frontend, scan_packages, scan_schema,
+        scan_security_static, scan_sensitivity, scan_testability,
+        scan_tests_inventory,
+    )
     from ..assessment.models import (
         PHASE_ORDER,
         Assessment,
@@ -29,10 +41,17 @@ with workflow.unsafe.imports_passed_through():
         PhaseResult,
         terminal_status,
     )
-    from ..measurement import Measurement
+    from ..assessment.scan.inherit import InheritedHalf, inherited_halves
+    from ..assessment.scan.models import (
+        CATEGORIES, SCAN_ORDER, ScanResult, ScanSignalId, ScanSignalResult,
+        SignalOutput, SignalSource, SourceCandidate, family_of,
+    )
+    from ..assessment.scan.registry import SCAN_SIGNALS, WAVES
+    from ..measurement import CollectionState, Measurement
     from ..models import GateSettings
     from ..triage.admission import admits
     from ..triage.models import RepoTriage
+    from .fanout import run_or_degrade
     from .gates import GateHost
     from .triage import TriageInput, TriageWorkflow
 
@@ -51,9 +70,9 @@ class AssessmentInput(BaseModel):
 
 
 # The E-item owing each unbuilt phase body, so an empty assessment says WHY
-# it is empty rather than merely being empty.
+# it is empty rather than merely being empty. SCAN dropped here in E-46: its
+# body is built, so nothing owes it.
 PHASE_OWNER: dict[PhaseId, str] = {
-    PhaseId.SCAN: "E-46",
     PhaseId.DISCOVER: "E-48",
     PhaseId.ASSESS: "E-49",
     PhaseId.REPORT: "E-52",
@@ -80,8 +99,132 @@ def skipped(phase: PhaseId) -> PhaseResult:
             "not run: repository not admitted (FR-903)"))
 
 
+# Deterministic given a tree; the retry covers FS/git blips only. Mirrors
+# triage's SIGNAL_ACT, which these signals are the Tier 2 analogue of.
+SCAN_ACT = dict(start_to_close_timeout=timedelta(minutes=10),
+                retry_policy=RetryPolicy(maximum_attempts=2))
+TREE_ACT = dict(start_to_close_timeout=timedelta(minutes=2),
+                retry_policy=RetryPolicy(maximum_attempts=3))
+
+# Registry `activity` names resolved to the callables. A name the registry
+# declares and this table lacks is a boot-time KeyError in _scan rather than a
+# silent skip, which is why test_scan_stub_activities asserts they agree.
+SCAN_ACTIVITIES = {
+    "scan_packages": scan_packages,
+    "scan_schema": scan_schema,
+    "scan_entrypoints": scan_entrypoints,
+    "scan_frontend": scan_frontend,
+    "scan_security_static": scan_security_static,
+    "scan_config_infra": scan_config_infra,
+    "scan_sensitivity": scan_sensitivity,
+    "scan_tests_inventory": scan_tests_inventory,
+    "scan_coverage": scan_coverage,
+    "scan_testability": scan_testability,
+    "scan_ci": scan_ci,
+}
+
+
+class ScanOutcome(BaseModel):
+    """scan's two halves, mirroring InitOutcome: a failed phase yields a row
+    but no artifact."""
+    result: PhaseResult
+    scan: ScanResult | None = None
+
+
+def skipped_scan_signal(signal_id: ScanSignalId,
+                        reason: str) -> ScanSignalResult:
+    """A signal that did not run. Its owed categories come from the artifact's
+    declaration, so a failed signal reports not_collected for exactly those
+    rather than leaving them unreported (the E-42 D8a discipline)."""
+    nc = Measurement.not_collected(reason)
+    return ScanSignalResult(
+        signal=signal_id, family=family_of(signal_id),
+        version=SCAN_SIGNALS[signal_id].version,
+        source=SignalSource.COMPUTED, collected=nc,
+        categories={k: nc for k in CATEGORIES[signal_id]})
+
+
+def fold_row(activity_row: ScanSignalResult,
+             half: InheritedHalf | None) -> ScanSignalResult:
+    """Union the activity's computed half with the inherited half (D7).
+
+    The inherited half wins its OWN categories and nothing else -- it is the
+    authority on what Tier 0 measured, and the activity is the authority on
+    what this phase computed. Neither can overwrite the other's keys.
+    """
+    if half is None:
+        return activity_row
+    return activity_row.model_copy(update={
+        "source": SignalSource.EXTENDED,
+        "producer": half.producer,
+        "categories": activity_row.categories | half.categories,
+    })
+
+
+def _collected_from_categories(
+        categories: Mapping[str, Measurement]) -> Measurement:
+    """A signal's overall collected state, DERIVED from its category
+    measurements: measured (record count) when every owed category measured,
+    else not_collected carrying a representative reason.
+
+    The row-level analogue of compute_readiness deriving a verdict from its
+    dimensions. Used for a purely-inherited signal (SS2), whose row has no
+    activity to set `collected` -- hardcoding not_collected would report a
+    measured inherited fact as unmeasured, the reverse of the FR-915
+    conflation the type exists to prevent.
+    """
+    if categories and all(
+            m.state is CollectionState.MEASURED for m in categories.values()):
+        return Measurement.measured(
+            sum(m.value or 0.0 for m in categories.values()))
+    nc = next((m for m in categories.values()
+               if m.state is not CollectionState.MEASURED), None)
+    return Measurement.not_collected(
+        nc.reason if nc and nc.reason
+        else "one or more owed categories not measured")
+
+
+def _inherited_row(signal_id: ScanSignalId,
+                   half: InheritedHalf) -> ScanSignalResult:
+    """A purely-inherited signal's row (SS2): the half IS the whole signal.
+
+    source is INHERITED, not EXTENDED -- D12 cut the computed half, so there
+    is no activity contribution to extend. `collected` is derived from the
+    categories the half carried, so a triage signal that collected reads as
+    collected here (FR-915).
+    """
+    return ScanSignalResult(
+        signal=signal_id, family=family_of(signal_id),
+        version=SCAN_SIGNALS[signal_id].version,
+        source=SignalSource.INHERITED,
+        collected=_collected_from_categories(half.categories),
+        categories=dict(half.categories),
+        producer=half.producer)
+
+
+def _upstream_for(signal_id: ScanSignalId,
+                  outputs: Mapping[ScanSignalId, SignalOutput]
+                  ) -> list[SourceCandidate]:
+    """The candidates one signal is allowed to read: only those produced by
+    the signals it declares in `consumes`.
+
+    `consumes` already drives the fan-out wave (wave_of) and the memo key
+    (rules_sha). Driving the payload from the SAME declaration makes reading
+    undeclared data impossible rather than merely discouraged -- otherwise a
+    wave-2 signal could read an S1 candidate off `upstream` while declaring
+    only S3, and editing S1's pattern table would not move its memo key
+    (rules_sha walks `consumes`, which does not include S1). That is the
+    precise stale-cache setup D10 exists to prevent.
+    """
+    return [cand
+            for c_id in SCAN_SIGNALS[signal_id].consumes
+            if c_id in outputs
+            for cand in outputs[c_id].sources]
+
+
 def assemble(repo_dir: str, init: InitOutcome, admitted: bool, reason: str,
-             rest: list[PhaseResult] | None = None) -> Assessment:
+             rest: list[PhaseResult] | None = None,
+             scan: ScanResult | None = None) -> Assessment:
     """The ONLY constructor of an Assessment and the only caller of
     terminal_status: one place where the artifact is built means the derived
     status cannot disagree with the phase list it was derived from.
@@ -109,7 +252,8 @@ def assemble(repo_dir: str, init: InitOutcome, admitted: bool, reason: str,
         commit_sha=t.commit_sha if t else "",
         toolchain=t.toolchain if t else None,
         triage=t, admitted=admitted, admission_reason=reason,
-        phases=phases, terminal_status=terminal_status(admitted, phases))
+        phases=phases, terminal_status=terminal_status(admitted, phases),
+        scan=scan)
 
 
 @workflow.defn
@@ -159,10 +303,92 @@ class AssessmentWorkflow(GateHost):
                                collected=Measurement.measured(1.0)),
             triage=triage)
 
-    async def _scan(self, inp: AssessmentInput) -> PhaseResult:
-        """E-46 owns this body: S1-S5 / SS1-SS4 / QS1-QS4 signals, memoized
-        on (tree hash, signal version) per FR-912."""
-        return unbuilt(PhaseId.SCAN)
+    async def _scan(self, inp: AssessmentInput,
+                    triage: RepoTriage) -> ScanOutcome:
+        """Phase 2 (E-46). Thirteen signals: eleven activities across two
+        waves, plus S5's merge and SS2's pure inheritance in workflow code.
+
+        Nothing here executes the assessed repository's code -- every signal
+        reads blob bytes at the pinned commit (NFR-9, D12).
+        """
+        try:
+            tree: AssessmentTree = await workflow.execute_activity(
+                assessment_resolve_tree,
+                AssessmentTreeInput(repo_dir=inp.repo_dir,
+                                    commit_sha=triage.commit_sha),
+                **TREE_ACT)
+        except Exception as e:                          # noqa: BLE001
+            # Without a tree hash nothing can be memoized or reproduced, so a
+            # scan that proceeded would be unverifiable.
+            return ScanOutcome(result=PhaseResult(
+                phase=PhaseId.SCAN,
+                collected=Measurement.not_collected(
+                    f"could not resolve the tree hash: "
+                    f"{type(e).__name__}: {e}"[:300])))
+
+        halves = inherited_halves(triage)
+        outputs: dict[ScanSignalId, SignalOutput] = {}
+
+        for wave in WAVES:
+            jobs = []
+            for sid in wave:
+                # D10: each signal's upstream is filtered to the signals it
+                # declares in `consumes`, so reading undeclared data is
+                # impossible and rules_sha (same `consumes`) cannot miss it.
+                arg = ScanSignalInput(
+                    repo_dir=inp.repo_dir, commit_sha=triage.commit_sha,
+                    tree_hash=tree.tree_hash,
+                    upstream=sorted(_upstream_for(sid, outputs),
+                                    key=lambda c: (c.signal.value,
+                                                   c.local_id)))
+                jobs.append(run_or_degrade(
+                    SCAN_ACTIVITIES[SCAN_SIGNALS[sid].activity], arg,
+                    SCAN_ACT,
+                    fallback=lambda sid=sid: SignalOutput(
+                        row=skipped_scan_signal(
+                            sid, f"{sid.value} activity failed or timed out"))))
+            results = await asyncio.gather(*jobs)
+            outputs.update(zip(wave, results))
+
+        # S5 (in_workflow) and SS2 (purely inherited, D12) run no activity.
+        # SS2's row is built from its inherited half -- the half IS the signal
+        # (D12 cut its computed half), so it reads INHERITED and collected when
+        # triage collected, not as a skipped stub. S5's merge is owed by plan 2.
+        for sid in SCAN_ORDER:
+            if sid in outputs or SCAN_SIGNALS[sid].activity:
+                continue
+            half = halves.get(sid)
+            outputs[sid] = SignalOutput(
+                row=_inherited_row(sid, half) if half is not None
+                else skipped_scan_signal(
+                    sid, f"{sid.value} not implemented (plan 2, E-46)"))
+
+        # Activity signals get their inherited half folded in (D7); the two
+        # synthesized rows above are already final (SS2 IS its half; S5 has no
+        # half to fold), so fold_row would wrongly promote SS2 to EXTENDED.
+        rows = [fold_row(outputs[sid].row, halves.get(sid))
+                if SCAN_SIGNALS[sid].activity else outputs[sid].row
+                for sid in SCAN_ORDER]
+        sources = sorted(
+            (c for out in outputs.values() for c in out.sources),
+            key=lambda c: (c.signal.value, c.local_id))
+        scan = ScanResult(
+            signals=rows,
+            sources=sources,
+            candidates=[],          # S5's merge lands in plan 2
+            data_sensitivity=sorted(
+                (r for out in outputs.values() for r in out.data_sensitivity),
+                key=lambda r: (r.classification.value, r.entity)),
+            testability=sorted(
+                (f for out in outputs.values() for f in out.testability),
+                key=lambda f: (f.path, f.pattern, f.key)))
+        measured = sum(
+            1 for r in rows
+            if r.collected.state is CollectionState.MEASURED)
+        return ScanOutcome(
+            result=PhaseResult(phase=PhaseId.SCAN,
+                               collected=Measurement.measured(float(measured))),
+            scan=scan)
 
     async def _discover(self, inp: AssessmentInput) -> PhaseResult:
         """E-48 owns this body: D1-D8 discover proposers."""
@@ -204,12 +430,14 @@ class AssessmentWorkflow(GateHost):
             return self._done(assemble(inp.repo_dir, init, False, why))
 
         self._status = "running"
+        scan_out = await self._scan(inp, init.triage)
         rest = [
-            await self._scan(inp),
+            scan_out.result,
             await self._discover(inp),
             await self._assess(inp),
             await self._report(inp),      # AFTER assess -- FR-911 dev. (a)
             await self._generate(inp),
             await self._finish(inp),
         ]
-        return self._done(assemble(inp.repo_dir, init, True, why, rest))
+        return self._done(assemble(inp.repo_dir, init, True, why, rest,
+                                   scan=scan_out.scan))

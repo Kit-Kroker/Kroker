@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from ..measurement import CollectionState, Measurement
 from ..triage.models import RepoTriage
+from .scan.models import ScanResult
 
 
 class PhaseId(str, Enum):
@@ -97,6 +98,10 @@ class Assessment(BaseModel):
     admission_reason: str           # admits()' reason, verbatim
     phases: list[PhaseResult] = Field(default_factory=list)
     terminal_status: str
+    # E-46's typed field. There is deliberately no generic payload bag: each
+    # later item adds its OWN typed field, because an untyped bag would be a
+    # schema-less hole in the one artifact handed to a customer (FR-921).
+    scan: ScanResult | None = None
 
     @model_validator(mode="after")
     def _no_triage_means_not_admitted(self) -> Assessment:
@@ -130,4 +135,27 @@ class Assessment(BaseModel):
                 f"the derived {expected!r} for admitted={self.admitted} "
                 f"and these phases -- the status is derived, never assigned "
                 f"(D6)")
+        return self
+
+    @model_validator(mode="after")
+    def _scan_agrees_with_its_phase(self) -> Assessment:
+        """The payload and its phase row cannot contradict each other, the
+        same guarantee _terminal_status_matches_derivation gives the status.
+
+        A not_collected SCAN phase carrying a ScanResult would be an
+        assessment claiming it did not scan while shipping scan output.
+        """
+        row = next((p for p in self.phases if p.phase is PhaseId.SCAN), None)
+        if row is None:                       # unreachable: the DAG validator
+            return self                       # already required every phase
+        measured = row.collected.state is CollectionState.MEASURED
+        if measured and self.scan is None:
+            raise ValueError(
+                "scan phase is measured but no ScanResult is present -- a "
+                "measured phase produced an artifact by definition")
+        if not measured and self.scan is not None:
+            raise ValueError(
+                f"scan phase is {row.collected.state.value} but a ScanResult "
+                f"is present -- an assessment cannot claim it did not scan "
+                f"while shipping scan output")
         return self
