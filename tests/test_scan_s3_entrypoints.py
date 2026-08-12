@@ -1,0 +1,150 @@
+"""S3 -- backend entry points, the Contract tier.
+
+Two rules carry the weight: BrownKit's "group by business operation, not
+technical type", and P2-D1's fail-closed reading of D5.
+"""
+from __future__ import annotations
+
+from sdlc.assessment.scan.models import (
+    C_BACKEND_ENTRY, Confidence, MemberKind, ScanSignalId,
+)
+from sdlc.assessment.scan.signals import entrypoints
+from sdlc.measurement import CollectionState
+
+FASTAPI = {
+    "src/payments/api.py": (
+        "from fastapi import APIRouter\n"
+        "router = APIRouter()\n"
+        "\n"
+        "@router.post('/api/payments')\n"
+        "def create_payment():\n"
+        "    ...\n"
+        "\n"
+        "@router.get('/api/payments/{payment_id}')\n"
+        "def get_payment():\n"
+        "    ...\n"
+    ),
+}
+
+
+def _by_id(out):
+    return {c.local_id: c for c in out.sources}
+
+
+def test_fastapi_routes_become_http_route_members():
+    out = entrypoints.evaluate(FASTAPI)
+    pay = _by_id(out)["S3-payment"]
+    values = {m.value for m in pay.members}
+    assert "POST /api/payments" in values
+    assert "GET /api/payments/{payment_id}" in values
+    assert all(m.kind is MemberKind.HTTP_ROUTE for m in pay.members)
+
+
+def test_routes_and_jobs_and_consumers_group_into_one_candidate():
+    """D9's ported rule: PaymentController + PaymentSettlementJob +
+    PaymentEventConsumer is ONE candidate, not three. Do not split by
+    channel."""
+    blobs = dict(FASTAPI)
+    blobs["src/jobs/PaymentSettlementJob.py"] = (
+        "from celery import shared_task\n"
+        "@shared_task\n"
+        "def settle_daily():\n"
+        "    ...\n"
+    )
+    out = entrypoints.evaluate(blobs)
+    assert set(_by_id(out)) == {"S3-payment"}
+    kinds = {m.kind for m in _by_id(out)["S3-payment"].members}
+    assert kinds == {MemberKind.HTTP_ROUTE, MemberKind.SCHEDULED_JOB}
+
+
+def test_cross_channel_corroboration_contributes_high():
+    blobs = dict(FASTAPI)
+    blobs["src/jobs/PaymentSettlementJob.py"] = (
+        "from celery import shared_task\n@shared_task\ndef settle():\n    ...\n")
+    out = entrypoints.evaluate(blobs)
+    assert _by_id(out)["S3-payment"].confidence_contribution is Confidence.HIGH
+
+
+def test_a_single_entry_point_contributes_low():
+    out = entrypoints.evaluate({
+        "src/health.py": ("from fastapi import FastAPI\napp = FastAPI()\n"
+                          "@app.get('/health')\ndef health():\n    ...\n")})
+    assert list(_by_id(out).values())[0].confidence_contribution is \
+        Confidence.LOW
+
+
+def test_a_route_prefix_is_not_the_business_name():
+    """/api/payments groups under 'payment', never under 'api'."""
+    out = entrypoints.evaluate(FASTAPI)
+    assert "S3-api" not in _by_id(out)
+    assert "S3-payment" in _by_id(out)
+
+
+def test_express_routes_are_extracted_without_a_toolchain_adapter():
+    """D4: fingerprints live in the signal module, so a TS/JS repo is
+    scannable before E-30b exists."""
+    out = entrypoints.evaluate({
+        "server/orders.js": ("const express = require('express')\n"
+                             "const router = express.Router()\n"
+                             "router.post('/orders', createOrder)\n")})
+    assert "S3-order" in _by_id(out)
+
+
+def test_click_commands_become_cli_command_members():
+    """And 'cli.py' names the delivery channel, not the capability, so the
+    candidate takes its parent directory -- E-48's guardrail applied at
+    extraction time rather than left for the proposer."""
+    out = entrypoints.evaluate({
+        "src/billing/cli.py": ("import click\n"
+                               "@click.command()\n"
+                               "def reconcile():\n    ...\n")})
+    assert "S3-billing" in _by_id(out)
+    cand = _by_id(out)["S3-billing"]
+    assert cand.members[0].kind is MemberKind.CLI_COMMAND
+    assert cand.rule == "s3_cli_command"
+
+
+def test_an_unfingerprinted_framework_fails_the_signal_closed():
+    """P2-D1: extracting only the FastAPI half would hand E-47a a partial
+    Contract tier at weight 0.55, which is what D5 forbids."""
+    blobs = dict(FASTAPI)
+    blobs["src/legacy/views.py"] = (
+        "from django.http import JsonResponse\n"
+        "def legacy_view(request):\n    return JsonResponse({})\n")
+    out = entrypoints.evaluate(blobs)
+    assert out.row.collected.state is CollectionState.NOT_COLLECTED
+    assert "django" in out.row.collected.reason
+    assert out.sources == []            # and nothing partial survives
+
+
+def test_no_recognized_framework_is_a_gap_not_a_zero():
+    """D5 literally: never an empty route list. 'This repo has no backend'
+    and 'this backend uses something we cannot parse' are not
+    distinguishable, and only one of them is safe to assert."""
+    out = entrypoints.evaluate({"src/lib/math.py": "def add(a, b):\n    return a + b\n"})
+    assert out.row.collected.state is CollectionState.NOT_COLLECTED
+    assert "no recognized backend framework" in out.row.collected.reason
+    assert out.sources == []
+
+
+def test_the_row_reports_its_category_and_nothing_else():
+    out = entrypoints.evaluate(FASTAPI)
+    assert set(out.row.categories) == {C_BACKEND_ENTRY}
+    assert out.row.signal is ScanSignalId.S3
+
+
+def test_evidence_cites_the_file_and_line():
+    out = entrypoints.evaluate(FASTAPI)
+    ev = _by_id(out)["S3-payment"].evidence
+    assert any(e.path == "src/payments/api.py" and e.lines for e in ev)
+
+
+def test_output_is_order_independent():
+    """NFR-10: dict iteration order must not reach the artifact."""
+    blobs = dict(FASTAPI)
+    blobs["src/orders/api.py"] = (
+        "from fastapi import APIRouter\nrouter = APIRouter()\n"
+        "@router.get('/orders')\ndef list_orders():\n    ...\n")
+    a = entrypoints.evaluate(blobs)
+    b = entrypoints.evaluate(dict(reversed(list(blobs.items()))))
+    assert a.model_dump_json() == b.model_dump_json()
