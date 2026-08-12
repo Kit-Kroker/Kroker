@@ -70,3 +70,9 @@ rubrics:
   planner: rubric-planner.md
   qa: rubric-qa.md
   research: rubric-research.md
+# Deterministic absolute overrides for the rubrics above (E-83). Same
+# key vocabulary as `rubrics:`. A rubric may have no veto file; a veto file
+# without a matching rubric key is never loaded.
+vetoes:
+  clarifier: vetoes-clarifier.yaml
+  qa: vetoes-qa.yaml

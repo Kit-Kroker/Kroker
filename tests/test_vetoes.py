@@ -121,3 +121,36 @@ def test_validate_fields_rejects_an_unknown_field():
     with pytest.raises(VetoConfigError) as e:
         validate_fields(bad, _Output)
     assert "not_a_field" in str(e.value)
+
+
+def test_shipped_veto_files_parse_and_match_their_output_types():
+    """The two authored veto files must parse AND name only real fields.
+
+    This is the load-time check the design puts ahead of judge time, run
+    against the real ClarifiedRequirements and QAReport."""
+    from pathlib import Path
+
+    from sdlc.models import ClarifiedRequirements, QAReport
+
+    case = (Path(__file__).resolve().parents[1] / "benchmarks" / "cases"
+            / "cat-cafe-monitoring")
+    for filename, output_type in (("vetoes-clarifier.yaml",
+                                   ClarifiedRequirements),
+                                  ("vetoes-qa.yaml", QAReport)):
+        vetoes = parse_vetoes((case / filename).read_text(encoding="utf-8"))
+        assert vetoes, f"{filename} declares no vetoes"
+        validate_fields(vetoes, output_type)
+
+
+def test_case_yaml_registers_both_veto_files():
+    from pathlib import Path
+
+    import yaml as _yaml
+
+    case = (Path(__file__).resolve().parents[1] / "benchmarks" / "cases"
+            / "cat-cafe-monitoring")
+    data = _yaml.safe_load((case / "case.yaml").read_text(encoding="utf-8"))
+    assert data["vetoes"] == {"clarifier": "vetoes-clarifier.yaml",
+                              "qa": "vetoes-qa.yaml"}
+    for rel in data["vetoes"].values():
+        assert (case / rel).is_file()

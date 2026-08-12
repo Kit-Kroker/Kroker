@@ -145,6 +145,9 @@ class CaseSpec(BaseModel):
     models: list[str]
     judge_model: str                        # cross-family (ADR-6)
     rubrics: dict[str, str] = Field(default_factory=dict)  # stage -> rubric file
+    # E-83: stage -> veto file. Mirrors `rubrics`. Absent = no vetoes for
+    # that stage, which is not an error -- vetoes are opt-in per case.
+    vetoes: dict[str, str] = Field(default_factory=dict)
     # FR-107: run the research stage for this case. Default False so existing
     # cases inherit no behavior change -- including no new abort path, since
     # a grounding-verifier violation hard-returns the whole run

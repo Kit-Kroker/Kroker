@@ -1,0 +1,11 @@
+# Executable form of rubric-qa.md:13-17 -- internal_consistency. Both
+# directions of the contradiction the rubric names, each a boolean over typed
+# QAReport fields. This is the clearest case in the repository of a check that
+# was being asked of an LLM inside a weighted mean.
+- id: internal_consistency_passing
+  kind: not_both
+  field: tests_passed
+  equals: true
+  and_any_nonempty:
+    - failing_tests
+    - issues

@@ -1,0 +1,31 @@
+# Executable form of rubric-clarifier.md:12 -- "Silently dropping an activity,
+# the risk analysis, the red marking, or the 24h history scores 0 on this
+# component regardless of how good the rest is."
+#
+# The rubric states an absolute override; a mean-of-components judge cannot
+# express one. This runs in Python, over the parsed ClarifiedRequirements,
+# with zero model calls.
+- id: scope_preserved
+  kind: mentions_all
+  terms:
+    - sleeping
+    - eating
+    - drinking
+    - litter box
+    - playing
+    - fighting
+    - risk
+    - red
+    - "24"   # quoted: unquoted, YAML parses 24 as an int and terms is list[str]
+  fields:
+    - summary
+    - functional_requirements
+    - open_questions
+    - non_functional_requirements
+
+# rubric-clarifier.md:16 -- out_of_scope must be explicit. An empty list is
+# not scope discipline; it is a missing answer.
+- id: scope_discipline_declared
+  kind: nonempty
+  fields:
+    - out_of_scope
