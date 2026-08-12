@@ -59,9 +59,13 @@ def _resolve_case(role: str, case: str | None) -> str:
 def render_report(r: PromptGateResult) -> str:
     head = f"eval {r.role} (case {r.case}) -> {r.verdict.value}"
     lines = [head, f"  {r.reason}"]
+    # Each number is guarded independently: a one-sided judge reports its
+    # measured mean with no delta or floor, because no comparison ran.
     if r.mean_baseline is not None:
         lines.append(f"  baseline  {r.mean_baseline:.2f}  (n={r.n_baseline})")
+    if r.mean_working is not None:
         lines.append(f"  working   {r.mean_working:.2f}  (n={r.n_working})")
+    if r.delta is not None and r.floor is not None:
         lines.append(f"  delta     {r.delta:+.2f}   floor {r.floor:.2f}")
     for f in r.absolute_failures:
         lines.append(f"  ABSOLUTE  {f}")

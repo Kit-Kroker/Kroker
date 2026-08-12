@@ -134,3 +134,32 @@ def test_real_scores_survive_the_sentinel_filter():
     r = decide(_results([0.8, 0.8], [0.8, 0.8]))
     assert r.judge_status is JudgeStatus.MEASURED
     assert r.mean_baseline == 0.8
+
+
+def test_one_sided_judge_still_records_the_measured_mean():
+    """A judge score that WAS produced must survive to the record.
+
+    The regression is correctly not evaluated -- but reporting only n=1 and
+    dropping the 1.00 is how OQ-P5's evidence was lost."""
+    # NOTE (E-83 plan deviation): the plan specified _results([], [1.0]), but
+    # an empty baseline list hits the earlier NO_BASELINE branch (verdict.py
+    # `if not base_rows:`), which already sets mean_working. The UNAVAILABLE
+    # branch the plan is fixing needs baseline ROWS that produce no SCORES --
+    # one errored judge row ([None]) -- so base=[] but base_rows is non-empty.
+    r = decide(_results([None], [1.0]))
+    assert r.judge_status is JudgeStatus.UNAVAILABLE
+    assert r.verdict is GateVerdict.PASS
+    assert r.n_working == 1
+    assert r.mean_working == 1.0
+    assert r.mean_baseline is None
+    # NOT a regression comparison -- these must stay unset.
+    assert r.delta is None
+    assert r.floor is None
+
+
+def test_one_sided_baseline_records_its_mean_too():
+    r = decide(_results([0.4, 0.6], []))
+    assert r.judge_status is JudgeStatus.UNAVAILABLE
+    assert r.mean_baseline == 0.5
+    assert r.mean_working is None
+    assert r.n_baseline == 2

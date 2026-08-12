@@ -150,8 +150,15 @@ def decide(results: dict, *, delta_min: float = 0.05) -> PromptGateResult:
             reason="no committed baseline — working-tree score only")
 
     if not base or not work:
+        # The measured side's mean IS reported. The regression is NOT
+        # evaluated -- delta/floor stay None -- but a score that was
+        # produced must reach the record. Dropping it is how OQ-P5's
+        # "scored 1.00" observation became unrecoverable: the number lived
+        # only in the results.json that run_gate deletes in its finally.
         return PromptGateResult(
             verdict=GateVerdict.PASS, judge_status=JudgeStatus.UNAVAILABLE,
+            mean_baseline=statistics.fmean(base) if base else None,
+            mean_working=statistics.fmean(work) if work else None,
             n_baseline=len(base), n_working=len(work),
             reason="judge unavailable on at least one side — regression NOT "
                    "evaluated (not measured, not passed)")
