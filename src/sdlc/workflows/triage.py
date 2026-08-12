@@ -31,6 +31,7 @@ with workflow.unsafe.imports_passed_through():
         ReadinessOverride, RepoTriage, SignalResult, Verdict, compute_readiness,
     )
     from ..triage.registry import SIGNALS
+    from .fanout import run_or_degrade
     from .gates import GateHost
 
 # Read-only and idempotent -- retrying is free.
@@ -129,16 +130,13 @@ class TriageWorkflow(GateHost):
         return self._triage
 
     async def _one(self, signal_id: str, activity, arg, opts) -> SignalResult:
-        """Run one signal. A timeout, a lost worker, or an exhausted retry
-        becomes not_collected for THIS signal while every other one still
-        reports -- the workflow-side half of E-41 spec D3, which the activity's
-        own try/except cannot keep."""
-        try:
-            return await workflow.execute_activity(activity, arg, **opts)
-        except Exception as e:                      # noqa: BLE001
-            return skipped_signal(
-                signal_id, f"{signal_id} activity failed: "
-                           f"{type(e).__name__}: {e}"[:300])
+        """Run one signal, degrading to not_collected for THIS signal alone
+        (E-41 D3). The rule itself lives in fanout.run_or_degrade so
+        AssessmentWorkflow shares it rather than restating it (E-46 D14)."""
+        return await run_or_degrade(
+            activity, arg, opts,
+            fallback=lambda: skipped_signal(
+                signal_id, f"{signal_id} activity failed or timed out"))
 
     async def _fan_out(self, inp: TriageInput,
                        commit_sha: str) -> list[SignalResult]:
