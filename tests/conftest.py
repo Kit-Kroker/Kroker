@@ -151,3 +151,16 @@ def write_registry_dir(root, version=1):
         b"    return Agent(model, name='adversary_agent',\n"
         b"                 system_prompt=instructions)\n")
     return root
+
+
+@pytest.fixture
+def repo_cases_root():
+    """The real benchmarks/cases tree -- for veto + case.yaml load checks."""
+    return Path(__file__).resolve().parents[1] / "benchmarks" / "cases"
+
+
+@pytest.fixture
+def repo_agents_dir():
+    """The real resolved agents/ tree (registry or repo agents)."""
+    from sdlc.agents.loader import _resolve_agents_dir
+    return _resolve_agents_dir()

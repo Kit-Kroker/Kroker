@@ -12,11 +12,15 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
+import yaml
 from pydantic import BaseModel, ValidationError
 
 # Absolute: promptfoo loads this file standalone (see provider.py).
 from sdlc.agents.loader import _load_build
 from sdlc.agents.settings import MODEL_SETTINGS
+from sdlc.benchmarks.vetoes import (Veto, VetoConfigError, check,
+                                    parse_vetoes, validate_fields)
+from sdlc.eval.promptfoo.assertion import RUBRIC_KEY
 
 
 @lru_cache(maxsize=None)
@@ -69,10 +73,55 @@ def validates_as_output_type(output: str, role: str,
     return {"pass": True, "score": 1.0, "reason": f"validates as {name}"}
 
 
+def load_vetoes(case: str, role: str, cases_root: Path) -> list[Veto]:
+    """Vetoes registered for (case, role), or [] when none are.
+
+    Absence is NOT an error: vetoes are opt-in per case and the absolute tier
+    keeps its previous behaviour without them. A veto file that is REGISTERED
+    but malformed IS an error -- a veto that does not parse is not a passing
+    veto.
+    """
+    case_yaml = Path(cases_root) / case / "case.yaml"
+    if not case_yaml.is_file():
+        return []
+    data = yaml.safe_load(case_yaml.read_text(encoding="utf-8")) or {}
+    rel = (data.get("vetoes") or {}).get(RUBRIC_KEY.get(role, role))
+    if not rel:
+        return []
+    path = Path(cases_root) / case / rel
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError as e:
+        raise VetoConfigError(
+            f"veto file {path} named in {case_yaml} does not exist") from e
+    return parse_vetoes(text)
+
+
 def get_assert(output: str, context) -> dict:
     """promptfoo's Python assertion entry point -- the name is fixed by
     promptfoo (`getattr(script_module, "get_assert")`). Returns a
     GradingResult dict: {pass, score, reason}."""
     v = (context if isinstance(context, dict)
          else {"vars": getattr(context, "vars", {}) or {}}).get("vars", {})
-    return validates_as_output_type(output, v["role"], Path(v["agents_dir"]))
+    role, agents_dir = v["role"], Path(v["agents_dir"])
+
+    # Type validity first: an output that does not parse is broken whatever a
+    # veto says, and a veto message about never-populated fields would only
+    # obscure that.
+    result = validates_as_output_type(output, role, agents_dir)
+    if not result["pass"]:
+        return result
+
+    try:
+        vetoes = load_vetoes(v["case"], role, Path(v["cases_root"]))
+        validate_fields(vetoes, output_type_for(role, agents_dir))
+    except VetoConfigError as e:
+        return {"pass": False, "score": 0.0,
+                "reason": f"veto configuration error: {e}"}
+
+    failures = check(json.loads(output), vetoes)
+    if failures:
+        return {"pass": False, "score": 0.0,
+                "reason": "; ".join(f"veto {f.veto_id}: {f.reason}"
+                                    for f in failures)}
+    return result
