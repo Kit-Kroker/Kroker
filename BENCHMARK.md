@@ -540,6 +540,36 @@ adapters).
   both as separate arms? Running both measures how much the architect stage
   contributes when handed the answer in prose rather than skipped outright.
 
+## 7. Judge sensitivity (E-83)
+
+E-83 sharpened the quality instrument and added the one plan-execution signal
+the pipeline did not measure. Quality scores from before and after E-83 sit on
+**different scales**; the `judge` field makes the boundary queryable and
+`report.md` names it (averaging across it is now visible, not implicit).
+
+- **Typed rubric vetoes** (`src/sdlc/benchmarks/vetoes.py`). A rubric
+  criterion that states an absolute override ("scores 0 regardless") is a
+  closed three-kind vocabulary (`mentions_all` / `not_both` / `nonempty`),
+  evaluated **deterministically over the parsed artifact — zero model calls**
+  — at both layers: an ABSOLUTE failure in the prompt gate, and a forced `0.0`
+  override at Layer 3. Authored per case as `benchmarks/cases/<case>/vetoes-*.yaml`.
+- **Staged judge.** The single-shot rubric prompt became two calls: rubric →
+  ordered evaluation steps (cached per `sha256(rubric)`), then artifact →
+  per-component scores. Vetoes override the LLM's output rather than being
+  argued into it. Records carry `judge="staged_rubric"`; pre-E-83 records keep
+  `"llm_judge"`.
+- **Plan adherence, split by provenance.** A deterministic `PlanDrift` on each
+  code-stage `BenchmarkRecord` (`files_hinted` vs `files_touched`, with
+  `hinted_untouched`/`touched_unhinted`); and advisory `plan_deviations` folded
+  into the existing `deep_review` lens (not a fifth lens), each with verbatim
+  transcript evidence or dropped.
+- **Sensitivity is proven, not asserted.** The mutation suite
+  (`SDLC_PROMPT_EVAL=1 python -m pytest -m prompt_eval -k mutations`) records
+  what real model behavior does to degraded prompts. The veto→`FAIL_ABSOLUTE`
+  path works end-to-end; the `clarify` role is largely invariant under prompt
+  degradation (the frozen fixture and schema carry the domain) — the honest
+  OQ-P5 answer. See the spec's §9 for the recorded outcome.
+
 ---
 
 *This document adds no scope to `PRD.md`. Every `(new scope)` marker above is a

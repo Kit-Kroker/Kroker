@@ -1215,6 +1215,13 @@ disappears entirely: wrapping a stage in a gate-and-retry loop becomes topology.
   unauthenticated once anything but localhost can reach them. Localhost-bind with
   no auth is the assumed near-term answer; **E-60** (identity & authorization,
   FR-1004) is where it stops being acceptable.
+- **OQ-P5..P8 — prompt-gate sensitivity (E-83).** Tracked in the eval spec's §9
+  (`docs/superpowers/specs/2026-08-12-judge-sensitivity-and-plan-adherence-design.md`),
+  not duplicated here. **OQ-P5 answered:** the gate has teeth (vetoes →
+  `FAIL_ABSOLUTE`, proven end-to-end), but the `clarify` role is largely invariant
+  under prompt degradation — the frozen fixture and schema carry the domain. New:
+  OQ-P6 (veto authorship is manual/unenforced), OQ-P7 (`PlanDrift` has no baseline
+  yet), OQ-P8 (phase-1 step caching vs judge nondeterminism).
 
 ## 15. Suggested ordering across §§10–14
 

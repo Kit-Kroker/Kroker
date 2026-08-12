@@ -96,10 +96,13 @@ not be evaluated is `errored` and never counts as a pass.
   `SDLC_PROMPT_EVAL=1 python -m pytest -m prompt_eval` A/B-scores each changed
   `agents/<role>/instructions.md` against its committed baseline via promptfoo
   (`pip install -e .[eval]`; needs Node ≥ 22.22; spends tokens). Deterministic
-  checks — output validates as the role's `output_type`, cost/latency budgets —
-  are absolute and gate; the cross-family judge is advisory and fails only on a
-  regression past a noise-aware floor. Ad hoc: `python -m sdlc.cli eval clarify
-  --case add-login-greenfield --gate`. Results land in `runs/prompt_evals/` and
+  checks — output validates as the role's `output_type`, per-case rubric
+  **vetoes** (`benchmarks/cases/<case>/vetoes-*.yaml`), cost/latency budgets —
+  are absolute and gate; the cross-family judge is staged (rubric → evaluation
+  steps → score) and advisory, failing only on a regression past a noise-aware
+  floor. Sensitivity is proven by the mutation suite:
+  `SDLC_PROMPT_EVAL=1 python -m pytest -m prompt_eval -k mutations`. Ad hoc:
+  `python -m sdlc.cli eval clarify --case add-login-greenfield --gate`. Results land in `runs/prompt_evals/` and
   join the benchmark record stream by `prompt_sha` **only** — they are never
   merged into the heatmap, matrices, or SC rollup.
 - See [`docs/foundation.md`](docs/foundation.md) for the contracts, activities,
