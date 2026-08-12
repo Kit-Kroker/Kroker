@@ -288,3 +288,120 @@ def testability_identity(f: TestabilityFinding) -> str:
 
 
 testability_identity.__test__ = False
+
+
+# --- Category keys (D3) -------------------------------------------------
+# A signal's coverage is tracked per category because ScanSignalResult
+# carries ONE `collected` and a signal like SS1 genuinely has an inherited
+# half and a computed half. Declared here, beside the artifact, so the
+# registry and the row cannot disagree about what a signal owes.
+
+C_PACKAGES = "packages"                          # S1
+C_SCHEMA = "schema_clusters"                     # S2
+C_BACKEND_ENTRY = "backend_entry_points"         # S3
+C_FRONTEND_ENTRY = "frontend_entry_points"       # S4
+C_MERGE = "candidate_merge"                      # S5
+
+C_CREDENTIAL_STORAGE = "credential_storage"      # SS1, inherited
+C_AUTHN_AUTHZ = "authn_authz"                    # SS1, inherited
+C_TLS = "tls_enforcement"                        # SS1, computed
+C_INPUT_VALIDATION = "input_validation"          # SS1, computed
+C_DIRECT_DEPS = "direct_dependencies"            # SS2, inherited
+C_FRAMEWORK_DEFAULTS = "framework_defaults"      # SS3, inherited
+C_EXPOSED_PORTS = "exposed_ports"                # SS3, computed
+C_ENV_DIVERGENCE = "env_divergence"              # SS3, computed
+C_DB_SECURITY = "db_security"                    # SS3, computed
+C_LOG_MASKING = "log_masking"                    # SS3, computed
+C_DATA_SENSITIVITY = "data_sensitivity"          # SS4
+
+C_TESTS_PRESENT = "tests_present"                # QS1, inherited
+C_TEST_LEVELS = "test_levels"                    # QS1, computed
+C_TEST_MAPPING = "test_mapping"                  # QS1, computed
+C_COVERAGE = "coverage"                          # QS2
+C_TESTABILITY = "testability"                    # QS3
+C_CI_PRESENT = "ci_present"                      # QS4, inherited
+C_CI_STAGES = "ci_stages"                        # QS4, computed
+C_ENV_DRIFT = "env_drift"                        # QS4, computed
+
+CATEGORIES: dict[ScanSignalId, tuple[str, ...]] = {
+    ScanSignalId.S1: (C_PACKAGES,),
+    ScanSignalId.S2: (C_SCHEMA,),
+    ScanSignalId.S3: (C_BACKEND_ENTRY,),
+    ScanSignalId.S4: (C_FRONTEND_ENTRY,),
+    ScanSignalId.S5: (C_MERGE,),
+    ScanSignalId.SS1: (C_CREDENTIAL_STORAGE, C_AUTHN_AUTHZ, C_TLS,
+                       C_INPUT_VALIDATION),
+    ScanSignalId.SS2: (C_DIRECT_DEPS,),
+    ScanSignalId.SS3: (C_FRAMEWORK_DEFAULTS, C_EXPOSED_PORTS,
+                       C_ENV_DIVERGENCE, C_DB_SECURITY, C_LOG_MASKING),
+    ScanSignalId.SS4: (C_DATA_SENSITIVITY,),
+    ScanSignalId.QS1: (C_TESTS_PRESENT, C_TEST_LEVELS, C_TEST_MAPPING),
+    ScanSignalId.QS2: (C_COVERAGE,),
+    ScanSignalId.QS3: (C_TESTABILITY,),
+    ScanSignalId.QS4: (C_CI_PRESENT, C_CI_STAGES, C_ENV_DRIFT),
+}
+
+
+class InheritedProducer(BaseModel):
+    """D2. Which producer already recorded this fact, and which findings of
+    its this row cites. Findings are cited, never copied: two copies in the
+    FR-921 bundle, and a copy re-labelled with a scan signal id would break
+    the finding_identity keying E-44's delta depends on.
+    """
+    producer: str                   # "triage:secrets"
+    version: int                    # the producer's declared version, PINNED
+    finding_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _canonicalize(self) -> "InheritedProducer":
+        self.finding_ids = sorted(set(self.finding_ids))
+        return self
+
+
+class ScanSignalResult(BaseModel):
+    """One signal's status row. The payload lives on ScanResult beside it,
+    exactly as Readiness lives beside RepoTriage.signals."""
+    signal: ScanSignalId
+    family: SignalFamily
+    version: int
+    source: SignalSource
+    collected: Measurement          # MEASURED value = record count
+    categories: dict[str, Measurement] = Field(default_factory=dict)
+    producer: InheritedProducer | None = None
+
+    @model_validator(mode="after")
+    def _producer_matches_source(self) -> "ScanSignalResult":
+        if self.source is SignalSource.COMPUTED:
+            if self.producer is not None:
+                raise ValueError(
+                    f"{self.signal.value}: source=computed carries a producer "
+                    f"-- a signal this phase computed inherits nothing (D2)")
+        elif self.producer is None:
+            raise ValueError(
+                f"{self.signal.value}: source={self.source.value} requires a "
+                f"producer -- an inherited fact must name what recorded it "
+                f"(D2)")
+        return self
+
+    @model_validator(mode="after")
+    def _declares_every_category_it_owes(self) -> "ScanSignalResult":
+        owed = set(CATEGORIES[self.signal])
+        got = set(self.categories)
+        if missing := owed - got:
+            raise ValueError(
+                f"{self.signal.value}: missing category/categories "
+                f"{sorted(missing)} -- a signal reports every category it "
+                f"owes, so an unreported one cannot pass as absent")
+        if undeclared := got - owed:
+            raise ValueError(
+                f"{self.signal.value}: undeclared category/categories "
+                f"{sorted(undeclared)} -- CATEGORIES is the one declaration")
+        return self
+
+    @model_validator(mode="after")
+    def _family_matches_its_id(self) -> "ScanSignalResult":
+        if self.family is not family_of(self.signal):
+            raise ValueError(
+                f"{self.signal.value}: family {self.family.value!r} "
+                f"contradicts the id prefix")
+        return self
