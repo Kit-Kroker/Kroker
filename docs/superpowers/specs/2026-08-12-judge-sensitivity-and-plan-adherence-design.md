@@ -525,6 +525,30 @@ is the smaller half and §4.1 gates everything.
   structured-output roles — `output_type` tool-calling and schema field
   descriptions carrying the instruction — rather than a defect in the gate.
   The increment is designed to be able to report that outcome honestly.
+
+  **Outcome recorded 2026-08-12 (live run, `google:gemini-3.5-flash` judge,
+  `anthropic:glm-5.2` author):**
+  - `control` — PASS, zero model calls (unchanged-prompt early exit). ✓
+  - `scope_dropped` — **PASS**, `scope_preserved` veto did *not* fire;
+    `scores_baseline=[0.97]`, `scores_working=[1.0]`. The model kept all six
+    activities despite being told to cover only three.
+  - `truncated` — PASS, judge unavailable on at least one side (no scores).
+  - `inverted` — **FAIL_ABSOLUTE** via `scope_discipline_declared` (the model
+    emptied `out_of_scope`), proving the veto fires end-to-end through real
+    promptfoo. (Under `repeat=3` an intermittent provider error on one repeat
+    reads as ERRORED per §6 — infra flakiness, not a logic defect.)
+
+  **Verdict:** the gate has teeth — the veto→FAIL_ABSOLUTE path works
+  end-to-end (unit tests + the `inverted` live run), and a defect that hid
+  every live absolute failure as ERRORED was fixed during the run (the
+  promptfoo `row.error`↔assertion-reason conflation). But OQ-P5's structured-
+  output hypothesis is confirmed: the `clarify` role is largely *invariant*
+  under prompt degradation, because the frozen fixture and the
+  `ClarifiedRequirements` schema carry the domain regardless of the
+  instruction. The gate is sensitive to mutations that change the artifact's
+  *typed content* (`inverted`) but not to mutations the schema already
+  encodes (`scope_dropped`, `truncated`). That is the honest answer the suite
+  was built to be able to report.
 - **OQ-P6 (new) — veto authorship is manual and unenforced.** Nothing checks
   that a rubric stating "scores 0 regardless" has a corresponding veto file. A
   lint pass over rubric prose for veto language is possible; whether it is worth
