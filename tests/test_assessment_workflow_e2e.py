@@ -254,8 +254,11 @@ async def test_scan_phase_flips_terminal_status_to_partial():
                if s.signal is ScanSignalId.SS2)
     assert ss2.source is SignalSource.INHERITED
     assert ss2.collected.state is CollectionState.MEASURED
-    # S5's merge is deferred to plan 2; its reason names the plan, not a
-    # misleading "has no computed half" (review finding 4).
+    # S5's merge is real as of plan 2. This worker points the activities at a
+    # repo_dir that does not exist, so S1-S4 degrade and S5 correctly reports
+    # a GAP naming them -- not a measured zero, and not a plan.
     s5 = next(s for s in result.scan.signals if s.signal is ScanSignalId.S5)
     assert s5.collected.state is CollectionState.NOT_COLLECTED
-    assert "plan 2" in s5.collected.reason
+    assert "plan" not in s5.collected.reason.lower()
+    assert "S1" in s5.collected.reason
+    assert result.scan.candidates == []
