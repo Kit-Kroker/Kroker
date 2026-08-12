@@ -11,6 +11,10 @@ from sdlc.assessment.models import (
     ASSESSED, BLOCKED, NO_PHASES, PHASE_ORDER, PhaseId, PhaseResult,
     InitOutcome,
 )
+from sdlc.assessment.scan.models import (
+    CATEGORIES, SCAN_ORDER, ScanResult, ScanSignalResult, SignalSource,
+    family_of,
+)
 from sdlc.measurement import CollectionState, Measurement
 from sdlc.models import GatePolicy
 from sdlc.triage.models import Readiness, RepoTriage, Verdict
@@ -27,6 +31,17 @@ def _triage() -> RepoTriage:
         readiness=Readiness(buildable=ok, runnable=ok, tests_present=ok,
                             structure_discernible=ok,
                             verdict=Verdict.READY))
+
+
+def _scan_result() -> ScanResult:
+    """A minimal measured ScanResult, so a measured SCAN phase satisfies the
+    E-46 phase-agreement validator."""
+    val = Measurement.measured(0.0)
+    return ScanResult(signals=[
+        ScanSignalResult(signal=s, family=family_of(s), version=1,
+                         source=SignalSource.COMPUTED, collected=val,
+                         categories={k: val for k in CATEGORIES[s]})
+        for s in SCAN_ORDER])
 
 
 def _init(ok: bool = True) -> InitOutcome:
@@ -102,8 +117,8 @@ def test_assemble_reports_assessed_once_every_phase_collects():
     """The status flips by itself when E-46..E-52 land -- no workflow edit."""
     rest = [PhaseResult(phase=p, collected=Measurement.measured(1.0))
             for p in PHASE_ORDER if p is not PhaseId.INIT]
-    assert assemble("/r", _init(), True, "verdict ready",
-                    rest).terminal_status == ASSESSED
+    assert assemble("/r", _init(), True, "verdict ready", rest,
+                    scan=_scan_result()).terminal_status == ASSESSED
 
 
 def test_assemble_orders_phases_canonically_regardless_of_arrival():

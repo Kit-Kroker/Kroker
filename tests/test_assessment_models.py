@@ -120,3 +120,83 @@ def test_init_outcome_defaults_to_no_triage():
         phase=PhaseId.INIT,
         collected=Measurement.not_collected("child failed")))
     assert out.triage is None
+
+
+# --- E-46: the scan payload and its phase-agreement validator -------------
+from sdlc.assessment.scan.models import (
+    CATEGORIES, SCAN_ORDER, ScanResult, ScanSignalResult, SignalSource,
+    family_of,
+)
+from sdlc.workflows.assessment import assemble
+
+
+def _scan_result() -> ScanResult:
+    val = Measurement.measured(0.0)
+    return ScanResult(signals=[
+        ScanSignalResult(signal=s, family=family_of(s), version=1,
+                         source=SignalSource.COMPUTED, collected=val,
+                         categories={k: val for k in CATEGORIES[s]})
+        for s in SCAN_ORDER])
+
+
+def _scan_dag(scan_measured: bool) -> list[PhaseResult]:
+    """The whole DAG with SCAN either measured or not (every other phase
+    measured). Kept distinct from the file's existing _phases(set) helper."""
+    out = []
+    for phase in PHASE_ORDER:
+        if phase is PhaseId.SCAN and not scan_measured:
+            out.append(PhaseResult(
+                phase=phase,
+                collected=Measurement.not_collected("scan not run")))
+        else:
+            out.append(PhaseResult(phase=phase,
+                                   collected=Measurement.measured(1.0)))
+    return out
+
+
+def _init_out() -> InitOutcome:
+    return InitOutcome(
+        result=PhaseResult(phase=PhaseId.INIT,
+                           collected=Measurement.measured(1.0)),
+        triage=_triage())
+
+
+def test_a_scan_payload_requires_a_measured_scan_phase():
+    """Mirrors _terminal_status_matches_derivation: the artifact cannot
+    contradict its own phase row."""
+    phases = _scan_dag(scan_measured=False)
+    with pytest.raises(ValidationError, match="scan"):
+        Assessment(repo_dir="/r", triage=_triage(), admitted=True,
+                   admission_reason="verdict ready", phases=phases,
+                   terminal_status=terminal_status(True, phases),
+                   scan=_scan_result())
+
+
+def test_a_measured_scan_phase_requires_a_payload():
+    phases = _scan_dag(scan_measured=True)
+    with pytest.raises(ValidationError, match="scan"):
+        Assessment(repo_dir="/r", triage=_triage(), admitted=True,
+                   admission_reason="verdict ready", phases=phases,
+                   terminal_status=terminal_status(True, phases), scan=None)
+
+
+def test_a_measured_scan_phase_with_a_payload_constructs():
+    phases = _scan_dag(scan_measured=True)
+    a = Assessment(repo_dir="/r", triage=_triage(), admitted=True,
+                   admission_reason="verdict ready", phases=phases,
+                   terminal_status=terminal_status(True, phases),
+                   scan=_scan_result())
+    assert a.scan is not None
+    assert len(a.scan.signals) == 13
+
+
+def test_assemble_threads_the_scan_payload_through():
+    from sdlc.workflows.assessment import unbuilt
+    rest = [PhaseResult(phase=PhaseId.SCAN,
+                        collected=Measurement.measured(0.0))]
+    rest += [unbuilt(p) for p in PHASE_ORDER
+             if p not in (PhaseId.INIT, PhaseId.SCAN)]
+    a = assemble("/r", _init_out(), True, "verdict ready", rest,
+                 scan=_scan_result())
+    assert a.scan is not None
+    assert a.terminal_status == PARTIAL

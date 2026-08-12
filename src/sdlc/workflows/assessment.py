@@ -29,6 +29,7 @@ with workflow.unsafe.imports_passed_through():
         PhaseResult,
         terminal_status,
     )
+    from ..assessment.scan.models import ScanResult
     from ..measurement import Measurement
     from ..models import GateSettings
     from ..triage.admission import admits
@@ -81,7 +82,8 @@ def skipped(phase: PhaseId) -> PhaseResult:
 
 
 def assemble(repo_dir: str, init: InitOutcome, admitted: bool, reason: str,
-             rest: list[PhaseResult] | None = None) -> Assessment:
+             rest: list[PhaseResult] | None = None,
+             scan: ScanResult | None = None) -> Assessment:
     """The ONLY constructor of an Assessment and the only caller of
     terminal_status: one place where the artifact is built means the derived
     status cannot disagree with the phase list it was derived from.
@@ -109,7 +111,8 @@ def assemble(repo_dir: str, init: InitOutcome, admitted: bool, reason: str,
         commit_sha=t.commit_sha if t else "",
         toolchain=t.toolchain if t else None,
         triage=t, admitted=admitted, admission_reason=reason,
-        phases=phases, terminal_status=terminal_status(admitted, phases))
+        phases=phases, terminal_status=terminal_status(admitted, phases),
+        scan=scan)
 
 
 @workflow.defn
