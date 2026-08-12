@@ -61,6 +61,12 @@ class PromptGateResult(BaseModel):
     floor: float | None = None
     n_baseline: int = 0
     n_working: int = 0
+    # The individual judge scores behind the means. Bounded by `repeat`
+    # (default 3), so this is a handful of floats. Persisted because the
+    # scratch results.json is deleted (gate.py:107) and without them no
+    # sensitivity claim about this gate is reproducible after the fact.
+    scores_baseline: list[float] = Field(default_factory=list)
+    scores_working: list[float] = Field(default_factory=list)
     absolute_failures: list[str] = Field(default_factory=list)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc))
@@ -141,12 +147,13 @@ def decide(results: dict, *, delta_min: float = 0.05) -> PromptGateResult:
 
     base = [s for s in _scores(base_rows) if s is not None]
     work = [s for s in _scores(work_rows) if s is not None]
+    kept = {"scores_baseline": base, "scores_working": work}
 
     if not base_rows:
         return PromptGateResult(
             verdict=GateVerdict.PASS, judge_status=JudgeStatus.NO_BASELINE,
             mean_working=statistics.fmean(work) if work else None,
-            n_working=len(work),
+            n_working=len(work), **kept,
             reason="no committed baseline — working-tree score only")
 
     if not base or not work:
@@ -159,7 +166,7 @@ def decide(results: dict, *, delta_min: float = 0.05) -> PromptGateResult:
             verdict=GateVerdict.PASS, judge_status=JudgeStatus.UNAVAILABLE,
             mean_baseline=statistics.fmean(base) if base else None,
             mean_working=statistics.fmean(work) if work else None,
-            n_baseline=len(base), n_working=len(work),
+            n_baseline=len(base), n_working=len(work), **kept,
             reason="judge unavailable on at least one side — regression NOT "
                    "evaluated (not measured, not passed)")
 
@@ -173,7 +180,7 @@ def decide(results: dict, *, delta_min: float = 0.05) -> PromptGateResult:
         verdict=GateVerdict.FAIL_REGRESSION if regressed else GateVerdict.PASS,
         judge_status=JudgeStatus.MEASURED,
         mean_baseline=mb, mean_working=mw, delta=delta, floor=floor,
-        n_baseline=len(base), n_working=len(work),
+        n_baseline=len(base), n_working=len(work), **kept,
         reason=(f"{'regression' if regressed else 'within noise'}: "
                 f"baseline {mb:.2f} -> working {mw:.2f} "
                 f"(delta {delta:+.2f}, floor {floor:.2f})"))

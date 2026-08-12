@@ -163,3 +163,29 @@ def test_one_sided_baseline_records_its_mean_too():
     assert r.mean_baseline == 0.5
     assert r.mean_working is None
     assert r.n_baseline == 2
+
+
+def test_individual_scores_are_persisted():
+    r = decide(_results([0.70, 0.80], [0.90, 0.95]))
+    assert r.scores_baseline == [0.70, 0.80]
+    assert r.scores_working == [0.90, 0.95]
+
+
+def test_unavailable_rows_are_excluded_from_persisted_scores():
+    """A JUDGE_UNAVAILABLE row carries a placeholder number that must not
+    be persisted as if it were a measurement."""
+    from sdlc.eval.verdict import JUDGE_UNAVAILABLE
+
+    res = _results([0.5], [0.5])
+    working_row = res["results"]["results"][-1]
+    working_row["gradingResult"]["componentResults"][1]["reason"] = (
+        f"{JUDGE_UNAVAILABLE}: judge errored")
+    r = decide(res)
+    assert r.scores_baseline == [0.5]
+    assert r.scores_working == []
+
+
+def test_scores_persisted_on_the_one_sided_path():
+    r = decide(_results([], [1.0]))
+    assert r.scores_working == [1.0]
+    assert r.scores_baseline == []
