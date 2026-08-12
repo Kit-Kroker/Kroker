@@ -56,6 +56,38 @@ def default_out_dir(selector: str, root: str | None = None) -> Path:
     return base / selector / "score"
 
 
+# The judge kinds that produce a rubric SCORE on one comparable scale. The
+# lenses and the deterministic instruments are excluded: they are different
+# instruments, not two versions of one scale, and flagging them would raise
+# a warning on every corpus.
+_SCORING_JUDGES = {"llm_judge", "staged_rubric"}
+
+
+def judge_mix_notes(records) -> list[str]:
+    """One note per case whose scored records span more than one scoring
+    judge kind (E-83 spec 2.1).
+
+    E-83 replaced the single-shot rubric judge with a staged one, which moves
+    the scale quality_score is measured on. The `judge` field makes the
+    boundary queryable; this makes averaging across it visible in report.md
+    instead of implicit. Pure -- score.py owns the filesystem, not this.
+    """
+    from collections import defaultdict
+
+    by_case = defaultdict(set)
+    for r in records:
+        if r.quality.score is None:
+            continue
+        if r.quality.judge in _SCORING_JUDGES:
+            by_case[r.case_id].add(r.quality.judge)
+    return [
+        f"case {case}: quality scores span {len(kinds)} judge instruments "
+        f"({', '.join(sorted(kinds))}) - E-83 changed the judge, so means "
+        f"across this boundary mix two scales"
+        for case, kinds in sorted(by_case.items()) if len(kinds) > 1
+    ]
+
+
 def write_score(ev: Evidence, out_dir: Path,
                 weights: CompositeWeights) -> list[Path]:
     """Write every grid the evidence supports. Returns the paths written."""
@@ -69,6 +101,7 @@ def write_score(ev: Evidence, out_dir: Path,
     out_dir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
     notes = list(ev.notes)
+    notes += judge_mix_notes(ev.records)
 
     calibration = load_calibration_reports()
     summaries = aggregate("", weights, _records=ev.records)
