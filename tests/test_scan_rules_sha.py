@@ -52,3 +52,16 @@ def test_an_unrelated_signals_module_does_not_move_the_key(monkeypatch):
         "sdlc.assessment.scan.rules.module_sha",
         lambda dotted: "edited" if dotted == s3_module else module_sha(dotted))
     assert rules_sha(ScanSignalId.QS3) == before
+
+
+def test_the_naming_module_reaches_s1_too(monkeypatch):
+    """P2-D2: S1 reads the generic/layer name tables, so it declares
+    scan.naming. Without the declaration, editing a layer word would change
+    S1's output while its memo key stood still."""
+    naming = SCAN_SIGNALS[ScanSignalId.S3].rule_modules[0]
+    assert naming in SCAN_SIGNALS[ScanSignalId.S1].rule_modules
+    before = rules_sha(ScanSignalId.S1)
+    monkeypatch.setattr(
+        "sdlc.assessment.scan.rules.module_sha",
+        lambda dotted: "edited" if dotted == naming else module_sha(dotted))
+    assert rules_sha(ScanSignalId.S1) != before

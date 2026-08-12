@@ -89,7 +89,8 @@ _NAMING = f"{_SIG.rsplit('.', 1)[0]}.naming"     # scan.naming, shared by S3+S5
 SCAN_SIGNALS: dict[ScanSignalId, ScanSignalSpec] = {
     ScanSignalId.S1: _spec(
         ScanSignalId.S1, 1, SignalSource.COMPUTED,
-        module=f"{_SIG}.packages", activity="scan_packages"),
+        module=f"{_SIG}.packages", activity="scan_packages",
+        rule_modules=(_NAMING,)),
     ScanSignalId.S2: _spec(
         ScanSignalId.S2, 1, SignalSource.COMPUTED,
         module=f"{_SIG}.schema", activity="scan_schema"),
