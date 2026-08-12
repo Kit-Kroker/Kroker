@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from ...measurement import Measurement
+from ...measurement import CollectionState, Measurement
 
 
 class ScanSignalId(str, Enum):
@@ -404,4 +404,66 @@ class ScanSignalResult(BaseModel):
             raise ValueError(
                 f"{self.signal.value}: family {self.family.value!r} "
                 f"contradicts the id prefix")
+        return self
+
+
+# Which ScanResult field each signal's payload lands in. Declared once so
+# _unmeasured_carries_no_payload can check the right field per signal rather
+# than a hardcoded pairing in the validator.
+PAYLOAD_FIELD: dict[ScanSignalId, str] = {
+    ScanSignalId.S1: "sources",
+    ScanSignalId.S2: "sources",
+    ScanSignalId.S3: "sources",
+    ScanSignalId.S4: "sources",
+    ScanSignalId.S5: "candidates",
+    ScanSignalId.SS4: "data_sensitivity",
+    ScanSignalId.QS3: "testability",
+}
+
+
+class SignalOutput(BaseModel):
+    """One computed signal's whole output -- the row AND its payload, cached
+    as a unit (D10). An activity returns this; the workflow folds in the
+    inherited half (D7)."""
+    row: ScanSignalResult
+    sources: list[SourceCandidate] = Field(default_factory=list)
+    data_sensitivity: list[SensitivityRecord] = Field(default_factory=list)
+    testability: list[TestabilityFinding] = Field(default_factory=list)
+
+
+class ScanResult(BaseModel):
+    signals: list[ScanSignalResult]
+    sources: list[SourceCandidate] = Field(default_factory=list)
+    candidates: list[ScanCandidate] = Field(default_factory=list)
+    data_sensitivity: list[SensitivityRecord] = Field(default_factory=list)
+    testability: list[TestabilityFinding] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _signals_are_the_whole_set(self) -> "ScanResult":
+        got = tuple(s.signal for s in self.signals)
+        if got != SCAN_ORDER:
+            raise ValueError(
+                f"signals must be the whole set in order -- expected "
+                f"{[s.value for s in SCAN_ORDER]}, got "
+                f"{[s.value for s in got]}")
+        return self
+
+    @model_validator(mode="after")
+    def _unmeasured_carries_no_payload(self) -> "ScanResult":
+        by_id = {s.signal: s for s in self.signals}
+        for signal_id, field_name in PAYLOAD_FIELD.items():
+            row = by_id[signal_id]
+            if row.collected.state is CollectionState.MEASURED:
+                continue
+            # The field can hold other signals' records too (S1-S4 all land
+            # in `sources`), so only this signal's own records are checked.
+            payload = getattr(self, field_name)
+            mine = [r for r in payload
+                    if getattr(r, "signal", signal_id) is signal_id]
+            if mine:
+                raise ValueError(
+                    f"{signal_id.value} is {row.collected.state.value} but "
+                    f"carries {len(mine)} record(s) in {field_name!r} -- a "
+                    f"signal that did not run has no records; partial output "
+                    f"is UNKNOWN")
         return self
