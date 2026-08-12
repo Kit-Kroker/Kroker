@@ -1,9 +1,9 @@
 """AssessmentWorkflow (E-45) -- Tier 2's shell.
 
 The EDCR DAG (init -> scan -> discover -> assess -> report -> generate ->
-finish) as a durable workflow, with six of seven phase bodies deliberately
-unbuilt: scan is E-46, discover E-48, assess E-49, finish E-51, report and
-generate E-52.
+finish) as a durable workflow, with five of seven phase bodies deliberately
+unbuilt: scan is built (E-46), and discover E-48, assess E-49, finish E-51,
+report and generate E-52 remain.
 
 What ships now is the shape plus three invariants that are cheapest to install
 before any phase produces findings: the admission rule narrowed to HUMAN
@@ -42,9 +42,11 @@ with workflow.unsafe.imports_passed_through():
         terminal_status,
     )
     from ..assessment.scan.inherit import InheritedHalf, inherited_halves
+    from ..assessment.scan.merge import MergeOutput, merge
     from ..assessment.scan.models import (
-        CATEGORIES, SCAN_ORDER, ScanResult, ScanSignalId, ScanSignalResult,
-        SignalOutput, SignalSource, SourceCandidate, family_of,
+        C_MERGE, CATEGORIES, SCAN_ORDER, ScanResult, ScanSignalId,
+        ScanSignalResult, SignalOutput, SignalSource, SourceCandidate,
+        family_of,
     )
     from ..assessment.scan.registry import SCAN_SIGNALS, WAVES
     from ..measurement import CollectionState, Measurement
@@ -222,6 +224,18 @@ def _upstream_for(signal_id: ScanSignalId,
             for cand in outputs[c_id].sources]
 
 
+def _merged_row(out: MergeOutput) -> ScanSignalResult:
+    """S5's row. COMPUTED with no producer: S5 inherits nothing -- it is a
+    derivation over signals this phase computed, which is why it runs in
+    workflow code rather than as an activity (D6)."""
+    return ScanSignalResult(
+        signal=ScanSignalId.S5, family=family_of(ScanSignalId.S5),
+        version=SCAN_SIGNALS[ScanSignalId.S5].version,
+        source=SignalSource.COMPUTED,
+        collected=out.collected,
+        categories={C_MERGE: out.collected})
+
+
 def assemble(repo_dir: str, init: InitOutcome, admitted: bool, reason: str,
              rest: list[PhaseResult] | None = None,
              scan: ScanResult | None = None) -> Assessment:
@@ -350,22 +364,33 @@ class AssessmentWorkflow(GateHost):
             results = await asyncio.gather(*jobs)
             outputs.update(zip(wave, results))
 
-        # S5 (in_workflow) and SS2 (purely inherited, D12) run no activity.
-        # SS2's row is built from its inherited half -- the half IS the signal
-        # (D12 cut its computed half), so it reads INHERITED and collected when
-        # triage collected, not as a skipped stub. S5's merge is owed by plan 2.
+        # SS2 is purely inherited (D12 cut its computed half), so the half IS
+        # the signal: it reads INHERITED and collected when triage collected,
+        # not as a skipped stub.
         for sid in SCAN_ORDER:
-            if sid in outputs or SCAN_SIGNALS[sid].activity:
+            if sid in outputs or SCAN_SIGNALS[sid].activity \
+                    or sid is ScanSignalId.S5:
                 continue
             half = halves.get(sid)
             outputs[sid] = SignalOutput(
                 row=_inherited_row(sid, half) if half is not None
                 else skipped_scan_signal(
-                    sid, f"{sid.value} not implemented (plan 2, E-46)"))
+                    sid, f"{sid.value} has no activity and no inherited half"))
 
-        # Activity signals get their inherited half folded in (D7); the two
-        # synthesized rows above are already final (SS2 IS its half; S5 has no
-        # half to fold), so fold_row would wrongly promote SS2 to EXTENDED.
+        # S5 last: it is a merge over the other source signals' candidates,
+        # filtered by its declared `consumes` (the same declaration that
+        # drives its wave and its memo key), so it cannot read undeclared
+        # data. Its candidates are the phase's headline output.
+        merged = merge(
+            _upstream_for(ScanSignalId.S5, outputs),
+            {sid: outputs[sid].row.collected
+             for sid in SCAN_SIGNALS[ScanSignalId.S5].consumes
+             if sid in outputs})
+        outputs[ScanSignalId.S5] = SignalOutput(row=_merged_row(merged))
+
+        # Activity signals get their inherited half folded in (D7); the
+        # synthesized rows above are already final (SS2 IS its half; S5 has
+        # no half to fold), so fold_row would wrongly promote SS2 to EXTENDED.
         rows = [fold_row(outputs[sid].row, halves.get(sid))
                 if SCAN_SIGNALS[sid].activity else outputs[sid].row
                 for sid in SCAN_ORDER]
@@ -375,7 +400,7 @@ class AssessmentWorkflow(GateHost):
         scan = ScanResult(
             signals=rows,
             sources=sources,
-            candidates=[],          # S5's merge lands in plan 2
+            candidates=merged.candidates,
             data_sensitivity=sorted(
                 (r for out in outputs.values() for r in out.data_sensitivity),
                 key=lambda r: (r.classification.value, r.entity)),

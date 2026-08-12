@@ -187,3 +187,33 @@ def test_upstream_for_a_wave_one_signal_is_empty():
         row=_measured_row(ScanSignalId.S1),
         sources=[_candidate(ScanSignalId.S1, "S1-pay")])}
     assert _upstream_for(ScanSignalId.S3, outputs) == []
+
+
+def test_s5_row_is_built_from_the_merge_not_from_a_stub():
+    """E-45 D6's derivation was the plan-1 claim; this is the plan-2 one:
+    S5's row comes from merge(), so nothing in the artifact names a plan."""
+    from sdlc.assessment.scan.merge import merge
+    from sdlc.assessment.scan.models import C_MERGE
+    from sdlc.workflows.assessment import _merged_row
+
+    out = merge([_candidate(ScanSignalId.S1, "S1-payments"),
+                 _candidate(ScanSignalId.S3, "S3-payments")],
+                {ScanSignalId.S1: Measurement.measured(1.0),
+                 ScanSignalId.S3: Measurement.measured(1.0)})
+    row = _merged_row(out)
+    assert row.signal is ScanSignalId.S5
+    assert row.source is SignalSource.COMPUTED
+    assert row.producer is None
+    assert set(row.categories) == {C_MERGE}
+    assert row.collected.state is CollectionState.MEASURED
+    assert "plan" not in (row.collected.reason or "").lower()
+
+
+def test_s5_reports_a_gap_when_every_source_signal_failed():
+    from sdlc.assessment.scan.merge import merge
+    from sdlc.workflows.assessment import _merged_row
+
+    nc = Measurement.not_collected("S1 activity failed or timed out")
+    row = _merged_row(merge([], {ScanSignalId.S1: nc, ScanSignalId.S3: nc}))
+    assert row.collected.state is CollectionState.NOT_COLLECTED
+    assert "S1" in row.collected.reason
