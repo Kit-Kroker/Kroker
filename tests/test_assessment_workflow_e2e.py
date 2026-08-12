@@ -13,9 +13,16 @@ from temporalio import activity
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from sdlc.assessment.models import (
-    BLOCKED, NO_PHASES, PHASE_ORDER, PhaseId,
+from sdlc.assessment.activities import (
+    AssessmentTree, AssessmentTreeInput,
+    scan_ci, scan_config_infra, scan_coverage, scan_entrypoints, scan_frontend,
+    scan_packages, scan_schema, scan_security_static, scan_sensitivity,
+    scan_testability, scan_tests_inventory,
 )
+from sdlc.assessment.models import (
+    BLOCKED, PARTIAL, PHASE_ORDER, PhaseId,
+)
+from sdlc.assessment.scan.models import SCAN_ORDER, ScanSignalId, SignalSource
 from sdlc.measurement import CollectionState, Measurement
 from sdlc.models import (
     GateDecision, GateOutcome, GatePolicy, GateSettings,
@@ -81,8 +88,22 @@ async def fake_deps(inp: TriageDependencyInput) -> SignalResult:
     return _ok("dependencies", 1)
 
 
+@activity.defn(name="assessment_resolve_tree")
+async def fake_resolve_tree(inp: AssessmentTreeInput) -> AssessmentTree:
+    # repo_dir="/r" is not a real git repo, so the real activity would fail.
+    # The scan memo keys on this tree_hash; any stable 40-hex string stands in.
+    return AssessmentTree(tree_hash="t" * 40)
+
+
+# The eleven scan activities are the real stubs (no I/O -- each returns a
+# not_collected row naming its plan), so they are registered as-is.
+SCAN_ACTS = [scan_packages, scan_schema, scan_entrypoints, scan_frontend,
+             scan_security_static, scan_config_infra, scan_sensitivity,
+             scan_tests_inventory, scan_coverage, scan_testability, scan_ci]
+
 ACTIVITIES = [fake_pin, fake_baseline, fake_scaffold, fake_probe,
-              fake_secrets, fake_misconfig, fake_outliers, fake_deps]
+              fake_secrets, fake_misconfig, fake_outliers, fake_deps,
+              fake_resolve_tree, *SCAN_ACTS]
 WORKFLOWS = [AssessmentWorkflow, TriageWorkflow]
 
 
@@ -157,11 +178,12 @@ async def test_a_human_override_admits_the_same_tree():
 
     assert result.admitted is True
     assert result.triage.override.approved_by == "human"
-    assert result.terminal_status == NO_PHASES
+    assert result.terminal_status == PARTIAL
     assert [p.phase for p in result.phases] == list(PHASE_ORDER)
-    # Every phase body is a later item, and the artifact says which.
-    assert "E-46" in result.phases[1].collected.reason
+    # SCAN is built in E-46: its phase row is now measured, not an unbuilt
+    # stub naming its owner.
     assert result.phases[1].phase is PhaseId.SCAN
+    assert result.phases[1].collected.state is CollectionState.MEASURED
 
 
 async def test_a_ready_repo_is_admitted_with_no_gate():
@@ -180,7 +202,7 @@ async def test_a_ready_repo_is_admitted_with_no_gate():
     assert result.triage.override is None
     assert result.admitted is True
     assert result.admission_reason == "verdict ready"
-    assert result.terminal_status == NO_PHASES
+    assert result.terminal_status == PARTIAL
     assert result.toolchain == "python"
 
 
@@ -200,4 +222,28 @@ async def test_the_assessment_query_serves_the_artifact():
 
     assert served is not None
     assert served.commit_sha == "a" * 40
-    assert status == NO_PHASES
+    assert status == PARTIAL
+
+
+async def test_scan_phase_flips_terminal_status_to_partial():
+    """E-45 D6's claim, now testable end to end: terminal_status is DERIVED,
+    so E-46 landing flips it with no edit to E-45's derivation. The happy-path
+    worker (fake triage + fake tree resolver + real scan stubs) drives a READY
+    repo through to an assessed:partial artifact whose SS1 row carries its
+    inherited producer (D7)."""
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=WORKFLOWS, activities=ACTIVITIES):
+            handle = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(repo_dir="/r"),
+                id=f"assess-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+            result = await handle.result()
+
+    assert result.terminal_status == PARTIAL
+    assert result.scan is not None
+    assert [s.signal for s in result.scan.signals] == list(SCAN_ORDER)
+    ss1 = next(s for s in result.scan.signals
+               if s.signal is ScanSignalId.SS1)
+    assert ss1.source is SignalSource.EXTENDED
+    assert ss1.producer is not None

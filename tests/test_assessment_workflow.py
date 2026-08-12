@@ -8,7 +8,7 @@ import inspect
 import pytest
 
 from sdlc.assessment.models import (
-    ASSESSED, BLOCKED, NO_PHASES, PHASE_ORDER, PhaseId, PhaseResult,
+    ASSESSED, BLOCKED, PARTIAL, PHASE_ORDER, PhaseId, PhaseResult,
     InitOutcome,
 )
 from sdlc.assessment.scan.models import (
@@ -74,7 +74,9 @@ def test_every_unbuilt_phase_names_the_item_that_owes_it():
 
 
 def test_every_post_init_phase_has_an_owner():
-    assert set(PHASE_OWNER) == set(PHASE_ORDER) - {PhaseId.INIT}
+    # SCAN is built in E-46, so it is not in PHASE_OWNER; every other
+    # post-init phase still names the item that owes its body.
+    assert set(PHASE_OWNER) == set(PHASE_ORDER) - {PhaseId.INIT, PhaseId.SCAN}
 
 
 def test_assemble_fills_the_whole_dag_on_a_refusal():
@@ -105,11 +107,17 @@ def test_assemble_on_a_failed_child_has_no_commit_and_is_not_admitted():
     assert a.terminal_status == BLOCKED
 
 
-def test_assemble_on_an_admitted_run_reports_nothing_implemented():
-    rest = [unbuilt(p) for p in PHASE_ORDER if p is not PhaseId.INIT]
-    a = assemble("/r", _init(), True, "verdict ready", rest)
+def test_assemble_on_an_admitted_run_reports_partial_once_scan_lands():
+    # SCAN is built in E-46 (always measured when admitted); the other five
+    # phases are still stubs. terminal_status derives PARTIAL with no workflow
+    # edit (D6), and the canonical phase order is preserved.
+    rest = [PhaseResult(phase=PhaseId.SCAN, collected=Measurement.measured(0.0))]
+    rest += [unbuilt(p) for p in PHASE_ORDER
+             if p not in (PhaseId.INIT, PhaseId.SCAN)]
+    a = assemble("/r", _init(), True, "verdict ready", rest,
+                 scan=_scan_result())
     assert a.admitted is True
-    assert a.terminal_status == NO_PHASES
+    assert a.terminal_status == PARTIAL
     assert [p.phase for p in a.phases] == list(PHASE_ORDER)
 
 
@@ -122,9 +130,11 @@ def test_assemble_reports_assessed_once_every_phase_collects():
 
 
 def test_assemble_orders_phases_canonically_regardless_of_arrival():
-    rest = list(reversed(
-        [unbuilt(p) for p in PHASE_ORDER if p is not PhaseId.INIT]))
-    a = assemble("/r", _init(), True, "verdict ready", rest)
+    rest = [PhaseResult(phase=PhaseId.SCAN, collected=Measurement.measured(0.0))]
+    rest += [unbuilt(p) for p in PHASE_ORDER
+             if p not in (PhaseId.INIT, PhaseId.SCAN)]
+    a = assemble("/r", _init(), True, "verdict ready",
+                 list(reversed(rest)), scan=_scan_result())
     assert [p.phase for p in a.phases] == list(PHASE_ORDER)
 
 
@@ -135,7 +145,7 @@ def test_assemble_rejects_a_partial_rest_on_an_admitted_run():
     contradiction on the face of an FR-921 bundle (review finding 1). The
     not-admitted path still fills with skipped(), whose message is then
     truthful."""
-    partial = [unbuilt(PhaseId.SCAN)]            # one of six
+    partial = [unbuilt(PhaseId.DISCOVER)]         # one of the unbuilt phases
     with pytest.raises(ValueError, match="admitted"):
         assemble("/r", _init(), True, "verdict ready", partial)
 

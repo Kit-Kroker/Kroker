@@ -17,10 +17,21 @@ what remove that debt.
 """
 from __future__ import annotations
 
+import asyncio
+from datetime import timedelta
+
 from pydantic import BaseModel, Field
 from temporalio import workflow
+from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
+    from ..assessment.activities import (
+        AssessmentTree, AssessmentTreeInput, ScanSignalInput,
+        assessment_resolve_tree, scan_ci, scan_config_infra, scan_coverage,
+        scan_entrypoints, scan_frontend, scan_packages, scan_schema,
+        scan_security_static, scan_sensitivity, scan_testability,
+        scan_tests_inventory,
+    )
     from ..assessment.models import (
         PHASE_ORDER,
         Assessment,
@@ -29,11 +40,17 @@ with workflow.unsafe.imports_passed_through():
         PhaseResult,
         terminal_status,
     )
-    from ..assessment.scan.models import ScanResult
-    from ..measurement import Measurement
+    from ..assessment.scan.inherit import InheritedHalf, inherited_halves
+    from ..assessment.scan.models import (
+        CATEGORIES, SCAN_ORDER, ScanResult, ScanSignalId, ScanSignalResult,
+        SignalOutput, SignalSource, family_of,
+    )
+    from ..assessment.scan.registry import SCAN_SIGNALS, WAVES
+    from ..measurement import CollectionState, Measurement
     from ..models import GateSettings
     from ..triage.admission import admits
     from ..triage.models import RepoTriage
+    from .fanout import run_or_degrade
     from .gates import GateHost
     from .triage import TriageInput, TriageWorkflow
 
@@ -52,9 +69,9 @@ class AssessmentInput(BaseModel):
 
 
 # The E-item owing each unbuilt phase body, so an empty assessment says WHY
-# it is empty rather than merely being empty.
+# it is empty rather than merely being empty. SCAN dropped here in E-46: its
+# body is built, so nothing owes it.
 PHASE_OWNER: dict[PhaseId, str] = {
-    PhaseId.SCAN: "E-46",
     PhaseId.DISCOVER: "E-48",
     PhaseId.ASSESS: "E-49",
     PhaseId.REPORT: "E-52",
@@ -79,6 +96,68 @@ def skipped(phase: PhaseId) -> PhaseResult:
         phase=phase,
         collected=Measurement.not_collected(
             "not run: repository not admitted (FR-903)"))
+
+
+# Deterministic given a tree; the retry covers FS/git blips only. Mirrors
+# triage's SIGNAL_ACT, which these signals are the Tier 2 analogue of.
+SCAN_ACT = dict(start_to_close_timeout=timedelta(minutes=10),
+                retry_policy=RetryPolicy(maximum_attempts=2))
+TREE_ACT = dict(start_to_close_timeout=timedelta(minutes=2),
+                retry_policy=RetryPolicy(maximum_attempts=3))
+
+# Registry `activity` names resolved to the callables. A name the registry
+# declares and this table lacks is a boot-time KeyError in _scan rather than a
+# silent skip, which is why test_scan_stub_activities asserts they agree.
+SCAN_ACTIVITIES = {
+    "scan_packages": scan_packages,
+    "scan_schema": scan_schema,
+    "scan_entrypoints": scan_entrypoints,
+    "scan_frontend": scan_frontend,
+    "scan_security_static": scan_security_static,
+    "scan_config_infra": scan_config_infra,
+    "scan_sensitivity": scan_sensitivity,
+    "scan_tests_inventory": scan_tests_inventory,
+    "scan_coverage": scan_coverage,
+    "scan_testability": scan_testability,
+    "scan_ci": scan_ci,
+}
+
+
+class ScanOutcome(BaseModel):
+    """scan's two halves, mirroring InitOutcome: a failed phase yields a row
+    but no artifact."""
+    result: PhaseResult
+    scan: ScanResult | None = None
+
+
+def skipped_scan_signal(signal_id: ScanSignalId,
+                        reason: str) -> ScanSignalResult:
+    """A signal that did not run. Its owed categories come from the artifact's
+    declaration, so a failed signal reports not_collected for exactly those
+    rather than leaving them unreported (the E-42 D8a discipline)."""
+    nc = Measurement.not_collected(reason)
+    return ScanSignalResult(
+        signal=signal_id, family=family_of(signal_id),
+        version=SCAN_SIGNALS[signal_id].version,
+        source=SignalSource.COMPUTED, collected=nc,
+        categories={k: nc for k in CATEGORIES[signal_id]})
+
+
+def fold_row(activity_row: ScanSignalResult,
+             half: InheritedHalf | None) -> ScanSignalResult:
+    """Union the activity's computed half with the inherited half (D7).
+
+    The inherited half wins its OWN categories and nothing else -- it is the
+    authority on what Tier 0 measured, and the activity is the authority on
+    what this phase computed. Neither can overwrite the other's keys.
+    """
+    if half is None:
+        return activity_row
+    return activity_row.model_copy(update={
+        "source": SignalSource.EXTENDED,
+        "producer": half.producer,
+        "categories": activity_row.categories | half.categories,
+    })
 
 
 def assemble(repo_dir: str, init: InitOutcome, admitted: bool, reason: str,
@@ -162,10 +241,81 @@ class AssessmentWorkflow(GateHost):
                                collected=Measurement.measured(1.0)),
             triage=triage)
 
-    async def _scan(self, inp: AssessmentInput) -> PhaseResult:
-        """E-46 owns this body: S1-S5 / SS1-SS4 / QS1-QS4 signals, memoized
-        on (tree hash, signal version) per FR-912."""
-        return unbuilt(PhaseId.SCAN)
+    async def _scan(self, inp: AssessmentInput,
+                    triage: RepoTriage) -> ScanOutcome:
+        """Phase 2 (E-46). Thirteen signals: eleven activities across two
+        waves, plus S5's merge and SS2's pure inheritance in workflow code.
+
+        Nothing here executes the assessed repository's code -- every signal
+        reads blob bytes at the pinned commit (NFR-9, D12).
+        """
+        try:
+            tree: AssessmentTree = await workflow.execute_activity(
+                assessment_resolve_tree,
+                AssessmentTreeInput(repo_dir=inp.repo_dir,
+                                    commit_sha=triage.commit_sha),
+                **TREE_ACT)
+        except Exception as e:                          # noqa: BLE001
+            # Without a tree hash nothing can be memoized or reproduced, so a
+            # scan that proceeded would be unverifiable.
+            return ScanOutcome(result=PhaseResult(
+                phase=PhaseId.SCAN,
+                collected=Measurement.not_collected(
+                    f"could not resolve the tree hash: "
+                    f"{type(e).__name__}: {e}"[:300])))
+
+        halves = inherited_halves(triage)
+        outputs: dict[ScanSignalId, SignalOutput] = {}
+
+        for wave in WAVES:
+            upstream = [c for out in outputs.values() for c in out.sources]
+            arg = ScanSignalInput(repo_dir=inp.repo_dir,
+                                  commit_sha=triage.commit_sha,
+                                  tree_hash=tree.tree_hash,
+                                  upstream=sorted(
+                                      upstream,
+                                      key=lambda c: (c.signal.value,
+                                                     c.local_id)))
+            results = await asyncio.gather(*[
+                run_or_degrade(
+                    SCAN_ACTIVITIES[SCAN_SIGNALS[sid].activity], arg,
+                    SCAN_ACT,
+                    fallback=lambda sid=sid: SignalOutput(
+                        row=skipped_scan_signal(
+                            sid, f"{sid.value} activity failed or timed out")))
+                for sid in wave])
+            outputs.update(zip(wave, results))
+
+        # S5 (in_workflow) and SS2 (inherited) run no activity: their rows are
+        # synthesized so the ledger still carries the whole set in order.
+        for sid in SCAN_ORDER:
+            if sid in outputs or SCAN_SIGNALS[sid].activity:
+                continue
+            outputs[sid] = SignalOutput(row=skipped_scan_signal(
+                sid, f"{sid.value} has no computed half"))
+
+        rows = [fold_row(outputs[sid].row, halves.get(sid))
+                for sid in SCAN_ORDER]
+        sources = sorted(
+            (c for out in outputs.values() for c in out.sources),
+            key=lambda c: (c.signal.value, c.local_id))
+        scan = ScanResult(
+            signals=rows,
+            sources=sources,
+            candidates=[],          # S5's merge lands in plan 2
+            data_sensitivity=sorted(
+                (r for out in outputs.values() for r in out.data_sensitivity),
+                key=lambda r: (r.classification.value, r.entity)),
+            testability=sorted(
+                (f for out in outputs.values() for f in out.testability),
+                key=lambda f: (f.path, f.pattern, f.key)))
+        measured = sum(
+            1 for r in rows
+            if r.collected.state is CollectionState.MEASURED)
+        return ScanOutcome(
+            result=PhaseResult(phase=PhaseId.SCAN,
+                               collected=Measurement.measured(float(measured))),
+            scan=scan)
 
     async def _discover(self, inp: AssessmentInput) -> PhaseResult:
         """E-48 owns this body: D1-D8 discover proposers."""
@@ -207,12 +357,14 @@ class AssessmentWorkflow(GateHost):
             return self._done(assemble(inp.repo_dir, init, False, why))
 
         self._status = "running"
+        scan_out = await self._scan(inp, init.triage)
         rest = [
-            await self._scan(inp),
+            scan_out.result,
             await self._discover(inp),
             await self._assess(inp),
             await self._report(inp),      # AFTER assess -- FR-911 dev. (a)
             await self._generate(inp),
             await self._finish(inp),
         ]
-        return self._done(assemble(inp.repo_dir, init, True, why, rest))
+        return self._done(assemble(inp.repo_dir, init, True, why, rest,
+                                   scan=scan_out.scan))
