@@ -6,7 +6,7 @@
 | Work items | **E-46** (fills §11's first unbuilt phase body; unblocks E-48, and through it E-47a's first live consumer) |
 | Requirements | FR-912; FR-902 extended to Tier 2; FR-915; FR-103 (memoization); FR-108 (adapter escalation); NFR-10 |
 | Scope input | `PRD.md` §FR-910; `ROADMAP.md` §11 (E-46), §15 item 3; `D:\own\BrownKit\commands\scan.md`; `docs/superpowers/specs/2026-08-10-assessment-workflow-edcr-shell-design.md` D5/D6; `docs/superpowers/specs/2026-08-08-oq6-capability-identity-design.md` (tiers, memo amendment); `docs/superpowers/specs/2026-08-06-repository-triage-hygiene-signals-design.md` D3/D15 |
-| Status | Design approved 2026-08-12; plan 1 of 3 implemented |
+| Status | Design approved 2026-08-12; plans 1 and 2 of 3 implemented |
 
 E-45 shipped the EDCR DAG with six phase bodies stubbed, each reporting
 `not_collected` naming the item that owes it. This increment writes the first of
@@ -779,6 +779,15 @@ During plans 1–2 the unbuilt categories report `not_collected` naming the plan
 that owes them. If plan 3 slips, the roadmap gains an **E-46a** for the
 remainder and the reasons name it instead — the split E-41 → E-41a–d took for
 the same reason.
+
+Plan 2 added two decisions the design left open, both recorded in
+`docs/superpowers/plans/2026-08-13-scan-phase-signals-plan-2.md`:
+**P2-D1** — S3 fails closed on an unfingerprinted framework, because
+`_unmeasured_carries_no_payload` makes "partially extracted" unrepresentable
+and D5's own reasoning prefers an absent Contract tier to a partial one.
+**P2-D2** — the generic/layer name tables live in `naming.py`, so S1 declares
+it as a `rule_module`; without that, editing a layer word would change S1's
+output while its memo key stood still.
 
 ---
 

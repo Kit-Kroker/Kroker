@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-08-10 (E-45 against `src/sdlc/{assessment,workflows/assessment.py,triage/admission.py}` + unit/e2e tests green); 2026-08-09 (E-44 against `src/sdlc/{tidyup,workflows/tidyup.py,triage/delta.py}` + unit/component tests green; E-42 against `src/sdlc/workflows/{gates,triage}.py` + `pytest -m temporal`, with three review defects fixed; E-47a 2026-08-08 against `src/sdlc/capability/`; E-78 2026-08-07 against `src/sdlc/board/`; E-40/E-43 2026-08-06; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
+| Last verified | 2026-08-13 (E-46 plan 2 against `src/sdlc/assessment/scan/` + unit suite green); 2026-08-10 (E-45 against `src/sdlc/{assessment,workflows/assessment.py,triage/admission.py}` + unit/e2e tests green); 2026-08-09 (E-44 against `src/sdlc/{tidyup,workflows/tidyup.py,triage/delta.py}` + unit/component tests green; E-42 against `src/sdlc/workflows/{gates,triage}.py` + `pytest -m temporal`, with three review defects fixed; E-47a 2026-08-08 against `src/sdlc/capability/`; E-78 2026-08-07 against `src/sdlc/board/`; E-40/E-43 2026-08-06; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -220,8 +220,9 @@ as tracked rather than accidental.
   `/enrich` as a declared stage input remains E-56. **2026-08-12 (E-46 plan 1):**
   the stub count dropped from six to five and `PHASE_OWNER` lost its `SCAN` entry
   — scan is now built, so the scan phase row is measured and `terminal_status`
-  derives `assessed:partial` on an admitted run.
-- [ ] **FR-912** deterministic scan memoized on `(tree hash, signal version)`; cross-source confidence (E-46). ⚠️ **Plan 1 of E-46 landed 2026-08-12.** The memo key is `(tree_hash, signal_version, rules_sha)` — `rules_sha` beyond the specified two terms, hashed transitively over shared rule modules and consumed signals, because a hand-maintained version int misses a real input (spec D10). All thirteen signal rows report; eleven bodies are still stubs naming plan 2 or 3.
+  derives `assessed:partial` on an admitted run. **2026-08-13 (E-46 plan 2):** the
+  scan phase's own stub count drops from eleven signal bodies to nine.
+- [ ] ⚠️ **FR-912** deterministic scan memoized on `(tree hash, signal version)`; cross-source confidence (E-46). **Plans 1–2 of 3 landed (2026-08-12, 2026-08-13).** The memo key is `(tree_hash, signal_version, rules_sha)` — `rules_sha` beyond the specified two terms, hashed transitively over shared rule modules and consumed signals, because a hand-maintained version int misses a real input (spec D10). All thirteen signal rows report; S1/S3/S5 compute, SS2 inherits, and nine bodies are still stubs naming plan 3. Cross-source confidence is live and derived (D8), but it cannot reach HIGH until plan 3 lands S2 and S4: two of S5's four sources do not yet produce.
 - [ ] ⚠️ **FR-913** `CapabilityMap` with stable ids + coverage floor + orphan classification — **also satisfies FR-102** (E-47a/E-47b/E-47c/E-48). **Identity half landed 2026-08-08 (E-47a):** surrogate `BC-NNN` ids, weighted-Jaccard re-attachment, audited `IdentityCorrection` (`src/sdlc/capability/`). Coverage floor + orphans (E-47b) and L2/entity-ownership (E-47c) still open.
 - [ ] **FR-914** byte-exact quote verification against the pinned commit, fail-closed — shares FR-107's verifier (E-43). *Partially landed 2026-08-06 (`grounding.py`: one substring invariant, two normalization profiles, verdict-only) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The verifier + research/handoff/deep-review consumers landed; the commit source gained its first consumer with E-41's secrets signal (2026-08-06), which re-verifies every emitted evidence quote against the pinned commit; stays open until an LLM-proposing assessment stage cites the same way, which is where the check stops being a drift guard.*
 - [ ] **FR-915** `not_collected` / `unknown` vs measured value (E-40). *Contract half landed 2026-08-06 (`measurement.py`, retrofitted onto `CoverageReport`/`SecurityReport`/`claim_survival_score`; `QAReport.coverage_pct` deleted) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The `RepoTriage`/triage half is deferred to E-41; the load-bearing case was the SARIF-malformed-reads-as-clean hole on the absolute floor. **E-44 adds a second consumer:** `compute_delta` reads `SignalResult.collected.state` and emits `UNVERIFIABLE` whenever a side did not collect, so a triage that timed out on the after side cannot read as "all findings fixed".*
@@ -944,8 +945,16 @@ the factory rather than as prompts.
   unchanged repo is a cache hit and editing one signal's logic invalidates
   exactly that signal. **Plan 1 landed 2026-08-12:** contracts, `SCAN_SIGNALS`,
   the memoized activity seam, and the five inherited halves
-  (`src/sdlc/assessment/scan/`). All thirteen rows report; eleven bodies are
-  stubs naming plan 2 or 3. `terminal_status` now derives `assessed:partial`.
+  (`src/sdlc/assessment/scan/`). **Plan 2 landed 2026-08-13:** S1, S3, S5 and
+  the shared `naming.py` rules — the capability core, so `ScanResult.candidates`
+  carries real merged candidates and the memo has its first production caller
+  (every plan-1 stub was refused by `store`'s not-MEASURED rule). Nine bodies
+  remain stubs naming plan 3. Two plan-level decisions: **S3 fails closed** on a
+  recognized-but-unfingerprinted framework (P2-D1) — `_unmeasured_carries_no_payload`
+  makes a partial Contract tier unrepresentable, and D5 prefers absent to
+  partial; and the **name tables live in `naming.py`**, so S1 declares it as a
+  `rule_module` (P2-D2) or editing a layer word would move S1's output without
+  moving its key.
 - **E-47 — `CapabilityMap`** → FR-913, **FR-102**. **Split three ways
   2026-08-08**; the single item carried four independent clauses and was too
   large for one plan. **This is where the assessment product and the core
