@@ -208,7 +208,7 @@
   loader: <code>src/sdlc/agents/loader.py</code> &middot;
   runtime: <code>src/sdlc/agents/roles.py</code> &middot;
   workflow callsites: <code>src/sdlc/workflows/feature.py</code> &middot;
-  contract source-of-truth: <code>src/sdlc/models.py</code> &middot; Verified <code>2026-08-05</code> against <code>config/agents.yaml</code> + <code>agents/</code> + <code>benchmarks/</code>
+  contract source-of-truth: <code>src/sdlc/models.py</code> &middot; Verified <code>2026-08-12</code> against <code>agents/registry.yaml</code> + <code>agents/</code> + <code>benchmarks/</code>
 </p>
 <p class="lede">
   Every role is a folder. The folder name <strong>is</strong> the role name, the API surface, and
@@ -686,7 +686,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
 </p>
 
 <div class="card soft">
-  <h4>The normalized result <span class="pill asset">models.py:231</span></h4>
+  <h4>The normalized result <span class="pill asset">models.py:394</span></h4>
   <pre><span class="k">class</span> HarnessRunResult(BaseModel):
     harness: HarnessKind                <span class="c"># CLAUDE_CODE | OPENCODE | CURSOR</span>
     session_id: str | <span class="k">None</span>             <span class="c"># resume across fix-loop attempts</span>
@@ -820,11 +820,11 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
   Requirements analyst. Extracts functional / non-functional requirements, defines out-of-scope,
   and lists <strong>only</strong> the open questions whose answers materially change the design
   (Definition-of-Ready style). Each question carries a suggested answer the human can accept in
-  one click. Wiring: <code>feature.py:776</code> via <code>_cached_stage</code> +
+  one click. Wiring: <code>feature.py:1911</code> via <code>_cached_stage</code> +
   <code>_revisable_stage</code> &rarr; <code>_gate("clarify")</code>.
 </p>
 
-<h3>The contract: <code>ClarifiedRequirements</code> <span class="pill asset">models.py:79</span></h3>
+<h3>The contract: <code>ClarifiedRequirements</code> <span class="pill asset">models.py:240</span></h3>
 <div class="table-wrap">
   <table>
     <thead><tr><th>field</th><th>type</th><th>rule</th></tr></thead>
@@ -840,7 +840,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
 </div>
 
 <div class="card soft">
-  <h4><code>OpenQuestion</code> <span class="pill asset">models.py:71</span></h4>
+  <h4><code>OpenQuestion</code> <span class="pill asset">models.py:232</span></h4>
   <pre><span class="k">class</span> OpenQuestion(BaseModel):
     id: str
     question: str
@@ -882,7 +882,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
   the same per-run budget as the research stage.
 </p>
 
-<h3>The contract: <code>ArchitectureSpec</code> <span class="pill asset">models.py:95</span></h3>
+<h3>The contract: <code>ArchitectureSpec</code> <span class="pill asset">models.py:256</span></h3>
 <div class="table-wrap">
   <table>
     <thead><tr><th>field</th><th>type</th><th>rule</th></tr></thead>
@@ -900,7 +900,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
 
 <div class="grid-2">
   <div class="card soft">
-    <h4><code>ArchitectureDecision</code> <span class="pill asset">models.py:88</span></h4>
+    <h4><code>ArchitectureDecision</code> <span class="pill asset">models.py:249</span></h4>
     <pre><span class="k">class</span> ArchitectureDecision(BaseModel):
     id: str
     decision: str
@@ -948,7 +948,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
   assertions, test commands, lint commands, written before any code exists.
 </p>
 
-<h3>The contract: <code>ImplementationPlan</code> <span class="pill asset">models.py:147</span></h3>
+<h3>The contract: <code>ImplementationPlan</code> <span class="pill asset">models.py:360</span></h3>
 <div class="table-wrap">
   <table>
     <thead><tr><th>field</th><th>type</th><th>rule</th></tr></thead>
@@ -961,7 +961,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
 </div>
 
 <div class="card soft">
-  <h4><code>DevTask</code> <span class="pill asset">models.py:132</span></h4>
+  <h4><code>DevTask</code> <span class="pill asset">models.py:306</span></h4>
   <pre><span class="k">class</span> DevTask(BaseModel):
     id: str
     title: str
@@ -976,7 +976,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
 </div>
 
 <div class="card soft">
-  <h4><code>ValidationContract</code> <span class="pill asset">models.py:105</span> &mdash; FR-803</h4>
+  <h4><code>ValidationContract</code> <span class="pill asset">models.py:266</span> &mdash; FR-803</h4>
   <pre><span class="k">class</span> ValidationContract(BaseModel):
     task_id: str
     assertions: list[str]                     <span class="c"># human-readable, test-mappable</span>
@@ -1020,7 +1020,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
 </p>
 
 <div class="card soft">
-  <h4>Per-task loop <span class="pill det">feature.py:470</span></h4>
+  <h4>Per-task loop <span class="pill det">feature.py:1277</span></h4>
   <pre><span class="k">for</span> attempt <span class="k">in</span> range(1, cfg.max_fix_attempts + 2):
     run = await workflow.execute_activity(
         run_coding_task,
@@ -1041,7 +1041,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
 </div>
 
 <div class="card soft">
-  <h4>Prompt assembly <span class="pill det">feature.py:498</span></h4>
+  <h4>Prompt assembly <span class="pill det">feature.py:1302</span></h4>
   <pre>prompt = (
     f<span class="s">"Task: {task.title}\n{task.description}\n"</span>
     + stack_directive                              <span class="c"># "use {contract.stack}, do not deviate"</span>
@@ -1090,7 +1090,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
   suggested fix. Sets <code>approve=False</code> if <em>any</em> finding is critical or high.
 </p>
 
-<h3>The contract: <code>ReviewReport</code> <span class="pill asset">models.py:228</span></h3>
+<h3>The contract: <code>ReviewReport</code> <span class="pill asset">models.py:493</span></h3>
 <div class="table-wrap">
   <table>
     <thead><tr><th>field</th><th>type</th><th>rule</th></tr></thead>
@@ -1104,7 +1104,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
 
 <div class="grid-2">
   <div class="card soft">
-    <h4><code>ReviewFinding</code> <span class="pill asset">models.py:221</span></h4>
+    <h4><code>ReviewFinding</code> <span class="pill asset">models.py:486</span></h4>
     <pre><span class="k">class</span> ReviewFinding(BaseModel):
     assertion: str            <span class="c"># which contract assertion / concern</span>
     severity: Literal[<span class="s">"critical"</span>, <span class="s">"high"</span>,
@@ -1113,7 +1113,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
     suggested_fix: str = <span class="s">""</span></pre>
   </div>
   <div class="card soft">
-    <h4><code>blocking_findings</code> property <span class="pill asset">models.py:237</span></h4>
+    <h4><code>blocking_findings</code> property <span class="pill asset">models.py:503</span></h4>
     <pre>@property
 <span class="k">def</span> blocking_findings(self):
     <span class="k">return</span> [f <span class="k">for</span> f <span class="k">in</span> self.findings
@@ -1126,7 +1126,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
 </div>
 
 <div class="card soft">
-  <h4>Per-task wiring <span class="pill det">feature.py:550</span></h4>
+  <h4>Per-task wiring <span class="pill det">feature.py:1429</span></h4>
   <pre>review = <span class="k">None</span>
 <span class="k">if</span> cfg.review_enabled:
     review = (await t_reviewer.run(
@@ -1156,7 +1156,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
   contract's frozen stack (not for a merely incomplete implementation within the correct stack).
 </p>
 
-<h3>The contract: <code>QAReport</code> <span class="pill asset">models.py:193</span></h3>
+<h3>The contract: <code>QAReport</code> <span class="pill asset">models.py:446</span></h3>
 <div class="table-wrap">
   <table>
     <thead><tr><th>field</th><th>type</th><th>rule</th></tr></thead>
@@ -1199,7 +1199,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
   not decide pass/fail.</strong>
 </p>
 
-<h3>The contract: <code>AnalysisReport</code> <span class="pill asset">models.py:249</span></h3>
+<h3>The contract: <code>AnalysisReport</code> <span class="pill asset">models.py:653</span></h3>
 <div class="table-wrap">
   <table>
     <thead><tr><th>field</th><th>type</th><th>rule</th></tr></thead>
@@ -1213,7 +1213,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
 </div>
 
 <div class="card soft">
-  <h4><code>CriterionTrace</code> <span class="pill asset">models.py:242</span></h4>
+  <h4><code>CriterionTrace</code> <span class="pill asset">models.py:646</span></h4>
   <pre><span class="k">class</span> CriterionTrace(BaseModel):
     task_id: str
     criterion: str             <span class="c"># copied verbatim from the plan</span>
@@ -1245,7 +1245,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
   approve one the deterministic gate failed; it only advises.</strong>
 </p>
 
-<h3>The contract: <code>MergeVerdict</code> <span class="pill asset">models.py:410</span></h3>
+<h3>The contract: <code>MergeVerdict</code> <span class="pill asset">models.py:859</span></h3>
 <div class="table-wrap">
   <table>
     <thead><tr><th>field</th><th>type</th><th>rule</th></tr></thead>
@@ -1377,7 +1377,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
 </div>
 
 <div class="card soft">
-  <h4>The contract: <code>ResearchBrief</code> field order (SGR) <span class="pill asset">models.py:311</span></h4>
+  <h4>The contract: <code>ResearchBrief</code> field order (SGR) <span class="pill asset">models.py:731</span></h4>
   <pre><span class="k">class</span> ResearchBrief(BaseModel):
     sub_questions:      list[SubQuestion]       <span class="c"># 1. decompose</span>
     sources_consulted:  list[ConsultedSource]   <span class="c"># 2. gather</span>
@@ -1484,7 +1484,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
   handoff (the diff itself) &mdash; a passing task is never failed by the extractor.
 </p>
 
-<h3>The contract: <code>HandoffSummary</code> <span class="pill asset">models.py:275</span></h3>
+<h3>The contract: <code>HandoffSummary</code> <span class="pill asset">models.py:291</span></h3>
 <div class="table-wrap">
   <table>
     <thead><tr><th>field</th><th>type</th><th>rule</th></tr></thead>
@@ -1500,7 +1500,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
 
 <div class="grid-2">
   <div class="card soft">
-    <h4><code>HandoffClaim</code> <span class="pill asset">models.py:268</span></h4>
+    <h4><code>HandoffClaim</code> <span class="pill asset">models.py:284</span></h4>
     <pre><span class="k">class</span> HandoffClaim(BaseModel):
     text: str        <span class="c"># the assertion</span>
     evidence: str    <span class="c"># exact transcript quote / reference</span></pre>
@@ -1574,28 +1574,28 @@ claim_survival_score(kept, dropped) -&gt; fraction
 
   <div class="layer">CONTRACT<br>src/sdlc/models.py</div>
   <div class="files">
-    <p><span class="mono">OpenQuestion, ClarifiedRequirements</span> (:71, :79)</p>
-    <p><span class="mono">ArchitectureDecision, ArchitectureSpec</span> (:88, :95)</p>
-    <p><span class="mono">ValidationContract, DevTask, ImplementationPlan</span> (:105, :132, :147)</p>
-    <p><span class="mono">HarnessRunResult, TaskResult</span> (:153, :181)</p>
-    <p><span class="mono">QAReport, ReviewFinding, ReviewReport</span> (:193, :221, :228)</p>
-    <p><span class="mono">CriterionTrace, AnalysisReport</span> (:242, :249)</p>
-    <p><span class="mono">MergeVerdict</span> (:410)</p>
-    <p><span class="mono">DeepReviewReport + IntegrityFlag</span> (:339) &mdash; E-39 advisory lens</p>
-    <p><span class="mono">HandoffClaim, HandoffSummary</span> (:268, :275) &mdash; FR-805 task-to-task handoff</p>
-    <p><span class="mono">ResearchBrief + nested</span> (:266-324)</p>
+    <p><span class="mono">OpenQuestion, ClarifiedRequirements</span> (:232, :240)</p>
+    <p><span class="mono">ArchitectureDecision, ArchitectureSpec</span> (:249, :256)</p>
+    <p><span class="mono">ValidationContract, DevTask, ImplementationPlan</span> (:266, :306, :360)</p>
+    <p><span class="mono">HarnessRunResult, TaskResult</span> (:394, :433)</p>
+    <p><span class="mono">QAReport, ReviewFinding, ReviewReport</span> (:446, :486, :493)</p>
+    <p><span class="mono">CriterionTrace, AnalysisReport</span> (:646, :653)</p>
+    <p><span class="mono">MergeVerdict</span> (:859)</p>
+    <p><span class="mono">DeepReviewReport + IntegrityFlag</span> (:628, :608) &mdash; E-39 advisory lens</p>
+    <p><span class="mono">HandoffClaim, HandoffSummary</span> (:284, :291) &mdash; FR-805 task-to-task handoff</p>
+    <p><span class="mono">ResearchBrief + nested</span> (:686-731)</p>
     <p><span class="mono">RoleConfig</span> &mdash; <code>kind</code>, <code>harness</code>, <code>model</code>, <code>provider</code>, <code>tool_files</code>, <code>instructions</code>, <code>context_budget_tokens</code>.</p>
   </div>
 
   <div class="layer">WORKFLOW CALLSITE<br>src/sdlc/workflows/feature.py</div>
   <div class="files">
-    <p><span class="mono">:26-27</span> &mdash; imports <code>t_*</code> TemporalAgents + <code>STAGE_MODELS</code>/<code>PROMPT_SHAS</code>.</p>
-    <p><span class="mono">:318</span> &mdash; <code>_cached_stage</code> (memoization; <code>STAGE_MODELS</code> keyed lookup).</p>
-    <p><span class="mono">:379, :419</span> &mdash; <code>_gate</code>, <code>_revisable_stage</code>.</p>
-    <p><span class="mono">:470</span> &mdash; <code>_dev_task</code> (dev harness + qa + reviewer per-task loop; + adversary on approve path, + handoff on success path).</p>
-    <p><span class="mono">:695</span> &mdash; research stage wiring (optional, FR-107).</p>
-    <p><span class="mono">:976</span> &mdash; <code>_run_handoff</code> (FR-805 handoff extraction, success path).</p>
-    <p><span class="mono">:776</span> clarify stage; <span class="mono">:869</span> architect; <span class="mono">:909</span> planner; <span class="mono">:1006</span> analyst; <span class="mono">:1142</span> merge_verdict.</p>
+    <p><span class="mono">:28-30</span> &mdash; imports <code>t_*</code> TemporalAgents + <code>STAGE_MODELS</code>/<code>PROMPT_SHAS</code>.</p>
+    <p><span class="mono">:773</span> &mdash; <code>_cached_stage</code> (memoization; <code>STAGE_MODELS</code> keyed lookup).</p>
+    <p><code>_gate</code> (inherited from GateHost, no def in feature.py) &middot; <span class="mono">:1225</span> <code>_revisable_stage</code>.</p>
+    <p><span class="mono">:1277</span> &mdash; <code>_dev_task</code> (dev harness + qa + reviewer per-task loop; + adversary on approve path, + handoff on success path).</p>
+    <p><span class="mono">:1721</span> &mdash; research stage wiring (optional, FR-107).</p>
+    <p><span class="mono">:1084</span> &mdash; <code>_run_handoff</code> (FR-805 handoff extraction, success path).</p>
+    <p><span class="mono">:1911</span> clarify stage; <span class="mono">:2023</span> architect; <span class="mono">:2065</span> planner; <span class="mono">:2202</span> analyst; <span class="mono">:2370</span> merge_verdict.</p>
   </div>
 
   <div class="layer">RESEARCH CODE<br>src/sdlc/research/</div>

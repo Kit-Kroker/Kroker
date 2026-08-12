@@ -349,11 +349,11 @@
 
 <h1>Research Stage Schema &amp; Architecture</h1>
 <p class="meta">
-  FR-107 · wired in <code>src/sdlc/workflows/feature.py:1625</code> ·
+  FR-107 · wired in <code>src/sdlc/workflows/feature.py:1726</code> ·
   fan-out activities in <code>src/sdlc/research/stage.py</code> ·
   spec: <code>docs/superpowers/specs/2026-08-04-research-fan-out-design.md</code> ·
   contract source-of-truth: <code>src/sdlc/models.py</code> ·
-  verified 2026-08-05 against <code>src/sdlc/</code>, <code>agents/research/</code>, <code>benchmarks/</code>
+  verified 2026-08-12 against <code>src/sdlc/</code>, <code>agents/research/</code>, <code>benchmarks/</code>
 </p>
 <p class="lede">
   The research stage is an <strong>optional, human-gated, off-by-default</strong> pre-clarify
@@ -462,7 +462,7 @@
 <div class="callout warn">
   <span class="label">Off by default, not memoized.</span>
   A served memo would mean pages were <em>not</em> fetched this run, so a brief cannot be cached
-  (<code>feature.py:1625</code> comment, spec finding 4). Only the canonical
+  (<code>feature.py:1721</code> comment, spec finding 4). Only the canonical
   <code>brief_digest()</code> contributes to downstream content keys (spec finding 3).
 </div>
 
@@ -470,7 +470,7 @@
 <h2 id="brief">2. The contract: <code>ResearchBrief</code> <span class="count">schema</span></h2>
 
 <p>
-  Defined at <code>src/sdlc/models.py:522</code>. Field order is <strong>reasoning order</strong>
+  Defined at <code>src/sdlc/models.py:731</code>. Field order is <strong>reasoning order</strong>
   (schema-guided reasoning, SGR): decompose &rarr; gather &rarr; what the bytes say &rarr; what I
   concluded &rarr; where sources disagree &rarr; what I could not answer &rarr; summary &rarr; ref
   &rarr; confidence. <code>tests/test_research_models.py</code> pins the order; a reorder is a
@@ -514,13 +514,13 @@
 
 <div class="grid-2">
   <div class="card soft">
-    <h4>SubQuestion <span class="pill asset">models.py:477</span></h4>
+    <h4>SubQuestion <span class="pill asset">models.py:686</span></h4>
     <pre><span class="k">class</span> SubQuestion:
     id: str
     question: str</pre>
   </div>
   <div class="card soft">
-    <h4>ConsultedSource <span class="pill asset">models.py:482</span></h4>
+    <h4>ConsultedSource <span class="pill asset">models.py:691</span></h4>
     <pre><span class="k">class</span> ConsultedSource:
     url: str
     title: str = <span class="s">""</span>
@@ -528,7 +528,7 @@
     relevance: str = <span class="s">""</span>     <span class="c"># "high" / "peripheral"</span></pre>
   </div>
   <div class="card soft">
-    <h4>GroundedFinding <span class="pill asset">models.py:490</span></h4>
+    <h4>GroundedFinding <span class="pill asset">models.py:699</span></h4>
     <pre><span class="k">class</span> GroundedFinding:
     source_url: str
     quote: str            <span class="c"># verbatim, fetched THIS run</span>
@@ -536,11 +536,11 @@
     sub_question_ids: list[str] = []</pre>
     <p style="margin:6px 0 0;font-size:12.5px;color:var(--muted)">
       <strong>quote BEFORE claim.</strong> The verifier asserts
-      <code>normalize(quote) in normalize(page_text)</code>.
+      <code>verify_quote(quote, page_text, Profile.EXTRACTED_TEXT)</code> (profile-aware match in <code>grounding.py</code>).
     </p>
   </div>
   <div class="card soft">
-    <h4>InferredFinding <span class="pill asset">models.py:500</span></h4>
+    <h4>InferredFinding <span class="pill asset">models.py:709</span></h4>
     <pre><span class="k">class</span> InferredFinding:
     reasoning: str
     claim: str
@@ -551,7 +551,7 @@
     </p>
   </div>
   <div class="card soft">
-    <h4>Contradiction <span class="pill asset">models.py:509</span></h4>
+    <h4>Contradiction <span class="pill asset">models.py:718</span></h4>
     <pre><span class="k">class</span> Contradiction:
     topic: str
     positions: list[str] = []
@@ -559,7 +559,7 @@
     unresolved: bool = <span class="k">True</span></pre>
   </div>
   <div class="card soft">
-    <h4>Gap <span class="pill asset">models.py:516</span></h4>
+    <h4>Gap <span class="pill asset">models.py:725</span></h4>
     <pre><span class="k">class</span> Gap:
     sub_question_id: str
     what_is_missing: str
@@ -707,7 +707,7 @@
   </div>
 
   <div class="card">
-    <h3>Refine round <span class="pill det">REVISE</span> <span class="pill asset">feature.py:1717</span></h3>
+    <h3>Refine round <span class="pill det">REVISE</span> <span class="pill asset">feature.py:1821</span></h3>
     <p class="meta">bounded by <code>max_refine_rounds</code></p>
     <p>
       <code>GateOutcome.REVISE</code> no longer collapses to reject. A replan is a <strong>plan with
@@ -727,7 +727,7 @@
   that calls a model <strong>must hand its usage back or the spend is silently lost</strong>. Every
   model-carrying return type &mdash; <code>ResearchPlan</code>, <code>SubQuestionFinding</code>, the
   <code>synthesize_brief</code> tuple &mdash; carries a <code>RoleUsage</code>; the workflow folds
-  each through <code>_fold_research_usage</code> (<code class="mono">feature.py:842</code>).
+  each through <code>_fold_research_usage</code> (<code class="mono">feature.py:926</code>).
   <code>price_usage</code> still happens <strong>workflow-side</strong> (replay-safe). The
   empty-findings path makes no model call and returns a zero-spend <code>RoleUsage</code>.
 </div>
@@ -818,10 +818,16 @@
         <td>Tavily HTTP API; canned-corpus offline provider for CI.</td>
       </tr>
       <tr>
+        <td>matching</td>
+        <td class="mono">src/sdlc/grounding.py</td>
+        <td><span class="pill det">deterministic</span> <span class="pill pure">pure</span></td>
+        <td>Home of the match logic (E-43): <code>Profile</code>, <code>normalize()</code>, <code>verify_quote()</code>, <code>quote_violation()</code>, <code>Violation</code>.</td>
+      </tr>
+      <tr>
         <td>verifier</td>
         <td class="mono">src/sdlc/research/verify.py</td>
         <td><span class="pill det">deterministic</span> <span class="pill act">activity</span></td>
-        <td>Pure <code>verify_brief()</code> + <code>verify_brief_activity</code> + <code>brief_digest()</code>.</td>
+        <td>Research-stage wrapper: page-cache lookup + <code>source_unavailable</code> check, delegates the match to <code>grounding.quote_violation</code> under <code>Profile.EXTRACTED_TEXT</code>. <code>verify_brief_activity</code> + <code>brief_digest()</code>.</td>
       </tr>
       <tr>
         <td>retain selector</td>
@@ -837,9 +843,9 @@
       </tr>
       <tr>
         <td>workflow wiring</td>
-        <td class="mono">src/sdlc/workflows/feature.py:1625</td>
+        <td class="mono">src/sdlc/workflows/feature.py:1726</td>
         <td><span class="pill det">deterministic</span></td>
-        <td>Builds <code>ResearchDeps</code>, fans out (<code>_fan_out_research</code> @ <code class="mono">:799</code>), verifies, gates (approve/reject/<strong>revise</strong>), retains, judges, records.</td>
+        <td>Builds <code>ResearchDeps</code>, fans out (<code>_fan_out_research</code> @ <code class="mono">:883</code>), verifies, gates (approve/reject/<strong>revise</strong>), retains, judges, records.</td>
       </tr>
     </tbody>
   </table>
@@ -870,7 +876,7 @@
       <rect x="132" y="120" width="120" height="32" rx="4" fill="#ffffff" stroke="#8250df"/>
       <text x="142" y="140">merge.py</text>
       <rect x="262" y="120" width="180" height="32" rx="4" fill="#ffffff" stroke="#8250df"/>
-      <text x="272" y="140">verify.py + write_page</text>
+      <text x="272" y="140">verify.py → grounding.py</text>
       <rect x="452" y="120" width="120" height="32" rx="4" fill="#ffffff" stroke="#8250df"/>
       <text x="462" y="140">budget_store.py</text>
       <rect x="582" y="120" width="120" height="32" rx="4" fill="#ffffff" stroke="#8250df"/>
@@ -884,7 +890,7 @@
       <rect x="10" y="174" width="600" height="68" rx="6" fill="rgba(9,105,218,0.05)" stroke="#0969da" stroke-dasharray="4 3"/>
       <text x="22" y="192" font-size="11" fill="#0969da" font-weight="700">WORKFLOW (deterministic)  src/sdlc/workflows/feature.py</text>
       <rect x="22" y="202" width="570" height="32" rx="4" fill="#ffffff" stroke="#0969da"/>
-      <text x="32" y="222">wiring @ :1625  ·  _fan_out @ :799  ·  _gate @ :1079  ·  _retain @ :608  ·  _judge @ :561</text>
+      <text x="32" y="222">wiring @ :1726  ·  _fan_out @ :883  ·  _gate @ :1079  ·  _retain @ :726  ·  _judge @ :678</text>
 
       <rect x="630" y="174" width="290" height="68" rx="6" fill="rgba(207,34,46,0.05)" stroke="#cf222e" stroke-dasharray="4 3"/>
       <text x="642" y="192" font-size="11" fill="#cf222e" font-weight="700">I/O  runs/&lt;run_id&gt;/research/</text>
@@ -1020,7 +1026,7 @@ deep_search(ctx, question) -&gt; hits</pre>
 <h2 id="budget">5. Budget enforcement <span class="count">per-scope, persisted, real</span></h2>
 
 <p>
-  Bounds live in <code>ResearchConfig</code> (<code class="mono">models.py:751</code>) and are
+  Bounds live in <code>ResearchConfig</code> (<code class="mono">models.py:961</code>) and are
   enforced inside the tool functions. Since fan-out, the caps are <strong>per sub-question</strong>
   (<code>max_searches</code> / <code>max_fetches</code> / <code>max_cost_usd</code>) plus a shared
   whole-run ceiling (<code>max_run_cost_usd</code>). <code>charge()</code>
@@ -1099,7 +1105,7 @@ deep_search(ctx, question) -&gt; hits</pre>
   <strong>persisted per-scope counters</strong> &mdash; so one sub-question cannot drain the run and
   a retry meets the same exhausted cap. <code>BudgetExceeded</code> /
   <code>UsageLimitExceeded</code> are classified <strong>non-retryable</strong>
-  (<code>RESEARCH_SQ_ACT</code>, <code class="mono">feature.py:151</code>) and the activity degrades
+  (<code>RESEARCH_SQ_ACT</code>, <code class="mono">feature.py:160</code>) and the activity degrades
   them into a <code>Gap</code> rather than re-raise. The <code>research_subquery</code> (architect
   mid-run) path was always in-process and remains exempt.
 </div>
@@ -1108,34 +1114,63 @@ deep_search(ctx, question) -&gt; hits</pre>
 <h2 id="verifier">6. The verifier <span class="count">the heart of the stage</span></h2>
 
 <p>
-  Pure verification of a <code>ResearchBrief</code> against bytes fetched this run, plus the
-  canonical <code>brief_digest()</code>. <strong>No network, no provider</strong> &mdash; just
-  page files and strings. Defined in <code>src/sdlc/research/verify.py</code>.
+  The matching logic lives in <code>src/sdlc/grounding.py</code> (since E-43), exposed as a
+  <strong>two-profile</strong> API: <code>Profile.EXTRACTED_TEXT</code> &mdash; third-party
+  HTML/PDF extractor output, what research briefs cite &mdash; and <code>Profile.VERBATIM_BYTES</code>
+  &mdash; committed code and stored transcripts, where <code>**</code> and quote glyphs are content,
+  not noise. <code>src/sdlc/research/verify.py</code> is now the <strong>research-stage wrapper</strong>
+  around that API: it owns the page-cache lookup that decides which bytes each quote is checked
+  against, delegates the substring check to <code>quote_violation(..., Profile.EXTRACTED_TEXT,
+  ...)</code>, and exposes the Temporal activity plus the canonical <code>brief_digest()</code>.
+  <strong>No network, no provider</strong> &mdash; just page files and strings.
 </p>
 
 <div class="card">
   <h3>The rule</h3>
   <p style="margin-top:0">
-    <code>grounded</code> means <code>normalize(quote)</code> is a substring of
-    <code>normalize(page_text)</code> for the page fetched this run for that
-    <code>source_url</code>. <strong>Every further loosening is a hole in the check</strong> &mdash;
-    add none without a test proving the specific false-failure it fixes.
+    <code>grounded</code> means <code>verify_quote(quote, page_text, Profile.EXTRACTED_TEXT)</code>
+    is true for the page fetched this run for that <code>source_url</code> &mdash; equivalently,
+    <code>normalize(quote, EXTRACTED_TEXT)</code> is a substring of
+    <code>normalize(page_text, EXTRACTED_TEXT)</code>. The check itself lives in
+    <code>grounding.py</code>; <code>verify.py</code> just supplies the bytes.
+    <strong>Every further loosening is a hole in the check</strong> &mdash; add none without a test
+    proving the specific false-failure it fixes.
   </p>
 </div>
 
 <div class="card soft">
-  <h4><code>normalize()</code> <span class="pill asset">verify.py:50</span></h4>
-  <pre>_WS         = re.compile(r<span class="s">"\s+"</span>)
+  <h4>Two profiles, deliberately not one <span class="pill asset">grounding.py:32</span></h4>
+  <pre><span class="k">class</span> Profile(str, Enum):
+    EXTRACTED_TEXT = <span class="s">"extracted_text"</span>   <span class="c"># third-party extractor output (research)</span>
+    VERBATIM_BYTES = <span class="s">"verbatim_bytes"</span>   <span class="c"># committed code, stored transcripts</span></pre>
+  <p style="margin:8px 0 0;font-size:12.5px;color:var(--muted)">
+    One invariant, three byte-sources: pages fetched this run (research), stored harness transcripts
+    (handoff, deep_review), and committed code at <code>path@sha</code> (assessment, not yet wired).
+    <code>EXTRACTED_TEXT</code> carries the two loosenings a third-party extractor forces on us;
+    <code>VERBATIM_BYTES</code> carries <strong>neither</strong>, because <code>**</code> is Python's
+    kwargs/exponent operator and quote glyphs are meaningful inside string literals &mdash; applying
+    the extractor profile to code would silently weaken the check SC-7 rests on. The research stage
+    always uses <code>EXTRACTED_TEXT</code>. Grounding is pure (stdlib + Pydantic only) and never
+    decides consequences: it returns a verdict; the caller chooses whether to fail a stage, drop a
+    claim, or fail closed.
+  </p>
+</div>
+
+<div class="card soft">
+  <h4><code>normalize()</code> <span class="pill asset">grounding.py:57</span></h4>
+  <pre><span class="c"># EXTRACTED_TEXT profile (research). Live in src/sdlc/grounding.py since E-43.</span>
+_WS         = re.compile(r<span class="s">"\s+"</span>)
 _APOSTROPHE = re.compile(r<span class="s">"['‘’`�]"</span>)   <span class="c"># straight, curly, backtick, U+FFFD</span>
 _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c"># literal markdown bold markers</span>
 
-<span class="k">def</span> normalize(text: str) -&gt; str:
-    <span class="c"># 1. drop apostrophe / quote-glyph + markdown-bold noise (symmetric)</span>
-    <span class="c"># 2. collapse whitespace runs to one space</span>
-    <span class="c"># 3. strip ends</span>
-    <span class="k">return</span> _WS.sub(<span class="s">" "</span>, _MD_BOLD.sub(<span class="s">""</span>, _APOSTROPHE.sub(<span class="s">""</span>, text))).strip()</pre>
+<span class="k">def</span> normalize(text: str, profile: Profile) -&gt; str:
+    <span class="k">if</span> profile <span class="k">is</span> Profile.EXTRACTED_TEXT:
+        text = _MD_BOLD.sub(<span class="s">""</span>, _APOSTROPHE.sub(<span class="s">""</span>, text))  <span class="c"># extractor noise only</span>
+    <span class="k">return</span> _WS.sub(<span class="s">" "</span>, text).strip()                  <span class="c"># whitespace collapse, both profiles</span></pre>
   <p style="margin:8px 0 0;font-size:12.5px;color:var(--muted)">
-    Case is <strong>preserved</strong>; all other punctuation is preserved.
+    Case is <strong>preserved</strong>; all other punctuation is preserved. The carve-outs apply only
+    to <code>Profile.EXTRACTED_TEXT</code> (third-party extractor output); <code>VERBATIM_BYTES</code>
+    (code / transcripts) keeps <code>**</code> and quote glyphs as content.
   </p>
 </div>
 
@@ -1166,7 +1201,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
     root = Path(os.environ.get(<span class="s">"SDLC_RUNS_ROOT"</span>, <span class="s">"runs"</span>))
     <span class="k">return</span> root / run_id / <span class="s">"research"</span> / <span class="s">"pages"</span>
 
-<span class="k">def</span> write_page(run_id, url, text) -&gt; Path:   <span class="c"># verify.py:68 — the WRITE side of the seam</span>
+<span class="k">def</span> write_page(run_id, url, text) -&gt; Path:   <span class="c"># verify.py:38 — the WRITE side of the seam</span>
     ...atomically write pages/&lt;sha&gt;.txt...</pre>
   <p style="margin:6px 0 0;font-size:12.5px;color:var(--muted)">
     ExaSearch's <code>get_page</code> calls <code>write_page</code> so the bytes it fetched are the
@@ -1175,20 +1210,51 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
 </div>
 
 <div class="card soft">
-  <h4><code>verify_brief()</code> <span class="pill det">deterministic</span> <span class="pill asset">verify.py:101</span></h4>
-  <pre><span class="k">class</span> Violation(BaseModel):
-    kind: <span class="s">"quote_not_found"</span> | <span class="s">"source_never_fetched"</span>
-    source_url: str
+  <h4>Public API <span class="pill asset">grounding.py:80</span></h4>
+  <pre><span class="c"># Violation field is `source` (a url, a "path@sha", or a session ref) — was source_url.</span>
+<span class="k">class</span> Violation(BaseModel):
+    kind: <span class="s">"quote_not_found"</span> | <span class="s">"source_unavailable"</span> | <span class="s">"quote_empty"</span>
+    source: str
     quote: str
 
-<span class="k">def</span> verify_brief(brief, run_id) -&gt; list[Violation]:
+<span class="k">def</span> normalize(text: str, profile: Profile) -&gt; str: ...
+<span class="k">def</span> verify_quote(quote: str, haystack: str, profile: Profile) -&gt; bool: ...
+<span class="k">def</span> quote_violation(quote: str, haystack: str, profile: Profile,
+                    source: str) -&gt; Violation | <span class="k">None</span>: ...</pre>
+  <p style="margin:8px 0 0;font-size:12.5px;color:var(--muted)">
+    <code>verify_quote</code> is the boolean form; <code>quote_violation</code> is the kind-aware form
+    for callers that report <em>why</em>, not just whether. A quote that normalizes to empty is
+    <strong>never</strong> grounded &mdash; <code>"" in haystack</code> would otherwise verify
+    trivially &mdash; so <code>quote_violation</code> returns kind <code>quote_empty</code> (new in
+    E-43); a missing match is <code>quote_not_found</code>. Note the split of responsibility:
+    <code>quote_violation</code> only ever returns <code>quote_empty</code> or
+    <code>quote_not_found</code> &mdash; it does <strong>not</strong> know whether the source exists.
+    <code>source_unavailable</code> (was <code>source_never_fetched</code>) is emitted by the
+    research wrapper below, which is what actually checks the page file is on disk.
+  </p>
+</div>
+
+<div class="card soft">
+  <h4><code>verify_brief()</code> &mdash; what <code>verify.py</code> still does <span class="pill det">deterministic</span> <span class="pill asset">verify.py:65</span></h4>
+  <p style="margin-top:0">
+    The research-stage wrapper around grounding. It owns the <strong>page-cache lookup</strong>
+    (which bytes each quote is checked against) and the <strong>source-existence check</strong>
+    (missing page file &rarr; <code>source_unavailable</code>, raised here &mdash; not inside
+    grounding). The substring match itself is delegated to
+    <code>quote_violation(..., Profile.EXTRACTED_TEXT, ...)</code>. <code>GroundedFinding.source_url</code>
+    (the models.py field name) is passed straight through as the <code>Violation.source</code> value.
+  </p>
+  <pre><span class="k">def</span> verify_brief(brief, run_id) -&gt; list[Violation]:
     <span class="k">for</span> f <span class="k">in</span> brief.grounded_findings:
         page = pages_dir(run_id) / page_filename(f.source_url)
         <span class="k">if not</span> page.is_file():
-            <span class="k">yield</span> Violation(<span class="s">"source_never_fetched"</span>, f.source_url, f.quote)
+            violations.append(Violation(kind=<span class="s">"source_unavailable"</span>,
+                                        source=f.source_url, quote=f.quote))
             <span class="k">continue</span>
-        <span class="k">if</span> normalize(f.quote) <span class="k">not in</span> normalize(page.read_text(<span class="s">"utf-8"</span>)):
-            <span class="k">yield</span> Violation(<span class="s">"quote_not_found"</span>, f.source_url, f.quote)</pre>
+        v = quote_violation(f.quote, page.read_text(<span class="s">"utf-8"</span>),
+                            Profile.EXTRACTED_TEXT, source=f.source_url)
+        <span class="k">if</span> v <span class="k">is not</span> <span class="k">None</span>:
+            violations.append(v)</pre>
 </div>
 
 <div class="card warn">
@@ -1196,7 +1262,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
   <p style="margin-top:0">
     A <strong>non-empty</strong> violations list records the research stage as
     <code>outcome=FAIL</code> (<code>judge="error"</code>, error string
-    <code>rejected:research.grounding: &hellip;</code>) at <code>feature.py:1708</code>, but the run
+    <code>rejected:research.grounding: &hellip;</code>) at <code>feature.py:1804</code>, but the run
     does <strong>not</strong> stop: <code>brief_digest_val</code> stays <code>""</code> (retain +
     digest skipped) and everything after research proceeds <strong>on the idea alone</strong>, same
     as a research-disabled run. The verifier itself is unchanged &mdash; still byte-exact contiguous
@@ -1222,7 +1288,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
 </div>
 
 <div class="card soft">
-  <h4><code>VERIFY_ACT</code> temporal policy <span class="pill asset">feature.py:119</span></h4>
+  <h4><code>VERIFY_ACT</code> temporal policy <span class="pill asset">feature.py:121</span></h4>
   <pre>VERIFY_ACT = dict(
     start_to_close_timeout = timedelta(minutes=1),
     retry_policy           = RetryPolicy(maximum_attempts=1),
@@ -1234,7 +1300,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
 </div>
 
 <div class="card soft">
-  <h4><code>brief_digest()</code> <span class="pill asset">verify.py:117</span></h4>
+  <h4><code>brief_digest()</code> <span class="pill asset">verify.py:84</span></h4>
   <pre><span class="k">def</span> brief_digest(brief) -&gt; str:
     pairs = sorted((f.source_url, f.claim) <span class="k">for</span> f <span class="k">in</span> brief.grounded_findings)
     payload = json.dumps(pairs, sort_keys=True, separators=(<span class="s">","</span>, <span class="s">":"</span>))
@@ -1277,7 +1343,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
   A retained finding is a <em>lead</em>: a hint about where prior runs looked. On recall, the
   research agent sees them via <code>recall_leads</code> and <strong>must re-fetch to
   re-ground</strong>. This is enforced structurally, not by prompt: a recalled lead placed in
-  <code>grounded_findings</code> fails <code>source_never_fetched</code> by construction.
+  <code>grounded_findings</code> fails <code>source_unavailable</code> by construction.
 </div>
 
 <!-- ================================================================= -->
@@ -1292,7 +1358,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
   <div class="card">
     <h3>1. Top-level stage <span class="pill det">workflow</span></h3>
     <p style="margin-top:0">
-      <code>feature.py:1630</code> &mdash; runs once before clarify when
+      <code>feature.py:1726</code> &mdash; runs once before clarify when
       <code>cfg.research_enabled and t_research is not None</code>. The workflow builds
       <code>ResearchDeps</code>, then <strong>fans out</strong>: <code>plan_research</code> &rarr;
       <code>_fan_out_research</code> (N &times; <code>research_subquestion</code>) &rarr;
@@ -1491,7 +1557,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
         <line x1="90" y1="328" x2="855" y2="328" stroke="#57606a" marker-end="url(#seqarr)"/>
 
         <!-- 10. read pages -->
-        <text x="770" y="354" text-anchor="middle" font-size="10">10. reads pages/&lt;sha&gt;.txt · normalize(quote) in normalize(text)?</text>
+        <text x="770" y="354" text-anchor="middle" font-size="10">10. reads pages/&lt;sha&gt;.txt · verify_quote(quote, text, EXTRACTED_TEXT)?</text>
         <line x1="855" y1="360" x2="690" y2="360" stroke="#cf222e" marker-end="url(#seqarr)"/>
 
         <!-- 11. violations return -->
@@ -1524,7 +1590,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
 </div>
 
 <p style="font-size:12.5px;color:var(--muted)">
-  Source: <code>feature.py:1625&ndash;1800</code> + <code>research/stage.py</code>. Gray arrows are
+  Source: <code>feature.py:1726&ndash;1892</code> + <code>research/stage.py</code>. Gray arrows are
   workflow &rarr; activity invocations; purple arrows are return values; red is the page-cache /
   fail-and-continue path (E-29); the dashed amber loop is the bounded <code>REVISE</code> refine
   round.
@@ -1603,7 +1669,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
   <p style="margin-top:0">
     Enforced structurally: <code>verified_findings_to_retain()</code> stores only verified
     findings as <code>MemoryKind.RESEARCH_FINDING</code>; a recalled lead placed in
-    <code>grounded_findings</code> fails <code>source_never_fetched</code> by construction.
+    <code>grounded_findings</code> fails <code>source_unavailable</code> by construction.
     Re-fetch to promote.
   </p>
 </div>
@@ -1634,24 +1700,25 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
     <p><span class="mono">protocol.py</span> &mdash; <code>SearchProvider</code> ABC, <code>SearchHit</code>, <code>FetchedPage</code>, <code>make_provider()</code>.</p>
     <p><span class="mono">tavily.py</span> &mdash; real provider over Tavily HTTP API (tool/legacy path).</p>
     <p><span class="mono">fake.py</span> &mdash; offline canned-corpus provider for CI.</p>
-    <p><span class="mono">verify.py</span> &mdash; <code>normalize()</code>, <code>write_page()</code>, <code>verify_brief()</code>, <code>verify_brief_activity</code>, <code>brief_digest()</code>, <code>GroundingViolation</code>, <code>Violation</code>.</p>
+    <p><span class="mono">verify.py</span> &mdash; research-stage wrapper around grounding: page-cache lookup (<code>page_filename</code>, <code>pages_dir</code>, <code>write_page</code>), <code>verify_brief()</code> + <code>verify_brief_activity</code>, <code>brief_digest()</code>, <code>GroundingViolation</code>. Delegates the match to <code>grounding.quote_violation</code> under <code>Profile.EXTRACTED_TEXT</code>.</p>
     <p><span class="mono">retain.py</span> &mdash; <code>verified_findings_to_retain()</code>.</p>
     <p><span class="mono">toolset.py</span> &mdash; <code>research_subquery()</code> (architect mid-run entry).</p>
   </div>
 
   <div class="layer">WORKFLOW<br>src/sdlc/workflows/</div>
   <div class="files">
-    <p><span class="mono">feature.py:1625&ndash;1800</span> &mdash; research stage wiring (the only deterministic caller).</p>
-    <p><span class="mono">feature.py:799</span> &mdash; <code>_fan_out_research</code> (plan &rarr; N sub-questions &rarr; gather); <code>:842</code> <code>_fold_research_usage</code>; <code>:303</code> <code>_refine_seed</code>.</p>
-    <p><span class="mono">feature.py:143 / :151 / :164</span> &mdash; <code>RESEARCH_PLAN_ACT</code>, <code>RESEARCH_SQ_ACT</code>, <code>RESEARCH_SYNTH_ACT</code> policies.</p>
-    <p><span class="mono">feature.py:119</span> &mdash; <code>VERIFY_ACT</code> policy (1 min, 1 attempt).</p>
-    <p><span class="mono">feature.py:561 / :608 / :1079</span> &mdash; <code>_judge</code>, <code>_retain</code>, <code>_gate</code> helpers reused by the stage.</p>
+    <p><span class="mono">feature.py:1726&ndash;1892</span> &mdash; research stage wiring (the only deterministic caller).</p>
+    <p><span class="mono">feature.py:883</span> &mdash; <code>_fan_out_research</code> (plan &rarr; N sub-questions &rarr; gather); <code>:926</code> <code>_fold_research_usage</code>; <code>:357</code> <code>_refine_seed</code>.</p>
+    <p><span class="mono">feature.py:152 / :160 / :173</span> &mdash; <code>RESEARCH_PLAN_ACT</code>, <code>RESEARCH_SQ_ACT</code>, <code>RESEARCH_SYNTH_ACT</code> policies.</p>
+    <p><span class="mono">feature.py:121</span> &mdash; <code>VERIFY_ACT</code> policy (1 min, 1 attempt).</p>
+    <p><span class="mono">feature.py:678 / :726 / :1079</span> &mdash; <code>_judge</code>, <code>_retain</code>, <code>_gate</code> helpers reused by the stage (<code>_gate</code> inherited from <code>GateHost</code>).</p>
   </div>
 
   <div class="layer">CONTRACT<br>src/sdlc/</div>
   <div class="files">
-    <p><span class="mono">models.py:461&ndash;563</span> &mdash; <code>RoleUsage</code>, <code>SubQuestion</code>, <code>ConsultedSource</code>, <code>GroundedFinding</code>, <code>InferredFinding</code>, <code>Contradiction</code>, <code>Gap</code>, <code>ResearchBrief</code>, <code>ResearchPlan</code>, <code>SubQuestionFinding</code>.</p>
-    <p><span class="mono">models.py:751</span> &mdash; <code>ResearchConfig</code> (<code>max_sub_questions</code>, per-sub-question caps, <code>max_run_cost_usd</code>, <code>max_refine_rounds</code>).</p>
+    <p><span class="mono">grounding.py</span> &mdash; <strong>home of the matching logic (E-43)</strong>: <code>Profile</code> (<code>EXTRACTED_TEXT</code> / <code>VERBATIM_BYTES</code>), <code>normalize()</code>, <code>verify_quote()</code>, <code>quote_violation()</code>, <code>Violation</code>. Pure (stdlib + Pydantic only); never imports models.py or temporalio.</p>
+    <p><span class="mono">models.py:670&ndash;767</span> &mdash; <code>RoleUsage</code>, <code>SubQuestion</code>, <code>ConsultedSource</code>, <code>GroundedFinding</code>, <code>InferredFinding</code>, <code>Contradiction</code>, <code>Gap</code>, <code>ResearchBrief</code>, <code>ResearchPlan</code>, <code>SubQuestionFinding</code>.</p>
+    <p><span class="mono">models.py:961</span> &mdash; <code>ResearchConfig</code> (<code>max_sub_questions</code>, per-sub-question caps, <code>max_run_cost_usd</code>, <code>max_refine_rounds</code>).</p>
     <p><span class="mono">models.py</span> (<code>RoleConfig</code>) &mdash; <code>kind=research</code>, <code>provider</code>, <code>tool_files</code>.</p>
   </div>
 
@@ -1692,7 +1759,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
   <a href="architecture-schema.html">&larr; architecture-schema.html</a>
   <a href="../PRD.md">PRD &sect; FR-107</a>
   <a href="../ARCHITECTURE.md">ARCHITECTURE.md &sect;3</a>
-  <span style="float:right">Contract source-of-truth: <code>src/sdlc/models.py</code> &middot; fan-out activities: <code>research/stage.py</code> &middot; wiring: <code>feature.py:1625</code></span>
+  <span style="float:right">Contract source-of-truth: <code>src/sdlc/models.py</code> &middot; fan-out activities: <code>research/stage.py</code> &middot; wiring: <code>feature.py:1726</code></span>
 </footer>
 
 </body>

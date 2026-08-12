@@ -414,8 +414,8 @@
     <a href="../SDLC-spec-v2.md">SDLC-spec-v2.md</a> ·
     <a href="../PRD.md">PRD.md</a>
     <br>
-    Status: <strong>Design doc — reconciled into ROADMAP.md §9.8 (E-30…E-39 landed; measurement instrument largely built)</strong> ·
-    Verified <strong>2026-08-05</strong> ·
+    Status: <strong>Design doc — reconciled into ROADMAP.md §9.8 (E-30…E-39 landed; E-83 sharpened the judge; measurement instrument largely built)</strong> ·
+    Verified <strong>2026-08-12</strong> ·
     Companion to <code>ROADMAP.md</code>, <code>SDLC-spec-v2.md</code>, <code>ARCHITECTURE.md</code>, <code>PRD.md</code>.
   </p>
 
@@ -445,9 +445,11 @@
     (<strong>E-32</strong>), the per-role model sweep (<strong>E-37</strong>), the error heatmap + rubric
     calibration (<strong>E-36</strong>) — now re-queryable in seconds via <code>sdlc benchmark score</code>
     (five grids + an <code>agreement_matrix</code> for the adversary arm), capture-always sessions
-    (<strong>E-38</strong>), and the <code>deep_review</code> lens (<strong>E-39</strong>). The remaining gaps are the
-    open items — <strong>E-30a/b/c</strong> (other languages), <strong>E-31a</strong> (overfit anti-cheat), and
-    <strong>E-28</strong> (research retry cap). This doc is that design.
+    (<strong>E-38</strong>), and the <code>deep_review</code> lens (<strong>E-39</strong>).
+    <strong>E-83</strong> then sharpened the quality instrument — typed rubric vetoes, a staged judge, and a
+    deterministic <code>PlanDrift</code> signal — and proved the gate's teeth via the <code>scope_dropped</code>
+    mutation. The remaining gaps are the open items — <strong>E-30a/b/c</strong> (other languages),
+    <strong>E-31a</strong> (overfit anti-cheat), and <strong>E-28</strong> (research retry cap). This doc is that design.
   </p>
 
   <div class="contents">
@@ -460,6 +462,7 @@
     <a href="#sec5">§5 Cases</a>
     <a href="#sec6">§6 Sequencing</a>
     <a href="#sec7">§7 Open questions</a>
+    <a href="#sec8">§8 Judge sensitivity (E-83)</a>
   </div>
 </header>
 
@@ -549,7 +552,7 @@
       <td class="name">Cross-family judge</td>
       <td><span class="pill done">done</span></td>
       <td><code>judge_artifact</code> with the <strong>ADR-6</strong> family-inequality invariant — the judge never shares an authoring model family with the producer. The “decorrelated review lens”, already load-bearing.</td>
-      <td class="note">Calibration tracking landed (E-36 / FR-110) — trust level beside every rubric score (<a href="#sec2">§2 Tier B</a>).</td>
+      <td class="note">Calibration tracking landed (E-36 / FR-110) — trust level beside every rubric score (<a href="#sec2">§2 Tier B</a>). E-83 made it a <strong>staged judge</strong> with typed rubric vetoes — see <a href="#sec8">§8</a>.</td>
     </tr>
     <tr>
       <td class="name">Prompt eval loop</td>
@@ -1060,7 +1063,7 @@
 </p>
 
 <!-- ============================================================ -->
-<h2 id="sec7">7. Open questions <span class="count">BENCHMARK §7 · OQ-B1..B7</span></h2>
+<h2 id="sec7">7. Open questions <span class="count">BENCHMARK §7 · OQ-B1..B10</span></h2>
 
 <div class="oq">
   <span class="oq-id">OQ-B1</span>
@@ -1155,8 +1158,112 @@
   </div>
 </div>
 
+<div class="oq decided">
+  <span class="oq-id">OQ-B8</span>
+  <div>
+    <span class="oq-title">Usable corpus size from DevEval → <strong>E-79</strong> — ANSWERED 2026-08-09.</span>
+    <div class="oq-body">
+      <strong>Six of ten</strong> Python repositories are committed. Two (<code>ArXiv_digest</code>,
+      <code>chakin</code>) genuinely need live egress and are quarantined behind
+      <code>network_required</code> until <strong>E-21</strong>; two (<code>Hybrid_Images</code>,
+      <code>TextCNN</code>) need <code>cv2</code> and <code>torch</code> to reach a green verify and are
+      re-importable on a machine that has them. The corpus is now 9 cases, which is the first real data point for
+      <strong>OQ-B1</strong>'s "10–30 cases" estimate.
+    </div>
+  </div>
+</div>
+
+<div class="oq decided">
+  <span class="oq-id">OQ-B9</span>
+  <div>
+    <span class="oq-title">Cost of confirming a generated <code>tasks.yaml</code> → <strong>E-79</strong> — ANSWERED 2026-08-09.</span>
+    <div class="oq-body">
+      It is a <strong>rewrite, not a light edit</strong> — budget 15–30 minutes per case. Test-file granularity is
+      too coarse to be requirement-weighted (<code>lice</code> arrived as one task holding 31 tests), so all six
+      suites were regrouped into 31 PRD-level requirements over 79 tests. The draft still earns its keep by
+      supplying exact node-id strings, but its grouping is a starting point only.
+    </div>
+  </div>
+</div>
+
+<div class="oq">
+  <span class="oq-id">OQ-B10</span>
+  <div>
+    <span class="oq-title">Contract-frozen vs pinned as the default for imported cases.</span>
+    <div class="oq-body">
+      Imported cases ship contract-frozen (reference architecture inlined in the description). Once
+      <strong>E-80</strong> lands, should they keep that, run pinned, or run both as separate arms? Running both
+      measures how much the architect stage contributes when handed the answer in prose rather than skipped
+      outright.
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="sec8">8. Judge sensitivity (E-83) <span class="count">BENCHMARK §7 · judge &amp; plan-adherence</span></h2>
+
+<p>
+  E-83 sharpened the quality instrument and added the one plan-execution signal the pipeline did not measure.
+  Quality scores from before and after E-83 sit on <strong>different scales</strong>; the <code>judge</code> field on
+  each record makes the boundary queryable (records now carry <code>judge="staged_rubric"</code>; pre-E-83 records keep
+  <code>"llm_judge"</code>), and <code>report.md</code> names it — so averaging across the boundary is now visible, not
+  implicit.
+</p>
+
+<div class="grid-2">
+  <div class="card">
+    <h3>Typed rubric vetoes <span class="tag-link">src/sdlc/benchmarks/vetoes.py</span></h3>
+    <p>
+      A rubric criterion that states an absolute override (“scores 0 regardless”) is a closed <strong>three-kind
+      vocabulary</strong> — <code>mentions_all</code> / <code>not_both</code> / <code>nonempty</code> — evaluated
+      <strong>deterministically over the parsed artifact, zero model calls</strong>, at both layers: an
+      <strong>ABSOLUTE failure</strong> in the prompt gate, and a forced <code>0.0</code> override at Layer 3.
+    </p>
+    <ul class="tight">
+      <li>Authored per case as <code>benchmarks/cases/&lt;case&gt;/vetoes-*.yaml</code>.</li>
+      <li><strong>Word boundaries, not substrings</strong> — the <code>mentions_all</code> matcher was corrected during the E-83 review to match on word boundaries, so a veto on <code>scope</code> no longer fires on <code>telescope</code>.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>Staged judge <span class="tag-link">two calls, cached steps</span></h3>
+    <p>
+      The single-shot rubric prompt became <strong>two calls</strong>: rubric → ordered evaluation steps
+      (cached per <code>sha256(rubric)</code>), then artifact → per-component scores.
+    </p>
+    <ul class="tight">
+      <li><strong>Vetoes override the LLM’s output rather than being argued into it</strong> — the model never has to concede a veto; the veto is applied on top.</li>
+      <li>The <strong>judge-never-raises invariant</strong> was restored in <code>_judge_sync</code> — a rubric that the model mis-formats is contained, never an unhandled exception.</li>
+      <li>Records carry <code>judge="staged_rubric"</code>; pre-E-83 records keep <code>"llm_judge"</code>.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>Plan adherence, split by provenance <span class="tag-link">the missing plan-execution signal</span></h3>
+    <p>
+      Two signals, deliberately split by how they are produced:
+    </p>
+    <ul class="tight">
+      <li><strong>Deterministic <code>PlanDrift</code></strong> on each code-stage <code>BenchmarkRecord</code> — <code>files_hinted</code> vs <code>files_touched</code>, with <code>hinted_untouched</code> / <code>touched_unhinted</code> counters. No model in the loop.</li>
+      <li><strong>Advisory <code>plan_deviations</code></strong> folded into the existing <code>deep_review</code> lens (<strong>E-39</strong>) — <em>not a fifth lens</em>; each deviation carries verbatim transcript evidence or is dropped.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>Sensitivity is proven, not asserted <span class="tag-link">mutation suite</span></h3>
+    <p>
+      The mutation suite (<code>SDLC_PROMPT_EVAL=1 python -m pytest -m prompt_eval -k mutations</code>) records what real
+      model behavior does to degraded prompts.
+    </p>
+    <ul class="tight">
+      <li><strong><code>scope_dropped</code> fails absolutely</strong> via the <code>scope_preserved</code> veto — the gate’s teeth are real and end-to-end, now that the veto matcher uses word boundaries.</li>
+      <li><strong><code>truncated</code> remains the open case</strong> — it has no veto and relies on the advisory judge, so it is not yet an absolute failure. See spec §9 for the recorded outcome.</li>
+    </ul>
+  </div>
+</div>
+
 <div class="footer">
-  Verified <strong>2026-08-05</strong> against <a href="../BENCHMARK.md">BENCHMARK.md</a> + <code>src/sdlc/benchmarks/</code>. Adds no scope to
+  Verified <strong>2026-08-12</strong> against <a href="../BENCHMARK.md">BENCHMARK.md</a> + <code>src/sdlc/benchmarks/</code>. Adds no scope to
   <a href="../PRD.md">PRD.md</a>; every <span class="newscope">(new scope)</span> marker is a measurement capability
   that needs a PRD line before it becomes a real requirement. Everything else is an <code>E-</code>-style plan for
   measuring requirements already open in the tracker.

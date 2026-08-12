@@ -110,14 +110,14 @@
 
 ## 1. Pipeline — 15-stage DAG (SDLC-spec v2 §1)
 
-**7 of 15 stages live.**
+**9 of 15 stages live.**
 
 - [ ] **0 · intake** — routing greenfield/brownfield/repair. `IdeaBrief.mode` is a field only; no branch logic in `feature.py`.
 - [ ] **1 · constitution** — no `Constitution` model, no stage.
 - [ ] **2 · context (Cartographer)** — no `CodebaseMap`, no `cartography.py`, no brownfield delta.
 - [ ] **3 · requirements (Product)** — conflated into clarify; no standalone Product proposer / `Requirements` artifact.
 - [ ] **4 · research** (FR-107) — grounded brief before clarify. The DAG is now 15
-  stages; **7 of 15 stages live** (research is scaffolded, off by default).
+  stages; **9 of 15 stages live** (research is scaffolded, off by default).
 - [x] **5 · clarify** — Clarifier + gate; open-question wait on `answer_question`; recall/retain/memoization wired.
 - [x] **6 · architecture** — Architect + gate, with REVISE loop (`_revisable_stage`).
 - [x] **7 · planning** — Planner + gate, with REVISE loop.
@@ -134,7 +134,7 @@
 ## 2. Functional requirements (PRD §6)
 
 ### Pipeline (FR-100)
-- [ ] ⚠️ **FR-101** 15-stage durable DAG — 7/15 stages (see §1).
+- [ ] ⚠️ **FR-101** 15-stage durable DAG — 9/15 stages (see §1).
 - [ ] **FR-102** greenfield/brownfield classify + `CodebaseMap` + delta.
 - [x] **FR-103** memoization, per-run watermark, audit-record-always-kept (`memoization/cache.py`, `content_key`, `_cached_stage`) — each stage's memo key now carries *its own* role's model (`STAGE_MODELS`), so a per-role model change invalidates exactly that stage. `brief_digest` keeps memoization alive once a non-memoized stage (research) feeds memoized ones: the brief contributes only a canonical (source_url, claim) digest to `content_key`, so identical facts hit and new facts invalidate clarify/architect/planner. ⚠️ **Amendment pending (E-47a, 2026-08-08):** E-46's `(tree hash, signal version)` key gains a third term, `identity_registry_version` — the `CapabilityMap` is a function of the tree *and* the identity registry, so re-assessing an unchanged tree is no longer unconditionally a cache hit. Deliberately coarse (any identity write invalidates the whole map for that project); the map is a single artifact with no per-capability memoization to preserve. **Clarified (E-46 D10, 2026-08-12):** E-47a's `identity_registry_version` term applies to the `CapabilityMap`, not to E-46's signal keys — E-46 is a pure function of the tree, keyed on `(tree_hash, signal_version, rules_sha)`.
 - [x] **FR-104** integration branch, per-task worktree, own-branch-point diff (ADR-14 fully wired).
