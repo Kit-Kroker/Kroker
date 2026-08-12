@@ -293,6 +293,9 @@ def build_parser() -> argparse.ArgumentParser:
                           "lookup; default collects nothing")
     ash = asrsub.add_parser("show")
     ash.add_argument("--id", required=True)
+    ash.add_argument("--json", action="store_true", dest="as_json",
+                     help="print the raw Assessment JSON instead of the "
+                          "summary")
     return p
 
 
@@ -494,8 +497,22 @@ async def main() -> None:
         handle = client.get_workflow_handle(args.id)
         # Query by METHOD, not by name -- see the triage show handler.
         report = await handle.query(AssessmentWorkflow.assessment)
-        print("no assessment yet" if report is None
-              else report.model_dump_json(indent=2))
+        if report is None:
+            print("no assessment yet")
+            return
+        if args.as_json:
+            print(report.model_dump_json(indent=2))
+            return
+        print(f"{report.terminal_status}  ({report.commit_sha[:12]})")
+        print(f"admitted: {report.admitted} -- {report.admission_reason}")
+        for phase in report.phases:
+            state = phase.collected.state.value
+            detail = f" -- {phase.collected.reason}" if phase.collected.reason \
+                else ""
+            print(f"  {phase.phase.value}: {state}{detail}")
+        if report.scan is not None:
+            from .assessment.scan.summary import render_scan_summary
+            print(render_scan_summary(report.scan))
         return
 
     if args.cmd == "assess":

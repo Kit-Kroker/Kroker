@@ -70,3 +70,12 @@ def test_parser_accepts_assess_show():
 def test_bare_assess_has_no_subcommand():
     args = build_parser().parse_args(["assess", "--repo", "/x/r"])
     assert args.assess_cmd is None
+
+
+def test_parser_accepts_assess_show_json():
+    """The raw dump stays reachable; the summary is the new default."""
+    args = build_parser().parse_args(
+        ["assess", "show", "--id", "assess-r-x", "--json"])
+    assert args.as_json is True
+    assert build_parser().parse_args(
+        ["assess", "show", "--id", "assess-r-x"]).as_json is False
