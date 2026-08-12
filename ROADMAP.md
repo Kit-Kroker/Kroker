@@ -100,7 +100,7 @@
 - [ ] ⚠️ **P5** — Triage + tidy-up (Tier 0/1), operator-run, single tenant → *one unfamiliar repository triaged, a mechanical backlog fixed through governed runs, before/after delta recorded*
   E-40/E-41/E-42/E-43/E-44 all landed in code. `[x]` here means "exit criterion **demonstrated**" (see P1 above), and no `TidyUpWorkflow` has run end-to-end yet: the four-scenario temporal e2e the plan specifies is deferred — its multi-workflow fan-out (a `TriageWorkflow` child whose readiness gate must be serviced plus N `FeatureWorkflow` fix children) is heavier than this Windows host's temporal dev-server can run contended. The components are each green under their own `pytest -m temporal` e2e (`test_triage_workflow_e2e`, `test_seeded_work`'s seeded run, `test_verification_branch`), the full unit suite is green, and `.run()` sequencing is unit-tested and follows the verified `GateHost`/`TriageWorkflow` pattern. Held at ⚠️ until the `TidyUpWorkflow` e2e runs (a CI host that can run the fan-out, or the env contention resolved). Operator-run only; **does not depend on P7**.
 - [ ] ⚠️ **P6** — Capability & risk audit (Tier 2) + evidence bundle → *one repository audited end-to-end with SC-7 held and a bundle handed over*
-  **Opened 2026-08-10** with E-45's DAG shell; every phase body remains unbuilt (§11, E-46…E-56). Gated on P5's readiness verdict (FR-903), not merely sequenced after it — and the gate now requires a **human** approval to admit a tree that is not READY.
+  **Opened 2026-08-10** with E-45's DAG shell; every phase body remains unbuilt (§11, E-46…E-56). Gated on P5's readiness verdict (FR-903), not merely sequenced after it — and the gate now requires a **human** approval to admit a tree that is not READY. Its first phase body is under way (E-46 plan 1 of 3).
 - [ ] **P7** — Hosted multi-tenant service → *NFR-8 adversarial test green; FR-1002 container tier live; a tenant onboards unassisted*
   Not started (§12, E-57…E-63). **FR-1002 is the gating item for admitting any external tenant**, not a hardening task: today a customer's `npm install` executes as the worker user with the worker's toolchain and unrestricted network egress.
 - [ ] **P8** — Product outcome loop → *one hypothesis pre-registered, shipped, and decided by its own rule (SC-11/SC-12)*
@@ -136,7 +136,7 @@
 ### Pipeline (FR-100)
 - [ ] ⚠️ **FR-101** 15-stage durable DAG — 7/15 stages (see §1).
 - [ ] **FR-102** greenfield/brownfield classify + `CodebaseMap` + delta.
-- [x] **FR-103** memoization, per-run watermark, audit-record-always-kept (`memoization/cache.py`, `content_key`, `_cached_stage`) — each stage's memo key now carries *its own* role's model (`STAGE_MODELS`), so a per-role model change invalidates exactly that stage. `brief_digest` keeps memoization alive once a non-memoized stage (research) feeds memoized ones: the brief contributes only a canonical (source_url, claim) digest to `content_key`, so identical facts hit and new facts invalidate clarify/architect/planner. ⚠️ **Amendment pending (E-47a, 2026-08-08):** E-46's `(tree hash, signal version)` key gains a third term, `identity_registry_version` — the `CapabilityMap` is a function of the tree *and* the identity registry, so re-assessing an unchanged tree is no longer unconditionally a cache hit. Deliberately coarse (any identity write invalidates the whole map for that project); the map is a single artifact with no per-capability memoization to preserve.
+- [x] **FR-103** memoization, per-run watermark, audit-record-always-kept (`memoization/cache.py`, `content_key`, `_cached_stage`) — each stage's memo key now carries *its own* role's model (`STAGE_MODELS`), so a per-role model change invalidates exactly that stage. `brief_digest` keeps memoization alive once a non-memoized stage (research) feeds memoized ones: the brief contributes only a canonical (source_url, claim) digest to `content_key`, so identical facts hit and new facts invalidate clarify/architect/planner. ⚠️ **Amendment pending (E-47a, 2026-08-08):** E-46's `(tree hash, signal version)` key gains a third term, `identity_registry_version` — the `CapabilityMap` is a function of the tree *and* the identity registry, so re-assessing an unchanged tree is no longer unconditionally a cache hit. Deliberately coarse (any identity write invalidates the whole map for that project); the map is a single artifact with no per-capability memoization to preserve. **Clarified (E-46 D10, 2026-08-12):** E-47a's `identity_registry_version` term applies to the `CapabilityMap`, not to E-46's signal keys — E-46 is a pure function of the tree, keyed on `(tree_hash, signal_version, rules_sha)`.
 - [x] **FR-104** integration branch, per-task worktree, own-branch-point diff (ADR-14 fully wired).
 - [ ] ⚠️ **FR-105** fix loops — QA loop ✅, review findings now fold into it ✅; loop-count defaults drift from spec (2 vs 3).
 - [ ] ⚠️ **FR-106** deterministic absolute/advisory gate — classification ✅ and load-bearing; security absolute-floor check now wired ✅ (`security_no_critical`); traceability enforced ✅; coverage wired as a deterministic diff-scoped seam ✅ (Python instrumentation landed via E-30; Go/TS/Rust via E-30a/b/c).
@@ -202,7 +202,7 @@ as tracked rather than accidental.
   per signal — **seven of seven landed**: build probe, secrets (incl.
   client-bundle reachability), baseline practice (E-41), plus dependency
   health, generator-scaffold/dead code, framework-default misconfig, and
-  size/duplication outliers (E-41a–d, 2026-08-08).
+  size/duplication outliers (E-41a–d, 2026-08-08). **Extended cross-tier by E-46 D2 (2026-08-12):** an assessment signal that duplicates a triage signal **cites** it by `finding_identity` and copies nothing.
 - [x] **FR-903** readiness gate blocking Tier 2, overridable by audited decision (E-42). *The gate resolves through the existing FR-301/302 machinery (now in `GateHost`); a verdict that is not READY opens a `readiness` gate, and an APPROVE records a `ReadinessOverride` on the artifact. E-42's admission rule was `verdict is READY or override is not None` (tightened by E-45 — see below).*
   *2026-08-10 (E-45):* the rule is now one function at two strictnesses
   (`triage/admission.py`). Tier 2 requires `approved_by == "human"`, so a
@@ -217,8 +217,11 @@ as tracked rather than accidental.
   phase-status file (E-45) — **the DAG and both deviations landed 2026-08-10**;
   six of seven phase bodies are stubs reporting `not_collected` with the E-item
   that owes them, so an assessment that assessed nothing says so (FR-915).
-  `/enrich` as a declared stage input remains E-56.
-- [ ] **FR-912** deterministic scan memoized on `(tree hash, signal version)`; cross-source confidence (E-46).
+  `/enrich` as a declared stage input remains E-56. **2026-08-12 (E-46 plan 1):**
+  the stub count dropped from six to five and `PHASE_OWNER` lost its `SCAN` entry
+  — scan is now built, so the scan phase row is measured and `terminal_status`
+  derives `assessed:partial` on an admitted run.
+- [ ] **FR-912** deterministic scan memoized on `(tree hash, signal version)`; cross-source confidence (E-46). ⚠️ **Plan 1 of E-46 landed 2026-08-12.** The memo key is `(tree_hash, signal_version, rules_sha)` — `rules_sha` beyond the specified two terms, hashed transitively over shared rule modules and consumed signals, because a hand-maintained version int misses a real input (spec D10). All thirteen signal rows report; eleven bodies are still stubs naming plan 2 or 3.
 - [ ] ⚠️ **FR-913** `CapabilityMap` with stable ids + coverage floor + orphan classification — **also satisfies FR-102** (E-47a/E-47b/E-47c/E-48). **Identity half landed 2026-08-08 (E-47a):** surrogate `BC-NNN` ids, weighted-Jaccard re-attachment, audited `IdentityCorrection` (`src/sdlc/capability/`). Coverage floor + orphans (E-47b) and L2/entity-ownership (E-47c) still open.
 - [ ] **FR-914** byte-exact quote verification against the pinned commit, fail-closed — shares FR-107's verifier (E-43). *Partially landed 2026-08-06 (`grounding.py`: one substring invariant, two normalization profiles, verdict-only) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The verifier + research/handoff/deep-review consumers landed; the commit source gained its first consumer with E-41's secrets signal (2026-08-06), which re-verifies every emitted evidence quote against the pinned commit; stays open until an LLM-proposing assessment stage cites the same way, which is where the check stops being a drift guard.*
 - [ ] **FR-915** `not_collected` / `unknown` vs measured value (E-40). *Contract half landed 2026-08-06 (`measurement.py`, retrofitted onto `CoverageReport`/`SecurityReport`/`claim_survival_score`; `QAReport.coverage_pct` deleted) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The `RepoTriage`/triage half is deferred to E-41; the load-bearing case was the SARIF-malformed-reads-as-clean hole on the absolute floor. **E-44 adds a second consumer:** `compute_delta` reads `SignalResult.collected.state` and emits `UNVERIFIABLE` whenever a side did not collect, so a triage that timed out on the after side cannot read as "all findings fixed".*
@@ -263,7 +266,7 @@ as tracked rather than accidental.
 - [x] **NFR-6** Reproducibility vs memoization — watermark-pinned recall + content-addressed cache. *Pinning is exact on `fake` (entry-count cutoff) and a `mentioned_at` cutoff on `hindsight`, which has no point-in-time read: memories retained after the freeze cannot enter a stage input, but ranking is still contaminated by them and post-freeze consolidation can mint observations carrying pre-freeze timestamps. `2026-08-02-hindsight-real-integration-design` §2.1.*
 - [x] **NFR-7** Portability — `MemoryConfig.backend` defaults to `fake`; real Hindsight client for self-hosting, verified against a live container by `tests/test_hindsight_live.py` (the client shipped before 2026-08-02 implemented an invented API and could not have worked).
 - [ ] **NFR-8** Tenant isolation proven by adversarial cross-tenant read/recall test — no tenant concept exists yet (E-58).
-- [ ] **NFR-9** Hostile input — the factory currently assumes repositories are its own. Build scripts, test code, and manifests of a connected repo are attacker-controlled and executed (E-57). **E-41's build probe is the first stage that knowingly executes a foreign repository's code** (bounded, in a throwaway clone, as the worker user with network access). **E-44 widens the exposure:** the tidy-up fix runs execute the triaged repository's own build and test commands (not just the probe), as governed `FeatureWorkflow` children. Still operator-run only until E-57/E-21.
+- [ ] **NFR-9** Hostile input — the factory currently assumes repositories are its own. Build scripts, test code, and manifests of a connected repo are attacker-controlled and executed (E-57). **E-41's build probe is the first stage that knowingly executes a foreign repository's code** (bounded, in a throwaway clone, as the worker user with network access). **E-44 widens the exposure:** the tidy-up fix runs execute the triaged repository's own build and test commands (not just the probe), as governed `FeatureWorkflow` children. Still operator-run only until E-57/E-21. **E-46 (2026-08-12)** adds no new execution of repository code: every scan signal is a blob read at the pinned commit.
 - [ ] — **NFR-10** Assessment reproducibility — not falsifiable until the assessment exists; the deterministic half is E-41/E-46, the fused-layer variance half needs runs.
 
 ---
@@ -934,12 +937,15 @@ the factory rather than as prompts.
   edit. Spec
   `docs/superpowers/specs/2026-08-10-assessment-workflow-edcr-shell-design.md`,
   plan `docs/superpowers/plans/2026-08-10-assessment-workflow-edcr-shell.md`.
-- [ ] **E-46 — scan phase** → FR-912. S1–S5 capability signals, SS1–SS4
+- [ ] ⚠️ **E-46 — scan phase** → FR-912. S1–S5 capability signals, SS1–SS4
   security, QS1–QS4 QA. Cross-source confidence: three or more independent
   sources = high, two = medium, one = low — never the depth of one source. Memo
   key `(repository tree hash, signal version)` per FR-103, so re-assessing an
   unchanged repo is a cache hit and editing one signal's logic invalidates
-  exactly that signal.
+  exactly that signal. **Plan 1 landed 2026-08-12:** contracts, `SCAN_SIGNALS`,
+  the memoized activity seam, and the five inherited halves
+  (`src/sdlc/assessment/scan/`). All thirteen rows report; eleven bodies are
+  stubs naming plan 2 or 3. `terminal_status` now derives `assessed:partial`.
 - **E-47 — `CapabilityMap`** → FR-913, **FR-102**. **Split three ways
   2026-08-08**; the single item carried four independent clauses and was too
   large for one plan. **This is where the assessment product and the core
@@ -1224,6 +1230,10 @@ disappears entirely: wrapping a stage in a gate-and-retry loop becomes topology.
   see spec §9's correction. New: OQ-P6 (veto authorship is manual/unenforced),
   OQ-P7 (`PlanDrift` has no baseline yet), OQ-P8 (phase-1 step caching vs judge
   nondeterminism).
+- **OQ-12 — S5 normalization is English-centric.** Layer-suffix stripping and
+  singularization assume English identifiers, so a non-English codebase degrades
+  to LOW-confidence single-source candidates. Recorded rather than solved:
+  calibrating it needs the corpus SC-8 also needs.
 
 ## 15. Suggested ordering across §§10–14
 
