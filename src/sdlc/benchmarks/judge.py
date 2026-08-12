@@ -73,13 +73,15 @@ def _set_judge_fn(fn: JudgeFn | None) -> None:
 
 
 _JUDGE_SYSTEM_PROMPT = (
-    "You are an impartial quality judge. Score the supplied artifact against "
-    "the supplied rubric. Respond with ONLY a JSON object of exactly this "
-    "shape and nothing else (no prose, no markdown fences):\n"
+    "You are an impartial quality judge. Work through the supplied "
+    "evaluation steps in order and score the artifact against them. "
+    "Respond with ONLY a JSON object of exactly this shape and nothing else "
+    "(no prose, no markdown fences):\n"
     '  {"score": <float between 0.0 and 1.0>, '
     '"components": {<name>: <float between 0.0 and 1.0>}}\n'
     "The overall \"score\" must reflect the artifact's rubric compliance; "
-    "each component score must be grounded in a named rubric criterion."
+    "each component score must be grounded in a named rubric criterion. "
+    "Do not invent components the rubric does not name."
 )
 
 _STEPS_SYSTEM_PROMPT = (
@@ -138,17 +140,24 @@ def _run_judge_agent(model, system_prompt: str, user_prompt: str) -> str:
 
 
 def _default_judge(inp: JudgeInput) -> str:
-    # Production default: a Pydantic AI Agent call on the configured
-    # cross-family judge model. Returns the raw JSON string; parsing,
-    # clamping and error-handling live in ``_judge_sync``.
+    """Production default: two staged calls on the configured cross-family
+    judge model. Phase 1 turns the rubric into an explicit checklist (cached
+    per rubric sha); phase 2 scores the artifact against that checklist.
+
+    Returns the raw JSON string; parsing, clamping, veto application and
+    error-handling live in _judge_sync.
+    """
     if inp.judge_model is None:
         raise RuntimeError(
             "no judge_model configured; cannot run production judge "
             "(set BenchmarkConfig.judge_model or inject a fn via "
             "_set_judge_fn)")
+    steps = generate_steps(inp.rubric, inp.judge_model)
+    checklist = "\n".join(f"{i}. {s}" for i, s in enumerate(steps, 1))
     user_prompt = (
-        f"Rubric:\n{inp.rubric}\n\nArtifact:\n{inp.artifact_json}"
-    )
+        f"Evaluation steps:\n{checklist}\n\n"
+        f"Rubric (for component names and weights):\n{inp.rubric}\n\n"
+        f"Artifact:\n{inp.artifact_json}")
     return _run_judge_agent(
         inp.judge_model, _JUDGE_SYSTEM_PROMPT, user_prompt)
 
@@ -180,7 +189,8 @@ def _judge_sync(inp: JudgeInput) -> QualityScore:
         for f in failures:
             components[f.veto_id] = 0.0
         score = 0.0
-    return QualityScore(score=score, components=components, judge="llm_judge")
+    return QualityScore(score=score, components=components,
+                        judge="staged_rubric")
 
 
 @activity.defn

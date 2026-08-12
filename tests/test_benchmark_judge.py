@@ -27,7 +27,7 @@ def test_judge_parses_valid_json():
         artifact_json="{}", rubric="score coverage 0..1",
         author_model="anthropic:claude-sonnet-4-6"))
     assert result.score == 0.82
-    assert result.judge == "llm_judge"
+    assert result.judge == "staged_rubric"
     assert result.components["coverage"] == 0.9
 
 
@@ -72,6 +72,10 @@ def test_default_judge_returns_agent_response(monkeypatch):
         captured["model"] = model
         captured["system_prompt"] = system_prompt
         captured["user_prompt"] = user_prompt
+        # E-83: _default_judge runs two phases. Phase 1 (step generation)
+        # uses the steps system prompt; serve it steps JSON, not score JSON.
+        if "checklist" in system_prompt:
+            return '{"steps": ["Check coverage"]}'
         return canned
 
     monkeypatch.setattr(judge_mod, "_run_judge_agent", fake_runner)
@@ -93,11 +97,13 @@ def test_default_judge_returns_agent_response(monkeypatch):
 
 def test_default_judge_flows_through_judge_sync(monkeypatch):
     """End-to-end: production default -> _judge_sync clamps/parses into a
-    QualityScore(judge='llm_judge')."""
-    monkeypatch.setattr(
-        judge_mod, "_run_judge_agent",
-        lambda model, system_prompt, user_prompt:
-        '{"score": 0.42, "components": {"a": 0.5}}')
+    QualityScore(judge='staged_rubric')."""
+    def _fake(model, system_prompt, user_prompt):
+        # E-83: serve phase-1 step generation before phase-2 scoring.
+        if "checklist" in system_prompt:
+            return '{"steps": ["a"]}'
+        return '{"score": 0.42, "components": {"a": 0.5}}'
+    monkeypatch.setattr(judge_mod, "_run_judge_agent", _fake)
     _set_judge_fn(None)
 
     result = judge_artifact.sync(JudgeInput(
@@ -105,16 +111,18 @@ def test_default_judge_flows_through_judge_sync(monkeypatch):
         author_model="anthropic:claude-sonnet-4-6",
         judge_model="openai/gpt-5.2"))
 
-    assert result.judge == "llm_judge"
+    assert result.judge == "staged_rubric"
     assert result.score == 0.42
     assert result.components == {"a": 0.5}
 
 
 def test_default_judge_clamps_through_judge_sync(monkeypatch):
-    """A score above 1.0 from the agent is clamped, still judge='llm_judge'."""
-    monkeypatch.setattr(
-        judge_mod, "_run_judge_agent",
-        lambda model, system_prompt, user_prompt: '{"score": 1.9}')
+    """A score above 1.0 from the agent is clamped, still judge='staged_rubric'."""
+    def _fake(model, system_prompt, user_prompt):
+        if "checklist" in system_prompt:
+            return '{"steps": ["a"]}'
+        return '{"score": 1.9}'
+    monkeypatch.setattr(judge_mod, "_run_judge_agent", _fake)
     _set_judge_fn(None)
 
     result = judge_artifact.sync(JudgeInput(
@@ -122,7 +130,7 @@ def test_default_judge_clamps_through_judge_sync(monkeypatch):
         author_model="anthropic:claude-sonnet-4-6",
         judge_model="openai/gpt-5.2"))
 
-    assert result.judge == "llm_judge"
+    assert result.judge == "staged_rubric"
     assert result.score == 1.0
 
 
@@ -155,7 +163,7 @@ def test_injectable_boundary_overrides_default(monkeypatch):
         author_model="anthropic:claude-sonnet-4-6",
         judge_model="openai/gpt-5.2"))
 
-    assert result.judge == "llm_judge"
+    assert result.judge == "staged_rubric"
     assert result.score == 0.99
 
 

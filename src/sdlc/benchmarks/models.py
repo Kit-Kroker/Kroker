@@ -55,7 +55,8 @@ class QualityScore(BaseModel):
     # `judge: str` straight through -- it is a ValidationError swallowed by the
     # caller's `except Exception`. tests/test_judge_literal.py pins the set.
     judge: Literal["contract", "llm_judge", "human_override", "error",
-                   "oracle", "deep_review", "adversary", "handoff"]
+                   "oracle", "deep_review", "adversary", "handoff",
+                   "staged_rubric"]
 
 
 class CostBag(BaseModel):

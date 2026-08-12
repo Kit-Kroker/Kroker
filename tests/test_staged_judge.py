@@ -71,3 +71,48 @@ def test_generate_steps_raises_on_an_empty_step_list(monkeypatch):
                         lambda m, s, u: '{"steps": []}')
     with pytest.raises(Exception):
         generate_steps("r", "m")
+
+
+def test_default_judge_runs_both_phases(monkeypatch):
+    prompts = []
+
+    def _fake(model, system_prompt, user_prompt):
+        prompts.append(system_prompt)
+        if "checklist" in system_prompt:
+            return '{"steps": ["Check the six activities are all named"]}'
+        assert "Check the six activities are all named" in user_prompt
+        return '{"score": 0.4, "components": {"scope_preserved": 0.4}}'
+
+    monkeypatch.setattr(judge_mod, "_run_judge_agent", _fake)
+    qs = judge_mod.judge_artifact.sync(judge_mod.JudgeInput(
+        artifact_json='{"summary": "x"}', rubric="the rubric",
+        author_model="anthropic:glm-5.2",
+        judge_model="google:gemini-3.5-flash"))
+    assert len(prompts) == 2
+    assert qs.score == 0.4
+    assert qs.judge == "staged_rubric"
+
+
+def test_step_generation_failure_is_not_measured(monkeypatch):
+    """NOT a fallback to the old judge: that would make the discontinuity
+    marker lie about which instrument produced the number."""
+    monkeypatch.setattr(judge_mod, "_run_judge_agent",
+                        lambda m, s, u: "garbage")
+    qs = judge_mod.judge_artifact.sync(judge_mod.JudgeInput(
+        artifact_json="{}", rubric="r", author_model="a", judge_model="b"))
+    assert qs.score is None
+    assert qs.judge == "error"
+
+
+def test_injected_judge_fn_still_short_circuits_both_phases():
+    """The _set_judge_fn seam is unchanged, so every existing test that
+    injects a fake keeps working and makes no model call."""
+    judge_mod._set_judge_fn(lambda _i: '{"score": 0.7, "components": {}}')
+    try:
+        qs = judge_mod.judge_artifact.sync(judge_mod.JudgeInput(
+            artifact_json="{}", rubric="r", author_model="a",
+            judge_model="b"))
+    finally:
+        judge_mod._set_judge_fn(None)
+    assert qs.score == 0.7
+    assert qs.judge == "staged_rubric"

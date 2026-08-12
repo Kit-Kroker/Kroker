@@ -13,6 +13,10 @@ from sdlc.benchmarks.models import QualityScore
 EMITTED_JUDGES = [
     "contract", "llm_judge", "human_override", "error", "oracle",
     "deep_review", "adversary", "handoff",
+    # E-83: the staged judge. "llm_judge" is retained, not retired -- every
+    # record written before E-83 carries it, and that is exactly what makes
+    # the measurement discontinuity queryable rather than silent.
+    "staged_rubric",
 ]
 
 
