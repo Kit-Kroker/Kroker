@@ -529,26 +529,32 @@ is the smaller half and §4.1 gates everything.
   **Outcome recorded 2026-08-12 (live run, `google:gemini-3.5-flash` judge,
   `anthropic:glm-5.2` author):**
   - `control` — PASS, zero model calls (unchanged-prompt early exit). ✓
-  - `scope_dropped` — **PASS**, `scope_preserved` veto did *not* fire;
-    `scores_baseline=[0.97]`, `scores_working=[1.0]`. The model kept all six
-    activities despite being told to cover only three.
+  - `scope_dropped` — **FAIL_ABSOLUTE**: the `scope_preserved` veto fired
+    (absent: litter box, playing, fighting). The model complied with the
+    scope-drop and the gate caught it deterministically.
   - `truncated` — PASS, judge unavailable on at least one side (no scores).
-  - `inverted` — **FAIL_ABSOLUTE** via `scope_discipline_declared` (the model
-    emptied `out_of_scope`), proving the veto fires end-to-end through real
-    promptfoo. (Under `repeat=3` an intermittent provider error on one repeat
-    reads as ERRORED per §6 — infra flakiness, not a logic defect.)
+    This mutation has no veto and relies on the advisory judge; it remains the
+    genuinely open case.
+  - `inverted` — veto fires end-to-end (observed FAIL_ABSOLUTE via
+    `scope_discipline_declared` on a clean repeat; under `repeat=3` an
+    intermittent provider error on one repeat reads as ERRORED per §6 — infra
+    flakiness, not a logic defect).
 
-  **Verdict:** the gate has teeth — the veto→FAIL_ABSOLUTE path works
-  end-to-end (unit tests + the `inverted` live run), and a defect that hid
-  every live absolute failure as ERRORED was fixed during the run (the
-  promptfoo `row.error`↔assertion-reason conflation). But OQ-P5's structured-
-  output hypothesis is confirmed: the `clarify` role is largely *invariant*
-  under prompt degradation, because the frozen fixture and the
-  `ClarifiedRequirements` schema carry the domain regardless of the
-  instruction. The gate is sensitive to mutations that change the artifact's
-  *typed content* (`inverted`) but not to mutations the schema already
-  encodes (`scope_dropped`, `truncated`). That is the honest answer the suite
-  was built to be able to report.
+  **Verdict:** the gate has teeth. The veto→`FAIL_ABSOLUTE` path works
+  end-to-end through real promptfoo, and `scope_dropped` — the mutation the
+  design built the sensitivity proof around — is caught.
+
+  **Correction (same day, code review):** an earlier draft of this entry
+  recorded `scope_dropped` as PASS ("veto did not fire; model kept all six
+  activities") and concluded the `clarify` role was "largely invariant under
+  prompt degradation." That conclusion was **an artifact of a veto-engine
+  false negative**, not a property of the role: `mentions_all` matched bare
+  substrings, so "eating" was satisfied by "creating", "red" by "required",
+  "playing" by "replaying", and the veto passed on words that merely
+  *contained* the term. Once matching was switched to word boundaries, the
+  same mutation fails absolutely. The lesson, recorded for OQ-P8-style
+  artifacts: a sensitivity verdict is only as trustworthy as the matcher
+  underneath it.
 - **OQ-P6 (new) — veto authorship is manual and unenforced.** Nothing checks
   that a rubric stating "scores 0 regardless" has a corresponding veto file. A
   lint pass over rubric prose for veto language is possible; whether it is worth

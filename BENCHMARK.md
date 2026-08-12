@@ -565,10 +565,11 @@ the pipeline did not measure. Quality scores from before and after E-83 sit on
   transcript evidence or dropped.
 - **Sensitivity is proven, not asserted.** The mutation suite
   (`SDLC_PROMPT_EVAL=1 python -m pytest -m prompt_eval -k mutations`) records
-  what real model behavior does to degraded prompts. The veto→`FAIL_ABSOLUTE`
-  path works end-to-end; the `clarify` role is largely invariant under prompt
-  degradation (the frozen fixture and schema carry the domain) — the honest
-  OQ-P5 answer. See the spec's §9 for the recorded outcome.
+  what real model behavior does to degraded prompts. The `scope_dropped`
+  mutation fails absolutely via the `scope_preserved` veto — the gate's teeth
+  are real and end-to-end. (`truncated`, which has no veto and relies on the
+  advisory judge, remains the open case.) See spec §9 for the recorded outcome
+  and the substring-matching correction.
 
 ---
 
