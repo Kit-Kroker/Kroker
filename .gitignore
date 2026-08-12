@@ -12,3 +12,5 @@ opencode.json
 # plus a negation would not work — the parent must stay traversable.
 docs/superpowers/*
 !docs/superpowers/specs/
+# generated benchmark/analysis artifacts (E-83 review note)
+artifacts/
