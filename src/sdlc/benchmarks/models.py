@@ -13,7 +13,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from ..agents.loader import HARNESS_ROLES, PROPOSER_ROLES
-from ..models import GatePolicy, HarnessKind, SessionDigest
+from ..models import GatePolicy, HarnessKind, PlanDrift, SessionDigest
 
 
 class Arm(BaseModel):
@@ -124,6 +124,7 @@ class BenchmarkRecord(BaseModel):
     cost: CostBag = Field(default_factory=CostBag)
     speed: SpeedBag
     waste: WasteBag | None = None           # None = no session captured
+    plan_drift: "PlanDrift | None" = None    # None = not measured (E-83)
     outcome: BenchmarkOutcome
     fix_attempts: int = 0
     error: str | None = None

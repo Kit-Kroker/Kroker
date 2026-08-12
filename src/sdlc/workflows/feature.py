@@ -76,11 +76,11 @@ with workflow.unsafe.imports_passed_through():
         ExecutionMode, Gap, GateConfig,
         GateDecision,
         GateOutcome, GatePolicy, HandoffSummary, IdeaBrief,
-        ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig,
+        ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig, PlanDrift,
         RecallSnapshot, ResearchBrief, ResearchPlan, RetainItem, RoleConfig,
         RoleUsage, RunSummary, SecurityReport, SeededWork, SmokeCheck,
         SubQuestionFinding,
-        TaskResult,
+        TaskResult, compute_plan_drift,
     )
     from .deployment import DeploymentInput, DeploymentWorkflow
     from .gates import GateHost
@@ -583,6 +583,7 @@ class FeatureWorkflow(GateHost):
                       task_id: str | None = None,
                       attempt: int | None = None,
                       waste: "WasteBag | None" = None,
+                      plan_drift: "PlanDrift | None" = None,
                       error: str | None = None) -> BenchmarkRecord:
         scope = (BenchmarkScope.TASK_ATTEMPT if task_id is not None
                  else BenchmarkScope.STAGE)
@@ -597,6 +598,7 @@ class FeatureWorkflow(GateHost):
             speed=SpeedBag(wall_clock_s=(ended - started).total_seconds(),
                            started_at=started, ended_at=ended),
             waste=waste,
+            plan_drift=plan_drift,
             outcome=outcome, fix_attempts=fix_attempts, error=error,
         )
 
@@ -1436,6 +1438,7 @@ class FeatureWorkflow(GateHost):
                 harness=role_cfg.harness,
                 cost_usd=run.cost_usd,
                 waste=WasteBag.from_digest(run.session_digest),
+                plan_drift=compute_plan_drift(task, diff.get("files", [])),
                 fix_attempts=attempt - 1,
                 task_id=task.id, attempt=attempt - 1))
 
