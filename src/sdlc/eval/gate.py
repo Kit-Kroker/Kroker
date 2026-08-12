@@ -60,6 +60,7 @@ def run_gate(role: str, case: str, *, repo_root: Path, cases_root: Path,
              agents_dir: Path, judge_model: str, repeat: int = 3,
              delta_min: float = 0.05, baseline_ref: str = "HEAD",
              max_calls: int = 40,
+             mutation: str | None = None,
              out_dir: Path | None = None) -> PromptGateResult:
     # Before any git/filesystem work: an unknown role must not surface as a
     # raw FileNotFoundError from `git show HEAD:agents/<role>/instructions.md`.
@@ -71,7 +72,12 @@ def run_gate(role: str, case: str, *, repo_root: Path, cases_root: Path,
             "was explicitly requested, so this is a failure, not a skip.")
 
     sha_base = prompt_sha(role, baseline_ref, repo_root, agents_dir)
-    sha_work = prompt_sha(role, "worktree", repo_root, agents_dir)
+    # A mutation IS the working-tree prompt for this run. Hashing it rather
+    # than the file is what stops the unchanged-prompt early exit from
+    # skipping the whole suite.
+    sha_work = (hashlib.sha256(mutation.encode()).hexdigest()
+                if mutation is not None
+                else prompt_sha(role, "worktree", repo_root, agents_dir))
 
     if sha_base == sha_work:
         result = PromptGateResult(
@@ -99,7 +105,8 @@ def run_gate(role: str, case: str, *, repo_root: Path, cases_root: Path,
             cfg = build_config(role, case, repo_root=repo_root,
                                cases_root=cases_root, agents_dir=agents_dir,
                                judge_model=judge_model, out_dir=tmp_path,
-                               repeat=repeat, baseline_ref=baseline_ref)
+                               repeat=repeat, baseline_ref=baseline_ref,
+                               mutation=mutation)
             results_path = tmp_path / "results.json"
             _run_promptfoo(cfg, results_path)
             results = json.loads(results_path.read_text(encoding="utf-8"))

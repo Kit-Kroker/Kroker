@@ -34,7 +34,8 @@ def build_config(role: str, case: str, *, repo_root: Path, cases_root: Path,
                  agents_dir: Path, judge_model: str, out_dir: Path,
                  repeat: int = 3, baseline_ref: str = "HEAD",
                  max_cost_usd: float = 0.50,
-                 max_latency_ms: int = 120_000) -> Path:
+                 max_latency_ms: int = 120_000,
+                 mutation: str | None = None) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     fixture = build_fixture(role, case, cases_root, agents_dir)
     fixture_path = out_dir / "fixture.json"
@@ -49,14 +50,22 @@ def build_config(role: str, case: str, *, repo_root: Path, cases_root: Path,
     }
     provider_id = f"{_rel_file_url(_HERE / 'provider.py', out_dir)}:call_api"
 
+    # E-83: a mutation is the working side's literal instructions body. It
+    # rides provider config as `instructions_text`, which call_api prefers
+    # over the git ref -- so a degraded prompt is injected without touching
+    # agents/<role>/instructions.md (the baseline is `git show`-resolved, so
+    # a worktree edit would move BOTH sides and measure nothing).
+    working_cfg = {**provider_cfg, "instructions_ref": "worktree"}
+    if mutation is not None:
+        working_cfg["instructions_text"] = mutation
+
     cfg = {
         "description": f"prompt gate: {role} on {case}",
         "prompts": ["{{input}}"],       # unused: the fixture is the input
         "providers": [
             {"id": provider_id, "label": "baseline",
              "config": {**provider_cfg, "instructions_ref": baseline_ref}},
-            {"id": provider_id, "label": "working",
-             "config": {**provider_cfg, "instructions_ref": "worktree"}},
+            {"id": provider_id, "label": "working", "config": working_cfg},
         ],
         "defaultTest": {
             "vars": {

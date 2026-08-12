@@ -82,7 +82,12 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
     try:
         cfg = options["config"]
         agents_dir = Path(cfg["agents_dir"])
-        instructions = resolve_instructions(
+        # A literal instructions body wins over the git ref. This is the
+        # mutation seam (E-83): the suite must degrade a prompt WITHOUT
+        # touching agents/<role>/instructions.md, because the baseline side
+        # is resolved with `git show` and a worktree edit would move both.
+        literal = cfg.get("instructions_text")
+        instructions = literal if literal is not None else resolve_instructions(
             cfg["role"], cfg["instructions_ref"], Path(cfg["repo_root"]),
             agents_dir)
         fixture = load_fixture(Path(cfg["fixture_path"]))
