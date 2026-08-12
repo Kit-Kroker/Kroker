@@ -15,11 +15,15 @@ from temporalio import activity
 
 from ..activities import _git
 from ..measurement import Measurement
+from ..triage.activities import tracked_paths
+from ..triage.gitread import is_over_size_limit, read_tree
+from .scan import memo
 from .scan.models import (
     CATEGORIES, ScanSignalId, ScanSignalResult, SignalOutput, SignalSource,
     SourceCandidate, family_of,
 )
 from .scan.registry import SCAN_SIGNALS
+from .scan.signals import entrypoints, packages
 
 _log = logging.getLogger(__name__)
 
@@ -56,13 +60,16 @@ async def assessment_resolve_tree(
     return AssessmentTree(tree_hash=proc.stdout.strip())
 
 
-# Which plan owes each signal's body. Plan 1 ships every activity as a stub so
-# the seam, the memo and the never-cache-unmeasured rule all have a real
-# consumer immediately -- the same reason E-45 shipped the DAG with six stub
-# phase bodies rather than waiting for one.
+# Signals whose body has landed. Kept beside OWED_BY and asserted disjoint
+# from it: a body that lands without its OWED_BY entry removed would report
+# "not implemented" forever, and removing the entry without landing the body
+# is a KeyError in unbuilt_signal.
+BUILT: frozenset[ScanSignalId] = frozenset({
+    ScanSignalId.S1, ScanSignalId.S3,
+})
+
+# Which plan owes each remaining signal's body.
 OWED_BY: dict[ScanSignalId, str] = {
-    ScanSignalId.S1: "plan 2",
-    ScanSignalId.S3: "plan 2",
     ScanSignalId.S2: "plan 3",
     ScanSignalId.S4: "plan 3",
     ScanSignalId.SS1: "plan 3",
@@ -103,10 +110,59 @@ def unbuilt_signal(signal_id: ScanSignalId) -> SignalOutput:
                     for k in CATEGORIES[signal_id]}))
 
 
+def failed_signal(signal_id: ScanSignalId, exc: Exception) -> SignalOutput:
+    """A signal whose body raised. Never re-raised: one signal that cannot
+    read the tree must not take the other twelve down with it (E-41 D3).
+    Distinct from unbuilt_signal because "we tried and could not" is not
+    "nobody has written this yet" -- the reason strings must not converge."""
+    reason = (f"{signal_id.value} failed: "
+              f"{type(exc).__name__}: {exc}"[:300])
+    return SignalOutput(row=ScanSignalResult(
+        signal=signal_id, family=family_of(signal_id),
+        version=SCAN_SIGNALS[signal_id].version,
+        source=SignalSource.COMPUTED,
+        collected=Measurement.not_collected(reason),
+        categories={k: Measurement.not_collected(reason)
+                    for k in CATEGORIES[signal_id]}))
+
+
+def _source_blobs(repo_dir: str, commit_sha: str, paths: list[str],
+                  extensions: tuple[str, ...]
+                  ) -> tuple[dict[str, str], list[str]]:
+    """(blobs, skipped) for source files at the pinned commit.
+
+    `skipped` carries the oversized ones so a caller can report a partial
+    count as not_collected rather than as a smaller number (spec section 6).
+    """
+    wanted = sorted(p for p in paths if p.endswith(extensions))
+    blobs: dict[str, str] = {}
+    for path, text in read_tree(repo_dir, commit_sha, wanted):
+        if is_over_size_limit(text):
+            continue
+        blobs[path] = text
+    return blobs, [p for p in wanted if p not in blobs]
+
+
 @activity.defn
 async def scan_packages(inp: ScanSignalInput) -> SignalOutput:
-    """S1 -- package structure. Body lands in plan 2."""
-    return unbuilt_signal(ScanSignalId.S1)
+    """S1 -- package structure at depth 1-3.
+
+    The scan memo's first production caller: plan 1 built load/store, and
+    every stub it shipped was refused by store's not-MEASURED rule.
+    """
+    if (hit := memo.load(ScanSignalId.S1, inp.tree_hash)) is not None:
+        return hit
+    try:
+        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+        blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
+                                       packages.SOURCE_EXTENSIONS)
+        loc = {p: text.count("\n") + 1 for p, text in blobs.items()}
+        out = packages.evaluate(paths, loc, skipped)
+    except Exception as exc:                        # noqa: BLE001 -- see helper
+        _log.warning("S1 failed: %s", exc)
+        return failed_signal(ScanSignalId.S1, exc)
+    memo.store(ScanSignalId.S1, inp.tree_hash, out)
+    return out
 
 
 @activity.defn
@@ -117,8 +173,19 @@ async def scan_schema(inp: ScanSignalInput) -> SignalOutput:
 
 @activity.defn
 async def scan_entrypoints(inp: ScanSignalInput) -> SignalOutput:
-    """S3 -- backend entry points, the Contract tier. Body lands in plan 2."""
-    return unbuilt_signal(ScanSignalId.S3)
+    """S3 -- backend entry points, the Contract tier."""
+    if (hit := memo.load(ScanSignalId.S3, inp.tree_hash)) is not None:
+        return hit
+    try:
+        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+        blobs, _ = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
+                                 packages.SOURCE_EXTENSIONS)
+        out = entrypoints.evaluate(blobs)
+    except Exception as exc:                        # noqa: BLE001
+        _log.warning("S3 failed: %s", exc)
+        return failed_signal(ScanSignalId.S3, exc)
+    memo.store(ScanSignalId.S3, inp.tree_hash, out)
+    return out
 
 
 @activity.defn
