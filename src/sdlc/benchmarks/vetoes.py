@@ -18,6 +18,7 @@ is added when a fourth rubric needs one, not in anticipation.
 from __future__ import annotations
 
 import json
+import re
 from typing import Annotated, Literal, Union
 
 import yaml
@@ -99,7 +100,13 @@ def _is_empty(value: object) -> bool:
 def _check_one(artifact: dict, v: Veto) -> VetoFailure | None:
     if isinstance(v, MentionsAll):
         hay = _haystack(artifact, v.fields)
-        missing = [t for t in v.terms if t.lower() not in hay]
+        # Word-boundary match, NOT bare substring: otherwise "eating" matches
+        # "creating", "red" matches "required"/"reduced", "playing" matches
+        # "replaying". That false negative made the scope_dropped veto pass on
+        # words that merely CONTAIN the term, not name it -- which made the
+        # OQ-P5 result unreliable (E-83 review).
+        missing = [t for t in v.terms
+                   if not re.search(r"\b" + re.escape(t.lower()) + r"\b", hay)]
         if missing:
             return VetoFailure(
                 veto_id=v.id,

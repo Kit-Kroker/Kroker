@@ -51,6 +51,25 @@ def test_mentions_all_is_case_insensitive():
     assert check(artifact, parse_vetoes(CLARIFY_YAML)) == []
 
 
+def test_mentions_all_does_not_match_substrings_of_other_words():
+    """Bare substring matching made 'eating' match 'creating', 'red' match
+    'required', 'playing' match 'replaying'. A veto that passes on those is a
+    false negative -- it was the hole that made the scope_dropped OQ-P5 result
+    unreliable (E-83 review)."""
+    artifact = {"functional_requirements": [
+        "creating the required replay logic; sleeping; drinking; "
+        "litter box; fighting"], "open_questions": []}
+    failures = check(artifact, parse_vetoes(CLARIFY_YAML))
+    ids = [f.veto_id for f in failures]
+    assert ids == ["scope_preserved"]
+    reason = failures[0].reason
+    assert "eating" in reason and "red" in reason and "playing" in reason
+    # 'sleeping' / 'drinking' / 'litter box' / 'fighting' ARE genuinely
+    # present as words, so they must NOT be reported missing.
+    assert "sleeping" not in reason
+    assert "drinking" not in reason
+
+
 def test_mentions_all_with_no_fields_searches_the_whole_artifact():
     vetoes = parse_vetoes(
         "- id: v\n  kind: mentions_all\n  terms: [alpha]\n")

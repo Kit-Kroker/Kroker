@@ -8,7 +8,8 @@ from sdlc.eval.promptfoo.absolute import get_assert, load_vetoes
 
 _GOOD = {
     "summary": "Detect sleeping, eating, drinking, litter box, playing and "
-               "fighting; risk analysis marks at-risk cats red; 24h history.",
+                "fighting; risk analysis marks at-risk cats red; 24 hours of "
+                "history.",
     "functional_requirements": ["detect all six activities"],
     "non_functional_requirements": ["5s telemetry cadence"],
     "out_of_scope": ["no real collar hardware"],
