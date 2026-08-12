@@ -189,3 +189,44 @@ class SourceCandidate(BaseModel):
         self.evidence = sorted(set(self.evidence),
                               key=lambda e: (e.path, e.lines))
         return self
+
+
+class ScanCandidate(BaseModel):
+    """S5's merge: one distinct candidate corroborated across sources.
+
+    candidate_id is local to ONE assessment. BC-NNN is E-47a's surrogate key,
+    allocated after discover -- the two look alike, and conflating them would
+    mint capability identity in the wrong phase.
+    """
+    candidate_id: str               # "C-01"
+    name: str
+    sources: list[str]              # SourceCandidate.local_id values
+    confidence: Confidence          # DERIVED (D8)
+    members: list[CandidateMember]
+    possible_duplicate_of: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _has_sources(self) -> "ScanCandidate":
+        if not self.sources:
+            raise ValueError(
+                "a ScanCandidate needs at least one source -- it is a merge "
+                "of source candidates, and a merge of nothing has no evidence")
+        return self
+
+    @model_validator(mode="after")
+    def _confidence_is_derived(self) -> "ScanCandidate":
+        expected = confidence_from(signal_of(s) for s in self.sources)
+        if self.confidence is not expected:
+            raise ValueError(
+                f"confidence {self.confidence.value!r} does not match the "
+                f"derived {expected.value!r} for sources {self.sources} -- "
+                f"confidence is derived from the count of DISTINCT source "
+                f"signals, never assigned (D8)")
+        return self
+
+    @model_validator(mode="after")
+    def _canonicalize(self) -> "ScanCandidate":
+        self.sources = sorted(set(self.sources))
+        self.members = sorted(set(self.members), key=CandidateMember.sort_key)
+        self.possible_duplicate_of = sorted(set(self.possible_duplicate_of))
+        return self
