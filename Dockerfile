@@ -6,7 +6,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         npm \
     && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g opencode-ai
+# Pin to the version the harness adapter is pinned to (harness/adapters pin
+# 1.18.4); a drifting opencode CLI breaks transcript parsing and causes
+# run_code/merge failures mid-benchmark. Bump both together after re-capturing
+# a fresh transcript and updating the adapter pin.
+RUN npm install -g opencode-ai@1.18.4
 
 WORKDIR /app
 COPY pyproject.toml ./
@@ -29,6 +33,12 @@ COPY policy ./policy
 # the extra installed here, boot crash-loops on ModuleNotFoundError before
 # the worker ever polls its task queue.
 RUN pip install --no-cache-dir .[logfire]
+
+# Oracle grading deps the base image doesn't pull: grade_oracle runs a case's
+# oracle/test_*.py in the worker's own Python, and python oracle conftests use
+# pytest-asyncio. Without it, collection errors on every case and the oracle
+# scores 0/0 (judge='error') even on correct code.
+RUN pip install --no-cache-dir pytest-asyncio
 
 ENV TEMPORAL_HOST=temporal:7233
 ENV SDLC_WORKTREES_ROOT=/tmp/sdlc/worktrees
