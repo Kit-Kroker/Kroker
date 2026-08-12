@@ -18,6 +18,7 @@ what remove that debt.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from datetime import timedelta
 
 from pydantic import BaseModel, Field
@@ -43,7 +44,7 @@ with workflow.unsafe.imports_passed_through():
     from ..assessment.scan.inherit import InheritedHalf, inherited_halves
     from ..assessment.scan.models import (
         CATEGORIES, SCAN_ORDER, ScanResult, ScanSignalId, ScanSignalResult,
-        SignalOutput, SignalSource, family_of,
+        SignalOutput, SignalSource, SourceCandidate, family_of,
     )
     from ..assessment.scan.registry import SCAN_SIGNALS, WAVES
     from ..measurement import CollectionState, Measurement
@@ -160,6 +161,67 @@ def fold_row(activity_row: ScanSignalResult,
     })
 
 
+def _collected_from_categories(
+        categories: Mapping[str, Measurement]) -> Measurement:
+    """A signal's overall collected state, DERIVED from its category
+    measurements: measured (record count) when every owed category measured,
+    else not_collected carrying a representative reason.
+
+    The row-level analogue of compute_readiness deriving a verdict from its
+    dimensions. Used for a purely-inherited signal (SS2), whose row has no
+    activity to set `collected` -- hardcoding not_collected would report a
+    measured inherited fact as unmeasured, the reverse of the FR-915
+    conflation the type exists to prevent.
+    """
+    if categories and all(
+            m.state is CollectionState.MEASURED for m in categories.values()):
+        return Measurement.measured(
+            sum(m.value or 0.0 for m in categories.values()))
+    nc = next((m for m in categories.values()
+               if m.state is not CollectionState.MEASURED), None)
+    return Measurement.not_collected(
+        nc.reason if nc and nc.reason
+        else "one or more owed categories not measured")
+
+
+def _inherited_row(signal_id: ScanSignalId,
+                   half: InheritedHalf) -> ScanSignalResult:
+    """A purely-inherited signal's row (SS2): the half IS the whole signal.
+
+    source is INHERITED, not EXTENDED -- D12 cut the computed half, so there
+    is no activity contribution to extend. `collected` is derived from the
+    categories the half carried, so a triage signal that collected reads as
+    collected here (FR-915).
+    """
+    return ScanSignalResult(
+        signal=signal_id, family=family_of(signal_id),
+        version=SCAN_SIGNALS[signal_id].version,
+        source=SignalSource.INHERITED,
+        collected=_collected_from_categories(half.categories),
+        categories=dict(half.categories),
+        producer=half.producer)
+
+
+def _upstream_for(signal_id: ScanSignalId,
+                  outputs: Mapping[ScanSignalId, SignalOutput]
+                  ) -> list[SourceCandidate]:
+    """The candidates one signal is allowed to read: only those produced by
+    the signals it declares in `consumes`.
+
+    `consumes` already drives the fan-out wave (wave_of) and the memo key
+    (rules_sha). Driving the payload from the SAME declaration makes reading
+    undeclared data impossible rather than merely discouraged -- otherwise a
+    wave-2 signal could read an S1 candidate off `upstream` while declaring
+    only S3, and editing S1's pattern table would not move its memo key
+    (rules_sha walks `consumes`, which does not include S1). That is the
+    precise stale-cache setup D10 exists to prevent.
+    """
+    return [cand
+            for c_id in SCAN_SIGNALS[signal_id].consumes
+            if c_id in outputs
+            for cand in outputs[c_id].sources]
+
+
 def assemble(repo_dir: str, init: InitOutcome, admitted: bool, reason: str,
              rest: list[PhaseResult] | None = None,
              scan: ScanResult | None = None) -> Assessment:
@@ -268,33 +330,44 @@ class AssessmentWorkflow(GateHost):
         outputs: dict[ScanSignalId, SignalOutput] = {}
 
         for wave in WAVES:
-            upstream = [c for out in outputs.values() for c in out.sources]
-            arg = ScanSignalInput(repo_dir=inp.repo_dir,
-                                  commit_sha=triage.commit_sha,
-                                  tree_hash=tree.tree_hash,
-                                  upstream=sorted(
-                                      upstream,
-                                      key=lambda c: (c.signal.value,
-                                                     c.local_id)))
-            results = await asyncio.gather(*[
-                run_or_degrade(
+            jobs = []
+            for sid in wave:
+                # D10: each signal's upstream is filtered to the signals it
+                # declares in `consumes`, so reading undeclared data is
+                # impossible and rules_sha (same `consumes`) cannot miss it.
+                arg = ScanSignalInput(
+                    repo_dir=inp.repo_dir, commit_sha=triage.commit_sha,
+                    tree_hash=tree.tree_hash,
+                    upstream=sorted(_upstream_for(sid, outputs),
+                                    key=lambda c: (c.signal.value,
+                                                   c.local_id)))
+                jobs.append(run_or_degrade(
                     SCAN_ACTIVITIES[SCAN_SIGNALS[sid].activity], arg,
                     SCAN_ACT,
                     fallback=lambda sid=sid: SignalOutput(
                         row=skipped_scan_signal(
-                            sid, f"{sid.value} activity failed or timed out")))
-                for sid in wave])
+                            sid, f"{sid.value} activity failed or timed out"))))
+            results = await asyncio.gather(*jobs)
             outputs.update(zip(wave, results))
 
-        # S5 (in_workflow) and SS2 (inherited) run no activity: their rows are
-        # synthesized so the ledger still carries the whole set in order.
+        # S5 (in_workflow) and SS2 (purely inherited, D12) run no activity.
+        # SS2's row is built from its inherited half -- the half IS the signal
+        # (D12 cut its computed half), so it reads INHERITED and collected when
+        # triage collected, not as a skipped stub. S5's merge is owed by plan 2.
         for sid in SCAN_ORDER:
             if sid in outputs or SCAN_SIGNALS[sid].activity:
                 continue
-            outputs[sid] = SignalOutput(row=skipped_scan_signal(
-                sid, f"{sid.value} has no computed half"))
+            half = halves.get(sid)
+            outputs[sid] = SignalOutput(
+                row=_inherited_row(sid, half) if half is not None
+                else skipped_scan_signal(
+                    sid, f"{sid.value} not implemented (plan 2, E-46)"))
 
+        # Activity signals get their inherited half folded in (D7); the two
+        # synthesized rows above are already final (SS2 IS its half; S5 has no
+        # half to fold), so fold_row would wrongly promote SS2 to EXTENDED.
         rows = [fold_row(outputs[sid].row, halves.get(sid))
+                if SCAN_SIGNALS[sid].activity else outputs[sid].row
                 for sid in SCAN_ORDER]
         sources = sorted(
             (c for out in outputs.values() for c in out.sources),

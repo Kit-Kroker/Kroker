@@ -247,3 +247,15 @@ async def test_scan_phase_flips_terminal_status_to_partial():
                if s.signal is ScanSignalId.SS1)
     assert ss1.source is SignalSource.EXTENDED
     assert ss1.producer is not None
+    # SS2 is purely inherited (D12 cut its computed half): fake_deps reported
+    # measured, so its row reads INHERITED + collected -- not a skipped stub
+    # (FR-915, review finding 1).
+    ss2 = next(s for s in result.scan.signals
+               if s.signal is ScanSignalId.SS2)
+    assert ss2.source is SignalSource.INHERITED
+    assert ss2.collected.state is CollectionState.MEASURED
+    # S5's merge is deferred to plan 2; its reason names the plan, not a
+    # misleading "has no computed half" (review finding 4).
+    s5 = next(s for s in result.scan.signals if s.signal is ScanSignalId.S5)
+    assert s5.collected.state is CollectionState.NOT_COLLECTED
+    assert "plan 2" in s5.collected.reason
