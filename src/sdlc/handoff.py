@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from .grounding import Profile, verify_quote
 from .measurement import Measurement
-from .models import HandoffClaim, IntegrityFlag
+from .models import HandoffClaim, IntegrityFlag, PlanDeviation
 
 # A path-ish token: at least one separator and a dotted final segment.
 # Deliberately narrow -- prose like "the API" must not read as a path.
@@ -112,4 +112,28 @@ def verified_integrity_flags(
             dropped += 1
             continue
         kept.append(f)
+    return kept, dropped
+
+
+def verified_plan_deviations(
+    deviations: list[PlanDeviation],
+    session_text: str | None,
+) -> tuple[list[PlanDeviation], int]:
+    """Drop plan deviations whose evidence quote is not in the transcript
+    (E-83). Returns (kept, dropped).
+
+    Identical rules to verified_integrity_flags, for the identical reason:
+    an empty quote survives, a missing haystack skips verification, and the
+    profile is VERBATIM_BYTES because a stored transcript is bytes we wrote.
+    """
+    if session_text is None:
+        return list(deviations), 0
+    kept: list[PlanDeviation] = []
+    dropped = 0
+    for d in deviations:
+        if d.evidence.strip() and not verify_quote(
+                d.evidence, session_text, Profile.VERBATIM_BYTES):
+            dropped += 1
+            continue
+        kept.append(d)
     return kept, dropped

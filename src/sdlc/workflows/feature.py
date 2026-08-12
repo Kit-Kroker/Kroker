@@ -86,6 +86,7 @@ with workflow.unsafe.imports_passed_through():
     from .gates import GateHost
     from ..handoff import (
         claim_survival_score, cross_check_claims, verified_integrity_flags,
+        verified_plan_deviations,
     )
     from ..pending import GateContext, clarify_pending
     from ..research.deps import ResearchDeps
@@ -976,6 +977,7 @@ class FeatureWorkflow(GateHost):
             report = (await self._run_role(
                 cfg, "deep_review", resolve_role_model(cfg, "deep_review"), t_deep_review,
                 "Frozen contract assertions:\n- " + "\n- ".join(assertions)
+                + f"\nThe task as planned:\n{task.model_dump_json()}"
                 + f"\nDiff:\n{diff['patch']}"
                 + "\nScrubbed harness transcript (how the diff was reached):\n"
                 + transcript, into=spend)).output
@@ -990,7 +992,16 @@ class FeatureWorkflow(GateHost):
                     "deep_review: dropped %d integrity flag(s) for task %s "
                     "whose evidence is not in the transcript",
                     dropped_flags, task.id)
-            report = report.model_copy(update={"integrity_flags": kept_flags})
+            kept_devs, dropped_devs = verified_plan_deviations(
+                report.plan_deviations, transcript)
+            if dropped_devs:
+                workflow.logger.warning(
+                    "deep_review: dropped %d plan deviation(s) for task %s "
+                    "whose evidence is not in the transcript",
+                    dropped_devs, task.id)
+            report = report.model_copy(update={
+                "integrity_flags": kept_flags,
+                "plan_deviations": kept_devs})
             await self._record(cfg, self._stage_record(
                 cfg, stage="deep_review", role="deep_review",
                 started=_started, ended=workflow.now(),

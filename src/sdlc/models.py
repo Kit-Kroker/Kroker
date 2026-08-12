@@ -613,6 +613,18 @@ class IntegrityFlag(BaseModel):
     evidence: str            # a quote/reference from the scrubbed transcript
 
 
+class PlanDeviation(BaseModel):
+    """One way the session departed from the task it was given (E-83).
+
+    Evidence-first, exactly like IntegrityFlag: a deviation whose quote is
+    not in the transcript is dropped, because an advisory lens that can
+    invent evidence is worse than no lens.
+    """
+    kind: Literal["unplanned_scope", "skipped_criterion", "approach_changed"]
+    detail: str
+    evidence: str            # a VERBATIM span from the scrubbed transcript
+
+
 class DeepReviewReport(BaseModel):
     """Advisory full-transcript lens (E-39). Reads the SCRUBBED HarnessSession
     as data — never the raw session, never via resume. Model family is
@@ -621,6 +633,7 @@ class DeepReviewReport(BaseModel):
     retained for signal only. Fields are evidence-first."""
     findings: list[ReviewFinding] = Field(default_factory=list)
     integrity_flags: list[IntegrityFlag] = Field(default_factory=list)
+    plan_deviations: list[PlanDeviation] = Field(default_factory=list)
     summary: str = ""
     approve: bool = True          # advisory opinion only
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)

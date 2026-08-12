@@ -15,10 +15,11 @@ def test_cheat_detected_true_iff_flags_present():
 
 
 def test_report_is_evidence_first():
-    # Field order is the SGR contract: evidence before verdict.
+    # Field order is the SGR contract: evidence before verdict. plan_deviations
+    # (E-83) is evidence-first too, so it sits with the evidence group.
     fields = list(DeepReviewReport.model_fields)
-    assert fields == ["findings", "integrity_flags", "summary",
-                      "approve", "confidence"]
+    assert fields == ["findings", "integrity_flags", "plan_deviations",
+                      "summary", "approve", "confidence"]
 
 
 def test_report_reuses_review_finding():
