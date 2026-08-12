@@ -356,3 +356,21 @@ def test_build_judge_input_defaults_vetoes_to_empty():
         author_model="a", judge_model="b")
     assert ji is not None
     assert ji.vetoes_yaml == ""
+
+
+def test_judge_never_raises_even_on_a_non_dict_artifact_with_vetoes():
+    """The judge's governing invariant (judge.py:5-7): on ANY failure return
+    QualityScore(score=None, judge='error'). A non-dict artifact_json with a
+    not_both veto makes check() do artifact.get(...) on a list -- that must
+    surface as not-measured, never propagate out and fail a benchmark cell."""
+    _set_judge_fn(lambda _i: '{"score": 0.9, "components": {}}')
+    try:
+        qs = judge_artifact.sync(JudgeInput(
+            artifact_json='[1, 2, 3]', rubric="r", author_model="a",
+            judge_model="b",
+            vetoes_yaml="- id: ic\n  kind: not_both\n  field: tests_passed\n"
+                        "  equals: true\n  and_any_nonempty: [issues]\n"))
+    finally:
+        _set_judge_fn(None)
+    assert qs.score is None
+    assert qs.judge == "error"

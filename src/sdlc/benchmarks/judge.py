@@ -166,11 +166,15 @@ def _judge_sync(inp: JudgeInput) -> QualityScore:
     # Vetoes FIRST and outside the judge's try: they are deterministic, so a
     # malformed veto file is a config error (not measured), while a veto that
     # FIRES is a measurement that succeeded and must survive a judge failure.
+    # Broad `except Exception` on purpose: the judge's governing invariant
+    # (this module's docstring) is that it NEVER raises -- a veto-engine
+    # surprise (e.g. a not_both veto against a non-dict artifact) must surface
+    # as not-measured, not propagate out and fail a benchmark cell.
     try:
         vetoes = parse_vetoes(inp.vetoes_yaml)
         artifact = json.loads(inp.artifact_json) if vetoes else {}
         failures = check(artifact, vetoes) if vetoes else []
-    except (VetoConfigError, json.JSONDecodeError):
+    except Exception:
         return QualityScore(score=None, judge="error")
 
     fn = _judge_fn or _default_judge
