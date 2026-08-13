@@ -85,19 +85,22 @@ def _spec(sid: ScanSignalId, version: int, source: SignalSource, *,
 
 
 _NAMING = f"{_SIG.rsplit('.', 1)[0]}.naming"     # scan.naming, shared by S3+S5
+# scan.sources, shared by S1+S3: both select blobs with SOURCE_EXTENSIONS, so
+# both must hash it or editing the tuple silently serves a stale S3 (D10).
+_SOURCES = f"{_SIG.rsplit('.', 1)[0]}.sources"
 
 SCAN_SIGNALS: dict[ScanSignalId, ScanSignalSpec] = {
     ScanSignalId.S1: _spec(
         ScanSignalId.S1, 1, SignalSource.COMPUTED,
         module=f"{_SIG}.packages", activity="scan_packages",
-        rule_modules=(_NAMING,)),
+        rule_modules=(_NAMING, _SOURCES)),
     ScanSignalId.S2: _spec(
         ScanSignalId.S2, 1, SignalSource.COMPUTED,
         module=f"{_SIG}.schema", activity="scan_schema"),
     ScanSignalId.S3: _spec(
         ScanSignalId.S3, 1, SignalSource.COMPUTED,
         module=f"{_SIG}.entrypoints", activity="scan_entrypoints",
-        rule_modules=(_NAMING,)),
+        rule_modules=(_NAMING, _SOURCES)),
     ScanSignalId.S4: _spec(
         ScanSignalId.S4, 1, SignalSource.COMPUTED,
         module=f"{_SIG}.frontend", activity="scan_frontend"),

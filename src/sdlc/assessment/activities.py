@@ -24,6 +24,7 @@ from .scan.models import (
 )
 from .scan.registry import SCAN_SIGNALS
 from .scan.signals import entrypoints, packages
+from .scan.sources import SOURCE_EXTENSIONS
 
 _log = logging.getLogger(__name__)
 
@@ -155,7 +156,7 @@ async def scan_packages(inp: ScanSignalInput) -> SignalOutput:
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
         blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
-                                       packages.SOURCE_EXTENSIONS)
+                                       SOURCE_EXTENSIONS)
         loc = {p: text.count("\n") + 1 for p, text in blobs.items()}
         out = packages.evaluate(paths, loc, skipped)
     except Exception as exc:                        # noqa: BLE001 -- see helper
@@ -179,7 +180,7 @@ async def scan_entrypoints(inp: ScanSignalInput) -> SignalOutput:
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
         blobs, _ = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
-                                 packages.SOURCE_EXTENSIONS)
+                                 SOURCE_EXTENSIONS)
         out = entrypoints.evaluate(blobs)
     except Exception as exc:                        # noqa: BLE001
         _log.warning("S3 failed: %s", exc)

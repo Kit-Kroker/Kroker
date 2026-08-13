@@ -20,20 +20,10 @@ from ..models import (
     family_of,
 )
 from ..naming import GENERIC_NAMES, LAYER_NAMES
+from ..sources import SOURCE_EXTENSIONS
 
 SIGNAL_ID = "S1"
 VERSION = 1
-
-# Language-agnostic, and deliberately NOT ToolchainAdapter.source_extensions:
-# only PythonToolchain exists, so gating on the adapter would make S1 report
-# nothing for the JS/TS repositories Tier 0 actually receives. This mirrors
-# the reasoning in triage/signals/scaffold.py's own _SOURCE_EXTENSIONS, whose
-# list is re-declared here rather than imported -- scan/ may not import
-# triage/signals/ (module purity, spec section 3).
-SOURCE_EXTENSIONS: tuple[str, ...] = (
-    ".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".rs", ".java", ".rb",
-    ".php", ".cs", ".kt", ".swift", ".scala", ".ex", ".exs",
-)
 
 # BrownKit's worked list, kept short on purpose. A term absent from here is
 # NOT dismissed -- it falls to s1_unclassified_name at MEDIUM. Growing this

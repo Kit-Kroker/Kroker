@@ -65,3 +65,24 @@ def test_the_naming_module_reaches_s1_too(monkeypatch):
         "sdlc.assessment.scan.rules.module_sha",
         lambda dotted: "edited" if dotted == naming else module_sha(dotted))
     assert rules_sha(ScanSignalId.S1) != before
+
+
+def test_the_sources_module_reaches_both_s1_and_s3(monkeypatch):
+    """Review finding 1: S3 selects its blobs with SOURCE_EXTENSIONS, which
+    lives in scan.sources. If S3 did not declare sources, adding '.vue' would
+    change S3's output while its memo key stood still -- the D10 hazard in the
+    epic whose headline invariant is D10. S1 reads the same tuple, so both
+    hash it."""
+    sources = next(m for m in SCAN_SIGNALS[ScanSignalId.S1].rule_modules
+                   if m.endswith(".sources"))
+    assert sources in SCAN_SIGNALS[ScanSignalId.S3].rule_modules
+    assert sources == "sdlc.assessment.scan.sources"
+    for sid in (ScanSignalId.S1, ScanSignalId.S3):
+        before = rules_sha(sid)
+        monkeypatch.setattr(
+            "sdlc.assessment.scan.rules.module_sha",
+            lambda dotted: "edited" if dotted == sources
+            else module_sha(dotted))
+        assert rules_sha(sid) != before
+        monkeypatch.setattr(
+            "sdlc.assessment.scan.rules.module_sha", module_sha)
