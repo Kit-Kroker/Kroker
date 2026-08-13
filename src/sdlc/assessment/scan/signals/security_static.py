@@ -20,7 +20,7 @@ Pure: blobs and the declared upstream in, records out.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 from ....measurement import Measurement
 from ....triage.models import evidence_key
@@ -30,6 +30,7 @@ from ..models import (
     SecurityObservation, SignalOutput, SignalSource, family_of,
     inherited_pending,
 )
+from ..testpaths import is_test_path
 
 SIGNAL_ID = "SS1"
 VERSION = 1
@@ -80,6 +81,8 @@ def _observation(category: str, rule: str, severity: str,
 def _tls(blobs: Mapping[str, str]) -> list[SecurityObservation]:
     out: list[SecurityObservation] = []
     for path in sorted(blobs):
+        if is_test_path(path):
+            continue
         lines = blobs[path].splitlines()
         for index, line in enumerate(lines, start=1):
             for rule, severity, confidence, pattern, detail in TLS_RULES:
@@ -110,6 +113,8 @@ def _validation(blobs: Mapping[str, str],
                 upstream: ScanUpstream) -> list[SecurityObservation]:
     out: list[SecurityObservation] = []
     for path, line in sorted(_entry_point_files(upstream).items()):
+        if is_test_path(path):
+            continue
         text = blobs.get(path)
         if text is None or VALIDATION_MARKERS.search(text):
             continue
@@ -129,9 +134,25 @@ def _validation(blobs: Mapping[str, str],
 
 
 def evaluate(blobs: Mapping[str, str],
-             upstream: ScanUpstream) -> SignalOutput:
+             upstream: ScanUpstream,
+             skipped: Sequence[str] = ()) -> SignalOutput:
     """`blobs` is path -> text for readable source blobs; `upstream` carries
-    S3's candidates and row state (P3-D4)."""
+    S3's candidates and row state (P3-D4). `skipped` names blobs over
+    MAX_BLOB_BYTES; a partial TLS/input-validation scan must not pass as a
+    complete one (spec section 6)."""
+    if skipped:
+        nc = Measurement.not_collected(
+            f"tls_enforcement: {len(skipped)} blob(s) over MAX_BLOB_BYTES "
+            f"not read (first: {skipped[0]}); a partial scan must not pass "
+            f"as a complete one (spec section 6)")
+        return SignalOutput(
+            row=ScanSignalResult(
+                signal=ScanSignalId.SS1, family=family_of(ScanSignalId.SS1),
+                version=VERSION, source=SignalSource.COMPUTED, collected=nc,
+                categories={
+                    C_TLS: nc, C_INPUT_VALIDATION: nc,
+                    C_CREDENTIAL_STORAGE: inherited_pending(C_CREDENTIAL_STORAGE),
+                    C_AUTHN_AUTHZ: inherited_pending(C_AUTHN_AUTHZ)}))
     tls = _tls(blobs)
     s3_ok = upstream.measured(ScanSignalId.S3)
     validation = _validation(blobs, upstream) if s3_ok else []

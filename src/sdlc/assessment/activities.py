@@ -162,18 +162,22 @@ def _source_blobs(repo_dir: str, commit_sha: str, paths: list[str],
 
 
 def _blobs_for(repo_dir: str, commit_sha: str,
-               paths: Sequence[str]) -> dict[str, str]:
-    """path -> text for an explicit path list, size-guarded.
+               paths: Sequence[str]) -> tuple[dict[str, str], list[str]]:
+    """(blobs, skipped) for an explicit path list, size-guarded.
 
     The companion to _source_blobs, which selects by extension. A config file,
     a CI workflow and a coverage report have no extension in common, so the
-    signals that read them select by name and share this reader.
+    signals that read them select by name and share this reader. `skipped`
+    carries the paths that were over MAX_BLOB_BYTES or unreadable, so a signal
+    can record them in its owing category's reason rather than silently
+    dropping them (spec section 6).
     """
+    wanted = sorted(paths)
     out: dict[str, str] = {}
-    for path, text in read_tree(repo_dir, commit_sha, sorted(paths)):
+    for path, text in read_tree(repo_dir, commit_sha, wanted):
         if not is_over_size_limit(text):
             out[path] = text
-    return out
+    return out, [p for p in wanted if p not in out]
 
 
 @activity.defn
@@ -210,9 +214,9 @@ async def scan_schema(inp: ScanSignalInput) -> SignalOutput:
         return hit
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
-        blobs, _ = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
-                                 SOURCE_EXTENSIONS + schema.EXTRA_EXTENSIONS)
-        out = schema.evaluate(blobs)
+        blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
+                                       SOURCE_EXTENSIONS + schema.EXTRA_EXTENSIONS)
+        out = schema.evaluate(blobs, skipped)
     except Exception as exc:                        # noqa: BLE001
         _log.warning("S2 failed: %s", exc)
         return failed_signal(ScanSignalId.S2, exc)
@@ -245,9 +249,9 @@ async def scan_frontend(inp: ScanSignalInput) -> SignalOutput:
         return hit
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
-        blobs, _ = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
-                                 frontend.FRONTEND_EXTENSIONS)
-        out = frontend.evaluate(blobs)
+        blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
+                                       frontend.FRONTEND_EXTENSIONS)
+        out = frontend.evaluate(blobs, skipped)
     except Exception as exc:                        # noqa: BLE001
         _log.warning("S4 failed: %s", exc)
         return failed_signal(ScanSignalId.S4, exc)
@@ -262,9 +266,9 @@ async def scan_security_static(inp: ScanSignalInput) -> SignalOutput:
         return hit
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
-        blobs, _ = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
-                                 SOURCE_EXTENSIONS)
-        out = security_static.evaluate(blobs, inp.upstream)
+        blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
+                                       SOURCE_EXTENSIONS)
+        out = security_static.evaluate(blobs, inp.upstream, skipped)
     except Exception as exc:                        # noqa: BLE001
         _log.warning("SS1 failed: %s", exc)
         return failed_signal(ScanSignalId.SS1, exc)
@@ -286,8 +290,8 @@ async def scan_config_infra(inp: ScanSignalInput) -> SignalOutput:
         wanted = sorted({p for p in paths
                          if config_infra.is_config_path(p)
                          or p.endswith(SOURCE_EXTENSIONS)})
-        out = config_infra.evaluate(
-            _blobs_for(inp.repo_dir, inp.commit_sha, wanted))
+        blobs, skipped = _blobs_for(inp.repo_dir, inp.commit_sha, wanted)
+        out = config_infra.evaluate(blobs, skipped)
     except Exception as exc:                        # noqa: BLE001
         _log.warning("SS3 failed: %s", exc)
         return failed_signal(ScanSignalId.SS3, exc)
@@ -303,9 +307,9 @@ async def scan_sensitivity(inp: ScanSignalInput) -> SignalOutput:
         return hit
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
-        blobs, _ = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
-                                 SOURCE_EXTENSIONS + schema.EXTRA_EXTENSIONS)
-        out = sensitivity.evaluate(blobs, inp.upstream)
+        blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
+                                       SOURCE_EXTENSIONS + schema.EXTRA_EXTENSIONS)
+        out = sensitivity.evaluate(blobs, inp.upstream, skipped)
     except Exception as exc:                        # noqa: BLE001
         _log.warning("SS4 failed: %s", exc)
         return failed_signal(ScanSignalId.SS4, exc)
@@ -321,10 +325,9 @@ async def scan_tests_inventory(inp: ScanSignalInput) -> SignalOutput:
         return hit
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
-        out = tests_inventory.evaluate(
-            paths,
-            _blobs_for(inp.repo_dir, inp.commit_sha,
-                       [p for p in paths if is_test_path(p)]))
+        test_paths = [p for p in paths if is_test_path(p)]
+        blobs, skipped = _blobs_for(inp.repo_dir, inp.commit_sha, test_paths)
+        out = tests_inventory.evaluate(paths, blobs, skipped)
     except Exception as exc:                        # noqa: BLE001
         _log.warning("QS1 failed: %s", exc)
         return failed_signal(ScanSignalId.QS1, exc)
@@ -341,10 +344,11 @@ async def scan_coverage(inp: ScanSignalInput) -> SignalOutput:
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
         tracked = set(paths)
-        reports = _blobs_for(
+        reports, skipped_reports = _blobs_for(
             inp.repo_dir, inp.commit_sha,
             [p for p in coverage_signal.REPORT_PATHS if p in tracked])
-        out = coverage_signal.evaluate(paths, reports, inp.upstream)
+        out = coverage_signal.evaluate(paths, reports, inp.upstream,
+                                       skipped_reports)
     except Exception as exc:                        # noqa: BLE001
         _log.warning("QS2 failed: %s", exc)
         return failed_signal(ScanSignalId.QS2, exc)
@@ -359,9 +363,9 @@ async def scan_testability(inp: ScanSignalInput) -> SignalOutput:
         return hit
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
-        blobs, _ = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
-                                 SOURCE_EXTENSIONS)
-        out = testability.evaluate(blobs)
+        blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
+                                       SOURCE_EXTENSIONS)
+        out = testability.evaluate(blobs, skipped)
     except Exception as exc:                        # noqa: BLE001
         _log.warning("QS3 failed: %s", exc)
         return failed_signal(ScanSignalId.QS3, exc)
@@ -377,10 +381,9 @@ async def scan_ci(inp: ScanSignalInput) -> SignalOutput:
         return hit
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
-        out = ci_signal.evaluate(
-            paths,
-            _blobs_for(inp.repo_dir, inp.commit_sha,
-                       [p for p in paths if ci_signal.is_ci_path(p)]))
+        ci_paths = [p for p in paths if ci_signal.is_ci_path(p)]
+        blobs, skipped = _blobs_for(inp.repo_dir, inp.commit_sha, ci_paths)
+        out = ci_signal.evaluate(paths, blobs, skipped)
     except Exception as exc:                        # noqa: BLE001
         _log.warning("QS4 failed: %s", exc)
         return failed_signal(ScanSignalId.QS4, exc)

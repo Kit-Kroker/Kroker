@@ -19,7 +19,7 @@ Pure: blobs in, records out.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel
 
@@ -120,15 +120,28 @@ PATTERNS: tuple[_Pattern, ...] = (
 )
 
 
-def evaluate(blobs: Mapping[str, str]) -> SignalOutput:
+def evaluate(blobs: Mapping[str, str],
+             skipped: Sequence[str] = ()) -> SignalOutput:
     """`blobs` is path -> text for every readable, in-bound source blob.
 
     A clean tree is a MEASURED zero: every source blob was read and no
     pattern fired. That is the same conclusion S1 reaches for a tree with no
     source files, and the opposite of S3's -- S3 cannot see routes it has no
     fingerprint for, while these patterns are the whole definition of what is
-    being looked for.
+    being looked for. `skipped` names blobs over MAX_BLOB_BYTES; if any were
+    skipped the tree was NOT fully read, so a zero would be the FR-915
+    conflation (spec section 6).
     """
+    if skipped:
+        nc = Measurement.not_collected(
+            f"testability: {len(skipped)} blob(s) over MAX_BLOB_BYTES not "
+            f"read (first: {skipped[0]}); a partial scan must not pass as a "
+            f"complete one (spec section 6)")
+        return SignalOutput(
+            row=ScanSignalResult(
+                signal=ScanSignalId.QS3, family=family_of(ScanSignalId.QS3),
+                version=VERSION, source=SignalSource.COMPUTED, collected=nc,
+                categories={C_TESTABILITY: nc}))
     findings: list[TestabilityFinding] = []
     for path in sorted(blobs):
         if is_test_path(path):

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import posixpath
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel
 
@@ -180,8 +180,16 @@ def _gap(reason: str) -> SignalOutput:
         categories={C_FRONTEND_ENTRY: nc}))
 
 
-def evaluate(blobs: Mapping[str, str]) -> SignalOutput:
-    """`blobs` is path -> text for every readable, in-bound frontend blob."""
+def evaluate(blobs: Mapping[str, str],
+             skipped: Sequence[str] = ()) -> SignalOutput:
+    """`blobs` is path -> text for every readable, in-bound frontend blob.
+    `skipped` names the blobs over MAX_BLOB_BYTES; a partial route set must
+    not pass as a complete one (spec section 6)."""
+    if skipped:
+        return _gap(
+            f"frontend_entry_points: {len(skipped)} blob(s) over "
+            f"MAX_BLOB_BYTES not read (first: {skipped[0]}); a partial scan "
+            f"must not pass as a complete one (spec section 6)")
     supported, unsupported = detected(blobs)
     if unsupported:
         return _gap(

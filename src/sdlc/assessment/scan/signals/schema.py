@@ -23,7 +23,7 @@ Pure: blobs in, records out. The activity reads the tree.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel
 
@@ -180,9 +180,17 @@ def _gap(reason: str) -> SignalOutput:
         categories={C_SCHEMA: nc}))
 
 
-def evaluate(blobs: Mapping[str, str]) -> SignalOutput:
+def evaluate(blobs: Mapping[str, str],
+             skipped: Sequence[str] = ()) -> SignalOutput:
     """`blobs` is path -> text for every readable, in-bound blob whose
-    extension is a source or schema extension."""
+    extension is a source or schema extension. `skipped` names the blobs over
+    MAX_BLOB_BYTES; a partial table set must not pass as a complete one
+    (spec section 6)."""
+    if skipped:
+        return _gap(
+            f"schema_clusters: {len(skipped)} blob(s) over MAX_BLOB_BYTES "
+            f"not read (first: {skipped[0]}); a partial scan must not pass "
+            f"as a complete one (spec section 6)")
     decls = declarations(blobs)
     if not decls:
         return _gap(

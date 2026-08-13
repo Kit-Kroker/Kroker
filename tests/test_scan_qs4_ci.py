@@ -88,12 +88,19 @@ def test_drift_needs_a_ci_file_to_compare_against():
     assert "E-56" in category.reason
 
 
-def test_an_unparseable_workflow_degrades_that_file_alone():
+def test_an_unparseable_workflow_does_not_pass_a_partial_stage_list_as_complete():
+    """A refused CI file may carry stages we cannot see, so measured(N) from
+    the parseable files would assert an incomplete count as the whole -- the
+    FR-915 conflation. The category names the refused file; env_drift is a
+    gap for the same reason (the CI side is unreadable)."""
     blobs = {".github/workflows/ci.yml": WORKFLOW,
              ".github/workflows/broken.yml": "jobs: [unbalanced\n"}
     out = ci.evaluate(PATHS + [".github/workflows/broken.yml"], blobs)
-    assert [s.workflow for s in out.ci] == [".github/workflows/ci.yml"] * 4
-    assert out.row.categories[C_CI_STAGES].state is CollectionState.MEASURED
+    assert out.row.categories[C_CI_STAGES].state is CollectionState.NOT_COLLECTED
+    assert "broken.yml" in out.row.categories[C_CI_STAGES].reason
+    assert out.row.categories[C_ENV_DRIFT].state is CollectionState.NOT_COLLECTED
+    assert out.ci == []
+    assert out.environments == []
 
 
 def test_a_yaml_bomb_is_refused_rather_than_expanded():
@@ -110,7 +117,7 @@ def test_a_yaml_bomb_is_refused_rather_than_expanded():
     out = ci.evaluate([".github/workflows/bomb.yml"],
                       {".github/workflows/bomb.yml": bomb})
     assert out.ci == []
-    assert out.row.categories[C_CI_STAGES].state is CollectionState.MEASURED
+    assert out.row.categories[C_CI_STAGES].state is CollectionState.NOT_COLLECTED
 
 
 def test_a_gitlab_pipeline_is_parsed_too():

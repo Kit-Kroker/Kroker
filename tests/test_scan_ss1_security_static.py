@@ -115,3 +115,15 @@ def test_output_is_byte_identical_across_input_orderings():
     reordered = dict(reversed(list(BLOBS.items())))
     assert security_static.evaluate(
         reordered, _upstream()).model_dump_json() == reference
+
+
+def test_a_tls_finding_in_a_test_file_is_not_attributed_to_the_product():
+    """QS3's rule, one signal over: a verify=False inside a test is the test's
+    own business, and flagging it would bury the findings that matter (and
+    E-49 would score it, E-52 would bundle it)."""
+    blobs = dict(BLOBS, **{"tests/test_client.py": (
+        "import requests\n"
+        "def test_fetch():\n"
+        "    requests.get('https://x', verify=False)\n")})
+    out = security_static.evaluate(blobs, _upstream())
+    assert all(o.path != "tests/test_client.py" for o in out.security)

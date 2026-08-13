@@ -17,7 +17,7 @@ Pure: blobs and the declared upstream in, records out.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 from ....measurement import Measurement
 from ..models import (
@@ -110,9 +110,17 @@ def _gap(reason: str) -> SignalOutput:
 
 
 def evaluate(blobs: Mapping[str, str],
-             upstream: ScanUpstream) -> SignalOutput:
+             upstream: ScanUpstream,
+             skipped: Sequence[str] = ()) -> SignalOutput:
     """`blobs` is path -> text for readable source/schema blobs; `upstream`
-    carries S2's and S3's candidates and row states (P3-D4)."""
+    carries S2's and S3's candidates and row states (P3-D4). `skipped` names
+    blobs over MAX_BLOB_BYTES; a partial entity set must not pass as a
+    complete one (spec section 6)."""
+    if skipped:
+        return _gap(
+            f"data_sensitivity: {len(skipped)} blob(s) over MAX_BLOB_BYTES "
+            f"not read (first: {skipped[0]}); a partial entity set must not "
+            f"pass as a complete one (spec section 6)")
     if not upstream.measured(ScanSignalId.S2):
         return _gap(upstream.gap(ScanSignalId.S2, "data_sensitivity").reason)
 

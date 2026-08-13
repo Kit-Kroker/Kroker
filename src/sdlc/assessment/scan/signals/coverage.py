@@ -125,9 +125,18 @@ def _row(collected: Measurement) -> ScanSignalResult:
 
 
 def evaluate(paths: Sequence[str], reports: Mapping[str, str],
-             upstream: ScanUpstream) -> SignalOutput:
+             upstream: ScanUpstream,
+             skipped_reports: Sequence[str] = ()) -> SignalOutput:
     """`reports` is path -> text for whichever of REPORT_PATHS the tree
-    carries; `upstream` carries QS1's records and row state."""
+    carries; `upstream` carries QS1's records and row state. `skipped_reports`
+    names a committed report that was over MAX_BLOB_BYTES; the authoritative
+    source being unreadable, a proxy must not silently substitute (spec
+    section 6)."""
+    if skipped_reports:
+        return SignalOutput(row=_row(Measurement.not_collected(
+            f"coverage: committed report(s) {sorted(skipped_reports)} over "
+            f"MAX_BLOB_BYTES; the authoritative source is unreadable, so a "
+            f"proxy must not silently substitute (spec section 6)")))
     for path in REPORT_PATHS:
         if path not in reports:
             continue

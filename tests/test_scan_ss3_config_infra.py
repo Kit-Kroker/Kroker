@@ -99,3 +99,13 @@ def test_is_config_path_selects_infrastructure_and_environment_files():
                  "appsettings.Production.json"):
         assert config_infra.is_config_path(path) is True
     assert config_infra.is_config_path("src/app.py") is False
+
+
+def test_a_log_call_in_a_test_file_is_not_attributed_to_the_product():
+    """A fixture that logs a throwaway token is the test's own business; an
+    observation attributed to the product is a finding a client cannot
+    trust (QS3's rule, one signal over)."""
+    out = config_infra.evaluate(
+        dict(BLOBS, **{"tests/conftest.py":
+                       "import logging\nlogging.info('token=%s', token)\n"}))
+    assert all(o.path != "tests/conftest.py" for o in out.security)

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import posixpath
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 from ....measurement import Measurement
 from ....triage.models import evidence_key
@@ -32,6 +32,7 @@ from ..models import (
     SecurityObservation, SignalOutput, SignalSource, family_of,
     inherited_pending,
 )
+from ..testpaths import is_test_path
 
 SIGNAL_ID = "SS3"
 VERSION = 1
@@ -229,15 +230,33 @@ def _divergence(env_files: dict[str, dict[str, tuple[str, int]]]
     return out
 
 
-def evaluate(blobs: Mapping[str, str]) -> SignalOutput:
+def evaluate(blobs: Mapping[str, str],
+             skipped: Sequence[str] = ()) -> SignalOutput:
     """`blobs` is path -> text for readable config, infrastructure and source
-    blobs. Config rules apply to config paths; log masking applies to all."""
+    blobs. Config rules apply to config paths; log masking applies to all.
+    `skipped` names blobs over MAX_BLOB_BYTES; a partial scan must not pass
+    as a complete one (spec section 6)."""
+    if skipped:
+        nc = Measurement.not_collected(
+            f"exposed_ports: {len(skipped)} blob(s) over MAX_BLOB_BYTES not "
+            f"read (first: {skipped[0]}); a partial scan must not pass as a "
+            f"complete one (spec section 6)")
+        return SignalOutput(
+            row=ScanSignalResult(
+                signal=ScanSignalId.SS3, family=family_of(ScanSignalId.SS3),
+                version=VERSION, source=SignalSource.COMPUTED, collected=nc,
+                categories={
+                    C_EXPOSED_PORTS: nc, C_DB_SECURITY: nc, C_LOG_MASKING: nc,
+                    C_ENV_DIVERGENCE: nc,
+                    C_FRAMEWORK_DEFAULTS: inherited_pending(C_FRAMEWORK_DEFAULTS)}))
     ports: list[SecurityObservation] = []
     database: list[SecurityObservation] = []
     logs: list[SecurityObservation] = []
     env_files: dict[str, dict[str, tuple[str, int]]] = {}
 
     for path in sorted(blobs):
+        if is_test_path(path):
+            continue
         text = blobs[path]
         logs.extend(_logs(path, text))
         if not is_config_path(path):

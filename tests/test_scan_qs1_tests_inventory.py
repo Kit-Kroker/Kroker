@@ -104,3 +104,16 @@ def test_a_repository_with_no_tests_is_a_measured_zero():
     out = tests_inventory.evaluate(["src/a.py"], {})
     assert out.row.categories[C_TEST_LEVELS].value == 0.0
     assert out.tests == []
+
+
+def test_a_skipped_test_blob_is_a_gap_not_an_unknown_classification():
+    """Spec section 6 / FR-915: a test blob over MAX_BLOB_BYTES was not read,
+    so it must not be indistinguishable from a blob we read but could not
+    classify (the partial-inventory conflation)."""
+    out = tests_inventory.evaluate(
+        ["tests/test_service.py", "tests/huge.py"],
+        {"tests/test_service.py": "import pytest\ndef test_x(): ...\n"},
+        skipped=["tests/huge.py"])
+    assert out.row.categories[C_TEST_LEVELS].state is CollectionState.NOT_COLLECTED
+    assert "huge.py" in out.row.categories[C_TEST_LEVELS].reason
+    assert out.tests == []

@@ -81,6 +81,18 @@ def test_a_clean_module_is_a_measured_zero_not_a_gap():
     assert out.testability == []
 
 
+def test_a_skipped_source_blob_is_a_gap_not_a_clean_tree():
+    """A measured zero requires that every blob was read; a skipped blob
+    means the tree was NOT fully scanned, so zero would assert an incomplete
+    scan as a clean result -- the FR-915 conflation (spec section 6)."""
+    out = testability.evaluate(
+        {"src/a.py": "def add(a, b):\n    return a + b\n"},
+        skipped=["src/huge.py"])
+    assert out.row.collected.state is CollectionState.NOT_COLLECTED
+    assert "huge.py" in out.row.collected.reason
+    assert out.testability == []
+
+
 def test_output_is_byte_identical_across_input_orderings():
     reference = testability.evaluate(BLOBS).model_dump_json()
     reordered = dict(reversed(list(BLOBS.items())))

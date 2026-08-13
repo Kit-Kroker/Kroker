@@ -165,10 +165,10 @@ def _jobs(doc: dict) -> list[tuple[str, dict]]:
             if isinstance(job, dict) and "script" in job]
 
 
-def _stages_from_yaml(path: str, text: str) -> list[CiStageRecord]:
-    doc = _safe_yaml(text)
-    if doc is None:
-        return []
+def _stages_from_doc(path: str, doc: dict) -> list[CiStageRecord]:
+    """Stages from an already-parsed workflow mapping. `_safe_yaml` is the
+    caller's responsibility so evaluate can tell a refusal from an empty
+    workflow apart (P3-D8, spec section 6)."""
     out: list[CiStageRecord] = []
     for order, (name, job) in enumerate(_jobs(doc)):
         body = _step_text(job)
@@ -197,20 +197,47 @@ def _stages_from_jenkinsfile(path: str, text: str) -> list[CiStageRecord]:
 
 
 def evaluate(paths: Sequence[str],
-             blobs: Mapping[str, str]) -> SignalOutput:
+             blobs: Mapping[str, str],
+             skipped: Sequence[str] = ()) -> SignalOutput:
     """`paths` is every tracked path (the config side of the drift
-    comparison); `blobs` is path -> text for the CI files that were read."""
+    comparison); `blobs` is path -> text for the CI files that were read.
+    `skipped` names CI files over MAX_BLOB_BYTES; an unreadable CI file makes
+    the stage list partial exactly as a refused one does (spec section 6)."""
     ci_paths = sorted(p for p in paths if is_ci_path(p))
     stages: list[CiStageRecord] = []
+    refused: list[str] = list(skipped)             # oversized == unreadable
     for path in ci_paths:
         text = blobs.get(path)
         if text is None:
             continue
         if posixpath.basename(path) == "Jenkinsfile":
             stages.extend(_stages_from_jenkinsfile(path, text))
+            continue
+        doc = _safe_yaml(text)
+        if doc is None:
+            refused.append(path)
         else:
-            stages.extend(_stages_from_yaml(path, text))
+            stages.extend(_stages_from_doc(path, doc))
     stages.sort(key=lambda s: (s.workflow, s.order, s.stage))
+
+    # A CI file we read but could not parse makes the stage list PARTIAL: an
+    # unparseable workflow may carry stages we cannot see, so measured(N) would
+    # pass a partial count as complete -- the FR-915 conflation. The pipeline
+    # side of env_drift is incomplete for the same reason. (spec section 6,
+    # P3-D8.)
+    if refused:
+        nc = Measurement.not_collected(
+            f"ci_stages: {len(refused)} CI file(s) not parsed -- over "
+            f"MAX_BLOB_BYTES or unparseable (first: {refused[0]}); a partial "
+            f"stage list must not pass as a complete one (spec section 6, "
+            f"P3-D8)")
+        return SignalOutput(
+            row=ScanSignalResult(
+                signal=ScanSignalId.QS4, family=family_of(ScanSignalId.QS4),
+                version=VERSION, source=SignalSource.COMPUTED, collected=nc,
+                categories={C_CI_STAGES: nc, C_ENV_DRIFT: nc,
+                            C_CI_PRESENT: inherited_pending(C_CI_PRESENT)}),
+            ci=[], environments=[])
 
     in_ci = {s.deploys_to for s in stages if s.deploys_to}
     in_config: dict[str, list[str]] = {}

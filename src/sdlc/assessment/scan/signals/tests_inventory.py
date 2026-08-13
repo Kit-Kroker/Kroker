@@ -131,9 +131,23 @@ def _mapping(path: str, subjects: Mapping[str, list[str]]
 
 
 def evaluate(paths: Sequence[str],
-             blobs: Mapping[str, str]) -> SignalOutput:
+             blobs: Mapping[str, str],
+             skipped: Sequence[str] = ()) -> SignalOutput:
     """`paths` is every tracked path; `blobs` is path -> text for the test
-    files that were read."""
+    files that were read. `skipped` names test blobs over MAX_BLOB_BYTES; an
+    unread test blob must not be indistinguishable from an unclassifiable one
+    (spec section 6)."""
+    if skipped:
+        nc = Measurement.not_collected(
+            f"test_levels: {len(skipped)} test blob(s) over MAX_BLOB_BYTES "
+            f"not read (first: {skipped[0]}); a partial inventory must not "
+            f"pass as a complete one (spec section 6)")
+        return SignalOutput(
+            row=ScanSignalResult(
+                signal=ScanSignalId.QS1, family=family_of(ScanSignalId.QS1),
+                version=VERSION, source=SignalSource.COMPUTED, collected=nc,
+                categories={C_TEST_LEVELS: nc, C_TEST_MAPPING: nc,
+                            C_TESTS_PRESENT: inherited_pending(C_TESTS_PRESENT)}))
     subjects: dict[str, list[str]] = {}
     for path in sorted(paths):
         if is_test_path(path) or not path.endswith(SOURCE_EXTENSIONS):
