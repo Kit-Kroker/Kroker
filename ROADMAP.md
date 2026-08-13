@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-08-13 (E-46 plan 3 against `src/sdlc/assessment/scan/` + unit suite green); 2026-08-13 (E-46 plan 2 against `src/sdlc/assessment/scan/` + unit suite green); 2026-08-10 (E-45 against `src/sdlc/{assessment,workflows/assessment.py,triage/admission.py}` + unit/e2e tests green); 2026-08-09 (E-44 against `src/sdlc/{tidyup,workflows/tidyup.py,triage/delta.py}` + unit/component tests green; E-42 against `src/sdlc/workflows/{gates,triage}.py` + `pytest -m temporal`, with three review defects fixed; E-47a 2026-08-08 against `src/sdlc/capability/`; E-78 2026-08-07 against `src/sdlc/board/`; E-40/E-43 2026-08-06; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
+| Last verified | 2026-08-13 (E-46 plan 3 + review fixes against `src/sdlc/assessment/scan/`, unit + temporal e2e green); 2026-08-13 (E-46 plan 3 against `src/sdlc/assessment/scan/` + unit suite green); 2026-08-13 (E-46 plan 2 against `src/sdlc/assessment/scan/` + unit suite green); 2026-08-10 (E-45 against `src/sdlc/{assessment,workflows/assessment.py,triage/admission.py}` + unit/e2e tests green); 2026-08-09 (E-44 against `src/sdlc/{tidyup,workflows/tidyup.py,triage/delta.py}` + unit/component tests green; E-42 against `src/sdlc/workflows/{gates,triage}.py` + `pytest -m temporal`, with three review defects fixed; E-47a 2026-08-08 against `src/sdlc/capability/`; E-78 2026-08-07 against `src/sdlc/board/`; E-40/E-43 2026-08-06; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -963,7 +963,14 @@ the factory rather than as prompts.
   makes a partial Contract tier unrepresentable, and D5 prefers absent to
   partial; and the **name tables live in `naming.py`**, so S1 declares it as a
   `rule_module` (P2-D2) or editing a layer word would move S1's output without
-  moving its key.
+  moving its key. **Review pass (2026-08-13):** three findings, all a gap
+  reported as a zero — fixed before merge. `_blobs_for` now returns
+  `(blobs, skipped)` and every content signal reports `not_collected` naming
+  an unread blob rather than a partial-as-complete count (spec §6, the S1
+  `loc_metric` precedent); QS4 reports `ci_stages`/`env_drift` `not_collected`
+  for a CI file that refused to parse, not `measured(0)`; and SS1/SS3 skip
+  test paths like QS3. S3 still scans test files — same species, plan-2 scope,
+  flagged for a follow-up.
 - **E-47 — `CapabilityMap`** → FR-913, **FR-102**. **Split three ways
   2026-08-08**; the single item carried four independent clauses and was too
   large for one plan. **This is where the assessment product and the core
