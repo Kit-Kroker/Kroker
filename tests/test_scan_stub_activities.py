@@ -8,7 +8,7 @@ import pytest
 
 from sdlc.assessment import activities as scan_acts
 from sdlc.assessment.scan.models import (
-    CATEGORIES, SCAN_ORDER, ScanSignalId, SignalSource,
+    CATEGORIES, SCAN_ORDER, ScanSignalId,
 )
 from sdlc.assessment.scan.registry import SCAN_SIGNALS
 from sdlc.measurement import CollectionState
@@ -63,13 +63,3 @@ def test_stub_carries_no_records(sid):
     out = scan_acts.unbuilt_signal(sid)
     for name in (f for f in type(out).model_fields if f != "row"):
         assert getattr(out, name) == [], name
-
-
-def test_stub_source_matches_its_registry_declaration():
-    """An EXTENDED signal's stub still declares EXTENDED; the workflow folds
-    the inherited producer in (D7), so the activity's own row is COMPUTED-
-    shaped and carries no producer."""
-    out = scan_acts.unbuilt_signal(ScanSignalId.QS4)
-    assert out.row.source is SignalSource.COMPUTED
-    assert out.row.producer is None
-    assert SCAN_SIGNALS[ScanSignalId.QS4].source is SignalSource.EXTENDED

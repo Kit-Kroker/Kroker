@@ -25,8 +25,8 @@ from .scan.models import (
 )
 from .scan.registry import SCAN_SIGNALS
 from .scan.signals import (
-    config_infra, coverage as coverage_signal, entrypoints, frontend,
-    packages, schema, sensitivity, security_static, testability,
+    ci as ci_signal, config_infra, coverage as coverage_signal, entrypoints,
+    frontend, packages, schema, sensitivity, security_static, testability,
     tests_inventory,
 )
 from .scan.sources import SOURCE_EXTENSIONS
@@ -74,13 +74,12 @@ async def assessment_resolve_tree(
 BUILT: frozenset[ScanSignalId] = frozenset({
     ScanSignalId.S1, ScanSignalId.S2, ScanSignalId.S3, ScanSignalId.S4,
     ScanSignalId.SS1, ScanSignalId.SS3, ScanSignalId.SS4, ScanSignalId.QS1,
-    ScanSignalId.QS2, ScanSignalId.QS3,
+    ScanSignalId.QS2, ScanSignalId.QS3, ScanSignalId.QS4,
 })
 
-# Which plan owes each remaining signal's body.
-OWED_BY: dict[ScanSignalId, str] = {
-    ScanSignalId.QS4: "plan 3",
-}
+# Which plan owes each remaining signal's body. Empty after plan 3: every
+# declared activity has landed.
+OWED_BY: dict[ScanSignalId, str] = {}
 
 
 class ScanSignalInput(BaseModel):
@@ -355,5 +354,18 @@ async def scan_testability(inp: ScanSignalInput) -> SignalOutput:
 
 @activity.defn
 async def scan_ci(inp: ScanSignalInput) -> SignalOutput:
-    """QS4 -- CI stages and env drift. Body lands in plan 3."""
-    return unbuilt_signal(ScanSignalId.QS4)
+    """QS4 -- CI stages and environment drift. Reads the pipeline files; the
+    config side of the drift comparison comes from the path list alone."""
+    if (hit := memo.load(ScanSignalId.QS4, inp.tree_hash)) is not None:
+        return hit
+    try:
+        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+        out = ci_signal.evaluate(
+            paths,
+            _blobs_for(inp.repo_dir, inp.commit_sha,
+                       [p for p in paths if ci_signal.is_ci_path(p)]))
+    except Exception as exc:                        # noqa: BLE001
+        _log.warning("QS4 failed: %s", exc)
+        return failed_signal(ScanSignalId.QS4, exc)
+    memo.store(ScanSignalId.QS4, inp.tree_hash, out)
+    return out
