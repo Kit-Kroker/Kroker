@@ -262,3 +262,11 @@ async def test_scan_phase_flips_terminal_status_to_partial():
     assert "plan" not in s5.collected.reason.lower()
     assert "S1" in s5.collected.reason
     assert result.scan.candidates == []
+    # Plan 3: every body has landed, so no row may name a plan. The fake
+    # worker's repo_dir does not exist, so the tree-reading signals report
+    # a FAILURE -- which is a different sentence from "not implemented", and
+    # the two must not converge (failed_signal vs unbuilt_signal).
+    assert len(result.scan.signals) == 13
+    for row in result.scan.signals:
+        assert "not implemented" not in (row.collected.reason or "")
+        assert "plan" not in (row.collected.reason or "").lower()

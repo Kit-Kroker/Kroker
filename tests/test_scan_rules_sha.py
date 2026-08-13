@@ -86,3 +86,31 @@ def test_the_sources_module_reaches_both_s1_and_s3(monkeypatch):
         assert rules_sha(sid) != before
         monkeypatch.setattr(
             "sdlc.assessment.scan.rules.module_sha", module_sha)
+
+
+def test_the_testpaths_module_reaches_all_four_of_its_consumers(monkeypatch):
+    """P3-D9: S2, QS1, QS2 and QS3 all decide what a test file is with the
+    same table, so editing a glob must move all four keys."""
+    testpaths = "sdlc.assessment.scan.testpaths"
+    for sid in (ScanSignalId.S2, ScanSignalId.QS1, ScanSignalId.QS2,
+                ScanSignalId.QS3):
+        assert testpaths in SCAN_SIGNALS[sid].rule_modules
+        before = rules_sha(sid)
+        monkeypatch.setattr(
+            "sdlc.assessment.scan.rules.module_sha",
+            lambda dotted: "edited" if dotted == testpaths
+            else module_sha(dotted))
+        assert rules_sha(sid) != before, sid.value
+        monkeypatch.setattr("sdlc.assessment.scan.rules.module_sha",
+                            module_sha)
+
+
+def test_s3s_module_reaches_ss4_now_that_ss4_consumes_it(monkeypatch):
+    """P3-D3: SS4 reads S3's candidates for accessed_by, so S3's bytes are
+    part of SS4's key -- an undeclared read would also be an unhashed one."""
+    s3_module = SCAN_SIGNALS[ScanSignalId.S3].module
+    before = rules_sha(ScanSignalId.SS4)
+    monkeypatch.setattr(
+        "sdlc.assessment.scan.rules.module_sha",
+        lambda dotted: "edited" if dotted == s3_module else module_sha(dotted))
+    assert rules_sha(ScanSignalId.SS4) != before

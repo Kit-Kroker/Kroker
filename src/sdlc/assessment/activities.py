@@ -82,6 +82,23 @@ BUILT: frozenset[ScanSignalId] = frozenset({
 OWED_BY: dict[ScanSignalId, str] = {}
 
 
+def _assert_bodies_are_accounted_for() -> None:
+    """A body that lands without its OWED_BY entry removed reports 'not
+    implemented' forever; removing the entry without landing the body is a
+    KeyError in unbuilt_signal. Asserted at import, not at the first
+    assessment -- the discipline validate_registry applies to agents.yaml.
+    """
+    declared = {s for s, spec in SCAN_SIGNALS.items() if spec.activity}
+    if BUILT | set(OWED_BY) != declared or (BUILT & set(OWED_BY)):
+        raise RuntimeError(
+            f"BUILT {sorted(s.value for s in BUILT)} and OWED_BY "
+            f"{sorted(s.value for s in OWED_BY)} must partition the declared "
+            f"activities {sorted(s.value for s in declared)}")
+
+
+_assert_bodies_are_accounted_for()
+
+
 class ScanSignalInput(BaseModel):
     """One signal's activity input. `upstream` is empty for wave 1 and carries
     the DECLARED consumed signals' payloads plus their row-level `collected`

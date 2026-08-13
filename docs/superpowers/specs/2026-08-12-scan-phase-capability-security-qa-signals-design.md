@@ -6,7 +6,7 @@
 | Work items | **E-46** (fills §11's first unbuilt phase body; unblocks E-48, and through it E-47a's first live consumer) |
 | Requirements | FR-912; FR-902 extended to Tier 2; FR-915; FR-103 (memoization); FR-108 (adapter escalation); NFR-10 |
 | Scope input | `PRD.md` §FR-910; `ROADMAP.md` §11 (E-46), §15 item 3; `D:\own\BrownKit\commands\scan.md`; `docs/superpowers/specs/2026-08-10-assessment-workflow-edcr-shell-design.md` D5/D6; `docs/superpowers/specs/2026-08-08-oq6-capability-identity-design.md` (tiers, memo amendment); `docs/superpowers/specs/2026-08-06-repository-triage-hygiene-signals-design.md` D3/D15 |
-| Status | Design approved 2026-08-12; plans 1 and 2 of 3 implemented |
+| Status | Design approved 2026-08-12; plans 1, 2 and 3 implemented |
 
 E-45 shipped the EDCR DAG with six phase bodies stubbed, each reporting
 `not_collected` naming the item that owes it. This increment writes the first of
@@ -534,6 +534,11 @@ class SignalOutput(BaseModel):
     # validator for each, with its own typed record shape; the plan-1 claim
     # "plans 2-3 replace bodies, not wiring" is therefore true for 8 of 13
     # signals and false for these 5. Recorded here so plan 3 is not surprised.
+    #
+    # Resolved (2026-08-13, plan 3): the five payload types landed as
+    # SecurityObservation (SS1+SS3), TestFileRecord (QS1), CoverageRecord
+    # (QS2), and CiStageRecord + EnvironmentRecord (QS4). PAYLOAD_FIELD widened
+    # from signal -> str to signal -> tuple[str, ...] so QS4 owns two fields.
 
 
 class ScanResult(BaseModel):
@@ -773,7 +778,7 @@ in the artifact.
 |---|---|---|
 | **1** | Contracts, `SCAN_SIGNALS`, activity seam, `run_or_degrade` hoist, `signal_key`, tree-hash activity, `_scan` wiring, `inherit.py`, and **all thirteen rows** with every inherited half populated | The inherited halves are pure functions over an artifact already in hand, so this is the cheapest possible first increment that still flips `terminal_status` and installs every invariant while the artifact is small |
 | **2** | **S1, S3, S5** + `naming.py` | The Contract tier and the candidate set: what E-48 consumes and what makes E-47a's matcher live |
-| **3** | **S2, S4, SS4, QS3**, and the SS1 / SS3 / QS1 / QS2 / QS4 extension halves | Completes FR-912 |
+| **3** | **S2, S4, SS4, QS3**, and the SS1 / SS3 / QS1 / QS2 / QS4 extension halves | Completes FR-912. **Delivered 2026-08-13.** |
 
 During plans 1–2 the unbuilt categories report `not_collected` naming the plan
 that owes them. If plan 3 slips, the roadmap gains an **E-46a** for the
@@ -788,6 +793,22 @@ and D5's own reasoning prefers an absent Contract tier to a partial one.
 **P2-D2** — the generic/layer name tables live in `naming.py`, so S1 declares
 it as a `rule_module`; without that, editing a layer word would change S1's
 output while its memo key stood still.
+
+Plan 3 added four decisions, recorded in
+`docs/superpowers/plans/2026-08-13-scan-phase-signals-plan-3.md`:
+**P3-D3** — SS4 declares `consumes=(S2, S3)`, because `accessed_by` cites S3
+and an undeclared read would also be an unhashed input (the D10 hazard).
+**P3-D5** — a wave-2 signal is never memoized when its upstream degraded: SS1
+can report MEASURED (a TLS count) while `input_validation` is `not_collected`
+because S3 timed out, and caching that serves a permanently-missing category
+against a healthy S3 on an unchanged tree.
+**P3-D7** — env drift is CI-vs-config, not CI-vs-declared, because the
+declared-scope comparison BrownKit makes needs `/enrich`'s `qa_scope` (E-56,
+unbuilt).
+**P3-D12** — SS4 owns two categories (`data_sensitivity` + `entity_access`)
+so an empty `accessed_by` cannot read as "no entry point touches PII" — the
+two halves fail independently, which is what D3's per-category tracking
+exists for.
 
 ---
 

@@ -53,6 +53,45 @@ def render_scan_summary(scan: ScanResult) -> str:
                 f"v{row.producer.version} "
                 f"({len(row.producer.finding_ids)} finding(s))")
 
+    by_category: dict[str, int] = {}
+    for observation in scan.security:
+        by_category[observation.category] = \
+            by_category.get(observation.category, 0) + 1
+    if by_category:
+        lines.append("  security observations:")
+        for category in sorted(by_category):
+            lines.append(f"    {category}: {by_category[category]}")
+
+    if scan.tests:
+        levels: dict[str, int] = {}
+        for record in scan.tests:
+            levels[record.level.value] = levels.get(record.level.value, 0) + 1
+        mapped = sum(1 for r in scan.tests if r.mapping_rule != "unmapped")
+        lines.append(
+            f"  tests: {len(scan.tests)} file(s) "
+            f"({', '.join(f'{k} {v}' for k, v in sorted(levels.items()))}); "
+            f"{mapped} mapped to a subject")
+
+    if scan.coverage:
+        # BrownKit's own rule: a coverage number is meaningless without its
+        # source, because a proxy and a measurement read the same.
+        source = scan.coverage[0].source
+        tool = scan.coverage[0].tool
+        measured = [r.covered.value for r in scan.coverage
+                    if r.covered.state is CollectionState.MEASURED
+                    and r.covered.value is not None]
+        headline = (f"{sum(measured) / len(measured):.1f}%" if measured
+                    else "no measured record")
+        lines.append(
+            f"  coverage: {source}{f' ({tool})' if tool else ''} "
+            f"{headline} over {len(scan.coverage)} record(s)")
+
+    drifted = [e.name for e in scan.environments if e.drifted]
+    if drifted:
+        lines.append(
+            f"  environment drift: {', '.join(sorted(drifted))} "
+            f"(declared on one side only)")
+
     gaps = [(r.signal.value, key, m)
             for r in scan.signals
             for key, m in sorted(r.categories.items())

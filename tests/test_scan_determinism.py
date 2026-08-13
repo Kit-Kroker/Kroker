@@ -80,3 +80,52 @@ def test_merging_the_same_sources_twice_yields_one_artifact():
     a = merge(s1.sources + s3.sources, MEASURED)
     b = merge(s3.sources + s1.sources, MEASURED)
     assert a.model_dump_json() == b.model_dump_json()
+
+
+def test_every_pure_signal_module_is_order_independent():
+    """NFR-10 over the whole set, not only the capability chain: each signal
+    is a pure function of its inputs, so shuffling those inputs must not
+    change a byte of the artifact."""
+    import random
+
+    from sdlc.assessment.scan.models import ScanUpstream
+    from sdlc.assessment.scan.signals import (
+        ci, config_infra, coverage, frontend, schema, security_static,
+        sensitivity, testability, tests_inventory,
+    )
+
+    tree = {
+        "package.json": '{"dependencies": {"next": "14.0.0"}}',
+        "app/orders/page.tsx": "export default function P() {}\n",
+        "migrations/0001.sql": "CREATE TABLE orders (id SERIAL, email TEXT);\n",
+        "src/service.py": "import datetime\nx = datetime.datetime.now()\n",
+        "tests/test_service.py": "import pytest\ndef test_x(): ...\n",
+        ".env.production": "DEBUG=true\n",
+        ".env.staging": "DEBUG=false\nSSL=true\n",
+        ".github/workflows/ci.yml": "jobs:\n  test:\n    steps:\n      - run: pytest\n",
+    }
+    paths = sorted(tree)
+    up = ScanUpstream(collected={
+        s: Measurement.measured(1.0)
+        for s in (ScanSignalId.S2, ScanSignalId.S3, ScanSignalId.QS1)})
+
+    cases = [
+        ("S2", lambda t, p: schema.evaluate(t)),
+        ("S4", lambda t, p: frontend.evaluate(t)),
+        ("SS1", lambda t, p: security_static.evaluate(t, up)),
+        ("SS3", lambda t, p: config_infra.evaluate(t)),
+        ("SS4", lambda t, p: sensitivity.evaluate(t, up)),
+        ("QS1", lambda t, p: tests_inventory.evaluate(p, t)),
+        ("QS2", lambda t, p: coverage.evaluate(p, {}, up)),
+        ("QS3", lambda t, p: testability.evaluate(t)),
+        ("QS4", lambda t, p: ci.evaluate(p, t)),
+    ]
+    for name, run in cases:
+        reference = run(tree, paths).model_dump_json()
+        for seed in range(3):
+            items = list(tree.items())
+            shuffled_paths = list(paths)
+            random.Random(seed).shuffle(items)
+            random.Random(seed).shuffle(shuffled_paths)
+            assert run(dict(items), shuffled_paths).model_dump_json() == \
+                reference, name

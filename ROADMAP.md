@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-08-13 (E-46 plan 2 against `src/sdlc/assessment/scan/` + unit suite green); 2026-08-10 (E-45 against `src/sdlc/{assessment,workflows/assessment.py,triage/admission.py}` + unit/e2e tests green); 2026-08-09 (E-44 against `src/sdlc/{tidyup,workflows/tidyup.py,triage/delta.py}` + unit/component tests green; E-42 against `src/sdlc/workflows/{gates,triage}.py` + `pytest -m temporal`, with three review defects fixed; E-47a 2026-08-08 against `src/sdlc/capability/`; E-78 2026-08-07 against `src/sdlc/board/`; E-40/E-43 2026-08-06; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
+| Last verified | 2026-08-13 (E-46 plan 3 against `src/sdlc/assessment/scan/` + unit suite green); 2026-08-13 (E-46 plan 2 against `src/sdlc/assessment/scan/` + unit suite green); 2026-08-10 (E-45 against `src/sdlc/{assessment,workflows/assessment.py,triage/admission.py}` + unit/e2e tests green); 2026-08-09 (E-44 against `src/sdlc/{tidyup,workflows/tidyup.py,triage/delta.py}` + unit/component tests green; E-42 against `src/sdlc/workflows/{gates,triage}.py` + `pytest -m temporal`, with three review defects fixed; E-47a 2026-08-08 against `src/sdlc/capability/`; E-78 2026-08-07 against `src/sdlc/board/`; E-40/E-43 2026-08-06; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -114,7 +114,7 @@
 
 - [ ] **0 · intake** — routing greenfield/brownfield/repair. `IdeaBrief.mode` is a field only; no branch logic in `feature.py`.
 - [ ] **1 · constitution** — no `Constitution` model, no stage.
-- [ ] **2 · context (Cartographer)** — no `CodebaseMap`, no `cartography.py`, no brownfield delta.
+- [ ] **2 · context (Cartographer)** — no `CodebaseMap`, no `cartography.py`, no brownfield delta. **E-46 plan 3 (2026-08-13):** S1–S5 is now the whole extraction half of `CodebaseMap`; FR-102 still needs E-47b/E-47c.
 - [ ] **3 · requirements (Product)** — conflated into clarify; no standalone Product proposer / `Requirements` artifact.
 - [ ] **4 · research** (FR-107) — grounded brief before clarify. The DAG is now 15
   stages; **9 of 15 stages live** (research is scaffolded, off by default).
@@ -220,9 +220,9 @@ as tracked rather than accidental.
   `/enrich` as a declared stage input remains E-56. **2026-08-12 (E-46 plan 1):**
   the stub count dropped from six to five and `PHASE_OWNER` lost its `SCAN` entry
   — scan is now built, so the scan phase row is measured and `terminal_status`
-  derives `assessed:partial` on an admitted run. **2026-08-13 (E-46 plan 2):** the
-  scan phase's own stub count drops from eleven signal bodies to nine.
-- [ ] ⚠️ **FR-912** deterministic scan memoized on `(tree hash, signal version)`; cross-source confidence (E-46). **Plans 1–2 of 3 landed (2026-08-12, 2026-08-13).** The memo key is `(tree_hash, signal_version, rules_sha)` — `rules_sha` beyond the specified two terms, hashed transitively over shared rule modules and consumed signals, because a hand-maintained version int misses a real input (spec D10). All thirteen signal rows report; S1/S3/S5 compute, SS2 inherits, and nine bodies are still stubs naming plan 3. Cross-source confidence is live and derived (D8), but it cannot reach HIGH until plan 3 lands S2 and S4: two of S5's four sources do not yet produce.
+  derives `assessed:partial` on an admitted run. **2026-08-13 (E-46 plan 3):**
+  the scan phase's own thirteen signals all report.
+- [x] **FR-912** deterministic scan memoized on `(tree hash, signal version)`; cross-source confidence (E-46). **All three plans landed (2026-08-12, 2026-08-13).** The memo key is `(tree_hash, signal_version, rules_sha)` — `rules_sha` beyond the specified two terms, hashed transitively over shared rule modules and consumed signals, because a hand-maintained version int misses a real input (spec D10). All thirteen signal rows report and every body computes or inherits; `OWED_BY` is empty. Cross-source confidence is live and derived (D8), and now reaches HIGH: S2 and S4 produce, so S5 can merge three or more distinct sources.
 - [ ] ⚠️ **FR-913** `CapabilityMap` with stable ids + coverage floor + orphan classification — **also satisfies FR-102** (E-47a/E-47b/E-47c/E-48). **Identity half landed 2026-08-08 (E-47a):** surrogate `BC-NNN` ids, weighted-Jaccard re-attachment, audited `IdentityCorrection` (`src/sdlc/capability/`). Coverage floor + orphans (E-47b) and L2/entity-ownership (E-47c) still open.
 - [ ] **FR-914** byte-exact quote verification against the pinned commit, fail-closed — shares FR-107's verifier (E-43). *Partially landed 2026-08-06 (`grounding.py`: one substring invariant, two normalization profiles, verdict-only) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The verifier + research/handoff/deep-review consumers landed; the commit source gained its first consumer with E-41's secrets signal (2026-08-06), which re-verifies every emitted evidence quote against the pinned commit; stays open until an LLM-proposing assessment stage cites the same way, which is where the check stops being a drift guard.*
 - [ ] **FR-915** `not_collected` / `unknown` vs measured value (E-40). *Contract half landed 2026-08-06 (`measurement.py`, retrofitted onto `CoverageReport`/`SecurityReport`/`claim_survival_score`; `QAReport.coverage_pct` deleted) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The `RepoTriage`/triage half is deferred to E-41; the load-bearing case was the SARIF-malformed-reads-as-clean hole on the absolute floor. **E-44 adds a second consumer:** `compute_delta` reads `SignalResult.collected.state` and emits `UNVERIFIABLE` whenever a side did not collect, so a triage that timed out on the after side cannot read as "all findings fixed".*
@@ -267,8 +267,8 @@ as tracked rather than accidental.
 - [x] **NFR-6** Reproducibility vs memoization — watermark-pinned recall + content-addressed cache. *Pinning is exact on `fake` (entry-count cutoff) and a `mentioned_at` cutoff on `hindsight`, which has no point-in-time read: memories retained after the freeze cannot enter a stage input, but ranking is still contaminated by them and post-freeze consolidation can mint observations carrying pre-freeze timestamps. `2026-08-02-hindsight-real-integration-design` §2.1.*
 - [x] **NFR-7** Portability — `MemoryConfig.backend` defaults to `fake`; real Hindsight client for self-hosting, verified against a live container by `tests/test_hindsight_live.py` (the client shipped before 2026-08-02 implemented an invented API and could not have worked).
 - [ ] **NFR-8** Tenant isolation proven by adversarial cross-tenant read/recall test — no tenant concept exists yet (E-58).
-- [ ] **NFR-9** Hostile input — the factory currently assumes repositories are its own. Build scripts, test code, and manifests of a connected repo are attacker-controlled and executed (E-57). **E-41's build probe is the first stage that knowingly executes a foreign repository's code** (bounded, in a throwaway clone, as the worker user with network access). **E-44 widens the exposure:** the tidy-up fix runs execute the triaged repository's own build and test commands (not just the probe), as governed `FeatureWorkflow` children. Still operator-run only until E-57/E-21. **E-46 (2026-08-12)** adds no new execution of repository code: every scan signal is a blob read at the pinned commit.
-- [ ] — **NFR-10** Assessment reproducibility — not falsifiable until the assessment exists; the deterministic half is E-41/E-46, the fused-layer variance half needs runs.
+- [ ] **NFR-9** Hostile input — the factory currently assumes repositories are its own. Build scripts, test code, and manifests of a connected repo are attacker-controlled and executed (E-57). **E-41's build probe is the first stage that knowingly executes a foreign repository's code** (bounded, in a throwaway clone, as the worker user with network access). **E-44 widens the exposure:** the tidy-up fix runs execute the triaged repository's own build and test commands (not just the probe), as governed `FeatureWorkflow` children. Still operator-run only until E-57/E-21. **E-46 (2026-08-12)** adds no new execution of repository code: every scan signal is a blob read at the pinned commit. **E-46 plan 3 (2026-08-13)** adds no execution either: QS2 parses a committed Cobertura report rather than running the suite, and QS4 parses pipeline files rather than running them.
+- [ ] — **NFR-10** Assessment reproducibility — not falsifiable until the assessment exists; the deterministic half is E-41/E-46, the fused-layer variance half needs runs. **E-46 plan 3 (2026-08-13):** the deterministic half is now asserted for every pure signal module (`test_every_pure_signal_module_is_order_independent`), not only the capability chain.
 
 ---
 
@@ -938,7 +938,7 @@ the factory rather than as prompts.
   edit. Spec
   `docs/superpowers/specs/2026-08-10-assessment-workflow-edcr-shell-design.md`,
   plan `docs/superpowers/plans/2026-08-10-assessment-workflow-edcr-shell.md`.
-- [ ] ⚠️ **E-46 — scan phase** → FR-912. S1–S5 capability signals, SS1–SS4
+- [x] **E-46 — scan phase** → FR-912. S1–S5 capability signals, SS1–SS4
   security, QS1–QS4 QA. Cross-source confidence: three or more independent
   sources = high, two = medium, one = low — never the depth of one source. Memo
   key `(repository tree hash, signal version)` per FR-103, so re-assessing an
@@ -948,8 +948,17 @@ the factory rather than as prompts.
   (`src/sdlc/assessment/scan/`). **Plan 2 landed 2026-08-13:** S1, S3, S5 and
   the shared `naming.py` rules — the capability core, so `ScanResult.candidates`
   carries real merged candidates and the memo has its first production caller
-  (every plan-1 stub was refused by `store`'s not-MEASURED rule). Nine bodies
-  remain stubs naming plan 3. Two plan-level decisions: **S3 fails closed** on a
+  (every plan-1 stub was refused by `store`'s not-MEASURED rule). **Plan 3
+  landed 2026-08-13:** all thirteen signals compute or inherit; `OWED_BY` is
+  empty. The plan-3 decisions worth carrying: **P3-D3** — SS4 declares `consumes
+  (S2, S3)`, because `accessed_by` cites S3 and an undeclared read would also be
+  an unhashed input; **P3-D5** — a wave-2 signal is never memoized when its
+  upstream degraded (SS1 can be MEASURED while `input_validation` is
+  `not_collected` because S3 timed out); **P3-D7** — env drift is CI-vs-config,
+  because the declared-scope comparison BrownKit makes needs `/enrich`'s
+  `qa_scope` (E-56); and **P3-D12** — SS4 owns two categories (`data_sensitivity`
+  + `entity_access`) so an empty `accessed_by` cannot read as "no entry point
+  touches PII". Two plan-2 decisions: **S3 fails closed** on a
   recognized-but-unfingerprinted framework (P2-D1) — `_unmeasured_carries_no_payload`
   makes a partial Contract tier unrepresentable, and D5 prefers absent to
   partial; and the **name tables live in `naming.py`**, so S1 declares it as a
@@ -1263,10 +1272,11 @@ harder to install later:
    assess → fix → prove claim end to end, almost entirely deterministic, needing
    neither tenancy nor containment because it is operator-run. (Verification
    debt: the `TidyUpWorkflow` temporal e2e is deferred — see P5's note.)
-3. **E-47a → E-47b/E-47c (with E-46)** — `CapabilityMap`. Unblocks P2 brownfield
+3. **E-47a → E-47b/E-47c** — `CapabilityMap`. Unblocks P2 brownfield
    whether or not the audit ships, which makes it the highest-leverage item in
    §11. **OQ-6 settled 2026-08-08** — the blocker is cleared and the item is
-   ready to plan. Take **E-47a first**: it resolves identity, the other two
+   ready to plan. **E-46 landed 2026-08-13**, so the pairing is now just
+   E-47b/E-47c. Take **E-47a first**: it resolves identity, the other two
    attach findings to it, and it is the only one of the three that needs no
    proposer (pure matcher, synthetic-fingerprint tests). FR-102 still needs all
    three.
