@@ -13,7 +13,12 @@ from __future__ import annotations
 
 import posixpath
 import re
+from collections.abc import Mapping
 from typing import NamedTuple
+
+from ...measurement import Measurement
+from ..scan.sources import SOURCE_EXTENSIONS
+from .models import ReferenceGraph, UnresolvedEdge
 
 
 class ImportForm(NamedTuple):
@@ -118,3 +123,120 @@ def is_relative(form_name: str, target: str) -> bool:
     if form.relative is not None:
         return form.relative
     return target.startswith(".")
+
+
+# A directory is referenced through one of these when it is imported by name.
+_INDEX_NAMES: tuple[str, ...] = ("index", "__init__", "mod", "main")
+
+# Segment separators across the dotted/namespaced forms: a.b.c, A\B,
+# crate::a::b, example.com/pkg/svc.
+_SEGMENTS = re.compile(r"[.\\/]+|::")
+
+# Leading segments that name the current crate/package rather than a directory.
+_ROOT_WORDS: frozenset[str] = frozenset({"crate", "self", "super"})
+
+
+def _candidate_paths(fragment: str) -> tuple[str, ...]:
+    """Repo paths a extension-free fragment could name."""
+    if not fragment:
+        return ()
+    direct = tuple(f"{fragment}{ext}" for ext in SOURCE_EXTENSIONS)
+    indexed = tuple(f"{fragment}/{name}{ext}"
+                    for name in _INDEX_NAMES for ext in SOURCE_EXTENSIONS)
+    return direct + indexed
+
+
+def _relative_fragment(importer: str, target: str) -> str:
+    base = posixpath.dirname(importer)
+    if target.startswith("./") or target.startswith("../"):
+        return posixpath.normpath(posixpath.join(base, target))
+    if target.startswith("."):
+        # Python: one dot is "this package", each extra dot walks up one.
+        dots = len(target) - len(target.lstrip("."))
+        rest = target[dots:].replace(".", "/")
+        up = base
+        for _ in range(dots - 1):
+            up = posixpath.dirname(up)
+        return posixpath.normpath(posixpath.join(up, rest)) if rest else up
+    # rust `mod x;` and ruby require_relative: sibling of the importer.
+    return posixpath.normpath(posixpath.join(base, target))
+
+
+def _dotted_fragment(target: str) -> str:
+    parts = [p for p in _SEGMENTS.split(target) if p]
+    while parts and parts[0] in _ROOT_WORDS:
+        parts = parts[1:]
+    return "/".join(parts)
+
+
+def _matches(fragment: str, inventory: Mapping[str, str],
+             *, exact: bool) -> list[str]:
+    """Paths the fragment names. `exact` for relative imports (the fragment
+    is a full repo path); suffix matching for dotted ones."""
+    candidates = _candidate_paths(fragment)
+    if exact:
+        return sorted(c for c in candidates if c in inventory)
+    return sorted(
+        path for path in inventory
+        for candidate in candidates
+        if path == candidate or path.endswith(f"/{candidate}"))
+
+
+def build(inventory: Mapping[str, str]) -> ReferenceGraph:
+    """The reference graph over one tree. Only files whose extension is in
+    EXTRACTOR_EXTENSIONS are parsed; the rest are reported unparsed and can
+    never be called dead (D7 clause 1)."""
+    paths = sorted(inventory)
+    parsed = tuple(p for p in paths
+                   if extension_of(p) in EXTRACTOR_EXTENSIONS)
+    unparsed = tuple(p for p in paths
+                     if extension_of(p) not in EXTRACTOR_EXTENSIONS)
+
+    edges: set[tuple[str, str]] = set()
+    unresolved: list[UnresolvedEdge] = []
+    relative_total = relative_failed = 0
+
+    for path in parsed:
+        for form_name, target in extract(path, inventory[path]):
+            if target.strip(".") == "":
+                # A pure-dot target names the package itself, not a module to
+                # edge to (python_from's "." for `from . import name`); the
+                # name is captured separately by python_from_bare.
+                continue
+            relative = is_relative(form_name, target)
+            if relative:
+                relative_total += 1
+                fragment = _relative_fragment(path, target)
+            else:
+                fragment = _dotted_fragment(target)
+            found = [m for m in _matches(fragment, inventory, exact=relative)
+                     if m != path]
+            if len(found) == 1:
+                edges.add((path, found[0]))
+                continue
+            if len(found) > 1:
+                reason = "ambiguous_suffix"
+            elif relative:
+                reason = "no_matching_path"
+            else:
+                continue        # external package: expected, not a failure
+            if relative:
+                relative_failed += 1
+            unresolved.append(UnresolvedEdge(
+                source_path=path, target=target, form=form_name,
+                reason=reason, relative=relative))
+
+    if relative_total:
+        rate = Measurement.measured(relative_failed / relative_total)
+    else:
+        # P-D1: no relative imports is no EVIDENCE of extractor failure, not
+        # evidence of failure. The dead guard trips only on MEASURED.
+        rate = Measurement.not_collected(
+            "no relative imports in the tree to check resolution against")
+
+    return ReferenceGraph(
+        edges=tuple(sorted(edges)),
+        unresolved=tuple(sorted(
+            unresolved,
+            key=lambda u: (u.source_path, u.form, u.target, u.reason))),
+        parsed=parsed, unparsed=unparsed, unresolved_relative_rate=rate)
