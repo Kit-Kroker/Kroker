@@ -23,7 +23,9 @@ from .scan.models import (
     SignalSource, family_of,
 )
 from .scan.registry import SCAN_SIGNALS
-from .scan.signals import entrypoints, frontend, packages, schema, sensitivity
+from .scan.signals import (
+    entrypoints, frontend, packages, schema, sensitivity, testability,
+)
 from .scan.sources import SOURCE_EXTENSIONS
 
 _log = logging.getLogger(__name__)
@@ -67,7 +69,7 @@ async def assessment_resolve_tree(
 # is a KeyError in unbuilt_signal.
 BUILT: frozenset[ScanSignalId] = frozenset({
     ScanSignalId.S1, ScanSignalId.S2, ScanSignalId.S3, ScanSignalId.S4,
-    ScanSignalId.SS4,
+    ScanSignalId.SS4, ScanSignalId.QS3,
 })
 
 # Which plan owes each remaining signal's body.
@@ -76,7 +78,6 @@ OWED_BY: dict[ScanSignalId, str] = {
     ScanSignalId.SS3: "plan 3",
     ScanSignalId.QS1: "plan 3",
     ScanSignalId.QS2: "plan 3",
-    ScanSignalId.QS3: "plan 3",
     ScanSignalId.QS4: "plan 3",
 }
 
@@ -266,8 +267,19 @@ async def scan_coverage(inp: ScanSignalInput) -> SignalOutput:
 
 @activity.defn
 async def scan_testability(inp: ScanSignalInput) -> SignalOutput:
-    """QS3 -- testability findings. Body lands in plan 3."""
-    return unbuilt_signal(ScanSignalId.QS3)
+    """QS3 -- testability findings over production source blobs."""
+    if (hit := memo.load(ScanSignalId.QS3, inp.tree_hash)) is not None:
+        return hit
+    try:
+        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+        blobs, _ = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
+                                 SOURCE_EXTENSIONS)
+        out = testability.evaluate(blobs)
+    except Exception as exc:                        # noqa: BLE001
+        _log.warning("QS3 failed: %s", exc)
+        return failed_signal(ScanSignalId.QS3, exc)
+    memo.store(ScanSignalId.QS3, inp.tree_hash, out)
+    return out
 
 
 @activity.defn
