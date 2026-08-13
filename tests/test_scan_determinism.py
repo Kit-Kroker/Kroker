@@ -1,7 +1,15 @@
-"""NFR-10's deterministic half: the same tree yields a byte-identical
-ScanResult. Asserted on the SERIALIZED artifact, as E-47a asserts for
-identity allocation -- an equal-comparing model with a differently-ordered
-list is not the same artifact to a memo or a bundle."""
+"""NFR-10's deterministic half at the PURE-signal layer: the same tree yields
+byte-identical SignalOutput / MergeOutput artifacts across input orderings.
+
+These tests cover the capability CHAIN (S1 -> S3 -> S5) -- the part a memo
+caches and the part most exposed to discovery order. They do NOT construct a
+ScanResult; the workflow-level assembly (row order, the sources/candidates
+sorts in _scan) is deterministic because _scan sorts every list before it
+builds the artifact, and is exercised end-to-end by the temporal e2e
+(test_assessment_workflow_e2e.test_scan_phase_flips_terminal_status_to_partial).
+Asserting the serialized SignalOutput/MergeOutput is the same standard
+E-47a applies to identity allocation: an equal-comparing model with a
+differently-ordered list is not the same artifact to a memo or a bundle."""
 from __future__ import annotations
 
 import random
