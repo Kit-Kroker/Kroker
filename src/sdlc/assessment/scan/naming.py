@@ -127,5 +127,10 @@ def _strip_layer_suffix(name: str) -> str:
 def normalize(name: str) -> str:
     """The normalized form two candidates must share to be merged."""
     out = _strip_layer_suffix(name.strip())
-    out = out.strip("_-").lower()
+    # '.', '_' and '-' are all word separators in real identifiers (JS/TS file
+    # stems like `users.controller.ts`, snake_case, kebab-case). Strip them so
+    # a dotted stem reaches the same key as S1's directory: without '.', S3's
+    # `users.controller` -> `users.` shares no key with S1's `users/` -> `user`
+    # (review finding 3).
+    out = out.strip("_-.").lower()
     return singularize(out)

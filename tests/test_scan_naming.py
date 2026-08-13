@@ -77,6 +77,15 @@ def test_normalize_is_idempotent():
         assert normalize(normalize(name)) == normalize(name)
 
 
+def test_dotted_layer_suffixes_merge_with_the_package_directory():
+    """Review finding 3: a JS/TS stem like `users.controller` must reach the
+    same key as S1's `users/` directory or D8 corroboration is unreachable for
+    the JS/TS repos the docstring says Tier 0 receives. Without stripping '.',
+    the suffix strip leaves a trailing dot: `users.` != `user`."""
+    assert normalize("users.controller") == normalize("users") == "user"
+    assert normalize("orders.service") == normalize("orders") == "order"
+
+
 def test_the_name_tables_are_disjoint():
     """A word classified as both generic and layer would make S1's rule
     depend on check order (P2-D2)."""
