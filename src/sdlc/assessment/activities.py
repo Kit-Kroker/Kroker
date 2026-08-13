@@ -26,7 +26,7 @@ from .scan.models import (
 from .scan.registry import SCAN_SIGNALS
 from .scan.signals import (
     coverage as coverage_signal, entrypoints, frontend, packages, schema,
-    sensitivity, testability, tests_inventory,
+    sensitivity, security_static, testability, tests_inventory,
 )
 from .scan.sources import SOURCE_EXTENSIONS
 from .scan.testpaths import is_test_path
@@ -72,12 +72,12 @@ async def assessment_resolve_tree(
 # is a KeyError in unbuilt_signal.
 BUILT: frozenset[ScanSignalId] = frozenset({
     ScanSignalId.S1, ScanSignalId.S2, ScanSignalId.S3, ScanSignalId.S4,
-    ScanSignalId.SS4, ScanSignalId.QS1, ScanSignalId.QS2, ScanSignalId.QS3,
+    ScanSignalId.SS1, ScanSignalId.SS4, ScanSignalId.QS1, ScanSignalId.QS2,
+    ScanSignalId.QS3,
 })
 
 # Which plan owes each remaining signal's body.
 OWED_BY: dict[ScanSignalId, str] = {
-    ScanSignalId.SS1: "plan 3",
     ScanSignalId.SS3: "plan 3",
     ScanSignalId.QS4: "plan 3",
 }
@@ -241,8 +241,19 @@ async def scan_frontend(inp: ScanSignalInput) -> SignalOutput:
 
 @activity.defn
 async def scan_security_static(inp: ScanSignalInput) -> SignalOutput:
-    """SS1 -- TLS and input validation. Body lands in plan 3."""
-    return unbuilt_signal(ScanSignalId.SS1)
+    """SS1 -- TLS enforcement and input validation. Wave 2: consumes S3."""
+    if (hit := memo.load(ScanSignalId.SS1, inp.tree_hash)) is not None:
+        return hit
+    try:
+        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+        blobs, _ = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
+                                 SOURCE_EXTENSIONS)
+        out = security_static.evaluate(blobs, inp.upstream)
+    except Exception as exc:                        # noqa: BLE001
+        _log.warning("SS1 failed: %s", exc)
+        return failed_signal(ScanSignalId.SS1, exc)
+    memo.store(ScanSignalId.SS1, inp.tree_hash, out, inp.upstream)
+    return out
 
 
 @activity.defn
