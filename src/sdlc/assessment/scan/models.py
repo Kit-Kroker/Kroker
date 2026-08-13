@@ -343,6 +343,21 @@ CATEGORIES: dict[ScanSignalId, tuple[str, ...]] = {
 }
 
 
+def inherited_pending(category: str) -> Measurement:
+    """What a COMPUTED activity half puts on a category the INHERITED half
+    owns (D7).
+
+    A row must declare every category its signal owes, but an EXTENDED
+    signal's activity computes only its own half -- the workflow derives the
+    other from RepoTriage and folds it in. This placeholder is what fold_row
+    overwrites in the normal path, and what stays, honestly, when triage
+    produced no half at all.
+    """
+    return Measurement.not_collected(
+        f"{category}: inherited from triage and folded in by the workflow "
+        f"(D7); this row carries the activity's computed half only")
+
+
 class SecurityObservation(BaseModel):
     """SS1's and SS3's computed half: one security-relevant fact at one path.
 

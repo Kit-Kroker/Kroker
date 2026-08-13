@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 
+from collections.abc import Sequence
 from pydantic import BaseModel, Field
 from temporalio import activity
 
@@ -25,8 +26,10 @@ from .scan.models import (
 from .scan.registry import SCAN_SIGNALS
 from .scan.signals import (
     entrypoints, frontend, packages, schema, sensitivity, testability,
+    tests_inventory,
 )
 from .scan.sources import SOURCE_EXTENSIONS
+from .scan.testpaths import is_test_path
 
 _log = logging.getLogger(__name__)
 
@@ -69,14 +72,13 @@ async def assessment_resolve_tree(
 # is a KeyError in unbuilt_signal.
 BUILT: frozenset[ScanSignalId] = frozenset({
     ScanSignalId.S1, ScanSignalId.S2, ScanSignalId.S3, ScanSignalId.S4,
-    ScanSignalId.SS4, ScanSignalId.QS3,
+    ScanSignalId.SS4, ScanSignalId.QS1, ScanSignalId.QS3,
 })
 
 # Which plan owes each remaining signal's body.
 OWED_BY: dict[ScanSignalId, str] = {
     ScanSignalId.SS1: "plan 3",
     ScanSignalId.SS3: "plan 3",
-    ScanSignalId.QS1: "plan 3",
     ScanSignalId.QS2: "plan 3",
     ScanSignalId.QS4: "plan 3",
 }
@@ -142,6 +144,21 @@ def _source_blobs(repo_dir: str, commit_sha: str, paths: list[str],
             continue
         blobs[path] = text
     return blobs, [p for p in wanted if p not in blobs]
+
+
+def _blobs_for(repo_dir: str, commit_sha: str,
+               paths: Sequence[str]) -> dict[str, str]:
+    """path -> text for an explicit path list, size-guarded.
+
+    The companion to _source_blobs, which selects by extension. A config file,
+    a CI workflow and a coverage report have no extension in common, so the
+    signals that read them select by name and share this reader.
+    """
+    out: dict[str, str] = {}
+    for path, text in read_tree(repo_dir, commit_sha, sorted(paths)):
+        if not is_over_size_limit(text):
+            out[path] = text
+    return out
 
 
 @activity.defn
@@ -255,8 +272,21 @@ async def scan_sensitivity(inp: ScanSignalInput) -> SignalOutput:
 
 @activity.defn
 async def scan_tests_inventory(inp: ScanSignalInput) -> SignalOutput:
-    """QS1 -- test levels and test->file mapping. Body lands in plan 3."""
-    return unbuilt_signal(ScanSignalId.QS1)
+    """QS1 -- test levels and the test->file mapping. Reads only the test
+    files' blobs; the mapping targets come from the path list."""
+    if (hit := memo.load(ScanSignalId.QS1, inp.tree_hash)) is not None:
+        return hit
+    try:
+        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+        out = tests_inventory.evaluate(
+            paths,
+            _blobs_for(inp.repo_dir, inp.commit_sha,
+                       [p for p in paths if is_test_path(p)]))
+    except Exception as exc:                        # noqa: BLE001
+        _log.warning("QS1 failed: %s", exc)
+        return failed_signal(ScanSignalId.QS1, exc)
+    memo.store(ScanSignalId.QS1, inp.tree_hash, out)
+    return out
 
 
 @activity.defn
