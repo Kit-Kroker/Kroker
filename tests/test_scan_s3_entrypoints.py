@@ -127,6 +127,37 @@ def test_no_recognized_framework_is_a_gap_not_a_zero():
     assert out.sources == []
 
 
+def test_a_framework_mentioned_only_in_a_comment_or_string_is_not_detected():
+    """Review finding 4 / P2-D1: detection keys fail-closed, so it must be as
+    precise as extraction. A `# ported from django` comment, a string literal
+    holding a marker, or the marker table itself must NOT cost a repo its
+    whole Contract tier. Only an IMPORT counts."""
+    blobs = {
+        "src/notes.py": (
+            "# this module was ported from django years ago\n"
+            "MARKERS = ('from django', 'import django', 'org.springframework')\n"
+            "note = \"see fastapi docs\"\n"
+            "def add(a, b):\n    return a + b\n"),
+    }
+    supported, unsupported = entrypoints.detected(blobs)
+    assert supported == set()
+    assert unsupported == set()
+    out = entrypoints.evaluate(blobs)
+    assert out.row.collected.state is CollectionState.NOT_COLLECTED
+    assert "no recognized backend framework" in out.row.collected.reason
+
+
+def test_an_unfingerprinted_framework_imported_for_real_fails_closed():
+    """The corollary: a real `from django` import DOES trip detection, so the
+    repo loses its Contract tier until a fingerprint exists. This is the
+    behaviour the comment/string test above must not weaken."""
+    out = entrypoints.evaluate({
+        "src/app.py": "from django.conf import settings\n"
+                      "SECRET = settings.SECRET_KEY\n"})
+    assert out.row.collected.state is CollectionState.NOT_COLLECTED
+    assert "django" in out.row.collected.reason
+
+
 def test_the_row_reports_its_category_and_nothing_else():
     out = entrypoints.evaluate(FASTAPI)
     assert set(out.row.categories) == {C_BACKEND_ENTRY}

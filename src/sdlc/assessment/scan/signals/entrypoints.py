@@ -39,7 +39,11 @@ VERSION = 1
 class Framework(BaseModel):
     """One framework we can both DETECT and EXTRACT from."""
     name: str
-    detect: tuple[str, ...]      # substrings proving the framework is present
+    # regexes (MULTILINE) proving the framework is IMPORTED, not merely
+    # mentioned. Anchored to import/require/using lines so the marker table
+    # itself, a test fixture, or a `# ported from django` comment cannot trip
+    # fail-closed on a repo that does not use the framework (review finding 4).
+    detect: tuple[str, ...]
     pattern: str                 # regex; groups are (method, path) or (name,)
     kind: MemberKind
     method_group: int = 0        # 0 = no method group; the verb is implicit
@@ -53,54 +57,69 @@ class Detector(BaseModel):
     detect: tuple[str, ...]
 
 
+# Import-line anchors shared across languages. Each is a fragment the framework's
+# own import statement matches; detected() pins it to a line start so a bare
+# substring in a comment or string literal cannot match.
+_PY_IMPORT = r"(?m)^[ \t]*(?:from[ ]+{m}\b|import[ ]+{m}\b)"
+_ESM_IMPORT = r"(?m)^[ \t]*import\b[^\n]*\bfrom[ ]+['\"]{m}['\"]"
+_CJS_REQUIRE = r"(?m)^[ \t]*(?:const|let|var)[ ]+\w+[ ]*=[ ]*require\([ ]*['\"]{m}['\"]\s*\)"
+_GO_IMPORT = r'(?m)^[ \t]*"{m}"'
+_JAVA_IMPORT = r"(?m)^[ \t]*import[ ]+{m}"
+_CS_USING = r"(?m)^[ \t]*using[ ]+{m}"
+_PHP_USE = r"(?m)^[ \t]*use[ ]+{m}"
+
 # Extraction is deliberately conservative: a decorator or router call on one
 # line with a literal path. A route assembled at runtime is not extracted,
 # which is a miss, not a fabrication.
 FRAMEWORKS: tuple[Framework, ...] = (
     Framework(
         name="fastapi",
-        detect=("from fastapi", "import fastapi"),
+        detect=(_PY_IMPORT.format(m="fastapi"),),
         pattern=r"@(?:\w+)\.(get|post|put|patch|delete)\(\s*['\"]([^'\"]+)",
         kind=MemberKind.HTTP_ROUTE, method_group=1, value_group=2),
     Framework(
         name="flask",
-        detect=("from flask", "import flask"),
+        detect=(_PY_IMPORT.format(m="flask"),),
         pattern=r"@(?:\w+)\.route\(\s*['\"]([^'\"]+)",
         kind=MemberKind.HTTP_ROUTE, value_group=1),
     Framework(
         name="express",
-        detect=("require('express')", 'require("express")', "from 'express'",
-                'from "express"'),
+        detect=(_ESM_IMPORT.format(m="express"), _CJS_REQUIRE.format(m="express")),
         pattern=r"\b(?:app|router)\.(get|post|put|patch|delete)"
                 r"\(\s*['\"]([^'\"]+)",
         kind=MemberKind.HTTP_ROUTE, method_group=1, value_group=2),
     Framework(
         name="nestjs",
-        detect=("@nestjs/common",),
+        detect=(_ESM_IMPORT.format(m=r"@nestjs/common"),),
         pattern=r"@(Get|Post|Put|Patch|Delete)\(\s*['\"]?([^'\")]*)",
         kind=MemberKind.HTTP_ROUTE, method_group=1, value_group=2),
     Framework(
         name="click",
-        detect=("import click", "from click"),
+        detect=(_PY_IMPORT.format(m="click"),),
         pattern=r"@\w+\.command\([^)]*\)\s*\ndef\s+(\w+)",
         kind=MemberKind.CLI_COMMAND, value_group=1),
     Framework(
         name="celery",
-        detect=("from celery", "import celery"),
+        detect=(_PY_IMPORT.format(m="celery"),),
         pattern=r"@(?:shared_task|\w+\.task)\b[^\n]*\n(?:@[^\n]*\n)*"
                 r"def\s+(\w+)",
         kind=MemberKind.SCHEDULED_JOB, value_group=1),
 )
 
 UNSUPPORTED_FRAMEWORKS: tuple[Detector, ...] = (
-    Detector(name="django", detect=("from django", "import django")),
-    Detector(name="spring", detect=("org.springframework",)),
-    Detector(name="rails", detect=("Rails.application", "ActionController")),
-    Detector(name="laravel", detect=("Illuminate\\",)),
-    Detector(name="gin", detect=("github.com/gin-gonic/gin",)),
-    Detector(name="echo", detect=("github.com/labstack/echo",)),
-    Detector(name="aspnet", detect=("Microsoft.AspNetCore",)),
-    Detector(name="grpc", detect=("grpc.ServiceProvider", "grpc.Server(")),
+    Detector(name="django", detect=(_PY_IMPORT.format(m="django"),)),
+    Detector(name="spring", detect=(_JAVA_IMPORT.format(m=r"org\.springframework"),)),
+    Detector(name="rails", detect=(
+        r"(?m)^[ \t]*Rails\.application\b",
+        r"(?m)^[ \t]*(?:require|gem)[ ]+['\"]rails['\"]")),
+    Detector(name="laravel", detect=(_PHP_USE.format(m=r"Illuminate\\"),)),
+    Detector(name="gin", detect=(_GO_IMPORT.format(m=r"github\.com/gin-gonic/gin"),)),
+    Detector(name="echo", detect=(_GO_IMPORT.format(m=r"github\.com/labstack/echo"),)),
+    Detector(name="aspnet", detect=(_CS_USING.format(m=r"Microsoft\.AspNetCore"),)),
+    Detector(name="grpc", detect=(
+        _PY_IMPORT.format(m="grpc"),
+        r"(?m)^[ \t]*import[ ]+io\.grpc",
+        _CS_USING.format(m=r"Grpc\.(?:AspNetCore|Core)"))),
 )
 
 # Route segments that prefix an API rather than name a business operation.
@@ -121,12 +140,19 @@ _KIND_RULE: tuple[tuple[MemberKind, str], ...] = (
 
 
 def detected(blobs: Mapping[str, str]) -> tuple[set[str], set[str]]:
-    """(supported, unsupported) framework names present in the tree."""
+    """(supported, unsupported) framework names present in the tree.
+
+    A framework is "present" only if it is IMPORTED: each `detect` entry is a
+    MULTILINE regex pinned to a line start so the marker table itself, a test
+    fixture quoted as a string literal, or a `# ported from django` comment
+    cannot trip detection -- fail-closed keys off this, so it must be as
+    precise as the extraction (review finding 4, P2-D1).
+    """
     text = "\n".join(blobs[p] for p in sorted(blobs))
     supported = {f.name for f in FRAMEWORKS
-                 if any(marker in text for marker in f.detect)}
+                 if any(re.search(d, text) for d in f.detect)}
     unsupported = {d.name for d in UNSUPPORTED_FRAMEWORKS
-                   if any(marker in text for marker in d.detect)}
+                   if any(re.search(p, text) for p in d.detect)}
     return supported, unsupported
 
 
