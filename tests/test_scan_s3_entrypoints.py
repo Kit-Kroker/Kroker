@@ -170,6 +170,38 @@ def test_evidence_cites_the_file_and_line():
     assert any(e.path == "src/payments/api.py" and e.lines for e in ev)
 
 
+def test_a_bare_nestjs_decorator_with_no_path_is_a_miss_not_a_verb_candidate():
+    """Review finding 2 / D5: NestJS `@Get()` (no path) extracts an empty
+    value. Emitting it would build a 'GET ' member and group unrelated
+    controllers under the HTTP verb. A route whose path we cannot read is a
+    miss -- never a fabricated grouping at Contract-tier weight."""
+    blobs = {
+        "src/orders/orders.controller.ts": (
+            "import { Controller, Get } from '@nestjs/common'\n"
+            "@Controller('orders')\n"
+            "export class OrdersController {\n"
+            "  @Get()\n"
+            "  list() {}\n"
+            "}\n"),
+        "src/users/users.controller.ts": (
+            "import { Controller, Get, Post } from '@nestjs/common'\n"
+            "@Controller('users')\n"
+            "export class UsersController {\n"
+            "  @Get()\n"
+            "  list() {}\n"
+            "  @Post()\n"
+            "  create() {}\n"
+            "}\n"),
+    }
+    out = entrypoints.evaluate(blobs)
+    ids = set(_by_id(out))
+    assert "S3-get" not in ids and "S3-post" not in ids
+    # No member carries a bare verb with no route behind it.
+    for cand in out.sources:
+        for m in cand.members:
+            assert m.value.split()[0] != m.value.strip()
+
+
 def test_output_is_order_independent():
     """NFR-10: dict iteration order must not reach the artifact."""
     blobs = dict(FASTAPI)

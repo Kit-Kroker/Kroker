@@ -196,6 +196,16 @@ def _members(blobs: Mapping[str, str], active: set[str]
         for path in sorted(blobs):
             for match in regex.finditer(blobs[path]):
                 raw = match.group(framework.value_group)
+                # An empty extract (NestJS bare `@Get()`, or any decorator
+                # whose path group matched nothing) carries no contract: the
+                # real route is the controller's runtime base path, which we
+                # cannot read. Emitting it would mint a member named after the
+                # HTTP verb and group unrelated controllers by method -- a
+                # fabrication at Contract-tier weight, the harm D5 exists to
+                # prevent. A route we cannot extract is a miss, not a guess
+                # (review finding 2).
+                if not raw or not raw.strip():
+                    continue
                 if framework.method_group:
                     value = f"{match.group(framework.method_group).upper()} {raw}"
                 elif framework.kind is MemberKind.HTTP_ROUTE:
