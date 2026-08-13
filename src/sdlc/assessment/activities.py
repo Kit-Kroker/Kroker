@@ -23,7 +23,7 @@ from .scan.models import (
     SignalSource, family_of,
 )
 from .scan.registry import SCAN_SIGNALS
-from .scan.signals import entrypoints, packages, schema
+from .scan.signals import entrypoints, frontend, packages, schema
 from .scan.sources import SOURCE_EXTENSIONS
 
 _log = logging.getLogger(__name__)
@@ -66,12 +66,11 @@ async def assessment_resolve_tree(
 # "not implemented" forever, and removing the entry without landing the body
 # is a KeyError in unbuilt_signal.
 BUILT: frozenset[ScanSignalId] = frozenset({
-    ScanSignalId.S1, ScanSignalId.S2, ScanSignalId.S3,
+    ScanSignalId.S1, ScanSignalId.S2, ScanSignalId.S3, ScanSignalId.S4,
 })
 
 # Which plan owes each remaining signal's body.
 OWED_BY: dict[ScanSignalId, str] = {
-    ScanSignalId.S4: "plan 3",
     ScanSignalId.SS1: "plan 3",
     ScanSignalId.SS3: "plan 3",
     ScanSignalId.SS4: "plan 3",
@@ -207,8 +206,20 @@ async def scan_entrypoints(inp: ScanSignalInput) -> SignalOutput:
 
 @activity.defn
 async def scan_frontend(inp: ScanSignalInput) -> SignalOutput:
-    """S4 -- frontend entry points. Body lands in plan 3."""
-    return unbuilt_signal(ScanSignalId.S4)
+    """S4 -- frontend entry points. Reads package.json too: a dependency list
+    is the honest framework detector (an import can be a comment)."""
+    if (hit := memo.load(ScanSignalId.S4, inp.tree_hash)) is not None:
+        return hit
+    try:
+        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+        blobs, _ = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
+                                 frontend.FRONTEND_EXTENSIONS)
+        out = frontend.evaluate(blobs)
+    except Exception as exc:                        # noqa: BLE001
+        _log.warning("S4 failed: %s", exc)
+        return failed_signal(ScanSignalId.S4, exc)
+    memo.store(ScanSignalId.S4, inp.tree_hash, out)
+    return out
 
 
 @activity.defn
