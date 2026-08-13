@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from temporalio import activity
 
 from ..activities import _git
@@ -19,8 +19,8 @@ from ..triage.activities import tracked_paths
 from ..triage.gitread import is_over_size_limit, read_tree
 from .scan import memo
 from .scan.models import (
-    CATEGORIES, ScanSignalId, ScanSignalResult, SignalOutput, SignalSource,
-    SourceCandidate, family_of,
+    CATEGORIES, ScanSignalId, ScanSignalResult, ScanUpstream, SignalOutput,
+    SignalSource, family_of,
 )
 from .scan.registry import SCAN_SIGNALS
 from .scan.signals import entrypoints, packages
@@ -85,11 +85,12 @@ OWED_BY: dict[ScanSignalId, str] = {
 
 class ScanSignalInput(BaseModel):
     """One signal's activity input. `upstream` is empty for wave 1 and carries
-    the consumed signals' candidates for wave 2 (spec section 5)."""
+    the DECLARED consumed signals' payloads plus their row-level `collected`
+    for wave 2 (spec section 5, P3-D4)."""
     repo_dir: str
     commit_sha: str
     tree_hash: str
-    upstream: list[SourceCandidate] = []
+    upstream: ScanUpstream = Field(default_factory=ScanUpstream)
 
 
 def unbuilt_signal(signal_id: ScanSignalId) -> SignalOutput:

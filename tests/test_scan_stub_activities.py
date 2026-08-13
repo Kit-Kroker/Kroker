@@ -58,10 +58,11 @@ def test_stub_reports_every_category_it_owes(sid):
 
 @pytest.mark.parametrize("sid", _stub_signals(), ids=lambda s: s.value)
 def test_stub_carries_no_records(sid):
+    """Generic over SignalOutput's payload fields: a new payload type added
+    in a later plan is covered without editing this test."""
     out = scan_acts.unbuilt_signal(sid)
-    assert out.sources == []
-    assert out.data_sensitivity == []
-    assert out.testability == []
+    for name in (f for f in type(out).model_fields if f != "row"):
+        assert getattr(out, name) == [], name
 
 
 def test_stub_source_matches_its_registry_declaration():

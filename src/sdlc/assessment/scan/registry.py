@@ -88,6 +88,11 @@ _NAMING = f"{_SIG.rsplit('.', 1)[0]}.naming"     # scan.naming, shared by S3+S5
 # scan.sources, shared by S1+S3: both select blobs with SOURCE_EXTENSIONS, so
 # both must hash it or editing the tuple silently serves a stale S3 (D10).
 _SOURCES = f"{_SIG.rsplit('.', 1)[0]}.sources"
+# scan.testpaths, shared by S2 (exclude fixture schemas), QS1 (find tests),
+# QS2 (exclude tests from significant files) and QS3 (exclude tests from
+# testability findings). All four hash it, or editing a glob would move four
+# signals' output while their keys stood still (P3-D9, D10).
+_TESTPATHS = f"{_SIG.rsplit('.', 1)[0]}.testpaths"
 
 SCAN_SIGNALS: dict[ScanSignalId, ScanSignalSpec] = {
     ScanSignalId.S1: _spec(
@@ -96,14 +101,16 @@ SCAN_SIGNALS: dict[ScanSignalId, ScanSignalSpec] = {
         rule_modules=(_NAMING, _SOURCES)),
     ScanSignalId.S2: _spec(
         ScanSignalId.S2, 1, SignalSource.COMPUTED,
-        module=f"{_SIG}.schema", activity="scan_schema"),
+        module=f"{_SIG}.schema", activity="scan_schema",
+        rule_modules=(_NAMING, _SOURCES, _TESTPATHS)),
     ScanSignalId.S3: _spec(
         ScanSignalId.S3, 1, SignalSource.COMPUTED,
         module=f"{_SIG}.entrypoints", activity="scan_entrypoints",
         rule_modules=(_NAMING, _SOURCES)),
     ScanSignalId.S4: _spec(
         ScanSignalId.S4, 1, SignalSource.COMPUTED,
-        module=f"{_SIG}.frontend", activity="scan_frontend"),
+        module=f"{_SIG}.frontend", activity="scan_frontend",
+        rule_modules=(_NAMING,)),
     ScanSignalId.S5: _spec(
         ScanSignalId.S5, 1, SignalSource.COMPUTED,
         module="sdlc.assessment.scan.merge", in_workflow=True,
@@ -114,6 +121,7 @@ SCAN_SIGNALS: dict[ScanSignalId, ScanSignalSpec] = {
         ScanSignalId.SS1, 1, SignalSource.EXTENDED,
         module=f"{_SIG}.security_static", activity="scan_security_static",
         inherits=("triage:misconfig", "triage:secrets"),
+        rule_modules=(_SOURCES,),
         consumes=(ScanSignalId.S3,)),
     ScanSignalId.SS2: _spec(
         ScanSignalId.SS2, 1, SignalSource.INHERITED,
@@ -126,18 +134,25 @@ SCAN_SIGNALS: dict[ScanSignalId, ScanSignalSpec] = {
     ScanSignalId.SS4: _spec(
         ScanSignalId.SS4, 1, SignalSource.COMPUTED,
         module=f"{_SIG}.sensitivity", activity="scan_sensitivity",
-        consumes=(ScanSignalId.S2,)),
+        rule_modules=(_NAMING,),
+        # P3-D3: accessed_by cites S3, so S3 is DECLARED. _upstream_for
+        # filters on this tuple and rules_sha walks it, so an undeclared read
+        # would also be an unhashed input -- the D10 hazard exactly.
+        consumes=(ScanSignalId.S2, ScanSignalId.S3)),
     ScanSignalId.QS1: _spec(
         ScanSignalId.QS1, 1, SignalSource.EXTENDED,
         module=f"{_SIG}.tests_inventory", activity="scan_tests_inventory",
-        inherits=("triage:baseline",)),
+        inherits=("triage:baseline",),
+        rule_modules=(_SOURCES, _TESTPATHS)),
     ScanSignalId.QS2: _spec(
         ScanSignalId.QS2, 1, SignalSource.COMPUTED,
         module=f"{_SIG}.coverage", activity="scan_coverage",
+        rule_modules=(_SOURCES, _TESTPATHS),
         consumes=(ScanSignalId.QS1,)),
     ScanSignalId.QS3: _spec(
         ScanSignalId.QS3, 1, SignalSource.COMPUTED,
-        module=f"{_SIG}.testability", activity="scan_testability"),
+        module=f"{_SIG}.testability", activity="scan_testability",
+        rule_modules=(_SOURCES, _TESTPATHS)),
     ScanSignalId.QS4: _spec(
         ScanSignalId.QS4, 1, SignalSource.EXTENDED,
         module=f"{_SIG}.ci", activity="scan_ci",

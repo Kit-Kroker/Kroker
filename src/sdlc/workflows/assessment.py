@@ -45,7 +45,7 @@ with workflow.unsafe.imports_passed_through():
     from ..assessment.scan.merge import MergeOutput, merge
     from ..assessment.scan.models import (
         C_MERGE, CATEGORIES, SCAN_ORDER, ScanResult, ScanSignalId,
-        ScanSignalResult, SignalOutput, SignalSource, SourceCandidate,
+        ScanSignalResult, ScanUpstream, SignalOutput, SignalSource,
         family_of,
     )
     from ..assessment.scan.registry import SCAN_SIGNALS, WAVES
@@ -204,24 +204,30 @@ def _inherited_row(signal_id: ScanSignalId,
         producer=half.producer)
 
 
-def _upstream_for(signal_id: ScanSignalId,
-                  outputs: Mapping[ScanSignalId, SignalOutput]
-                  ) -> list[SourceCandidate]:
-    """The candidates one signal is allowed to read: only those produced by
-    the signals it declares in `consumes`.
+def upstream_for(signal_id: ScanSignalId,
+                 outputs: Mapping[ScanSignalId, SignalOutput]) -> ScanUpstream:
+    """Everything one signal is allowed to read: the payloads AND the row
+    states of the signals it declares in `consumes`.
 
     `consumes` already drives the fan-out wave (wave_of) and the memo key
     (rules_sha). Driving the payload from the SAME declaration makes reading
     undeclared data impossible rather than merely discouraged -- otherwise a
-    wave-2 signal could read an S1 candidate off `upstream` while declaring
-    only S3, and editing S1's pattern table would not move its memo key
-    (rules_sha walks `consumes`, which does not include S1). That is the
+    wave-2 signal could read an S1 candidate while declaring only S3, and
+    editing S1's pattern table would not move its memo key. That is the
     precise stale-cache setup D10 exists to prevent.
+
+    `collected` travels with the payloads so a dependent signal can tell "the
+    upstream measured zero" from "the upstream did not collect" (P3-D4) --
+    the same pair merge() has always taken.
     """
-    return [cand
-            for c_id in SCAN_SIGNALS[signal_id].consumes
-            if c_id in outputs
-            for cand in outputs[c_id].sources]
+    consumes = SCAN_SIGNALS[signal_id].consumes
+    present = [c for c in consumes if c in outputs]
+    return ScanUpstream(
+        sources=sorted((c for sid in present for c in outputs[sid].sources),
+                       key=lambda c: (c.signal.value, c.local_id)),
+        tests=sorted((t for sid in present for t in outputs[sid].tests),
+                     key=lambda t: t.path),
+        collected={sid: outputs[sid].row.collected for sid in present})
 
 
 def _merged_row(out: MergeOutput) -> ScanSignalResult:
@@ -352,9 +358,7 @@ class AssessmentWorkflow(GateHost):
                 arg = ScanSignalInput(
                     repo_dir=inp.repo_dir, commit_sha=triage.commit_sha,
                     tree_hash=tree.tree_hash,
-                    upstream=sorted(_upstream_for(sid, outputs),
-                                    key=lambda c: (c.signal.value,
-                                                   c.local_id)))
+                    upstream=upstream_for(sid, outputs))
                 jobs.append(run_or_degrade(
                     SCAN_ACTIVITIES[SCAN_SIGNALS[sid].activity], arg,
                     SCAN_ACT,
@@ -381,11 +385,8 @@ class AssessmentWorkflow(GateHost):
         # filtered by its declared `consumes` (the same declaration that
         # drives its wave and its memo key), so it cannot read undeclared
         # data. Its candidates are the phase's headline output.
-        merged = merge(
-            _upstream_for(ScanSignalId.S5, outputs),
-            {sid: outputs[sid].row.collected
-             for sid in SCAN_SIGNALS[ScanSignalId.S5].consumes
-             if sid in outputs})
+        merged_upstream = upstream_for(ScanSignalId.S5, outputs)
+        merged = merge(merged_upstream.sources, merged_upstream.collected)
         outputs[ScanSignalId.S5] = SignalOutput(row=_merged_row(merged))
 
         # Activity signals get their inherited half folded in (D7); the
@@ -406,7 +407,21 @@ class AssessmentWorkflow(GateHost):
                 key=lambda r: (r.classification.value, r.entity)),
             testability=sorted(
                 (f for out in outputs.values() for f in out.testability),
-                key=lambda f: (f.path, f.pattern, f.key)))
+                key=lambda f: (f.path, f.pattern, f.key)),
+            security=sorted(
+                (o for out in outputs.values() for o in out.security),
+                key=lambda o: (o.signal.value, o.category, o.path, o.rule,
+                               o.line or 0)),
+            tests=sorted((t for out in outputs.values() for t in out.tests),
+                         key=lambda t: t.path),
+            coverage=sorted(
+                (c for out in outputs.values() for c in out.coverage),
+                key=lambda c: (c.scope, c.path)),
+            ci=sorted((c for out in outputs.values() for c in out.ci),
+                      key=lambda c: (c.workflow, c.order, c.stage)),
+            environments=sorted(
+                (e for out in outputs.values() for e in out.environments),
+                key=lambda e: e.name))
         measured = sum(
             1 for r in rows
             if r.collected.state is CollectionState.MEASURED)

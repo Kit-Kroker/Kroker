@@ -342,6 +342,208 @@ CATEGORIES: dict[ScanSignalId, tuple[str, ...]] = {
 }
 
 
+class SecurityObservation(BaseModel):
+    """SS1's and SS3's computed half: one security-relevant fact at one path.
+
+    `signal` is carried because the two signals SHARE ScanResult.security and
+    _unmeasured_carries_no_payload discriminates a row's own records by
+    exactly that attribute -- the same shape S1-S4 use to share `sources`
+    (P3-D1).
+
+    `severity_hint`, never `severity`: BrownKit's own rule is that scan emits
+    hints and /assess assigns severity (E-49). A field called `severity` would
+    invite a consumer to treat a pattern match as a rating.
+    """
+    signal: ScanSignalId
+    category: str
+    rule: str
+    detail: str
+    severity_hint: Literal["info", "low", "medium", "high", "critical"]
+    path: str
+    line: int | None = None
+    evidence: str = ""              # verbatim quote from path@commit_sha
+    key: str = ""                   # rule-scoped discriminator (E-44 D3)
+    confidence: Confidence
+
+    @model_validator(mode="after")
+    def _category_is_owed_by_its_signal(self) -> "SecurityObservation":
+        if self.category not in CATEGORIES[self.signal]:
+            raise ValueError(
+                f"{self.signal.value} observation names category "
+                f"{self.category!r}, which it does not owe "
+                f"{CATEGORIES[self.signal]} -- CATEGORIES is the one "
+                f"declaration")
+        return self
+
+
+def security_identity(o: SecurityObservation) -> str:
+    """The identity a delta matches on. Excludes `line`, exactly as
+    finding_identity and testability_identity do: a fix landing above an
+    observation shifts its line, and a line-keyed identity would report a
+    phantom resolved+new pair (E-44 D3)."""
+    return f"{o.signal.value}:{o.rule}:{o.path}:{o.key}"
+
+
+class TestLevel(str, Enum):
+    """BrownKit's six levels plus UNKNOWN.
+
+    UNKNOWN is the load-bearing member: a test-shaped file whose level no rule
+    decided must not default to `unit`, which would silently inflate the
+    unit-test count in a product that sells measurement (FR-915's spirit
+    applied to a classification rather than a number).
+    """
+    UNIT = "unit"
+    INTEGRATION = "integration"
+    CONTRACT = "contract"
+    E2E = "e2e"
+    PERFORMANCE = "performance"
+    MANUAL = "manual"
+    UNKNOWN = "unknown"
+
+
+class TestFileRecord(BaseModel):
+    """QS1's computed half: one test file, its level, and what it covers."""
+    path: str
+    level: TestLevel
+    rule: str                       # the rule that decided the level
+    framework: str = ""             # "" when no framework signature matched
+    covers: list[str] = Field(default_factory=list)
+    mapping_rule: str               # naming_convention | co_location | unmapped
+    confidence: Confidence
+
+    @model_validator(mode="after")
+    def _mapping_rule_agrees_with_covers(self) -> "TestFileRecord":
+        if self.mapping_rule == "unmapped" and self.covers:
+            raise ValueError(
+                f"{self.path}: mapping_rule=unmapped but covers "
+                f"{self.covers} -- a mapping that produced a file is not an "
+                f"absent mapping")
+        if self.mapping_rule != "unmapped" and not self.covers:
+            raise ValueError(
+                f"{self.path}: mapping_rule={self.mapping_rule!r} produced no "
+                f"covers -- say `unmapped`, so QS2's proxy cannot read an "
+                f"empty mapping as a mapping to nothing")
+        return self
+
+    @model_validator(mode="after")
+    def _canonicalize(self) -> "TestFileRecord":
+        self.covers = sorted(set(self.covers))
+        return self
+
+
+class CoverageRecord(BaseModel):
+    """QS2. Never a bare percentage: BrownKit's acceptance gate 5 requires
+    every coverage record to carry its source and confidence, and D12 forbids
+    running the suite -- so `proxy` is a real and frequent answer here, not an
+    edge case."""
+    scope: Literal["file", "package"]
+    path: str
+    covered: Measurement            # percent in [0, 100]
+    source: Literal["report", "proxy"]
+    tool: str = ""                  # "cobertura" for a report, "" for a proxy
+    confidence: Confidence
+
+    @model_validator(mode="after")
+    def _source_fields_agree(self) -> "CoverageRecord":
+        if self.source == "proxy" and self.confidence is not Confidence.LOW:
+            raise ValueError(
+                "a proxy coverage record is LOW confidence by construction "
+                "(D12) -- tested_files/significant_files is not a measurement "
+                "of coverage, and a HIGH-confidence proxy would read as one")
+        if self.source == "report" and not self.tool:
+            raise ValueError(
+                "a report coverage record must name the tool that produced "
+                "it -- 'source: <tool>' is BrownKit's own rule")
+        return self
+
+
+class CiStageRecord(BaseModel):
+    """QS4's stages. `order` is the position within its workflow file, so a
+    reader sees the pipeline's shape without re-parsing it."""
+    workflow: str                   # path of the CI file
+    stage: str                      # job / stage id
+    order: int
+    runs_tests: bool
+    test_levels: list[TestLevel] = Field(default_factory=list)
+    deploys_to: str = ""            # environment name; "" when it does not
+    # A required check is a branch-protection setting, not a tracked file, so
+    # it is not readable at a pinned commit. not_collected, never False --
+    # "this job does not block merges" and "we cannot see what blocks merges"
+    # are different facts (FR-915). E-59's app install is what makes it
+    # measurable, with no schema change here.
+    blocking: Measurement
+
+    @model_validator(mode="after")
+    def _levels_only_when_it_tests(self) -> "CiStageRecord":
+        if self.test_levels and not self.runs_tests:
+            raise ValueError(
+                f"{self.stage}: declares test levels but runs_tests is False")
+        return self
+
+
+CiStageRecord.__test__ = False
+
+
+class EnvironmentRecord(BaseModel):
+    """QS4's env_drift (P3-D7): one environment name and where the repository
+    declares it. `drifted` is DERIVED from the two booleans, never assigned --
+    D8's rule applied one level down."""
+    name: str
+    in_ci: bool                     # named by a CI job's deploy target
+    in_config: bool                 # named by a committed config / env file
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _declared_somewhere(self) -> "EnvironmentRecord":
+        if not self.in_ci and not self.in_config:
+            raise ValueError(
+                f"{self.name!r} is declared nowhere -- an environment no side "
+                f"names is not an environment, it is an empty record")
+        return self
+
+    @property
+    def drifted(self) -> bool:
+        return self.in_ci != self.in_config
+
+
+class ScanUpstream(BaseModel):
+    """Everything a signal may read from the signals it declares in
+    `consumes` (D10, P3-D4).
+
+    One field per payload kind, so a new dependent signal is a registry edit
+    rather than a new activity-input field. `collected` travels beside the
+    payloads because an empty list cannot distinguish "the upstream measured
+    zero" from "the upstream did not collect" -- the distinction section 5
+    requires every wave-2 signal to make, and the reason merge() already takes
+    both.
+    """
+    sources: list[SourceCandidate] = Field(default_factory=list)
+    tests: list[TestFileRecord] = Field(default_factory=list)
+    collected: dict[ScanSignalId, Measurement] = Field(default_factory=dict)
+
+    def measured(self, signal_id: ScanSignalId) -> bool:
+        """Whether a consumed signal collected. False when it is absent from
+        the map: an upstream that never reported is not one that reported
+        nothing."""
+        m = self.collected.get(signal_id)
+        return m is not None and m.state is CollectionState.MEASURED
+
+    def gap(self, signal_id: ScanSignalId, category: str) -> Measurement:
+        """The not_collected a dependent category reports when its input did
+        not collect, carrying the upstream's own reason so the assessment says
+        WHY and not merely THAT (section 5, D5)."""
+        m = self.collected.get(signal_id)
+        why = (m.reason if m is not None and m.reason
+               else f"{signal_id.value} did not report")
+        return Measurement.not_collected(
+            f"{category}: depends on {signal_id.value}, which did not "
+            f"collect ({why})")
+
+
+TestLevel.__test__ = False
+TestFileRecord.__test__ = False
+
+
 class InheritedProducer(BaseModel):
     """D2. Which producer already recorded this fact, and which findings of
     its this row cites. Findings are cited, never copied: two copies in the
@@ -407,17 +609,24 @@ class ScanSignalResult(BaseModel):
         return self
 
 
-# Which ScanResult field each signal's payload lands in. Declared once so
+# Which ScanResult field(s) each signal's payload lands in. Declared once so
 # _unmeasured_carries_no_payload can check the right field per signal rather
-# than a hardcoded pairing in the validator.
-PAYLOAD_FIELD: dict[ScanSignalId, str] = {
-    ScanSignalId.S1: "sources",
-    ScanSignalId.S2: "sources",
-    ScanSignalId.S3: "sources",
-    ScanSignalId.S4: "sources",
-    ScanSignalId.S5: "candidates",
-    ScanSignalId.SS4: "data_sensitivity",
-    ScanSignalId.QS3: "testability",
+# than a hardcoded pairing in the validator. A TUPLE per signal because QS4
+# owns two payloads whose shapes share nothing (P3-D2); SS2 owns none, since
+# D12 cut its computed half.
+PAYLOAD_FIELD: dict[ScanSignalId, tuple[str, ...]] = {
+    ScanSignalId.S1: ("sources",),
+    ScanSignalId.S2: ("sources",),
+    ScanSignalId.S3: ("sources",),
+    ScanSignalId.S4: ("sources",),
+    ScanSignalId.S5: ("candidates",),
+    ScanSignalId.SS1: ("security",),
+    ScanSignalId.SS3: ("security",),
+    ScanSignalId.SS4: ("data_sensitivity",),
+    ScanSignalId.QS1: ("tests",),
+    ScanSignalId.QS2: ("coverage",),
+    ScanSignalId.QS3: ("testability",),
+    ScanSignalId.QS4: ("ci", "environments"),
 }
 
 
@@ -429,6 +638,11 @@ class SignalOutput(BaseModel):
     sources: list[SourceCandidate] = Field(default_factory=list)
     data_sensitivity: list[SensitivityRecord] = Field(default_factory=list)
     testability: list[TestabilityFinding] = Field(default_factory=list)
+    security: list[SecurityObservation] = Field(default_factory=list)
+    tests: list[TestFileRecord] = Field(default_factory=list)
+    coverage: list[CoverageRecord] = Field(default_factory=list)
+    ci: list[CiStageRecord] = Field(default_factory=list)
+    environments: list[EnvironmentRecord] = Field(default_factory=list)
 
 
 class ScanResult(BaseModel):
@@ -437,6 +651,11 @@ class ScanResult(BaseModel):
     candidates: list[ScanCandidate] = Field(default_factory=list)
     data_sensitivity: list[SensitivityRecord] = Field(default_factory=list)
     testability: list[TestabilityFinding] = Field(default_factory=list)
+    security: list[SecurityObservation] = Field(default_factory=list)
+    tests: list[TestFileRecord] = Field(default_factory=list)
+    coverage: list[CoverageRecord] = Field(default_factory=list)
+    ci: list[CiStageRecord] = Field(default_factory=list)
+    environments: list[EnvironmentRecord] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _signals_are_the_whole_set(self) -> "ScanResult":
@@ -451,19 +670,20 @@ class ScanResult(BaseModel):
     @model_validator(mode="after")
     def _unmeasured_carries_no_payload(self) -> "ScanResult":
         by_id = {s.signal: s for s in self.signals}
-        for signal_id, field_name in PAYLOAD_FIELD.items():
+        for signal_id, field_names in PAYLOAD_FIELD.items():
             row = by_id[signal_id]
             if row.collected.state is CollectionState.MEASURED:
                 continue
-            # The field can hold other signals' records too (S1-S4 all land
-            # in `sources`), so only this signal's own records are checked.
-            payload = getattr(self, field_name)
-            mine = [r for r in payload
-                    if getattr(r, "signal", signal_id) is signal_id]
-            if mine:
-                raise ValueError(
-                    f"{signal_id.value} is {row.collected.state.value} but "
-                    f"carries {len(mine)} record(s) in {field_name!r} -- a "
-                    f"signal that did not run has no records; partial output "
-                    f"is UNKNOWN")
+            for field_name in field_names:
+                # A field can hold other signals' records too (S1-S4 share
+                # `sources`, SS1+SS3 share `security`), so only this signal's
+                # own records are checked.
+                mine = [r for r in getattr(self, field_name)
+                        if getattr(r, "signal", signal_id) is signal_id]
+                if mine:
+                    raise ValueError(
+                        f"{signal_id.value} is {row.collected.state.value} "
+                        f"but carries {len(mine)} record(s) in "
+                        f"{field_name!r} -- a signal that did not run has no "
+                        f"records; partial output is UNKNOWN")
         return self

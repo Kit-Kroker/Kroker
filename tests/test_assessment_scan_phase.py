@@ -17,8 +17,8 @@ from sdlc.triage.models import (
     FixClass, Readiness, RepoTriage, SignalResult, TriageFinding, Verdict,
 )
 from sdlc.workflows.assessment import (
-    ScanOutcome, _collected_from_categories, _inherited_row, _upstream_for,
-    fold_row, skipped_scan_signal,
+    ScanOutcome, _collected_from_categories, _inherited_row, fold_row,
+    skipped_scan_signal, upstream_for,
 )
 
 
@@ -173,11 +173,11 @@ def test_upstream_for_returns_only_declared_consumes_candidates():
                                       sources=[_candidate(ScanSignalId.S4, "S4-shop")]),
     }
     # SS1 consumes only S3.
-    assert [c.local_id for c in _upstream_for(ScanSignalId.SS1, outputs)] \
+    assert [c.local_id for c in upstream_for(ScanSignalId.SS1, outputs).sources] \
         == ["S3-pay"]
-    # SS4 consumes only S2.
-    assert [c.local_id for c in _upstream_for(ScanSignalId.SS4, outputs)] \
-        == ["S2-orders"]
+    # SS4 consumes S2 and S3 (P3-D3).
+    assert [c.local_id for c in upstream_for(ScanSignalId.SS4, outputs).sources] \
+        == ["S2-orders", "S3-pay"]
 
 
 def test_upstream_for_a_wave_one_signal_is_empty():
@@ -186,7 +186,8 @@ def test_upstream_for_a_wave_one_signal_is_empty():
     outputs = {ScanSignalId.S1: SignalOutput(
         row=_measured_row(ScanSignalId.S1),
         sources=[_candidate(ScanSignalId.S1, "S1-pay")])}
-    assert _upstream_for(ScanSignalId.S3, outputs) == []
+    up = upstream_for(ScanSignalId.S3, outputs)
+    assert up.sources == [] and up.tests == [] and up.collected == {}
 
 
 def test_s5_row_is_built_from_the_merge_not_from_a_stub():
