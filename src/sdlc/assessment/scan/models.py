@@ -312,7 +312,8 @@ C_EXPOSED_PORTS = "exposed_ports"                # SS3, computed
 C_ENV_DIVERGENCE = "env_divergence"              # SS3, computed
 C_DB_SECURITY = "db_security"                    # SS3, computed
 C_LOG_MASKING = "log_masking"                    # SS3, computed
-C_DATA_SENSITIVITY = "data_sensitivity"          # SS4
+C_DATA_SENSITIVITY = "data_sensitivity"          # SS4, computed
+C_ENTITY_ACCESS = "entity_access"                # SS4, computed from S3
 
 C_TESTS_PRESENT = "tests_present"                # QS1, inherited
 C_TEST_LEVELS = "test_levels"                    # QS1, computed
@@ -334,7 +335,7 @@ CATEGORIES: dict[ScanSignalId, tuple[str, ...]] = {
     ScanSignalId.SS2: (C_DIRECT_DEPS,),
     ScanSignalId.SS3: (C_FRAMEWORK_DEFAULTS, C_EXPOSED_PORTS,
                        C_ENV_DIVERGENCE, C_DB_SECURITY, C_LOG_MASKING),
-    ScanSignalId.SS4: (C_DATA_SENSITIVITY,),
+    ScanSignalId.SS4: (C_DATA_SENSITIVITY, C_ENTITY_ACCESS),
     ScanSignalId.QS1: (C_TESTS_PRESENT, C_TEST_LEVELS, C_TEST_MAPPING),
     ScanSignalId.QS2: (C_COVERAGE,),
     ScanSignalId.QS3: (C_TESTABILITY,),

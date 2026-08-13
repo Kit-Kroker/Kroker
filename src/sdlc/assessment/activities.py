@@ -23,7 +23,7 @@ from .scan.models import (
     SignalSource, family_of,
 )
 from .scan.registry import SCAN_SIGNALS
-from .scan.signals import entrypoints, frontend, packages, schema
+from .scan.signals import entrypoints, frontend, packages, schema, sensitivity
 from .scan.sources import SOURCE_EXTENSIONS
 
 _log = logging.getLogger(__name__)
@@ -67,13 +67,13 @@ async def assessment_resolve_tree(
 # is a KeyError in unbuilt_signal.
 BUILT: frozenset[ScanSignalId] = frozenset({
     ScanSignalId.S1, ScanSignalId.S2, ScanSignalId.S3, ScanSignalId.S4,
+    ScanSignalId.SS4,
 })
 
 # Which plan owes each remaining signal's body.
 OWED_BY: dict[ScanSignalId, str] = {
     ScanSignalId.SS1: "plan 3",
     ScanSignalId.SS3: "plan 3",
-    ScanSignalId.SS4: "plan 3",
     ScanSignalId.QS1: "plan 3",
     ScanSignalId.QS2: "plan 3",
     ScanSignalId.QS3: "plan 3",
@@ -236,8 +236,20 @@ async def scan_config_infra(inp: ScanSignalInput) -> SignalOutput:
 
 @activity.defn
 async def scan_sensitivity(inp: ScanSignalInput) -> SignalOutput:
-    """SS4 -- data sensitivity classification. Body lands in plan 3."""
-    return unbuilt_signal(ScanSignalId.SS4)
+    """SS4 -- data sensitivity. Wave 2: consumes S2's tables and S3's entry
+    points, so its output is only cacheable when both collected (P3-D5)."""
+    if (hit := memo.load(ScanSignalId.SS4, inp.tree_hash)) is not None:
+        return hit
+    try:
+        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+        blobs, _ = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
+                                 SOURCE_EXTENSIONS + schema.EXTRA_EXTENSIONS)
+        out = sensitivity.evaluate(blobs, inp.upstream)
+    except Exception as exc:                        # noqa: BLE001
+        _log.warning("SS4 failed: %s", exc)
+        return failed_signal(ScanSignalId.SS4, exc)
+    memo.store(ScanSignalId.SS4, inp.tree_hash, out, inp.upstream)
+    return out
 
 
 @activity.defn
