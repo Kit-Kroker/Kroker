@@ -69,7 +69,7 @@ def test_stub_source_matches_its_registry_declaration():
     """An EXTENDED signal's stub still declares EXTENDED; the workflow folds
     the inherited producer in (D7), so the activity's own row is COMPUTED-
     shaped and carries no producer."""
-    out = scan_acts.unbuilt_signal(ScanSignalId.SS3)
+    out = scan_acts.unbuilt_signal(ScanSignalId.QS4)
     assert out.row.source is SignalSource.COMPUTED
     assert out.row.producer is None
-    assert SCAN_SIGNALS[ScanSignalId.SS3].source is SignalSource.EXTENDED
+    assert SCAN_SIGNALS[ScanSignalId.QS4].source is SignalSource.EXTENDED

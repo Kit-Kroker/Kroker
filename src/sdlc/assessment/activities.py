@@ -25,8 +25,9 @@ from .scan.models import (
 )
 from .scan.registry import SCAN_SIGNALS
 from .scan.signals import (
-    coverage as coverage_signal, entrypoints, frontend, packages, schema,
-    sensitivity, security_static, testability, tests_inventory,
+    config_infra, coverage as coverage_signal, entrypoints, frontend,
+    packages, schema, sensitivity, security_static, testability,
+    tests_inventory,
 )
 from .scan.sources import SOURCE_EXTENSIONS
 from .scan.testpaths import is_test_path
@@ -72,13 +73,12 @@ async def assessment_resolve_tree(
 # is a KeyError in unbuilt_signal.
 BUILT: frozenset[ScanSignalId] = frozenset({
     ScanSignalId.S1, ScanSignalId.S2, ScanSignalId.S3, ScanSignalId.S4,
-    ScanSignalId.SS1, ScanSignalId.SS4, ScanSignalId.QS1, ScanSignalId.QS2,
-    ScanSignalId.QS3,
+    ScanSignalId.SS1, ScanSignalId.SS3, ScanSignalId.SS4, ScanSignalId.QS1,
+    ScanSignalId.QS2, ScanSignalId.QS3,
 })
 
 # Which plan owes each remaining signal's body.
 OWED_BY: dict[ScanSignalId, str] = {
-    ScanSignalId.SS3: "plan 3",
     ScanSignalId.QS4: "plan 3",
 }
 
@@ -258,8 +258,25 @@ async def scan_security_static(inp: ScanSignalInput) -> SignalOutput:
 
 @activity.defn
 async def scan_config_infra(inp: ScanSignalInput) -> SignalOutput:
-    """SS3 -- ports, env divergence, DB security, log masking. Plan 3."""
-    return unbuilt_signal(ScanSignalId.SS3)
+    """SS3 -- ports, env divergence, DB security, log masking.
+
+    Reads config and infrastructure paths (which have no single extension)
+    plus source blobs, because a log call lives in code.
+    """
+    if (hit := memo.load(ScanSignalId.SS3, inp.tree_hash)) is not None:
+        return hit
+    try:
+        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+        wanted = sorted({p for p in paths
+                         if config_infra.is_config_path(p)
+                         or p.endswith(SOURCE_EXTENSIONS)})
+        out = config_infra.evaluate(
+            _blobs_for(inp.repo_dir, inp.commit_sha, wanted))
+    except Exception as exc:                        # noqa: BLE001
+        _log.warning("SS3 failed: %s", exc)
+        return failed_signal(ScanSignalId.SS3, exc)
+    memo.store(ScanSignalId.SS3, inp.tree_hash, out)
+    return out
 
 
 @activity.defn
