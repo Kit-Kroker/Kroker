@@ -45,13 +45,31 @@ class MergeOutput(BaseModel):
     collected: Measurement
 
 
+def _paths(members: frozenset[CandidateMember]) -> frozenset[str]:
+    """The file paths a group's members cite. A member with no path carries no
+    locational evidence, so it neither causes nor prevents an overlap."""
+    return frozenset(m.path for m in members if m.path)
+
+
 def _overlaps(a: frozenset[CandidateMember],
               b: frozenset[CandidateMember]) -> bool:
-    """Sharing ANY member is enough to flag. Deliberately generous: an
-    over-flag costs E-48 one decision it was going to make anyway, while an
-    under-flag is a silent collapse -- the exact failure rule 2 exists to
-    prevent."""
-    return bool(a & b)
+    """Two differently-named candidates that cite the SAME file path cannot be
+    merged and must not be silently split either: flag both for E-48 to settle
+    (D9 rule 2).
+
+    Overlap is on PATH, not whole-member equality. Cross-source members are
+    kind-disjoint (S1 emits package/file paths, S3 emits routes), so two
+    differently-named groups never share a whole member -- whole-member overlap
+    could never fire in production, and the flag was dead (review finding 6).
+    Two groups that lay claim to the same FILE is the real signal.
+    """
+    return bool(_paths(a) & _paths(b))
+
+
+def _dup_sort_key(candidate_id: str) -> int:
+    """Order candidate ids numerically so C-100 sorts after C-99, not before
+    it (review finding 8)."""
+    return int(candidate_id.rsplit("-", 1)[-1])
 
 
 def merge(sources: Sequence[SourceCandidate],
@@ -83,9 +101,10 @@ def merge(sources: Sequence[SourceCandidate],
             members=sorted(member_sets[index],
                            key=CandidateMember.sort_key),
             possible_duplicate_of=sorted(
-                ids[other] for other in range(len(ordered))
-                if other != index
-                and _overlaps(member_sets[index], member_sets[other]))))
+                (ids[other] for other in range(len(ordered))
+                 if other != index
+                 and _overlaps(member_sets[index], member_sets[other])),
+                key=_dup_sort_key)))
 
     if candidates:
         return MergeOutput(candidates=candidates,

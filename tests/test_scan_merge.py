@@ -18,8 +18,12 @@ def _sc(signal: ScanSignalId, slug: str, name: str,
     return SourceCandidate(
         signal=signal, local_id=f"{signal.value}-{slug}", name=name,
         rule="r", detail="d", confidence_contribution=Confidence.LOW,
+        # A path is required for the merge's path-based overlap to mean
+        # anything: two differently-named candidates collide on the file they
+        # both claim (review finding 6).
         members=members or [CandidateMember(kind=MemberKind.PACKAGE_PATH,
-                                            value=f"src/{slug}")])
+                                            value=f"src/{slug}",
+                                            path=f"src/{slug}")])
 
 
 def test_three_sources_on_one_name_merge_to_high():
@@ -52,7 +56,8 @@ def test_overlapping_members_under_different_names_are_not_collapsed():
     """D9 rule 2, ported verbatim: emit both, flag each. /discover decides
     MERGE vs SPLIT -- S5 never has to be right, only never silently wrong."""
     shared = CandidateMember(kind=MemberKind.FILE_PATH,
-                             value="src/billing/core.py")
+                             value="src/billing/core.py",
+                             path="src/billing/core.py")
     out = merge([_sc(ScanSignalId.S1, "payments", "payments", [shared]),
                  _sc(ScanSignalId.S3, "refund", "Refunds", [shared])],
                 MEASURED)
@@ -125,3 +130,35 @@ def test_output_is_order_independent():
     a = merge(args, MEASURED)
     b = merge(list(reversed(args)), MEASURED)
     assert a.model_dump_json() == b.model_dump_json()
+
+
+def test_two_groups_sharing_a_file_path_are_flagged_as_duplicates():
+    """Review finding 6: D9 rule 2 must be ARMED with members evaluate()
+    actually emits. An S1 FILE_PATH and an S3 HTTP_ROUTE that cite the same
+    file but group it under different names is the real overlap -- cross-
+    source members are kind-disjoint, so whole-member equality never fired."""
+    file = CandidateMember(kind=MemberKind.FILE_PATH,
+                           value="src/billing/core.py",
+                           path="src/billing/core.py")
+    route = CandidateMember(kind=MemberKind.HTTP_ROUTE, value="POST /refund",
+                            path="src/billing/core.py", line=12)
+    out = merge([
+        SourceCandidate(signal=ScanSignalId.S1, local_id="S1-payments",
+                        name="payments", rule="r", detail="d",
+                        confidence_contribution=Confidence.LOW, members=[file]),
+        SourceCandidate(signal=ScanSignalId.S3, local_id="S3-refund",
+                        name="Refunds", rule="r", detail="d",
+                        confidence_contribution=Confidence.LOW, members=[route])],
+        MEASURED)
+    assert len(out.candidates) == 2
+    ids = {c.candidate_id for c in out.candidates}
+    for c in out.candidates:
+        assert c.possible_duplicate_of == sorted(ids - {c.candidate_id})
+
+
+def test_duplicate_ids_sort_numerically_past_99():
+    """Review finding 8: lexicographic sort puts C-100 before C-99; a monorepo
+    can mint 100+ directory candidates at S1 alone."""
+    from sdlc.assessment.scan.merge import _dup_sort_key
+    ids = ["C-99", "C-100", "C-03", "C-98"]
+    assert sorted(ids, key=_dup_sort_key) == ["C-03", "C-98", "C-99", "C-100"]
