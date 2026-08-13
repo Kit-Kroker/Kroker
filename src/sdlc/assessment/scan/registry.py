@@ -93,6 +93,10 @@ _SOURCES = f"{_SIG.rsplit('.', 1)[0]}.sources"
 # testability findings). All four hash it, or editing a glob would move four
 # signals' output while their keys stood still (P3-D9, D10).
 _TESTPATHS = f"{_SIG.rsplit('.', 1)[0]}.testpaths"
+# scan.configpaths, shared by SS3 (config rules) and E-47b's attribution
+# module. SS3 hashes it, or editing a pattern would move SS3's output while
+# its key stood still (D10).
+_CONFIGPATHS = f"{_SIG.rsplit('.', 1)[0]}.configpaths"
 
 SCAN_SIGNALS: dict[ScanSignalId, ScanSignalSpec] = {
     ScanSignalId.S1: _spec(
@@ -130,7 +134,8 @@ SCAN_SIGNALS: dict[ScanSignalId, ScanSignalSpec] = {
     ScanSignalId.SS3: _spec(
         ScanSignalId.SS3, 1, SignalSource.EXTENDED,
         module=f"{_SIG}.config_infra", activity="scan_config_infra",
-        inherits=("triage:misconfig",)),
+        inherits=("triage:misconfig",),
+        rule_modules=(_CONFIGPATHS,)),
     ScanSignalId.SS4: _spec(
         ScanSignalId.SS4, 1, SignalSource.COMPUTED,
         module=f"{_SIG}.sensitivity", activity="scan_sensitivity",

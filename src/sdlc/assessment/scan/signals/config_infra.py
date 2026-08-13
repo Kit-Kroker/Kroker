@@ -32,24 +32,13 @@ from ..models import (
     SecurityObservation, SignalOutput, SignalSource, family_of,
     inherited_pending,
 )
+from ..configpaths import is_config_path
 from ..testpaths import is_test_path
 
 SIGNAL_ID = "SS3"
 VERSION = 1
 
 _MAX_EVIDENCE = 400
-
-_CONFIG_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"(^|/)Dockerfile[\w.-]*$"),
-    re.compile(r"(^|/)docker-compose[\w.-]*\.ya?ml$"),
-    re.compile(r"(^|/)\.env[\w.-]*$"),
-    re.compile(r"(^|/)appsettings(\.\w+)?\.json$"),
-    re.compile(r"(^|/)application(-[\w]+)?\.(ya?ml|properties)$"),
-    re.compile(r"(^|/)(k8s|kubernetes|deploy|deployment|helm|charts)/.*"
-               r"\.(ya?ml|tpl)$"),
-    re.compile(r"\.tf$|\.tfvars$|\.bicep$"),
-    re.compile(r"(^|/)(nginx|haproxy)[\w.-]*\.conf$"),
-)
 
 _ENV_FILE = re.compile(
     r"(^|/)(\.env[\w.-]*|appsettings(\.\w+)?\.json"
@@ -130,12 +119,6 @@ _LOG_CALL = re.compile(
 
 _KEY_VALUE = re.compile(
     r"""(?m)^\s*["']?([A-Za-z_][\w.\-]*)["']?\s*[:=]\s*["']?([^"'\n#]*)""")
-
-
-def is_config_path(path: str) -> bool:
-    """Whether SS3's configuration and infrastructure rules apply to a path.
-    Log masking runs everywhere; everything else runs only here."""
-    return any(pattern.search(path) for pattern in _CONFIG_PATTERNS)
 
 
 def _observation(category: str, rule: str, severity: str, detail: str,

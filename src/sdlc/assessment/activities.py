@@ -29,6 +29,7 @@ from .scan.signals import (
     frontend, packages, schema, sensitivity, security_static, testability,
     tests_inventory,
 )
+from .scan.configpaths import is_config_path
 from .scan.sources import SOURCE_EXTENSIONS
 from .scan.testpaths import is_test_path
 
@@ -288,7 +289,7 @@ async def scan_config_infra(inp: ScanSignalInput) -> SignalOutput:
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
         wanted = sorted({p for p in paths
-                         if config_infra.is_config_path(p)
+                         if is_config_path(p)
                          or p.endswith(SOURCE_EXTENSIONS)})
         blobs, skipped = _blobs_for(inp.repo_dir, inp.commit_sha, wanted)
         out = config_infra.evaluate(blobs, skipped)
