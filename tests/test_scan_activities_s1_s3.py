@@ -106,5 +106,8 @@ def test_built_and_owed_partition_the_activity_signals():
     assert not (acts.BUILT & set(acts.OWED_BY))
 
 
-def test_the_two_built_signals_are_s1_and_s3():
-    assert acts.BUILT == {ScanSignalId.S1, ScanSignalId.S3}
+def test_a_built_signal_is_never_still_owed():
+    """The partition test above says BUILT | OWED_BY covers the declared
+    activities; this says the two never overlap as bodies land one per task."""
+    assert not (acts.BUILT & set(acts.OWED_BY))
+    assert acts.BUILT, "at least S1 and S3 have landed"

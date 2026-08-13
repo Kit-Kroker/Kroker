@@ -23,7 +23,7 @@ from .scan.models import (
     SignalSource, family_of,
 )
 from .scan.registry import SCAN_SIGNALS
-from .scan.signals import entrypoints, packages
+from .scan.signals import entrypoints, packages, schema
 from .scan.sources import SOURCE_EXTENSIONS
 
 _log = logging.getLogger(__name__)
@@ -66,12 +66,11 @@ async def assessment_resolve_tree(
 # "not implemented" forever, and removing the entry without landing the body
 # is a KeyError in unbuilt_signal.
 BUILT: frozenset[ScanSignalId] = frozenset({
-    ScanSignalId.S1, ScanSignalId.S3,
+    ScanSignalId.S1, ScanSignalId.S2, ScanSignalId.S3,
 })
 
 # Which plan owes each remaining signal's body.
 OWED_BY: dict[ScanSignalId, str] = {
-    ScanSignalId.S2: "plan 3",
     ScanSignalId.S4: "plan 3",
     ScanSignalId.SS1: "plan 3",
     ScanSignalId.SS3: "plan 3",
@@ -169,8 +168,24 @@ async def scan_packages(inp: ScanSignalInput) -> SignalOutput:
 
 @activity.defn
 async def scan_schema(inp: ScanSignalInput) -> SignalOutput:
-    """S2 -- database schema clusters. Body lands in plan 3."""
-    return unbuilt_signal(ScanSignalId.S2)
+    """S2 -- database schema clusters.
+
+    Reads the source extensions S1/S3 read plus schema.EXTRA_EXTENSIONS: a
+    .sql or .prisma file is not source code, but it is where a schema is
+    declared.
+    """
+    if (hit := memo.load(ScanSignalId.S2, inp.tree_hash)) is not None:
+        return hit
+    try:
+        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+        blobs, _ = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
+                                 SOURCE_EXTENSIONS + schema.EXTRA_EXTENSIONS)
+        out = schema.evaluate(blobs)
+    except Exception as exc:                        # noqa: BLE001
+        _log.warning("S2 failed: %s", exc)
+        return failed_signal(ScanSignalId.S2, exc)
+    memo.store(ScanSignalId.S2, inp.tree_hash, out)
+    return out
 
 
 @activity.defn
