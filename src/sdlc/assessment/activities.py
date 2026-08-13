@@ -25,8 +25,8 @@ from .scan.models import (
 )
 from .scan.registry import SCAN_SIGNALS
 from .scan.signals import (
-    entrypoints, frontend, packages, schema, sensitivity, testability,
-    tests_inventory,
+    coverage as coverage_signal, entrypoints, frontend, packages, schema,
+    sensitivity, testability, tests_inventory,
 )
 from .scan.sources import SOURCE_EXTENSIONS
 from .scan.testpaths import is_test_path
@@ -72,14 +72,13 @@ async def assessment_resolve_tree(
 # is a KeyError in unbuilt_signal.
 BUILT: frozenset[ScanSignalId] = frozenset({
     ScanSignalId.S1, ScanSignalId.S2, ScanSignalId.S3, ScanSignalId.S4,
-    ScanSignalId.SS4, ScanSignalId.QS1, ScanSignalId.QS3,
+    ScanSignalId.SS4, ScanSignalId.QS1, ScanSignalId.QS2, ScanSignalId.QS3,
 })
 
 # Which plan owes each remaining signal's body.
 OWED_BY: dict[ScanSignalId, str] = {
     ScanSignalId.SS1: "plan 3",
     ScanSignalId.SS3: "plan 3",
-    ScanSignalId.QS2: "plan 3",
     ScanSignalId.QS4: "plan 3",
 }
 
@@ -291,8 +290,22 @@ async def scan_tests_inventory(inp: ScanSignalInput) -> SignalOutput:
 
 @activity.defn
 async def scan_coverage(inp: ScanSignalInput) -> SignalOutput:
-    """QS2 -- committed report or proxy. Never runs the suite (D12). Plan 3."""
-    return unbuilt_signal(ScanSignalId.QS2)
+    """QS2 -- a committed report, else QS1's proxy. NEVER runs the suite
+    (D12). Wave 2: consumes QS1."""
+    if (hit := memo.load(ScanSignalId.QS2, inp.tree_hash)) is not None:
+        return hit
+    try:
+        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+        tracked = set(paths)
+        reports = _blobs_for(
+            inp.repo_dir, inp.commit_sha,
+            [p for p in coverage_signal.REPORT_PATHS if p in tracked])
+        out = coverage_signal.evaluate(paths, reports, inp.upstream)
+    except Exception as exc:                        # noqa: BLE001
+        _log.warning("QS2 failed: %s", exc)
+        return failed_signal(ScanSignalId.QS2, exc)
+    memo.store(ScanSignalId.QS2, inp.tree_hash, out, inp.upstream)
+    return out
 
 
 @activity.defn
