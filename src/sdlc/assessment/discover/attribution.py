@@ -15,9 +15,10 @@ import posixpath
 from collections.abc import Mapping, Sequence
 from typing import NamedTuple
 
-from ...measurement import Measurement
+from ...measurement import CollectionState, Measurement
 from ..scan.configpaths import is_config_path
 from ..scan.sources import SOURCE_EXTENSIONS
+from ..scan.testpaths import is_test_path
 from . import refgraph
 from .models import (
     ACCOUNTED_FOR, DEAD_GUARD_MAX_UNRESOLVED, DEFAULT_COVERAGE_FLOOR,
@@ -95,10 +96,39 @@ def _classify(path: str, ctx: _Context) -> FileAttribution:
             rule="graph_connected_to_member",
             detail="shares an import edge with a capability member",
             capabilities=tuple(attached))
+    # D7: `dead` is the claim a customer acts on by deleting code. All four
+    # clauses must hold; any failure sends the file to unclassified, never to
+    # a weaker positive.
+    if path not in ctx.parsed:
+        return FileAttribution(
+            path=path, bucket=FileBucket.UNCLASSIFIED,
+            rule="language_not_parsed",
+            detail="no import extractor covers this file's language")
+    if path in ctx.entry_points:
+        return FileAttribution(
+            path=path, bucket=FileBucket.UNCLASSIFIED,
+            rule="framework_discovered_entry_point",
+            detail="hosts an entry point, so it is reached by dispatch")
+    if is_test_path(path):
+        return FileAttribution(
+            path=path, bucket=FileBucket.UNCLASSIFIED,
+            rule="framework_discovered_test",
+            detail="collected by a test runner by convention, not by import")
+    if ctx.neighbours.get(path):
+        return FileAttribution(
+            path=path, bucket=FileBucket.UNCLASSIFIED,
+            rule="referenced_by_unattributed_file",
+            detail="referenced, but by nothing that reaches a capability")
+    if ctx.guard_tripped:
+        return FileAttribution(
+            path=path, bucket=FileBucket.UNCLASSIFIED,
+            rule="dead_guard_tripped",
+            detail="too many relative imports failed to resolve for an "
+                   "absence of references to be evidence")
     return FileAttribution(
         path=path, bucket=FileBucket.DEAD,
         rule="no_static_inbound_reference",
-        detail="no import edge connects this file to a capability")
+        detail="nothing in this tree statically references this file")
 
 
 def attribute(
@@ -141,10 +171,15 @@ def attribute(
         neighbours.setdefault(src, set()).add(dst)
         neighbours.setdefault(dst, set()).add(src)
 
+    rate = graph.unresolved_relative_rate
+    guard_tripped = (rate.state is CollectionState.MEASURED
+                     and rate.value is not None
+                     and rate.value > max_unresolved)
+
     context = _Context(
         member_of=member_of, neighbours=neighbours,
         skipped=set(skipped_in), parsed=set(graph.parsed),
-        entry_points=set(entry_points), guard_tripped=False)
+        entry_points=set(entry_points), guard_tripped=guard_tripped)
 
     files = tuple(_classify(path, context) for path in denominator)
     counts = {b: sum(1 for f in files if f.bucket is b) for b in FileBucket}
@@ -153,5 +188,6 @@ def attribute(
 
     return AttributionReport(
         files=files, counts=counts, coverage=coverage, floor=floor,
-        meets_floor=coverage.value >= floor, dead_guard_tripped=False,
+        meets_floor=coverage.value >= floor,
+        dead_guard_tripped=guard_tripped,
         graph=graph, skipped=tuple(skipped_in))
