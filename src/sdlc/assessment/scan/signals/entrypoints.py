@@ -156,6 +156,29 @@ def detected(blobs: Mapping[str, str]) -> tuple[set[str], set[str]]:
     return supported, unsupported
 
 
+def _is_non_specific(word: str) -> bool:
+    """A stem/segment that names a technical layer, a generic bucket, or an
+    API prefix -- none of which is a business operation."""
+    key = word.lower()
+    return key in LAYER_NAMES or key in GENERIC_NAMES or key in _PATH_PREFIXES
+
+
+def _specific_ancestor(path: str) -> str | None:
+    """The first ancestor directory (deepest-first) that names a capability
+    rather than a layer/generic/prefix, or None.
+
+    Re-checking the parent is the point: 'server/index.js' and
+    'src/api/routes.py' both fall back from a layer stem to a parent that is
+    ITSELF a layer/prefix ('server', 'api') -- which named the candidate after
+    a delivery channel, contradicting the very rule that sent us here (review
+    finding 5)."""
+    parts = path.split("/")[:-1]                      # drop the filename
+    for seg in reversed(parts):
+        if seg and not _is_non_specific(seg):
+            return head_token(seg)
+    return None
+
+
 def _business_name(value: str, path: str, kind: MemberKind) -> str:
     """The business operation an entry point belongs to.
 
@@ -167,8 +190,10 @@ def _business_name(value: str, path: str, kind: MemberKind) -> str:
     three ways, which is precisely the split-by-channel BrownKit forbids.
 
     A stem that names a delivery channel rather than an operation
-    ('cli.py', 'routes.py') falls back to the parent directory: 'routes.py'
-    names no capability, but 'payments/routes.py' does.
+    ('cli.py', 'routes.py') falls back to its first SPECIFIC ancestor:
+    'routes.py' names no capability, but 'payments/routes.py' does. A parent
+    that is itself a layer/prefix ('api/routes.py', 'server/index.js') is
+    skipped, not silently adopted.
     """
     if kind is MemberKind.HTTP_ROUTE:
         for segment in value.split()[-1].split("/"):
@@ -178,10 +203,10 @@ def _business_name(value: str, path: str, kind: MemberKind) -> str:
                 continue
             return segment
     stem = posixpath.splitext(posixpath.basename(path))[0]
-    if stem.lower() in LAYER_NAMES or stem.lower() in GENERIC_NAMES:
-        parent = posixpath.basename(posixpath.dirname(path))
-        if parent:
-            return head_token(parent)
+    if _is_non_specific(stem):
+        ancestor = _specific_ancestor(path)
+        if ancestor is not None:
+            return ancestor
     return head_token(stem)
 
 

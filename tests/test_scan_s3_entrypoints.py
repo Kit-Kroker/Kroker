@@ -202,6 +202,24 @@ def test_a_bare_nestjs_decorator_with_no_path_is_a_miss_not_a_verb_candidate():
             assert m.value.split()[0] != m.value.strip()
 
 
+def test_a_layer_parent_is_not_adopted_as_the_business_name():
+    """Review finding 5: a layer/generic stem falls back to its ancestor, but
+    the ancestor is re-checked -- 'server/index.js' and 'src/api/routes.py'
+    must not become S3-server / S3-api, which contradict the rule that /api
+    is a prefix, not a capability."""
+    out = entrypoints.evaluate({
+        "src/api/routes.py": (
+            "from flask import Flask\napp = Flask(__name__)\n"
+            "@app.route('/v1/')\ndef root():\n    ...\n"),
+        "server/index.js": (
+            "const express = require('express')\nconst app = express()\n"
+            "app.get('/')\n"),
+    })
+    ids = set(_by_id(out))
+    assert "S3-api" not in ids
+    assert "S3-server" not in ids
+
+
 def test_output_is_order_independent():
     """NFR-10: dict iteration order must not reach the artifact."""
     blobs = dict(FASTAPI)
