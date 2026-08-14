@@ -18,7 +18,9 @@ from ..scan.models import (
     CandidateMember, Confidence, CoverageRecord, EvidenceRef,
     SecurityObservation, SensitivityRecord, TestabilityFinding,
 )
+from ...capability.models import Advisory
 from ...measurement import CollectionState, Measurement
+from .models import AttributionReport, DecompositionReport, OwnershipReport
 
 
 class DiscoverAction(str, Enum):
@@ -211,4 +213,85 @@ class DiscoverContext(BaseModel):
                 f"collected={self.collected.state.value} carries no payload, "
                 f"but {len(self.candidates)} candidate(s) are present -- a "
                 f"context that could not be built has no candidates (FR-915)")
+        return self
+
+
+# A verdict ABOUT a candidate rather than a surviving boundary. Only the
+# actions absent from this set produce a Capability with a bc_id.
+REJECTING_ACTIONS: frozenset[DiscoverAction] = frozenset(
+    {DiscoverAction.DE_SCOPE, DiscoverAction.FLAG})
+
+
+class Capability(BaseModel):
+    """One L1 capability: a candidate that survived disposition and was given
+    a durable id by E-47a's resolve()."""
+    model_config = {"frozen": True}
+    bc_id: str
+    local_key: str                        # the candidate_id it came from
+    name: str
+    confidence: Confidence
+    members: tuple[CandidateMember, ...]
+    member_paths: tuple[str, ...]
+    cohesion: Measurement
+    coupling: Measurement
+    disposition: CandidateDisposition
+
+    @model_validator(mode="after")
+    def _a_rejected_candidate_is_not_a_capability(self) -> "Capability":
+        if self.disposition.action in REJECTING_ACTIONS:
+            raise ValueError(
+                f"disposition action={self.disposition.action.value} rejects "
+                f"the candidate, so it must not hold bc_id={self.bc_id} -- a "
+                f"map that both rejected and identified the same thing is "
+                f"making two claims")
+        return self
+
+
+class CapabilityMap(BaseModel):
+    """The DISCOVER phase artifact (FR-913).
+
+    Plan 3 adds `domain_model` (clause D7) and `blueprint` (clause D8) when it
+    builds their producers. Declaring them now would be a field with no
+    producer, which is what E-47c's review found and fixed.
+    """
+    capabilities: tuple[Capability, ...] = ()
+    by_action: dict[DiscoverAction, int] = Field(default_factory=dict)
+    dispositions: tuple[CandidateDisposition, ...] = ()
+    attribution: AttributionReport | None = None
+    decomposition: DecompositionReport | None = None
+    ownership: OwnershipReport | None = None
+    advisories: tuple[Advisory, ...] = ()
+    dropped_dispositions: int = 0
+    total_references: int = 0
+    collected: Measurement
+
+    @model_validator(mode="after")
+    def _counts_are_derived(self) -> "CapabilityMap":
+        for action, claimed in self.by_action.items():
+            actual = sum(1 for c in self.capabilities
+                         if c.disposition.action is action)
+            if claimed != actual:
+                raise ValueError(
+                    f"by_action[{action.value}]={claimed} but {actual} "
+                    f"capabilit(ies) carry it -- counts are derived from "
+                    f"capabilities, never assigned")
+        unlisted = sorted({c.disposition.action.value
+                           for c in self.capabilities}
+                          - {a.value for a in self.by_action})
+        if unlisted:
+            raise ValueError(
+                f"capabilities carry actions absent from by_action "
+                f"({unlisted}) -- an absent key and a zero count are "
+                f"different claims and only one of them is true")
+        return self
+
+    @model_validator(mode="after")
+    def _unmeasured_carries_no_payload(self) -> "CapabilityMap":
+        if (self.collected.state is not CollectionState.MEASURED
+                and self.capabilities):
+            raise ValueError(
+                f"collected={self.collected.state.value} carries no payload, "
+                f"but {len(self.capabilities)} capabilit(ies) are present -- "
+                f"a discover that did not happen has no capabilities "
+                f"(FR-915)")
         return self
