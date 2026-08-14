@@ -36,7 +36,9 @@ from ..naming import (
 )
 
 SIGNAL_ID = "S3"
-VERSION = 1
+# v2: Flask's methods= kwarg is captured (review finding 2); kept in step
+# with registry.py's S3 version, which is what the memo key reads.
+VERSION = 2
 
 
 class Framework(BaseModel):
@@ -83,8 +85,15 @@ FRAMEWORKS: tuple[Framework, ...] = (
     Framework(
         name="flask",
         detect=(_PY_IMPORT.format(m="flask"),),
-        pattern=r"@(?:\w+)\.route\(\s*['\"]([^'\"]+)",
-        kind=MemberKind.HTTP_ROUTE, value_group=1),
+        # methods= is captured when present, so a POST route is recorded as
+        # POST -- synthesizing GET would turn every Flask write into a read
+        # downstream (review finding 2). The group is OPTIONAL: a bare
+        # @route still matches and takes the GET default in _members. A
+        # mixed methods= list yields its first declared method, which is one
+        # of the route's true methods, never a guess.
+        pattern=r"@(?:\w+)\.route\(\s*['\"]([^'\"]+)['\"]"
+                r"(?:[^)]*?methods\s*=\s*\[?\s*['\"]([A-Z]+)['\"])?",
+        kind=MemberKind.HTTP_ROUTE, method_group=2, value_group=1),
     Framework(
         name="express",
         detect=(_ESM_IMPORT.format(m="express"), _CJS_REQUIRE.format(m="express")),
@@ -225,11 +234,17 @@ def _members(blobs: Mapping[str, str], active: set[str]
                 # (review finding 2).
                 if not raw or not raw.strip():
                     continue
-                if framework.method_group:
-                    value = f"{match.group(framework.method_group).upper()} {raw}"
+                # An OPTIONAL method group reads as None when it did not
+                # participate (Flask with no methods=), so fall through to
+                # the GET default rather than crashing or guessing.
+                method = (match.group(framework.method_group)
+                          if framework.method_group else None)
+                if method:
+                    value = f"{method.upper()} {raw}"
                 elif framework.kind is MemberKind.HTTP_ROUTE:
-                    # Flask's @route defaults to GET when no methods= is given;
-                    # naming the verb keeps every HTTP member one shape.
+                    # Flask's @route defaults to GET when no methods= is
+                    # given; naming the verb keeps every HTTP member one
+                    # shape.
                     value = f"GET {raw}"
                 else:
                     value = raw

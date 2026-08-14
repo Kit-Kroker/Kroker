@@ -108,7 +108,11 @@ SCAN_SIGNALS: dict[ScanSignalId, ScanSignalSpec] = {
         module=f"{_SIG}.schema", activity="scan_schema",
         rule_modules=(_NAMING, _SOURCES, _TESTPATHS)),
     ScanSignalId.S3: _spec(
-        ScanSignalId.S3, 1, SignalSource.COMPUTED,
+        # v2 (2026-08-14, review finding 2): Flask's methods= kwarg is now
+        # captured, so a POST route records as POST. Extraction behaviour
+        # changed, so the memo key must move with it (FR-912: editing one
+        # signal's logic invalidates exactly that signal).
+        ScanSignalId.S3, 2, SignalSource.COMPUTED,
         module=f"{_SIG}.entrypoints", activity="scan_entrypoints",
         rule_modules=(_NAMING, _SOURCES)),
     ScanSignalId.S4: _spec(

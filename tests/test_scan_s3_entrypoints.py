@@ -40,6 +40,42 @@ def test_fastapi_routes_become_http_route_members():
     assert all(m.kind is MemberKind.HTTP_ROUTE for m in pay.members)
 
 
+FLASK = {
+    "src/app.py": (
+        "from flask import Flask\n"
+        "app = Flask(__name__)\n"
+        "\n"
+        "@app.route('/api/payments', methods=['POST'])\n"
+        "def create_payment():\n"
+        "    ...\n"
+        "\n"
+        "@app.route('/api/payments/{id}', methods=['GET', 'POST'])\n"
+        "def get_or_create():\n"
+        "    ...\n"
+        "\n"
+        "@app.route('/health')\n"
+        "def health():\n"
+        "    ...\n"
+    ),
+}
+
+
+def test_flask_methods_kwarg_is_read_not_synthesized_as_get():
+    """Review finding 2: a POST route recorded as 'GET /path' is a false S3
+    artifact in its own right, and downstream it turns every Flask write
+    into a read, so ownership falls to the wrong rule. The kwarg is
+    capturable evidence; capture it. A bare @route keeps Flask's own GET
+    default; a mixed methods= list names its first declared method -- one
+    of the route's true methods, never a guess."""
+    out = entrypoints.evaluate(FLASK)
+    payment = _by_id(out)["S3-payment"]
+    values = {m.value for m in payment.members}
+    assert "POST /api/payments" in values
+    assert "GET /api/payments/{id}" in values
+    health = _by_id(out)["S3-health"]
+    assert {m.value for m in health.members} == {"GET /health"}
+
+
 def test_routes_and_jobs_and_consumers_group_into_one_candidate():
     """D9's ported rule: PaymentController + PaymentSettlementJob +
     PaymentEventConsumer is ONE candidate, not three. Do not split by
