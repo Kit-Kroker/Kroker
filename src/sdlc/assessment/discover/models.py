@@ -236,3 +236,131 @@ class DecompositionReport(BaseModel):
                 f"but {len(self.operations)} operation(s) are present -- a "
                 f"decomposition that did not happen has no rows (FR-915)")
         return self
+
+
+class OwnershipVerb(str, Enum):
+    """A capability's relationship to an entity. NOT OperationVerb (D6).
+
+    TRACKS is deliberately absent. The other four have a deterministic
+    trigger; TRACKS means something closer to "holds a reference for
+    lifecycle purposes", which no static signal here distinguishes from
+    READS. Emitting it would put a judgment call behind a code-computed
+    label -- the exact defect this port exists to remove from BrownKit's
+    prose gates. It is reserved for E-48's proposer.
+    """
+    OWNS = "owns"
+    CREATES = "creates"
+    MANAGES = "manages"
+    READS = "reads"
+
+
+class OwnershipOutcome(str, Enum):
+    """D8: three non-owned outcomes, deliberately not one.
+
+    Collapsing them would repeat coverage_pct's defect. A CLI-written table
+    reported as UNCLAIMED tells a customer nothing touches data their job
+    writes nightly -- a different and worse claim than "we cannot read the
+    direction of the thing that touches it".
+    """
+    OWNED = "owned"
+    CONFLICT = "conflict"          # 2+ tied claimants; E-48 picks
+    UNDIRECTED = "undirected"      # claimants, none with readable direction
+    UNCLAIMED = "unclaimed"        # nothing in the capability set touches it
+
+
+class EntityDeclaration(BaseModel):
+    """D2: what assign() needs from S2, WITHOUT importing a signal.
+
+    discover/ imports scan RULE modules and never a signal: a signal is a
+    producer with a memo key and a version, and depending on one here would
+    make this package part of that signal's hashed surface. E-48 adapts S2's
+    TableDecl at the call site, where both are already in scope.
+    """
+    model_config = {"frozen": True}
+    name: str
+    path: str
+    line: int
+
+
+class EntityOwnership(BaseModel):
+    model_config = {"frozen": True}
+    entity: str
+    outcome: OwnershipOutcome
+    owner: str | None = None
+    verb: OwnershipVerb | None = None
+    rule: str
+    claimants: tuple[str, ...] = ()
+    evidence: tuple[EvidenceRef, ...] = ()
+
+    @model_validator(mode="after")
+    def _owner_matches_outcome(self) -> "EntityOwnership":
+        owned = self.outcome is OwnershipOutcome.OWNED
+        if owned != (self.owner is not None and self.verb is not None):
+            raise ValueError(
+                f"owner and verb are set IFF outcome is owned -- got "
+                f"outcome={self.outcome.value} owner={self.owner} "
+                f"verb={self.verb}. A row that names an owner and calls "
+                f"itself a conflict is not a weaker claim, it is two claims")
+        return self
+
+    @model_validator(mode="after")
+    def _claimants_match_outcome(self) -> "EntityOwnership":
+        if self.outcome is OwnershipOutcome.CONFLICT and len(self.claimants) < 2:
+            raise ValueError(
+                f"outcome=conflict needs at least two claimants, got "
+                f"{self.claimants} -- one claimant is not a contest")
+        if self.outcome is OwnershipOutcome.UNCLAIMED and self.claimants:
+            raise ValueError(
+                f"outcome=unclaimed names no claimants, got {self.claimants}")
+        if (self.outcome in (OwnershipOutcome.OWNED,
+                             OwnershipOutcome.UNDIRECTED)
+                and not self.claimants):
+            raise ValueError(
+                f"outcome={self.outcome.value} requires at least one "
+                f"claimant -- it is defined by something touching the entity")
+        return self
+
+    @model_validator(mode="after")
+    def _claimants_are_sorted(self) -> "EntityOwnership":
+        """Asserted, not repaired: a producer emitting discovery order is a
+        determinism bug (NFR-10), and fixing it here would hide it. This is
+        FileAttribution._capabilities_are_sorted's rule."""
+        if list(self.claimants) != sorted(set(self.claimants)):
+            raise ValueError(
+                f"claimants {self.claimants} are not sorted and deduped -- "
+                f"discovery order must not reach the artifact")
+        return self
+
+
+class OwnershipReport(BaseModel):
+    entities: tuple[EntityOwnership, ...] = ()
+    counts: dict[OwnershipOutcome, int] = Field(default_factory=dict)
+    collected: Measurement
+
+    @model_validator(mode="after")
+    def _counts_agree_with_entities(self) -> "OwnershipReport":
+        """AttributionReport._counts_agree_with_files, verbatim in intent."""
+        missing = [o.value for o in OwnershipOutcome if o not in self.counts]
+        if missing:
+            raise ValueError(
+                f"counts must carry every outcome, including zeros (missing "
+                f"{missing}) -- an absent key and a zero count are different "
+                f"claims and only one of them is true")
+        for outcome in OwnershipOutcome:
+            actual = sum(1 for e in self.entities if e.outcome is outcome)
+            if self.counts[outcome] != actual:
+                raise ValueError(
+                    f"counts[{outcome.value}]={self.counts[outcome]} but "
+                    f"{actual} entit(ies) carry it -- counts are derived "
+                    f"from entities, never assigned")
+        return self
+
+    @model_validator(mode="after")
+    def _unmeasured_carries_no_payload(self) -> "OwnershipReport":
+        if (self.collected.state is not CollectionState.MEASURED
+                and self.entities):
+            raise ValueError(
+                f"collected={self.collected.state.value} carries no payload, "
+                f"but {len(self.entities)} entit(ies) are present -- an "
+                f"ownership map that did not happen has no rows (FR-915)")
+        return self

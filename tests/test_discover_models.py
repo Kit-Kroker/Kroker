@@ -155,3 +155,77 @@ def test_an_unmeasured_report_with_no_rows_is_valid():
         collected=Measurement.not_collected("S3 did not collect"))
     assert report.operations == ()
     assert report.collected.state is CollectionState.NOT_COLLECTED
+
+
+from sdlc.assessment.discover.models import (
+    EntityOwnership, OwnershipOutcome, OwnershipReport, OwnershipVerb,
+)
+
+
+def _counts(*rows: EntityOwnership) -> dict[OwnershipOutcome, int]:
+    return {o: sum(1 for r in rows if r.outcome is o)
+            for o in OwnershipOutcome}
+
+
+OWNED = EntityOwnership(
+    entity="order", outcome=OwnershipOutcome.OWNED, owner="BC-014",
+    verb=OwnershipVerb.OWNS, rule="declared_in_sole_member",
+    claimants=("BC-014",))
+
+
+def test_tracks_is_not_a_deterministic_verb():
+    """D6: four relationships have a trigger; TRACKS has none, and it is
+    reserved for E-48's proposer."""
+    assert not hasattr(OwnershipVerb, "TRACKS")
+    assert {v.value for v in OwnershipVerb} == {
+        "owns", "creates", "manages", "reads"}
+
+
+def test_an_owner_requires_the_owned_outcome():
+    with pytest.raises(ValidationError, match="owner and verb are set"):
+        EntityOwnership(entity="order", outcome=OwnershipOutcome.CONFLICT,
+                        owner="BC-014", verb=OwnershipVerb.OWNS,
+                        rule="tied_writers", claimants=("BC-014", "BC-021"))
+
+
+def test_the_owned_outcome_requires_an_owner():
+    with pytest.raises(ValidationError, match="owner and verb are set"):
+        EntityOwnership(entity="order", outcome=OwnershipOutcome.OWNED,
+                        rule="sole_writer", claimants=("BC-014",))
+
+
+def test_a_conflict_needs_at_least_two_claimants():
+    with pytest.raises(ValidationError, match="at least two claimants"):
+        EntityOwnership(entity="order", outcome=OwnershipOutcome.CONFLICT,
+                        rule="tied_writers", claimants=("BC-014",))
+
+
+def test_an_unclaimed_entity_names_no_claimants():
+    with pytest.raises(ValidationError, match="names no claimants"):
+        EntityOwnership(entity="order", outcome=OwnershipOutcome.UNCLAIMED,
+                        rule="no_claimant", claimants=("BC-014",))
+
+
+def test_claimants_are_asserted_sorted_never_repaired():
+    with pytest.raises(ValidationError, match="not sorted"):
+        EntityOwnership(entity="order", outcome=OwnershipOutcome.CONFLICT,
+                        rule="tied_writers", claimants=("BC-021", "BC-014"))
+
+
+def test_counts_carry_every_outcome_including_zeros():
+    report = OwnershipReport(entities=(OWNED,), counts=_counts(OWNED),
+                             collected=Measurement.measured(1.0))
+    assert report.counts[OwnershipOutcome.UNCLAIMED] == 0
+
+
+def test_a_missing_outcome_key_is_rejected():
+    with pytest.raises(ValidationError, match="every outcome"):
+        OwnershipReport(entities=(OWNED,),
+                        counts={OwnershipOutcome.OWNED: 1},
+                        collected=Measurement.measured(1.0))
+
+
+def test_an_unmeasured_ownership_report_carries_no_rows():
+    with pytest.raises(ValidationError, match="carries no payload"):
+        OwnershipReport(entities=(OWNED,), counts=_counts(OWNED),
+                        collected=Measurement.not_collected("S2 gap"))
