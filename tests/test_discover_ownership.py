@@ -102,6 +102,47 @@ def test_a_shared_declaration_file_surfaces_a_conflict():
     assert row.rule == "declared_in_shared_file"
 
 
+def test_clustered_declarations_in_different_files_are_tied_declarers():
+    """Review finding 5: 'declared_in_shared_file' is only true when the
+    SAME file is attributed to 2+ capabilities. orders in one capability's
+    file and order_items in another's is a tie across files; a rule name
+    that misstates the evidence cannot be cited."""
+    report = _assign(
+        [ORDERS,
+         EntityDeclaration(name="order_items", path="db/other.py", line=3)],
+        {"BC-014": ["db/models/order.py"], "BC-021": ["db/other.py"]}, [])
+    row = _row(report, "order")
+    assert row.outcome is OwnershipOutcome.CONFLICT
+    assert row.claimants == ("BC-014", "BC-021")
+    assert row.rule == "tied_declarers"
+
+
+def test_rule_1_lists_every_toucher_not_just_the_declarer():
+    """Review finding 3: D7 accepts the shared-models limitation because
+    E-48's proposer has standing to override it -- but only if the row
+    shows the capability that lost. A declaration-site owner with a
+    different sole writer carries both as claimants, each backed by the
+    evidence beside them."""
+    report = _assign([ORDERS], {"BC-014": ["db/models/order.py"]},
+                     [_op("BC-021", OperationVerb.CREATE, "order")])
+    row = _row(report, "order")
+    assert row.owner == "BC-014"
+    assert row.rule == "declared_in_sole_member"
+    assert row.claimants == ("BC-014", "BC-021")
+    assert len(row.evidence) == 2      # one declaration, one operation
+
+
+def test_a_directed_winner_does_not_erase_undirected_contact():
+    """Review finding 3: rules 2/3 dropped undirected touchers, so the row
+    understated contact and claimants disagreed with evidence."""
+    report = _assign([ORDERS], {}, [
+        _op("BC-014", OperationVerb.CREATE, "order", 1),
+        _op("BC-033", OperationVerb.INVOKE, "order", 2)])
+    row = _row(report, "order")
+    assert row.owner == "BC-014"
+    assert row.claimants == ("BC-014", "BC-033")
+
+
 def test_an_undirected_claimant_is_not_unclaimed():
     """D8: a CLI-written table must not read as untouched."""
     report = _assign([ORDERS], {}, [_op("BC-014", OperationVerb.INVOKE, "order")])

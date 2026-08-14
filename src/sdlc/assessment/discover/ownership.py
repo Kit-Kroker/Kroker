@@ -51,6 +51,20 @@ def _resolve(entity: str, decls: Sequence[EntityDeclaration],
              declarers: set[str], ops: Sequence[L2Operation]) -> EntityOwnership:
     decl_evidence = tuple(EvidenceRef(path=d.path, lines=str(d.line))
                           for d in decls)
+    op_evidence = tuple(o.evidence for o in ops)
+    evidence = decl_evidence + op_evidence
+
+    writers = {o.capability for o in ops if o.verb in WRITE_VERBS}
+    readers = {o.capability for o in ops if o.verb in READ_VERBS}
+    undirected = {o.capability for o in ops if o.verb not in DIRECTED_VERBS}
+    # Every capability with ANY contact -- declaration, directed access, or
+    # undirected touch -- is a claimant, whatever rule won (review finding
+    # 3). Three reasons, in ascending order of importance: the row must not
+    # understate contact; every claimant is backed by an evidence ref
+    # beside it; and D7 accepts the shared-models limitation only because
+    # E-48's proposer can override it -- which it cannot do if the row
+    # never shows the capability that lost.
+    claimants = tuple(sorted(declarers | writers | readers | undirected))
 
     # Rule 1 -- declaration site.
     if len(declarers) == 1:
@@ -58,16 +72,17 @@ def _resolve(entity: str, decls: Sequence[EntityDeclaration],
             entity=entity, outcome=OwnershipOutcome.OWNED,
             owner=next(iter(declarers)), verb=OwnershipVerb.OWNS,
             rule="declared_in_sole_member",
-            claimants=tuple(sorted(declarers)), evidence=decl_evidence)
+            claimants=claimants, evidence=evidence)
     if len(declarers) > 1:
+        # 'declared_in_shared_file' is only true when one file carries two
+        # capabilities; the same key declared in different files across
+        # capabilities is a tie across files, and the rule must not
+        # misname it (review finding 5).
+        rule = ("declared_in_shared_file"
+                if len({d.path for d in decls}) == 1 else "tied_declarers")
         return EntityOwnership(
             entity=entity, outcome=OwnershipOutcome.CONFLICT,
-            rule="declared_in_shared_file",
-            claimants=tuple(sorted(declarers)), evidence=decl_evidence)
-
-    op_evidence = tuple(o.evidence for o in ops)
-    writers = {o.capability for o in ops if o.verb in WRITE_VERBS}
-    readers = {o.capability for o in ops if o.verb in READ_VERBS}
+            rule=rule, claimants=claimants, evidence=evidence)
 
     # Rule 2 -- sole writer.
     if len(writers) == 1:
@@ -77,34 +92,28 @@ def _resolve(entity: str, decls: Sequence[EntityDeclaration],
             verb=_write_verb({o.verb for o in ops
                               if o.capability == owner
                               and o.verb in WRITE_VERBS}),
-            rule="sole_writer", claimants=tuple(sorted(writers | readers)),
-            evidence=op_evidence)
+            rule="sole_writer", claimants=claimants, evidence=evidence)
     if len(writers) > 1:
         return EntityOwnership(
             entity=entity, outcome=OwnershipOutcome.CONFLICT,
-            rule="tied_writers", claimants=tuple(sorted(writers | readers)),
-            evidence=op_evidence)
+            rule="tied_writers", claimants=claimants, evidence=evidence)
 
     # Rule 3 -- sole reader.
     if len(readers) == 1:
         return EntityOwnership(
             entity=entity, outcome=OwnershipOutcome.OWNED,
             owner=next(iter(readers)), verb=OwnershipVerb.READS,
-            rule="sole_reader", claimants=tuple(sorted(readers)),
-            evidence=op_evidence)
+            rule="sole_reader", claimants=claimants, evidence=evidence)
     if len(readers) > 1:
         return EntityOwnership(
             entity=entity, outcome=OwnershipOutcome.CONFLICT,
-            rule="tied_readers", claimants=tuple(sorted(readers)),
-            evidence=op_evidence)
+            rule="tied_readers", claimants=claimants, evidence=evidence)
 
     # Rules 4/5 -- something touched it, but nothing readable said which way.
-    undirected = {o.capability for o in ops if o.verb not in DIRECTED_VERBS}
     if undirected:
         return EntityOwnership(
             entity=entity, outcome=OwnershipOutcome.UNDIRECTED,
-            rule="undirected_only", claimants=tuple(sorted(undirected)),
-            evidence=op_evidence)
+            rule="undirected_only", claimants=claimants, evidence=evidence)
     return EntityOwnership(
         entity=entity, outcome=OwnershipOutcome.UNCLAIMED,
         rule="no_claimant", evidence=decl_evidence)
