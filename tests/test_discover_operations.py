@@ -79,6 +79,44 @@ def test_an_underivable_object_is_empty_and_named_by_its_verb():
     assert report.operations[0].name == "read"
 
 
+def test_a_non_route_object_is_empty_because_no_deterministic_rule_exists():
+    """Review finding 1: head_token on a command name returns the VERB
+    ('create_payment' -> 'create'), which assign() would then match against
+    entity keys -- garbage stated as evidence. A CLI name is verb-first, a
+    topic is entity-first, a job name may carry no entity at all, so there
+    is no single-position rule; object stays "" and entity_keys carries the
+    contact surface instead. The operation's own name IS the command name."""
+    report = decompose({"BC-014": [
+        _m(MemberKind.CLI_COMMAND, "sync_orders", "cli.py", 4),
+        _m(MemberKind.QUEUE_TOPIC, "orders.created", "mq.py", 9),
+        _m(MemberKind.SCHEDULED_JOB, "settle_nightly", "jobs/settle.py", 12),
+    ]}, contract_collected=MEASURED)
+    by_binding = {o.binding: o for o in report.operations}
+    for op in report.operations:
+        assert op.object == ""
+    assert by_binding["sync_orders"].name == "sync_orders"
+    assert by_binding["orders.created"].name == "orders.created"
+    assert by_binding["settle_nightly"].name == "settle_nightly"
+    # Contact keys: every separator token of the binding, reduced. This is
+    # what lets a CLI-written table reach UNDIRECTED instead of UNCLAIMED.
+    assert by_binding["sync_orders"].entity_keys == ("order", "sync")
+    assert by_binding["orders.created"].entity_keys == ("created", "order")
+    assert by_binding["settle_nightly"].entity_keys == ("nightly", "settle")
+
+
+def test_route_object_matching_stays_strict():
+    """Only HTTP routes carry directed verbs, so only they can make an
+    ownership claim; their keys stay exactly the route object -- loose
+    token matching is reserved for the undirected kinds, where the worst
+    outcome is an extra UNDIRECTED claimant, never a fabricated owner."""
+    report = decompose({"BC-014": [
+        _m(MemberKind.HTTP_ROUTE, "GET /orders/{id}/items"),
+    ]}, contract_collected=MEASURED)
+    op = report.operations[0]
+    assert op.object == "order"
+    assert op.entity_keys == ("order",)
+
+
 def test_non_contract_kinds_yield_no_operations():
     """D4, and a MEASURED zero -- not a gap."""
     report = decompose(
@@ -106,6 +144,16 @@ def test_a_degraded_contract_tier_yields_no_rows():
     assert report.operations == ()
     assert report.collected.state is CollectionState.NOT_COLLECTED
     assert "S3" in report.collected.reason
+
+
+def test_a_degraded_report_names_no_capability_counts():
+    """Review finding 7: by_capability[bc]=0 is a MEASURED claim ('exposes
+    zero operations'); under a gap the dict must be empty, not zero-filled
+    -- the absent-key-vs-zero distinction FR-915 is made of."""
+    report = decompose({"BC-014": PAYMENTS},
+                       contract_collected=Measurement.not_collected(
+                           "S3 reported not_collected"))
+    assert report.by_capability == {}
 
 
 def test_output_is_byte_identical_across_input_order():

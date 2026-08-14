@@ -20,7 +20,8 @@ def _op(bc_id: str, verb: OperationVerb, obj: str, n: int = 1) -> L2Operation:
         op_id=f"{bc_id}-OP-{n:02d}", capability=bc_id, verb=verb,
         name=f"{verb.value}_{obj}", object=obj,
         binding=f"{verb.value.upper()} /{obj}", kind=MemberKind.HTTP_ROUTE,
-        rule="http_post", evidence=EvidenceRef(path="api/a.py", lines="3"))
+        rule="http_post", entity_keys=(obj,) if obj else (),
+        evidence=EvidenceRef(path="api/a.py", lines="3"))
 
 
 def _assign(decls, members, ops):

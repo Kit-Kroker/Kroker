@@ -12,7 +12,7 @@ from enum import Enum
 from pydantic import BaseModel, Field, model_validator
 
 from ...measurement import CollectionState, Measurement
-from ..scan.models import CandidateMember, EvidenceRef, MemberKind
+from ..scan.models import EvidenceRef, MemberKind
 
 DEFAULT_COVERAGE_FLOOR = 0.90
 DEAD_GUARD_MAX_UNRESOLVED = 0.10
@@ -197,11 +197,31 @@ class L2Operation(BaseModel):
     capability: str             # bc_id
     verb: OperationVerb
     name: str                   # "create_payment"
-    object: str                 # "payment"; "" when underivable
+    object: str                 # "payment"; "" when underivable (see below)
     binding: str                # "POST /api/payments", verbatim
     kind: MemberKind
     rule: str                   # the mapping rule that fired
+    # The entity keys this operation can CLAIM CONTACT on, and the only
+    # thing assign() matches against. Route-shaped kinds contribute exactly
+    # their object: only HTTP routes carry directed verbs, so their match
+    # must stay strict -- a loose route match could fabricate a writer.
+    # Every other kind contributes the reduction of each separator token of
+    # its binding: those kinds are undirected by construction (D6), so the
+    # most a loose token match can produce is an UNDIRECTED claimant, never
+    # an owner (review finding 1).
+    entity_keys: tuple[str, ...] = ()
     evidence: EvidenceRef
+
+    @model_validator(mode="after")
+    def _entity_keys_are_sorted(self) -> "L2Operation":
+        """Asserted, not repaired: a producer emitting unsorted keys is a
+        determinism bug (NFR-10), and fixing it here would hide it. This is
+        FileAttribution._capabilities_are_sorted's rule."""
+        if list(self.entity_keys) != sorted(set(self.entity_keys)):
+            raise ValueError(
+                f"entity_keys {self.entity_keys} are not sorted and "
+                f"deduped -- discovery order must not reach the artifact")
+        return self
 
 
 class DecompositionReport(BaseModel):

@@ -144,7 +144,10 @@ def assign(
     for entity in sorted(grouped):
         decls = grouped[entity]
         declarers = {bc for d in decls for bc in owner_of.get(d.path, ())}
-        ops = sorted((o for o in operations if o.object == entity),
+        # Matching reads entity_keys, never object: route kinds keep strict
+        # single-key matching (only they carry directed verbs), undirected
+        # kinds match on any reduced token of their binding (review F1).
+        ops = sorted((o for o in operations if entity in o.entity_keys),
                      key=lambda o: o.op_id)
         rows.append(_resolve(entity, decls, declarers, ops))
 

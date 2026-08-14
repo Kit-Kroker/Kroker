@@ -110,7 +110,21 @@ OP = L2Operation(
     op_id="BC-014-OP-01", capability="BC-014", verb=OperationVerb.CREATE,
     name="create_payment", object="payment", binding="POST /api/payments",
     kind=MemberKind.HTTP_ROUTE, rule="http_post",
+    entity_keys=("payment",),
     evidence=EvidenceRef(path="api/pay.py", lines="31"))
+
+
+def test_entity_keys_are_asserted_sorted_never_repaired():
+    """NFR-10: a producer emitting unsorted keys is a determinism bug;
+    repairing it here would hide it (FileAttribution's rule)."""
+    with pytest.raises(ValidationError, match="not sorted"):
+        L2Operation(
+            op_id="BC-014-OP-01", capability="BC-014",
+            verb=OperationVerb.CREATE, name="create_payment",
+            object="payment", binding="POST /api/payments",
+            kind=MemberKind.HTTP_ROUTE, rule="http_post",
+            entity_keys=("payment", "order"),
+            evidence=EvidenceRef(path="api/pay.py", lines="31"))
 
 
 def test_contract_kinds_names_behaviour_not_data_or_structure():

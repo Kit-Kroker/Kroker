@@ -13,6 +13,7 @@ executed (NFR-9).
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 
 from ...measurement import CollectionState, Measurement
@@ -56,19 +57,43 @@ def _verb(member: CandidateMember) -> tuple[OperationVerb, str]:
 
 
 def _object(member: CandidateMember) -> str:
-    """The entity key this operation is about, or "".
+    """The route's business object, reduced -- or "" for every other kind.
 
-    Both branches end in normalize(head_token(...)) -- S2's _cluster_key --
-    so an operation's object and an entity's key are comparable by
-    construction rather than by two tables agreeing.
+    Only route-shaped values have a deterministic object rule (D10's
+    route_object). For everything else no single-position rule exists: a CLI
+    name is verb-first ('sync_orders'), a topic is entity-first
+    ('orders.created'), and a job name may carry no entity at all
+    ('settle_nightly'), so head_token on those returns the verb or the whole
+    string -- garbage stated as evidence (review finding 1). object stays ""
+    and entity_keys carries the contact surface instead.
     """
-    raw = member.value
+    if member.kind not in ROUTE_SHAPED_KINDS:
+        return ""
+    segment = route_object(member.value)
+    if segment is None:
+        return ""
+    return normalize(head_token(segment))
+
+
+def _entity_keys(member: CandidateMember, obj: str) -> tuple[str, ...]:
+    """The sorted, reduced entity keys this operation can claim contact on.
+
+    Route-shaped: exactly the object -- only HTTP routes carry directed
+    verbs, so their matching stays strict; a loose route match could
+    fabricate a writer. Every other kind: the reduction of each separator
+    token of the binding. Those kinds are undirected by construction (D6),
+    so the most a token match can produce is an UNDIRECTED claimant --
+    which is exactly the recall D8's UNDIRECTED outcome exists to provide
+    for CLI- and queue-driven repositories.
+
+    Known limit, same species as naming.py's OQ-12: camelCase inside a
+    token ('syncOrders') is not split, so its reduction matches nothing.
+    A missed key is a miss, not a fabrication.
+    """
     if member.kind in ROUTE_SHAPED_KINDS:
-        segment = route_object(member.value)
-        if segment is None:
-            return ""
-        raw = segment
-    return normalize(head_token(raw))
+        return (obj,) if obj else ()
+    tokens = (normalize(token) for token in re.split(r"[._\-\s]+", member.value))
+    return tuple(sorted({token for token in tokens if token}))
 
 
 def decompose(
@@ -83,9 +108,10 @@ def decompose(
     exposes nothing (D9).
     """
     if contract_collected.state is not CollectionState.MEASURED:
-        return DecompositionReport(
-            by_capability={bc_id: 0 for bc_id in sorted(members)},
-            collected=contract_collected)
+        # No by_capability entries at all, not zero-filled: a zero count is
+        # a MEASURED claim, and a gap is never a zero (FR-915, review
+        # finding 7).
+        return DecompositionReport(collected=contract_collected)
 
     operations: list[L2Operation] = []
     for bc_id in sorted(members):
@@ -95,15 +121,22 @@ def decompose(
         for index, member in enumerate(contract, start=1):
             verb, rule = _verb(member)
             obj = _object(member)
+            if obj:
+                name = f"{verb.value}_{obj}"
+            elif member.kind in ROUTE_SHAPED_KINDS:
+                name = verb.value        # spec's pinned bare-verb fallback
+            else:
+                name = member.value      # a command's own name IS the name
             operations.append(L2Operation(
                 op_id=f"{bc_id}-OP-{index:02d}",
                 capability=bc_id,
                 verb=verb,
-                name=f"{verb.value}_{obj}" if obj else verb.value,
+                name=name,
                 object=obj,
                 binding=member.value,
                 kind=member.kind,
                 rule=rule,
+                entity_keys=_entity_keys(member, obj),
                 evidence=EvidenceRef(
                     path=member.path,
                     lines="" if member.line is None else str(member.line)),
