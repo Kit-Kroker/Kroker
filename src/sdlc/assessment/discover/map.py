@@ -14,7 +14,11 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, model_validator
 
-from ..scan.models import EvidenceRef
+from ..scan.models import (
+    CandidateMember, Confidence, CoverageRecord, EvidenceRef,
+    SecurityObservation, SensitivityRecord, TestabilityFinding,
+)
+from ...measurement import CollectionState, Measurement
 
 
 class DiscoverAction(str, Enum):
@@ -116,4 +120,95 @@ class CandidateDisposition(BaseModel):
                 "source=proposer requires a rationale -- a baseline's rule IS "
                 "its rationale, but an unexplained model verdict is "
                 "unreviewable")
+        return self
+
+
+# S1's two non-domain classifications. A candidate supported ONLY by these is
+# named like a layer or a container ("services", "utils", "api"), which is
+# clause D2's guardrail: delivery channels and deployment boundaries are not
+# capabilities. S1 records WHICH rule fired rather than a boolean precisely so
+# this distinction is available here (scan spec, SourceCandidate docstring).
+GUARDRAIL_RULES: frozenset[str] = frozenset({
+    "s1_layer_name", "s1_generic_name"})
+
+
+class GraphSummary(BaseModel):
+    """The reference graph's shape WITHOUT its edges (DD4).
+
+    The proposer needs to know how much of the tree the extractor could read
+    -- a coupling number computed over two parsed files means something
+    different from one over two hundred. It does not need the edge list, and
+    an edge list in workflow history is the open FR-702 hazard.
+    """
+    model_config = {"frozen": True}
+    parsed: int
+    unparsed: int
+    edges: int
+    unresolved_relative_rate: Measurement
+
+
+class CandidateContext(BaseModel):
+    """One scan candidate as the proposer sees it: everything code could
+    compute about it, and no room to invent anything else."""
+    model_config = {"frozen": True}
+    candidate_id: str
+    name: str
+    confidence: Confidence
+    sources: tuple[str, ...]              # SourceCandidate.local_id
+    source_rules: tuple[str, ...]         # the rules that produced them
+    members: tuple[CandidateMember, ...]
+    member_paths: tuple[str, ...]
+    cohesion: Measurement                 # clause D1
+    coupling: Measurement                 # clause D1
+    guardrail_only: bool                  # DD6's input, DERIVED
+    possible_duplicate_of: tuple[str, ...] = ()
+    security: tuple[SecurityObservation, ...] = ()      # clause D6
+    sensitivity: tuple[SensitivityRecord, ...] = ()     # clause D6
+    testability: tuple[TestabilityFinding, ...] = ()    # clause D6a
+    coverage: tuple[CoverageRecord, ...] = ()           # clause D6a
+
+    @model_validator(mode="after")
+    def _guardrail_only_is_derived(self) -> "CandidateContext":
+        """Derived, never assigned, so a deserialized payload cannot disagree
+        with its own arithmetic (AttributionReport.meets_floor's rule).
+
+        `and self.source_rules` is load-bearing: all() of an empty sequence is
+        True, and a candidate whose rules we do not know must not be DE-SCOPEd
+        on an absence of evidence.
+        """
+        expected = bool(self.source_rules) and all(
+            r in GUARDRAIL_RULES for r in self.source_rules)
+        if self.guardrail_only != expected:
+            raise ValueError(
+                f"guardrail_only={self.guardrail_only} does not match the "
+                f"derived {expected} for source_rules={self.source_rules} -- "
+                f"it is derived, never assigned")
+        return self
+
+    @model_validator(mode="after")
+    def _member_paths_are_sorted(self) -> "CandidateContext":
+        if list(self.member_paths) != sorted(set(self.member_paths)):
+            raise ValueError(
+                f"member_paths {self.member_paths} are not sorted and "
+                f"deduped -- discovery order must not reach the artifact")
+        return self
+
+
+class DiscoverContext(BaseModel):
+    """The packet handed to the proposer, and the thing DD10's memo digests."""
+    candidates: tuple[CandidateContext, ...] = ()
+    entry_point_paths: tuple[str, ...] = ()
+    graph: GraphSummary
+    file_count: int = 0
+    skipped: tuple[str, ...] = ()
+    collected: Measurement
+
+    @model_validator(mode="after")
+    def _unmeasured_carries_no_payload(self) -> "DiscoverContext":
+        if (self.collected.state is not CollectionState.MEASURED
+                and self.candidates):
+            raise ValueError(
+                f"collected={self.collected.state.value} carries no payload, "
+                f"but {len(self.candidates)} candidate(s) are present -- a "
+                f"context that could not be built has no candidates (FR-915)")
         return self
