@@ -252,12 +252,22 @@ table, and FR-902's one-implementation-per-signal rule is the same rule read
 from the other side. So it moves to `scan/naming.py` as
 `route_object(value) -> str | None`, and `entrypoints.py` calls it.
 
-**Consequence, stated rather than discovered later:** `naming.py` is a declared
-`rule_module` for S3 and `rules_sha` hashes rule modules transitively. This
-promotion **invalidates S3's memo**, so the first assessment after it lands
-re-runs S3. That is the memo key working correctly — S3's inputs did change —
-and it is the reason the move belongs in this item's plan rather than in a
-drive-by edit.
+Note the promotion is two names, not one: `route_object` needs
+`_PATH_PREFIXES`, which `_is_non_specific` also reads, so the table moves with
+it as `PATH_PREFIXES` and `entrypoints.py` imports both back.
+
+**Consequence, stated rather than discovered later.** `rules_sha` hashes rule
+modules by bytes, so editing `naming.py` moves the memo key of **every signal
+that declares it** — and `registry.py` shows that is six: **S1, S2, S3, S4, S5
+and SS4**. (An earlier draft of this decision said "S3"; that was wrong, and
+the correction is recorded here rather than silently fixed, because the size of
+the invalidation is the reason the move needs its own task.)
+
+The first assessment after this lands therefore re-runs six signals. That is
+the memo key working correctly — `naming.py`'s bytes are a declared input to
+all six, and `test_scan_rules_sha` exists to assert exactly this coupling. It
+is also why the move belongs in this item's plan, behind a parity test, rather
+than in a drive-by edit.
 
 ### D11 — no `CheckResult` here
 
@@ -386,10 +396,18 @@ def decompose(
    canonical order is the one scan already defines. `binding` is the member's
    `value`, carried verbatim; the sort key and `op_id` order are therefore the
    same ordering under two names, not two orderings.
-3. Map each to a verb (D6) and derive `object`:
-   - `HTTP_ROUTE` → `naming.route_object(value)`
-   - every other kind → `normalize(head_token(value))` on the member's own value
-     (a CLI command name, a topic, a job name)
+3. Map each to a verb (D6) and derive `object`. Both branches end in the same
+   reduction — `normalize(head_token(...))`, S2's `_cluster_key` — so an
+   operation's object and an entity's key are comparable by construction. Only
+   the string fed into it differs:
+   - **route-shaped kinds** (`HTTP_ROUTE`, `FRONTEND_ROUTE`) →
+     `naming.route_object(value)` first, because a raw URL reduces to garbage:
+     `head_token("/users/:id")` is `/users/:id`. S4 emits `/payments/:id` with
+     no method, and `route_object` reads it correctly — it takes the last
+     whitespace-separated field, which for a method-less value is the whole
+     path.
+   - **every other kind** → the member's own value (a CLI command name, a
+     topic, a job name)
 
    `route_object` returns `str | None`; `None` and a blank reduction both store
    `object=""`. Name the operation `f"{verb}_{object}"`, falling back to the
@@ -501,5 +519,5 @@ This spec is **E-47c**, completing the E-47 split:
 | §1 stage 2 (context) | Note L2 and ownership land; FR-102's remaining half is classify/delta, no longer E-47 |
 | NFR-9 | Note E-47c adds no execution of repository code — parameters only, as E-47b |
 | NFR-10 | Two more pure modules under the order-independence assertion |
-| E-46 / S3 | `route_object` promoted to `scan/naming.py`; S3's memo invalidated once by the move (D10) |
+| E-46 / naming | `route_object` + `PATH_PREFIXES` promoted into `scan/naming.py`; the memo keys of all six `_NAMING` signals (S1, S2, S3, S4, S5, SS4) move once by the edit (D10) |
 | SC-8 | Blocker narrows from "needs E-47a + E-47b" to "needs a corpus" |
