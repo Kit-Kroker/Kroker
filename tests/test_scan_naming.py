@@ -119,6 +119,14 @@ def test_route_object_returns_none_when_every_segment_is_a_prefix():
     assert route_object("GET /") is None
 
 
+def test_route_object_returns_none_for_an_empty_or_blank_value():
+    """The helper is public now, so its precondition is enforced, not
+    assumed: S3 filters empty extracts today, but a second consumer (or a
+    future S5 path) may not (review finding 6)."""
+    assert route_object("") is None
+    assert route_object("   ") is None
+
+
 def test_route_object_keeps_segment_case():
     """The raw segment, not a key: callers reduce it themselves."""
     assert route_object("GET /Payments") == "Payments"

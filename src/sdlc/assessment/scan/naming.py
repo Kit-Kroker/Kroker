@@ -159,7 +159,10 @@ def route_object(value: str) -> str | None:
     normalize(head_token(...)); returning a key here would make the S3
     business name lossy, which this move must not do.
     """
-    for segment in value.split()[-1].split("/"):
+    fields = value.split()
+    if not fields:
+        return None
+    for segment in fields[-1].split("/"):
         if not segment or segment[0] in "{:<*":
             continue
         if segment.lower() in PATH_PREFIXES:
