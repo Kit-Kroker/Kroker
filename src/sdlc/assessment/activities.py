@@ -18,10 +18,12 @@ from ..activities import _git
 from ..measurement import Measurement
 from ..triage.activities import tracked_paths
 from ..triage.gitread import is_over_size_limit, read_tree
+from .discover.context import build_context
+from .discover.map import DiscoverContext, GraphSummary
 from .scan import memo
 from .scan.models import (
-    CATEGORIES, ScanSignalId, ScanSignalResult, ScanUpstream, SignalOutput,
-    SignalSource, family_of,
+    CATEGORIES, ScanResult, ScanSignalId, ScanSignalResult, ScanUpstream,
+    SignalOutput, SignalSource, family_of,
 )
 from .scan.registry import SCAN_SIGNALS
 from .scan.signals import (
@@ -390,3 +392,42 @@ async def scan_ci(inp: ScanSignalInput) -> SignalOutput:
         return failed_signal(ScanSignalId.QS4, exc)
     memo.store(ScanSignalId.QS4, inp.tree_hash, out)
     return out
+
+
+class DiscoverContextInput(BaseModel):
+    """Discover's read of the tree. `tree_hash` is carried for DD10's memo
+    key even though this activity does not itself memoize -- the phase does."""
+    repo_dir: str
+    commit_sha: str
+    tree_hash: str
+    scan: ScanResult
+
+
+def _no_context(reason: str) -> DiscoverContext:
+    """A packet that could not be built. Never an empty MEASURED packet: a
+    tree we could not read is not a tree with no capabilities (FR-915)."""
+    return DiscoverContext(
+        collected=Measurement.not_collected(reason),
+        graph=GraphSummary(
+            parsed=0, unparsed=0, edges=0,
+            unresolved_relative_rate=Measurement.not_collected(reason)))
+
+
+@activity.defn
+async def discover_context(inp: DiscoverContextInput) -> DiscoverContext:
+    """Read the tree at the pinned commit and compute everything code can
+    say about the candidate set (E-48 DD1).
+
+    Degrades rather than raising, exactly as the scan signals do: one
+    unreadable tree must report not_collected, not surface as a traceback the
+    phase has to interpret.
+    """
+    try:
+        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+        blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
+                                       SOURCE_EXTENSIONS)
+        return build_context(inp.scan, blobs, skipped)
+    except Exception as exc:                        # noqa: BLE001
+        _log.warning("discover_context failed: %s", exc)
+        return _no_context(
+            f"could not read the tree: {type(exc).__name__}: {exc}"[:300])

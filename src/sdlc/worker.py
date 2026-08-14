@@ -34,8 +34,8 @@ from .activities import (
 from .agents.loader import load_registry, validate_registry
 from .agents.roles import ALL_TEMPORAL_AGENTS
 from .assessment.activities import (
-    assessment_resolve_tree, scan_ci, scan_config_infra, scan_coverage,
-    scan_entrypoints, scan_frontend, scan_packages, scan_schema,
+    assessment_resolve_tree, discover_context, scan_ci, scan_config_infra,
+    scan_coverage, scan_entrypoints, scan_frontend, scan_packages, scan_schema,
     scan_security_static, scan_sensitivity, scan_testability,
     scan_tests_inventory,
 )
@@ -131,7 +131,7 @@ async def main() -> None:
             triage_baseline, triage_secrets, triage_build_probe,
             triage_dependencies, triage_scaffold, triage_misconfig,
             triage_outliers, triage_resolve_commit,
-            assessment_resolve_tree,
+            assessment_resolve_tree, discover_context,
             scan_packages, scan_schema, scan_entrypoints, scan_frontend,
             scan_security_static, scan_config_infra, scan_sensitivity,
             scan_tests_inventory, scan_coverage, scan_testability, scan_ci,
