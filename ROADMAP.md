@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-08-13 (E-47b against `src/sdlc/assessment/discover/` + `src/sdlc/assessment/scan/configpaths.py` + unit suite green); 2026-08-13 (E-46 plan 3 + review fixes against `src/sdlc/assessment/scan/`, unit + temporal e2e green); 2026-08-13 (E-46 plan 3 against `src/sdlc/assessment/scan/` + unit suite green); 2026-08-13 (E-46 plan 2 against `src/sdlc/assessment/scan/` + unit suite green); 2026-08-10 (E-45 against `src/sdlc/{assessment,workflows/assessment.py,triage/admission.py}` + unit/e2e tests green); 2026-08-09 (E-44 against `src/sdlc/{tidyup,workflows/tidyup.py,triage/delta.py}` + unit/component tests green; E-42 against `src/sdlc/workflows/{gates,triage}.py` + `pytest -m temporal`, with three review defects fixed; E-47a 2026-08-08 against `src/sdlc/capability/`; E-78 2026-08-07 against `src/sdlc/board/`; E-40/E-43 2026-08-06; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
+| Last verified | 2026-08-14 (E-47c against `src/sdlc/assessment/discover/` + `src/sdlc/assessment/scan/naming.py` + unit suite green); 2026-08-13 (E-47b against `src/sdlc/assessment/discover/` + `src/sdlc/assessment/scan/configpaths.py` + unit suite green); 2026-08-13 (E-46 plan 3 + review fixes against `src/sdlc/assessment/scan/`, unit + temporal e2e green); 2026-08-13 (E-46 plan 3 against `src/sdlc/assessment/scan/` + unit suite green); 2026-08-13 (E-46 plan 2 against `src/sdlc/assessment/scan/` + unit suite green); 2026-08-10 (E-45 against `src/sdlc/{assessment,workflows/assessment.py,triage/admission.py}` + unit/e2e tests green); 2026-08-09 (E-44 against `src/sdlc/{tidyup,workflows/tidyup.py,triage/delta.py}` + unit/component tests green; E-42 against `src/sdlc/workflows/{gates,triage}.py` + `pytest -m temporal`, with three review defects fixed; E-47a 2026-08-08 against `src/sdlc/capability/`; E-78 2026-08-07 against `src/sdlc/board/`; E-40/E-43 2026-08-06; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -114,7 +114,7 @@
 
 - [ ] **0 · intake** — routing greenfield/brownfield/repair. `IdeaBrief.mode` is a field only; no branch logic in `feature.py`.
 - [ ] **1 · constitution** — no `Constitution` model, no stage.
-- [ ] **2 · context (Cartographer)** — no `CodebaseMap`, no `cartography.py`, no brownfield delta. **E-46 plan 3 (2026-08-13):** S1–S5 is now the whole extraction half of `CodebaseMap`; FR-102 still needs E-47b/E-47c. **E-47b (2026-08-13):** attribution and orphan classification land; FR-102 still needs E-47c.
+- [ ] **2 · context (Cartographer)** — no `CodebaseMap`, no `cartography.py`, no brownfield delta. **E-46 plan 3 (2026-08-13):** S1–S5 is now the whole extraction half of `CodebaseMap`; FR-102 still needs E-47b/E-47c. **E-47b (2026-08-13):** attribution and orphan classification land; FR-102 still needs E-47c. **E-47c (2026-08-14):** L2 operations and entity ownership land; the E-47 group is closed and FR-102's remainder is classify + delta.
 - [ ] **3 · requirements (Product)** — conflated into clarify; no standalone Product proposer / `Requirements` artifact.
 - [ ] **4 · research** (FR-107) — grounded brief before clarify. The DAG is now 15
   stages; **9 of 15 stages live** (research is scaffolded, off by default).
@@ -135,7 +135,7 @@
 
 ### Pipeline (FR-100)
 - [ ] ⚠️ **FR-101** 15-stage durable DAG — 9/15 stages (see §1).
-- [ ] **FR-102** greenfield/brownfield classify + `CodebaseMap` + delta.
+- [ ] **FR-102** greenfield/brownfield classify + `CodebaseMap` + delta. **E-47a/b/c are all complete (2026-08-08 → 2026-08-14)**, so the `CapabilityMap` inputs exist; the remaining half is intake classification + brownfield delta, no longer E-47.
 - [x] **FR-103** memoization, per-run watermark, audit-record-always-kept (`memoization/cache.py`, `content_key`, `_cached_stage`) — each stage's memo key now carries *its own* role's model (`STAGE_MODELS`), so a per-role model change invalidates exactly that stage. `brief_digest` keeps memoization alive once a non-memoized stage (research) feeds memoized ones: the brief contributes only a canonical (source_url, claim) digest to `content_key`, so identical facts hit and new facts invalidate clarify/architect/planner. ⚠️ **Amendment pending (E-47a, 2026-08-08):** E-46's `(tree hash, signal version)` key gains a third term, `identity_registry_version` — the `CapabilityMap` is a function of the tree *and* the identity registry, so re-assessing an unchanged tree is no longer unconditionally a cache hit. Deliberately coarse (any identity write invalidates the whole map for that project); the map is a single artifact with no per-capability memoization to preserve. **Clarified (E-46 D10, 2026-08-12):** E-47a's `identity_registry_version` term applies to the `CapabilityMap`, not to E-46's signal keys — E-46 is a pure function of the tree, keyed on `(tree_hash, signal_version, rules_sha)`.
 - [x] **FR-104** integration branch, per-task worktree, own-branch-point diff (ADR-14 fully wired).
 - [ ] ⚠️ **FR-105** fix loops — QA loop ✅, review findings now fold into it ✅; loop-count defaults drift from spec (2 vs 3).
@@ -223,7 +223,7 @@ as tracked rather than accidental.
   derives `assessed:partial` on an admitted run. **2026-08-13 (E-46 plan 3):**
   the scan phase's own thirteen signals all report.
 - [x] **FR-912** deterministic scan memoized on `(tree hash, signal version)`; cross-source confidence (E-46). **All three plans landed (2026-08-12, 2026-08-13).** The memo key is `(tree_hash, signal_version, rules_sha)` — `rules_sha` beyond the specified two terms, hashed transitively over shared rule modules and consumed signals, because a hand-maintained version int misses a real input (spec D10). All thirteen signal rows report and every body computes or inherits; `OWED_BY` is empty. Cross-source confidence is live and derived (D8), and now reaches HIGH: S2 and S4 produce, so S5 can merge three or more distinct sources.
-- [ ] ⚠️ **FR-913** `CapabilityMap` with stable ids + coverage floor + orphan classification — **also satisfies FR-102** (E-47a/E-47b/E-47c/E-48). **Identity half landed 2026-08-08 (E-47a):** surrogate `BC-NNN` ids, weighted-Jaccard re-attachment, audited `IdentityCorrection` (`src/sdlc/capability/`). **Coverage floor + orphans landed 2026-08-13 (E-47b):** attribution and orphan classification in `src/sdlc/assessment/discover/`, pure and unwired (E-48 calls `attribute()` when it lands). L2/entity-ownership (E-47c) still open.
+- [x] **FR-913** `CapabilityMap` with stable ids + coverage floor + orphan classification — **also satisfies FR-102** (E-47a/E-47b/E-47c/E-48). **Identity half landed 2026-08-08 (E-47a):** surrogate `BC-NNN` ids, weighted-Jaccard re-attachment, audited `IdentityCorrection` (`src/sdlc/capability/`). **Coverage floor + orphans landed 2026-08-13 (E-47b):** attribution and orphan classification in `src/sdlc/assessment/discover/`, pure and unwired (E-48 calls `attribute()` when it lands). **L2 + entity ownership landed 2026-08-14 (E-47c):** all four clauses closed — `decompose()` and `assign()` in `src/sdlc/assessment/discover/`, pure and unwired (E-48 calls them when it lands).
 - [ ] **FR-914** byte-exact quote verification against the pinned commit, fail-closed — shares FR-107's verifier (E-43). *Partially landed 2026-08-06 (`grounding.py`: one substring invariant, two normalization profiles, verdict-only) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The verifier + research/handoff/deep-review consumers landed; the commit source gained its first consumer with E-41's secrets signal (2026-08-06), which re-verifies every emitted evidence quote against the pinned commit; stays open until an LLM-proposing assessment stage cites the same way, which is where the check stops being a drift guard.*
 - [ ] **FR-915** `not_collected` / `unknown` vs measured value (E-40). *Contract half landed 2026-08-06 (`measurement.py`, retrofitted onto `CoverageReport`/`SecurityReport`/`claim_survival_score`; `QAReport.coverage_pct` deleted) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The `RepoTriage`/triage half is deferred to E-41; the load-bearing case was the SARIF-malformed-reads-as-clean hole on the absolute floor. **E-44 adds a second consumer:** `compute_delta` reads `SignalResult.collected.state` and emits `UNVERIFIABLE` whenever a side did not collect, so a triage that timed out on the after side cannot read as "all findings fixed".*
 - [ ] **FR-916** STRIDE + vuln classification + control coverage + composites with 1–3 specific drivers (E-49).
@@ -267,8 +267,8 @@ as tracked rather than accidental.
 - [x] **NFR-6** Reproducibility vs memoization — watermark-pinned recall + content-addressed cache. *Pinning is exact on `fake` (entry-count cutoff) and a `mentioned_at` cutoff on `hindsight`, which has no point-in-time read: memories retained after the freeze cannot enter a stage input, but ranking is still contaminated by them and post-freeze consolidation can mint observations carrying pre-freeze timestamps. `2026-08-02-hindsight-real-integration-design` §2.1.*
 - [x] **NFR-7** Portability — `MemoryConfig.backend` defaults to `fake`; real Hindsight client for self-hosting, verified against a live container by `tests/test_hindsight_live.py` (the client shipped before 2026-08-02 implemented an invented API and could not have worked).
 - [ ] **NFR-8** Tenant isolation proven by adversarial cross-tenant read/recall test — no tenant concept exists yet (E-58).
-- [ ] **NFR-9** Hostile input — the factory currently assumes repositories are its own. Build scripts, test code, and manifests of a connected repo are attacker-controlled and executed (E-57). **E-41's build probe is the first stage that knowingly executes a foreign repository's code** (bounded, in a throwaway clone, as the worker user with network access). **E-44 widens the exposure:** the tidy-up fix runs execute the triaged repository's own build and test commands (not just the probe), as governed `FeatureWorkflow` children. Still operator-run only until E-57/E-21. **E-46 (2026-08-12)** adds no new execution of repository code: every scan signal is a blob read at the pinned commit. **E-46 plan 3 (2026-08-13)** adds no execution either: QS2 parses a committed Cobertura report rather than running the suite, and QS4 parses pipeline files rather than running them. **E-47b (2026-08-13)** adds no execution of repository code: every input is a parameter and the graph is built from blobs already read.
-- [ ] — **NFR-10** Assessment reproducibility — not falsifiable until the assessment exists; the deterministic half is E-41/E-46, the fused-layer variance half needs runs. **E-46 plan 3 (2026-08-13):** the deterministic half is now asserted for every pure signal module (`test_every_pure_signal_module_is_order_independent`), not only the capability chain. **E-47b (2026-08-13):** two more pure modules (`discover/refgraph.py`, `discover/attribution.py`) carry their own byte-identical-across-input-order assertions in their own test files.
+- [ ] **NFR-9** Hostile input — the factory currently assumes repositories are its own. Build scripts, test code, and manifests of a connected repo are attacker-controlled and executed (E-57). **E-41's build probe is the first stage that knowingly executes a foreign repository's code** (bounded, in a throwaway clone, as the worker user with network access). **E-44 widens the exposure:** the tidy-up fix runs execute the triaged repository's own build and test commands (not just the probe), as governed `FeatureWorkflow` children. Still operator-run only until E-57/E-21. **E-46 (2026-08-12)** adds no new execution of repository code: every scan signal is a blob read at the pinned commit. **E-46 plan 3 (2026-08-13)** adds no execution either: QS2 parses a committed Cobertura report rather than running the suite, and QS4 parses pipeline files rather than running them. **E-47b (2026-08-13)** adds no execution of repository code: every input is a parameter and the graph is built from blobs already read. **E-47c (2026-08-14)** adds no execution of repository code: every input is a parameter, as E-47b.
+- [ ] — **NFR-10** Assessment reproducibility — not falsifiable until the assessment exists; the deterministic half is E-41/E-46, the fused-layer variance half needs runs. **E-46 plan 3 (2026-08-13):** the deterministic half is now asserted for every pure signal module (`test_every_pure_signal_module_is_order_independent`), not only the capability chain. **E-47b (2026-08-13):** two more pure modules (`discover/refgraph.py`, `discover/attribution.py`) carry their own byte-identical-across-input-order assertions in their own test files. **E-47c (2026-08-14):** two more pure modules (`discover/operations.py`, `discover/ownership.py`) carry their own byte-identical-across-input-order assertions.
 
 ---
 
@@ -289,7 +289,7 @@ as tracked rather than accidental.
   **Aggregation landed** (`benchmarks/sc_rollup.py`, `sdlc benchmark score`);
   the number is n/a until 5+ runs exist.
 - [ ] — **SC-7** grounding integrity: 100% of `grounded` findings re-verify byte-exact, zero fabricated path/line refs when sampled — **the assessment product's SC-5**: one violation is a defect, not a percentage. Mechanism is E-43 (designed 2026-08-06, not implemented); the sampled audit needs real assessments.
-- [ ] — **SC-8** capability coverage ≥90% with classified orphans on ≥80% of readiness-passing repos — needs **E-47a + E-47b** (the coverage floor and orphan classification are E-47b; it needs E-47a's identified capability set to classify against) + a corpus. Not E-47c.
+- [ ] — **SC-8** capability coverage ≥90% with classified orphans on ≥80% of readiness-passing repos — needs **E-47a + E-47b** (the coverage floor and orphan classification are E-47b; it needs E-47a's identified capability set to classify against) + a corpus. Not E-47c. **(2026-08-14):** E-47a/b/c are all done; the blocker narrows to a corpus of readiness-passing repos.
 - [ ] — **SC-9** remediation efficacy: reduced composite for the targeted capability in ≥80% of accepted items, no new critical — needs E-54's delta.
 - [ ] — **SC-10** assessment economics per repo-size band — needs E-55 budgets + runs; without this the work cannot be priced.
 - [ ] — **SC-11** ≥95% of experiments decided by the pre-registered rule with no *unaudited* post-hoc change — needs E-65.
@@ -970,7 +970,11 @@ the factory rather than as prompts.
   `loc_metric` precedent); QS4 reports `ci_stages`/`env_drift` `not_collected`
   for a CI file that refused to parse, not `measured(0)`; and SS1/SS3 skip
   test paths like QS3. S3 still scans test files — same species, plan-2 scope,
-  flagged for a follow-up.
+  flagged for a follow-up. **E-47c (2026-08-14, D10):** `route_object` +
+  `PATH_PREFIXES` moved from `entrypoints.py` into `naming.py` for E-47c's
+  second consumer, which moves the memo keys of all six `_NAMING` signals
+  (S1, S2, S3, S4, S5, SS4) once by the edit — `test_scan_rules_sha`
+  asserts exactly this coupling.
 - **E-47 — `CapabilityMap`** → FR-913, **FR-102**. **Split three ways
   2026-08-08**; the single item carried four independent clauses and was too
   large for one plan. **This is where the assessment product and the core
@@ -1008,8 +1012,17 @@ the factory rather than as prompts.
     cost as a test rather than a caveat. Spec
     `docs/superpowers/specs/2026-08-13-e47b-coverage-floor-and-orphans-design.md`,
     plan `docs/superpowers/plans/2026-08-13-e47b-coverage-floor-and-orphans.md`.
-  - [ ] **E-47c — L2 operations + entity ownership** → FR-913. L2 decomposition,
+  - [x] **E-47c — L2 operations + entity ownership** → FR-913. L2 decomposition,
     entity ownership (exactly one owner or a surfaced conflict). Needs E-47a.
+    **Landed 2026-08-14.** Pure and unwired (D1): E-48 calls `decompose()` and
+    `assign()`. Decisions worth carrying: operations are one-per-contract-member
+    (D3) so each resolves to a byte range; `OperationVerb` and `OwnershipVerb`
+    stay separate and **`TRACKS` is not emitted** (D6) because it has no
+    deterministic trigger; ownership is declaration → writes → reads with ties
+    surfaced (D7); and `CONFLICT`/`UNDIRECTED`/`UNCLAIMED` are three outcomes
+    (D8) so a CLI-written table never reads as untouched. Spec
+    `docs/superpowers/specs/2026-08-14-e47c-l2-operations-and-entity-ownership-design.md`,
+    plan `docs/superpowers/plans/2026-08-14-e47c-l2-operations-and-entity-ownership.md`.
 - [ ] **E-48 — discover proposers** → FR-913. D1 cohesion/coupling/boundary
   clarity; D2 action per candidate (`CONFIRM | SPLIT | MERGE | DE-SCOPE |
   FLAG`); D3 coverage verification with orphan disposition; D4 lock; D5 L2
