@@ -30,7 +30,10 @@ from ..models import (
     ScanSignalId, ScanSignalResult, SignalOutput, SignalSource, SourceCandidate,
     family_of,
 )
-from ..naming import GENERIC_NAMES, LAYER_NAMES, head_token, normalize
+from ..naming import (
+    GENERIC_NAMES, LAYER_NAMES, PATH_PREFIXES, head_token, normalize,
+    route_object,
+)
 
 SIGNAL_ID = "S3"
 VERSION = 1
@@ -122,12 +125,6 @@ UNSUPPORTED_FRAMEWORKS: tuple[Detector, ...] = (
         _CS_USING.format(m=r"Grpc\.(?:AspNetCore|Core)"))),
 )
 
-# Route segments that prefix an API rather than name a business operation.
-_PATH_PREFIXES: frozenset[str] = frozenset({
-    "api", "apis", "rest", "graphql", "v1", "v2", "v3", "internal", "public",
-    "admin", "_next",
-})
-
 # Which member kind is most contract-ish, for choosing the rule a mixed
 # candidate reports. Ordered, not a set: the answer must be deterministic.
 _KIND_RULE: tuple[tuple[MemberKind, str], ...] = (
@@ -160,7 +157,7 @@ def _is_non_specific(word: str) -> bool:
     """A stem/segment that names a technical layer, a generic bucket, or an
     API prefix -- none of which is a business operation."""
     key = word.lower()
-    return key in LAYER_NAMES or key in GENERIC_NAMES or key in _PATH_PREFIXES
+    return key in LAYER_NAMES or key in GENERIC_NAMES or key in PATH_PREFIXES
 
 
 def _specific_ancestor(path: str) -> str | None:
@@ -196,11 +193,8 @@ def _business_name(value: str, path: str, kind: MemberKind) -> str:
     skipped, not silently adopted.
     """
     if kind is MemberKind.HTTP_ROUTE:
-        for segment in value.split()[-1].split("/"):
-            if not segment or segment[0] in "{:<*":
-                continue
-            if segment.lower() in _PATH_PREFIXES:
-                continue
+        segment = route_object(value)
+        if segment is not None:
             return segment
     stem = posixpath.splitext(posixpath.basename(path))[0]
     if _is_non_specific(stem):

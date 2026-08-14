@@ -134,3 +134,35 @@ def normalize(name: str) -> str:
     # (review finding 3).
     out = out.strip("_-.").lower()
     return singularize(out)
+
+
+# Route segments that prefix an API rather than name a business operation.
+# Moved here from entrypoints.py when E-47c's decompose() became a second
+# consumer -- sources.py's rule: a table moves out when the second one
+# appears (D10). _is_non_specific reads it too, which is why the table moves
+# with route_object rather than the function alone.
+PATH_PREFIXES: frozenset[str] = frozenset({
+    "api", "apis", "rest", "graphql", "v1", "v2", "v3", "internal", "public",
+    "admin", "_next",
+})
+
+
+def route_object(value: str) -> str | None:
+    """The first segment of a route that names a business object, or None.
+
+    `value` is a member value in S3's uniform "<METHOD> <path>" shape, so the
+    path is its last whitespace-separated field -- which for S4's method-less
+    FRONTEND_ROUTE values is the whole string, by construction rather than by
+    accident.
+
+    Returns the RAW segment. Callers wanting a comparison key reduce it with
+    normalize(head_token(...)); returning a key here would make the S3
+    business name lossy, which this move must not do.
+    """
+    for segment in value.split()[-1].split("/"):
+        if not segment or segment[0] in "{:<*":
+            continue
+        if segment.lower() in PATH_PREFIXES:
+            continue
+        return segment
+    return None

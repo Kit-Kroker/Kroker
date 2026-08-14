@@ -97,3 +97,32 @@ def test_every_layer_suffix_is_capitalized():
     the form they appear in source so the table reads as documentation."""
     for suffix in LAYER_SUFFIXES:
         assert suffix[0].isupper(), suffix
+
+
+from sdlc.assessment.scan.naming import PATH_PREFIXES, route_object
+
+
+def test_route_object_skips_prefixes_and_parameters():
+    assert route_object("POST /api/v1/payments") == "payments"
+    assert route_object("GET /api/payments/{id}") == "payments"
+    assert route_object("GET /v2/orders/:id/items") == "orders"
+
+
+def test_route_object_reads_a_method_less_value():
+    """S4's FRONTEND_ROUTE members carry no method; the last whitespace
+    field of a method-less value is the whole path."""
+    assert route_object("/payments/:id") == "payments"
+
+
+def test_route_object_returns_none_when_every_segment_is_a_prefix():
+    assert route_object("GET /api/v1") is None
+    assert route_object("GET /") is None
+
+
+def test_route_object_keeps_segment_case():
+    """The raw segment, not a key: callers reduce it themselves."""
+    assert route_object("GET /Payments") == "Payments"
+
+
+def test_path_prefixes_is_importable_and_populated():
+    assert "api" in PATH_PREFIXES and "v1" in PATH_PREFIXES
