@@ -41,6 +41,7 @@ with workflow.unsafe.imports_passed_through():
         PhaseResult,
         terminal_status,
     )
+    from ..assessment.discover.map import CapabilityMap
     from ..assessment.scan.inherit import InheritedHalf, inherited_halves
     from ..assessment.scan.merge import MergeOutput, merge
     from ..assessment.scan.models import (
@@ -244,7 +245,8 @@ def _merged_row(out: MergeOutput) -> ScanSignalResult:
 
 def assemble(repo_dir: str, init: InitOutcome, admitted: bool, reason: str,
              rest: list[PhaseResult] | None = None,
-             scan: ScanResult | None = None) -> Assessment:
+             scan: ScanResult | None = None,
+             discover: CapabilityMap | None = None) -> Assessment:
     """The ONLY constructor of an Assessment and the only caller of
     terminal_status: one place where the artifact is built means the derived
     status cannot disagree with the phase list it was derived from.
@@ -273,7 +275,7 @@ def assemble(repo_dir: str, init: InitOutcome, admitted: bool, reason: str,
         toolchain=t.toolchain if t else None,
         triage=t, admitted=admitted, admission_reason=reason,
         phases=phases, terminal_status=terminal_status(admitted, phases),
-        scan=scan)
+        scan=scan, discover=discover)
 
 
 @workflow.defn

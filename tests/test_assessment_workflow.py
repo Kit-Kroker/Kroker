@@ -7,6 +7,7 @@ import inspect
 
 import pytest
 
+from sdlc.assessment.discover.map import CapabilityMap
 from sdlc.assessment.models import (
     ASSESSED, BLOCKED, PARTIAL, PHASE_ORDER, PhaseId, PhaseResult,
     InitOutcome,
@@ -126,7 +127,9 @@ def test_assemble_reports_assessed_once_every_phase_collects():
     rest = [PhaseResult(phase=p, collected=Measurement.measured(1.0))
             for p in PHASE_ORDER if p is not PhaseId.INIT]
     assert assemble("/r", _init(), True, "verdict ready", rest,
-                    scan=_scan_result()).terminal_status == ASSESSED
+                    scan=_scan_result(),
+                    discover=CapabilityMap(
+                        collected=Measurement.measured(0.0))).terminal_status == ASSESSED
 
 
 def test_assemble_orders_phases_canonically_regardless_of_arrival():

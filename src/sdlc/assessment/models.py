@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from ..measurement import CollectionState, Measurement
 from ..triage.models import RepoTriage
+from .discover.map import CapabilityMap
 from .scan.models import ScanResult
 
 
@@ -102,6 +103,10 @@ class Assessment(BaseModel):
     # later item adds its OWN typed field, because an untyped bag would be a
     # schema-less hole in the one artifact handed to a customer (FR-921).
     scan: ScanResult | None = None
+    # E-48's typed field. As with `scan`, this is its OWN field rather than a
+    # generic payload bag: an untyped bag would be a schema-less hole in the
+    # one artifact handed to a customer (FR-921).
+    discover: CapabilityMap | None = None
 
     @model_validator(mode="after")
     def _no_triage_means_not_admitted(self) -> Assessment:
@@ -158,4 +163,27 @@ class Assessment(BaseModel):
                 f"scan phase is {row.collected.state.value} but a ScanResult "
                 f"is present -- an assessment cannot claim it did not scan "
                 f"while shipping scan output")
+        return self
+
+    @model_validator(mode="after")
+    def _discover_agrees_with_its_phase(self) -> Assessment:
+        """_scan_agrees_with_its_phase, for DISCOVER. Kept as a second
+        explicit validator rather than a loop over (phase, field) pairs: the
+        error messages are what a reader debugs against, and a generic one
+        would name neither the phase nor the artifact.
+        """
+        row = next((p for p in self.phases if p.phase is PhaseId.DISCOVER),
+                   None)
+        if row is None:                       # unreachable: the DAG validator
+            return self                       # already required every phase
+        measured = row.collected.state is CollectionState.MEASURED
+        if measured and self.discover is None:
+            raise ValueError(
+                "discover phase is measured but no CapabilityMap is present "
+                "-- a measured phase produced an artifact by definition")
+        if not measured and self.discover is not None:
+            raise ValueError(
+                f"discover phase is {row.collected.state.value} but a "
+                f"CapabilityMap is present -- an assessment cannot claim it "
+                f"did not discover while shipping a capability map")
         return self

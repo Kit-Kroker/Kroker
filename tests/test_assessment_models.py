@@ -181,7 +181,13 @@ def test_a_measured_scan_phase_requires_a_payload():
 
 
 def test_a_measured_scan_phase_with_a_payload_constructs():
-    phases = _scan_dag(scan_measured=True)
+    # DISCOVER is held not-measured: this test is about the SCAN pairing, and
+    # a measured DISCOVER would now also require a CapabilityMap (E-48).
+    phases = [
+        p if p.phase is not PhaseId.DISCOVER else PhaseResult(
+            phase=PhaseId.DISCOVER,
+            collected=Measurement.not_collected("discover not run"))
+        for p in _scan_dag(scan_measured=True)]
     a = Assessment(repo_dir="/r", triage=_triage(), admitted=True,
                    admission_reason="verdict ready", phases=phases,
                    terminal_status=terminal_status(True, phases),
@@ -197,6 +203,59 @@ def test_assemble_threads_the_scan_payload_through():
     rest += [unbuilt(p) for p in PHASE_ORDER
              if p not in (PhaseId.INIT, PhaseId.SCAN)]
     a = assemble("/r", _init_out(), True, "verdict ready", rest,
-                 scan=_scan_result())
+                  scan=_scan_result())
     assert a.scan is not None
     assert a.terminal_status == PARTIAL
+
+
+# --- E-48: the discover payload and its phase-agreement validator ---------
+from sdlc.assessment.discover.map import CapabilityMap
+
+
+def _discover_dag(discover_measured: bool) -> list[PhaseResult]:
+    """The whole DAG with DISCOVER either measured or not, every other phase
+    measured. _scan_dag's shape, for the other pairing."""
+    out = []
+    for phase in PHASE_ORDER:
+        if phase is PhaseId.DISCOVER and not discover_measured:
+            out.append(PhaseResult(
+                phase=phase,
+                collected=Measurement.not_collected("discover not run")))
+        else:
+            out.append(PhaseResult(phase=phase,
+                                   collected=Measurement.measured(1.0)))
+    return out
+
+
+def test_a_measured_discover_phase_requires_a_capability_map():
+    """_scan_agrees_with_its_phase, applied to DISCOVER: a measured phase
+    produced an artifact by definition."""
+    phases = _discover_dag(discover_measured=True)
+    with pytest.raises(ValidationError, match="no CapabilityMap"):
+        Assessment(repo_dir="/r", triage=_triage(), admitted=True,
+                   admission_reason="verdict ready", phases=phases,
+                   terminal_status=terminal_status(True, phases),
+                   scan=_scan_result(), discover=None)
+
+
+def test_a_discover_payload_requires_a_measured_discover_phase():
+    """An assessment cannot claim it did not discover while shipping a map."""
+    phases = _discover_dag(discover_measured=False)
+    with pytest.raises(ValidationError, match="did not discover"):
+        Assessment(repo_dir="/r", triage=_triage(), admitted=True,
+                   admission_reason="verdict ready", phases=phases,
+                   terminal_status=terminal_status(True, phases),
+                   scan=_scan_result(),
+                   discover=CapabilityMap(
+                       collected=Measurement.measured(0.0)))
+
+
+def test_a_measured_discover_phase_with_a_payload_constructs():
+    phases = _discover_dag(discover_measured=True)
+    a = Assessment(repo_dir="/r", triage=_triage(), admitted=True,
+                   admission_reason="verdict ready", phases=phases,
+                   terminal_status=terminal_status(True, phases),
+                   scan=_scan_result(),
+                   discover=CapabilityMap(
+                       collected=Measurement.measured(0.0)))
+    assert a.discover is not None
