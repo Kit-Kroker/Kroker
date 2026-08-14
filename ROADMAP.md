@@ -223,7 +223,7 @@ as tracked rather than accidental.
   derives `assessed:partial` on an admitted run. **2026-08-13 (E-46 plan 3):**
   the scan phase's own thirteen signals all report.
 - [x] **FR-912** deterministic scan memoized on `(tree hash, signal version)`; cross-source confidence (E-46). **All three plans landed (2026-08-12, 2026-08-13).** The memo key is `(tree_hash, signal_version, rules_sha)` — `rules_sha` beyond the specified two terms, hashed transitively over shared rule modules and consumed signals, because a hand-maintained version int misses a real input (spec D10). All thirteen signal rows report and every body computes or inherits; `OWED_BY` is empty. Cross-source confidence is live and derived (D8), and now reaches HIGH: S2 and S4 produce, so S5 can merge three or more distinct sources.
-- [x] **FR-913** `CapabilityMap` with stable ids + coverage floor + orphan classification — **also satisfies FR-102** (E-47a/E-47b/E-47c/E-48). **Identity half landed 2026-08-08 (E-47a):** surrogate `BC-NNN` ids, weighted-Jaccard re-attachment, audited `IdentityCorrection` (`src/sdlc/capability/`). **Coverage floor + orphans landed 2026-08-13 (E-47b):** attribution and orphan classification in `src/sdlc/assessment/discover/`, pure and unwired (E-48 calls `attribute()` when it lands). **L2 + entity ownership landed 2026-08-14 (E-47c):** all four clauses closed — `decompose()` and `assign()` in `src/sdlc/assessment/discover/`, pure and unwired (E-48 calls them when it lands).
+- [ ] ⚠️ **FR-913** `CapabilityMap` with stable ids + coverage floor + orphan classification — **also satisfies FR-102** (E-47a/E-47b/E-47c/E-48). All four clauses' mechanisms have landed, pure and unwired; `[x]` waits on E-48 wiring them into `discover` (`workflows/assessment.py` still returns `unbuilt(PhaseId.DISCOVER)`). **Identity half landed 2026-08-08 (E-47a):** surrogate `BC-NNN` ids, weighted-Jaccard re-attachment, audited `IdentityCorrection` (`src/sdlc/capability/`). **Coverage floor + orphans landed 2026-08-13 (E-47b):** attribution and orphan classification in `src/sdlc/assessment/discover/` (E-48 calls `attribute()` when it lands). **L2 + entity ownership landed 2026-08-14 (E-47c):** `decompose()` and `assign()` in `src/sdlc/assessment/discover/` (E-48 calls them when it lands).
 - [ ] **FR-914** byte-exact quote verification against the pinned commit, fail-closed — shares FR-107's verifier (E-43). *Partially landed 2026-08-06 (`grounding.py`: one substring invariant, two normalization profiles, verdict-only) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The verifier + research/handoff/deep-review consumers landed; the commit source gained its first consumer with E-41's secrets signal (2026-08-06), which re-verifies every emitted evidence quote against the pinned commit; stays open until an LLM-proposing assessment stage cites the same way, which is where the check stops being a drift guard.*
 - [ ] **FR-915** `not_collected` / `unknown` vs measured value (E-40). *Contract half landed 2026-08-06 (`measurement.py`, retrofitted onto `CoverageReport`/`SecurityReport`/`claim_survival_score`; `QAReport.coverage_pct` deleted) — see spec `docs/superpowers/specs/2026-08-06-measurement-and-shared-grounding-verifier-design.md`. The `RepoTriage`/triage half is deferred to E-41; the load-bearing case was the SARIF-malformed-reads-as-clean hole on the absolute floor. **E-44 adds a second consumer:** `compute_delta` reads `SignalResult.collected.state` and emits `UNVERIFIABLE` whenever a side did not collect, so a triage that timed out on the after side cannot read as "all findings fixed".*
 - [ ] **FR-916** STRIDE + vuln classification + control coverage + composites with 1–3 specific drivers (E-49).
@@ -1023,6 +1023,17 @@ the factory rather than as prompts.
     (D8) so a CLI-written table never reads as untouched. Spec
     `docs/superpowers/specs/2026-08-14-e47c-l2-operations-and-entity-ownership-design.md`,
     plan `docs/superpowers/plans/2026-08-14-e47c-l2-operations-and-entity-ownership.md`.
+    **Review pass (2026-08-14, before merge):** eight findings, the worst
+    being a fabricated non-route `object` (`head_token` on a command name
+    returns the verb) that made CLI-written tables read as `UNCLAIMED`.
+    Fixed via `L2Operation.entity_keys`: route kinds match strict (only they
+    carry directed verbs), undirected kinds match on reduced binding tokens.
+    Also: S3 now reads Flask's `methods=` kwarg (v2) so a POST route is a
+    write; `claimants` carries every toucher so E-48's proposer sees the
+    loser; `tied_declarers` names cross-file ties; a degraded `decompose()`
+    names no zero counts; the decompose→assign seam is tested
+    (`tests/test_discover_seam.py`). Corrections recorded in the spec's
+    "Review corrections" section.
 - [ ] **E-48 — discover proposers** → FR-913. D1 cohesion/coupling/boundary
   clarity; D2 action per candidate (`CONFIRM | SPLIT | MERGE | DE-SCOPE |
   FLAG`); D3 coverage verification with orphan disposition; D4 lock; D5 L2

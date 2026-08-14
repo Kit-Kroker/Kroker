@@ -521,3 +521,48 @@ This spec is **E-47c**, completing the E-47 split:
 | NFR-10 | Two more pure modules under the order-independence assertion |
 | E-46 / naming | `route_object` + `PATH_PREFIXES` promoted into `scan/naming.py`; the memo keys of all six `_NAMING` signals (S1, S2, S3, S4, S5, SS4) move once by the edit (D10) |
 | SC-8 | Blocker narrows from "needs E-47a + E-47b" to "needs a corpus" |
+
+## Review corrections (2026-08-14, before merge)
+
+Four pre-merge review findings changed a decision above. Recorded here
+rather than silently fixed, per D10's rule.
+
+**RC1 — "The two functions" step 3, non-route branch, was wrong.** The spec
+said every non-route kind feeds `normalize(head_token(value))` into
+`object`, claiming comparability "by construction". That holds only for
+the route branch: `head_token` takes the *leading* token, and S3's
+non-route names are verb-first (`sync_orders` → `sync`) or whole-string
+(`orders.created`), so every non-route `object` was garbage that matched
+no entity — a table touched only by a CLI job resolved to `UNCLAIMED`,
+the exact outcome D8 exists to prevent. Correction: non-route kinds carry
+`object=""` (no deterministic single-object rule exists) and a new
+`L2Operation.entity_keys` — route kinds contribute exactly their `object`,
+every other kind the reduction of each separator token of its binding.
+The asymmetry is deliberate: only HTTP routes carry directed verbs, so
+only they can fabricate an owner; a loose token match on an undirected
+kind can produce at most an `UNDIRECTED` claimant. `assign()` matches on
+`entity_keys`, never `object`.
+
+**RC2 — D6's method extraction is only as truthful as S3.** D6 assumed
+every HTTP member value carries its true method. Flask's pattern captured
+only the path, so a `methods=["POST"]` route was synthesized as `GET` —
+every Flask write decomposed into a read. Fixed in S3 (v2): the `methods=`
+kwarg is captured when present; a bare `@route` keeps Flask's own GET
+default, preserving the one-shape property D6 wanted.
+
+**RC3 — D7's `claimants` understated contact.** The rules as specified
+listed only the capabilities the winning rule considered: rule 1 its
+declarers, rules 2–3 their writers/readers. Correction: `claimants` is the
+union of declarers, writers, readers and undirected touchers for every
+outcome, each backed by the row's evidence. D7's own mitigation depends on
+this — the proposer can only override a declaration-site owner it can see.
+Rule 4's `declared_in_shared_file` is also narrowed: a 2+ declarer tie
+across *different* files is `tied_declarers`, because a rule name that
+misstates the evidence cannot be cited.
+
+**RC4 — D9's degraded branch zero-filled `by_capability`.** A zero count
+is a measured claim ("exposes zero operations"); under a gap the dict is
+empty. Same FR-915 distinction the report's `collected.state` makes, and
+the same absent-key-vs-zero rule `counts` inverts on purpose (a closed
+enumeration requires zeros; an open dict over bc_ids makes presence a
+claim).
