@@ -12,6 +12,7 @@ from enum import Enum
 from pydantic import BaseModel, Field, model_validator
 
 from ...measurement import CollectionState, Measurement
+from ..scan.models import CandidateMember, EvidenceRef, MemberKind
 
 DEFAULT_COVERAGE_FLOOR = 0.90
 DEAD_GUARD_MAX_UNRESOLVED = 0.10
@@ -139,4 +140,99 @@ class AttributionReport(BaseModel):
                 f"{expected} for coverage={self.coverage.state.value} "
                 f"floor={self.floor} -- meets_floor is derived, "
                 f"never assigned")
+        return self
+
+
+# D4. An operation is something the system DOES, reachable from outside the
+# capability. The other half of this pairing is E-48's MemberKind ->
+# SignalTier map; NEITHER may be derived from the other, because two uses of
+# the word "contract" that agree only by coincidence is precisely the defect
+# PipelineConfig.roles' boot-time mirror assertion exists to prevent.
+CONTRACT_KINDS: frozenset[MemberKind] = frozenset({
+    MemberKind.HTTP_ROUTE, MemberKind.CLI_COMMAND, MemberKind.GRPC_METHOD,
+    MemberKind.SCHEDULED_JOB, MemberKind.QUEUE_TOPIC,
+    MemberKind.FRONTEND_ROUTE,
+})
+
+# Kinds whose value is a URL path. head_token("/users/:id") is "/users/:id",
+# so these MUST go through naming.route_object before being reduced.
+ROUTE_SHAPED_KINDS: frozenset[MemberKind] = frozenset({
+    MemberKind.HTTP_ROUTE, MemberKind.FRONTEND_ROUTE,
+})
+
+
+class OperationVerb(str, Enum):
+    """What an operation does.
+
+    NOT OwnershipVerb (D6). That describes a capability's relationship to an
+    entity -- a different subject -- and collapsing the two reads plausibly
+    right up to the point where an operation's CREATE is mistaken for an
+    ownership CREATES.
+    """
+    CREATE = "create"
+    READ = "read"
+    UPDATE = "update"
+    DELETE = "delete"
+    INVOKE = "invoke"        # CLI command, gRPC method -- direction unknown
+    SCHEDULE = "schedule"    # cron/job -- direction unknown
+    CONSUME = "consume"      # queue topic -- direction unknown
+    RENDER = "render"        # frontend route -- direction unknown
+
+
+WRITE_VERBS: frozenset[OperationVerb] = frozenset(
+    {OperationVerb.CREATE, OperationVerb.UPDATE, OperationVerb.DELETE})
+READ_VERBS: frozenset[OperationVerb] = frozenset({OperationVerb.READ})
+
+# Ownership rules 2 and 3 consider ONLY these. An operation whose direction we
+# cannot read proves contact and nothing else; counting it as a read would
+# invent evidence (D8's UNDIRECTED outcome exists for exactly this case).
+DIRECTED_VERBS: frozenset[OperationVerb] = WRITE_VERBS | READ_VERBS
+
+
+class L2Operation(BaseModel):
+    """One thing a capability does, resolving 1:1 to a byte range at the
+    pinned commit (D3) -- which is why SC-7 holds trivially here."""
+    model_config = {"frozen": True}
+    op_id: str                  # "BC-014-OP-03", assessment-local (D5)
+    capability: str             # bc_id
+    verb: OperationVerb
+    name: str                   # "create_payment"
+    object: str                 # "payment"; "" when underivable
+    binding: str                # "POST /api/payments", verbatim
+    kind: MemberKind
+    rule: str                   # the mapping rule that fired
+    evidence: EvidenceRef
+
+
+class DecompositionReport(BaseModel):
+    operations: tuple[L2Operation, ...] = ()
+    by_capability: dict[str, int] = Field(default_factory=dict)
+    collected: Measurement
+
+    @model_validator(mode="after")
+    def _counts_are_derived(self) -> "DecompositionReport":
+        for bc_id, claimed in self.by_capability.items():
+            actual = sum(1 for o in self.operations if o.capability == bc_id)
+            if claimed != actual:
+                raise ValueError(
+                    f"by_capability[{bc_id}]={claimed} but {actual} "
+                    f"operation(s) carry it -- counts are derived from "
+                    f"operations, never assigned")
+        unlisted = sorted({o.capability for o in self.operations}
+                          - set(self.by_capability))
+        if unlisted:
+            raise ValueError(
+                f"operations name capabilities absent from by_capability "
+                f"({unlisted}) -- an absent key and a zero count are "
+                f"different claims and only one of them is true")
+        return self
+
+    @model_validator(mode="after")
+    def _unmeasured_carries_no_payload(self) -> "DecompositionReport":
+        if (self.collected.state is not CollectionState.MEASURED
+                and self.operations):
+            raise ValueError(
+                f"collected={self.collected.state.value} carries no payload, "
+                f"but {len(self.operations)} operation(s) are present -- a "
+                f"decomposition that did not happen has no rows (FR-915)")
         return self

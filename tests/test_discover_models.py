@@ -97,3 +97,61 @@ def test_exactly_the_floor_meets_it():
     ] + [FileAttribution(path="d.py", bucket=FileBucket.DEAD,
                          rule="no_static_inbound_reference")]
     assert _report(files, Measurement.measured(0.90)).meets_floor is True
+
+
+from sdlc.assessment.discover.models import (
+    CONTRACT_KINDS, DIRECTED_VERBS, DecompositionReport, L2Operation,
+    OperationVerb,
+)
+from sdlc.assessment.scan.models import EvidenceRef, MemberKind
+from sdlc.measurement import CollectionState
+
+OP = L2Operation(
+    op_id="BC-014-OP-01", capability="BC-014", verb=OperationVerb.CREATE,
+    name="create_payment", object="payment", binding="POST /api/payments",
+    kind=MemberKind.HTTP_ROUTE, rule="http_post",
+    evidence=EvidenceRef(path="api/pay.py", lines="31"))
+
+
+def test_contract_kinds_names_behaviour_not_data_or_structure():
+    assert MemberKind.HTTP_ROUTE in CONTRACT_KINDS
+    assert MemberKind.SCHEDULED_JOB in CONTRACT_KINDS
+    for absent in (MemberKind.ENTITY_NAME, MemberKind.DB_TABLE,
+                   MemberKind.TEST_NAME, MemberKind.EXPORTED_SYMBOL,
+                   MemberKind.PACKAGE_PATH, MemberKind.FILE_PATH):
+        assert absent not in CONTRACT_KINDS
+
+
+def test_only_read_and_write_verbs_are_directed():
+    assert OperationVerb.CREATE in DIRECTED_VERBS
+    assert OperationVerb.READ in DIRECTED_VERBS
+    for undirected in (OperationVerb.INVOKE, OperationVerb.SCHEDULE,
+                       OperationVerb.CONSUME, OperationVerb.RENDER):
+        assert undirected not in DIRECTED_VERBS
+
+
+def test_by_capability_carries_every_capability_including_zeros():
+    report = DecompositionReport(
+        operations=(OP,), by_capability={"BC-014": 1, "BC-021": 0},
+        collected=Measurement.measured(1.0))
+    assert report.by_capability["BC-021"] == 0
+
+
+def test_by_capability_counts_are_derived_from_operations():
+    with pytest.raises(ValidationError, match="derived from operations"):
+        DecompositionReport(operations=(OP,), by_capability={"BC-014": 7},
+                            collected=Measurement.measured(1.0))
+
+
+def test_an_unmeasured_report_carries_no_operations():
+    with pytest.raises(ValidationError, match="carries no payload"):
+        DecompositionReport(
+            operations=(OP,), by_capability={"BC-014": 1},
+            collected=Measurement.not_collected("S3 did not collect"))
+
+
+def test_an_unmeasured_report_with_no_rows_is_valid():
+    report = DecompositionReport(
+        collected=Measurement.not_collected("S3 did not collect"))
+    assert report.operations == ()
+    assert report.collected.state is CollectionState.NOT_COLLECTED
