@@ -374,6 +374,26 @@ def fingerprint_of(locked: LockedCandidate) -> CapabilityFingerprint:
         tiers=tiers, collected=Measurement.measured(float(total)))
 
 
+def capabilities_of(applied: ApplyResult,
+                    bc_of: Mapping[str, str]) -> tuple[Capability, ...]:
+    """The locked Capability rows. Extracted so both the blueprint activity
+    and build_map share one construction (DD11)."""
+    missing = sorted(c.local_key for c in applied.locked
+                     if c.local_key not in bc_of)
+    if missing:
+        raise ValueError(
+            f"no bc_id was attached to {missing} -- resolve() attaches every "
+            f"proposed capability, so a missing one is a lock defect rather "
+            f"than a degraded input")
+
+    return tuple(
+        Capability(bc_id=bc_of[c.local_key], local_key=c.local_key,
+                   name=c.name, confidence=c.confidence, members=c.members,
+                   member_paths=c.member_paths, cohesion=c.cohesion,
+                   coupling=c.coupling, disposition=c.disposition)
+        for c in applied.locked)
+
+
 def build_map(applied: ApplyResult, bc_of: Mapping[str, str], *,
               advisories: Sequence[Advisory] = (),
               attribution: AttributionReport | None = None,
@@ -392,20 +412,7 @@ def build_map(applied: ApplyResult, bc_of: Mapping[str, str], *,
     PHASE row and carries no map at all, so a not_collected map has no
     producer and Assessment._discover_agrees_with_its_phase would refuse one.
     """
-    missing = sorted(c.local_key for c in applied.locked
-                     if c.local_key not in bc_of)
-    if missing:
-        raise ValueError(
-            f"no bc_id was attached to {missing} -- resolve() attaches every "
-            f"proposed capability, so a missing one is a lock defect rather "
-            f"than a degraded input")
-
-    capabilities = tuple(
-        Capability(bc_id=bc_of[c.local_key], local_key=c.local_key,
-                   name=c.name, confidence=c.confidence, members=c.members,
-                   member_paths=c.member_paths, cohesion=c.cohesion,
-                   coupling=c.coupling, disposition=c.disposition)
-        for c in applied.locked)
+    capabilities = capabilities_of(applied, bc_of)
 
     return CapabilityMap(
         capabilities=capabilities,

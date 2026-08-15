@@ -26,11 +26,13 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
+    from ..agents.roles import PROMPT_SHAS, STAGE_MODELS, t_discover
     from ..assessment.activities import (
-        DiscoverContextInput, DiscoverFinalizeInput, DiscoverLockInput,
-        DiscoverMemoInput, DiscoverMemoStoreInput,
-        discover_context, discover_finalize, discover_lock,
-        discover_memo_load, discover_memo_store, no_finalize,
+        BlueprintInput, DiscoverContextInput, DiscoverFinalizeInput,
+        DiscoverLockInput, DiscoverMemoInput, DiscoverMemoStoreInput,
+        VerifyRefsInput, discover_context, discover_finalize, discover_lock,
+        discover_memo_load, discover_memo_store, load_blueprint, no_finalize,
+        verify_discover_refs,
     )
     from ..assessment.models import (
         PHASE_ORDER,
@@ -41,13 +43,17 @@ with workflow.unsafe.imports_passed_through():
         terminal_status,
     )
     from ..assessment.discover.apply import (
-        apply, build_map, fingerprint_of, stamp,
+        apply, build_map, capabilities_of, fingerprint_of, stamp,
     )
+    from ..assessment.discover.blueprint import not_compared
     from ..assessment.discover.context import (
-        contract_collected, schema_collected,
+        contract_collected, render_discover_prompt, schema_collected,
     )
-    from ..assessment.discover.map import CapabilityMap, context_digest
-    from ..assessment.scan.models import ScanResult
+    from ..assessment.discover.domain import consolidate
+    from ..assessment.discover.map import (
+        CapabilityMap, context_digest, guard_tripped,
+    )
+    from ..assessment.scan.models import ScanResult, ScanSignalId
     from ..capability.models import ProposedCapability
     from ..measurement import CollectionState, Measurement
     from ..memoization.cache import NO_PROPOSER
@@ -226,11 +232,11 @@ class AssessmentWorkflow(GateHost):
 
     async def _discover(self, inp: AssessmentInput, triage: RepoTriage,
                         scan_out: ScanOutcome) -> DiscoverOutcome:
-        """Phase 3 (E-48). DD4's pipeline, minus the proposer plan 3 inserts
-        between `baseline_dispositions` and `stamp`.
+        """Phase 3 (E-48). DD4's pipeline, complete with proposer, verification,
+        citation guard, blueprint comparison, and derived domain model.
 
-        Nothing here executes the assessed repository's code -- both
-        activities read blob bytes at the pinned commit (NFR-9).
+        Nothing here executes the assessed repository's code -- activities
+        read blob bytes at the pinned commit (NFR-9).
         """
         if scan_out.scan is None:
             return no_discover(
@@ -259,13 +265,15 @@ class AssessmentWorkflow(GateHost):
             return no_discover(
                 f"the context could not be built: {context.collected.reason}")
 
-        # P2-D6: NO_PROPOSER, never "". Plan 3 passes the role's prompt_sha
-        # and model here, and a baseline-only map must never share a key with
-        # a proposer map.
+        # P2-D6: NO_PROPOSER, never "". A baseline-only map and a proposer map
+        # must never share a key, so the two terms are the role's own when the
+        # role is shipped and the sentinel when it is not.
+        proposing = t_discover is not None
         memo_key = DiscoverMemoInput(
             project=inp.project_key, tree_hash=scan_out.tree_hash,
             context_digest=context_digest(context),
-            prompt_sha=NO_PROPOSER, model=NO_PROPOSER)
+            prompt_sha=PROMPT_SHAS["discover"] if proposing else NO_PROPOSER,
+            model=STAGE_MODELS["discover"] if proposing else NO_PROPOSER)
         # A cache read that fails is a MISS, never a phase failure.
         hit = await run_or_degrade(discover_memo_load, memo_key,
                                    DISCOVER_ACT, fallback=lambda: None)
@@ -274,10 +282,43 @@ class AssessmentWorkflow(GateHost):
                 result=PhaseResult(phase=PhaseId.DISCOVER,
                                    collected=hit.collected), map=hit)
 
-        # Plan 3 replaces `None` with the proposer's DiscoverProposal; stamp()
-        # already knows what to do with either (DD7).
+        proposal = None
+        verification = None
+        if proposing:
+            try:
+                run = await t_discover.run(render_discover_prompt(context))
+                proposal = run.output
+            except Exception as e:                      # noqa: BLE001
+                # The role shipped but the call failed. Not DD7's ABSENT case
+                # -- the reasons must not converge -- so the baseline runs and
+                # the map records why judgment is missing.
+                proposal = None
+
+        if proposal is not None:
+            verification = await run_or_degrade(
+                verify_discover_refs,
+                VerifyRefsInput(repo_dir=inp.repo_dir,
+                                commit_sha=triage.commit_sha,
+                                proposal=proposal),
+                DISCOVER_ACT, fallback=lambda: None)
+            if verification is None:
+                # Verification could not run, so no citation is verified.
+                # Applying the proposal anyway would ship exactly the
+                # unverified claims DD8 exists to refuse.
+                return no_discover(
+                    "verify_discover_refs did not run, so no citation could "
+                    "be verified (DD8 fails closed)")
+            tripped = guard_tripped(verification)
+            if tripped:
+                return no_discover(tripped)
+
         try:
-            applied = apply(context, stamp(context, None))
+            stamped = stamp(
+                context,
+                verification.proposal if verification is not None else None,
+                refusals=verification.refusals if verification is not None
+                else {})
+            applied = apply(context, stamped)
         except Exception as e:                          # noqa: BLE001
             return no_discover(
                 f"disposition apply failed: {type(e).__name__}: {e}"[:300])
@@ -299,6 +340,13 @@ class AssessmentWorkflow(GateHost):
 
         bc_of = {a.local_key: a.bc_id for a in lock.attachments}
         try:
+            caps = capabilities_of(applied, bc_of)
+            blueprint = await run_or_degrade(
+                load_blueprint,
+                BlueprintInput(capabilities=list(caps)),
+                DISCOVER_ACT,
+                fallback=lambda: not_compared(
+                    "load_blueprint did not run to completion"))
             finalized = await run_or_degrade(
                 discover_finalize,
                 DiscoverFinalizeInput(
@@ -315,7 +363,11 @@ class AssessmentWorkflow(GateHost):
                 applied, bc_of, advisories=lock.advisories,
                 attribution=finalized.attribution,
                 decomposition=finalized.decomposition,
-                ownership=finalized.ownership)
+                ownership=finalized.ownership,
+                total_references=(verification.total_references
+                                  if verification is not None else 0),
+                blueprint=blueprint,
+                domain_model=consolidate(finalized.ownership, caps))
         except Exception as e:                          # noqa: BLE001
             # build_map raises only on a lock defect (a boundary with no
             # bc_id). Reporting it as a phase failure keeps the reason on the
@@ -334,6 +386,7 @@ class AssessmentWorkflow(GateHost):
             result=PhaseResult(phase=PhaseId.DISCOVER,
                                collected=capability_map.collected),
             map=capability_map)
+
 
     async def _assess(self, inp: AssessmentInput) -> PhaseResult:
         """E-49 owns this body: UnifiedRiskMap + risk proposers."""

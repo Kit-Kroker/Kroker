@@ -180,3 +180,50 @@ def contract_collected(scan: ScanResult) -> Measurement:
     return Measurement.measured(
         sum(m.value or 0.0 for m in rows.values()))
 
+
+def render_discover_prompt(context: DiscoverContext,
+                           *, max_candidates: int = 100,
+                           max_members: int = 20) -> str:
+    """Bounded, deterministic prompt rendering of DiscoverContext.
+
+    Announces any cuts rather than truncating silently (NFR-10).
+    """
+    lines: list[str] = [
+        f"# Discover Candidates ({len(context.candidates)})",
+        f"Files: {context.file_count} (parsed: {context.graph.parsed}, "
+        f"unparsed: {context.graph.unparsed}, edges: {context.graph.edges})",
+        "",
+    ]
+    shown_cands = context.candidates[:max_candidates]
+    for c in shown_cands:
+        coh_str = (f"{c.cohesion.value:.2f}"
+                   if c.cohesion.state is CollectionState.MEASURED
+                   else f"({c.cohesion.reason})")
+        coup_str = (f"{int(c.coupling.value)}"
+                    if c.coupling.state is CollectionState.MEASURED
+                    else f"({c.coupling.reason})")
+        lines.append(f"## Candidate {c.candidate_id}: {c.name}")
+        lines.append(f"- Confidence: {c.confidence.value}")
+        lines.append(f"- Rules: {', '.join(c.source_rules) or 'none'}")
+        lines.append(f"- Cohesion: {coh_str}, Coupling: {coup_str}")
+        if c.possible_duplicate_of:
+            lines.append(
+                f"- Possible duplicate of: {', '.join(c.possible_duplicate_of)}")
+        if c.guardrail_only:
+            lines.append("- Guardrail only: true (layer/container naming)")
+        lines.append(f"- Members ({len(c.members)}):")
+        for m in c.members[:max_members]:
+            loc = (f" ({m.path}:{m.line})" if m.line
+                   else f" ({m.path})" if m.path else "")
+            lines.append(f"  - [{m.kind.value}] {m.value}{loc}")
+        if len(c.members) > max_members:
+            lines.append(f"  … {len(c.members) - max_members} more member(s)")
+        lines.append("")
+
+    if len(context.candidates) > max_candidates:
+        lines.append(
+            f"… {len(context.candidates) - max_candidates} more candidate(s) omitted")
+
+    return "\n".join(lines)
+
+

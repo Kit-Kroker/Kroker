@@ -27,8 +27,9 @@ NC = Measurement.not_collected("timed out")
 
 
 def _git(args, cwd):
-    subprocess.run(["git", *args], cwd=cwd, check=True,
-                   capture_output=True, text=True)
+    return subprocess.run(["git", *args], cwd=cwd, check=True,
+                          capture_output=True, text=True,
+                          stdin=subprocess.DEVNULL).stdout
 
 
 @pytest.fixture
@@ -48,8 +49,7 @@ def repo(tmp_path):
     _git(["config", "user.name", "t"], tmp_path)
     _git(["add", "-A"], tmp_path)
     _git(["commit", "-qm", "init"], tmp_path)
-    sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmp_path,
-                         capture_output=True, text=True).stdout.strip()
+    sha = _git(["rev-parse", "HEAD"], tmp_path).strip()
     return str(tmp_path), sha
 
 

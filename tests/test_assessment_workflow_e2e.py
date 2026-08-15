@@ -17,10 +17,10 @@ from temporalio.worker import Worker
 from sdlc.assessment.activities import (
     AssessmentTree, AssessmentTreeInput,
     discover_context, discover_finalize, discover_lock, discover_memo_load,
-    discover_memo_store,
+    discover_memo_store, load_blueprint,
     scan_ci, scan_config_infra, scan_coverage, scan_entrypoints, scan_frontend,
     scan_packages, scan_schema, scan_security_static, scan_sensitivity,
-    scan_testability, scan_tests_inventory,
+    scan_testability, scan_tests_inventory, verify_discover_refs,
 )
 from sdlc.assessment.models import (
     BLOCKED, PARTIAL, PHASE_ORDER, PhaseId,
@@ -280,7 +280,7 @@ async def test_scan_phase_flips_terminal_status_to_partial():
 
 def _git(args, cwd):
     subprocess.run(["git", *args], cwd=cwd, check=True,
-                   capture_output=True, text=True)
+                   capture_output=True, text=True, stdin=subprocess.DEVNULL)
 
 
 @pytest.fixture
@@ -305,11 +305,12 @@ def assessed_repo(tmp_path):
     _git(["add", "-A"], tmp_path)
     _git(["commit", "-qm", "init"], tmp_path)
     sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmp_path,
-                         capture_output=True, text=True).stdout.strip()
+                         capture_output=True, text=True,
+                         stdin=subprocess.DEVNULL).stdout.strip()
     return str(tmp_path), sha
 
 
-# --- E-48 plan 2: discover runs end to end inside the assessment ----------
+# --- E-48 plan 2 & 3: discover runs end to end inside the assessment --------
 
 
 async def test_discover_goes_measured_and_the_map_reaches_the_artifact(
@@ -324,7 +325,7 @@ async def test_discover_goes_measured_and_the_map_reaches_the_artifact(
         -> discover_memo_load (miss)
         -> stamp(context, None) -> apply (C-01 locked)
         -> discover_lock (allocates BC-001 in SQLite)
-        -> discover_finalize (attribute + decompose + assign)
+        -> load_blueprint + discover_finalize (attribute + decompose + assign)
         -> build_map -> discover_memo_store
         -> Assessment carries the CapabilityMap
     """
@@ -344,7 +345,8 @@ async def test_discover_goes_measured_and_the_map_reaches_the_artifact(
             fake_secrets, fake_misconfig, fake_outliers, fake_deps,
             assessment_resolve_tree, *SCAN_ACTS,
             discover_context, discover_lock, discover_finalize,
-            discover_memo_load, discover_memo_store]
+            discover_memo_load, discover_memo_store,
+            load_blueprint, verify_discover_refs]
 
     async with await WorkflowEnvironment.start_time_skipping() as env:
         async with Worker(env.client, task_queue=TASK_QUEUE,
@@ -371,6 +373,12 @@ async def test_discover_goes_measured_and_the_map_reaches_the_artifact(
     assert cap_map.ownership.collected.state is CollectionState.MEASURED
     assert next(e for e in cap_map.ownership.entities
                 if e.entity == "payment").owner == "BC-001"
+    assert cap_map.blueprint is not None
+    assert cap_map.blueprint.collected.state is CollectionState.MEASURED
+    assert cap_map.domain_model is not None
+    assert cap_map.domain_model.collected.state is CollectionState.MEASURED
+    assert next(e for e in cap_map.domain_model.entities
+                if e.entity == "payment").owner == "BC-001"
 
 
 async def test_a_second_assessment_of_the_same_tree_hits_the_memo(
@@ -395,7 +403,8 @@ async def test_a_second_assessment_of_the_same_tree_hits_the_memo(
             fake_secrets, fake_misconfig, fake_outliers, fake_deps,
             assessment_resolve_tree, *SCAN_ACTS,
             discover_context, discover_lock, discover_finalize,
-            discover_memo_load, discover_memo_store]
+            discover_memo_load, discover_memo_store,
+            load_blueprint, verify_discover_refs]
 
     async with await WorkflowEnvironment.start_time_skipping() as env:
         async with Worker(env.client, task_queue=TASK_QUEUE,
@@ -431,4 +440,130 @@ async def test_a_second_assessment_of_the_same_tree_hits_the_memo(
                 store.close()
             # Registry was NOT touched on run 2: lock was skipped.
             assert v2 == v1
+
+
+async def test_discover_proposer_judgment_and_verification(
+        assessed_repo, tmp_path, monkeypatch):
+    """When t_discover is active, proposer's proposal runs through verify_discover_refs
+    and shapes the map."""
+    repo_dir, sha = assessed_repo
+    db = str(tmp_path / "board.sqlite3")
+    monkeypatch.setenv("SDLC_BOARD_DB", db)
+
+    from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
+    from temporalio.contrib.pydantic import pydantic_data_converter
+    from tests.fakes.fake_agents import fake_agent_activities
+    from sdlc.assessment.discover.map import (
+        DiscoverAction, DiscoverProposal, ProposedDisposition,
+    )
+
+    from sdlc.assessment.scan.models import EvidenceRef
+
+    canned = DiscoverProposal(
+        dispositions=(
+            ProposedDisposition(
+                candidate_id="C-01",
+                action=DiscoverAction.CONFIRM,
+                rationale="Core payment processing domain logic",
+                evidence=(EvidenceRef(path="payments/api.py", lines="5"),),
+                quote="def charge(): pass",
+            ),
+        ),
+    )
+
+    agent_acts = fake_agent_activities([
+        ("discover_agent", DiscoverProposal, canned),
+    ])
+
+    @activity.defn(name="triage_resolve_commit")
+    async def real_pin(inp: TriagePinInput) -> TriagePin:
+        return TriagePin(commit_sha=sha, toolchain="python")
+
+    from sdlc.assessment.activities import assessment_resolve_tree
+
+    acts = [real_pin, fake_baseline, fake_scaffold, fake_probe,
+            fake_secrets, fake_misconfig, fake_outliers, fake_deps,
+            assessment_resolve_tree, *SCAN_ACTS,
+            discover_context, discover_lock, discover_finalize,
+            discover_memo_load, discover_memo_store,
+            load_blueprint, verify_discover_refs, *agent_acts]
+
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=WORKFLOWS, activities=acts,
+                          plugins=[PydanticAIPlugin()]):
+            h = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(repo_dir=repo_dir, project_key="acme"),
+                id=f"assess-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+            res = await h.result()
+
+    assert res.discover is not None
+    assert res.discover.total_references == 1
+    assert res.discover.capabilities[0].disposition.rationale == "Core payment processing domain logic"
+    assert res.discover.capabilities[0].disposition.evidence == (EvidenceRef(path="payments/api.py", lines="5"),)
+
+
+async def test_discover_proposer_trips_guard_fails_closed(
+        assessed_repo, tmp_path, monkeypatch):
+    """When the proposer cites non-existent files or wrong quotes exceeding threshold,
+    the citation guard trips and the discover phase reports not_collected."""
+    repo_dir, sha = assessed_repo
+    db = str(tmp_path / "board.sqlite3")
+    monkeypatch.setenv("SDLC_BOARD_DB", db)
+
+    from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
+    from temporalio.contrib.pydantic import pydantic_data_converter
+    from tests.fakes.fake_agents import fake_agent_activities
+    from sdlc.assessment.scan.models import EvidenceRef
+    from sdlc.assessment.discover.map import (
+        DiscoverAction, DiscoverProposal, ProposedDisposition,
+    )
+
+    canned = DiscoverProposal(
+        dispositions=(
+            ProposedDisposition(
+                candidate_id="C-01",
+                action=DiscoverAction.CONFIRM,
+                rationale="Core payment processing domain logic",
+                evidence=(EvidenceRef(path="nonexistent.py", lines="10"),),
+                quote="def fake(): pass",
+            ),
+        ),
+    )
+
+    agent_acts = fake_agent_activities([
+        ("discover_agent", DiscoverProposal, canned),
+    ])
+
+    @activity.defn(name="triage_resolve_commit")
+    async def real_pin(inp: TriagePinInput) -> TriagePin:
+        return TriagePin(commit_sha=sha, toolchain="python")
+
+    from sdlc.assessment.activities import assessment_resolve_tree
+
+    acts = [real_pin, fake_baseline, fake_scaffold, fake_probe,
+            fake_secrets, fake_misconfig, fake_outliers, fake_deps,
+            assessment_resolve_tree, *SCAN_ACTS,
+            discover_context, discover_lock, discover_finalize,
+            discover_memo_load, discover_memo_store,
+            load_blueprint, verify_discover_refs, *agent_acts]
+
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=WORKFLOWS, activities=acts,
+                          plugins=[PydanticAIPlugin()]):
+            h = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(repo_dir=repo_dir, project_key="acme"),
+                id=f"assess-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+            res = await h.result()
+
+    assert res.discover is None
+    discover_phase = next(p for p in res.phases if p.phase is PhaseId.DISCOVER)
+    assert discover_phase.collected.state is CollectionState.NOT_COLLECTED
+    assert "fabrication rate" in discover_phase.collected.reason
+
 
