@@ -7,8 +7,12 @@ direction (D2) and open the cycle models.py -> context -> assessment -> triage
 """
 from __future__ import annotations
 
-from pydantic import BaseModel
+from typing import Literal
 
+from pydantic import BaseModel, Field, model_validator
+
+from ..assessment.scan.models import Confidence, MemberKind
+from ..measurement import CollectionState, Measurement
 from ..models import ProjectMode
 
 
@@ -34,3 +38,65 @@ class IntakeVerdict(BaseModel):
     ok: bool
     warning: str = ""
     reason: str = ""
+
+
+class MapModule(BaseModel):
+    """One S5-merged candidate, as the Architect sees it."""
+    model_config = {"frozen": True}
+    name: str
+    member_paths: tuple[str, ...] = ()
+    confidence: Confidence
+
+
+class MapContract(BaseModel):
+    """One externally-reachable member: a route, a command, a topic."""
+    model_config = {"frozen": True}
+    kind: MemberKind
+    value: str
+    path: str
+    line: int | None = None
+
+
+class HotSpot(BaseModel):
+    """A place the Architect should look before proposing a change.
+
+    `source` is what keeps partial collection inspectable: when QS3 ran and
+    QS2 did not, the hot spots that exist say which signal produced them
+    rather than presenting as a complete set.
+    """
+    model_config = {"frozen": True}
+    path: str
+    source: Literal["testability", "coverage"]
+    reason: str
+    metric: Measurement
+
+
+class CodebaseMap(BaseModel):
+    """FR-102's stage 2 artifact: modules, contracts and hot spots extracted
+    from the tree at a pinned commit.
+
+    Deliberately does NOT carry the tree's path list. The delta resolves
+    against git activity-side (D8) because a large repository's full listing
+    would bloat every run's history against ADR-10 and push this past the
+    Architect's context_budget_tokens (FR-801).
+    """
+    tree_hash: str
+    commit_sha: str
+    modules: tuple[MapModule, ...] = ()
+    contracts: tuple[MapContract, ...] = ()
+    hot_spots: tuple[HotSpot, ...] = ()
+    modules_collected: Measurement
+    contracts_collected: Measurement
+    hot_spots_collected: Measurement
+    collected: Measurement
+
+    @model_validator(mode="after")
+    def _unmeasured_carries_no_payload(self) -> "CodebaseMap":
+        if self.collected.state is not CollectionState.MEASURED:
+            if self.modules or self.contracts or self.hot_spots:
+                raise ValueError(
+                    f"collected={self.collected.state.value} carries no "
+                    f"payload, but modules/contracts/hot_spots are present "
+                    f"-- a context stage that did not collect has nothing to "
+                    f"show (FR-915)")
+        return self
