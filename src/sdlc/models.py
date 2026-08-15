@@ -253,6 +253,18 @@ class ArchitectureDecision(BaseModel):
     alternatives_considered: list[str] = Field(default_factory=list)
 
 
+class BrownfieldDelta(BaseModel):
+    """FR-102's delta: what an architecture change does to a real tree.
+
+    Three classes rather than one flat list because they have OPPOSITE
+    grounding rules -- a modified path must exist and an added path must not
+    (E-84 D8) -- and a single list cannot carry that distinction.
+    """
+    added: list[str] = Field(default_factory=list)
+    modified: list[str] = Field(default_factory=list)
+    removed: list[str] = Field(default_factory=list)
+
+
 class ArchitectureSpec(BaseModel):
     overview: str
     decisions: list[ArchitectureDecision]
@@ -261,6 +273,23 @@ class ArchitectureSpec(BaseModel):
     risks: list[str] = Field(default_factory=list)
     spec_ref: ArtifactRef | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)  # FR-301
+    delta: BrownfieldDelta | None = None                    # E-84, brownfield
+
+    @model_validator(mode="after")
+    def _affected_modules_follow_the_delta(self) -> "ArchitectureSpec":
+        """E-84 D7: one authority for what changed.
+
+        `affected_modules` predates the typed delta and is documented as the
+        delta in docs/agents-schema.html. When a delta is present it is the
+        authority and this field is derived from it; when it is absent
+        (greenfield, and the seeded specs tidyup/backlog.py:103 and the
+        benchmark fixtures write) the field is left exactly as given.
+        """
+        if self.delta is not None:
+            derived = sorted(set(self.delta.modified) | set(self.delta.removed))
+            if list(self.affected_modules) != derived:
+                self.affected_modules = derived
+        return self
 
 
 class ValidationContract(BaseModel):
