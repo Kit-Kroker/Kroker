@@ -79,3 +79,22 @@ def discover_key(project: str, tree_hash: str, context_digest: str,
     payload = "|".join(["discover", project, tree_hash, context_digest,
                         str(identity_registry_version), prompt_sha, model_id])
     return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def risk_key(project: str, tree_hash: str, map_digest: str,
+             rules_sha: str) -> str:
+    """Memo key for the whole assess phase (E-49).
+
+    A sibling of discover_key for signal_key's reason. `map_digest` rather
+    than a restatement of the CapabilityMap's own key terms: the map already
+    folds identity_registry_version (E-47a's FR-103 amendment), so digesting
+    it inherits that term instead of maintaining a second copy of the list.
+
+    No prompt_sha or model_id term: plan 1 has no proposer, and plan 2 adds
+    them here rather than passing "" -- which signal_key's docstring refuses,
+    because it makes "no model was involved" indistinguishable from a bug
+    that dropped the model id.
+    """
+    payload = "|".join(["risk", project, tree_hash, map_digest, rules_sha])
+    return hashlib.sha256(payload.encode()).hexdigest()
+
