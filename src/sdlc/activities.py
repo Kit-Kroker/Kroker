@@ -25,18 +25,20 @@ from pydantic import BaseModel
 from temporalio import activity
 
 from .assessment.scan.sources import SOURCE_EXTENSIONS
+from .context.delta import DELTA_CHECK, check_delta
 from .context.models import RepoObservation
 
 from .artifacts.capture import capture_session
 from .observability.logfire_setup import span
 from .gate import (
-    CheckResult, GateOverride, GateReport, QualityGateInput,
-    evaluate_quality_gate,
+    CheckClass, CheckResult, GateOverride, GateReport, QualityGateInput,
+    build_check, evaluate_quality_gate,
 )
 from .harness.adapters import HARNESSES, HarnessRequest
 from .harness.containment import ContainmentError, load_policy
 from .toolchain.adapters import ToolchainKind, detect
 from .models import (
+    BrownfieldDelta,
     CoverageReport,
     HarnessKind,
     HarnessRunResult,
@@ -1183,5 +1185,38 @@ async def classify_repo(inp: RepoProbeInput) -> RepoObservation:
     return RepoObservation(
         is_git_repo=True, base_branch_resolves=True,
         commit_sha=commit_sha, source_file_count=count)
+
+
+class DeltaCheckInput(BaseModel):
+    repo_dir: str
+    commit_sha: str
+    delta: BrownfieldDelta | None = None
+
+
+@activity.defn
+async def check_brownfield_delta(inp: DeltaCheckInput) -> CheckResult:
+    """E-84 D8: supply the tree's path list, then run the pure check.
+
+    The listing stays here rather than travelling to the workflow: a large
+    repository's full path set inline would bloat every brownfield run's
+    history against ADR-10, and would push CodebaseMap past the Architect's
+    context_budget_tokens (FR-801).
+    """
+    try:
+        listing = subprocess.run(
+            ["git", "ls-tree", "-r", "--name-only", inp.commit_sha],
+            cwd=inp.repo_dir, capture_output=True, text=True)
+    except Exception as exc:
+        return build_check(
+            DELTA_CHECK, False, CheckClass.ABSOLUTE,
+            f"could not list the tree at {inp.commit_sha[:12]}: {exc}")
+    if listing.returncode != 0:
+        return build_check(
+            DELTA_CHECK, False, CheckClass.ABSOLUTE,
+            f"could not list the tree at {inp.commit_sha[:12]}: "
+            f"{listing.stderr.strip()[:200]}")
+    paths = frozenset(p for p in listing.stdout.splitlines() if p.strip())
+    return check_delta(inp.delta, paths)
+
 
 

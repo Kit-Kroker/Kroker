@@ -26,10 +26,11 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker
 
 from .activities import (
-    build_verification_branch, classify_repo, create_worktree, evaluate_gate,
-    get_task_diff, measure_coverage, merge_into_integration, open_pull_request,
-    read_committed_bytes, run_coding_task, run_integration_checks, run_lint,
-    run_test_suite, security_scan, setup_integration_branch,
+    build_verification_branch, check_brownfield_delta, classify_repo,
+    create_worktree, evaluate_gate, get_task_diff, measure_coverage,
+    merge_into_integration, open_pull_request, read_committed_bytes,
+    run_coding_task, run_integration_checks, run_lint, run_test_suite,
+    security_scan, setup_integration_branch,
 )
 from .agents.loader import load_registry, validate_registry
 from .agents.roles import ALL_TEMPORAL_AGENTS
@@ -106,6 +107,7 @@ async def main() -> None:
                    AssessmentWorkflow],
         activities=[
             create_worktree, setup_integration_branch, classify_repo,
+            check_brownfield_delta,
             merge_into_integration,
             build_verification_branch,
             run_coding_task, run_integration_checks, run_lint, run_test_suite,
