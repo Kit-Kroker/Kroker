@@ -152,8 +152,15 @@ def _merge_refusal(context: CandidateContext, proposed: ProposedDisposition,
 
 def _stamp_one(context: CandidateContext,
                rows: Sequence[ProposedDisposition],
-               known: Mapping[str, CandidateContext]) -> CandidateDisposition:
+               known: Mapping[str, CandidateContext],
+               refusal: tuple[str, str] | None = None) -> CandidateDisposition:
     cid = context.candidate_id
+    if refusal is not None:
+        # DD8 items 4-5 already refused this verdict. Checked BEFORE the
+        # empty-rows branch: verify_refs removed the row, so `rows` is empty
+        # here, and dropped_missing would report an omission the proposer did
+        # not commit (P3-D1).
+        return _dropped(cid, refusal[0], refusal[1])
     if not rows:
         return _dropped(
             cid, "dropped_missing",
@@ -165,16 +172,16 @@ def _stamp_one(context: CandidateContext,
             f"candidate; DD8 requires exactly one")
     proposed = rows[0]
     if proposed.action is DiscoverAction.SPLIT:
-        refusal = _split_refusal(context, proposed)
-        if refusal:
+        refusal_rule = _split_refusal(context, proposed)
+        if refusal_rule:
             return _dropped(
-                cid, refusal,
+                cid, refusal_rule,
                 "the split does not partition this candidate's own members")
     if proposed.action is DiscoverAction.MERGE:
-        refusal = _merge_refusal(context, proposed, known)
-        if refusal:
+        refusal_rule = _merge_refusal(context, proposed, known)
+        if refusal_rule:
             return _dropped(
-                cid, refusal,
+                cid, refusal_rule,
                 f"merge_into={proposed.merge_into!r} does not name another "
                 f"candidate in this context")
     try:
@@ -182,25 +189,28 @@ def _stamp_one(context: CandidateContext,
             candidate_id=cid, action=proposed.action,
             source=DispositionSource.PROPOSER, rule="proposer",
             rationale=proposed.rationale, merge_into=proposed.merge_into,
-            partitions=proposed.partitions, evidence=proposed.evidence)
+            partitions=proposed.partitions, evidence=proposed.evidence,
+            quote=proposed.quote)
     except ValidationError as exc:
         return _dropped(cid, "dropped_malformed",
                         f"the disposition did not validate: {exc}"[:300])
 
 
 def stamp(context: DiscoverContext,
-          proposal: DiscoverProposal | None) -> StampedProposal:
+          proposal: DiscoverProposal | None,
+          *,
+          refusals: Mapping[str, tuple[str, str]] = {}) -> StampedProposal:
     """DD8 items 1-3 and DD7's two fallbacks.
+
+    `refusals` carries DD8 items 4-5's verdicts from verify_refs, which runs
+    in front of this function because it needs the tree. Defaulting to empty
+    keeps plan 2's callers and tests unchanged (P3-D1).
 
     `proposal is None` is the proposer-ABSENT case (the role is not shipped
     or the stage is off) and yields DD6's baseline. A proposal that is
     present but missing a row is the proposer-FAILED case and yields FLAG.
     The two must not converge -- unbuilt_signal vs failed_signal states the
     rule, and "the reason strings must not converge".
-
-    Items 4 and 5 (an EvidenceRef path resolving at the pinned commit, a
-    quote byte-verifying) need the tree and land in plan 3's
-    verify_discover_refs, in front of this function.
     """
     if proposal is None:
         return StampedProposal(dispositions=baseline_dispositions(context))
@@ -214,7 +224,8 @@ def stamp(context: DiscoverContext,
         else:
             unknown.add(row.candidate_id)
 
-    first = [_stamp_one(c, by_candidate.get(c.candidate_id, ()), known)
+    first = [_stamp_one(c, by_candidate.get(c.candidate_id, ()), known,
+                        refusals.get(c.candidate_id))
              for c in context.candidates]
 
     # Second pass. A MERGE whose target did not itself survive would fold the

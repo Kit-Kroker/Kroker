@@ -76,6 +76,11 @@ class ProposedDisposition(BaseModel):
     merge_into: str | None = None
     partitions: tuple[SplitPartition, ...] = ()
     evidence: tuple[EvidenceRef, ...] = ()
+    # DD8 item 5. Optional: a disposition may cite a location without quoting
+    # it. When present it is byte-verified under VERBATIM_BYTES against the
+    # FIRST evidence ref's file -- a quote with no reference has nothing to
+    # verify against and is refused.
+    quote: str = ""
 
 
 class DiscoverProposal(BaseModel):
@@ -94,6 +99,7 @@ class CandidateDisposition(BaseModel):
     merge_into: str | None = None
     partitions: tuple[SplitPartition, ...] = ()
     evidence: tuple[EvidenceRef, ...] = ()
+    quote: str = ""
 
     @model_validator(mode="after")
     def _merge_names_a_target(self) -> "CandidateDisposition":
@@ -124,6 +130,13 @@ class CandidateDisposition(BaseModel):
                 "its rationale, but an unexplained model verdict is "
                 "unreviewable")
         return self
+
+
+# DD8's phase-level citation guard, mirroring E-47b's DEAD_GUARD_MAX_UNRESOLVED
+# (discover/models.py:18) and set to the same value for the same reason: past
+# this fabrication rate, too many references failed to resolve for the
+# surviving ones to be evidence.
+CITATION_GUARD_MAX_UNRESOLVED: float = 0.10
 
 
 # S1's two non-domain classifications. A candidate supported ONLY by these is
