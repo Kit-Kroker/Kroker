@@ -28,10 +28,11 @@ from temporalio.common import RetryPolicy
 with workflow.unsafe.imports_passed_through():
     from ..agents.roles import PROMPT_SHAS, STAGE_MODELS, t_discover
     from ..assessment.activities import (
-        BlueprintInput, DiscoverContextInput, DiscoverFinalizeInput,
-        DiscoverLockInput, DiscoverMemoInput, DiscoverMemoStoreInput,
-        VerifyRefsInput, discover_context, discover_finalize, discover_lock,
-        discover_memo_load, discover_memo_store, load_blueprint, no_finalize,
+        AssessRiskInput, BlueprintInput, DiscoverContextInput,
+        DiscoverFinalizeInput, DiscoverLockInput, DiscoverMemoInput,
+        DiscoverMemoStoreInput, VerifyRefsInput, assess_risk, discover_context,
+        discover_finalize, discover_lock, discover_memo_load,
+        discover_memo_store, load_blueprint, no_finalize,
         verify_discover_refs,
     )
     from ..assessment.models import (
@@ -53,6 +54,8 @@ with workflow.unsafe.imports_passed_through():
     from ..assessment.discover.map import (
         CapabilityMap, context_digest, guard_tripped,
     )
+    from ..assessment.risk.build import no_risk
+    from ..assessment.risk.models import UnifiedRiskMap
     from ..assessment.scan.models import ScanResult, ScanSignalId
     from ..capability.models import ProposedCapability
     from ..measurement import CollectionState, Measurement
@@ -93,10 +96,10 @@ class AssessmentInput(BaseModel):
 
 
 # The E-item owing each unbuilt phase body, so an empty assessment says WHY
-# it is empty rather than merely being empty. SCAN dropped here in E-46 and
-# DISCOVER in E-48: their bodies are built, so nothing owes them.
+# it is empty rather than merely being empty. SCAN dropped here in E-46,
+# DISCOVER in E-48, and ASSESS in E-49: their bodies are built, so nothing
+# owes them.
 PHASE_OWNER: dict[PhaseId, str] = {
-    PhaseId.ASSESS: "E-49",
     PhaseId.REPORT: "E-52",
     PhaseId.GENERATE: "E-52",
     PhaseId.FINISH: "E-51",
@@ -129,11 +132,20 @@ DISCOVER_ACT = dict(start_to_close_timeout=timedelta(minutes=10),
 LOCK_ACT = dict(start_to_close_timeout=timedelta(minutes=2),
                 retry_policy=RetryPolicy(maximum_attempts=3))
 
+ASSESS_ACT = dict(start_to_close_timeout=timedelta(minutes=5),
+                  retry_policy=RetryPolicy(maximum_attempts=2))
+
 
 class DiscoverOutcome(BaseModel):
     """discover's two halves, mirroring ScanOutcome."""
     result: PhaseResult
     map: CapabilityMap | None = None
+
+
+class AssessOutcome(BaseModel):
+    """assess's two halves, mirroring ScanOutcome and DiscoverOutcome."""
+    result: PhaseResult
+    risk: UnifiedRiskMap | None = None
 
 
 def no_discover(reason: str) -> DiscoverOutcome:
@@ -147,7 +159,8 @@ def no_discover(reason: str) -> DiscoverOutcome:
 def assemble(repo_dir: str, init: InitOutcome, admitted: bool, reason: str,
              rest: list[PhaseResult] | None = None,
              scan: ScanResult | None = None,
-             discover: CapabilityMap | None = None) -> Assessment:
+             discover: CapabilityMap | None = None,
+             risk: UnifiedRiskMap | None = None) -> Assessment:
     """The ONLY constructor of an Assessment and the only caller of
     terminal_status: one place where the artifact is built means the derived
     status cannot disagree with the phase list it was derived from.
@@ -176,7 +189,7 @@ def assemble(repo_dir: str, init: InitOutcome, admitted: bool, reason: str,
         toolchain=t.toolchain if t else None,
         triage=t, admitted=admitted, admission_reason=reason,
         phases=phases, terminal_status=terminal_status(admitted, phases),
-        scan=scan, discover=discover)
+        scan=scan, discover=discover, risk=risk)
 
 
 @workflow.defn
@@ -392,9 +405,45 @@ class AssessmentWorkflow(GateHost):
             map=capability_map)
 
 
-    async def _assess(self, inp: AssessmentInput) -> PhaseResult:
-        """E-49 owns this body: UnifiedRiskMap + risk proposers."""
-        return unbuilt(PhaseId.ASSESS)
+    async def _assess(self, inp: AssessmentInput,
+                      triage: RepoTriage,
+                      discover: DiscoverOutcome,
+                      scan: ScanOutcome) -> AssessOutcome:
+        """E-49: the deterministic risk score."""
+        if discover.map is None:
+            reason = (
+                f"discover did not produce a CapabilityMap "
+                f"({discover.result.collected.reason}), so there is "
+                f"nothing to assess")
+            return AssessOutcome(
+                result=PhaseResult(
+                    phase=PhaseId.ASSESS,
+                    collected=Measurement.not_collected(reason)),
+                risk=None)
+
+        cats = [c for s in scan.scan.signals for c in s.categories] if scan.scan else []
+        risk_map = await run_or_degrade(
+            assess_risk,
+            AssessRiskInput(
+                project=inp.project_key,
+                tree_hash=triage.tree_hash,
+                capability_map=discover.map,
+                collected_categories=sorted(set(cats))),
+            ASSESS_ACT,
+            fallback=lambda: no_risk("assess_risk activity failed"))
+        # A not_collected map yields an uncollected phase result AND passes
+        # risk=None to assemble, so _assess_agrees_with_its_phase holds (E-49).
+        if risk_map.collected.state is not CollectionState.MEASURED:
+            return AssessOutcome(
+                result=PhaseResult(
+                    phase=PhaseId.ASSESS,
+                    collected=risk_map.collected),
+                risk=None)
+        return AssessOutcome(
+            result=PhaseResult(
+                phase=PhaseId.ASSESS,
+                collected=risk_map.collected),
+            risk=risk_map)
 
     async def _report(self, inp: AssessmentInput) -> PhaseResult:
         """E-52 owns this body: the five role reports."""
@@ -430,14 +479,16 @@ class AssessmentWorkflow(GateHost):
         self._status = "running"
         scan_out = await self._scan(inp, init.triage)
         discover_out = await self._discover(inp, init.triage, scan_out)
+        assess_out = await self._assess(inp, init.triage, discover_out, scan_out)
         rest = [
             scan_out.result,
             discover_out.result,
-            await self._assess(inp),
+            assess_out.result,
             await self._report(inp),      # AFTER assess -- FR-911 dev. (a)
             await self._generate(inp),
             await self._finish(inp),
         ]
         return self._done(assemble(inp.repo_dir, init, True, why, rest,
                                    scan=scan_out.scan,
-                                   discover=discover_out.map))
+                                   discover=discover_out.map,
+                                   risk=assess_out.risk))

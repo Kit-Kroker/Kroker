@@ -46,20 +46,26 @@ def _scan_result() -> ScanResult:
         for s in SCAN_ORDER])
 
 
+from sdlc.assessment.risk.models import UnifiedRiskMap
+
+
 def _rest_after_discover(discover: PhaseResult | None = None
                          ) -> list[PhaseResult]:
-    """SCAN (E-46) and DISCOVER (E-48) are built; the other four are stubs.
+    """SCAN (E-46), DISCOVER (E-48), and ASSESS (E-49) are built; the other three are stubs.
 
-    DISCOVER defaults to not_collected so a caller that does not care about
-    the discover pairing need not supply a CapabilityMap.
+    DISCOVER and ASSESS default to not_collected so a caller that does not care about
+    their pairing need not supply their maps.
     """
     out = [PhaseResult(phase=PhaseId.SCAN,
                        collected=Measurement.measured(0.0)),
            discover or PhaseResult(
                phase=PhaseId.DISCOVER,
-               collected=Measurement.not_collected("discover not run"))]
+               collected=Measurement.not_collected("discover not run")),
+           PhaseResult(
+               phase=PhaseId.ASSESS,
+               collected=Measurement.not_collected("assess not run"))]
     out += [unbuilt(p) for p in PHASE_ORDER
-            if p not in (PhaseId.INIT, PhaseId.SCAN, PhaseId.DISCOVER)]
+            if p not in (PhaseId.INIT, PhaseId.SCAN, PhaseId.DISCOVER, PhaseId.ASSESS)]
     return out
 
 
@@ -93,11 +99,11 @@ def test_every_unbuilt_phase_names_the_item_that_owes_it():
 
 
 def test_every_post_init_phase_has_an_owner():
-    # SCAN is built in E-46 and DISCOVER in E-48, so neither is in
+    # SCAN is built in E-46, DISCOVER in E-48, and ASSESS in E-49, so none is in
     # PHASE_OWNER; every other post-init phase still names the item that owes
     # its body.
     assert set(PHASE_OWNER) == set(PHASE_ORDER) - {
-        PhaseId.INIT, PhaseId.SCAN, PhaseId.DISCOVER}
+        PhaseId.INIT, PhaseId.SCAN, PhaseId.DISCOVER, PhaseId.ASSESS}
 
 
 def test_assemble_fills_the_whole_dag_on_a_refusal():
@@ -143,6 +149,8 @@ def test_assemble_reports_assessed_once_every_phase_collects():
     assert assemble("/r", _init(), True, "verdict ready", rest,
                     scan=_scan_result(),
                     discover=CapabilityMap(
+                        collected=Measurement.measured(0.0)),
+                    risk=UnifiedRiskMap(
                         collected=Measurement.measured(0.0))).terminal_status == ASSESSED
 
 
@@ -159,7 +167,7 @@ def test_assemble_rejects_a_partial_rest_on_an_admitted_run():
     contradiction on the face of an FR-921 bundle (review finding 1). The
     not-admitted path still fills with skipped(), whose message is then
     truthful."""
-    partial = [unbuilt(PhaseId.ASSESS)]        # one of the unbuilt phases
+    partial = [unbuilt(PhaseId.REPORT)]        # one of the unbuilt phases
     with pytest.raises(ValueError, match="admitted"):
         assemble("/r", _init(), True, "verdict ready", partial)
 
@@ -231,3 +239,18 @@ def test_the_run_body_passes_the_scan_and_triage_into_discover():
     src = inspect.getsource(AssessmentWorkflow.run)
     assert "self._discover(inp, init.triage, scan_out)" in src
     assert "discover=discover_out.map" in src
+
+
+# --- E-49: assess is a built phase --------------------------------------
+
+
+def test_assess_is_no_longer_an_unbuilt_phase():
+    """E-46 and E-48's move, for ASSESS."""
+    assert PhaseId.ASSESS not in PHASE_OWNER
+
+
+def test_the_run_body_passes_the_outputs_into_assess():
+    src = inspect.getsource(AssessmentWorkflow.run)
+    assert "self._assess(inp, init.triage, discover_out, scan_out)" in src
+    assert "risk=assess_out.risk" in src
+
