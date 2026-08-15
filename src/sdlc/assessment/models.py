@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, model_validator
 from ..measurement import CollectionState, Measurement
 from ..triage.models import RepoTriage
 from .discover.map import CapabilityMap
+from .risk.models import UnifiedRiskMap
 from .scan.models import ScanResult
 
 
@@ -107,6 +108,8 @@ class Assessment(BaseModel):
     # generic payload bag: an untyped bag would be a schema-less hole in the
     # one artifact handed to a customer (FR-921).
     discover: CapabilityMap | None = None
+    # E-49's typed field (FR-916).
+    risk: UnifiedRiskMap | None = None
 
     @model_validator(mode="after")
     def _no_triage_means_not_admitted(self) -> Assessment:
@@ -187,3 +190,23 @@ class Assessment(BaseModel):
                 f"CapabilityMap is present -- an assessment cannot claim it "
                 f"did not discover while shipping a capability map")
         return self
+
+    @model_validator(mode="after")
+    def _assess_agrees_with_its_phase(self) -> Assessment:
+        """_scan_agrees_with_its_phase, for ASSESS (E-49)."""
+        row = next((p for p in self.phases if p.phase is PhaseId.ASSESS),
+                   None)
+        if row is None:                       # unreachable: the DAG validator
+            return self                       # already required every phase
+        measured = row.collected.state is CollectionState.MEASURED
+        if measured and self.risk is None:
+            raise ValueError(
+                "assess phase is measured but no UnifiedRiskMap is present "
+                "-- a measured phase produced an artifact by definition")
+        if not measured and self.risk is not None:
+            raise ValueError(
+                f"assess phase is {row.collected.state.value} but a "
+                f"UnifiedRiskMap is present -- an assessment cannot claim it "
+                f"did not assess while shipping a risk map")
+        return self
+
