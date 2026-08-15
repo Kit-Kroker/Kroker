@@ -130,3 +130,18 @@ def test_the_digest_moves_with_content_and_not_with_order():
                            "tree1", "c" * 40))
     assert a == b
     assert a != c
+
+
+def test_degraded_s5_with_measured_testability_does_not_raise():
+    """Finding 3: when S5 degrades but QS3 measured, project() must return
+    an unmeasured CodebaseMap with empty payloads rather than raising
+    ValueError via CodebaseMap._unmeasured_carries_no_payload."""
+    findings = [
+        TestabilityFinding(severity="smell", pattern="p", detail="d",
+                           recommended_seam="s", path="src/a.py")]
+    scan = _scan(s5_ok=False, testability=findings)
+    m = project(scan, "tree1", "c" * 40)
+    assert m.collected.state is CollectionState.NOT_COLLECTED
+    assert m.modules == ()
+    assert m.contracts == ()
+    assert m.hot_spots == ()

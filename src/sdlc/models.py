@@ -1093,7 +1093,6 @@ class PipelineConfig(BaseModel):
     max_tool_escalations: int = 3            # E-17: gates raised per task
                                              # attempt; past this, deny
     max_delta_retries: int = 1               # E-84 D11: brownfield re-prompt limit
-    context_budget_tokens: int = 4000        # E-84 D12: bounded prompt budget
     max_gate_rounds: int = 2                # FR-301: bounded revision loop;
                                             # exhaustion escalates to a hard
                                             # human gate

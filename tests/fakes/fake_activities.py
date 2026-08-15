@@ -7,11 +7,14 @@ from __future__ import annotations
 from temporalio import activity
 
 from sdlc.activities import (
-    CodingTaskInput, CoverageInput, DiffInput, IntegrationChecks,
-    IntegrationChecksInput, IntegrationHandle,
+    CodingTaskInput, CoverageInput, DeltaCheckInput, DiffInput,
+    IntegrationChecks, IntegrationChecksInput, IntegrationHandle,
     IntegrationInput, LintInput, MergeInput, MergeResult, PROpenInput,
-    QAInput, SecurityScanInput, WorktreeHandle, WorktreeInput,
+    QAInput, RepoProbeInput, SecurityScanInput, WorktreeHandle, WorktreeInput,
 )
+from sdlc.context.delta import DELTA_CHECK
+from sdlc.context.models import RepoObservation
+from sdlc.gate import CheckClass, CheckResult, build_check
 from sdlc.models import (
     ArtifactRef, CoverageReport, HarnessRunResult, QAReport, SecurityReport,
 )
@@ -125,6 +128,29 @@ async def fake_attach_task_evidence(inp: AttachEvidenceInput) -> ArtifactRef:
                        uri="file:///fake/evidence", sha256="0" * 64)
 
 
+@activity.defn(name="classify_repo")
+async def fake_classify_repo(inp: RepoProbeInput) -> RepoObservation:
+    return RepoObservation(
+        is_git_repo=True,
+        base_branch_resolves=True,
+        commit_sha="deadbeef" * 5,
+        source_file_count=10)
+
+
+@activity.defn(name="check_brownfield_delta")
+async def fake_check_brownfield_delta(inp: DeltaCheckInput) -> CheckResult:
+    return build_check(DELTA_CHECK, True, CheckClass.ABSOLUTE,
+                       "all resolve (fake)")
+
+
+from sdlc.artifacts.retention import RetentionInput
+
+
+@activity.defn(name="apply_session_retention")
+async def fake_apply_session_retention(inp: RetentionInput) -> str:
+    return "kept:0"
+
+
 # E-78: same-named no-op fakes for the board activities. The workflow now
 # issues board writes at clarify/architecture/plan/task; the e2e worker
 # registers these so dispatch resolves without touching a real SQLite DB
@@ -141,6 +167,8 @@ GIT_FAKES = [
     fake_get_task_diff, fake_run_test_suite, fake_run_lint,
     fake_merge_into_integration, fake_open_pull_request,
     fake_security_scan, fake_measure_coverage, fake_run_integration_checks,
+    fake_classify_repo, fake_check_brownfield_delta,
+    fake_apply_session_retention,
     price_usage,   # E-33: real activity — pure local table lookup, no network
     *BOARD_FAKES,
 ]

@@ -94,9 +94,11 @@ def project(scan: ScanResult, tree_hash: str, commit_sha: str) -> CodebaseMap:
 
     # The map's defining content is its modules: without them there is nothing
     # for the delta to be grounded against, which is what D6 fails closed on.
-    collected = (Measurement.measured(float(len(modules)))
-                 if members.state is CollectionState.MEASURED
-                 else Measurement.not_collected(members.reason))
+    if members.state is CollectionState.MEASURED:
+        collected = Measurement.measured(float(len(modules)))
+    else:
+        modules, contracts, hot_spots = (), (), ()
+        collected = Measurement.not_collected(members.reason)
     return CodebaseMap(
         tree_hash=tree_hash, commit_sha=commit_sha,
         modules=modules, contracts=contracts, hot_spots=hot_spots,

@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
+from temporalio.exceptions import ApplicationError
 
 with workflow.unsafe.imports_passed_through():
     from ..activities import (
@@ -1615,7 +1616,14 @@ class FeatureWorkflow(GateHost):
     async def run(self, idea: IdeaBrief,
                   cfg: PipelineConfig | None = None,
                   seeded: SeededWork | None = None) -> str:
-        cfg = cfg or PipelineConfig()
+        if isinstance(idea, dict):
+            idea = IdeaBrief.model_validate(idea)
+        if isinstance(cfg, dict):
+            cfg = PipelineConfig.model_validate(cfg)
+        elif cfg is None:
+            cfg = PipelineConfig()
+        if isinstance(seeded, dict):
+            seeded = SeededWork.model_validate(seeded)
         self._cfg = cfg
         self._budget_threshold = cfg.run_budget_usd    # E-33
         try:
@@ -2028,8 +2036,7 @@ class FeatureWorkflow(GateHost):
         map_block = ""
         map_key = ""
         if self._codebase_map is not None:
-            rendered_map = render_for_prompt(
-                self._codebase_map, budget_tokens=cfg.context_budget_tokens)
+            rendered_map = render_for_prompt(self._codebase_map)
             map_key = map_digest(self._codebase_map)
             map_block = (f"\n\nCodebase map at commit "
                          f"{self._codebase_map.commit_sha[:12]}:\n{rendered_map}")
@@ -2114,9 +2121,10 @@ class FeatureWorkflow(GateHost):
                     return arch
 
                 if delta_retries <= 0:
-                    raise RuntimeError(
+                    raise ApplicationError(
                         f"brownfield architecture delta failed grounding check "
-                        f"after retries: {delta_check.detail}")
+                        f"after retries: {delta_check.detail}",
+                        non_retryable=True)
                 delta_retries -= 1
                 delta_guidance = (
                     f"The proposed delta does not match the repository at "

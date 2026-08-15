@@ -1139,52 +1139,48 @@ class RepoProbeInput(BaseModel):
 
 @activity.defn
 async def classify_repo(inp: RepoProbeInput) -> RepoObservation:
-    """E-84 D3: observe a repository. Facts only; classify() decides.
+    """E-84 D3: probe the repository for intake classification.
 
-    Never raises. An unreachable path, a missing branch and a broken git are
-    all observations intake turns into a verdict with a reason -- raising here
-    would make "the path is wrong" indistinguishable from "the worker died",
-    which is the retry policy's business, not intake's.
+    Never raises: missing repo / branch / unreadable tree / subprocess error
+    are all observations intake turns into a verdict with a reason -- raising
+    here would make "the path is wrong" indistinguishable from "the worker
+    died", which is the retry policy's business, not intake's.
     """
     try:
-        probe = subprocess.run(
-            ["git", "rev-parse", "--is-inside-work-tree"],
-            cwd=inp.repo_dir, capture_output=True, text=True)
+        probe = _git(["rev-parse", "--is-inside-work-tree"], cwd=inp.repo_dir)
+        if probe.returncode != 0:
+            return RepoObservation(
+                is_git_repo=False, base_branch_resolves=False,
+                reason=(probe.stderr.strip() or
+                        f"{inp.repo_dir!r} is not reachable")[:300])
+
+        rev = _git(["rev-parse", "--verify", f"{inp.base_branch}^{{commit}}"],
+                   cwd=inp.repo_dir)
+        if rev.returncode != 0:
+            return RepoObservation(
+                is_git_repo=True, base_branch_resolves=False,
+                reason=(rev.stderr.strip() or
+                        f"branch {inp.base_branch!r} does not resolve")[:300])
+        commit_sha = rev.stdout.strip()
+
+        listing = _git(["-c", "core.quotepath=false", "ls-tree", "-r",
+                        "--name-only", commit_sha], cwd=inp.repo_dir)
+        if listing.returncode != 0:
+            return RepoObservation(
+                is_git_repo=True, base_branch_resolves=True,
+                commit_sha=commit_sha,
+                reason=(listing.stderr.strip() or
+                        "could not list the tree")[:300])
+
+        count = sum(1 for p in listing.stdout.splitlines()
+                    if p.strip().endswith(SOURCE_EXTENSIONS))
+        return RepoObservation(
+            is_git_repo=True, base_branch_resolves=True,
+            commit_sha=commit_sha, source_file_count=count)
     except Exception as exc:
         return RepoObservation(
             is_git_repo=False, base_branch_resolves=False,
-            reason=f"{inp.repo_dir!r} is not reachable: {exc}"[:300])
-
-    if probe.returncode != 0:
-        return RepoObservation(
-            is_git_repo=False, base_branch_resolves=False,
-            reason=(probe.stderr.strip() or
-                    f"{inp.repo_dir!r} is not reachable")[:300])
-
-    rev = subprocess.run(
-        ["git", "rev-parse", "--verify", f"{inp.base_branch}^{{commit}}"],
-        cwd=inp.repo_dir, capture_output=True, text=True)
-    if rev.returncode != 0:
-        return RepoObservation(
-            is_git_repo=True, base_branch_resolves=False,
-            reason=(rev.stderr.strip() or
-                    f"branch {inp.base_branch!r} does not resolve")[:300])
-    commit_sha = rev.stdout.strip()
-
-    listing = subprocess.run(
-        ["git", "ls-tree", "-r", "--name-only", commit_sha],
-        cwd=inp.repo_dir, capture_output=True, text=True)
-    if listing.returncode != 0:
-        return RepoObservation(
-            is_git_repo=True, base_branch_resolves=True,
-            commit_sha=commit_sha,
-            reason=(listing.stderr.strip() or "could not list the tree")[:300])
-
-    count = sum(1 for p in listing.stdout.splitlines()
-                if p.strip().endswith(SOURCE_EXTENSIONS))
-    return RepoObservation(
-        is_git_repo=True, base_branch_resolves=True,
-        commit_sha=commit_sha, source_file_count=count)
+            reason=f"{inp.repo_dir!r} probe failed: {exc}"[:300])
 
 
 class DeltaCheckInput(BaseModel):
@@ -1203,9 +1199,8 @@ async def check_brownfield_delta(inp: DeltaCheckInput) -> CheckResult:
     context_budget_tokens (FR-801).
     """
     try:
-        listing = subprocess.run(
-            ["git", "ls-tree", "-r", "--name-only", inp.commit_sha],
-            cwd=inp.repo_dir, capture_output=True, text=True)
+        listing = _git(["-c", "core.quotepath=false", "ls-tree", "-r",
+                        "--name-only", inp.commit_sha], cwd=inp.repo_dir)
     except Exception as exc:
         return build_check(
             DELTA_CHECK, False, CheckClass.ABSOLUTE,
