@@ -378,7 +378,8 @@ def build_map(applied: ApplyResult, bc_of: Mapping[str, str], *,
               advisories: Sequence[Advisory] = (),
               attribution: AttributionReport | None = None,
               decomposition: DecompositionReport | None = None,
-              ownership: OwnershipReport | None = None) -> CapabilityMap:
+              ownership: OwnershipReport | None = None,
+              total_references: int = 0) -> CapabilityMap:
     """The ONE constructor of a CapabilityMap, following assemble()'s rule:
     one place where the artifact is built means its derived counts cannot
     disagree with the rows they were derived from.
@@ -420,10 +421,12 @@ def build_map(applied: ApplyResult, bc_of: Mapping[str, str], *,
         dispositions=applied.stamped.dispositions,
         attribution=attribution, decomposition=decomposition,
         ownership=ownership, advisories=tuple(advisories),
-        # Both halves of what DD8 refused: a verdict verification dropped, and
-        # a verdict naming a candidate that does not exist. Plan 3 divides
-        # this by total_references for the citation guard -- and must guard
-        # the zero denominator this plan always produces.
+        # The audit record of refused verdicts: one verification dropped, plus
+        # one naming a candidate that does not exist. NOT the guard's
+        # numerator -- DD8 measures a fabrication rate over REFERENCES, and
+        # guard_tripped() divides unresolved_references by total_references
+        # (P3-D2).
         dropped_dispositions=(applied.stamped.dropped
                               + len(applied.stamped.unknown_candidate_ids)),
+        total_references=total_references,
         collected=Measurement.measured(float(len(capabilities))))

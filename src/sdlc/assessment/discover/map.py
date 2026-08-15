@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -22,6 +23,9 @@ from ..scan.models import (
 from ...capability.models import Advisory
 from ...measurement import CollectionState, Measurement
 from .models import AttributionReport, DecompositionReport, OwnershipReport
+
+if TYPE_CHECKING:
+    from .verify import RefVerification
 
 
 class DiscoverAction(str, Enum):
@@ -137,6 +141,26 @@ class CandidateDisposition(BaseModel):
 # this fabrication rate, too many references failed to resolve for the
 # surviving ones to be evidence.
 CITATION_GUARD_MAX_UNRESOLVED: float = 0.10
+
+
+def guard_tripped(verification: "RefVerification") -> str:
+    """DD8's phase-level guard: the reason the phase must report
+    not_collected, or "" when the proposal is usable.
+
+    Deliberately returns a REASON rather than a bool. The workflow puts this
+    string on the PhaseResult, and a bare True would leave the caller to
+    reinvent the explanation -- which is how two reasons that must not
+    converge start converging.
+    """
+    if verification.fabrication_rate <= CITATION_GUARD_MAX_UNRESOLVED:
+        return ""
+    return (f"the proposer's citation fabrication rate is "
+            f"{verification.unresolved_references}/"
+            f"{verification.total_references} = "
+            f"{verification.fabrication_rate:.2f}, past the "
+            f"{CITATION_GUARD_MAX_UNRESOLVED:.2f} guard -- too many "
+            f"references failed to resolve for the surviving ones to be "
+            f"evidence")
 
 
 # S1's two non-domain classifications. A candidate supported ONLY by these is
