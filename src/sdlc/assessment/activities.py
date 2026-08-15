@@ -27,11 +27,14 @@ from ..triage.gitread import is_over_size_limit, read_tree
 from .discover import memo as discover_memo
 from .discover.attribution import attribute
 from .discover.context import build_context
-from .discover.map import CapabilityMap, DiscoverContext, GraphSummary
+from .discover.map import (
+    CapabilityMap, DiscoverContext, DiscoverProposal, GraphSummary,
+)
 from .discover.models import (
     AttributionReport, DecompositionReport, EntityDeclaration, FileBucket,
     OwnershipOutcome, OwnershipReport, ReferenceGraph,
 )
+from .discover.verify import RefVerification, cited_paths, verify_refs
 from .discover.operations import decompose
 from .discover.ownership import assign
 from .scan import memo
@@ -637,6 +640,50 @@ async def discover_finalize(
     return DiscoverFinalizeOutcome(attribution=attribution,
                                    decomposition=decomposition,
                                    ownership=ownership)
+
+
+def _committed_blob(repo_dir: str, commit_sha: str, path: str) -> str | None:
+    ref = f"{commit_sha}:{path}"
+    try:
+        kind = _git(["cat-file", "-t", ref], cwd=repo_dir)
+        if kind.returncode != 0 or kind.stdout.strip() != "blob":
+            return None
+        proc = _git(["show", ref], cwd=repo_dir)
+    except OSError:
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout
+
+
+class VerifyRefsInput(BaseModel):
+    """DD8 items 4-5's inputs. The proposal travels whole rather than as a
+    path list: the pure function needs the quotes too, and splitting them
+    would put half the verification decision in the activity."""
+    repo_dir: str
+    commit_sha: str
+    proposal: DiscoverProposal
+
+
+@activity.defn
+async def verify_discover_refs(inp: VerifyRefsInput) -> RefVerification:
+    """E-48 DD8 items 4-5. The activity READS; verify.py DECIDES.
+
+    NFR-9: `git show <sha>:<path>` at the pinned commit. No checkout, no
+    worktree mutation, and none of the assessed repository's code runs.
+
+    A path that does not resolve -- including one that resolves to a tree --
+    yields None, which verify_refs counts as a fabricated reference. An
+    unreadable repository therefore refuses every reference rather than
+    raising: fail-closed means "unverified", not "crash", and the phase-level
+    guard is what turns a mass refusal into a not_collected phase.
+    """
+    blobs: dict[str, str | None] = {
+        path: _committed_blob(inp.repo_dir, inp.commit_sha, path)
+        for path in cited_paths(inp.proposal)
+    }
+    return verify_refs(inp.proposal, blobs)
+
 
 
 

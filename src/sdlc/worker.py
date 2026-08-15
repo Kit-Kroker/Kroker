@@ -39,7 +39,7 @@ from .assessment.activities import (
     discover_lock, discover_memo_load, discover_memo_store, scan_ci,
     scan_config_infra, scan_coverage, scan_entrypoints, scan_frontend,
     scan_packages, scan_schema, scan_security_static, scan_sensitivity,
-    scan_testability, scan_tests_inventory,
+    scan_testability, scan_tests_inventory, verify_discover_refs,
 )
 from .artifacts.read import load_session
 from .artifacts.retention import apply_session_retention
@@ -140,6 +140,7 @@ async def main() -> None:
             scan_packages, scan_schema, scan_entrypoints, scan_frontend,
             scan_security_static, scan_config_infra, scan_sensitivity,
             scan_tests_inventory, scan_coverage, scan_testability, scan_ci,
+            verify_discover_refs,
             *agent_activities,
         ],
     )
