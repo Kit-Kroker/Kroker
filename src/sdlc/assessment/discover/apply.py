@@ -22,9 +22,9 @@ from ...capability.models import Advisory, CapabilityFingerprint
 from ...measurement import Measurement
 from ..scan.models import CandidateMember, Confidence
 from .map import (
-    REJECTING_ACTIONS, Capability, CandidateContext, CandidateDisposition,
-    CapabilityMap, DiscoverAction, DiscoverContext, DiscoverProposal,
-    DispositionSource, ProposedDisposition,
+    REJECTING_ACTIONS, BlueprintComparison, Capability, CandidateContext,
+    CandidateDisposition, CapabilityMap, DiscoverAction, DiscoverContext,
+    DiscoverProposal, DispositionSource, ProposedDisposition,
 )
 from .models import AttributionReport, DecompositionReport, OwnershipReport
 from .tiers import group_by_tier
@@ -379,14 +379,13 @@ def build_map(applied: ApplyResult, bc_of: Mapping[str, str], *,
               attribution: AttributionReport | None = None,
               decomposition: DecompositionReport | None = None,
               ownership: OwnershipReport | None = None,
-              total_references: int = 0) -> CapabilityMap:
+              total_references: int = 0,
+              blueprint: BlueprintComparison | None = None) -> CapabilityMap:
     """The ONE constructor of a CapabilityMap, following assemble()'s rule:
     one place where the artifact is built means its derived counts cannot
     disagree with the rows they were derived from.
 
-    `bc_of` is local_key -> bc_id, from the lock's attachments. Plan 3 adds
-    `domain_model` (clause D7) and `blueprint` (clause D8) here, when their
-    producers exist.
+    `bc_of` is local_key -> bc_id, from the lock's attachments.
 
     Only ever MEASURED: a discover that could not run reports a not_collected
     PHASE row and carries no map at all, so a not_collected map has no
@@ -429,4 +428,5 @@ def build_map(applied: ApplyResult, bc_of: Mapping[str, str], *,
         dropped_dispositions=(applied.stamped.dropped
                               + len(applied.stamped.unknown_candidate_ids)),
         total_references=total_references,
+        blueprint=blueprint,
         collected=Measurement.measured(float(len(capabilities))))

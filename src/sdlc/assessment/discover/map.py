@@ -293,6 +293,85 @@ class Capability(BaseModel):
         return self
 
 
+class BlueprintStatus(str, Enum):
+    """Clause D8. MISSING is CONTEXT, not failure: a repository that does not
+    do what its industry normally does may be correct, incomplete, or out of
+    scope, and this comparison cannot tell which."""
+    PRESENT = "present"
+    MISSING = "missing"
+    EXTRA = "extra"
+
+
+class BlueprintGap(BaseModel):
+    model_config = {"frozen": True}
+    name: str
+    status: BlueprintStatus
+    level: int = 0                       # 0 for an EXTRA (no blueprint level)
+    parent: str = ""
+    matched_bc_id: str | None = None
+
+    @model_validator(mode="after")
+    def _a_match_names_its_capability(self) -> "BlueprintGap":
+        matched = self.status in (BlueprintStatus.PRESENT,
+                                  BlueprintStatus.EXTRA)
+        if matched != (self.matched_bc_id is not None):
+            raise ValueError(
+                f"matched_bc_id is set IFF the status names a capability -- "
+                f"got status={self.status.value} "
+                f"matched_bc_id={self.matched_bc_id}. A MISSING row that "
+                f"names a capability is not a weaker claim, it is two claims")
+        return self
+
+
+class BlueprintComparison(BaseModel):
+    """DD11's artifact. Degrades on its own (P3-D4) -- a missing or
+    unparseable blueprint reports not_collected here and the rest of the map
+    ships."""
+    blueprint: str = ""
+    version: str = ""
+    gaps: tuple[BlueprintGap, ...] = ()
+    counts: dict[BlueprintStatus, int] = Field(default_factory=dict)
+    collected: Measurement
+
+    @model_validator(mode="after")
+    def _counts_are_derived(self) -> "BlueprintComparison":
+        if self.collected.state is not CollectionState.MEASURED:
+            return self
+        missing = [s.value for s in BlueprintStatus if s not in self.counts]
+        if missing:
+            raise ValueError(
+                f"counts must carry every status, including zeros (missing "
+                f"{missing}) -- an absent key and a zero count are different "
+                f"claims and only one of them is true")
+        for status in BlueprintStatus:
+            actual = sum(1 for g in self.gaps if g.status is status)
+            if self.counts[status] != actual:
+                raise ValueError(
+                    f"counts[{status.value}]={self.counts[status]} but "
+                    f"{actual} row(s) carry it -- counts are derived from "
+                    f"rows, never assigned")
+        return self
+
+    @model_validator(mode="after")
+    def _gaps_are_sorted(self) -> "BlueprintComparison":
+        keys = [(g.status.value, g.name) for g in self.gaps]
+        if keys != sorted(set(keys)):
+            raise ValueError(
+                f"gaps {keys} are not sorted and deduped -- comparison order "
+                f"must not reach the artifact")
+        return self
+
+    @model_validator(mode="after")
+    def _unmeasured_carries_no_payload(self) -> "BlueprintComparison":
+        if self.collected.state is not CollectionState.MEASURED and (
+                self.gaps or self.counts):
+            raise ValueError(
+                f"collected={self.collected.state.value} carries no payload, "
+                f"but rows are present -- a comparison that did not happen "
+                f"has no gaps (FR-915)")
+        return self
+
+
 class CapabilityMap(BaseModel):
     """The DISCOVER phase artifact (FR-913).
 
@@ -309,6 +388,7 @@ class CapabilityMap(BaseModel):
     advisories: tuple[Advisory, ...] = ()
     dropped_dispositions: int = 0
     total_references: int = 0
+    blueprint: BlueprintComparison | None = None
     collected: Measurement
 
     @model_validator(mode="after")
@@ -337,7 +417,8 @@ class CapabilityMap(BaseModel):
             if (self.capabilities or self.dispositions or self.by_action
                     or self.attribution is not None or self.decomposition is not None
                     or self.ownership is not None or self.advisories
-                    or self.dropped_dispositions != 0 or self.total_references != 0):
+                    or self.dropped_dispositions != 0 or self.total_references != 0
+                    or self.blueprint is not None):
                 raise ValueError(
                     f"collected={self.collected.state.value} carries no payload, "
                     f"but payload fields are present -- a discover that did "

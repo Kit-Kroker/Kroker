@@ -1,0 +1,66 @@
+# APQC Process Classification Framework (cross-industry), levels 1-2.
+# E-48 DD11's ONE reference blueprint. MISSING is context, not failure.
+# The remaining six (BIAN, TM Forum, ACORD, HL7, ARTS) are curation work with
+# their own item -- see the E-48 spec's Scope section.
+name: APQC PCF (cross-industry)
+version: "7.2"
+processes:
+  - {name: Develop Vision and Strategy, level: 1}
+  - {name: Define the Business Concept and Long-Term Vision, level: 2, parent: Develop Vision and Strategy}
+  - {name: Develop Business Strategy, level: 2, parent: Develop Vision and Strategy}
+
+  - {name: Develop and Manage Products and Services, level: 1}
+  - {name: Manage Product and Service Portfolio, level: 2, parent: Develop and Manage Products and Services}
+  - {name: Develop Products and Services, level: 2, parent: Develop and Manage Products and Services}
+
+  - {name: Market and Sell Products and Services, level: 1}
+  - {name: Understand Markets Customers and Capabilities, level: 2, parent: Market and Sell Products and Services}
+  - {name: Develop Marketing Strategy, level: 2, parent: Market and Sell Products and Services}
+  - {name: Develop and Manage Sales Plans, level: 2, parent: Market and Sell Products and Services}
+
+  - {name: Deliver Physical Products, level: 1}
+  - {name: Plan for and Acquire Necessary Resources, level: 2, parent: Deliver Physical Products}
+  - {name: Manage Logistics and Warehousing, level: 2, parent: Deliver Physical Products}
+
+  - {name: Deliver Services, level: 1}
+  - {name: Establish Service Delivery Governance, level: 2, parent: Deliver Services}
+  - {name: Deliver Service to Customer, level: 2, parent: Deliver Services}
+
+  - {name: Manage Customer Service, level: 1}
+  - {name: Develop Customer Care Strategy, level: 2, parent: Manage Customer Service}
+  - {name: Manage Customer Service Requests and Inquiries, level: 2, parent: Manage Customer Service}
+  - {name: Manage Customer Complaints, level: 2, parent: Manage Customer Service}
+
+  - {name: Develop and Manage Human Capital, level: 1}
+  - {name: Recruit Source and Select Employees, level: 2, parent: Develop and Manage Human Capital}
+  - {name: Manage Employee Information and Analytics, level: 2, parent: Develop and Manage Human Capital}
+
+  - {name: Manage Information Technology, level: 1}
+  - {name: Develop and Manage IT Customer Relationships, level: 2, parent: Manage Information Technology}
+  - {name: Develop and Manage IT Solutions, level: 2, parent: Manage Information Technology}
+  - {name: Deploy Information Technology Solutions, level: 2, parent: Manage Information Technology}
+  - {name: Manage Information Technology Knowledge, level: 2, parent: Manage Information Technology}
+
+  - {name: Manage Financial Resources, level: 1}
+  - {name: Perform Planning and Management Accounting, level: 2, parent: Manage Financial Resources}
+  - {name: Perform Revenue Accounting, level: 2, parent: Manage Financial Resources}
+  - {name: Process Customer Payments, level: 2, parent: Manage Financial Resources}
+  - {name: Manage Treasury Operations, level: 2, parent: Manage Financial Resources}
+
+  - {name: Acquire Construct and Manage Assets, level: 1}
+  - {name: Plan and Acquire Assets, level: 2, parent: Acquire Construct and Manage Assets}
+  - {name: Maintain Assets, level: 2, parent: Acquire Construct and Manage Assets}
+
+  - {name: Manage Enterprise Risk Compliance Remediation and Resiliency, level: 1}
+  - {name: Manage Enterprise Risk, level: 2, parent: Manage Enterprise Risk Compliance Remediation and Resiliency}
+  - {name: Manage Compliance, level: 2, parent: Manage Enterprise Risk Compliance Remediation and Resiliency}
+  - {name: Manage Business Resiliency, level: 2, parent: Manage Enterprise Risk Compliance Remediation and Resiliency}
+
+  - {name: Manage External Relationships, level: 1}
+  - {name: Build Investor Relationships, level: 2, parent: Manage External Relationships}
+  - {name: Manage Government and Industry Relationships, level: 2, parent: Manage External Relationships}
+
+  - {name: Develop and Manage Business Capabilities, level: 1}
+  - {name: Manage Business Processes, level: 2, parent: Develop and Manage Business Capabilities}
+  - {name: Manage Knowledge and Change, level: 2, parent: Develop and Manage Business Capabilities}
+  - {name: Measure and Benchmark, level: 2, parent: Develop and Manage Business Capabilities}

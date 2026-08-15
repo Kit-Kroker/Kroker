@@ -26,9 +26,11 @@ from ..triage.activities import tracked_paths
 from ..triage.gitread import is_over_size_limit, read_tree
 from .discover import memo as discover_memo
 from .discover.attribution import attribute
+from .discover.blueprint import DEFAULT_BLUEPRINT, compare, load, not_compared
 from .discover.context import build_context
 from .discover.map import (
-    CapabilityMap, DiscoverContext, DiscoverProposal, GraphSummary,
+    BlueprintComparison, Capability, CapabilityMap, DiscoverContext,
+    DiscoverProposal, GraphSummary,
 )
 from .discover.models import (
     AttributionReport, DecompositionReport, EntityDeclaration, FileBucket,
@@ -683,6 +685,28 @@ async def verify_discover_refs(inp: VerifyRefsInput) -> RefVerification:
         for path in cited_paths(inp.proposal)
     }
     return verify_refs(inp.proposal, blobs)
+
+
+class BlueprintInput(BaseModel):
+    capabilities: list[Capability] = Field(default_factory=list)
+    path: str = DEFAULT_BLUEPRINT
+
+
+@activity.defn
+async def load_blueprint(inp: BlueprintInput) -> BlueprintComparison:
+    """DD11 (clause D8). Reads a FACTORY-shipped YAML file, never the assessed
+    repository -- so this adds nothing to NFR-9's surface.
+
+    A missing or unparseable file degrades the comparison and names it
+    (P3-D4); the rest of the map ships.
+    """
+    loaded = load(inp.path)
+    if loaded is None:
+        return not_compared(
+            f"the blueprint {inp.path!r} is missing or did not parse")
+    return compare(inp.capabilities, loaded.processes,
+                   name=loaded.name, version=loaded.version)
+
 
 
 
