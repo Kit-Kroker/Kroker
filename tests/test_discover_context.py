@@ -116,6 +116,23 @@ def test_skipped_blobs_are_carried_not_dropped():
     """The E-46 review's rule: a gap reported as a zero is the defect."""
     ctx = build_context(_scan(), INVENTORY, ["big/generated.py"])
     assert ctx.skipped == ("big/generated.py",)
+    assert ctx.file_count == len(INVENTORY) + 1
+
+
+def test_unresolvable_source_prevents_guardrail_only_flip():
+    """Finding 1: if a source lookup misses, we cannot prove the candidate is
+    supported *only* by layer rules. An unresolvable source must record the
+    miss and keep guardrail_only=False."""
+    cand = ScanCandidate(
+        candidate_id="C-03", name="mixed",
+        sources=["S1-services", "S3-missing"],
+        confidence=Confidence.MEDIUM,
+        members=[CandidateMember(kind=MemberKind.PACKAGE_PATH, value="services",
+                                 path="services/__init__.py")])
+    ctx = build_context(_scan(candidates=[cand]), INVENTORY, [])
+    mixed = ctx.candidates[0]
+    assert "unresolved" in mixed.source_rules
+    assert mixed.guardrail_only is False
 
 
 def test_the_packet_is_order_independent():

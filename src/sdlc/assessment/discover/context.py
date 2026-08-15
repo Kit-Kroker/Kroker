@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Collection, Mapping, Sequence
 
 from ...measurement import Measurement
-from ..scan.models import CandidateMember, ScanResult
+from ..scan.models import CandidateMember, ScanResult, ScanSignalId
 from . import refgraph
 from .map import (
     GUARDRAIL_RULES, CandidateContext, DiscoverContext, GraphSummary,
@@ -76,13 +76,14 @@ def coupling(candidate_id: str, member_paths: Collection[str], edges: Edges,
 
 # S3 and S4 are the entry-point signals; attribute() takes the paths that host
 # one so a referenced-by-an-entry-point file is ATTACHED rather than orphaned.
-_ENTRY_SIGNALS = ("S3", "S4")
+_ENTRY_SIGNALS: frozenset[ScanSignalId] = frozenset({
+    ScanSignalId.S3, ScanSignalId.S4})
 
 
 def entry_point_paths(scan: ScanResult) -> tuple[str, ...]:
     """Paths hosting an S3/S4 entry point, for E-47b's attribute()."""
     return tuple(sorted({
-        m.path for s in scan.sources if s.signal.value in _ENTRY_SIGNALS
+        m.path for s in scan.sources if s.signal in _ENTRY_SIGNALS
         for m in s.members if m.path}))
 
 
@@ -108,8 +109,7 @@ def build_context(scan: ScanResult, inventory: Mapping[str, str],
     contexts: list[CandidateContext] = []
     for cand in sorted(scan.candidates, key=lambda c: c.candidate_id):
         paths = sorted({m.path for m in cand.members if m.path})
-        rules = tuple(sorted({rule_of[s] for s in cand.sources
-                              if s in rule_of}))
+        rules = tuple(sorted({rule_of.get(s, "unresolved") for s in cand.sources}))
         member_set = set(paths)
         contexts.append(CandidateContext(
             candidate_id=cand.candidate_id,
@@ -142,6 +142,6 @@ def build_context(scan: ScanResult, inventory: Mapping[str, str],
             parsed=len(graph.parsed), unparsed=len(graph.unparsed),
             edges=len(graph.edges),
             unresolved_relative_rate=graph.unresolved_relative_rate),
-        file_count=len(inventory),
+        file_count=len(inventory) + len(skipped),
         skipped=tuple(sorted(skipped)),
         collected=Measurement.measured(float(len(contexts))))

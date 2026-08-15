@@ -426,8 +426,14 @@ async def discover_context(inp: DiscoverContextInput) -> DiscoverContext:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
         blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
                                        SOURCE_EXTENSIONS)
-        return build_context(inp.scan, blobs, skipped)
     except Exception as exc:                        # noqa: BLE001
-        _log.warning("discover_context failed: %s", exc)
+        _log.warning("discover_context tree read failed: %s", exc)
         return _no_context(
             f"could not read the tree: {type(exc).__name__}: {exc}"[:300])
+
+    try:
+        return build_context(inp.scan, blobs, skipped)
+    except Exception as exc:                        # noqa: BLE001
+        _log.warning("discover_context build_context failed: %s", exc)
+        return _no_context(
+            f"could not build context: {type(exc).__name__}: {exc}"[:300])

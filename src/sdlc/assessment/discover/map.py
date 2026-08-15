@@ -246,6 +246,14 @@ class Capability(BaseModel):
                 f"making two claims")
         return self
 
+    @model_validator(mode="after")
+    def _member_paths_are_sorted(self) -> "Capability":
+        if list(self.member_paths) != sorted(set(self.member_paths)):
+            raise ValueError(
+                f"member_paths {self.member_paths} are not sorted and "
+                f"deduped -- discovery order must not reach the artifact")
+        return self
+
 
 class CapabilityMap(BaseModel):
     """The DISCOVER phase artifact (FR-913).
@@ -287,11 +295,13 @@ class CapabilityMap(BaseModel):
 
     @model_validator(mode="after")
     def _unmeasured_carries_no_payload(self) -> "CapabilityMap":
-        if (self.collected.state is not CollectionState.MEASURED
-                and self.capabilities):
-            raise ValueError(
-                f"collected={self.collected.state.value} carries no payload, "
-                f"but {len(self.capabilities)} capabilit(ies) are present -- "
-                f"a discover that did not happen has no capabilities "
-                f"(FR-915)")
+        if self.collected.state is not CollectionState.MEASURED:
+            if (self.capabilities or self.dispositions or self.by_action
+                    or self.attribution is not None or self.decomposition is not None
+                    or self.ownership is not None or self.advisories
+                    or self.dropped_dispositions != 0 or self.total_references != 0):
+                raise ValueError(
+                    f"collected={self.collected.state.value} carries no payload, "
+                    f"but payload fields are present -- a discover that did "
+                    f"not happen has no capabilities, rows, or reports (FR-915)")
         return self

@@ -80,4 +80,19 @@ async def test_an_unreadable_tree_degrades_rather_than_raising(repo):
     ctx = await discover_context(DiscoverContextInput(
         repo_dir=repo_dir, commit_sha="0" * 40, tree_hash="t", scan=SCAN))
     assert ctx.collected.state is CollectionState.NOT_COLLECTED
+    assert "could not read the tree" in ctx.collected.reason
+    assert ctx.candidates == ()
+
+
+@pytest.mark.asyncio
+async def test_build_failure_degrades_with_distinct_reason(repo, monkeypatch):
+    """Finding 5: 'could not build context' is distinct from 'could not read tree'."""
+    repo_dir, sha = repo
+    def _boom(*a, **kw):
+        raise RuntimeError("boom")
+    monkeypatch.setattr("sdlc.assessment.activities.build_context", _boom)
+    ctx = await discover_context(DiscoverContextInput(
+        repo_dir=repo_dir, commit_sha=sha, tree_hash="t", scan=SCAN))
+    assert ctx.collected.state is CollectionState.NOT_COLLECTED
+    assert "could not build context" in ctx.collected.reason
     assert ctx.candidates == ()

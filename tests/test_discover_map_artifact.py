@@ -72,3 +72,25 @@ def test_dropped_dispositions_are_recorded_not_discarded():
                       by_action={DiscoverAction.CONFIRM: 1},
                       dropped_dispositions=2, total_references=20)
     assert m.dropped_dispositions == 2
+
+
+def test_capability_member_paths_are_sorted_and_deduped():
+    """Finding 3: member_paths must be sorted and deduped (NFR-10)."""
+    _cap(member_paths=("a.py", "b.py"))
+    with pytest.raises(ValidationError, match="not sorted"):
+        _cap(member_paths=("z.py", "a.py"))
+    with pytest.raises(ValidationError, match="not sorted"):
+        _cap(member_paths=("a.py", "a.py"))
+
+
+def test_an_uncollected_map_carries_no_payload_fields():
+    """Finding 2: not_collected covers dispositions, dropped counts, etc."""
+    disp = CandidateDisposition(
+        candidate_id="C-01", action=DiscoverAction.CONFIRM,
+        source=DispositionSource.BASELINE, rule="r")
+    with pytest.raises(ValidationError, match="no payload"):
+        CapabilityMap(collected=NC, dispositions=(disp,))
+    with pytest.raises(ValidationError, match="no payload"):
+        CapabilityMap(collected=NC, dropped_dispositions=2)
+    with pytest.raises(ValidationError, match="no payload"):
+        CapabilityMap(collected=NC, total_references=5)
