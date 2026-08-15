@@ -110,14 +110,14 @@
 
 ## 1. Pipeline — 15-stage DAG (SDLC-spec v2 §1)
 
-**9 of 15 stages live.**
+**11 of 15 stages live.**
 
-- [ ] **0 · intake** — routing greenfield/brownfield/repair. `IdeaBrief.mode` is a field only; no branch logic in `feature.py`.
+- [x] **0 · intake** — routing greenfield/brownfield/repair. Verified by `classify_repo` activity against git tree (E-84 D3); fails closed when brownfield has nothing to map.
 - [ ] **1 · constitution** — no `Constitution` model, no stage.
-- [ ] **2 · context (Cartographer)** — no `CodebaseMap`, no `cartography.py`, no brownfield delta. **E-46 plan 3 (2026-08-13):** S1–S5 is now the whole extraction half of `CodebaseMap`; FR-102 still needs E-47b/E-47c. **E-47b (2026-08-13):** attribution and orphan classification land; FR-102 still needs E-47c. **E-47c (2026-08-14):** L2 operations and entity ownership land; the E-47 group is closed and FR-102's remainder is classify + delta.
+- [x] **2 · context (Cartographer)** — `CodebaseMap` projected from scan tree, bounded prompt rendering (`render_for_prompt`), and `check_brownfield_delta` grounding check with 1 retry before failing closed (E-84).
 - [ ] **3 · requirements (Product)** — conflated into clarify; no standalone Product proposer / `Requirements` artifact.
 - [ ] **4 · research** (FR-107) — grounded brief before clarify. The DAG is now 15
-  stages; **9 of 15 stages live** (research is scaffolded, off by default).
+  stages; **11 of 15 stages live** (research is scaffolded, off by default).
 - [x] **5 · clarify** — Clarifier + gate; open-question wait on `answer_question`; recall/retain/memoization wired.
 - [x] **6 · architecture** — Architect + gate, with REVISE loop (`_revisable_stage`).
 - [x] **7 · planning** — Planner + gate, with REVISE loop.
@@ -134,8 +134,8 @@
 ## 2. Functional requirements (PRD §6)
 
 ### Pipeline (FR-100)
-- [ ] ⚠️ **FR-101** 15-stage durable DAG — 9/15 stages (see §1).
-- [ ] **FR-102** greenfield/brownfield classify + `CodebaseMap` + delta. **E-47a/b/c are all complete (2026-08-08 → 2026-08-14)**, so the `CapabilityMap` inputs exist; the remaining half is intake classification + brownfield delta, no longer E-47.
+- [ ] ⚠️ **FR-101** 15-stage durable DAG — 11/15 stages (see §1).
+- [x] **FR-102** greenfield/brownfield classify + `CodebaseMap` + delta. **Landed 2026-08-15 (E-84)**: `classify()` pure rule + `classify_repo` activity; `CodebaseMap` projection from 13 Tier 2 scan signals; bounded prompt rendering; typed `BrownfieldDelta` (added/modified/removed) with activity-side git grounding check in architecture stage.
 - [x] **FR-103** memoization, per-run watermark, audit-record-always-kept (`memoization/cache.py`, `content_key`, `_cached_stage`) — each stage's memo key now carries *its own* role's model (`STAGE_MODELS`), so a per-role model change invalidates exactly that stage. `brief_digest` keeps memoization alive once a non-memoized stage (research) feeds memoized ones: the brief contributes only a canonical (source_url, claim) digest to `content_key`, so identical facts hit and new facts invalidate clarify/architect/planner. ⚠️ **Amendment pending (E-47a, 2026-08-08):** E-46's `(tree hash, signal version)` key gains a third term, `identity_registry_version` — the `CapabilityMap` is a function of the tree *and* the identity registry, so re-assessing an unchanged tree is no longer unconditionally a cache hit. Deliberately coarse (any identity write invalidates the whole map for that project); the map is a single artifact with no per-capability memoization to preserve. **Clarified (E-46 D10, 2026-08-12):** E-47a's `identity_registry_version` term applies to the `CapabilityMap`, not to E-46's signal keys — E-46 is a pure function of the tree, keyed on `(tree_hash, signal_version, rules_sha)`.
 - [x] **FR-104** integration branch, per-task worktree, own-branch-point diff (ADR-14 fully wired).
 - [ ] ⚠️ **FR-105** fix loops — QA loop ✅, review findings now fold into it ✅; loop-count defaults drift from spec (2 vs 3).
@@ -898,6 +898,12 @@ which makes it the shortest path to a demonstrable assess → fix → prove loop
   side cannot read as having fixed everything it found; **the verification
   branch** (D6) — `build_verification_branch` constructs the "if you merged all
   of these" tree, because `open_pull_request` opens PRs and does not merge them.
+- [x] **E-84 — Brownfield intake, context, and checked delta** → FR-102. *Landed 2026-08-15.*
+  Lifts `scan_tree()` fan-out to shared workflow code across audit and feature pipelines (D1/D5);
+  pure `classify()` and `classify_repo` activity (D3); `CodebaseMap` projected from scan tree (D1);
+  bounded prompt rendering `render_for_prompt()` (D12); typed `BrownfieldDelta` (added/modified/removed) (D7/D8/D9);
+  activity-side tree listing `check_brownfield_delta` (D8); stages 0 and 2 wired in `FeatureWorkflow` (D3/D4/D6);
+  and architecture stage delta grounding check with 1 retry before failing closed (D10/D11).
 
 ## 11. Tier 2 — the EDCR port (`E-45`…`E-56`) → FR-910
 
