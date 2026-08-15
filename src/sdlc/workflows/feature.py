@@ -15,14 +15,14 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from ..activities import (
-        CodingTaskInput, CoverageInput, DiffInput,
+        CodingTaskInput, CoverageInput, DeltaCheckInput, DiffInput,
         IntegrationChecks, IntegrationChecksInput,
         IntegrationHandle, IntegrationInput, LintInput, MergeInput,
         PROpenInput, QAInput, RepoProbeInput, SecurityScanInput, WorktreeInput,
-        classify_repo, create_worktree, evaluate_gate, get_task_diff,
-        measure_coverage, merge_into_integration, open_pull_request,
-        run_coding_task, run_integration_checks, run_lint, run_test_suite,
-        security_scan, setup_integration_branch,
+        check_brownfield_delta, classify_repo, create_worktree, evaluate_gate,
+        get_task_diff, measure_coverage, merge_into_integration,
+        open_pull_request, run_coding_task, run_integration_checks, run_lint,
+        run_test_suite, security_scan, setup_integration_branch,
     )
     from ..agents.roles import (
         PROMPT_SHAS, STAGE_MODELS, STAGE_ROLES, t_adversary, t_analyst,
@@ -2024,13 +2024,17 @@ class FeatureWorkflow(GateHost):
 
         arch_spend = RoleUsage(role="architect", model=resolve_role_model(cfg, "architect"))
 
-        async def _run_architect(guidance: str | None):
-            prompt = (f"mode={idea.mode.value}\n{reqs.model_dump_json()}"
-                      + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
-                         if snapshot.items else "")
-                      + (f"\nRevision guidance from reviewer:\n{guidance}"
-                         if guidance else ""))
+        # E-84 D10/D12: render the codebase map once upfront for prompt and memo key.
+        map_block = ""
+        map_key = ""
+        if self._codebase_map is not None:
+            rendered_map = render_for_prompt(
+                self._codebase_map, budget_tokens=cfg.context_budget_tokens)
+            map_key = map_digest(self._codebase_map)
+            map_block = (f"\n\nCodebase map at commit "
+                         f"{self._codebase_map.commit_sha[:12]}:\n{rendered_map}")
 
+        async def _run_architect(guidance: str | None):
             # ResearchDeps is ALWAYS constructed so the architect agent's
             # deps_type=ResearchDeps is satisfied uniformly. When research is
             # disabled, provider="fake".
@@ -2069,13 +2073,56 @@ class FeatureWorkflow(GateHost):
                 # ceiling via charge_scoped's run-counter step.
                 scope="architect")
 
-            async def _produce():
-                return (await self._run_role(cfg, "architect", resolve_role_model(cfg, "architect"), t_architect, prompt, deps=architect_deps, into=arch_spend)).output
-            arch, _ = await self._cached_stage(
-                cfg, "architect",
-                reqs.model_dump_json() + (guidance or ""),
-                ArchitectureSpec, _produce)
-            return arch
+            delta_retries = cfg.max_delta_retries
+            delta_guidance: str | None = None
+            while True:
+                prompt = (
+                    f"mode={idea.mode.value}\n{reqs.model_dump_json()}"
+                    + (map_block if self._codebase_map is not None else "")
+                    + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
+                       if snapshot.items else "")
+                    + (f"\nRevision guidance from reviewer:\n{guidance}"
+                       if guidance else "")
+                    + (f"\nDelta correction required:\n{delta_guidance}"
+                       if delta_guidance else ""))
+
+                async def _produce():
+                    return (await self._run_role(
+                        cfg, "architect", resolve_role_model(cfg, "architect"),
+                        t_architect, prompt, deps=architect_deps,
+                        into=arch_spend)).output
+
+                cache_key = (
+                    reqs.model_dump_json()
+                    + (guidance or "")
+                    + (map_key if self._codebase_map is not None else "")
+                    + (delta_guidance or ""))
+                arch, _ = await self._cached_stage(
+                    cfg, "architect", cache_key, ArchitectureSpec, _produce)
+
+                if self._codebase_map is None:
+                    return arch
+
+                delta_check = await workflow.execute_activity(
+                    check_brownfield_delta,
+                    DeltaCheckInput(
+                        repo_dir=repo_path,
+                        commit_sha=self._codebase_map.commit_sha,
+                        delta=arch.delta),
+                    **INTAKE_ACT)
+                if delta_check.passed:
+                    return arch
+
+                if delta_retries <= 0:
+                    raise RuntimeError(
+                        f"brownfield architecture delta failed grounding check "
+                        f"after retries: {delta_check.detail}")
+                delta_retries -= 1
+                delta_guidance = (
+                    f"The proposed delta does not match the repository at "
+                    f"{self._codebase_map.commit_sha[:12]}: "
+                    f"{delta_check.detail}. Update delta.added, delta.modified, "
+                    f"and delta.removed so every path resolves.")
 
         arch, gate = await self._revisable_stage("architecture", cfg,
                                                  _run_architect)
