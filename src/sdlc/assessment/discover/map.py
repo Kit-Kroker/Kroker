@@ -22,7 +22,10 @@ from ..scan.models import (
 )
 from ...capability.models import Advisory
 from ...measurement import CollectionState, Measurement
-from .models import AttributionReport, DecompositionReport, OwnershipReport
+from .models import (
+    AttributionReport, DecompositionReport, OwnershipOutcome, OwnershipReport,
+    OwnershipVerb,
+)
 
 if TYPE_CHECKING:
     from .verify import RefVerification
@@ -372,6 +375,71 @@ class BlueprintComparison(BaseModel):
         return self
 
 
+class DomainEntity(BaseModel):
+    """One entity in the consolidated domain model (clause D7). A projection
+    of EntityOwnership -- never a second judgment of it (DD12)."""
+    model_config = {"frozen": True}
+    entity: str
+    outcome: OwnershipOutcome
+    owner: str | None = None
+    verb: OwnershipVerb | None = None
+    readers: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def _readers_are_sorted(self) -> "DomainEntity":
+        if list(self.readers) != sorted(set(self.readers)):
+            raise ValueError(
+                f"readers {self.readers} are not sorted and deduped -- "
+                f"discovery order must not reach the artifact")
+        return self
+
+
+class DomainModel(BaseModel):
+    """DD12's artifact: entities, their owner where one resolved, the
+    capabilities that read them, and the three unowned outcomes surfaced as
+    E-47c left them."""
+    entities: tuple[DomainEntity, ...] = ()
+    counts: dict[OwnershipOutcome, int] = Field(default_factory=dict)
+    collected: Measurement
+
+    @model_validator(mode="after")
+    def _counts_are_derived(self) -> "DomainModel":
+        if self.collected.state is not CollectionState.MEASURED:
+            return self
+        missing = [o.value for o in OwnershipOutcome if o not in self.counts]
+        if missing:
+            raise ValueError(
+                f"counts must carry every outcome, including zeros (missing "
+                f"{missing}) -- an absent key and a zero count are different "
+                f"claims and only one of them is true")
+        for outcome in OwnershipOutcome:
+            actual = sum(1 for e in self.entities if e.outcome is outcome)
+            if self.counts[outcome] != actual:
+                raise ValueError(
+                    f"counts[{outcome.value}]={self.counts[outcome]} but "
+                    f"{actual} entit(ies) carry it -- counts are derived from "
+                    f"entities, never assigned")
+        return self
+
+    @model_validator(mode="after")
+    def _entities_are_sorted(self) -> "DomainModel":
+        names = [e.entity for e in self.entities]
+        if names != sorted(set(names)):
+            raise ValueError(
+                f"entities {names} are not sorted and deduped")
+        return self
+
+    @model_validator(mode="after")
+    def _unmeasured_carries_no_payload(self) -> "DomainModel":
+        if self.collected.state is not CollectionState.MEASURED and (
+                self.entities or self.counts):
+            raise ValueError(
+                f"collected={self.collected.state.value} carries no payload, "
+                f"but rows are present -- a domain model that did not happen "
+                f"has no entities (FR-915)")
+        return self
+
+
 class CapabilityMap(BaseModel):
     """The DISCOVER phase artifact (FR-913).
 
@@ -389,6 +457,7 @@ class CapabilityMap(BaseModel):
     dropped_dispositions: int = 0
     total_references: int = 0
     blueprint: BlueprintComparison | None = None
+    domain_model: DomainModel | None = None
     collected: Measurement
 
     @model_validator(mode="after")
@@ -418,7 +487,7 @@ class CapabilityMap(BaseModel):
                     or self.attribution is not None or self.decomposition is not None
                     or self.ownership is not None or self.advisories
                     or self.dropped_dispositions != 0 or self.total_references != 0
-                    or self.blueprint is not None):
+                    or self.blueprint is not None or self.domain_model is not None):
                 raise ValueError(
                     f"collected={self.collected.state.value} carries no payload, "
                     f"but payload fields are present -- a discover that did "
