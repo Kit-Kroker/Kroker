@@ -204,11 +204,11 @@
 
 <h1>Agents Schema &amp; Architecture</h1>
 <p class="meta">
-  15 agents &middot; <code>agents/&lt;role&gt;/</code> registry &middot;
+  16 roles total (13 proposers/helpers + 3 harness roles) &middot; <code>agents/&lt;role&gt;/</code> registry &middot;
   loader: <code>src/sdlc/agents/loader.py</code> &middot;
   runtime: <code>src/sdlc/agents/roles.py</code> &middot;
-  workflow callsites: <code>src/sdlc/workflows/feature.py</code> &middot;
-  contract source-of-truth: <code>src/sdlc/models.py</code> &middot; Verified <code>2026-08-14</code> against <code>agents/registry.yaml</code> + <code>agents/</code> + <code>benchmarks/</code>
+  workflow callsites: <code>src/sdlc/workflows/feature.py</code>, <code>src/sdlc/workflows/assessment.py</code> &middot;
+  contract source-of-truth: <code>src/sdlc/models.py</code> &middot; Verified <code>2026-08-16</code> against <code>agents/registry.yaml</code> + <code>agents/</code> + <code>benchmarks/</code>
 </p>
 <p class="lede">
   Every role is a folder. The folder name <strong>is</strong> the role name, the API surface, and
@@ -244,6 +244,7 @@
   <a href="#research">research</a>
   <a href="#adversary">adversary</a>
   <a href="#handoff">handoff</a>
+  <a href="#discover">discover</a>
   <a href="#filemap" class="major">File map</a>
 </div>
 
@@ -268,7 +269,7 @@
 
 <div class="grid-3">
   <div class="card">
-    <h3 style="margin-top:0">Proposer <span class="pill proposer">8 required + 4 optional</span></h3>
+    <h3 style="margin-top:0">Proposer <span class="pill proposer">13 roles</span></h3>
     <p style="margin:0">
       <strong>Required (8): clarify, architect, planner, qa, reviewer, analyst, merge_verdict, devops_planner.</strong>
       One LLM call (via Pydantic AI) emitting a schema-validated Pydantic artifact. Never touch the
@@ -278,7 +279,7 @@
       <strong>deep_review</strong> (E-39) reads the scrubbed harness transcript, advisory, never gates;
       <strong>handoff</strong> (FR-805) extracts task-to-task claims from the scrubbed session;
       <strong>adversary</strong> (decorrelated second opinion) runs only on the approving path, off by
-      default. Each optional proposer is guarded by its own <code>*_enabled</code> flag.
+      default. <strong>Assessment (1):</strong> <strong>discover</strong> (E-48) brownfield capability discovery proposer for <code>AssessmentWorkflow</code>.
     </p>
   </div>
   <div class="card">
@@ -345,7 +346,7 @@
 </div>
 
 <!-- ================================================================ -->
-<h2 id="matrix">Matrix <span class="count">15 agents &times; key attributes</span></h2>
+<h2 id="matrix">Matrix <span class="count">16 roles &times; key attributes</span></h2>
 
 <p>
   Three name spaces are distinct and easy to confuse: <strong>stage</strong> (the workflow's
@@ -391,6 +392,7 @@
       <tr><td class="mono">deep_review</td>      <td><span class="pill proposer">proposer</span></td><td class="mono">deep_review</td>  <td class="mono">deep_review_agent</td>     <td class="mono">anthropic:glm-5.2</td>     <td class="mono">DeepReviewReport</td>        <td>&mdash;</td></tr>
       <tr><td class="mono">adversary</td>        <td><span class="pill proposer">proposer</span></td><td class="mono">adversary (non-DAG lens)</td><td class="mono">adversary_agent</td>     <td class="mono">anthropic:claude-sonnet-4-6</td><td class="mono">ReviewReport</td>             <td>&mdash;</td></tr>
       <tr><td class="mono">handoff</td>          <td><span class="pill proposer">proposer</span></td><td class="mono">handoff (non-DAG lens)</td><td class="mono">handoff_agent</td>       <td class="mono">anthropic:glm-5.2</td>     <td class="mono">HandoffSummary</td>          <td>&mdash;</td></tr>
+      <tr><td class="mono">discover</td>         <td><span class="pill proposer">proposer</span></td><td class="mono">discover (AssessmentWorkflow)</td><td class="mono">discover_agent</td><td class="mono">anthropic:claude-sonnet-4-5</td><td class="mono">DiscoverProposals</td><td>&mdash;</td></tr>
     </tbody>
   </table>
 </div>
@@ -560,7 +562,7 @@
   <table>
     <thead><tr><th>class</th><th>Temporal construct</th><th>our roles</th></tr></thead>
     <tbody>
-      <tr><td>Automation (one LLM call)</td><td class="mono">activity via TemporalAgent</td><td>clarify, architect, planner, reviewer, qa, analyst, merge_verdict, devops_planner, research, deep_review, adversary, handoff (optional)</td></tr>
+      <tr><td>Automation (one LLM call)</td><td class="mono">activity via TemporalAgent</td><td>clarify, architect, planner, reviewer, qa, analyst, merge_verdict, devops_planner, research, deep_review, adversary, handoff, discover (optional / assessment)</td></tr>
       <tr><td>Long-running (tools, iteration)</td><td class="mono">heartbeating activity</td><td>dev, test, devops (via <code>run_coding_task</code>)</td></tr>
       <tr><td>Conversational</td><td class="mono">external client ↔ workflow signals/queries</td><td>operators via MCP / dashboard / CLI (not agents)</td></tr>
       <tr><td>Proactive</td><td class="mono">workflow (timer / Schedule)</td><td>MaintenanceWorkflow, nightly reflect (not agents)</td></tr>
@@ -596,6 +598,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
       <tr><td>deep_review (optional)</td><td>integrity lens over the scrubbed transcript (E-39)</td><td><strong>different family than <code>dev</code></strong> (ADR-6); advisory, never gates</td></tr>
       <tr><td>adversary (optional)</td><td>decorrelated second opinion on the approve path (spec pt.2)</td><td><strong>different model identity than <code>dev</code> AND <code>reviewer</code></strong> (by <code>model_id()</code>, not provider prefix); ships as <code>claude-sonnet-4-6</code>; advisory, fail-open, never the sole blocking lens</td></tr>
       <tr><td>handoff (optional)</td><td>narrow extraction from scrubbed session (FR-805)</td><td>small fast model (<code>glm-5.2</code>)</td></tr>
+      <tr><td>discover</td><td>brownfield capability discovery &amp; disposition (E-48)</td><td><code>anthropic:claude-sonnet-4-5</code></td></tr>
     </tbody>
   </table>
 </div>
@@ -800,6 +803,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
       <tr><td>research</td>         <td>idea; pages it fetches this run; recalled leads</td><td>another stage's raw transcript</td></tr>
       <tr><td>adversary</td>        <td>same clean-context inputs as reviewer (frozen contract + materialised diff + test output)</td><td><strong>the dev's session</strong> (that is deep_review's job) and <strong>the primary reviewer's reasoning</strong></td></tr>
       <tr><td>handoff</td>          <td>materialised diff + scrubbed HarnessSession (via <code>load_session</code>) + frozen contract assertions</td><td>validators of <strong>this</strong> task (handoff flows to downstream tasks only)</td></tr>
+      <tr><td>discover</td>         <td>13 Tier 2 scan signals (entrypoints, routes, DB schemas, telemetry), candidate context with cohesion/coupling metrics, blueprint references</td><td>unresolved file paths, raw unparsed tree, unmeasured repository state</td></tr>
     </tbody>
   </table>
 </div>
@@ -1543,6 +1547,59 @@ claim_survival_score(kept, dropped) -&gt; Measurement
 </div>
 
 <!-- ################################################################ -->
+<h2 id="discover">15. discover <span class="pill proposer">proposer</span></h2>
+
+<div class="agent-banner">
+  <span class="name">discover</span>
+  <span class="kv">activity: <b>discover_agent</b></span>
+  <span class="kv">stage: <b>discover (AssessmentWorkflow)</b></span>
+  <span class="kv">output: <b>DiscoverProposals</b></span>
+  <span class="kv">model: <b>anthropic:claude-sonnet-4-5</b></span>
+  <span class="kv">files: <b>agents/discover/{agent.py, agent.yaml, instructions.md}</b></span>
+</div>
+
+<p>
+  Brownfield capability discovery proposer for <code>AssessmentWorkflow</code> (E-48). Consumes
+  13 Tier 2 scan signals (entrypoints, routes, DB schemas, telemetry, etc.), existing codebase
+  structure, and industry reference blueprints (BIAN / TM Forum / ACORD / HL7).
+  Emits candidate capabilities, operation decompositions, attribution findings, and entity
+  ownership mappings.
+</p>
+
+<h3>The contract: <code>DiscoverProposals</code> <span class="pill asset">sdlc/assessment/discover/map.py</span></h3>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>field</th><th>type</th><th>rule</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">capabilities</td><td class="mono">list[CapabilityProposal]</td><td>Candidate capability dispositions (confirm, split, merge, de_scope, flag).</td></tr>
+      <tr><td class="mono">refinements</td><td class="mono">list[RefinementProposal]</td><td>Operation decompositions, member partition sets, and structural boundary refinements.</td></tr>
+      <tr><td class="mono">attributions</td><td class="mono">list[AttributionProposal]</td><td>Attribution findings and entity ownership mappings against candidate signals.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="grid-2">
+  <div class="card soft">
+    <h4>Grounding &amp; Byte Verification <span class="pill det">verify_discover_refs</span></h4>
+    <p style="margin:6px 0 0">
+      Every evidence path and quote is byte-verified against the pinned commit via
+      <code>verify_discover_refs</code> using <code>Profile.VERBATIM_BYTES</code> before
+      dispositions are finalized. Any citation that fails to resolve causes the candidate
+      verdict to be discarded and replaced with <code>flag</code> (provenance stamped as <code>dropped</code>).
+    </p>
+  </div>
+  <div class="card soft">
+    <h4>Citation Guard &amp; Synthesis <span class="pill warn">CITATION_GUARD_MAX_UNRESOLVED = 0.10</span></h4>
+    <p style="margin:6px 0 0">
+      A fail-closed citation guard aborts/flags if the reference fabrication rate exceeds
+      <strong>0.10</strong>. Produces a derived domain model (<code>DomainModel</code> projected
+      from entity ownership) and single blueprint comparison (<code>BlueprintComparison</code> against
+      BIAN / TM Forum / ACORD / HL7).
+    </p>
+  </div>
+</div>
+
+<!-- ################################################################ -->
 <h2 id="filemap">File map <span class="count">by layer</span></h2>
 
 <div class="filemap">
@@ -1558,6 +1615,7 @@ claim_survival_score(kept, dropped) -&gt; Measurement
     <p><span class="mono">deep_review/{agent.py, agent.yaml, instructions.md}</span> &mdash; optional advisory proposer (E-39); reads scrubbed session; family &ne; dev</p>
     <p><span class="mono">adversary/{agent.py, agent.yaml, instructions.md}</span> &mdash; decorrelated second opinion (spec pt.2); approve path only; <code>model_id</code> &ne; dev &amp; reviewer</p>
     <p><span class="mono">handoff/{agent.py, agent.yaml, instructions.md}</span> &mdash; FR-805 task-to-task extraction; reads scrubbed session; small fast model</p>
+    <p><span class="mono">discover/{agent.py, agent.yaml, instructions.md}</span> &mdash; brownfield capability discovery proposer for AssessmentWorkflow (E-48); model: <code>claude-sonnet-4-5</code></p>
     <p><span class="mono">devops_planner/{agent.py, agent.yaml, instructions.md}</span> &mdash; builds <code>devops_agent</code></p>
     <p><span class="mono">dev/agent.yaml</span>, <span class="mono">test/agent.yaml</span>, <span class="mono">devops/agent.yaml</span> &mdash; harness roles, prompt+agent.py forbidden</p>
     <p><span class="mono">research/{agent.py, agent.yaml, instructions.md, tools/}</span></p>
@@ -1590,18 +1648,20 @@ claim_survival_score(kept, dropped) -&gt; Measurement
     <p><span class="mono">DeepReviewReport + IntegrityFlag</span> (:628, :608) &mdash; E-39 advisory lens</p>
     <p><span class="mono">HandoffClaim, HandoffSummary</span> (:284, :291) &mdash; FR-805 task-to-task handoff</p>
     <p><span class="mono">ResearchBrief + nested</span> (:686-731)</p>
+    <p><span class="mono">DiscoverProposal, CapabilityMap, DomainModel, BlueprintComparison</span> &mdash; E-48 discover phase contracts in <code>src/sdlc/assessment/discover/map.py</code></p>
     <p><span class="mono">RoleConfig</span> &mdash; <code>kind</code>, <code>harness</code>, <code>model</code>, <code>provider</code>, <code>tool_files</code>, <code>instructions</code>, <code>context_budget_tokens</code>.</p>
   </div>
 
-  <div class="layer">WORKFLOW CALLSITE<br>src/sdlc/workflows/feature.py</div>
+  <div class="layer">WORKFLOW CALLSITE<br>src/sdlc/workflows/</div>
   <div class="files">
-    <p><span class="mono">:28-30</span> &mdash; imports <code>t_*</code> TemporalAgents + <code>STAGE_MODELS</code>/<code>PROMPT_SHAS</code>.</p>
-    <p><span class="mono">:773</span> &mdash; <code>_cached_stage</code> (memoization; <code>STAGE_MODELS</code> keyed lookup).</p>
-    <p><code>_gate</code> (inherited from GateHost, no def in feature.py) &middot; <span class="mono">:1225</span> <code>_revisable_stage</code>.</p>
-    <p><span class="mono">:1277</span> &mdash; <code>_dev_task</code> (dev harness + qa + reviewer per-task loop; + adversary on approve path, + handoff on success path).</p>
-    <p><span class="mono">:1721</span> &mdash; research stage wiring (optional, FR-107).</p>
-    <p><span class="mono">:1084</span> &mdash; <code>_run_handoff</code> (FR-805 handoff extraction, success path).</p>
-    <p><span class="mono">:1911</span> clarify stage; <span class="mono">:2023</span> architect; <span class="mono">:2065</span> planner; <span class="mono">:2202</span> analyst; <span class="mono">:2370</span> merge_verdict.</p>
+    <p><span class="mono">feature.py:28-30</span> &mdash; imports <code>t_*</code> TemporalAgents + <code>STAGE_MODELS</code>/<code>PROMPT_SHAS</code>.</p>
+    <p><span class="mono">feature.py:773</span> &mdash; <code>_cached_stage</code> (memoization; <code>STAGE_MODELS</code> keyed lookup).</p>
+    <p><code>_gate</code> (inherited from GateHost, no def in feature.py) &middot; <span class="mono">feature.py:1225</span> <code>_revisable_stage</code>.</p>
+    <p><span class="mono">feature.py:1277</span> &mdash; <code>_dev_task</code> (dev harness + qa + reviewer per-task loop; + adversary on approve path, + handoff on success path).</p>
+    <p><span class="mono">feature.py:1721</span> &mdash; research stage wiring (optional, FR-107).</p>
+    <p><span class="mono">feature.py:1084</span> &mdash; <code>_run_handoff</code> (FR-805 handoff extraction, success path).</p>
+    <p><span class="mono">feature.py:1911</span> clarify stage; <span class="mono">:2023</span> architect; <span class="mono">:2065</span> planner; <span class="mono">:2202</span> analyst; <span class="mono">:2370</span> merge_verdict.</p>
+    <p><span class="mono">assessment.py</span> &mdash; <code>AssessmentWorkflow</code> discover phase execution, <code>verify_discover_refs</code> activity, citation guard.</p>
   </div>
 
   <div class="layer">RESEARCH CODE<br>src/sdlc/research/</div>
@@ -1612,6 +1672,7 @@ claim_survival_score(kept, dropped) -&gt; Measurement
   <div class="layer">SUPPORT ACTIVITIES<br>src/sdlc/</div>
   <div class="files">
     <p><span class="mono">activities.py</span> &mdash; flattened activity module (target layout in <code>ARCHITECTURE.md &sect;14</code> splits this by concern). Holds <code>create_worktree</code> (:274), <code>run_coding_task</code> (:527), <code>run_test_suite</code> (:660), <code>get_task_diff</code>, <code>merge_into_integration</code>, <code>setup_integration_branch</code>, <code>run_lint</code>, <code>security_scan</code>.</p>
+    <p><span class="mono">assessment/activities.py</span> &mdash; <code>verify_discover_refs</code> (:671), scan activities, blueprint parser.</p>
     <p><span class="mono">memory/activities.py</span> &mdash; <code>recall_snapshot</code>, <code>retain</code>.</p>
     <p><span class="mono">memoization/activities.py</span> &mdash; <code>cache_get</code>, <code>cache_put</code> (content-addressed; ADR-5).</p>
     <p><span class="mono">handoff.py</span> &mdash; deterministic half of the handoff (FR-805): <code>cross_check_claims</code> (:40), <code>claim_survival_score</code> (:79), <code>verified_integrity_flags</code> (:91). Pure functions, no LLM.</p>
