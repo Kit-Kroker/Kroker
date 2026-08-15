@@ -12,7 +12,7 @@ from sdlc.agents.roles import PROMPT_SHAS, REGISTRY, STAGE_ROLES
 
 PRE_MIGRATION_SHAS = {
     "clarify": "f40fbf6ef7451def3717c0270315e5d3c3897ba288cf96a06daec064454e0560",
-    "architect": "a7ca1e578f2db831689208eb1d1f965e3d42f7adbbafc132d095905715fd9fc6",
+    "architect": "259aa152c105b95d4cc52a50103fb337e2f5df8c482791d7abba15593172232b",
     "plan": "ffe6717f887ca9d6f7f6f7276b3d0a688a8dc7c76d17d1ef0e06bae4c470563e",
     "devops": "9d18988b3d1180ed20e93748bb93559bb6c1cb645606eebcdde212d12d866e57",
     "review": "dcaa8df20374b514a5ac329bef9ac1c42d4e03fe6b264f2496ecb41c6fd635f3",
