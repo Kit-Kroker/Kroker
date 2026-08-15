@@ -21,7 +21,11 @@ from dataclasses import dataclass, field
 
 import defusedxml.ElementTree as DET
 from defusedxml.common import DefusedXmlException
+from pydantic import BaseModel
 from temporalio import activity
+
+from .assessment.scan.sources import SOURCE_EXTENSIONS
+from .context.models import RepoObservation
 
 from .artifacts.capture import capture_session
 from .observability.logfire_setup import span
@@ -1124,4 +1128,60 @@ async def open_pull_request(inp: PROpenInput) -> str:
 async def evaluate_gate(inp: QualityGateInput) -> GateReport:
     """Activity wrapper over the pure DeterministicQualityGate."""
     return evaluate_quality_gate(inp.checks, inp.overrides)
+
+
+class RepoProbeInput(BaseModel):
+    repo_dir: str
+    base_branch: str = "main"
+
+
+@activity.defn
+async def classify_repo(inp: RepoProbeInput) -> RepoObservation:
+    """E-84 D3: observe a repository. Facts only; classify() decides.
+
+    Never raises. An unreachable path, a missing branch and a broken git are
+    all observations intake turns into a verdict with a reason -- raising here
+    would make "the path is wrong" indistinguishable from "the worker died",
+    which is the retry policy's business, not intake's.
+    """
+    try:
+        probe = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=inp.repo_dir, capture_output=True, text=True)
+    except Exception as exc:
+        return RepoObservation(
+            is_git_repo=False, base_branch_resolves=False,
+            reason=f"{inp.repo_dir!r} is not reachable: {exc}"[:300])
+
+    if probe.returncode != 0:
+        return RepoObservation(
+            is_git_repo=False, base_branch_resolves=False,
+            reason=(probe.stderr.strip() or
+                    f"{inp.repo_dir!r} is not reachable")[:300])
+
+    rev = subprocess.run(
+        ["git", "rev-parse", "--verify", f"{inp.base_branch}^{{commit}}"],
+        cwd=inp.repo_dir, capture_output=True, text=True)
+    if rev.returncode != 0:
+        return RepoObservation(
+            is_git_repo=True, base_branch_resolves=False,
+            reason=(rev.stderr.strip() or
+                    f"branch {inp.base_branch!r} does not resolve")[:300])
+    commit_sha = rev.stdout.strip()
+
+    listing = subprocess.run(
+        ["git", "ls-tree", "-r", "--name-only", commit_sha],
+        cwd=inp.repo_dir, capture_output=True, text=True)
+    if listing.returncode != 0:
+        return RepoObservation(
+            is_git_repo=True, base_branch_resolves=True,
+            commit_sha=commit_sha,
+            reason=(listing.stderr.strip() or "could not list the tree")[:300])
+
+    count = sum(1 for p in listing.stdout.splitlines()
+                if p.strip().endswith(SOURCE_EXTENSIONS))
+    return RepoObservation(
+        is_git_repo=True, base_branch_resolves=True,
+        commit_sha=commit_sha, source_file_count=count)
+
 
