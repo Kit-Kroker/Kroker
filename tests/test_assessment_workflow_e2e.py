@@ -6,6 +6,7 @@ workflows/tidyup.py:87-97 documents, executed end to end.
 """
 from __future__ import annotations
 
+import subprocess
 import uuid
 
 import pytest
@@ -15,6 +16,8 @@ from temporalio.worker import Worker
 
 from sdlc.assessment.activities import (
     AssessmentTree, AssessmentTreeInput,
+    discover_context, discover_finalize, discover_lock, discover_memo_load,
+    discover_memo_store,
     scan_ci, scan_config_infra, scan_coverage, scan_entrypoints, scan_frontend,
     scan_packages, scan_schema, scan_security_static, scan_sensitivity,
     scan_testability, scan_tests_inventory,
@@ -23,6 +26,7 @@ from sdlc.assessment.models import (
     BLOCKED, PARTIAL, PHASE_ORDER, PhaseId,
 )
 from sdlc.assessment.scan.models import SCAN_ORDER, ScanSignalId, SignalSource
+from sdlc.capability.store import BoardIdentityStore
 from sdlc.measurement import CollectionState, Measurement
 from sdlc.models import (
     GateDecision, GateOutcome, GatePolicy, GateSettings,
@@ -103,7 +107,9 @@ SCAN_ACTS = [scan_packages, scan_schema, scan_entrypoints, scan_frontend,
 
 ACTIVITIES = [fake_pin, fake_baseline, fake_scaffold, fake_probe,
               fake_secrets, fake_misconfig, fake_outliers, fake_deps,
-              fake_resolve_tree, *SCAN_ACTS]
+              fake_resolve_tree, *SCAN_ACTS,
+              discover_context, discover_lock, discover_finalize,
+              discover_memo_load, discover_memo_store]
 WORKFLOWS = [AssessmentWorkflow, TriageWorkflow]
 
 
@@ -270,3 +276,159 @@ async def test_scan_phase_flips_terminal_status_to_partial():
     for row in result.scan.signals:
         assert "not implemented" not in (row.collected.reason or "")
         assert "plan" not in (row.collected.reason or "").lower()
+
+
+def _git(args, cwd):
+    subprocess.run(["git", *args], cwd=cwd, check=True,
+                   capture_output=True, text=True)
+
+
+@pytest.fixture
+def assessed_repo(tmp_path):
+    (tmp_path / "package.json").write_text(
+        '{"dependencies": {"next": "14.0.0"}}\n')
+    (tmp_path / "app" / "payments").mkdir(parents=True)
+    (tmp_path / "app" / "payments" / "page.tsx").write_text(
+        "export default function PaymentsPage() { return null; }\n")
+    (tmp_path / "payments").mkdir()
+    (tmp_path / "payments" / "api.py").write_text(
+        "from fastapi import FastAPI\n"
+        "from payments.models import Order\n"
+        "app = FastAPI()\n"
+        "@app.post('/api/payments')\ndef charge(): pass\n")
+    (tmp_path / "payments" / "models.py").write_text(
+        "class Order(Base):\n    __tablename__ = 'payments'\n"
+        "    id = Column(Integer)\n")
+    _git(["init", "-q"], tmp_path)
+    _git(["config", "user.email", "t@t"], tmp_path)
+    _git(["config", "user.name", "t"], tmp_path)
+    _git(["add", "-A"], tmp_path)
+    _git(["commit", "-qm", "init"], tmp_path)
+    sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmp_path,
+                         capture_output=True, text=True).stdout.strip()
+    return str(tmp_path), sha
+
+
+# --- E-48 plan 2: discover runs end to end inside the assessment ----------
+
+
+async def test_discover_goes_measured_and_the_map_reaches_the_artifact(
+        assessed_repo, tmp_path, monkeypatch):
+    """The happy-path assessment with a real git tree: triage is still faked
+    (NFR-9: no build executed), but scan and discover run their REAL
+    activities over the real repo.
+
+    DD4's deterministic spine executes end-to-end:
+      scan (S1-S4 real blobs, S5 merges S3-payments)
+        -> discover_context (refgraph built and discarded)
+        -> discover_memo_load (miss)
+        -> stamp(context, None) -> apply (C-01 locked)
+        -> discover_lock (allocates BC-001 in SQLite)
+        -> discover_finalize (attribute + decompose + assign)
+        -> build_map -> discover_memo_store
+        -> Assessment carries the CapabilityMap
+    """
+    repo_dir, sha = assessed_repo
+    db = str(tmp_path / "board.sqlite3")
+    monkeypatch.setenv("SDLC_BOARD_DB", db)
+
+    # Pin to the real commit so the scan blob-readers find it.
+    @activity.defn(name="triage_resolve_commit")
+    async def real_pin(inp: TriagePinInput) -> TriagePin:
+        return TriagePin(commit_sha=sha, toolchain="python")
+
+    # Real tree resolver: the repo exists, so git rev-parse HEAD^{tree} works.
+    from sdlc.assessment.activities import assessment_resolve_tree
+
+    acts = [real_pin, fake_baseline, fake_scaffold, fake_probe,
+            fake_secrets, fake_misconfig, fake_outliers, fake_deps,
+            assessment_resolve_tree, *SCAN_ACTS,
+            discover_context, discover_lock, discover_finalize,
+            discover_memo_load, discover_memo_store]
+
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=WORKFLOWS, activities=acts):
+            handle = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(repo_dir=repo_dir, project_key="acme"),
+                id=f"assess-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+            result = await handle.result()
+
+    assert result.terminal_status == PARTIAL
+    assert result.phases[1].phase is PhaseId.SCAN
+    assert result.phases[1].collected.state is CollectionState.MEASURED
+    assert result.phases[2].phase is PhaseId.DISCOVER
+    assert result.phases[2].collected.state is CollectionState.MEASURED
+
+    cap_map = result.discover
+    assert cap_map is not None
+    assert [c.bc_id for c in cap_map.capabilities] == ["BC-001"]
+    assert cap_map.capabilities[0].name == "payment"
+    assert cap_map.attribution.coverage.state is CollectionState.MEASURED
+    assert cap_map.decomposition.collected.state is CollectionState.MEASURED
+    assert cap_map.decomposition.by_capability["BC-001"] == 2
+    assert cap_map.ownership.collected.state is CollectionState.MEASURED
+    assert next(e for e in cap_map.ownership.entities
+                if e.entity == "payment").owner == "BC-001"
+
+
+async def test_a_second_assessment_of_the_same_tree_hits_the_memo(
+        assessed_repo, tmp_path, monkeypatch):
+    """DD10 end-to-end: run 1 populates the discover memo; run 2 loads it
+    without re-running disposition, lock or finalize.
+
+    Proved by asserting the SQLite registry version did not increment --
+    discover_lock was never called.
+    """
+    repo_dir, sha = assessed_repo
+    db = str(tmp_path / "board.sqlite3")
+    monkeypatch.setenv("SDLC_BOARD_DB", db)
+
+    @activity.defn(name="triage_resolve_commit")
+    async def real_pin(inp: TriagePinInput) -> TriagePin:
+        return TriagePin(commit_sha=sha, toolchain="python")
+
+    from sdlc.assessment.activities import assessment_resolve_tree
+
+    acts = [real_pin, fake_baseline, fake_scaffold, fake_probe,
+            fake_secrets, fake_misconfig, fake_outliers, fake_deps,
+            assessment_resolve_tree, *SCAN_ACTS,
+            discover_context, discover_lock, discover_finalize,
+            discover_memo_load, discover_memo_store]
+
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=WORKFLOWS, activities=acts):
+            # Run 1: cold cache.
+            h1 = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(repo_dir=repo_dir, project_key="acme"),
+                id=f"assess-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+            r1 = await h1.result()
+            assert r1.discover is not None
+
+            store = BoardIdentityStore()
+            try:
+                v1 = store.registry_version("acme")
+            finally:
+                store.close()
+            assert v1 == 1
+
+            # Run 2: hits the memo.
+            h2 = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(repo_dir=repo_dir, project_key="acme"),
+                id=f"assess-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+            r2 = await h2.result()
+            assert r2.discover is not None
+            assert [c.bc_id for c in r2.discover.capabilities] == ["BC-001"]
+
+            store = BoardIdentityStore()
+            try:
+                v2 = store.registry_version("acme")
+            finally:
+                store.close()
+            # Registry was NOT touched on run 2: lock was skipped.
+            assert v2 == v1
+
