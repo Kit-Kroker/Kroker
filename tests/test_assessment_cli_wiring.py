@@ -45,13 +45,15 @@ def test_worker_registers_the_workflow():
 @pytest.mark.parametrize("argv,expected", [
     (["assess", "--repo", "/x/r"],
      {"repo": "/x/r", "commit": "HEAD", "no_build_probe": False,
-      "advisory_source": "none"}),
+      "advisory_source": "none", "project": None}),
     (["assess", "--repo", "/x/r", "--no-build-probe"],
      {"repo": "/x/r", "no_build_probe": True}),
     (["assess", "--repo", "/x/r", "--commit", "abc123"],
      {"repo": "/x/r", "commit": "abc123"}),
     (["assess", "--repo", "/x/r", "--advisory-source", "osv"],
      {"advisory_source": "osv"}),
+    (["assess", "--repo", "/x/r", "--project", "payments-service"],
+     {"project": "payments-service"}),
 ])
 def test_parser_accepts_the_assess_flags(argv, expected):
     args = build_parser().parse_args(argv)

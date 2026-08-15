@@ -288,6 +288,9 @@ def build_parser() -> argparse.ArgumentParser:
                      help="skip the one signal that executes the repo's own "
                           "code; readiness becomes INDETERMINATE, so "
                           "admission then requires a human override")
+    asr.add_argument("--project", default=None,
+                     help="project key for capability identity resolution; "
+                          "defaults to the repository directory name")
     asr.add_argument("--advisory-source", default="none",
                      help="'osv' enables a declared outbound vulnerability "
                           "lookup; default collects nothing")
@@ -519,12 +522,14 @@ async def main() -> None:
         if not args.repo:
             raise SystemExit("assess requires --repo")
         repo = os.path.abspath(args.repo)
+        project_key = args.project or os.path.basename(repo)
         wf_id = assess_workflow_id(repo)
         handle = await client.start_workflow(
             AssessmentWorkflow.run,
             AssessmentInput(repo_dir=repo, commit=args.commit,
                             build_probe=not args.no_build_probe,
-                            advisory_source=args.advisory_source),
+                            advisory_source=args.advisory_source,
+                            project_key=project_key),
             id=wf_id, task_queue=TASK_QUEUE)
         print(f"started {handle.id}")
         # The FR-903 gate opens on the CHILD, so the operator needs the

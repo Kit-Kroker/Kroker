@@ -85,6 +85,29 @@ def test_by_action_counts_capabilities_not_dispositions():
     assert len(m.dispositions) == 2
 
 
+def test_by_action_preserves_enum_definition_order():
+    """Deterministic serialization: by_action iterates DiscoverAction in
+    definition order, never raw set iteration."""
+    from sdlc.assessment.discover.map import SplitPartition
+    c1 = _locked("C-01", disposition=_disp("C-01", DiscoverAction.CONFIRM))
+    disp_split = CandidateDisposition(
+        candidate_id="C-02", action=DiscoverAction.SPLIT,
+        source=DispositionSource.PROPOSER, rule="proposer",
+        rationale="two distinct operations",
+        partitions=(SplitPartition(name="a", member_values=("POST /pay",)),
+                    SplitPartition(name="b", member_values=("pay/core.py",))))
+    c2 = _locked("C-02#a", disposition=disp_split)
+    c3 = _locked("C-03", disposition=_disp("C-03", DiscoverAction.CONFIRM))
+    stamped = StampedProposal(dispositions=(
+        _disp("C-01", DiscoverAction.CONFIRM),
+        disp_split,
+        _disp("C-03", DiscoverAction.CONFIRM)))
+    m = build_map(_applied(c1, c2, c3, stamped=stamped),
+                  {"C-01": "BC-001", "C-02#a": "BC-002", "C-03": "BC-003"})
+    assert list(m.by_action.keys()) == [DiscoverAction.CONFIRM, DiscoverAction.SPLIT]
+
+
+
 def test_dropped_dispositions_sums_both_halves_of_the_guard():
     """DD8's leniency is bounded by a rate over references; both a refused
     verdict and a verdict naming a candidate that does not exist feed it."""

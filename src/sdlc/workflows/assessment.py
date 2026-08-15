@@ -529,7 +529,11 @@ class AssessmentWorkflow(GateHost):
 
         # Plan 3 replaces `None` with the proposer's DiscoverProposal; stamp()
         # already knows what to do with either (DD7).
-        applied = apply(context, stamp(context, None))
+        try:
+            applied = apply(context, stamp(context, None))
+        except Exception as e:                          # noqa: BLE001
+            return no_discover(
+                f"disposition apply failed: {type(e).__name__}: {e}"[:300])
 
         try:
             lock = await workflow.execute_activity(

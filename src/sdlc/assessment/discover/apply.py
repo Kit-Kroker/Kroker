@@ -403,8 +403,9 @@ def build_map(applied: ApplyResult, bc_of: Mapping[str, str], *,
         # verdict record is `dispositions`, which carries every one.
         by_action={action: sum(1 for c in capabilities
                                if c.disposition.action is action)
-                   for action in {c.disposition.action
-                                  for c in capabilities}},
+                   for action in DiscoverAction
+                   if any(c.disposition.action is action
+                          for c in capabilities)},
         dispositions=applied.stamped.dispositions,
         attribution=attribution, decomposition=decomposition,
         ownership=ownership, advisories=tuple(advisories),

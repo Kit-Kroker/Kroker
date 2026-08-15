@@ -47,11 +47,24 @@ def store(*, project: str, tree_hash: str, context_digest: str,
           out: CapabilityMap) -> bool:
     """Cache `out` and report whether it was stored.
 
-    ONLY a MEASURED map is stored -- scan/memo.py's rule verbatim in intent.
-    Memoizing a phase that reported not_collected would serve that failure as
-    a cache hit forever.
+    Three guards, all of them the same rule (scan/memo.py's rules 1 and 2):
+    never serve a failure forever.
+
+    1. ONLY a MEASURED map is stored.
+    2. A map with any degraded sub-report (attribution, decomposition,
+       ownership) is NOT stored -- a transient finalize blip or git timeout
+       must not freeze a permanently missing report into the cache.
     """
     if out.collected.state is not CollectionState.MEASURED:
+        return False
+    if out.attribution is not None and (
+            out.attribution.coverage.state is not CollectionState.MEASURED):
+        return False
+    if out.decomposition is not None and (
+            out.decomposition.collected.state is not CollectionState.MEASURED):
+        return False
+    if out.ownership is not None and (
+            out.ownership.collected.state is not CollectionState.MEASURED):
         return False
     cache.put(cache.discover_key(project, tree_hash, context_digest,
                                  registry_version, prompt_sha, model),

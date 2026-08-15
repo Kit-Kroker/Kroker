@@ -9,6 +9,10 @@ from sdlc.assessment.discover.map import (
     CandidateContext, CapabilityMap, DiscoverContext, GraphSummary,
     context_digest,
 )
+from sdlc.assessment.discover.models import (
+    AttributionReport, DecompositionReport, FileBucket, OwnershipOutcome,
+    OwnershipReport, ReferenceGraph,
+)
 from sdlc.assessment.scan.models import CandidateMember, Confidence, MemberKind
 from sdlc.measurement import Measurement
 from sdlc.memoization.cache import NO_PROPOSER, discover_key
@@ -101,3 +105,31 @@ def test_the_sentinel_is_never_empty():
     indistinguishable from a bug that dropped the model id (P2-D6)."""
     assert NO_PROPOSER
     assert NO_PROPOSER != ""
+
+
+def test_a_map_with_degraded_sub_reports_is_never_stored():
+    """scan/memo.py's rule 2: a transient finalize blip or git timeout must not
+    freeze a permanently missing sub-report into the cache."""
+    nc = Measurement.not_collected("git timeout")
+
+    # Degraded attribution:
+    map_attr_nc = CapabilityMap(
+        collected=Measurement.measured(1.0),
+        attribution=AttributionReport(
+            counts={b: 0 for b in FileBucket}, coverage=nc, meets_floor=False,
+            graph=ReferenceGraph(unresolved_relative_rate=nc)))
+    assert memo.store(**KEY, registry_version=1, out=map_attr_nc) is False
+
+    # Degraded decomposition:
+    map_decomp_nc = CapabilityMap(
+        collected=Measurement.measured(1.0),
+        decomposition=DecompositionReport(collected=nc))
+    assert memo.store(**KEY, registry_version=1, out=map_decomp_nc) is False
+
+    # Degraded ownership:
+    map_owner_nc = CapabilityMap(
+        collected=Measurement.measured(1.0),
+        ownership=OwnershipReport(counts={o: 0 for o in OwnershipOutcome},
+                                  collected=nc))
+    assert memo.store(**KEY, registry_version=1, out=map_owner_nc) is False
+
