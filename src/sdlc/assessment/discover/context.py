@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Collection, Mapping, Sequence
 
-from ...measurement import Measurement
+from ...measurement import CollectionState, Measurement
 from ..scan.models import CandidateMember, ScanResult, ScanSignalId
 from . import refgraph
 from .map import (
@@ -145,3 +145,38 @@ def build_context(scan: ScanResult, inventory: Mapping[str, str],
         file_count=len(inventory) + len(skipped),
         skipped=tuple(sorted(skipped)),
         collected=Measurement.measured(float(len(contexts))))
+
+
+def _row(scan: ScanResult, signal_id: ScanSignalId) -> Measurement:
+    row = next((r for r in scan.signals if r.signal is signal_id), None)
+    if row is None:
+        return Measurement.not_collected(
+            f"{signal_id.value} has no row in this ScanResult")
+    return row.collected
+
+
+def schema_collected(scan: ScanResult) -> Measurement:
+    """S2's row, which is assign()'s `schema_collected` argument."""
+    return _row(scan, ScanSignalId.S2)
+
+
+def contract_collected(scan: ScanResult) -> Measurement:
+    """S3 AND S4, as one Measurement (P2-D5).
+
+    decompose() documents its argument as "S3's (and S4's) collection state",
+    and CONTRACT_KINDS includes FRONTEND_ROUTE, which only S4 emits. Deriving
+    this from S3 alone would let a dead S4 read as a capability that genuinely
+    exposes no frontend route -- the FR-915 conflation, one signal removed.
+    """
+    rows = {sid: _row(scan, sid)
+            for sid in (ScanSignalId.S3, ScanSignalId.S4)}
+    degraded = sorted(
+        (sid.value, m) for sid, m in rows.items()
+        if m.state is not CollectionState.MEASURED)
+    if degraded:
+        name, measurement = degraded[0]
+        return Measurement.not_collected(
+            f"{name} did not collect: {measurement.reason}")
+    return Measurement.measured(
+        sum(m.value or 0.0 for m in rows.values()))
+

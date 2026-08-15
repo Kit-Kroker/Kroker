@@ -25,12 +25,19 @@ from ..measurement import Measurement
 from ..triage.activities import tracked_paths
 from ..triage.gitread import is_over_size_limit, read_tree
 from .discover import memo as discover_memo
+from .discover.attribution import attribute
 from .discover.context import build_context
 from .discover.map import CapabilityMap, DiscoverContext, GraphSummary
+from .discover.models import (
+    AttributionReport, DecompositionReport, EntityDeclaration, FileBucket,
+    OwnershipOutcome, OwnershipReport, ReferenceGraph,
+)
+from .discover.operations import decompose
+from .discover.ownership import assign
 from .scan import memo
 from .scan.models import (
-    CATEGORIES, ScanResult, ScanSignalId, ScanSignalResult, ScanUpstream,
-    SignalOutput, SignalSource, family_of,
+    CATEGORIES, CandidateMember, ScanResult, ScanSignalId, ScanSignalResult,
+    ScanUpstream, SignalOutput, SignalSource, family_of,
 )
 from .scan.registry import SCAN_SIGNALS
 from .scan.signals import (
@@ -545,5 +552,91 @@ async def discover_lock(inp: DiscoverLockInput) -> DiscoverLockOutcome:
     return DiscoverLockOutcome(attachments=result.attachments,
                                advisories=result.advisories,
                                registry_version=new_version)
+
+
+class DiscoverFinalizeInput(BaseModel):
+    """DD4 step 7's input: the LOCKED capability set, keyed by bc_id.
+
+    attribute() takes `members: bc_id -> paths`, and no bc_id exists until the
+    lock has run -- which is why attribution runs after disposition rather
+    than before (E-47b D1).
+    """
+    repo_dir: str
+    commit_sha: str
+    members: dict[str, list[CandidateMember]] = Field(default_factory=dict)
+    entry_point_paths: list[str] = Field(default_factory=list)
+    schema_collected: Measurement
+    contract_collected: Measurement
+
+
+class DiscoverFinalizeOutcome(BaseModel):
+    attribution: AttributionReport
+    decomposition: DecompositionReport
+    ownership: OwnershipReport
+
+
+def no_finalize(reason: str) -> DiscoverFinalizeOutcome:
+    """DD9: the capability set survived, so the map ships -- with the gap
+    visible in each report that could not be computed. Never empty MEASURED
+    reports: a tree we could not read is not a tree with no operations.
+
+    Public, unlike _no_context: the workflow imports it as run_or_degrade's
+    fallback, the way it imports unbuilt() and skipped().
+    """
+    nc = Measurement.not_collected(reason)
+    return DiscoverFinalizeOutcome(
+        attribution=AttributionReport(
+            counts={b: 0 for b in FileBucket}, coverage=nc, meets_floor=False,
+            graph=ReferenceGraph(unresolved_relative_rate=nc)),
+        decomposition=DecompositionReport(collected=nc),
+        ownership=OwnershipReport(counts={o: 0 for o in OwnershipOutcome},
+                                  collected=nc))
+
+
+@activity.defn
+async def discover_finalize(
+        inp: DiscoverFinalizeInput) -> DiscoverFinalizeOutcome:
+    """Coverage, L2 operations and entity ownership over the locked set.
+
+    Reads the tree a second time, deliberately (DD4): passing the reference
+    graph from discover_context would push an entire tree's edge list through
+    workflow history, which is the open FR-702 hazard. Blob reads are cheap
+    beside a model call.
+
+    Entity declarations are re-derived here rather than reconstructed from the
+    ScanResult (P2-D8): EntityDeclaration needs (name, path, line), and S2's
+    SourceCandidate carries names on `members` and lines on `evidence` with no
+    join between them. schema.declarations() is pure over the same blobs at
+    the same pinned commit, so what it sees is what S2 saw -- and the
+    adaptation lives here, where both types are in scope, so discover/ still
+    imports no signal (E-47c D2).
+    """
+    try:
+        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+        blobs, skipped = _source_blobs(
+            inp.repo_dir, inp.commit_sha, paths,
+            SOURCE_EXTENSIONS + schema.EXTRA_EXTENSIONS)
+    except Exception as exc:                        # noqa: BLE001
+        _log.warning("discover_finalize tree read failed: %s", exc)
+        return no_finalize(
+            f"could not read the tree: {type(exc).__name__}: {exc}"[:300])
+
+    member_paths = {bc_id: sorted({m.path for m in members if m.path})
+                    for bc_id, members in inp.members.items()}
+    # attribute() filters the denominator to SOURCE_EXTENSIONS itself, so the
+    # wider schema read above costs one pass, not a second git call.
+    attribution = attribute(blobs, skipped, member_paths,
+                            inp.entry_point_paths)
+    decomposition = decompose(inp.members,
+                              contract_collected=inp.contract_collected)
+    declarations = [EntityDeclaration(name=d.name, path=d.path, line=d.line)
+                    for d in schema.declarations(blobs)]
+    ownership = assign(declarations, member_paths, decomposition.operations,
+                       schema_collected=inp.schema_collected,
+                       contract_collected=inp.contract_collected)
+    return DiscoverFinalizeOutcome(attribution=attribution,
+                                   decomposition=decomposition,
+                                   ownership=ownership)
+
 
 
