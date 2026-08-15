@@ -150,6 +150,17 @@ def write_registry_dir(root, version=1):
         b"def build(model, instructions, model_settings):\n"
         b"    return Agent(model, name='adversary_agent',\n"
         b"                 system_prompt=instructions)\n")
+    # Optional discover proposer (E-48 DD7): a plain proposer.
+    disc = root / "discover"
+    disc.mkdir(exist_ok=True)
+    (disc / "agent.yaml").write_bytes(
+        b"kind: proposer\nmodel: anthropic:claude-sonnet-4-5\n")
+    (disc / "instructions.md").write_bytes(b"judge candidate capabilities")
+    (disc / "agent.py").write_bytes(
+        b"from pydantic_ai import Agent\n"
+        b"def build(model, instructions, model_settings):\n"
+        b"    return Agent(model, name='discover_agent',\n"
+        b"                 system_prompt=instructions)\n")
     return root
 
 

@@ -68,6 +68,9 @@ handoff_agent = AGENTS.get("handoff")
 # ships; the LENS runs only under cfg.adversarial_review_enabled (feature.py).
 adversary_agent = AGENTS.get("adversary")
 
+# Optional discover proposer (E-48 DD7). Present iff agents/discover/ ships.
+discover_agent = AGENTS.get("discover")
+
 # Stage name -> registry role. Stage names (feature.py's pipeline vocabulary)
 # and role names (the registry's) genuinely differ — 'plan'/'planner',
 # 'review'/'reviewer', 'analyze'/'analyst', 'devops'/'devops_planner'. This
@@ -85,6 +88,7 @@ STAGE_ROLES: dict[str, str] = {
     "deep_review": "deep_review",       # optional; present iff the folder ships
     "handoff": "handoff",               # optional; present iff the folder ships
     "adversary": "adversary",           # optional; present iff the folder ships
+    "discover": "discover",             # optional; present iff the folder ships
 }
 
 # Both maps are keyed by stage and looked up together in _cached_stage. Keep
@@ -138,6 +142,13 @@ t_adversary = (
     TemporalAgent(adversary_agent, activity_config=AGENT_ACTIVITY_CONFIG)
     if adversary_agent is not None else None)
 
+# Optional: the discover TemporalAgent exists iff agents/discover/ shipped and
+# built cleanly. workflows/assessment.py guards the phase with
+# `t_discover is not None`, feature.py's t_research pattern (DD7).
+t_discover = (
+    TemporalAgent(discover_agent, activity_config=AGENT_ACTIVITY_CONFIG)
+    if discover_agent is not None else None)
+
 ALL_TEMPORAL_AGENTS = [t_clarify, t_architect, t_planner, t_qa,
                        t_reviewer, t_analyst, t_merge_verdict, t_devops]
 if t_research is not None:
@@ -148,3 +159,5 @@ if t_handoff is not None:
     ALL_TEMPORAL_AGENTS.append(t_handoff)
 if t_adversary is not None:
     ALL_TEMPORAL_AGENTS.append(t_adversary)
+if t_discover is not None:
+    ALL_TEMPORAL_AGENTS.append(t_discover)
