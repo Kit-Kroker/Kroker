@@ -7,9 +7,11 @@ dependency here would appear as a reviewable import.
 """
 from __future__ import annotations
 
+from enum import Enum
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from ...measurement import CollectionState, Measurement
+from ..scan.models import EvidenceRef
 
 MAX_DRIVERS = 3
 
@@ -108,4 +110,201 @@ class Composite(BaseModel):
                 raise ValueError(
                     f"driver names no factor: {d.factor_key!r} is not among "
                     f"{sorted(keys)}")
+        return self
+
+
+class Criticality(str, Enum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class CriticalityRating(BaseModel):
+    """An optional level plus a Measurement, rather than a Criticality with an
+    UNKNOWN member: an UNKNOWN member would be a second way to say
+    not_collected, and two registries for one fact is the defect this codebase
+    has paid for more than once."""
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    level: Criticality | None = None
+    collected: Measurement
+
+    @model_validator(mode="after")
+    def _level_matches_collection(self) -> "CriticalityRating":
+        measured = self.collected.state is CollectionState.MEASURED
+        if measured and self.level is None:
+            raise ValueError("collected criticality must carry a level")
+        if not measured and self.level is not None:
+            raise ValueError(
+                f"criticality did not collect but carries level "
+                f"{self.level.value!r} -- _unmeasured_carries_no_payload")
+        return self
+
+
+class ControlFamily(str, Enum):
+    AUTHENTICATION = "authentication"
+    AUTHORIZATION = "authorization"
+    VALIDATION = "validation"
+    MONITORING = "monitoring"
+    ENCRYPTION = "encryption"
+
+
+class ControlState(str, Enum):
+    PRESENT = "present"
+    ABSENT = "absent"
+
+
+class ControlCoverage(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    family: ControlFamily
+    state: ControlState | None = None
+    collected: Measurement
+    evidence: tuple[EvidenceRef, ...] = ()
+    rule: str
+
+    @model_validator(mode="after")
+    def _state_matches_collection(self) -> "ControlCoverage":
+        measured = self.collected.state is CollectionState.MEASURED
+        if measured and self.state is None:
+            raise ValueError("collected control coverage must carry a state")
+        if not measured and self.state is not None:
+            raise ValueError(
+                f"{self.family.value} did not collect but carries state "
+                f"{self.state.value!r} -- _unmeasured_carries_no_payload")
+        return self
+
+
+class StrideCategory(str, Enum):
+    SPOOFING = "spoofing"
+    TAMPERING = "tampering"
+    REPUDIATION = "repudiation"
+    INFORMATION_DISCLOSURE = "information_disclosure"
+    DENIAL_OF_SERVICE = "denial_of_service"
+    ELEVATION_OF_PRIVILEGE = "elevation_of_privilege"
+
+
+class ThreatAssessment(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    category: StrideCategory
+    applicable: bool
+    rationale: str
+    vulnerability_keys: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def _rationale_is_required(self) -> "ThreatAssessment":
+        if not self.rationale.strip():
+            raise ValueError(
+                f"{self.category.value} needs a rationale -- FR-916 requires "
+                f"an explicit one even when the category does not apply")
+        return self
+
+
+class Severity(str, Enum):
+    CRITICAL = "critical"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    INFO = "info"
+
+
+class VulnerabilityClass(str, Enum):
+    CONFIRMED = "confirmed"
+    PROBABLE = "probable"
+    POTENTIAL = "potential"
+
+
+class RiskSource(str, Enum):
+    BASELINE = "baseline"       # the deterministic rule (plan 1)
+    PROPOSER = "proposer"       # dispositioned by the model (plan 2)
+
+
+class Vulnerability(BaseModel):
+    """`key` IS security_identity(observation) -- no new identity scheme, so
+    E-54's delta and E-53's seeds match on a key that already exists and is
+    line-excluding."""
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    key: str
+    classification: VulnerabilityClass
+    severity: Severity
+    stride_category: StrideCategory
+    path: str
+    line: int | None = None
+    evidence: tuple[EvidenceRef, ...] = ()
+    source: RiskSource
+
+
+class SystemRisk(BaseModel):
+    """RD10's four families. Plan 1 lands the contract with every family
+    reporting not_collected naming plan 3, so the artifact is honest between
+    plans exactly as PHASE_OWNER makes the workflow honest between items."""
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    shared_vulnerabilities: Measurement = Measurement.not_collected(
+        "cross-capability analysis not implemented (E-49 plan 3)")
+    cascades: Measurement = Measurement.not_collected(
+        "cross-capability analysis not implemented (E-49 plan 3)")
+    trust_boundaries: Measurement = Measurement.not_collected(
+        "cross-capability analysis not implemented (E-49 plan 3)")
+    escalation_paths: Measurement = Measurement.not_collected(
+        "cross-capability analysis not implemented (E-49 plan 3)")
+
+
+class CapabilityRisk(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    bc_id: str
+    criticality: CriticalityRating
+    threats: tuple[ThreatAssessment, ...]
+    vulnerabilities: tuple[Vulnerability, ...] = ()
+    controls: tuple[ControlCoverage, ...]
+    security: Composite
+    qa: Composite
+    unified: Composite
+
+    @model_validator(mode="after")
+    def _structurally_complete(self) -> "CapabilityRisk":
+        got_t = tuple(t.category for t in self.threats)
+        if got_t != tuple(StrideCategory):
+            raise ValueError(
+                f"{self.bc_id}: threats must be all six STRIDE categories in "
+                f"declaration order, got {[c.value for c in got_t]} -- "
+                f"omission must never come to mean 'not applicable'")
+        got_c = tuple(c.family for c in self.controls)
+        if got_c != tuple(ControlFamily):
+            raise ValueError(
+                f"{self.bc_id}: controls must be all five control families in "
+                f"declaration order, got {[f.value for f in got_c]}")
+        return self
+
+
+class UnifiedRiskMap(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    capabilities: tuple[CapabilityRisk, ...] = ()
+    system: SystemRisk = SystemRisk()
+    collected: Measurement
+
+    @property
+    def counts(self) -> dict[str, int]:
+        """Derived from rows, never assigned."""
+        return {
+            "capabilities": len(self.capabilities),
+            "vulnerabilities": sum(len(c.vulnerabilities)
+                                   for c in self.capabilities),
+        }
+
+    @model_validator(mode="after")
+    def _capabilities_are_sorted(self) -> "UnifiedRiskMap":
+        ids = [c.bc_id for c in self.capabilities]
+        if ids != sorted(ids):
+            raise ValueError(
+                f"capabilities must be sorted by bc_id, got {ids} -- a "
+                f"producer emitting discovery order is an NFR-10 bug")
+        if len(set(ids)) != len(ids):
+            raise ValueError(f"duplicate bc_id in {ids}")
+        return self
+
+    @model_validator(mode="after")
+    def _unmeasured_carries_no_payload(self) -> "UnifiedRiskMap":
+        if (self.collected.state is not CollectionState.MEASURED
+                and self.capabilities):
+            raise ValueError(
+                f"risk map did not collect ({self.collected.reason}) but "
+                f"carries {len(self.capabilities)} capabilities")
         return self
