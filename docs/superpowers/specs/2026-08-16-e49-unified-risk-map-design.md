@@ -104,6 +104,18 @@ FR-916 specifies exactly this latitude — *"a unified composite in [0,1] or a
 `partial`/`unknown` sentinel"* — so the sentinel is the specified behaviour, not
 a degradation of it.
 
+**`partial` is derived, never stored.** `CollectionState` (`measurement.py:22`)
+has three members — `MEASURED`, `NOT_COLLECTED`, `UNKNOWN` — and adding a fourth
+would change a type that `CoverageReport`, `SecurityReport`, triage, scan and
+discover all share, for one consumer's need. Instead a `Composite` carries its
+factors, each with its own `Measurement`, and `is_partial` is a property: some
+factors collected, some did not. This is the codebase's standing preference —
+`terminal_status` is derived, every `counts` field is derived — and it means a
+composite cannot claim a partiality its factors contradict. The composite's own
+`value` is `not_collected` in that case, with a reason naming the missing
+factors, so a consumer that ignores `is_partial` still cannot read a number that
+was never computed.
+
 The consequence lands on E-50 and is deliberate: FR-917's composite-threshold
 BLOCK does not fire until `/enrich` (E-56) supplies the missing inputs, while
 its other two BLOCK clauses — a confirmed unaccepted vulnerability, and a
@@ -245,10 +257,15 @@ contributors", which is derivable rather than a stylistic cap.
 a report which did not collect has no rows; FR-916 says a composite carries one
 to three drivers. The `partial` case touches both, so the rule is stated once:
 
-- `measured` → drivers over all factors
-- `partial` → drivers over **the factors that did collect**, plus the reason
-  naming those that did not
-- `not_collected` / `unknown` → **no drivers**
+- every factor collected → drivers over all factors
+- **some** factors collected (`is_partial`) → drivers over the factors that did
+  collect; the composite's own `value` is `not_collected`, its reason naming
+  those that did not
+- **no** factor collected → **no drivers**
+
+The middle case is why drivers hang off the composite rather than off its
+`value`: a `Measurement` that is `not_collected` may carry no value, but the
+factors underneath it are real and are exactly what a customer needs to see.
 
 ### RD10 — cross-capability splits by mechanism
 
@@ -317,7 +334,8 @@ artifact.
 | `CriticalityRating` | `level: Criticality \| None`, `collected: Measurement` |
 | `Criticality` | `HIGH \| MEDIUM \| LOW` |
 | `Driver` | RD9's typed factor reference |
-| `Composite` | `value: Measurement`, `drivers: tuple[Driver, ...]` |
+| `Factor` | `key`, `value: Measurement`, `weight` — one input to a composite |
+| `Composite` | `value: Measurement`, `factors: tuple[Factor, ...]`, `drivers: tuple[Driver, ...]`, `is_partial` (property) |
 | `CapabilityRisk` | one per `bc_id`: criticality, threats, vulnerabilities, controls, three composites |
 | `SharedVulnerability` / `Cascade` / `TrustBoundary` / `EscalationPath` | RD10's four families |
 | `SystemRisk` | the four families, each with its own `Measurement` |
@@ -366,7 +384,7 @@ would move.
 |---|---|
 | discover reported `not_collected` | ASSESS reports `not_collected` naming discover; no empty map is constructed (RD8) |
 | SS4 did not collect | criticality `not_collected`; no capability is rated low by absence (RD4) |
-| QS2/QS3 did not collect | the affected QA factor is `not_collected`; the composite is `partial` with a reason (RD3) |
+| QS2/QS3 did not collect | the affected QA factor is `not_collected`; the composite's `value` is `not_collected` naming it, and `is_partial` derives True (RD3) |
 | `agents/risk/` absent, or the call fails | judgment layer `not_collected`; composites survive; phase MEASURED (RD7) |
 | fabrication rate > 0.10 | judgment layer `not_collected`; composites survive (RD7) |
 | a proposer cites an unresolvable path or an unverifiable quote | that row drops; the rate feeds the guard (RD6) |
@@ -378,8 +396,11 @@ would move.
   one central test: the E-47b/E-47c and E-48-plan-3 pattern.
 - `_unmeasured_carries_no_payload` per report; counts derived and asserted,
   never repaired.
-- RD9's `partial` boundary pinned explicitly: drivers over collected factors
-  when partial, **none** when `not_collected`.
+- RD9's boundary pinned explicitly in all three cases: drivers over every
+  factor when all collected; drivers over the collected subset with
+  `is_partial` True and a `not_collected` `value` when some did; **no** drivers
+  when none did. Plus the derivation itself — `is_partial` must never be
+  settable, and must agree with the factors it is read from.
 - Structural completeness: six STRIDE categories and five control families
   required at the type, so omission cannot come to mean "not applicable".
 - RD6's lift proved by **E-48's existing verification tests passing
