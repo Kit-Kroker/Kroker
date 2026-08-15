@@ -18,8 +18,8 @@ with workflow.unsafe.imports_passed_through():
         CodingTaskInput, CoverageInput, DiffInput,
         IntegrationChecks, IntegrationChecksInput,
         IntegrationHandle, IntegrationInput, LintInput, MergeInput,
-        PROpenInput, QAInput, SecurityScanInput, WorktreeInput,
-        create_worktree, evaluate_gate, get_task_diff,
+        PROpenInput, QAInput, RepoProbeInput, SecurityScanInput, WorktreeInput,
+        classify_repo, create_worktree, evaluate_gate, get_task_diff,
         measure_coverage, merge_into_integration, open_pull_request,
         run_coding_task, run_integration_checks, run_lint, run_test_suite,
         security_scan, setup_integration_branch,
@@ -43,6 +43,10 @@ with workflow.unsafe.imports_passed_through():
                                     publish_artifact_version,
                                     set_task_authoritative, sync_plan_tasks)
     from ..board.models import ArtifactStatus, TaskStatus
+    from ..context.classify import classify
+    from ..context.models import CodebaseMap
+    from ..context.project import map_digest, project
+    from ..context.render import render_for_prompt
     from ..gate import (
         CheckClass, CheckResult, GateOverride, GateReport, QualityGateInput,
         build_check,
@@ -65,7 +69,7 @@ with workflow.unsafe.imports_passed_through():
                            merge_verdict_prompt, planner_prompt, qa_prompt,
                            reviewer_prompt)
     from ..artifacts.retention import (RetentionInput, apply_session_retention,
-                                       keep_full_transcripts)
+                                        keep_full_transcripts)
     from ..artifacts.read import LoadSessionInput, load_session
     from ..harness.session import session_text_from_jsonl
     from ..notify.contract import NotifyReason
@@ -77,6 +81,7 @@ with workflow.unsafe.imports_passed_through():
         GateDecision,
         GateOutcome, GatePolicy, HandoffSummary, IdeaBrief,
         ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig, PlanDrift,
+        ProjectMode,
         RecallSnapshot, ResearchBrief, ResearchPlan, RetainItem, RoleConfig,
         RoleUsage, RunSummary, SecurityReport, SeededWork, SmokeCheck,
         SubQuestionFinding,
@@ -84,6 +89,7 @@ with workflow.unsafe.imports_passed_through():
     )
     from .deployment import DeploymentInput, DeploymentWorkflow
     from .gates import GateHost
+    from .scanning import scan_tree
     from ..handoff import (
         claim_survival_score, cross_check_claims, verified_integrity_flags,
         verified_plan_deviations,
@@ -98,6 +104,8 @@ with workflow.unsafe.imports_passed_through():
         brief_digest, verify_brief_activity,
     )
 
+INTAKE_ACT = dict(start_to_close_timeout=timedelta(minutes=2),
+                  retry_policy=RetryPolicy(maximum_attempts=3))
 ACT = dict(start_to_close_timeout=timedelta(minutes=10),
            retry_policy=RetryPolicy(maximum_attempts=3))
 # Coding/test-suite runs stream output in bursts; a quiet LLM turn can
@@ -567,6 +575,8 @@ class FeatureWorkflow(GateHost):
         # E-78: surrogate artifact_version.id of the current plan, captured
         # when the plan stage publishes. Task board writes key off it.
         self._plan_version: int | None = None
+        # E-84: stage 2 codebase map for brownfield runs (None for greenfield).
+        self._codebase_map: CodebaseMap | None = None
 
     # ----------------------- benchmark recording ------------------------
 
@@ -1681,6 +1691,23 @@ class FeatureWorkflow(GateHost):
             # Retro must never change the run outcome (best-effort stage).
             pass
 
+    async def _context(self, repo_path: str, commit_sha: str) -> CodebaseMap:
+        """Stage 2 (E-84). The same thirteen signals the audit tier runs, over
+        the same memo, with no triage (D1/D5).
+
+        Nothing here executes the repository's code: every signal reads blob
+        bytes at the pinned commit (NFR-9).
+        """
+        out = await scan_tree(repo_path, commit_sha, None)
+        if out.scan is None:
+            return CodebaseMap(
+                tree_hash=out.tree_hash or "", commit_sha=commit_sha,
+                modules_collected=out.result.collected,
+                contracts_collected=out.result.collected,
+                hot_spots_collected=out.result.collected,
+                collected=out.result.collected)
+        return project(out.scan, out.tree_hash, commit_sha)
+
     async def _pipeline(self, idea: IdeaBrief, cfg: PipelineConfig,
                         seeded: SeededWork | None = None) -> str:
         if cfg.memory.enabled:
@@ -1692,6 +1719,21 @@ class FeatureWorkflow(GateHost):
                                   base_url=cfg.memory.base_url),
                     **MEM_ACT))
         repo_path = idea.repo_url or "/var/sdlc/repo"  # prepared by a setup activity IRL
+
+        # 0. INTAKE (E-84 D3) -- deterministic, no model call. IdeaBrief.mode
+        # is declared by the operator; this verifies the declaration against
+        # the tree and fails closed when brownfield has nothing to map.
+        self._status = "intake"
+        observed = await workflow.execute_activity(
+            classify_repo,
+            RepoProbeInput(repo_dir=repo_path, base_branch=idea.base_branch),
+            **INTAKE_ACT)
+        verdict = classify(observed, idea.mode)
+        if verdict.warning:
+            self._emit(RunEventKind.STAGE_ENDED, stage="intake",
+                       warning=verdict.warning)
+        if not verdict.ok:
+            return f"rejected:intake ({verdict.reason})"
 
         # ADR-14: one sdlc/<run_id>/integration branch accumulates completed
         # task work; dependent tasks branch from its head. The activity hands
@@ -1717,6 +1759,21 @@ class FeatureWorkflow(GateHost):
             self._status = "coding"
             return await self._build_and_merge(idea, cfg, arch, plan,
                                                repo_path)
+
+        # 2. CONTEXT (E-84 D1/D4/D6) -- brownfield only. Pinned to the
+        # integration head, which is the branch point the work is based on.
+        self._codebase_map = None
+        if idea.mode is ProjectMode.BROWNFIELD:
+            self._status = "mapping"
+            self._codebase_map = await self._context(
+                repo_path, self._integration_head)
+            if self._codebase_map.collected.state \
+                    is not CollectionState.MEASURED:
+                # D6: proceeding would silently drop the delta check exactly
+                # when the ground is weakest -- the shape of the
+                # malformed-SARIF-reads-as-clean hole (FR-915).
+                return (f"rejected:context "
+                        f"({self._codebase_map.collected.reason})")
 
         # 0. RESEARCH (FR-107) — optional, human-gated, NOT memoized. A served
         # memo means pages were not fetched this run, so a brief cannot be
