@@ -13,6 +13,7 @@ Blueprint matching is not a scan rule and must not be hashed as one.
 """
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Iterable, Sequence
 from pathlib import Path
@@ -37,12 +38,25 @@ _STOP = frozenset({
 _SPLIT = re.compile(r"[^a-z0-9]+")
 
 
+def _singularize(word: str) -> str:
+    """Local singularization, keeping blueprint matching independent of scan rules memo."""
+    if len(word) > 3 and word.endswith("ies"):
+        return word[:-3] + "y"
+    for group in ("sses", "shes", "ches", "xes", "zes"):
+        if len(word) > len(group) and word.endswith(group):
+            return word[:-2]
+    if (len(word) > 2 and word.endswith("s")
+            and not word.endswith("ss") and not word.endswith("us")):
+        return word[:-1]
+    return word
+
+
 def _tokens(name: str) -> frozenset[str]:
-    """Lowercase alphanumeric tokens, stop words removed, trailing plural 's'
-    stripped. English-centric, and OQ-12 already records that limitation for
-    S5's normalization; the same caveat applies here."""
-    raw = (t for t in _SPLIT.split(name.lower()) if t)
-    return frozenset(t.rstrip("s") for t in raw if t not in _STOP) - {""}
+    """Lowercase alphanumeric tokens, stop words removed, singularized.
+    English-centric, and OQ-12 already records that limitation for S5's
+    normalization; the same caveat applies here."""
+    raw = (_singularize(t) for t in _SPLIT.split(name.lower()) if t)
+    return frozenset(t for t in raw if t and t not in _STOP)
 
 
 class BlueprintProcess(BaseModel):
@@ -59,14 +73,31 @@ class Blueprint(BaseModel):
     processes: tuple[BlueprintProcess, ...]
 
 
-def load(path: str = DEFAULT_BLUEPRINT) -> Blueprint | None:
+def resolve_blueprint_path(path: str | Path | None = None) -> Path:
+    """Resolve blueprint yaml path honoring SDLC_BLUEPRINTS_DIR, repo root fallback, and CWD."""
+    if path:
+        return Path(path)
+    env_dir = os.environ.get("SDLC_BLUEPRINTS_DIR")
+    if env_dir:
+        candidate = Path(env_dir) / "apqc.yaml"
+        if candidate.exists():
+            return candidate
+    repo_root = Path(__file__).resolve().parents[4]
+    candidate = repo_root / "blueprints" / "apqc.yaml"
+    if candidate.exists():
+        return candidate
+    return Path(DEFAULT_BLUEPRINT)
+
+
+def load(path: str | Path | None = None) -> Blueprint | None:
     """The blueprint, or None when the file is absent or will not parse.
 
     Returns None rather than raising (P3-D4): the caller reports
     not_collected naming the file, and the rest of the map ships.
     """
+    target = resolve_blueprint_path(path)
     try:
-        raw = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+        raw = yaml.safe_load(target.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError):
         return None
     if not isinstance(raw, dict):
@@ -128,7 +159,8 @@ def compare(capabilities: Iterable[Capability],
                 name=cap.name, status=BlueprintStatus.EXTRA,
                 matched_bc_id=cap.bc_id))
 
-    ordered = tuple(sorted(gaps, key=lambda g: (g.status.value, g.name)))
+    ordered = tuple(sorted(
+        gaps, key=lambda g: (g.status.value, g.name, g.matched_bc_id or "")))
     return BlueprintComparison(
         blueprint=name, version=version, gaps=ordered,
         counts={s: sum(1 for g in ordered if g.status is s)

@@ -113,7 +113,7 @@ def _refuse(row: ProposedDisposition,
                     "verify it against")
         else:
             body = blobs.get(row.evidence[0].path)
-            if body is None or not verify_quote(
+            if body is not None and not verify_quote(
                     row.quote, body, Profile.VERBATIM_BYTES):
                 unresolved += 1
                 if not first_rule:
@@ -139,7 +139,7 @@ def verify_refs(proposal: DiscoverProposal,
     unresolved_total = 0
 
     for row in proposal.dispositions:
-        total += len(row.evidence)
+        total += len(row.evidence) + (1 if row.quote else 0)
         rule, detail, unresolved = _refuse(row, blobs)
         unresolved_total += unresolved
         if rule:

@@ -28,6 +28,9 @@ COPY benchmarks ./benchmarks
 # this COPY every gate notification silently fails to deliver, so a HITL
 # gate just sits unnotified until its timeout.
 COPY policy ./policy
+# Blueprint comparison yaml (blueprints/apqc.yaml, E-48 D8) is a factory asset:
+# without this COPY production assessments cannot load the reference taxonomy.
+COPY blueprints ./blueprints
 # .env's LOGFIRE_TOKEN reaches this container via docker-compose's env_file,
 # so logfire_setup.configure() gates itself on and imports logfire -- without
 # the extra installed here, boot crash-loops on ModuleNotFoundError before
@@ -53,5 +56,6 @@ ENV SDLC_AGENTS_DIR=/app/agents
 # resolves under the Python install prefix instead of /app. Pin it explicitly
 # rather than relying on that fallback ever matching this image's layout.
 ENV SDLC_CASES_ROOT=/app/benchmarks/cases
+ENV SDLC_BLUEPRINTS_DIR=/app/blueprints
 
 CMD ["python", "-m", "sdlc.worker"]

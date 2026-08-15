@@ -182,11 +182,11 @@ def contract_collected(scan: ScanResult) -> Measurement:
 
 
 def render_discover_prompt(context: DiscoverContext,
-                           *, max_candidates: int = 100,
-                           max_members: int = 20) -> str:
+                           *, max_members: int = 20) -> str:
     """Bounded, deterministic prompt rendering of DiscoverContext.
 
-    Announces any cuts rather than truncating silently (NFR-10).
+    Renders all candidates in the context so no candidate is omitted
+    from proposer adjudication, and announces member cuts (NFR-10).
     """
     lines: list[str] = [
         f"# Discover Candidates ({len(context.candidates)})",
@@ -194,8 +194,7 @@ def render_discover_prompt(context: DiscoverContext,
         f"unparsed: {context.graph.unparsed}, edges: {context.graph.edges})",
         "",
     ]
-    shown_cands = context.candidates[:max_candidates]
-    for c in shown_cands:
+    for c in context.candidates:
         coh_str = (f"{c.cohesion.value:.2f}"
                    if c.cohesion.state is CollectionState.MEASURED
                    else f"({c.cohesion.reason})")
@@ -211,6 +210,21 @@ def render_discover_prompt(context: DiscoverContext,
                 f"- Possible duplicate of: {', '.join(c.possible_duplicate_of)}")
         if c.guardrail_only:
             lines.append("- Guardrail only: true (layer/container naming)")
+        if c.security:
+            lines.append(
+                f"- Security findings ({len(c.security)}): "
+                f"{', '.join(f'{s.rule} ({s.severity_hint})' for s in c.security)}")
+        if c.sensitivity:
+            lines.append(
+                f"- Sensitivity records ({len(c.sensitivity)}): "
+                f"{', '.join(f'{s.entity}:{s.classification.value}' for s in c.sensitivity)}")
+        if c.testability:
+            lines.append(
+                f"- Testability findings ({len(c.testability)}): "
+                f"{', '.join(f'{t.pattern} ({t.severity})' for t in c.testability)}")
+        if c.coverage:
+            lines.append(
+                f"- Coverage records: {len(c.coverage)}")
         lines.append(f"- Members ({len(c.members)}):")
         for m in c.members[:max_members]:
             loc = (f" ({m.path}:{m.line})" if m.line
@@ -219,10 +233,6 @@ def render_discover_prompt(context: DiscoverContext,
         if len(c.members) > max_members:
             lines.append(f"  … {len(c.members) - max_members} more member(s)")
         lines.append("")
-
-    if len(context.candidates) > max_candidates:
-        lines.append(
-            f"… {len(context.candidates) - max_candidates} more candidate(s) omitted")
 
     return "\n".join(lines)
 

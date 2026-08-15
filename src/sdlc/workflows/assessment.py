@@ -87,6 +87,9 @@ class AssessmentInput(BaseModel):
     # a checkout moves. Named after PipelineConfig.project_key, which
     # addresses the same SQLite file.
     project_key: str = "default"
+    # DD7: whether the discover proposer stage is active (propose_discover=True)
+    # or disabled (propose_discover=False, baseline only).
+    propose_discover: bool = True
 
 
 # The E-item owing each unbuilt phase body, so an empty assessment says WHY
@@ -268,7 +271,7 @@ class AssessmentWorkflow(GateHost):
         # P2-D6: NO_PROPOSER, never "". A baseline-only map and a proposer map
         # must never share a key, so the two terms are the role's own when the
         # role is shipped and the sentinel when it is not.
-        proposing = t_discover is not None
+        proposing = inp.propose_discover and t_discover is not None
         memo_key = DiscoverMemoInput(
             project=inp.project_key, tree_hash=scan_out.tree_hash,
             context_digest=context_digest(context),
@@ -289,10 +292,11 @@ class AssessmentWorkflow(GateHost):
                 run = await t_discover.run(render_discover_prompt(context))
                 proposal = run.output
             except Exception as e:                      # noqa: BLE001
-                # The role shipped but the call failed. Not DD7's ABSENT case
-                # -- the reasons must not converge -- so the baseline runs and
-                # the map records why judgment is missing.
-                proposal = None
+                # The role shipped and was invoked, but the call failed.
+                # Must fail closed rather than quietly laundering into baseline
+                # (which would store a judgment-free map under the proposer's memo key).
+                return no_discover(
+                    f"discover proposer failed: {type(e).__name__}: {e}")
 
         if proposal is not None:
             verification = await run_or_degrade(

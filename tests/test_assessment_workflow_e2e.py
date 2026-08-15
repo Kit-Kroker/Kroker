@@ -353,7 +353,8 @@ async def test_discover_goes_measured_and_the_map_reaches_the_artifact(
                           workflows=WORKFLOWS, activities=acts):
             handle = await env.client.start_workflow(
                 AssessmentWorkflow.run,
-                AssessmentInput(repo_dir=repo_dir, project_key="acme"),
+                AssessmentInput(repo_dir=repo_dir, project_key="acme",
+                                propose_discover=False),
                 id=f"assess-{uuid.uuid4()}", task_queue=TASK_QUEUE)
             result = await handle.result()
 
@@ -412,7 +413,8 @@ async def test_a_second_assessment_of_the_same_tree_hits_the_memo(
             # Run 1: cold cache.
             h1 = await env.client.start_workflow(
                 AssessmentWorkflow.run,
-                AssessmentInput(repo_dir=repo_dir, project_key="acme"),
+                AssessmentInput(repo_dir=repo_dir, project_key="acme",
+                                propose_discover=False),
                 id=f"assess-{uuid.uuid4()}", task_queue=TASK_QUEUE)
             r1 = await h1.result()
             assert r1.discover is not None
@@ -424,21 +426,25 @@ async def test_a_second_assessment_of_the_same_tree_hits_the_memo(
                 store.close()
             assert v1 == 1
 
-            # Run 2: hits the memo.
+            # Run 2: hits discover_memo_store's entry.
             h2 = await env.client.start_workflow(
                 AssessmentWorkflow.run,
-                AssessmentInput(repo_dir=repo_dir, project_key="acme"),
+                AssessmentInput(repo_dir=repo_dir, project_key="acme",
+                                propose_discover=False),
                 id=f"assess-{uuid.uuid4()}", task_queue=TASK_QUEUE)
             r2 = await h2.result()
             assert r2.discover is not None
-            assert [c.bc_id for c in r2.discover.capabilities] == ["BC-001"]
+
+            # Byte-identical payload served from the memo.
+            assert (r2.discover.model_dump_json()
+                    == r1.discover.model_dump_json())
 
             store = BoardIdentityStore()
             try:
                 v2 = store.registry_version("acme")
             finally:
                 store.close()
-            # Registry was NOT touched on run 2: lock was skipped.
+            # No lock run: SQLite registry version is untouched.
             assert v2 == v1
 
 
@@ -500,7 +506,7 @@ async def test_discover_proposer_judgment_and_verification(
             res = await h.result()
 
     assert res.discover is not None
-    assert res.discover.total_references == 1
+    assert res.discover.total_references == 2
     assert res.discover.capabilities[0].disposition.rationale == "Core payment processing domain logic"
     assert res.discover.capabilities[0].disposition.evidence == (EvidenceRef(path="payments/api.py", lines="5"),)
 
@@ -565,5 +571,51 @@ async def test_discover_proposer_trips_guard_fails_closed(
     discover_phase = next(p for p in res.phases if p.phase is PhaseId.DISCOVER)
     assert discover_phase.collected.state is CollectionState.NOT_COLLECTED
     assert "fabrication rate" in discover_phase.collected.reason
+
+
+async def test_discover_proposer_exception_fails_closed(
+        assessed_repo, tmp_path, monkeypatch):
+    """When the discover proposer agent raises an error, the phase fails closed
+    (not_collected) rather than quietly laundering into baseline or caching."""
+    repo_dir, sha = assessed_repo
+    db = str(tmp_path / "board.sqlite3")
+    monkeypatch.setenv("SDLC_BOARD_DB", db)
+
+    from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
+    from temporalio.contrib.pydantic import pydantic_data_converter
+
+    @activity.defn(name="discover_agent")
+    async def failing_agent(prompt: str) -> str:
+        raise RuntimeError("LLM service unavailable")
+
+    @activity.defn(name="triage_resolve_commit")
+    async def real_pin(inp: TriagePinInput) -> TriagePin:
+        return TriagePin(commit_sha=sha, toolchain="python")
+
+    from sdlc.assessment.activities import assessment_resolve_tree
+
+    acts = [real_pin, fake_baseline, fake_scaffold, fake_probe,
+            fake_secrets, fake_misconfig, fake_outliers, fake_deps,
+            assessment_resolve_tree, *SCAN_ACTS,
+            discover_context, discover_lock, discover_finalize,
+            discover_memo_load, discover_memo_store,
+            load_blueprint, verify_discover_refs, failing_agent]
+
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=WORKFLOWS, activities=acts,
+                          plugins=[PydanticAIPlugin()]):
+            h = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(repo_dir=repo_dir, project_key="acme"),
+                id=f"assess-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+            res = await h.result()
+
+    assert res.discover is None
+    discover_phase = next(p for p in res.phases if p.phase is PhaseId.DISCOVER)
+    assert discover_phase.collected.state is CollectionState.NOT_COLLECTED
+    assert "discover proposer failed" in discover_phase.collected.reason
+
 
 

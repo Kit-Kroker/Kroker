@@ -276,6 +276,10 @@ class Capability(BaseModel):
     cohesion: Measurement
     coupling: Measurement
     disposition: CandidateDisposition
+    security: tuple[SecurityObservation, ...] = ()      # clause D6
+    sensitivity: tuple[SensitivityRecord, ...] = ()     # clause D6
+    testability: tuple[TestabilityFinding, ...] = ()    # clause D6a
+    coverage: tuple[CoverageRecord, ...] = ()           # clause D6a
 
     @model_validator(mode="after")
     def _a_rejected_candidate_is_not_a_capability(self) -> "Capability":
@@ -357,7 +361,7 @@ class BlueprintComparison(BaseModel):
 
     @model_validator(mode="after")
     def _gaps_are_sorted(self) -> "BlueprintComparison":
-        keys = [(g.status.value, g.name) for g in self.gaps]
+        keys = [(g.status.value, g.name, g.matched_bc_id or "") for g in self.gaps]
         if keys != sorted(set(keys)):
             raise ValueError(
                 f"gaps {keys} are not sorted and deduped -- comparison order "

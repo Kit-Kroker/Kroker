@@ -163,3 +163,20 @@ def test_a_refused_verdict_is_not_reported_as_an_omission():
     assert row.rule == "dropped_ref_unresolved"
     assert row.rule != "dropped_missing"
 
+
+def test_quote_included_in_total_and_rate_bounded():
+    p = _proposal(_row("C1", evidence=(EvidenceRef(path="ghost.py"),), quote="bad.quote"))
+    out = verify_refs(p, {"ghost.py": None})
+    assert out.total_references == 2
+    assert out.unresolved_references == 1
+    assert out.fabrication_rate == 0.5
+
+
+def test_pure_quote_fabrication_counts_in_total():
+    p = _proposal(_row("C1", quote="unanchored.quote"))
+    out = verify_refs(p, {})
+    assert out.total_references == 1
+    assert out.unresolved_references == 1
+    assert out.fabrication_rate == 1.0
+
+

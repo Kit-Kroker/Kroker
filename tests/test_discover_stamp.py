@@ -188,3 +188,21 @@ def test_a_malformed_disposition_is_dropped_rather_than_raising():
 def test_dropped_is_derived_from_the_rows():
     with pytest.raises(ValidationError, match="derived"):
         StampedProposal(dispositions=(), dropped=3)
+
+
+def test_refused_unknown_candidate_id_lands_in_unknown_candidate_ids():
+    got = stamp(
+        _context(), DiscoverProposal(dispositions=[]),
+        refusals={"GHOST_99": ("dropped_ref_unresolved", "nope.py does not resolve")})
+    assert "GHOST_99" in got.unknown_candidate_ids
+    assert got.dropped == 1  # C-01 missing from proposal (dropped)
+
+
+def test_two_dispositions_where_one_is_refused_stamps_dropped_duplicated():
+    # Model emitted 2 rows for C-01; one was refused by verify_refs, one survived
+    got = stamp(
+        _context(), DiscoverProposal(dispositions=[_prop(candidate_id="C-01")]),
+        refusals={"C-01": ("dropped_quote_unverified", "bad quote")})
+    assert _only(got).rule == "dropped_duplicated"
+    assert _only(got).action is DiscoverAction.FLAG
+

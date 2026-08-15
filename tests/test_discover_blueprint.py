@@ -94,3 +94,28 @@ def test_the_shipped_apqc_blueprint_loads_and_has_two_levels():
     # every level-2 process names a level-1 parent that exists
     tops = {p.name for p in bp.processes if p.level == 1}
     assert all(p.parent in tops for p in bp.processes if p.level == 2)
+
+
+def test_two_extra_capabilities_sharing_name_sort_without_duplicate_key_error():
+    caps = [_cap("BC-001", "orders"), _cap("BC-002", "orders")]
+    out = compare(caps, PROCESSES)
+    extras = [g for g in out.gaps if g.status is BlueprintStatus.EXTRA]
+    assert len(extras) == 2
+    assert [e.matched_bc_id for e in extras] == ["BC-001", "BC-002"]
+
+
+def test_processes_stop_word_and_singularization():
+    from sdlc.assessment.discover.blueprint import _tokens
+    # "processes" -> "process" -> stop word -> dropped
+    assert _tokens("manage processes") == frozenset()
+    # "payments" -> "payment" -> kept
+    assert _tokens("process payments") == frozenset({"payment"})
+
+
+def test_resolve_blueprint_path_env(monkeypatch, tmp_path):
+    from sdlc.assessment.discover.blueprint import resolve_blueprint_path
+    bp_file = tmp_path / "apqc.yaml"
+    bp_file.write_text("name: test\nversion: 1\nprocesses: []\n", encoding="utf-8")
+    monkeypatch.setenv("SDLC_BLUEPRINTS_DIR", str(tmp_path))
+    assert resolve_blueprint_path() == bp_file
+

@@ -23,8 +23,10 @@ from ...measurement import Measurement
 from ..scan.models import CandidateMember, Confidence
 from .map import (
     REJECTING_ACTIONS, BlueprintComparison, Capability, CandidateContext,
-    CandidateDisposition, CapabilityMap, DiscoverAction, DiscoverContext,
-    DiscoverProposal, DispositionSource, DomainModel, ProposedDisposition,
+    CandidateDisposition, CapabilityMap, CoverageRecord, DiscoverAction,
+    DiscoverContext, DiscoverProposal, DispositionSource, DomainModel,
+    ProposedDisposition, SecurityObservation, SensitivityRecord,
+    TestabilityFinding,
 )
 from .models import AttributionReport, DecompositionReport, OwnershipReport
 from .tiers import group_by_tier
@@ -155,6 +157,12 @@ def _stamp_one(context: CandidateContext,
                known: Mapping[str, CandidateContext],
                refusal: tuple[str, str] | None = None) -> CandidateDisposition:
     cid = context.candidate_id
+    total_emitted = len(rows) + (1 if refusal is not None else 0)
+    if total_emitted > 1:
+        return _dropped(
+            cid, "dropped_duplicated",
+            f"the proposer returned {total_emitted} dispositions for this "
+            f"candidate; DD8 requires exactly one")
     if refusal is not None:
         # DD8 items 4-5 already refused this verdict. Checked BEFORE the
         # empty-rows branch: verify_refs removed the row, so `rows` is empty
@@ -165,11 +173,6 @@ def _stamp_one(context: CandidateContext,
         return _dropped(
             cid, "dropped_missing",
             "the proposer returned no disposition for this candidate")
-    if len(rows) > 1:
-        return _dropped(
-            cid, "dropped_duplicated",
-            f"the proposer returned {len(rows)} dispositions for this "
-            f"candidate; DD8 requires exactly one")
     proposed = rows[0]
     if proposed.action is DiscoverAction.SPLIT:
         refusal_rule = _split_refusal(context, proposed)
@@ -223,6 +226,9 @@ def stamp(context: DiscoverContext,
             by_candidate.setdefault(row.candidate_id, []).append(row)
         else:
             unknown.add(row.candidate_id)
+    for cid in refusals:
+        if cid not in known:
+            unknown.add(cid)
 
     first = [_stamp_one(c, by_candidate.get(c.candidate_id, ()), known,
                         refusals.get(c.candidate_id))
@@ -278,6 +284,10 @@ class LockedCandidate(BaseModel):
     cohesion: Measurement
     coupling: Measurement
     disposition: CandidateDisposition
+    security: tuple[SecurityObservation, ...] = ()      # clause D6
+    sensitivity: tuple[SensitivityRecord, ...] = ()     # clause D6
+    testability: tuple[TestabilityFinding, ...] = ()    # clause D6a
+    coverage: tuple[CoverageRecord, ...] = ()           # clause D6a
 
 
 class ApplyResult(BaseModel):
@@ -304,9 +314,13 @@ def apply(context: DiscoverContext,
     the loser's members fold into the winner, and only the winner is handed
     to resolve().
     """
-    by_id = {c.candidate_id: c for c in context.candidates}
     disposition_of = {d.candidate_id: d for d in stamped.dispositions}
+    by_id = {c.candidate_id: c for c in context.candidates}
 
+    # Target -> list of absorbed candidates. A loser must NOT be handed to
+    # the lock: resolve() mints a fresh id for every candidate it sees, so
+    # locking a merged loser would give it a bc_id that contradicts its
+    # disposition (P2-D2).
     absorbed: dict[str, list[CandidateContext]] = {}
     for d in stamped.dispositions:
         if d.action is DiscoverAction.MERGE and d.merge_into is not None:
@@ -332,13 +346,29 @@ def apply(context: DiscoverContext,
                                                if m.path})),
                     cohesion=Measurement.not_collected(_SPLIT_REASON),
                     coupling=Measurement.not_collected(_SPLIT_REASON),
-                    disposition=d))
+                    disposition=d,
+                    security=context_row.security,
+                    sensitivity=context_row.sensitivity,
+                    testability=context_row.testability,
+                    coverage=context_row.coverage))
             continue
 
         taken = absorbed.get(context_row.candidate_id, [])
         members = tuple(sorted(
             set(context_row.members) | {m for a in taken for m in a.members},
             key=CandidateMember.sort_key))
+        sec = tuple(sorted(
+            set(context_row.security) | {s for a in taken for s in a.security},
+            key=lambda s: (s.signal.value, s.rule, s.path, s.key)))
+        sens = tuple(sorted(
+            set(context_row.sensitivity) | {s for a in taken for s in a.sensitivity},
+            key=lambda s: (s.classification.value, s.entity)))
+        testab = tuple(sorted(
+            set(context_row.testability) | {t for a in taken for t in a.testability},
+            key=lambda t: (t.pattern, t.path, t.key)))
+        cov = tuple(sorted(
+            set(context_row.coverage) | {c for a in taken for c in a.coverage},
+            key=lambda c: c.path))
         locked.append(LockedCandidate(
             local_key=context_row.candidate_id, name=context_row.name,
             confidence=context_row.confidence, members=members,
@@ -347,7 +377,11 @@ def apply(context: DiscoverContext,
                       else context_row.cohesion),
             coupling=(Measurement.not_collected(_MERGE_REASON) if taken
                       else context_row.coupling),
-            disposition=d))
+            disposition=d,
+            security=sec,
+            sensitivity=sens,
+            testability=testab,
+            coverage=cov))
 
     return ApplyResult(
         locked=tuple(sorted(locked, key=lambda c: c.local_key)),
@@ -390,7 +424,9 @@ def capabilities_of(applied: ApplyResult,
         Capability(bc_id=bc_of[c.local_key], local_key=c.local_key,
                    name=c.name, confidence=c.confidence, members=c.members,
                    member_paths=c.member_paths, cohesion=c.cohesion,
-                   coupling=c.coupling, disposition=c.disposition)
+                   coupling=c.coupling, disposition=c.disposition,
+                   security=c.security, sensitivity=c.sensitivity,
+                   testability=c.testability, coverage=c.coverage)
         for c in applied.locked)
 
 
