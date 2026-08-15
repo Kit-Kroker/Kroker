@@ -341,3 +341,77 @@ def apply(context: DiscoverContext,
     return ApplyResult(
         locked=tuple(sorted(locked, key=lambda c: c.local_key)),
         stamped=stamped)
+
+
+def fingerprint_of(locked: LockedCandidate) -> CapabilityFingerprint:
+    """DD3's MemberKind -> SignalTier map applied to one boundary.
+
+    A boundary with no members yields not_collected, never an empty MEASURED
+    fingerprint: score() returns None for a not_collected side, so resolve()
+    mints a fresh id and files an IDENTITY_NOT_ASSESSED advisory rather than
+    scoring it 0.0 against everything -- E-47a's rule, "never scored 0".
+    """
+    tiers = group_by_tier(locked.members)
+    total = sum(len(values) for values in tiers.values())
+    if not total:
+        return CapabilityFingerprint(
+            tiers=tiers,
+            collected=Measurement.not_collected(
+                f"{locked.local_key} carries no members, so no tier could be "
+                f"populated and identity was not assessed"))
+    return CapabilityFingerprint(
+        tiers=tiers, collected=Measurement.measured(float(total)))
+
+
+def build_map(applied: ApplyResult, bc_of: Mapping[str, str], *,
+              advisories: Sequence[Advisory] = (),
+              attribution: AttributionReport | None = None,
+              decomposition: DecompositionReport | None = None,
+              ownership: OwnershipReport | None = None) -> CapabilityMap:
+    """The ONE constructor of a CapabilityMap, following assemble()'s rule:
+    one place where the artifact is built means its derived counts cannot
+    disagree with the rows they were derived from.
+
+    `bc_of` is local_key -> bc_id, from the lock's attachments. Plan 3 adds
+    `domain_model` (clause D7) and `blueprint` (clause D8) here, when their
+    producers exist.
+
+    Only ever MEASURED: a discover that could not run reports a not_collected
+    PHASE row and carries no map at all, so a not_collected map has no
+    producer and Assessment._discover_agrees_with_its_phase would refuse one.
+    """
+    missing = sorted(c.local_key for c in applied.locked
+                     if c.local_key not in bc_of)
+    if missing:
+        raise ValueError(
+            f"no bc_id was attached to {missing} -- resolve() attaches every "
+            f"proposed capability, so a missing one is a lock defect rather "
+            f"than a degraded input")
+
+    capabilities = tuple(
+        Capability(bc_id=bc_of[c.local_key], local_key=c.local_key,
+                   name=c.name, confidence=c.confidence, members=c.members,
+                   member_paths=c.member_paths, cohesion=c.cohesion,
+                   coupling=c.coupling, disposition=c.disposition)
+        for c in applied.locked)
+
+    return CapabilityMap(
+        capabilities=capabilities,
+        # Counted over CAPABILITIES, not over dispositions: de_scope, flag and
+        # merge occur as verdicts but never as boundaries, and listing them
+        # here as zeros would read as "no candidate was de-scoped". The full
+        # verdict record is `dispositions`, which carries every one.
+        by_action={action: sum(1 for c in capabilities
+                               if c.disposition.action is action)
+                   for action in {c.disposition.action
+                                  for c in capabilities}},
+        dispositions=applied.stamped.dispositions,
+        attribution=attribution, decomposition=decomposition,
+        ownership=ownership, advisories=tuple(advisories),
+        # Both halves of what DD8 refused: a verdict verification dropped, and
+        # a verdict naming a candidate that does not exist. Plan 3 divides
+        # this by total_references for the citation guard -- and must guard
+        # the zero denominator this plan always produces.
+        dropped_dispositions=(applied.stamped.dropped
+                              + len(applied.stamped.unknown_candidate_ids)),
+        collected=Measurement.measured(float(len(capabilities))))
