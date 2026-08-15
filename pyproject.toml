@@ -36,6 +36,7 @@ eval = ["promptfoo>=0.1.4"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = [".", "src"]
 # Default run = fast unit tests only. `slow` (venv builds, real pip installs)
 # and `temporal` (each test spawns its own ephemeral Temporal dev-server
 # subprocess via WorkflowEnvironment.start_time_skipping; 22 such tests

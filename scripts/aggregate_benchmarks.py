@@ -40,7 +40,7 @@ def parse_report(path: Path) -> list[dict]:
     headers: list[str] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         s = line.strip()
-        if s.startswith("| ") and "---" in s:
+        if s.startswith("|") and "---" in s:
             in_table = True
             continue
         if not in_table and s.startswith("|"):
@@ -303,8 +303,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .pill.fail { background: rgba(248,81,73,.15); color: var(--red); }
   .pill.other { background: rgba(139,148,158,.15); color: var(--muted); }
   .pill.empty { background: rgba(139,148,158,.08); color: var(--muted); }
-  .pill.case-cafe { background: rgba(188,140,255,.15); color: var(--purple); }
-  .pill.case-todo { background: rgba(88,166,255,.15); color: var(--accent); }
+.pill.case-cafe { background: rgba(188,140,255,.15); color: var(--purple); }
+.pill.case-todo { background: rgba(88,166,255,.15); color: var(--accent); }
+.pill.case-deveval { background: rgba(210,153,34,.15); color: #d29922; }
   .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
   .controls select, .controls input { background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 10px; font-size: 13px; }
   .controls label { color: var(--muted); font-size: 12px; display: inline-flex; gap: 6px; align-items: center; }
@@ -398,7 +399,7 @@ function esc(s){ const d=document.createElement('div'); d.textContent=s==null?''
 function runShort(id){ return id.replace(/^bench-/,'').replace(/-(\\d{10})$/, m=>'…'+m.slice(-5)); }
 
 const caseColors = {'cat-cafe-monitoring':'#bc8cff','todo-api-greenfield':'#58a6ff'};
-function casePill(c){ const cls = c.startsWith('cat')?'case-cafe':'case-todo'; return '<span class="pill '+cls+'">'+esc(c)+'</span>'; }
+function casePill(c){ const cls = c.startsWith('cat')?'case-cafe':(c.startsWith('deveval')?'case-deveval':'case-todo'); return '<span class="pill '+cls+'">'+esc(c)+'</span>'; }
 function outPill(o){ const cls = ({pass:'pass',fail:'fail'})[o]||'other'; return '<span class="pill '+cls+'">'+esc(o||'—')+'</span>'; }
 
 // Generated timestamp

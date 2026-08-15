@@ -208,7 +208,7 @@
   loader: <code>src/sdlc/agents/loader.py</code> &middot;
   runtime: <code>src/sdlc/agents/roles.py</code> &middot;
   workflow callsites: <code>src/sdlc/workflows/feature.py</code> &middot;
-  contract source-of-truth: <code>src/sdlc/models.py</code> &middot; Verified <code>2026-08-12</code> against <code>agents/registry.yaml</code> + <code>agents/</code> + <code>benchmarks/</code>
+  contract source-of-truth: <code>src/sdlc/models.py</code> &middot; Verified <code>2026-08-14</code> against <code>agents/registry.yaml</code> + <code>agents/</code> + <code>benchmarks/</code>
 </p>
 <p class="lede">
   Every role is a folder. The folder name <strong>is</strong> the role name, the API surface, and
@@ -406,7 +406,7 @@
   </ul>
   <p style="margin:6px 0 0">
     The <em>one</em> place this divergence is reconciled: <code>STAGE_ROLES</code> in
-    <code>roles.py:64</code>.
+    <code>roles.py:75</code>.
   </p>
 </div>
 
@@ -570,7 +570,7 @@
 </div>
 
 <div class="card soft">
-  <h4>The <code>TemporalAgent</code> wrapping <span class="pill asset">roles.py:100</span></h4>
+  <h4>The <code>TemporalAgent</code> wrapping <span class="pill asset">roles.py:114</span></h4>
   <pre>t_clarify    = TemporalAgent(clarify_agent,         activity_config=AGENT_ACTIVITY_CONFIG)
 t_architect  = TemporalAgent(architect_agent,       activity_config=AGENT_ACTIVITY_CONFIG)
 <span class="c"># ...one per proposer role. AGENT_ACTIVITY_CONFIG:</span>
@@ -608,7 +608,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
 </p>
 
 <div class="card soft">
-  <h4>The invariant <span class="pill asset">loader.py:185</span></h4>
+  <h4>The invariant <span class="pill asset">loader.py:198</span></h4>
   <pre><span class="k">def</span> check_adr6_families(role_models):
     <span class="c"># The single ADR-6 family check, reused at boot (validate_registry)</span>
     <span class="c"># and per run (validate_run_roles, for --role-model / benchmark arms).</span>
@@ -623,7 +623,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
     <span class="k">if</span> dr <span class="k">is not</span> <span class="k">None</span> <span class="k">and</span> model_family(dr) == model_family(dev):
         <span class="k">raise</span> RegistryError(<span class="s">"deep_review family equals dev family"</span>)
 
-<span class="c"># A separate, legacy clause still lives in validate_registry (loader.py:242):</span>
+<span class="c"># A separate, legacy clause still lives in validate_registry (loader.py:280):</span>
 <span class="c"># if reviewer.kind == "harness" and reviewer.harness == dev.harness: raise</span>
 
 <span class="k">def</span> model_family(model: str) -&gt; str:
@@ -730,7 +730,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
 </div>
 
 <div class="card soft">
-  <h4>Per-adapter capabilities <span class="pill asset">adapters.py:138</span></h4>
+  <h4>Per-adapter capabilities <span class="pill asset">adapters.py:172</span></h4>
   <p style="margin:0">
     Each adapter additionally owns (a) a <strong>transcript normaliser</strong>
     <code>normalise_session</code> &rarr; canonical <code>HarnessSession</code> (E-38: claude via
@@ -757,7 +757,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
 </div>
 
 <div class="card soft">
-  <h4>Env allowlist (FR-703, Finding #8) <span class="pill asset">adapters.py:58</span></h4>
+  <h4>Env allowlist (FR-703, Finding #8) <span class="pill asset">adapters.py:79</span></h4>
   <pre>ENV_ALLOWLIST = (
     <span class="s">"PATH"</span>, <span class="s">"HOME"</span>, <span class="s">"LANG"</span>, <span class="s">"LC_ALL"</span>, <span class="s">"TMPDIR"</span>, <span class="s">"TMP"</span>, <span class="s">"TEMP"</span>,
     <span class="s">"SYSTEMROOT"</span>, <span class="s">"SYSTEMDRIVE"</span>, <span class="s">"USERPROFILE"</span>, <span class="s">"PATHEXT"</span>, <span class="s">"COMSPEC"</span>,
@@ -768,7 +768,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
 </div>
 
 <div class="card soft">
-  <h4>Context-window table <span class="pill asset">adapters.py:35</span></h4>
+  <h4>Context-window table <span class="pill asset">adapters.py:48</span></h4>
   <pre>CONTEXT_WINDOWS = {
     <span class="s">"sonnet"</span>: 200_000,  <span class="s">"opus"</span>: 200_000,  <span class="s">"haiku"</span>: 200_000,
     <span class="s">"gpt-5"</span>: 400_000,  <span class="s">"glm"</span>:  1_000_000,
@@ -1352,7 +1352,7 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
   <span class="kv">stage: <b>research (optional, FR-107)</b></span>
   <span class="kv">output: <b>ResearchBrief</b></span>
   <span class="kv">model: <b>anthropic:glm-5.2</b></span>
-  <span class="kv">provider: <b>fake (CI, ships) / tavily (needs TAVILY_API_KEY) / exa (needs EXA_API_KEY)</b></span>
+  <span class="kv">provider: <b>exa (ships in agents/research/agent.yaml) / tavily (needs TAVILY_API_KEY) / fake (CI)</b></span>
   <span class="kv">tools: <b>recall_leads, read_repo, ExaSearch (web_search, get_page, deep_search) + run_code &mdash; only when provider: exa</b></span>
 </div>
 
@@ -1510,15 +1510,21 @@ AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=
     </p>
   </div>
   <div class="card soft">
-    <h4>Deterministic cross-check <span class="pill asset">handoff.py:26</span></h4>
-    <pre>cross_check_claims(claims, files_touched)
-  -&gt; (kept, dropped_count)
-<span class="c"># Pure function, no LLM: a claim naming a path</span>
-<span class="c"># NOT in files_touched is dropped &amp; counted.</span>
-<span class="c"># A claim naming NO path survives (design</span>
-<span class="c"># decisions legitimately reference no file).</span>
-claim_survival_score(kept, dropped) -&gt; fraction
-  <span class="c"># None when there were no claims at all.</span></pre>
+    <h4>Deterministic cross-check <span class="pill asset">handoff.py:40</span></h4>
+    <pre>cross_check_claims(claims, files_touched, session_text=None)
+  -&gt; CrossCheckResult(kept, dropped_paths, dropped_quotes)
+<span class="c"># Pure function, no LLM, two drop reasons counted</span>
+<span class="c"># separately: a claim naming a path NOT in</span>
+<span class="c"># files_touched is dropped (dropped_paths); a claim</span>
+<span class="c"># whose evidence quote is missing from session_text</span>
+<span class="c"># is dropped too (dropped_quotes, E-43 — VERBATIM_BYTES).</span>
+<span class="c"># A claim naming NO path survives (design decisions</span>
+<span class="c"># legitimately reference no file); session_text=None</span>
+<span class="c"># skips quote verification — no haystack is not</span>
+<span class="c"># evidence against the quote.</span>
+claim_survival_score(kept, dropped) -&gt; Measurement
+  <span class="c"># measured(kept / total); not_collected("no claims</span>
+  <span class="c"># extracted") when there were no claims (FR-915).</span></pre>
   </div>
 </div>
 
@@ -1605,10 +1611,10 @@ claim_survival_score(kept, dropped) -&gt; fraction
 
   <div class="layer">SUPPORT ACTIVITIES<br>src/sdlc/</div>
   <div class="files">
-    <p><span class="mono">activities.py</span> &mdash; flattened activity module (target layout in <code>ARCHITECTURE.md &sect;14</code> splits this by concern). Holds <code>create_worktree</code> (:257), <code>run_coding_task</code> (:381), <code>run_test_suite</code> (:449), <code>get_task_diff</code>, <code>merge_into_integration</code>, <code>setup_integration_branch</code>, <code>run_lint</code>, <code>security_scan</code>.</p>
+    <p><span class="mono">activities.py</span> &mdash; flattened activity module (target layout in <code>ARCHITECTURE.md &sect;14</code> splits this by concern). Holds <code>create_worktree</code> (:274), <code>run_coding_task</code> (:527), <code>run_test_suite</code> (:660), <code>get_task_diff</code>, <code>merge_into_integration</code>, <code>setup_integration_branch</code>, <code>run_lint</code>, <code>security_scan</code>.</p>
     <p><span class="mono">memory/activities.py</span> &mdash; <code>recall_snapshot</code>, <code>retain</code>.</p>
     <p><span class="mono">memoization/activities.py</span> &mdash; <code>cache_get</code>, <code>cache_put</code> (content-addressed; ADR-5).</p>
-    <p><span class="mono">handoff.py</span> &mdash; deterministic half of the handoff (FR-805): <code>cross_check_claims</code> (:26), <code>claim_survival_score</code> (:50). Pure functions, no LLM.</p>
+    <p><span class="mono">handoff.py</span> &mdash; deterministic half of the handoff (FR-805): <code>cross_check_claims</code> (:40), <code>claim_survival_score</code> (:79), <code>verified_integrity_flags</code> (:91). Pure functions, no LLM.</p>
   </div>
 
   <div class="layer">TESTS<br>tests/</div>

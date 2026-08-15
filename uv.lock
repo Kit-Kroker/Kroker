@@ -31,6 +31,9 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
 ]
+eval = [
+    { name = "promptfoo" },
+]
 logfire = [
     { name = "logfire" },
 ]
@@ -43,6 +46,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4" },
     { name = "logfire", extras = ["pydantic-ai"], marker = "extra == 'logfire'", specifier = ">=3" },
+    { name = "promptfoo", marker = "extra == 'eval'", specifier = ">=0.1.4" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-ai-harness", extras = ["codemode", "exa"], specifier = ">=0.7" },
     { name = "pydantic-ai-slim", extras = ["anthropic", "openai", "google", "temporal"], specifier = ">=0.4" },
@@ -54,7 +58,7 @@ requires-dist = [
     { name = "temporalio", specifier = ">=1.9" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]
-provides-extras = ["dev", "logfire"]
+provides-extras = ["dev", "logfire", "eval"]
 
 [[package]]
 name = "annotated-doc"
@@ -113,6 +117,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/9a/8e/82a0fe20a541c03148528be8cac2408564a6c9a0cc7e9171802bc1d26985/attrs-26.1.0.tar.gz", hash = "sha256:d03ceb89cb322a8fd706d4fb91940737b6642aa36998fe130a9bc96c985eff32", size = 952055, upload-time = "2026-03-19T14:22:25.026Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/64/b4/17d4b0b2a2dc85a6df63d1157e028ed19f90d4cd97c36717afef2bc2f395/attrs-26.1.0-py3-none-any.whl", hash = "sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309", size = 67548, upload-time = "2026-03-19T14:22:23.645Z" },
+]
+
+[[package]]
+name = "backoff"
+version = "2.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/d7/5bbeb12c44d7c4f2fb5b56abce497eb5ed9f34d85701de869acedd602619/backoff-2.2.1.tar.gz", hash = "sha256:03f829f5bb1923180821643f8753b0502c3b682293992485b0eef2807afa5cba", size = 17001, upload-time = "2022-10-05T19:19:32.061Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/df/73/b6e24bd22e6720ca8ee9a85a0c4a2971af8497d8f3193fa05390cbd46e09/backoff-2.2.1-py3-none-any.whl", hash = "sha256:63579f9a0628e06278f7e47b7d7d5b6ce20dc65c5e96a6f3ca99a6adca0396e8", size = 15148, upload-time = "2022-10-05T19:19:30.546Z" },
 ]
 
 [[package]]
@@ -993,6 +1006,34 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
+]
+
+[[package]]
+name = "posthog"
+version = "7.39.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "backoff" },
+    { name = "distro" },
+    { name = "requests" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4f/77/3737f60571995ba07677b058bb1523b7c26f28570806b8ffaf83a66df18c/posthog-7.39.1.tar.gz", hash = "sha256:0d184596e35057457fc1094883646fd23de2d6338db8b9c3ea770643fb55d8a2", size = 428586, upload-time = "2026-08-14T13:50:24.688Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/88/79/ee5c01937bfb0c80415929e25aa1e8296c48e26fc9a10fe1d9f665f0f478/posthog-7.39.1-py3-none-any.whl", hash = "sha256:e76e82fe571314a0a9bc11d039fd1a1a8d210cd0f737899d41b31f61b73bf08c", size = 504259, upload-time = "2026-08-14T13:50:22.896Z" },
+]
+
+[[package]]
+name = "promptfoo"
+version = "0.1.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "posthog" },
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d0/92/40b0b68d7576fccfd65a32f83001b6c8db672f1cc1938199f6c2e99d2eb4/promptfoo-0.1.4.tar.gz", hash = "sha256:c1a91c3fdc82a8c7ea9b7dd38b38c90dbc55ec501c1101158740db7101d618cc", size = 17385, upload-time = "2026-04-06T06:03:53.805Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/76/54/dd88dab13e85dd1e007d5d517c6bf6f8a1bbdb393a077c7268e51e0fb135/promptfoo-0.1.4-py3-none-any.whl", hash = "sha256:db4274c4bd5066dbaf252ea0903b80f8b8d53e04e7f68405b31a38a9f76ae965", size = 17647, upload-time = "2026-04-06T06:03:52.308Z" },
 ]
 
 [[package]]

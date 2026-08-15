@@ -353,7 +353,7 @@
   fan-out activities in <code>src/sdlc/research/stage.py</code> ·
   spec: <code>docs/superpowers/specs/2026-08-04-research-fan-out-design.md</code> ·
   contract source-of-truth: <code>src/sdlc/models.py</code> ·
-  verified 2026-08-12 against <code>src/sdlc/</code>, <code>agents/research/</code>, <code>benchmarks/</code>
+  verified 2026-08-14 against <code>src/sdlc/</code>, <code>agents/research/</code>, <code>benchmarks/</code>
 </p>
 <p class="lede">
   The research stage is an <strong>optional, human-gated, off-by-default</strong> pre-clarify
@@ -890,7 +890,7 @@
       <rect x="10" y="174" width="600" height="68" rx="6" fill="rgba(9,105,218,0.05)" stroke="#0969da" stroke-dasharray="4 3"/>
       <text x="22" y="192" font-size="11" fill="#0969da" font-weight="700">WORKFLOW (deterministic)  src/sdlc/workflows/feature.py</text>
       <rect x="22" y="202" width="570" height="32" rx="4" fill="#ffffff" stroke="#0969da"/>
-      <text x="32" y="222">wiring @ :1726  ·  _fan_out @ :883  ·  _gate @ :1079  ·  _retain @ :726  ·  _judge @ :678</text>
+      <text x="32" y="222">wiring @ :1726  ·  _fan_out @ :883  ·  _gate @ :1816  ·  _retain @ :726  ·  _judge @ :678</text>
 
       <rect x="630" y="174" width="290" height="68" rx="6" fill="rgba(207,34,46,0.05)" stroke="#cf222e" stroke-dasharray="4 3"/>
       <text x="642" y="192" font-size="11" fill="#cf222e" font-weight="700">I/O  runs/&lt;run_id&gt;/research/</text>
@@ -1051,7 +1051,7 @@ deep_search(ctx, question) -&gt; hits</pre>
 
 <span class="k">class</span> ResearchDeps(BaseModel):
     run_id: str
-    provider: <span class="s">"tavily"</span> | <span class="s">"fake"</span>
+    provider: <span class="s">"tavily"</span> | <span class="s">"exa"</span> | <span class="s">"fake"</span>
     max_searches: int            <span class="c"># PER sub-question</span>
     max_fetches:  int            <span class="c"># PER sub-question</span>
     max_cost_usd: float          <span class="c"># PER sub-question</span>
@@ -1145,7 +1145,9 @@ deep_search(ctx, question) -&gt; hits</pre>
     VERBATIM_BYTES = <span class="s">"verbatim_bytes"</span>   <span class="c"># committed code, stored transcripts</span></pre>
   <p style="margin:8px 0 0;font-size:12.5px;color:var(--muted)">
     One invariant, three byte-sources: pages fetched this run (research), stored harness transcripts
-    (handoff, deep_review), and committed code at <code>path@sha</code> (assessment, not yet wired).
+    (handoff, deep_review), and committed code at <code>path@sha</code> (first consumer: E-41's triage
+    secrets signal, which re-verifies every emitted evidence quote against the pinned commit; an
+    LLM-proposing assessment consumer is still owed &mdash; FR-914).
     <code>EXTRACTED_TEXT</code> carries the two loosenings a third-party extractor forces on us;
     <code>VERBATIM_BYTES</code> carries <strong>neither</strong>, because <code>**</code> is Python's
     kwargs/exponent operator and quote glyphs are meaningful inside string literals &mdash; applying
@@ -1711,7 +1713,7 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
     <p><span class="mono">feature.py:883</span> &mdash; <code>_fan_out_research</code> (plan &rarr; N sub-questions &rarr; gather); <code>:926</code> <code>_fold_research_usage</code>; <code>:357</code> <code>_refine_seed</code>.</p>
     <p><span class="mono">feature.py:152 / :160 / :173</span> &mdash; <code>RESEARCH_PLAN_ACT</code>, <code>RESEARCH_SQ_ACT</code>, <code>RESEARCH_SYNTH_ACT</code> policies.</p>
     <p><span class="mono">feature.py:121</span> &mdash; <code>VERIFY_ACT</code> policy (1 min, 1 attempt).</p>
-    <p><span class="mono">feature.py:678 / :726 / :1079</span> &mdash; <code>_judge</code>, <code>_retain</code>, <code>_gate</code> helpers reused by the stage (<code>_gate</code> inherited from <code>GateHost</code>).</p>
+    <p><span class="mono">feature.py:678 / :726 / :1816</span> &mdash; <code>_judge</code>, <code>_retain</code>, <code>_gate</code> helpers reused by the stage (<code>_gate</code> inherited from <code>GateHost</code>; the research gate call sits at <code>:1816</code>).</p>
   </div>
 
   <div class="layer">CONTRACT<br>src/sdlc/</div>

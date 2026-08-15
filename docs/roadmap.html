@@ -527,7 +527,7 @@
     <a href="../SDLC-spec-v2.md">SDLC-spec-v2.md</a> ·
     <a href="../BENCHMARK.md">BENCHMARK.md</a> (§9.8)
     <br>
-    Last verified: <strong>2026-08-12</strong> ·
+    Last verified: <strong>2026-08-14</strong> ·
     Verified against: <code>src/sdlc/</code>, <code>interfaces/</code>, <code>tests/</code>, <code>config/</code>, <code>agents/</code>, <code>benchmarks/</code> ·
     Method: every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code.
   </p>
@@ -579,13 +579,13 @@
 <main id="detail"></main>
 
 <footer>
-  Regenerated 2026-08-12 from <a href="../ROADMAP.md">ROADMAP.md</a> (last verified 2026-08-12; since the 2026-07-26 snapshot: gate notifications + durable timers (E-9, FR-303), real Hindsight integration verified against a live container (NFR-7), the measurement instrument completed — WasteBag/waste-matrix, sc-rollup, agreement-matrix, <code>sdlc benchmark score</code> and the experiment log (E-36) — research fan-out (2026-08-04), and the verified-handoff extractor + decorrelated adversary lens (2026-08-05) all landed; on 2026-08-06 the two §15 invariants landed — <code>Measurement</code> (E-40 / FR-915 contract half) and the shared grounding verifier with two normalization profiles (E-43 / FR-914), closing two live unverified-quote holes (handoff claims, deep-review integrity flags) and the malformed-SARIF-reads-as-clean absolute-floor hole; an Exa budget double-charge and the architect's shared budget scope were also fixed; <code>summary.json</code> is now persisted alongside events.jsonl/report.html; later on 2026-08-06 the deploy contract (E-67/E-68) landed on feat/deploy-contract — DAG stage 13 now runs a deterministic <code>DeploymentWorkflow</code> child (DeployPlan/DeployReport, apply→smoke→rollback, <code>deploy_failed</code> gate) behind <code>PipelineConfig.deploy</code> (off by default), so FR-1104, ADR-19's deployment half and stage 13 itself move to done/partial, and the quality_gate absolute floor gained <code>security_scan_collected</code> (FR-915); a new §14 (pipeline-as-data — graph interpreter + canvas, E-72…E-77 → FR-1200) was designed and recorded, all not-started; on 2026-08-07 the triage signal registry landed (E-41: RepoTriage/TriageFinding/Readiness contracts + build-probe, secret-scan and baseline-practice signals, registered on the worker — closing FR-915's triage half and FR-902 → partial), and the agent board landed on feat/agent-board (E-78 / FR-1300…FR-1303 / ADR-21): a durable SQLite projection of project artifacts + task state with a FastAPI query API and an authoritative-vs-observational status split that keeps replay the source of truth; OQ-11 (dashboard/board auth) is now live, not hypothetical).
+  Regenerated 2026-08-14 from <a href="../ROADMAP.md">ROADMAP.md</a> (last verified 2026-08-14; since the 2026-07-26 snapshot: gate notifications + durable timers (E-9, FR-303), real Hindsight integration verified against a live container (NFR-7), the measurement instrument completed — WasteBag/waste-matrix, sc-rollup, agreement-matrix, <code>sdlc benchmark score</code> and the experiment log (E-36) — research fan-out (2026-08-04), and the verified-handoff extractor + decorrelated adversary lens (2026-08-05) all landed; on 2026-08-06 the two §15 invariants landed — <code>Measurement</code> (E-40 / FR-915 contract half) and the shared grounding verifier with two normalization profiles (E-43 / FR-914), closing two live unverified-quote holes (handoff claims, deep-review integrity flags) and the malformed-SARIF-reads-as-clean absolute-floor hole; an Exa budget double-charge and the architect's shared budget scope were also fixed; <code>summary.json</code> is now persisted alongside events.jsonl/report.html; later on 2026-08-06 the deploy contract (E-67/E-68) landed on feat/deploy-contract — DAG stage 13 now runs a deterministic <code>DeploymentWorkflow</code> child (DeployPlan/DeployReport, apply→smoke→rollback, <code>deploy_failed</code> gate) behind <code>PipelineConfig.deploy</code> (off by default), so FR-1104, ADR-19's deployment half and stage 13 itself move to done/partial, and the quality_gate absolute floor gained <code>security_scan_collected</code> (FR-915); a new §14 (pipeline-as-data — graph interpreter + canvas, E-72…E-77 → FR-1200) was designed and recorded, all not-started; on 2026-08-07 the triage signal registry landed (E-41: RepoTriage/TriageFinding/Readiness contracts + build-probe, secret-scan and baseline-practice signals, registered on the worker — closing FR-915's triage half and FR-902 → partial), and the agent board landed on feat/agent-board (E-78 / FR-1300…FR-1303 / ADR-21): a durable SQLite projection of project artifacts + task state with a FastAPI query API and an authoritative-vs-observational status split that keeps replay the source of truth; OQ-11 (dashboard/board auth) is now live, not hypothetical); and since 2026-08-08: the triage stage + readiness gate and the four E-41a–d hygiene signals closed FR-901/FR-902/FR-903 (E-42, 2026-08-08), capability identity landed (E-47a: BC-NNN surrogate ids, weighted-Jaccard re-attachment — resolving OQ-6), the DevEval import grew the benchmark corpus 3 → 9 cases (E-79) and tidy-up fix runs + before/after delta landed (E-44, 2026-08-09), the <code>AssessmentWorkflow</code> EDCR shell opened P6 (E-45, 2026-08-10), the scan phase closed across three plans — all thirteen signals compute or inherit, <code>OWED_BY</code> empty, memo key <code>(tree_hash, signal_version, rules_sha)</code> — so FR-912 is done (E-46, 2026-08-12 → 2026-08-13), and the coverage floor + orphan classification (E-47b, 2026-08-13) and L2 operations + entity ownership (E-47c, 2026-08-14) landed pure and unwired in <code>src/sdlc/assessment/discover/</code> — the E-47 group is closed and FR-913 waits only on E-48's wiring; OQ-12 (S5 normalization is English-centric) recorded).
   To refresh, re-extract items per the rule documented inline in this file's <code>&lt;script&gt;</code> block.
 </footer>
 
 <script>
 /* =========================================================================
- * DATA — hand-extracted from ROADMAP.md (verified 2026-08-12).
+ * DATA — hand-extracted from ROADMAP.md (verified 2026-08-14).
  *
  * Extraction rules (mechanical):
  *   [x]            -> status: "done"
@@ -603,7 +603,7 @@
  * ========================================================================= */
 const ROADMAP = {
   meta: {
-    lastVerified: "2026-08-12",
+    lastVerified: "2026-08-14",
     sourceFile: "ROADMAP.md"
   },
 
@@ -628,10 +628,10 @@ const ROADMAP = {
       title: "Triage + tidy-up (Tier 0/1), operator-run, single tenant",
       exit:  "one unfamiliar repository triaged, a mechanical backlog fixed through governed runs, before/after delta recorded",
       note:  "E-40/E-41/E-42/E-43/E-44 all landed in code. [x] here means exit criterion demonstrated (see P1), and no TidyUpWorkflow has run end-to-end yet: the four-scenario temporal e2e the plan specifies is deferred — its multi-workflow fan-out (a TriageWorkflow child whose readiness gate must be serviced plus N FeatureWorkflow fix children) is heavier than this Windows host's temporal dev-server can run contended. Components are each green under their own pytest -m temporal e2e, the full unit suite is green, and .run() sequencing is unit-tested. Held at ⚠️ until the TidyUpWorkflow e2e runs. Operator-run only; does not depend on P7." },
-    { id: "P6", pct: 10, status: "partial",
+    { id: "P6", pct: 20, status: "partial",
       title: "Capability & risk audit (Tier 2) + evidence bundle",
       exit:  "one repository audited end-to-end with SC-7 held and a bundle handed over",
-      note:  "Opened 2026-08-10 with E-45's DAG shell; every phase body remains unbuilt (§11, E-46…E-56). Gated on P5's readiness verdict (FR-903), not merely sequenced after it — and the gate now requires a human approval to admit a tree that is not READY." },
+      note:  "Opened 2026-08-10 with E-45's DAG shell; its first phase body (scan) landed 2026-08-13 (E-46) — the five remaining bodies are owed by E-48…E-52 (§11). Gated on P5's readiness verdict (FR-903), not merely sequenced after it — and the gate now requires a human approval to admit a tree that is not READY." },
     { id: "P7", pct: 0, status: "notstarted",
       title: "Hosted multi-tenant service",
       exit:  "NFR-8 adversarial test green; FR-1002 container tier live; a tenant onboards unassisted",
@@ -645,7 +645,7 @@ const ROADMAP = {
   stages: [
     { n: 0,  name: "intake",        status: "notstarted", note: "routing greenfield/brownfield/repair. IdeaBrief.mode is a field only; no branch logic in feature.py." },
     { n: 1,  name: "constitution",  status: "notstarted", note: "no Constitution model, no stage." },
-    { n: 2,  name: "context",       status: "notstarted", note: "Cartographer. No CodebaseMap, no cartography.py, no brownfield delta." },
+    { n: 2,  name: "context",       status: "notstarted", note: "Cartographer. No CodebaseMap, no cartography.py, no brownfield delta. E-46 plan 3 (2026-08-13): S1–S5 is now the whole extraction half of CodebaseMap. E-47b (2026-08-13): attribution and orphan classification land. E-47c (2026-08-14): L2 operations and entity ownership land — the E-47 group is closed and FR-102's remainder is intake classify + delta." },
     { n: 3,  name: "requirements",  status: "notstarted", note: "Product. Conflated into clarify; no standalone Product proposer / Requirements artifact." },
     { n: 4,  name: "research",      status: "partial",    note: "FR-107 grounded brief before clarify. Off by default (research_enabled). Now fans out: plan_research decomposes into ≤N sub-questions, research_subquestion runs each in-process (per-scope budget, degrades on exhaustion), synthesize_brief merges via merge_briefs then one closed-output model call (cannot author a grounded finding). Grounding failure is fail-and-continue (E-29): the stage records FAIL and the run proceeds on the idea alone; verifier unchanged. 2026-08-04 fan-out." },
     { n: 5,  name: "clarify",       status: "done",       note: "Clarifier + gate; open-question wait on answer_question; recall/retain/memoization wired." },
@@ -665,9 +665,9 @@ const ROADMAP = {
     { id: "FR-101", section: "FR", status: "partial",    title: "15-stage durable DAG",
       note: "9/15 stages live (see §1) — stage 13 deploy now runs a DeploymentWorkflow child (E-67); stage 14 retro live (E-32).", recent: true },
     { id: "FR-102", section: "FR", status: "notstarted", title: "greenfield/brownfield classify + CodebaseMap + delta",
-      note: "No classifier, no CodebaseMap, no brownfield delta.", recent: false },
+      note: "E-47a/b/c are all complete (2026-08-08 → 2026-08-14), so the CapabilityMap inputs exist; the remaining half is intake classification + brownfield delta, no longer E-47.", recent: true },
     { id: "FR-103", section: "FR", status: "done",       title: "memoization, per-run watermark, audit-record-always-kept",
-      note: "memoization/cache.py, content_key, _cached_stage — each stage's memo key now carries its own role's model (STAGE_MODELS). brief_digest keeps memoization alive once a non-memoized stage (research) feeds memoized ones.", recent: true },
+      note: "memoization/cache.py, content_key, _cached_stage — each stage's memo key now carries its own role's model (STAGE_MODELS). brief_digest keeps memoization alive once a non-memoized stage (research) feeds memoized ones. Amendment pending (E-47a): E-46's key gains a third term, identity_registry_version, for the CapabilityMap — the map is a function of the tree AND the identity registry. Clarified (E-46 D10): that term applies to the CapabilityMap, not to E-46's signal keys — E-46 is a pure function of the tree, keyed on (tree_hash, signal_version, rules_sha).", recent: true },
     { id: "FR-104", section: "FR", status: "done",       title: "integration branch, per-task worktree, own-branch-point diff",
       note: "ADR-14 fully wired.", recent: false },
     { id: "FR-105", section: "FR", status: "partial",    title: "fix loops",
@@ -759,7 +759,7 @@ const ROADMAP = {
     { id: "FR-901", section: "FR", status: "done", title: "triage stage → RepoTriage + readiness verdict (E-42)",
       note: "RepoTriage landed with E-41; the stage and readiness gate landed with E-42 (2026-08-08) — TriageWorkflow pins a commit, fans out the seven deterministic signals, and compute_readiness produces the verdict. Completes on repositories that do not build: the build probe reports not_ready dimensions, not an error.", recent: true },
     { id: "FR-902", section: "FR", status: "done", title: "hygiene signal set via FR-108 adapters, one implementation per signal (E-41)",
-      note: "Seven of seven landed: build probe, secrets (incl. client-bundle reachability), baseline practice (E-41), plus dependency health, generator-scaffold/dead code, framework-default misconfig, and size/duplication outliers (E-41a–d, 2026-08-08).", recent: true },
+      note: "Seven of seven landed: build probe, secrets (incl. client-bundle reachability), baseline practice (E-41), plus dependency health, generator-scaffold/dead code, framework-default misconfig, and size/duplication outliers (E-41a–d, 2026-08-08). Extended cross-tier by E-46 D2 (2026-08-12): an assessment signal that duplicates a triage signal cites it by finding_identity and copies nothing.", recent: true },
     { id: "FR-903", section: "FR", status: "done", title: "readiness gate blocking Tier 2, overridable by audited decision (E-42)",
       note: "Gate resolves through the FR-301/302 machinery (GateHost); a verdict not READY opens a readiness gate, APPROVE records a ReadinessOverride. E-45 tightened the rule (triage/admission.py): Tier 2 requires approved_by == \"human\", so a policy/timeout approval no longer admits an audit; Tier 0 keeps the broader rule.", recent: true },
     { id: "FR-904", section: "FR", status: "done", title: "mechanically_fixable → brownfield child runs + before/after re-triage (E-44)",
@@ -767,15 +767,15 @@ const ROADMAP = {
 
     /* FR-910 — Tier 2 capability & risk audit (new scope; PRD v1.1) */
     { id: "FR-911", section: "FR", status: "partial", title: "AssessmentWorkflow EDCR DAG, report-after-assess, no phase-status file (E-45)",
-      note: "The DAG and both deviations landed 2026-08-10 (E-45); six of seven phase bodies are stubs reporting not_collected naming the E-item that owes them, so an assessment that assessed nothing says so (FR-915). /enrich as a declared stage input remains E-56.", recent: true },
-    { id: "FR-912", section: "FR", status: "notstarted", title: "deterministic scan memoized on (tree hash, signal version); cross-source confidence (E-46)",
-      note: "", recent: false },
+      note: "The DAG and both deviations landed 2026-08-10 (E-45). 2026-08-12 (E-46 plan 1): the stub count dropped from six to five and PHASE_OWNER lost its SCAN entry — scan is built, so the scan phase row is measured and terminal_status derives assessed:partial on an admitted run. 2026-08-13 (E-46 plan 3): the scan phase's own thirteen signals all report. Five phase bodies remain stubs reporting not_collected naming the E-item that owes them (discover E-48, assess E-49, finish E-51, report/generate E-52), so an assessment that assessed nothing says so (FR-915). /enrich as a declared stage input remains E-56.", recent: true },
+    { id: "FR-912", section: "FR", status: "done", title: "deterministic scan memoized on (tree hash, signal version); cross-source confidence (E-46)",
+      note: "All three plans landed (2026-08-12, 2026-08-13). The memo key is (tree_hash, signal_version, rules_sha) — rules_sha beyond the specified two terms, hashed transitively over shared rule modules and consumed signals, because a hand-maintained version int misses a real input (spec D10). All thirteen signal rows report and every body computes or inherits; OWED_BY is empty. Cross-source confidence is live and derived (D8), and now reaches HIGH: S2 and S4 produce, so S5 can merge three or more distinct sources.", recent: true },
     { id: "FR-913", section: "FR", status: "partial", title: "CapabilityMap with stable ids + coverage floor + orphan classification (E-47a/E-47b/E-47c/E-48)",
-      note: "Also satisfies FR-102. Identity half landed 2026-08-08 (E-47a): surrogate BC-NNN ids, weighted-Jaccard re-attachment, audited IdentityCorrection (src/sdlc/capability/). Resolves OQ-6. Coverage floor + orphans (E-47b) and L2/entity-ownership (E-47c) still open.", recent: true },
+      note: "Also satisfies FR-102. All four clauses' mechanisms have landed, pure and unwired; [x] waits on E-48 wiring them into discover (workflows/assessment.py still returns unbuilt(PhaseId.DISCOVER)). Identity half landed 2026-08-08 (E-47a): surrogate BC-NNN ids, weighted-Jaccard re-attachment, audited IdentityCorrection (src/sdlc/capability/). Resolves OQ-6. Coverage floor + orphans landed 2026-08-13 (E-47b): attribution and orphan classification in src/sdlc/assessment/discover/ (E-48 calls attribute() when it lands). L2 + entity ownership landed 2026-08-14 (E-47c): decompose() and assign() in src/sdlc/assessment/discover/ (E-48 calls them when it lands).", recent: true },
     { id: "FR-914", section: "FR", status: "notstarted", title: "byte-exact quote verification, fail-closed — shares FR-107's verifier (E-43)",
-      note: "Partially landed 2026-08-06 (grounding.py: one substring invariant, two normalization profiles, verdict-only). Verifier + research/handoff/deep-review consumers landed; stays open until an assessment stage consumes the read_committed_bytes commit source.", recent: true },
+      note: "Partially landed 2026-08-06 (grounding.py: one substring invariant, two normalization profiles, verdict-only). Verifier + research/handoff/deep-review consumers landed; the commit source gained its first consumer with E-41's secrets signal (2026-08-06), which re-verifies every emitted evidence quote against the pinned commit; stays open until an LLM-proposing assessment stage cites the same way, which is where the check stops being a drift guard.", recent: true },
     { id: "FR-915", section: "FR", status: "partial", title: "not_collected / unknown vs measured value (E-40)",
-      note: "Both halves landed. Contract half 2026-08-06 (measurement.py retrofitted onto CoverageReport/SecurityReport/claim_survival_score; QAReport.coverage_pct deleted). RepoTriage/triage half landed 2026-08-07 with E-41 (RepoTriage/TriageFinding carry Measurement). The load-bearing case was the malformed-SARIF-reads-as-clean hole on the absolute floor (now not_collected).", recent: true },
+      note: "Both halves landed. Contract half 2026-08-06 (measurement.py retrofitted onto CoverageReport/SecurityReport/claim_survival_score; QAReport.coverage_pct deleted). RepoTriage/triage half landed 2026-08-06 with E-41 (RepoTriage/TriageFinding carry Measurement). The load-bearing case was the malformed-SARIF-reads-as-clean hole on the absolute floor (now not_collected). E-44 adds a second consumer: compute_delta reads SignalResult.collected.state and emits UNVERIFIABLE whenever a side did not collect, so a triage that timed out on the after side cannot read as \"all findings fixed\".", recent: true },
     { id: "FR-916", section: "FR", status: "notstarted", title: "STRIDE + vuln classification + control coverage + composites with 1–3 drivers (E-49)",
       note: "", recent: false },
     { id: "FR-917", section: "FR", status: "notstarted", title: "risk thresholds as deterministic gate checks; FP dispositions as audited overrides (E-50)",
@@ -853,9 +853,9 @@ const ROADMAP = {
     { id: "NFR-8", section: "NFR", status: "notstarted", title: "Tenant isolation proven by adversarial cross-tenant read/recall test",
       note: "no tenant concept exists yet (E-58).", recent: false },
     { id: "NFR-9", section: "NFR", status: "notstarted", title: "Hostile input — repos attacker-controlled",
-      note: "build scripts, test code, manifests executed today (E-57).", recent: false },
+      note: "E-41's build probe is the first stage that knowingly executes a foreign repository's code (bounded, throwaway clone, as the worker user with network access). E-44 widens the exposure: tidy-up fix runs execute the triaged repo's own build and test commands as governed FeatureWorkflow children. Still operator-run only until E-57/E-21. E-46 (2026-08-12 and plan 3) adds no new execution: every scan signal is a blob read at the pinned commit; QS2 parses a committed Cobertura report, QS4 parses pipeline files rather than running them. E-47b (2026-08-13) and E-47c (2026-08-14) add none either: every input is a parameter and the graph is built from blobs already read.", recent: true },
     { id: "NFR-10", section: "NFR", status: "notmeasurable", title: "Assessment reproducibility",
-      note: "not falsifiable until the assessment exists; deterministic half is E-41/E-46, fused-layer variance needs runs.", recent: false },
+      note: "not falsifiable until the assessment exists; deterministic half is E-41/E-46, fused-layer variance needs runs. E-46 plan 3 (2026-08-13): the deterministic half is now asserted for every pure signal module (test_every_pure_signal_module_is_order_independent). E-47b (2026-08-13): discover/refgraph.py and discover/attribution.py carry their own byte-identical-across-input-order assertions. E-47c (2026-08-14): discover/operations.py and discover/ownership.py do too.", recent: true },
 
     /* SC */
     { id: "SC-1", section: "SC", status: "notmeasurable", title: "≥80% runs reach merge gate unattended",
@@ -873,7 +873,7 @@ const ROADMAP = {
     { id: "SC-7", section: "SC", status: "notmeasurable", title: "grounding integrity: 100% of grounded findings re-verify byte-exact",
       note: "the assessment product's SC-5: one violation is a defect. Mechanism is E-43; sampled audit needs real assessments.", recent: false },
     { id: "SC-8", section: "SC", status: "notmeasurable", title: "capability coverage ≥90% with classified orphans on ≥80% of readiness-passing repos",
-      note: "needs E-47 + a corpus.", recent: false },
+      note: "E-47a/b/c are all done (2026-08-14); the blocker narrows to a corpus of readiness-passing repos.", recent: true },
     { id: "SC-9", section: "SC", status: "notmeasurable", title: "remediation efficacy: reduced composite for the targeted capability in ≥80% of accepted items",
       note: "needs E-54's delta.", recent: false },
     { id: "SC-10", section: "SC", status: "notmeasurable", title: "assessment economics per repo-size band",
@@ -929,7 +929,7 @@ const ROADMAP = {
     { id: "ADR-10", section: "ADR", status: "partial",    title: "Claim-check for large payloads",
       note: "ArtifactRef now load-bearing for harness sessions (ArtifactStore / harness_session, E-38); diffs still travel inline so still partial.", recent: true },
     { id: "ADR-11", section: "ADR", status: "partial",    title: "Deterministic DAG",
-      note: "holds for the 8 live stages (retro joined, E-32); 6 stages still absent.", recent: true },
+      note: "holds for the 9 live stages (deploy and retro joined — E-67/E-32); 6 stages still absent.", recent: true },
     { id: "ADR-12", section: "ADR", status: "done",       title: "Contract-first, clean-context validators",
       note: "QA ✅ and review ✅ both clean-context. (now complete)", recent: true },
     { id: "ADR-13", section: "ADR", status: "done",       title: "Serial-by-default; resume-bounded; context by reference",
@@ -1063,7 +1063,7 @@ const ROADMAP = {
 
     /* §10 — Tier 0 triage & tidy-up (FR-900) */
     { id: "E-40", section: "E", status: "partial", title: "Measurement type + RepoTriage contracts (FR-915, FR-901)",
-      note: "Measurement landed 2026-08-06 (src/sdlc/measurement.py retrofitted onto CoverageReport, SecurityReport and claim_survival_score; QAReport.coverage_pct deleted). The live conflation worth fixing was on the ABSOLUTE floor (report_from_sarif returned critical=0 for a malformed document) — now not_collected, and security_no_critical split into security_scan_collected + security_no_critical. RepoTriage/TriageFinding/Readiness landed with E-41 (2026-08-07), closing the triage half of FR-915.", recent: true },
+      note: "Measurement landed 2026-08-06 (src/sdlc/measurement.py retrofitted onto CoverageReport, SecurityReport and claim_survival_score; QAReport.coverage_pct deleted). The live conflation worth fixing was on the ABSOLUTE floor (report_from_sarif returned critical=0 for a malformed document) — now not_collected, and security_no_critical split into security_scan_collected + security_no_critical. RepoTriage/TriageFinding/Readiness landed with E-41 (2026-08-06), closing the triage half of FR-915.", recent: true },
     { id: "E-41", section: "E", status: "done", title: "deterministic hygiene signals (FR-902, FR-108)",
       note: "Contracts + seam + three signals landed 2026-08-06: RepoTriage/TriageFinding/Readiness (closing E-40's deferred half), a one-activity-per-signal seam, and build probe, secret scan (incl. client-bundle-reachable credentials) and baseline practice. Readiness is three-valued — any unmeasured dimension forces INDETERMINATE, so an unmeasured repo never reads as ready for the FR-903 gate. The build probe executes the triaged repo's own code in a throwaway clone at the pinned commit (operator-authorization boundary, not solved — NFR-9; E-57/E-21). The remaining four families are E-41a–d.", recent: true },
     { id: "E-41a", section: "E", status: "done", title: "dependency health signal (FR-902)",
@@ -1084,16 +1084,16 @@ const ROADMAP = {
     /* §11 — Tier 2 EDCR port (FR-910) */
     { id: "E-45", section: "E", status: "done", title: "AssessmentWorkflow EDCR DAG shell (FR-911)",
       note: "Landed 2026-08-10. init → scan → discover → assess → report → generate → finish, with six phase bodies deliberately unbuilt (each reports not_collected naming the item that owes it). Two deviations: report runs after assess; workflow.json is not ported (Temporal history already is that state machine). Admission rule is one function at two strictnesses (triage/admission.py: require_human=True for Tier 2); init runs a TriageWorkflow child and never accepts a caller-supplied RepoTriage; terminal_status is derived. /enrich, /gate, /validate are not stages (→ E-56, E-50, E-53).", recent: true },
-    { id: "E-46", section: "E", status: "notstarted", title: "scan phase (FR-912)",
-      note: "S1–S5 capability signals, SS1–SS4 security, QS1–QS4 QA. Cross-source confidence: three+ sources = high, two = medium, one = low. Memo key (repository tree hash, signal version) per FR-103, so re-assessing an unchanged repo is a cache hit and editing one signal's logic invalidates exactly that signal.", recent: false },
-    { id: "E-47", section: "E", status: "notstarted", title: "CapabilityMap (FR-913, FR-102) — split three ways 2026-08-08",
-      note: "Split into E-47a/b/c because the single item carried four independent clauses. Where the assessment product and the core pipeline converge: together they satisfy FR-102's CodebaseMap, so building them for the audit also unblocks P2 brownfield. FR-102 needs all three, not E-47a alone.", recent: true },
+    { id: "E-46", section: "E", status: "done", title: "scan phase (FR-912)",
+      note: "All three plans landed (plan 1: contracts, SCAN_SIGNALS, memoized activity seam + five inherited halves, 2026-08-12; plan 2: S1/S3/S5 + shared naming.py rules — the capability core, the memo's first production caller, 2026-08-13; plan 3: all thirteen signals compute or inherit, OWED_BY empty, 2026-08-13). Cross-source confidence: three+ independent sources = high, two = medium, one = low. Memo key (tree_hash, signal_version, rules_sha) — rules_sha hashed transitively over shared rule modules and consumed signals, so editing a rule moves the keys of every signal that reads it (test_scan_rules_sha). Review pass 2026-08-13: a gap may never pass as a zero — skipped/unread blobs and unparseable CI files report not_collected, and SS1/SS3 skip test paths. E-47c (2026-08-14, D10): route_object + PATH_PREFIXES moved into naming.py for its second consumer, moving all six _NAMING signal keys once by the edit.", recent: true },
+    { id: "E-47", section: "E", status: "done", title: "CapabilityMap (FR-913, FR-102) — split three ways 2026-08-08",
+      note: "Split into E-47a/b/c because the single item carried four independent clauses. Where the assessment product and the core pipeline converge: together they satisfy FR-102's CodebaseMap, so building them for the audit also unblocks P2 brownfield. All three landed (2026-08-08 → 2026-08-14); the group is closed — FR-102's remainder is intake classification + delta, no longer E-47.", recent: true },
     { id: "E-47a", section: "E", status: "done", title: "capability identity (FR-913)",
       note: "Landed 2026-08-08 (src/sdlc/capability/). Stable BC-NNN as a surrogate key: allocated once, persisted with its fingerprint, re-attached on later scans by weighted-Jaccard similarity over signal tiers ordered by cost-to-change (contract > behavioral > structural > locational). Greedy one-to-one assignment. Board authoritative; .sdlc/capabilities.json is a hash-only export. Ambiguity decided deterministically and reversed by an audited IdentityCorrection. Resolves OQ-6. Amends FR-103. Does not block on E-48.", recent: true },
-    { id: "E-47b", section: "E", status: "notstarted", title: "coverage floor + orphans (FR-913)",
-      note: "file→capability coverage floor (default 0.90), orphans classified attached | infrastructure | dead. Needs E-47a — an orphan is defined against an identified capability set.", recent: false },
-    { id: "E-47c", section: "E", status: "notstarted", title: "L2 operations + entity ownership (FR-913)",
-      note: "L2 decomposition, entity ownership (exactly one owner or a surfaced conflict). Needs E-47a.", recent: false },
+    { id: "E-47b", section: "E", status: "done", title: "coverage floor + orphans (FR-913)",
+      note: "Landed 2026-08-13, pure and unwired by design (D1): _discover still reports not_collected naming E-48, which calls attribute() when it lands. The denominator is strict (every SOURCE_EXTENSIONS blob, tests and build tooling included) while the numerator is accounted-for (members + infrastructure + attached), so the floor means the tree is explained, not that it is capability-owned; dead requires four clauses (parsed language, zero inbound edges, not framework-discovered, tree-wide resolution healthy) — it is the one orphan verdict a customer acts on by deleting code. test_known_false_positive_a_dynamic_reference_reads_as_dead pins the dynamic-reference cost as a test.", recent: true },
+    { id: "E-47c", section: "E", status: "done", title: "L2 operations + entity ownership (FR-913)",
+      note: "Landed 2026-08-14, pure and unwired (D1): E-48 calls decompose() and assign(). Operations are one-per-contract-member so each resolves to a byte range; OperationVerb and OwnershipVerb stay separate and TRACKS is not emitted (no deterministic trigger); ownership is declaration → writes → reads with ties surfaced; CONFLICT/UNDIRECTED/UNCLAIMED are three outcomes so a CLI-written table never reads as untouched. Review pass (2026-08-14, before merge): eight findings fixed, the worst a fabricated non-route object — L2Operation.entity_keys now matches route kinds strict, undirected kinds on reduced binding tokens; S3 reads Flask's methods= kwarg (v2) so a POST route is a write; the decompose→assign seam is tested (tests/test_discover_seam.py).", recent: true },
     { id: "E-48", section: "E", status: "notstarted", title: "discover proposers (FR-913)",
       note: "D1 cohesion/coupling/boundary clarity; D2 action per candidate (CONFIRM | SPLIT | MERGE | DE-SCOPE | FLAG); D3 coverage verification with orphan disposition; D4 lock; D5 L2 decomposition with entity ownership; D6 security context; D6a QA context using E-40's not_collected; D7 consolidated domain model; D8 industry-blueprint comparison. Guardrail: delivery channels and deployment boundaries are not capabilities.", recent: false },
     { id: "E-49", section: "E", status: "notstarted", title: "UnifiedRiskMap + risk proposers (FR-916)",
@@ -1155,7 +1155,7 @@ const ROADMAP = {
     { id: "E-74", section: "E", status: "notstarted", title: "GraphWorkflow replaces _pipeline (FR-1203)",
       note: "Thin Temporal layer over E-73: dispatch from node.type to the existing handlers (_run_clarify, _run_architect, _dev_task, _gate…), converging on (Activation, PipelineConfig)→Emission; exceptions become fail emissions so error routing is topology. default.graph.yaml expresses today's pipeline and is asserted to reproduce its stage sequence. Big-bang rewrite of feature.py::_pipeline, not strangler-with-parity. Blocked by OQ-10 (in-flight runs at cutover). Designed 2026-08-06.", recent: true },
     { id: "E-75", section: "E", status: "notstarted", title: "dashboard backend (FR-1204; closes P2 dashboard-backend half)",
-      note: "No backend today: api/http.ts:4 rejects every call, dashboard runs on api/mock. Live run state needs no DB — two new queries on GraphWorkflow (graph_state(), graph()) beside the existing status/pending_decisions/run_summary; only storage is content-addressed graphs/<sha>.yaml; gates/answers are existing signals. The project's first network surface — OQ-11: localhost-bind + no auth near-term, E-60 (FR-1004) is where it stops being acceptable. Designed 2026-08-06.", recent: true },
+      note: "No backend today: api/http.ts:4 rejects every call, dashboard runs on api/mock. Live run state needs no DB — two new queries on GraphWorkflow (graph_state(), graph()) beside the existing status/pending_decisions/run_summary; only storage is content-addressed graphs/<sha>.yaml; gates/answers are existing signals. Not the project's first network surface — superseded 2026-08-07: E-78's board API got there first, so OQ-11's auth question is already live and no longer gated on E-75 (localhost-bind + no auth near-term; E-60 (FR-1004) is where it stops being acceptable). Designed 2026-08-06.", recent: true },
     { id: "E-76", section: "E", status: "notstarted", title: "canvas (FR-1205)",
       note: "@vue-flow/core + dagre auto-layout on the existing Vue 3 + Pinia + Vite stack. One renderer, two modes: runState ⇒ status rings/cost/durations/traversal counters on loop edges/live gate approve-reject; editable ⇒ palette + inspector. Editing a running graph disabled by design. Run.stageIdx (linear) becomes currentNodes:string[]; StageDots.vue maps active nodes through canonical_stage back onto the fixed 15-stage strip. Designed 2026-08-06.", recent: true },
     { id: "E-77", section: "E", status: "notstarted", title: "graph store + custom-graph benchmark mapping (FR-1206)",
@@ -1185,7 +1185,7 @@ const ROADMAP = {
    *   notstarted -> open / unresolved
    *
    * `series` groups the id families used in ROADMAP.md:
-   *   ""  numeric (OQ-4, OQ-6, OQ-7, OQ-9, OQ-10, OQ-11)
+    *   ""  numeric (OQ-4, OQ-6, OQ-7, OQ-9, OQ-10, OQ-11, OQ-12)
    *   "B" benchmark/eval (OQ-B1..B8, tracked in BENCHMARK.md §7)
    *   "E" eval tooling  (OQ-E2, the regression-gate half of E-4)
    *   "P" prompt-gate   (OQ-P5..P8, the E-83 judge-sensitivity work)
@@ -1199,10 +1199,10 @@ const ROADMAP = {
       note: "Cross-run learning is the factory's differentiator and, without a tenant boundary, its first data-breach path — client A's gotchas recalled into client B's run. Resolved by E-58 / FR-1001 (not started)." },
     { id: "OQ-6",  series: "",  status: "done", title: "Capability identity surrogate key",
       related: "E-47a", recent: true,
-      note: "Settled 2026-08-08 — E-47a landed: stable BC-NNN surrogate ids, weighted-Jaccard re-attachment, audited IdentityCorrection. The blocker is cleared; E-47b/E-47c remain but do not re-open this question." },
+      note: "Settled 2026-08-08 — E-47a landed: stable BC-NNN surrogate ids, weighted-Jaccard re-attachment, audited IdentityCorrection. The blocker is cleared; E-47b (2026-08-13) and E-47c (2026-08-14) have since landed — the E-47 group is closed — and neither re-opened this question." },
     { id: "OQ-7",  series: "",  status: "notstarted", title: "Grounding verifier scope (read_committed_bytes consumer)",
       related: "E-43", recent: false,
-      note: "Untouched. The verifier landed (E-43, grounding.py: one substring invariant, two normalization profiles) and closed two live holes (HandoffClaim.evidence, IntegrityFlag.evidence); FR-914 stays open until an assessment stage consumes the read_committed_bytes commit source." },
+      note: "Untouched. The verifier landed (E-43, grounding.py: one substring invariant, two normalization profiles) and closed two live holes (HandoffClaim.evidence, IntegrityFlag.evidence); the commit source gained its first consumer with E-41's triage secrets signal (2026-08-06), but FR-914 stays open until an LLM-proposing assessment stage cites the same way." },
     { id: "OQ-9",  series: "",  status: "notstarted", title: "Analytics-source grounding for the keep/kill verdict",
       related: "E-69", recent: false,
       note: "The factory would read a metric from a customer-controlled source to decide keep/kill, which is FR-914's grounding problem inside a system we do not control. Currently has no good answer; blocks the FR-1106 observation verdict." },
@@ -1212,6 +1212,9 @@ const ROADMAP = {
     { id: "OQ-11", series: "",  status: "partial", title: "Dashboard / board auth (now live, not hypothetical)",
       related: "E-60", recent: true,
       note: "⚠️ Now live (2026-08-07): E-78's board API serves unauthenticated and its two agent write routes trust a self-asserted X-Actor header, so the audit log's \"who moved what\" is spoofable. Localhost-bind is the current containment. E-60 (FR-1004) is where it stops being acceptable." },
+    { id: "OQ-12", series: "",  status: "notstarted", title: "S5 normalization is English-centric",
+      related: "E-46", recent: true,
+      note: "Layer-suffix stripping and singularization assume English identifiers, so a non-English codebase degrades to LOW-confidence single-source candidates. Recorded rather than solved: calibrating it needs the corpus SC-8 also needs." },
 
     /* B-series — benchmark & evaluation (BENCHMARK.md §7) */
     { id: "OQ-B1", series: "B", status: "partial", title: "Minimum trustworthy corpus size",
@@ -1511,19 +1514,20 @@ function renderDetail() {
   `;
   host.appendChild(benchOrder);
 
-  /* §14 — Suggested ordering across §§10–13 (triage / audit / service / outcome) */
+  /* §15 — Suggested ordering across §§10–14 (triage / audit / service / outcome / pipeline-as-data) */
   const crossOrder = document.createElement("section");
   crossOrder.id = "cross-ordering";
   crossOrder.innerHTML = `
-    <h2>Suggested ordering — assessment, service &amp; outcome <span style="font-weight:400;color:var(--muted);font-size:13px">— §14</span></h2>
+    <h2>Suggested ordering — assessment, service &amp; outcome <span style="font-weight:400;color:var(--muted);font-size:13px">— §15</span></h2>
     <p style="color:var(--muted);font-size:13px;margin-top:0;">Ranked by what each item unblocks and by which invariants get harder to install later. §10 ships before §11 even though §11 is the more impressive product: triage tells you whether the audit is worth running, its findings are mechanically fixable, and it is the only tier that works on the repositories most likely to arrive first.</p>
     <ol class="next-list">
       <li><strong>E-40 + E-43</strong> — the two invariants. Both small, both land in existing code paths, both improve the current pipeline on their own. Installing “no unverified claim may be labelled grounded” before any finding-producing stage exists is far cheaper than retrofitting it across four of them.</li>
       <li class="done"><strong>E-41 → E-42 → E-44</strong> — triage and tidy-up. <strong>Landed.</strong> The chain is closed: E-44's TidyUpWorkflow proves the whole assess → fix → prove claim end to end, almost entirely deterministic, needing neither tenancy nor containment (operator-run). Verification debt: the TidyUpWorkflow temporal e2e is deferred (see P5's note).</li>
-      <li><strong>E-47a → E-47b/E-47c (with E-46)</strong> — CapabilityMap. Unblocks P2 brownfield whether or not the audit ships; highest-leverage item in §11. <strong>OQ-6 settled 2026-08-08</strong> — E-47a landed (identity); E-47b/E-47c remain. FR-102 still needs all three.</li>
+      <li class="done"><strong>E-47a → E-47b/E-47c (with E-46)</strong> — CapabilityMap. Unblocks P2 brownfield whether or not the audit ships; highest-leverage item in §11. <strong>All landed</strong> — E-46 closed 2026-08-13, E-47a 2026-08-08, E-47b 2026-08-13, E-47c 2026-08-14 (group closed). FR-102's remainder is intake classification + delta.</li>
       <li><strong>E-67</strong> — DeployPlan/DeployReport. Closes stage 13 for ordinary feature runs; the outcome loop needs it, but so does P1's own deploy stage.</li>
       <li><strong>E-57 + E-58</strong> — the moment an external, self-serve tenant is on the table these stop being optional. Not required for operator-run delivery.</li>
       <li>Then audit depth (<strong>E-48 → E-49 → E-50 → E-51 → E-52 → E-53 → E-54 → E-55 → E-56</strong>), service (<strong>E-59…E-63</strong>), and the outcome loop (<strong>E-64 → E-65 → E-66 → E-68/E-69 → E-70 → E-71</strong>).</li>
+      <li><strong>§14 (E-72…E-77) is deliberately unsequenced.</strong> It is the only tier that rewrites a core code path rather than extending one, and it competes with nothing above it for invariants — the factory ships fine without it. Two things argue for pulling it earlier anyway: <strong>E-75 closes P2's outstanding dashboard-backend half</strong> regardless of whether the interpreter lands, and the longer _pipeline accretes stages the more imperative wiring the big-bang rewrite has to absorb. If §14 is wanted at all, <strong>E-72 → E-73 before §1 grows</strong> is the cheap moment; E-75 can be lifted out and shipped on its own.</li>
     </ol>
   `;
   host.appendChild(crossOrder);

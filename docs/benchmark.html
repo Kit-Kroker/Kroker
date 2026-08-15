@@ -415,7 +415,7 @@
     <a href="../PRD.md">PRD.md</a>
     <br>
     Status: <strong>Design doc — reconciled into ROADMAP.md §9.8 (E-30…E-39 landed; E-83 sharpened the judge; measurement instrument largely built)</strong> ·
-    Verified <strong>2026-08-12</strong> ·
+    Verified <strong>2026-08-14</strong> ·
     Companion to <code>ROADMAP.md</code>, <code>SDLC-spec-v2.md</code>, <code>ARCHITECTURE.md</code>, <code>PRD.md</code>.
   </p>
 
@@ -545,7 +545,7 @@
     <tr>
       <td class="name">Benchmark harness</td>
       <td><span class="pill done">done</span></td>
-      <td><code>benchmarks/workflow.py</code> (<strong>E-27</strong>) — runs golden cases through the real <code>FeatureWorkflow</code>, judges per-stage artifacts against rubrics via the cross-family <code>judge_artifact</code>. Two cases today, both sized for a single short factory run.</td>
+      <td><code>benchmarks/workflow.py</code> (<strong>E-27</strong>) — runs golden cases through the real <code>FeatureWorkflow</code>, judges per-stage artifacts against rubrics via the cross-family <code>judge_artifact</code>. Nine cases today — three hand-authored greenfield specs sized for a single short factory run, plus six DevEval imports (<strong>E-79</strong>, 2026-08-09).</td>
       <td class="note">Decomposition now exercised — cat-café carries a held-out oracle (E-34).</td>
     </tr>
     <tr>
@@ -719,7 +719,7 @@
       <td class="name">Case</td>
       <td>Greenfield feature specs of graded complexity</td>
       <td><code>benchmarks/cases/</code></td>
-      <td class="note">Decomposition case landed — cat-café carries a held-out oracle (E-34); see <a href="#sec5">§5</a>.</td>
+      <td class="note">Decomposition case landed — cat-café carries a held-out oracle (E-34); six DevEval repos imported as contract-frozen cases (E-79); see <a href="#sec5">§5</a>.</td>
     </tr>
   </tbody>
 </table>
@@ -895,6 +895,12 @@
       Use them to tell “my change regressed <em>my</em> cases” from “my change regressed <em>everything</em>”.
       These grade purely on <a href="#sec2">Tier A</a>.
     </p>
+    <p>
+      <strong>Landed (E-79, 2026-08-09):</strong> six of ten DevEval Python repositories committed as cases
+      (<code>sdlc benchmark import-deveval</code> — PR → description with the reference architecture inlined
+      as a frozen contract, suites → <code>oracle/</code>). Egress-needing cases are quarantined by
+      <code>CaseSpec.network_required</code> until E-21.
+    </p>
   </div>
 
   <div class="card tinted">
@@ -906,7 +912,8 @@
     </p>
     <p>
       The retro stage (<a href="#sec6">§6 priority 2</a>) now runs (E-32), but the loop-B intake still needs an
-      <code>org_bank</code> writer (E-25) to consolidate across runs; until then, cases are hand-authored only.
+      <code>org_bank</code> writer (E-25) to consolidate across runs; distilled production incidents are the one
+      absent source — the corpus already includes six machine-imported DevEval anchors (E-79).
     </p>
   </div>
 </div>
@@ -1263,7 +1270,7 @@
 </div>
 
 <div class="footer">
-  Verified <strong>2026-08-12</strong> against <a href="../BENCHMARK.md">BENCHMARK.md</a> + <code>src/sdlc/benchmarks/</code>. Adds no scope to
+  Verified <strong>2026-08-14</strong> against <a href="../BENCHMARK.md">BENCHMARK.md</a> + <code>src/sdlc/benchmarks/</code>. Adds no scope to
   <a href="../PRD.md">PRD.md</a>; every <span class="newscope">(new scope)</span> marker is a measurement capability
   that needs a PRD line before it becomes a real requirement. Everything else is an <code>E-</code>-style plan for
   measuring requirements already open in the tracker.
