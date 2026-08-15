@@ -415,8 +415,9 @@
     <a href="../PRD.md">PRD.md</a>
     <br>
     Status: <strong>Design doc — reconciled into ROADMAP.md §9.8 (E-30…E-39 landed; E-83 sharpened the judge; measurement instrument largely built)</strong> ·
-    Verified <strong>2026-08-14</strong> ·
-    Companion to <code>ROADMAP.md</code>, <code>SDLC-spec-v2.md</code>, <code>ARCHITECTURE.md</code>, <code>PRD.md</code>.
+    Verified <strong>2026-08-15</strong> ·
+    Companion to <code>ROADMAP.md</code>, <code>SDLC-spec-v2.md</code>, <code>ARCHITECTURE.md</code>, <code>PRD.md</code> ·
+    Companion HTML docs: <a href="roadmap.html">roadmap.html</a> &middot; <a href="agents-schema.html">agents-schema.html</a> &middot; <a href="architecture-schema.html">architecture-schema.html</a> &middot; <a href="research-stage-schema.html">research-stage-schema.html</a> &middot; <a href="benchmark-analysis.html">benchmark-analysis.html</a>.
   </p>
 
   <p class="meta">
@@ -429,7 +430,7 @@
     <span class="chip"><span class="dot done"></span> built / on live path</span>
     <span class="chip"><span class="dot partial"></span> partial — mechanism exists, gap remains</span>
     <span class="chip"><span class="dot notstarted"></span> not started</span>
-    <span class="chip"><span class="dot notmeasurable"></span> not measurable from code alone (SC-1..6 today)</span>
+    <span class="chip"><span class="dot notmeasurable"></span> not measurable from code alone (SC-1..6 today; SC-7 citation guard enforced on every run)</span>
     <span style="margin-left:auto; align-self:center;">
       <span class="newscope">(new scope)</span> &nbsp;= measurement capability that needs a PRD line
     </span>
@@ -440,7 +441,7 @@
     and a prompt eval loop (<code>sdlc eval</code>, <strong>E-4</strong>). The <em>measurement design</em> — a
     stated ground-truth strategy, the metrics each success criterion needs, and the wiring that turns
     <strong>SC-1..SC-6</strong> from “not measurable” into numbers — is now reconciled into
-    <code>ROADMAP.md §9.8</code>, and most of the instrument has landed: the held-out oracle
+    <code>ROADMAP.md §9.8</code> (while <strong>SC-7</strong> grounding integrity is computed and enforced on every run via the E-43 / E-48 citation guard), and most of the instrument has landed: the held-out oracle
     (<strong>E-30/E-31</strong>), per-role cost (<strong>E-33</strong>), retro + <code>RunSummary</code>
     (<strong>E-32</strong>), the per-role model sweep (<strong>E-37</strong>), the error heatmap + rubric
     calibration (<strong>E-36</strong>) — now re-queryable in seconds via <code>sdlc benchmark score</code>
@@ -448,7 +449,7 @@
     (<strong>E-38</strong>), and the <code>deep_review</code> lens (<strong>E-39</strong>).
     <strong>E-83</strong> then sharpened the quality instrument — typed rubric vetoes, a staged judge, and a
     deterministic <code>PlanDrift</code> signal — and proved the gate's teeth via the <code>scope_dropped</code>
-    mutation. The remaining gaps are the open items — <strong>E-30a/b/c</strong> (other languages),
+    mutation. The corpus now spans 9 cases (3 greenfield + 6 DevEval imports under <strong>E-79</strong>). The remaining gaps are the open items — <strong>E-30a/b/c</strong> (other languages; Python reference adapter end-to-end under <strong>ADR-15 / E-30</strong>),
     <strong>E-31a</strong> (overfit anti-cheat), and <strong>E-28</strong> (research retry cap). This doc is that design.
   </p>
 
@@ -503,13 +504,13 @@
   </div>
 
   <div class="card tinted">
-    <h3>The factory’s own state <span class="tag-link">ROADMAP §0 / SC-1..6</span></h3>
+    <h3>The factory’s own state <span class="tag-link">ROADMAP §0 / SC-1..7</span></h3>
     <p>
-      SC-1 through SC-6 are marked <span class="pill notmeasurable">not measurable</span> or mechanism-exists-no-metric.
+      SC-1 through SC-6 are marked <span class="pill notmeasurable">not measurable</span> or mechanism-exists-no-metric (with cross-run aggregation accumulating via <code>sc-rollup</code>), while <strong>SC-7</strong> grounding integrity (100% grounded findings re-verified byte-exact, zero fabricated references) is enforced on every run via the E-43 / E-48 citation guard.
       The pipeline can ship a feature end-to-end (P1 done), and the instrument that turns that into numbers is now
       mostly built: <em>how cheaply</em> is measurable per run via <code>RunSummary.roles</code>
       (<strong>E-33</strong>), and <em>how well</em> is measurable for Python cases via the held-out oracle
-      (<strong>E-30/E-31</strong>). Cross-language coverage (<strong>E-30a/b/c</strong>) and the overfit anti-cheat
+      (<strong>E-30/E-31</strong>). Cross-language coverage (<strong>E-30a/b/c</strong>; Python reference adapter end-to-end under <strong>ADR-15 / E-30</strong>) and the overfit anti-cheat
       (<strong>E-31a</strong>) stay open — the precondition for P3’s exit and everything in P4.
     </p>
   </div>
@@ -1270,10 +1271,12 @@
 </div>
 
 <div class="footer">
-  Verified <strong>2026-08-14</strong> against <a href="../BENCHMARK.md">BENCHMARK.md</a> + <code>src/sdlc/benchmarks/</code>. Adds no scope to
+  Verified <strong>2026-08-15</strong> against <a href="../BENCHMARK.md">BENCHMARK.md</a> + <code>src/sdlc/benchmarks/</code>. Adds no scope to
   <a href="../PRD.md">PRD.md</a>; every <span class="newscope">(new scope)</span> marker is a measurement capability
   that needs a PRD line before it becomes a real requirement. Everything else is an <code>E-</code>-style plan for
   measuring requirements already open in the tracker.
+  <br>
+  Companion pages: <a href="roadmap.html">roadmap.html</a> &middot; <a href="agents-schema.html">agents-schema.html</a> &middot; <a href="architecture-schema.html">architecture-schema.html</a> &middot; <a href="research-stage-schema.html">research-stage-schema.html</a> &middot; <a href="benchmark-analysis.html">benchmark-analysis.html</a>.
 </div>
 
 </body>

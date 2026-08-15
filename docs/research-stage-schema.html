@@ -353,7 +353,8 @@
   fan-out activities in <code>src/sdlc/research/stage.py</code> ·
   spec: <code>docs/superpowers/specs/2026-08-04-research-fan-out-design.md</code> ·
   contract source-of-truth: <code>src/sdlc/models.py</code> ·
-  verified 2026-08-14 against <code>src/sdlc/</code>, <code>agents/research/</code>, <code>benchmarks/</code>
+  verified <strong>2026-08-15</strong> against <code>src/sdlc/</code>, <code>agents/research/</code>, <code>benchmarks/</code> ·
+  Companion HTML docs: <a href="roadmap.html">roadmap.html</a> &middot; <a href="agents-schema.html">agents-schema.html</a> &middot; <a href="architecture-schema.html">architecture-schema.html</a> &middot; <a href="benchmark.html">benchmark.html</a> &middot; <a href="benchmark-analysis.html">benchmark-analysis.html</a>
 </p>
 <p class="lede">
   The research stage is an <strong>optional, human-gated, off-by-default</strong> pre-clarify
@@ -401,9 +402,9 @@
 <p>
   The 15-stage DAG runs <code>intake &rarr; constitution &rarr; <em>context*</em> &rarr;
   <strong>research</strong> &rarr; {research gate} &rarr; clarify &rarr; {clarify gate} &rarr;
-  architecture &rarr; &hellip;</code>. <em>context</em> is brownfield-only; <strong>research</strong>
+  architecture &rarr; devops_plan &rarr; plan &rarr; devops &rarr; dev &rarr; review &rarr; qa &rarr; test &rarr; merge &rarr; retro</code>. <em>context</em> is brownfield-only; <strong>research</strong>
   runs only when <code>cfg.research_enabled</code> is on <em>and</em> the registry built a
-  <code>t_research</code> agent (<code class="mono">agents/research/</code> present).
+  <code>t_research</code> agent (<code class="mono">agents/research/</code> present in the 16-role registry).
 </p>
 
 <div class="diagram">
@@ -1753,12 +1754,20 @@ _MD_BOLD    = re.compile(r<span class="s">"\*\*"</span>)       <span class="c">#
     <p><span class="mono">docs/superpowers/specs/2026-08-04-research-fan-out-design.md</span> &mdash; <strong>current authority</strong> (plan &rarr; N &rarr; synthesize, refine, usage accounting).</p>
     <p><span class="mono">docs/superpowers/specs/2026-07-17-research-agent-grounded-briefs-design.md</span> &mdash; original grounded-brief design (partly superseded).</p>
     <p><span class="mono">docs/superpowers/specs/2026-07-29-research-agent-exa-harness-design.md</span> &mdash; ExaSearch + Harness <code>run_code</code> design.</p>
+    <p><span class="mono">docs/roadmap.html</span> &mdash; <a href="roadmap.html">implementation roadmap</a>.</p>
+    <p><span class="mono">docs/agents-schema.html</span> &mdash; <a href="agents-schema.html">agents schema &amp; 16-role registry</a>.</p>
     <p><span class="mono">docs/architecture-schema.html</span> &mdash; <a href="architecture-schema.html">whole-factory schema</a>.</p>
+    <p><span class="mono">docs/benchmark.html</span> &mdash; <a href="benchmark.html">benchmark foundation</a>.</p>
+    <p><span class="mono">docs/benchmark-analysis.html</span> &mdash; <a href="benchmark-analysis.html">benchmark analysis</a>.</p>
   </div>
 </div>
 
 <footer>
+  <a href="roadmap.html">&larr; roadmap.html</a>
+  <a href="agents-schema.html">&larr; agents-schema.html</a>
   <a href="architecture-schema.html">&larr; architecture-schema.html</a>
+  <a href="benchmark.html">&rarr; benchmark.html</a>
+  <a href="benchmark-analysis.html">&rarr; benchmark-analysis.html</a>
   <a href="../PRD.md">PRD &sect; FR-107</a>
   <a href="../ARCHITECTURE.md">ARCHITECTURE.md &sect;3</a>
   <span style="float:right">Contract source-of-truth: <code>src/sdlc/models.py</code> &middot; fan-out activities: <code>research/stage.py</code> &middot; wiring: <code>feature.py:1726</code></span>
