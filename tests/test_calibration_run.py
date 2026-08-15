@@ -54,7 +54,8 @@ def test_importing_calibration_does_not_import_temporalio():
     code = ("import sys; import sdlc.benchmarks.calibration; "
             "sys.exit(1 if 'temporalio' in sys.modules else 0)")
     result = subprocess.run([sys.executable, "-c", code],
-                            capture_output=True, text=True)
+                            capture_output=True, text=True,
+                            stdin=subprocess.DEVNULL)
     assert result.returncode == 0, (
         "importing sdlc.benchmarks.calibration pulled in temporalio:\n"
         + result.stderr)

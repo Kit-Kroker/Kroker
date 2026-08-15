@@ -527,3 +527,12 @@ and blueprint comparison already covers the gap.
 | §1 stage 2 (context) | Discover live; FR-102's remainder is classify + delta |
 | §6 ADRs | **ADR-22** added |
 | P6 | Second of seven phase bodies ships |
+
+## Plan 3 corrections
+
+These decisions were resolved during implementation of Plan 3 (`docs/superpowers/plans/2026-08-15-e48-discover-plan-3.md`):
+
+- **P3-D1 (Reference verification purity & refusal threading).** DD8 items 4–5 require access to the git tree to verify paths and byte quotes, so they cannot live in pure `stamp()`. Pure `discover/verify.py` + `verify_discover_refs` activity perform verification and return the surviving proposal plus a refusal mapping (`refusals: dict[str, tuple[str, str]]`). `stamp(context, proposal, *, refusals={})` accepts this mapping and stamps `DROPPED` with the distinct refusal rule rather than collapsing into `dropped_missing`.
+- **P3-D2 (Citation guard denominator).** Reconciles `build_map`'s earlier comment with DD8 decision text: the citation guard ratio is `unresolved_references / total_references` across all emitted references (measuring citation quality, not candidate row count). A zero denominator never trips the guard.
+- **P3-D6 (Blueprint name normalization independence).** `blueprint.py` does its own name normalization and does not import `naming.py`. This prevents blueprint matching from coupling to the memo hash of the six scan signals (`test_scan_rules_sha`).
+

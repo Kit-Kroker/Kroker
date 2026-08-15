@@ -12,7 +12,8 @@ from sdlc.assessment.activities import (
 
 
 def _run(args: list[str], cwd) -> str:
-    proc = subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+    proc = subprocess.run(args, cwd=cwd, capture_output=True, text=True,
+                          stdin=subprocess.DEVNULL)
     assert proc.returncode == 0, proc.stderr
     return proc.stdout.strip()
 
