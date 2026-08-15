@@ -323,7 +323,7 @@
 <body>
 
 <h1>Architecture Schema</h1>
-<p class="meta">Agentic SDLC Factory &middot; Status overlay on <code>ARCHITECTURE.md</code> &middot; Verified <code>2026-08-14</code> against <code>src/sdlc/</code> (incl. <code>board/</code>, <code>deploy/</code>, <code>triage/</code>, <code>tidyup/</code>, <code>assessment/scan/</code>, <code>assessment/discover/</code>, <code>capability/</code>, <code>workflows/{triage,tidyup,assessment}.py</code>, <code>measurement.py</code>, <code>grounding.py</code>), <code>interfaces/</code>, <code>tests/</code>, <code>config/</code>, <code>agents/</code>, <code>benchmarks/</code></p>
+<p class="meta">Agentic SDLC Factory &middot; Status overlay on <code>ARCHITECTURE.md</code> &middot; Verified <code>2026-08-15</code> against <code>src/sdlc/</code> (incl. <code>board/</code>, <code>deploy/</code>, <code>triage/</code>, <code>tidyup/</code>, <code>assessment/scan/</code>, <code>assessment/discover/</code>, <code>capability/</code>, <code>workflows/{triage,tidyup,assessment,factory}.py</code>, <code>measurement.py</code>, <code>grounding.py</code>, <code>cartography.py</code>), <code>interfaces/</code>, <code>tests/</code>, <code>config/</code>, <code>agents/</code>, <code>benchmarks/</code></p>
 <p class="meta">Companion to <a href="roadmap.html">Implementation Roadmap</a> &middot; Sources: <code>ARCHITECTURE.md</code>, <code>ROADMAP.md</code></p>
 
 <p class="lede">
@@ -340,7 +340,7 @@
   <span class="chip"><span class="dot notstarted"></span> Not started</span>
   <span class="chip"><span class="dot notmeasurable"></span> Not falsifiable from code alone</span>
   <span style="margin-left:auto; align-self:center;">
-    Pipeline: <strong>9 / 15</strong> stages live &middot;
+    Pipeline: <strong>11 / 15</strong> stages live &middot;
     ADRs: <strong>13 / 21</strong> satisfied &middot;
     Phase: <strong>P1 closed</strong>, P2/P3/P5/P6 partial, P4/P7/P8 not started
   </span>
@@ -459,7 +459,7 @@
 </p>
 
 <!-- =========================================================== -->
-<h2>Pipeline DAG <span class="count">ARCHITECTURE &sect;3 &middot; 9 / 15 stages live</span></h2>
+<h2>Pipeline DAG <span class="count">ARCHITECTURE &sect;3 &middot; 11 / 15 stages live</span></h2>
 
 <div class="dag-wrap">
 <svg viewBox="0 0 1080 280" width="100%" height="280" xmlns="http://www.w3.org/2000/svg">
@@ -474,10 +474,10 @@
   <!-- Helper: gates shown as diamonds on the connecting arrows -->
 
   <!-- 0 intake -->
-  <rect x="10" y="40" width="110" height="54" rx="6" fill="rgba(87,96,106,0.10)" stroke="#57606a" stroke-width="1.5"/>
+  <rect x="10" y="40" width="110" height="54" rx="6" fill="rgba(26,127,55,0.12)" stroke="#1a7f37" stroke-width="1.5"/>
   <text x="65" y="62" text-anchor="middle" font-size="11" font-weight="700" fill="#1f2328">0 · intake</text>
-  <text x="65" y="78" text-anchor="middle" font-size="9" fill="#57606a">mode field only</text>
-  <text x="65" y="89" text-anchor="middle" font-size="9" fill="#57606a">no routing</text>
+  <text x="65" y="78" text-anchor="middle" font-size="9" fill="#1a7f37">classify_repo ✅</text>
+  <text x="65" y="89" text-anchor="middle" font-size="9" fill="#57606a">routing (E-84)</text>
 
   <!-- 1 constitution -->
   <rect x="140" y="40" width="110" height="54" rx="6" fill="rgba(87,96,106,0.10)" stroke="#57606a" stroke-width="1.5"/>
@@ -485,10 +485,10 @@
   <text x="195" y="78" text-anchor="middle" font-size="9" fill="#57606a">no model / stage</text>
 
   <!-- 2 context -->
-  <rect x="270" y="40" width="110" height="54" rx="6" fill="rgba(87,96,106,0.10)" stroke="#57606a" stroke-width="1.5"/>
+  <rect x="270" y="40" width="110" height="54" rx="6" fill="rgba(26,127,55,0.12)" stroke="#1a7f37" stroke-width="1.5"/>
   <text x="325" y="62" text-anchor="middle" font-size="11" font-weight="700" fill="#1f2328">2 · context*</text>
-  <text x="325" y="78" text-anchor="middle" font-size="9" fill="#57606a">Cartographer</text>
-  <text x="325" y="89" text-anchor="middle" font-size="9" fill="#57606a">no CodebaseMap</text>
+  <text x="325" y="78" text-anchor="middle" font-size="9" fill="#1a7f37">CodebaseMap ✅</text>
+  <text x="325" y="89" text-anchor="middle" font-size="9" fill="#57606a">prompt budget (E-84)</text>
 
   <!-- 3 requirements -->
   <rect x="400" y="40" width="110" height="54" rx="6" fill="rgba(87,96,106,0.10)" stroke="#57606a" stroke-width="1.5"/>
@@ -624,7 +624,7 @@
   <span><span class="swatch" style="background:rgba(87,96,106,0.10); border-color:#57606a;"></span>not started</span>
   <span><span class="swatch" style="background:#ffffff; border-color:#bf8700;"></span>human gate (hard / soft / off)</span>
   <span><code>4&middot;research</code> now fans out (plan &rarr; N sub-questions &rarr; synthesize); still partial / off by default</span>
-  <span style="margin-left:auto;"><code>*context</code> runs brownfield-only; skipped greenfield</span>
+  <span style="margin-left:auto;"><code>*context</code> runs brownfield-only; skipped greenfield; validates delta in stage 6</span>
 </div>
 </div>
 
@@ -655,9 +655,9 @@
     </tr>
     <tr>
       <td class="name">Workflows<br><code>workflows/factory.py</code></td>
-      <td class="status"><span class="pill done">9 stages wired</span></td>
+      <td class="status"><span class="pill done">11 stages wired</span></td>
       <td>deterministic DAG, gate waits, fix-loop bounds, scheduling</td>
-      <td class="note">Class is <code>FeatureWorkflow</code>; docs call it <code>FactoryWorkflow</code>. 6 of 15 stages absent. Stage 13 runs a deterministic <code>DeploymentWorkflow</code> child behind a <code>deploy_failed</code> gate (E-67); board writes wired into clarify/arch/plan/task stages (E-78).</td>
+      <td class="note">Class is <code>FeatureWorkflow</code>; docs call it <code>FactoryWorkflow</code>. 4 of 15 stages absent (1, 3, 4 partial, maintenance). Stage 0 intake &amp; stage 2 context live (E-84); stage 13 runs a deterministic <code>DeploymentWorkflow</code> child behind a <code>deploy_failed</code> gate (E-67); board writes wired into clarify/arch/plan/task stages (E-78).</td>
     </tr>
     <tr>
       <td class="name">Per-task loop<br><code>workflows/task.py</code></td>
@@ -693,7 +693,7 @@
       <td class="name">Repo activities<br><code>activities/repo.py</code></td>
       <td class="status"><span class="pill done">integration branch ✅</span></td>
       <td>worktree (from integration head), task diff, merge-back, PR</td>
-      <td class="note">Brownfield clone / Cartographer absent (FR-102).</td>
+      <td class="note">Brownfield routing, worktrees, task diff, merge-back, PR ✅; Cartographer integration live (E-84, FR-102).</td>
     </tr>
     <tr>
       <td class="name">QA activities<br><code>activities/qa.py</code></td>
@@ -709,9 +709,9 @@
     </tr>
     <tr>
       <td class="name">Cartography<br><code>activities/cartography.py</code></td>
-      <td class="status"><span class="pill notstarted">not started</span></td>
-      <td>brownfield repo analysis, <code>CodebaseMap</code></td>
-      <td class="note">Required for brownfield mode (FR-102) and Architect delta.</td>
+      <td class="status"><span class="pill done">done ✅</span></td>
+      <td><code>classify_repo</code> + <code>CodebaseMap</code> projection from 13 Tier 2 signals, <code>render_for_prompt</code>, <code>check_brownfield_delta</code></td>
+      <td class="note">Landed (E-84, 2026-08-15): pure <code>classify()</code> + <code>classify_repo</code> activity; <code>CodebaseMap</code> projected from 13 scan signals with prompt budget enforcement (<code>render_for_prompt</code>); <code>check_brownfield_delta</code> validates <code>BrownfieldDelta</code> against git tree with 1 retry before failing closed.</td>
     </tr>
     <tr>
       <td class="name">Notify<br><code>activities/notify.py</code></td>
@@ -733,9 +733,9 @@
     </tr>
     <tr>
       <td class="name">Agent registry<br><code>agents/loader.py</code></td>
-      <td class="status"><span class="pill done">15 roles ✅</span></td>
+      <td class="status"><span class="pill done">16 roles ✅</span></td>
       <td><code>agents/&lt;role&gt;/</code> folders &rarr; <code>TemporalAgent</code></td>
-      <td class="note">E-1/E-2 done. 3 harness + 8 required proposers + 4 optional (research, deep_review, handoff, adversary). ADR-6 family-inequality still enforced against <code>dev</code> at boot; new <code>model_id()</code>-based <code>check_adversary_model</code> guards the adversary lens (decorrelation by model identity, not provider prefix). <code>cfg.roles</code> not yet per-project (E-26).</td>
+      <td class="note">E-1/E-2/E-48 done. 3 harness + 9 proposers (incl. discover) + 4 optional lenses (research, deep_review, handoff, adversary). ADR-6 family-inequality still enforced against <code>dev</code> at boot; new <code>model_id()</code>-based <code>check_adversary_model</code> guards the adversary lens (decorrelation by model identity, not provider prefix). <code>cfg.roles</code> not yet per-project (E-26).</td>
     </tr>
     <tr>
       <td class="name">Deterministic agents<br><code>agents/deterministic.py</code></td>
@@ -807,19 +807,103 @@
 </table>
 
 <!-- =========================================================== -->
+<h2>Brownfield mode &amp; Cartographer architecture <span class="count">ARCHITECTURE &sect;3.1 &middot; FR-102 &middot; E-84</span></h2>
+
+<p style="font-size:13px; color:var(--muted); margin-top:0;">
+  In greenfield mode, the factory initiates from a clean worktree. In brownfield mode (E-84 / FR-102),
+  the factory ingests an existing repository and projects contextual codebase models into prompt budgets
+  before feature architecture and planning.
+</p>
+
+<div class="grid-3">
+  <div class="card tinted">
+    <h3>1. Intake &amp; Triage <span class="tag-link">Stage 0 · classify_repo</span></h3>
+    <ul class="tight">
+      <li><span class="pill done">done</span> <strong>Routing:</strong> Pure <code>classify()</code> rule + Temporal <code>classify_repo</code> activity inspects git tree (commit count, file tree, marker files).</li>
+      <li><span class="pill done">done</span> Routes to <code>greenfield</code> (0 commits / empty repo), <code>brownfield</code> (existing repo), or <code>repair</code> (maintenance backlog).</li>
+      <li><span class="pill done">done</span> <strong>Fail-Closed:</strong> Immediately aborts and fails closed if brownfield mode is specified on a repo that has nothing to map.</li>
+    </ul>
+  </div>
+
+  <div class="card tinted">
+    <h3>2. Cartographer Context <span class="tag-link">Stage 2 · CodebaseMap</span></h3>
+    <ul class="tight">
+      <li><span class="pill done">done</span> <strong>Projection:</strong> Projects a deterministic <code>CodebaseMap</code> from 13 Tier 2 scan signals (entrypoints, call graph, framework detection, dependency topologies, exports/symbols).</li>
+      <li><span class="pill done">done</span> <strong>Budget Enforcement:</strong> Bounded serialization via <code>render_for_prompt(budget_tokens)</code> guarantees prompt budget ceilings for downstream proposers.</li>
+      <li><span class="pill done">done</span> Injected by reference into Clarifier, Architect, and Planner prompts.</li>
+    </ul>
+  </div>
+
+  <div class="card tinted">
+    <h3>3. Checked Delta <span class="tag-link">Stage 6 · check_brownfield_delta</span></h3>
+    <ul class="tight">
+      <li><span class="pill done">done</span> <strong>Proposer Delta:</strong> Architect proposer emits <code>affected_modules</code> and a structured <code>BrownfieldDelta</code> (typed lists of <code>added</code>, <code>modified</code>, and <code>removed</code> paths).</li>
+      <li><span class="pill done">done</span> <strong>Git Grounding:</strong> Activity <code>check_brownfield_delta</code> verifies modified/removed paths exist in git tree and added paths do not collide.</li>
+      <li><span class="pill done">done</span> <strong>Retry &amp; Gate:</strong> Allows 1 retry with validation feedback before failing closed.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- =========================================================== -->
+<h2>Assessment workflow (EDCR) pipeline <span class="count">ARCHITECTURE &sect;3.2 &middot; FR-911&ndash;FR-915 &middot; E-45&ndash;E-48</span></h2>
+
+<p style="font-size:13px; color:var(--muted); margin-top:0;">
+  <code>AssessmentWorkflow</code> executes an enterprise-grade Evaluate / Discover / Comprehend / Remediate (EDCR)
+  DAG: <code>init → scan → discover → assess → report → generate → finish</code> (E-45).
+</p>
+
+<div class="grid-2">
+  <div class="card tinted">
+    <h3>Scan Phase <span class="tag-link">E-46 · 13 Pure Signals</span></h3>
+    <ul class="tight">
+      <li><span class="pill done">done</span> <strong>Deterministic Signals:</strong> 13 pure signal modules executed across 2 activity waves + S5 merge + SS2 inheritance.</li>
+      <li><span class="pill done">done</span> <strong>Cache Key:</strong> Purely memoized on <code>(tree_hash, signal_version, rules_sha)</code>; byte-identical across input order.</li>
+      <li><span class="pill done">done</span> Computes AST structure, call graphs, frameworks, dependencies, committed Cobertura coverage (QS2), pipeline CI files (QS4), and SARIF security scans.</li>
+    </ul>
+  </div>
+
+  <div class="card tinted">
+    <h3>Capability Identity &amp; Graphs <span class="tag-link">E-47a · E-47b · E-47c</span></h3>
+    <ul class="tight">
+      <li><span class="pill done">done</span> <strong>Identity (E-47a):</strong> Stable <code>BC-NNN</code> surrogate keys, weighted-Jaccard similarity reattachment across audit runs, audited <code>IdentityCorrection</code> logs (<code>src/sdlc/capability/</code>).</li>
+      <li><span class="pill done">done</span> <strong>Coverage &amp; Orphans (E-47b):</strong> Capability coverage floor with 3 orphan verdicts: <code>infrastructure</code>, <code>attached</code>, or <code>dead</code> (<code>discover/attribution.py</code>).</li>
+      <li><span class="pill done">done</span> <strong>L2 &amp; Ownership (E-47c):</strong> 2-level capability decomposition (<code>decompose()</code>); entity ownership assignment (<code>assign()</code>) following declaration &rarr; writes &rarr; reads.</li>
+    </ul>
+  </div>
+
+  <div class="card tinted">
+    <h3>Discover Proposer &amp; Grounding <span class="tag-link">E-48 · agents/discover/</span></h3>
+    <ul class="tight">
+      <li><span class="pill done">done</span> <strong>Proposer:</strong> <code>discover_proposer</code> agent generates <code>DiscoverProposals</code> (capability, refinement, attribution).</li>
+      <li><span class="pill done">done</span> <strong>Quote &amp; Path Verification:</strong> <code>verify_discover_refs</code> byte-verifies every evidence path and quote against the pinned commit via <code>Profile.VERBATIM_BYTES</code> (FR-914).</li>
+      <li><span class="pill done">done</span> <strong>Citation Guard:</strong> Strictly fails closed if evidence fabrication rate exceeds <code>0.10</code> (SC-7 enforcement).</li>
+    </ul>
+  </div>
+
+  <div class="card tinted">
+    <h3>Blueprints &amp; Domain Model <span class="tag-link">E-48 · discover/{blueprint,domain}.py</span></h3>
+    <ul class="tight">
+      <li><span class="pill done">done</span> <strong>Blueprint Comparison:</strong> Correlates discovered capabilities against standard industry reference architectures (BIAN, TM Forum, ACORD, HL7).</li>
+      <li><span class="pill done">done</span> <strong>Derived Domain Model:</strong> Deterministically derives typed entity relationships, boundary definitions, and ubiquitous language from capability and ownership mappings.</li>
+      <li><span class="pill done">done</span> Order-independent pure transformations feeding downstream Assess (E-49) and Report (E-52) phases.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- =========================================================== -->
 <h2>Cross-cutting subsystems <span class="count">ARCHITECTURE &sect;4–&sect;7</span></h2>
 
 <div class="grid-2">
   <div class="card tinted">
     <h3>Agent architecture <span class="tag-link">§4</span></h3>
     <ul class="tight">
-      <li><span class="pill done">done</span> 15 roles in <code>agents.yaml</code>: 3 harness + 8 required proposers + 4 optional (research, deep_review, handoff, adversary).</li>
+      <li><span class="pill done">done</span> 16 roles in <code>agents.yaml</code>: 3 harness + 9 proposers (incl. <code>discover</code>) + 4 optional lenses (research, deep_review, handoff, adversary).</li>
       <li><span class="pill done">done</span> Automation class via <code>TemporalAgent</code> (Pydantic AI).</li>
       <li><span class="pill done">done</span> Harness protocol with 3 adapters; <code>HarnessRunResult</code> + canonical <code>HarnessSession</code> normalised per adapter (E-38).</li>
       <li><span class="pill done">done</span> <code>session_ref: ArtifactRef{kind: harness_session}</code> on <code>HarnessRunResult</code> — a claim-checked, scrubbed canonical <code>HarnessSession</code> transcript captured on every run (ADR-16, E-38); clean-green runs keep a structured <code>SessionDigest</code>, fail/benchmark/retried runs keep the full transcript. <code>ArtifactStore</code> seam (file:// backend); scrub runs fail-closed before the full-vs-digest branch.</li>
       <li><span class="pill done">done</span> Model-family inequality enforced at boot (ADR-6).</li>
       <li><span class="pill done">done</span> Reviewer is clean-context proposer (ADR-12).</li>
-      <li><span class="pill partial">partial</span> Context by reference + budgets; <code>CodebaseMap</code> slice missing.</li>
+      <li><span class="pill done">done</span> Context by reference + budgets; <code>CodebaseMap</code> slice rendered with bounded prompt budgets via <code>render_for_prompt</code> (E-84).</li>
       <li><span class="pill partial">partial</span> Optional harness <em>deep-review</em> tier (ADR-6 opt-in, E-39) — advisory <code>_run_deep_review</code> in <code>_dev_task</code> reads the scrubbed <code>HarnessSession</code> as data via <code>load_session</code>, emits <code>DeepReviewReport</code>/<code>IntegrityFlag</code>, never gates. E-83 (2026-08-12) adds a deterministic <code>PlanDrift</code> finding: the deep-review lens now reports <em>verified</em> plan deviations (scope dropped / unimplemented tasks) from the materialized diff + frozen <code>ImplementationPlan</code>, surfaced into the fix loop and the benchmark record. Default <code>review</code> still never resumes the developer's session. Off by default (<code>deep_review_enabled</code>).</li>
       <li><span class="pill partial">partial</span> Optional <em>adversary</em> lens (decorrelated second opinion on the approve path) — runs only when the primary reviewer approves (<code>review_ok</code>), so it targets the expensive false-approve failure mode; fail-open (a failed call counts as agreement, so the primary reviewer stays the sole blocking lens); decorrelated by <code>model_id()</code>, not provider prefix (new <code>check_adversary_model</code> guard; ADR-6 dev/reviewer clause deliberately untouched so no baseline shifts). Emits <code>ReviewReport</code>, so findings merge into the fix loop with no new plumbing. Off by default (<code>adversarial_review_enabled</code>); non-DAG lens, advisory.</li>
       <li><span class="pill partial">partial</span> Optional <em>handoff</em> extractor (FR-805) — runs once per task on the success path beside <code>_run_deep_review</code>; reads the scrubbed <code>HarnessSession</code> via <code>load_session</code> + materialized diff + frozen contract assertions, emits <code>HandoffSummary</code> with evidence-first <code>HandoffClaim</code>s (<code>files_touched</code> computed deterministically from the diff). Deterministic file cross-check in <code>src/sdlc/handoff.py</code> drops claims citing unknown files. Best-effort (failure falls back to mechanical handoff); invariant: flows to downstream tasks only, never to this task's validators. Non-DAG lens.</li>
@@ -911,7 +995,7 @@
   <div class="phase">
     <div class="tag"><span class="label">P2 — Brownfield</span><span class="pill partial">partial</span></div>
     <div class="desc">Brownfield, dashboard + notifications, fix loops, cross-harness review.</div>
-    <div class="exit"><strong>Exit:</strong> first brownfield feature merged via PR. Cross-harness review ✅ and fix loops ✅ landed early; notify activity ✅ landed (FR-303); brownfield, dashboard backend, Slack surface not started.</div>
+    <div class="exit"><strong>Exit:</strong> first brownfield feature merged via PR. Brownfield intake &amp; context live (E-84: <code>classify_repo</code>, <code>CodebaseMap</code>, <code>check_brownfield_delta</code>); cross-harness review ✅ and fix loops ✅ landed early; notify activity ✅ landed (FR-303); dashboard backend, Slack surface not started.</div>
   </div>
   <div class="phase">
     <div class="tag"><span class="label">P3 — Memory</span><span class="pill partial">partial</span></div>
@@ -931,7 +1015,7 @@
   <div class="phase">
     <div class="tag"><span class="label">P6 — Audit</span><span class="pill partial">partial</span></div>
     <div class="desc">Capability &amp; risk audit (Tier 2) + evidence bundle.</div>
-    <div class="exit"><strong>Exit:</strong> one repo audited end-to-end with SC-7 held and a bundle handed over (E-45…E-56). Gated on P5's readiness verdict (FR-903), which now requires a <strong>human</strong> approval to admit a non-READY tree (E-45). <strong>Opened 2026-08-10</strong> with E-45's <code>AssessmentWorkflow</code> EDCR DAG (init → scan → discover → assess → report → generate → finish). The scan phase body is built (E-46, closed 2026-08-13): thirteen signals — eleven activities across two waves plus S5's merge and SS2's pure inheritance — memoized on <code>(tree hash, signal version, rules_sha)</code>. Five phase bodies remain stubs reporting <code>not_collected</code> naming the E-item that owes them (discover E-48, assess E-49, finish E-51, report/generate E-52). Capability identity (E-47a, 2026-08-08) plus the coverage floor / orphans (E-47b, 2026-08-13) and L2 operations / entity ownership (E-47c, 2026-08-14) landed in <code>assessment/discover/</code> and <code>capability/</code> — pure and unwired until E-48 wires them into the discover phase.</div>
+    <div class="exit"><strong>Exit:</strong> one repo audited end-to-end with SC-7 held and a bundle handed over (E-45…E-56). Gated on P5's readiness verdict (FR-903), which now requires a <strong>human</strong> approval to admit a non-READY tree (E-45). <strong>Opened 2026-08-10</strong> with E-45's <code>AssessmentWorkflow</code> EDCR DAG (init → scan → discover → assess → report → generate → finish). Scan phase (E-46, closed 2026-08-13: 13 deterministic pure signals on <code>(tree_hash, signal_version, rules_sha)</code>) and discover phase (E-47a capability identity, E-47b coverage floor/orphans, E-47c L2 operations/ownership, E-48 discover proposers + quote verification with <code>Profile.VERBATIM_BYTES</code> + citation guard failing closed at &gt;0.10 + blueprint comparison + derived domain model) all landed. Assess (E-49), finish (E-51), and report/generate (E-52) phases remain stubs.</div>
   </div>
   <div class="phase">
     <div class="tag"><span class="label">P7 — Service</span><span class="pill notstarted">not started</span></div>
@@ -974,7 +1058,7 @@
       <li><span class="pill done">done</span> retro/reflect wiring — per-run retro stage live (E-32); project ✅, org blocked on E-25.</li>
       <li><span class="pill partial">partial</span> Harness containment — <code>pre_tool</code> hook landed (E-15/E-16); approval escalation landed (E-17, same hook → gate); network-level + OS/container tier open (E-18/E-21).</li>
       <li><span class="pill partial">partial</span> Operability — cross-run inbox ✅ (E-8) + notify ✅ (E-9); dashboard FastAPI (E-10) + MCP (E-11) still todo.</li>
-      <li><span class="pill partial">partial</span> Post-P1 roadmap — DAPER/todo, two pools/todo, budgets ✅ (E-33), observability ✅ (E-32), deploy contract ✅ (E-67/E-68), agent board ✅ (E-78/ADR-21), triage ✅ (E-40/E-41/E-41a-d/E-42/E-43), tidy-up ✅ (E-44), assessment shell ✅ (E-45) + scan phase ✅ (E-46: thirteen signals) + capability identity ✅ (E-47a) + coverage floor/orphans/L2 ✅ (E-47b/c, unwired until E-48), brownfield/todo, claim-check partial (E-38 sessions; diffs inline).</li>
+      <li><span class="pill partial">partial</span> Post-P1 roadmap — DAPER/todo, two pools/todo, budgets ✅ (E-33), observability ✅ (E-32), deploy contract ✅ (E-67/E-68), agent board ✅ (E-78/ADR-21), triage ✅ (E-40/E-41/E-41a-d/E-42/E-43), tidy-up ✅ (E-44), assessment shell ✅ (E-45) + scan phase ✅ (E-46: thirteen signals) + capability identity ✅ (E-47a) + coverage floor/orphans/L2 ✅ (E-47b/c) + discover proposers &amp; citation guard ✅ (E-48), brownfield mode ✅ (E-84), claim-check partial (E-38 sessions; diffs inline).</li>
       <li><span class="pill partial">partial</span> Repo hardening via agents-as-folders — E-1/E-2/E-4 done; remaining is reorganisation.</li>
     </ol>
   </div>
@@ -1026,7 +1110,7 @@
   </div>
   <div class="adr partial">
     <div class="head"><span class="title">Deterministic DAG, deliberately</span><span class="id">ADR-11</span></div>
-    <p class="why">Holds for the 9 live stages; 6 of 15 stages absent.</p>
+    <p class="why">Holds for the 11 live stages; 4 of 15 stages absent (1, 3, 4 partial, maintenance).</p>
   </div>
   <div class="adr done">
     <div class="head"><span class="title">Contract-first, clean-context validators</span><span class="id">ADR-12</span></div>
@@ -1071,7 +1155,7 @@
 </div>
 
 <div class="footer">
-  Sources: <code>ARCHITECTURE.md</code> (Draft v1.0, 2026-07-02) and <code>ROADMAP.md</code> (last verified 2026-08-14).
+  Sources: <code>ARCHITECTURE.md</code> (Draft v1.0, 2026-07-02) and <code>ROADMAP.md</code> (last verified 2026-08-15).
   Status reflects code in <code>src/sdlc/</code>, <code>interfaces/</code>, <code>tests/</code>, <code>config/</code>, <code>agents/</code>, <code>benchmarks/</code> &mdash; not prior audit claims.
   Companion pages: <a href="roadmap.html">roadmap.html</a> (full FR/NFR/SC/US checklist) &middot; <a href="benchmark.html">benchmark.html</a> (evaluation design).
 </div>
