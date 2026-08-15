@@ -10,6 +10,7 @@ SUB-MECHANISM reports (attribution, decomposition, ownership) and is already
 """
 from __future__ import annotations
 
+import hashlib
 from enum import Enum
 
 from pydantic import BaseModel, Field, model_validator
@@ -305,3 +306,20 @@ class CapabilityMap(BaseModel):
                     f"but payload fields are present -- a discover that did "
                     f"not happen has no capabilities, rows, or reports (FR-915)")
         return self
+
+
+def context_digest(context: DiscoverContext) -> str:
+    """A canonical digest over the packet the rest of the phase reads (DD10).
+
+    Digesting the packet rather than hand-listing its parts follows
+    brief_digest's reasoning: identical facts hit, new facts invalidate, and a
+    field added to the context later cannot escape the key.
+
+    Canonical because DiscoverContext is: build_context sorts every collection
+    it emits and the model carries no dicts, which
+    test_the_packet_is_order_independent already asserts as a byte-identical
+    model_dump_json across input order. This hashes exactly those bytes.
+    """
+    return hashlib.sha256(
+        context.model_dump_json().encode("utf-8")).hexdigest()
+

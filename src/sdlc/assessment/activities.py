@@ -15,11 +15,13 @@ from pydantic import BaseModel, Field
 from temporalio import activity
 
 from ..activities import _git
+from ..capability.store import BoardIdentityStore
 from ..measurement import Measurement
 from ..triage.activities import tracked_paths
 from ..triage.gitread import is_over_size_limit, read_tree
+from .discover import memo as discover_memo
 from .discover.context import build_context
-from .discover.map import DiscoverContext, GraphSummary
+from .discover.map import CapabilityMap, DiscoverContext, GraphSummary
 from .scan import memo
 from .scan.models import (
     CATEGORIES, ScanResult, ScanSignalId, ScanSignalResult, ScanUpstream,
@@ -437,3 +439,51 @@ async def discover_context(inp: DiscoverContextInput) -> DiscoverContext:
         _log.warning("discover_context build_context failed: %s", exc)
         return _no_context(
             f"could not build context: {type(exc).__name__}: {exc}"[:300])
+
+
+class DiscoverMemoInput(BaseModel):
+    """DD10's key terms the workflow supplies. `identity_registry_version` is
+    deliberately absent: it is store state, and a workflow that carried a
+    stale one would key against a registry that had already moved."""
+    project: str
+    tree_hash: str
+    context_digest: str
+    prompt_sha: str
+    model: str
+
+
+class DiscoverMemoStoreInput(BaseModel):
+    key: DiscoverMemoInput
+    # The version discover_lock returned. Read fresh here rather than passed
+    # in would be equivalent today and racy tomorrow; see P2-D3.
+    registry_version: int
+    out: CapabilityMap
+
+
+@activity.defn
+async def discover_memo_load(inp: DiscoverMemoInput) -> CapabilityMap | None:
+    """DD10's lookup. Reads the registry version itself (P2-D3): before the
+    lock, the store's current version IS the one this run's map would be
+    keyed at."""
+    store = BoardIdentityStore()
+    try:
+        version = store.registry_version(inp.project)
+    finally:
+        store.close()
+    return discover_memo.load(
+        project=inp.project, tree_hash=inp.tree_hash,
+        context_digest=inp.context_digest, registry_version=version,
+        prompt_sha=inp.prompt_sha, model=inp.model)
+
+
+@activity.defn
+async def discover_memo_store(inp: DiscoverMemoStoreInput) -> bool:
+    """DD10's write, keyed at the POST-lock registry version -- the version
+    whose ids the map actually carries. Keying it at the pre-lock version
+    would guarantee a miss on every subsequent run (P2-D3)."""
+    return discover_memo.store(
+        project=inp.key.project, tree_hash=inp.key.tree_hash,
+        context_digest=inp.key.context_digest,
+        registry_version=inp.registry_version,
+        prompt_sha=inp.key.prompt_sha, model=inp.key.model, out=inp.out)
+

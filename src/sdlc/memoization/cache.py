@@ -49,3 +49,33 @@ def put(key: str, payload_json: str) -> None:
     root = _cache_root()
     root.mkdir(parents=True, exist_ok=True)
     (root / f"{key}.json").write_text(payload_json, encoding="utf-8")
+
+
+# E-48 P2-D6. With no proposer there is no prompt and no model, and "" is
+# exactly what signal_key's docstring refuses: it would make "no model was
+# involved" indistinguishable from a bug that dropped the model id, in the one
+# place where a silently wrong value serves stale results indefinitely. A
+# baseline-only map and a proposer map therefore never share a key.
+NO_PROPOSER = "no-proposer"
+
+
+def discover_key(project: str, tree_hash: str, context_digest: str,
+                 identity_registry_version: int, prompt_sha: str,
+                 model_id: str) -> str:
+    """Memo key for the whole discover phase (E-48 DD10).
+
+    A sibling of content_key and signal_key rather than a call into either,
+    for signal_key's reason: content_key has no slot for a registry version,
+    and reusing upstream_recall_ref for one would put a load-bearing term in a
+    field named for something else.
+
+    `identity_registry_version` is FR-103's amendment from E-47a and is what
+    makes skipping the lock on a hit safe -- if the registry moved, the key
+    moved, so a hit implies the stored map's ids are still the registry's. It
+    is deliberately coarse: any identity write invalidates the whole map for
+    that project, and the map is a single artifact with no per-capability
+    memoization to preserve.
+    """
+    payload = "|".join(["discover", project, tree_hash, context_digest,
+                        str(identity_registry_version), prompt_sha, model_id])
+    return hashlib.sha256(payload.encode()).hexdigest()
