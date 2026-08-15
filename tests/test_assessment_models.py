@@ -1,3 +1,4 @@
+# tests/test_assessment_models.py
 """E-45: the assessment artifact and its derived status."""
 from __future__ import annotations
 
@@ -89,8 +90,8 @@ def test_phases_must_be_the_whole_dag_in_order():
 def test_a_refused_assessment_still_carries_the_triage():
     """E-44 D7's shape: not admitted is not empty-handed."""
     a = Assessment(repo_dir="/r", commit_sha="a" * 40, triage=_triage(),
-                   admitted=False, admission_reason="verdict not_ready",
-                   phases=_phases(set()), terminal_status=BLOCKED)
+                    admitted=False, admission_reason="verdict not_ready",
+                    phases=_phases(set()), terminal_status=BLOCKED)
     assert a.triage is not None
     assert a.triage.commit_sha == "a" * 40
 
@@ -199,9 +200,11 @@ def test_a_measured_scan_phase_with_a_payload_constructs():
 def test_assemble_threads_the_scan_payload_through():
     from sdlc.workflows.assessment import unbuilt
     rest = [PhaseResult(phase=PhaseId.SCAN,
-                        collected=Measurement.measured(0.0))]
+                        collected=Measurement.measured(0.0)),
+            PhaseResult(phase=PhaseId.DISCOVER,
+                        collected=Measurement.not_collected("discover not run"))]
     rest += [unbuilt(p) for p in PHASE_ORDER
-             if p not in (PhaseId.INIT, PhaseId.SCAN)]
+             if p not in (PhaseId.INIT, PhaseId.SCAN, PhaseId.DISCOVER)]
     a = assemble("/r", _init_out(), True, "verdict ready", rest,
                   scan=_scan_result())
     assert a.scan is not None

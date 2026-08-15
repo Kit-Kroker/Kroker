@@ -1,3 +1,4 @@
+# tests/test_assessment_workflow.py
 """E-45. Pure helpers directly; sequencing through the workflow environment
 lives in tests/test_assessment_workflow_e2e.py, following
 tests/test_tidyup_workflow.py."""
@@ -20,8 +21,8 @@ from sdlc.measurement import CollectionState, Measurement
 from sdlc.models import GatePolicy
 from sdlc.triage.models import Readiness, RepoTriage, Verdict
 from sdlc.workflows.assessment import (
-    PHASE_OWNER, AssessmentInput, AssessmentWorkflow, assemble, skipped,
-    unbuilt,
+    PHASE_OWNER, AssessmentInput, AssessmentWorkflow, DiscoverOutcome, assemble,
+    no_discover, skipped, unbuilt,
 )
 
 
@@ -43,6 +44,23 @@ def _scan_result() -> ScanResult:
                          source=SignalSource.COMPUTED, collected=val,
                          categories={k: val for k in CATEGORIES[s]})
         for s in SCAN_ORDER])
+
+
+def _rest_after_discover(discover: PhaseResult | None = None
+                         ) -> list[PhaseResult]:
+    """SCAN (E-46) and DISCOVER (E-48) are built; the other four are stubs.
+
+    DISCOVER defaults to not_collected so a caller that does not care about
+    the discover pairing need not supply a CapabilityMap.
+    """
+    out = [PhaseResult(phase=PhaseId.SCAN,
+                       collected=Measurement.measured(0.0)),
+           discover or PhaseResult(
+               phase=PhaseId.DISCOVER,
+               collected=Measurement.not_collected("discover not run"))]
+    out += [unbuilt(p) for p in PHASE_ORDER
+            if p not in (PhaseId.INIT, PhaseId.SCAN, PhaseId.DISCOVER)]
+    return out
 
 
 def _init(ok: bool = True) -> InitOutcome:
@@ -75,9 +93,11 @@ def test_every_unbuilt_phase_names_the_item_that_owes_it():
 
 
 def test_every_post_init_phase_has_an_owner():
-    # SCAN is built in E-46, so it is not in PHASE_OWNER; every other
-    # post-init phase still names the item that owes its body.
-    assert set(PHASE_OWNER) == set(PHASE_ORDER) - {PhaseId.INIT, PhaseId.SCAN}
+    # SCAN is built in E-46 and DISCOVER in E-48, so neither is in
+    # PHASE_OWNER; every other post-init phase still names the item that owes
+    # its body.
+    assert set(PHASE_OWNER) == set(PHASE_ORDER) - {
+        PhaseId.INIT, PhaseId.SCAN, PhaseId.DISCOVER}
 
 
 def test_assemble_fills_the_whole_dag_on_a_refusal():
@@ -109,13 +129,7 @@ def test_assemble_on_a_failed_child_has_no_commit_and_is_not_admitted():
 
 
 def test_assemble_on_an_admitted_run_reports_partial_once_scan_lands():
-    # SCAN is built in E-46 (always measured when admitted); the other five
-    # phases are still stubs. terminal_status derives PARTIAL with no workflow
-    # edit (D6), and the canonical phase order is preserved.
-    rest = [PhaseResult(phase=PhaseId.SCAN, collected=Measurement.measured(0.0))]
-    rest += [unbuilt(p) for p in PHASE_ORDER
-             if p not in (PhaseId.INIT, PhaseId.SCAN)]
-    a = assemble("/r", _init(), True, "verdict ready", rest,
+    a = assemble("/r", _init(), True, "verdict ready", _rest_after_discover(),
                  scan=_scan_result())
     assert a.admitted is True
     assert a.terminal_status == PARTIAL
@@ -133,11 +147,8 @@ def test_assemble_reports_assessed_once_every_phase_collects():
 
 
 def test_assemble_orders_phases_canonically_regardless_of_arrival():
-    rest = [PhaseResult(phase=PhaseId.SCAN, collected=Measurement.measured(0.0))]
-    rest += [unbuilt(p) for p in PHASE_ORDER
-             if p not in (PhaseId.INIT, PhaseId.SCAN)]
     a = assemble("/r", _init(), True, "verdict ready",
-                 list(reversed(rest)), scan=_scan_result())
+                 list(reversed(_rest_after_discover())), scan=_scan_result())
     assert [p.phase for p in a.phases] == list(PHASE_ORDER)
 
 
@@ -148,7 +159,7 @@ def test_assemble_rejects_a_partial_rest_on_an_admitted_run():
     contradiction on the face of an FR-921 bundle (review finding 1). The
     not-admitted path still fills with skipped(), whose message is then
     truthful."""
-    partial = [unbuilt(PhaseId.DISCOVER)]         # one of the unbuilt phases
+    partial = [unbuilt(PhaseId.ASSESS)]        # one of the unbuilt phases
     with pytest.raises(ValueError, match="admitted"):
         assemble("/r", _init(), True, "verdict ready", partial)
 
@@ -174,3 +185,49 @@ def test_the_run_body_calls_the_phases_in_dag_order():
 def test_admission_is_checked_at_tier_two_strictness():
     src = inspect.getsource(AssessmentWorkflow.run)
     assert "require_human=True" in src
+
+
+# --- E-48 plan 2: discover is a built phase ------------------------------
+
+
+def test_discover_is_no_longer_an_unbuilt_phase():
+    """E-46 dropped SCAN from PHASE_OWNER when its body landed; this is the
+    same move for DISCOVER, and terminal_status derives the change."""
+    assert PhaseId.DISCOVER not in PHASE_OWNER
+
+
+def test_the_input_carries_a_project_key():
+    """Capability identity is per-project (E-47a), and a value derived from
+    repo_dir would move every client-cited BC-NNN when a checkout moves.
+    Named after PipelineConfig.project_key, which addresses the same SQLite."""
+    assert AssessmentInput(repo_dir="/r").project_key == "default"
+
+
+def test_no_discover_carries_its_reason_and_no_map():
+    out = no_discover("S5 did not collect: nothing merged")
+    assert out.map is None
+    assert out.result.phase is PhaseId.DISCOVER
+    assert out.result.collected.state is CollectionState.NOT_COLLECTED
+    assert "S5" in out.result.collected.reason
+
+
+def test_a_measured_discover_reaches_the_artifact():
+    """The pairing Assessment._discover_agrees_with_its_phase enforces, from
+    the workflow's side: assemble() must be handed the map whenever the phase
+    row is measured."""
+    cap_map = CapabilityMap(collected=Measurement.measured(0.0))
+    rest = _rest_after_discover(PhaseResult(
+        phase=PhaseId.DISCOVER, collected=cap_map.collected))
+    a = assemble("/r", _init(), True, "verdict ready", rest,
+                 scan=_scan_result(), discover=cap_map)
+    assert a.discover is not None
+    assert a.terminal_status == PARTIAL
+
+
+def test_the_run_body_passes_the_scan_and_triage_into_discover():
+    """_discover needs the tree hash, the pinned commit and the candidate set;
+    a body that still called self._discover(inp) would compile and silently
+    rediscover nothing."""
+    src = inspect.getsource(AssessmentWorkflow.run)
+    assert "self._discover(inp, init.triage, scan_out)" in src
+    assert "discover=discover_out.map" in src

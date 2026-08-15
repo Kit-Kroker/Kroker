@@ -27,11 +27,14 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from ..assessment.activities import (
-        AssessmentTree, AssessmentTreeInput, ScanSignalInput,
-        assessment_resolve_tree, scan_ci, scan_config_infra, scan_coverage,
-        scan_entrypoints, scan_frontend, scan_packages, scan_schema,
-        scan_security_static, scan_sensitivity, scan_testability,
-        scan_tests_inventory,
+        AssessmentTree, AssessmentTreeInput, DiscoverContextInput,
+        DiscoverFinalizeInput, DiscoverLockInput, DiscoverMemoInput,
+        DiscoverMemoStoreInput, ScanSignalInput, assessment_resolve_tree,
+        discover_context, discover_finalize, discover_lock,
+        discover_memo_load, discover_memo_store, no_finalize, scan_ci,
+        scan_config_infra, scan_coverage, scan_entrypoints, scan_frontend,
+        scan_packages, scan_schema, scan_security_static, scan_sensitivity,
+        scan_testability, scan_tests_inventory,
     )
     from ..assessment.models import (
         PHASE_ORDER,
@@ -41,7 +44,13 @@ with workflow.unsafe.imports_passed_through():
         PhaseResult,
         terminal_status,
     )
-    from ..assessment.discover.map import CapabilityMap
+    from ..assessment.discover.apply import (
+        apply, build_map, fingerprint_of, stamp,
+    )
+    from ..assessment.discover.context import (
+        contract_collected, schema_collected,
+    )
+    from ..assessment.discover.map import CapabilityMap, context_digest
     from ..assessment.scan.inherit import InheritedHalf, inherited_halves
     from ..assessment.scan.merge import MergeOutput, merge
     from ..assessment.scan.models import (
@@ -50,7 +59,9 @@ with workflow.unsafe.imports_passed_through():
         family_of,
     )
     from ..assessment.scan.registry import SCAN_SIGNALS, WAVES
+    from ..capability.models import ProposedCapability
     from ..measurement import CollectionState, Measurement
+    from ..memoization.cache import NO_PROPOSER
     from ..models import GateSettings
     from ..triage.admission import admits
     from ..triage.models import RepoTriage
@@ -70,13 +81,18 @@ class AssessmentInput(BaseModel):
     build_probe: bool = True
     advisory_source: str = "none"
     gates: GateSettings = Field(default_factory=GateSettings)
+    # Capability identity is per-project (E-47a), and this is the scope every
+    # BC-NNN is allocated within. Deliberately NOT derived from repo_dir: a
+    # value computed from a filesystem path moves every client-cited id when
+    # a checkout moves. Named after PipelineConfig.project_key, which
+    # addresses the same SQLite file.
+    project_key: str = "default"
 
 
 # The E-item owing each unbuilt phase body, so an empty assessment says WHY
-# it is empty rather than merely being empty. SCAN dropped here in E-46: its
-# body is built, so nothing owes it.
+# it is empty rather than merely being empty. SCAN dropped here in E-46 and
+# DISCOVER in E-48: their bodies are built, so nothing owes them.
 PHASE_OWNER: dict[PhaseId, str] = {
-    PhaseId.DISCOVER: "E-48",
     PhaseId.ASSESS: "E-49",
     PhaseId.REPORT: "E-52",
     PhaseId.GENERATE: "E-52",
@@ -129,9 +145,38 @@ SCAN_ACTIVITIES = {
 
 class ScanOutcome(BaseModel):
     """scan's two halves, mirroring InitOutcome: a failed phase yields a row
-    but no artifact."""
+    but no artifact.
+
+    `tree_hash` travels with them because discover keys its memo on the same
+    tree scan did (DD10). Resolving it a second time would let the two phases
+    describe different trees if a concurrent write landed between them.
+    """
     result: PhaseResult
     scan: ScanResult | None = None
+    tree_hash: str = ""
+
+
+DISCOVER_ACT = dict(start_to_close_timeout=timedelta(minutes=10),
+                    retry_policy=RetryPolicy(maximum_attempts=2))
+# Three attempts, not two: an IdentityConflictError means a concurrent
+# assessment wrote first, and a retry re-reads the registry and re-matches
+# (E-47a's loser behaviour) rather than replaying computed attachments.
+LOCK_ACT = dict(start_to_close_timeout=timedelta(minutes=2),
+                retry_policy=RetryPolicy(maximum_attempts=3))
+
+
+class DiscoverOutcome(BaseModel):
+    """discover's two halves, mirroring ScanOutcome."""
+    result: PhaseResult
+    map: CapabilityMap | None = None
+
+
+def no_discover(reason: str) -> DiscoverOutcome:
+    """DD9's phase-level failure: the capability set itself could not be
+    produced, so there is no map. Everything short of that degrades
+    per-report INSIDE the map instead."""
+    return DiscoverOutcome(result=PhaseResult(
+        phase=PhaseId.DISCOVER, collected=Measurement.not_collected(reason)))
 
 
 def skipped_scan_signal(signal_id: ScanSignalId,
@@ -430,11 +475,114 @@ class AssessmentWorkflow(GateHost):
         return ScanOutcome(
             result=PhaseResult(phase=PhaseId.SCAN,
                                collected=Measurement.measured(float(measured))),
-            scan=scan)
+            scan=scan, tree_hash=tree.tree_hash)
 
-    async def _discover(self, inp: AssessmentInput) -> PhaseResult:
-        """E-48 owns this body: D1-D8 discover proposers."""
-        return unbuilt(PhaseId.DISCOVER)
+    async def _discover(self, inp: AssessmentInput, triage: RepoTriage,
+                        scan_out: ScanOutcome) -> DiscoverOutcome:
+        """Phase 3 (E-48). DD4's pipeline, minus the proposer plan 3 inserts
+        between `baseline_dispositions` and `stamp`.
+
+        Nothing here executes the assessed repository's code -- both
+        activities read blob bytes at the pinned commit (NFR-9).
+        """
+        if scan_out.scan is None:
+            return no_discover(
+                f"scan produced no result: {scan_out.result.collected.reason}")
+        s5 = next((r for r in scan_out.scan.signals
+                   if r.signal is ScanSignalId.S5), None)
+        if s5 is None or s5.collected.state is not CollectionState.MEASURED:
+            # DD9's first row. Without a candidate set there is nothing to
+            # dispose over, and an empty map would claim the repository has
+            # no capabilities rather than that the scan could not see them.
+            return no_discover(
+                f"S5 did not collect: "
+                f"{s5.collected.reason if s5 else 'no S5 row'}")
+
+        try:
+            context = await workflow.execute_activity(
+                discover_context,
+                DiscoverContextInput(
+                    repo_dir=inp.repo_dir, commit_sha=triage.commit_sha,
+                    tree_hash=scan_out.tree_hash, scan=scan_out.scan),
+                **DISCOVER_ACT)
+        except Exception as e:                          # noqa: BLE001
+            return no_discover(
+                f"discover_context failed: {type(e).__name__}: {e}"[:300])
+        if context.collected.state is not CollectionState.MEASURED:
+            return no_discover(
+                f"the context could not be built: {context.collected.reason}")
+
+        # P2-D6: NO_PROPOSER, never "". Plan 3 passes the role's prompt_sha
+        # and model here, and a baseline-only map must never share a key with
+        # a proposer map.
+        memo_key = DiscoverMemoInput(
+            project=inp.project_key, tree_hash=scan_out.tree_hash,
+            context_digest=context_digest(context),
+            prompt_sha=NO_PROPOSER, model=NO_PROPOSER)
+        # A cache read that fails is a MISS, never a phase failure.
+        hit = await run_or_degrade(discover_memo_load, memo_key,
+                                   DISCOVER_ACT, fallback=lambda: None)
+        if hit is not None:
+            return DiscoverOutcome(
+                result=PhaseResult(phase=PhaseId.DISCOVER,
+                                   collected=hit.collected), map=hit)
+
+        # Plan 3 replaces `None` with the proposer's DiscoverProposal; stamp()
+        # already knows what to do with either (DD7).
+        applied = apply(context, stamp(context, None))
+
+        try:
+            lock = await workflow.execute_activity(
+                discover_lock,
+                DiscoverLockInput(
+                    project=inp.project_key, run_id=workflow.info().run_id,
+                    proposed=[ProposedCapability(local_key=c.local_key,
+                                                 fingerprint=fingerprint_of(c))
+                              for c in applied.locked]),
+                **LOCK_ACT)
+        except Exception as e:                          # noqa: BLE001
+            # E-47a's fail-closed rule (DD9): proceeding produces a complete,
+            # plausible-looking map in which every id is wrong.
+            return no_discover(
+                f"identity lock failed: {type(e).__name__}: {e}"[:300])
+
+        bc_of = {a.local_key: a.bc_id for a in lock.attachments}
+        try:
+            finalized = await run_or_degrade(
+                discover_finalize,
+                DiscoverFinalizeInput(
+                    repo_dir=inp.repo_dir, commit_sha=triage.commit_sha,
+                    members={bc_of[c.local_key]: list(c.members)
+                             for c in applied.locked},
+                    entry_point_paths=list(context.entry_point_paths),
+                    schema_collected=schema_collected(scan_out.scan),
+                    contract_collected=contract_collected(scan_out.scan)),
+                DISCOVER_ACT,
+                fallback=lambda: no_finalize(
+                    "discover_finalize did not run to completion"))
+            capability_map = build_map(
+                applied, bc_of, advisories=lock.advisories,
+                attribution=finalized.attribution,
+                decomposition=finalized.decomposition,
+                ownership=finalized.ownership)
+        except Exception as e:                          # noqa: BLE001
+            # build_map raises only on a lock defect (a boundary with no
+            # bc_id). Reporting it as a phase failure keeps the reason on the
+            # artifact instead of retrying a workflow task forever.
+            return no_discover(
+                f"the map could not be assembled: "
+                f"{type(e).__name__}: {e}"[:300])
+
+        await run_or_degrade(
+            discover_memo_store,
+            DiscoverMemoStoreInput(key=memo_key,
+                                   registry_version=lock.registry_version,
+                                   out=capability_map),
+            DISCOVER_ACT, fallback=lambda: False)
+        return DiscoverOutcome(
+            result=PhaseResult(phase=PhaseId.DISCOVER,
+                               collected=capability_map.collected),
+            map=capability_map)
 
     async def _assess(self, inp: AssessmentInput) -> PhaseResult:
         """E-49 owns this body: UnifiedRiskMap + risk proposers."""
@@ -473,13 +621,15 @@ class AssessmentWorkflow(GateHost):
 
         self._status = "running"
         scan_out = await self._scan(inp, init.triage)
+        discover_out = await self._discover(inp, init.triage, scan_out)
         rest = [
             scan_out.result,
-            await self._discover(inp),
+            discover_out.result,
             await self._assess(inp),
             await self._report(inp),      # AFTER assess -- FR-911 dev. (a)
             await self._generate(inp),
             await self._finish(inp),
         ]
         return self._done(assemble(inp.repo_dir, init, True, why, rest,
-                                   scan=scan_out.scan))
+                                   scan=scan_out.scan,
+                                   discover=discover_out.map))
