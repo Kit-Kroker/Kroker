@@ -237,3 +237,107 @@ def stamp(context: DiscoverContext,
         unknown_candidate_ids=tuple(sorted(unknown)),
         dropped=sum(1 for d in final
                     if d.source is DispositionSource.DROPPED))
+
+
+# P2-D2. build_context computed cohesion and coupling over the candidate's
+# ORIGINAL members and then discarded the reference graph (DD4), so a
+# boundary whose member set changed cannot have them recomputed here.
+# Reporting the old number would attach a measurement to a thing it does not
+# describe, which is the FR-915 conflation.
+_SPLIT_REASON = ("this boundary is one partition of a split candidate, and "
+                 "the metric was computed over the whole candidate")
+_MERGE_REASON = ("this boundary absorbed another candidate's members, and "
+                 "the metric was computed before the merge")
+
+
+class LockedCandidate(BaseModel):
+    """A boundary that survived disposition, before it has a bc_id.
+
+    Capability minus bc_id, deliberately: identity is the lock's to assign
+    (D4), and a type that could hold one before the lock ran would let a
+    caller mint capability identity in the wrong phase -- the confusion
+    ScanCandidate's docstring already warns about for C-NN vs BC-NNN.
+    """
+    model_config = {"frozen": True}
+    local_key: str
+    name: str
+    confidence: Confidence
+    members: tuple[CandidateMember, ...]
+    member_paths: tuple[str, ...]
+    cohesion: Measurement
+    coupling: Measurement
+    disposition: CandidateDisposition
+
+
+class ApplyResult(BaseModel):
+    locked: tuple[LockedCandidate, ...] = ()
+    stamped: StampedProposal
+
+    @model_validator(mode="after")
+    def _local_keys_are_unique_and_sorted(self) -> "ApplyResult":
+        keys = [c.local_key for c in self.locked]
+        if keys != sorted(set(keys)):
+            raise ValueError(
+                f"local_keys {keys} are not unique and sorted -- resolve() "
+                f"raises on a duplicate local_key, and discovery order must "
+                f"not reach the artifact")
+        return self
+
+
+def apply(context: DiscoverContext,
+          stamped: StampedProposal) -> ApplyResult:
+    """Verified dispositions in, the boundaries the lock will identify out.
+
+    CONFIRM keeps its measured metrics; a merge winner and a split part lose
+    theirs to not_collected (P2-D2). MERGE produces no boundary of its own --
+    the loser's members fold into the winner, and only the winner is handed
+    to resolve().
+    """
+    by_id = {c.candidate_id: c for c in context.candidates}
+    disposition_of = {d.candidate_id: d for d in stamped.dispositions}
+
+    absorbed: dict[str, list[CandidateContext]] = {}
+    for d in stamped.dispositions:
+        if d.action is DiscoverAction.MERGE and d.merge_into is not None:
+            absorbed.setdefault(d.merge_into, []).append(
+                by_id[d.candidate_id])
+
+    locked: list[LockedCandidate] = []
+    for context_row in context.candidates:
+        d = disposition_of[context_row.candidate_id]
+        if d.action in REJECTING_ACTIONS or d.action is DiscoverAction.MERGE:
+            continue
+
+        if d.action is DiscoverAction.SPLIT:
+            for part in d.partitions:
+                wanted = set(part.member_values)
+                members = tuple(m for m in context_row.members
+                                if m.value in wanted)
+                locked.append(LockedCandidate(
+                    local_key=f"{context_row.candidate_id}#{part.name}",
+                    name=part.name, confidence=context_row.confidence,
+                    members=members,
+                    member_paths=tuple(sorted({m.path for m in members
+                                               if m.path})),
+                    cohesion=Measurement.not_collected(_SPLIT_REASON),
+                    coupling=Measurement.not_collected(_SPLIT_REASON),
+                    disposition=d))
+            continue
+
+        taken = absorbed.get(context_row.candidate_id, [])
+        members = tuple(sorted(
+            set(context_row.members) | {m for a in taken for m in a.members},
+            key=CandidateMember.sort_key))
+        locked.append(LockedCandidate(
+            local_key=context_row.candidate_id, name=context_row.name,
+            confidence=context_row.confidence, members=members,
+            member_paths=tuple(sorted({m.path for m in members if m.path})),
+            cohesion=(Measurement.not_collected(_MERGE_REASON) if taken
+                      else context_row.cohesion),
+            coupling=(Measurement.not_collected(_MERGE_REASON) if taken
+                      else context_row.coupling),
+            disposition=d))
+
+    return ApplyResult(
+        locked=tuple(sorted(locked, key=lambda c: c.local_key)),
+        stamped=stamped)
