@@ -39,6 +39,10 @@ from .discover.models import (
 from .discover.verify import RefVerification, cited_paths, verify_refs
 from .discover.operations import decompose
 from .discover.ownership import assign
+from .risk import memo as risk_memo
+from .risk.build import build as build_risk, no_risk
+from .risk.models import UnifiedRiskMap
+from .risk.rules import rules_sha as risk_rules_sha
 from .scan import memo
 from .scan.models import (
     CATEGORIES, CandidateMember, ScanResult, ScanSignalId, ScanSignalResult,
@@ -706,6 +710,46 @@ async def load_blueprint(inp: BlueprintInput) -> BlueprintComparison:
             f"the blueprint {inp.path!r} is missing or did not parse")
     return compare(inp.capabilities, loaded.processes,
                    name=loaded.name, version=loaded.version)
+
+
+class AssessRiskInput(BaseModel):
+    """`collected_categories` is a list, not a frozenset: Temporal payloads
+    are JSON, and a set has no stable serialization. build() takes the
+    frozenset, so the conversion happens here at the seam."""
+    project: str
+    tree_hash: str
+    capability_map: CapabilityMap
+    collected_categories: list[str] = Field(default_factory=list)
+
+
+@activity.defn
+async def assess_risk(inp: AssessRiskInput) -> UnifiedRiskMap:
+    """E-49 plan 1: the deterministic risk score.
+
+    Reads no blobs and executes nothing -- every input is a parameter
+    projected from the CapabilityMap (NFR-9).
+
+    Never raises: a crash here would fail the phase, and the phase's own
+    contract is that a failure is a not_collected artifact naming the reason
+    (E-41 spec D3).
+    """
+    digest = risk_memo.map_digest(inp.capability_map)
+    sha = risk_rules_sha()
+    hit = risk_memo.load(project=inp.project, tree_hash=inp.tree_hash,
+                         map_digest=digest, rules_sha=sha)
+    if hit is not None:
+        return hit
+    try:
+        out = build_risk(
+            inp.capability_map,
+            collected_categories=frozenset(inp.collected_categories))
+    except Exception as exc:                              # noqa: BLE001
+        _log.warning("assess_risk failed: %s", exc)
+        return no_risk(f"assess raised: {type(exc).__name__}: {exc}"[:300])
+    risk_memo.store(project=inp.project, tree_hash=inp.tree_hash,
+                    map_digest=digest, rules_sha=sha, out=out)
+    return out
+
 
 
 
