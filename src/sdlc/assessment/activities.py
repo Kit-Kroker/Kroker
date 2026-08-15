@@ -15,6 +15,11 @@ from pydantic import BaseModel, Field
 from temporalio import activity
 
 from ..activities import _git
+from ..capability.matcher import resolve
+from ..capability.models import (
+    Advisory, IdentityAttachment, ProposedCapability,
+)
+from ..capability.rows import identity_rows
 from ..capability.store import BoardIdentityStore
 from ..measurement import Measurement
 from ..triage.activities import tracked_paths
@@ -486,4 +491,59 @@ async def discover_memo_store(inp: DiscoverMemoStoreInput) -> bool:
         context_digest=inp.key.context_digest,
         registry_version=inp.registry_version,
         prompt_sha=inp.key.prompt_sha, model=inp.key.model, out=inp.out)
+
+
+class DiscoverLockInput(BaseModel):
+    """Clause D4's input: the boundaries that survived disposition, each with
+    the fingerprint this assessment observed."""
+    project: str
+    run_id: str
+    proposed: list[ProposedCapability] = Field(default_factory=list)
+
+
+class DiscoverLockOutcome(BaseModel):
+    attachments: list[IdentityAttachment] = Field(default_factory=list)
+    advisories: list[Advisory] = Field(default_factory=list)
+    registry_version: int
+
+
+@activity.defn
+async def discover_lock(inp: DiscoverLockInput) -> DiscoverLockOutcome:
+    """Attach a durable BC-NNN to every surviving boundary (D4, DD5).
+
+    Deliberately NOT never-raising, unlike every other activity in this phase.
+    A scan signal that cannot read the tree degrades to not_collected because
+    the other twelve still report; an identity store that cannot be read or
+    written has no such containment -- proceeding "produces a complete,
+    plausible-looking map in which every id is wrong, and the next successful
+    write commits that corruption" (E-47a). The workflow turns the raise into
+    a not_collected PHASE (DD9).
+
+    Its RetryPolicy is what implements E-47a's concurrency rule: an
+    IdentityConflictError means another assessment wrote first, and a retry
+    re-reads the registry and re-matches rather than replaying computed
+    attachments. Ordinals burned by a failed attempt are gaps, never reuse --
+    the allocator's documented behaviour.
+    """
+    store = BoardIdentityStore()
+    try:
+        version = store.registry_version(inp.project)
+        registry = store.load(inp.project)
+        result = resolve(inp.proposed, registry,
+                         allocate=store.allocator(inp.project))
+        rows = identity_rows(
+            inp.project, inp.run_id, result,
+            {p.local_key: p.fingerprint for p in inp.proposed}, registry)
+        # P2-D7: a write with no rows bumps the version and records nothing,
+        # invalidating every project memo for a change that did not happen.
+        new_version = (
+            store.apply(inp.project, rows, expected_version=version,
+                        actor="assessment", operation="resolve")
+            if rows else version)
+    finally:
+        store.close()
+    return DiscoverLockOutcome(attachments=result.attachments,
+                               advisories=result.advisories,
+                               registry_version=new_version)
+
 
