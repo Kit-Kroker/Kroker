@@ -10,6 +10,7 @@ from sdlc.assessment.risk.models import SystemRisk, UnifiedRiskMap
 from sdlc.assessment.discover.map import CapabilityMap
 from sdlc.measurement import Measurement
 from sdlc.memoization import cache
+from sdlc.memoization.cache import NO_PROPOSER, risk_key
 
 
 @pytest.fixture(autouse=True)
@@ -17,7 +18,8 @@ def _cache_root(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_MEMOIZATION_CACHE_ROOT", str(tmp_path))
 
 
-KW = dict(project="p", tree_hash="t", map_digest="d", rules_sha="r")
+KW = dict(project="p", tree_hash="t", map_digest="d", rules_sha="r",
+          prompt_sha=NO_PROPOSER, model=NO_PROPOSER)
 
 
 def _measured() -> UnifiedRiskMap:
@@ -42,16 +44,19 @@ def test_an_uncollected_map_is_never_stored():
 
 
 def test_corrupt_content_is_a_miss_not_a_crash():
-    cache.put(cache.risk_key("p", "t", "d", "r"), "{not json")
+    cache.put(cache.risk_key("p", "t", "d", "r", NO_PROPOSER, NO_PROPOSER),
+              "{not json")
     assert memo.load(**KW) is None
 
 
 def test_the_key_moves_with_every_term():
-    base = cache.risk_key("p", "t", "d", "r")
-    assert cache.risk_key("p2", "t", "d", "r") != base
-    assert cache.risk_key("p", "t2", "d", "r") != base
-    assert cache.risk_key("p", "t", "d2", "r") != base
-    assert cache.risk_key("p", "t", "d", "r2") != base
+    base = cache.risk_key("p", "t", "d", "r", NO_PROPOSER, NO_PROPOSER)
+    assert cache.risk_key("p2", "t", "d", "r", NO_PROPOSER, NO_PROPOSER) != base
+    assert cache.risk_key("p", "t2", "d", "r", NO_PROPOSER, NO_PROPOSER) != base
+    assert cache.risk_key("p", "t", "d2", "r", NO_PROPOSER, NO_PROPOSER) != base
+    assert cache.risk_key("p", "t", "d", "r2", NO_PROPOSER, NO_PROPOSER) != base
+    assert cache.risk_key("p", "t", "d", "r", "prompt2", NO_PROPOSER) != base
+    assert cache.risk_key("p", "t", "d", "r", NO_PROPOSER, "model2") != base
 
 
 def test_map_digest_is_stable_and_content_addressed():
@@ -60,3 +65,42 @@ def test_map_digest_is_stable_and_content_addressed():
     assert map_digest(a) == map_digest(b)
     c = CapabilityMap(collected=Measurement.not_collected("x"))
     assert map_digest(c) != map_digest(a)
+
+
+def test_the_proposer_terms_are_part_of_the_key():
+    """A baseline-only map and a judged map must never share a key."""
+    baseline = risk_key("p", "t", "d", "s", NO_PROPOSER, NO_PROPOSER)
+    judged = risk_key("p", "t", "d", "s", "abc", "anthropic:x")
+    assert baseline != judged
+
+
+def test_a_degraded_judgment_is_not_stored_under_a_proposer_key(tmp_path,
+                                                                monkeypatch):
+    """P2-D3: a transient model failure must cost one recompute, never a
+    permanently judgment-free map served from cache."""
+    monkeypatch.setenv("SDLC_MEMOIZATION_CACHE_ROOT", str(tmp_path))
+    from sdlc.assessment.risk import memo
+    from sdlc.assessment.risk.models import UnifiedRiskMap
+    from sdlc.measurement import Measurement
+
+    m = UnifiedRiskMap(collected=Measurement.measured(1.0),
+                       judgment=Measurement.not_collected("proposer failed"))
+    assert memo.store(project="p", tree_hash="t", map_digest="d",
+                      rules_sha="s", prompt_sha="abc", model="m",
+                      out=m) is False
+
+
+def test_a_degraded_judgment_IS_stored_under_the_no_proposer_key(tmp_path,
+                                                                 monkeypatch):
+    """With no proposer configured the degradation is permanent, not
+    transient, so caching it is correct."""
+    monkeypatch.setenv("SDLC_MEMOIZATION_CACHE_ROOT", str(tmp_path))
+    from sdlc.assessment.risk import memo
+    from sdlc.assessment.risk.models import UnifiedRiskMap
+    from sdlc.measurement import Measurement
+
+    m = UnifiedRiskMap(collected=Measurement.measured(1.0),
+                       judgment=Measurement.not_collected("no proposer"))
+    assert memo.store(project="p", tree_hash="t", map_digest="d",
+                      rules_sha="s", prompt_sha=NO_PROPOSER,
+                      model=NO_PROPOSER, out=m) is True

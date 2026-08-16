@@ -81,8 +81,8 @@ def discover_key(project: str, tree_hash: str, context_digest: str,
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
-def risk_key(project: str, tree_hash: str, map_digest: str,
-             rules_sha: str) -> str:
+def risk_key(project: str, tree_hash: str, map_digest: str, rules_sha: str,
+             prompt_sha: str, model_id: str) -> str:
     """Memo key for the whole assess phase (E-49).
 
     A sibling of discover_key for signal_key's reason. `map_digest` rather
@@ -90,11 +90,13 @@ def risk_key(project: str, tree_hash: str, map_digest: str,
     folds identity_registry_version (E-47a's FR-103 amendment), so digesting
     it inherits that term instead of maintaining a second copy of the list.
 
-    No prompt_sha or model_id term: plan 1 has no proposer, and plan 2 adds
-    them here rather than passing "" -- which signal_key's docstring refuses,
-    because it makes "no model was involved" indistinguishable from a bug
-    that dropped the model id.
+    `prompt_sha` and `model_id` carry the explicit NO_PROPOSER sentinel when
+    no proposer ran, never "" -- which signal_key's docstring refuses, because
+    it makes "no model was involved" indistinguishable from a bug that dropped
+    the model id, in the one place where a silently wrong value serves stale
+    results indefinitely.
     """
-    payload = "|".join(["risk", project, tree_hash, map_digest, rules_sha])
+    payload = "|".join(["risk", project, tree_hash, map_digest, rules_sha,
+                        prompt_sha, model_id])
     return hashlib.sha256(payload.encode()).hexdigest()
 

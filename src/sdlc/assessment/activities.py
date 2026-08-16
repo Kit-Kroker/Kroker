@@ -41,8 +41,12 @@ from .discover.operations import decompose
 from .discover.ownership import assign
 from .risk import memo as risk_memo
 from .risk.build import build as build_risk, no_risk
-from .risk.models import UnifiedRiskMap
+from .risk.models import (
+    ProposedControl, ProposedThreat, ProposedVulnerability, RiskProposal,
+    RiskVerification, UnifiedRiskMap,
+)
 from .risk.rules import rules_sha as risk_rules_sha
+from .verification import cited_paths_of, verify_rows
 from .scan import memo
 from .scan.models import (
     CATEGORIES, CandidateMember, ScanResult, ScanSignalId, ScanSignalResult,
@@ -715,16 +719,20 @@ async def load_blueprint(inp: BlueprintInput) -> BlueprintComparison:
 class AssessRiskInput(BaseModel):
     """`collected_categories` is a list, not a frozenset: Temporal payloads
     are JSON, and a set has no stable serialization. build() takes the
-    frozenset, so the conversion happens here at the seam."""
-    project: str
-    tree_hash: str
+    frozenset, so the conversion happens here at the seam.
+
+    No project/tree_hash since plan 2: the memo moved out of this activity
+    (the artifact it stores now depends on a model call only the workflow can
+    make), and a payload field nothing reads is a field a reader must
+    disprove.
+    """
     capability_map: CapabilityMap
     collected_categories: list[str] = Field(default_factory=list)
 
 
 @activity.defn
 async def assess_risk(inp: AssessRiskInput) -> UnifiedRiskMap:
-    """E-49 plan 1: the deterministic risk score.
+    """E-49: the deterministic baseline (RD1).
 
     Reads no blobs and executes nothing -- every input is a parameter
     projected from the CapabilityMap (NFR-9).
@@ -733,22 +741,87 @@ async def assess_risk(inp: AssessRiskInput) -> UnifiedRiskMap:
     contract is that a failure is a not_collected artifact naming the reason
     (E-41 spec D3).
     """
-    digest = risk_memo.map_digest(inp.capability_map)
-    sha = risk_rules_sha()
-    hit = risk_memo.load(project=inp.project, tree_hash=inp.tree_hash,
-                         map_digest=digest, rules_sha=sha)
-    if hit is not None:
-        return hit
     try:
-        out = build_risk(
+        return build_risk(
             inp.capability_map,
             collected_categories=frozenset(inp.collected_categories))
     except Exception as exc:                              # noqa: BLE001
         _log.warning("assess_risk failed: %s", exc)
         return no_risk(f"assess raised: {type(exc).__name__}: {exc}"[:300])
-    risk_memo.store(project=inp.project, tree_hash=inp.tree_hash,
-                    map_digest=digest, rules_sha=sha, out=out)
-    return out
+
+
+class RiskMemoInput(BaseModel):
+    """`rules_sha` is deliberately ABSENT and computed inside the activity:
+    rules_sha() reads module bytes off disk, which is I/O a workflow must
+    never do. `map_digest` is pure, so the workflow computes that one."""
+    project: str
+    tree_hash: str
+    map_digest: str
+    prompt_sha: str
+    model: str
+
+
+class RiskMemoStoreInput(BaseModel):
+    key: RiskMemoInput
+    out: UnifiedRiskMap
+
+
+@activity.defn
+async def risk_memo_load(inp: RiskMemoInput) -> UnifiedRiskMap | None:
+    return risk_memo.load(project=inp.project, tree_hash=inp.tree_hash,
+                          map_digest=inp.map_digest,
+                          rules_sha=risk_rules_sha(),
+                          prompt_sha=inp.prompt_sha, model=inp.model)
+
+
+@activity.defn
+async def risk_memo_store(inp: RiskMemoStoreInput) -> bool:
+    k = inp.key
+    return risk_memo.store(project=k.project, tree_hash=k.tree_hash,
+                           map_digest=k.map_digest,
+                           rules_sha=risk_rules_sha(),
+                           prompt_sha=k.prompt_sha, model=k.model,
+                           out=inp.out)
+
+
+class VerifyRiskRefsInput(BaseModel):
+    """RD6's inputs. The proposal travels whole rather than as a path list:
+    the pure function needs the quotes too, and splitting them would put half
+    the verification decision in the activity."""
+    repo_dir: str
+    commit_sha: str
+    proposal: RiskProposal
+
+
+@activity.defn
+async def verify_risk_refs(inp: VerifyRiskRefsInput) -> RiskVerification:
+    """RD6. The activity READS; verification.py DECIDES.
+
+    NFR-9: `git show <sha>:<path>` at the pinned commit. No checkout, no
+    worktree mutation, and none of the assessed repository's code runs.
+
+    One pass over all three families so the fabrication rate is over every
+    reference the proposer made, not three rates that could each stay under
+    the guard. The survivors are re-split here rather than in the pure
+    function, which is generic over one row type by design.
+    """
+    rows = inp.proposal.rows
+    blobs: dict[str, str | None] = {
+        path: _committed_blob(inp.repo_dir, inp.commit_sha, path)
+        for path in cited_paths_of(rows)
+    }
+    out = verify_rows(rows, blobs, id_of=lambda row: row.row_id)
+    return RiskVerification(
+        proposal=RiskProposal(
+            threats=[r for r in out.survivors
+                     if isinstance(r, ProposedThreat)],
+            vulnerabilities=[r for r in out.survivors
+                             if isinstance(r, ProposedVulnerability)],
+            controls=[r for r in out.survivors
+                      if isinstance(r, ProposedControl)]),
+        refusals=out.refusals, total_references=out.total_references,
+        unresolved_references=out.unresolved_references)
+
 
 
 

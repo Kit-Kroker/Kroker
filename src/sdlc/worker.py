@@ -37,9 +37,11 @@ from .agents.roles import ALL_TEMPORAL_AGENTS
 from .assessment.activities import (
     assess_risk, assessment_resolve_tree, discover_context, discover_finalize,
     discover_lock, discover_memo_load, discover_memo_store, load_blueprint,
+    risk_memo_load, risk_memo_store,
     scan_ci, scan_config_infra, scan_coverage, scan_entrypoints, scan_frontend,
     scan_packages, scan_schema, scan_security_static, scan_sensitivity,
     scan_testability, scan_tests_inventory, verify_discover_refs,
+    verify_risk_refs,
 )
 from .artifacts.read import load_session
 from .artifacts.retention import apply_session_retention
@@ -142,7 +144,7 @@ async def main() -> None:
             scan_security_static, scan_config_infra, scan_sensitivity,
             scan_tests_inventory, scan_coverage, scan_testability, scan_ci,
             verify_discover_refs,
-            assess_risk,
+            assess_risk, risk_memo_load, risk_memo_store, verify_risk_refs,
             *agent_activities,
         ],
     )

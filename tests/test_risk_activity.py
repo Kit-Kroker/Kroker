@@ -31,8 +31,7 @@ def _cmap(*caps) -> CapabilityMap:
 
 
 def _inp(cmap: CapabilityMap) -> AssessRiskInput:
-    return AssessRiskInput(project="p", tree_hash="t", capability_map=cmap,
-                           collected_categories=ALL)
+    return AssessRiskInput(capability_map=cmap, collected_categories=ALL)
 
 
 @pytest.mark.asyncio
@@ -50,11 +49,21 @@ async def test_an_uncollected_map_yields_not_collected():
 
 
 @pytest.mark.asyncio
-async def test_a_second_call_hits_the_memo():
+async def test_the_baseline_is_deterministic_across_calls():
+    """The memo moved to risk_memo_load/store with plan 2; what this seam
+    still owes is a byte-identical result for identical input (NFR-10)."""
     inp = _inp(_cmap(capability()))
     first = await assess_risk(inp)
     second = await assess_risk(inp)
     assert first.model_dump_json() == second.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_the_baseline_reports_no_judgment():
+    """RD7: plan 2's activity still runs no model, so the judgment layer is
+    not_collected until the workflow applies a proposal."""
+    out = await assess_risk(_inp(_cmap(capability())))
+    assert out.judgment.state is CollectionState.NOT_COLLECTED
 
 
 @pytest.mark.asyncio
