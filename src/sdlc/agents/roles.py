@@ -71,6 +71,9 @@ adversary_agent = AGENTS.get("adversary")
 # Optional discover proposer (E-48 DD7). Present iff agents/discover/ ships.
 discover_agent = AGENTS.get("discover")
 
+# Optional risk proposer (E-49 RD7). Present iff agents/risk/ ships.
+risk_agent = AGENTS.get("risk")
+
 # Stage name -> registry role. Stage names (feature.py's pipeline vocabulary)
 # and role names (the registry's) genuinely differ — 'plan'/'planner',
 # 'review'/'reviewer', 'analyze'/'analyst', 'devops'/'devops_planner'. This
@@ -89,6 +92,7 @@ STAGE_ROLES: dict[str, str] = {
     "handoff": "handoff",               # optional; present iff the folder ships
     "adversary": "adversary",           # optional; present iff the folder ships
     "discover": "discover",             # optional; present iff the folder ships
+    "risk": "risk",                     # optional; present iff the folder ships
 }
 
 # Both maps are keyed by stage and looked up together in _cached_stage. Keep
@@ -149,6 +153,13 @@ t_discover = (
     TemporalAgent(discover_agent, activity_config=AGENT_ACTIVITY_CONFIG)
     if discover_agent is not None else None)
 
+# Optional: the risk TemporalAgent exists iff agents/risk/ shipped and built
+# cleanly. workflows/assessment.py guards the phase with
+# `t_risk is not None`, t_discover's pattern (RD7).
+t_risk = (
+    TemporalAgent(risk_agent, activity_config=AGENT_ACTIVITY_CONFIG)
+    if risk_agent is not None else None)
+
 ALL_TEMPORAL_AGENTS = [t_clarify, t_architect, t_planner, t_qa,
                        t_reviewer, t_analyst, t_merge_verdict, t_devops]
 if t_research is not None:
@@ -161,3 +172,6 @@ if t_adversary is not None:
     ALL_TEMPORAL_AGENTS.append(t_adversary)
 if t_discover is not None:
     ALL_TEMPORAL_AGENTS.append(t_discover)
+if t_risk is not None:
+    ALL_TEMPORAL_AGENTS.append(t_risk)
+

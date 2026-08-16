@@ -57,9 +57,10 @@ REQUIRED_ROLES = HARNESS_ROLES | PROPOSER_ROLES
 # KNOWN directory so the unknown-directory check keeps biting. This EXTENDS
 # the fail-closed check; it does not weaken it. 'discover' joins for the same
 # reason at a different tier (E-48 DD7): it is an ASSESSMENT-only role, and
-# making it required would fail boot on a feature-only deployment.
+# making it required would fail boot on a feature-only deployment. 'risk'
+# joins it for the identical reason at the next phase (E-49 RD7).
 OPTIONAL_ROLES: frozenset[str] = frozenset(
-    {"research", "deep_review", "handoff", "adversary", "discover"})
+    {"research", "deep_review", "handoff", "adversary", "discover", "risk"})
 
 # REQUIRED_ROLES gates PRESENCE (a missing one fails boot).
 # KNOWN_ROLES gates RECOGNITION (an unknown directory fails boot).
