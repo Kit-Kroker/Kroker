@@ -26,6 +26,9 @@ def test_rules_sha_covers_every_module_that_can_move_output():
         "sdlc.assessment.risk.factors",
         "sdlc.assessment.risk.composites",
         "sdlc.assessment.risk.build",
+        "sdlc.assessment.risk.prompt",
+        "sdlc.assessment.risk.apply",
+        "sdlc.assessment.verification",
     }
 
 

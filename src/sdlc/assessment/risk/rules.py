@@ -90,8 +90,11 @@ CASCADE_MAX_PATHS = 50
 
 # build.py is here for the reason the others are: it carries the baseline
 # STRIDE category and the POTENTIAL classification, so editing it moves every
-# score. A module that can move output and is not named here is a stale-cache
-# hole -- E-46's D10 records the cost of finding that out late.
+# score. prompt.py, apply.py and assessment/verification.py join with plan 2
+# (P2-D7): the renderer decides what the model sees, apply decides what
+# survives, the verifier decides what is dropped -- all three can move a
+# STORED map. A module that can move output and is not named here is a
+# stale-cache hole; E-46's D10 records the cost of finding that out late.
 RULE_MODULES: tuple[str, ...] = (
     "sdlc.assessment.risk.rules",
     "sdlc.assessment.risk.severity",
@@ -99,6 +102,9 @@ RULE_MODULES: tuple[str, ...] = (
     "sdlc.assessment.risk.factors",
     "sdlc.assessment.risk.composites",
     "sdlc.assessment.risk.build",
+    "sdlc.assessment.risk.prompt",
+    "sdlc.assessment.risk.apply",
+    "sdlc.assessment.verification",
 )
 
 
