@@ -139,31 +139,20 @@ class CandidateDisposition(BaseModel):
         return self
 
 
-# DD8's phase-level citation guard, mirroring E-47b's DEAD_GUARD_MAX_UNRESOLVED
-# (discover/models.py:18) and set to the same value for the same reason: past
-# this fabrication rate, too many references failed to resolve for the
-# surviving ones to be evidence.
-CITATION_GUARD_MAX_UNRESOLVED: float = 0.10
+# DD8's phase-level citation guard. The threshold and the wording are
+# verification.py's since E-49 RD6: two reasons that must not converge cannot
+# converge if there is only one. Re-exported here because E-48's tests and
+# call sites import it from this module.
+from ..verification import (                             # noqa: E402
+    CITATION_GUARD_MAX_UNRESOLVED, guard_reason,
+)
 
 
 def guard_tripped(verification: "RefVerification") -> str:
-    """DD8's phase-level guard: the reason the phase must report
-    not_collected, or "" when the proposal is usable.
+    """DD8's phase-level guard, typed to discover's verification: the reason
+    the phase must report not_collected, or "" when the proposal is usable."""
+    return guard_reason(verification)
 
-    Deliberately returns a REASON rather than a bool. The workflow puts this
-    string on the PhaseResult, and a bare True would leave the caller to
-    reinvent the explanation -- which is how two reasons that must not
-    converge start converging.
-    """
-    if verification.fabrication_rate <= CITATION_GUARD_MAX_UNRESOLVED:
-        return ""
-    return (f"the proposer's citation fabrication rate is "
-            f"{verification.unresolved_references}/"
-            f"{verification.total_references} = "
-            f"{verification.fabrication_rate:.2f}, past the "
-            f"{CITATION_GUARD_MAX_UNRESOLVED:.2f} guard -- too many "
-            f"references failed to resolve for the surviving ones to be "
-            f"evidence")
 
 
 # S1's two non-domain classifications. A candidate supported ONLY by these is
