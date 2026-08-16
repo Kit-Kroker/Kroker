@@ -74,8 +74,8 @@ def test_baseline_threats_are_all_present_and_none_are_applicable():
     baseline says so rather than guessing."""
     m = build(_cmap(capability(security=(_obs(),))), collected_categories=ALL)
     threats = m.capabilities[0].threats
-    assert all(not t.applicable for t in threats)
-    assert all("E-49 plan 2" in t.rationale for t in threats)
+    assert all("deterministic baseline" in t.rationale for t in threats)
+    assert all(t.source is RiskSource.BASELINE for t in threats)
 
 
 def test_baseline_vulnerabilities_are_potential_not_confirmed():

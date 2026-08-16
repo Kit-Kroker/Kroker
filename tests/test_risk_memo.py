@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from sdlc.assessment.risk import memo
-from sdlc.assessment.risk.build import no_risk
+from sdlc.assessment.risk.build import map_digest, no_risk
 from sdlc.assessment.risk.models import SystemRisk, UnifiedRiskMap
 from sdlc.assessment.discover.map import CapabilityMap
 from sdlc.measurement import Measurement
@@ -57,6 +57,6 @@ def test_the_key_moves_with_every_term():
 def test_map_digest_is_stable_and_content_addressed():
     a = CapabilityMap(collected=Measurement.measured(1.0))
     b = CapabilityMap(collected=Measurement.measured(1.0))
-    assert memo.map_digest(a) == memo.map_digest(b)
+    assert map_digest(a) == map_digest(b)
     c = CapabilityMap(collected=Measurement.not_collected("x"))
-    assert memo.map_digest(c) != memo.map_digest(a)
+    assert map_digest(c) != map_digest(a)

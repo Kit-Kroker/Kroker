@@ -6,28 +6,15 @@ and scan/memo.py's reason.
 """
 from __future__ import annotations
 
-import hashlib
 import logging
 
 from pydantic import ValidationError
 
-from ..discover.map import CapabilityMap
 from ...measurement import CollectionState
 from ...memoization import cache
 from .models import UnifiedRiskMap
 
 _log = logging.getLogger(__name__)
-
-
-def map_digest(cmap: CapabilityMap) -> str:
-    """A content hash over the serialized CapabilityMap.
-
-    Pydantic emits fields in declaration order, so this does not depend on
-    construction order (NFR-10) -- and the map's own producers already assert
-    their rows sorted.
-    """
-    return hashlib.sha256(
-        cmap.model_dump_json().encode("utf-8")).hexdigest()
 
 
 def load(*, project: str, tree_hash: str, map_digest: str,

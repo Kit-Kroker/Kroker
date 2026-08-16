@@ -9,6 +9,8 @@ baseline does.
 """
 from __future__ import annotations
 
+import hashlib
+
 from ..discover.map import Capability, CapabilityMap
 from ..scan.models import (
     C_COVERAGE, C_DATA_SENSITIVITY, C_TESTABILITY, EvidenceRef,
@@ -25,8 +27,9 @@ from .models import (
 from .severity import criticality, severity
 
 _NO_JUDGMENT = (
-    "STRIDE applicability is judgment and no proposer ran (E-49 plan 2); "
-    "this is the deterministic baseline, not a finding of inapplicability")
+    "deterministic baseline: STRIDE applicability is the risk proposer's "
+    "judgment, and this row records that no judgment was applied -- not a "
+    "finding of inapplicability. See UnifiedRiskMap.judgment for why")
 
 
 def no_risk(reason: str) -> UnifiedRiskMap:
@@ -55,8 +58,8 @@ def _vulnerabilities(cap: Capability, rating) -> tuple[Vulnerability, ...]:
             # disposition, and a pattern match is not a confirmation.
             classification=VulnerabilityClass.POTENTIAL,
             severity=severity(o.severity_hint, rating, o.confidence),
-            # The baseline cannot link a threat it did not judge. Plan 2
-            # replaces this with the proposer's linkage.
+            # The baseline cannot link a threat it did not judge; the
+            # proposer's linkage replaces this in apply_judgment.
             stride_category=StrideCategory.INFORMATION_DISCLOSURE,
             path=o.path, line=o.line,
             evidence=(EvidenceRef(path=o.path,
@@ -101,3 +104,19 @@ def build(cmap: CapabilityMap, *,
 
     return UnifiedRiskMap(capabilities=tuple(rows), system=SystemRisk(),
                           collected=Measurement.measured(1.0))
+
+
+def map_digest(cmap: CapabilityMap) -> str:
+    """A content hash over the serialized CapabilityMap (the assess memo's
+    third key term).
+
+    Lives here rather than in memo.py (P2-D8): the workflow needs the digest
+    to build the memo key before any activity runs, and memo.py does
+    filesystem I/O. build.py is pure and already in RULE_MODULES, which is
+    where a digest function belongs -- changing it must invalidate what it
+    keyed.
+
+    Pydantic emits fields in declaration order, so this does not depend on
+    construction order (NFR-10).
+    """
+    return hashlib.sha256(cmap.model_dump_json().encode("utf-8")).hexdigest()

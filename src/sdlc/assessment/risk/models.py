@@ -8,12 +8,17 @@ dependency here would appear as a reviewable import.
 from __future__ import annotations
 
 from enum import Enum
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ...measurement import CollectionState, Measurement
 from ..scan.models import EvidenceRef
 
 MAX_DRIVERS = 3
+
+
+class RiskSource(str, Enum):
+    BASELINE = "baseline"       # the deterministic rule (plan 1)
+    PROPOSER = "proposer"       # dispositioned by the model (plan 2)
 
 
 class Factor(BaseModel):
@@ -160,6 +165,8 @@ class ControlCoverage(BaseModel):
     collected: Measurement
     evidence: tuple[EvidenceRef, ...] = ()
     rule: str
+    rationale: str = ""
+    source: RiskSource = RiskSource.BASELINE
 
     @model_validator(mode="after")
     def _state_matches_collection(self) -> "ControlCoverage":
@@ -188,6 +195,7 @@ class ThreatAssessment(BaseModel):
     applicable: bool
     rationale: str
     vulnerability_keys: tuple[str, ...] = ()
+    source: RiskSource = RiskSource.BASELINE
 
     @model_validator(mode="after")
     def _rationale_is_required(self) -> "ThreatAssessment":
@@ -212,11 +220,6 @@ class VulnerabilityClass(str, Enum):
     POTENTIAL = "potential"
 
 
-class RiskSource(str, Enum):
-    BASELINE = "baseline"       # the deterministic rule (plan 1)
-    PROPOSER = "proposer"       # dispositioned by the model (plan 2)
-
-
 class Vulnerability(BaseModel):
     """`key` IS security_identity(observation) -- no new identity scheme, so
     E-54's delta and E-53's seeds match on a key that already exists and is
@@ -229,7 +232,97 @@ class Vulnerability(BaseModel):
     path: str
     line: int | None = None
     evidence: tuple[EvidenceRef, ...] = ()
+    # P2-D6: a classification with no stated basis is the self-asserted shape
+    # E-51's acceptance criteria exist to refuse. Empty on a BASELINE row,
+    # which asserts nothing beyond "the scan matched a pattern here".
+    rationale: str = ""
     source: RiskSource
+
+
+class ProposedThreat(BaseModel):
+    """One STRIDE applicability judgment for one capability.
+
+    Carries no `source` and no `severity`: provenance is code's to stamp
+    (E-48 DD1) and severity is a table (RD4). A model able to set either
+    could label a hallucinated judgment as a computed baseline, or overrule
+    the table the FR-921 bundle publishes.
+    """
+    bc_id: str
+    category: StrideCategory
+    applicable: bool
+    rationale: str
+    vulnerability_keys: tuple[str, ...] = ()
+    evidence: tuple[EvidenceRef, ...] = ()
+    quote: str = ""
+
+    @property
+    def row_id(self) -> str:
+        """Prefixed so one flat verification pass over the three families
+        cannot collide a bc_id with a vulnerability key."""
+        return f"threat:{self.bc_id}:{self.category.value}"
+
+
+class ProposedVulnerability(BaseModel):
+    """A classification and a STRIDE linkage for a vulnerability that already
+    exists. `key` names a baseline row; it never creates one."""
+    key: str
+    classification: VulnerabilityClass
+    stride_category: StrideCategory
+    rationale: str
+    evidence: tuple[EvidenceRef, ...] = ()
+    quote: str = ""
+
+    @property
+    def row_id(self) -> str:
+        return f"vuln:{self.key}"
+
+
+class ProposedControl(BaseModel):
+    """A control state for a family whose scan source COLLECTED. A family
+    with no source is refused downstream (P2-D4): flipping "we have no signal
+    for this" into "present" is the most expensive over-claim the artifact
+    admits."""
+    bc_id: str
+    family: ControlFamily
+    state: ControlState
+    rationale: str
+    evidence: tuple[EvidenceRef, ...] = ()
+    quote: str = ""
+
+    @property
+    def row_id(self) -> str:
+        return f"control:{self.bc_id}:{self.family.value}"
+
+
+class RiskProposal(BaseModel):
+    """The proposer's output_type. Three disposition families and nothing
+    else -- a proposer that could return a CapabilityRisk would author the
+    number FR-917 gates on (RD1)."""
+    threats: list[ProposedThreat] = Field(default_factory=list)
+    vulnerabilities: list[ProposedVulnerability] = Field(default_factory=list)
+    controls: list[ProposedControl] = Field(default_factory=list)
+
+    @property
+    def rows(self) -> tuple[ProposedThreat | ProposedVulnerability
+                            | ProposedControl, ...]:
+        """Every row, for one verification pass over one fabrication rate."""
+        return (*self.threats, *self.vulnerabilities, *self.controls)
+
+
+class RiskVerification(BaseModel):
+    """RD6's result, typed for the Temporal boundary. Mirrors
+    discover/verify.py's RefVerification; the row-level logic is the shared
+    one in assessment/verification.py."""
+    proposal: RiskProposal = Field(default_factory=RiskProposal)
+    refusals: dict[str, tuple[str, str]] = {}
+    total_references: int = 0
+    unresolved_references: int = 0
+
+    @property
+    def fabrication_rate(self) -> float:
+        if self.total_references == 0:
+            return 0.0
+        return self.unresolved_references / self.total_references
 
 
 class SystemRisk(BaseModel):
@@ -279,6 +372,11 @@ class UnifiedRiskMap(BaseModel):
     capabilities: tuple[CapabilityRisk, ...] = ()
     system: SystemRisk = SystemRisk()
     collected: Measurement
+    # RD7: the judgment layer's own collection state, in ONE place. The
+    # per-row rationale never restates it (P2-D2) -- one fact in one field is
+    # what keeps two reasons that must not converge from converging.
+    judgment: Measurement = Measurement.not_collected(
+        "no proposer output was applied")
 
     @property
     def counts(self) -> dict[str, int]:
@@ -307,4 +405,23 @@ class UnifiedRiskMap(BaseModel):
             raise ValueError(
                 f"risk map did not collect ({self.collected.reason}) but "
                 f"carries {len(self.capabilities)} capabilities")
+        return self
+
+    @model_validator(mode="after")
+    def _unjudged_carries_no_proposer_rows(self) -> "UnifiedRiskMap":
+        """_unmeasured_carries_no_payload, for the judgment layer."""
+        if self.judgment.state is CollectionState.MEASURED:
+            return self
+        for c in self.capabilities:
+            bad = ([t.category.value for t in c.threats
+                    if t.source is RiskSource.PROPOSER]
+                   + [v.key for v in c.vulnerabilities
+                      if v.source is RiskSource.PROPOSER]
+                   + [k.family.value for k in c.controls
+                      if k.source is RiskSource.PROPOSER])
+            if bad:
+                raise ValueError(
+                    f"{c.bc_id}: the judgment layer did not collect "
+                    f"({self.judgment.reason}) but row(s) {bad} are stamped "
+                    f"PROPOSER")
         return self
