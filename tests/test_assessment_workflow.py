@@ -249,6 +249,14 @@ def test_assess_is_no_longer_an_unbuilt_phase():
     assert PhaseId.ASSESS not in PHASE_OWNER
 
 
+def test_no_assess_reports_the_reason_and_carries_no_map():
+    from sdlc.workflows.assessment import no_assess
+
+    out = no_assess("discover did not collect")
+    assert out.risk is None
+    assert "discover did not collect" in out.result.collected.reason
+
+
 def test_the_run_body_passes_the_outputs_into_assess():
     src = inspect.getsource(AssessmentWorkflow.run)
     assert "self._assess(inp, init.triage, discover_out, scan_out)" in src

@@ -10,7 +10,10 @@ baseline does.
 from __future__ import annotations
 
 from ..discover.map import Capability, CapabilityMap
-from ..scan.models import EvidenceRef, security_identity
+from ..scan.models import (
+    C_COVERAGE, C_DATA_SENSITIVITY, C_TESTABILITY, EvidenceRef,
+    security_identity,
+)
 from ...measurement import CollectionState, Measurement
 from .composites import compose, unified
 from .controls import controls
@@ -75,8 +78,7 @@ def build(cmap: CapabilityMap, *,
             "nothing to score -- a map over zero capabilities would read as "
             "a clean risk map")
 
-    sensitivity_collected = any(
-        c.sensitivity for c in cmap.capabilities) or False
+    sensitivity_collected = C_DATA_SENSITIVITY in collected_categories
     rows: list[CapabilityRisk] = []
     for cap in sorted(cmap.capabilities, key=lambda c: c.bc_id):
         rating = criticality(cap, sensitivity_collected=sensitivity_collected)
@@ -87,8 +89,9 @@ def build(cmap: CapabilityMap, *,
                              collected_categories=collected_categories),
             label="security")
         qa = compose(
-            qa_factors(cap, coverage_collected=bool(cap.coverage),
-                       testability_collected=True),
+            qa_factors(cap,
+                       coverage_collected=C_COVERAGE in collected_categories,
+                       testability_collected=C_TESTABILITY in collected_categories),
             label="qa")
         rows.append(CapabilityRisk(
             bc_id=cap.bc_id, criticality=rating, threats=_threats(),

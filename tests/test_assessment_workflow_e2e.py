@@ -16,6 +16,7 @@ from temporalio.worker import Worker
 
 from sdlc.assessment.activities import (
     AssessmentTree, AssessmentTreeInput,
+    assess_risk,
     discover_context, discover_finalize, discover_lock, discover_memo_load,
     discover_memo_store, load_blueprint,
     scan_ci, scan_config_infra, scan_coverage, scan_entrypoints, scan_frontend,
@@ -346,7 +347,7 @@ async def test_discover_goes_measured_and_the_map_reaches_the_artifact(
             assessment_resolve_tree, *SCAN_ACTS,
             discover_context, discover_lock, discover_finalize,
             discover_memo_load, discover_memo_store,
-            load_blueprint, verify_discover_refs]
+            load_blueprint, verify_discover_refs, assess_risk]
 
     async with await WorkflowEnvironment.start_time_skipping() as env:
         async with Worker(env.client, task_queue=TASK_QUEUE,
@@ -405,7 +406,7 @@ async def test_a_second_assessment_of_the_same_tree_hits_the_memo(
             assessment_resolve_tree, *SCAN_ACTS,
             discover_context, discover_lock, discover_finalize,
             discover_memo_load, discover_memo_store,
-            load_blueprint, verify_discover_refs]
+            load_blueprint, verify_discover_refs, assess_risk]
 
     async with await WorkflowEnvironment.start_time_skipping() as env:
         async with Worker(env.client, task_queue=TASK_QUEUE,
@@ -492,7 +493,7 @@ async def test_discover_proposer_judgment_and_verification(
             assessment_resolve_tree, *SCAN_ACTS,
             discover_context, discover_lock, discover_finalize,
             discover_memo_load, discover_memo_store,
-            load_blueprint, verify_discover_refs, *agent_acts]
+            load_blueprint, verify_discover_refs, *agent_acts, assess_risk]
 
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
@@ -554,7 +555,7 @@ async def test_discover_proposer_trips_guard_fails_closed(
             assessment_resolve_tree, *SCAN_ACTS,
             discover_context, discover_lock, discover_finalize,
             discover_memo_load, discover_memo_store,
-            load_blueprint, verify_discover_refs, *agent_acts]
+            load_blueprint, verify_discover_refs, *agent_acts, assess_risk]
 
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
@@ -581,12 +582,32 @@ async def test_discover_proposer_exception_fails_closed(
     db = str(tmp_path / "board.sqlite3")
     monkeypatch.setenv("SDLC_BOARD_DB", db)
 
-    from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
+    from datetime import timedelta
+    from pydantic_ai import Agent
+    from pydantic_ai.durable_exec.temporal import PydanticAIPlugin, TemporalAgent
+    from pydantic_ai.models.function import FunctionModel
+    from temporalio.common import RetryPolicy
     from temporalio.contrib.pydantic import pydantic_data_converter
+    from temporalio.exceptions import ApplicationError
+    from temporalio.workflow import ActivityConfig
+    from sdlc.assessment.discover.map import DiscoverProposal
 
-    @activity.defn(name="discover_agent")
-    async def failing_agent(prompt: str) -> str:
-        raise RuntimeError("LLM service unavailable")
+    async def _failing_model(messages, info):
+        raise ApplicationError("LLM service unavailable", non_retryable=True)
+
+    agent = Agent(
+        FunctionModel(_failing_model),
+        name="discover_agent",
+        output_type=DiscoverProposal,
+    )
+    ta = TemporalAgent(
+        agent,
+        activity_config=ActivityConfig(
+            start_to_close_timeout=timedelta(seconds=5),
+            retry_policy=RetryPolicy(maximum_attempts=1),
+        ),
+    )
+    agent_acts = ta.temporal_activities
 
     @activity.defn(name="triage_resolve_commit")
     async def real_pin(inp: TriagePinInput) -> TriagePin:
@@ -599,7 +620,7 @@ async def test_discover_proposer_exception_fails_closed(
             assessment_resolve_tree, *SCAN_ACTS,
             discover_context, discover_lock, discover_finalize,
             discover_memo_load, discover_memo_store,
-            load_blueprint, verify_discover_refs, failing_agent]
+            load_blueprint, verify_discover_refs, *agent_acts, assess_risk]
 
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
@@ -616,6 +637,53 @@ async def test_discover_proposer_exception_fails_closed(
     discover_phase = next(p for p in res.phases if p.phase is PhaseId.DISCOVER)
     assert discover_phase.collected.state is CollectionState.NOT_COLLECTED
     assert "discover proposer failed" in discover_phase.collected.reason
+
+
+async def test_assess_phase_measures_with_no_model_registered(
+        assessed_repo, tmp_path, monkeypatch):
+    """E-49 plan 1: the deterministic score is a live phase, not a stub.
+
+    No risk proposer exists yet, and the phase must still measure -- that is
+    what makes plan 1 a defensible increment on its own.
+    """
+    repo_dir, sha = assessed_repo
+    db = str(tmp_path / "board.sqlite3")
+    monkeypatch.setenv("SDLC_BOARD_DB", db)
+
+    @activity.defn(name="triage_resolve_commit")
+    async def real_pin(inp: TriagePinInput) -> TriagePin:
+        return TriagePin(commit_sha=sha, toolchain="python")
+
+    from sdlc.assessment.activities import assessment_resolve_tree
+
+    acts = [real_pin, fake_baseline, fake_scaffold, fake_probe,
+            fake_secrets, fake_misconfig, fake_outliers, fake_deps,
+            assessment_resolve_tree, *SCAN_ACTS,
+            discover_context, discover_lock, discover_finalize,
+            discover_memo_load, discover_memo_store,
+            load_blueprint, verify_discover_refs, assess_risk]
+
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=WORKFLOWS, activities=acts):
+            h = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(repo_dir=repo_dir, project_key="acme",
+                                propose_discover=False),
+                id=f"assess-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+            result = await h.result()
+
+    row = next(p for p in result.phases if p.phase is PhaseId.ASSESS)
+    assert row.collected.state is CollectionState.MEASURED
+    assert result.risk is not None
+    assert result.terminal_status == PARTIAL
+
+    # RD3's headline consequence, asserted end to end rather than only in
+    # the unit tests: with defect density and change velocity unsourced, the
+    # unified composite is partial on every run.
+    for cap in result.risk.capabilities:
+        assert cap.qa.is_partial is True
+        assert cap.unified.value.state is CollectionState.NOT_COLLECTED
 
 
 

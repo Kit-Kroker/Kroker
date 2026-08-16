@@ -156,6 +156,13 @@ def no_discover(reason: str) -> DiscoverOutcome:
         phase=PhaseId.DISCOVER, collected=Measurement.not_collected(reason)))
 
 
+def no_assess(reason: str) -> AssessOutcome:
+    """The phase-level failure: there is no capability set to score, so
+    there is no map. Everything short of that degrades INSIDE the map."""
+    return AssessOutcome(result=PhaseResult(
+        phase=PhaseId.ASSESS, collected=Measurement.not_collected(reason)))
+
+
 def assemble(repo_dir: str, init: InitOutcome, admitted: bool, reason: str,
              rest: list[PhaseResult] | None = None,
              scan: ScanResult | None = None,
@@ -409,26 +416,32 @@ class AssessmentWorkflow(GateHost):
                       triage: RepoTriage,
                       discover: DiscoverOutcome,
                       scan: ScanOutcome) -> AssessOutcome:
-        """E-49: the deterministic risk score."""
+        """Phase 4 (E-49 plan 1). The deterministic score.
+
+        Nothing here executes the assessed repository's code, and nothing
+        reads the tree: every input is projected from the CapabilityMap
+        (NFR-9).
+        """
         if discover.map is None:
             reason = (
                 f"discover did not produce a CapabilityMap "
                 f"({discover.result.collected.reason}), so there is "
                 f"nothing to assess")
-            return AssessOutcome(
-                result=PhaseResult(
-                    phase=PhaseId.ASSESS,
-                    collected=Measurement.not_collected(reason)),
-                risk=None)
+            return no_assess(reason)
 
-        cats = [c for s in scan.scan.signals for c in s.categories] if scan.scan else []
+        collected = sorted(
+            cat
+            for s in (scan.scan.signals if scan.scan else [])
+            for cat, m in s.categories.items()
+            if m.state is CollectionState.MEASURED
+        )
         risk_map = await run_or_degrade(
             assess_risk,
             AssessRiskInput(
                 project=inp.project_key,
-                tree_hash=triage.tree_hash,
+                tree_hash=scan.tree_hash,
                 capability_map=discover.map,
-                collected_categories=sorted(set(cats))),
+                collected_categories=collected),
             ASSESS_ACT,
             fallback=lambda: no_risk("assess_risk activity failed"))
         # A not_collected map yields an uncollected phase result AND passes
@@ -442,7 +455,7 @@ class AssessmentWorkflow(GateHost):
         return AssessOutcome(
             result=PhaseResult(
                 phase=PhaseId.ASSESS,
-                collected=risk_map.collected),
+                collected=Measurement.measured(1.0)),
             risk=risk_map)
 
     async def _report(self, inp: AssessmentInput) -> PhaseResult:

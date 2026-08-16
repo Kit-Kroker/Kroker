@@ -109,3 +109,24 @@ def test_build_is_order_independent():
         out = build(_cmap(*caps), collected_categories=ALL).model_dump_json()
         first = first if first is not None else out
         assert out == first
+
+
+def test_build_with_all_scan_categories_uncollected_degrades_honestly():
+    """Findings 3, 4, 7: when no scan categories collected, absence of data
+    must NOT be read as clean controls, low criticality, or zero defect/testability."""
+    m = build(_cmap(capability()), collected_categories=frozenset())
+    assert m.collected.state is CollectionState.MEASURED
+    cap = m.capabilities[0]
+    # Criticality was not collected because SS4 (data_sensitivity) did not collect
+    assert cap.criticality.collected.state is CollectionState.NOT_COLLECTED
+    # Controls are uncollected/no_source
+    assert all(c.collected.state is CollectionState.NOT_COLLECTED for c in cap.controls)
+    # QA composite is uncollected (0 of 4 factors collected)
+    assert cap.qa.value.state is CollectionState.NOT_COLLECTED
+    assert cap.qa.is_partial is False
+    assert len(cap.qa.collected_factors) == 0
+    # Security composite is uncollected (1 of 3 factors collected - exposure)
+    assert cap.security.value.state is CollectionState.NOT_COLLECTED
+    assert cap.security.is_partial is True
+    # Unified is uncollected
+    assert cap.unified.value.state is CollectionState.NOT_COLLECTED

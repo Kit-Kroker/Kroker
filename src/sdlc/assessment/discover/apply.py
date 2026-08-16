@@ -15,6 +15,7 @@ proposer between the first and the second without touching either.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+import itertools
 
 from pydantic import BaseModel, ValidationError, model_validator
 
@@ -357,18 +358,36 @@ def apply(context: DiscoverContext,
         members = tuple(sorted(
             set(context_row.members) | {m for a in taken for m in a.members},
             key=CandidateMember.sort_key))
-        sec = tuple(sorted(
-            set(context_row.security) | {s for a in taken for s in a.security},
-            key=lambda s: (s.signal.value, s.rule, s.path, s.key)))
-        sens = tuple(sorted(
-            set(context_row.sensitivity) | {s for a in taken for s in a.sensitivity},
-            key=lambda s: (s.classification.value, s.entity)))
-        testab = tuple(sorted(
-            set(context_row.testability) | {t for a in taken for t in a.testability},
-            key=lambda t: (t.pattern, t.path, t.key)))
-        cov = tuple(sorted(
-            set(context_row.coverage) | {c for a in taken for c in a.coverage},
-            key=lambda c: c.path))
+        if taken:
+            sec_map = {(s.signal.value, s.rule, s.path, s.key): s
+                       for s in itertools.chain(context_row.security,
+                                                *(a.security for a in taken))}
+            sec = tuple(sorted(
+                sec_map.values(),
+                key=lambda s: (s.signal.value, s.rule, s.path, s.key)))
+            sens_map = {(s.classification.value, s.entity): s
+                        for s in itertools.chain(context_row.sensitivity,
+                                                 *(a.sensitivity for a in taken))}
+            sens = tuple(sorted(
+                sens_map.values(),
+                key=lambda s: (s.classification.value, s.entity)))
+            testab_map = {(t.pattern, t.path, t.key): t
+                          for t in itertools.chain(context_row.testability,
+                                                   *(a.testability for a in taken))}
+            testab = tuple(sorted(
+                testab_map.values(),
+                key=lambda t: (t.pattern, t.path, t.key)))
+            cov_map = {c.path: c
+                       for c in itertools.chain(context_row.coverage,
+                                                *(a.coverage for a in taken))}
+            cov = tuple(sorted(
+                cov_map.values(),
+                key=lambda c: c.path))
+        else:
+            sec = context_row.security
+            sens = context_row.sensitivity
+            testab = context_row.testability
+            cov = context_row.coverage
         locked.append(LockedCandidate(
             local_key=context_row.candidate_id, name=context_row.name,
             confidence=context_row.confidence, members=members,
