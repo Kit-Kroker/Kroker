@@ -35,7 +35,7 @@ from .activities import (
 from .agents.loader import load_registry, validate_registry
 from .agents.roles import ALL_TEMPORAL_AGENTS
 from .assessment.activities import (
-    assessment_resolve_tree, discover_context, discover_finalize,
+    assess_risk, assessment_resolve_tree, discover_context, discover_finalize,
     discover_lock, discover_memo_load, discover_memo_store, load_blueprint,
     scan_ci, scan_config_infra, scan_coverage, scan_entrypoints, scan_frontend,
     scan_packages, scan_schema, scan_security_static, scan_sensitivity,
@@ -142,6 +142,7 @@ async def main() -> None:
             scan_security_static, scan_config_infra, scan_sensitivity,
             scan_tests_inventory, scan_coverage, scan_testability, scan_ci,
             verify_discover_refs,
+            assess_risk,
             *agent_activities,
         ],
     )
