@@ -161,6 +161,17 @@ def write_registry_dir(root, version=1):
         b"def build(model, instructions, model_settings):\n"
         b"    return Agent(model, name='discover_agent',\n"
         b"                 system_prompt=instructions)\n")
+    # Optional risk proposer (E-49 RD7): a plain proposer.
+    rk = root / "risk"
+    rk.mkdir(exist_ok=True)
+    (rk / "agent.yaml").write_bytes(
+        b"kind: proposer\nmodel: anthropic:claude-sonnet-4-5\n")
+    (rk / "instructions.md").write_bytes(b"judge risk baseline")
+    (rk / "agent.py").write_bytes(
+        b"from pydantic_ai import Agent\n"
+        b"def build(model, instructions, model_settings):\n"
+        b"    return Agent(model, name='risk_agent',\n"
+        b"                 system_prompt=instructions)\n")
     return root
 
 

@@ -26,14 +26,15 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
-    from ..agents.roles import PROMPT_SHAS, STAGE_MODELS, t_discover
+    from ..agents.roles import PROMPT_SHAS, STAGE_MODELS, t_discover, t_risk
     from ..assessment.activities import (
         AssessRiskInput, BlueprintInput, DiscoverContextInput,
         DiscoverFinalizeInput, DiscoverLockInput, DiscoverMemoInput,
-        DiscoverMemoStoreInput, VerifyRefsInput, assess_risk, discover_context,
+        DiscoverMemoStoreInput, RiskMemoInput, RiskMemoStoreInput,
+        VerifyRefsInput, VerifyRiskRefsInput, assess_risk, discover_context,
         discover_finalize, discover_lock, discover_memo_load,
-        discover_memo_store, load_blueprint, no_finalize,
-        verify_discover_refs,
+        discover_memo_store, load_blueprint, no_finalize, risk_memo_load,
+        risk_memo_store, verify_discover_refs, verify_risk_refs,
     )
     from ..assessment.models import (
         PHASE_ORDER,
@@ -54,8 +55,11 @@ with workflow.unsafe.imports_passed_through():
     from ..assessment.discover.map import (
         CapabilityMap, context_digest, guard_tripped,
     )
-    from ..assessment.risk.build import no_risk
+    from ..assessment.risk.apply import apply_judgment, degraded
+    from ..assessment.risk.build import map_digest, no_risk
     from ..assessment.risk.models import UnifiedRiskMap
+    from ..assessment.risk.prompt import render_risk_prompt
+    from ..assessment.verification import guard_reason
     from ..assessment.scan.models import ScanResult, ScanSignalId
     from ..capability.models import ProposedCapability
     from ..measurement import CollectionState, Measurement
@@ -93,6 +97,10 @@ class AssessmentInput(BaseModel):
     # DD7: whether the discover proposer stage is active (propose_discover=True)
     # or disabled (propose_discover=False, baseline only).
     propose_discover: bool = True
+    # RD7: whether the risk proposer stage is active (propose_risk=True) or
+    # disabled (propose_risk=False, deterministic score only). The phase is
+    # MEASURED either way -- what changes is whether the judgment layer is.
+    propose_risk: bool = True
 
 
 # The E-item owing each unbuilt phase body, so an empty assessment says WHY
@@ -416,18 +424,17 @@ class AssessmentWorkflow(GateHost):
                       triage: RepoTriage,
                       discover: DiscoverOutcome,
                       scan: ScanOutcome) -> AssessOutcome:
-        """Phase 4 (E-49 plan 1). The deterministic score.
+        """Phase 4 (E-49). The deterministic score, then the judgment layer.
 
-        Nothing here executes the assessed repository's code, and nothing
-        reads the tree: every input is projected from the CapabilityMap
-        (NFR-9).
+        Nothing here executes the assessed repository's code. The only tree
+        access is verify_risk_refs, which reads exactly the blobs the
+        proposer cited, at the pinned commit (NFR-9).
         """
         if discover.map is None:
-            reason = (
+            return no_assess(
                 f"discover did not produce a CapabilityMap "
                 f"({discover.result.collected.reason}), so there is "
                 f"nothing to assess")
-            return no_assess(reason)
 
         collected = sorted(
             cat
@@ -435,28 +442,114 @@ class AssessmentWorkflow(GateHost):
             for cat, m in s.categories.items()
             if m.state is CollectionState.MEASURED
         )
-        risk_map = await run_or_degrade(
+
+        # NO_PROPOSER, never "": a baseline-only map and a judged map must
+        # never share a key (P2-D6's rule at the assess tier).
+        proposing = inp.propose_risk and t_risk is not None
+        memo_key = RiskMemoInput(
+            project=inp.project_key, tree_hash=scan.tree_hash,
+            map_digest=map_digest(discover.map),
+            prompt_sha=PROMPT_SHAS["risk"] if proposing else NO_PROPOSER,
+            model=STAGE_MODELS["risk"] if proposing else NO_PROPOSER)
+        # A cache read that fails is a MISS, never a phase failure.
+        hit = await run_or_degrade(risk_memo_load, memo_key, ASSESS_ACT,
+                                   fallback=lambda: None)
+        if hit is not None:
+            return self._assessed(hit)
+
+        baseline = await run_or_degrade(
             assess_risk,
-            AssessRiskInput(
-                project=inp.project_key,
-                tree_hash=scan.tree_hash,
-                capability_map=discover.map,
-                collected_categories=collected),
+            AssessRiskInput(capability_map=discover.map,
+                            collected_categories=collected),
             ASSESS_ACT,
             fallback=lambda: no_risk("assess_risk activity failed"))
-        # A not_collected map yields an uncollected phase result AND passes
-        # risk=None to assemble, so _assess_agrees_with_its_phase holds (E-49).
-        if risk_map.collected.state is not CollectionState.MEASURED:
+        if baseline.collected.state is not CollectionState.MEASURED:
+            return self._assessed(baseline)
+
+        final = await self._judge(inp, triage, discover.map, baseline,
+                                  proposing)
+        # store() refuses a degraded judgment under a proposer key (P2-D3),
+        # so a transient model failure costs one recompute rather than a
+        # permanently judgment-free map.
+        await run_or_degrade(
+            risk_memo_store, RiskMemoStoreInput(key=memo_key, out=final),
+            ASSESS_ACT, fallback=lambda: False)
+        return self._assessed(final)
+
+    def _assessed(self, m: UnifiedRiskMap) -> AssessOutcome:
+        """RD7: the phase is MEASURED whenever the COMPOSITES are, whatever
+        the judgment layer did -- its own state travels on the map.
+
+        A not_collected map yields an uncollected phase result AND passes
+        risk=None to assemble, so _assess_agrees_with_its_phase holds.
+        """
+        if m.collected.state is not CollectionState.MEASURED:
             return AssessOutcome(
-                result=PhaseResult(
-                    phase=PhaseId.ASSESS,
-                    collected=risk_map.collected),
+                result=PhaseResult(phase=PhaseId.ASSESS,
+                                   collected=m.collected),
                 risk=None)
         return AssessOutcome(
-            result=PhaseResult(
-                phase=PhaseId.ASSESS,
-                collected=Measurement.measured(1.0)),
-            risk=risk_map)
+            result=PhaseResult(phase=PhaseId.ASSESS,
+                               collected=Measurement.measured(1.0)),
+            risk=m)
+
+    async def _judge(self, inp: AssessmentInput, triage: RepoTriage,
+                     cmap: CapabilityMap, baseline: UnifiedRiskMap,
+                     proposing: bool) -> UnifiedRiskMap:
+        """RD7's degradation, layer-scoped: every failure returns the
+        BASELINE with a reason on `judgment`, never a failed phase.
+
+        The difference from _discover is deliberate and stated in RD7: there,
+        dispositions ARE the map's content, so a tripped guard fails the
+        phase. Here the composites never depended on the proposer.
+
+        The reasons are deliberately distinct -- "no proposer is configured"
+        and "the proposer ran and was refused" must not converge, which is
+        unbuilt_signal vs failed_signal's rule.
+        """
+        if not proposing:
+            return degraded(
+                baseline,
+                "no risk proposer ran: agents/risk/ is absent or "
+                "propose_risk is False, so no STRIDE applicability, "
+                "vulnerability classification or control disposition was "
+                "judged")
+
+        try:
+            run = await t_risk.run(render_risk_prompt(cmap, baseline))
+            proposal = run.output
+        except Exception as e:                          # noqa: BLE001
+            return degraded(
+                baseline,
+                f"the risk proposer ran and failed: "
+                f"{type(e).__name__}: {e}"[:300])
+
+        verification = await run_or_degrade(
+            verify_risk_refs,
+            VerifyRiskRefsInput(repo_dir=inp.repo_dir,
+                                commit_sha=triage.commit_sha,
+                                proposal=proposal),
+            ASSESS_ACT, fallback=lambda: None)
+        if verification is None:
+            # Verification could not run, so no citation is verified.
+            # Applying the proposal anyway would ship exactly the unverified
+            # claims RD6 exists to refuse.
+            return degraded(
+                baseline,
+                "verify_risk_refs did not run, so no citation could be "
+                "verified (RD6 fails closed)")
+
+        tripped = guard_reason(verification)
+        if tripped:
+            return degraded(baseline, tripped)
+
+        try:
+            return apply_judgment(baseline, verification.proposal)
+        except Exception as e:                          # noqa: BLE001
+            return degraded(
+                baseline,
+                f"the proposer's dispositions could not be applied: "
+                f"{type(e).__name__}: {e}"[:300])
 
     async def _report(self, inp: AssessmentInput) -> PhaseResult:
         """E-52 owns this body: the five role reports."""

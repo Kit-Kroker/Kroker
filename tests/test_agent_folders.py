@@ -29,6 +29,7 @@ PRE_MIGRATION_AGENT_NAMES = {
     "handoff": "handoff_agent",
     "adversary": "adversary_agent",
     "discover": "discover_agent",
+    "risk": "risk_agent",
 }
 
 

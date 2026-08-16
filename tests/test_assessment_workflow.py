@@ -262,3 +262,36 @@ def test_the_run_body_passes_the_outputs_into_assess():
     assert "self._assess(inp, init.triage, discover_out, scan_out)" in src
     assert "risk=assess_out.risk" in src
 
+
+# --- E-49 plan 2: the judgment layer ----------------------------------
+
+def test_assess_input_carries_a_propose_risk_knob():
+    """RD7's off switch, propose_discover's shape."""
+    from sdlc.workflows.assessment import AssessmentInput
+    assert AssessmentInput(repo_dir="/x").propose_risk is True
+    assert AssessmentInput(repo_dir="/x", propose_risk=False).propose_risk \
+        is False
+
+
+def test_the_judgment_reasons_do_not_converge():
+    """"no proposer is configured" and "the proposer ran and was refused"
+    are different facts and must read differently (P2-D2)."""
+    import inspect
+
+    from sdlc.workflows import assessment
+    src = inspect.getsource(assessment.AssessmentWorkflow._judge)
+    assert "no risk proposer ran" in src
+    assert "the risk proposer ran and failed" in src
+
+
+def test_a_failed_judgment_never_fails_the_phase():
+    """RD7: the guard fails whatever consumed the model, and nothing else.
+    _judge has no return path that is not a UnifiedRiskMap."""
+    import inspect
+
+    from sdlc.workflows import assessment
+    src = inspect.getsource(assessment.AssessmentWorkflow._judge)
+    assert "no_assess" not in src
+    assert src.count("degraded(") >= 4
+
+
