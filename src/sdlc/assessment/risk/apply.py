@@ -15,6 +15,7 @@ from typing import TypeVar
 
 from ...measurement import CollectionState, Measurement
 from ..scan.models import EvidenceRef
+from .crosscap import apply_system_judgment
 from .models import (
     CapabilityRisk, ControlCoverage, ProposedControl, ProposedThreat,
     ProposedVulnerability, RiskProposal, RiskSource, ThreatAssessment,
@@ -171,11 +172,17 @@ def apply_judgment(baseline: UnifiedRiskMap,
             security=c.security, qa=c.qa, unified=c.unified)
         for c in baseline.capabilities)
 
+    system = apply_system_judgment(baseline.system, proposal)
+
     applied_count = sum(
         sum(1 for t in c.threats if t.source is RiskSource.PROPOSER)
         + sum(1 for v in c.vulnerabilities if v.source is RiskSource.PROPOSER)
         + sum(1 for ctrl in c.controls if ctrl.source is RiskSource.PROPOSER)
         for c in rows)
+    applied_count += sum(
+        1 for b in system.trust_boundaries if b.source is RiskSource.PROPOSER)
+    applied_count += sum(
+        1 for e in system.escalation_paths if e.source is RiskSource.PROPOSER)
 
     if applied_count == 0:
         total = len(proposal.rows) if total_proposed is None else total_proposed
@@ -185,6 +192,6 @@ def apply_judgment(baseline: UnifiedRiskMap,
             baseline,
             f"the proposer returned {total} row(s) and none survived verification")
 
-    return UnifiedRiskMap(capabilities=rows, system=baseline.system,
+    return UnifiedRiskMap(capabilities=rows, system=system,
                           collected=baseline.collected,
                           judgment=Measurement.measured(1.0))

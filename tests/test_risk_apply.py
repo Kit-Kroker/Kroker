@@ -7,22 +7,28 @@ import random
 import pytest
 
 from sdlc.assessment.discover.map import CapabilityMap
+from sdlc.assessment.discover.models import (
+    AttributionReport, FileBucket, ReferenceGraph,
+)
 from sdlc.assessment.risk.apply import apply_judgment, degraded
 from sdlc.assessment.risk.build import build
 from sdlc.assessment.risk.models import (
-    ControlFamily, ControlState, ProposedControl, ProposedThreat,
+    BoundaryVerdict, ChainVerdict, ControlFamily, ControlState,
+    ProposedBoundary, ProposedControl, ProposedEscalation, ProposedThreat,
     ProposedVulnerability, RiskProposal, RiskSource, StrideCategory,
     VulnerabilityClass,
 )
 from sdlc.assessment.scan.models import (
-    C_AUTHN_AUTHZ, C_DB_SECURITY, C_INPUT_VALIDATION, C_TLS, Confidence,
-    EvidenceRef, ScanSignalId, SecurityObservation,
+    C_AUTHN_AUTHZ, C_DATA_SENSITIVITY, C_DB_SECURITY, C_INPUT_VALIDATION,
+    C_TLS, CandidateMember, Confidence, EvidenceRef, MemberKind,
+    ScanSignalId, SecurityObservation, Sensitivity, SensitivityRecord,
 )
 from sdlc.measurement import CollectionState, Measurement
 
 from tests.helpers_risk import capability
 
-ALL = frozenset([C_AUTHN_AUTHZ, C_INPUT_VALIDATION, C_TLS, C_DB_SECURITY])
+ALL = frozenset([C_AUTHN_AUTHZ, C_INPUT_VALIDATION, C_TLS, C_DB_SECURITY,
+                 C_DATA_SENSITIVITY])
 
 
 def _obs(rule: str = "r1") -> SecurityObservation:
@@ -270,7 +276,7 @@ def test_apply_judgment_is_order_independent():
         ProposedThreat(bc_id="BC-002", category=StrideCategory.TAMPERING,
                        applicable=True, rationale="r2"),
         ProposedControl(bc_id="BC-001", family=ControlFamily.VALIDATION,
-                        state=ControlState.ABSENT, rationale="r3"),
+                       state=ControlState.ABSENT, rationale="r3"),
     ]
     first = None
     for _ in range(5):
@@ -281,3 +287,84 @@ def test_apply_judgment_is_order_independent():
         out = apply_judgment(b, p).model_dump_json()
         first = first if first is not None else out
         assert out == first
+
+
+def _attribution(edges, parsed=("a.py", "b.py")) -> AttributionReport:
+    return AttributionReport(
+        files=(), counts={b: 0 for b in FileBucket},
+        coverage=Measurement.measured(1.0), meets_floor=True,
+        graph=ReferenceGraph(
+            edges=tuple(edges), parsed=tuple(parsed),
+            unresolved_relative_rate=Measurement.not_collected("no imports")))
+
+
+def _world():
+    entry = capability(
+        "BC-001", member_paths=("a.py",),
+        members=(CandidateMember(kind=MemberKind.HTTP_ROUTE,
+                                 value="GET /orders", path="a.py"),),
+        security=(_obs("a.py"),))
+    store = capability(
+        "BC-002", member_paths=("b.py",), security=(_obs("b.py"),),
+        sensitivity=(SensitivityRecord(
+            classification=Sensitivity.PII, entity="customer", origin="table",
+            fields=["email"], rule="ss4_field_name",
+            confidence=Confidence.HIGH),))
+    return [entry, store], _attribution([("a.py", "b.py")])
+
+
+def _cmap_world(caps, attribution=None) -> CapabilityMap:
+    actions: dict = {}
+    for c in caps:
+        actions[c.disposition.action] = actions.get(c.disposition.action, 0) + 1
+    return CapabilityMap(capabilities=tuple(caps), by_action=actions,
+                         attribution=attribution,
+                         collected=Measurement.measured(1.0))
+
+
+def test_a_boundary_verdict_replaces_verdict_and_rationale():
+    caps, attribution = _world()
+    cmap = _cmap_world(caps, attribution)
+    b = build(cmap, collected_categories=ALL)
+    out = apply_judgment(b, RiskProposal(boundaries=[
+        ProposedBoundary(source_bc_id="BC-001", target_bc_id="BC-002",
+                         verdict=BoundaryVerdict.SOUND,
+                         rationale="mTLS configured across the hop")]))
+    row = out.system.trust_boundaries[0]
+    assert row.verdict is BoundaryVerdict.SOUND
+    assert row.rationale == "mTLS configured across the hop"
+    assert row.source is RiskSource.PROPOSER
+
+
+def test_an_escalation_verdict_replaces_verdict_and_rationale():
+    caps, attribution = _world()
+    cmap = _cmap_world(caps, attribution)
+    b = build(cmap, collected_categories=ALL)
+    out = apply_judgment(b, RiskProposal(escalations=[
+        ProposedEscalation(path_id="BC-001->BC-002",
+                           verdict=ChainVerdict.REFUTED,
+                           rationale="caller has a signed claim")]))
+    row = out.system.escalation_paths[0]
+    assert row.verdict is ChainVerdict.REFUTED
+    assert row.source is RiskSource.PROPOSER
+
+
+def test_an_unknown_boundary_or_escalation_is_refused():
+    """ADR-22 at the boundary: the proposer cannot inject an edge the
+    graph did not project."""
+    caps, attribution = _world()
+    cmap = _cmap_world(caps, attribution)
+    b = build(cmap, collected_categories=ALL)
+    out = apply_judgment(b, RiskProposal(
+        boundaries=[ProposedBoundary(source_bc_id="BC-001",
+                                     target_bc_id="BC-999",
+                                     verdict=BoundaryVerdict.SOUND,
+                                     rationale="r")],
+        escalations=[ProposedEscalation(path_id="BC-001->BC-999",
+                                        verdict=ChainVerdict.PLAUSIBLE,
+                                        rationale="r")]))
+    assert all(row.source is RiskSource.BASELINE
+               for row in out.system.trust_boundaries)
+    assert all(row.source is RiskSource.BASELINE
+               for row in out.system.escalation_paths)
+

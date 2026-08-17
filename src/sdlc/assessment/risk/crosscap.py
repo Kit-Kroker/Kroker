@@ -31,8 +31,8 @@ from ...measurement import CollectionState, Measurement
 from .models import (
     BoundaryVerdict, CapabilityEdge, CapabilityRisk, Cascade, ChainVerdict,
     ControlFamily, ControlState, EDGE_EVIDENCE_MAX, EscalationPath,
-    FAM_BOUNDARIES, FAM_CASCADES, FAM_ESCALATIONS, FAM_SHARED, Severity,
-    SharedVulnerability, SystemRisk, TrustBoundary,
+    FAM_BOUNDARIES, FAM_CASCADES, FAM_ESCALATIONS, FAM_SHARED, RiskProposal,
+    RiskSource, Severity, SharedVulnerability, SystemRisk, TrustBoundary,
 )
 from .rules import (
     BOUNDARY_MAX_ROWS, CASCADE_MAX_DEPTH, CASCADE_MAX_PATHS,
@@ -396,6 +396,65 @@ def system_view(cmap: CapabilityMap, risks: tuple[CapabilityRisk, ...], *,
         escalation_paths_collected=chains.collected,
         truncated=tuple(sorted(name for name, fam in families.items()
                                if fam.truncated)))
+
+
+def _unique(rows, key):
+    seen = {}
+    dupes = set()
+    for row in rows:
+        k = key(row)
+        if k in seen:
+            dupes.add(k)
+        seen[k] = row
+    return {k: v for k, v in seen.items() if k not in dupes}
+
+
+def _merged(*groups: Iterable[EvidenceRef]) -> tuple[EvidenceRef, ...]:
+    merged = {(e.path, e.lines): e for group in groups for e in group}
+    return tuple(merged[k] for k in sorted(merged))
+
+
+def apply_system_judgment(system: SystemRisk,
+                           proposal: RiskProposal) -> SystemRisk:
+    """Stamp the proposer's verdicts onto the candidates code enumerated."""
+    boundaries = _unique(proposal.boundaries,
+                         lambda b: (b.source_bc_id, b.target_bc_id))
+    escalations = _unique(proposal.escalations, lambda e: e.path_id)
+
+    new_b = []
+    for b in system.trust_boundaries:
+        p = boundaries.get((b.source_bc_id, b.target_bc_id))
+        if p is None or not p.rationale.strip():
+            new_b.append(b)
+            continue
+        new_b.append(TrustBoundary(
+            source_bc_id=b.source_bc_id, target_bc_id=b.target_bc_id,
+            rule=b.rule, verdict=p.verdict, rationale=p.rationale,
+            evidence=_merged(b.evidence, p.evidence),
+            source=RiskSource.PROPOSER))
+
+    new_e = []
+    for e in system.escalation_paths:
+        p = escalations.get(e.path_id)
+        if p is None or not p.rationale.strip():
+            new_e.append(e)
+            continue
+        new_e.append(EscalationPath(
+            path=e.path, rule=e.rule, verdict=p.verdict, rationale=p.rationale,
+            evidence=_merged(e.evidence, p.evidence),
+            source=RiskSource.PROPOSER))
+
+    return SystemRisk(
+        shared_vulnerabilities=system.shared_vulnerabilities,
+        shared_vulnerabilities_collected=system.shared_vulnerabilities_collected,
+        cascades=system.cascades,
+        cascades_collected=system.cascades_collected,
+        trust_boundaries=tuple(new_b),
+        trust_boundaries_collected=system.trust_boundaries_collected,
+        escalation_paths=tuple(new_e),
+        escalation_paths_collected=system.escalation_paths_collected,
+        truncated=system.truncated)
+
 
 
 
