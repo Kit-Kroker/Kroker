@@ -63,6 +63,8 @@ def build_run_summary(
     trace: list[RunEvent],
     memory_enabled: bool, memory_watermark: str | None,
     budget_usd: float | None = None,
+    title: str = "",
+    repo_url: str | None = None,
 ) -> RunSummary:
     stages = [_stage_outcome(e) for e in trace
               if e.kind is RunEventKind.STAGE_ENDED]
@@ -103,6 +105,7 @@ def build_run_summary(
 
     return RunSummary(
         run_id=run_id, mode=mode, outcome=outcome, terminal_stage=terminal,
+        title=title, repo_url=repo_url,
         started_at=started, ended_at=ended,
         duration_s=(ended - started).total_seconds(),
         stages=stages, clarifications=clarifications, gates=gates,

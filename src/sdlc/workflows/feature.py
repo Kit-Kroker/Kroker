@@ -84,7 +84,7 @@ with workflow.unsafe.imports_passed_through():
         ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig, PlanDrift,
         ProjectMode,
         RecallSnapshot, ResearchBrief, ResearchPlan, RetainItem, RoleConfig,
-        RoleUsage, RunSummary, SecurityReport, SeededWork, SmokeCheck,
+        RoleUsage, RunState, RunSummary, SecurityReport, SeededWork, SmokeCheck,
         SubQuestionFinding,
         TaskResult, compute_plan_drift,
     )
@@ -551,6 +551,15 @@ class FeatureWorkflow(GateHost):
         # E-42: cfg is threaded as a parameter everywhere else; the gate hooks
         # run inside GateHost and cannot receive it, so run() stashes it here.
         self._cfg: PipelineConfig | None = None
+        # E-10: run_state() needs the brief and the start time, which are
+        # run() parameters/locals everywhere else -- same reason _cfg is
+        # stashed here rather than threaded.
+        self._idea: IdeaBrief | None = None
+        self._started_at: datetime | None = None
+        # run_state() is unit-tested on bare instances (no workflow event
+        # loop, where workflow.info() raises), so run() stashes the id --
+        # the run_summary query likewise reads only stashed state.
+        self._run_id: str = ""
         # ADR-14: one sdlc/<run_id>/integration branch accumulates completed
         # task work. _integration_head advances after each successful merge;
         # _integration_wt is the worktree path (set once at run start, stable).
@@ -822,6 +831,37 @@ class FeatureWorkflow(GateHost):
     def run_summary(self) -> RunSummary | None:
         """The retro-stage RunSummary; None until the run terminates (E-32)."""
         return self._run_summary
+
+    @workflow.query
+    def run_state(self) -> RunState | None:
+        """Live run state for the dashboard fleet view (E-10).
+
+        None until run() stashes the brief. Every field is read from state
+        the run already holds -- this query adds no bookkeeping.
+        """
+        if self._idea is None or self._started_at is None:
+            return None
+        priced = [u.cost_usd for u in self._role_usage.values()
+                  if u.cost_usd is not None]
+        budget = (self._cfg.run_budget_usd
+                  if self._cfg and self._cfg.run_budget_usd > 0 else None)
+        stage = next((e.stage for e in reversed(self._trace)
+                      if e.kind is RunEventKind.STAGE_STARTED), None)
+        return RunState(
+            run_id=self._run_id,
+            title=self._idea.title,
+            repo_url=self._idea.repo_url,
+            mode=self._idea.mode.value,
+            status=self._status,
+            current_stage=stage,
+            started_at=self._started_at,
+            decisions=list(self._gate_decisions.values()),
+            roles=list(self._role_usage.values()),
+            # None, not 0.0: a pricing miss must never read as a free run.
+            cost_usd_total=sum(priced) if priced else None,
+            budget_usd=budget,
+            budget_crossings=self._budget_crossings,
+        )
 
     # ---------------------------- helpers -------------------------------
 
@@ -1624,6 +1664,9 @@ class FeatureWorkflow(GateHost):
             cfg = PipelineConfig()
         if isinstance(seeded, dict):
             seeded = SeededWork.model_validate(seeded)
+        self._idea = idea
+        self._started_at = workflow.now()
+        self._run_id = workflow.info().workflow_id
         self._cfg = cfg
         self._budget_threshold = cfg.run_budget_usd    # E-33
         try:
@@ -1649,7 +1692,9 @@ class FeatureWorkflow(GateHost):
                 memory_enabled=cfg.memory.enabled,
                 memory_watermark=self._memory_watermark,
                 budget_usd=(cfg.run_budget_usd
-                            if cfg.run_budget_usd > 0 else None))
+                            if cfg.run_budget_usd > 0 else None),
+                title=idea.title,
+                repo_url=idea.repo_url)
             self._run_summary = summary
 
             if cfg.memory.enabled:
