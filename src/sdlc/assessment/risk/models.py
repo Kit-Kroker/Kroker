@@ -288,6 +288,46 @@ class CapabilityEdge(BaseModel):
         return self
 
 
+class SharedVulnerability(BaseModel):
+    """A weakness CLASS recurring across capabilities (RD10).
+
+    The join key is `(signal, rule, key)` -- coarser than `Vulnerability.key`
+    (= security_identity), which includes `path` and is therefore right for
+    the per-instance identity E-54's delta and E-53's seeds match on. Both
+    keys are on the artifact and answer different questions.
+    """
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    weakness_class: str
+    signal: str
+    rule: str
+    key: str = ""
+    bc_ids: tuple[str, ...]
+    vulnerability_keys: tuple[str, ...]
+    severity: Severity
+
+    @model_validator(mode="after")
+    def _shared_means_at_least_two_capabilities(self) -> "SharedVulnerability":
+        if len(self.bc_ids) < 2:
+            raise ValueError(
+                f"{self.weakness_class!r} names {list(self.bc_ids)} -- a class "
+                f"carried by one capability is not shared, and emitting it "
+                f"would make 'shared' mean 'present'")
+        if list(self.bc_ids) != sorted(set(self.bc_ids)):
+            raise ValueError(
+                f"bc_ids {list(self.bc_ids)} are not sorted and deduped -- a "
+                f"producer emitting discovery order is an NFR-10 bug, and "
+                f"repairing it here would hide that")
+        if list(self.vulnerability_keys) != sorted(set(self.vulnerability_keys)):
+            raise ValueError(
+                f"vulnerability_keys {list(self.vulnerability_keys)} are not "
+                f"sorted and deduped")
+        if not self.vulnerability_keys:
+            raise ValueError(
+                "a shared weakness names no vulnerability row -- FR-918's "
+                "cross-reference integrity starts at the producer")
+        return self
+
+
 class ProposedThreat(BaseModel):
     """One STRIDE applicability judgment for one capability.
 

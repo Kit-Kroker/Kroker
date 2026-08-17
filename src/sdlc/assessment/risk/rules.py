@@ -10,7 +10,8 @@ from __future__ import annotations
 import hashlib
 
 from ..scan.models import (
-    C_AUTHN_AUTHZ, C_DB_SECURITY, C_INPUT_VALIDATION, C_TLS,
+    C_AUTHN_AUTHZ, C_DB_SECURITY, C_INPUT_VALIDATION, C_TLS, CATEGORIES,
+    ScanSignalId,
 )
 from ..scan.rules import module_sha
 from .models import ControlFamily, Criticality, Severity
@@ -85,6 +86,13 @@ UNSOURCED_QA: dict[str, str] = {
 }
 
 # --- cross-capability caps (RD10) ---------------------------------------
+# The scan categories that PRODUCE SecurityObservation rows, derived from
+# scan's own CATEGORIES rather than hand-listed: a second list of the same
+# categories is the duplicate registry ADR-6 already cost us.
+SECURITY_CATEGORIES: frozenset[str] = frozenset(
+    CATEGORIES[ScanSignalId.SS1] + CATEGORIES[ScanSignalId.SS3])
+
+SHARED_MAX_ROWS = 100
 CASCADE_MAX_DEPTH = 4
 CASCADE_MAX_PATHS = 50
 

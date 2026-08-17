@@ -9,6 +9,8 @@ pattern match as a rating."
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from ..discover.map import Capability
 from ..scan.models import Confidence, MemberKind, Sensitivity
 from ...measurement import Measurement
@@ -72,3 +74,17 @@ def severity(hint: str, rating: CriticalityRating,
         i = _ORDER.index(out)
         out = _ORDER[max(0, i + LOW_CONFIDENCE_SHIFT)]
     return out
+
+
+def max_severity(values: Iterable[Severity]) -> Severity:
+    """The highest severity in `values`, INFO for an empty run.
+
+    Over the ONE order the table is built from (_ORDER), so a caller cannot
+    introduce a second ranking of the same five members.
+    """
+    out = Severity.INFO
+    for value in values:
+        if _ORDER.index(value) > _ORDER.index(out):
+            out = value
+    return out
+
