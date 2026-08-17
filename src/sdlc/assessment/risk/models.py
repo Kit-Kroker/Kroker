@@ -15,6 +15,24 @@ from ..scan.models import EvidenceRef
 
 MAX_DRIVERS = 3
 
+# RD10's four cross-capability families, named ONCE. SystemRisk's `truncated`
+# validator and crosscap's assembly both read these, and two lists of family
+# names that agree by coincidence is the defect ADR-6's duplicate role lists
+# already cost this codebase.
+FAM_CASCADES = "cascades"
+FAM_ESCALATIONS = "escalation_paths"
+FAM_SHARED = "shared_vulnerabilities"
+FAM_BOUNDARIES = "trust_boundaries"
+SYSTEM_FAMILIES: tuple[str, ...] = tuple(sorted(
+    (FAM_CASCADES, FAM_ESCALATIONS, FAM_SHARED, FAM_BOUNDARIES)))
+
+# Supporting file edges kept on one projected capability edge. Declared HERE
+# because CapabilityEdge's validator enforces it and models.py may not import
+# rules.py (rules.py imports models.py). models.py therefore joins
+# RULE_MODULES below: it already carried MAX_DRIVERS unhashed, which is a
+# stale-cache hole of exactly the kind E-46's D10 records.
+EDGE_EVIDENCE_MAX = 3
+
 
 class RiskSource(str, Enum):
     BASELINE = "baseline"       # the deterministic rule (plan 1)
@@ -237,6 +255,37 @@ class Vulnerability(BaseModel):
     # which asserts nothing beyond "the scan matched a pattern here".
     rationale: str = ""
     source: RiskSource
+
+
+class CapabilityEdge(BaseModel):
+    """RD10's projection: one capability -> capability dependency, plus the
+    file edges that support it.
+
+    Deliberately NOT stored on the artifact. It is the intermediate the four
+    families are computed over, and persisting it would put a dense O(n^2)
+    structure in a bundle a human reads.
+    """
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    source_bc_id: str
+    target_bc_id: str
+    weight: int = 1
+    evidence: tuple[EvidenceRef, ...] = ()
+
+    @model_validator(mode="after")
+    def _an_edge_joins_two_capabilities(self) -> "CapabilityEdge":
+        if self.source_bc_id == self.target_bc_id:
+            raise ValueError(
+                f"{self.source_bc_id} edges to itself -- an intra-capability "
+                f"edge is not a cross-capability fact, and dropping it at the "
+                f"projection is what keeps that true of every consumer")
+        if self.weight < 1:
+            raise ValueError(
+                "an edge with no supporting file edge is not an edge")
+        if len(self.evidence) > EDGE_EVIDENCE_MAX:
+            raise ValueError(
+                f"at most {EDGE_EVIDENCE_MAX} supporting reference(s), got "
+                f"{len(self.evidence)}")
+        return self
 
 
 class ProposedThreat(BaseModel):

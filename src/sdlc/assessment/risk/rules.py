@@ -84,7 +84,7 @@ UNSOURCED_QA: dict[str, str] = {
         "history least reliable on this repository population"),
 }
 
-# --- cross-capability caps (RD10, consumed by plan 3) -------------------
+# --- cross-capability caps (RD10) ---------------------------------------
 CASCADE_MAX_DEPTH = 4
 CASCADE_MAX_PATHS = 50
 
@@ -93,14 +93,17 @@ CASCADE_MAX_PATHS = 50
 # score. prompt.py, apply.py and assessment/verification.py join with plan 2
 # (P2-D7): the renderer decides what the model sees, apply decides what
 # survives, the verifier decides what is dropped -- all three can move a
-# STORED map. A module that can move output and is not named here is a
-# stale-cache hole; E-46's D10 records the cost of finding that out late.
+# STORED map. models.py joins because it carries MAX_DRIVERS and EDGE_EVIDENCE_MAX:
+# caps in a contract module are still caps, and a stored map of an older
+# contract shape would otherwise be reused under an unchanged key.
 RULE_MODULES: tuple[str, ...] = (
     "sdlc.assessment.risk.rules",
+    "sdlc.assessment.risk.models",
     "sdlc.assessment.risk.severity",
     "sdlc.assessment.risk.controls",
     "sdlc.assessment.risk.factors",
     "sdlc.assessment.risk.composites",
+    "sdlc.assessment.risk.crosscap",
     "sdlc.assessment.risk.build",
     "sdlc.assessment.risk.prompt",
     "sdlc.assessment.risk.apply",

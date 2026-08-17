@@ -21,10 +21,12 @@ def test_rules_sha_covers_every_module_that_can_move_output():
     would move output without moving the key."""
     assert set(rules.RULE_MODULES) == {
         "sdlc.assessment.risk.rules",
+        "sdlc.assessment.risk.models",
         "sdlc.assessment.risk.severity",
         "sdlc.assessment.risk.controls",
         "sdlc.assessment.risk.factors",
         "sdlc.assessment.risk.composites",
+        "sdlc.assessment.risk.crosscap",
         "sdlc.assessment.risk.build",
         "sdlc.assessment.risk.prompt",
         "sdlc.assessment.risk.apply",
