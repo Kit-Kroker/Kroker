@@ -132,3 +132,22 @@ def test_build_with_the_system_view_is_order_independent():
                     collected_categories=ALL).model_dump_json()
         first = first if first is not None else out
         assert out == first
+
+
+def test_build_degrades_system_view_gracefully_on_unexpected_exception(monkeypatch):
+    """Finding 1: a crosscap failure in system_view degrades the four families
+    without discarding the deterministic per-capability score."""
+    import sdlc.assessment.risk.build as build_module
+    def _exploding_system_view(*args, **kwargs):
+        raise RuntimeError("simulated crosscap explosion")
+    monkeypatch.setattr(build_module, "system_view", _exploding_system_view)
+
+    caps, attribution = _world()
+    m = build(_cmap(caps, attribution), collected_categories=ALL)
+    assert m.collected.state is CollectionState.MEASURED
+    assert len(m.capabilities) == 2
+    for family in SYSTEM_FAMILIES:
+        state = getattr(m.system, f"{family}_collected")
+        assert state.state is CollectionState.NOT_COLLECTED
+        assert "simulated crosscap explosion" in state.reason
+

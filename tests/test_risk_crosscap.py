@@ -128,6 +128,20 @@ def test_a_weakness_in_one_capability_only_is_not_shared():
     assert out.rows == ()
 
 
+def test_one_weakness_on_overlapping_capabilities_is_not_shared():
+    """Finding 2: a single observation in a shared file (len(keys)==1,
+    len(bc_ids)==2) is one finding on two capabilities, not a recurring
+    weakness class."""
+    shared_obs = _obs(path="src/shared.py")
+    caps = [capability("BC-001", member_paths=("src/shared.py",), security=(shared_obs,)),
+            capability("BC-002", member_paths=("src/shared.py",), security=(shared_obs,))]
+    sev = {security_identity(shared_obs): Severity.HIGH}
+    out = shared_vulnerabilities(caps, sev, security_collected=True)
+    assert out.collected.state is CollectionState.MEASURED
+    assert out.rows == ()
+
+
+
 def test_shared_severity_is_the_highest_of_its_member_rows():
     caps = [capability("BC-001", security=(_obs(path="src/a.py"),)),
             capability("BC-002", security=(_obs(path="src/b.py"),))]

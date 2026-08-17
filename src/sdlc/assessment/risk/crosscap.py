@@ -25,14 +25,15 @@ from typing import Generic, TypeVar
 
 from ..discover.map import Capability, CapabilityMap
 from ..scan.models import (
-    C_DATA_SENSITIVITY, EvidenceRef, SecurityObservation, security_identity,
+    C_AUTHN_AUTHZ, C_DATA_SENSITIVITY, EvidenceRef, SecurityObservation,
+    security_identity,
 )
 from ...measurement import CollectionState, Measurement
 from .models import (
-    BoundaryVerdict, CapabilityEdge, CapabilityRisk, Cascade, ChainVerdict,
-    ControlFamily, ControlState, EDGE_EVIDENCE_MAX, EscalationPath,
-    FAM_BOUNDARIES, FAM_CASCADES, FAM_ESCALATIONS, FAM_SHARED, RiskProposal,
-    RiskSource, Severity, SharedVulnerability, SystemRisk, TrustBoundary,
+    CapabilityEdge, CapabilityRisk, Cascade, ControlFamily, ControlState,
+    EDGE_EVIDENCE_MAX, EscalationPath, FAM_BOUNDARIES, FAM_CASCADES,
+    FAM_ESCALATIONS, FAM_SHARED, RiskProposal, RiskSource, Severity,
+    SharedVulnerability, SystemRisk, TrustBoundary,
 )
 from .rules import (
     BOUNDARY_MAX_ROWS, CASCADE_MAX_DEPTH, CASCADE_MAX_PATHS,
@@ -62,31 +63,42 @@ class FamilyResult(Generic[R]):
 
 
 def _capped(rows: list[R], cap: int) -> FamilyResult[R]:
-    return FamilyResult(collected=Measurement.measured(1.0),
-                        rows=tuple(rows[:cap]), truncated=len(rows) > cap)
+    """Truncate to `cap` and record whether the cap bit.
+
+    Order is the CALLER's responsibility: rows must already be sorted so
+    truncation drops the tail rather than an arbitrary subset (NFR-10).
+    """
+    return FamilyResult(
+        collected=Measurement.measured(1.0),
+        rows=tuple(rows[:cap]),
+        truncated=len(rows) > cap)
 
 
-def _uncollected(reason: str) -> FamilyResult:
+def _uncollected(reason: str) -> FamilyResult[R]:
     return FamilyResult(collected=Measurement.not_collected(reason))
 
 
 def _owners(capabilities: Iterable[Capability]) -> dict[str, tuple[str, ...]]:
-    """path -> the bc_ids that own it, sorted.
+    """path -> (bc_id, ...) in sorted order.
 
-    A set per path rather than one owner: attribution lets a file belong to
-    more than one capability, and picking one would silently drop an edge.
+    Attribution allows a file to belong to more than one capability, so the
+    index maps a path to a tuple of owners rather than a single owner.
     """
-    index: dict[str, set[str]] = {}
-    for cap in capabilities:
+    index: dict[str, list[str]] = {}
+    for cap in sorted(capabilities, key=lambda c: c.bc_id):
         for path in cap.member_paths:
-            index.setdefault(path, set()).add(cap.bc_id)
-    return {path: tuple(sorted(ids)) for path, ids in index.items()}
+            index.setdefault(path, []).append(cap.bc_id)
+    return {p: tuple(sorted(set(owners))) for p, owners in index.items()}
 
 
 def project_edges(capabilities: Iterable[Capability],
                   file_edges: Iterable[tuple[str, str]]
                   ) -> tuple[CapabilityEdge, ...]:
-    """The file -> file graph projected onto capability -> capability edges.
+    """Project file -> file reference edges into capability -> capability edges.
+
+    Deterministic: input order is ignored, output is sorted by (source_bc_id,
+    target_bc_id). Supporting file edges are kept up to EDGE_EVIDENCE_MAX per
+    capability edge, deterministically sorted.
 
     Intra-capability edges and edges touching a file no capability owns are
     dropped: neither is a cross-capability fact.
@@ -108,6 +120,8 @@ def project_edges(capabilities: Iterable[Capability],
         for importer, _ in ordered:
             if importer not in paths:
                 paths.append(importer)
+                if len(paths) == EDGE_EVIDENCE_MAX:
+                    break
         out.append(CapabilityEdge(
             source_bc_id=src, target_bc_id=dst, weight=len(ordered),
             evidence=tuple(EvidenceRef(path=p)
@@ -159,7 +173,7 @@ def shared_vulnerabilities(capabilities: Iterable[Capability],
             severity=max_severity(severities[k] for k in sorted(g["keys"])
                                   if k in severities))
         for name, g in sorted(groups.items())
-        if len(g["bc_ids"]) >= 2
+        if len(g["bc_ids"]) >= 2 and len(g["keys"]) >= 2
     ]
     return _capped(rows, SHARED_MAX_ROWS)
 
@@ -183,70 +197,81 @@ def graph_state(cmap: CapabilityMap) -> Measurement:
     return Measurement.measured(1.0)
 
 
-def _adjacency(edges: Iterable[CapabilityEdge]) -> dict[str, tuple[str, ...]]:
-    out: dict[str, set[str]] = {}
-    for edge in edges:
-        out.setdefault(edge.source_bc_id, set()).add(edge.target_bc_id)
-    return {src: tuple(sorted(dsts)) for src, dsts in out.items()}
+
+def _adjacency(edges: Iterable[CapabilityEdge]) -> dict[str, list[str]]:
+    adj: dict[str, list[str]] = {}
+    for e in edges:
+        adj.setdefault(e.source_bc_id, []).append(e.target_bc_id)
+    return {k: sorted(set(v)) for k, v in adj.items()}
 
 
-def _shortest_paths(adj: dict[str, tuple[str, ...]], origin: str, *,
+def _shortest_paths(adj: dict[str, list[str]], origin: str, *,
                     max_depth: int) -> dict[str, tuple[str, ...]]:
-    """BFS over sorted adjacency: each reachable capability appears once, with
-    its shortest path, and the origin itself is not a result.
+    """BFS for shortest paths from `origin`, up to `max_depth` hops.
 
-    Bounded by max_depth, and deterministic because the frontier is expanded
-    in sorted order (NFR-10).
+    Deterministic: adj lists are sorted, so paths of equal length break ties
+    lexicographically by node id.
     """
-    seen: dict[str, tuple[str, ...]] = {origin: (origin,)}
-    queue: deque[str] = deque([origin])
+    best: dict[str, tuple[str, ...]] = {}
+    queue: deque[tuple[str, ...]] = deque([(origin,)])
     while queue:
-        node = queue.popleft()
-        path = seen[node]
+        path = queue.popleft()
+        node = path[-1]
         if len(path) - 1 >= max_depth:
             continue
-        for nxt in adj.get(node, ()):
-            if nxt in seen:
+        for neighbor in adj.get(node, ()):
+            if neighbor in path:        # cycle
                 continue
-            seen[nxt] = path + (nxt,)
-            queue.append(nxt)
-    return {bc: path for bc, path in seen.items() if bc != origin}
+            extended = (*path, neighbor)
+            if neighbor not in best or len(extended) < len(best[neighbor]):
+                best[neighbor] = extended
+                queue.append(extended)
+    return best
 
 
 def cascades(risks: Iterable[CapabilityRisk],
              edges: Iterable[CapabilityEdge], *,
              graph: Measurement) -> FamilyResult[Cascade]:
-    """What a compromise of a high-security-composite capability reaches."""
-    if graph.state is not CollectionState.MEASURED:
-        return _uncollected(f"cascades need the reference graph: {graph.reason}")
+    """Shortest paths from high-security-composite capabilities to all
+    reachable capabilities.
 
-    rows_in = tuple(risks)
-    if not any(r.security.value.state is CollectionState.MEASURED
-               for r in rows_in):
+    Origins are capabilities with security composite >= CASCADE_SOURCE_MIN_SECURITY.
+    """
+    if graph.state is not CollectionState.MEASURED:
         return _uncollected(
-            "no capability carries a measured security composite, so no "
-            "cascade origin could be identified -- an empty cascade set here "
-            "would read as 'nothing propagates' (FR-915)")
+            f"cascades need the reference graph: {graph.reason}")
 
     origins = sorted(
-        r.bc_id for r in rows_in
-        if r.security.value.state is CollectionState.MEASURED
-        and r.security.value.value >= CASCADE_SOURCE_MIN_SECURITY)
-    adj = _adjacency(edges)
+        r.bc_id for r in risks
+        if (r.security.value.state is CollectionState.MEASURED
+            and r.security.value.value is not None
+            and r.security.value.value >= CASCADE_SOURCE_MIN_SECURITY))
+    if not origins:
+        # If no security composite was MEASURED, cascades did not collect; if
+        # composites were measured and none cleared the threshold, that is a
+        # measured zero (empty list).
+        any_measured = any(
+            r.security.value.state is CollectionState.MEASURED for r in risks)
+        if not any_measured:
+            return _uncollected(
+                "no capability has a MEASURED security composite, so cascade "
+                "origins cannot be identified (FR-915)")
+        return FamilyResult(collected=Measurement.measured(1.0), rows=())
 
+    adj = _adjacency(edges)
     out: list[Cascade] = []
     for origin in origins:
-        for _, path in sorted(
-                _shortest_paths(adj, origin,
-                                max_depth=CASCADE_MAX_DEPTH).items()):
+        paths = _shortest_paths(adj, origin, max_depth=CASCADE_MAX_DEPTH)
+        for target, path in sorted(paths.items()):
             out.append(Cascade(origin=origin, path=path))
-    out.sort(key=lambda c: (c.origin, c.path))
+    out.sort(key=lambda c: (c.origin, c.impacted))
     return _capped(out, CASCADE_MAX_PATHS)
 
 
 _NO_JUDGMENT_BOUNDARY = (
-    "code enumerated this edge as a trust-boundary candidate; no judgment "
-    "was applied -- this is not a finding that the boundary is sound. See "
+    "deterministic baseline: criticality or data sensitivity exposure "
+    "differs across this edge; trust boundary verdict is the risk proposer's "
+    "judgment, and this row records that no judgment was applied. See "
     "UnifiedRiskMap.judgment for why")
 
 
@@ -255,18 +280,13 @@ def boundary_candidates(risks: Iterable[CapabilityRisk],
                         edges: Iterable[CapabilityEdge], *,
                         sensitivity_collected: bool,
                         graph: Measurement) -> FamilyResult[TrustBoundary]:
-    """Edges whose endpoints differ in criticality or sensitivity exposure.
-
-    An edge between endpoints we could not RATE is not a candidate and is not
-    a non-candidate either -- when neither input collected, the whole family
-    reports not_collected rather than an empty set (FR-915).
-    """
+    """Candidate trust boundaries from criticality or sensitivity differences."""
     if graph.state is not CollectionState.MEASURED:
         return _uncollected(
             f"trust boundaries need the reference graph: {graph.reason}")
 
     levels = {r.bc_id: r.criticality.level for r in risks}
-    criticality_collected = any(v is not None for v in levels.values())
+    criticality_collected = any(r.criticality.level is not None for r in risks)
     if not criticality_collected and not sensitivity_collected:
         return _uncollected(
             "neither criticality nor data sensitivity collected, so no edge "
@@ -303,6 +323,7 @@ _NO_JUDGMENT_CHAIN = (
 def escalation_candidates(risks: Iterable[CapabilityRisk],
                           capabilities: Iterable[Capability],
                           edges: Iterable[CapabilityEdge], *,
+                          authn_collected: bool = True,
                           sensitivity_collected: bool,
                           graph: Measurement) -> FamilyResult[EscalationPath]:
     """Bounded paths from an unauthenticated entry point to sensitive data.
@@ -315,6 +336,11 @@ def escalation_candidates(risks: Iterable[CapabilityRisk],
     if graph.state is not CollectionState.MEASURED:
         return _uncollected(
             f"escalation chains need the reference graph: {graph.reason}")
+    if not authn_collected:
+        return _uncollected(
+            "C_AUTHN_AUTHZ did not collect, so no entry point can be "
+            "identified as unauthenticated vs authenticated -- an empty set "
+            "here would read as 'no escalation path exists' (FR-915)")
     if not sensitivity_collected:
         return _uncollected(
             "SS4 did not collect, so no capability can be identified as "
@@ -335,18 +361,17 @@ def escalation_candidates(risks: Iterable[CapabilityRisk],
         if cap is None or not any(m.kind in REACHABLE_KINDS
                                   for m in cap.members):
             continue
-        # PRESENT is the one state that disqualifies: ABSENT is a weakness,
-        # and not_collected is "we cannot see it", which is not a control.
-        if auth[bc_id].state is ControlState.PRESENT:
+        # PRESENT is the one state that disqualifies: ABSENT is a weakness.
+        # Only a measured ABSENT control qualifies as an unauthenticated entry.
+        if (auth[bc_id].collected.state is not CollectionState.MEASURED
+                or auth[bc_id].state is not ControlState.ABSENT):
             continue
         entries.append(bc_id)
 
     adj = _adjacency(edges)
     out: list[EscalationPath] = []
     for entry in entries:
-        rule = ("entry_authentication_absent"
-                if auth[entry].state is ControlState.ABSENT
-                else "entry_authentication_not_collected")
+        rule = "entry_authentication_absent"
         for target, path in sorted(
                 _shortest_paths(adj, entry,
                                 max_depth=ESCALATION_MAX_DEPTH).items()):
@@ -372,6 +397,7 @@ def system_view(cmap: CapabilityMap, risks: tuple[CapabilityRisk, ...], *,
              if graph.state is CollectionState.MEASURED else ())
     severities = {v.key: v.severity for r in risks for v in r.vulnerabilities}
     sensitivity_collected = C_DATA_SENSITIVITY in collected_categories
+    authn_collected = C_AUTHN_AUTHZ in collected_categories
 
     shared = shared_vulnerabilities(
         cmap.capabilities, severities,
@@ -382,6 +408,7 @@ def system_view(cmap: CapabilityMap, risks: tuple[CapabilityRisk, ...], *,
         sensitivity_collected=sensitivity_collected, graph=graph)
     chains = escalation_candidates(
         risks, cmap.capabilities, edges,
+        authn_collected=authn_collected,
         sensitivity_collected=sensitivity_collected, graph=graph)
 
     families = {FAM_SHARED: shared, FAM_CASCADES: cascade,
@@ -396,65 +423,3 @@ def system_view(cmap: CapabilityMap, risks: tuple[CapabilityRisk, ...], *,
         escalation_paths_collected=chains.collected,
         truncated=tuple(sorted(name for name, fam in families.items()
                                if fam.truncated)))
-
-
-def _unique(rows, key):
-    seen = {}
-    dupes = set()
-    for row in rows:
-        k = key(row)
-        if k in seen:
-            dupes.add(k)
-        seen[k] = row
-    return {k: v for k, v in seen.items() if k not in dupes}
-
-
-def _merged(*groups: Iterable[EvidenceRef]) -> tuple[EvidenceRef, ...]:
-    merged = {(e.path, e.lines): e for group in groups for e in group}
-    return tuple(merged[k] for k in sorted(merged))
-
-
-def apply_system_judgment(system: SystemRisk,
-                           proposal: RiskProposal) -> SystemRisk:
-    """Stamp the proposer's verdicts onto the candidates code enumerated."""
-    boundaries = _unique(proposal.boundaries,
-                         lambda b: (b.source_bc_id, b.target_bc_id))
-    escalations = _unique(proposal.escalations, lambda e: e.path_id)
-
-    new_b = []
-    for b in system.trust_boundaries:
-        p = boundaries.get((b.source_bc_id, b.target_bc_id))
-        if p is None or not p.rationale.strip():
-            new_b.append(b)
-            continue
-        new_b.append(TrustBoundary(
-            source_bc_id=b.source_bc_id, target_bc_id=b.target_bc_id,
-            rule=b.rule, verdict=p.verdict, rationale=p.rationale,
-            evidence=_merged(b.evidence, p.evidence),
-            source=RiskSource.PROPOSER))
-
-    new_e = []
-    for e in system.escalation_paths:
-        p = escalations.get(e.path_id)
-        if p is None or not p.rationale.strip():
-            new_e.append(e)
-            continue
-        new_e.append(EscalationPath(
-            path=e.path, rule=e.rule, verdict=p.verdict, rationale=p.rationale,
-            evidence=_merged(e.evidence, p.evidence),
-            source=RiskSource.PROPOSER))
-
-    return SystemRisk(
-        shared_vulnerabilities=system.shared_vulnerabilities,
-        shared_vulnerabilities_collected=system.shared_vulnerabilities_collected,
-        cascades=system.cascades,
-        cascades_collected=system.cascades_collected,
-        trust_boundaries=tuple(new_b),
-        trust_boundaries_collected=system.trust_boundaries_collected,
-        escalation_paths=tuple(new_e),
-        escalation_paths_collected=system.escalation_paths_collected,
-        truncated=system.truncated)
-
-
-
-

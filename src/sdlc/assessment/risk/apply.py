@@ -15,12 +15,13 @@ from typing import TypeVar
 
 from ...measurement import CollectionState, Measurement
 from ..scan.models import EvidenceRef
-from .crosscap import apply_system_judgment
 from .models import (
-    CapabilityRisk, ControlCoverage, ProposedControl, ProposedThreat,
-    ProposedVulnerability, RiskProposal, RiskSource, ThreatAssessment,
+    CapabilityRisk, ControlCoverage, EscalationPath, ProposedBoundary,
+    ProposedControl, ProposedEscalation, ProposedThreat, ProposedVulnerability,
+    RiskProposal, RiskSource, SystemRisk, ThreatAssessment, TrustBoundary,
     UnifiedRiskMap, Vulnerability,
 )
+
 
 T = TypeVar("T")
 K = TypeVar("K")
@@ -131,7 +132,69 @@ def _controls(cap: CapabilityRisk,
     return tuple(out)
 
 
+def _normalize_path_id(pid: str) -> str:
+    return pid.replace(" ", "")
+
+
+def _boundaries(system: SystemRisk,
+                proposed: dict[tuple[str, str], ProposedBoundary]
+                ) -> tuple[TrustBoundary, ...]:
+    if system.trust_boundaries_collected.state is not CollectionState.MEASURED:
+        return system.trust_boundaries
+    out: list[TrustBoundary] = []
+    for row in system.trust_boundaries:
+        p = proposed.get((row.source_bc_id, row.target_bc_id))
+        if p is None or not p.rationale.strip():
+            out.append(row)
+            continue
+        out.append(TrustBoundary(
+            source_bc_id=row.source_bc_id, target_bc_id=row.target_bc_id,
+            rule=row.rule, verdict=p.verdict, rationale=p.rationale,
+            evidence=_merged(row.evidence, p.evidence),
+            source=RiskSource.PROPOSER))
+    return tuple(out)
+
+
+def _escalations(system: SystemRisk,
+                 proposed: dict[str, ProposedEscalation]
+                 ) -> tuple[EscalationPath, ...]:
+    if system.escalation_paths_collected.state is not CollectionState.MEASURED:
+        return system.escalation_paths
+    out: list[EscalationPath] = []
+    for row in system.escalation_paths:
+        p = proposed.get(_normalize_path_id(row.path_id))
+        if p is None or not p.rationale.strip():
+            out.append(row)
+            continue
+        out.append(EscalationPath(
+            path=row.path, rule=row.rule, verdict=p.verdict,
+            rationale=p.rationale,
+            evidence=_merged(row.evidence, p.evidence),
+            source=RiskSource.PROPOSER))
+    return tuple(out)
+
+
+def apply_system_judgment(system: SystemRisk,
+                           proposal: RiskProposal) -> SystemRisk:
+    """Stamp the proposer's verdicts onto the candidates code enumerated."""
+    boundaries = _unique(proposal.boundaries,
+                         lambda r: (r.source_bc_id, r.target_bc_id))
+    escalations = _unique(proposal.escalations,
+                          lambda r: _normalize_path_id(r.path_id))
+    return SystemRisk(
+        shared_vulnerabilities=system.shared_vulnerabilities,
+        shared_vulnerabilities_collected=system.shared_vulnerabilities_collected,
+        cascades=system.cascades,
+        cascades_collected=system.cascades_collected,
+        trust_boundaries=_boundaries(system, boundaries),
+        trust_boundaries_collected=system.trust_boundaries_collected,
+        escalation_paths=_escalations(system, escalations),
+        escalation_paths_collected=system.escalation_paths_collected,
+        truncated=system.truncated)
+
+
 def apply_judgment(baseline: UnifiedRiskMap,
+
                    proposal: RiskProposal,
                    *,
                    total_proposed: int | None = None) -> UnifiedRiskMap:

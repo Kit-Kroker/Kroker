@@ -22,7 +22,7 @@ from .controls import controls
 from .crosscap import system_view
 from .factors import qa_factors, security_factors
 from .models import (
-    CapabilityRisk, RiskSource, StrideCategory, ThreatAssessment,
+    CapabilityRisk, RiskSource, StrideCategory, SystemRisk, ThreatAssessment,
     UnifiedRiskMap, Vulnerability, VulnerabilityClass,
 )
 from .severity import criticality, severity
@@ -33,7 +33,18 @@ _NO_JUDGMENT = (
     "finding of inapplicability. See UnifiedRiskMap.judgment for why")
 
 
+def _degraded_system(reason: str) -> SystemRisk:
+    uncollected = Measurement.not_collected(reason)
+    return SystemRisk(
+        shared_vulnerabilities_collected=uncollected,
+        cascades_collected=uncollected,
+        trust_boundaries_collected=uncollected,
+        escalation_paths_collected=uncollected,
+    )
+
+
 def no_risk(reason: str) -> UnifiedRiskMap:
+
     """RD8: the phase produced no map, and says why.
 
     Never an empty map with a measured `collected` -- zero vulnerabilities
@@ -104,10 +115,15 @@ def build(cmap: CapabilityMap, *,
             unified=unified(sec, qa)))
 
     rows_out = tuple(rows)
+    try:
+        sys_view = system_view(cmap, rows_out,
+                               collected_categories=collected_categories)
+    except Exception as e:
+        sys_view = _degraded_system(f"system view derivation failed: {e}")
+
     return UnifiedRiskMap(
         capabilities=rows_out,
-        system=system_view(cmap, rows_out,
-                           collected_categories=collected_categories),
+        system=sys_view,
         collected=Measurement.measured(1.0))
 
 

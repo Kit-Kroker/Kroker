@@ -10,7 +10,8 @@ do not score.
 
 ## What you may return
 
-Three kinds of disposition, all optional. Return only what you can justify.
+Five kinds of disposition, all optional. Return only what you can justify.
+
 
 - **`threats`** — one per `(capability, STRIDE category)` you have a view on.
   Set `applicable` and give a `rationale`. `vulnerability_keys` may link the

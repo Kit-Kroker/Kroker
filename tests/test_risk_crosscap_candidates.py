@@ -212,9 +212,41 @@ def test_uncollected_sensitivity_is_not_an_empty_chain_set():
     attribution = _attribution([("a.py", "b.py")])
     out = escalation_candidates(_risks(caps, attribution, frozenset()), caps,
                                 project_edges(caps, attribution.graph.edges),
+                                authn_collected=True,
                                 sensitivity_collected=False, graph=OK)
     assert out.collected.state is CollectionState.NOT_COLLECTED
     assert "no chain has an end" in out.collected.reason
+
+
+def test_uncollected_authentication_is_not_an_empty_chain_set():
+    """Finding 3: when authn_collected is False, escalation_candidates reports
+    not_collected rather than shipping chains from absence of evidence."""
+    entry = capability("BC-001", member_paths=("a.py",), members=(_route(),))
+    store = capability("BC-002", member_paths=("b.py",), sensitivity=(_pii(),))
+    caps = [entry, store]
+    attribution = _attribution([("a.py", "b.py")])
+    out = escalation_candidates(_risks(caps, attribution, frozenset({C_DATA_SENSITIVITY})), caps,
+                                project_edges(caps, attribution.graph.edges),
+                                authn_collected=False,
+                                sensitivity_collected=True, graph=OK)
+    assert out.collected.state is CollectionState.NOT_COLLECTED
+    assert "C_AUTHN_AUTHZ did not collect" in out.collected.reason
+
+
+def test_entry_authentication_not_collected_is_not_an_escalation_candidate():
+    """Finding 3: an entry whose AUTHENTICATION control is not_collected does
+    not qualify as unauthenticated entry."""
+    entry = capability("BC-001", member_paths=("a.py",), members=(_route(),))
+    store = capability("BC-002", member_paths=("b.py",), sensitivity=(_pii(),))
+    caps = [entry, store]
+    attribution = _attribution([("a.py", "b.py")])
+    # Calling _risks with only C_DATA_SENSITIVITY means AUTHENTICATION is not_collected
+    risks = _risks(caps, attribution, frozenset({C_DATA_SENSITIVITY}))
+    out = escalation_candidates(risks, caps,
+                                project_edges(caps, attribution.graph.edges),
+                                authn_collected=True,
+                                sensitivity_collected=True, graph=OK)
+    assert out.rows == ()
 
 
 def test_the_known_limit_chains_are_authentication_gated_not_authorization():
@@ -234,6 +266,7 @@ def test_the_known_limit_chains_are_authentication_gated_not_authorization():
     assert authz.collected.state is CollectionState.NOT_COLLECTED
     out = escalation_candidates(risks, caps,
                                 project_edges(caps, attribution.graph.edges),
+                                authn_collected=True,
                                 sensitivity_collected=True, graph=OK)
     assert out.rows == (), (
         "an authenticated entry is excluded even though authorization was "
@@ -242,7 +275,7 @@ def test_the_known_limit_chains_are_authentication_gated_not_authorization():
 
 def test_escalation_candidates_are_order_independent():
     entry = capability("BC-001", member_paths=("a.py",), members=(_route(),),
-                       security=())
+                       security=(_weak_authn(),))
     mid = capability("BC-002", member_paths=("b.py",))
     store = capability("BC-003", member_paths=("c.py",), sensitivity=(_pii(),))
     caps = [entry, mid, store]
@@ -252,9 +285,11 @@ def test_escalation_candidates_are_order_independent():
     for _ in range(5):
         random.shuffle(caps)
         random.shuffle(file_edges)
-        out = repr(escalation_candidates(_risks(caps, attribution, frozenset(
-            {C_DATA_SENSITIVITY})), caps, project_edges(caps, file_edges),
+        out = repr(escalation_candidates(_risks(caps, attribution, ALL),
+            caps, project_edges(caps, file_edges),
+            authn_collected=True,
             sensitivity_collected=True, graph=OK))
         first = first if first is not None else out
         assert out == first
+
 

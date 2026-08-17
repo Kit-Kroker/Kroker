@@ -368,3 +368,35 @@ def test_an_unknown_boundary_or_escalation_is_refused():
     assert all(row.source is RiskSource.BASELINE
                for row in out.system.escalation_paths)
 
+
+def test_path_id_matching_is_whitespace_tolerant():
+    """Finding 7: path_id matching normalizes whitespace around '->'."""
+    caps, attribution = _world()
+    cmap = _cmap_world(caps, attribution)
+    b = build(cmap, collected_categories=ALL)
+    out = apply_judgment(b, RiskProposal(escalations=[
+        ProposedEscalation(path_id="BC-001 -> BC-002",
+                           verdict=ChainVerdict.REFUTED,
+                           rationale="caller has a signed claim")]))
+    row = out.system.escalation_paths[0]
+    assert row.verdict is ChainVerdict.REFUTED
+    assert row.source is RiskSource.PROPOSER
+
+
+def test_system_proposer_judgment_refused_when_escalation_family_not_collected():
+    """Finding 3: when escalation paths did not collect (e.g. no SS4), proposer
+    verdicts cannot land."""
+    caps, attribution = _world()
+    cmap = _cmap_world(caps, attribution)
+    # frozenset() means SS4 did not collect -> escalation_paths is not_collected
+    b = build(cmap, collected_categories=frozenset({C_AUTHN_AUTHZ}))
+    assert b.system.escalation_paths_collected.state is CollectionState.NOT_COLLECTED
+    out = apply_judgment(b, RiskProposal(escalations=[
+        ProposedEscalation(path_id="BC-001->BC-002",
+                           verdict=ChainVerdict.REFUTED,
+                           rationale="r")]))
+    assert out.system.escalation_paths == ()
+    assert out.system.escalation_paths_collected.state is CollectionState.NOT_COLLECTED
+    assert out.judgment.state is CollectionState.NOT_COLLECTED
+
+

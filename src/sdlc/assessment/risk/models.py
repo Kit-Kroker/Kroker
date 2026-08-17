@@ -321,10 +321,10 @@ class SharedVulnerability(BaseModel):
             raise ValueError(
                 f"vulnerability_keys {list(self.vulnerability_keys)} are not "
                 f"sorted and deduped")
-        if not self.vulnerability_keys:
+        if len(self.vulnerability_keys) < 2:
             raise ValueError(
-                "a shared weakness names no vulnerability row -- FR-918's "
-                "cross-reference integrity starts at the producer")
+                f"{self.weakness_class!r} names {list(self.vulnerability_keys)} -- a "
+                f"shared weakness must have at least 2 distinct vulnerability keys")
         return self
 
 
@@ -346,19 +346,20 @@ class Cascade(BaseModel):
         return len(self.path) - 1
 
     @model_validator(mode="after")
-    def _the_path_starts_at_its_origin(self) -> "Cascade":
+    def _a_cascade_has_an_origin_and_a_path(self) -> "Cascade":
+        if not self.origin:
+            raise ValueError("cascade origin cannot be empty")
         if len(self.path) < 2:
             raise ValueError(
-                f"a cascade needs at least one hop, got {list(self.path)} -- "
-                f"a capability does not cascade into itself")
+                f"cascade path needs at least one hop, got {list(self.path)}")
         if self.path[0] != self.origin:
             raise ValueError(
-                f"path {list(self.path)} does not start at origin "
-                f"{self.origin!r}")
+                f"cascade origin {self.origin!r} does not match path start "
+                f"{self.path[0]!r}")
         if len(set(self.path)) != len(self.path):
             raise ValueError(
                 f"path {list(self.path)} repeats a capability -- a cycle is "
-                f"not a cascade, and emitting one would double-count impact")
+                f"not a cascade path")
         return self
 
 
@@ -366,14 +367,18 @@ class BoundaryVerdict(str, Enum):
     """RD10's disposition over a candidate edge. UNCLEAR is the baseline's
     own value and a legitimate proposer answer: 'we looked and cannot tell'
     is a finding, and forcing a binary would manufacture one."""
-    WEAK = "weak"
     SOUND = "sound"
+    WEAK = "weak"
     UNCLEAR = "unclear"
 
 
 class TrustBoundary(BaseModel):
-    """A candidate edge whose endpoints differ in criticality or sensitivity
-    exposure. `rule` is why code enumerated it; `verdict` is what judged it."""
+    """An edge between capabilities whose criticality or data sensitivity
+    differs (RD10).
+
+    The baseline leaves the verdict UNCLEAR; the risk proposer sets it to
+    SOUND or WEAK in plan 2.
+    """
     model_config = ConfigDict(frozen=True, extra="forbid")
     source_bc_id: str
     target_bc_id: str
@@ -384,11 +389,15 @@ class TrustBoundary(BaseModel):
     source: RiskSource = RiskSource.BASELINE
 
     @model_validator(mode="after")
-    def _rationale_is_required(self) -> "TrustBoundary":
+    def _a_boundary_joins_two_capabilities(self) -> "TrustBoundary":
+        if self.source_bc_id == self.target_bc_id:
+            raise ValueError(
+                f"{self.source_bc_id} boundaries with itself -- a trust "
+                f"boundary is between distinct capabilities")
         if not self.rationale.strip():
             raise ValueError(
-                f"{self.source_bc_id}->{self.target_bc_id} needs a rationale "
-                f"-- an unexplained verdict is unreviewable")
+                f"boundary {self.source_bc_id}->{self.target_bc_id} needs a "
+                f"rationale -- an unexplained verdict is unreviewable")
         return self
 
 
@@ -400,14 +409,10 @@ class ChainVerdict(str, Enum):
 
 
 class EscalationPath(BaseModel):
-    """A bounded path from an externally-reachable capability whose
-    authentication control is absent or uncollected, to one handling
-    sensitive entities.
+    """A path from an unauthenticated externally reachable entry point to a
+    capability handling sensitive entities (RD10).
 
-    KNOWN LIMIT (RD10): these chains are AUTHENTICATION-gated, not
-    AUTHORIZATION-gated, because RD5 leaves Authorization with no scan
-    source. A narrower claim than FR-916's wording implies, stated here
-    rather than discovered by a customer.
+    The baseline leaves the verdict UNCLEAR; the proposer sets it in plan 2.
     """
     model_config = ConfigDict(frozen=True, extra="forbid")
     path: tuple[str, ...]
@@ -456,7 +461,7 @@ class ProposedThreat(BaseModel):
     could label a hallucinated judgment as a computed baseline, or overrule
     the table the FR-921 bundle publishes.
     """
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True)
     bc_id: str
     category: StrideCategory
     applicable: bool
@@ -475,7 +480,7 @@ class ProposedThreat(BaseModel):
 class ProposedVulnerability(BaseModel):
     """A classification and a STRIDE linkage for a vulnerability that already
     exists. `key` names a baseline row; it never creates one."""
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True)
     key: str
     classification: VulnerabilityClass
     stride_category: StrideCategory
@@ -493,7 +498,7 @@ class ProposedControl(BaseModel):
     with no source is refused downstream (P2-D4): flipping "we have no signal
     for this" into "present" is the most expensive over-claim the artifact
     admits."""
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True)
     bc_id: str
     family: ControlFamily
     state: ControlState
@@ -510,7 +515,7 @@ class ProposedBoundary(BaseModel):
     """A verdict over a candidate edge code enumerated. `source_bc_id` and
     `target_bc_id` name an existing candidate; a pair the baseline does not
     carry is dropped, never created (ADR-22)."""
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True)
     source_bc_id: str
     target_bc_id: str
     verdict: BoundaryVerdict
@@ -526,7 +531,7 @@ class ProposedBoundary(BaseModel):
 class ProposedEscalation(BaseModel):
     """A verdict over a candidate chain. `path_id` is EscalationPath.path_id
     -- the model names a path, it never assembles one."""
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True)
     path_id: str
     verdict: ChainVerdict
     rationale: str

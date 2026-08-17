@@ -158,3 +158,32 @@ def test_proposed_system_rows_carry_prefixed_ids():
     assert e.row_id == "escalation:BC-001->BC-002"
     assert set(RiskProposal(boundaries=[b], escalations=[e]).rows) == {b, e}
 
+
+def test_proposed_models_ignore_extra_fields():
+    """Finding 4: LLM outputs with stray extra fields (e.g. severity, extra
+    annotations) must be ignored, not fail the entire RiskProposal."""
+    from sdlc.assessment.risk.models import (
+        BoundaryVerdict, ChainVerdict, ProposedBoundary, ProposedEscalation,
+    )
+    t = ProposedThreat(bc_id="BC-001", category=StrideCategory.SPOOFING,
+                       applicable=True, rationale="r", severity="high")
+    v = ProposedVulnerability(key="ss1:r:a.py:",
+                              classification=VulnerabilityClass.CONFIRMED,
+                              stride_category=StrideCategory.SPOOFING,
+                              rationale="r", extra_field=123)
+    c = ProposedControl(bc_id="BC-001", family=ControlFamily.AUTHENTICATION,
+                        state=ControlState.ABSENT, rationale="r",
+                        unknown_tag=True)
+    b = ProposedBoundary(source_bc_id="BC-001", target_bc_id="BC-002",
+                         verdict=BoundaryVerdict.WEAK, rationale="r",
+                         severity="medium")
+    e = ProposedEscalation(path_id="BC-001->BC-002",
+                           verdict=ChainVerdict.PLAUSIBLE, rationale="r",
+                           confidence=0.9)
+    assert t.bc_id == "BC-001"
+    assert v.key == "ss1:r:a.py:"
+    assert c.state is ControlState.ABSENT
+    assert b.verdict is BoundaryVerdict.WEAK
+    assert e.verdict is ChainVerdict.PLAUSIBLE
+
+
