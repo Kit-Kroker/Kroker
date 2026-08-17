@@ -31,9 +31,9 @@ def test_t_risk_is_built_and_registered():
 
 
 def test_the_proposer_can_only_return_dispositions():
-    """ADR-22 at the type: three disposition families and nothing else. A
+    """ADR-22 at the type: five disposition families and nothing else. A
     proposer that could return a CapabilityRisk would author the number
     FR-917 gates on."""
     from sdlc.assessment.risk.models import RiskProposal
     assert set(RiskProposal.model_fields) == {
-        "threats", "vulnerabilities", "controls"}
+        "threats", "vulnerabilities", "controls", "boundaries", "escalations"}

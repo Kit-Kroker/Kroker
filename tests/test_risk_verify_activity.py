@@ -74,3 +74,41 @@ async def test_an_unreadable_repository_refuses_rather_than_raises(repo):
         repo_dir="/nonexistent/repo", commit_sha=sha, proposal=proposal))
     assert out.proposal.threats == []
     assert out.fabrication_rate == 1.0
+
+
+@pytest.mark.asyncio
+async def test_system_rows_verify_in_their_own_families(repo):
+    from sdlc.assessment.risk.models import (
+        BoundaryVerdict, ChainVerdict, ProposedBoundary, ProposedEscalation,
+    )
+    repo_dir, sha = repo
+    proposal = RiskProposal(
+        boundaries=[ProposedBoundary(
+            source_bc_id="BC-001", target_bc_id="BC-002",
+            verdict=BoundaryVerdict.WEAK, rationale="r",
+            evidence=(EvidenceRef(path="a.py", lines="1"),),
+            quote="def charge(): pass")],
+        escalations=[ProposedEscalation(
+            path_id="BC-001->BC-002", verdict=ChainVerdict.PLAUSIBLE,
+            rationale="r")])
+    out = await verify_risk_refs(VerifyRiskRefsInput(
+        repo_dir=repo_dir, commit_sha=sha, proposal=proposal))
+    assert len(out.proposal.boundaries) == 1
+    assert len(out.proposal.escalations) == 1
+    assert out.unresolved_references == 0
+
+
+@pytest.mark.asyncio
+async def test_a_fabricated_boundary_reference_drops_its_row(repo):
+    from sdlc.assessment.risk.models import BoundaryVerdict, ProposedBoundary
+    repo_dir, sha = repo
+    proposal = RiskProposal(boundaries=[ProposedBoundary(
+        source_bc_id="BC-001", target_bc_id="BC-002",
+        verdict=BoundaryVerdict.SOUND, rationale="r",
+        evidence=(EvidenceRef(path="ghost.py"),))])
+    out = await verify_risk_refs(VerifyRiskRefsInput(
+        repo_dir=repo_dir, commit_sha=sha, proposal=proposal))
+    assert out.proposal.boundaries == []
+    assert out.refusals["boundary:BC-001->BC-002"][0] == (
+        "dropped_ref_unresolved")
+

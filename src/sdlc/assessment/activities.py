@@ -42,8 +42,8 @@ from .discover.ownership import assign
 from .risk import memo as risk_memo
 from .risk.build import build as build_risk, no_risk
 from .risk.models import (
-    ProposedControl, ProposedThreat, ProposedVulnerability, RiskProposal,
-    RiskVerification, UnifiedRiskMap,
+    ProposedBoundary, ProposedControl, ProposedEscalation, ProposedThreat,
+    ProposedVulnerability, RiskProposal, RiskVerification, UnifiedRiskMap,
 )
 from .risk.rules import rules_sha as risk_rules_sha
 from .verification import cited_paths_of, verify_rows
@@ -818,7 +818,11 @@ async def verify_risk_refs(inp: VerifyRiskRefsInput) -> RiskVerification:
             vulnerabilities=[r for r in out.survivors
                              if isinstance(r, ProposedVulnerability)],
             controls=[r for r in out.survivors
-                      if isinstance(r, ProposedControl)]),
+                      if isinstance(r, ProposedControl)],
+            boundaries=[r for r in out.survivors
+                        if isinstance(r, ProposedBoundary)],
+            escalations=[r for r in out.survivors
+                         if isinstance(r, ProposedEscalation)]),
         refusals=out.refusals, total_references=out.total_references,
         unresolved_references=out.unresolved_references)
 

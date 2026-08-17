@@ -456,6 +456,7 @@ class ProposedThreat(BaseModel):
     could label a hallucinated judgment as a computed baseline, or overrule
     the table the FR-921 bundle publishes.
     """
+    model_config = ConfigDict(frozen=True, extra="forbid")
     bc_id: str
     category: StrideCategory
     applicable: bool
@@ -474,6 +475,7 @@ class ProposedThreat(BaseModel):
 class ProposedVulnerability(BaseModel):
     """A classification and a STRIDE linkage for a vulnerability that already
     exists. `key` names a baseline row; it never creates one."""
+    model_config = ConfigDict(frozen=True, extra="forbid")
     key: str
     classification: VulnerabilityClass
     stride_category: StrideCategory
@@ -491,6 +493,7 @@ class ProposedControl(BaseModel):
     with no source is refused downstream (P2-D4): flipping "we have no signal
     for this" into "present" is the most expensive over-claim the artifact
     admits."""
+    model_config = ConfigDict(frozen=True, extra="forbid")
     bc_id: str
     family: ControlFamily
     state: ControlState
@@ -503,19 +506,55 @@ class ProposedControl(BaseModel):
         return f"control:{self.bc_id}:{self.family.value}"
 
 
+class ProposedBoundary(BaseModel):
+    """A verdict over a candidate edge code enumerated. `source_bc_id` and
+    `target_bc_id` name an existing candidate; a pair the baseline does not
+    carry is dropped, never created (ADR-22)."""
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    source_bc_id: str
+    target_bc_id: str
+    verdict: BoundaryVerdict
+    rationale: str
+    evidence: tuple[EvidenceRef, ...] = ()
+    quote: str = ""
+
+    @property
+    def row_id(self) -> str:
+        return f"boundary:{self.source_bc_id}->{self.target_bc_id}"
+
+
+class ProposedEscalation(BaseModel):
+    """A verdict over a candidate chain. `path_id` is EscalationPath.path_id
+    -- the model names a path, it never assembles one."""
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    path_id: str
+    verdict: ChainVerdict
+    rationale: str
+    evidence: tuple[EvidenceRef, ...] = ()
+    quote: str = ""
+
+    @property
+    def row_id(self) -> str:
+        return f"escalation:{self.path_id}"
+
+
 class RiskProposal(BaseModel):
-    """The proposer's output_type. Three disposition families and nothing
-    else -- a proposer that could return a CapabilityRisk would author the
-    number FR-917 gates on (RD1)."""
+    """The proposer's output_type. Five disposition families and nothing else
+    -- a proposer that could return a CapabilityRisk or a SystemRisk would
+    author the numbers and the edges FR-917 gates on (RD1, RD10)."""
     threats: list[ProposedThreat] = Field(default_factory=list)
     vulnerabilities: list[ProposedVulnerability] = Field(default_factory=list)
     controls: list[ProposedControl] = Field(default_factory=list)
+    boundaries: list[ProposedBoundary] = Field(default_factory=list)
+    escalations: list[ProposedEscalation] = Field(default_factory=list)
 
     @property
     def rows(self) -> tuple[ProposedThreat | ProposedVulnerability
-                            | ProposedControl, ...]:
+                            | ProposedControl | ProposedBoundary
+                            | ProposedEscalation, ...]:
         """Every row, for one verification pass over one fabrication rate."""
-        return (*self.threats, *self.vulnerabilities, *self.controls)
+        return (*self.threats, *self.vulnerabilities, *self.controls,
+                *self.boundaries, *self.escalations)
 
 
 class RiskVerification(BaseModel):

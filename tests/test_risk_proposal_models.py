@@ -70,9 +70,9 @@ def test_no_proposer_row_can_author_a_number(model):
     assert not (set(model.model_fields) & forbidden)
 
 
-def test_the_proposal_carries_only_the_three_disposition_families():
+def test_the_proposal_carries_only_the_five_disposition_families():
     assert set(RiskProposal.model_fields) == {
-        "threats", "vulnerabilities", "controls"}
+        "threats", "vulnerabilities", "controls", "boundaries", "escalations"}
 
 
 def test_row_ids_are_distinct_across_the_three_families():
@@ -141,3 +141,20 @@ def test_zero_references_is_a_zero_rate():
 def test_the_rate_is_unresolved_over_total():
     v = RiskVerification(total_references=4, unresolved_references=1)
     assert v.fabrication_rate == 0.25
+
+
+def test_proposed_system_rows_carry_prefixed_ids():
+    """One flat verification pass over five families cannot collide a bc_id
+    pair with a vulnerability key."""
+    from sdlc.assessment.risk.models import (
+        BoundaryVerdict, ChainVerdict, ProposedBoundary, ProposedEscalation,
+        RiskProposal,
+    )
+    b = ProposedBoundary(source_bc_id="BC-001", target_bc_id="BC-002",
+                         verdict=BoundaryVerdict.WEAK, rationale="r")
+    e = ProposedEscalation(path_id="BC-001->BC-002",
+                           verdict=ChainVerdict.PLAUSIBLE, rationale="r")
+    assert b.row_id == "boundary:BC-001->BC-002"
+    assert e.row_id == "escalation:BC-001->BC-002"
+    assert set(RiskProposal(boundaries=[b], escalations=[e]).rows) == {b, e}
+
