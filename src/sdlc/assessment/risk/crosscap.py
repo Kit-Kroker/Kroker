@@ -25,18 +25,19 @@ from typing import Generic, TypeVar
 
 from ..discover.map import Capability, CapabilityMap
 from ..scan.models import (
-    EvidenceRef, SecurityObservation, security_identity,
+    C_DATA_SENSITIVITY, EvidenceRef, SecurityObservation, security_identity,
 )
 from ...measurement import CollectionState, Measurement
 from .models import (
     BoundaryVerdict, CapabilityEdge, CapabilityRisk, Cascade, ChainVerdict,
-    ControlFamily, ControlState, EDGE_EVIDENCE_MAX, EscalationPath, Severity,
-    SharedVulnerability, TrustBoundary,
+    ControlFamily, ControlState, EDGE_EVIDENCE_MAX, EscalationPath,
+    FAM_BOUNDARIES, FAM_CASCADES, FAM_ESCALATIONS, FAM_SHARED, Severity,
+    SharedVulnerability, SystemRisk, TrustBoundary,
 )
 from .rules import (
     BOUNDARY_MAX_ROWS, CASCADE_MAX_DEPTH, CASCADE_MAX_PATHS,
     CASCADE_SOURCE_MIN_SECURITY, ESCALATION_MAX_DEPTH, ESCALATION_MAX_PATHS,
-    SHARED_MAX_ROWS,
+    SECURITY_CATEGORIES, SHARED_MAX_ROWS,
 )
 from .severity import REACHABLE_KINDS, max_severity
 
@@ -355,5 +356,46 @@ def escalation_candidates(risks: Iterable[CapabilityRisk],
                                       rationale=_NO_JUDGMENT_CHAIN))
     out.sort(key=lambda p: p.path)
     return _capped(out, ESCALATION_MAX_PATHS)
+
+
+def system_view(cmap: CapabilityMap, risks: tuple[CapabilityRisk, ...], *,
+                collected_categories: frozenset[str]) -> SystemRisk:
+    """RD10 assembled: the projection once, then the four families over it.
+
+    Each family degrades on its OWN inputs -- a missing reference graph costs
+    three families and leaves shared vulnerabilities measured. That is the
+    per-report degradation E-48's BlueprintComparison already established,
+    applied one artifact down.
+    """
+    graph = graph_state(cmap)
+    edges = (project_edges(cmap.capabilities, cmap.attribution.graph.edges)
+             if graph.state is CollectionState.MEASURED else ())
+    severities = {v.key: v.severity for r in risks for v in r.vulnerabilities}
+    sensitivity_collected = C_DATA_SENSITIVITY in collected_categories
+
+    shared = shared_vulnerabilities(
+        cmap.capabilities, severities,
+        security_collected=bool(SECURITY_CATEGORIES & collected_categories))
+    cascade = cascades(risks, edges, graph=graph)
+    boundaries = boundary_candidates(
+        risks, cmap.capabilities, edges,
+        sensitivity_collected=sensitivity_collected, graph=graph)
+    chains = escalation_candidates(
+        risks, cmap.capabilities, edges,
+        sensitivity_collected=sensitivity_collected, graph=graph)
+
+    families = {FAM_SHARED: shared, FAM_CASCADES: cascade,
+                FAM_BOUNDARIES: boundaries, FAM_ESCALATIONS: chains}
+    return SystemRisk(
+        shared_vulnerabilities=shared.rows,
+        shared_vulnerabilities_collected=shared.collected,
+        cascades=cascade.rows, cascades_collected=cascade.collected,
+        trust_boundaries=boundaries.rows,
+        trust_boundaries_collected=boundaries.collected,
+        escalation_paths=chains.rows,
+        escalation_paths_collected=chains.collected,
+        truncated=tuple(sorted(name for name, fam in families.items()
+                               if fam.truncated)))
+
 
 

@@ -63,3 +63,15 @@ def test_weights_sum_to_one_per_composite():
     for table in (rules.SECURITY_WEIGHTS, rules.QA_WEIGHTS,
                   rules.UNIFIED_WEIGHTS):
         assert abs(sum(table.values()) - 1.0) < 1e-9
+
+
+def test_cross_capability_caps_are_declared():
+    """RD10's depth and result caps are memo inputs: retuning one must
+    invalidate exactly the assessments it would move."""
+    for cap in (rules.CASCADE_MAX_DEPTH, rules.CASCADE_MAX_PATHS,
+                rules.ESCALATION_MAX_DEPTH, rules.ESCALATION_MAX_PATHS,
+                rules.BOUNDARY_MAX_ROWS, rules.SHARED_MAX_ROWS,
+                rules.EDGE_EVIDENCE_MAX):
+        assert isinstance(cap, int) and cap > 0
+    assert 0.0 <= rules.CASCADE_SOURCE_MIN_SECURITY <= 1.0
+

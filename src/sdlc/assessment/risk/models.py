@@ -535,18 +535,88 @@ class RiskVerification(BaseModel):
 
 
 class SystemRisk(BaseModel):
-    """RD10's four families. Plan 1 lands the contract with every family
-    reporting not_collected naming plan 3, so the artifact is honest between
-    plans exactly as PHASE_OWNER makes the workflow honest between items."""
+    """RD10's four families: two computed outright, two enumerated by code and
+    dispositioned by the proposer.
+
+    Rows and their Measurement are separate fields on purpose. `<family>` is
+    what was found; `<family>_collected` is whether we looked. An empty tuple
+    under a MEASURED Measurement means 'computed, and there is genuinely
+    nothing'; the same tuple under not_collected means 'we could not look'.
+    Collapsing those two is the malformed-SARIF hole (FR-915).
+    """
     model_config = ConfigDict(frozen=True, extra="forbid")
-    shared_vulnerabilities: Measurement = Measurement.not_collected(
-        "cross-capability analysis not implemented (E-49 plan 3)")
-    cascades: Measurement = Measurement.not_collected(
-        "cross-capability analysis not implemented (E-49 plan 3)")
-    trust_boundaries: Measurement = Measurement.not_collected(
-        "cross-capability analysis not implemented (E-49 plan 3)")
-    escalation_paths: Measurement = Measurement.not_collected(
-        "cross-capability analysis not implemented (E-49 plan 3)")
+
+    shared_vulnerabilities: tuple[SharedVulnerability, ...] = ()
+    cascades: tuple[Cascade, ...] = ()
+    trust_boundaries: tuple[TrustBoundary, ...] = ()
+    escalation_paths: tuple[EscalationPath, ...] = ()
+
+    shared_vulnerabilities_collected: Measurement = Measurement.not_collected(
+        "cross-capability analysis did not run")
+    cascades_collected: Measurement = Measurement.not_collected(
+        "cross-capability analysis did not run")
+    trust_boundaries_collected: Measurement = Measurement.not_collected(
+        "cross-capability analysis did not run")
+    escalation_paths_collected: Measurement = Measurement.not_collected(
+        "cross-capability analysis did not run")
+
+    # The families whose enumeration hit its cap. Membership IS the claim, so
+    # there is no zero-versus-absent ambiguity to resolve: a family not named
+    # here is complete. A truncated audit that does not say so is worse than
+    # a smaller one that does.
+    truncated: tuple[str, ...] = ()
+
+    def rows_of(self, family: str) -> tuple:
+        """The rows for one of SYSTEM_FAMILIES, read by name."""
+        return getattr(self, family)
+
+    def collected_of(self, family: str) -> Measurement:
+        return getattr(self, f"{family}_collected")
+
+    @model_validator(mode="after")
+    def _unmeasured_carries_no_payload(self) -> "SystemRisk":
+        for family in SYSTEM_FAMILIES:
+            rows = self.rows_of(family)
+            if (self.collected_of(family).state is not CollectionState.MEASURED
+                    and rows):
+                raise ValueError(
+                    f"{family} did not collect "
+                    f"({self.collected_of(family).reason}) but carries "
+                    f"{len(rows)} row(s)")
+        return self
+
+    @model_validator(mode="after")
+    def _rows_are_sorted(self) -> "SystemRisk":
+        keys = {
+            FAM_SHARED: [r.weakness_class for r in self.shared_vulnerabilities],
+            FAM_CASCADES: [(c.origin, c.path) for c in self.cascades],
+            FAM_BOUNDARIES: [(b.source_bc_id, b.target_bc_id)
+                             for b in self.trust_boundaries],
+            FAM_ESCALATIONS: [p.path for p in self.escalation_paths],
+        }
+        for family, got in keys.items():
+            if got != sorted(got):
+                raise ValueError(
+                    f"{family} rows {got} are not sorted -- a producer "
+                    f"emitting traversal order is an NFR-10 determinism bug, "
+                    f"and repairing it here would hide that")
+        return self
+
+    @model_validator(mode="after")
+    def _truncated_names_a_collected_family(self) -> "SystemRisk":
+        if list(self.truncated) != sorted(set(self.truncated)):
+            raise ValueError(
+                f"truncated {list(self.truncated)} is not sorted and deduped")
+        for name in self.truncated:
+            if name not in SYSTEM_FAMILIES:
+                raise ValueError(
+                    f"truncated names {name!r}, which is not one of "
+                    f"{list(SYSTEM_FAMILIES)}")
+            if self.collected_of(name).state is not CollectionState.MEASURED:
+                raise ValueError(
+                    f"{name} is marked truncated but did not collect -- you "
+                    f"cannot truncate a family you never enumerated")
+        return self
 
 
 class CapabilityRisk(BaseModel):
@@ -590,11 +660,14 @@ class UnifiedRiskMap(BaseModel):
     @property
     def counts(self) -> dict[str, int]:
         """Derived from rows, never assigned."""
-        return {
+        out = {
             "capabilities": len(self.capabilities),
             "vulnerabilities": sum(len(c.vulnerabilities)
                                    for c in self.capabilities),
         }
+        out.update({family: len(self.system.rows_of(family))
+                    for family in SYSTEM_FAMILIES})
+        return out
 
     @model_validator(mode="after")
     def _capabilities_are_sorted(self) -> "UnifiedRiskMap":
@@ -633,4 +706,15 @@ class UnifiedRiskMap(BaseModel):
                     f"{c.bc_id}: the judgment layer did not collect "
                     f"({self.judgment.reason}) but row(s) {bad} are stamped "
                     f"PROPOSER")
+        system_bad = (
+            [f"boundary:{b.source_bc_id}->{b.target_bc_id}"
+             for b in self.system.trust_boundaries
+             if b.source is RiskSource.PROPOSER]
+            + [f"escalation:{p.path_id}"
+               for p in self.system.escalation_paths
+               if p.source is RiskSource.PROPOSER])
+        if system_bad:
+            raise ValueError(
+                f"the judgment layer did not collect ({self.judgment.reason}) "
+                f"but system row(s) {system_bad} are stamped PROPOSER")
         return self

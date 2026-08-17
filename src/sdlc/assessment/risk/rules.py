@@ -14,7 +14,9 @@ from ..scan.models import (
     ScanSignalId,
 )
 from ..scan.rules import module_sha
-from .models import ControlFamily, Criticality, Severity
+from .models import (
+    ControlFamily, Criticality, EDGE_EVIDENCE_MAX, Severity,
+)
 
 # --- severity (RD4) -----------------------------------------------------
 # A table, not a formula: it is auditable in the FR-921 bundle and reviewable

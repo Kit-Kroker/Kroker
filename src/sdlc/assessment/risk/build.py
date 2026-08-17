@@ -19,9 +19,10 @@ from ..scan.models import (
 from ...measurement import CollectionState, Measurement
 from .composites import compose, unified
 from .controls import controls
+from .crosscap import system_view
 from .factors import qa_factors, security_factors
 from .models import (
-    CapabilityRisk, RiskSource, StrideCategory, SystemRisk, ThreatAssessment,
+    CapabilityRisk, RiskSource, StrideCategory, ThreatAssessment,
     UnifiedRiskMap, Vulnerability, VulnerabilityClass,
 )
 from .severity import criticality, severity
@@ -102,8 +103,12 @@ def build(cmap: CapabilityMap, *,
             controls=control_rows, security=sec, qa=qa,
             unified=unified(sec, qa)))
 
-    return UnifiedRiskMap(capabilities=tuple(rows), system=SystemRisk(),
-                          collected=Measurement.measured(1.0))
+    rows_out = tuple(rows)
+    return UnifiedRiskMap(
+        capabilities=rows_out,
+        system=system_view(cmap, rows_out,
+                           collected_categories=collected_categories),
+        collected=Measurement.measured(1.0))
 
 
 def map_digest(cmap: CapabilityMap) -> str:
