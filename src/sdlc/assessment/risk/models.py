@@ -328,6 +328,40 @@ class SharedVulnerability(BaseModel):
         return self
 
 
+class Cascade(BaseModel):
+    """A bounded reachability path from a high-security-composite capability
+    (RD10). One path per (origin, reached) pair -- the shortest -- because
+    enumerating every simple path is exponential on a dense graph and is not
+    what a reader of the FR-921 bundle can act on."""
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    origin: str
+    path: tuple[str, ...]
+
+    @property
+    def impacted(self) -> str:
+        return self.path[-1]
+
+    @property
+    def depth(self) -> int:
+        return len(self.path) - 1
+
+    @model_validator(mode="after")
+    def _the_path_starts_at_its_origin(self) -> "Cascade":
+        if len(self.path) < 2:
+            raise ValueError(
+                f"a cascade needs at least one hop, got {list(self.path)} -- "
+                f"a capability does not cascade into itself")
+        if self.path[0] != self.origin:
+            raise ValueError(
+                f"path {list(self.path)} does not start at origin "
+                f"{self.origin!r}")
+        if len(set(self.path)) != len(self.path):
+            raise ValueError(
+                f"path {list(self.path)} repeats a capability -- a cycle is "
+                f"not a cascade, and emitting one would double-count impact")
+        return self
+
+
 class ProposedThreat(BaseModel):
     """One STRIDE applicability judgment for one capability.
 

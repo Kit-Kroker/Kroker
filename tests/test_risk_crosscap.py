@@ -11,7 +11,8 @@ import random
 import pytest
 
 from sdlc.assessment.risk.crosscap import (
-    project_edges, shared_vulnerabilities, weakness_class,
+    cascades, graph_state, project_edges, shared_vulnerabilities,
+    weakness_class,
 )
 from sdlc.assessment.risk.models import CapabilityEdge
 
@@ -157,4 +158,145 @@ def test_shared_vulnerabilities_are_order_independent():
         out = repr(shared_vulnerabilities(caps, sev, security_collected=True))
         first = first if first is not None else out
         assert out == first
+
+
+from sdlc.assessment.discover.map import CapabilityMap
+from sdlc.assessment.discover.models import (
+    AttributionReport, FileBucket, ReferenceGraph,
+)
+from sdlc.assessment.risk.build import build
+from sdlc.assessment.risk.rules import CASCADE_MAX_DEPTH
+from sdlc.assessment.scan.models import (
+    C_DATA_SENSITIVITY, CandidateMember, MemberKind, Sensitivity,
+    SensitivityRecord,
+)
+from sdlc.measurement import Measurement
+
+# C_DATA_SENSITIVITY is REQUIRED here, not incidental: without it criticality
+# does not collect, so `impact` does not collect, so no security composite is
+# MEASURED and cascades correctly report not_collected. The threshold test
+# needs a measured composite to exceed.
+SEC = frozenset({C_AUTHN_AUTHZ, C_DATA_SENSITIVITY})
+
+
+def _origin(bc_id: str, path: str):
+    """A capability whose security composite clears
+    CASCADE_SOURCE_MIN_SECURITY: HIGH criticality (sensitive AND externally
+    reachable) gives impact 1.0, and five or more observations saturate
+    likelihood.
+    """
+    return capability(
+        bc_id, member_paths=(path,),
+        members=(CandidateMember(kind=MemberKind.HTTP_ROUTE,
+                                 value="GET /orders", path=path),),
+        sensitivity=(SensitivityRecord(
+            classification=Sensitivity.PII, entity="customer", origin="table",
+            fields=["email"], rule="ss4_field_name",
+            confidence=Confidence.HIGH),),
+        security=tuple(_obs(path=path, rule=f"r{i}") for i in range(5)))
+
+
+def _attribution(edges, parsed=("a.py", "b.py")) -> AttributionReport:
+    return AttributionReport(
+        files=(), counts={b: 0 for b in FileBucket},
+        coverage=Measurement.measured(1.0), meets_floor=True,
+        graph=ReferenceGraph(
+            edges=tuple(edges), parsed=tuple(parsed),
+            unresolved_relative_rate=Measurement.not_collected("no imports")))
+
+
+def _cmap(caps, attribution=None) -> CapabilityMap:
+    actions: dict = {}
+    for c in caps:
+        actions[c.disposition.action] = actions.get(c.disposition.action, 0) + 1
+    return CapabilityMap(capabilities=tuple(caps), by_action=actions,
+                         attribution=attribution,
+                         collected=Measurement.measured(1.0))
+
+
+def _risks(caps, attribution=None):
+    """The deterministic per-capability rows, straight from plan 1's build."""
+    return build(_cmap(caps, attribution), collected_categories=SEC).capabilities
+
+
+def test_a_missing_attribution_report_means_no_reference_graph():
+    state = graph_state(_cmap([capability()]))
+    assert state.state is CollectionState.NOT_COLLECTED
+    assert "AttributionReport" in state.reason
+
+
+def test_a_graph_that_parsed_nothing_is_not_evidence_of_independence():
+    """Zero edges from an extractor that ran on no file is not a finding."""
+    state = graph_state(_cmap([capability()], _attribution([], parsed=())))
+    assert state.state is CollectionState.NOT_COLLECTED
+    assert "parsed no file" in state.reason
+
+
+def test_a_cascade_follows_the_projected_edges_from_a_high_origin():
+    caps = [_origin("BC-001", "a.py"),
+            capability("BC-002", member_paths=("b.py",))]
+    attribution = _attribution([("a.py", "b.py")])
+    edges = project_edges(caps, attribution.graph.edges)
+    out = cascades(_risks(caps, attribution), edges,
+                   graph=Measurement.measured(1.0))
+    assert out.collected.state is CollectionState.MEASURED
+    assert [(c.origin, c.path) for c in out.rows] == [
+        ("BC-001", ("BC-001", "BC-002"))]
+    assert out.rows[0].impacted == "BC-002"
+    assert out.rows[0].depth == 1
+
+
+def test_cascades_need_the_graph():
+    out = cascades((), (), graph=Measurement.not_collected("no attribution"))
+    assert out.collected.state is CollectionState.NOT_COLLECTED
+    assert out.rows == ()
+
+
+def test_no_measured_security_composite_is_not_an_empty_cascade_set():
+    """FR-915: 'nothing propagates' and 'we could not tell' are different."""
+    caps = [capability("BC-001", member_paths=("a.py",)),
+            capability("BC-002", member_paths=("b.py",))]
+    attribution = _attribution([("a.py", "b.py")])
+    # No scan category collected -> no capability carries a measured security
+    # composite (likelihood and impact both fail to collect).
+    risks = build(_cmap(caps, attribution),
+                  collected_categories=frozenset()).capabilities
+    out = cascades(risks, project_edges(caps, attribution.graph.edges),
+                   graph=Measurement.measured(1.0))
+    assert out.collected.state is CollectionState.NOT_COLLECTED
+    assert "cascade origin" in out.collected.reason
+
+
+def test_traversal_stops_at_the_depth_cap():
+    chain = [_origin("BC-001", "f1.py")] + [
+        capability(f"BC-{i:03d}", member_paths=(f"f{i}.py",))
+        for i in range(2, CASCADE_MAX_DEPTH + 3)]
+    file_edges = [(f"f{i}.py", f"f{i + 1}.py")
+                  for i in range(1, CASCADE_MAX_DEPTH + 2)]
+    attribution = _attribution(file_edges,
+                               parsed=tuple(f"f{i}.py" for i in
+                                            range(1, CASCADE_MAX_DEPTH + 3)))
+    out = cascades(_risks(chain, attribution),
+                   project_edges(chain, attribution.graph.edges),
+                   graph=Measurement.measured(1.0))
+    assert out.rows, "the chain's origin must produce cascades"
+    assert max(c.depth for c in out.rows) == CASCADE_MAX_DEPTH
+
+
+def test_cascades_are_order_independent():
+    caps = [capability("BC-003", member_paths=("c.py",)),
+            _origin("BC-001", "a.py"),
+            capability("BC-002", member_paths=("b.py",))]
+    file_edges = [("a.py", "b.py"), ("b.py", "c.py")]
+    attribution = _attribution(file_edges, parsed=("a.py", "b.py", "c.py"))
+    first = None
+    for _ in range(5):
+        random.shuffle(caps)
+        random.shuffle(file_edges)
+        out = repr(cascades(_risks(caps, attribution),
+                            project_edges(caps, file_edges),
+                            graph=Measurement.measured(1.0)))
+        first = first if first is not None else out
+        assert out == first
+
 

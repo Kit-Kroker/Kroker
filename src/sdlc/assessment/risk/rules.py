@@ -96,6 +96,11 @@ SHARED_MAX_ROWS = 100
 CASCADE_MAX_DEPTH = 4
 CASCADE_MAX_PATHS = 50
 
+# A cascade ORIGIN is a capability whose security composite is high enough
+# that its compromise is worth propagating. NOT a gate threshold: FR-917's
+# BLOCK is E-50's and reads the UNIFIED composite.
+CASCADE_SOURCE_MIN_SECURITY = 0.6
+
 # build.py is here for the reason the others are: it carries the baseline
 # STRIDE category and the POTENTIAL classification, so editing it moves every
 # score. prompt.py, apply.py and assessment/verification.py join with plan 2

@@ -18,19 +18,24 @@ dense graph is not a bounded activity.
 """
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
-from ..discover.map import Capability
+from ..discover.map import Capability, CapabilityMap
 from ..scan.models import (
     EvidenceRef, SecurityObservation, security_identity,
 )
-from ...measurement import Measurement
+from ...measurement import CollectionState, Measurement
 from .models import (
-    CapabilityEdge, EDGE_EVIDENCE_MAX, Severity, SharedVulnerability,
+    CapabilityEdge, CapabilityRisk, Cascade, EDGE_EVIDENCE_MAX, Severity,
+    SharedVulnerability,
 )
-from .rules import SHARED_MAX_ROWS
+from .rules import (
+    CASCADE_MAX_DEPTH, CASCADE_MAX_PATHS, CASCADE_SOURCE_MIN_SECURITY,
+    SHARED_MAX_ROWS,
+)
 from .severity import max_severity
 
 R = TypeVar("R")
@@ -154,3 +159,83 @@ def shared_vulnerabilities(capabilities: Iterable[Capability],
         if len(g["bc_ids"]) >= 2
     ]
     return _capped(rows, SHARED_MAX_ROWS)
+
+
+def graph_state(cmap: CapabilityMap) -> Measurement:
+    """MEASURED when the reference graph is evidence, and the reason when it
+    is not.
+
+    A graph that parsed no file has zero edges, and zero edges from an
+    extractor that ran on nothing is not evidence that the capabilities are
+    independent (FR-915).
+    """
+    if cmap.attribution is None:
+        return Measurement.not_collected(
+            "discover produced no AttributionReport, so there is no reference "
+            "graph to project capability edges from")
+    if not cmap.attribution.graph.parsed:
+        return Measurement.not_collected(
+            "the reference graph parsed no file, so an absence of edges is "
+            "not evidence that the capabilities are independent")
+    return Measurement.measured(1.0)
+
+
+def _adjacency(edges: Iterable[CapabilityEdge]) -> dict[str, tuple[str, ...]]:
+    out: dict[str, set[str]] = {}
+    for edge in edges:
+        out.setdefault(edge.source_bc_id, set()).add(edge.target_bc_id)
+    return {src: tuple(sorted(dsts)) for src, dsts in out.items()}
+
+
+def _shortest_paths(adj: dict[str, tuple[str, ...]], origin: str, *,
+                    max_depth: int) -> dict[str, tuple[str, ...]]:
+    """BFS over sorted adjacency: each reachable capability appears once, with
+    its shortest path, and the origin itself is not a result.
+
+    Bounded by max_depth, and deterministic because the frontier is expanded
+    in sorted order (NFR-10).
+    """
+    seen: dict[str, tuple[str, ...]] = {origin: (origin,)}
+    queue: deque[str] = deque([origin])
+    while queue:
+        node = queue.popleft()
+        path = seen[node]
+        if len(path) - 1 >= max_depth:
+            continue
+        for nxt in adj.get(node, ()):
+            if nxt in seen:
+                continue
+            seen[nxt] = path + (nxt,)
+            queue.append(nxt)
+    return {bc: path for bc, path in seen.items() if bc != origin}
+
+
+def cascades(risks: Iterable[CapabilityRisk],
+             edges: Iterable[CapabilityEdge], *,
+             graph: Measurement) -> FamilyResult[Cascade]:
+    """What a compromise of a high-security-composite capability reaches."""
+    if graph.state is not CollectionState.MEASURED:
+        return _uncollected(f"cascades need the reference graph: {graph.reason}")
+
+    rows_in = tuple(risks)
+    if not any(r.security.value.state is CollectionState.MEASURED
+               for r in rows_in):
+        return _uncollected(
+            "no capability carries a measured security composite, so no "
+            "cascade origin could be identified -- an empty cascade set here "
+            "would read as 'nothing propagates' (FR-915)")
+
+    origins = sorted(
+        r.bc_id for r in rows_in
+        if r.security.value.state is CollectionState.MEASURED
+        and r.security.value.value >= CASCADE_SOURCE_MIN_SECURITY)
+    adj = _adjacency(edges)
+
+    out: list[Cascade] = []
+    for origin in origins:
+        for _, path in sorted(
+                _shortest_paths(adj, origin,
+                                max_depth=CASCADE_MAX_DEPTH).items()):
+            out.append(Cascade(origin=origin, path=path))
+    out.sort(key=lambda c: (c.origin, c.path))
+    return _capped(out, CASCADE_MAX_PATHS)
