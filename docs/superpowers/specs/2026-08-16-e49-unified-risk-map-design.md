@@ -418,7 +418,7 @@ would move.
 |---|---|---|
 | **1 — the deterministic score** | `risk/models.py`, factors / severity / controls / criticality / composites, `assess_risk` activity, the memo, `Assessment.risk` + validator, `_assess` wired | ASSESS **measured** with no model call (landed 2026-08-16) |
 | **2 — judgment** | `assessment/verification.py` lift, `agents/risk/`, `t_risk`, STRIDE + vulnerability + control dispositions, the guard, memo refusal, `verify_risk_refs`, e2e | FR-916's per-capability half complete (landed 2026-08-16) |
-| **3 — the system view** | the graph projection, shared vulnerabilities + cascades computed, trust-boundary + escalation candidates enumerated and dispositioned | FR-916 complete |
+| **3 — the system view** | the graph projection, shared vulnerabilities + cascades computed, trust-boundary + escalation candidates enumerated and dispositioned | FR-916 complete (landed 2026-08-17) |
 
 Plan 1 is a live phase rather than a stub because RD1's deterministic score is
 the real artifact, not a placeholder. If plan 3 slipped, the tier would still

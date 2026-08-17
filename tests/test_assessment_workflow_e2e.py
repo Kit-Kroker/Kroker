@@ -818,5 +818,66 @@ async def test_the_phase_is_measured_with_no_risk_proposer(
     assert "no risk proposer ran" in res.risk.judgment.reason
 
 
+async def test_the_system_view_measures_with_no_model_registered(
+        assessed_repo, tmp_path, monkeypatch):
+    """E-49 plan 3: the two computed families and the two candidate lists are
+    deterministic, so the system view is live with no proposer at all.
+
+    A family that could not be computed reports not_collected with a reason;
+    none of the four may be silently absent.
+    """
+    repo_dir, sha = assessed_repo
+    db = str(tmp_path / "board.sqlite3")
+    monkeypatch.setenv("SDLC_BOARD_DB", db)
+
+    from sdlc.assessment.risk.models import SYSTEM_FAMILIES
+
+    @activity.defn(name="triage_resolve_commit")
+    async def real_pin(inp: TriagePinInput) -> TriagePin:
+        return TriagePin(commit_sha=sha, toolchain="python")
+
+    from sdlc.assessment.activities import assessment_resolve_tree
+
+    acts = [real_pin, fake_baseline, fake_scaffold, fake_probe,
+            fake_secrets, fake_misconfig, fake_outliers, fake_deps,
+            assessment_resolve_tree, *SCAN_ACTS,
+            discover_context, discover_lock, discover_finalize,
+            discover_memo_load, discover_memo_store,
+            load_blueprint, verify_discover_refs,
+            assess_risk, risk_memo_load, risk_memo_store, verify_risk_refs]
+
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=WORKFLOWS, activities=acts):
+            h = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(repo_dir=repo_dir, project_key="acme",
+                                propose_discover=False, propose_risk=False),
+                id=f"assess-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+            result = await h.result()
+
+    row = next(p for p in result.phases if p.phase is PhaseId.ASSESS)
+    assert row.collected.state is CollectionState.MEASURED
+    assert result.risk is not None
+
+    system = result.risk.system
+    for family in SYSTEM_FAMILIES:
+        state = system.collected_of(family)
+        assert state.state in (CollectionState.MEASURED,
+                               CollectionState.NOT_COLLECTED), family
+        if state.state is CollectionState.NOT_COLLECTED:
+            assert state.reason.strip(), (
+                f"{family} did not collect and gave no reason")
+        else:
+            # A MEASURED family's rows are the artifact's; an uncollected one
+            # carries none (SystemRisk._unmeasured_carries_no_payload).
+            assert isinstance(system.rows_of(family), tuple)
+
+    # RD7 unchanged by plan 3: no proposer means no judgment, and the
+    # deterministic families still measured.
+    assert result.risk.judgment.state is CollectionState.NOT_COLLECTED
+
+
+
 
 
