@@ -166,7 +166,8 @@ class GateHost:
         elif policy == GatePolicy.SOFT and auto_decision and auto_decision.approved:
             decision = auto_decision
         else:
-            pending = gate_pending(name, round, context)
+            pending = gate_pending(name, round, context,
+                                   opened_at=workflow.now())
             self._pending[key] = pending
             self._status = f"awaiting:{name}"
             await self._on_gate_awaited(name, round)

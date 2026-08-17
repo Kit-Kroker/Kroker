@@ -11,6 +11,7 @@ All four variants collapse to just two FR-302 signals on reply:
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field
@@ -26,6 +27,7 @@ class ClarifyPending(BaseModel):
     question: str
     why_it_matters: str
     suggested_answer: str | None = None
+    opened_at: datetime | None = None
 
 
 class StageGatePending(BaseModel):
@@ -35,6 +37,7 @@ class StageGatePending(BaseModel):
     gate: str
     round: int
     spec_summary: str
+    opened_at: datetime | None = None
 
 
 class TaskEscalationPending(BaseModel):
@@ -46,6 +49,7 @@ class TaskEscalationPending(BaseModel):
     task_id: str
     analysis: str
     attempts: int
+    opened_at: datetime | None = None
 
 
 class MergeGatePending(BaseModel):
@@ -56,6 +60,7 @@ class MergeGatePending(BaseModel):
     round: int
     checks: list[CheckResult] = Field(default_factory=list)
     verdict: str | None = None
+    opened_at: datetime | None = None
 
 
 PendingDecision = Annotated[
@@ -78,18 +83,21 @@ class GateContext(BaseModel):
 
 def clarify_pending(
     open_questions: list[OpenQuestion], answered_ids: set[str],
+    *, opened_at: datetime | None = None,
 ) -> list[ClarifyPending]:
     """One ClarifyPending per still-unanswered open question."""
     return [
         ClarifyPending(key=q.id, question=q.question,
                        why_it_matters=q.why_it_matters,
-                       suggested_answer=q.suggested_answer)
+                       suggested_answer=q.suggested_answer,
+                       opened_at=opened_at)
         for q in open_questions if q.id not in answered_ids
     ]
 
 
 def gate_pending(
     name: str, round: int, context: GateContext | None,
+    *, opened_at: datetime | None = None,
 ) -> PendingDecision:
     """Build the render variant a gate wait should surface. The gate name is
     the discriminator: 'merge' -> MergeGatePending, 'task:<id>' ->
@@ -98,11 +106,14 @@ def gate_pending(
     ctx = context or GateContext()
     if name == "merge":
         return MergeGatePending(key=key, gate=name, round=round,
-                                checks=ctx.checks, verdict=ctx.verdict)
+                                checks=ctx.checks, verdict=ctx.verdict,
+                                opened_at=opened_at)
     if name.startswith("task:"):
         return TaskEscalationPending(
             key=key, gate=name, round=round,
             task_id=ctx.task_id or name.removeprefix("task:"),
-            analysis=ctx.analysis or "", attempts=ctx.attempts or 0)
+            analysis=ctx.analysis or "", attempts=ctx.attempts or 0,
+            opened_at=opened_at)
     return StageGatePending(key=key, gate=name, round=round,
-                            spec_summary=ctx.spec_summary or "")
+                            spec_summary=ctx.spec_summary or "",
+                            opened_at=opened_at)
