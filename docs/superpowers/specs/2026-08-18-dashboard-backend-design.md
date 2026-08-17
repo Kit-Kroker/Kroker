@@ -102,7 +102,7 @@ faked. This also keeps `stageIdx` out of the backend — E-76 already states tha
 becomes `currentNodes: string[]`"*, so encoding it server-side would bake in
 something the roadmap has already scheduled for replacement.
 
-**D4 — localhost-bind, no auth, `X-Actor` → `decided_by`.** Matches the board
+**D4 — localhost-bind, no auth, `X-Actor` → `GateDecision.reviewer`.** Matches the board
 API's existing posture exactly rather than inventing a second half-measure
 beside it. Recorded as a known gap under OQ-11, not silently inherited. E-60
 (FR-1004) remains the single place identity gets solved for both surfaces.
@@ -297,11 +297,18 @@ module's stated job is being written once for every surface
 (`transport.py:6`), so the key-based lookup belongs beside `match()` rather
 than forked.
 
-**`X-Actor` reaches `decided_by` through `DashboardChannel`.**
-`default_translate` hardcodes `decided_by="human"` (`contract.py:88`). Rather
-than adding a parameter to a pure function, the dashboard implements the
-`Channel` protocol — delegating to `default_translate`, then stamping the
-operator identity — which is the extension point `contract.py:9` documents.
+**`X-Actor` reaches `GateDecision.reviewer` through `DashboardChannel`.**
+`default_translate` hardcodes `decided_by="human"` (`contract.py:88`) and
+leaves `reviewer` unset. **The identity goes in `reviewer`, not `decided_by`:**
+`decided_by` is `Literal["human", "policy", "timeout"]` (`models.py:818`), and
+that Literal is load-bearing — `ReadinessOverride.approved_by` carries it
+verbatim so `"policy"` and `"timeout"` stay legible as non-human on the face of
+the artifact. `reviewer` is already the established home for exactly this:
+`triage.py:115` sets it with the comment *"self-asserted identity (FR-1004)"*.
+
+Rather than adding a parameter to a pure function, the dashboard implements the
+`Channel` protocol — delegating to `default_translate`, then stamping
+`reviewer` — which is the extension point `contract.py:9` documents.
 `submit()` is reused untouched.
 
 **Double-submit is already safe.** FR-302 is first-decision-wins, and `submit()`
@@ -358,7 +365,8 @@ without a server.
   the grace window.
 - **Routes** via `TestClient` with an injected fake poller, generalizing the
   `create_app(store_factory)` seam (`board/api.py:60`). Covers 409 on duplicate
-  id, `confirmed: false` passthrough, and `X-Actor` reaching `decided_by`.
+  id, `confirmed: false` passthrough, and `X-Actor` reaching
+  `GateDecision.reviewer` while `decided_by` stays `"human"`.
 - **SSE**: emits on content change, suppresses identical snapshots, heartbeats
   when idle.
 - **`run_state()`**: a `pytest -m temporal` e2e that starts a real run and
