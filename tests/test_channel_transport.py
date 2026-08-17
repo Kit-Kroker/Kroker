@@ -5,7 +5,7 @@ import argparse
 import pytest
 
 from sdlc.channels.transport import (
-    Ambiguous, NoMatch, Selector, describe, match,
+    Ambiguous, NoMatch, Selector, describe, match, match_key,
 )
 from sdlc.pending import (
     ClarifyPending, MergeGatePending, StageGatePending, TaskEscalationPending,
@@ -232,3 +232,27 @@ def test_inbox_verb_takes_no_arguments():
     sub.add_parser("inbox")
     args = p.parse_args(["inbox"])
     assert args.cmd == "inbox"
+
+
+def test_match_key_finds_the_item_by_its_resolution_key():
+    """The dashboard operator clicked a specific item, so it addresses the
+    key directly -- Selector's ambiguity resolution is a CLI concern that
+    here would only add a way to hit the wrong item (spec 6)."""
+    q1 = ClarifyPending(key="Q1", question="q1", why_it_matters="w")
+    arch = StageGatePending(key="architecture#1", gate="architecture",
+                            round=1, spec_summary="s")
+    assert match_key([q1, arch], "architecture#1") is arch
+    assert match_key([q1, arch], "Q1") is q1
+
+
+def test_match_key_raises_no_match_and_lists_what_is_pending():
+    q1 = ClarifyPending(key="Q1", question="q1", why_it_matters="w")
+    with pytest.raises(NoMatch) as e:
+        match_key([q1], "merge#1")
+    assert "merge#1" in e.value.message
+    assert "Q1" in e.value.message
+
+
+def test_match_key_raises_no_match_on_an_empty_pending_list():
+    with pytest.raises(NoMatch):
+        match_key([], "merge#1")

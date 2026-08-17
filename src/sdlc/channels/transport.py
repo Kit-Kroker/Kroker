@@ -106,6 +106,30 @@ def match(pendings: Sequence[PendingDecision], selector: Selector,
     return cands[0]
 
 
+def match_key(pendings: Sequence[PendingDecision],
+              key: str) -> PendingDecision:
+    """Resolve a pending item by its exact resolution key, or raise NoMatch.
+
+    match()'s sibling for surfaces that already hold the key -- the dashboard
+    operator clicked a specific item, so Selector's reply_kind narrowing and
+    ambiguity resolution would only introduce a way to hit the wrong one.
+    Keys are unique by construction (question id, or gate_key(gate, round)),
+    so there is no Ambiguous case here.
+    """
+    for d in pendings:
+        if d.key == key:
+            return d
+    head = f"no pending item with key '{key}' on this run"
+    if pendings:
+        head += f"\ncurrently pending:\n{_listing(pendings)}"
+    raise NoMatch(head, candidates=list(pendings))
+
+
+async def resolve_key(handle, key: str) -> PendingDecision:
+    """resolve()'s sibling: fetch what is pending and address one by key."""
+    return match_key(await fetch_pending(handle), key)
+
+
 def _name_of(d: PendingDecision) -> str:
     """Gate variants carry .gate; clarify falls back to its question id."""
     return getattr(d, "gate", None) or d.key
