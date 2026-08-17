@@ -19,9 +19,11 @@ from sdlc.assessment.activities import (
     assess_risk,
     discover_context, discover_finalize, discover_lock, discover_memo_load,
     discover_memo_store, load_blueprint,
+    risk_memo_load, risk_memo_store,
     scan_ci, scan_config_infra, scan_coverage, scan_entrypoints, scan_frontend,
     scan_packages, scan_schema, scan_security_static, scan_sensitivity,
     scan_testability, scan_tests_inventory, verify_discover_refs,
+    verify_risk_refs,
 )
 from sdlc.assessment.models import (
     BLOCKED, PARTIAL, PHASE_ORDER, PhaseId,
@@ -347,7 +349,8 @@ async def test_discover_goes_measured_and_the_map_reaches_the_artifact(
             assessment_resolve_tree, *SCAN_ACTS,
             discover_context, discover_lock, discover_finalize,
             discover_memo_load, discover_memo_store,
-            load_blueprint, verify_discover_refs, assess_risk]
+            load_blueprint, verify_discover_refs,
+            assess_risk, risk_memo_load, risk_memo_store, verify_risk_refs]
 
     async with await WorkflowEnvironment.start_time_skipping() as env:
         async with Worker(env.client, task_queue=TASK_QUEUE,
@@ -406,7 +409,8 @@ async def test_a_second_assessment_of_the_same_tree_hits_the_memo(
             assessment_resolve_tree, *SCAN_ACTS,
             discover_context, discover_lock, discover_finalize,
             discover_memo_load, discover_memo_store,
-            load_blueprint, verify_discover_refs, assess_risk]
+            load_blueprint, verify_discover_refs,
+            assess_risk, risk_memo_load, risk_memo_store, verify_risk_refs]
 
     async with await WorkflowEnvironment.start_time_skipping() as env:
         async with Worker(env.client, task_queue=TASK_QUEUE,
@@ -493,7 +497,8 @@ async def test_discover_proposer_judgment_and_verification(
             assessment_resolve_tree, *SCAN_ACTS,
             discover_context, discover_lock, discover_finalize,
             discover_memo_load, discover_memo_store,
-            load_blueprint, verify_discover_refs, *agent_acts, assess_risk]
+            load_blueprint, verify_discover_refs, *agent_acts,
+            assess_risk, risk_memo_load, risk_memo_store, verify_risk_refs]
 
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
@@ -555,7 +560,8 @@ async def test_discover_proposer_trips_guard_fails_closed(
             assessment_resolve_tree, *SCAN_ACTS,
             discover_context, discover_lock, discover_finalize,
             discover_memo_load, discover_memo_store,
-            load_blueprint, verify_discover_refs, *agent_acts, assess_risk]
+            load_blueprint, verify_discover_refs, *agent_acts,
+            assess_risk, risk_memo_load, risk_memo_store, verify_risk_refs]
 
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
@@ -620,7 +626,8 @@ async def test_discover_proposer_exception_fails_closed(
             assessment_resolve_tree, *SCAN_ACTS,
             discover_context, discover_lock, discover_finalize,
             discover_memo_load, discover_memo_store,
-            load_blueprint, verify_discover_refs, *agent_acts, assess_risk]
+            load_blueprint, verify_discover_refs, *agent_acts,
+            assess_risk, risk_memo_load, risk_memo_store, verify_risk_refs]
 
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
@@ -661,7 +668,8 @@ async def test_assess_phase_measures_with_no_model_registered(
             assessment_resolve_tree, *SCAN_ACTS,
             discover_context, discover_lock, discover_finalize,
             discover_memo_load, discover_memo_store,
-            load_blueprint, verify_discover_refs, assess_risk]
+            load_blueprint, verify_discover_refs,
+            assess_risk, risk_memo_load, risk_memo_store, verify_risk_refs]
 
     async with await WorkflowEnvironment.start_time_skipping() as env:
         async with Worker(env.client, task_queue=TASK_QUEUE,
@@ -684,6 +692,131 @@ async def test_assess_phase_measures_with_no_model_registered(
     for cap in result.risk.capabilities:
         assert cap.qa.is_partial is True
         assert cap.unified.value.state is CollectionState.NOT_COLLECTED
+
+
+async def test_risk_proposer_judgment_reaches_the_map(
+        assessed_repo, tmp_path, monkeypatch):
+    """RD1 end to end: the proposer dispositions rows code produced, and the
+    composites it never touched come through unchanged."""
+    repo_dir, sha = assessed_repo
+    monkeypatch.setenv("SDLC_BOARD_DB", str(tmp_path / "board.sqlite3"))
+
+    from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
+    from temporalio.contrib.pydantic import pydantic_data_converter
+    from tests.fakes.fake_agents import fake_agent_activities
+    from sdlc.assessment.risk.models import (
+        ProposedThreat, RiskProposal, RiskSource, StrideCategory,
+    )
+    from sdlc.assessment.activities import (
+        risk_memo_load, risk_memo_store, verify_risk_refs,
+    )
+    from sdlc.assessment.discover.map import (
+        DiscoverAction, DiscoverProposal, ProposedDisposition,
+    )
+    from sdlc.assessment.scan.models import EvidenceRef
+    from sdlc.measurement import CollectionState
+
+    discover_canned = DiscoverProposal(dispositions=(
+        ProposedDisposition(
+            candidate_id="C-01", action=DiscoverAction.CONFIRM,
+            rationale="Core payment processing domain logic",
+            evidence=(EvidenceRef(path="payments/api.py", lines="5"),),
+            quote="def charge(): pass"),))
+
+    # No evidence: an unevidenced row is accepted (it fabricates nothing),
+    # which keeps this case about JUDGMENT rather than about citations.
+    risk_canned = RiskProposal(threats=[
+        ProposedThreat(bc_id="BC-001", category=StrideCategory.SPOOFING,
+                       applicable=True,
+                       rationale="the charge route has no session check")])
+
+    agent_acts = fake_agent_activities([
+        ("discover_agent", DiscoverProposal, discover_canned),
+        ("risk_agent", RiskProposal, risk_canned),
+    ])
+
+    @activity.defn(name="triage_resolve_commit")
+    async def real_pin(inp: TriagePinInput) -> TriagePin:
+        return TriagePin(commit_sha=sha, toolchain="python")
+
+    from sdlc.assessment.activities import assessment_resolve_tree
+
+    acts = [real_pin, fake_baseline, fake_scaffold, fake_probe,
+            fake_secrets, fake_misconfig, fake_outliers, fake_deps,
+            assessment_resolve_tree, *SCAN_ACTS,
+            discover_context, discover_lock, discover_finalize,
+            discover_memo_load, discover_memo_store,
+            load_blueprint, verify_discover_refs, *agent_acts,
+            assess_risk, risk_memo_load, risk_memo_store, verify_risk_refs]
+
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=WORKFLOWS, activities=acts,
+                          plugins=[PydanticAIPlugin()]):
+            h = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(repo_dir=repo_dir, project_key="acme"),
+                id=f"assess-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+            res = await h.result()
+
+    row = next(p for p in res.phases if p.phase is PhaseId.ASSESS)
+    assert row.collected.state is CollectionState.MEASURED
+    assert res.risk is not None
+    assert res.risk.judgment.state is CollectionState.MEASURED
+    cap = next(c for c in res.risk.capabilities if c.bc_id == "BC-001")
+    spoofing = next(t for t in cap.threats
+                    if t.category is StrideCategory.SPOOFING)
+    assert spoofing.applicable is True
+    assert spoofing.source is RiskSource.PROPOSER
+    # RD7: the other five categories were never judged and say so.
+    assert sum(1 for t in cap.threats if t.source is RiskSource.BASELINE) == 5
+
+
+async def test_the_phase_is_measured_with_no_risk_proposer(
+        assessed_repo, tmp_path, monkeypatch):
+    """RD7: no folder, no model call, and a phase that is still MEASURED --
+    with the judgment layer reporting not_collected rather than absent."""
+    repo_dir, sha = assessed_repo
+    monkeypatch.setenv("SDLC_BOARD_DB", str(tmp_path / "board.sqlite3"))
+
+    from temporalio.contrib.pydantic import pydantic_data_converter
+    from sdlc.assessment.activities import (
+        risk_memo_load, risk_memo_store, verify_risk_refs,
+    )
+    from sdlc.measurement import CollectionState
+
+    @activity.defn(name="triage_resolve_commit")
+    async def real_pin(inp: TriagePinInput) -> TriagePin:
+        return TriagePin(commit_sha=sha, toolchain="python")
+
+    from sdlc.assessment.activities import assessment_resolve_tree
+
+    acts = [real_pin, fake_baseline, fake_scaffold, fake_probe,
+            fake_secrets, fake_misconfig, fake_outliers, fake_deps,
+            assessment_resolve_tree, *SCAN_ACTS,
+            discover_context, discover_lock, discover_finalize,
+            discover_memo_load, discover_memo_store,
+            load_blueprint, verify_discover_refs,
+            assess_risk, risk_memo_load, risk_memo_store, verify_risk_refs]
+
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=WORKFLOWS, activities=acts):
+            h = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(repo_dir=repo_dir, project_key="acme",
+                                propose_discover=False, propose_risk=False),
+                id=f"assess-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+            res = await h.result()
+
+    row = next(p for p in res.phases if p.phase is PhaseId.ASSESS)
+    assert row.collected.state is CollectionState.MEASURED
+    assert res.risk is not None
+    assert res.risk.judgment.state is CollectionState.NOT_COLLECTED
+    assert "no risk proposer ran" in res.risk.judgment.reason
+
 
 
 

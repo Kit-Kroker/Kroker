@@ -416,8 +416,8 @@ would move.
 
 | Plan | Lands | State after |
 |---|---|---|
-| **1 — the deterministic score** | `risk/models.py`, factors / severity / controls / criticality / composites, `assess_risk` activity, the memo, `Assessment.risk` + validator, `_assess` wired | ASSESS **measured** with no model call |
-| **2 — judgment** | `assessment/verification.py` lift, `agents/risk/`, `t_risk`, STRIDE + vulnerability + control dispositions, the guard | FR-916's per-capability half complete |
+| **1 — the deterministic score** | `risk/models.py`, factors / severity / controls / criticality / composites, `assess_risk` activity, the memo, `Assessment.risk` + validator, `_assess` wired | ASSESS **measured** with no model call (landed 2026-08-16) |
+| **2 — judgment** | `assessment/verification.py` lift, `agents/risk/`, `t_risk`, STRIDE + vulnerability + control dispositions, the guard, memo refusal, `verify_risk_refs`, e2e | FR-916's per-capability half complete (landed 2026-08-16) |
 | **3 — the system view** | the graph projection, shared vulnerabilities + cascades computed, trust-boundary + escalation candidates enumerated and dispositioned | FR-916 complete |
 
 Plan 1 is a live phase rather than a stub because RD1's deterministic score is
