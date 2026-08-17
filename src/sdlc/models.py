@@ -1171,6 +1171,8 @@ class RunSummary(BaseModel):
     exported to report.html, and exposed via the run_summary() query."""
     run_id: str
     mode: str
+    title: str = ""                     # E-10: closed runs render from here
+    repo_url: str | None = None
     outcome: str            # the run() return string
     terminal_stage: str
     started_at: datetime
@@ -1186,3 +1188,28 @@ class RunSummary(BaseModel):
     memory_enabled: bool = False
     memory_watermark: str | None = None
     memory_retains: int = 0
+
+
+class RunState(BaseModel):
+    """Live counterpart to RunSummary: what a run looks like mid-flight,
+    exposed via the run_state() query (E-10).
+
+    Field names mirror RunSummary where they overlap, deliberately -- the
+    fleet view and the retro report describe the same run, and two
+    vocabularies for one concept is how they come to disagree.
+
+    cost_usd_total stays None rather than 0.0 when pricing failed: see
+    RoleUsage.cost_usd. A pricing miss must never read as a free run.
+    """
+    run_id: str
+    title: str
+    repo_url: str | None = None
+    mode: str
+    status: str                          # GateHost._status verbatim
+    current_stage: str | None = None     # last STAGE_STARTED in _trace
+    started_at: datetime
+    decisions: list[GateDecision] = Field(default_factory=list)
+    roles: list[RoleUsage] = Field(default_factory=list)
+    cost_usd_total: float | None = None
+    budget_usd: float | None = None
+    budget_crossings: int = 0
