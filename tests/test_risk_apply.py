@@ -229,6 +229,36 @@ def test_an_uncollected_baseline_is_returned_untouched():
         == m.model_dump_json()
 
 
+def test_apply_judgment_with_surviving_rows_is_measured():
+    b = _one()
+    out = apply_judgment(b, RiskProposal(threats=[
+        ProposedThreat(bc_id="BC-001", category=StrideCategory.SPOOFING,
+                       applicable=True, rationale="unauthenticated route")]))
+    assert out.judgment.state is CollectionState.MEASURED
+
+
+def test_apply_judgment_with_empty_proposal_is_degraded():
+    b = _one()
+    out = apply_judgment(b, RiskProposal())
+    assert out.judgment.state is CollectionState.NOT_COLLECTED
+    assert out.judgment.reason == "the proposer returned no dispositions"
+
+
+def test_apply_judgment_with_refused_rows_is_degraded():
+    b = _one()
+    out = apply_judgment(b, RiskProposal(threats=[
+        ProposedThreat(bc_id="BC-999", category=StrideCategory.SPOOFING,
+                       applicable=True, rationale="r")]))
+    assert out.judgment.state is CollectionState.NOT_COLLECTED
+    assert out.judgment.reason == (
+        "the proposer returned 1 row(s) and none survived verification")
+
+    out2 = apply_judgment(b, RiskProposal(), total_proposed=3)
+    assert out2.judgment.state is CollectionState.NOT_COLLECTED
+    assert out2.judgment.reason == (
+        "the proposer returned 3 row(s) and none survived verification")
+
+
 # --- NFR-10 -----------------------------------------------------------
 
 def test_apply_judgment_is_order_independent():

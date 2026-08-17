@@ -58,6 +58,6 @@ def store(*, project: str, tree_hash: str, map_digest: str, rules_sha: str,
             and out.judgment.state is not CollectionState.MEASURED):
         return False
     cache.put(cache.risk_key(project, tree_hash, map_digest, rules_sha,
-                            prompt_sha, model),
+                             prompt_sha, model),
               out.model_dump_json())
     return True

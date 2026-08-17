@@ -449,8 +449,8 @@ already exist.
 
 | Item | Change |
 |---|---|
-| E-49 | `[ ]` → `[x]` on landing |
-| FR-916 | `[ ]` → `[x]` |
+| E-49 | `[ ]` → `[ ] ⚠️` (Plans 1 & 2 landed; `[x]` on Plan 3 landing) |
+| FR-916 | `[ ]` → `[ ] ⚠️` (per-capability half landed; `[x]` on Plan 3 landing) |
 | FR-911 | Stub count 4 → 3; `PHASE_OWNER` loses its `ASSESS` entry |
 | FR-917 | Unchanged (E-50), but its two non-composite BLOCK clauses become computable; the composite clause waits on E-56 (RD3) |
 | FR-902 | New follow-up: SS1 v2 separating `authn_authz`; a monitoring-presence signal (RD5) |

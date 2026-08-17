@@ -8,7 +8,7 @@ from sdlc.assessment.risk import memo
 from sdlc.assessment.risk.build import map_digest, no_risk
 from sdlc.assessment.risk.models import SystemRisk, UnifiedRiskMap
 from sdlc.assessment.discover.map import CapabilityMap
-from sdlc.measurement import Measurement
+from sdlc.measurement import CollectionState, Measurement
 from sdlc.memoization import cache
 from sdlc.memoization.cache import NO_PROPOSER, risk_key
 
@@ -104,3 +104,24 @@ def test_a_degraded_judgment_IS_stored_under_the_no_proposer_key(tmp_path,
     assert memo.store(project="p", tree_hash="t", map_digest="d",
                       rules_sha="s", prompt_sha=NO_PROPOSER,
                       model=NO_PROPOSER, out=m) is True
+
+
+def test_all_refused_proposal_degrades_and_is_refused_by_memo_store(tmp_path,
+                                                                     monkeypatch):
+    """Finding 1: a proposal whose rows were all refused degrades judgment,
+    and P2-D3 refuses to store it under the proposer key."""
+    monkeypatch.setenv("SDLC_MEMOIZATION_CACHE_ROOT", str(tmp_path))
+    from sdlc.assessment.risk.apply import apply_judgment
+    from sdlc.assessment.risk.models import (
+        ProposedThreat, RiskProposal, StrideCategory,
+    )
+
+    b = UnifiedRiskMap(collected=Measurement.measured(1.0))
+    # No rows survive
+    out = apply_judgment(b, RiskProposal(threats=[
+        ProposedThreat(bc_id="BC-999", category=StrideCategory.SPOOFING,
+                       applicable=True, rationale="r")]))
+    assert out.judgment.state is CollectionState.NOT_COLLECTED
+    assert memo.store(project="p", tree_hash="t", map_digest="d",
+                      rules_sha="s", prompt_sha="abc", model="m",
+                      out=out) is False

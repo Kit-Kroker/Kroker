@@ -544,7 +544,8 @@ class AssessmentWorkflow(GateHost):
             return degraded(baseline, tripped)
 
         try:
-            return apply_judgment(baseline, verification.proposal)
+            return apply_judgment(baseline, verification.proposal,
+                                  total_proposed=len(proposal.rows))
         except Exception as e:                          # noqa: BLE001
             return degraded(
                 baseline,

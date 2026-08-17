@@ -131,12 +131,18 @@ def _controls(cap: CapabilityRisk,
 
 
 def apply_judgment(baseline: UnifiedRiskMap,
-                   proposal: RiskProposal) -> UnifiedRiskMap:
+                   proposal: RiskProposal,
+                   *,
+                   total_proposed: int | None = None) -> UnifiedRiskMap:
     """Every disposition that names a row the baseline carries.
 
     A disposition naming an unknown bc_id, key or family is DROPPED, never
     created. An uncollected baseline is returned untouched: RD8 means no
     empty map is constructed anywhere, including here.
+
+    Degrades when nothing landed (Finding 1), distinguishing an empty proposal
+    from one whose rows were all refused, so P2-D3's store guard refuses to
+    persist a judgment-free map under a proposer key.
     """
     if baseline.collected.state is not CollectionState.MEASURED:
         return baseline
@@ -164,6 +170,20 @@ def apply_judgment(baseline: UnifiedRiskMap,
             # number, never upstream of it (RD1).
             security=c.security, qa=c.qa, unified=c.unified)
         for c in baseline.capabilities)
+
+    applied_count = sum(
+        sum(1 for t in c.threats if t.source is RiskSource.PROPOSER)
+        + sum(1 for v in c.vulnerabilities if v.source is RiskSource.PROPOSER)
+        + sum(1 for ctrl in c.controls if ctrl.source is RiskSource.PROPOSER)
+        for c in rows)
+
+    if applied_count == 0:
+        total = len(proposal.rows) if total_proposed is None else total_proposed
+        if total == 0:
+            return degraded(baseline, "the proposer returned no dispositions")
+        return degraded(
+            baseline,
+            f"the proposer returned {total} row(s) and none survived verification")
 
     return UnifiedRiskMap(capabilities=rows, system=baseline.system,
                           collected=baseline.collected,
