@@ -29,12 +29,12 @@ from ..scan.models import (
 )
 from ...measurement import CollectionState, Measurement
 from .models import (
-    CapabilityEdge, CapabilityRisk, Cascade, EDGE_EVIDENCE_MAX, Severity,
-    SharedVulnerability,
+    BoundaryVerdict, CapabilityEdge, CapabilityRisk, Cascade,
+    EDGE_EVIDENCE_MAX, Severity, SharedVulnerability, TrustBoundary,
 )
 from .rules import (
-    CASCADE_MAX_DEPTH, CASCADE_MAX_PATHS, CASCADE_SOURCE_MIN_SECURITY,
-    SHARED_MAX_ROWS,
+    BOUNDARY_MAX_ROWS, CASCADE_MAX_DEPTH, CASCADE_MAX_PATHS,
+    CASCADE_SOURCE_MIN_SECURITY, SHARED_MAX_ROWS,
 )
 from .severity import max_severity
 
@@ -239,3 +239,54 @@ def cascades(risks: Iterable[CapabilityRisk],
             out.append(Cascade(origin=origin, path=path))
     out.sort(key=lambda c: (c.origin, c.path))
     return _capped(out, CASCADE_MAX_PATHS)
+
+
+_NO_JUDGMENT_BOUNDARY = (
+    "code enumerated this edge as a trust-boundary candidate; no judgment "
+    "was applied -- this is not a finding that the boundary is sound. See "
+    "UnifiedRiskMap.judgment for why")
+
+
+def boundary_candidates(risks: Iterable[CapabilityRisk],
+                        capabilities: Iterable[Capability],
+                        edges: Iterable[CapabilityEdge], *,
+                        sensitivity_collected: bool,
+                        graph: Measurement) -> FamilyResult[TrustBoundary]:
+    """Edges whose endpoints differ in criticality or sensitivity exposure.
+
+    An edge between endpoints we could not RATE is not a candidate and is not
+    a non-candidate either -- when neither input collected, the whole family
+    reports not_collected rather than an empty set (FR-915).
+    """
+    if graph.state is not CollectionState.MEASURED:
+        return _uncollected(
+            f"trust boundaries need the reference graph: {graph.reason}")
+
+    levels = {r.bc_id: r.criticality.level for r in risks}
+    criticality_collected = any(v is not None for v in levels.values())
+    if not criticality_collected and not sensitivity_collected:
+        return _uncollected(
+            "neither criticality nor data sensitivity collected, so no edge "
+            "can be seen to cross a trust boundary -- an empty set here would "
+            "read as 'every boundary is internal' (FR-915)")
+
+    sensitive = {c.bc_id for c in capabilities
+                 if c.sensitivity} if sensitivity_collected else set()
+
+    out: list[TrustBoundary] = []
+    for edge in edges:
+        src, dst = edge.source_bc_id, edge.target_bc_id
+        rule = ""
+        if (levels.get(src) is not None and levels.get(dst) is not None
+                and levels[src] is not levels[dst]):
+            rule = "criticality_differs"
+        elif sensitivity_collected and (src in sensitive) != (dst in sensitive):
+            rule = "sensitivity_exposure_differs"
+        if not rule:
+            continue
+        out.append(TrustBoundary(
+            source_bc_id=src, target_bc_id=dst, rule=rule,
+            rationale=_NO_JUDGMENT_BOUNDARY, evidence=edge.evidence))
+    out.sort(key=lambda b: (b.source_bc_id, b.target_bc_id))
+    return _capped(out, BOUNDARY_MAX_ROWS)
+

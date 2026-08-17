@@ -362,6 +362,36 @@ class Cascade(BaseModel):
         return self
 
 
+class BoundaryVerdict(str, Enum):
+    """RD10's disposition over a candidate edge. UNCLEAR is the baseline's
+    own value and a legitimate proposer answer: 'we looked and cannot tell'
+    is a finding, and forcing a binary would manufacture one."""
+    WEAK = "weak"
+    SOUND = "sound"
+    UNCLEAR = "unclear"
+
+
+class TrustBoundary(BaseModel):
+    """A candidate edge whose endpoints differ in criticality or sensitivity
+    exposure. `rule` is why code enumerated it; `verdict` is what judged it."""
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    source_bc_id: str
+    target_bc_id: str
+    rule: str
+    verdict: BoundaryVerdict = BoundaryVerdict.UNCLEAR
+    rationale: str
+    evidence: tuple[EvidenceRef, ...] = ()
+    source: RiskSource = RiskSource.BASELINE
+
+    @model_validator(mode="after")
+    def _rationale_is_required(self) -> "TrustBoundary":
+        if not self.rationale.strip():
+            raise ValueError(
+                f"{self.source_bc_id}->{self.target_bc_id} needs a rationale "
+                f"-- an unexplained verdict is unreviewable")
+        return self
+
+
 class ProposedThreat(BaseModel):
     """One STRIDE applicability judgment for one capability.
 
