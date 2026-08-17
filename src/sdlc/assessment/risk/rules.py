@@ -96,6 +96,8 @@ SHARED_MAX_ROWS = 100
 BOUNDARY_MAX_ROWS = 100
 CASCADE_MAX_DEPTH = 4
 CASCADE_MAX_PATHS = 50
+ESCALATION_MAX_DEPTH = 4
+ESCALATION_MAX_PATHS = 25
 
 # A cascade ORIGIN is a capability whose security composite is high enough
 # that its compromise is worth propagating. NOT a gate threshold: FR-917's

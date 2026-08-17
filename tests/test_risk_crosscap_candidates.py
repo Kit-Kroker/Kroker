@@ -11,9 +11,11 @@ from sdlc.assessment.discover.models import (
 )
 from sdlc.assessment.risk.build import build
 from sdlc.assessment.risk.crosscap import (
-    boundary_candidates, project_edges,
+    boundary_candidates, escalation_candidates, project_edges,
 )
-from sdlc.assessment.risk.models import BoundaryVerdict, RiskSource
+from sdlc.assessment.risk.models import (
+    BoundaryVerdict, ChainVerdict, RiskSource,
+)
 from sdlc.assessment.scan.models import (
     C_AUTHN_AUTHZ, C_DATA_SENSITIVITY, CandidateMember, Confidence, MemberKind,
     ScanSignalId, SecurityObservation, Sensitivity, SensitivityRecord,
@@ -154,3 +156,105 @@ def test_boundary_candidates_are_order_independent():
                                        sensitivity_collected=True, graph=OK))
         first = first if first is not None else out
         assert out == first
+
+
+def test_a_chain_runs_from_an_unauthenticated_entry_to_sensitive_data():
+    entry = capability("BC-001", member_paths=("a.py",), members=(_route(),),
+                       security=(_weak_authn(),))
+    store = capability("BC-002", member_paths=("b.py",), sensitivity=(_pii(),))
+    caps = [entry, store]
+    attribution = _attribution([("a.py", "b.py")])
+    out = escalation_candidates(_risks(caps, attribution), caps,
+                                project_edges(caps, attribution.graph.edges),
+                                sensitivity_collected=True, graph=OK)
+    assert out.collected.state is CollectionState.MEASURED
+    assert [p.path for p in out.rows] == [("BC-001", "BC-002")]
+    assert out.rows[0].path_id == "BC-001->BC-002"
+    assert out.rows[0].verdict is ChainVerdict.UNCLEAR
+    assert out.rows[0].source is RiskSource.BASELINE
+
+
+def test_an_entry_whose_authentication_is_present_is_not_a_candidate():
+    """The AUTHENTICATION control row reads PRESENT when SS1 collected and
+    found no weakness for that capability."""
+    entry = capability("BC-001", member_paths=("a.py",), members=(_route(),))
+    store = capability("BC-002", member_paths=("b.py",), sensitivity=(_pii(),))
+    caps = [entry, store]
+    attribution = _attribution([("a.py", "b.py")])
+    risks = _risks(caps, attribution)
+    auth = next(c for c in risks[0].controls
+                if c.family.value == "authentication")
+    assert auth.state is not None and auth.state.value == "present"
+    out = escalation_candidates(risks, caps,
+                                project_edges(caps, attribution.graph.edges),
+                                sensitivity_collected=True, graph=OK)
+    assert out.rows == ()
+
+
+def test_a_chain_needs_an_externally_reachable_entry():
+    # Authentication reads ABSENT, so reachability is the only thing keeping
+    # this out of the candidate list.
+    entry = capability("BC-001", member_paths=("a.py",),
+                       security=(_weak_authn(),))   # no route member
+    store = capability("BC-002", member_paths=("b.py",), sensitivity=(_pii(),))
+    caps = [entry, store]
+    attribution = _attribution([("a.py", "b.py")])
+    out = escalation_candidates(_risks(caps, attribution), caps,
+                                project_edges(caps, attribution.graph.edges),
+                                sensitivity_collected=True, graph=OK)
+    assert out.rows == ()
+
+
+def test_uncollected_sensitivity_is_not_an_empty_chain_set():
+    entry = capability("BC-001", member_paths=("a.py",), members=(_route(),))
+    store = capability("BC-002", member_paths=("b.py",))
+    caps = [entry, store]
+    attribution = _attribution([("a.py", "b.py")])
+    out = escalation_candidates(_risks(caps, attribution, frozenset()), caps,
+                                project_edges(caps, attribution.graph.edges),
+                                sensitivity_collected=False, graph=OK)
+    assert out.collected.state is CollectionState.NOT_COLLECTED
+    assert "no chain has an end" in out.collected.reason
+
+
+def test_the_known_limit_chains_are_authentication_gated_not_authorization():
+    """RD10's written-down limit, pinned as a test rather than a caveat.
+
+    RD5 leaves Authorization with no scan source, so a capability whose
+    AUTHENTICATION control is PRESENT is excluded even though nothing in the
+    scan can say whether it AUTHORIZES the caller for the entity it reaches.
+    """
+    entry = capability("BC-001", member_paths=("a.py",), members=(_route(),))
+    store = capability("BC-002", member_paths=("b.py",), sensitivity=(_pii(),))
+    caps = [entry, store]
+    attribution = _attribution([("a.py", "b.py")])
+    risks = _risks(caps, attribution)
+    authz = next(c for c in risks[0].controls
+                 if c.family.value == "authorization")
+    assert authz.collected.state is CollectionState.NOT_COLLECTED
+    out = escalation_candidates(risks, caps,
+                                project_edges(caps, attribution.graph.edges),
+                                sensitivity_collected=True, graph=OK)
+    assert out.rows == (), (
+        "an authenticated entry is excluded even though authorization was "
+        "never collected -- the narrower claim, stated")
+
+
+def test_escalation_candidates_are_order_independent():
+    entry = capability("BC-001", member_paths=("a.py",), members=(_route(),),
+                       security=())
+    mid = capability("BC-002", member_paths=("b.py",))
+    store = capability("BC-003", member_paths=("c.py",), sensitivity=(_pii(),))
+    caps = [entry, mid, store]
+    file_edges = [("a.py", "b.py"), ("b.py", "c.py")]
+    attribution = _attribution(file_edges, parsed=("a.py", "b.py", "c.py"))
+    first = None
+    for _ in range(5):
+        random.shuffle(caps)
+        random.shuffle(file_edges)
+        out = repr(escalation_candidates(_risks(caps, attribution, frozenset(
+            {C_DATA_SENSITIVITY})), caps, project_edges(caps, file_edges),
+            sensitivity_collected=True, graph=OK))
+        first = first if first is not None else out
+        assert out == first
+

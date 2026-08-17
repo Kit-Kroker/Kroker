@@ -392,6 +392,62 @@ class TrustBoundary(BaseModel):
         return self
 
 
+class ChainVerdict(str, Enum):
+    """RD10's disposition over a candidate escalation chain."""
+    PLAUSIBLE = "plausible"
+    REFUTED = "refuted"
+    UNCLEAR = "unclear"
+
+
+class EscalationPath(BaseModel):
+    """A bounded path from an externally-reachable capability whose
+    authentication control is absent or uncollected, to one handling
+    sensitive entities.
+
+    KNOWN LIMIT (RD10): these chains are AUTHENTICATION-gated, not
+    AUTHORIZATION-gated, because RD5 leaves Authorization with no scan
+    source. A narrower claim than FR-916's wording implies, stated here
+    rather than discovered by a customer.
+    """
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    path: tuple[str, ...]
+    rule: str
+    verdict: ChainVerdict = ChainVerdict.UNCLEAR
+    rationale: str
+    evidence: tuple[EvidenceRef, ...] = ()
+    source: RiskSource = RiskSource.BASELINE
+
+    @property
+    def path_id(self) -> str:
+        """Derived from the path, never stored: an id that could disagree
+        with the path it names is two claims."""
+        return "->".join(self.path)
+
+    @property
+    def entry_bc_id(self) -> str:
+        return self.path[0]
+
+    @property
+    def target_bc_id(self) -> str:
+        return self.path[-1]
+
+    @model_validator(mode="after")
+    def _a_chain_is_at_least_one_hop(self) -> "EscalationPath":
+        if len(self.path) < 2:
+            raise ValueError(
+                f"an escalation chain needs at least one hop, got "
+                f"{list(self.path)}")
+        if len(set(self.path)) != len(self.path):
+            raise ValueError(
+                f"path {list(self.path)} repeats a capability -- a cycle is "
+                f"not an escalation chain")
+        if not self.rationale.strip():
+            raise ValueError(
+                f"{'->'.join(self.path)} needs a rationale -- an unexplained "
+                f"verdict is unreviewable")
+        return self
+
+
 class ProposedThreat(BaseModel):
     """One STRIDE applicability judgment for one capability.
 

@@ -29,14 +29,16 @@ from ..scan.models import (
 )
 from ...measurement import CollectionState, Measurement
 from .models import (
-    BoundaryVerdict, CapabilityEdge, CapabilityRisk, Cascade,
-    EDGE_EVIDENCE_MAX, Severity, SharedVulnerability, TrustBoundary,
+    BoundaryVerdict, CapabilityEdge, CapabilityRisk, Cascade, ChainVerdict,
+    ControlFamily, ControlState, EDGE_EVIDENCE_MAX, EscalationPath, Severity,
+    SharedVulnerability, TrustBoundary,
 )
 from .rules import (
     BOUNDARY_MAX_ROWS, CASCADE_MAX_DEPTH, CASCADE_MAX_PATHS,
-    CASCADE_SOURCE_MIN_SECURITY, SHARED_MAX_ROWS,
+    CASCADE_SOURCE_MIN_SECURITY, ESCALATION_MAX_DEPTH, ESCALATION_MAX_PATHS,
+    SHARED_MAX_ROWS,
 )
-from .severity import max_severity
+from .severity import REACHABLE_KINDS, max_severity
 
 R = TypeVar("R")
 
@@ -289,4 +291,69 @@ def boundary_candidates(risks: Iterable[CapabilityRisk],
             rationale=_NO_JUDGMENT_BOUNDARY, evidence=edge.evidence))
     out.sort(key=lambda b: (b.source_bc_id, b.target_bc_id))
     return _capped(out, BOUNDARY_MAX_ROWS)
+
+
+_NO_JUDGMENT_CHAIN = (
+    "code enumerated this path as a privilege-escalation candidate; no "
+    "judgment was applied -- this is not a finding that the chain is "
+    "exploitable. See UnifiedRiskMap.judgment for why")
+
+
+def escalation_candidates(risks: Iterable[CapabilityRisk],
+                          capabilities: Iterable[Capability],
+                          edges: Iterable[CapabilityEdge], *,
+                          sensitivity_collected: bool,
+                          graph: Measurement) -> FamilyResult[EscalationPath]:
+    """Bounded paths from an unauthenticated entry point to sensitive data.
+
+    KNOWN LIMIT (RD10): authentication-gated, not authorization-gated. RD5
+    leaves Authorization with no scan source, so a capability whose
+    authentication control reads PRESENT is excluded even though nothing
+    collected says whether it authorizes the caller.
+    """
+    if graph.state is not CollectionState.MEASURED:
+        return _uncollected(
+            f"escalation chains need the reference graph: {graph.reason}")
+    if not sensitivity_collected:
+        return _uncollected(
+            "SS4 did not collect, so no capability can be identified as "
+            "handling sensitive entities and no chain has an end -- an empty "
+            "set here would read as 'no escalation path exists' (FR-915)")
+
+    caps = {c.bc_id: c for c in capabilities}
+    auth = {
+        r.bc_id: next(c for c in r.controls
+                      if c.family is ControlFamily.AUTHENTICATION)
+        for r in risks
+    }
+    targets = {bc for bc, cap in caps.items() if cap.sensitivity}
+
+    entries: list[str] = []
+    for bc_id in sorted(auth):
+        cap = caps.get(bc_id)
+        if cap is None or not any(m.kind in REACHABLE_KINDS
+                                  for m in cap.members):
+            continue
+        # PRESENT is the one state that disqualifies: ABSENT is a weakness,
+        # and not_collected is "we cannot see it", which is not a control.
+        if auth[bc_id].state is ControlState.PRESENT:
+            continue
+        entries.append(bc_id)
+
+    adj = _adjacency(edges)
+    out: list[EscalationPath] = []
+    for entry in entries:
+        rule = ("entry_authentication_absent"
+                if auth[entry].state is ControlState.ABSENT
+                else "entry_authentication_not_collected")
+        for target, path in sorted(
+                _shortest_paths(adj, entry,
+                                max_depth=ESCALATION_MAX_DEPTH).items()):
+            if target not in targets:
+                continue
+            out.append(EscalationPath(path=path, rule=rule,
+                                      rationale=_NO_JUDGMENT_CHAIN))
+    out.sort(key=lambda p: p.path)
+    return _capped(out, ESCALATION_MAX_PATHS)
+
 
