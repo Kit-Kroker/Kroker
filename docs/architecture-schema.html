@@ -455,7 +455,10 @@
   Green border = component present &amp; on the live path. Amber = mechanism exists but
   incomplete. Grey = unbuilt. Operator interfaces are stateless shells over three Temporal
   primitives (queries, signals, visibility) &mdash; ADR-8; the agent board is a deliberate
-  stateful exception (ADR-21) serving durable cross-run state no live workflow holds.
+  stateful exception (ADR-21) serving durable cross-run state no live workflow holds. The
+  dashboard backend (E-10) is a second deliberate exception: its in-process fleet poller and
+  subscriber set are not durable state, but not a stateless shell either &mdash; a per-request
+  fan-out costs N_clients &times; N_runs where one shared poller costs N_runs (ARCHITECTURE.md &sect;8).
 </p>
 
 <!-- =========================================================== -->
@@ -781,15 +784,15 @@
     </tr>
     <tr>
       <td class="name">Channels<br><code>channels/</code></td>
-      <td class="status"><span class="pill partial">contract only</span></td>
+      <td class="status"><span class="pill done">E-6…E-10 ✅</span></td>
       <td>render / translate / deliver over FR-302 signals</td>
-      <td class="note">E-6 contract + E-7 CLI refit + E-8 inbox + E-9 notify ✅ done. E-10 dashboard / E-11 MCP still pending.</td>
+      <td class="note">E-6 contract + E-7 CLI refit + E-8 inbox + E-9 notify + E-10 dashboard ✅ done. E-11 MCP still pending.</td>
     </tr>
     <tr>
       <td class="name">Dashboard<br><code>interfaces/dashboard/</code></td>
-      <td class="status"><span class="pill partial">frontend only</span></td>
+      <td class="status"><span class="pill done">backend live ✅</span></td>
       <td>FastAPI + SPA: fleet rail, spine, decision inbox</td>
-      <td class="note">Vue 3 frontend with mock API exists; no FastAPI backend (FR-601, E-10).</td>
+      <td class="note">Vue 3 frontend + FastAPI backend serving live Temporal state: <code>run_state()</code>/<code>pending_decisions()</code>/<code>run_summary()</code> fan-out, REST + SSE, three write routes over FR-302 signals; composed with the board API in one app (E-10, 2026-08-18).</td>
     </tr>
     <tr>
       <td class="name">MCP server<br><code>interfaces/mcp/</code></td>
@@ -1114,7 +1117,7 @@
   </div>
   <div class="adr partial">
     <div class="head"><span class="title">Interfaces as stateless shells</span><span class="id">ADR-8</span></div>
-    <p class="why">True for CLI; dashboard backend absent; MCP not started. <strong>Exception:</strong> the agent board API (ADR-21) is a stateful surface by design — it serves durable cross-run state no live workflow holds. ARCHITECTURE.md &sect;8 scopes the "stateless shells" claim to operator surfaces.</p>
+    <p class="why">True for CLI; MCP not started. <strong>Two documented exceptions, both deliberate:</strong> the agent board API (E-78, ADR-21) serves durable cross-run state no live workflow holds, and the dashboard backend (E-10) holds an in-process fleet poller and subscriber set &mdash; not durable state, but not a stateless shell either; a per-request fan-out costs N_clients &times; N_runs while one shared poller costs N_runs. ARCHITECTURE.md &sect;8 scopes the claim; operator surfaces still own no durable state.</p>
   </div>
   <div class="adr notstarted">
     <div class="head"><span class="title">Two worker pools by capability</span><span class="id">ADR-9</span></div>
