@@ -51,9 +51,11 @@ async def _start(idea: IdeaBrief, cfg: PipelineConfig, wf_id: str) -> str:
 app.include_router(create_router(poller, starter=_start), prefix="/api")
 
 
-@app.on_event("shutdown")
 async def _shutdown() -> None:
     await poller.aclose()
+
+
+app.router.add_event_handler("shutdown", _shutdown)
 
 
 __all__ = ["app"]
