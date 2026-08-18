@@ -873,11 +873,15 @@ class FeatureWorkflow(GateHost):
                                     kind=kind, stage=stage, data=data))
         self._seq += 1
 
-    def _stage(self, name: str) -> None:
-        """Record stage start: _status plus the STAGE_STARTED trace event
-        run_state() projects (E-10)."""
-        self._status = name
-        self._emit(RunEventKind.STAGE_STARTED, stage=name)
+    def _stage(self, status: str, trace: str | None = None) -> None:
+        """Record stage start: _status keeps the run's status vocabulary
+        (status() query consumers), while the STAGE_STARTED trace event uses
+        the canonical stage nouns -- the same vocabulary STAGE_ENDED,
+        run_summary.terminal_stage, and the dashboard's CANONICAL_STAGES
+        (benchmarks/heatmap.py) already speak. Two vocabularies in one trace
+        is how the fleet view and the benchmarks come to disagree."""
+        self._status = status
+        self._emit(RunEventKind.STAGE_STARTED, stage=trace or status)
 
     def _track_usage(self, *, role: str, model: str,
                      input_tokens: int = 0, output_tokens: int = 0,
@@ -1815,7 +1819,7 @@ class FeatureWorkflow(GateHost):
         # park a tidy-up run on a question the finding contains.
         if seeded is not None:
             arch, plan = seeded.arch, seeded.plan
-            self._stage("coding")
+            self._stage("coding", "code")
             return await self._build_and_merge(idea, cfg, arch, plan,
                                                repo_path)
 
@@ -1823,7 +1827,7 @@ class FeatureWorkflow(GateHost):
         # integration head, which is the branch point the work is based on.
         self._codebase_map = None
         if idea.mode is ProjectMode.BROWNFIELD:
-            self._stage("mapping")
+            self._stage("mapping", "context")
             self._codebase_map = await self._context(
                 repo_path, self._integration_head)
             if self._codebase_map.collected.state \
@@ -1840,7 +1844,7 @@ class FeatureWorkflow(GateHost):
         # digest to downstream keys (finding 3), never its prose.
         brief_digest_val = ""
         if cfg.research_enabled and t_research is not None:
-            self._stage("researching")
+            self._stage("researching", "research")
             _r_started = workflow.now()
             deps = ResearchDeps(
                 run_id=workflow.info().workflow_id,
@@ -1913,7 +1917,7 @@ class FeatureWorkflow(GateHost):
                 # keys, so brief_digest_val stays "" and retain is skipped;
                 # everything after research proceeds on the idea alone, same
                 # as a research-disabled run.
-                self._stage("research_failed")
+                self._stage("research_failed", "research")
                 err = "; ".join(
                     f"{v.kind}: {v.source}: {v.quote[:80]!r}"
                     for v in violations)
@@ -1968,7 +1972,7 @@ class FeatureWorkflow(GateHost):
                         args=[brief, workflow.info().workflow_id],
                         **VERIFY_ACT)
                     if violations:
-                        self._stage("research_failed")
+                        self._stage("research_failed", "research")
                         brief_digest_val = ""
                         break
                     brief_digest_val = brief_digest(brief)
@@ -2011,7 +2015,7 @@ class FeatureWorkflow(GateHost):
         await self._check_budget(cfg)
 
         # 1. CLARIFY — open questions answered by human via signals
-        self._stage("clarifying")
+        self._stage("clarifying", "clarify")
         _started = workflow.now()
         snapshot = await self._recall(
             cfg, cfg.memory.project_bank, query=f"clarify:{idea.title}",
@@ -2076,7 +2080,7 @@ class FeatureWorkflow(GateHost):
         await self._check_budget(cfg)
 
         # 2. ARCHITECT (+ human approval of the spec)
-        self._stage("architecting")
+        self._stage("architecting", "architecture")
         _started = workflow.now()
         snapshot = await self._recall(
             cfg, cfg.memory.project_bank, query=f"architect:{idea.title}",
@@ -2347,7 +2351,7 @@ class FeatureWorkflow(GateHost):
         # 4b. ANALYZE (stage 9) — clean-context Analyst proposes the
         # criterion->test mapping; the workflow enforces it (FR-106). Runs on
         # the integrated whole, before the merge gate.
-        self._stage("analyzing")
+        self._stage("analyzing", "analyze")
         _an_started = workflow.now()
         integration_diff = await workflow.execute_activity(
             get_task_diff,
@@ -2615,7 +2619,7 @@ class FeatureWorkflow(GateHost):
                     quality_score=None, judge="contract",
                     outcome=BenchmarkOutcome.PASS,
                     model=resolve_role_model(cfg, "devops")))
-                self._stage("deployed")
+                self._stage("deployed", "deploy")
                 return _deploy_result(report, None, pr_url)
 
             # The gate opens even when the rollback itself failed -- that is
@@ -2643,5 +2647,5 @@ class FeatureWorkflow(GateHost):
                 quality_score=None, judge="contract",
                 outcome=BenchmarkOutcome.FAIL,
                 model=resolve_role_model(cfg, "devops")))
-            self._stage("deploy_failed")
+            self._stage("deploy_failed", "deploy")
             return _deploy_result(report, decision, pr_url)

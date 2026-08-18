@@ -102,3 +102,21 @@ def test_budget_is_reported_when_configured():
     cfg = PipelineConfig()
     cfg.run_budget_usd = 40.0
     assert _wf(cfg=cfg).run_state().budget_usd == 40.0
+
+
+def test_stage_started_emits_canonical_stage_names():
+    """STAGE_STARTED must speak the canonical noun vocabulary (heatmap's
+    CANONICAL_STAGES) -- STAGE_ENDED, terminal_stage, and the frontend's
+    stage strip already do; a gerund here parks every run at intake."""
+    import re
+    from pathlib import Path
+
+    from sdlc.benchmarks.heatmap import CANONICAL_STAGES
+    import sdlc.workflows.feature as feature_mod
+
+    src = Path(feature_mod.__file__).read_text(encoding="utf-8")
+    calls = re.findall(r'_stage\("(\w+)"(?:,\s*"(\w+)")?\)', src)
+    assert calls, "no _stage call sites found -- helper renamed?"
+    for status, trace in calls:
+        assert (trace or status) in CANONICAL_STAGES, \
+            f"_stage({status!r}, {trace!r}): not a canonical stage name"
