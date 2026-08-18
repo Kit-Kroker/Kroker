@@ -121,6 +121,22 @@ def test_decide_404s_when_the_key_is_not_pending(client):
     assert r.status_code == 404
 
 
+def test_answer_404s_when_the_key_is_a_gate(client):
+    """/answer is for questions: a gate key would build a GateDecision with
+    no outcome and 500. Same 404 shape as NoMatch (E-10 review B4)."""
+    r = client.post("/runs/feature-add-sso/answer",
+                    json={"key": "architecture#1", "text": "x"})
+    assert r.status_code == 404
+
+
+def test_decide_404s_when_the_key_is_a_question(client):
+    """/decide is for gates: a clarify key would signal answer_question with
+    a None answer (E-10 review B4)."""
+    r = client.post("/runs/feature-add-sso/decide",
+                    json={"key": "Q1", "outcome": "approve"})
+    assert r.status_code == 404
+
+
 def test_decide_returns_the_submit_result_verbatim(client):
     r = client.post("/runs/feature-add-sso/decide",
                     json={"key": "architecture#1", "outcome": "approve"})

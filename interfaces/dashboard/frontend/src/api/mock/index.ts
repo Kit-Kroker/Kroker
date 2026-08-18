@@ -238,11 +238,11 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
       return clone(inbox)
     },
 
-    async answerClarify(id: string, answer: string) {
+    async answerClarify(runId: string, key: string, answer: string) {
       await delay()
-      const it = inbox.find((i) => i.id === id) as ClarifyItem | undefined
-      if (!it) return
-      removeItem(id)
+      const it = inbox.find((i) => i.id === key && i.runId === runId) as ClarifyItem | undefined
+      if (!it) throw new Error(`no pending item ${key} on ${runId}`)
+      removeItem(key)
       addDecision(it.runId, {
         gate: `clarify Q${it.id.slice(1)} r${it.round}`,
         outcome: 'approve',
@@ -254,11 +254,11 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
       }
     },
 
-    async decideGate(id: string, outcome: GateOutcome, comment: string) {
+    async decideGate(runId: string, key: string, outcome: GateOutcome, comment: string) {
       await delay()
-      const it = inbox.find((i) => i.id === id && i.type === 'gate') as GateItem | undefined
-      if (!it) return
-      removeItem(id)
+      const it = inbox.find((i) => i.id === key && i.runId === runId && i.type === 'gate') as GateItem | undefined
+      if (!it) throw new Error(`no pending item ${key} on ${runId}`)
+      removeItem(key)
       addDecision(it.runId, { gate: `${it.gate} r${it.round}`, outcome, comment })
       if (outcome === 'approve') {
         patchRun(it.runId, (r) => ({ status: 'running', stageIdx: r.stageIdx + 1, blocker: '' }))
@@ -269,11 +269,11 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
       }
     },
 
-    async overrideMerge(id: string, approve: boolean, justification: string) {
+    async overrideMerge(runId: string, key: string, approve: boolean, justification: string) {
       await delay()
-      const it = inbox.find((i) => i.id === id && i.type === 'override') as OverrideItem | undefined
-      if (!it) return
-      removeItem(id)
+      const it = inbox.find((i) => i.id === key && i.runId === runId && i.type === 'override') as OverrideItem | undefined
+      if (!it) throw new Error(`no pending item ${key} on ${runId}`)
+      removeItem(key)
       if (approve) {
         addDecision(it.runId, { gate: `merge r${it.round}`, outcome: 'approve', comment: `ADVISORY OVERRIDE: ${justification}`, decider: 'human · you (override)' })
         patchRun(it.runId, { status: 'running', stageIdx: 12, blocker: '' })
@@ -283,11 +283,11 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
       }
     },
 
-    async resolveEscalation(id: string, retry: boolean, guidance: string) {
+    async resolveEscalation(runId: string, key: string, retry: boolean, guidance: string) {
       await delay()
-      const it = inbox.find((i) => i.id === id && i.type === 'escalation') as EscalationItem | undefined
-      if (!it) return
-      removeItem(id)
+      const it = inbox.find((i) => i.id === key && i.runId === runId && i.type === 'escalation') as EscalationItem | undefined
+      if (!it) throw new Error(`no pending item ${key} on ${runId}`)
+      removeItem(key)
       if (retry) {
         addDecision(it.runId, { gate: 'escalation T-07', outcome: 'approve', comment: `retry w/ guidance: ${guidance || '(none)'}` })
         patchRun(it.runId, { status: 'running', blocker: 'repair attempt 4 (guided)' })

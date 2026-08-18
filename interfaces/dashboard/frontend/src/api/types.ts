@@ -100,10 +100,10 @@ export interface DashboardApi {
   listRuns(): Promise<Run[]>
   getRun(id: string): Promise<Run | undefined>
   listInbox(): Promise<InboxItem[]>
-  answerClarify(id: string, answer: string): Promise<void>
-  decideGate(id: string, outcome: GateOutcome, comment: string): Promise<void>
-  overrideMerge(id: string, approve: boolean, justification: string): Promise<void>
-  resolveEscalation(id: string, retry: boolean, guidance: string): Promise<void>
+  answerClarify(runId: string, key: string, answer: string): Promise<void>
+  decideGate(runId: string, key: string, outcome: GateOutcome, comment: string): Promise<void>
+  overrideMerge(runId: string, key: string, approve: boolean, justification: string): Promise<void>
+  resolveEscalation(runId: string, key: string, retry: boolean, guidance: string): Promise<void>
   startRun(input: StartRunInput): Promise<Run>
   subscribe(cb: (s: FleetState) => void): () => void
 }

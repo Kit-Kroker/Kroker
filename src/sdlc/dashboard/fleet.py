@@ -24,8 +24,15 @@ from ..pending import PendingDecision
 
 CLOSED_LIMIT = 20
 
+# Newest-first, so the just-finished run is always inside the cap. ORDER BY
+# requires advanced visibility; standard visibility (the dev server this
+# project deploys) rejects the clause, so _closed_run_ids falls back once.
 _CLOSED_QUERY = ("WorkflowType='FeatureWorkflow' AND "
-                 "ExecutionStatus!='Running'")
+                 "ExecutionStatus!='Running'"
+                 " ORDER BY CloseTime DESC")
+_CLOSED_QUERY_UNORDERED = ("WorkflowType='FeatureWorkflow' AND "
+                           "ExecutionStatus!='Running'")
+_ORDER_BY_SUPPORTED = True
 
 _PENDING_LIST = TypeAdapter(list[PendingDecision])
 
@@ -66,13 +73,27 @@ async def _fetch_closed(client, run_id: str):
         return e
 
 
-async def _closed_run_ids(client, limit: int) -> list[str]:
+async def _scan_closed(client, query: str, limit: int) -> list[str]:
     ids: list[str] = []
-    async for wf in client.list_workflows(_CLOSED_QUERY):
+    async for wf in client.list_workflows(query):
         ids.append(wf.id)
         if len(ids) >= limit:
             break
     return ids
+
+
+async def _closed_run_ids(client, limit: int) -> list[str]:
+    global _ORDER_BY_SUPPORTED
+    if _ORDER_BY_SUPPORTED:
+        try:
+            return await _scan_closed(client, _CLOSED_QUERY, limit)
+        except Exception as e:    # noqa: BLE001 -- narrow retry, re-raise else
+            if "ORDER BY" not in str(e):
+                raise
+            # Standard visibility (dev server): the clause is rejected
+            # outright. Remember, so only the first fan-out pays the probe.
+            _ORDER_BY_SUPPORTED = False
+    return await _scan_closed(client, _CLOSED_QUERY_UNORDERED, limit)
 
 
 async def fetch_fleet(client, *, now: datetime,
@@ -84,6 +105,8 @@ async def fetch_fleet(client, *, now: datetime,
     open_results, closed_results = await asyncio.gather(
         asyncio.gather(*(_fetch_open(client, r) for r in open_ids)),
         asyncio.gather(*(_fetch_closed(client, r) for r in closed_ids)))
+
+    open_id_set = set(open_ids)
 
     snap = FleetSnapshot(at=now, total_open_runs=len(open_ids))
     for run_id, outcome in zip(open_ids, open_results):
@@ -99,6 +122,11 @@ async def fetch_fleet(client, *, now: datetime,
             snap.inbox.append(RunInbox(run_id=run_id, pending=pending))
 
     for run_id, outcome in zip(closed_ids, closed_results):
+        if run_id in open_id_set:
+            # A run completing between the two visibility queries lands in
+            # both lists; the open pass already rendered it, so rendering it
+            # again here would duplicate its row.
+            continue
         if isinstance(outcome, Exception):
             snap.errors.append(InboxError(run_id=run_id, error=str(outcome)))
         elif outcome is not None:
@@ -147,14 +175,25 @@ class FleetPoller:
         return self._task is not None and not self._task.done()
 
     async def _client_or_connect(self):
+        async with self._lock:
+            return await self._connect_locked()
+
+    async def _connect_locked(self):
+        """Connect if needed. Caller must hold self._lock: two concurrent
+        cold readers would otherwise race to two clients (and a factory
+        returning a coroutine once stashed un-awaited poisons _client with
+        a consumed coroutine forever)."""
         if self._client is None:
-            self._client = self._client_factory()
-            if asyncio.iscoroutine(self._client):
-                self._client = await self._client
+            client = self._client_factory()
+            if asyncio.iscoroutine(client):
+                client = await client
+            self._client = client
         return self._client
 
     async def _fan_out(self) -> FleetSnapshot:
-        client = await self._client_or_connect()
+        # Runs under self._lock (snapshot and _loop both hold it), so the
+        # re-locking _client_or_connect would deadlock.
+        client = await self._connect_locked()
         snap = await self._fetch(client, now=self._clock())
         self._snapshot = snap
         return snap
@@ -178,6 +217,10 @@ class FleetPoller:
                 async with self._lock:
                     snap = await self._fan_out()
                 for q in list(self._subscribers):
+                    if q.full():
+                        # Drop-oldest: a wedged SSE consumer must not
+                        # accumulate a full snapshot per tick forever.
+                        q.get_nowait()
                     q.put_nowait(snap)
             except asyncio.CancelledError:
                 raise
@@ -204,7 +247,7 @@ class FleetPoller:
     @contextlib.asynccontextmanager
     async def subscribe(self):
         """Yields a queue receiving every new snapshot while subscribed."""
-        q: asyncio.Queue = asyncio.Queue()
+        q: asyncio.Queue = asyncio.Queue(maxsize=8)
         self._subscribers.add(q)
         self._cancel_pending_stop()
         if not self.running:

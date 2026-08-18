@@ -46,6 +46,9 @@ async def test_run_state_answers_on_a_live_run():
                 assert state.run_id == "feature-add-sso"
                 # Nothing has been priced yet, and None must not become 0.0.
                 assert state.cost_usd_total is None
+                # STAGE_STARTED is emitted before the first activity, so
+                # the very first workflow task answers with the stage set.
+                assert state.current_stage == "intake"
 
                 snap = await fetch_fleet(
                     env.client, now=datetime.now(timezone.utc))

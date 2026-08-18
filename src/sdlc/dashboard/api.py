@@ -23,7 +23,7 @@ from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from ..channels.contract import Reply
+from ..channels.contract import Reply, default_render
 from ..channels.transport import NoMatch, resolve_key, submit
 from ..cli import slug
 from ..models import GateOutcome, IdeaBrief, PipelineConfig, ProjectMode
@@ -71,12 +71,20 @@ def create_router(poller: FleetPoller,
     router = APIRouter()
     start_run = starter or _default_starter
 
-    async def _reply(run_id: str, key: str, reply: Reply, actor: str):
+    async def _reply(run_id: str, key: str, reply: Reply, actor: str,
+                     want: str):
         handle = await _handle(poller, run_id)
         try:
             pending = await resolve_key(handle, key)
         except NoMatch as e:
             raise HTTPException(404, e.message) from e
+        # match_key drops match()'s reply-kind narrowing (the operator
+        # addressed an exact key), so the route enforces the kind itself:
+        # /answer is for questions, /decide for gates. Mismatch is a 404,
+        # keeping the surface uniform with NoMatch.
+        if default_render(pending).reply_kind != want:
+            noun = "a question" if want == "text" else "a gate"
+            raise HTTPException(404, f"key {key!r} is not {noun} on this run")
         # confirmed=False is informational, never an error: the dominant
         # cause is another surface winning the race, which is FR-302
         # working as designed (transport._message).
@@ -142,7 +150,8 @@ def create_router(poller: FleetPoller,
     async def answer(run_id: str, body: AnswerBody,
                      x_actor: str = Header(default="human:unknown",
                                            alias="X-Actor")):
-        return await _reply(run_id, body.key, Reply(text=body.text), x_actor)
+        return await _reply(run_id, body.key, Reply(text=body.text), x_actor,
+                            want="text")
 
     @router.post("/runs/{run_id}/decide")
     async def decide(run_id: str, body: DecideBody,
@@ -150,7 +159,7 @@ def create_router(poller: FleetPoller,
                                            alias="X-Actor")):
         return await _reply(run_id, body.key,
                             Reply(outcome=body.outcome, text=body.text or None),
-                            x_actor)
+                            x_actor, want="gate")
 
     @router.post("/runs", response_model=StartedRun)
     async def start(body: StartBody):

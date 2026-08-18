@@ -49,7 +49,15 @@ def main() -> None:
             outcome="deployed:ok", terminal_stage="retro", started_at=AT,
             ended_at=AT + timedelta(hours=3), duration_s=10800.0,
             title="Dark mode for settings pages",
-            repo_url="git@github.com:acme/portal", cost_usd_total=7.88)],
+            repo_url="git@github.com:acme/portal", cost_usd_total=7.88),
+            # E-10 review F2: rolled-back is a failure outcome; the fixture
+            # must exercise closedStatus's deployed-vs-everything-else split.
+            RunSummary(
+                run_id="fix-payment-retry", mode="brownfield",
+                outcome="rolled-back:pr-142", terminal_stage="deploy",
+                started_at=AT, ended_at=AT + timedelta(hours=2),
+                duration_s=7200.0, title="Payment retry hotfix",
+                repo_url="git@github.com:acme/billing", cost_usd_total=11.3)],
         inbox=[RunInbox(run_id="feature-add-sso", pending=[
             ClarifyPending(key="Q1", question="Which identity protocol?",
                            why_it_matters="no auth abstraction exists",

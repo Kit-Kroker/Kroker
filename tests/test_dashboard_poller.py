@@ -111,3 +111,43 @@ async def test_aclose_stops_the_poller_immediately():
         await asyncio.wait_for(q.get(), timeout=2)
     await p.aclose()
     assert p.running is False
+
+
+@pytest.mark.asyncio
+async def test_a_failed_connect_does_not_poison_later_calls():
+    """Regression (E-10 review B1): the client coroutine used to be stashed
+    on self._client before being awaited, so one Temporal outage at first
+    connect left every later call returning the same consumed coroutine."""
+    calls = []
+    good = object()
+
+    async def factory():
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("temporal down")
+        return good
+
+    fetched = []
+
+    async def fake_fetch(client, *, now, closed_limit=20):
+        fetched.append(client)
+        return FleetSnapshot(at=now)
+
+    p = FleetPoller(factory, clock=_Clock(), fetch=fake_fetch, interval=1.0)
+    with pytest.raises(RuntimeError, match="temporal down"):
+        await p.snapshot()
+    snap = await p.snapshot()
+    assert snap is not None
+    assert len(calls) == 2
+    assert fetched == [good]
+
+
+@pytest.mark.asyncio
+async def test_a_subscriber_who_never_consumes_is_bounded():
+    """A wedged SSE consumer must not accumulate a full snapshot per tick;
+    the queue drops oldest under pressure (E-10 review B7)."""
+    p = _poller()
+    async with p.subscribe() as q:
+        await asyncio.wait_for(q.get(), timeout=2)   # delivery is flowing
+        await asyncio.sleep(0.3)                     # many ticks pile up
+        assert 1 <= q.qsize() <= 8

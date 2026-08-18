@@ -32,7 +32,7 @@ describe('mock api decision flows', () => {
   })
 
   it('answers a clarify question and logs a decision', async () => {
-    await api.answerClarify('q1', 'Use OIDC.')
+    await api.answerClarify('feature-add-sso', 'q1', 'Use OIDC.')
     const inbox = await api.listInbox()
     expect(inbox.find((i) => i.id === 'q1')).toBeUndefined()
     const run = await api.getRun('feature-add-sso')
@@ -40,47 +40,55 @@ describe('mock api decision flows', () => {
   })
 
   it('advances a run to architecture when the last clarify is answered', async () => {
-    await api.answerClarify('q1', 'OIDC')
-    await api.answerClarify('q2', 'Keep password behind a flag')
+    await api.answerClarify('feature-add-sso', 'q1', 'OIDC')
+    await api.answerClarify('feature-add-sso', 'q2', 'Keep password behind a flag')
     const run = await api.getRun('feature-add-sso')
     expect(run?.stageIdx).toBe(5)
     expect(run?.status).toBe('running')
   })
 
+  it('throws when the key is not pending on that run', async () => {
+    // q1 belongs to feature-add-sso; scoping to another run must fail loudly,
+    // not silently succeed (the wrong-run POST is F1's whole finding).
+    await expect(
+      api.answerClarify('feature-usage-metering', 'q1', 'x'),
+    ).rejects.toThrow('no pending item q1 on feature-usage-metering')
+  })
+
   it('approving a gate advances the stage', async () => {
-    await api.decideGate('g2', 'approve', '')
+    await api.decideGate('feature-usage-metering', 'g2', 'approve', '')
     const run = await api.getRun('feature-usage-metering')
     expect(run?.status).toBe('running')
     expect(run?.stageIdx).toBeGreaterThan(5)
   })
 
   it('rejecting a gate fails the branch', async () => {
-    await api.decideGate('g2', 'reject', 'wrong layering')
+    await api.decideGate('feature-usage-metering', 'g2', 'reject', 'wrong layering')
     const run = await api.getRun('feature-usage-metering')
     expect(run?.status).toBe('failed')
   })
 
   it('override approve moves run to deploy (stageIdx 12)', async () => {
-    await api.overrideMerge('g1', true, 'retry branches covered indirectly')
+    await api.overrideMerge('feature-billing-webhooks', 'g1', true, 'retry branches covered indirectly')
     const run = await api.getRun('feature-billing-webhooks')
     expect(run?.stageIdx).toBe(12)
     expect(run?.status).toBe('running')
   })
 
   it('override send-back drops run to code (stageIdx 7)', async () => {
-    await api.overrideMerge('g1', false, '')
+    await api.overrideMerge('feature-billing-webhooks', 'g1', false, '')
     const run = await api.getRun('feature-billing-webhooks')
     expect(run?.stageIdx).toBe(7)
   })
 
   it('escalation retry resumes the task', async () => {
-    await api.resolveEscalation('e1', true, 'inject a clock')
+    await api.resolveEscalation('fix-rate-limit-retry', 'e1', true, 'inject a clock')
     const run = await api.getRun('fix-rate-limit-retry')
     expect(run?.blocker).toContain('repair attempt 4')
   })
 
   it('escalation quarantine keeps the wave going', async () => {
-    await api.resolveEscalation('e1', false, '')
+    await api.resolveEscalation('fix-rate-limit-retry', 'e1', false, '')
     const run = await api.getRun('fix-rate-limit-retry')
     expect(run?.blocker).toContain('quarantined')
     expect(run?.status).toBe('running')

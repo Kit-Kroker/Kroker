@@ -34,9 +34,10 @@ function liveStatus(status: string): Status {
 }
 
 function closedStatus(outcome: string): Status {
-  return outcome.startsWith('rejected') || outcome.startsWith('failed')
-    ? 'failed'
-    : 'done'
+  // Success is exactly one prefix; failure has many (deploy-broken:,
+  // deploy-rejected:, rolled-back:, plus gate rejections), so testing for
+  // success keeps a rolled-back run from rendering green.
+  return outcome.startsWith('deployed:') ? 'done' : 'failed'
 }
 
 function blocker(status: string, pendingCount: number): string {
@@ -155,34 +156,34 @@ export function createHttpApi(baseUrl = '/api'): DashboardApi {
   const snapshot = async (): Promise<FleetState> =>
     mapSnapshot(await json('/inbox'))
 
-  const find = async (id: string) =>
-    (await snapshot()).inbox.find((i) => i.id === id)
-
-  const decide = async (id: string, outcome: GateOutcome, text: string) => {
-    const it = await find(id)
-    if (!it) return
-    await json(`/runs/${encodeURIComponent(it.runId)}/decide`, {
-      method: 'POST', body: JSON.stringify({ key: id, outcome, text }),
+  // Write verbs are run-scoped: two runs can both be awaiting the same key,
+  // so looking the key up across the fleet could POST to the wrong run. Not
+  // found is the backend's 404, never a silent return.
+  const decide = (runId: string, key: string, body: Record<string, unknown>) =>
+    json(`/runs/${encodeURIComponent(runId)}/decide`, {
+      method: 'POST', body: JSON.stringify({ key, ...body }),
     })
-  }
 
   return {
     async listRuns() { return (await snapshot()).runs },
     async getRun(id) { return (await snapshot()).runs.find((r) => r.id === id) },
     async listInbox() { return (await snapshot()).inbox },
 
-    async answerClarify(id, answer) {
-      const it = await find(id)
-      if (!it) return
-      await json(`/runs/${encodeURIComponent(it.runId)}/answer`, {
-        method: 'POST', body: JSON.stringify({ key: id, text: answer }),
+    async answerClarify(runId, key, answer) {
+      await json(`/runs/${encodeURIComponent(runId)}/answer`, {
+        method: 'POST', body: JSON.stringify({ key, text: answer }),
       })
     },
-    decideGate: (id, outcome, comment) => decide(id, outcome, comment),
-    overrideMerge: (id, approve, justification) =>
-      decide(id, approve ? 'approve' : 'revise', justification),
-    resolveEscalation: (id, retry, guidance) =>
-      decide(id, retry ? 'approve' : 'reject', guidance),
+    decideGate: (runId, key, outcome, comment) =>
+      decide(runId, key, { outcome, text: comment }),
+    overrideMerge: (runId, key, approve, justification) =>
+      decide(runId, key, {
+        outcome: approve ? 'approve' : 'revise', text: justification,
+      }),
+    resolveEscalation: (runId, key, retry, guidance) =>
+      decide(runId, key, {
+        outcome: retry ? 'approve' : 'reject', text: guidance,
+      }),
 
     async startRun(input: StartRunInput) {
       const { run_id } = await json('/runs', {

@@ -873,6 +873,12 @@ class FeatureWorkflow(GateHost):
                                     kind=kind, stage=stage, data=data))
         self._seq += 1
 
+    def _stage(self, name: str) -> None:
+        """Record stage start: _status plus the STAGE_STARTED trace event
+        run_state() projects (E-10)."""
+        self._status = name
+        self._emit(RunEventKind.STAGE_STARTED, stage=name)
+
     def _track_usage(self, *, role: str, model: str,
                      input_tokens: int = 0, output_tokens: int = 0,
                      cache_read_tokens: int = 0, cache_write_tokens: int = 0,
@@ -1776,7 +1782,7 @@ class FeatureWorkflow(GateHost):
         # 0. INTAKE (E-84 D3) -- deterministic, no model call. IdeaBrief.mode
         # is declared by the operator; this verifies the declaration against
         # the tree and fails closed when brownfield has nothing to map.
-        self._status = "intake"
+        self._stage("intake")
         observed = await workflow.execute_activity(
             classify_repo,
             RepoProbeInput(repo_dir=repo_path, base_branch=idea.base_branch),
@@ -1809,7 +1815,7 @@ class FeatureWorkflow(GateHost):
         # park a tidy-up run on a question the finding contains.
         if seeded is not None:
             arch, plan = seeded.arch, seeded.plan
-            self._status = "coding"
+            self._stage("coding")
             return await self._build_and_merge(idea, cfg, arch, plan,
                                                repo_path)
 
@@ -1817,7 +1823,7 @@ class FeatureWorkflow(GateHost):
         # integration head, which is the branch point the work is based on.
         self._codebase_map = None
         if idea.mode is ProjectMode.BROWNFIELD:
-            self._status = "mapping"
+            self._stage("mapping")
             self._codebase_map = await self._context(
                 repo_path, self._integration_head)
             if self._codebase_map.collected.state \
@@ -1834,7 +1840,7 @@ class FeatureWorkflow(GateHost):
         # digest to downstream keys (finding 3), never its prose.
         brief_digest_val = ""
         if cfg.research_enabled and t_research is not None:
-            self._status = "researching"
+            self._stage("researching")
             _r_started = workflow.now()
             deps = ResearchDeps(
                 run_id=workflow.info().workflow_id,
@@ -1907,7 +1913,7 @@ class FeatureWorkflow(GateHost):
                 # keys, so brief_digest_val stays "" and retain is skipped;
                 # everything after research proceeds on the idea alone, same
                 # as a research-disabled run.
-                self._status = "research_failed"
+                self._stage("research_failed")
                 err = "; ".join(
                     f"{v.kind}: {v.source}: {v.quote[:80]!r}"
                     for v in violations)
@@ -1962,7 +1968,7 @@ class FeatureWorkflow(GateHost):
                         args=[brief, workflow.info().workflow_id],
                         **VERIFY_ACT)
                     if violations:
-                        self._status = "research_failed"
+                        self._stage("research_failed")
                         brief_digest_val = ""
                         break
                     brief_digest_val = brief_digest(brief)
@@ -2005,7 +2011,7 @@ class FeatureWorkflow(GateHost):
         await self._check_budget(cfg)
 
         # 1. CLARIFY — open questions answered by human via signals
-        self._status = "clarifying"
+        self._stage("clarifying")
         _started = workflow.now()
         snapshot = await self._recall(
             cfg, cfg.memory.project_bank, query=f"clarify:{idea.title}",
@@ -2034,7 +2040,8 @@ class FeatureWorkflow(GateHost):
                     q.answer = q.suggested_answer
             else:
                 self._status = "awaiting:clarify"
-                for p in clarify_pending(reqs.open_questions, set()):
+                for p in clarify_pending(reqs.open_questions, set(),
+                                         opened_at=workflow.now()):
                     self._pending[p.key] = p
                 await workflow.wait_condition(
                     lambda: all(q.id in self._question_answers
@@ -2069,7 +2076,7 @@ class FeatureWorkflow(GateHost):
         await self._check_budget(cfg)
 
         # 2. ARCHITECT (+ human approval of the spec)
-        self._status = "architecting"
+        self._stage("architecting")
         _started = workflow.now()
         snapshot = await self._recall(
             cfg, cfg.memory.project_bank, query=f"architect:{idea.title}",
@@ -2340,7 +2347,7 @@ class FeatureWorkflow(GateHost):
         # 4b. ANALYZE (stage 9) — clean-context Analyst proposes the
         # criterion->test mapping; the workflow enforces it (FR-106). Runs on
         # the integrated whole, before the merge gate.
-        self._status = "analyzing"
+        self._stage("analyzing")
         _an_started = workflow.now()
         integration_diff = await workflow.execute_activity(
             get_task_diff,
@@ -2608,7 +2615,7 @@ class FeatureWorkflow(GateHost):
                     quality_score=None, judge="contract",
                     outcome=BenchmarkOutcome.PASS,
                     model=resolve_role_model(cfg, "devops")))
-                self._status = "deployed"
+                self._stage("deployed")
                 return _deploy_result(report, None, pr_url)
 
             # The gate opens even when the rollback itself failed -- that is
@@ -2636,5 +2643,5 @@ class FeatureWorkflow(GateHost):
                 quality_score=None, judge="contract",
                 outcome=BenchmarkOutcome.FAIL,
                 model=resolve_role_model(cfg, "devops")))
-            self._status = "deploy_failed"
+            self._stage("deploy_failed")
             return _deploy_result(report, decision, pr_url)

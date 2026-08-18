@@ -49,6 +49,14 @@ describe('mapSnapshot', () => {
     expect(closed.title).toBe('Dark mode for settings pages')
   })
 
+  it('renders a rolled-back closed run as failed, not done', () => {
+    // deployed: is the only success prefix; rolled-back: must not render
+    // green (E-10 review F2).
+    const { runs } = mapSnapshot(snapshot as never, NOW)
+    expect(runs.find((r) => r.id === 'fix-payment-retry')!.status).toBe('failed')
+    expect(runs.find((r) => r.id === 'feature-dark-mode')!.status).toBe('done')
+  })
+
   it('maps each pending variant to its inbox item type', () => {
     const { inbox } = mapSnapshot(snapshot as never, NOW)
     expect(inbox.map((i) => i.type)).toEqual([

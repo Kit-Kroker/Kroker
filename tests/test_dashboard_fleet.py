@@ -50,8 +50,10 @@ class _Client:
     def __init__(self, open_handles, closed_handles=None):
         self._open = open_handles
         self._closed = closed_handles or {}
+        self.queries = []
 
     async def list_workflows(self, query):
+        self.queries.append(query)
         ids = self._closed if "!=" in query else self._open
         for run_id in ids:
             yield SimpleNamespace(id=run_id)
@@ -129,3 +131,54 @@ async def test_a_closed_run_whose_summary_is_none_is_skipped_not_errored():
 async def test_empty_fleet_is_an_empty_snapshot_not_an_error():
     snap = await fetch_fleet(_Client({}), now=AT)
     assert snap == FleetSnapshot(at=AT)
+
+
+@pytest.mark.asyncio
+async def test_the_closed_pass_is_ordered_newest_first():
+    """Past CLOSED_LIMIT closed runs the just-finished run may never appear
+    without ORDER BY CloseTime DESC -- Temporal's default order is arbitrary
+    (E-10 review B5)."""
+    client = _Client({}, {"run-old": _Handle(summary=_summary("run-old"))})
+    await fetch_fleet(client, now=AT)
+    closed_queries = [q for q in client.queries if "!=" in q]
+    assert closed_queries, "the closed pass never ran"
+    assert "ORDER BY CloseTime DESC" in closed_queries[0]
+
+
+@pytest.mark.asyncio
+async def test_the_closed_pass_falls_back_when_order_by_is_rejected(monkeypatch):
+    """Standard visibility (the dev server this project deploys) rejects the
+    ORDER BY clause outright; the fan-out must retry unordered rather than
+    fail -- found by the temporal e2e, kept fast here."""
+    import sdlc.dashboard.fleet as fleet_mod
+    monkeypatch.setattr(fleet_mod, "_ORDER_BY_SUPPORTED", True)
+
+    class _NoOrderBy(_Client):
+        async def list_workflows(self, query):
+            if "ORDER BY" in query:
+                raise RuntimeError("invalid query: operation is not "
+                                   "supported: 'ORDER BY' clause")
+            async for wf in super().list_workflows(query):
+                yield wf
+
+    client = _NoOrderBy({}, {"run-old": _Handle(summary=_summary("run-old"))})
+    snap = await fetch_fleet(client, now=AT)
+    assert [c.run_id for c in snap.closed] == ["run-old"]
+    assert fleet_mod._ORDER_BY_SUPPORTED is False
+    # the remembered verdict skips the rejected clause on later fan-outs
+    client.queries.clear()
+    await fetch_fleet(client, now=AT)
+    assert all("ORDER BY" not in q for q in client.queries)
+
+
+@pytest.mark.asyncio
+async def test_a_run_landing_in_both_passes_is_rendered_once():
+    """A run completing between the two visibility queries shows up in both
+    id lists; the open pass already rendered it, so the closed pass must
+    skip it rather than duplicate its row (E-10 review B6)."""
+    both = _Handle(state=_state("run-x"), summary=_summary("run-x"))
+    client = _Client({"run-x": both}, {"run-x": both})
+    snap = await fetch_fleet(client, now=AT)
+    assert [r.run_id for r in snap.runs] == ["run-x"]
+    assert snap.closed == []
+    assert snap.errors == []

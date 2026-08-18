@@ -74,6 +74,27 @@
       "memory_enabled": false,
       "memory_watermark": null,
       "memory_retains": 0
+    },
+    {
+      "run_id": "fix-payment-retry",
+      "mode": "brownfield",
+      "title": "Payment retry hotfix",
+      "repo_url": "git@github.com:acme/billing",
+      "outcome": "rolled-back:pr-142",
+      "terminal_stage": "deploy",
+      "started_at": "2026-08-18T09:00:00Z",
+      "ended_at": "2026-08-18T11:00:00Z",
+      "duration_s": 7200.0,
+      "stages": [],
+      "clarifications": [],
+      "gates": [],
+      "roles": [],
+      "cost_usd_total": 11.3,
+      "budget_usd": null,
+      "budget_crossings": 0,
+      "memory_enabled": false,
+      "memory_watermark": null,
+      "memory_retains": 0
     }
   ],
   "inbox": [
