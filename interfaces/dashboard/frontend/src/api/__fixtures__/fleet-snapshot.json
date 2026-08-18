@@ -95,6 +95,27 @@
       "memory_enabled": false,
       "memory_watermark": null,
       "memory_retains": 0
+    },
+    {
+      "run_id": "feature-flag-cleanup",
+      "mode": "greenfield",
+      "title": "Feature flag cleanup",
+      "repo_url": null,
+      "outcome": "merged-not-deployed:pr-151",
+      "terminal_stage": "merge",
+      "started_at": "2026-08-18T09:00:00Z",
+      "ended_at": "2026-08-18T10:00:00Z",
+      "duration_s": 3600.0,
+      "stages": [],
+      "clarifications": [],
+      "gates": [],
+      "roles": [],
+      "cost_usd_total": 2.5,
+      "budget_usd": null,
+      "budget_crossings": 0,
+      "memory_enabled": false,
+      "memory_watermark": null,
+      "memory_retains": 0
     }
   ],
   "inbox": [

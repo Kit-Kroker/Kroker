@@ -57,6 +57,15 @@ describe('mapSnapshot', () => {
     expect(runs.find((r) => r.id === 'feature-dark-mode')!.status).toBe('done')
   })
 
+  it('renders a merged-not-deployed closed run as done, not failed', () => {
+    // Success family per tidyup.py: merged-not-deployed passed the absolute
+    // merge gate; deploy was disabled/unapproved. It must not render red.
+    const { runs } = mapSnapshot(snapshot as never, NOW)
+    expect(runs.find((r) => r.id === 'feature-flag-cleanup')!.status).toBe('done')
+    expect(runs.find((r) => r.id === 'fix-payment-retry')!.status).toBe('failed')
+    expect(runs.find((r) => r.id === 'feature-dark-mode')!.status).toBe('done')
+  })
+
   it('maps each pending variant to its inbox item type', () => {
     const { inbox } = mapSnapshot(snapshot as never, NOW)
     expect(inbox.map((i) => i.type)).toEqual([

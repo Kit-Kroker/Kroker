@@ -34,10 +34,14 @@ function liveStatus(status: string): Status {
 }
 
 function closedStatus(outcome: string): Status {
-  // Success is exactly one prefix; failure has many (deploy-broken:,
-  // deploy-rejected:, rolled-back:, plus gate rejections), so testing for
-  // success keeps a rolled-back run from rendering green.
-  return outcome.startsWith('deployed:') ? 'done' : 'failed'
+  // Success family per tidyup.py: deployed = merged AND shipped;
+  // merged-not-deployed = merged, deploy disabled/unapproved. Failure has
+  // many prefixes (deploy-broken:, deploy-rejected:, rolled-back:, plus
+  // gate rejections), so testing for success keeps a rolled-back run from
+  // rendering green.
+  const done = outcome.startsWith('deployed:')
+    || outcome.startsWith('merged-not-deployed:')
+  return done ? 'done' : 'failed'
 }
 
 function blocker(status: string, pendingCount: number): string {
