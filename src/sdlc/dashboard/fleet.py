@@ -13,7 +13,8 @@ real -- history reaches back only as far as that retention.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+import contextlib
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field, TypeAdapter
 
@@ -103,3 +104,123 @@ async def fetch_fleet(client, *, now: datetime,
         elif outcome is not None:
             snap.closed.append(outcome)
     return snap
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class FleetPoller:
+    """One shared fan-out multiplexed to every subscriber (spec D5/D6).
+
+    Why shared: a per-request fan-out costs N_clients x N_runs because each
+    browser tab polls independently. One poller costs N_runs regardless of
+    how many tabs are open.
+
+    Why lazy: an operator tool left open overnight should stop querying
+    Temporal when nobody is watching. It starts on the first subscriber or
+    a cold read and stops grace_s after the last unsubscribe.
+
+    Why snapshot() can still fan out inline: REST correctness must never
+    depend on the poller being up.
+
+    `clock` and `fetch` are injectable for tests only; production uses the
+    module defaults.
+    """
+
+    def __init__(self, client_factory, *, interval: float = 2.0,
+                 grace_s: float = 30.0, clock=None, fetch=None) -> None:
+        self._client_factory = client_factory
+        self._interval = interval
+        self._grace_s = grace_s
+        self._clock = clock or _utcnow
+        self._fetch = fetch or fetch_fleet
+        self._client = None
+        self._snapshot: FleetSnapshot | None = None
+        self._subscribers: set[asyncio.Queue] = set()
+        self._task: asyncio.Task | None = None
+        self._stop_handle: asyncio.TimerHandle | None = None
+        self._lock = asyncio.Lock()
+
+    @property
+    def running(self) -> bool:
+        return self._task is not None and not self._task.done()
+
+    async def _client_or_connect(self):
+        if self._client is None:
+            self._client = self._client_factory()
+            if asyncio.iscoroutine(self._client):
+                self._client = await self._client
+        return self._client
+
+    async def _fan_out(self) -> FleetSnapshot:
+        client = await self._client_or_connect()
+        snap = await self._fetch(client, now=self._clock())
+        self._snapshot = snap
+        return snap
+
+    def _fresh(self) -> bool:
+        if self._snapshot is None:
+            return False
+        age = (self._clock() - self._snapshot.at).total_seconds()
+        return age < 2 * self._interval
+
+    async def snapshot(self) -> FleetSnapshot:
+        """The cached snapshot when fresh, otherwise an inline fan-out."""
+        async with self._lock:
+            if self._fresh():
+                return self._snapshot
+            return await self._fan_out()
+
+    async def _loop(self) -> None:
+        while True:
+            try:
+                async with self._lock:
+                    snap = await self._fan_out()
+                for q in list(self._subscribers):
+                    q.put_nowait(snap)
+            except asyncio.CancelledError:
+                raise
+            except Exception:       # noqa: BLE001 -- a poll failure must
+                pass                # never kill the loop; next tick retries
+            await asyncio.sleep(self._interval)
+
+    def _cancel_pending_stop(self) -> None:
+        if self._stop_handle is not None:
+            self._stop_handle.cancel()
+            self._stop_handle = None
+
+    def _schedule_stop(self) -> None:
+        loop = asyncio.get_running_loop()
+        self._cancel_pending_stop()
+        self._stop_handle = loop.call_later(
+            self._grace_s,
+            lambda: asyncio.ensure_future(self._stop_if_idle()))
+
+    async def _stop_if_idle(self) -> None:
+        if not self._subscribers:
+            await self.aclose()
+
+    @contextlib.asynccontextmanager
+    async def subscribe(self):
+        """Yields a queue receiving every new snapshot while subscribed."""
+        q: asyncio.Queue = asyncio.Queue()
+        self._subscribers.add(q)
+        self._cancel_pending_stop()
+        if not self.running:
+            self._task = asyncio.create_task(self._loop())
+        try:
+            yield q
+        finally:
+            self._subscribers.discard(q)
+            if not self._subscribers:
+                self._schedule_stop()
+
+    async def aclose(self) -> None:
+        """Stop the poll loop now. Idempotent."""
+        self._cancel_pending_stop()
+        task, self._task = self._task, None
+        if task is not None and not task.done():
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
