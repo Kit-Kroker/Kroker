@@ -6,7 +6,7 @@
 | Work items | **E-10** (§9.2). Resolves E-10/E-75 duplicate tracking; see D0 |
 | Requirements | FR-601, FR-1204, US-6, ADR-8 (second exception), OQ-11 (restated) |
 | Scope input | `ROADMAP.md` §0 (P2), §9.2 (E-6…E-11), §14 (E-75), §15 item 7; `interfaces/dashboard/frontend/src/api/`; `src/sdlc/channels/`; `src/sdlc/board/api.py` |
-| Status | Design approved 2026-08-18 |
+| Status | Implemented 2026-08-18 (plan `docs/superpowers/plans/2026-08-18-dashboard-backend.md`) |
 
 P2's summary line has read "brownfield mode and dashboard backend remain" since
 the phase opened. Half of that is now stale — E-84 landed brownfield intake,

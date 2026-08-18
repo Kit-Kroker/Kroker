@@ -286,9 +286,13 @@ bounds history.
 
 *Operator* surfaces are stateless shells over three Temporal primitives —
 queries (`status`, `stages`, `pending_decisions`), signals, visibility lists.
-The **agent board API** is the one deliberate exception: it serves durable
-cross-run state that no live workflow holds, so it reads its own store rather
-than a running workflow. Operator surfaces still own no state.
+The **agent board API** (E-78, ADR-21) and the **dashboard backend** (E-10) are
+the two deliberate exceptions: the board serves durable cross-run state that no
+live workflow holds, so it reads its own store rather than a running workflow,
+while the dashboard backend holds an in-process fleet poller and subscriber
+set — not durable state, but not a stateless shell either. The poller exists
+because a per-request fan-out costs `N_clients × N_runs` while one shared
+poller costs `N_runs`. Operator surfaces still own no durable state.
 
 - **Dashboard** (FastAPI + single-page UI): fleet rail, 15-stage spine,
   decision inbox (accept-suggestion one-click, inline custom answers,

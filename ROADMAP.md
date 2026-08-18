@@ -92,7 +92,7 @@
 - [x] **P1** — Greenfield pipeline, CLI, hard gates, no memory → *one project shipped end-to-end*
   Exit criterion **demonstrated**: `tests/test_e2e_greenfield.py` drives the real `FeatureWorkflow` greenfield `IdeaBrief` → `deployed:` end-to-end in CI, and the `security_no_critical` absolute floor now bites (SC-5). Delivered on `feat/p1-consolidation` (`3cfbe62`…`41c9185`).
 - [ ] ⚠️ **P2** — Brownfield, dashboard + notifications, fix loops, cross-harness review → *first brownfield feature merged via PR*
-  Cross-harness review ✅, fix loops ✅, and notifications ✅ (E-9) landed early; brownfield mode and dashboard backend remain. The backend is **E-75** (§14) — `api/http.ts:4` still rejects every call and the dashboard runs entirely on `api/mock`.
+  Cross-harness review ✅, fix loops ✅, notifications ✅ (E-9), and brownfield ✅ (E-84, 2026-08-15; `CapabilityMap` via E-47a/b/c) all landed. The dashboard backend landed 2026-08-18 (**E-10**, §9.2) — `interfaces/dashboard/api/main.py` now composes the board and dashboard routers, and the frontend's `http` provider serves live Temporal state. **Every part is built; the exit criterion — *first brownfield feature merged via PR* — is a demonstration that has not been run.**
 - [ ] ⚠️ **P3** — Hindsight memory + confidence-gated soft gates → *SC-4 and SC-6 measurable*
   Memory (recall/retain/watermark) ✅ and soft gates ✅ done; SC-4/SC-6 not yet measurable (need retro/reflect wiring + real runs). **The retro stage that makes them measurable is E-32** (§9.8); the on/off memory delta is the measurement E-31/E-33 exist to run.
 - [ ] **P4** — MCP surface, maintenance loop (DAPER), fleet scale → *SC-1..3 at target*
@@ -169,7 +169,7 @@
 - [ ] **FR-503** confidence-gated repair approval; timeout = inaction.
 
 ### Interfaces (FR-600)
-- [ ] ⚠️ **FR-601** dashboard fleet/spine/inbox — Vue 3 frontend exists (mock API); **no FastAPI backend** wired to Temporal.
+- [x] **FR-601** dashboard fleet/spine/inbox — Vue 3 frontend over a FastAPI backend serving live Temporal state (E-10, 2026-08-18). Closed runs render from `run_summary()` within Temporal's retention window; older history would need a store (OQ-13).
 - [ ] **FR-602** MCP server (list/detail/inbox/answer/decide/start) — no `interfaces/mcp/`.
 - [ ] ⚠️ **FR-603** CLI — `start/status/answer/approve/revise/reject/benchmark` ✅
   (`revise` landed with E-7; gate rounds are now derived from the pending item,
@@ -309,7 +309,7 @@ as tracked rather than accidental.
 - [x] **US-3** task escalation → retry-with-guidance/quarantine — guidance reaches same harness session.
 - [x] **US-4** per-project gate config (hard/soft + threshold) — `GateConfig`, no code change.
 - [x] **US-5** dev/reviewer different model family; registry rejects same-family — enforced at boot, against `dev` (the role that actually codes) since `2026-07-16-registry-drives-every-role`.
-- [ ] **US-6** stakeholder one-screen fleet view — no dashboard backend.
+- [x] **US-6** stakeholder one-screen fleet view — `GET /api/runs` plus the `/api/events` SSE stream (E-10).
 - [ ] **US-7** MCP conversational gate approval — no MCP server.
 - [x] **US-8** client connects a repo → readiness verdict + checkable hygiene list (E-41/E-42/E-43/E-44). *Both halves ship: the readiness verdict + `sdlc triage` (E-42), and the per-finding fix-backlog from `mechanical_backlog`, which lands on the `TidyUpReport` even when a repo is not admitted (E-44).*
 - [x] **US-9** client approves a tidy-up backlog → PR per item + before/after delta (E-44). `TidyUpWorkflow` opens a `tidy_up` gate with the backlog rendered, `select_items` narrows it, each accepted item becomes one governed fix run, and `compute_delta` records the before/after.
@@ -328,7 +328,7 @@ as tracked rather than accidental.
 - [x] **ADR-5** Memoization + watermark; auditability/memoization split
 - [x] **ADR-6** Anti-collusion review (model-family inequality, clean-context reviewer) — *the boot check validated `agents.yaml`'s `developer` entry, which nothing ran; `cfg.roles["dev"]` did the coding. Re-aimed at `dev` and the two registries mirror-checked at boot (`2026-07-16-registry-drives-every-role`).*
 - [ ] **ADR-7** Repairs execute through the factory — maintenance loop absent.
-- [ ] ⚠️ **ADR-8** Interfaces as stateless shells — true for CLI; *operator* dashboard backend still absent (E-75). The agent board API (E-78) is a stateful surface by design, not drift: it serves durable cross-run state no live workflow holds. ADR-21 records the exception; ARCHITECTURE.md §8 now scopes the "stateless shells" claim to operator surfaces.
+- [ ] ⚠️ **ADR-8** Interfaces as stateless shells — true for CLI. **Two documented exceptions, both deliberate:** the agent board API (E-78) serves durable cross-run state no live workflow holds (ADR-21); and the dashboard backend (E-10) holds an in-process fleet poller and subscriber set — not durable state, but not a stateless shell either. The poller exists because a per-request fan-out costs `N_clients × N_runs` while one shared poller costs `N_runs`. ARCHITECTURE.md §8 scopes the claim accordingly.
 - [ ] **ADR-9** Two worker pools by capability — single queue.
 - [ ] ⚠️ **ADR-10** Claim-check for large payloads — `ArtifactRef` exists but not load-bearing.
 - [ ] ⚠️ **ADR-11** Deterministic DAG — holds for the 8 live stages; 6 stages absent.
@@ -442,7 +442,7 @@ We track notifications, cross-run inbox, dashboard backend, and MCP server as fo
   `docs/superpowers/specs/2026-07-19-cli-refit-onto-channel-contract-design.md`.
 - [x] **E-8** Cross-run inbox as a query over pending gates (FR-305, FR-603's missing verb) — the first capability the contract buys that we don't already have. *Landed:* `sdlc/channels/inbox.py` (`fetch_inbox`) plus the CLI inbox verb over the existing Layer A/B contract. Plan `docs/superpowers/plans/2026-07-22-cross-run-inbox.md`.
 - [x] **E-9** Notify activity + reminder timer + fallback approver (FR-303). *Landed:* `src/sdlc/notify/` (schedule + routes asset + log/webhook transports + activity), deadline-walking wait in `_gate`, `GATE_NOTIFIED` traced with delivery outcome. `on_timeout` per gate; `merge` holds rather than discarding a green run. Spec `docs/superpowers/specs/2026-07-26-gate-notifications-and-reminder-timers-design.md`, plan `docs/superpowers/plans/2026-07-26-gate-notifications-and-reminder-timers.md`.
-- [ ] **E-10** FastAPI dashboard backend as a channel adapter, replacing the Vue frontend's mock API (FR-601, US-6, ADR-8).
+- [x] **E-10** FastAPI dashboard backend as a channel adapter, replacing the Vue frontend's mock API (FR-601, US-6, ADR-8). *Landed 2026-08-18.* `run_state()` — one query over state the run already held — plus `sdlc/dashboard/{fleet,api,channel}.py`: a lazy shared poller fanning out `run_state()` + `pending_decisions()` across open runs and `run_summary()` across the 20 most recent closed ones, served as REST reads plus an SSE stream. Three write routes, not five: `pending.py`'s four variants already collapse to two FR-302 signals. Spec `docs/superpowers/specs/2026-08-18-dashboard-backend-design.md`.
 - [ ] **E-11** MCP server as a channel adapter — list/detail/inbox/answer/decide/start (FR-602, US-7).
 
 ### 9.3 Schedules as files → FR-404, FR-501
@@ -1248,18 +1248,7 @@ disappears entirely: wrapping a stage in a gate-and-retry loop becomes topology.
   its stage sequence. **Big-bang was chosen over strangler-with-parity** — run
   the benchmark before/after anyway as a regression check; the choice was to not
   *gate* on dual-running, not to discard free evidence.
-- [ ] **E-75 — dashboard backend** → FR-1204. **Closes the "dashboard backend
-  remains" half of P2.** There is no backend today: `api/http.ts:4` rejects every
-  call with *"Dashboard http provider not wired"* and the whole dashboard runs on
-  `api/mock`. Thinner than it looks — live run state needs no database, only two
-  new queries on `GraphWorkflow` (`graph_state()`, `graph()`) beside the existing
-  `status` / `pending_decisions` / `run_summary` (`feature.py:739`–:753). The only
-  storage is content-addressed `graphs/<sha>.yaml`. Gates and answers are the
-  existing signals. ~~**This is the project's first network surface**~~ —
-  **superseded 2026-08-07:** E-78's board API got there first, so OQ-11's auth
-  question is already live and no longer gated on E-75. E-75's own claim that
-  *live run state* needs no database still holds; the board stores durable
-  cross-run state, which is a different concern.
+- [ ] **E-75 — graph queries on the dashboard backend** → FR-1204. **Superseded in part 2026-08-18:** E-10 built the backend, so this narrows to adding `graph_state()` and `graph()` beside the existing queries once `GraphWorkflow` exists. The "dashboard backend remains" half of P2 is closed; what is left here is graph-shaped run state, which needs E-74 first. The only storage is still content-addressed `graphs/<sha>.yaml`.
 - [ ] **E-76 — canvas** → FR-1205. `@vue-flow/core` (React Flow's Vue port, what
   n8n itself uses; fits the existing Vue 3 + Pinia + Vite stack) plus `dagre` for
   auto-layout of YAML-authored graphs. **One renderer, two modes**: `runState`
@@ -1293,6 +1282,12 @@ disappears entirely: wrapping a stage in a gate-and-retry loop becomes topology.
   unauthenticated once anything but localhost can reach them. Localhost-bind with
   no auth is the assumed near-term answer; **E-60** (identity & authorization,
   FR-1004) is where it stops being acceptable.
+  **2026-08-18 (E-10):** a *second* unauthenticated surface now serves, and this
+  one can start runs and approve merge gates. Operator identity is the
+  self-asserted `X-Actor` header landing on `GateDecision.reviewer` — never on
+  `decided_by`, which stays `Literal["human","policy","timeout"]` so
+  `ReadinessOverride.approved_by` keeps distinguishing a machine approval from a
+  human one. Localhost-bind remains the whole containment.
 - **OQ-P5..P8 — prompt-gate sensitivity (E-83).** Tracked in the eval spec's §9
   (`docs/superpowers/specs/2026-08-12-judge-sensitivity-and-plan-adherence-design.md`),
   not duplicated here. **OQ-P5 answered:** the gate has teeth — `scope_dropped`
