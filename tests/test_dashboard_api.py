@@ -58,10 +58,13 @@ def client(snap, submitted, monkeypatch):
             return SubmitResult(confirmed=False, message="still pending")
         return SubmitResult(confirmed=True, message="approved")
 
+    async def fake_handle(poller, run_id):
+        return object()
+
     import sdlc.dashboard.api as mod
     monkeypatch.setattr(mod, "resolve_key", fake_resolve_key)
     monkeypatch.setattr(mod, "submit", fake_submit)
-    monkeypatch.setattr(mod, "_handle", lambda poller, run_id: object())
+    monkeypatch.setattr(mod, "_handle", fake_handle)
 
     app = FastAPI()
     app.include_router(create_router(_FakePoller(snap)))

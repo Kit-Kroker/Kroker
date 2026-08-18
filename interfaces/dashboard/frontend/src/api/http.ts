@@ -193,8 +193,14 @@ export function createHttpApi(baseUrl = '/api'): DashboardApi {
         }),
       })
       const run = (await snapshot()).runs.find((r) => r.id === run_id)
-      if (!run) throw new Error(`started ${run_id} but it is not in the fleet`)
-      return run
+      if (run) return run
+      const nowIso = new Date().toISOString()
+      return {
+        id: run_id, title: input.title, mode: input.mode, repo: input.repo,
+        stageIdx: 0, status: 'running' as const, blocker: '',
+        cost: null, budget: null, age: age(nowIso, new Date(nowIso)),
+        decisions: [],
+      }
     },
 
     subscribe(cb) {

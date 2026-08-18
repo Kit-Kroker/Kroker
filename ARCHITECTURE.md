@@ -297,7 +297,8 @@ poller costs `N_runs`. Operator surfaces still own no durable state.
 - **Dashboard** (FastAPI + single-page UI): fleet rail, 15-stage spine,
   decision inbox (accept-suggestion one-click, inline custom answers,
   approve/reject with comments). Auth via API-key flow + rate limit
-  (fastapi-request-pipeline). 5 s polling v1; SSE later.
+  (fastapi-request-pipeline). Serves an SSE stream (`/api/events`) from a
+  shared lazy poller (E-10); no client polling.
 - **MCP server**: `list_runs, run_detail, decision_inbox, answer_question,
   decide_gate, start_feature` — any MCP client becomes an operator surface.
 - **CLI**: same operations for scripting.

@@ -27,7 +27,6 @@ from ..channels.contract import Reply
 from ..channels.transport import NoMatch, resolve_key, submit
 from ..cli import slug
 from ..models import GateOutcome, IdeaBrief, PipelineConfig, ProjectMode
-from ..worker import TASK_QUEUE
 from .channel import DashboardChannel
 from .fleet import FleetPoller, FleetSnapshot
 
@@ -56,11 +55,9 @@ class StartedRun(BaseModel):
     run_id: str
 
 
-def _handle(poller: FleetPoller, run_id: str):
+async def _handle(poller: FleetPoller, run_id: str):
     """The workflow handle for a run. Indirected so tests can stub it."""
-    client = poller._client
-    if client is None:
-        raise HTTPException(503, "no Temporal client connected")
+    client = await poller._client_or_connect()
     return client.get_workflow_handle(run_id)
 
 
@@ -75,7 +72,7 @@ def create_router(poller: FleetPoller,
     start_run = starter or _default_starter
 
     async def _reply(run_id: str, key: str, reply: Reply, actor: str):
-        handle = _handle(poller, run_id)
+        handle = await _handle(poller, run_id)
         try:
             pending = await resolve_key(handle, key)
         except NoMatch as e:
