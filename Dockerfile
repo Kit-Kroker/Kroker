@@ -1,6 +1,8 @@
 FROM python:3.13-slim AS base
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
         git \
         nodejs \
         npm \
@@ -11,6 +13,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # run_code/merge failures mid-benchmark. Bump both together after re-capturing
 # a fresh transcript and updating the adapter pin.
 RUN npm install -g opencode-ai@1.18.4
+
+# activities.open_pull_request shells out to `gh`, and it is the LAST step of a
+# feature run -- a worker without it fails after build, lint, security, review
+# and every gate have already passed. Pinned for the same reason opencode is:
+# `gh pr create`'s flags and its "print the PR url on stdout" contract are what
+# the activity parses. Installed from the pinned .deb rather than GitHub's apt
+# source, which would re-resolve to a different version on every rebuild.
+ARG GH_VERSION=2.97.0
+RUN arch="$(dpkg --print-architecture)" \
+    && curl -fsSL -o /tmp/gh.deb \
+        "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${arch}.deb" \
+    && dpkg -i /tmp/gh.deb \
+    && rm /tmp/gh.deb
+
+# open_pull_request runs a plain `git push` before it calls gh, so GH_TOKEN has
+# to reach git too. Configured as a credential helper rather than by baking a
+# token into the image (there is none at build time) or rewriting the remote
+# url (which would put the token in `git remote -v` and in every error
+# message): gh resolves GH_TOKEN from the environment at push time. Set here
+# rather than by `gh auth setup-git`, which needs an authenticated gh to run.
+RUN git config --global \
+        "credential.https://github.com.helper" "!gh auth git-credential"
 
 WORKDIR /app
 COPY pyproject.toml ./
