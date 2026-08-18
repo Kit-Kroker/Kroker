@@ -204,11 +204,11 @@
 
 <h1>Agents Schema &amp; Architecture</h1>
 <p class="meta">
-  16 roles total (13 proposers/helpers + 3 harness roles) &middot; <code>agents/&lt;role&gt;/</code> registry &middot;
+  17 roles total (14 proposers/helpers + 3 harness roles) &middot; <code>agents/&lt;role&gt;/</code> registry &middot;
   loader: <code>src/sdlc/agents/loader.py</code> &middot;
   runtime: <code>src/sdlc/agents/roles.py</code> &middot;
   workflow callsites: <code>src/sdlc/workflows/feature.py</code>, <code>src/sdlc/workflows/assessment.py</code> &middot;
-  contract source-of-truth: <code>src/sdlc/models.py</code> &middot; Verified <code>2026-08-16</code> against <code>agents/registry.yaml</code> + <code>agents/</code> + <code>benchmarks/</code>
+  contract source-of-truth: <code>src/sdlc/models.py</code> &middot; Verified <code>2026-08-17</code> against <code>agents/registry.yaml</code> + <code>agents/</code> + <code>benchmarks/</code>
 </p>
 <p class="lede">
   Every role is a folder. The folder name <strong>is</strong> the role name, the API surface, and
@@ -245,6 +245,7 @@
   <a href="#adversary">adversary</a>
   <a href="#handoff">handoff</a>
   <a href="#discover">discover</a>
+  <a href="#risk">risk</a>
   <a href="#filemap" class="major">File map</a>
 </div>
 
@@ -346,7 +347,7 @@
 </div>
 
 <!-- ================================================================ -->
-<h2 id="matrix">Matrix <span class="count">16 roles &times; key attributes</span></h2>
+<h2 id="matrix">Matrix <span class="count">17 roles &times; key attributes</span></h2>
 
 <p>
   Three name spaces are distinct and easy to confuse: <strong>stage</strong> (the workflow's
@@ -393,6 +394,7 @@
       <tr><td class="mono">adversary</td>        <td><span class="pill proposer">proposer</span></td><td class="mono">adversary (non-DAG lens)</td><td class="mono">adversary_agent</td>     <td class="mono">anthropic:claude-sonnet-4-6</td><td class="mono">ReviewReport</td>             <td>&mdash;</td></tr>
       <tr><td class="mono">handoff</td>          <td><span class="pill proposer">proposer</span></td><td class="mono">handoff (non-DAG lens)</td><td class="mono">handoff_agent</td>       <td class="mono">anthropic:glm-5.2</td>     <td class="mono">HandoffSummary</td>          <td>&mdash;</td></tr>
       <tr><td class="mono">discover</td>         <td><span class="pill proposer">proposer</span></td><td class="mono">discover (AssessmentWorkflow)</td><td class="mono">discover_agent</td><td class="mono">anthropic:claude-sonnet-4-5</td><td class="mono">DiscoverProposals</td><td>&mdash;</td></tr>
+      <tr><td class="mono">risk</td>            <td><span class="pill proposer">proposer</span></td><td class="mono">assess (AssessmentWorkflow)</td><td class="mono">risk_agent</td><td class="mono">anthropic:claude-sonnet-4-5</td><td class="mono">RiskProposal</td><td>&mdash;</td></tr>
     </tbody>
   </table>
 </div>
@@ -1595,6 +1597,62 @@ claim_survival_score(kept, dropped) -&gt; Measurement
       <strong>0.10</strong>. Produces a derived domain model (<code>DomainModel</code> projected
       from entity ownership) and single blueprint comparison (<code>BlueprintComparison</code> against
       BIAN / TM Forum / ACORD / HL7).
+    </p>
+  </div>
+</div>
+
+<!-- ################################################################ -->
+<h2 id="risk">16. risk <span class="pill proposer">proposer</span></h2>
+
+<div class="agent-banner">
+  <span class="name">risk</span>
+  <span class="kv">activity: <b>risk_agent</b></span>
+  <span class="kv">stage: <b>assess (AssessmentWorkflow)</b></span>
+  <span class="kv">output: <b>RiskProposal</b></span>
+  <span class="kv">model: <b>anthropic:claude-sonnet-4-5</b></span>
+  <span class="kv">files: <b>agents/risk/{agent.py, agent.yaml, instructions.md}</b></span>
+</div>
+
+<p>
+  Risk proposer for the assess phase of <code>AssessmentWorkflow</code> (E-49). Runs over the
+  deterministic <code>UnifiedRiskMap</code> baseline &mdash; the proposer never authors a number or
+  an edge (RD1): it emits dispositions over rows the deterministic half already produced, tracked
+  in <code>UnifiedRiskMap.judgment</code>. Five disposition families and nothing else: STRIDE
+  threats, vulnerabilities, control coverage, trust boundaries, and privilege-escalation chains.
+</p>
+
+<h3>The contract: <code>RiskProposal</code> <span class="pill asset">sdlc/assessment/risk/models.py</span></h3>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>field</th><th>type</th><th>rule</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">threats</td><td class="mono">list[ProposedThreat]</td><td>STRIDE dispositions per capability, with explicit rationale for inapplicable categories.</td></tr>
+      <tr><td class="mono">vulnerabilities</td><td class="mono">list[ProposedVulnerability]</td><td>confirmed | probable | potential classifications.</td></tr>
+      <tr><td class="mono">controls</td><td class="mono">list[ProposedControl]</td><td>Coverage dispositions across the five control families.</td></tr>
+      <tr><td class="mono">boundaries</td><td class="mono">list[ProposedBoundary]</td><td>Trust-boundary dispositions over code-enumerated candidates (plan 3).</td></tr>
+      <tr><td class="mono">escalations</td><td class="mono">list[ProposedEscalation]</td><td>Privilege-escalation chain dispositions (authentication-gated, RD5).</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="grid-2">
+  <div class="card soft">
+    <h4>Grounding &amp; Byte Verification <span class="pill det">verify_risk_refs</span></h4>
+    <p style="margin:6px 0 0">
+      Every evidence path and quote is byte-verified against the pinned commit via
+      <code>verify_risk_refs</code>, using the row-level verifier lifted to
+      <code>assessment/verification.py</code> (RD6, shared with discover's
+      <code>verify_discover_refs</code>). One fabrication rate over all rows; the citation guard
+      fails closed.
+    </p>
+  </div>
+  <div class="card soft">
+    <h4>Layer-Scoped Degradation <span class="pill warn">RD7 &middot; P2-D2/D3</span></h4>
+    <p style="margin:6px 0 0">
+      A failed or fabricating proposer leaves the deterministic baseline composites measured and
+      degrades <code>UnifiedRiskMap.judgment</code> with distinct, non-converging reasons; the
+      memo store refuses to cache a degraded judgment under a proposer key, so a transient failure
+      costs one recompute rather than freezing an unjudged map into cache.
     </p>
   </div>
 </div>
