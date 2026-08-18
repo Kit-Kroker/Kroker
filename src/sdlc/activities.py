@@ -23,6 +23,7 @@ import defusedxml.ElementTree as DET
 from defusedxml.common import DefusedXmlException
 from pydantic import BaseModel
 from temporalio import activity
+from temporalio.exceptions import ApplicationError
 
 from .assessment.scan.sources import SOURCE_EXTENSIONS
 from .context.delta import DELTA_CHECK, check_delta
@@ -1114,15 +1115,57 @@ class PROpenInput:
 
 @activity.defn
 async def open_pull_request(inp: PROpenInput) -> str:
+    """Push the integration branch and open a PR for it.
+
+    Preconditions first, and both non-retryable: a worker image without `gh`
+    and a worktree without an `origin` are misconfigurations, not blips, so
+    ACT's six attempts with backoff only delay a failure that is already
+    decided. Checking `gh` *before* the push also keeps a missing binary from
+    leaving a pushed branch on the remote with no PR pointing at it.
+
+    `gh` is resolved through shutil.which rather than invoked by name: it is
+    the same lookup the precondition needs, and on Windows CreateProcess
+    appends only `.exe`, so a bare `["gh", ...]` misses a `gh.cmd` that is
+    plainly on PATH.
+
+    `gh pr create` is deliberately left retryable — unlike the preconditions
+    it is a network call to GitHub, where a 5xx is worth another attempt. What
+    must survive either way is the diagnostic: `check=True` raised a
+    CalledProcessError whose str() is "returned non-zero exit status 1", so
+    gh's own message was dropped on the way through Temporal (the hazard
+    `_git`'s docstring documents, one seam over).
+    """
+    gh = shutil.which("gh")
+    if gh is None:
+        raise ApplicationError(
+            "gh CLI not found on PATH: the worker cannot open a pull request "
+            "without it (it is installed in the worker image; a source "
+            "checkout needs it installed separately)",
+            non_retryable=True)
+
+    remote = _git(["remote", "get-url", "origin"], inp.worktree)
+    if remote.returncode != 0:
+        raise ApplicationError(
+            f"no 'origin' remote in {inp.worktree!r}: "
+            f"{remote.stderr.strip() or remote.stdout.strip()}",
+            non_retryable=True)
+
     push = _git(["push", "-u", "origin", "HEAD"], inp.worktree)
     if push.returncode != 0:
         raise RuntimeError(
             f"git push failed: {push.stderr.strip() or push.stdout.strip()}")
+
+    # stdin=DEVNULL for the console-less-worker reason _git documents.
     pr = subprocess.run(
-        ["gh", "pr", "create", "--title", inp.title, "--body", inp.body,
+        [gh, "pr", "create", "--title", inp.title, "--body", inp.body,
          "--base", inp.base_branch],
-        cwd=inp.worktree, check=True, capture_output=True, encoding="utf-8", errors="replace",
+        cwd=inp.worktree, capture_output=True, encoding="utf-8",
+        errors="replace", stdin=subprocess.DEVNULL,
     )
+    if pr.returncode != 0:
+        raise ApplicationError(
+            f"gh pr create failed: "
+            f"{pr.stderr.strip() or pr.stdout.strip()}")
     return pr.stdout.strip()  # PR url
 
 
