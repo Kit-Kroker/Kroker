@@ -36,7 +36,7 @@ describe('fleet store', () => {
 
   it('startRun refreshes the fleet', async () => {
     const fleet = useFleetStore()
-    await fleet.startRun({ title: 'New', repo: '', mode: 'brownfield' })
+    await fleet.startRun({ title: 'New', description: '', repo: '', mode: 'brownfield' })
     expect(fleet.runs).toHaveLength(2)
   })
 })

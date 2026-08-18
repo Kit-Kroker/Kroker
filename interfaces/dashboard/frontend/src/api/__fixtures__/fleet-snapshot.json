@@ -1,0 +1,135 @@
+{
+  "at": "2026-08-18T11:00:00Z",
+  "total_open_runs": 2,
+  "runs": [
+    {
+      "run_id": "feature-add-sso",
+      "title": "Add SSO to customer portal",
+      "repo_url": "git@github.com:acme/portal",
+      "mode": "brownfield",
+      "status": "awaiting:architecture",
+      "current_stage": "architecture",
+      "started_at": "2026-08-18T09:00:00Z",
+      "decisions": [
+        {
+          "gate": "clarify",
+          "round": 1,
+          "outcome": "approve",
+          "decided_by": "human",
+          "reviewer": "human:mika",
+          "comments": "all suggestions accepted",
+          "guidance": null,
+          "decided_at": "2026-08-18T09:00:00Z"
+        }
+      ],
+      "roles": [
+        {
+          "role": "architect",
+          "model": "m",
+          "calls": 2,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "cost_usd": 3.12
+        }
+      ],
+      "cost_usd_total": 3.12,
+      "budget_usd": 40.0,
+      "budget_crossings": 0
+    },
+    {
+      "run_id": "feature-unpriced",
+      "title": "Unpriced run",
+      "repo_url": null,
+      "mode": "greenfield",
+      "status": "running",
+      "current_stage": "code",
+      "started_at": "2026-08-18T09:00:00Z",
+      "decisions": [],
+      "roles": [],
+      "cost_usd_total": null,
+      "budget_usd": null,
+      "budget_crossings": 0
+    }
+  ],
+  "closed": [
+    {
+      "run_id": "feature-dark-mode",
+      "mode": "brownfield",
+      "title": "Dark mode for settings pages",
+      "repo_url": "git@github.com:acme/portal",
+      "outcome": "deployed:ok",
+      "terminal_stage": "retro",
+      "started_at": "2026-08-18T09:00:00Z",
+      "ended_at": "2026-08-18T12:00:00Z",
+      "duration_s": 10800.0,
+      "stages": [],
+      "clarifications": [],
+      "gates": [],
+      "roles": [],
+      "cost_usd_total": 7.88,
+      "budget_usd": null,
+      "budget_crossings": 0,
+      "memory_enabled": false,
+      "memory_watermark": null,
+      "memory_retains": 0
+    }
+  ],
+  "inbox": [
+    {
+      "run_id": "feature-add-sso",
+      "pending": [
+        {
+          "kind": "clarify",
+          "key": "Q1",
+          "question": "Which identity protocol?",
+          "why_it_matters": "no auth abstraction exists",
+          "suggested_answer": "OIDC",
+          "opened_at": "2026-08-18T09:00:00Z"
+        },
+        {
+          "kind": "stage_gate",
+          "key": "architecture#1",
+          "gate": "architecture",
+          "round": 1,
+          "spec_summary": "Adds MeteringService",
+          "opened_at": "2026-08-18T09:00:00Z"
+        },
+        {
+          "kind": "merge_gate",
+          "key": "merge#1",
+          "gate": "merge",
+          "round": 1,
+          "checks": [
+            {
+              "name": "lint",
+              "passed": true,
+              "classification": "absolute",
+              "detail": "clean"
+            },
+            {
+              "name": "diff coverage",
+              "passed": false,
+              "classification": "advisory",
+              "detail": "0.68 - target 0.80"
+            }
+          ],
+          "verdict": "MergeVerdict 0.91 - approve",
+          "opened_at": "2026-08-18T09:00:00Z"
+        },
+        {
+          "kind": "task_escalation",
+          "key": "task:T07#1",
+          "gate": "task:T07",
+          "round": 1,
+          "task_id": "T07",
+          "analysis": "test_retry_budget flakes",
+          "attempts": 3,
+          "opened_at": "2026-08-18T09:00:00Z"
+        }
+      ]
+    }
+  ],
+  "errors": []
+}

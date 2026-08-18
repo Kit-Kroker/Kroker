@@ -18,11 +18,9 @@ export interface Run {
   stageIdx: number
   status: Status
   blocker: string
-  cost: number
-  budget: number
+  cost: number | null
+  budget: number | null
   age: string
-  skipCtx: boolean
-  stageNote: string
   decisions: Decision[]
 }
 
@@ -35,7 +33,6 @@ export interface ClarifyItem {
   title: string
   body: string
   suggestion: string
-  confidence: string
 }
 
 export interface GateItem {
@@ -88,8 +85,15 @@ export type InboxItem =
 
 export interface StartRunInput {
   title: string
+  description: string
   repo: string
   mode: ProjectMode
+}
+
+export interface FleetState {
+  runs: Run[]
+  inbox: InboxItem[]
+  errors: { runId: string; error: string }[]
 }
 
 export interface DashboardApi {
@@ -101,4 +105,5 @@ export interface DashboardApi {
   overrideMerge(id: string, approve: boolean, justification: string): Promise<void>
   resolveEscalation(id: string, retry: boolean, guidance: string): Promise<void>
   startRun(input: StartRunInput): Promise<Run>
+  subscribe(cb: (s: FleetState) => void): () => void
 }

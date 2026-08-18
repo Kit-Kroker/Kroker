@@ -30,7 +30,7 @@ export const useFleetStore = defineStore('fleet', () => {
 
   const blockedCount = computed(() => runs.value.filter((r) => r.status === 'blocked').length)
   const activeCount = computed(() => runs.value.filter((r) => r.status === 'running' || r.status === 'blocked').length)
-  const totalCost = computed(() => +runs.value.reduce((a, r) => a + r.cost, 0).toFixed(2))
+  const totalCost = computed(() => +runs.value.reduce((a, r) => a + (r.cost ?? 0), 0).toFixed(2))
 
   return { runs, loading, lastFetched, refresh, getOrLoad, startRun, blockedCount, activeCount, totalCost }
 })

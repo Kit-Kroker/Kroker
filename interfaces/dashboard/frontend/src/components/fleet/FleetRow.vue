@@ -22,7 +22,7 @@ const meta = computed(() => statusMetaOf(props.run))
       {{ meta.label }}
     </span>
     <span class="blocker">{{ run.blocker || '—' }}</span>
-    <span class="cost">{{ money(run.cost) }}</span>
+    <span class="cost">{{ run.cost == null ? '—' : money(run.cost) }}</span>
     <span class="age">{{ run.age }}</span>
   </RouterLink>
 </template>

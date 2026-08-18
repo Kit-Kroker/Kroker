@@ -17,7 +17,7 @@ async function submit() {
     ui.toast('Title required', '#e0b050')
     return
   }
-  const r = await fleet.startRun({ title, repo: ui.startRepo, mode: ui.startMode })
+  const r = await fleet.startRun({ title, description: '', repo: ui.startRepo, mode: ui.startMode })
   ui.toast(`Run started — ${r.id}`, '#5b9dd9')
   ui.resetStartForm()
   ui.closeStart()

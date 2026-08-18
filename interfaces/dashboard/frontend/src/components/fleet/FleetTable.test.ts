@@ -12,8 +12,8 @@ const RouterLinkStub = {
 
 const mkRun = (over: Partial<Run> = {}): Run => ({
   id: 'feature-x', title: 'A feature', mode: 'brownfield', repo: 'r', stageIdx: 4,
-  status: 'blocked', blocker: 'clarify gate', cost: 3.12, budget: 40, age: '2h', skipCtx: false,
-  stageNote: '', decisions: [], ...over,
+  status: 'blocked', blocker: 'clarify gate', cost: 3.12, budget: 40, age: '2h',
+  decisions: [], ...over,
 })
 
 beforeEach(() => {

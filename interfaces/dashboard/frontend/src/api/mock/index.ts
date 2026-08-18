@@ -1,5 +1,6 @@
 import type {
   DashboardApi,
+  FleetState,
   GateOutcome,
   Run,
   InboxItem,
@@ -13,7 +14,7 @@ import type {
 export function tickCosts(runs: Run[]): Run[] {
   return runs.map((r) =>
     r.status === 'running'
-      ? { ...r, cost: +(r.cost + 0.02 + Math.random() * 0.06).toFixed(2) }
+      ? { ...r, cost: +((r.cost ?? 0) + 0.02 + Math.random() * 0.06).toFixed(2) }
       : r,
   )
 }
@@ -31,8 +32,6 @@ function seedRuns(): Run[] {
       cost: 3.12,
       budget: 40,
       age: '2h 14m',
-      skipCtx: false,
-      stageNote: 'clarify: 2 low-confidence questions routed to human (gate round 1). 4 others auto-answered ≥ 0.95.',
       decisions: [
         { ts: '09:12', gate: 'clarify r1 (partial)', outcome: 'approve', comment: '4 questions auto-answered, confidence ≥ 0.95', decider: 'policy (soft)' },
       ],
@@ -48,8 +47,6 @@ function seedRuns(): Run[] {
       cost: 18.4,
       budget: 60,
       age: '9h 03m',
-      skipCtx: false,
-      stageNote: 'quality_gate: absolutes green · advisory diff coverage 0.68 < 0.80 — awaiting human GateDecision.',
       decisions: [
         { ts: '02:20', gate: 'architecture r1', outcome: 'approve', comment: 'delta grounded in CodebaseMap', decider: 'human · mika' },
         { ts: '03:05', gate: 'plan r1', outcome: 'approve', comment: '7 tasks / 3 waves, DAG valid', decider: 'policy (soft)' },
@@ -67,8 +64,6 @@ function seedRuns(): Run[] {
       cost: 9.75,
       budget: 50,
       age: '4h 41m',
-      skipCtx: true,
-      stageNote: 'code: wave 2/3 — 4 tasks in flight in isolated worktrees, cut from integration head (ADR-14).',
       decisions: [
         { ts: '11:02', gate: 'clarify r1', outcome: 'approve', comment: 'all suggestions accepted', decider: 'human · sam' },
         { ts: '11:38', gate: 'architecture r1', outcome: 'revise', comment: 'split auth from profile service', decider: 'human · sam' },
@@ -87,8 +82,6 @@ function seedRuns(): Run[] {
       cost: 6.2,
       budget: 30,
       age: '6h 27m',
-      skipCtx: false,
-      stageNote: 'qa: T-07 red after 3 resolver attempts — escalated to human (retry-with-guidance | quarantine).',
       decisions: [{ ts: '13:15', gate: 'plan r1', outcome: 'approve', comment: '', decider: 'policy (soft)' }],
     },
     {
@@ -102,8 +95,6 @@ function seedRuns(): Run[] {
       cost: 2.05,
       budget: 45,
       age: '1h 02m',
-      skipCtx: false,
-      stageNote: 'architecture: delta spec awaiting approval (adds MeteringService; 3 contracts added, 0 removed).',
       decisions: [{ ts: '14:30', gate: 'clarify r1', outcome: 'approve', comment: 'auto, confidence 0.96', decider: 'policy (soft)' }],
     },
     {
@@ -117,8 +108,6 @@ function seedRuns(): Run[] {
       cost: 14.02,
       budget: 40,
       age: '11h 50m',
-      skipCtx: false,
-      stageNote: 'retro: RunSummary building; learnings retained to Hindsight.',
       decisions: [
         { ts: '05:12', gate: 'merge r1', outcome: 'approve', comment: 'all checks green', decider: 'policy (soft)' },
         { ts: '06:01', gate: 'deploy r1', outcome: 'approve', comment: 'PR #482 merged, staging deploy', decider: 'human · mika' },
@@ -135,8 +124,6 @@ function seedRuns(): Run[] {
       cost: 7.88,
       budget: 30,
       age: '1d 3h',
-      skipCtx: false,
-      stageNote: '',
       decisions: [
         { ts: 'yday', gate: 'merge r1', outcome: 'approve', comment: '', decider: 'policy (soft)' },
         { ts: 'yday', gate: 'deploy r1', outcome: 'approve', comment: '', decider: 'human · sam' },
@@ -154,7 +141,6 @@ function seedInbox(): InboxItem[] {
       round: 1,
       age: '38m',
       title: 'Q1 — Which identity protocol should SSO support?',
-      confidence: '0.82',
       body: 'The repo has no auth-provider abstraction. Requirements mention "enterprise SSO" but not a protocol; the CodebaseMap shows session middleware in portal/auth/session.py.',
       suggestion: 'OIDC (Authorization Code + PKCE). It fits the existing session middleware; defer SAML to a follow-up run if an enterprise customer requires it.',
     },
@@ -165,7 +151,6 @@ function seedInbox(): InboxItem[] {
       round: 1,
       age: '38m',
       title: 'Q2 — Should password login remain enabled after SSO ships?',
-      confidence: '0.74',
       body: 'US-1 is silent on migration. Disabling password auth immediately would lock out users whose IdP mapping fails on first login.',
       suggestion: 'Keep password auth behind a feature flag for 2 releases, then retire it once SSO adoption is > 95%.',
     },
@@ -265,7 +250,7 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
       })
       const left = inbox.some((i) => i.runId === it.runId && i.type === 'clarify')
       if (!left) {
-        patchRun(it.runId, { status: 'running', stageIdx: 5, blocker: '', stageNote: 'architecture: drafting delta spec from Clarifications @ r1.' })
+        patchRun(it.runId, { status: 'running', stageIdx: 5, blocker: '' })
       }
     },
 
@@ -276,11 +261,11 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
       removeItem(id)
       addDecision(it.runId, { gate: `${it.gate} r${it.round}`, outcome, comment })
       if (outcome === 'approve') {
-        patchRun(it.runId, (r) => ({ status: 'running', stageIdx: r.stageIdx + 1, blocker: '', stageNote: 'gate approved — pipeline resumed.' }))
+        patchRun(it.runId, (r) => ({ status: 'running', stageIdx: r.stageIdx + 1, blocker: '' }))
       } else if (outcome === 'revise') {
-        patchRun(it.runId, { status: 'running', blocker: `revising — round ${it.round + 1}`, stageNote: `revise: producing stage re-entered with your comments (round ${it.round + 1} of MAX_GATE_ROUNDS=2).` })
+        patchRun(it.runId, { status: 'running', blocker: `revising — round ${it.round + 1}` })
       } else {
-        patchRun(it.runId, { status: 'failed', blocker: `rejected at ${it.gate}`, stageNote: 'branch abandoned — rejection recorded with identity + timestamp.' })
+        patchRun(it.runId, { status: 'failed', blocker: `rejected at ${it.gate}` })
       }
     },
 
@@ -291,10 +276,10 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
       removeItem(id)
       if (approve) {
         addDecision(it.runId, { gate: `merge r${it.round}`, outcome: 'approve', comment: `ADVISORY OVERRIDE: ${justification}`, decider: 'human · you (override)' })
-        patchRun(it.runId, { status: 'running', stageIdx: 12, blocker: '', stageNote: 'deploy: DeployPlan proposed — PR opened against main.' })
+        patchRun(it.runId, { status: 'running', stageIdx: 12, blocker: '' })
       } else {
         addDecision(it.runId, { gate: `merge r${it.round}`, outcome: 'revise', comment: justification || 'raise diff coverage to 0.80' })
-        patchRun(it.runId, { status: 'running', stageIdx: 7, blocker: 'revising — coverage', stageNote: 'code: developer session resumed to add coverage for retry/backoff branches.' })
+        patchRun(it.runId, { status: 'running', stageIdx: 7, blocker: 'revising — coverage' })
       }
     },
 
@@ -305,10 +290,10 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
       removeItem(id)
       if (retry) {
         addDecision(it.runId, { gate: 'escalation T-07', outcome: 'approve', comment: `retry w/ guidance: ${guidance || '(none)'}` })
-        patchRun(it.runId, { status: 'running', blocker: 'repair attempt 4 (guided)', stageNote: 'qa: resolver resumed same harness session with your guidance.' })
+        patchRun(it.runId, { status: 'running', blocker: 'repair attempt 4 (guided)' })
       } else {
         addDecision(it.runId, { gate: 'escalation T-07', outcome: 'reject', comment: guidance ? `quarantined: ${guidance}` : 'quarantined' })
-        patchRun(it.runId, { status: 'running', blocker: 'T-07 quarantined', stageNote: 'qa: T-07 quarantined; remaining tasks proceed — plan marked partial.' })
+        patchRun(it.runId, { status: 'running', blocker: 'T-07 quarantined' })
       }
     },
 
@@ -333,12 +318,20 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
         cost: 0.04,
         budget: 40,
         age: 'just now',
-        skipCtx: input.mode === 'greenfield',
-        stageNote: 'requirements: Product agent drafting stories from IdeaBrief.',
         decisions: [],
       }
       runs = [run, ...runs]
       return clone(run)
+    },
+
+    subscribe(cb: (s: FleetState) => void) {
+      // The mock already faked liveness with this timer; a push-shaped
+      // contract is simply more honest about what it was doing.
+      const t = setInterval(() => {
+        runs = tickCosts(runs)
+        cb({ runs: clone(runs), inbox: clone(inbox), errors: [] })
+      }, 4000)
+      return () => clearInterval(t)
     },
 
     dispose() {

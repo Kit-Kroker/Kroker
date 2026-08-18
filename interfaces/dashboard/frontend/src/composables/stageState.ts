@@ -3,10 +3,9 @@ import type { Run } from '../api/types'
 export type StageState = 'done' | 'active' | 'blocked' | 'failed' | 'skipped' | 'pending'
 
 export function stageStateOf(
-  run: Pick<Run, 'stageIdx' | 'status' | 'skipCtx'>,
+  run: Pick<Run, 'stageIdx' | 'status'>,
   i: number,
 ): StageState {
-  if (i === 2 && run.skipCtx) return 'skipped'
   if (i < run.stageIdx) return 'done'
   if (i === run.stageIdx) {
     if (run.status === 'blocked') return 'blocked'

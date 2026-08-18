@@ -15,8 +15,6 @@ const run = (over: Partial<Run>): Run => ({
   cost: 1,
   budget: 10,
   age: '1m',
-  skipCtx: false,
-  stageNote: '',
   decisions: [],
   ...over,
 })
@@ -55,9 +53,6 @@ describe('stageStateOf', () => {
   })
   it('marks the current stage blocked when run is blocked', () => {
     expect(stageStateOf(run({ stageIdx: 5, status: 'blocked' }), 5)).toBe('blocked')
-  })
-  it('skips the context stage for greenfield', () => {
-    expect(stageStateOf(run({ stageIdx: 5, skipCtx: true }), 2)).toBe('skipped')
   })
   it('marks future stages pending', () => {
     expect(stageStateOf(run({ stageIdx: 5 }), 9)).toBe('pending')

@@ -4,7 +4,7 @@ import type { Run } from '../types'
 
 const mk = (over: Partial<Run>): Run => ({
   id: 'x', title: 't', mode: 'brownfield', repo: 'r', stageIdx: 5, status: 'running',
-  blocker: '', cost: 1, budget: 10, age: '1m', skipCtx: false, stageNote: '', decisions: [],
+  blocker: '', cost: 1, budget: 10, age: '1m', decisions: [],
   ...over,
 })
 
@@ -87,7 +87,7 @@ describe('mock api decision flows', () => {
   })
 
   it('startRun slugs the title and prepends the run', async () => {
-    const r = await api.startRun({ title: 'Add SSO to customer portal', repo: '', mode: 'brownfield' })
+    const r = await api.startRun({ title: 'Add SSO to customer portal', description: '', repo: '', mode: 'brownfield' })
     expect(r.id).toBe('feature-add-sso-to-customer')
     expect((await api.listRuns())[0].id).toBe(r.id)
   })

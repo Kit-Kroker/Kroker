@@ -16,7 +16,7 @@ describe('AppHeader', () => {
   it('shows the inbox badge count from the store', () => {
     const inbox = useInboxStore()
     inbox.items = [
-      { id: 'q1', type: 'clarify', runId: 'r', round: 1, age: '1m', title: 't', body: 'b', suggestion: 's', confidence: '0.8' },
+      { id: 'q1', type: 'clarify', runId: 'r', round: 1, age: '1m', title: 't', body: 'b', suggestion: 's' },
       { id: 'g1', type: 'gate', gate: 'merge', runId: 'r', round: 1, age: '1m', title: 't', body: 'b' },
     ] as any
     const fleet = useFleetStore()
