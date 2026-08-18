@@ -109,6 +109,8 @@ def create_router(poller: FleetPoller,
     async def events():
         async def stream():
             last: str | None = None
+            loop = asyncio.get_running_loop()
+            last_emit = loop.time()
             async with poller.subscribe() as q:
                 while True:
                     try:
@@ -118,15 +120,24 @@ def create_router(poller: FleetPoller,
                         # Keeps idle connections alive through proxies and
                         # makes a dead poller detectable.
                         yield ": heartbeat\n\n"
+                        last_emit = loop.time()
                         continue
                     body = snap.model_dump_json()
                     payload = json.loads(body)
                     payload.pop("at", None)
                     fingerprint = json.dumps(payload, sort_keys=True)
                     if fingerprint == last:
-                        continue        # nothing changed but the clock
+                        # Nothing changed but the clock -- but the poller
+                        # is alive, so heartbeat on emit-idle too: an
+                        # unchanged fleet must still see bytes every
+                        # HEARTBEAT_S or proxies drop the connection.
+                        if loop.time() - last_emit >= HEARTBEAT_S:
+                            yield ": heartbeat\n\n"
+                            last_emit = loop.time()
+                        continue
                     last = fingerprint
                     yield f"data: {body}\n\n"
+                    last_emit = loop.time()
 
         return StreamingResponse(stream(), media_type="text/event-stream")
 
