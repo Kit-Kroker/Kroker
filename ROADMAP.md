@@ -93,6 +93,113 @@
   Exit criterion **demonstrated**: `tests/test_e2e_greenfield.py` drives the real `FeatureWorkflow` greenfield `IdeaBrief` → `deployed:` end-to-end in CI, and the `security_no_critical` absolute floor now bites (SC-5). Delivered on `feat/p1-consolidation` (`3cfbe62`…`41c9185`).
 - [ ] ⚠️ **P2** — Brownfield, dashboard + notifications, fix loops, cross-harness review → *first brownfield feature merged via PR*
   Cross-harness review ✅, fix loops ✅, notifications ✅ (E-9), and brownfield ✅ (E-84, 2026-08-15; `CapabilityMap` via E-47a/b/c) all landed. The dashboard backend landed 2026-08-18 (**E-10**, §9.2) — `interfaces/dashboard/api/main.py` now composes the board and dashboard routers, and the frontend's `http` provider serves live Temporal state. **Correction 2026-08-18 — "every part is built" was wrong, and the part that was missing was the *via PR* clause itself.** `open_pull_request` had never executed outside fakes: its only appearance under `tests/` was `fake_open_pull_request`, every e2e reached `deployed:` through `GIT_FAKES`, and benchmark runs short-circuit it by design (`"skipped:benchmark-run-has-no-remote"`), so nothing had ever forced the real branch. Three things were absent, each of which would have killed the demonstration after every gate had already passed: **`gh` was not in the worker image** (the `Dockerfile` apt line installed `git`, `nodejs`, `npm`); **no GitHub credential reached the worker** (`.env` had no `GH_TOKEN`, and `git push` needs one too, not just `gh`); and **the activity reported none of this** — a missing binary raised `FileNotFoundError` that `ACT` retried six times, and `check=True` raised a `CalledProcessError` whose `str()` drops gh's own diagnostic crossing Temporal, the hazard `_git`'s docstring documents one seam over. *Closed 2026-08-18:* pinned `gh` 2.97.0 plus a `!gh auth git-credential` helper in the image, `GH_TOKEN` documented in `.env.example`, non-retryable `gh`/`origin` preconditions checked **before** the push (so a misconfigured worker cannot leave a pushed branch with no PR pointing at it), and the activity's first real-git coverage — `tests/test_open_pull_request.py` and the `docker`-marked `tests/test_worker_image.py`. **The exit criterion — *first brownfield feature merged via PR* — is still a demonstration that has not been run**; what changed is that it can now fail for interesting reasons. One thing to settle before judging it: the pipeline **opens** the PR and never merges it (`activities.py` says so outright), so the `merged-not-deployed:<pr_url>` terminal status means merged *into the integration branch* — the criterion's final merge is an operator action.
+
+  **2026-08-19 — the demonstration was run twice, against this repository, and
+  did not reach the PR step either time. The blocker is no longer plumbing; it
+  is the merge gate's own design.** Both runs built the feature successfully
+  (E-30a, a `GoToolchain` adapter: `src/sdlc/toolchain/adapters.py` +93 and
+  `tests/test_toolchain_go.py` +232, 36 tests, verified passing). Run 1 died at
+  a task gate; run 2 reached the merge gate and was rejected
+  `absolute-gate-failed:build_integration_green,lint_clean,security_no_critical`.
+
+  **The finding that matters: the absolute floor measures the repository, not
+  the change.** `security_scan` takes the whole `integration_worktree`,
+  `lint_cmd()` is `ruff check .`, and the integration test run is the entire
+  suite; only `measure_coverage` is scoped to `changed_files`. On this
+  repository all three fail on `main` itself, before any feature is added:
+  `ruff check .` reports **1142 errors**; the security scan reports **4
+  criticals**, all in pre-existing files, including `tests/test_security_floor.py`
+  — the security floor's *own fixtures*, which contain deliberate fake secrets
+  and `eval()` so that detection can be tested (added by `4805c45`, the commit
+  that built the floor); and two tests fail (see below). Absolute checks are
+  never overridable by design (`gate.py:86`), so **no operator can pass this
+  gate, and no brownfield change can ship into a repository carrying any lint
+  debt or scanner false positive** — which is every real brownfield repository.
+  For greenfield this is correct, because the repo *is* the change. P2 inherits
+  a floor built for P1. Scoping lint and security to the diff, the way
+  `measure_coverage` already is, changes what SC-5's security floor *means* and
+  needs its own spec — it is not a patch.
+
+  Five further defects, each of which needed a real repository, a real worker
+  image, or a real operator decision to appear — none was reachable by the
+  existing suite:
+
+  - **The per-task gate could not honour REVISE** — *fixed*, `477635e`, with
+    `tests/test_task_gate_revise_loop.py` (the first coverage this path has
+    ever had). `_dev_task` branched on `decision.approved`, which is False for
+    both reject and revise — the exact confusion `GateDecision.approved`'s
+    docstring warns callers about — so guidance was recorded in
+    `TaskResult.notes` and the task quarantined anyway. Since any quarantined
+    task fails the run, APPROVE was the only outcome a run could survive, from
+    a gate whose comment promised "accept, retry, or quarantine". This killed
+    run 1 after 4h09m. Now bounded by `max_gate_rounds` exactly as
+    `_revisable_stage` bounds the stage gates, and exercised live in run 2:
+    three revisions were issued across three tasks and every one was honoured.
+  - **A task's own tests never ran, and the gate reported on them anyway** —
+    the planner authored `pytest tests/ -x -q`; `-x` aborted at an unrelated
+    failing test sorting alphabetically *before* the task's own file, so across
+    four attempts the Go adapter's tests executed **zero times**. `QAReport`
+    cannot express this: it says `tests_passed: false`, true of the suite and
+    silent about the task. **This is E-30's `CoverageReport` problem one layer
+    up** — that contract already separates `measured: bool` from a zero;
+    `QAReport` has no way to distinguish "failed" from "never ran". The reviewer
+    caught it unprompted, on a diff it was otherwise approving.
+  - **The retry prompt carries no diagnostic.** `QAReport.issues` keeps the last
+    2000 characters of output, which on this repository is entirely PydanticAI
+    deprecation warnings, so the traceback is truncated away and every retry
+    prompt contains the failing test's *name* and nothing else. Four consecutive
+    tasks — documentation, adapter, tests, CI — none touching the relevant code,
+    responded by attacking the named test file, each widening further: editing
+    the test, rewriting git handling in `activities.py`, then adding an
+    `OSError`-swallowing retry helper that would have masked real defects in the
+    checkpoint path. That is one broken signal reproducing the same failure four
+    times, not four agents behaving badly. Nothing tells an agent its diff has
+    left its assigned files; the reviewer says so only after every attempt is
+    spent. **Cheapest high-value fix on this list.**
+  - **A contract authored from a false premise cannot be retired.** The planner
+    asserted that CI existed and must include the new test paths; there is no
+    `.github/workflows` on `main`, and `scan_ci` had already established that.
+    The task was then unsatisfiable by construction: the agent invented a CI
+    workflow (reverted for scope), and the correct empty diff cannot satisfy
+    assertions about a file that should not exist. Only an operator override or
+    quarantine — which fails the run — can clear it. The adapters' degrading
+    defaults solve exactly this problem one layer down; contracts have no way to
+    mark an assertion *inapplicable* rather than unmet.
+  - **`project()` runs in the workflow thread and can trip Temporal's deadlock
+    detector.** `_context` projects thirteen scan signals inside the workflow;
+    on this repository's ~300KB payload that exceeded the 2s no-yield bound and
+    raised `TMPRL1101`. It is load-*order* dependent: run 1 failed when two large
+    results landed in one activation, run 2 passed on identical data because they
+    arrived spread out. It self-heals via retry, so **a green run is not evidence
+    it is absent**. The fix is a seam move — `project()` is pure and belongs
+    behind an activity like the signals it consumes.
+
+  Also observed: `pytest-cov` is **not installed in the worker image**, so
+  `test_cmd(coverage=True)` always raises a usage error and
+  `run_integration_checks` always falls back to the uninstrumented command —
+  E-30's coverage instrumentation cannot function as deployed (it degrades
+  honestly, naming the reason, rather than reporting a false zero). The planner
+  emitted one task with an empty description, and authored contract commands
+  using `pip install -e .`, which `PythonToolchain.install_cmd` rejects in terms
+  ("writes `*.egg-info` into the tree under audit") and which duly left
+  `src/ai_sdlc_temporal.egg-info` in the worktree. No mechanism tracks which task
+  owns which file, so one task delivered a later task's deliverable under a
+  different filename and the branch carried duplicate coverage of one class until
+  an operator caught it. And `tests/test_coding_task_checkpoint.py::test_checkpoint_survives_dubious_ownership`
+  is **flaky inside pipeline runs specifically** — 5/5 failures in runs, 7/7
+  passes on direct re-runs including under the exact contract command on pristine
+  code. Five hypotheses were tested and eliminated (environmental, pre-existing,
+  concurrent `pip install -e .`, the contract command, ambient `GIT_*` differing
+  between the worker process and an exec shell — verified byte-identical). It
+  remains unexplained.
+
+  **What the two runs cost and bought:** roughly nine hours and two full runs,
+  no PR. One defect fixed, six recorded with evidence, and the reason P2 has
+  never been demonstrated is now understood and is architectural rather than
+  incidental. A proposed `_git_env()` fix from one of the agents — stripping
+  ambient `GIT_*` from git subprocesses, a real silent-hijack hazard — was
+  reverted for scope and timing and is worth its own branch and tests; it does
+  **not** explain the flake (tested).
 - [ ] ⚠️ **P3** — Hindsight memory + confidence-gated soft gates → *SC-4 and SC-6 measurable*
   Memory (recall/retain/watermark) ✅ and soft gates ✅ done; SC-4/SC-6 not yet measurable (need retro/reflect wiring + real runs). **The retro stage that makes them measurable is E-32** (§9.8); the on/off memory delta is the measurement E-31/E-33 exist to run.
 - [ ] **P4** — MCP surface, maintenance loop (DAPER), fleet scale → *SC-1..3 at target*
