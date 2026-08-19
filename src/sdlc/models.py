@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Literal
 
 from pydantic import (
@@ -229,12 +229,32 @@ class IdeaBrief(BaseModel):
     constraints: list[str] = Field(default_factory=list)
 
 
+class ClarificationDimension(StrEnum):
+    """SWE-RPG's practitioner-derived clarification taxonomy (E-85 §1.2).
+
+    Stands in for MAC's five MultiWOZ domains: "implement a software feature"
+    is one domain in MAC's terms, so our experts specialise by the KIND of
+    ambiguity they resolve rather than by business domain.
+    """
+    FUNCTIONAL_INTENT  = "C1"   # the core behaviour change needed
+    BUSINESS_SEMANTICS = "C2"   # domain rules and constraints
+    TECHNICAL_CONTEXT  = "C3"   # architectural and dependency considerations
+    INTERFACE_SPEC     = "C4"   # API contracts and signatures
+    CODE_STRUCTURE     = "C5"   # repository patterns and conventions
+    DATA_SEMANTICS     = "C6"   # data invariants and constraints
+
+
 class OpenQuestion(BaseModel):
     id: str
     question: str
     why_it_matters: str
     suggested_answer: str | None = None
     answer: str | None = None              # filled by human (or auto)
+    # E-85: additive only -- a pre-E-85 artifact must still validate.
+    dimension: ClarificationDimension | None = None
+    asked_by: str | None = None            # "supervisor" | "probe:C4"
+    materiality: float | None = Field(default=None, ge=0.0, le=1.0)
+    evidence: str | None = None            # repo path/symbol grounding it
 
 
 class ClarifiedRequirements(BaseModel):
@@ -244,6 +264,11 @@ class ClarifiedRequirements(BaseModel):
     out_of_scope: list[str]
     open_questions: list[OpenQuestion]
     spec_ref: ArtifactRef | None = None
+    # E-85: what actually ran, and what the cap cut. `dropped` is what makes
+    # the cap honest -- without it, capping and being incurious are
+    # indistinguishable in the record.
+    dimensions_probed: list[ClarificationDimension] = Field(default_factory=list)
+    dropped: list[OpenQuestion] = Field(default_factory=list)
 
 
 class ArchitectureDecision(BaseModel):
@@ -1160,6 +1185,7 @@ class ClarificationOutcome(BaseModel):
     question_id: str
     question: str
     answered_by: Literal["human", "suggested", "unanswered"]
+    dimension: ClarificationDimension | None = None   # E-85
 
 
 class GateOutcomeSummary(BaseModel):
