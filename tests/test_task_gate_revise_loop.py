@@ -41,7 +41,7 @@ from sdlc.observability.activities import export_run_artifacts
 from tests.fakes.canned import (
     AGENT_SPECS, QUESTION_IDS, e2e_config, greenfield_idea,
 )
-from tests.fakes.fake_activities import GIT_FAKES
+from tests.fakes.fake_activities import git_fakes_except
 
 with workflow.unsafe.imports_passed_through():
     from sdlc.workflows.deployment import DeploymentWorkflow
@@ -106,11 +106,8 @@ async def _noop_notify(inp: NotifyInput) -> Results:
 
 def _scripted_fakes():
     """GIT_FAKES with the coding/QA pair swapped for the scripted ones."""
-    replaced = {"run_coding_task", "run_test_suite"}
-    kept = [f for f in GIT_FAKES
-            if getattr(f, "__temporal_activity_definition").name
-            not in replaced]
-    return [*kept, scripted_coding_task, scripted_test_suite]
+    return [*git_fakes_except("run_coding_task", "run_test_suite"),
+            scripted_coding_task, scripted_test_suite]
 
 
 def _cfg(max_fix_attempts: int = 1, max_gate_rounds: int = 2):

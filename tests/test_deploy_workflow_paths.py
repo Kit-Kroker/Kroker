@@ -14,7 +14,6 @@ from temporalio.worker import Worker
 from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 
 from sdlc.activities import evaluate_gate
-from sdlc.artifacts.retention import RetentionInput
 from sdlc.models import (
     GateConfig, GateDecision, GateOutcome, GatePolicy, SmokeState,
 )
@@ -31,14 +30,6 @@ with workflow.unsafe.imports_passed_through():
     from tests.fakes.fake_agents import fake_agent_activities
 
 pytestmark = [pytest.mark.temporal, pytest.mark.asyncio]
-
-
-@activity.defn(name="apply_session_retention")
-async def _noop_retention(inp: RetentionInput) -> str:
-    # Retro calls this; without it the workflow blocks on the activity and the
-    # run_summary query never resolves. A no-op lets retro complete so the
-    # summary (built before this call) is queryable.
-    return "kept:0"
 
 
 async def _wait_for_status(handle, target, timeout_s=15.0):
@@ -76,7 +67,6 @@ async def _run(cfg, tmp_path, monkeypatch, tag, driver=None):
         async with Worker(env.client, task_queue=tag,
                           workflows=[FeatureWorkflow, DeploymentWorkflow],
                           activities=[evaluate_gate, export_run_artifacts,
-                                      _noop_retention,
                                       *GIT_FAKES, *DEPLOY_FAKES,
                                       *fake_agent_activities(AGENT_SPECS)],
                           plugins=[PydanticAIPlugin()]):

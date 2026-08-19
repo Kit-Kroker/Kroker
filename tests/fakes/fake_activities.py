@@ -172,3 +172,17 @@ GIT_FAKES = [
     price_usage,   # E-33: real activity — pure local table lookup, no network
     *BOARD_FAKES,
 ]
+
+
+def git_fakes_except(*names: str) -> list:
+    """GIT_FAKES minus the named activities, for a test that registers its
+    own version of one (a recorder, or a scripted failure).
+
+    Registering both raises "More than one activity named ..." inside
+    Worker(), which is *construction* — it happens before any workflow code
+    runs, so the test fails on an error that names neither the test nor the
+    behaviour under test. Three modules broke exactly this way and stayed
+    broken, because `temporal` is an opt-in marker the default run skips.
+    """
+    return [f for f in GIT_FAKES
+            if f.__temporal_activity_definition.name not in names]

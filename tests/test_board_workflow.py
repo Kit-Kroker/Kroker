@@ -28,7 +28,6 @@ from sdlc.board.store import BoardStore
 from sdlc.models import GateConfig, GateDecision, GateOutcome, GatePolicy
 from sdlc.notify.contract import NotifyInput, Results
 from sdlc.observability.activities import export_run_artifacts
-from sdlc.artifacts.retention import RetentionInput
 from temporalio import activity
 from tests.fakes.canned import AGENT_SPECS, e2e_config, greenfield_idea
 from tests.fakes.fake_activities import BOARD_FAKES, GIT_FAKES
@@ -46,11 +45,6 @@ PROJECT = "default"   # PipelineConfig.project_key default
 # The real board activities, swapped in for the no-op fakes GIT_FAKES carries.
 BOARD_REAL = [publish_artifact_version, sync_plan_tasks,
               set_task_authoritative, attach_task_evidence]
-
-
-@activity.defn(name="apply_session_retention")
-async def _noop_retention(inp: RetentionInput) -> str:
-    return "kept:0"
 
 
 @activity.defn(name="notify")
@@ -109,7 +103,7 @@ async def test_shipped_run_publishes_artifacts_tasks_and_evidence(board_env):
                 env.client, task_queue=tag,
                 workflows=[FeatureWorkflow, DeploymentWorkflow],
                 activities=[evaluate_gate, export_run_artifacts,
-                            _noop_retention, _noop_notify,
+                            _noop_notify,
                             *_git_fakes_without_board(), *DEPLOY_FAKES,
                             *fake_agent_activities(AGENT_SPECS),
                             *BOARD_REAL],
@@ -168,7 +162,7 @@ async def test_rejected_architecture_records_rejected_and_keeps_pointer(
                     env.client, task_queue=tag,
                     workflows=[FeatureWorkflow, DeploymentWorkflow],
                     activities=[evaluate_gate, export_run_artifacts,
-                                _noop_retention, _noop_notify,
+                                _noop_notify,
                                 *_git_fakes_without_board(), *DEPLOY_FAKES,
                                 *fake_agent_activities(AGENT_SPECS),
                                 *BOARD_REAL],

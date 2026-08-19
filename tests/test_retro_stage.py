@@ -17,7 +17,7 @@ from sdlc.models import GateDecision, GateOutcome
 from sdlc.artifacts.retention import RetentionInput
 from sdlc.observability.activities import RunExportInput, export_run_artifacts
 from tests.fakes.canned import AGENT_SPECS, QUESTION_IDS, e2e_config, greenfield_idea
-from tests.fakes.fake_activities import GIT_FAKES
+from tests.fakes.fake_activities import GIT_FAKES, git_fakes_except
 from tests.fakes.fake_deploy import DEPLOY_FAKES, reset as reset_deploy
 
 with workflow.unsafe.imports_passed_through():
@@ -172,8 +172,12 @@ async def test_retention_invoked_keep_full_on_rejected_path(tmp_path, monkeypatc
     the export_run_artifacts fake-activity idiom used above."""
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
     del _RECORDED_RETENTION[:]
+    # _record_retention REPLACES the GIT_FAKES no-op: this test asserts on
+    # what apply_session_retention received, so the recorder must be the one
+    # that runs -- and registering both is a Worker construction error.
     activities = [evaluate_gate, export_run_artifacts, _record_retention,
-                  *GIT_FAKES, *fake_agent_activities(AGENT_SPECS)]
+                  *git_fakes_except("apply_session_retention"),
+                  *fake_agent_activities(AGENT_SPECS)]
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
         with env.auto_time_skipping_disabled():
