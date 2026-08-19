@@ -1152,6 +1152,15 @@ class PipelineConfig(BaseModel):
                                             # changes hot-path outcomes and
                                             # costs a call per approving
                                             # attempt. Swept as a benchmark arm.
+    clarify_probes_enabled: bool = False    # E-85: off by default; the
+                                            # default pipeline stays the
+                                            # single-call clarifier.
+    clarify_question_cap: int = Field(default=5, ge=1)   # E-85 D9: hard cap
+                                            # on the batch a human sees. MAC
+                                            # held latency with "one
+                                            # clarification per turn"; our
+                                            # unit is a human blocking on
+                                            # gate_timeout_hours.
     coverage_threshold: float = Field(default=0.0, ge=0.0, le=100.0)
     # FR-106: diff-scoped coverage (0..100) the advisory `coverage` check must
     # clear. Default 0.0 = effectively off until a project opts in AND its test
