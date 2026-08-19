@@ -1377,7 +1377,15 @@ class FeatureWorkflow(GateHost):
         session_id: str | None = None
         resumes = 0
         run = None
-        for attempt in range(1, cfg.max_fix_attempts + 2):
+        attempt = 0
+        # Attempts available before the escalation gate fires. A REVISE at
+        # that gate grants exactly one more (see the escalation below), the
+        # same "one producer re-run per round" rule _revisable_stage applies
+        # to the stage gates.
+        budget = cfg.max_fix_attempts + 1
+        gate_round = 0
+        while True:
+            attempt += 1
             _attempt_started = workflow.now()
             self._emit(RunEventKind.FIX_ATTEMPT, stage="code",
                        task_id=task.id, attempt=str(attempt))
@@ -1579,11 +1587,9 @@ class FeatureWorkflow(GateHost):
                 # still bounds it, and exhaustion enters the existing
                 # accept / retry-with-guidance / quarantine gate unchanged.
 
-            if attempt > cfg.max_fix_attempts:
-                break
-
-            issues = _fix_loop_issues(qa, qa_raw, review, adversary)
-            if not issues:
+            issues = ("" if attempt >= budget
+                      else _fix_loop_issues(qa, qa_raw, review, adversary))
+            if attempt < budget and not issues:
                 # The task failed its gate, yet neither judge produced a
                 # single actionable statement — there is nothing to put in a
                 # retry prompt, so re-attempting only re-rolls the dice at
@@ -1595,7 +1601,64 @@ class FeatureWorkflow(GateHost):
                     "task %s attempt %s failed with no actionable feedback "
                     "(qa_raw.tests_passed=%s) - abandoning fix loop",
                     task.id, attempt, qa_raw.tests_passed)
-                break
+                budget = attempt          # nothing to retry on → escalate now
+
+            if attempt >= budget:
+                # Escalate: the human accepts, asks for a revision, or
+                # quarantines. REVISE must be read off `outcome`, never off
+                # `decision.approved` — that property is False for BOTH
+                # reject and revise (its own docstring says callers who must
+                # distinguish read `outcome`), and collapsing the two here
+                # made APPROVE the only outcome a run could survive.
+                #
+                # The analysis carries the SAME evidence the fix loop got — a
+                # human asked to adjudicate a task whose only real failure was
+                # a red test command must be shown that command's output, not
+                # an empty list.
+                gate_round += 1
+                analysis = _fix_loop_issues(qa, qa_raw, review) if qa else ""
+                decision = await self._gate(
+                    f"task:{task.id}", cfg.gate_settings(), round=gate_round,
+                    context=GateContext(task_id=task.id, analysis=analysis,
+                                        attempts=attempt))
+                if (decision.outcome is GateOutcome.REVISE
+                        and gate_round <= cfg.max_gate_rounds):
+                    # Bounded exactly like _revisable_stage: one more attempt
+                    # per granted round, then the gate is asked again. Past
+                    # max_gate_rounds the final gate decides accept-anyway vs
+                    # quarantine, so revise can never loop forever.
+                    guidance = decision.guidance or decision.comments or ""
+                    budget = attempt + 1
+                    # Fresh session: the operator is redirecting the work, and
+                    # the prior session is anchored to the approach they just
+                    # rejected.
+                    session_id = None
+                    prompt = (
+                        stack_directive
+                        + f"Task: {task.title}\n{task.description}\n"
+                        + "An operator reviewed the previous attempts and "
+                        "asked for these changes:\n"
+                        + f"{guidance}\n"
+                        + "Contract:\n- " + "\n- ".join(assertions)
+                    )
+                    continue
+                deep = await self._run_deep_review(
+                    cfg, run, contract, assertions, diff, task)
+                return TaskResult(
+                    task_id=task.id,
+                    status="done" if decision.approved else "quarantined",
+                    # `attempt`, not the ceiling: the loop can exit early when
+                    # it has no actionable feedback to retry on, and the
+                    # benchmark's fix_attempts column has to reflect what was
+                    # actually spent.
+                    attempts=attempt,
+                    branch=handle.branch,
+                    qa=qa_raw,
+                    review=review,
+                    deep_review=deep,
+                    notes=decision.comments or "",
+                )
+
             await self._retain(
                 cfg, MemoryKind.GOTCHA, cfg.memory.project_bank,
                 text=f"task {task.id} ({task.title}) attempt {attempt} failed: "
@@ -1634,31 +1697,6 @@ class FeatureWorkflow(GateHost):
                     + f"Unmet contract assertions:\n- {issues}\n"
                     "Contract:\n- " + "\n- ".join(assertions)
                 )
-
-        # Escalate: human decides whether to accept, retry, or quarantine.
-        # The analysis carries the SAME evidence the fix loop got — a human
-        # asked to adjudicate a task whose only real failure was a red test
-        # command must be shown that command's output, not an empty list.
-        analysis = _fix_loop_issues(qa, qa_raw, review) if qa else ""
-        decision = await self._gate(
-            f"task:{task.id}", cfg.gate_settings(),
-            context=GateContext(task_id=task.id, analysis=analysis,
-                                attempts=attempt))
-        deep = await self._run_deep_review(
-            cfg, run, contract, assertions, diff, task)
-        return TaskResult(
-            task_id=task.id,
-            status="done" if decision.approved else "quarantined",
-            # `attempt`, not the ceiling: the loop can now exit early when it
-            # has no actionable feedback to retry on, and the benchmark's
-            # fix_attempts column has to reflect what was actually spent.
-            attempts=attempt,
-            branch=handle.branch,
-            qa=qa_raw,
-            review=review,
-            deep_review=deep,
-            notes=decision.comments or "",
-        )
 
     # ------------------------------ run ---------------------------------
 
