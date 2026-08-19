@@ -727,12 +727,65 @@ async def run_test_suite(inp: QAInput) -> QAReport:
         return QAReport(tests_passed=True, failing_tests=[], issues=[])
     issues: list[str] = []
     if proc.returncode != 0:
-        issues = [out[-2000:]]
+        issues = [_diagnostic_slice(out)]
         if provisioning:
             issues.insert(0, provisioning)
     return QAReport(tests_passed=proc.returncode == 0,
                     failing_tests=failing[:50],
-                    issues=issues)
+                    issues=issues,
+                    stopped_early=_stopped_early(out))
+
+
+_FAILURES_BANNER = "= FAILURES ="
+_WARNINGS_BANNER = "= warnings summary ="
+_SUMMARY_BANNER = "= short test summary info ="
+_STOP_MARKER = "stopping after"
+_QA_OUTPUT_MAX = 2000
+
+
+def _stopped_early(out: str) -> bool:
+    """Whether the runner aborted before the end of the suite.
+
+    pytest announces it: ``!!!! stopping after 1 failures !!!!`` for both -x
+    and --maxfail. Anything after the stopping point never ran.
+    """
+    return _STOP_MARKER in out
+
+
+def _diagnostic_slice(out: str, limit: int = _QA_OUTPUT_MAX) -> str:
+    """The part of a test run that explains the failure, within `limit`.
+
+    pytest orders its output FAILURES (tracebacks) -> warnings summary ->
+    short test summary info, so keeping the TAIL keeps warnings and discards
+    tracebacks. On this repository the warnings block alone exceeds the whole
+    budget, which left every retry prompt carrying a failing test's name and
+    no diagnostic at all -- and four consecutive tasks responded by guessing
+    at the named file, each widening further than the last (P2 demonstration,
+    2026-08-19).
+
+    So: prefer the FAILURES section, and reserve room for the short summary
+    because it names *every* failing test while the traceback shows only what
+    fits. Within the failures section the tail is the useful end -- that is
+    where the assertion and the exception live.
+
+    Falls back to the plain tail when there is no FAILURES section, which is
+    any non-pytest runner (FR-803 lets a contract name any test command) and
+    also a collection error, where the traceback is already at the end.
+    """
+    start = out.find(_FAILURES_BANNER)
+    if start == -1:
+        return out[-limit:]
+    rest = out[start:]
+
+    summary_at = rest.find(_SUMMARY_BANNER)
+    warnings_at = rest.find(_WARNINGS_BANNER)
+    ends = [i for i in (warnings_at, summary_at) if i != -1]
+    failures = rest[:min(ends)] if ends else rest
+
+    # A third of the budget is plenty for the summary's one line per test, and
+    # never lets it crowd out the tracebacks the way the warnings block did.
+    summary = rest[summary_at:][:limit // 3] if summary_at != -1 else ""
+    return failures[-max(limit - len(summary), 0):] + summary
 
 
 @dataclass
@@ -1096,7 +1149,8 @@ async def run_integration_checks(
     failing = [ln.split(" ")[0] for ln in out.splitlines()
                if ln.startswith("FAILED")]
     qa = QAReport(tests_passed=code == 0, failing_tests=failing[:50],
-                  issues=[] if code == 0 else [out[-2000:]])
+                  issues=[] if code == 0 else [_diagnostic_slice(out)],
+                  stopped_early=_stopped_early(out))
 
     lcode, ldetail = await _bounded_shell(
         adapter.lint_cmd(), inp.worktree, inp.lint_timeout_s, env=env)

@@ -427,6 +427,19 @@ def _fix_loop_issues(qa, qa_raw, review, adversary=None) -> str:
         if qa_raw.failing_tests:
             deterministic.append(
                 "failing tests: " + ", ".join(qa_raw.failing_tests[:25]))
+        if qa_raw.stopped_early:
+            # Without this the agent reads a truncated run as the whole
+            # story and starts fixing the one test it was shown. In the P2
+            # demonstration that test was unrelated to every task that
+            # attacked it, and the tasks' own tests -- sorting after it --
+            # never ran at all.
+            deterministic.append(
+                "NOTE: the test run STOPPED EARLY (-x / --maxfail), so tests "
+                "ordered after the failure above did not run. This is a "
+                "partial result, not a verdict on your work: the failure "
+                "shown may be unrelated to your task, and your own tests may "
+                "not have executed. Check whether it is yours before "
+                "changing it.")
     review_issues = [
         f"{f.severity}: {f.assertion} — {f.detail}"
         for r in (review, adversary) if r is not None

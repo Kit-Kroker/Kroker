@@ -487,6 +487,14 @@ class QAReport(BaseModel):
                                              # different language/runtime
                                              # than the contract's frozen
                                              # stack, not merely incomplete
+    # The runner aborted before the end of the suite (-x / --maxfail). Tests
+    # ordered after the stopping point DID NOT RUN, which is a different fact
+    # from "they ran and failed" -- the same distinction CoverageReport draws
+    # with `measured` (E-30/FR-915). Without it a task whose own tests sort
+    # after an unrelated failure receives a verdict on evidence that was never
+    # collected (P2 demonstration, 2026-08-19: a Go adapter's 23 tests never
+    # executed across four attempts while QA reported tests_passed=False).
+    stopped_early: bool = False
     report_ref: ArtifactRef | None = None
 
 
