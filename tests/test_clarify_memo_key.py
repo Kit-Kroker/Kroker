@@ -1,34 +1,107 @@
-"""The memo key must move when a probe prompt moves, and must NOT move when
-the flag is off.
+"""The clarify memo key must move when the fan-out's inputs move, and must
+NOT move when the flag is off.
 
-Without the first, editing a probe serves a stale clarification silently.
-Without the second, landing E-85 invalidates every existing clarify memo even
-though the flag-off prompt did not change -- which is what "the default
-pipeline is byte-identical to today" rules out."""
+Without the first, editing a probe -- or retuning the cap -- serves a stale
+clarification silently. Without the second, landing E-85 invalidates every
+existing clarify memo even though the flag-off prompt did not change, which is
+what "the default pipeline is byte-identical to today" rules out.
+
+The unit under test is `_clarify_memo_extra`, the workflow's own helper, NOT
+`content_key`. Asserting on hand-built key strings would pass unchanged if the
+stage stopped appending the extra altogether; asserting on the helper the
+stage actually calls is what makes the constraint executable. The content_key
+tests at the bottom pin the one remaining thing the helper cannot: that a
+non-empty extra really does move a key, i.e. that the term is load-bearing.
+"""
+from __future__ import annotations
+
+import pytest
+
+from sdlc.assessment.scan.models import Confidence
 from sdlc.clarify.prompts import probe_prompt_digest
+from sdlc.context.models import CodebaseMap, MapModule
+from sdlc.measurement import Measurement
 from sdlc.memoization.cache import content_key
+from sdlc.models import PipelineConfig
+from sdlc.workflows.feature import _clarify_memo_extra
 
+
+def _map(name: str = "cap001", tree: str = "t1") -> CodebaseMap:
+    ok = Measurement.measured(1.0)
+    return CodebaseMap(
+        tree_hash=tree, commit_sha="c" * 40,
+        modules=(MapModule(name=name, member_paths=("src/a.py",),
+                           confidence=Confidence.LOW),),
+        modules_collected=ok, contracts_collected=ok,
+        hot_spots_collected=ok, collected=ok)
+
+
+def _cfg(**kw) -> PipelineConfig:
+    return PipelineConfig(clarify_probes_enabled=True, **kw)
+
+
+# ---- flag off: nothing is appended, at all ----------------------------
+
+@pytest.mark.parametrize("cmap", [None, _map()])
+def test_the_flag_off_extra_is_empty_with_or_without_a_tree(cmap):
+    """The binding guarantee. An empty string concatenates to the identity,
+    so a flag-off run keys exactly as it did pre-E-85 and every memo written
+    before E-85 landed still hits."""
+    assert _clarify_memo_extra(PipelineConfig(), cmap) == ""
+
+
+def test_the_default_config_is_flag_off():
+    # If this ever flips, the assertion above stops meaning anything.
+    assert PipelineConfig().clarify_probes_enabled is False
+
+
+# ---- flag on: every input that changes the answer moves the key -------
+
+def test_turning_the_flag_on_appends_the_probe_digest():
+    extra = _clarify_memo_extra(_cfg(), _map())
+    assert extra != ""
+    assert probe_prompt_digest() in extra
+
+
+def test_a_different_tree_moves_the_extra():
+    assert _clarify_memo_extra(_cfg(), _map(name="cap001")) \
+        != _clarify_memo_extra(_cfg(), _map(name="cap999"))
+
+
+def test_the_same_tree_and_prompts_hit_the_same_extra():
+    assert _clarify_memo_extra(_cfg(), _map()) \
+        == _clarify_memo_extra(_cfg(), _map())
+
+
+def test_a_different_cap_moves_the_extra():
+    """Spec section 10 names the cap as the first knob the benchmark tunes.
+    The cap decides which questions reach a human and which land on
+    `dropped`, so a memo made under cap=3 is not the cap=8 artifact."""
+    assert _clarify_memo_extra(_cfg(clarify_question_cap=3), _map()) \
+        != _clarify_memo_extra(_cfg(clarify_question_cap=8), _map())
+
+
+def test_greenfield_has_no_tree_but_still_keys_stably():
+    """codebase_map is None for a greenfield run. The term must be a stable
+    sentinel, not a crash and not an empty string that would collide with
+    the flag-off key."""
+    greenfield = _clarify_memo_extra(_cfg(), None)
+    assert greenfield == _clarify_memo_extra(_cfg(), None)
+    assert greenfield != ""
+    assert greenfield != _clarify_memo_extra(_cfg(), _map())
+
+
+# ---- the extra is load-bearing in the key it feeds --------------------
 
 def _key(extra: str) -> str:
     return content_key("clarify", '{"title": "x"}' + extra, "prompt-sha",
                        "anthropic:glm-5.2", "none")
 
 
-def test_the_flag_off_key_carries_no_e85_terms():
-    # Flag off appends nothing, so the key is what it was pre-E-85.
-    assert _key("") == _key("")
+def test_the_flag_off_key_equals_the_pre_e85_key():
+    assert _key(_clarify_memo_extra(PipelineConfig(), _map())) \
+        == _key("")
 
 
-def test_turning_the_flag_on_moves_the_key():
-    on = f"|e85:{probe_prompt_digest()}|map:abc123"
-    assert _key(on) != _key("")
-
-
-def test_a_different_tree_moves_the_key():
-    d = probe_prompt_digest()
-    assert _key(f"|e85:{d}|map:aaa") != _key(f"|e85:{d}|map:bbb")
-
-
-def test_the_same_tree_and_prompts_hit_the_same_key():
-    d = probe_prompt_digest()
-    assert _key(f"|e85:{d}|map:aaa") == _key(f"|e85:{d}|map:aaa")
+def test_the_flag_on_key_differs_from_the_pre_e85_key():
+    assert _key(_clarify_memo_extra(_cfg(), _map())) != _key("")

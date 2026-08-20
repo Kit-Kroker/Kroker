@@ -7,7 +7,6 @@ signal waits with a per-gate policy (hard / soft / off).
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import os
 from collections.abc import Sequence
 from datetime import datetime, timedelta
@@ -48,7 +47,7 @@ with workflow.unsafe.imports_passed_through():
                                     set_task_authoritative, sync_plan_tasks)
     from ..board.models import ArtifactStatus, TaskStatus
     from ..clarify.merge import merge_clarification
-    from ..clarify.models import ClarifyRoute, ProbeResult
+    from ..clarify.models import ProbeResult
     from ..clarify.prompts import probe_prompt, probe_prompt_digest
     from ..clarify.routing import grounded_dimensions, live_dimensions
     from ..context.classify import classify
@@ -225,6 +224,68 @@ def _probe_results_from(
         out.append(res if res.dimension is dim
                    else res.model_copy(update={"dimension": dim}))
     return out
+
+
+def _clarify_memo_extra(cfg: "PipelineConfig",
+                        codebase_map: "CodebaseMap | None") -> str:
+    """The E-85 terms appended to the clarify stage's memo input.
+
+    Empty when the fan-out is off, so a flag-off run keys exactly as it did
+    pre-E-85 and its existing memos keep hitting. That emptiness is the
+    whole "the default pipeline is byte-identical to today" guarantee, so it
+    lives in a helper a test can pin rather than inline in the stage.
+
+    On, three terms, each covering something the base key cannot see:
+      - the probe-prompt digest, or editing a probe serves a stale
+        clarification silently;
+      - the codebase-map digest, or a clarification grounded in a tree
+        survives that tree changing;
+      - the question cap, which decides which questions reach a human and
+        which land on `dropped`. Spec section 10 names it as the first knob
+        the benchmark tunes, so a memo made under a different cap is a
+        differently shaped artifact, not the same one.
+    """
+    if not cfg.clarify_probes_enabled:
+        return ""
+    digest = map_digest(codebase_map) if codebase_map is not None else "none"
+    return (f"|e85:{probe_prompt_digest()}|map:{digest}"
+            f"|cap:{cfg.clarify_question_cap}")
+
+
+async def _clarify_fanout(run_role, *, route_agent, probe_agent,
+                          route_prompt: str, idea_json: str, grounding: str,
+                          mode: "ProjectMode", cap: int):
+    """The E-85 clarify orchestration: route, fan out, merge.
+
+    Module-level and collaborator-injected so the orchestration is testable
+    without Temporal: `run_role(agent, prompt)` is the caller's already-bound
+    model-egress point (self._run_role with cfg / role / model / `into`
+    applied) and returns an AgentRunResult.
+
+    `route_prompt` carries NO map content. ROUTE_SCOPE tells the supervisor
+    it cannot read the codebase; handing it one anyway contradicts its own
+    instructions. It learns greenfield-vs-brownfield from idea.mode inside
+    idea_json, and live_dimensions enforces the mode narrowing in code
+    regardless of what the model asks for.
+    """
+    route = (await run_role(route_agent, route_prompt)).output
+    dims = live_dimensions(route.live_dimensions, mode)
+    reqs_json = route.model_dump_json()
+
+    async def _probe(d):
+        return (await run_role(probe_agent, probe_prompt(
+            d, idea_json=idea_json, requirements_json=reqs_json,
+            grounding=grounding))).output
+
+    # return_exceptions=True IS the degrade-alone rule here: a probe that
+    # times out, loses its worker or exhausts its retries raises inside its
+    # own coroutine and gather captures it, leaving every sibling's result
+    # intact. _probe_results_from turns each captured exception into a
+    # dropped dimension.
+    results = await asyncio.gather(*[_probe(d) for d in dims],
+                                   return_exceptions=True)
+    return merge_clarification(route, _probe_results_from(dims, results),
+                               cap=cap, grounded=grounded_dimensions(mode))
 
 
 def _long_act(role_cfg: RoleConfig | None = None) -> dict:
@@ -2113,51 +2174,36 @@ class FeatureWorkflow(GateHost):
 
         async def _run_clarify_fanout():
             """E-85: supervisor routes and asks C1/C2, probes fan out per
-            dimension, pure merge ranks and caps."""
-            grounding = (self._codebase_map.model_dump_json()
-                         if self._codebase_map is not None else "")
-            route = (await self._run_role(
-                cfg, "clarify", resolve_role_model(cfg, "clarify"),
-                t_clarify_route,
-                clarify_prompt(idea.model_dump_json(), snapshot.items)
-                + (f"\n\n## Codebase context\n{grounding}" if grounding else ""),
-                into=clarify_spend)).output
+            dimension, pure merge ranks and caps.
 
-            dims = live_dimensions(route.live_dimensions, idea.mode)
-            reqs_json = route.model_dump_json()
+            Every call still leaves through _run_role -- _clarify_fanout
+            takes the already-bound egress as its collaborator, so E-33's
+            accounting covers the route call and all N probes.
 
-            async def _probe(d):
-                return (await self._run_role(
+            The probes get render_for_prompt's BOUNDED rendering, never the
+            raw map JSON: fan-out multiplies input cost by N, which makes
+            this the largest cost lever in the stage, and the architect
+            stage already reads the map the same way.
+            """
+            async def _egress(agent, prompt):
+                return await self._run_role(
                     cfg, "clarify", resolve_role_model(cfg, "clarify"),
-                    t_clarify_probe,
-                    probe_prompt(d, idea_json=idea.model_dump_json(),
-                                 requirements_json=reqs_json,
-                                 grounding=grounding),
-                    into=clarify_spend)).output
+                    agent, prompt, into=clarify_spend)
 
-            # return_exceptions=True IS the degrade-alone rule here: a probe
-            # that times out, loses its worker or exhausts its retries raises
-            # inside its own coroutine and gather captures it, leaving every
-            # sibling's result intact. _probe_results_from turns each captured
-            # exception into a dropped dimension.
-            results = await asyncio.gather(*[_probe(d) for d in dims],
-                                           return_exceptions=True)
-            return merge_clarification(
-                route, _probe_results_from(dims, results),
-                cap=cfg.clarify_question_cap,
-                grounded=grounded_dimensions(idea.mode))
+            return await _clarify_fanout(
+                _egress,
+                route_agent=t_clarify_route, probe_agent=t_clarify_probe,
+                route_prompt=clarify_prompt(idea.model_dump_json(),
+                                            snapshot.items),
+                idea_json=idea.model_dump_json(),
+                grounding=(render_for_prompt(self._codebase_map)
+                           if self._codebase_map is not None else ""),
+                mode=idea.mode, cap=cfg.clarify_question_cap)
 
-        # E-85: the probe prompt digest and the codebase-map digest join the
-        # memo input. Without the first, editing a probe serves a stale memo
-        # silently; without the second, a clarification grounded in a tree
-        # survives that tree changing. Both are appended ONLY when the flag is
-        # on, so flag-off memos keep hitting.
-        _clarify_key_extra = ""
-        if cfg.clarify_probes_enabled:
-            _map_digest = (hashlib.sha256(
-                self._codebase_map.model_dump_json().encode()).hexdigest()
-                if self._codebase_map is not None else "none")
-            _clarify_key_extra = f"|e85:{probe_prompt_digest()}|map:{_map_digest}"
+        # E-85: the fan-out's extra memo terms (probe prompts, tree, cap).
+        # Empty with the flag off, so flag-off memos keep hitting -- the
+        # rationale for each term lives on _clarify_memo_extra.
+        _clarify_key_extra = _clarify_memo_extra(cfg, self._codebase_map)
 
         reqs, _ = await self._cached_stage(
             cfg, "clarify",
