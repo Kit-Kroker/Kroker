@@ -7,7 +7,9 @@ signal waits with a per-gate policy (hard / soft / off).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 
 from temporalio import workflow
@@ -27,7 +29,8 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..agents.roles import (
         PROMPT_SHAS, STAGE_MODELS, STAGE_ROLES, t_adversary, t_analyst,
-        t_architect, t_clarify, t_deep_review, t_handoff, t_merge_verdict,
+        t_architect, t_clarify, t_clarify_probe, t_clarify_route,
+        t_deep_review, t_handoff, t_merge_verdict,
         t_planner, t_qa, t_research, t_reviewer,
     )
     from ..benchmarks.judge import (
@@ -44,6 +47,10 @@ with workflow.unsafe.imports_passed_through():
                                     publish_artifact_version,
                                     set_task_authoritative, sync_plan_tasks)
     from ..board.models import ArtifactStatus, TaskStatus
+    from ..clarify.merge import merge_clarification
+    from ..clarify.models import ClarifyRoute, ProbeResult
+    from ..clarify.prompts import probe_prompt, probe_prompt_digest
+    from ..clarify.routing import grounded_dimensions, live_dimensions
     from ..context.classify import classify
     from ..context.models import CodebaseMap
     from ..context.project import map_digest, project
@@ -75,7 +82,8 @@ with workflow.unsafe.imports_passed_through():
     from ..harness.session import session_text_from_jsonl
     from ..notify.contract import NotifyReason
     from ..models import (
-        AnalysisReport, ArchitectureSpec, ArtifactRef, ClarifiedRequirements,
+        AnalysisReport, ArchitectureSpec, ArtifactRef, ClarificationDimension,
+        ClarifiedRequirements,
         DeferredToolUse, EscalationOutcome, ToolDenial, ToolEscalation, ToolGrant,
         CoverageReport, DeepReviewReport, DeployPlan, DeployReport, DevTask,
         ExecutionMode, Gap, GateConfig,
@@ -194,6 +202,29 @@ def resolve_role_model(cfg: "PipelineConfig", stage: str) -> str:
     if rc is not None and rc.model is not None:
         return rc.model
     return STAGE_MODELS[stage]
+
+
+def _probe_results_from(
+    dimensions: "Sequence[ClarificationDimension]",
+    results: "Sequence[object]",
+) -> list["ProbeResult"]:
+    """Pair each probed dimension with its result, discarding the dead ones.
+
+    An exception means the probe never produced an answer, so the dimension
+    is ABSENT from the output -- and therefore absent from dimensions_probed,
+    which is what distinguishes "never ran" from "ran and abstained".
+
+    The asked-for dimension overrides whatever the model reported: the burst
+    knows which probe it dispatched, and a mislabelled result would attribute
+    questions to a dimension that never ran.
+    """
+    out: list[ProbeResult] = []
+    for dim, res in zip(dimensions, results):
+        if isinstance(res, BaseException):
+            continue
+        out.append(res if res.dimension is dim
+                   else res.model_copy(update={"dimension": dim}))
+    return out
 
 
 def _long_act(role_cfg: RoleConfig | None = None) -> dict:
@@ -2074,14 +2105,66 @@ class FeatureWorkflow(GateHost):
 
         clarify_spend = RoleUsage(role="clarify", model=resolve_role_model(cfg, "clarify"))
 
-        async def _run_clarify():
+        async def _run_clarify_single():
+            """Pre-E-85 path: one call, one prompt. Byte-identical to before."""
             return (await self._run_role(cfg, "clarify", resolve_role_model(cfg, "clarify"), t_clarify,
                 clarify_prompt(idea.model_dump_json(), snapshot.items),
                 into=clarify_spend)).output
 
+        async def _run_clarify_fanout():
+            """E-85: supervisor routes and asks C1/C2, probes fan out per
+            dimension, pure merge ranks and caps."""
+            grounding = (self._codebase_map.model_dump_json()
+                         if self._codebase_map is not None else "")
+            route = (await self._run_role(
+                cfg, "clarify", resolve_role_model(cfg, "clarify"),
+                t_clarify_route,
+                clarify_prompt(idea.model_dump_json(), snapshot.items)
+                + (f"\n\n## Codebase context\n{grounding}" if grounding else ""),
+                into=clarify_spend)).output
+
+            dims = live_dimensions(route.live_dimensions, idea.mode)
+            reqs_json = route.model_dump_json()
+
+            async def _probe(d):
+                return (await self._run_role(
+                    cfg, "clarify", resolve_role_model(cfg, "clarify"),
+                    t_clarify_probe,
+                    probe_prompt(d, idea_json=idea.model_dump_json(),
+                                 requirements_json=reqs_json,
+                                 grounding=grounding),
+                    into=clarify_spend)).output
+
+            # return_exceptions=True IS the degrade-alone rule here: a probe
+            # that times out, loses its worker or exhausts its retries raises
+            # inside its own coroutine and gather captures it, leaving every
+            # sibling's result intact. _probe_results_from turns each captured
+            # exception into a dropped dimension.
+            results = await asyncio.gather(*[_probe(d) for d in dims],
+                                           return_exceptions=True)
+            return merge_clarification(
+                route, _probe_results_from(dims, results),
+                cap=cfg.clarify_question_cap,
+                grounded=grounded_dimensions(idea.mode))
+
+        # E-85: the probe prompt digest and the codebase-map digest join the
+        # memo input. Without the first, editing a probe serves a stale memo
+        # silently; without the second, a clarification grounded in a tree
+        # survives that tree changing. Both are appended ONLY when the flag is
+        # on, so flag-off memos keep hitting.
+        _clarify_key_extra = ""
+        if cfg.clarify_probes_enabled:
+            _map_digest = (hashlib.sha256(
+                self._codebase_map.model_dump_json().encode()).hexdigest()
+                if self._codebase_map is not None else "none")
+            _clarify_key_extra = f"|e85:{probe_prompt_digest()}|map:{_map_digest}"
+
         reqs, _ = await self._cached_stage(
-            cfg, "clarify", idea.model_dump_json() + brief_digest_val,
-            ClarifiedRequirements, _run_clarify)
+            cfg, "clarify",
+            idea.model_dump_json() + brief_digest_val + _clarify_key_extra,
+            ClarifiedRequirements,
+            _run_clarify_fanout if cfg.clarify_probes_enabled
+            else _run_clarify_single)
         if reqs.open_questions:
             for q in reqs.open_questions:
                 self._emit(RunEventKind.CLARIFICATION_ASKED, stage="clarify",
