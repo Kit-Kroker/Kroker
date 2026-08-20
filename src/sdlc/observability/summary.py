@@ -86,6 +86,9 @@ def build_run_summary(
             question_id=e.data.get("question_id", "?"),
             question=e.data.get("question", ""),
             answered_by=answered.get(e.data.get("question_id"), "unanswered"),
+            # E-85. Absent on pre-E-85 runs, "" on the flag-off path; both
+            # mean "no dimension", and "" is not a valid enum member.
+            dimension=e.data.get("dimension") or None,
         )
         for e in trace if e.kind is RunEventKind.CLARIFICATION_ASKED
     ]

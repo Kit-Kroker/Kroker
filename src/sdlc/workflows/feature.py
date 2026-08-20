@@ -2214,7 +2214,10 @@ class FeatureWorkflow(GateHost):
         if reqs.open_questions:
             for q in reqs.open_questions:
                 self._emit(RunEventKind.CLARIFICATION_ASKED, stage="clarify",
-                           question_id=q.id, question=q.question)
+                           question_id=q.id, question=q.question,
+                           # data is dict[str, str] -- "" not None, or the
+                           # RunEvent fails validation on the flag-off path.
+                           dimension=q.dimension.value if q.dimension else "")
             clarify_policy = cfg.gates.get("clarify", GateConfig()).policy
             if clarify_policy == GatePolicy.OFF:
                 # unattended run (e.g. a benchmark cell) — no human is
