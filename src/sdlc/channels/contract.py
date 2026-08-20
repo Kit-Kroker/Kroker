@@ -112,3 +112,34 @@ class ReferenceChannel:
 
     def translate(self, d: PendingDecision, reply: Reply) -> SignalCall:
         return default_translate(d, reply)
+
+
+class ActorChannel:
+    """A Channel carrying a self-asserted operator identity (OQ-11).
+
+    contract.py states that "a surface MAY override render for richer
+    presentation"; this uses that extension point to carry identity without
+    adding a parameter to the pure default_translate.
+
+    The identity lands on GateDecision.reviewer, NEVER on decided_by:
+    decided_by is Literal["human","policy","timeout"] and
+    ReadinessOverride.approved_by carries it verbatim, so a free-string actor
+    there would destroy the one signal that keeps "policy" legible as
+    non-human. triage.py:115 sets reviewer for exactly this reason (FR-1004).
+
+    Shared by every identity-bearing surface: the dashboard (E-10) and the
+    chat surface (E-86) differ only in the actor string they pass.
+    """
+
+    def __init__(self, actor: str) -> None:
+        self.actor = actor
+
+    def render(self, d: PendingDecision) -> RenderedDecision:
+        return default_render(d)
+
+    def translate(self, d: PendingDecision, reply: Reply) -> SignalCall:
+        call = default_translate(d, reply)
+        if call.decision is not None:
+            call.decision.reviewer = self.actor
+        return call
+
