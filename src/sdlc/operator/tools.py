@@ -20,14 +20,18 @@ import json
 from pydantic import BaseModel
 
 from ..artifacts.store import ref_to_path
-
 from ..board.models import TaskStatus
 from ..board.store import NotFoundError
+from ..channels.contract import ActorChannel, Reply, default_render
+from ..channels.transport import resolve_key, submit
+from ..cli import slug
+from ..models import GateOutcome, IdeaBrief, PipelineConfig, ProjectMode
 from .deps import OperatorDeps
 from .errors import ToolError, guard
 from . import render
 
 _STATUSES = ("open", "closed", "all")
+
 
 
 
@@ -357,6 +361,93 @@ async def follow(deps: OperatorDeps, run_id: str | None = None,
             changed, detail = _describe_change(before, snap, run_id)
             return ChangeReport(run_id=run_id, timed_out=False,
                                 changed=changed, detail=detail)
+
+
+class ReplyReceipt(BaseModel):
+    """The outcome of one reply, in the words transport already chose.
+
+    confirmed=False is informational, never an error: the dominant cause is
+    another surface winning the race, which is FR-302 working as designed
+    (transport._message). Repeat detail to the operator verbatim.
+    """
+    run_id: str
+    key: str
+    confirmed: bool
+    detail: str
+
+
+async def _handle(deps: OperatorDeps, run_id: str):
+    client = await deps.poller._client_or_connect()
+    return client.get_workflow_handle(run_id)
+
+
+async def _reply(deps: OperatorDeps, run_id: str, key: str, reply: Reply,
+                 want: str) -> ReplyReceipt:
+    handle = await _handle(deps, run_id)
+    pending = await resolve_key(handle, key)
+    kind = default_render(pending).reply_kind
+    if kind != want:
+        right = "answer_question" if kind == "text" else "decide_gate"
+        raise ToolError(
+            f"key {key!r} on {run_id} takes a {kind} reply; use {right}")
+    result = await submit(handle, pending, reply,
+                          channel=ActorChannel(actor=deps.actor))
+    return ReplyReceipt(run_id=run_id, key=key, confirmed=result.confirmed,
+                        detail=result.message)
+
+
+@guard
+async def answer_question(deps: OperatorDeps, run_id: str, key: str,
+                          text: str) -> ReplyReceipt:
+    """Answer a clarification question the run is waiting on.
+
+    key must come from get_run or inbox; do not invent one.
+    """
+    deps.note_other_tool()
+    return await _reply(deps, run_id, key, Reply(text=text), want="text")
+
+
+@guard
+async def decide_gate(deps: OperatorDeps, run_id: str, key: str,
+                      outcome: GateOutcome, text: str = "") -> ReplyReceipt:
+    """Approve, reject, or request revision on a gate the run is waiting on.
+
+    key must come from get_run or inbox. The gate round is taken from the
+    pending item -- never supply one. With outcome=revise, text is the
+    guidance the pipeline loops back with.
+    """
+    deps.note_other_tool()
+    return await _reply(deps, run_id, key,
+                        Reply(outcome=outcome, text=text or None),
+                        want="gate")
+
+
+@guard
+async def start_run(deps: OperatorDeps, title: str, mode: ProjectMode,
+                    description: str = "",
+                    repo: str | None = None) -> str:
+    """Start a new feature run. Returns the run id.
+
+    Brownfield runs need a repo url; greenfield runs must not be given one.
+    """
+    deps.note_other_tool()
+    if mode is ProjectMode.BROWNFIELD and not repo:
+        raise ToolError(
+            "a brownfield run needs repo set to the repository url; ask the "
+            "operator which repository this is for")
+    idea = IdeaBrief(title=title, description=description, mode=mode,
+                     repo_url=repo)
+    wf_id = f"feature-{slug(title)}"
+    try:
+        await deps.starter(idea, PipelineConfig(), wf_id)
+    except Exception as e:      # noqa: BLE001 -- narrowed into ToolError
+        if "already started" in str(e).lower():
+            raise ToolError(
+                f"a run with id {wf_id!r} already exists; call get_run on it, "
+                f"or start this one under a different title") from None
+        raise
+    return wf_id
+
 
 
 
