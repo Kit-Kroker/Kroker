@@ -12,9 +12,15 @@ rather than read prose about.
 """
 from __future__ import annotations
 
+import asyncio
+import json
+
+
+
 from pydantic import BaseModel
 
 from ..artifacts.store import ref_to_path
+
 from ..board.models import TaskStatus
 from ..board.store import NotFoundError
 from .deps import OperatorDeps
@@ -229,5 +235,128 @@ async def read_artifact(deps: OperatorDeps, project: str, key: str,
         content=window.decode("utf-8", errors="replace"),
         total_bytes=len(data), truncated=truncated,
         next_offset=end if truncated else None)
+
+
+MIN_TIMEOUT_S = 5
+MAX_TIMEOUT_S = 120
+
+
+class ChangeReport(BaseModel):
+    """What moved while we waited, or that nothing did."""
+    run_id: str | None = None
+    timed_out: bool = False
+    changed: list[str] = []
+    detail: str = ""
+
+
+def _clamp(timeout_s: int) -> int:
+    return max(MIN_TIMEOUT_S, min(MAX_TIMEOUT_S, int(timeout_s)))
+
+
+def _projection(snap, run_id: str | None) -> str:
+    """A stable fingerprint of the part of the fleet being followed.
+
+    Scoped to one run on purpose: a fleet-wide fingerprint moves whenever ANY
+    run moves, so a scoped follow against it would return instantly and
+    forever. `at` is excluded for the reason dashboard/api.py excludes it --
+    the clock is not a change.
+    """
+    runs = [r for r in snap.runs if run_id is None or r.run_id == run_id]
+    inbox = [i for i in snap.inbox if run_id is None or i.run_id == run_id]
+    payload = {
+        "runs": [json.loads(r.model_dump_json()) for r in runs],
+        "inbox": [json.loads(i.model_dump_json()) for i in inbox],
+        "closed": sorted(c.run_id for c in snap.closed),
+    }
+    return json.dumps(payload, sort_keys=True)
+
+
+def _describe_change(before, after, run_id: str | None) -> tuple[list[str], str]:
+    changed: list[str] = []
+    before_runs = {r.run_id: r for r in before.runs}
+    after_runs = {r.run_id: r for r in after.runs}
+    scope = ([run_id] if run_id is not None
+             else sorted(set(before_runs) | set(after_runs)))
+    lines: list[str] = []
+    for rid in scope:
+        was, now = before_runs.get(rid), after_runs.get(rid)
+        if was is not None and now is None:
+            changed.append(f"{rid}:closed")
+            lines.append(f"{rid} is no longer open -- it closed")
+            continue
+        if now is None:
+            continue
+        if was is None:
+            changed.append(f"{rid}:appeared")
+            lines.append(f"{rid} appeared: {render.run_line(now)}")
+            continue
+        if was.current_stage != now.current_stage:
+            changed.append(f"{rid}:stage")
+            lines.append(f"{rid} stage {was.current_stage} -> "
+                         f"{now.current_stage}")
+        if was.status != now.status:
+            changed.append(f"{rid}:status")
+            lines.append(f"{rid} status {was.status} -> {now.status}")
+    before_keys = {(i.run_id, d.key) for i in before.inbox for d in i.pending}
+    for item in after.inbox:
+        if run_id is not None and item.run_id != run_id:
+            continue
+        for d in item.pending:
+            if (item.run_id, d.key) not in before_keys:
+                changed.append(f"{item.run_id}:pending")
+                lines.append(f"{item.run_id} is now waiting on:\n"
+                             f"{render.pending_block(d)}")
+    if not lines:
+        lines.append("something changed that this report does not name; "
+                     "call get_run for detail")
+    return changed, "\n".join(lines)
+
+
+def _is_terminal_change(changed: list[str]) -> bool:
+    """Pending decisions and closures end the wait immediately; a stage
+    advance is reported too, but only because the fingerprint moved."""
+    return any(c.endswith(":pending") or c.endswith(":closed")
+               for c in changed)
+
+
+@guard
+async def follow(deps: OperatorDeps, run_id: str | None = None,
+                 timeout_s: int = 60) -> ChangeReport:
+    """Wait until something changes, then report what.
+
+    Waits on one run when run_id is given, otherwise on the whole fleet.
+    Returns as soon as a run needs a decision or finishes. Report to the
+    operator between waits; consecutive waits are capped.
+    """
+    deps.note_follow()
+    timeout_s = _clamp(timeout_s)
+    before = await deps.poller.snapshot()
+    if run_id is not None and not any(r.run_id == run_id for r in before.runs):
+        raise ToolError(
+            f"{run_id!r} is not an open run, so there is nothing to wait "
+            f"for; call list_runs")
+
+    baseline = _projection(before, run_id)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout_s
+    async with deps.poller.subscribe() as q:
+        while True:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                return ChangeReport(
+                    run_id=run_id, timed_out=True,
+                    detail=f"nothing changed in {timeout_s}s")
+            try:
+                snap = await asyncio.wait_for(q.get(), timeout=remaining)
+            except asyncio.TimeoutError:
+                return ChangeReport(
+                    run_id=run_id, timed_out=True,
+                    detail=f"nothing changed in {timeout_s}s")
+            if _projection(snap, run_id) == baseline:
+                continue
+            changed, detail = _describe_change(before, snap, run_id)
+            return ChangeReport(run_id=run_id, timed_out=False,
+                                changed=changed, detail=detail)
+
 
 
