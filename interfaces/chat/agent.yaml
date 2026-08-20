@@ -1,0 +1,5 @@
+# The operator chat agent (E-86). Not a registry role: agents/loader.py's
+# KNOWN_ROLES is closed by design, and ADR-6 family inequality does not apply
+# to a surface that decorrelates from nothing. See spec D5.
+model: anthropic:claude-sonnet-4-6
+max_tokens: 64000
