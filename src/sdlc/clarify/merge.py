@@ -52,10 +52,13 @@ def merge_clarification(
     candidates: list[OpenQuestion] = list(route.questions)
     for probe in probes:
         for q in probe.questions:
-            # The probe's own dimension is authoritative: the model may omit
-            # it per question, but the burst knows which probe answered.
-            candidates.append(q.model_copy(update={"dimension": probe.dimension})
-                              if q.dimension is None else q)
+            # The probe's own dimension is authoritative, unconditionally:
+            # the burst knows which probe it dispatched, and the model's own
+            # self-report cannot be trusted to agree. A disagreeing value
+            # left in place would let a grounded probe's question dodge the
+            # evidence-required discard below by mislabelling itself into an
+            # ungrounded dimension.
+            candidates.append(q.model_copy(update={"dimension": probe.dimension}))
 
     # DISCARD ungrounded speculation before anything else, so it cannot win a
     # slot or pollute the dedup.

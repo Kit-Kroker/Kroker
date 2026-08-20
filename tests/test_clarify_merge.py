@@ -70,15 +70,40 @@ def test_a_question_without_materiality_sorts_last():
     assert [q.id for q in out.open_questions] == ["P2", "P1"]
 
 
-def test_ties_break_by_dimension_then_id_so_replays_are_stable():
+def test_ties_break_by_dimension_before_id_so_replays_are_stable():
+    # Ids run counter to dimension order here on purpose: TECHNICAL_CONTEXT
+    # (C3) gets the *later* id "Z" and DATA_SEMANTICS (C6) gets the *earlier*
+    # id "A". If an implementation dropped the dimension component from the
+    # sort key, id-ascending alone would put "A" first -- the wrong answer --
+    # so this catches that bug where the old same-direction fixture couldn't.
     probes = [
         ProbeResult(dimension=CD.DATA_SEMANTICS, questions=[
-            _q("Z", "d?", dim=CD.DATA_SEMANTICS, mat=0.5, ev="d.py")]),
+            _q("A", "d?", dim=CD.DATA_SEMANTICS, mat=0.5, ev="d.py")]),
         ProbeResult(dimension=CD.TECHNICAL_CONTEXT, questions=[
-            _q("A", "t?", dim=CD.TECHNICAL_CONTEXT, mat=0.5, ev="t.py")]),
+            _q("Z", "t?", dim=CD.TECHNICAL_CONTEXT, mat=0.5, ev="t.py")]),
+    ]
+    out = _merge(_route(), probes)
+    assert [q.id for q in out.open_questions] == ["Z", "A"]
+
+
+def test_id_is_the_final_tiebreak_when_materiality_and_dimension_tie():
+    probes = [
+        ProbeResult(dimension=CD.DATA_SEMANTICS, questions=[
+            _q("Z", "z?", dim=CD.DATA_SEMANTICS, mat=0.5, ev="z.py"),
+            _q("A", "a?", dim=CD.DATA_SEMANTICS, mat=0.5, ev="a.py")]),
     ]
     out = _merge(_route(), probes)
     assert [q.id for q in out.open_questions] == ["A", "Z"]
+
+
+def test_a_dimensionless_question_sorts_after_a_dimensioned_one_at_equal_materiality():
+    # Only a supervisor question can reach merge with dimension=None: every
+    # probe question gets its probe's dimension stamped on unconditionally.
+    sup = _q("S1", "sup?", dim=None, mat=0.5, asked_by="supervisor")
+    probe = ProbeResult(dimension=CD.INTERFACE_SPEC, questions=[
+        _q("P1", "probe?", dim=CD.INTERFACE_SPEC, mat=0.5, ev="a.py")])
+    out = _merge(_route(sup), [probe])
+    assert [q.id for q in out.open_questions] == ["P1", "S1"]
 
 
 def test_the_cap_truncates_and_the_remainder_is_recorded_as_dropped():
