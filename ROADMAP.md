@@ -416,9 +416,8 @@ as tracked rather than accidental.
 - [x] **US-3** task escalation → retry-with-guidance/quarantine — guidance reaches same harness session.
 - [x] **US-4** per-project gate config (hard/soft + threshold) — `GateConfig`, no code change.
 - [x] **US-5** dev/reviewer different model family; registry rejects same-family — enforced at boot, against `dev` (the role that actually codes) since `2026-07-16-registry-drives-every-role`.
-- [x] **US-6** stakeholder one-screen fleet view — `GET /api/runs` plus the `/api/events` SSE stream (E-10).
-- [ ] **US-7** MCP conversational gate approval — no MCP server.
-- [x] **US-8** client connects a repo → readiness verdict + checkable hygiene list (E-41/E-42/E-43/E-44). *Both halves ship: the readiness verdict + `sdlc triage` (E-42), and the per-finding fix-backlog from `mechanical_backlog`, which lands on the `TidyUpReport` even when a repo is not admitted (E-44).*
+- [ ] ⚠️ **US-7** conversational gate approval — chat agent shipped (E-86, 2026-08-20); MCP server pending (E-11).
+
 - [x] **US-9** client approves a tidy-up backlog → PR per item + before/after delta (E-44). `TidyUpWorkflow` opens a `tidy_up` gate with the backlog rendered, `select_items` narrows it, each accepted item becomes one governed fix run, and `compute_delta` records the before/after.
 - [ ] **US-10** assessor hands over a bundle whose every claim resolves to evidence (E-51/E-52).
 - [ ] **US-11** product owner's decision rule frozen at approval, verdict computed against it (E-64/E-65/E-70).
@@ -550,7 +549,8 @@ We track notifications, cross-run inbox, dashboard backend, and MCP server as fo
 - [x] **E-8** Cross-run inbox as a query over pending gates (FR-305, FR-603's missing verb) — the first capability the contract buys that we don't already have. *Landed:* `sdlc/channels/inbox.py` (`fetch_inbox`) plus the CLI inbox verb over the existing Layer A/B contract. Plan `docs/superpowers/plans/2026-07-22-cross-run-inbox.md`.
 - [x] **E-9** Notify activity + reminder timer + fallback approver (FR-303). *Landed:* `src/sdlc/notify/` (schedule + routes asset + log/webhook transports + activity), deadline-walking wait in `_gate`, `GATE_NOTIFIED` traced with delivery outcome. `on_timeout` per gate; `merge` holds rather than discarding a green run. Spec `docs/superpowers/specs/2026-07-26-gate-notifications-and-reminder-timers-design.md`, plan `docs/superpowers/plans/2026-07-26-gate-notifications-and-reminder-timers.md`.
 - [x] **E-10** FastAPI dashboard backend as a channel adapter, replacing the Vue frontend's mock API (FR-601, US-6, ADR-8). *Landed 2026-08-18.* `run_state()` — one query over state the run already held — plus `sdlc/dashboard/{fleet,api,channel}.py`: a lazy shared poller fanning out `run_state()` + `pending_decisions()` across open runs and `run_summary()` across the 20 most recent closed ones, served as REST reads plus an SSE stream. Three write routes, not five: `pending.py`'s four variants already collapse to two FR-302 signals. Spec `docs/superpowers/specs/2026-08-18-dashboard-backend-design.md`.
-- [ ] **E-11** MCP server as a channel adapter — list/detail/inbox/answer/decide/start (FR-602, US-7).
+- [ ] **E-11** MCP server as a channel adapter — list/detail/inbox/answer/decide/start (FR-602, US-7). *Re-exports `sdlc/operator/tools.py` (E-86) rather than reimplementing the verbs.*
+- [x] **E-86** Operator chat surface — a Pydantic AI agent over the same tool layer, served by `pydantic_ai.ui.create_web_app` and mounted at `/chat` beside the board and dashboard routers. Twelve verbs in `src/sdlc/operator/` (nine reads, three approval-gated writes), a run-scoped bounded `follow`, and a 32 KB paged `read_artifact`. Shipped behind `SDLC_CHAT_ENABLED`, default off. Closes the chat half of US-7; FR-602 stays open until E-11's MCP server ships. Spec `docs/superpowers/specs/2026-08-20-operator-chat-surface-design.md`, plan `docs/superpowers/plans/2026-08-20-operator-chat-surface.md`.
 
 ### 9.3 Schedules as files → FR-404, FR-501
 

@@ -17,7 +17,10 @@ def configure() -> bool:
     """Called once at worker boot. Returns True iff Logfire is live."""
     if not _ENABLED:
         return False
-    import logfire  # lazy: optional dependency, only needed when gated on
+    try:
+        import logfire  # lazy: optional dependency, only needed when gated on
+    except ImportError:
+        return False
     logfire.configure(send_to_logfire="if-token-present", console=False)
     logfire.instrument_pydantic_ai()
     return True
@@ -27,5 +30,9 @@ def span(name: str, **attrs):
     """Context manager: logfire.span when enabled, else nullcontext."""
     if not _ENABLED:
         return nullcontext()
-    import logfire
+    try:
+        import logfire
+    except ImportError:
+        return nullcontext()
     return logfire.span(name, **attrs)
+
