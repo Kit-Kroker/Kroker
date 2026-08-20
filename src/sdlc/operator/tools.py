@@ -12,6 +12,9 @@ rather than read prose about.
 """
 from __future__ import annotations
 
+from pydantic import BaseModel
+
+from ..artifacts.store import ref_to_path
 from ..board.models import TaskStatus
 from ..board.store import NotFoundError
 from .deps import OperatorDeps
@@ -19,6 +22,7 @@ from .errors import ToolError, guard
 from . import render
 
 _STATUSES = ("open", "closed", "all")
+
 
 
 
@@ -151,4 +155,79 @@ async def project_events(deps: OperatorDeps, project: str,
               f"{e.to_status or '-'}{' | ' + e.detail if e.detail else ''}"
               for e in rows]
     return "\n".join(lines)
+
+
+class ArtifactRead(BaseModel):
+    """One page of an artifact body.
+
+    truncated and next_offset exist so the model knows it is holding a
+    fragment: without them it fills the gap by inventing the rest.
+    """
+    project: str
+    key: str
+    version_id: int
+    n: int
+    sha256: str
+    content: str
+    total_bytes: int
+    truncated: bool
+    next_offset: int | None = None
+
+
+@guard
+async def read_artifact(deps: OperatorDeps, project: str, key: str,
+                        version_id: int | None = None,
+                        offset: int = 0) -> ArtifactRead:
+    """Read one page of a published artifact.
+
+    key MUST be one of the artifact keys get_project listed for this project.
+    Large artifacts are paged: when truncated is true, call again with
+    offset=next_offset. Summarize what you read; do not quote it whole.
+    """
+    deps.note_other_tool()
+    deps.board.get_project(project)
+    # Refuse before touching the blob store: an unknown key is the model
+    # fishing, and the answer is to go back to get_project, not to search.
+    try:
+        art = deps.board.get_artifact(project, key)
+    except NotFoundError:
+        raise ToolError(
+            f"project {project!r} has no artifact {key!r}; call get_project "
+            f"and use one of the keys it lists") from None
+
+    if version_id is None:
+        if art.current_version is None:
+            raise ToolError(
+                f"artifact {key!r} in {project!r} has no published version")
+        version_id = art.current_version
+    v = deps.board.get_version(project, version_id)
+    if v.key != key:
+        raise ToolError(
+            f"version {version_id} belongs to {v.key!r}, not {key!r}")
+
+    path = ref_to_path(v)
+    if not path.exists():
+        # Metadata outlives the blob (board/api.py:126): the row and its
+        # sha256 are still authoritative history when runs/ has been pruned.
+        raise ToolError(
+            f"the blob for {key!r} version {version_id} was pruned from the "
+            f"claim-check store; sha256 {v.sha256}, uri {v.uri}")
+
+    data = path.read_bytes()
+    if offset < 0:
+        raise ToolError("offset must be zero or positive")
+    if offset and offset >= len(data):
+        raise ToolError(
+            f"offset {offset} is past the end of {key!r} "
+            f"({len(data)} bytes); the previous page was the last one")
+
+    window = data[offset:offset + deps.max_artifact_bytes]
+    end = offset + len(window)
+    truncated = end < len(data)
+    return ArtifactRead(
+        project=project, key=key, version_id=v.id, n=v.n, sha256=v.sha256,
+        content=window.decode("utf-8", errors="replace"),
+        total_bytes=len(data), truncated=truncated,
+        next_offset=end if truncated else None)
+
 
