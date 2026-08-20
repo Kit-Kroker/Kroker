@@ -9,12 +9,16 @@ Set them explicitly and never rename after deploying to production.
 """
 from __future__ import annotations
 
+from pydantic_ai import Agent
 from pydantic_ai.durable_exec.temporal import TemporalAgent
 from pydantic_ai.settings import ModelSettings
 from datetime import timedelta
 import hashlib
 import os
 from temporalio.workflow import ActivityConfig
+
+from ..clarify.models import ClarifyRoute, ProbeResult
+from ..clarify.prompts import PROBE_SYSTEM, ROUTE_SCOPE
 
 AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=10))
 
@@ -74,6 +78,34 @@ discover_agent = AGENTS.get("discover")
 # Optional risk proposer (E-49 RD7). Present iff agents/risk/ ships.
 risk_agent = AGENTS.get("risk")
 
+# E-85: two extra agents for the clarify fan-out. NOT new registry roles --
+# they reuse the clarify role's model and its instructions.md preamble, so
+# agents/ stays at 15 roles and the loader is untouched.
+#
+# They exist as separate Agents rather than per-run output_type overrides
+# because an Agent's output type is fixed at build time and t_clarify is
+# pinned to ClarifiedRequirements. Keeping them as TemporalAgents means every
+# call still goes through _run_role, so E-33's single model-egress accounting
+# prices and attributes the spend -- research had to hand RoleUsage back from
+# its activities precisely because fan-out moved its calls out of that reach.
+_clarify_role = REGISTRY["clarify"]
+
+clarify_route_agent = Agent(
+    _clarify_role.model,
+    name="clarify_route_agent",     # Temporal activity name -- NEVER rename
+    output_type=ClarifyRoute,
+    model_settings=MODEL_SETTINGS,
+    system_prompt=_clarify_role.instructions + "\n\n" + ROUTE_SCOPE,
+)
+
+clarify_probe_agent = Agent(
+    _clarify_role.model,
+    name="clarify_probe_agent",     # Temporal activity name -- NEVER rename
+    output_type=ProbeResult,
+    model_settings=MODEL_SETTINGS,
+    system_prompt=_clarify_role.instructions + "\n\n" + PROBE_SYSTEM,
+)
+
 # Stage name -> registry role. Stage names (feature.py's pipeline vocabulary)
 # and role names (the registry's) genuinely differ — 'plan'/'planner',
 # 'review'/'reviewer', 'analyze'/'analyst', 'devops'/'devops_planner'. This
@@ -120,6 +152,10 @@ PROMPT_SHAS: dict[str, str] = {
 
 # Temporal-wrapped versions used inside workflows.
 t_clarify = TemporalAgent(clarify_agent, activity_config=AGENT_ACTIVITY_CONFIG)
+t_clarify_route = TemporalAgent(clarify_route_agent,
+                                activity_config=AGENT_ACTIVITY_CONFIG)
+t_clarify_probe = TemporalAgent(clarify_probe_agent,
+                                activity_config=AGENT_ACTIVITY_CONFIG)
 t_architect = TemporalAgent(architect_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 t_planner = TemporalAgent(planner_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 t_qa = TemporalAgent(qa_analyst_agent, activity_config=AGENT_ACTIVITY_CONFIG)
@@ -160,7 +196,8 @@ t_risk = (
     TemporalAgent(risk_agent, activity_config=AGENT_ACTIVITY_CONFIG)
     if risk_agent is not None else None)
 
-ALL_TEMPORAL_AGENTS = [t_clarify, t_architect, t_planner, t_qa,
+ALL_TEMPORAL_AGENTS = [t_clarify, t_clarify_route, t_clarify_probe,
+                       t_architect, t_planner, t_qa,
                        t_reviewer, t_analyst, t_merge_verdict, t_devops]
 if t_research is not None:
     ALL_TEMPORAL_AGENTS.append(t_research)
