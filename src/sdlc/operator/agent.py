@@ -9,7 +9,9 @@ Two things here are load-bearing and non-obvious:
 * _bind rewrites each verb's signature to swap `deps` for a RunContext.
   Pydantic AI derives a tool's JSON schema from the signature, so the
   rewrite is what keeps `deps` out of the schema the model sees.
-* _ResetPerRequest zeroes the follow streak per HTTP request. create_web_app
+* _bind also converts ToolError into ToolFailed. That conversion is the only
+  thing that makes errors.py's careful wording reach the model at all.
+* _ResetPerRequest zeroes the follow streak on each chat POST. create_web_app
   holds ONE deps object for the life of the mount, so without this the brake
   would be per-process rather than per-conversation-turn.
 """
@@ -22,6 +24,7 @@ from pathlib import Path
 
 import yaml
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.exceptions import ToolFailed
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.toolsets import FunctionToolset
 try:
@@ -33,10 +36,23 @@ except ImportError:
 from ..models import GateOutcome, ProjectMode
 from . import render, tools
 from .deps import OperatorDeps
+from .errors import ToolError
 from .tools import ArtifactRead, ChangeReport, ReplyReceipt
 
 
-ASSET_DIR = Path(__file__).resolve().parents[3] / "interfaces" / "chat"
+ASSETS_ENV = "SDLC_CHAT_ASSETS"
+
+# parents[3] is the repo root for a source checkout / editable install. It is
+# NOT the repo root once sdlc is installed into site-packages, where it lands
+# on <prefix>/lib -- the same trap the Dockerfile documents for oracle.py and
+# works around with SDLC_CASES_ROOT. The env override is the supported answer
+# for any deployment where `interfaces/` is not a sibling of `src/`.
+_REPO_ASSETS = Path(__file__).resolve().parents[3] / "interfaces" / "chat"
+
+
+def asset_dir() -> Path:
+    env = os.environ.get(ASSETS_ENV)
+    return Path(env) if env else _REPO_ASSETS
 
 READ_TOOLS = (tools.list_runs, tools.get_run, tools.follow, tools.inbox,
               tools.list_projects, tools.get_project, tools.list_tasks,
@@ -57,7 +73,7 @@ class ChatConfig:
 
 
 def load_chat_config(root: Path | None = None) -> ChatConfig:
-    root = Path(root) if root is not None else ASSET_DIR
+    root = Path(root) if root is not None else asset_dir()
     cfg_file = root / "agent.yaml"
     if not cfg_file.is_file():
         raise ChatConfigError(f"missing {cfg_file}: the chat surface needs an "
@@ -90,7 +106,23 @@ def _bind(fn):
     rest = [p for name, p in sig.parameters.items() if name != "deps"]
 
     async def tool(ctx: RunContext[OperatorDeps], **kwargs):
-        return await fn(ctx.deps, **kwargs)
+        try:
+            return await fn(ctx.deps, **kwargs)
+        except ToolError as e:
+            # THE reason errors.py exists. Only ModelRetry and ToolFailed
+            # become a tool result the model can read; every other exception
+            # propagates out of Agent.run -- so without this line the entire
+            # ordinary-failure vocabulary ("that key is no longer pending;
+            # re-read the inbox") 500s the chat request instead of reaching
+            # the model it was written for.
+            #
+            # ToolFailed, not ModelRetry: every ToolError here is terminal
+            # for the call as made -- a stale key, an unknown run, an offset
+            # past the end -- and wants the model to ADAPT, not to repeat
+            # itself. ModelRetry would also consume the tool's retry budget
+            # (default 1), so a second miss would raise
+            # UnexpectedModelBehavior and kill the turn after all.
+            raise ToolFailed(e.message) from None
 
     ctx_param = inspect.Parameter("ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD,
                                   annotation=RunContext[OperatorDeps])
@@ -137,14 +169,30 @@ def build_agent(cfg: ChatConfig | None = None) -> Agent:
 
 
 class _ResetPerRequest:
-    """ASGI wrapper clearing per-request tool state before the app runs."""
+    """ASGI wrapper clearing per-turn tool state before a chat turn runs.
+
+    Scoped to the chat POST, not to every HTTP request: create_web_app also
+    serves the UI shell at `/` and `/{id}`, so resetting on any request meant
+    that opening a second tab -- or a plain page reload -- zeroed the
+    consecutive-wait streak mid-conversation and dissolved the brake.
+
+    The streak still lives on a deps object shared by every client of the
+    mount, which is a localhost single-operator assumption rather than a
+    guarantee; making it per-conversation needs session state the bundled UI
+    does not carry (spec OQ-C2).
+    """
 
     def __init__(self, app, deps: OperatorDeps) -> None:
         self.app = app
         self.deps = deps
 
+    def _starts_a_turn(self, scope) -> bool:
+        return (scope.get("type") == "http"
+                and scope.get("method", "").upper() == "POST"
+                and scope.get("path", "").rstrip("/").endswith("/chat"))
+
     async def __call__(self, scope, receive, send):
-        if scope.get("type") == "http":
+        if self._starts_a_turn(scope):
             self.deps.reset_request_state()
         return await self.app(scope, receive, send)
 

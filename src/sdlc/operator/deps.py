@@ -22,7 +22,11 @@ from .errors import ToolError
 @dataclass
 class OperatorDeps:
     poller: Any                 # dashboard.fleet.FleetPoller
-    board: Any                  # board.store.BoardStore
+    board: Any                  # () -> BoardStore. A FACTORY, not a store:
+                                # tools._board opens and closes one per call
+                                # inside the worker thread it runs on, because
+                                # sqlite connections are bound to the thread
+                                # that opened them (check_same_thread).
     starter: Any                # async (IdeaBrief, PipelineConfig, str) -> str
     actor: str = "chat:unknown"
     max_artifact_bytes: int = 32 * 1024

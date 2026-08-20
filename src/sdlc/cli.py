@@ -37,6 +37,7 @@ from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 
 from .models import GateOutcome, IdeaBrief, PipelineConfig, ProjectMode
+from .naming import slug
 from .worker import TASK_QUEUE
 from .workflows.assessment import AssessmentInput, AssessmentWorkflow
 from .workflows.feature import FeatureWorkflow
@@ -44,8 +45,11 @@ from .workflows.tidyup import TidyUpInput, TidyUpWorkflow
 from .workflows.triage import TriageInput, TriageWorkflow
 
 
-def slug(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+# `slug` is imported from the leaf module sdlc.naming, not defined here:
+# `sdlc.cli.slug` is an established import path (dashboard/api.py and this
+# module's own id builders use it) and keeps working, while a caller that
+# wants only the regex can import it without dragging in the workflows.
 
 
 def triage_workflow_id(repo: str, now: datetime | None = None) -> str:

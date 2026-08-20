@@ -73,7 +73,12 @@ def mount_chat(target, fleet_poller) -> bool:
         # is what gives the chat surface per-conversation traces beside the
         # pipeline's (spec 12). It is a no-op without a Logfire token.
         configure_logfire()
-        deps = OperatorDeps(poller=fleet_poller, board=BoardStore(),
+        # The CLASS, not an instance: tools._board opens and closes a store
+        # per call inside the worker thread it runs on. A single shared
+        # connection here would be pinned to the import thread by sqlite's
+        # check_same_thread, and would never be closed -- board/api.py:65
+        # opens one per request for exactly these reasons.
+        deps = OperatorDeps(poller=fleet_poller, board=BoardStore,
                             starter=_start, actor="chat:local")
         target.mount("/chat", build_chat_app(deps))
     except ChatConfigError as e:

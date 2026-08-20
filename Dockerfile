@@ -55,6 +55,13 @@ COPY policy ./policy
 # Blueprint comparison yaml (blueprints/apqc.yaml, E-48 D8) is a factory asset:
 # without this COPY production assessments cannot load the reference taxonomy.
 COPY blueprints ./blueprints
+# The operator chat surface's prompt and model config (E-86). Copied even
+# though the mount is off by default: without it, setting SDLC_CHAT_ENABLED=1
+# in a container fails soft to a log line and a silently 404ing /chat.
+# SDLC_CHAT_ASSETS below is what makes the path independent of where sdlc
+# itself was installed -- agent.py cannot infer the repo root from
+# site-packages, the same trap SDLC_CASES_ROOT exists for.
+COPY interfaces/chat ./interfaces/chat
 # .env's LOGFIRE_TOKEN reaches this container via docker-compose's env_file,
 # so logfire_setup.configure() gates itself on and imports logfire -- without
 # the extra installed here, boot crash-loops on ModuleNotFoundError before
@@ -80,6 +87,7 @@ ENV SDLC_AGENTS_DIR=/app/agents
 # resolves under the Python install prefix instead of /app. Pin it explicitly
 # rather than relying on that fallback ever matching this image's layout.
 ENV SDLC_CASES_ROOT=/app/benchmarks/cases
+ENV SDLC_CHAT_ASSETS=/app/interfaces/chat
 ENV SDLC_BLUEPRINTS_DIR=/app/blueprints
 
 CMD ["python", "-m", "sdlc.worker"]

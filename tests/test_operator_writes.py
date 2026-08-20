@@ -177,3 +177,22 @@ async def test_writes_reset_the_follow_streak(deps):
     deps.note_follow()
     await tools.answer_question(deps, "feature-add-sso", "Q1", "Okta")
     assert deps.follow_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_start_run_uses_the_id_the_starter_returns(deps):
+    async def renaming_starter(idea, cfg, wf_id):
+        return wf_id + "-2"
+    deps.starter = renaming_starter
+    got = await tools.start_run(deps, title="Add SSO",
+                                mode=ProjectMode.GREENFIELD)
+    assert got == "feature-add-sso-2"
+
+
+@pytest.mark.asyncio
+async def test_a_title_with_no_alphanumerics_is_refused(deps):
+    """slug() strips everything else, so this would start a run called
+    bare 'feature-'."""
+    with pytest.raises(ToolError) as e:
+        await tools.start_run(deps, title="!!!", mode=ProjectMode.GREENFIELD)
+    assert "descriptive title" in e.value.message

@@ -24,8 +24,8 @@ from ..board.models import TaskStatus
 from ..board.store import NotFoundError
 from ..channels.contract import ActorChannel, Reply, default_render
 from ..channels.transport import resolve_key, submit
-from ..cli import slug
 from ..models import GateOutcome, IdeaBrief, PipelineConfig, ProjectMode
+from ..naming import slug
 from .deps import OperatorDeps
 from .errors import ToolError, guard
 from . import render
@@ -69,12 +69,48 @@ async def inbox(deps: OperatorDeps) -> str:
     return render.inbox_view(await deps.poller.snapshot())
 
 
-def _current_plan_version(deps: OperatorDeps, project: str) -> int:
+async def _board(deps: OperatorDeps, fn):
+    """Run fn(store) on a worker thread, against a store created and closed
+    inside that same thread.
+
+    Three things at once, all required:
+
+    * OFF THE LOOP. sqlite here is opened with PRAGMA busy_timeout=5000, so a
+      contended write blocks its caller for up to five seconds. On the event
+      loop that stalls the shared FleetPoller and every dashboard SSE client,
+      not merely the chat request. board/api.py gets this for free by writing
+      sync `def` handlers that Starlette offloads; async verbs must ask.
+    * ONE THREAD. schema.connect() leaves check_same_thread at its default of
+      True, so a connection opened on the loop thread cannot legally be used
+      from a worker. Creating it inside `run` is what makes the offload safe.
+    * PER CALL. board/api.py:65 opens and closes a store per request for the
+      same reason; a single long-lived connection pinned to the import thread
+      is a latent ProgrammingError.
+    """
+    factory = deps.board
+    if not callable(factory):
+        raise ToolError(
+            "OperatorDeps.board must be a zero-argument callable returning a "
+            "fresh BoardStore (it is used from a worker thread, so a shared "
+            "instance would cross threads); got "
+            f"{type(factory).__name__}")
+
+    def run():
+        store = factory()
+        try:
+            return fn(store)
+        finally:
+            store.close()
+
+    return await asyncio.to_thread(run)
+
+
+def _current_plan_version(store, project: str) -> int:
     """The plan version list_tasks defaults to, resolved the way
-    board/api.py:_current_plan_version does."""
+    board/api.py:_current_plan_version does. Runs inside _board's thread."""
     try:
-        art = deps.board.get_artifact(project, "plan")
-    except NotFoundError as e:
+        art = store.get_artifact(project, "plan")
+    except NotFoundError:
         raise ToolError(
             f"project {project!r} has no plan artifact yet, so it has no "
             f"tasks; call get_project to see what it does have") from None
@@ -89,7 +125,7 @@ def _current_plan_version(deps: OperatorDeps, project: str) -> int:
 async def list_projects(deps: OperatorDeps) -> str:
     """Every project the board knows about."""
     deps.note_other_tool()
-    rows = deps.board.list_projects()
+    rows = await _board(deps, lambda st: st.list_projects())
     if not rows:
         return "no projects on the board"
     return "\n".join(f"{key} | {repo or 'no repo'}" for key, repo in rows)
@@ -102,9 +138,12 @@ async def get_project(deps: OperatorDeps, project: str) -> str:
     The artifact keys listed here are the ONLY keys read_artifact accepts.
     """
     deps.note_other_tool()
-    key, repo = deps.board.get_project(project)
-    artifacts = deps.board.list_artifacts(project)
-    stats = deps.board.stats(project)
+
+    def _fetch(st):
+        return (st.get_project(project), st.list_artifacts(project),
+                st.stats(project))
+
+    (key, repo), artifacts, stats = await _board(deps, _fetch)
     lines = [f"project: {key}", f"repo: {repo or 'no repo'}"]
     if artifacts:
         lines.append("artifacts:")
@@ -126,9 +165,6 @@ async def list_tasks(deps: OperatorDeps, project: str,
                      status: str | None = None) -> str:
     """Tasks for a project's plan. Defaults to the current plan version."""
     deps.note_other_tool()
-    deps.board.get_project(project)
-    version = (plan_version if plan_version is not None
-               else _current_plan_version(deps, project))
     want = None
     if status is not None:
         try:
@@ -138,7 +174,14 @@ async def list_tasks(deps: OperatorDeps, project: str,
             raise ToolError(
                 f"unknown task status {status!r}; use one of {allowed}"
             ) from None
-    rows = deps.board.list_tasks(project, version, status=want)
+
+    def _fetch(st):
+        st.get_project(project)
+        v = (plan_version if plan_version is not None
+             else _current_plan_version(st, project))
+        return v, st.list_tasks(project, v, status=want)
+
+    version, rows = await _board(deps, _fetch)
     if not rows:
         return f"no tasks in plan {version} of {project!r}"
     lines = [f"plan {version} of {project!r}, {len(rows)} task(s):"]
@@ -155,8 +198,12 @@ async def project_events(deps: OperatorDeps, project: str,
                          since: int = 0) -> str:
     """The board's durable timeline for a project, oldest first."""
     deps.note_other_tool()
-    deps.board.get_project(project)
-    rows = deps.board.list_events(project, since=since)
+
+    def _fetch(st):
+        st.get_project(project)
+        return st.list_events(project, since=since)
+
+    rows = await _board(deps, _fetch)
     if not rows:
         return f"no events for {project!r} after id {since}"
     lines = [f"{len(rows)} event(s) for {project!r}:"]
@@ -195,49 +242,60 @@ async def read_artifact(deps: OperatorDeps, project: str, key: str,
     offset=next_offset. Summarize what you read; do not quote it whole.
     """
     deps.note_other_tool()
-    deps.board.get_project(project)
-    # Refuse before touching the blob store: an unknown key is the model
-    # fishing, and the answer is to go back to get_project, not to search.
-    try:
-        art = deps.board.get_artifact(project, key)
-    except NotFoundError:
-        raise ToolError(
-            f"project {project!r} has no artifact {key!r}; call get_project "
-            f"and use one of the keys it lists") from None
-
-    if version_id is None:
-        if art.current_version is None:
-            raise ToolError(
-                f"artifact {key!r} in {project!r} has no published version")
-        version_id = art.current_version
-    v = deps.board.get_version(project, version_id)
-    if v.key != key:
-        raise ToolError(
-            f"version {version_id} belongs to {v.key!r}, not {key!r}")
-
-    path = ref_to_path(v)
-    if not path.exists():
-        # Metadata outlives the blob (board/api.py:126): the row and its
-        # sha256 are still authoritative history when runs/ has been pruned.
-        raise ToolError(
-            f"the blob for {key!r} version {version_id} was pruned from the "
-            f"claim-check store; sha256 {v.sha256}, uri {v.uri}")
-
-    data = path.read_bytes()
     if offset < 0:
         raise ToolError("offset must be zero or positive")
-    if offset and offset >= len(data):
-        raise ToolError(
-            f"offset {offset} is past the end of {key!r} "
-            f"({len(data)} bytes); the previous page was the last one")
 
-    window = data[offset:offset + deps.max_artifact_bytes]
+    def _fetch(st):
+        st.get_project(project)
+        # Refuse before touching the blob store: an unknown key is the model
+        # fishing, and the answer is to go back to get_project, not to search.
+        try:
+            art = st.get_artifact(project, key)
+        except NotFoundError:
+            raise ToolError(
+                f"project {project!r} has no artifact {key!r}; call "
+                f"get_project and use one of the keys it lists") from None
+
+        want = version_id
+        if want is None:
+            if art.current_version is None:
+                raise ToolError(
+                    f"artifact {key!r} in {project!r} has no published "
+                    f"version")
+            want = art.current_version
+        v = st.get_version(project, want)
+        if v.key != key:
+            raise ToolError(
+                f"version {want} belongs to {v.key!r}, not {key!r}")
+
+        path = ref_to_path(v)
+        if not path.exists():
+            # Metadata outlives the blob (board/api.py:126): the row and its
+            # sha256 are still authoritative history when runs/ was pruned.
+            raise ToolError(
+                f"the blob for {key!r} version {want} was pruned from the "
+                f"claim-check store; sha256 {v.sha256}, uri {v.uri}")
+
+        # Seek to the page rather than reading the whole blob to return
+        # 32 KB of it: an artifact big enough to need paging is exactly the
+        # one whose full read costs the most, and every page paid it again.
+        total = path.stat().st_size
+        if offset and offset >= total:
+            raise ToolError(
+                f"offset {offset} is past the end of {key!r} "
+                f"({total} bytes); the previous page was the last one")
+        with path.open("rb") as fh:
+            fh.seek(offset)
+            window = fh.read(deps.max_artifact_bytes)
+        return v, window, total
+
+    v, window, total = await _board(deps, _fetch)
     end = offset + len(window)
-    truncated = end < len(data)
+    truncated = end < total
     return ArtifactRead(
         project=project, key=key, version_id=v.id, n=v.n, sha256=v.sha256,
         content=window.decode("utf-8", errors="replace"),
-        total_bytes=len(data), truncated=truncated,
+        total_bytes=total, truncated=truncated,
         next_offset=end if truncated else None)
 
 
@@ -257,6 +315,10 @@ def _clamp(timeout_s: int) -> int:
     return max(MIN_TIMEOUT_S, min(MAX_TIMEOUT_S, int(timeout_s)))
 
 
+def _in_scope(rid: str, run_id: str | None) -> bool:
+    return run_id is None or rid == run_id
+
+
 def _projection(snap, run_id: str | None) -> str:
     """A stable fingerprint of the part of the fleet being followed.
 
@@ -264,13 +326,28 @@ def _projection(snap, run_id: str | None) -> str:
     run moves, so a scoped follow against it would return instantly and
     forever. `at` is excluded for the reason dashboard/api.py excludes it --
     the clock is not a change.
+
+    It fingerprints EXACTLY the fields _describe_change can name -- stage,
+    status, presence, and pending keys -- and nothing else. Serialising the
+    whole RunState instead (as this did originally) folds in `roles` and
+    `cost_usd_total`, which move on almost every poll tick of an active run:
+    every wait then returned within seconds reporting a change it could not
+    describe, burning a model round trip and marching toward the consecutive
+    -wait brake. A fingerprint must not be able to move in a way the report
+    cannot explain.
     """
-    runs = [r for r in snap.runs if run_id is None or r.run_id == run_id]
-    inbox = [i for i in snap.inbox if run_id is None or i.run_id == run_id]
     payload = {
-        "runs": [json.loads(r.model_dump_json()) for r in runs],
-        "inbox": [json.loads(i.model_dump_json()) for i in inbox],
-        "closed": sorted(c.run_id for c in snap.closed),
+        "runs": sorted(
+            (r.run_id, r.current_stage, r.status)
+            for r in snap.runs if _in_scope(r.run_id, run_id)),
+        "pending": sorted(
+            (i.run_id, d.key)
+            for i in snap.inbox if _in_scope(i.run_id, run_id)
+            for d in i.pending),
+        # Scoped like everything else: an unrelated run finishing, or an old
+        # entry ageing out of CLOSED_LIMIT, must not end a wait on this run.
+        "closed": sorted(c.run_id for c in snap.closed
+                         if _in_scope(c.run_id, run_id)),
     }
     return json.dumps(payload, sort_keys=True)
 
@@ -315,12 +392,6 @@ def _describe_change(before, after, run_id: str | None) -> tuple[list[str], str]
                      "call get_run for detail")
     return changed, "\n".join(lines)
 
-
-def _is_terminal_change(changed: list[str]) -> bool:
-    """Pending decisions and closures end the wait immediately; a stage
-    advance is reported too, but only because the fingerprint moved."""
-    return any(c.endswith(":pending") or c.endswith(":closed")
-               for c in changed)
 
 
 @guard
@@ -437,16 +508,26 @@ async def start_run(deps: OperatorDeps, title: str, mode: ProjectMode,
             "operator which repository this is for")
     idea = IdeaBrief(title=title, description=description, mode=mode,
                      repo_url=repo)
-    wf_id = f"feature-{slug(title)}"
+    stem = slug(title)
+    if not stem:
+        # slug() strips everything non-alphanumeric, so a title like "!!!"
+        # yields "", and the run would be started as bare "feature-".
+        raise ToolError(
+            f"title {title!r} has no letters or digits to build a run id "
+            f"from; ask the operator for a descriptive title")
+    wf_id = f"feature-{stem}"
     try:
-        await deps.starter(idea, PipelineConfig(), wf_id)
+        started = await deps.starter(idea, PipelineConfig(), wf_id)
     except Exception as e:      # noqa: BLE001 -- narrowed into ToolError
         if "already started" in str(e).lower():
             raise ToolError(
                 f"a run with id {wf_id!r} already exists; call get_run on it, "
                 f"or start this one under a different title") from None
         raise
-    return wf_id
+    # The starter's return value is authoritative: it is the id Temporal
+    # actually assigned. Returning the locally computed one would quietly
+    # diverge the moment a starter dedupes or decorates the id.
+    return started or wf_id
 
 
 

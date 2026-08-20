@@ -9,6 +9,18 @@ from sdlc.operator import tools
 from sdlc.operator.deps import OperatorDeps
 
 
+def _test_cfg():
+    """A config naming pydantic-ai's built-in 'test' model.
+
+    build_agent() constructs the configured model eagerly, so using the real
+    agent.yaml would make these tests depend on ANTHROPIC_API_KEY being in
+    the environment -- which it only was by accident, via the load_dotenv()
+    that sdlc.cli used to run when tools.py still imported it.
+    """
+    return chat_agent.ChatConfig(model="test", max_tokens=1000,
+                                 instructions="test instructions")
+
+
 def test_twelve_tools_nine_read_three_write():
     assert len(chat_agent.READ_TOOLS) == 9
     assert len(chat_agent.WRITE_TOOLS) == 3
@@ -74,7 +86,7 @@ async def test_the_orientation_line_reaches_the_prompt(monkeypatch):
                                status="running", started_at=at)])
 
     deps = OperatorDeps(poller=FakePoller(), board=None, starter=None)
-    a = chat_agent.build_agent()
+    a = chat_agent.build_agent(_test_cfg())
     with a.override(model=TestModel(call_tools=[])):
         result = await a.run("hello", deps=deps)
     assert result.output is not None
@@ -82,12 +94,68 @@ async def test_the_orientation_line_reaches_the_prompt(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_each_http_request_clears_the_follow_streak():
+async def test_a_chat_post_clears_the_follow_streak():
     deps = OperatorDeps(poller=None, board=None, starter=None)
     deps.note_follow()
     app = chat_agent._ResetPerRequest(_noop_asgi, deps)
-    await app({"type": "http"}, _recv, _send)
+    await app({"type": "http", "method": "POST", "path": "/chat/api/chat"},
+              _recv, _send)
     assert deps.follow_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_loading_the_ui_page_does_not_clear_the_streak():
+    """create_web_app serves the UI shell at / and /{id}. Resetting on those
+    meant a second tab or a plain reload dissolved the consecutive-wait
+    brake mid-conversation."""
+    deps = OperatorDeps(poller=None, board=None, starter=None)
+    deps.note_follow()
+    app = chat_agent._ResetPerRequest(_noop_asgi, deps)
+    for path in ("/chat/", "/chat/some-conversation-id"):
+        await app({"type": "http", "method": "GET", "path": path},
+                  _recv, _send)
+    assert deps.follow_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_a_tool_error_reaches_the_model_instead_of_killing_the_turn():
+    """The whole point of errors.py. Only ModelRetry and ToolFailed become a
+    tool return the model reads; any other exception propagates out of
+    Agent.run and 500s the chat request. ToolFailed also leaves the retry
+    budget alone, so a second miss does not become UnexpectedModelBehavior."""
+    from datetime import datetime, timezone
+
+    from pydantic_ai.models.test import TestModel
+
+    from sdlc.dashboard.fleet import FleetSnapshot
+
+    class EmptyFleet:
+        async def snapshot(self):
+            return FleetSnapshot(at=datetime.now(timezone.utc))
+
+    deps = OperatorDeps(poller=EmptyFleet(), board=None, starter=None)
+    a = chat_agent.build_agent(_test_cfg())
+    with a.override(model=TestModel(call_tools=["get_run"])):
+        result = await a.run("check run nope", deps=deps)
+    assert result.output is not None
+
+
+@pytest.mark.asyncio
+async def test_the_follow_brake_also_reaches_the_model():
+    from pydantic_ai.exceptions import ToolFailed
+
+    deps = OperatorDeps(poller=None, board=None, starter=None,
+                        max_follow_calls=0)
+    bound = chat_agent._bind(tools.follow)
+
+    class Ctx:
+        pass
+
+    ctx = Ctx()
+    ctx.deps = deps
+    with pytest.raises(ToolFailed) as e:
+        await bound(ctx, run_id="r1", timeout_s=5)
+    assert "report to the operator" in str(e.value)
 
 
 async def _noop_asgi(scope, receive, send):
@@ -100,3 +168,17 @@ async def _recv():
 
 async def _send(message):
     return None
+
+
+def test_asset_dir_honours_the_env_override(monkeypatch, tmp_path):
+    """parents[3] is the repo root only for a source checkout; from
+    site-packages it lands on <prefix>/lib. The image sets SDLC_CHAT_ASSETS
+    for the same reason the Dockerfile sets SDLC_CASES_ROOT."""
+    monkeypatch.setenv(chat_agent.ASSETS_ENV, str(tmp_path))
+    assert chat_agent.asset_dir() == tmp_path
+
+
+def test_asset_dir_falls_back_to_the_checkout(monkeypatch):
+    monkeypatch.delenv(chat_agent.ASSETS_ENV, raising=False)
+    assert chat_agent.asset_dir().name == "chat"
+    assert (chat_agent.asset_dir() / "agent.yaml").is_file()

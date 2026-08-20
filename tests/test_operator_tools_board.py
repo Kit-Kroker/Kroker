@@ -8,16 +8,20 @@ from sdlc.operator.errors import ToolError
 
 
 @pytest.fixture
-def store(tmp_path):
-    s = BoardStore(tmp_path / "board.db")
-    s.ensure_project("kroker", repo="git@example.com:kroker.git")
-    yield s
-    s.close()
+def board_factory(tmp_path):
+    """A zero-arg factory, matching production: tools._board opens and closes
+    a store per call inside its worker thread, because a sqlite connection
+    belongs to the thread that opened it."""
+    db = tmp_path / "board.db"
+    seed = BoardStore(db)
+    seed.ensure_project("kroker", repo="git@example.com:kroker.git")
+    seed.close()
+    return lambda: BoardStore(db)
 
 
 @pytest.fixture
-def deps(store):
-    return OperatorDeps(poller=None, board=store, starter=None)
+def deps(board_factory):
+    return OperatorDeps(poller=None, board=board_factory, starter=None)
 
 
 @pytest.mark.asyncio
@@ -29,13 +33,25 @@ async def test_list_projects_names_key_and_repo(deps):
 
 @pytest.mark.asyncio
 async def test_list_projects_empty_is_explicit(tmp_path):
-    s = BoardStore(tmp_path / "empty.db")
+    db = tmp_path / "empty.db"
+    out = await tools.list_projects(
+        OperatorDeps(poller=None, board=lambda: BoardStore(db), starter=None))
+    assert "no projects" in out.lower()
+
+
+@pytest.mark.asyncio
+async def test_a_bare_store_instead_of_a_factory_is_refused_clearly(tmp_path):
+    """The failure mode this factory contract exists to prevent is a sqlite
+    connection crossing threads, which surfaces as an obscure
+    ProgrammingError. Refuse it up front instead."""
+    store = BoardStore(tmp_path / "board.db")
     try:
-        out = await tools.list_projects(
-            OperatorDeps(poller=None, board=s, starter=None))
-        assert "no projects" in out.lower()
+        with pytest.raises(ToolError) as e:
+            await tools.list_projects(
+                OperatorDeps(poller=None, board=store, starter=None))
+        assert "callable" in e.value.message
     finally:
-        s.close()
+        store.close()
 
 
 @pytest.mark.asyncio

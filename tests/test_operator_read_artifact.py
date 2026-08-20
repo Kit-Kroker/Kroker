@@ -11,17 +11,25 @@ BIG = "x" * (80 * 1024)
 
 
 @pytest.fixture
-def deps(tmp_path):
-    store = BoardStore(tmp_path / "board.db",
-                       blobs=LocalFileStore(root=tmp_path / "runs"))
-    store.ensure_project("kroker")
-    store.publish_artifact_version(
+def board_factory(tmp_path):
+    db = tmp_path / "board.db"
+    blobs = tmp_path / "runs"
+
+    def make():
+        return BoardStore(db, blobs=LocalFileStore(root=blobs))
+
+    seed = make()
+    seed.ensure_project("kroker")
+    seed.publish_artifact_version(
         "kroker", "spec", run_id="feature-x",
         content=BIG.encode("utf-8"), actor="workflow:feature-x")
-    try:
-        yield OperatorDeps(poller=None, board=store, starter=None)
-    finally:
-        store.close()
+    seed.close()
+    return make
+
+
+@pytest.fixture
+def deps(board_factory):
+    return OperatorDeps(poller=None, board=board_factory, starter=None)
 
 
 @pytest.mark.asyncio
@@ -47,10 +55,14 @@ async def test_paging_reaches_the_end_and_stops(deps):
 
 
 @pytest.mark.asyncio
-async def test_a_small_artifact_is_not_marked_truncated(deps):
-    deps.board.publish_artifact_version(
-        "kroker", "plan", run_id="feature-x", content=b"short",
-        actor="workflow:feature-x")
+async def test_a_small_artifact_is_not_marked_truncated(deps, board_factory):
+    st = board_factory()
+    try:
+        st.publish_artifact_version(
+            "kroker", "plan", run_id="feature-x", content=b"short",
+            actor="workflow:feature-x")
+    finally:
+        st.close()
     got = await tools.read_artifact(deps, "kroker", "plan")
     assert got.content == "short"
     assert got.truncated is False
@@ -73,11 +85,16 @@ async def test_offset_past_the_end_is_a_tool_error_not_an_empty_read(deps):
 
 
 @pytest.mark.asyncio
-async def test_pruned_blob_reports_metadata_instead_of_crashing(deps):
-    _, version_id = deps.board.publish_artifact_version(
-        "kroker", "arch", run_id="feature-x", content=b"temp",
-        actor="workflow:feature-x")
-    v = deps.board.get_version("kroker", version_id)
+async def test_pruned_blob_reports_metadata_instead_of_crashing(deps,
+                                                                board_factory):
+    st = board_factory()
+    try:
+        _, version_id = st.publish_artifact_version(
+            "kroker", "arch", run_id="feature-x", content=b"temp",
+            actor="workflow:feature-x")
+        v = st.get_version("kroker", version_id)
+    finally:
+        st.close()
     ref_to_path(v).unlink()
     with pytest.raises(ToolError) as e:
         await tools.read_artifact(deps, "kroker", "arch")
