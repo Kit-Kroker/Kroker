@@ -4,7 +4,7 @@ no model, no I/O.
 The cap is load-bearing: MAC raised task success WHILE CUTTING dialogue turns
 (6.53 -> 4.86), and six dimensions sweeping in parallel is a direct assault on
 that. `dropped` is what keeps capping distinguishable from incuriosity."""
-from sdlc.clarify.merge import merge_clarification
+from sdlc.clarify.merge import MATERIALITY_FLOOR, merge_clarification
 from sdlc.clarify.models import ClarifyRoute, ProbeResult
 from sdlc.models import ClarificationDimension as CD
 from sdlc.models import OpenQuestion
@@ -56,18 +56,70 @@ def test_probe_questions_join_the_supervisors():
 
 def test_ranking_is_by_materiality_descending():
     probe = ProbeResult(dimension=CD.INTERFACE_SPEC, questions=[
-        _q("P1", "low?", dim=CD.INTERFACE_SPEC, mat=0.2, ev="a.py"),
+        _q("P1", "low?", dim=CD.INTERFACE_SPEC, mat=0.35, ev="a.py"),
         _q("P2", "high?", dim=CD.INTERFACE_SPEC, mat=0.95, ev="b.py")])
     out = _merge(_route(), [probe])
     assert [q.id for q in out.open_questions] == ["P2", "P1"]
 
 
-def test_a_question_without_materiality_sorts_last():
+# ---- the materiality floor -------------------------------------------
+# Both prompts say "below 0.3 -- do not ask it". Merge is the policy layer,
+# so it ENFORCES that rather than trusting it. Without the floor the cap is
+# an attractor rather than a ceiling: the human sees exactly `cap` questions
+# whenever the pool is larger, which is the inversion of MAC's result that
+# spec §13 names as the risk deciding whether E-85 was worth building.
+
+def test_the_floor_is_the_number_both_prompts_state():
+    assert MATERIALITY_FLOOR == 0.3
+
+
+def test_a_question_below_the_floor_is_discarded_not_dropped():
+    probe = ProbeResult(dimension=CD.INTERFACE_SPEC, questions=[
+        _q("P1", "trivial?", dim=CD.INTERFACE_SPEC, mat=0.29, ev="a.py")])
+    out = _merge(_route(), [probe])
+    assert out.open_questions == []
+    assert out.dropped == [], (
+        "`dropped` means 'material but lost the cap'; a sub-floor question "
+        "was never material and must not pollute that measurement")
+
+
+def test_a_question_exactly_at_the_floor_survives():
+    # The prompts say "BELOW 0.3 -- do not ask it", so 0.3 is askable.
+    probe = ProbeResult(dimension=CD.INTERFACE_SPEC, questions=[
+        _q("P1", dim=CD.INTERFACE_SPEC, mat=MATERIALITY_FLOOR, ev="a.py")])
+    assert [q.id for q in _merge(_route(), [probe]).open_questions] == ["P1"]
+
+
+def test_a_question_without_materiality_is_discarded():
+    # An author that skipped the shared scale did not clear it. Sorting
+    # these last instead would let them ride into any batch smaller than
+    # the cap ahead of nothing at all.
     probe = ProbeResult(dimension=CD.INTERFACE_SPEC, questions=[
         _q("P1", "unscored?", dim=CD.INTERFACE_SPEC, ev="a.py"),
-        _q("P2", "scored?", dim=CD.INTERFACE_SPEC, mat=0.1, ev="b.py")])
+        _q("P2", "scored?", dim=CD.INTERFACE_SPEC, mat=0.9, ev="b.py")])
     out = _merge(_route(), [probe])
-    assert [q.id for q in out.open_questions] == ["P2", "P1"]
+    assert [q.id for q in out.open_questions] == ["P2"]
+    assert out.dropped == []
+
+
+def test_the_floor_applies_to_supervisor_questions_too():
+    sup = _q("S1", "trivial?", dim=CD.FUNCTIONAL_INTENT, mat=0.1,
+             asked_by="supervisor")
+    out = _merge(_route(sup), [])
+    assert out.open_questions == []
+    assert out.dropped == []
+
+
+def test_the_cap_is_a_ceiling_not_an_attractor():
+    """The regression this floor exists for: a pool larger than the cap
+    made of mostly immaterial questions must NOT fill the batch to `cap`."""
+    probe = ProbeResult(dimension=CD.INTERFACE_SPEC, questions=(
+        [_q("HI", "real?", dim=CD.INTERFACE_SPEC, mat=0.8, ev="a.py")]
+        + [_q(f"LO{i}", f"filler{i}?", dim=CD.INTERFACE_SPEC, mat=0.1,
+              ev="b.py") for i in range(9)]))
+    out = _merge(_route(), [probe], cap=5)
+    assert [q.id for q in out.open_questions] == ["HI"]
+    assert out.dropped == []
 
 
 def test_ties_break_by_dimension_before_id_so_replays_are_stable():
@@ -154,9 +206,42 @@ def test_an_ungrounded_dimension_needs_no_evidence():
 
 
 def test_a_supervisor_question_never_needs_evidence():
-    sup = _q("S1", dim=CD.FUNCTIONAL_INTENT, mat=0.9, asked_by="supervisor",
+    # The case worth pinning is a supervisor question labelled with a
+    # GROUNDED dimension. C1 would pass trivially -- it is not in GROUNDED,
+    # so the evidence gate never looks at it. C4 is, and the supervisor has
+    # no repo access with which to cite anything, so without the clamp this
+    # question is discarded into neither open_questions nor `dropped`.
+    sup = _q("S1", dim=CD.INTERFACE_SPEC, mat=0.9, asked_by="supervisor",
              ev=None)
     assert [q.id for q in _merge(_route(sup), []).open_questions] == ["S1"]
+
+
+def test_a_supervisor_question_outside_c1_c2_is_clamped_to_no_dimension():
+    """Dimension authority mirrors the probe side, where the burst's own
+    dispatch overrides the model's self-report unconditionally. The
+    supervisor owns C1/C2; anything else it labels itself is not knowable,
+    so it becomes None rather than a claim merge would then act on."""
+    sup = _q("S1", dim=CD.CODE_STRUCTURE, mat=0.9, asked_by="supervisor",
+             ev="a.py")
+    out = _merge(_route(sup), [])
+    assert [q.dimension for q in out.open_questions] == [None]
+
+
+def test_a_supervisor_question_inside_c1_c2_keeps_its_dimension():
+    for dim in (CD.FUNCTIONAL_INTENT, CD.BUSINESS_SEMANTICS):
+        sup = _q("S1", dim=dim, mat=0.9, asked_by="supervisor")
+        out = _merge(_route(sup), [])
+        assert [q.dimension for q in out.open_questions] == [dim]
+
+
+def test_a_mislabelled_supervisor_question_never_vanishes_silently():
+    """Every candidate must end up somewhere countable: asked, dropped, or
+    removed by a rule the record explains. A drifting label is not a rule."""
+    sup = _q("S1", dim=CD.DATA_SEMANTICS, mat=0.9, asked_by="supervisor",
+             ev=None)
+    out = _merge(_route(sup), [])
+    assert [q.id for q in out.open_questions] + \
+           [q.id for q in out.dropped] == ["S1"]
 
 
 def test_a_probe_dimension_is_recorded_even_when_it_abstained():

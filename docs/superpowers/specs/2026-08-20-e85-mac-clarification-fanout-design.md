@@ -112,7 +112,9 @@ clarify stage  (feature.py:2069, gated by cfg.clarify_probes_enabled)
 │
 ├─ 2. clarify_probe × N    EXPERTS, concurrent, one per live dimension
 │      in : idea, requirements body, the dimension's scope block,
-│           the grounding slice it is entitled to
+│           and the same full `render_for_prompt` grounding packet for
+│           every probe — there is no per-dimension slicer. Each probe's
+│           scope block, not its input, is what narrows it.
 │      out: zero or more OpenQuestion, each with evidence
 │      Each runs its own is_ambiguous(); abstaining is a valid answer.
 │
@@ -263,9 +265,18 @@ error and no warning."
 So: one `PROBE_PREFIX`, byte-identical across every probe in a burst, carrying
 the shared method (what counts as material, what evidence to cite, that
 abstaining is valid, the output contract). The per-dimension scope block is
-appended *after* the prefix, never interpolated into it. Four probes at ~0.1×
-input price on the shared prefix is the difference between roughly 4× and 1.3×
-stage input cost.
+appended *after* the prefix, never interpolated into it.
+
+**What that actually buys, precisely.** Probes are dispatched together via
+`asyncio.gather`, so no probe can read a cache entry a sibling writes in the
+same burst — a cache entry is not visible until the write that creates it
+completes, and all N requests are in flight at once. Within a single run the
+first burst therefore pays full input price on the prefix N times. The saving
+accrues **across runs**, whenever a later burst starts inside the cache TTL of
+an earlier one: those probes read the prefix at ~0.1× instead of writing it.
+So the shared prefix is a cross-run amortisation, not a within-burst 4×→1.3×
+collapse, and §10's cost measurement must compare warm runs against cold ones
+rather than reading a single run's numbers.
 
 ## 7. Memoization correctness
 

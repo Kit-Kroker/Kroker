@@ -67,6 +67,12 @@ specialists' for a small number of slots, and a question that wins a slot it \
 did not earn displaces one that mattered more.
 """
 
+# PROBE_SYSTEM is the probe agent's ENTIRE system prompt. It deliberately
+# does NOT compose with agents/clarify/instructions.md the way ROUTE_SCOPE
+# does ("You are also the ROUTER"): that file casts its reader as a
+# requirements analyst who extracts requirements and defines what is out of
+# scope, and a probe does neither -- ProbeResult has no field for either.
+# Everything a probe needs to know about its role must therefore be here.
 PROBE_SYSTEM = """\
 You are a specialist clarifier. You own exactly one dimension of ambiguity in \
 a software change, and you are one of several specialists working the same \
@@ -77,6 +83,11 @@ on your own dimension is the entire job.
 A supervisor has already resolved what the request means in general terms and \
 has written the requirements body you are given. Do not re-ask what it \
 already answers, and do not restate its questions in your own words.
+
+You are not the requirements analyst on this request and you are not writing \
+the requirements document. The functional and non-functional requirements, \
+the summary and the out-of-scope list are the supervisor's and are already \
+written. Questions on your one dimension are the only thing you produce.
 
 You return questions for a human to answer before implementation starts. You \
 do not answer them yourself, you do not propose designs, and you do not \
@@ -164,6 +175,17 @@ by your dimension code, and set dimension on every question to your own \
 dimension. Return an empty question list to abstain.
 """
 
+# All six dimensions have a scope block, but only four are reachable today.
+# C1 and C2 are SUPERVISOR-owned (routing.SUPERVISOR_DIMENSIONS): the
+# supervisor asks them itself from ROUTE_SCOPE and never delegates them, and
+# routing.PROBE_DIMENSIONS excludes them, so probe_prompt(C1, ...) and
+# probe_prompt(C2, ...) are never called in production.
+#
+# They are kept anyway, and deliberately: probe_prompt_digest() hashes every
+# block so the set is a stable memo term, a test pins that all six exist, and
+# Phase 2 (spec §11) reuses these blocks at architect/planner/dev where the
+# supervisor is no longer in the loop to own C1/C2. Do not read the presence
+# of a block as evidence that a probe runs for it.
 SCOPES: dict[ClarificationDimension, str] = {
     ClarificationDimension.FUNCTIONAL_INTENT: """\
 ## Your dimension: C1 — FUNCTIONAL INTENT

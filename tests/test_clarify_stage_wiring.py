@@ -3,14 +3,18 @@
 run_or_degrade exists because a timeout, a lost worker or an exhausted retry
 happens OUTSIDE the activity, where its own try/except cannot keep it. A
 clarifier that cannot ask about data semantics is degraded, not broken."""
+import ast
+import json
 from dataclasses import dataclass
 
 import pytest
+from test_factory_purity import FEATURE_PY, _load_class, _methods
 
 from sdlc.clarify.models import ClarifyRoute, ProbeResult
 from sdlc.models import ClarificationDimension as CD
 from sdlc.models import ClarifiedRequirements, OpenQuestion, ProjectMode
-from sdlc.workflows.feature import _clarify_fanout, _probe_results_from
+from sdlc.workflows.feature import (_clarify_fanout, _probe_results_from,
+                                    _requirements_for_downstream)
 
 C3, C4, C6 = (CD.TECHNICAL_CONTEXT, CD.INTERFACE_SPEC, CD.DATA_SEMANTICS)
 
@@ -191,3 +195,110 @@ async def test_the_cap_is_honoured_and_the_overflow_is_recorded_as_dropped():
     out = await _fanout(eg, [C4], cap=2)
     assert len(out.open_questions) == 2
     assert len(out.dropped) == 2
+
+
+# ---------------------------------------------------------------------
+# What crosses the stage boundary. Spec §2's scope guard is "no change to
+# any downstream role", and §9's cap only protects the pipeline if the
+# capped-out questions stay inside the stage. `dropped` carries every cut
+# question WITH its why_it_matters, suggested_answer and evidence, and it
+# is unbounded -- merge keeps the entire remainder past the cap. Feeding it
+# to the architect would hand the architect the uncapped set.
+# ---------------------------------------------------------------------
+
+def _reqs(**kw) -> ClarifiedRequirements:
+    base = dict(summary="s", functional_requirements=["fr"],
+                non_functional_requirements=["nfr"], out_of_scope=["oos"],
+                open_questions=[])
+    return ClarifiedRequirements(**(base | kw))
+
+
+def _cut(qid: str) -> OpenQuestion:
+    return OpenQuestion(
+        id=qid, question=f"{qid} SENTINEL-QUESTION?",
+        why_it_matters="SENTINEL-WHY", suggested_answer="SENTINEL-ANSWER",
+        dimension=C6, materiality=0.4, evidence="SENTINEL-EVIDENCE.py")
+
+
+def test_the_downstream_view_omits_every_dropped_question():
+    reqs = _reqs(open_questions=[_cut("kept")], dropped=[_cut("cut1"),
+                                                        _cut("cut2")])
+    view = _requirements_for_downstream(reqs)
+    assert "kept" in view
+    for lost in ("cut1", "cut2"):
+        assert lost not in view
+    # ...and nothing a dropped question carried leaks by another route.
+    assert view.count("SENTINEL-EVIDENCE.py") == 1
+    assert "dropped" not in json.loads(view)
+
+
+def test_the_downstream_view_omits_the_stage_telemetry():
+    """dimensions_probed records which probes ran. That is a measurement of
+    the clarify stage, not a fact about the requirement."""
+    view = json.loads(_requirements_for_downstream(
+        _reqs(dimensions_probed=[C3, C4, C6])))
+    assert "dimensions_probed" not in view
+
+
+def test_the_downstream_view_keeps_the_requirement_itself():
+    reqs = _reqs(open_questions=[_cut("q1")], dropped=[_cut("cut")])
+    view = json.loads(_requirements_for_downstream(reqs))
+    assert view["summary"] == "s"
+    assert view["functional_requirements"] == ["fr"]
+    assert view["non_functional_requirements"] == ["nfr"]
+    assert view["out_of_scope"] == ["oos"]
+    assert [q["id"] for q in view["open_questions"]] == ["q1"]
+
+
+def test_the_flag_off_downstream_view_has_the_pre_e85_envelope():
+    """With the flag off both artifact-level E-85 fields are EMPTY, but an
+    empty list still serializes -- and pre-E-85 neither key existed at all.
+    Excluding them restores the exact pre-E-85 envelope.
+
+    (The per-question E-85 fields still serialize as nulls; that is a
+    separate, bounded, contentless addition and is deliberately left as it
+    shipped -- see the next test, which pins it so it stays deliberate.)"""
+    view = json.loads(_requirements_for_downstream(_reqs()))
+    assert list(view) == ["summary", "functional_requirements",
+                          "non_functional_requirements", "out_of_scope",
+                          "open_questions", "spec_ref"]
+
+
+def test_the_per_question_e85_fields_are_null_not_absent_with_the_flag_off():
+    """Documented, not fixed. `dimension`/`asked_by`/`materiality`/
+    `evidence` are additive with None defaults, so a flag-off question
+    carries four nulls the architect did not see pre-E-85. They are
+    contentless and bounded -- unlike `dropped`, they cannot defeat the cap
+    or grow without limit -- so they stay. This test exists so that stops
+    being an accident."""
+    q = json.loads(_requirements_for_downstream(
+        _reqs(open_questions=[_cut("q1")])))["open_questions"][0]
+    assert set(q) >= {"dimension", "asked_by", "materiality", "evidence"}
+
+
+def test_dropped_still_survives_on_the_artifact_itself():
+    """The exclusion is a VIEW. `dropped` is the benchmark's record of
+    "material question that was never asked" (§5) and must not be deleted
+    from the artifact that is persisted, judged and published."""
+    reqs = _reqs(dropped=[_cut("cut")], dimensions_probed=[C6])
+    full = json.loads(reqs.model_dump_json())
+    assert [q["id"] for q in full["dropped"]] == ["cut"]
+    assert full["dimensions_probed"] == [C6.value]
+
+
+def test_the_architect_reads_the_downstream_view_not_the_raw_artifact():
+    """AST, because the leak was a `reqs.model_dump_json()` in the
+    architect's prompt AND in its cache key. Nothing else in the suite
+    inspects those two expressions."""
+    tree = ast.parse(FEATURE_PY.read_text(encoding="utf-8"),
+                     filename=str(FEATURE_PY))
+    src = ast.unparse(_methods(_load_class(tree, "FeatureWorkflow"))["_pipeline"])
+    assert "reqs_for_architect = _requirements_for_downstream(reqs)" in src
+    # the prompt...
+    assert r"f'mode={idea.mode.value}\n{reqs_for_architect}'" in src
+    # ...and the memo key, which must key on exactly what it prompted with.
+    assert "cache_key = reqs_for_architect +" in src
+    # The clarify stage's own uses still read the FULL artifact: `dropped`
+    # is the measurement record and must reach disk and the board.
+    assert "self._judge(cfg, reqs.model_dump_json(), 'clarifier'" in src
+    assert "self._board_publish(cfg, 'requirements', reqs.model_dump_json())" in src

@@ -15,12 +15,32 @@ from pydantic_ai.settings import ModelSettings
 from datetime import timedelta
 import hashlib
 import os
+from temporalio.common import RetryPolicy
 from temporalio.workflow import ActivityConfig
 
 from ..clarify.models import ClarifyRoute, ProbeResult
 from ..clarify.prompts import PROBE_SYSTEM, ROUTE_SCOPE
 
 AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=10))
+
+# E-85: the clarify fan-out's own config. It exists ONLY because
+# AGENT_ACTIVITY_CONFIG sets no retry_policy, which means Temporal's default
+# applies: UNLIMITED attempts. Every other agent is a single serial call, so
+# an unlimited retry there is a slow stage. For the fan-out it is a different
+# failure entirely -- spec §8 and decision D10 say a dead probe degrades to
+# "that dimension asked nothing" while its siblings still report, and
+# _clarify_fanout implements that with asyncio.gather(return_exceptions=True).
+# A retryable failure that never exhausts never raises, so gather never
+# returns and the stage HANGS instead of degrading. A bounded
+# maximum_attempts is what makes fail-open true rather than aspirational.
+#
+# Deliberately a separate ActivityConfig, not a mutation of the shared one:
+# no other agent's retry behaviour changes.
+CLARIFY_FANOUT_MAX_ATTEMPTS = 3
+CLARIFY_FANOUT_ACTIVITY_CONFIG = ActivityConfig(
+    start_to_close_timeout=timedelta(minutes=10),
+    retry_policy=RetryPolicy(maximum_attempts=CLARIFY_FANOUT_MAX_ATTEMPTS),
+)
 
 from .loader import build_agents, load_registry
 
@@ -79,8 +99,19 @@ discover_agent = AGENTS.get("discover")
 risk_agent = AGENTS.get("risk")
 
 # E-85: two extra agents for the clarify fan-out. NOT new registry roles --
-# they reuse the clarify role's model and its instructions.md preamble, so
-# agents/ stays at 15 roles and the loader is untouched.
+# they reuse the clarify role's model, so agents/ stays at 15 roles and the
+# loader is untouched.
+#
+# Only the ROUTE agent inherits agents/clarify/instructions.md. It IS the
+# requirements analyst that file describes -- it authors the body and the
+# out-of-scope list -- and ROUTE_SCOPE opens with "You are ALSO the ROUTER",
+# composing with the preamble rather than replacing it.
+#
+# The PROBE agent does not, and must not: instructions.md tells its reader to
+# extract requirements and define what is out of scope, while PROBE_SYSTEM
+# says "You own exactly one dimension... Depth on your own dimension is the
+# entire job" over an output_type (ProbeResult) with no field for either. Two
+# role assignments in one system prompt is a coin flip, not a prompt.
 #
 # They exist as separate Agents rather than per-run output_type overrides
 # because an Agent's output type is fixed at build time and t_clarify is
@@ -103,7 +134,7 @@ clarify_probe_agent = Agent(
     name="clarify_probe_agent",     # Temporal activity name -- NEVER rename
     output_type=ProbeResult,
     model_settings=MODEL_SETTINGS,
-    system_prompt=_clarify_role.instructions + "\n\n" + PROBE_SYSTEM,
+    system_prompt=PROBE_SYSTEM,     # standalone -- see the note above
 )
 
 # Stage name -> registry role. Stage names (feature.py's pipeline vocabulary)
@@ -153,9 +184,9 @@ PROMPT_SHAS: dict[str, str] = {
 # Temporal-wrapped versions used inside workflows.
 t_clarify = TemporalAgent(clarify_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 t_clarify_route = TemporalAgent(clarify_route_agent,
-                                activity_config=AGENT_ACTIVITY_CONFIG)
+                                activity_config=CLARIFY_FANOUT_ACTIVITY_CONFIG)
 t_clarify_probe = TemporalAgent(clarify_probe_agent,
-                                activity_config=AGENT_ACTIVITY_CONFIG)
+                                activity_config=CLARIFY_FANOUT_ACTIVITY_CONFIG)
 t_architect = TemporalAgent(architect_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 t_planner = TemporalAgent(planner_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 t_qa = TemporalAgent(qa_analyst_agent, activity_config=AGENT_ACTIVITY_CONFIG)

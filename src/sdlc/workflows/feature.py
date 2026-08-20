@@ -278,14 +278,42 @@ async def _clarify_fanout(run_role, *, route_agent, probe_agent,
             grounding=grounding))).output
 
     # return_exceptions=True IS the degrade-alone rule here: a probe that
-    # times out, loses its worker or exhausts its retries raises inside its
-    # own coroutine and gather captures it, leaving every sibling's result
-    # intact. _probe_results_from turns each captured exception into a
-    # dropped dimension.
+    # times out, loses its worker or exhausts its BOUNDED retries (see
+    # CLARIFY_FANOUT_ACTIVITY_CONFIG -- without a maximum_attempts Temporal
+    # would retry forever and this gather would never return) raises inside
+    # its own coroutine and gather captures it, leaving every sibling's
+    # result intact. _probe_results_from turns each captured exception into
+    # a dropped dimension.
     results = await asyncio.gather(*[_probe(d) for d in dims],
                                    return_exceptions=True)
     return merge_clarification(route, _probe_results_from(dims, results),
                                cap=cap, grounded=grounded_dimensions(mode))
+
+
+def _requirements_for_downstream(reqs: "ClarifiedRequirements") -> str:
+    """The clarify artifact as every DOWNSTREAM role sees it.
+
+    E-85's scope guard is "no change to downstream roles" (spec §2), and two
+    of `ClarifiedRequirements`' E-85 fields are measurement rather than
+    requirement:
+
+      - `dropped` is the record of what the cap CUT, carrying each lost
+        question's `why_it_matters`, `suggested_answer` and `evidence`.
+        Feeding it to the architect would hand the architect the UNCAPPED
+        set and undo the very protection §9's cap exists to provide -- and
+        it is unbounded, since merge keeps every candidate past the cap.
+      - `dimensions_probed` is stage telemetry: which probes ran. It says
+        nothing about the requirement.
+
+    Both stay on the persisted and emitted artifact -- they are the
+    benchmark's measurement record (§5, §10) and must survive. They simply
+    never reach a downstream prompt or a downstream memo key.
+
+    Excluding them also restores byte-identity for the flag-off path: before
+    E-85 neither field existed, so neither appeared in the architect's
+    prompt or its cache key.
+    """
+    return reqs.model_dump_json(exclude={"dropped", "dimensions_probed"})
 
 
 def _long_act(role_cfg: RoleConfig | None = None) -> dict:
@@ -2321,9 +2349,13 @@ class FeatureWorkflow(GateHost):
 
             delta_retries = cfg.max_delta_retries
             delta_guidance: str | None = None
+            # E-85: the architect reads the requirements, not the stage's
+            # measurement record. Rendered once so the prompt and the memo
+            # key below cannot drift apart.
+            reqs_for_architect = _requirements_for_downstream(reqs)
             while True:
                 prompt = (
-                    f"mode={idea.mode.value}\n{reqs.model_dump_json()}"
+                    f"mode={idea.mode.value}\n{reqs_for_architect}"
                     + (map_block if self._codebase_map is not None else "")
                     + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
                        if snapshot.items else "")
@@ -2339,7 +2371,7 @@ class FeatureWorkflow(GateHost):
                         into=arch_spend)).output
 
                 cache_key = (
-                    reqs.model_dump_json()
+                    reqs_for_architect
                     + (guidance or "")
                     + (map_key if self._codebase_map is not None else "")
                     + (delta_guidance or ""))
