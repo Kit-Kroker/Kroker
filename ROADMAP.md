@@ -1016,6 +1016,24 @@ which makes it the shortest path to a demonstrable assess → fix → prove loop
   bounded prompt rendering `render_for_prompt()` (D12); typed `BrownfieldDelta` (added/modified/removed) (D7/D8/D9);
   activity-side tree listing `check_brownfield_delta` (D8); stages 0 and 2 wired in `FeatureWorkflow` (D3/D4/D6);
   and architecture stage delta grounding check with 1 retry before failing closed (D10/D11).
+- [x] **E-85** MAC-style clarification fan-out (`src/sdlc/clarify/`): the clarify
+  stage becomes supervisor → N dimension probes → pure merge, behind
+  `clarify_probes_enabled` (default off). Ports MAC (IWSDS 2026), whose
+  both-levels configuration beat no-clarification 62.3 vs 54.5 on MultiWOZ 2.4
+  *while cutting* turns 6.53 → 4.86; SWE-RPG's C1–C6 taxonomy supplies the
+  dimensions, since "implement a software feature" is one domain in MAC's
+  terms. SWE-RPG attributed 24.5–46.0% of coding-agent failures to requirement
+  clarification, with 42–54% coverage on interface specs and data semantics —
+  dimensions our clarifier could not reach at all, having no repo access.
+  **Phase 1 only:** inside the stage boundary, one human round-trip, no DAG
+  change. Phase 2 (escalation at architect/planner/dev) is designed for and not
+  built, so the taxonomy gain and the timing gain stay separately measurable.
+  ⚠️ **The A/B has not been run.** MAC's gain came WITH shorter dialogues; six
+  probes naturally push question volume the other way, and `clarify_question_cap`
+  (default 5) plus `dropped` are the guard. Do not default the flag on before
+  dimension coverage and the SC-4 human-answered rate are read together.
+  Spec: `docs/superpowers/specs/2026-08-20-e85-mac-clarification-fanout-design.md`;
+  plan: `docs/superpowers/plans/2026-08-20-e85-mac-clarification-fanout.md`.
 
 ## 11. Tier 2 — the EDCR port (`E-45`…`E-56`) → FR-910
 
