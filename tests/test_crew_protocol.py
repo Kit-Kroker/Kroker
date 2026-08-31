@@ -17,8 +17,6 @@ from sdlc.crew.activities import (
 from sdlc.crew.worktree import round_dir
 from sdlc.workflows.crew import CrewTaskInput, CrewTaskWorkflow
 
-pytestmark = pytest.mark.asyncio
-
 _CODE_MODEL = "zai-coding-plan/glm-5.3"       # crew/roles/coder.yaml
 
 
@@ -77,7 +75,7 @@ def test_an_empty_protocol_still_carries_the_round_path():
         ".workspace/orchestration/code/round-1/notes.md.")
     assert CrewTaskWorkflow()._round_brief(_brief_inp(), 2) == (
         "do the thing\n\nThis is round 2. Your previous round's note is at "
-        "round-1/notes.md. Continue from it; do not restate it. Write this "
+        "round-1/notes.md. Continue from it; do not restate it.\n\nWrite this "
         "round's note to .workspace/orchestration/code/round-2/notes.md.")
 
 
@@ -88,6 +86,7 @@ def test_the_round_path_follows_the_layout():
     assert ".workspace/orchestration/infra/round-1/notes.md" in brief
 
 
+@pytest.mark.asyncio
 async def test_read_round_returns_the_critics_advisory_and_verdict(tmp_path):
     """The critic's output is what round N+1 has to react to; unread, the
     critic is spend with no consumer."""
@@ -114,6 +113,7 @@ async def test_read_round_returns_the_critics_advisory_and_verdict(tmp_path):
     assert "api.py:20" in out.critique
 
 
+@pytest.mark.asyncio
 async def test_read_round_is_fine_with_no_critic_output(tmp_path):
     """A one-role crew writes neither file, and that is the shipped step-1
     layout -- absence is not a protocol violation."""
@@ -129,6 +129,7 @@ async def test_read_round_is_fine_with_no_critic_output(tmp_path):
     assert out.verdict is None
 
 
+@pytest.mark.asyncio
 async def test_an_unknown_advisory_schema_is_an_error(tmp_path):
     """Untrusted input: an unknown schema is refused, never parsed
     best-effort."""
@@ -144,6 +145,7 @@ async def test_an_unknown_advisory_schema_is_an_error(tmp_path):
                                         round=1, deliverable_path="notes.md"))
 
 
+@pytest.mark.asyncio
 async def test_an_unknown_review_verdict_is_an_error(tmp_path):
     """'verdict' drives a control decision, so it is a closed set. A free
     string would let a model invent an outcome the workflow never planned
