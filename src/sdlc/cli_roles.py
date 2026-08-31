@@ -5,7 +5,8 @@ from __future__ import annotations
 from .agents.loader import (
     HARNESS_ROLES, KNOWN_ROLES, load_registry, validate_run_roles,
 )
-from .models import RoleConfig
+from .crew.loader import preflight_crew
+from .models import HarnessKind, RoleConfig
 
 
 def parse_role_models(pairs: list[str]) -> dict[str, str]:
@@ -40,4 +41,10 @@ def build_role_overrides(overrides: dict[str, str]) -> dict[str, RoleConfig]:
             roles[role] = RoleConfig(harness=reg[role].harness, model=model)
         else:
             roles[role] = RoleConfig(kind="proposer", model=model)
+    # E-88 §5: a crew's roles enter the same decorrelation rule. The dev
+    # role's harness decides whether there is a crew at all; the layout name
+    # comes from the registry entry, defaulting to the shipped one.
+    dev = roles.get("dev") or reg.get("dev")
+    if dev is not None and dev.harness is HarnessKind.CREW:
+        preflight_crew(dev.layout or "code", dev.lead_harness, dev.model)
     return roles

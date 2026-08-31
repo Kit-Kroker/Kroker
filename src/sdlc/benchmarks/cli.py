@@ -12,8 +12,10 @@ from pathlib import Path
 
 import yaml
 
-from ..models import GatePolicy
+from ..crew.loader import preflight_crew
+from ..models import GatePolicy, HarnessKind
 from ..worker import TASK_QUEUE
+from .matrix import expand_matrix
 from .models import CaseSpec
 from .workflow import BenchmarkWorkflow
 
@@ -160,6 +162,13 @@ async def _run_matrix(case_path: str, gate_policy: str | None = None) -> str:
     from temporalio.contrib.pydantic import pydantic_data_converter
 
     spec = load_case_spec(case_path)
+    # Refuse a colliding sweep before the matrix starts, not at each cell's
+    # code stage (parent §5). expand_matrix already turned `crew:<harness>`
+    # entries into cells, so this reads the same strings the arms will use.
+    for cell in expand_matrix(spec):
+        if cell.harness is HarnessKind.CREW:
+            preflight_crew("code", cell.lead_harness,
+                           cell.role_models.get("dev"))
     if gate_policy is not None:
         spec = spec.model_copy(update={"gate_policy": GatePolicy(gate_policy)})
     client = await Client.connect(

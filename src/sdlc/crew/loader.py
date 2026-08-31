@@ -218,3 +218,25 @@ def validate_crew_clis(root: Path | None = None) -> None:
             "crew roles name CLIs this environment does not carry, so the "
             "run would fail after other roles had already spent:\n  "
             + "\n  ".join(missing))
+
+
+def preflight_crew(layout: str, lead_harness: HarnessKind | None,
+                   lead_model: str | None) -> None:
+    """Run the crew's ADR-6 check client-side, before the run starts.
+
+    The same pure rule load_crew applies -- one implementation, so the two
+    cannot become two policies that hold only while they agree. This site is
+    the early warning; load_crew remains the guarantee, because it is the one
+    that always sees the run's effective values and can never be bypassed.
+
+    Silent when there is no crew tree, and silent when the layout does not
+    exist: a non-crew run must not be blocked by crew assets it never asked
+    for. A crew run with a broken tree still dies at load_crew.
+    """
+    try:
+        cfg_layout, roles = load_layout(layout)
+        resolved = resolve_crew_roles(cfg_layout, roles, lead_harness,
+                                      lead_model)
+    except CrewAssetsMissing:
+        return
+    check_crew_families(cfg_layout.lead, resolved)
