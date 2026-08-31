@@ -215,3 +215,42 @@ async def run_crew_turn(inp: CrewTurnInput) -> CrewTurnOutput:
             type=AGENT_FAILURE, non_retryable=True)
 
     return CrewTurnOutput(run=result, record=record)
+
+
+@dataclass
+class CheckpointInput:
+    worktree: str
+    round: int
+    exit_code: int
+
+
+@activity.defn
+async def checkpoint_round(inp: CheckpointInput) -> str | None:
+    """Close a round with a commit. Per ROUND rather than per task: it is
+    the resume point a restart resets to, and it is why a turn timeout no
+    longer discards the work already in the worktree (spec §2/§4).
+
+    `_git` is imported from sdlc.activities rather than reimplemented: it
+    carries the safe.directory bypass that mounted volumes and container
+    users need, and two copies of that would drift.
+    """
+    from ..activities import _git
+
+    add = _git(["add", "-A"], inp.worktree)
+    if add.returncode != 0:
+        # Surface git's actual diagnostic instead of a bare
+        # CalledProcessError that loses stderr when Temporal serializes it.
+        detail = add.stderr.strip() or add.stdout.strip()
+        hint = ""
+        if "not a git repository" in detail:
+            hint = (" (the worktree was a repository when this crew started; "
+                    "the agent likely deleted or reinitialized it)")
+        raise RuntimeError(f"git add failed in {inp.worktree}: "
+                           f"{detail}{hint}")
+    commit = _git(
+        ["commit", "-m", f"sdlc crew checkpoint round {inp.round} "
+                         f"(exit={inp.exit_code})", "--allow-empty"],
+        inp.worktree)
+    if commit.returncode != 0:
+        return None
+    return _git(["rev-parse", "HEAD"], inp.worktree).stdout.strip()
