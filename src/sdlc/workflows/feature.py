@@ -1510,13 +1510,16 @@ class FeatureWorkflow(GateHost):
         )
 
         crew_layout = crew_roles = None
+        crew_protocol = ""
         crew_sessions: dict[str, str] = {}
         if role_cfg.harness is HarnessKind.CREW:
-            crew_layout, crew_roles = await workflow.execute_activity(
+            crew = await workflow.execute_activity(
                 load_crew, LoadCrewInput(layout=role_cfg.layout or "code",
                                          lead_harness=role_cfg.lead_harness,
                                          lead_model=role_cfg.model),
                 **FS_ACT)
+            crew_layout, crew_roles, crew_protocol = (
+                crew.layout, crew.roles, crew.protocol)
 
         session_id: str | None = None
         resumes = 0
@@ -1559,7 +1562,7 @@ class FeatureWorkflow(GateHost):
                             turn_timeout_s=crew_layout.limits.turn_timeout_s,
                             cost_usd=crew_layout.limits.cost_usd,
                             sessions=crew_sessions,
-                            protocol=crew.protocol,
+                            protocol=crew_protocol,
                             containment_enabled=cfg.containment_enabled,
                             containment_policy_path=cfg.containment.policy_path,
                             containment_strict=cfg.containment.strict,
