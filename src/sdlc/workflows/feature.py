@@ -88,7 +88,7 @@ with workflow.unsafe.imports_passed_through():
         CoverageReport, DeepReviewReport, DeployPlan, DeployReport, DevTask,
         ExecutionMode, Gap, GateConfig,
         GateDecision,
-        GateOutcome, GatePolicy, HandoffSummary, IdeaBrief,
+        GateOutcome, GatePolicy, HandoffSummary, HarnessKind, IdeaBrief,
         ImplementationPlan, MemoryKind, MergeVerdict, PipelineConfig, PlanDrift,
         ProjectMode,
         RecallSnapshot, ResearchBrief, ResearchPlan, RetainItem, RoleConfig,
