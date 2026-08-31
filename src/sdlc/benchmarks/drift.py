@@ -78,6 +78,10 @@ def _record_from_event(run_id: str, event: Any, bench_run_id: str
     result = event.get("result")
     if not isinstance(result, dict):
         return None
+    # E-88: run_crew_turn returns CrewTurnOutput; the shared-contract
+    # fields (harness/exit_code/cost_usd/...) live on .run.
+    if isinstance(result.get("run"), dict):
+        result = result["run"]
     try:
         ts = event.get("timestamp") or datetime.now(timezone.utc)
         if isinstance(ts, str):

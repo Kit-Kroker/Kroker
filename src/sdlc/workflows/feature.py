@@ -1559,6 +1559,7 @@ class FeatureWorkflow(GateHost):
                             turn_timeout_s=crew_layout.limits.turn_timeout_s,
                             cost_usd=crew_layout.limits.cost_usd,
                             sessions=crew_sessions,
+                            protocol=crew.protocol,
                             containment_enabled=cfg.containment_enabled,
                             containment_policy_path=cfg.containment.policy_path,
                             containment_strict=cfg.containment.strict,

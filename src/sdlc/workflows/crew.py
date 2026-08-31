@@ -21,9 +21,9 @@ from temporalio.exceptions import ActivityError, ApplicationError
 
 with workflow.unsafe.imports_passed_through():
     from ..crew.activities import (
-        AGENT_FAILURE, CheckpointInput, CrewTurnInput, PrepareCrewInput,
-        ReadRoundInput, checkpoint_round, prepare_crew, read_round,
-        run_crew_turn,
+        AGENT_FAILURE, CREW_CONTAINMENT_UNSUPPORTED, CheckpointInput,
+        CrewTurnInput, PrepareCrewInput, ReadRoundInput, checkpoint_round,
+        prepare_crew, read_round, run_crew_turn,
     )
     from ..crew.config import CrewRole
     from ..crew.models import CrewRunResult, RoundRecord, TurnRecord
@@ -61,6 +61,8 @@ class CrewTaskInput(BaseModel):
     cost_usd: float = 25.0
     # role -> session_id, so a re-invocation continues rather than restarts.
     sessions: dict[str, str] = Field(default_factory=dict)
+    # The lead's SKILL.md, rendered into every round brief (E-88 step 1).
+    protocol: str = ""
     containment_enabled: bool = False
     containment_policy_path: str | None = None
     containment_strict: bool = False
@@ -75,7 +77,9 @@ def _turn_act(turn_timeout_s: int) -> dict:
         start_to_close_timeout=timedelta(seconds=turn_timeout_s + 60),
         heartbeat_timeout=timedelta(seconds=min(300, turn_timeout_s)),
         retry_policy=RetryPolicy(maximum_attempts=2,
-                                 non_retryable_error_types=[AGENT_FAILURE]))
+                                 non_retryable_error_types=[
+                                     AGENT_FAILURE,
+                                     CREW_CONTAINMENT_UNSUPPORTED]))
 
 
 @workflow.defn
@@ -223,9 +227,14 @@ class CrewTaskWorkflow:
                              rounds=self._rounds)
 
     def _round_brief(self, inp: CrewTaskInput, rnd: int) -> str:
+        # The skill text is the role preamble ("You are the lead of a
+        # crew..."), so protocol first, assignment after. Empty protocol
+        # keeps the brief byte-identical to its pre-step-1 shape.
+        base = (f"{inp.protocol}\n\n{inp.prompt}" if inp.protocol
+                else inp.prompt)
         if rnd == 1:
-            return inp.prompt
-        return (f"{inp.prompt}\n\nThis is round {rnd}. Your previous round's "
+            return base
+        return (f"{base}\n\nThis is round {rnd}. Your previous round's "
                 f"note is at round-{rnd - 1}/{inp.deliverable_path}. Continue "
                 f"from it; do not restate it.")
 

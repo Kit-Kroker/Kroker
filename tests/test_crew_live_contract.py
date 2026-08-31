@@ -14,13 +14,13 @@ from sdlc.crew.activities import (
     CrewTurnInput, PrepareCrewInput, ReadRoundInput, prepare_crew, read_round,
     run_crew_turn,
 )
-from sdlc.crew.loader import load_layout
+from sdlc.crew.loader import load_layout, read_skill
 from sdlc.crew.worktree import round_dir
 
 pytestmark = [pytest.mark.crew, pytest.mark.asyncio]
 
 PROMPT = ("Add a file hello.py containing a function greet() that returns "
-          "the string 'hello'. Then write your round note.")
+          "the string 'hello'.")
 
 
 @pytest.mark.skipif(os.environ.get("SDLC_LIVE_TESTS") != "1",
@@ -32,6 +32,10 @@ async def test_one_real_round(tmp_path):
                        check=True)
     layout, roles = load_layout("code")
     lead = roles[layout.lead]
+    # Compose the turn prompt the way CrewTaskWorkflow._round_brief does:
+    # the lead's skill (the round protocol) first, the assignment after —
+    # this is the delivery path production runs on.
+    turn_prompt = f"{read_skill(lead.skill)}\n\n{PROMPT}"
 
     await prepare_crew(PrepareCrewInput(worktree=str(tmp_path),
                                         layout=layout.layout, brief=PROMPT))
@@ -40,7 +44,7 @@ async def test_one_real_round(tmp_path):
 
     out = await run_crew_turn(CrewTurnInput(
         worktree=str(tmp_path), layout=layout.layout, role=lead.name,
-        harness=lead.harness, model=lead.model, prompt=PROMPT,
+        harness=lead.harness, model=lead.model, prompt=turn_prompt,
         round=1, attempt=1, turn_timeout_s=900, task_id="live"))
 
     # The work/notes inversion: source in the worktree, prose in the note.

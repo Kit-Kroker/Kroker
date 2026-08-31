@@ -84,6 +84,20 @@ def validate_crew(layout: CrewLayout, roles: dict[str, CrewRole],
             f" must resolve inside the round directory")
 
 
+def read_skill(skill: str, root: Path | None = None) -> str:
+    """The skill text that IS the round protocol, rendered into the round
+    brief (E-88 step 1). Resolves the tree exactly like load_layout, so the
+    delivered text cannot come from anywhere the boot validation missed."""
+    root = root or crew_dir()
+    if root is None:
+        raise CrewAssetsMissing("no crew/ directory found from the cwd upward")
+    path = root / "skills" / skill / "SKILL.md"
+    if not path.is_file():
+        raise CrewConfigError(
+            f"skill {skill!r} has no SKILL.md at {path}")
+    return path.read_text(encoding="utf-8")
+
+
 def load_layout(name: str,
                 root: Path | None = None) -> tuple[CrewLayout, dict[str, CrewRole]]:
     root = root or crew_dir()

@@ -110,6 +110,12 @@ async def read_round(inp: ReadRoundInput) -> RoundReading:
 # result" from "the worker died". Only the latter deserves a retry.
 AGENT_FAILURE = "crew_agent_failure"
 
+# E-88 step 2 wires the fence into crew turns. Until then a run that asks
+# for containment/grants would put an unfenced lead on the box while the
+# run believes it is policed — ADR-17's worst case — so the turn fails
+# closed instead (spec §3: never run believing a lie).
+CREW_CONTAINMENT_UNSUPPORTED = "crew_containment_unsupported"
+
 
 @dataclass
 class CrewTurnInput:
@@ -154,6 +160,15 @@ def _resume_target(inp: CrewTurnInput) -> str | None:
 
 @activity.defn
 async def run_crew_turn(inp: CrewTurnInput) -> CrewTurnOutput:
+    if inp.containment_enabled or inp.grants:
+        # FAIL CLOSED (E-88 step-1 remedy): crew turns do not wire the
+        # fence until step 2, and a lead that ran anyway would be unfenced
+        # while the run believes it is policed. Refuse the turn outright.
+        raise ApplicationError(
+            f"crew turn for role {inp.role!r}: containment/grants arrive "
+            f"for crew turns only in E-88 step 2, so the turn refuses to "
+            f"run unfenced while the run believes it is policed",
+            type=CREW_CONTAINMENT_UNSUPPORTED, non_retryable=True)
     harness = HARNESSES[inp.harness]
     session_id = _resume_target(inp)
     req = HarnessRequest(prompt=inp.prompt, cwd=inp.worktree,
@@ -268,15 +283,21 @@ class LoadCrewInput:
 class LoadedCrew:
     layout: CrewLayout
     roles: list[CrewRole]
+    # The LEAD's SKILL.md (a one-role crew runs one skill): the round
+    # protocol the workflow renders into every round brief. Without it the
+    # skill is boot-validated and then dropped, and nothing tells the agent
+    # to write its notes.md.
+    protocol: str
 
 
 @activity.defn
 async def load_crew(inp: LoadCrewInput) -> LoadedCrew:
     """Read and validate the crew tree activity-side: the workflow sandbox
     cannot read files, the same split the agent registry already uses."""
-    from .loader import load_layout, resolve_crew_roles
+    from .loader import load_layout, read_skill, resolve_crew_roles
     layout, roles = load_layout(inp.layout)
     return LoadedCrew(
         layout=layout,
         roles=resolve_crew_roles(layout, roles, inp.lead_harness,
-                                 inp.lead_model))
+                                 inp.lead_model),
+        protocol=read_skill(roles[layout.lead].skill))

@@ -8,7 +8,7 @@ from temporalio.exceptions import ApplicationError
 
 from sdlc.crew import activities as crew_acts
 from sdlc.crew.activities import AGENT_FAILURE, CrewTurnInput, run_crew_turn
-from sdlc.models import HarnessKind, HarnessRunResult
+from sdlc.models import HarnessKind, HarnessRunResult, ToolGrant
 
 pytestmark = pytest.mark.asyncio
 
@@ -85,3 +85,31 @@ async def test_a_non_retryable_failure_carries_its_cost_reading(monkeypatch):
         await run_crew_turn(_inp())
     assert e.value.details[0]["cost_usd"] == 0.1
     assert e.value.details[0]["session_id"] == "s-1"
+
+
+async def test_containment_enabled_fails_closed(monkeypatch):
+    """ADR-17's worst case: a crew lead running unfenced while the run
+    believes it is policed. Containment arrives for crew turns only in
+    E-88 step 2; until then the turn refuses rather than run exposed."""
+    fake = FakeHarness()
+    monkeypatch.setitem(crew_acts.HARNESSES, HarnessKind.OPENCODE, fake)
+    with pytest.raises(ApplicationError) as e:
+        await run_crew_turn(_inp(containment_enabled=True))
+    assert e.value.non_retryable is True
+    assert e.value.type == "crew_containment_unsupported"
+    assert "coder" in e.value.message
+    assert fake.calls == []               # it never ran unfenced
+
+
+async def test_grants_fail_closed(monkeypatch):
+    """A granted (human-approved) call is exactly as unfenced as a policy
+    fence: both must refuse until step 2 wires them in."""
+    fake = FakeHarness()
+    monkeypatch.setitem(crew_acts.HARNESSES, HarnessKind.OPENCODE, fake)
+    grant = ToolGrant(tool_use_id="tu-1", tool="Bash", input_digest="d:aa",
+                      rule_id="net", approved=True)
+    with pytest.raises(ApplicationError) as e:
+        await run_crew_turn(_inp(grants=[grant]))
+    assert e.value.non_retryable is True
+    assert e.value.type == "crew_containment_unsupported"
+    assert fake.calls == []
