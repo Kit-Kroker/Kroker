@@ -1568,7 +1568,9 @@ class FeatureWorkflow(GateHost):
                             containment_enabled=cfg.containment_enabled,
                             containment_policy_path=cfg.containment.policy_path,
                             containment_strict=cfg.containment.strict,
-                            grants=grants),
+                            grants=grants,
+                            gate_settings=cfg.gate_settings(),
+                            max_tool_escalations=cfg.max_tool_escalations),
                         id=f"{workflow.info().workflow_id}-crew-"
                            f"{task.id}-{attempt}",
                         execution_timeout=timedelta(

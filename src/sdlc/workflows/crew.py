@@ -27,7 +27,12 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..crew.config import CrewRole
     from ..crew.models import CrewRunResult, RoundRecord, TurnRecord
-    from ..models import HarnessKind, HarnessRunResult, ToolGrant
+    from ..models import (
+        GatePolicy, GateSettings, HarnessKind, HarnessRunResult, ToolDenial,
+        ToolGrant,
+    )
+    from ..pending import GateContext
+    from .gates import GateHost
 
 EXIT_OK = 0
 EXIT_PROTOCOL_VIOLATION = 65
@@ -67,6 +72,11 @@ class CrewTaskInput(BaseModel):
     containment_policy_path: str | None = None
     containment_strict: bool = False
     grants: list[ToolGrant] = Field(default_factory=list)
+    # E-88 §6: the gate is hosted HERE, so the child needs the same three
+    # fields GateHost reads. GateSettings exists precisely so a gate host
+    # need not take the whole PipelineConfig.
+    gate_settings: GateSettings = Field(default_factory=GateSettings)
+    max_tool_escalations: int = 3
 
 
 def _turn_act(turn_timeout_s: int) -> dict:
@@ -83,14 +93,14 @@ def _turn_act(turn_timeout_s: int) -> dict:
 
 
 @workflow.defn
-class CrewTaskWorkflow:
+class CrewTaskWorkflow(GateHost):
     def __init__(self) -> None:
+        super().__init__()
         self._status = "starting"
         self._rounds: list[RoundRecord] = []
-
-    @workflow.query
-    def status(self) -> str:
-        return self._status
+        # §6: two per crew, durable. Exhaustion is a signal about clarify,
+        # not just a brake.
+        self._escalations = 0
 
     @workflow.query
     def rounds(self) -> list[RoundRecord]:
@@ -102,6 +112,7 @@ class CrewTaskWorkflow:
         lead = next(r for r in inp.roles if r.name == inp.lead)
         sessions = dict(inp.sessions)
         refs: list = []
+        denials: list[ToolDenial] = []
         spent = 0.0
         last: TurnRecord | None = None
         last_run: HarnessRunResult | None = None
@@ -130,53 +141,97 @@ class CrewTaskWorkflow:
             record = RoundRecord(round=rnd)
             self._rounds.append(record)
 
-            turn = workflow.start_activity(
-                run_crew_turn,
-                CrewTurnInput(
-                    worktree=inp.worktree, layout=inp.layout, role=lead.name,
-                    harness=lead.harness, model=lead.model,
-                    prompt=self._round_brief(inp, rnd),
-                    session_id=sessions.get(lead.name), round=rnd, attempt=1,
-                    turn_timeout_s=min(inp.turn_timeout_s, int(remaining)),
-                    task_id=inp.task_id,
-                    containment_enabled=inp.containment_enabled,
-                    containment_policy_path=inp.containment_policy_path,
-                    containment_strict=inp.containment_strict,
-                    grants=inp.grants),
-                **_turn_act(min(inp.turn_timeout_s, int(remaining))))
+            grants: list[ToolGrant] = []
+            asked = 0
+            capped = False
+            out = None
+            failed = False
+            while True:
+                turn = workflow.start_activity(
+                    run_crew_turn,
+                    CrewTurnInput(
+                        worktree=inp.worktree, layout=inp.layout,
+                        role=lead.name, harness=lead.harness,
+                        model=lead.model, writes=lead.writes,
+                        prompt=self._round_brief(inp, rnd),
+                        session_id=sessions.get(lead.name), round=rnd,
+                        attempt=1,
+                        turn_timeout_s=min(inp.turn_timeout_s, int(remaining)),
+                        task_id=inp.task_id,
+                        containment_enabled=inp.containment_enabled,
+                        containment_policy_path=inp.containment_policy_path,
+                        containment_strict=inp.containment_strict,
+                        grants=grants),
+                    **_turn_act(min(inp.turn_timeout_s, int(remaining))))
 
-            # Pick First: the crew's own deadline must win over the turn, so
-            # the workflow ends itself with a classified reason rather than
-            # being killed by an outer timeout that loses the diagnosis.
-            timer = asyncio.ensure_future(
-                workflow.sleep(timedelta(seconds=remaining)))
-            # workflow.wait, not asyncio.wait: the SDK warns the latter is
-            # non-deterministic inside workflow code. asyncio.FIRST_COMPLETED
-            # is a str constant, so it passes through unchanged.
-            done, _ = await workflow.wait(
-                [turn, timer], return_when=asyncio.FIRST_COMPLETED)
-            if timer in done:
-                turn.cancel()
-                exit_code = EXIT_DEADLINE
+                # Pick First: the crew's own deadline must win over the turn,
+                # so the workflow ends itself with a classified reason rather
+                # than being killed by an outer timeout that loses the
+                # diagnosis.
+                timer = asyncio.ensure_future(
+                    workflow.sleep(timedelta(seconds=remaining)))
+                # workflow.wait, not asyncio.wait: the SDK warns the latter is
+                # non-deterministic inside workflow code. asyncio.FIRST_COMPLETED
+                # is a str constant, so it passes through unchanged.
+                done, _ = await workflow.wait(
+                    [turn, timer], return_when=asyncio.FIRST_COMPLETED)
+                if timer in done:
+                    turn.cancel()
+                    exit_code = EXIT_DEADLINE
+                    failed = True
+                    break
+                timer.cancel()
+
+                try:
+                    out = await turn
+                except ActivityError as e:
+                    rec = self._record_from_failure(e, lead, rnd)
+                    record.turns.append(rec)
+                    cost_incomplete = cost_incomplete or rec.cost_incomplete
+                    exit_code = EXIT_PROTOCOL_VIOLATION
+                    failed = True
+                    break
+
+                record.turns.append(out.record)
+                last = out.record
+                last_run = out.run
+                denials.extend(out.run.denials)
+                if out.run.session_ref is not None:
+                    refs.append(out.run.session_ref)
+                if out.record.session_id:
+                    sessions[lead.name] = out.record.session_id
+
+                if out.run.deferred is None or capped:
+                    break
+
+                # E-17, verbatim: resuming for an approval costs neither a
+                # round nor a fix attempt. The cap does not abandon the agent
+                # mid-call -- it spends one final resume to deliver the deny.
+                d = out.run.deferred
+                if asked >= inp.max_tool_escalations:
+                    capped = True
+                    grants = [ToolGrant(
+                        tool_use_id=d.tool_use_id, tool=d.tool,
+                        input_digest=d.input_digest, rule_id=d.rule_id,
+                        approved=False, reason="escalation cap reached")]
+                    continue
+                asked += 1
+                self._escalations += 1
+                decision = await self._gate(
+                    "tool_approval", inp.gate_settings,
+                    round=self._escalations,
+                    context=GateContext(spec_summary=(
+                        f"crew task {inp.task_id} round {rnd}: the "
+                        f"{lead.name} suspended at {d.tool} on "
+                        f"{d.target or '(no target)'} — rule {d.rule_id}: "
+                        f"{d.reason}")))
+                grants = [ToolGrant(
+                    tool_use_id=d.tool_use_id, tool=d.tool,
+                    input_digest=d.input_digest, rule_id=d.rule_id,
+                    approved=decision.approved,
+                    reason=decision.comments or "")]
+            if failed:
                 break
-            timer.cancel()
-
-            try:
-                out = await turn
-            except ActivityError as e:
-                rec = self._record_from_failure(e, lead, rnd)
-                record.turns.append(rec)
-                cost_incomplete = cost_incomplete or rec.cost_incomplete
-                exit_code = EXIT_PROTOCOL_VIOLATION
-                break
-
-            record.turns.append(out.record)
-            last = out.record
-            last_run = out.run
-            if out.run.session_ref is not None:
-                refs.append(out.run.session_ref)
-            if out.record.session_id:
-                sessions[lead.name] = out.record.session_id
 
             # Every non-lead role, after the lead, inside the same round.
             # Sequential rather than asyncio.gather: with one non-lead role
@@ -254,12 +309,6 @@ class CrewTaskWorkflow:
             else:
                 spent += rc
 
-            if out.run.deferred is not None:
-                # Step 2 gates this here. Until then it travels upward, where
-                # feature.py's E-17 loop already knows what to do with it.
-                exit_code = out.run.exit_code
-                break
-
             if rnd >= inp.rounds_max:
                 # Deliberate ordering (spec §4): the rounds bound wins over
                 # the budget on the final round — a completed round is not
@@ -280,6 +329,7 @@ class CrewTaskWorkflow:
             session_digest=last_run.session_digest if last_run else None,
             cost_usd=None if cost_incomplete else spent,
             commit_sha=commit_sha,
+            denials=denials,
             input_tokens=last.input_tokens if last else None,
             output_tokens=last.output_tokens if last else None,
             context_window=last.context_window if last else None,
