@@ -330,9 +330,10 @@ Two layers, and they do not compete.
 
 ```yaml
 kind: harness
-harness: crew
+harness: crew                    # composition mode
 layout: code
-model: zai-coding-plan/glm-5.2   # the LEAD's model; see the precedence rule
+lead_harness: opencode           # which CLI the LEAD runs
+model: zai-coding-plan/glm-5.2   # the LEAD's model
 ```
 
 **Layer 2 — `crew/layouts/<name>.yaml` plus `crew/roles/*.yaml`:** who is on the crew. This is where
@@ -374,10 +375,29 @@ default cannot enter `role_models`, and a role outside `role_models` is a role A
 `crew` list: it stops describing a window and starts describing a team. `_pane_model`, `pane.split`,
 `set_split_ratio`, and `agent.rename` go with it.
 
-**Precedence: the request's model wins over the role file, but only for the lead.** This is not taste;
-it is what makes a benchmark cell measurable, and `herdr/roles/coder.yaml` already argues it — a cell
-that varied harness and model at once would compare two things. Non-lead roles always take their
-model from their own file, so `code | crew | <model>` varies exactly one variable.
+**Precedence: the run's `(harness, model)` wins over the role file, but only for the lead.** Non-lead
+roles always take both from their own file, so a cell varies exactly one thing at a time — which is
+what `herdr/roles/coder.yaml` already argues when it explains that "a claude coder would compare
+harness AND model at once".
+
+**Both halves are overridable, deliberately.** A benchmark case declares its harness dimension as a
+list (`harnesses: [...]` in `case.yaml`) and its models per role (`arms.role_models`). If only the
+model were overridable, every crew cell would read `crew` and the lead's CLI would be invisible in
+the matrix — the sweep "same model, different harness" would stop existing, and that is precisely
+the comparison the role file's own comment exists to protect. So `lead_harness` is a run-level key
+beside `model`, the role file supplies the default for both, and a cell is labelled
+`crew:<lead_harness>`.
+
+**Changing the lead's harness requires changing its model in the same breath**, per friction 2 below:
+model strings are pass-through in each CLI's own syntax. The check belongs beside ADR-6, at the same
+pre-DAG boundary — if the effective `lead_harness` differs from the role file's `harness` and no
+model override accompanies it, the run does not start.
+
+This also unpins an architectural choice that would otherwise be frozen in a layout file. E-87 §1
+argued the lead should be `claude_code`, as the only `NATIVE|HOOK` tier and therefore the strongest
+fence on the sole repository-writing surface; `crew/roles/coder.yaml` picks `opencode` instead, for
+benchmark comparability rather than for containment. Both remain reachable per run, and the layout
+stops deciding it permanently.
 
 **Decorrelation is validated before the DAG starts, per finding 5.** When a harness role resolves to
 `crew`, the loader expands its layout and contributes the crew into the same `role_models` map that
@@ -501,7 +521,9 @@ is not a removal project.
 **What this design actually edits on `main`** is therefore small and worth listing in full: add
 `HarnessKind.CREW`; add `CrewTaskWorkflow` and four activities; change one call site
 (`feature.py:1534`); extend `check_adr6_families` and `validate_run_roles` (§5); add one disjunct to
-`_OPEN_FEATURE_QUERY` (`inbox.py:66`); add `parent_run_id` to `PendingDecision`; teach
+`_OPEN_FEATURE_QUERY` (`inbox.py:66`); add `parent_run_id` to `PendingDecision`; add `layout` and
+`lead_harness` to the harness-role config and thread `lead_harness` through the benchmark arm's cell
+label; teach
 `benchmarks/drift.py:71` the crew turn's activity name (finding 12); register the new workflow and
 activities in `worker.py`; and add `claude_code`'s CLI to the worker image, which today ships
 opencode only.
@@ -574,9 +596,9 @@ as an archived ref, and this spec quotes it.
    `worktree.py`, and `RoundRecord` land here. Acceptance: the `crew-probe` baseline above, matched
    by a one-role crew. This is the step that proves the mechanism against a measurement.
 2. **The crew.** The critic role, parallel turns, `read_round` validation of `advisor.md` /
-   `review.json` / `question.json`, the ADR-6 extension in `validate_run_roles`, the loader's
-   model-resolvability boot check, `GateHost` and the inbox disjunct, and `PendingDecision`'s
-   `parent_run_id`.
+   `review.json` / `question.json`, the ADR-6 extension in `validate_run_roles`, the
+   `lead_harness`/model coupling check beside it, the loader's model-resolvability boot check,
+   `GateHost` and the inbox disjunct, and `PendingDecision`'s `parent_run_id`.
 3. **The seams.** `drift.py`'s activity name, the `crew` pytest marker, the worker image gaining
    `claude_code`, and the retargeted `test_crew_{loader,worktree}.py`.
 
