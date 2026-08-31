@@ -56,6 +56,7 @@ from .board.activities import (attach_task_evidence,
 from .crew.activities import (
     checkpoint_round, load_crew, prepare_crew, read_round, run_crew_turn,
 )
+from .crew.loader import validate_crew_clis
 from .harness.adapters import check_harness_versions
 from .memoization.activities import cache_get, cache_put
 from .memory.activities import (
@@ -90,6 +91,10 @@ async def main() -> None:
     # Fail closed: a registry that violates the ADR-6 family-inequality
     # invariant must never boot a worker (FR-204/US-5).
     validate_registry(load_registry())
+    # E-88 step 2: same rule one level down. A crew role naming a CLI this
+    # image does not carry must kill the worker here, not forty minutes and
+    # one billed lead into a run.
+    validate_crew_clis()
     # E-24 (via E-35): warn — not fail — on harness CLI version drift.
     check_harness_versions()
 

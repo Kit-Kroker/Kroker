@@ -99,3 +99,33 @@ def test_rejects_a_model_with_no_provider_separator(tmp_path):
     with pytest.raises(CrewConfigError, match="provider"):
         load_layout("code", root)
 
+
+def test_crew_cli_check_names_the_role_and_the_missing_binary(tmp_path,
+                                                              monkeypatch):
+    """spec §5 friction 1: pointing a role at a CLI this image does not carry
+    fails at RUNTIME today, after the other roles have already spent. The
+    worker must die at startup instead, naming which role is wrong."""
+    from sdlc.crew import loader as crew_loader
+    root = _tree(tmp_path)
+    monkeypatch.setattr(crew_loader.shutil, "which", lambda _: None)
+    with pytest.raises(CrewConfigError) as e:
+        crew_loader.validate_crew_clis(root)
+    assert "coder" in str(e.value)
+    assert "opencode" in str(e.value)
+
+
+def test_crew_cli_check_passes_when_every_binary_is_present(tmp_path,
+                                                            monkeypatch):
+    from sdlc.crew import loader as crew_loader
+    root = _tree(tmp_path)
+    monkeypatch.setattr(crew_loader.shutil, "which", lambda n: f"/usr/bin/{n}")
+    crew_loader.validate_crew_clis(root)
+
+
+def test_crew_cli_check_is_a_noop_without_a_crew_tree(tmp_path):
+    """A source checkout running the unit suite carries no crew assets, and
+    that is not a defect -- the same reasoning CrewAssetsMissing exists for."""
+    from sdlc.crew import loader as crew_loader
+    crew_loader.validate_crew_clis(tmp_path / "nothing-here")
+
+

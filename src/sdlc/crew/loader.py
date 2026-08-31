@@ -6,6 +6,7 @@ failure it prevents, named in its message.
 """
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import yaml
@@ -182,3 +183,38 @@ def resolve_crew_roles(layout: CrewLayout, roles: dict[str, CrewRole],
         out.append(role.model_copy(update={
             "harness": harness, "model": lead_model or role.model}))
     return out
+
+
+def validate_crew_clis(root: Path | None = None) -> None:
+    """Every role in every shipped layout has its CLI on PATH (spec §5
+    friction 1).
+
+    Boot-time, not load-time: a source checkout running the unit suite has no
+    reason to carry a coding CLI, so this is called from worker.py's main()
+    rather than from load_layout.
+
+    The honest limit: this proves the BINARY exists, not that it is logged in
+    to the provider the role's model names. Auth cannot be checked offline,
+    and a check that pretended to would be worse than none. What it does
+    catch is the concrete failure the spec names -- a role pointing at a CLI
+    this image does not carry.
+    """
+    root = root or crew_dir()
+    if root is None or not (root / "layouts").is_dir():
+        return                       # no crew assets here; not a defect
+    from ..harness.adapters import HARNESSES
+    missing: list[str] = []
+    for path in sorted((root / "layouts").glob("*.yaml")):
+        layout, roles = load_layout(path.stem, root)
+        for name in layout.roles():
+            cli = HARNESSES[roles[name].harness].cli
+            if shutil.which(cli) is None:
+                missing.append(
+                    f"layout {layout.layout!r} role {name!r} needs "
+                    f"{roles[name].harness.value!r}, whose CLI {cli!r} is not "
+                    f"on PATH")
+    if missing:
+        raise CrewConfigError(
+            "crew roles name CLIs this environment does not carry, so the "
+            "run would fail after other roles had already spent:\n  "
+            + "\n  ".join(missing))
