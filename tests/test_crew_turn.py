@@ -7,15 +7,32 @@ import pytest
 from temporalio.exceptions import ApplicationError
 
 from sdlc.crew import activities as crew_acts
-from sdlc.crew.activities import AGENT_FAILURE, CrewTurnInput, run_crew_turn
-from sdlc.crew.worktree import round_dir
-from sdlc.models import HarnessKind, HarnessRunResult, ToolGrant
+from sdlc.crew.activities import (
+    AGENT_FAILURE, CREW_CONTAINMENT_REFUSED, CrewTurnInput, run_crew_turn,
+)
+from sdlc.crew.worktree import orchestration_dir, round_dir
+from sdlc.models import (
+    ContainmentLayer, ContainmentReport, HarnessKind, HarnessRunResult,
+    ToolGrant,
+)
 
 pytestmark = pytest.mark.asyncio
 
 
 class FakeHarness:
     kind = HarnessKind.OPENCODE
+
+    # A harness with NO containment layer fails closed under ADR-17; these
+    # tests are about the crew's wiring, not about that refusal, so the fake
+    # declares a layer and records what it was asked to compile.
+    containment = frozenset({ContainmentLayer.NATIVE})
+    applied: list = []
+
+    def apply_containment(self, policy, req, grants=None):
+        self.applied.append((policy, req, list(grants or [])))
+        return ContainmentReport(enabled=True,
+                                 layers_active=[ContainmentLayer.NATIVE],
+                                 rules_unenforceable=[])
 
     def __init__(self, result=None, calls=None):
         self._result = result or HarnessRunResult(
@@ -107,29 +124,60 @@ async def test_a_non_retryable_failure_carries_its_cost_reading(monkeypatch):
     assert e.value.details[0]["session_id"] == "s-1"
 
 
-async def test_containment_enabled_fails_closed(monkeypatch):
-    """ADR-17's worst case: a crew lead running unfenced while the run
-    believes it is policed. Containment arrives for crew turns only in
-    E-88 step 2; until then the turn refuses rather than run exposed."""
+async def test_a_contained_turn_compiles_the_policy_instead_of_refusing(
+        monkeypatch, tmp_path):
+    """Step 1 refused every contained crew turn, because the fence was not
+    wired -- and run.deferred exists ONLY because a containment escalate rule
+    matched, so that refusal also made every gate in E-88 step 2 unreachable."""
+    policy = tmp_path / "containment.yaml"
+    policy.write_text("version: 1\nrules: []\n", encoding="utf-8")
     fake = FakeHarness()
     monkeypatch.setitem(crew_acts.HARNESSES, HarnessKind.OPENCODE, fake)
-    with pytest.raises(ApplicationError) as e:
-        await run_crew_turn(_inp(containment_enabled=True))
-    assert e.value.non_retryable is True
-    assert e.value.type == "crew_containment_unsupported"
-    assert "coder" in e.value.message
-    assert fake.calls == []               # it never ran unfenced
+    out = await run_crew_turn(_inp(worktree=str(tmp_path), writes=True,
+                                   containment_enabled=True,
+                                   containment_policy_path=str(policy)))
+    assert out.run.exit_code == 0
+    assert fake.applied, "the policy was never compiled into the request"
+    assert out.run.containment is not None
+    assert out.run.containment.enabled is True
 
 
-async def test_grants_fail_closed(monkeypatch):
-    """A granted (human-approved) call is exactly as unfenced as a policy
-    fence: both must refuse until step 2 wires them in."""
+async def test_a_non_lead_turn_is_confined_to_the_orchestration_tree(
+        monkeypatch, tmp_path):
+    """spec §A: the lead may write repository files; every other role writes
+    only under .workspace/orchestration/<layout>/. cwd stays the worktree so
+    the role can READ the diff it is criticising."""
     fake = FakeHarness()
     monkeypatch.setitem(crew_acts.HARNESSES, HarnessKind.OPENCODE, fake)
-    grant = ToolGrant(tool_use_id="tu-1", tool="Bash", input_digest="d:aa",
-                      rule_id="net", approved=True)
+    await run_crew_turn(_inp(worktree=str(tmp_path), role="critic",
+                             writes=False))
+    req = fake.calls[-1]
+    assert req.cwd == str(tmp_path)
+    assert req.write_root == str(orchestration_dir(str(tmp_path), "code"))
+
+
+async def test_the_lead_is_not_confined(monkeypatch, tmp_path):
+    """A lead with a write_root could not write the repository at all, which
+    is the entire job of the writing role."""
+    fake = FakeHarness()
+    monkeypatch.setitem(crew_acts.HARNESSES, HarnessKind.OPENCODE, fake)
+    await run_crew_turn(_inp(worktree=str(tmp_path), writes=True))
+    assert fake.calls[-1].write_root is None
+
+
+async def test_an_unenforceable_policy_still_fails_closed(monkeypatch,
+                                                          tmp_path):
+    """ADR-17 is not relaxed by this task: a harness that cannot enforce a
+    layer must refuse, non-retryably -- retrying a config error spends
+    money to learn the same thing."""
+    policy = tmp_path / "containment.yaml"
+    policy.write_text("version: 1\nrules: []\n", encoding="utf-8")
+    fake = FakeHarness()
+    fake.containment = frozenset()
+    monkeypatch.setitem(crew_acts.HARNESSES, HarnessKind.OPENCODE, fake)
     with pytest.raises(ApplicationError) as e:
-        await run_crew_turn(_inp(grants=[grant]))
+        await run_crew_turn(_inp(worktree=str(tmp_path), writes=True,
+                                 containment_enabled=True,
+                                 containment_policy_path=str(policy)))
+    assert e.value.type == CREW_CONTAINMENT_REFUSED
     assert e.value.non_retryable is True
-    assert e.value.type == "crew_containment_unsupported"
-    assert fake.calls == []

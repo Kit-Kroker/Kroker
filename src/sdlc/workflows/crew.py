@@ -21,7 +21,7 @@ from temporalio.exceptions import ActivityError, ApplicationError
 
 with workflow.unsafe.imports_passed_through():
     from ..crew.activities import (
-        AGENT_FAILURE, CREW_CONTAINMENT_UNSUPPORTED, CheckpointInput,
+        AGENT_FAILURE, CREW_CONTAINMENT_REFUSED, CheckpointInput,
         CrewTurnInput, PrepareCrewInput, ReadRoundInput, checkpoint_round,
         prepare_crew, read_round, run_crew_turn,
     )
@@ -79,7 +79,7 @@ def _turn_act(turn_timeout_s: int) -> dict:
         retry_policy=RetryPolicy(maximum_attempts=2,
                                  non_retryable_error_types=[
                                      AGENT_FAILURE,
-                                     CREW_CONTAINMENT_UNSUPPORTED]))
+                                     CREW_CONTAINMENT_REFUSED]))
 
 
 @workflow.defn

@@ -17,7 +17,7 @@ from ..models import HarnessKind, HarnessRunResult, ToolGrant
 from .config import CrewLayout, CrewRole
 from .models import MAX_NOTE_BYTES, RoundNote, TurnBeat, TurnRecord
 from .worktree import (
-    ORCH_ROOT, prepare_orchestration, round_dir,
+    ORCH_ROOT, orchestration_dir, prepare_orchestration, round_dir,
 )
 
 # 4x the note cap: enough headroom for JSON overhead, small enough that a
@@ -112,11 +112,12 @@ async def read_round(inp: ReadRoundInput) -> RoundReading:
 # result" from "the worker died". Only the latter deserves a retry.
 AGENT_FAILURE = "crew_agent_failure"
 
-# E-88 step 2 wires the fence into crew turns. Until then a run that asks
-# for containment/grants would put an unfenced lead on the box while the
-# run believes it is policed — ADR-17's worst case — so the turn fails
-# closed instead (spec §3: never run believing a lie).
-CREW_CONTAINMENT_UNSUPPORTED = "crew_containment_unsupported"
+# The turn refused to run because containment could not be established the
+# way the run asked for it: an unresolvable policy, a harness with no layer
+# (ADR-17), or strict mode against unenforceable rules. Always a config
+# error, so always non-retryable -- a retry spends money to learn the same
+# thing.
+CREW_CONTAINMENT_REFUSED = "crew_containment_refused"
 
 # ADR-6 guard (spec §5, finding 5): a crew run whose lead's model never
 # entered check_adr6_families must not start.
@@ -135,6 +136,10 @@ class CrewTurnInput:
     attempt: int
     turn_timeout_s: int
     task_id: str
+    # Repository writes, not protocol writes: every role writes its own
+    # files under the orchestration dir. Only the lead may touch the repo,
+    # or the diff stops being attributable (spec §1).
+    writes: bool = False
     session_id: str | None = None
     containment_enabled: bool = False
     containment_policy_path: str | None = None
@@ -166,15 +171,14 @@ def _resume_target(inp: CrewTurnInput) -> str | None:
 
 @activity.defn
 async def run_crew_turn(inp: CrewTurnInput) -> CrewTurnOutput:
-    if inp.containment_enabled or inp.grants:
-        # FAIL CLOSED (E-88 step-1 remedy): crew turns do not wire the
-        # fence until step 2, and a lead that ran anyway would be unfenced
-        # while the run believes it is policed. Refuse the turn outright.
-        raise ApplicationError(
-            f"crew turn for role {inp.role!r}: containment/grants arrive "
-            f"for crew turns only in E-88 step 2, so the turn refuses to "
-            f"run unfenced while the run believes it is policed",
-            type=CREW_CONTAINMENT_UNSUPPORTED, non_retryable=True)
+    # Imported inside the function, following load_crew below: sdlc.activities
+    # pulls in the whole activity surface, and crew.activities is imported by
+    # feature.py under workflow.unsafe.imports_passed_through. Shared rather
+    # than duplicated because ADR-17's fail-closed ladder must have exactly
+    # one implementation.
+    from ..activities import _resolve_containment
+    from ..harness.containment import ContainmentError
+
     harness = HARNESSES[inp.harness]
     # The activity is the only actor that knows the round, so it owns the
     # round dir: the agent must not have to mkdir to follow the protocol,
@@ -182,9 +186,21 @@ async def run_crew_turn(inp: CrewTurnInput) -> CrewTurnOutput:
     round_dir(inp.worktree, inp.layout, inp.round).mkdir(
         parents=True, exist_ok=True)
     session_id = _resume_target(inp)
+    # A non-lead role reads the repository (cwd) and writes only the
+    # protocol tree (write_root). The lead gets None -- a write_root would
+    # fence it out of the repository, which is its whole job.
+    write_root = (None if inp.writes
+                  else str(orchestration_dir(inp.worktree, inp.layout)))
     req = HarnessRequest(prompt=inp.prompt, cwd=inp.worktree,
                          model=inp.model, session_id=session_id,
-                         timeout_s=inp.turn_timeout_s)
+                         timeout_s=inp.turn_timeout_s,
+                         write_root=write_root)
+    try:
+        _, report = _resolve_containment(harness, inp, req)
+    except ContainmentError as e:
+        raise ApplicationError(f"crew turn for role {inp.role!r}: {e}",
+                               type=CREW_CONTAINMENT_REFUSED,
+                               non_retryable=True) from e
 
     seen = TurnBeat(session_id=session_id, round=inp.round)
 
@@ -202,6 +218,7 @@ async def run_crew_turn(inp: CrewTurnInput) -> CrewTurnOutput:
             pass
 
     result = await harness.run(req, heartbeat=_beat)
+    result.containment = report
     result.denials = harness.normalise_denials(result._raw_stdout)
     result.deferred = harness.normalise_deferral(result._raw_stdout)
 
