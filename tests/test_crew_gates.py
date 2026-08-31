@@ -32,6 +32,7 @@ TASK_QUEUE = "crew-gates"
 TURNS: list[CrewTurnInput] = []
 # How many more lead turns should come back suspended at a tool call.
 DEFER = {"left": 0}
+ASK = {"left": 0}
 
 DEFERRAL = DeferredToolUse(tool_use_id="tu-1", tool="Bash",
                            target="/etc/hosts", rule_id="no-out-of-worktree-write",
@@ -63,8 +64,12 @@ async def fake_turn(inp: CrewTurnInput) -> CrewTurnOutput:
 
 @activity.defn(name="read_round")
 async def fake_read(inp: ReadRoundInput) -> RoundReading:
+    q = ""
+    if ASK["left"] > 0:
+        ASK["left"] -= 1
+        q = "which database? | the schema cannot be written without it"
     return RoundReading(deliverable_path="/w/notes.md", note_summary="done",
-                        missing=False)
+                        missing=False, question=q)
 
 
 @activity.defn(name="checkpoint_round")
@@ -165,3 +170,56 @@ async def test_a_human_decision_reaches_the_child_workflow():
     lead = [t for t in TURNS if t.role == "coder"]
     assert lead[-1].grants[0].approved is False
     assert lead[-1].grants[0].reason == "not on this box"
+
+
+async def test_a_question_opens_a_gate_and_the_answer_reaches_the_next_round():
+    """The addendum's departure from parent §6: answer_question lives on
+    FeatureWorkflow, not GateHost, so a question opens a GATE and the human's
+    answer arrives as decision.comments."""
+    TURNS.clear()
+    DEFER["left"] = 0
+    ASK["left"] = 1
+    wf_id = f"crew-{uuid.uuid4()}"
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=[CrewTaskWorkflow], activities=ACTIVITIES):
+            handle = await env.client.start_workflow(
+                CrewTaskWorkflow.run,
+                _inp(policy=GatePolicy.HARD, rounds_max=2),
+                id=wf_id, task_queue=TASK_QUEUE)
+            with env.auto_time_skipping_disabled():
+                for _ in range(100):
+                    pending = await handle.query(
+                        CrewTaskWorkflow.pending_decisions)
+                    if pending:
+                        break
+                    await asyncio.sleep(0.1)
+                assert pending and pending[0].gate == "crew_question"
+                await handle.signal(
+                    CrewTaskWorkflow.submit_gate_decision,
+                    GateDecision(gate="crew_question", round=pending[0].round,
+                                 outcome=GateOutcome.APPROVE,
+                                 decided_by="human", comments="use sqlite"))
+            await handle.result()
+    lead_r2 = [t for t in TURNS if t.role == "coder" and t.round == 2][0]
+    assert "use sqlite" in lead_r2.prompt
+
+
+async def test_the_escalation_budget_ends_the_crew_as_an_intent_gap():
+    """§6: two per crew. Exhaustion is journalled as a metric because a lead
+    hitting an intent gap is evidence clarify under-performed on this task."""
+    from sdlc.workflows.crew import EXIT_INTENT_GAP
+    TURNS.clear()
+    DEFER["left"] = 0
+    ASK["left"] = 9
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=[CrewTaskWorkflow], activities=ACTIVITIES):
+            res = await env.client.execute_workflow(
+                CrewTaskWorkflow.run,
+                _inp(policy=GatePolicy.OFF, rounds_max=9),
+                id=f"crew-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+    assert res.run.exit_code == EXIT_INTENT_GAP
+

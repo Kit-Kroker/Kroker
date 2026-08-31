@@ -60,6 +60,22 @@ class RoundReview(BaseModel):
                                           max_length=100)
 
 
+class CrewQuestion(BaseModel):
+    """A genuine gap in user intent, escalated to a human (parent §6).
+
+    `why_it_matters` and `evidence` are REQUIRED and non-empty by validator,
+    not by convention: E-87 §7's guard is that a question carrying neither a
+    class nor evidence is not a question. Forwarding one spends a human's
+    attention on an agent that did not do its reading.
+    """
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    schema_name: Literal["question-v1"] = Field(alias="schema")
+    question: str = Field(min_length=1, max_length=MAX_NOTE_BYTES)
+    why_it_matters: str = Field(min_length=1, max_length=MAX_NOTE_BYTES)
+    evidence: str = Field(min_length=1, max_length=MAX_NOTE_BYTES)
+
+
 class TurnBeat(BaseModel):
     """What a turn's heartbeat carries so a retry can resume rather than
     restart (spec §3). Crosses the Temporal boundary as a plain dict."""

@@ -17,7 +17,8 @@ from ..harness.adapters import HARNESSES, HarnessRequest
 from ..models import HarnessKind, HarnessRunResult, ToolGrant
 from .config import CrewLayout, CrewRole
 from .models import (
-    MAX_NOTE_BYTES, RoundAdvisory, RoundNote, RoundReview, TurnBeat, TurnRecord,
+    MAX_NOTE_BYTES, CrewQuestion, RoundAdvisory, RoundNote, RoundReview,
+    TurnBeat, TurnRecord,
 )
 from .worktree import (
     ORCH_ROOT, orchestration_dir, prepare_orchestration, round_dir,
@@ -65,6 +66,7 @@ class RoundReading:
     # the layout has no critic, which is the shipped one-role case.
     critique: str = ""
     verdict: str | None = None
+    question: str = ""
 
 
 def _resolve_in_round(worktree: str, layout: str, rnd: int,
@@ -148,6 +150,11 @@ async def read_round(inp: ReadRoundInput) -> RoundReading:
     base = round_dir(inp.worktree, inp.layout, inp.round)
     advisory = _read_schema(base / "advisor.md", "advisor-v1", RoundAdvisory)
     review = _read_schema(base / "review.json", "review-v1", RoundReview)
+    q = _read_schema(base / "question.json", "question-v1", CrewQuestion)
+    question = ""
+    if q is not None:
+        question = (f"{q.question}\n\nWhy it matters: {q.why_it_matters}\n"
+                    f"Evidence the agent gathered first: {q.evidence}")
 
     parts: list[str] = []
     if advisory is not None:
@@ -162,7 +169,8 @@ async def read_round(inp: ReadRoundInput) -> RoundReading:
 
     return RoundReading(deliverable_path=str(path), note_summary=summary,
                         missing=False, critique="\n".join(parts),
-                        verdict=review.verdict if review else None)
+                        verdict=review.verdict if review else None,
+                        question=question)
 
 
 # The error type a workflow matches on to tell "the agent produced a bad

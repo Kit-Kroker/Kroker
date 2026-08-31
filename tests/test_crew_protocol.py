@@ -162,3 +162,41 @@ async def test_an_unknown_review_verdict_is_an_error(tmp_path):
         await read_round(ReadRoundInput(worktree=str(tmp_path), layout="code",
                                         round=1, deliverable_path="notes.md"))
 
+
+@pytest.mark.asyncio
+async def test_a_question_needs_a_class_and_evidence(tmp_path):
+    """E-87 §7's guard, kept: a question carrying neither a class nor
+    evidence is not a question, and forwarding it would spend a human's
+    attention on an agent that did not do its reading."""
+    d = round_dir(tmp_path, "code", 1)
+    d.mkdir(parents=True)
+    (d / "notes.md").write_text(json.dumps(
+        {"schema": "notes-v1", "what_changed": "c", "why": "w",
+         "verification": "v"}), encoding="utf-8")
+    (d / "question.json").write_text(json.dumps(
+        {"schema": "question-v1", "question": "which database?",
+         "why_it_matters": "", "evidence": ""}), encoding="utf-8")
+    with pytest.raises(CrewProtocolError, match="evidence"):
+        await read_round(ReadRoundInput(worktree=str(tmp_path), layout="code",
+                                        round=1, deliverable_path="notes.md"))
+
+
+@pytest.mark.asyncio
+async def test_a_well_formed_question_is_returned(tmp_path):
+    d = round_dir(tmp_path, "code", 1)
+    d.mkdir(parents=True)
+    (d / "notes.md").write_text(json.dumps(
+        {"schema": "notes-v1", "what_changed": "c", "why": "w",
+         "verification": "v"}), encoding="utf-8")
+    (d / "question.json").write_text(json.dumps(
+        {"schema": "question-v1", "question": "which database?",
+         "why_it_matters": "the schema module cannot be written without it",
+         "evidence": "the brief names no store; grep found no config"}),
+        encoding="utf-8")
+    out = await read_round(ReadRoundInput(worktree=str(tmp_path),
+                                          layout="code", round=1,
+                                          deliverable_path="notes.md"))
+    assert "which database?" in out.question
+    assert "grep found no config" in out.question
+
+
