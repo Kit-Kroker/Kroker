@@ -1,0 +1,43 @@
+case_id: crew-probe
+idea_summary: Add a login page (email + password) to a fresh greenfield web app.
+description: |
+  Same small greenfield feature as add-login-greenfield (one login route,
+  credential check against a user table, session cookie on success), but
+  scoped to a single harness: crew (E-88). Exists to collect real cost /
+  wall-clock / outcome statistics for the crew harness under the
+  dev/test/devops HARNESS_ROLES, in isolation from claude_code and opencode,
+  so runs don't also re-bill those baselines every invocation.
+mode: greenfield
+# repo_url: null hits feature.py:1956's `idea.repo_url or "/var/sdlc/repo"`
+# stub -- "/var/sdlc/repo" is a placeholder path a real deployment's setup
+# activity would provision, and this docker-compose worker never does,
+# so setup_integration_branch fails with FileNotFoundError. Confirmed
+  # empirically; unrelated to crew, would break claude_code/opencode cases
+# identically. Point at an existing mounted scratch repo instead, the same
+# way todo-api-greenfield/deveval-* avoid the same stub.
+# E-87b §7.2: the baseline run scored quality 0.000 for an ENVIRONMENT
+# reason, not a model one -- the retry brief referenced
+# /srv/scratch-repos/..., a worker-only mount the agent could not see. This
+# case's assertions must be stated against the worktree, or the scratch repo
+# must be visible wherever they are evaluated.
+repo_url: /srv/scratch-repos/todo-api-greenfield
+harnesses: [crew]
+models:
+  # Unused once `arms` is set (expand_matrix ignores `models` when arms is
+  # non-empty), kept only because CaseSpec requires the field.
+  - zai-coding-plan/glm-5.3
+judge_model: google:gemini-3.7-flash     # different family than the author (ADR-6)
+# dev/test/devops are the HARNESS_ROLES this arm runs through the crew.
+# `zai-coding-plan` is already a different ADR-6 family from the reviewer's
+# registry default (anthropic:glm-5.2), so no provider-prefix trick is
+# needed here any more -- the model string is now passed through to the
+# crew's CLI verbatim.
+arms:
+  - name: crew-glm-5.3
+    role_models:
+      dev: zai-coding-plan/glm-5.3
+      test: zai-coding-plan/glm-5.3
+      devops: zai-coding-plan/glm-5.3
+rubrics:
+  architect: rubric-architect.md
+  clarifier: rubric-clarifier.md

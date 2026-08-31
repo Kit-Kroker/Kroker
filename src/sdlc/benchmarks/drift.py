@@ -62,13 +62,18 @@ def _iter_events(history: Any):
     return []
 
 
+# E-88: a coding turn is no longer one activity name. Naming the set here
+# rather than inline is what makes the omission testable.
+CODING_ACTIVITIES = frozenset({"run_coding_task", "run_crew_turn"})
+
+
 def _record_from_event(run_id: str, event: Any, bench_run_id: str
                        ) -> BenchmarkRecord | None:
     if not isinstance(event, dict):
         return None
     if event.get("event_type") != "ActivityTaskCompleted":
         return None
-    if event.get("activity") != "run_coding_task":
+    if event.get("activity") not in CODING_ACTIVITIES:
         return None
     result = event.get("result")
     if not isinstance(result, dict):
