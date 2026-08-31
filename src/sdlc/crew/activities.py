@@ -8,6 +8,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from pydantic import ValidationError
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
@@ -15,7 +16,9 @@ from ..artifacts.capture import capture_session
 from ..harness.adapters import HARNESSES, HarnessRequest
 from ..models import HarnessKind, HarnessRunResult, ToolGrant
 from .config import CrewLayout, CrewRole
-from .models import MAX_NOTE_BYTES, RoundNote, TurnBeat, TurnRecord
+from .models import (
+    MAX_NOTE_BYTES, RoundAdvisory, RoundNote, RoundReview, TurnBeat, TurnRecord,
+)
 from .worktree import (
     ORCH_ROOT, orchestration_dir, prepare_orchestration, round_dir,
 )
@@ -58,6 +61,10 @@ class RoundReading:
     deliverable_path: str | None
     note_summary: str
     missing: bool
+    # The critic's output, rendered for the next round's brief. Empty when
+    # the layout has no critic, which is the shipped one-role case.
+    critique: str = ""
+    verdict: str | None = None
 
 
 def _resolve_in_round(worktree: str, layout: str, rnd: int,
@@ -71,6 +78,39 @@ def _resolve_in_round(worktree: str, layout: str, rnd: int,
             f"deliverable {rel!r} resolves outside the round directory "
             f"{base}")
     return target
+
+
+def _read_schema(path: Path, schema: str, model):
+    """Read one model-written protocol file, or None when absent.
+
+    Every rule here is the untrusted-input rule RoundNote already follows:
+    size cap before parse, JSON object required, an unknown `schema` value is
+    a hard error rather than a best-effort parse.
+    """
+    if not path.is_file():
+        return None
+    size = path.stat().st_size
+    if size > MAX_ROUND_FILE_BYTES:
+        raise CrewProtocolError(
+            f"{path.name} is too large: {size} bytes exceeds "
+            f"{MAX_ROUND_FILE_BYTES}")
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise CrewProtocolError(f"{path.name} is not valid JSON: {e}") from e
+    if not isinstance(payload, dict):
+        raise CrewProtocolError(f"{path.name} must contain a JSON object")
+    declared = payload.get("schema")
+    if declared != schema:
+        raise CrewProtocolError(
+            f"{path.name} declares schema {declared!r}; only {schema!r} is "
+            f"understood, and an unknown schema is an error rather than a "
+            f"best-effort parse")
+    try:
+        return model(**payload)
+    except ValidationError as e:
+        raise CrewProtocolError(f"{path.name} is not valid {schema}: {e}") from e
 
 
 @activity.defn
@@ -104,8 +144,25 @@ async def read_round(inp: ReadRoundInput) -> RoundReading:
     summary = "\n".join(
         [note.what_changed, note.why, note.verification, note.left_undone]
     ).strip()
+
+    base = round_dir(inp.worktree, inp.layout, inp.round)
+    advisory = _read_schema(base / "advisor.md", "advisor-v1", RoundAdvisory)
+    review = _read_schema(base / "review.json", "review-v1", RoundReview)
+
+    parts: list[str] = []
+    if advisory is not None:
+        parts.append(f"Assessment: {advisory.assessment}")
+        if advisory.risks:
+            parts.append(f"Risks: {advisory.risks}")
+        if advisory.suggestions:
+            parts.append(f"Suggestions: {advisory.suggestions}")
+    if review is not None:
+        parts += [f"[{f.severity}] {f.where}: {f.what}"
+                  for f in review.findings]
+
     return RoundReading(deliverable_path=str(path), note_summary=summary,
-                        missing=False)
+                        missing=False, critique="\n".join(parts),
+                        verdict=review.verdict if review else None)
 
 
 # The error type a workflow matches on to tell "the agent produced a bad

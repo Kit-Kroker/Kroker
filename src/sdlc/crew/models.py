@@ -29,6 +29,37 @@ class RoundNote(BaseModel):
     left_undone: str = Field(default="", max_length=MAX_NOTE_BYTES)
 
 
+class RoundAdvisory(BaseModel):
+    """The critic's response to the lead's round. Prose, because its consumer
+    is the next round's brief and the reader is a model."""
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    schema_name: Literal["advisor-v1"] = Field(alias="schema")
+    assessment: str = Field(max_length=MAX_NOTE_BYTES)
+    risks: str = Field(default="", max_length=MAX_NOTE_BYTES)
+    suggestions: str = Field(default="", max_length=MAX_NOTE_BYTES)
+
+
+class ReviewFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    severity: Literal["blocker", "major", "minor"]
+    where: str = Field(max_length=1_000)
+    what: str = Field(max_length=MAX_NOTE_BYTES)
+
+
+class RoundReview(BaseModel):
+    """A verdict plus its evidence. `verdict` is a closed set because it
+    drives a control decision -- a free string would let a model invent an
+    outcome the workflow has no branch for."""
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    schema_name: Literal["review-v1"] = Field(alias="schema")
+    verdict: Literal["approve", "needs_work"]
+    findings: list[ReviewFinding] = Field(default_factory=list,
+                                          max_length=100)
+
+
 class TurnBeat(BaseModel):
     """What a turn's heartbeat carries so a retry can resume rather than
     restart (spec §3). Crosses the Temporal boundary as a plain dict."""
@@ -70,6 +101,10 @@ class RoundRecord(BaseModel):
     turns: list[TurnRecord] = Field(default_factory=list)
     deliverable_path: str | None = None
     verdict: str | None = None
+    # What round N+1's brief carries forward. Stored on the record so a
+    # replay reconstructs the brief from history rather than from the disk
+    # state of a worktree that has moved on.
+    critique: str = ""
     note_summary: str = ""
 
     def cost_usd(self) -> float | None:
