@@ -117,6 +117,10 @@ class BenchmarkRecord(BaseModel):
     attempt: int | None = None
     role: str
     harness: HarnessKind | None = None
+    # Set only when harness == CREW: the CLI the crew's lead ran under
+    # (spec §5). Without it every crew:<lead_harness> cell collapses to one
+    # record identity and the lead sweep cannot be told apart in a report.
+    lead_harness: HarnessKind | None = None
     model: str
     prompt_sha: str = ""
     # raw dimensions
@@ -206,10 +210,13 @@ class BenchmarkCell(BaseModel):
 
 
 class BenchmarkSummary(BaseModel):
-    """Aggregate over all records for one (case, stage, harness, model)."""
+    """Aggregate over all records for one (case, stage, harness, model),
+    split further by lead_harness on harness=CREW records -- otherwise a
+    crew:<lead_harness> sweep blends different leads into one composite."""
     case_id: str
     stage: str
     harness: HarnessKind | None
+    lead_harness: HarnessKind | None = None
     model: str
     n: int
     mean_quality: float | None

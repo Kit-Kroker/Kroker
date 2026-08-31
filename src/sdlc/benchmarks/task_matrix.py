@@ -43,7 +43,10 @@ def build_task_matrix(case_id: str, records: list[BenchmarkRecord],
 
     by_col: dict[tuple[str, str], list[BenchmarkRecord]] = defaultdict(list)
     for r in recs:
-        cell_id = f"{case_id}#{r.harness.value if r.harness else ''}#{r.model}"
+        h = r.harness.value if r.harness else ""
+        if r.lead_harness:
+            h = f"{h}:{r.lead_harness.value}"
+        cell_id = f"{case_id}#{h}#{r.model}"
         by_col[(r.bench_run_id, cell_id)].append(r)
 
     columns: list[TaskMatrixColumn] = []

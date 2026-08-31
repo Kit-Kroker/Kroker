@@ -28,11 +28,15 @@ def compute_summaries(
     # excluded before grouping to avoid inflating n / blending mean_quality
     # and composite into the oracle summary row.
     records = [r for r in records if r.scope is not BenchmarkScope.ORACLE_TASK]
-    # group raw records by cell identity
-    by_cell: dict[tuple[str, str, str | None, str], list[BenchmarkRecord]] = (
-        defaultdict(list))
+    # group raw records by cell identity. lead_harness joins the key so a
+    # crew:<lead_harness> sweep doesn't blend different leads into one
+    # composite (spec §5) -- it's None for every non-crew record, so the
+    # key shape is unchanged there.
+    by_cell: dict[tuple[str, str, str | None, str | None, str],
+                 list[BenchmarkRecord]] = defaultdict(list)
     for r in records:
         by_cell[(r.case_id, r.stage, r.harness.value if r.harness else None,
+                 r.lead_harness.value if r.lead_harness else None,
                  r.model)].append(r)
 
     summaries: list[BenchmarkSummary] = []
@@ -47,7 +51,7 @@ def compute_summaries(
         use_cost = len(costed) >= 2 and max_usd
         use_speed = len(timed) >= 2 and max_sec
 
-        for (_c, _s, h, m), cell_recs in by_cell.items():
+        for (_c, _s, h, lh, m), cell_recs in by_cell.items():
             if _c != case_id or _s != stage:
                 continue
             scored = [r for r in cell_recs if r.quality.score is not None]
@@ -60,9 +64,11 @@ def compute_summaries(
             composite = _composite(mean_q, mean_usd, mean_sec,
                                    max_usd, max_sec, use_cost, use_speed, w)
             harness = (HarnessKind(h) if h else None)
+            lead_harness = (HarnessKind(lh) if lh else None)
             errors = [r.error for r in cell_recs if r.error]
             summaries.append(BenchmarkSummary(
-                case_id=case_id, stage=stage, harness=harness, model=m,
+                case_id=case_id, stage=stage, harness=harness,
+                lead_harness=lead_harness, model=m,
                 n=len(cell_recs), mean_quality=mean_q, mean_cost_usd=mean_usd,
                 mean_wall_clock_s=mean_sec, composite=composite,
                 errors=errors,

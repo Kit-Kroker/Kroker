@@ -41,7 +41,10 @@ def build_error_matrix(case_id: str, records: list[BenchmarkRecord],
     mass: dict[tuple[str, str, str], float] = defaultdict(float)
     runs_by_arm_class: dict[tuple[str, str], set[str]] = defaultdict(set)
     for r in recs:
-        arm_key = f"{r.harness.value if r.harness else ''}#{r.model}"
+        h = r.harness.value if r.harness else ""
+        if r.lead_harness:
+            h = f"{h}:{r.lead_harness.value}"
+        arm_key = f"{h}#{r.model}"
         cls = class_by_task[r.task_id]
         mass[(r.bench_run_id, arm_key, cls)] += (1.0 - r.quality.score)
         runs_by_arm_class[(arm_key, cls)].add(r.bench_run_id)

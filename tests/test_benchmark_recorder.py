@@ -70,6 +70,24 @@ def test_record_benchmark_routes_production_to_flat_file(tmp_path, monkeypatch):
     assert recs[0].case_id == "_production"
 
 
+def test_record_benchmark_separates_crew_cells_by_lead_harness(
+        tmp_path, monkeypatch):
+    """spec §5: crew:claude_code and crew:opencode are different cells --
+    without lead_harness in the file key they'd both land in
+    c1#crew#glm.jsonl and the lead sweep couldn't be told apart."""
+    monkeypatch.setenv("SDLC_BENCHMARKS_ROOT", str(tmp_path))
+    for lead in (HarnessKind.CLAUDE_CODE, HarnessKind.OPENCODE):
+        rec = _record(run_id=f"r-{lead.value}", bench="b1", case="c1")
+        rec = rec.model_copy(update={"harness": HarnessKind.CREW,
+                                     "lead_harness": lead,
+                                     "model": "glm"})
+        asyncio.run(record_benchmark(rec))
+    files = sorted(p.name for p in tmp_path.rglob("*.jsonl"))
+    assert len(files) == 2
+    assert any("claude_code" in f for f in files)
+    assert any("opencode" in f for f in files)
+
+
 def test_record_benchmark_sanitizes_colon_in_model_id(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_BENCHMARKS_ROOT", str(tmp_path))
     rec = _record(run_id="r1", bench="b1", case="c1")

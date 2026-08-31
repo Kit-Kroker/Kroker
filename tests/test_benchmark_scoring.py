@@ -8,11 +8,12 @@ from sdlc.benchmarks.scoring import compute_summaries
 from sdlc.models import HarnessKind
 
 
-def _rec(case, harness, model, q, usd, secs):
+def _rec(case, harness, model, q, usd, secs, lead_harness=None):
     return BenchmarkRecord(
         run_id="r", bench_run_id="b", case_id=case,
         scope=BenchmarkScope.STAGE, stage="code", role="dev",
-        harness=harness, model=model, prompt_sha="",
+        harness=harness, lead_harness=lead_harness, model=model,
+        prompt_sha="",
         quality=QualityScore(score=q, judge="contract"),
         cost=CostBag(usd=usd, input_tokens=10, output_tokens=5),
         speed=SpeedBag(wall_clock_s=secs,
@@ -110,3 +111,21 @@ def test_multiple_records_averaged_per_cell():
     s = _summarize(recs)
     assert s["sonnet"].n == 2
     assert abs(s["sonnet"].mean_quality - 0.7) < 1e-9
+
+
+def test_crew_leads_summarize_into_separate_cells():
+    """spec §5: harness=CREW records for two different leads share
+    (case_id, stage, harness, model) -- without lead_harness in the group
+    key they would blend into one composite, hiding the very comparison
+    the crew:<lead_harness> sweep exists to make."""
+    recs = [
+        _rec("c1", HarnessKind.CREW, "glm", q=0.9, usd=1.0, secs=100,
+             lead_harness=HarnessKind.CLAUDE_CODE),
+        _rec("c1", HarnessKind.CREW, "glm", q=0.1, usd=1.0, secs=100,
+             lead_harness=HarnessKind.OPENCODE),
+    ]
+    summaries = compute_summaries(recs)
+    assert len(summaries) == 2
+    by_lead = {s.lead_harness: s for s in summaries}
+    assert by_lead[HarnessKind.CLAUDE_CODE].mean_quality == 0.9
+    assert by_lead[HarnessKind.OPENCODE].mean_quality == 0.1

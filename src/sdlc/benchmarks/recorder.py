@@ -96,4 +96,8 @@ def _cell_id_for(record: BenchmarkRecord) -> str | None:
     if record.case_id == "_production":
         return None
     h = record.harness.value if record.harness else "proposer"
+    # Mirrors BenchmarkCell.cell_id (matrix.py): a crew:<lead_harness> cell
+    # must keep its own file, or the lead sweep collapses into one column.
+    if record.lead_harness is not None:
+        h = f"{h}:{record.lead_harness.value}"
     return f"{record.case_id}#{h}#{record.model}"

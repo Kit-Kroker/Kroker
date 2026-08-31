@@ -22,6 +22,7 @@ def aggregate(bench_run_id: str, weights: CompositeWeights | None = None,
         compute_summaries(records, weights),
         key=lambda s: (s.case_id, s.stage,
                        s.harness.value if s.harness else "",
+                       s.lead_harness.value if s.lead_harness else "",
                        s.model,
                        -(s.composite or -1)),
     )
@@ -72,9 +73,12 @@ def render_markdown(summaries: list[BenchmarkSummary], calibration=None) -> str:
             # mangles the em dash into "�" (Unicode replacement char)
             # when this gets printed, not just when written to the file.
             return f"{x:.3f}" if isinstance(x, float) else "n/a"
+        harness_col = s.harness.value if s.harness else "proposer"
+        if s.lead_harness:
+            harness_col = f"{harness_col}:{s.lead_harness.value}"
         lines.append(
             f"| {s.case_id} | {s.stage} | "
-            f"{s.harness.value if s.harness else 'proposer'} | {s.model} | "
+            f"{harness_col} | {s.model} | "
             f"{s.n} | {fmt(s.mean_quality)} | {fmt(s.mean_cost_usd)} | "
             f"{fmt(s.mean_wall_clock_s)} | {fmt(s.composite)} | "
             f"{trust_for_stage(s.stage, calibration)} |"
