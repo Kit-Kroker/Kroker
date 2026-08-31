@@ -1651,11 +1651,21 @@ class FeatureWorkflow(GateHost):
             # E-33 harness join: the harness reports REAL dollars (CLI
             # total_cost_usd) — no pricing activity needed. Accumulate
             # under the executing role.
+            #
+            # `into` is not optional here: self._role_usage is per RUN and per
+            # role, while a stage='code' BenchmarkRecord is per TASK ATTEMPT,
+            # so the record cannot read the accumulator. Without a bag of its
+            # own the record went out with cost.usd set and
+            # cost.input_tokens/output_tokens null — for every harness, not
+            # only crew (cost_bag_from_spend degrades to CostBag(usd=...)
+            # when spend is None). E-88's acceptance asks for non-null token
+            # counts, and the tokens were in `run` the whole time.
+            code_spend = RoleUsage(role="dev", model=role_cfg.model)
             self._track_usage(
                 role="dev", model=role_cfg.model,
                 input_tokens=run.input_tokens or 0,
                 output_tokens=run.output_tokens or 0,
-                cost_usd=run.cost_usd)
+                cost_usd=run.cost_usd, into=code_spend)
 
             # Clean-context validation: contract + tests + diff. No narrative.
             # Uses the contract's own stack-specific test_commands (FR-803)
@@ -1704,7 +1714,7 @@ class FeatureWorkflow(GateHost):
                 model=role_cfg.model,
                 harness=role_cfg.harness,
                 lead_harness=role_cfg.lead_harness,
-                cost_usd=run.cost_usd,
+                cost_usd=run.cost_usd, spend=code_spend,
                 waste=WasteBag.from_digest(run.session_digest),
                 plan_drift=compute_plan_drift(task, diff.get("files", [])),
                 fix_attempts=attempt - 1,

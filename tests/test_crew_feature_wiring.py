@@ -36,8 +36,10 @@ from sdlc.crew.activities import (
     ReadRoundInput, RoundReading, load_crew,
 )
 from sdlc.crew.models import TurnRecord
+from sdlc.benchmarks.models import BenchmarkRecord
 from sdlc.models import (
-    GateConfig, GatePolicy, HarnessKind, HarnessRunResult, RoleConfig,
+    BenchmarkConfig, GateConfig, GatePolicy, HarnessKind, HarnessRunResult,
+    RoleConfig,
 )
 from sdlc.notify.contract import NotifyInput, Results
 from sdlc.observability.activities import export_run_artifacts
@@ -72,10 +74,15 @@ async def fake_turn(inp: CrewTurnInput) -> CrewTurnOutput:
     run = HarnessRunResult(harness=inp.harness, exit_code=0,
                            summary="ok", session_id="s-1", cost_usd=0.5,
                            input_tokens=100, output_tokens=20)
+    # The token fields matter: CrewTaskWorkflow builds its returned
+    # HarnessRunResult's input_tokens/output_tokens from the RECORD, not
+    # from this run, exactly as the real run_crew_turn copies them across.
+    # A record without them makes the crew report None and hides whether
+    # the seam above carries tokens at all.
     return CrewTurnOutput(run=run, record=TurnRecord(
         role=inp.role, round=inp.round, attempt=inp.attempt,
         harness=inp.harness, model=inp.model, session_id="s-1",
-        cost_usd=0.5, exit_code=0))
+        cost_usd=0.5, input_tokens=100, output_tokens=20, exit_code=0))
 
 
 @activity.defn(name="read_round")
@@ -89,6 +96,15 @@ async def fake_checkpoint(inp: CheckpointInput) -> str | None:
     return "a" * 40
 
 
+# Every BenchmarkRecord the run wrote, when _cfg(benchmark=True).
+RECORDS: list[BenchmarkRecord] = []
+
+
+@activity.defn(name="record_benchmark")
+async def fake_record(rec: BenchmarkRecord) -> None:
+    RECORDS.append(rec)
+
+
 @activity.defn(name="notify")
 async def _noop_notify(inp: NotifyInput) -> Results:
     # Registered so an unexpected escalation surfaces as the test's own
@@ -97,9 +113,14 @@ async def _noop_notify(inp: NotifyInput) -> Results:
     return Results(results=[])
 
 
-def _cfg():
+def _cfg(benchmark: bool = False):
     """Every gate OFF: the point is the dev stage's crew wiring, not gate
-    driving. The dev role goes CREW with the shipped `code` layout."""
+    driving. The dev role goes CREW with the shipped `code` layout.
+
+    `benchmark` turns on the record path (case_id is what _benchmarking
+    reads); rubrics stay empty so _judge degrades gracefully instead of
+    needing a judge activity.
+    """
     cfg = e2e_config()
     cfg.gates = {name: GateConfig(policy=GatePolicy.OFF)
                  for name in ("clarify", "architecture", "plan", "merge",
@@ -107,6 +128,9 @@ def _cfg():
     cfg.default_gate_policy = GatePolicy.OFF
     cfg.roles["dev"] = RoleConfig(harness=HarnessKind.CREW, layout="code",
                                   model="zai-coding-plan/glm-5.3")
+    if benchmark:
+        cfg.benchmark = BenchmarkConfig(case_id="crew-wiring",
+                                        bench_run_id="crew-wiring-1")
     return cfg
 
 
@@ -177,3 +201,60 @@ async def test_the_crew_dev_task_carries_the_protocol_to_the_round_brief(
     assert any("notes-v1" in b for b in BRIEFS), (
         "the lead's SKILL.md protocol must reach the round brief run_crew_turn "
         "receives; it was loaded, dropped, or read before its first binding")
+
+
+async def test_the_code_stage_record_carries_the_attempts_token_counts(
+        tmp_path, monkeypatch):
+    """The third bug to live on this seam with the suite all green.
+
+    `_stage_record` built the stage='code' record with `cost_usd=run.cost_usd`
+    and no `spend=`, and `cost_bag_from_spend(None, usd)` degrades to
+    `CostBag(usd=...)` -- so every code record went out with real dollars and
+    NULL input_tokens/output_tokens, for every harness, while `run` carried
+    both numbers the whole time. E-88's acceptance criterion is a cost record
+    with non-null token counts, so a green suite here was hiding a failed
+    acceptance. The bag must be per TASK ATTEMPT: self._role_usage is
+    per-run-per-role and a record is per attempt, so the record cannot read
+    the accumulator.
+    """
+    BRIEFS.clear()
+    RECORDS.clear()
+    monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=[FeatureWorkflow, DeploymentWorkflow,
+                                     CrewTaskWorkflow],
+                          activities=[evaluate_gate, export_run_artifacts,
+                                      _noop_notify, fake_record, load_crew,
+                                      fake_prepare, fake_turn, fake_read,
+                                      fake_checkpoint,
+                                      *git_fakes_except("run_coding_task"),
+                                      *fake_agent_activities(AGENT_SPECS)],
+                          plugins=[PydanticAIPlugin()]):
+            handle = await env.client.start_workflow(
+                FeatureWorkflow.run,
+                args=[greenfield_idea(), _cfg(benchmark=True), None],
+                id=f"{TASK_QUEUE}-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+            with env.auto_time_skipping_disabled():
+                for qid in QUESTION_IDS:
+                    await handle.signal(FeatureWorkflow.answer_question,
+                                        args=[qid, "yes"])
+            result = await _finish(handle)
+
+    assert not result.startswith("failed"), result
+    code = [r for r in RECORDS if r.stage == "code"]
+    assert code, "the run wrote no stage='code' benchmark record"
+    for rec in code:
+        # fake_turn reports 100/20 per turn; the assertion is that they
+        # ARRIVE, not what they sum to -- a crew may run several turns.
+        assert rec.cost.input_tokens, (
+            f"code record {rec.task_id}/{rec.attempt} has null input_tokens "
+            f"while the harness reported them")
+        assert rec.cost.output_tokens, (
+            f"code record {rec.task_id}/{rec.attempt} has null output_tokens "
+            f"while the harness reported them")
+        # The explicit harness dollars still win over the spend's priced sum
+        # (cost_bag_from_spend's first rule) -- adding the bag must not
+        # replace a REAL reported cost with a computed one.
+        assert rec.cost.usd == 0.5
