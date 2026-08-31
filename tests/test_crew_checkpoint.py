@@ -48,6 +48,17 @@ async def test_checkpoint_never_commits_the_protocol_directory(tmp_path):
         ["git", "-C", str(repo), "show", "--name-only", "--pretty=", "HEAD"],
         capture_output=True, text=True, check=True).stdout.split()
     assert files == ["app.py"]
+    # ... and the exclusion is local to the add, not repo state: the
+    # orchestration tree stays on disk, visibly UNTRACKED (a bare
+    # `git add -A` would sweep it -- that guarantee belongs to this
+    # command's pathspec, nowhere else).
+    assert (d / "brief.md").is_file()
+    status = subprocess.run(
+        ["git", "-C", str(repo), "status", "--porcelain"],
+        capture_output=True, text=True, check=True).stdout
+    orch = [ln for ln in status.splitlines() if ".workspace" in ln]
+    assert orch, "orchestration tree vanished from disk"
+    assert all(ln.startswith("??") for ln in orch)
 
 
 async def test_checkpoint_is_allowed_to_be_empty(tmp_path):

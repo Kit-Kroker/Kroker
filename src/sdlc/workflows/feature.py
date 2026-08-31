@@ -1574,6 +1574,7 @@ class FeatureWorkflow(GateHost):
                     )
                     crew_sessions = crew.sessions
                     run = crew.run
+                    self._session_refs.extend(crew.session_refs)
                 else:
                     # The existing call, moved into the else branch verbatim:
                     # same CodingTaskInput(...) arguments, same _long_act.

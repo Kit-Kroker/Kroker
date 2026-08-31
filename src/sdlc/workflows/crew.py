@@ -104,6 +104,7 @@ class CrewTaskWorkflow:
         refs: list = []
         spent = 0.0
         last: TurnRecord | None = None
+        last_run: HarnessRunResult | None = None
         summary = ""
         exit_code = EXIT_ROUNDS_EXHAUSTED
         commit_sha: str | None = None
@@ -164,6 +165,7 @@ class CrewTaskWorkflow:
 
             record.turns.append(out.record)
             last = out.record
+            last_run = out.run
             if out.run.session_ref is not None:
                 refs.append(out.run.session_ref)
             if out.record.session_id:
@@ -217,6 +219,8 @@ class CrewTaskWorkflow:
             session_id=sessions.get(lead.name),
             exit_code=exit_code,
             summary=summary,
+            session_ref=last_run.session_ref if last_run else None,
+            session_digest=last_run.session_digest if last_run else None,
             cost_usd=None if cost_incomplete else spent,
             commit_sha=commit_sha,
             input_tokens=last.input_tokens if last else None,

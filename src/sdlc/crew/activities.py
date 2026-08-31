@@ -16,7 +16,9 @@ from ..harness.adapters import HARNESSES, HarnessRequest
 from ..models import HarnessKind, HarnessRunResult, ToolGrant
 from .config import CrewLayout, CrewRole
 from .models import MAX_NOTE_BYTES, RoundNote, TurnBeat, TurnRecord
-from .worktree import orchestration_dir, prepare_orchestration, round_dir
+from .worktree import (
+    ORCH_ROOT, orchestration_dir, prepare_orchestration, round_dir,
+)
 
 # 4x the note cap: enough headroom for JSON overhead, small enough that a
 # runaway file is refused before it is parsed.
@@ -170,6 +172,11 @@ async def run_crew_turn(inp: CrewTurnInput) -> CrewTurnOutput:
             f"run unfenced while the run believes it is policed",
             type=CREW_CONTAINMENT_UNSUPPORTED, non_retryable=True)
     harness = HARNESSES[inp.harness]
+    # The activity is the only actor that knows the round, so it owns the
+    # round dir: the agent must not have to mkdir to follow the protocol,
+    # and a dir nobody created would read as EXIT_PROTOCOL_VIOLATION.
+    round_dir(inp.worktree, inp.layout, inp.round).mkdir(
+        parents=True, exist_ok=True)
     session_id = _resume_target(inp)
     req = HarnessRequest(prompt=inp.prompt, cwd=inp.worktree,
                          model=inp.model, session_id=session_id,
@@ -252,7 +259,12 @@ async def checkpoint_round(inp: CheckpointInput) -> str | None:
     """
     from ..activities import _git
 
-    add = _git(["add", "-A"], inp.worktree)
+    # Pathspec-scoped add: the exclusion is LOCAL to this one command -- no
+    # common-dir state, no races between parallel tasks, nothing written
+    # into the user's repository. (info/exclude lives in the git COMMON
+    # dir, so a linked worktree cannot have a private exclude file.)
+    add = _git(["add", "-A", "--", ".", f":(exclude){ORCH_ROOT}"],
+               inp.worktree)
     if add.returncode != 0:
         # Surface git's actual diagnostic instead of a bare
         # CalledProcessError that loses stderr when Temporal serializes it.

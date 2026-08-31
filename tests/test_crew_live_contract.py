@@ -40,7 +40,6 @@ async def test_one_real_round(tmp_path):
     await prepare_crew(PrepareCrewInput(worktree=str(tmp_path),
                                         layout=layout.layout, brief=PROMPT))
     d = round_dir(tmp_path, layout.layout, 1)
-    d.mkdir(parents=True, exist_ok=True)
 
     out = await run_crew_turn(CrewTurnInput(
         worktree=str(tmp_path), layout=layout.layout, role=lead.name,

@@ -17,7 +17,9 @@ from sdlc.crew.activities import (
     ReadRoundInput, RoundReading,
 )
 from sdlc.crew.models import TurnRecord
-from sdlc.models import HarnessKind, HarnessRunResult
+from sdlc.models import (
+    ArtifactRef, HarnessKind, HarnessRunResult, SessionDigest,
+)
 from sdlc.workflows.crew import (
     EXIT_BUDGET, EXIT_PROTOCOL_VIOLATION, CrewTaskInput, CrewTaskWorkflow,
 )
@@ -26,6 +28,11 @@ pytestmark = [pytest.mark.temporal, pytest.mark.asyncio]
 
 TASK_QUEUE = "crew-test"
 _STATE = {"missing": False, "turns": 0}
+
+# What a real turn captures (run_crew_turn -> capture_session): a
+# claim-checked transcript ref plus the inline waste digest.
+SESSION_REF = ArtifactRef(kind="session", uri="file:///sessions/s-1.jsonl")
+SESSION_DIGEST = SessionDigest(model_turns=3, tool_calls=5)
 
 
 @activity.defn(name="prepare_crew")
@@ -38,7 +45,9 @@ async def fake_turn(inp: CrewTurnInput) -> CrewTurnOutput:
     _STATE["turns"] += 1
     run = HarnessRunResult(harness=HarnessKind.OPENCODE, exit_code=0,
                            summary="ok", session_id="s-1", cost_usd=0.5,
-                           input_tokens=100, output_tokens=20)
+                           input_tokens=100, output_tokens=20,
+                           session_ref=SESSION_REF,
+                           session_digest=SESSION_DIGEST)
     return CrewTurnOutput(run=run, record=TurnRecord(
         role=inp.role, round=inp.round, attempt=inp.attempt,
         harness=inp.harness, model=inp.model, session_id="s-1",
@@ -92,6 +101,12 @@ async def test_a_one_role_crew_completes_one_round():
     assert res.sessions == {"coder": "s-1"}
     assert len(res.rounds) == 1
     assert res.rounds[0].turns[0].attempt == 1
+    # The seam: run.session_ref/session_digest must cross the crew->feature
+    # boundary (deep review, handoff, retention, WasteBag all read them off
+    # `run`), while session_refs keeps the FULL list.
+    assert res.run.session_ref == SESSION_REF
+    assert res.run.session_digest == SESSION_DIGEST
+    assert res.session_refs == [SESSION_REF]
 
 
 async def test_the_lead_session_travels_on_the_shared_contract():

@@ -8,6 +8,7 @@ from temporalio.exceptions import ApplicationError
 
 from sdlc.crew import activities as crew_acts
 from sdlc.crew.activities import AGENT_FAILURE, CrewTurnInput, run_crew_turn
+from sdlc.crew.worktree import round_dir
 from sdlc.models import HarnessKind, HarnessRunResult, ToolGrant
 
 pytestmark = pytest.mark.asyncio
@@ -52,6 +53,25 @@ async def test_turn_records_cost_and_session(monkeypatch):
     assert out.record.session_id == "s-1"
     assert out.record.cost_usd == 0.5
     assert out.record.cost_incomplete is False
+
+
+async def test_the_round_directory_exists_before_the_harness_runs(
+        monkeypatch, tmp_path):
+    """The ACTIVITY owns the round dir: the agent must not have to mkdir to
+    follow the protocol, because a missing notes.md reads as
+    EXIT_PROTOCOL_VIOLATION -- misdiagnosed as 'the agent never ran the
+    protocol' when really nobody created the dir."""
+    probe = {}
+
+    class Probe(FakeHarness):
+        async def run(self, req, heartbeat=None):
+            probe["dir"] = round_dir(req.cwd, "code", 1)
+            return await super().run(req, heartbeat)
+
+    fake = Probe()
+    monkeypatch.setitem(crew_acts.HARNESSES, HarnessKind.OPENCODE, fake)
+    await run_crew_turn(_inp(worktree=str(tmp_path)))
+    assert probe["dir"].is_dir()
 
 
 async def test_turn_resumes_the_session_it_is_given(monkeypatch):
