@@ -28,6 +28,10 @@ class HarnessKind(str, Enum):
     CLAUDE_CODE = "claude_code"   # claude -p
     OPENCODE = "opencode"         # opencode run
     CURSOR = "cursor"             # cursor-agent -p (E-35)
+    # E-88: a COMPOSITION mode, not a CLI. A crew role's own harness is one
+    # of the three above; `crew` says the stage runs as CrewTaskWorkflow.
+    # Deliberately absent from HARNESSES: there is no subprocess to build.
+    CREW = "crew"
 
 
 class GatePolicy(str, Enum):
