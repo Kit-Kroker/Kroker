@@ -107,6 +107,12 @@ class HarnessRequest:
     timeout_s: int = 3600
     env: dict[str, str] = field(default_factory=dict)
     extra_args: list[str] = field(default_factory=list)
+    # E-88 step 2 §A: the root the FENCE measures against, when it differs
+    # from where the process runs. A non-lead crew role runs with cwd = the
+    # worktree (so it can read the diff it is criticising) and write_root =
+    # its orchestration directory (so it can write nowhere else). None means
+    # "the same as cwd", which is every non-crew caller.
+    write_root: str | None = None
 
 
 def _log_live_event(line: str) -> None:
@@ -385,7 +391,10 @@ class ClaudeCodeHarness(CodingHarness):
         path is passed explicitly because the hook's cwd is the worktree (a
         temp dir), where repo-root discovery would fail."""
         exe = Path(sys.executable).as_posix()
-        wt = Path(req.cwd).as_posix()
+        # write_root, not cwd, when the two differ: the hook's --worktree IS
+        # the confinement root (`_abs_under(target, worktree)`), and cwd is
+        # only where the process runs.
+        wt = Path(req.write_root or req.cwd).as_posix()
         cmd = f'"{exe}" -m sdlc.harness.hook --worktree "{wt}"'
         if source_path is not None:
             cmd += f' --policy "{Path(source_path).as_posix()}"'
