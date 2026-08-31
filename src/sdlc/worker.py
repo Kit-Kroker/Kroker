@@ -53,6 +53,9 @@ from .benchmarks.workflow import BenchmarkWorkflow
 from .board.activities import (attach_task_evidence,
                                publish_artifact_version,
                                set_task_authoritative, sync_plan_tasks)
+from .crew.activities import (
+    checkpoint_round, prepare_crew, read_round, run_crew_turn,
+)
 from .harness.adapters import check_harness_versions
 from .memoization.activities import cache_get, cache_put
 from .memory.activities import (
@@ -70,6 +73,7 @@ from .triage.activities import (
     triage_scaffold, triage_secrets,
 )
 from .workflows.assessment import AssessmentWorkflow
+from .workflows.crew import CrewTaskWorkflow
 from .workflows.feature import FeatureWorkflow
 from .workflows.reflect import ReflectWorkflow
 from .workflows.tidyup import TidyUpWorkflow
@@ -106,12 +110,13 @@ async def main() -> None:
         task_queue=TASK_QUEUE,
         workflows=[FeatureWorkflow, BenchmarkWorkflow, ReflectWorkflow,
                    DeploymentWorkflow, TriageWorkflow, TidyUpWorkflow,
-                   AssessmentWorkflow],
+                   AssessmentWorkflow, CrewTaskWorkflow],
         activities=[
             create_worktree, setup_integration_branch, classify_repo,
             check_brownfield_delta,
             merge_into_integration,
             build_verification_branch,
+            prepare_crew, run_crew_turn, read_round, checkpoint_round,
             run_coding_task, run_integration_checks, run_lint, run_test_suite,
             security_scan,
             measure_coverage,
