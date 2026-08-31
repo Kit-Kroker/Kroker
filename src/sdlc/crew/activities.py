@@ -5,12 +5,16 @@ none of it.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from temporalio import activity
+from temporalio.exceptions import ApplicationError
 
-from .models import MAX_NOTE_BYTES, RoundNote
+from ..artifacts.capture import capture_session
+from ..harness.adapters import HARNESSES, HarnessRequest
+from ..models import HarnessKind, HarnessRunResult, ToolGrant
+from .models import MAX_NOTE_BYTES, RoundNote, TurnBeat, TurnRecord
 from .worktree import orchestration_dir, prepare_orchestration, round_dir
 
 # 4x the note cap: enough headroom for JSON overhead, small enough that a
@@ -99,3 +103,115 @@ async def read_round(inp: ReadRoundInput) -> RoundReading:
     ).strip()
     return RoundReading(deliverable_path=str(path), note_summary=summary,
                         missing=False)
+
+
+# The error type a workflow matches on to tell "the agent produced a bad
+# result" from "the worker died". Only the latter deserves a retry.
+AGENT_FAILURE = "crew_agent_failure"
+
+
+@dataclass
+class CrewTurnInput:
+    worktree: str
+    layout: str
+    role: str
+    harness: HarnessKind
+    model: str
+    prompt: str
+    round: int
+    attempt: int
+    turn_timeout_s: int
+    task_id: str
+    session_id: str | None = None
+    containment_enabled: bool = False
+    containment_policy_path: str | None = None
+    containment_strict: bool = False
+    grants: list[ToolGrant] = field(default_factory=list)
+
+
+@dataclass
+class CrewTurnOutput:
+    run: HarnessRunResult
+    record: TurnRecord
+
+
+def _resume_target(inp: CrewTurnInput) -> str | None:
+    """The session to continue. A retried attempt prefers what the previous
+    attempt heartbeated: the CLI printed its session id seconds into the run
+    (adapters.py:127), so even a turn that died mid-stream leaves us able to
+    continue rather than re-pay the whole context (spec §3)."""
+    try:
+        details = activity.info().heartbeat_details
+    except RuntimeError:                       # outside an activity, in tests
+        details = ()
+    if details:
+        beat = TurnBeat(**details[-1])
+        if beat.session_id:
+            return beat.session_id
+    return inp.session_id
+
+
+@activity.defn
+async def run_crew_turn(inp: CrewTurnInput) -> CrewTurnOutput:
+    harness = HARNESSES[inp.harness]
+    session_id = _resume_target(inp)
+    req = HarnessRequest(prompt=inp.prompt, cwd=inp.worktree,
+                         model=inp.model, session_id=session_id,
+                         timeout_s=inp.turn_timeout_s)
+
+    seen = TurnBeat(session_id=session_id, round=inp.round)
+
+    def _beat(payload=None) -> None:
+        """Heartbeat with the details a retry needs. The harness calls this
+        as it streams; we enrich rather than replace, so the session id
+        survives even when a later beat carries no payload."""
+        if isinstance(payload, dict):
+            for k, v in payload.items():
+                if v is not None and hasattr(seen, k):
+                    setattr(seen, k, v)
+        try:
+            activity.heartbeat(seen.model_dump())
+        except RuntimeError:                   # outside an activity, in tests
+            pass
+
+    result = await harness.run(req, heartbeat=_beat)
+    result.denials = harness.normalise_denials(result._raw_stdout)
+    result.deferred = harness.normalise_deferral(result._raw_stdout)
+
+    # E-38/ADR-16, per TURN. Raw stdout rides a PrivateAttr and is scrubbed
+    # here; a real transcript per agent per round is the thing E-87's single
+    # synthetic journal was standing in for. Best-effort, exactly as
+    # run_coding_task treats it: losing the RECORD must not fail the turn.
+    try:
+        run_id = activity.info().workflow_run_id
+    except RuntimeError:                       # outside an activity, in tests
+        run_id = "local"
+    try:
+        ref, digest = capture_session(
+            harness, result._raw_stdout, run_id=run_id,
+            task_id=f"{inp.task_id}-{inp.role}-r{inp.round}",
+            attempt=inp.attempt)
+        result.session_ref = ref
+        result.session_digest = digest
+    except Exception:                          # noqa: BLE001
+        pass
+
+    record = TurnRecord(
+        role=inp.role, round=inp.round, attempt=inp.attempt,
+        harness=inp.harness, model=inp.model,
+        session_id=result.session_id or session_id,
+        cost_usd=result.cost_usd, input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+        context_window=result.context_window, exit_code=result.exit_code,
+        cost_incomplete=result.cost_usd is None)
+
+    # A suspended tool call is NOT a failure: the workflow must see it, gate
+    # it, and resume. Only a genuine non-zero exit is an agent-level failure.
+    if result.exit_code != 0 and result.deferred is None:
+        raise ApplicationError(
+            f"crew turn failed: role={inp.role} round={inp.round} "
+            f"exit_code={result.exit_code}",
+            record.model_dump(mode="json"),
+            type=AGENT_FAILURE, non_retryable=True)
+
+    return CrewTurnOutput(run=result, record=record)
