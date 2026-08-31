@@ -14,6 +14,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # a fresh transcript and updating the adapter pin.
 RUN npm install -g opencode-ai@1.18.4
 
+# claude_code beside opencode. E-88 step 2 puts the critic on a different
+# model FAMILY from the lead (ADR-6) and prefers a harness with a hook
+# layer, since a non-lead role is confined by `no-out-of-worktree-write`,
+# which is layer: hook and therefore unenforceable on opencode. Pinned for
+# the same reason opencode is: a drifting CLI breaks transcript parsing.
+# Without this the crew boot check refuses to start the worker at all.
+RUN npm install -g @anthropic-ai/claude-code@2.0.44
+
 # activities.open_pull_request shells out to `gh`, and it is the LAST step of a
 # feature run -- a worker without it fails after build, lint, security, review
 # and every gate have already passed. Pinned for the same reason opencode is:

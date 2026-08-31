@@ -129,3 +129,17 @@ def test_crew_cli_check_is_a_noop_without_a_crew_tree(tmp_path):
     crew_loader.validate_crew_clis(tmp_path / "nothing-here")
 
 
+def test_the_shipped_layout_is_a_decorrelated_two_role_crew():
+    """The real tree, not a fixture: this is the layout the factory selects,
+    and its ADR-6 compliance is a property of the shipped files."""
+    from sdlc.crew.loader import check_crew_families, crew_dir
+    root = crew_dir()
+    if root is None:
+        pytest.skip("no crew/ tree in this checkout")
+    layout, roles = load_layout("code", root)
+    assert layout.crew == ["coder", "critic"]
+    assert layout.rounds.max == 2
+    check_crew_families(layout.lead, list(roles.values()))
+
+
+

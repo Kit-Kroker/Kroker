@@ -1,0 +1,12 @@
+# claude_code, not opencode: the critic must differ from the lead's model
+# FAMILY (spec §5, ADR-6), and it is the role that most wants a hook layer --
+# a non-lead role is confined by `no-out-of-worktree-write`, which is
+# layer: hook, so an opencode critic is unconfined by it and refuses outright
+# under containment_strict (step-2 spec §A).
+harness: claude_code
+model: anthropic:claude-opus-5
+# REPOSITORY writes. The critic writes advisor.md and review.json under the
+# orchestration tree like every role; `false` means it may not touch the
+# repo, which keeps the diff attributable to the lead alone (spec §1).
+writes: false
+skill: critic

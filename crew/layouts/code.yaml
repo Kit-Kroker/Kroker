@@ -1,14 +1,15 @@
-# The coding layout. One role for now: the critic arrives in E-88 step 2, and
-# the reviewer needs a third vendor (cursor installed, or an agy adapter) --
-# see the spec's finding 10.
+# The coding layout. Two roles: the lead writes, the critic reviews. The
+# reviewer slot in the parent spec's round shape stays empty -- it needs a
+# third vendor (cursor installed, or an agy adapter), see finding 10.
 layout: code
 lead: coder
-crew: [coder]
+crew: [coder, critic]
 rounds:
-  # The factory already retries: a failed coding task returns through the
-  # fix-attempt loop with review and test feedback in the brief. Retrying
-  # inside the crew as well multiplies spend without adding a signal.
-  max: 1
+  # Two, not one. Step 1 shipped `max: 1` reasoning that the factory already
+  # retries -- true, but a critic writes advisor.md and the ONLY thing that
+  # can read it is the next round's brief. At max 1 the critic is spend with
+  # no consumer, so the round bound and the critic arrive together.
+  max: 2
   require_reviewer_approval: false
 deliverable:
   # Relative to the ROUND directory. The diff itself is captured by git, so
