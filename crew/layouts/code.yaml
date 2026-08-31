@@ -1,0 +1,22 @@
+# The coding layout. One role for now: the critic arrives in E-88 step 2, and
+# the reviewer needs a third vendor (cursor installed, or an agy adapter) --
+# see the spec's finding 10.
+layout: code
+lead: coder
+crew: [coder]
+rounds:
+  # The factory already retries: a failed coding task returns through the
+  # fix-attempt loop with review and test feedback in the brief. Retrying
+  # inside the crew as well multiplies spend without adding a signal.
+  max: 1
+  require_reviewer_approval: false
+deliverable:
+  # Relative to the ROUND directory. The diff itself is captured by git, so
+  # this note is not the work -- it records the decisions and known gaps the
+  # diff cannot state, and it fills HarnessRunResult.summary.
+  path: notes.md
+  schema: notes-v1
+limits:
+  wall_clock_s: 3000
+  turn_timeout_s: 1800
+  cost_usd: 25.0

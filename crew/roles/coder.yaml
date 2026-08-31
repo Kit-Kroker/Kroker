@@ -1,0 +1,10 @@
+# opencode, not claude_code: all three harness roles' registry defaults are
+# opencode, so a claude coder would compare harness AND model at once and the
+# benchmark cell would measure two changes. This is a DEFAULT -- the run's
+# lead_harness and model both win over it (spec §5).
+harness: opencode
+model: zai-coding-plan/glm-5.3
+writes: true
+skill: coder
+superpowers:
+  - superpowers:test-driven-development
