@@ -63,15 +63,29 @@ def render_inbox(inbox: Inbox) -> str:
     return "\n".join(lines)
 
 
-_OPEN_FEATURE_QUERY = "WorkflowType='FeatureWorkflow' AND ExecutionStatus='Running'"
+def _open_runs_query(*types: str) -> str:
+    """Server-side visibility filter for currently-running workflows of the
+    named types."""
+    disjuncts = " OR ".join(f"WorkflowType='{t}'" for t in types)
+    return f"({disjuncts}) AND ExecutionStatus='Running'"
 
 
-async def list_open_run_ids(client) -> list[str]:
-    """Every currently-running FeatureWorkflow id, via a server-side
-    visibility filter -- ReflectWorkflow/BenchmarkWorkflow executions on the
-    same task queue never expose pending_decisions, so they are excluded
-    here rather than probed and discarded."""
-    return [wf.id async for wf in client.list_workflows(_OPEN_FEATURE_QUERY)]
+async def list_open_run_ids(client, *types: str) -> list[str]:
+    """Every currently-running workflow id of the given types.
+
+    Defaults to FeatureWorkflow alone, which is what every caller had before
+    E-88 -- ReflectWorkflow and BenchmarkWorkflow share the task queue and
+    never expose pending_decisions, so they are excluded here rather than
+    probed and discarded.
+
+    A PARAMETER rather than a wider constant (step-2 spec §E): the inbox
+    wants crew children, because a crew's gate is exactly what a human owes a
+    decision on; dashboard/fleet.py does not, because it lists RUNS and a
+    crew child is part of a run rather than one. Widening the constant would
+    have changed both.
+    """
+    query = _open_runs_query(*(types or ("FeatureWorkflow",)))
+    return [wf.id async for wf in client.list_workflows(query)]
 
 
 async def _fetch_one(client, run_id: str):
@@ -89,7 +103,8 @@ async def fetch_inbox(client) -> Inbox:
     concurrently, and aggregate. A run with nothing pending is dropped, not
     listed; a run whose query raised becomes an InboxError instead of
     aborting the whole fetch."""
-    run_ids = await list_open_run_ids(client)
+    run_ids = await list_open_run_ids(client, "FeatureWorkflow",
+                                      "CrewTaskWorkflow")
     results = await asyncio.gather(*(_fetch_one(client, rid) for rid in run_ids))
 
     inbox = Inbox(total_open_runs=len(run_ids))
