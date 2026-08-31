@@ -94,6 +94,21 @@ def test_opencode_build_cmd_runs_pure():
     assert "--pure" in cmd
 
 
+def test_opencode_build_cmd_separates_prompt_with_dashdash():
+    """A crew SKILL.md's YAML frontmatter fence makes the round protocol
+    text -- and so the composed prompt -- start with '---'. opencode's
+    yargs parser reads a leading-dash positional as an unrecognized option
+    instead of the message, empties the required message array, and exits 1
+    dumping its own --help to stderr (reproduced verbatim against a live
+    opencode 1.18.4; every crew turn failed this way before the fix). `--`
+    is the POSIX end-of-options marker yargs honors, so it must sit
+    immediately before the prompt regardless of the prompt's content."""
+    cmd = OpenCodeHarness().build_cmd(HarnessRequest(
+        prompt="---\nname: coder\n---\n\ndo stuff", cwd="/tmp/wt",
+        model="zai-coding-plan/glm-5.2"))
+    assert cmd[-2:] == ["--", "---\nname: coder\n---\n\ndo stuff"]
+
+
 def test_claude_build_cmd_accept_edits():
     """Regression guard: claude must auto-accept edits for autonomous runs."""
     cmd = ClaudeCodeHarness().build_cmd(HarnessRequest(

@@ -622,6 +622,15 @@ class OpenCodeHarness(CodingHarness):
             cmd += ["--attach", self.attach_url]
         cmd += ["--format", "json"]
         cmd += req.extra_args
+        # `--`: opencode's yargs parser reads a prompt starting with '-'
+        # (e.g. a crew SKILL.md's YAML frontmatter fence, "---\nname: ...")
+        # as an unrecognized option rather than the positional message,
+        # which empties the required message array and opencode exits 1
+        # dumping its own --help to stderr -- confirmed by reproducing it
+        # verbatim against a live opencode 1.18.4. `--` is the POSIX
+        # end-of-options marker yargs honors, forcing everything after it
+        # to be positional regardless of leading characters.
+        cmd.append("--")
         cmd.append(req.prompt)            # positional, must come last
         return cmd
 

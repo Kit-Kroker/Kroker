@@ -269,6 +269,18 @@ async def checkpoint_round(inp: CheckpointInput) -> str | None:
     # dir, so a linked worktree cannot have a private exclude file.)
     add = _git(["add", "-A", "--", ".", f":(exclude){ORCH_ROOT}"],
                inp.worktree)
+    if (add.returncode != 0
+            and "ignored by one of your .gitignore files" in add.stderr):
+        # The target repo (or a stale COMMON-dir info/exclude left by an
+        # older run) already ignores ORCH_ROOT itself. Naming an
+        # already-ignored path in ANY pathspec -- exclude clause included --
+        # makes git refuse the whole `add` with this error unless `-f`
+        # (confirmed empirically: identical repo, only difference is a
+        # pre-existing ignore rule for the same path). Since the path is
+        # already known-ignored, a plain `-A` (no exclude pathspec at all)
+        # reaches the same end state through git's default ignore handling,
+        # without re-triggering the conflict.
+        add = _git(["add", "-A", "--", "."], inp.worktree)
     if add.returncode != 0:
         # Surface git's actual diagnostic instead of a bare
         # CalledProcessError that loses stderr when Temporal serializes it.

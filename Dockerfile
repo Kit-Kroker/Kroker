@@ -47,6 +47,11 @@ COPY agents ./agents
 # not through the installed package. Without this COPY every oracle grade
 # silently returns "no oracle dir for case" regardless of the produced code.
 COPY benchmarks ./benchmarks
+# The crew layout/role/skill tree is an asset too: crew/loader.py's
+# crew_dir() walks cwd upward looking for a `crew/` directory at runtime, the
+# same discovery pattern as agents/ above. Without this COPY load_crew fails
+# every attempt with CrewAssetsMissing before a single crew round can run.
+COPY crew ./crew
 # notify/routes.py resolves policy/notifications.yaml relative to the repo
 # root at runtime, same discovery pattern as the cases dir above. Without
 # this COPY every gate notification silently fails to deliver, so a HITL

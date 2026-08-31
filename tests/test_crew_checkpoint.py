@@ -70,6 +70,30 @@ async def test_checkpoint_is_allowed_to_be_empty(tmp_path):
     assert sha and len(sha) == 40
 
 
+async def test_checkpoint_falls_back_when_orchestration_is_already_ignored(
+        tmp_path):
+    """A repo (or a stale COMMON-dir info/exclude left by an older run) can
+    already ignore .workspace/orchestration on its own. Naming an
+    already-ignored path in ANY pathspec -- even an :(exclude) clause --
+    makes git refuse the whole `add` unless -f (confirmed empirically
+    against a live git: identical repo, only difference is a pre-existing
+    ignore rule for the same path). Every crew checkpoint would fail on
+    such a repo without the fallback."""
+    repo = _repo(tmp_path)
+    (repo / ".git" / "info" / "exclude").write_text(
+        "/.workspace/orchestration/\n", encoding="utf-8")
+    d = prepare_orchestration(repo, "code")
+    (d / "brief.md").write_text("secret-ish", encoding="utf-8")
+    (repo / "app.py").write_text("x = 1", encoding="utf-8")
+    sha = await checkpoint_round(CheckpointInput(worktree=str(repo), round=1,
+                                                 exit_code=0))
+    assert sha and len(sha) == 40
+    files = subprocess.run(
+        ["git", "-C", str(repo), "show", "--name-only", "--pretty=", "HEAD"],
+        capture_output=True, text=True, check=True).stdout.split()
+    assert files == ["app.py"]
+
+
 async def test_checkpoint_surfaces_gits_own_diagnostic(tmp_path):
     """A bare CalledProcessError loses stderr when Temporal serializes it."""
     with pytest.raises(RuntimeError, match="not a git repository"):
