@@ -54,6 +54,7 @@ with workflow.unsafe.imports_passed_through():
     from ..context.models import CodebaseMap
     from ..context.project import map_digest, project
     from ..context.render import render_for_prompt
+    from ..crew.activities import LoadCrewInput, load_crew
     from ..gate import (
         CheckClass, CheckResult, GateOverride, GateReport, QualityGateInput,
         build_check,
@@ -95,6 +96,7 @@ with workflow.unsafe.imports_passed_through():
         SubQuestionFinding,
         TaskResult, compute_plan_drift,
     )
+    from .crew import FS_ACT, CrewTaskInput, CrewTaskWorkflow
     from .deployment import DeploymentInput, DeploymentWorkflow
     from .gates import GateHost
     from .scanning import scan_tree
@@ -1507,6 +1509,15 @@ class FeatureWorkflow(GateHost):
             " the `.git` file/directory."
         )
 
+        crew_layout = crew_roles = None
+        crew_sessions: dict[str, str] = {}
+        if role_cfg.harness is HarnessKind.CREW:
+            crew_layout, crew_roles = await workflow.execute_activity(
+                load_crew, LoadCrewInput(layout=role_cfg.layout or "code",
+                                         lead_harness=role_cfg.lead_harness,
+                                         lead_model=role_cfg.model),
+                **FS_ACT)
+
         session_id: str | None = None
         resumes = 0
         run = None
@@ -1530,18 +1541,50 @@ class FeatureWorkflow(GateHost):
             asked = 0
             capped = False
             while True:
-                run = await workflow.execute_activity(
-                    run_coding_task,
-                    CodingTaskInput(harness=role_cfg.harness, prompt=prompt,
-                                    worktree=worktree, model=role_cfg.model,
-                                    session_id=session_id,
-                                    task_id=task.id, attempt=attempt,
-                                    containment_enabled=cfg.containment_enabled,
-                                    containment_policy_path=cfg.containment.policy_path,
-                                    containment_strict=cfg.containment.strict,
-                                    grants=grants),
-                    **_long_act(role_cfg),
-                )
+                if role_cfg.harness is HarnessKind.CREW:
+                    # E-88: the crew is a child workflow, not an activity.
+                    # It returns the same HarnessRunResult, so everything
+                    # around this call -- the E-17 deferred loop, the
+                    # escalations, the cost accumulation -- is unchanged.
+                    crew = await workflow.execute_child_workflow(
+                        CrewTaskWorkflow.run,
+                        CrewTaskInput(
+                            layout=crew_layout.layout, lead=crew_layout.lead,
+                            roles=crew_roles, prompt=prompt,
+                            worktree=worktree, task_id=task.id,
+                            attempt=attempt,
+                            deliverable_path=crew_layout.deliverable.path,
+                            rounds_max=crew_layout.rounds.max,
+                            wall_clock_s=crew_layout.limits.wall_clock_s,
+                            turn_timeout_s=crew_layout.limits.turn_timeout_s,
+                            cost_usd=crew_layout.limits.cost_usd,
+                            sessions=crew_sessions,
+                            containment_enabled=cfg.containment_enabled,
+                            containment_policy_path=cfg.containment.policy_path,
+                            containment_strict=cfg.containment.strict,
+                            grants=grants),
+                        id=f"{workflow.info().workflow_id}-crew-"
+                           f"{task.id}-{attempt}",
+                        execution_timeout=timedelta(
+                            seconds=crew_layout.limits.wall_clock_s + 600),
+                    )
+                    crew_sessions = crew.sessions
+                    run = crew.run
+                else:
+                    # The existing call, moved into the else branch verbatim:
+                    # same CodingTaskInput(...) arguments, same _long_act.
+                    run = await workflow.execute_activity(
+                        run_coding_task,
+                        CodingTaskInput(harness=role_cfg.harness, prompt=prompt,
+                                        worktree=worktree, model=role_cfg.model,
+                                        session_id=session_id,
+                                        task_id=task.id, attempt=attempt,
+                                        containment_enabled=cfg.containment_enabled,
+                                        containment_policy_path=cfg.containment.policy_path,
+                                        containment_strict=cfg.containment.strict,
+                                        grants=grants),
+                        **_long_act(role_cfg),
+                    )
                 for esc in escalations_from_denials(run.denials):
                     await self._record_escalation(cfg, task, esc)
                 if run.deferred is None or capped:

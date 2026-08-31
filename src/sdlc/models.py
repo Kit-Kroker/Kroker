@@ -878,6 +878,12 @@ class RoleConfig(BaseModel):
     kind: Literal["proposer", "harness", "research"] = "harness"
     harness: HarnessKind | None = None      # None for proposer/research roles
     model: str | None = None                # e.g. "zai-coding-plan/glm-5.2"
+    # E-88: only for harness == CREW. `layout` names crew/layouts/<name>.yaml;
+    # `lead_harness` is the run-level override for the LEAD's CLI, so a
+    # benchmark cell can read `crew:<lead_harness>` and the harness dimension
+    # survives. Non-lead roles are never overridable from a run.
+    layout: str | None = None
+    lead_harness: HarnessKind | None = None
     # Which search provider a kind=research role uses. None for every other
     # kind. 'tavily' and 'exa' each require their API key reachable at boot
     # (validated in agents/loader.py); 'fake' is the CI/default opt-out.

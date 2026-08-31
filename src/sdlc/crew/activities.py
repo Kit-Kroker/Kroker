@@ -14,6 +14,7 @@ from temporalio.exceptions import ApplicationError
 from ..artifacts.capture import capture_session
 from ..harness.adapters import HARNESSES, HarnessRequest
 from ..models import HarnessKind, HarnessRunResult, ToolGrant
+from .config import CrewLayout, CrewRole
 from .models import MAX_NOTE_BYTES, RoundNote, TurnBeat, TurnRecord
 from .worktree import orchestration_dir, prepare_orchestration, round_dir
 
@@ -254,3 +255,28 @@ async def checkpoint_round(inp: CheckpointInput) -> str | None:
     if commit.returncode != 0:
         return None
     return _git(["rev-parse", "HEAD"], inp.worktree).stdout.strip()
+
+
+@dataclass
+class LoadCrewInput:
+    layout: str
+    lead_harness: HarnessKind | None = None
+    lead_model: str | None = None
+
+
+@dataclass
+class LoadedCrew:
+    layout: CrewLayout
+    roles: list[CrewRole]
+
+
+@activity.defn
+async def load_crew(inp: LoadCrewInput) -> LoadedCrew:
+    """Read and validate the crew tree activity-side: the workflow sandbox
+    cannot read files, the same split the agent registry already uses."""
+    from .loader import load_layout, resolve_crew_roles
+    layout, roles = load_layout(inp.layout)
+    return LoadedCrew(
+        layout=layout,
+        roles=resolve_crew_roles(layout, roles, inp.lead_harness,
+                                 inp.lead_model))

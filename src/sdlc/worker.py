@@ -54,7 +54,7 @@ from .board.activities import (attach_task_evidence,
                                publish_artifact_version,
                                set_task_authoritative, sync_plan_tasks)
 from .crew.activities import (
-    checkpoint_round, prepare_crew, read_round, run_crew_turn,
+    checkpoint_round, load_crew, prepare_crew, read_round, run_crew_turn,
 )
 from .harness.adapters import check_harness_versions
 from .memoization.activities import cache_get, cache_put
@@ -117,6 +117,7 @@ async def main() -> None:
             merge_into_integration,
             build_verification_branch,
             prepare_crew, run_crew_turn, read_round, checkpoint_round,
+            load_crew,
             run_coding_task, run_integration_checks, run_lint, run_test_suite,
             security_scan,
             measure_coverage,
