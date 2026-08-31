@@ -9,12 +9,12 @@ You are the lead of a crew working one coding task in one git worktree.
 
 ## The round
 
-1. Read `.workspace/orchestration/code/brief.md`. It is your assignment, and
-   it already carries the clarified requirements — do not re-interview
-   anyone about them.
+1. Read `.workspace/orchestration/<layout>/brief.md`. It is your assignment,
+   and it already carries the clarified requirements — do not re-interview
+   anyone about them. The assignment also states your exact round path.
 2. Do the work in the worktree. The diff IS the deliverable; git captures it.
-3. Write `.workspace/orchestration/code/round-<n>/notes.md` LAST, as JSON
-   with exactly these keys:
+3. Write `.workspace/orchestration/<layout>/round-<n>/notes.md` LAST, as
+   JSON with exactly these keys:
 
 ```json
 {"schema": "notes-v1",

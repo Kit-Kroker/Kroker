@@ -308,10 +308,14 @@ def validate_registry(roles: dict[str, RoleConfig]) -> None:
 def _validate_pipeline_mirror(roles: dict[str, RoleConfig]) -> None:
     """the agents/ registry is authoritative; PipelineConfig.roles is a
     purity-mandated mirror of its harness roles (see the note on
-    PipelineConfig.roles). Drift between them is what let ADR-6 validate a role
-    that never ran, so it fails the worker at boot."""
+    PipelineConfig.roles). Drift between them is what let ADR-6 validate a
+    role that never ran, so it fails the worker at boot.
+
+    The mirror is DELIBERATE and spans the crew knobs too (layout,
+    lead_harness): when a registry role opts into a crew, PipelineConfig.
+    roles' default must be changed in the same commit (spec §5 layer 1)."""
     from ..models import PipelineConfig      # local: avoid an import cycle at
-                                             # module scope via models -> ...
+                                              # module scope via models -> ...
     default_roles = PipelineConfig().roles
     if set(default_roles) != HARNESS_ROLES:
         raise RegistryError(
@@ -319,15 +323,18 @@ def _validate_pipeline_mirror(roles: dict[str, RoleConfig]) -> None:
             f"{sorted(HARNESS_ROLES)}; it has {sorted(default_roles)}")
     for name in sorted(HARNESS_ROLES):
         reg, dflt = roles[name], default_roles[name]
-        if (reg.kind, reg.harness, reg.model) != \
-                (dflt.kind, dflt.harness, dflt.model):
+        if (reg.kind, reg.harness, reg.model, reg.layout, reg.lead_harness) \
+                != (dflt.kind, dflt.harness, dflt.model, dflt.layout,
+                    dflt.lead_harness):
             raise RegistryError(
                 f"PipelineConfig.roles['{name}'] does not mirror the agents/ "
-                f"registry: "
+                f"registry (change one, change both, in the same commit): "
                 f"registry has (kind={reg.kind}, harness={reg.harness}, "
-                f"model={reg.model}); PipelineConfig default has "
-                f"(kind={dflt.kind}, harness={dflt.harness}, "
-                f"model={dflt.model})")
+                f"model={reg.model}, layout={reg.layout}, "
+                f"lead_harness={reg.lead_harness}); PipelineConfig default "
+                f"has (kind={dflt.kind}, harness={dflt.harness}, "
+                f"model={dflt.model}, layout={dflt.layout}, "
+                f"lead_harness={dflt.lead_harness})")
 
 
 def _load_build(name: str, d: Path):

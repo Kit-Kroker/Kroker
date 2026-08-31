@@ -8,7 +8,9 @@ never ran.
 """
 import pytest
 
-from sdlc.agents.loader import HARNESS_ROLES, RegistryError, validate_registry
+from sdlc.agents.loader import (
+    HARNESS_ROLES, RegistryError, _validate_pipeline_mirror, validate_registry,
+)
 from sdlc.models import HarnessKind, PipelineConfig, RoleConfig
 
 from test_agents_registry import _complete_registry
@@ -42,3 +44,49 @@ def test_mirror_error_names_the_role_and_both_values():
     assert "test" in str(exc.value)
     assert "zai-coding-plan/drifted" in str(exc.value)
     assert "zai-coding-plan/glm-5.2" in str(exc.value)
+
+
+def _crew_registry():
+    """A registry whose dev role opts into a crew (spec §5 layer 1) —
+    layout and lead_harness set, every other role exactly _complete."""
+    roles = _complete_registry()
+    roles["dev"] = RoleConfig(harness=HarnessKind.CREW, layout="code",
+                              lead_harness=HarnessKind.OPENCODE,
+                              model="zai-coding-plan/glm-5.3")
+    return roles
+
+
+class _CrewDefaultPipelineConfig:
+    """Stands in for PipelineConfig with its roles default changed in the
+    same commit as the crew registry — the lockstep the mirror demands."""
+
+    def __init__(self) -> None:
+        self.roles = {
+            "dev": RoleConfig(harness=HarnessKind.CREW, layout="code",
+                              lead_harness=HarnessKind.OPENCODE,
+                              model="zai-coding-plan/glm-5.3"),
+            "test": RoleConfig(harness=HarnessKind.OPENCODE,
+                               model="zai-coding-plan/glm-5.2"),
+            "devops": RoleConfig(harness=HarnessKind.OPENCODE,
+                                 model="zai-coding-plan/glm-5.2"),
+        }
+
+
+def test_mirror_accepts_a_matching_crew_configured_pair(monkeypatch):
+    """spec §5 layer 1: when a registry role opts into a crew and
+    PipelineConfig's default is changed in the same commit, the boot check
+    passes — layout and lead_harness mirror too, not just the triple."""
+    monkeypatch.setattr("sdlc.models.PipelineConfig",
+                        _CrewDefaultPipelineConfig)
+    _validate_pipeline_mirror(_crew_registry())      # must not raise
+
+
+def test_registry_crew_vs_non_crew_default_is_rejected():
+    """The crew knobs must not drift silently: a crew-configured registry
+    role against the shipped non-crew default fails the boot check, naming
+    harness, layout, and lead_harness."""
+    with pytest.raises(RegistryError) as exc:
+        _validate_pipeline_mirror(_crew_registry())
+    msg = str(exc.value)
+    for field in ("harness", "layout", "lead_harness"):
+        assert field in msg, msg

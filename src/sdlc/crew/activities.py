@@ -17,7 +17,7 @@ from ..models import HarnessKind, HarnessRunResult, ToolGrant
 from .config import CrewLayout, CrewRole
 from .models import MAX_NOTE_BYTES, RoundNote, TurnBeat, TurnRecord
 from .worktree import (
-    ORCH_ROOT, orchestration_dir, prepare_orchestration, round_dir,
+    ORCH_ROOT, prepare_orchestration, round_dir,
 )
 
 # 4x the note cap: enough headroom for JSON overhead, small enough that a
@@ -117,6 +117,10 @@ AGENT_FAILURE = "crew_agent_failure"
 # run believes it is policed — ADR-17's worst case — so the turn fails
 # closed instead (spec §3: never run believing a lie).
 CREW_CONTAINMENT_UNSUPPORTED = "crew_containment_unsupported"
+
+# ADR-6 guard (spec §5, finding 5): a crew run whose lead's model never
+# entered check_adr6_families must not start.
+CREW_MODEL_UNRESOLVED = "crew_model_unresolved"
 
 
 @dataclass
@@ -305,8 +309,20 @@ class LoadedCrew:
 @activity.defn
 async def load_crew(inp: LoadCrewInput) -> LoadedCrew:
     """Read and validate the crew tree activity-side: the workflow sandbox
-    cannot read files, the same split the agent registry already uses."""
+    cannot read files, the same split the agent registry already uses.
+
+    Fails closed when lead_model is None (ADR-6, spec §5 finding 5): the
+    crew role file's model never enters check_adr6_families, so the lead's
+    model must be named in a layer ADR-6 already validates — registry role,
+    benchmark arm, or run override."""
     from .loader import load_layout, read_skill, resolve_crew_roles
+    if inp.lead_model is None:
+        raise ApplicationError(
+            "a crew run must name the lead's model in the layer ADR-6 "
+            "already validates (registry role, benchmark arm, run "
+            "override); the crew role file's model never enters "
+            "check_adr6_families (spec §5, finding 5)",
+            type=CREW_MODEL_UNRESOLVED, non_retryable=True)
     layout, roles = load_layout(inp.layout)
     return LoadedCrew(
         layout=layout,

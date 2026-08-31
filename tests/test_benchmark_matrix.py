@@ -103,3 +103,45 @@ def test_backward_compat_models_desugar_to_harness_arms():
         # only the 3 harness roles are overridden; no proposer keys
         assert set(c.role_models) == {"dev", "test", "devops"}
 
+
+def test_crew_lead_cells_expand_with_distinct_ids():
+    """spec §5: a cell is labelled crew:<lead_harness>. `crew:claude_code`
+    yields harness=CREW with the lead's CLI recorded, and must not collide
+    with the plain-crew cell over the same arm."""
+    spec = _spec_arms(
+        [Arm(name="a", role_models={"dev": "zai-coding-plan/glm-5.2"})],
+        harnesses=["crew", "crew:claude_code"], judge="openai/gpt-5.2")
+    cells = expand_matrix(spec)
+    assert len(cells) == 2
+    by_id = {c.cell_id: c for c in cells}
+    assert set(by_id) == {"c1#crew#a", "c1#crew:claude_code#a"}
+    assert by_id["c1#crew#a"].lead_harness is None
+    assert by_id["c1#crew:claude_code#a"].lead_harness \
+        is HarnessKind.CLAUDE_CODE
+    assert all(c.harness is HarnessKind.CREW for c in cells)
+
+
+def test_plain_harness_entry_keeps_lead_harness_none():
+    spec = _spec_arms(
+        [Arm(name="a", role_models={"dev": "zai-coding-plan/glm-5.2"})],
+        harnesses=["opencode"], judge="openai/gpt-5.2")
+    (cell,) = expand_matrix(spec)
+    assert cell.harness is HarnessKind.OPENCODE
+    assert cell.lead_harness is None
+
+
+def test_crew_crew_entry_is_rejected():
+    spec = _spec_arms(
+        [Arm(name="a", role_models={"dev": "zai-coding-plan/glm-5.2"})],
+        harnesses=["crew:crew"], judge="openai/gpt-5.2")
+    with pytest.raises(ValueError, match="crew:crew"):
+        expand_matrix(spec)
+
+
+def test_unknown_crew_lead_entry_is_rejected():
+    spec = _spec_arms(
+        [Arm(name="a", role_models={"dev": "zai-coding-plan/glm-5.2"})],
+        harnesses=["crew:bogus"], judge="openai/gpt-5.2")
+    with pytest.raises(ValueError, match="crew:bogus"):
+        expand_matrix(spec)
+

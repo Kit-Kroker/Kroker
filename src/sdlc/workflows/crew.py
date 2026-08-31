@@ -118,13 +118,17 @@ class CrewTaskWorkflow:
 
         for rnd in range(1, inp.rounds_max + 1):
             self._status = f"round:{rnd}:lead"
-            record = RoundRecord(round=rnd)
-            self._rounds.append(record)
 
             remaining = (deadline - workflow.now()).total_seconds()
             if remaining <= 0:
+                # Before creating the round record: a deadline already spent
+                # means this round never started, and an empty phantom round
+                # would misreport it. (The timer-wins path below keeps its
+                # record — that round DID start.)
                 exit_code = EXIT_DEADLINE
                 break
+            record = RoundRecord(round=rnd)
+            self._rounds.append(record)
 
             turn = workflow.start_activity(
                 run_crew_turn,
@@ -146,7 +150,10 @@ class CrewTaskWorkflow:
             # being killed by an outer timeout that loses the diagnosis.
             timer = asyncio.ensure_future(
                 workflow.sleep(timedelta(seconds=remaining)))
-            done, _ = await asyncio.wait(
+            # workflow.wait, not asyncio.wait: the SDK warns the latter is
+            # non-deterministic inside workflow code. asyncio.FIRST_COMPLETED
+            # is a str constant, so it passes through unchanged.
+            done, _ = await workflow.wait(
                 [turn, timer], return_when=asyncio.FIRST_COMPLETED)
             if timer in done:
                 turn.cancel()
@@ -207,6 +214,9 @@ class CrewTaskWorkflow:
                 break
 
             if rnd >= inp.rounds_max:
+                # Deliberate ordering (spec §4): the rounds bound wins over
+                # the budget on the final round — a completed round is not
+                # retroactively vetoed; the budget is a between-rounds brake.
                 exit_code = EXIT_OK
                 break
             if spent >= inp.cost_usd:
@@ -232,15 +242,20 @@ class CrewTaskWorkflow:
 
     def _round_brief(self, inp: CrewTaskInput, rnd: int) -> str:
         # The skill text is the role preamble ("You are the lead of a
-        # crew..."), so protocol first, assignment after. Empty protocol
-        # keeps the brief byte-identical to its pre-step-1 shape.
+        # crew..."), so protocol first, assignment after. Every round states
+        # its exact note path — SKILL.md documents the pattern with
+        # <layout>, the assignment carries the concrete round directory.
         base = (f"{inp.protocol}\n\n{inp.prompt}" if inp.protocol
                 else inp.prompt)
         if rnd == 1:
-            return base
+            return (f"{base}\n\nThis is round 1. Write your round note to "
+                    f".workspace/orchestration/{inp.layout}/round-1/"
+                    f"{inp.deliverable_path}.")
         return (f"{base}\n\nThis is round {rnd}. Your previous round's "
-                f"note is at round-{rnd - 1}/{inp.deliverable_path}. Continue "
-                f"from it; do not restate it.")
+                f"note is at round-{rnd - 1}/{inp.deliverable_path}. "
+                f"Continue from it; do not restate it. Write this round's "
+                f"note to .workspace/orchestration/{inp.layout}/"
+                f"round-{rnd}/{inp.deliverable_path}.")
 
     def _record_from_failure(self, e: ActivityError, role: CrewRole,
                              rnd: int) -> TurnRecord:

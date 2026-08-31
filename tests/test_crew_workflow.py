@@ -21,7 +21,8 @@ from sdlc.models import (
     ArtifactRef, HarnessKind, HarnessRunResult, SessionDigest,
 )
 from sdlc.workflows.crew import (
-    EXIT_BUDGET, EXIT_PROTOCOL_VIOLATION, CrewTaskInput, CrewTaskWorkflow,
+    EXIT_BUDGET, EXIT_DEADLINE, EXIT_PROTOCOL_VIOLATION, CrewTaskInput,
+    CrewTaskWorkflow,
 )
 
 pytestmark = [pytest.mark.temporal, pytest.mark.asyncio]
@@ -138,3 +139,13 @@ async def test_the_budget_brake_stops_between_rounds():
     res = await _run(_inp(rounds_max=5, cost_usd=1.2))
     assert res.run.exit_code == EXIT_BUDGET
     assert _STATE["turns"] == 3
+
+
+async def test_a_deadline_before_round_one_records_no_round():
+    """A deadline already spent at round start must not leave a phantom
+    empty round behind — that round never started. (The timer-wins path
+    below keeps its record: that round DID start.)"""
+    _STATE.update(missing=False, turns=0)
+    res = await _run(_inp(wall_clock_s=0))
+    assert res.run.exit_code == EXIT_DEADLINE
+    assert res.rounds == []

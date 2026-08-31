@@ -33,9 +33,13 @@ async def test_one_real_round(tmp_path):
     layout, roles = load_layout("code")
     lead = roles[layout.lead]
     # Compose the turn prompt the way CrewTaskWorkflow._round_brief does:
-    # the lead's skill (the round protocol) first, the assignment after —
-    # this is the delivery path production runs on.
-    turn_prompt = f"{read_skill(lead.skill)}\n\n{PROMPT}"
+    # the lead's skill (the round protocol) first, the assignment after,
+    # then the round line — this is the delivery path production runs on.
+    turn_prompt = (
+        f"{read_skill(lead.skill)}\n\n{PROMPT}"
+        f"\n\nThis is round 1. Write your round note to "
+        f".workspace/orchestration/{layout.layout}/round-1/"
+        f"{layout.deliverable.path}.")
 
     await prepare_crew(PrepareCrewInput(worktree=str(tmp_path),
                                         layout=layout.layout, brief=PROMPT))

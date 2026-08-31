@@ -57,6 +57,10 @@ def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
             rc = base.roles.get(role)
             roles[role] = RoleConfig(
                 harness=cell.harness, model=model,
+                # spec §5: a crew:<lead_harness> cell's lead CLI reaches
+                # the role here; every other harness leaves it unset.
+                lead_harness=(cell.lead_harness
+                              if cell.harness is HarnessKind.CREW else None),
                 context_budget_tokens=(rc.context_budget_tokens
                                        if rc else 30_000),
                 extra_args=[*(rc.extra_args if rc else []),

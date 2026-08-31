@@ -101,6 +101,24 @@ def test_cell_config_is_pure_when_base_unbenchmark():
     assert cfg.benchmark.case_id == "add-login"
 
 
+def test_cell_config_carries_lead_harness_for_crew_cells():
+    """spec §5: a crew:<lead_harness> cell reaches the dev RoleConfig as
+    lead_harness (the harness dimension survives the composition); every
+    other harness leaves lead_harness unset."""
+    base = PipelineConfig()
+    idea = IdeaBrief(title="t", description="d", mode=ProjectMode.GREENFIELD)
+    cell = BenchmarkCell(case_id="add-login", harness=HarnessKind.CREW,
+                         lead_harness=HarnessKind.CLAUDE_CODE, arm_name="a",
+                         role_models={"dev": "zai-coding-plan/glm-5.2"})
+    cfg = _cell_config(base, idea, _spec(), cell, bench_run_id="b1")
+    assert cfg.roles["dev"].harness is HarnessKind.CREW
+    assert cfg.roles["dev"].lead_harness is HarnessKind.CLAUDE_CODE
+    plain = _cell_config(base, idea, _spec(),
+                         _harness_cell("zai-coding-plan/glm-5.2"),
+                         bench_run_id="b1")
+    assert all(rc.lead_harness is None for rc in plain.roles.values())
+
+
 def test_benchmark_workflow_class_has_run():
     # the @workflow.run method exists
     assert hasattr(BenchmarkWorkflow, "run")

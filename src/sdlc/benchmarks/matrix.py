@@ -3,6 +3,7 @@ cross-family judge rule: the judge model's family must differ from EVERY
 model explicitly named in EVERY arm."""
 from __future__ import annotations
 
+from ..models import HarnessKind
 from .models import Arm, BenchmarkCell, CaseSpec
 
 
@@ -32,6 +33,35 @@ def _arms_for(spec: CaseSpec) -> list[Arm]:
     ]
 
 
+def _parse_harness_entry(entry: str) -> tuple[HarnessKind, HarnessKind | None]:
+    """spec §5: an entry is either a plain harness ("opencode") or a crew
+    cell naming its lead CLI ("crew:claude_code" → CREW + that lead).
+    Returns (harness, lead_harness); lead_harness is None for plain cells."""
+    if ":" in str(entry):
+        left, _, right = str(entry).partition(":")
+        try:
+            harness, lead = HarnessKind(left), HarnessKind(right)
+        except ValueError as e:
+            raise ValueError(
+                f"harnesses entry {entry!r}: unknown harness (expected "
+                f"'<harness>' or 'crew:<lead_harness>')") from e
+        if harness is not HarnessKind.CREW:
+            raise ValueError(
+                f"harnesses entry {entry!r}: only 'crew:<lead_harness>' "
+                f"may contain ':'")
+        if lead is HarnessKind.CREW:
+            raise ValueError(
+                f"harnesses entry {entry!r}: the lead CLI cannot be 'crew' "
+                f"— it is a composition mode, not a CLI")
+        return harness, lead
+    try:
+        return HarnessKind(str(entry)), None
+    except ValueError as e:
+        raise ValueError(
+            f"harnesses entry {entry!r}: unknown harness "
+            f"(expected '<harness>' or 'crew:<lead_harness>')") from e
+
+
 def expand_matrix(spec: CaseSpec) -> list[BenchmarkCell]:
     if spec.network_required:
         raise NetworkRequiredCaseError(
@@ -50,8 +80,12 @@ def expand_matrix(spec: CaseSpec) -> list[BenchmarkCell]:
             f"judge model family {judge_family!r} matches a producer model "
             f"family in {sorted(author_families)}; ADR-6 requires the judge "
             f"to differ from every producer family in the matrix")
-    return [
-        BenchmarkCell(case_id=spec.case_id, harness=h,
-                      arm_name=arm.name, role_models=arm.resolve())
-        for h in spec.harnesses for arm in arms
-    ]
+    cells = []
+    for raw in spec.harnesses:
+        harness, lead_harness = _parse_harness_entry(raw)
+        cells.extend(
+            BenchmarkCell(case_id=spec.case_id, harness=harness,
+                          lead_harness=lead_harness, arm_name=arm.name,
+                          role_models=arm.resolve())
+            for arm in arms)
+    return cells

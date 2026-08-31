@@ -71,8 +71,26 @@ def test_case_spec_matrix_axes():
 
 def test_benchmark_cell_identity():
     c = BenchmarkCell(case_id="add-login", harness=HarnessKind.OPENCODE,
-                     arm_name="anthropic-claude-sonnet-4-6")
+                      arm_name="anthropic-claude-sonnet-4-6")
     assert c.cell_id == "add-login#opencode#anthropic-claude-sonnet-4-6"
+
+
+def test_benchmark_cell_identity_includes_lead_harness():
+    """spec §5: `crew:<lead_harness>` rides the cell id so crew vs
+    crew:claude_code cells over the same arm cannot collide."""
+    c = BenchmarkCell(case_id="add-login", harness=HarnessKind.CREW,
+                      lead_harness=HarnessKind.CLAUDE_CODE, arm_name="zai-glm")
+    assert c.cell_id == "add-login#crew:claude_code#zai-glm"
+
+
+def test_case_spec_harnesses_stay_raw_strings():
+    """`crew:claude_code` must survive validation unparsed — parsing is
+    expand_matrix's job, so the error names the entry at expansion time."""
+    spec = CaseSpec(case_id="c", idea_summary="s",
+                    harnesses=["crew:claude_code"],
+                    models=["zai-coding-plan/glm-5.2"],
+                    judge_model="openai/gpt-5.2")
+    assert spec.harnesses == ["crew:claude_code"]
 
 
 def test_benchmark_summary_aggregates_fields():

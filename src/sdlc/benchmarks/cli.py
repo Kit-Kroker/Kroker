@@ -12,7 +12,7 @@ from pathlib import Path
 
 import yaml
 
-from ..models import GatePolicy, HarnessKind
+from ..models import GatePolicy
 from ..worker import TASK_QUEUE
 from .models import CaseSpec
 from .workflow import BenchmarkWorkflow
@@ -20,7 +20,8 @@ from .workflow import BenchmarkWorkflow
 
 def load_case_spec(path: str) -> CaseSpec:
     raw = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
-    raw["harnesses"] = [HarnessKind(h) for h in raw.get("harnesses", [])]
+    # harnesses stay raw strings: `crew:<lead_harness>` entries (spec §5)
+    # are not HarnessKind values. expand_matrix validates them.
     return CaseSpec(**raw)
 
 

@@ -143,7 +143,10 @@ class CaseSpec(BaseModel):
     description: str = ""
     mode: Literal["greenfield", "brownfield"] = "greenfield"
     repo_url: str | None = None
-    harnesses: list[HarnessKind]
+    # Raw strings on purpose: `crew:<lead_harness>` (spec §5) is not a
+    # HarnessKind value, so parsing stays in expand_matrix where the entry
+    # can be named in the error.
+    harnesses: list[str]
     models: list[str]
     judge_model: str                        # cross-family (ADR-6)
     rubrics: dict[str, str] = Field(default_factory=dict)  # stage -> rubric file
@@ -187,15 +190,19 @@ class CaseSpec(BaseModel):
 
 
 class BenchmarkCell(BaseModel):
-    """One cell of the matrix: a (case, harness, arm) triple to execute."""
+    """One cell of the matrix: a (case, harness, arm) triple to execute.
+    `lead_harness` is set only on harness=CREW cells expanded from a
+    `crew:<lead_harness>` entry — the CLI the crew's lead runs under."""
     case_id: str
     harness: HarnessKind
+    lead_harness: HarnessKind | None = None
     arm_name: str
     role_models: dict[str, str] = Field(default_factory=dict)
 
     @property
     def cell_id(self) -> str:
-        return f"{self.case_id}#{self.harness.value}#{self.arm_name}"
+        lead = f":{self.lead_harness.value}" if self.lead_harness else ""
+        return f"{self.case_id}#{self.harness.value}{lead}#{self.arm_name}"
 
 
 class BenchmarkSummary(BaseModel):

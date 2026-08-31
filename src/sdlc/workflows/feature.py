@@ -1639,7 +1639,11 @@ class FeatureWorkflow(GateHost):
                                  else EscalationOutcome.REJECTED),
                         decided_by=decision.decided_by,
                         round=self._escalation_round))
-            if run.session_ref is not None:
+            # The crew seam extends the FULL ref list in its branch; the
+            # last ref also rides run.session_ref for the clean-context
+            # consumers — don't double-count it here.
+            if run.session_ref is not None \
+                    and run.session_ref not in self._session_refs:
                 self._session_refs.append(run.session_ref)
 
             # E-33 harness join: the harness reports REAL dollars (CLI
