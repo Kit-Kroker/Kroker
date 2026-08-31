@@ -2,8 +2,11 @@
 
 **Date:** 2026-08-31
 **Roadmap:** new — `E-88`, supersedes `E-87` / `E-87b` (herdr interactive harness)
-**Requirements:** No FR moves. `HarnessKind.HERDR` is replaced by `CREW`; the stage DAG, gate
-semantics, and artifact contracts are untouched. One call site in `feature.py` changes shape.
+**Requirements:** No FR moves. `HarnessKind` gains `CREW`; the stage DAG, gate semantics, and
+artifact contracts are untouched. One call site in `feature.py` changes shape.
+**Baseline:** `main` at `2f0dc2f`. E-87/E-87b live only on `feat/e-87-herdr-harness` and were never
+merged, so every `herdr/*` and `src/sdlc/herdr/*` path cited below is **branch-only** and is quoted
+as evidence, not as something this work edits. All other line anchors are `main`'s.
 **Builds on:** `2026-08-20-herdr-interactive-harness-design.md` (its round protocol, role taxonomy,
 and escalation policy are inherited nearly verbatim) and `2026-08-30-herdr-coding-layout-design.md`
 (its §7.1/§7.2 live outcomes are the measured baseline this design must reproduce).
@@ -25,7 +28,8 @@ auto-updater replacing the pinned binary inside a running container; and a crash
 file mount inside the data directory defeating the entrypoint's symlink swap.
 
 None of these are accidents. They are the ordinary diseases of a shared mutable singleton that owns
-live processes, and every one was found the expensive way.
+live processes, and every one was found the expensive way — which is the whole value of the branch,
+and the reason it is quoted here rather than merged.
 
 Underneath the operational bill sits a structural one. `TabDriver` is 782 lines implementing a
 round state machine, deadlines, heartbeats, recovery after an activity retry, a cost brake, and
@@ -42,8 +46,8 @@ value E-87 was written for is not on the reachable path, while its full operatio
 ## Findings
 
 1. **A live pane is not required for context continuity.** Every subprocess adapter already resumes
-   a prior session: `--resume <id>` for claude (`adapters.py:321`), `-s <id>` for opencode
-   (`adapters.py:627`), `--resume <id>` for cursor (`adapters.py:829`). The session store is the
+   a prior session: `--resume <id>` for claude (`adapters.py:314`), `-s <id>` for opencode
+   (`adapters.py:620`), `--resume <id>` for cursor (`adapters.py:822`). The session store is the
    CLI's own, on a volume. A round can therefore be an ordinary batch invocation that continues the
    same conversation, which removes the only reason a process had to stay alive between rounds.
 
@@ -60,7 +64,7 @@ value E-87 was written for is not on the reachable path, while its full operatio
    schedule, and the timeout decision without restating any of them.
 
 4. **The inbox discovers gate hosts by workflow type, client-side.** `list_open_run_ids`
-   (`inbox.py:65`) filters `WorkflowType='FeatureWorkflow' AND ExecutionStatus='Running'`, and the
+   (`inbox.py:66`) filters `WorkflowType='FeatureWorkflow' AND ExecutionStatus='Running'`, and the
    comment beside it says why: other types on the same task queue "never expose pending_decisions".
    A new gate-hosting workflow type is therefore one disjunct in one string, and `_fetch_one`,
    `fetch_pending`, and `submit` operate on handles and need no change at all.
@@ -68,7 +72,7 @@ value E-87 was written for is not on the reachable path, while its full operatio
 5. **ADR-6 is already a pre-DAG check, and already the right check.** `validate_run_roles`
    (`loader.py:248`) is documented as "per-run ADR-6 enforcement at a boundary that constructs a
    non-default role→model map (benchmark arm, CLI `--role-model`)", and `build_role_overrides`
-   (`cli_roles.py:29`) calls it while parsing arguments, before any workflow starts. Its notion of
+   (`cli_roles.py:36`) calls it while parsing arguments, before any workflow starts. Its notion of
    correlation is **model-family inequality**, not string inequality — the correct granularity,
    since two models from one family are a correlated second opinion regardless of their names. The
    crew's roles need to enter that same map; they do not need a new mechanism, and must not get a
@@ -83,7 +87,7 @@ value E-87 was written for is not on the reachable path, while its full operatio
    composition and therefore checkable when the layout loads.
 
 7. **Cost is already in the stream the adapters parse.** claude and cursor report `total_cost_usd`
-   (`adapters.py:512`, `:857`); opencode reports per-step cost in `step_finish` (`:751`). E-87 §6
+   (`adapters.py:504`, `:849`); opencode reports per-step cost in `step_finish` (`:743`). E-87 §6
    needed `CostProbe` — 345 lines reading CLI session logs keyed by herdr's `agent_session` — only
    because a TUI pane emits no such stream. Batch turns emit it. One exception, recorded rather than
    glossed: the cursor adapter's cost line carries `# ASSUMPTION: may be absent`.
@@ -101,11 +105,15 @@ value E-87 was written for is not on the reachable path, while its full operatio
    with the same prompt is spend without signal. A blanket `maximum_attempts=1` is therefore too
    coarse; the split is by class.
 
-10. **`agy` has no adapter, deliberately.** `HarnessKind.ANTIGRAVITY` exists but is absent from
-    `HARNESSES` — `models.py:35` states this is so "a role cannot select it until E-87b writes one".
-    Cross-vendor decorrelation therefore runs on `claude_code` / `opencode` / `cursor` today, which
-    is three vendors and enough. Should `agy` be wanted, a batch adapter is *less* work than a pane
-    was, because the pane also required a `CostProbe`.
+10. **Cross-vendor composition has exactly two usable vendors today.** `main`'s `HarnessKind` is
+    `CLAUDE_CODE`, `OPENCODE`, `CURSOR`, and `HARNESSES` registers all three — but `CursorHarness`
+    carries `expected_version = None` ("Set once the CLI is installed", `adapters.py:807`) and
+    inherits `frozenset()` containment, so under ADR-17 "cursor cells drop out of a contained
+    benchmark sweep" (`adapters.py:830`). `ANTIGRAVITY` exists only on the herdr branch, where
+    `models.py` records that it is deliberately absent from `HARNESSES` so "a role cannot select it
+    until E-87b writes one"; it is not on `main` at all. A crew therefore ships with two vendors and
+    grows to three when cursor is installed or an `agy` batch adapter is written — the latter being
+    *less* work than a pane was, because a pane also required a `CostProbe`.
 
 11. **Human intervention was labelled, not prevented.** E-87 §7 conceded that a human attaching to a
     pane makes the result non-reproducible and journals `manual_intervention` as "an honest label,
@@ -155,14 +163,17 @@ class CrewRunResult(BaseModel):
 `run.session_id` stays the lead's, which is honest: E-87 §4's rule that the token fields describe the
 lead pane rather than a meaningless sum across three context windows is preserved unchanged.
 
-**An abstraction returns to its original shape.** E-87 finding 1 had to strip `@abstractmethod` from
-`build_cmd` and give it a raising default, and `HerdrHarness` overrode `run()` outright to feed
-`parse()` a synthetic journal. With composition living in the workflow, `HerdrHarness` is deleted,
-`CodingHarness` is batch-only again, and `build_cmd` is `@abstractmethod` once more.
+**An abstraction is never bent in the first place.** E-87 finding 1 had to strip `@abstractmethod`
+from `build_cmd` and give it a raising default, because a tab had no single command line, and
+`HerdrHarness` overrode `run()` outright to feed `parse()` a synthetic journal. On `main`
+`build_cmd` is still `@abstractmethod` (`adapters.py:156`), and this design keeps it that way:
+composition lives in the workflow, so `CodingHarness` stays batch-only and no composite harness
+object is ever added.
 
 **Transcripts improve.** A turn is an ordinary harness run, so `capture_session`
-(`activities.py:655`) runs per turn: N real scrubbed transcripts through the existing E-38/ADR-16
-path, instead of one synthetic journal. `_publish_herdr_journal` is deleted.
+(`activities.py:569`) runs per turn: N real scrubbed transcripts through the existing E-38/ADR-16
+path. The branch's synthetic tab journal and its `_publish_herdr_journal` publisher are simply never
+written.
 
 The worktree is one per task and shared by the crew, as before. Containment is per role by path
 prefix: the lead may write repository files, non-lead roles are confined to
@@ -184,7 +195,8 @@ one row:
 | `working` / `state: done` | written prematurely | cannot occur |
 | `blocked` / any | route to HITL | `deferred` from the harness hook (§6) |
 
-Deleted with it: `status/`, `journal.jsonl`, and `_reconcile` (`driver.py:542`).
+Not carried forward with it: `status/`, `journal.jsonl`, and `_reconcile`
+(branch: `src/sdlc/herdr/driver.py:542`).
 
 **What stays — the result files, because they carry work rather than state.**
 
@@ -231,7 +243,7 @@ flag, not a redesign.
 `git reset --hard <round N-1 checkpoint>`.
 
 `journal.jsonl` is replaced by workflow history plus `rounds: list[RoundRecord]` returned upward.
-`RoundRecord` moves from `driver.py:59` unchanged.
+`RoundRecord` is lifted from the branch's `driver.py:59` unchanged.
 
 ### §3 Non-idempotent turns and recovery
 
@@ -268,8 +280,8 @@ round's checkpoint (§2), which is clean and reproducible.
 
 **Whole-worker loss.** The workflow replays from history: closed rounds are facts, and only the
 in-flight turn is re-dispatched. E-87 §4's three recovery scenarios (tab alive → reattach; server
-restarted → relaunch panes; no tab → rebuild) and `driver.py:353 attach()` are deleted, because
-there is no live state to reattach to.
+restarted → relaunch panes; no tab → rebuild) and its `driver.py:353 attach()` have no counterpart
+here, because there is no live state to reattach to.
 
 **One new constraint, stated plainly.** Session resume requires the CLI's session store to be
 reachable by whichever worker takes the retry. Today that is the `agent-sessions` volume, and
@@ -302,9 +314,9 @@ uncommitted for the resumed session (§3). This is the precondition that makes `
 to set aggressively.
 
 **Cost changes source, not rules.** The check still happens at a round boundary: an agent must not be
-cut off mid-answer over a cent, but a round boundary is an honest decision point. Removed: `cost.py`
-(345 lines) and the loader's "every harness in a layout has a working `CostProbe`" boot check, both
-obsolete per finding 7.
+cut off mid-answer over a cent, but a round boundary is an honest decision point. Never written:
+the branch's `cost.py` (345 lines) and the loader's "every harness in a layout has a working
+`CostProbe`" boot check, both obsolete per finding 7.
 
 **Round structure becomes native observability.** `{crew, round, phase, role}` heartbeats remain for
 the turn in flight, but round boundaries are now history events, so the Temporal UI shows the
@@ -349,7 +361,7 @@ skill: coder                     skill: critic
 shipped `code.yaml` does, because a third vendor is not available today. `CursorHarness` exists but
 its CLI is not installed — `expected_version = None`, "Set once the CLI is installed" — and it
 inherits `frozenset()` containment, so per ADR-17 it fails closed and "cursor cells drop out of a
-contained benchmark sweep" (`adapters.py:836`). `agy` has no adapter at all (finding 10). Naming a
+contained benchmark sweep" (`adapters.py:830`). `agy` has no adapter at all (finding 10). Naming a
 reviewer before one of those is resolved would put a model string in this spec that nobody can run.
 Adding the reviewer is therefore its own step, not a hidden prerequisite of this one.
 
@@ -403,8 +415,8 @@ hidden:
    need a translation table that eventually lies" — and that holds. Each adapter's `build_cmd` knows
    its own flag syntax, so changing a role's harness means rewriting its model string in the new
    CLI's format. No mechanical conversion is offered.
-3. **Containment tiers differ** — `claude_code` declares `NATIVE|HOOK` (`adapters.py:325`), `opencode`
-   `NATIVE` (`:638`), `cursor` none. Per finding 6 the intersection rule is gone, so a weak critic no
+3. **Containment tiers differ** — `claude_code` declares `NATIVE|HOOK` (`adapters.py:317`), `opencode`
+   `NATIVE` (`:630`), `cursor` none. Per finding 6 the intersection rule is gone, so a weak critic no
    longer weakens the lead; but in a contained run a role on a harness with no layer is still
    inadmissible, and that is now checked against the crew's composition at load rather than
    discovered mid-task.
@@ -453,26 +465,46 @@ enters the run's history" — was held by prohibition; it is now held by constru
 
 ### §7 Inventory and verification
 
-**Deleted outright** (transport and reconciliation, which no longer exist):
+Because E-87 never reached `main`, most of what E-87b's design would have had to delete is instead
+simply **not carried forward**. That is the single biggest consequence of building from `main`: this
+is not a removal project.
 
-| Item | Lines | Why |
+**Not carried forward** — it exists only on `feat/e-87-herdr-harness`, and stays there:
+
+| Item | Lines | Why it has no successor |
 |---|---|---|
-| `herdr/driver.py` | 782 | the round machine moves into the workflow (`RoundRecord`, `driver.py:59`, is lifted out first) |
-| `herdr/cost.py` | 345 | cost comes from the CLI stream (finding 7) |
-| `herdr/adapter.py` | 178 | there is no composite harness (§1) |
-| `herdr/client.py` | 139 | NDJSON over a UDS |
-| `herdr/protocol.py` | 132 | the socket API schema |
+| `src/sdlc/herdr/driver.py` | 782 | the round machine is the workflow (`RoundRecord`, `driver.py:59`, is lifted out first) |
+| `src/sdlc/herdr/cost.py` | 345 | cost comes from the CLI stream (finding 7) |
+| `src/sdlc/herdr/adapter.py` | 178 | there is no composite harness (§1) |
+| `src/sdlc/herdr/client.py` | 139 | NDJSON over a UDS |
+| `src/sdlc/herdr/protocol.py` | 132 | the socket API schema |
 | `herdr/config.toml` | — | it configured a server |
-| `Dockerfile` stage `herdr` | 77 of 185 | 42% of the file |
+| `Dockerfile` stage `herdr` | 77 of the branch's 185 | 42% of that file |
 | `scripts/kroker-pane`, `herdr-entrypoint.sh`, `herdr-api-key-helper.sh` | — | pane plumbing |
-| `activities.py::_publish_herdr_journal` and its call | ~55 | there is no journal |
+| `activities.py::_publish_herdr_journal` | ~55 | there is no journal |
 | `adapters.py::_register_herdr` | ~30 | and its import-cycle commentary with it |
-| compose: service `herdr`, volumes `herdr-sock` and `herdr-state`, the `auth.json` staging workaround | — | |
+| compose: service `herdr`, volumes `herdr-sock` and `herdr-state`, the `auth.json` staging workaround | — | `main`'s compose never grew them |
+| `HarnessKind.HERDR` and `ANTIGRAVITY` | — | `main` has neither; only `CREW` is added |
+| 13 of the 15 `tests/test_herdr_*.py` files | ~2390 | their subject is transport (see below) |
 
-**Moved, with their meaning intact:** `herdr/loader.py` (composition validation — the rules change per
-§1/§5, the "fail at boot, not mid-run" discipline does not), `herdr/worktree.py` (the protocol
-directory and the exclude line; its docstring describes an invariant that is unchanged), and the
-`herdr/` roles and skills tree to `crew/`, contents nearly verbatim.
+**Carried across from the branch**, because their meaning survives the change of mechanism:
+
+| From | To | Change on arrival |
+|---|---|---|
+| `herdr/{layouts,roles,skills}/` | `crew/` | `splits` dropped; roles reduced to `coder` + `critic` (§5) |
+| `src/sdlc/herdr/loader.py` | `src/sdlc/crew/loader.py` | rules change per §1/§5; "fail at boot, not mid-run" does not |
+| `src/sdlc/herdr/worktree.py` | `src/sdlc/crew/worktree.py` | unchanged — its docstring states an invariant this design keeps |
+| `RoundRecord` (`driver.py:59`) | `src/sdlc/crew/models.py` | unchanged |
+| `benchmarks/cases/herdr-probe/` | `benchmarks/cases/crew-probe/` | rename only; its recorded numbers are the baseline below |
+| `tests/test_herdr_{loader,worktree}.py` | `tests/test_crew_*.py` | retargeted, not rewritten |
+
+**What this design actually edits on `main`** is therefore small and worth listing in full: add
+`HarnessKind.CREW`; add `CrewTaskWorkflow` and four activities; change one call site
+(`feature.py:1534`); extend `check_adr6_families` and `validate_run_roles` (§5); add one disjunct to
+`_OPEN_FEATURE_QUERY` (`inbox.py:66`); add `parent_run_id` to `PendingDecision`; teach
+`benchmarks/drift.py:71` the crew turn's activity name (finding 12); register the new workflow and
+activities in `worker.py`; and add `claude_code`'s CLI to the worker image, which today ships
+opencode only.
 
 **Added:** `CrewTaskWorkflow(GateHost)` and four activities — `prepare_crew` (exclude file and the
 first brief), `run_crew_turn` (a thin wrapper over the existing harness path), `read_round` (read and
@@ -485,7 +517,8 @@ uncomputed for crew tasks.
 **Tests.** The 2625 lines across 15 `test_herdr_*.py` files are mostly about transport:
 `test_herdr_client` (a fake UDS), `test_herdr_protocol`, `test_herdr_driver` (918 lines of state
 machine), `test_herdr_recovery`, `test_herdr_diagnoses` (the disagreement table), and
-`test_herdr_compose`. They go with their subject. The replacement sits at three levels:
+`test_herdr_compose`. They stay on the branch with their subject; only `test_herdr_loader` and
+`test_herdr_worktree` come across. The replacement sits at three levels:
 
 | Level | How | Covers |
 |---|---|---|
@@ -493,16 +526,18 @@ machine), `test_herdr_recovery`, `test_herdr_diagnoses` (the disagreement table)
 | workflow | `WorkflowEnvironment.start_time_skipping`, marker `temporal` | the deadline race, the escalation budget, `deferred` → gate → resume, an abandoned attempt's cost, replay after worker loss |
 | live contract | marker `crew`, replacing `herdr` | one round against a real CLI |
 
-The cost is named rather than assumed: `pyproject.toml:41` warns that the existing 22 `temporal`
+The cost is named rather than assumed: `pyproject.toml:43` warns that the existing 22 `temporal`
 tests "contend and freeze the suite when run together", and these add to that count. It remains far
 cheaper than the three-live-pane races today's tests do not cover at all.
 
 **Acceptance is a reproduced measurement, not a green suite.** E-87b §7.2 records a real baseline from
-2026-08-30: case `herdr-probe`, cell `code | herdr | zai-coding-plan/glm-5.3`, three attempts, each
+2026-08-30 on the branch: case `herdr-probe`, cell `code | herdr | zai-coding-plan/glm-5.3`, three
+attempts, each
 leaving a cost record (7235 in / 923 out; 5550 / 765; similar) and a well-formed prose note, with
 the last attempt correctly escalating instead of inventing when it found the environment broken.
 
-Acceptance is that `code | crew | zai-coding-plan/glm-5.3` on the same case matches that baseline on
+Acceptance is that `code | crew | zai-coding-plan/glm-5.3` on `crew-probe` — the same case, renamed
+— matches that baseline on
 its **mechanical** signals: three attempts each drive a real round, each leaves a cost record with
 non-null token counts, each produces a `notes-v1` note that validates, and the broken-environment
 attempt still escalates rather than fabricating. Quality is explicitly **not** a criterion here —
@@ -516,31 +551,37 @@ names exist) and work lost to `idle_timeout` (per-round checkpoints, §2).
 **Known losses and one open risk.** Lost deliberately: live attachment to an agent's terminal
 (accepted as a non-requirement), and opencode's per-turn lifecycle authority, which existed only to
 backstop a heuristic that is gone. Open: `CursorHarness` parses cost under
-`# ASSUMPTION: may be absent` (`adapters.py:857`), so a cursor role may yield `cost_incomplete`. Not
+`# ASSUMPTION: may be absent` (`adapters.py:849`), so a cursor role may yield `cost_incomplete`. Not
 a blocker; recorded rather than glossed.
 
 ## Migration
 
-E-87's code reached a working, measured state on `feat/e-87-herdr-harness`. This design removes it
-rather than deprecating it in place: a second harness path kept "just in case" would keep the
-container, the socket, and the Dockerfile stage alive for a fallback nobody exercises, and an
-unexercised fallback is where the next `agent_name_taken` hides. `HarnessKind.HERDR` is therefore
-removed in the same change that adds `CREW`, and the E-87 and E-87b specs stay in
-`docs/superpowers/specs/` as the record of what was measured and why it changed.
+E-87's code reached a working, measured state on `feat/e-87-herdr-harness` and was never merged:
+`main` is at `2f0dc2f`, the branch is 39 commits ahead of it, and 38 of those are herdr. The one
+that is not — `d53b884`, a planner retry fix — has been cherry-picked to `main` already.
 
-**One landing on `main`, three reviewable steps on the branch.** The two paths coexist only inside
-the branch, never in a shipped state:
+**The branch is not merged and not deleted.** Merging it to delete it a step later would put a
+stateful container, a UDS socket, and a Dockerfile stage into `main` for a capability `main` does
+not gain: the only reachable layout is `rounds.max: 1, splits: []`, one opencode session wrapped in
+a container — strictly less than the `OpenCodeHarness` subprocess path `main` already has. Deleting
+the branch would throw away the only place the E-87b measurement can be reproduced live. So it stays
+as an archived ref, and this spec quotes it.
+
+**Three reviewable steps on `feat/e-88-crew`, cut from `main`:**
 
 1. **The spine.** `CrewTaskWorkflow` with a single-role crew (lead only), the four activities,
-   heartbeat-details resume, and the brakes. Acceptance: the `herdr-probe` baseline above, matched
+   heartbeat-details resume, and the brakes. The carry-across table's `crew/`, `loader.py`,
+   `worktree.py`, and `RoundRecord` land here. Acceptance: the `crew-probe` baseline above, matched
    by a one-role crew. This is the step that proves the mechanism against a measurement.
 2. **The crew.** The critic role, parallel turns, `read_round` validation of `advisor.md` /
    `review.json` / `question.json`, the ADR-6 extension in `validate_run_roles`, the loader's
    model-resolvability boot check, `GateHost` and the inbox disjunct, and `PendingDecision`'s
    `parent_run_id`.
-3. **The removal.** Everything in §7's deletion table, plus `drift.py`'s activity name and the
-   `crew` pytest marker replacing `herdr`.
+3. **The seams.** `drift.py`'s activity name, the `crew` pytest marker, the worker image gaining
+   `claude_code`, and the retargeted `test_crew_{loader,worktree}.py`.
 
-The reviewer role is deliberately outside all three, per §5: it is unblocked by installing
-`cursor-agent` or writing an `agy` adapter, and should be tracked as its own item rather than
-carried as an assumption inside this one.
+There is no removal step, because there is nothing on `main` to remove.
+
+The reviewer role is deliberately outside all three, per §5 and finding 10: it is unblocked by
+installing `cursor-agent` or writing an `agy` adapter, and should be tracked as its own item rather
+than carried as an assumption inside this one.
