@@ -28,6 +28,11 @@ class ClarifyPending(BaseModel):
     why_it_matters: str
     suggested_answer: str | None = None
     opened_at: datetime | None = None
+    # The run this item BELONGS to, when the hosting workflow is a child
+    # (E-88 §6). The renderer groups by it and falls back to the handle id.
+    # A field rather than a parse of the workflow-id prefix: the prefix is a
+    # fact about ids, not a contract for display.
+    parent_run_id: str | None = None
 
 
 class StageGatePending(BaseModel):
@@ -38,6 +43,7 @@ class StageGatePending(BaseModel):
     round: int
     spec_summary: str
     opened_at: datetime | None = None
+    parent_run_id: str | None = None
 
 
 class TaskEscalationPending(BaseModel):
@@ -50,6 +56,7 @@ class TaskEscalationPending(BaseModel):
     analysis: str
     attempts: int
     opened_at: datetime | None = None
+    parent_run_id: str | None = None
 
 
 class MergeGatePending(BaseModel):
@@ -61,6 +68,7 @@ class MergeGatePending(BaseModel):
     checks: list[CheckResult] = Field(default_factory=list)
     verdict: str | None = None
     opened_at: datetime | None = None
+    parent_run_id: str | None = None
 
 
 PendingDecision = Annotated[
@@ -98,6 +106,7 @@ def clarify_pending(
 def gate_pending(
     name: str, round: int, context: GateContext | None,
     *, opened_at: datetime | None = None,
+    parent_run_id: str | None = None,
 ) -> PendingDecision:
     """Build the render variant a gate wait should surface. The gate name is
     the discriminator: 'merge' -> MergeGatePending, 'task:<id>' ->
@@ -107,13 +116,15 @@ def gate_pending(
     if name == "merge":
         return MergeGatePending(key=key, gate=name, round=round,
                                 checks=ctx.checks, verdict=ctx.verdict,
-                                opened_at=opened_at)
+                                opened_at=opened_at,
+                                parent_run_id=parent_run_id)
     if name.startswith("task:"):
         return TaskEscalationPending(
             key=key, gate=name, round=round,
             task_id=ctx.task_id or name.removeprefix("task:"),
             analysis=ctx.analysis or "", attempts=ctx.attempts or 0,
-            opened_at=opened_at)
+            opened_at=opened_at, parent_run_id=parent_run_id)
     return StageGatePending(key=key, gate=name, round=round,
                             spec_summary=ctx.spec_summary or "",
-                            opened_at=opened_at)
+                            opened_at=opened_at,
+                            parent_run_id=parent_run_id)

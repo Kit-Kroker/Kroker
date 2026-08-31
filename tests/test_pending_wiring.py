@@ -86,3 +86,17 @@ def test_submit_gate_decision_pops_that_gate(monkeypatch):
 
     assert wf.pending_decisions() == []
     assert wf._gate_decisions["architecture#2"].outcome is GateOutcome.APPROVE
+
+
+def test_every_pending_variant_can_name_its_parent_run():
+    """The renderer groups by this field, so a variant missing it would make
+    one kind of item ungroupable -- and the union is what the inbox
+    deserialises into."""
+    from sdlc.pending import (
+        ClarifyPending, MergeGatePending, StageGatePending,
+        TaskEscalationPending,
+    )
+    for cls in (ClarifyPending, StageGatePending, TaskEscalationPending,
+                MergeGatePending):
+        assert "parent_run_id" in cls.model_fields
+        assert cls.model_fields["parent_run_id"].default is None

@@ -111,6 +111,8 @@ class CrewTaskWorkflow(GateHost):
 
     @workflow.run
     async def run(self, inp: CrewTaskInput) -> CrewRunResult:
+        parent = workflow.info().parent
+        self._parent_run_id = parent.workflow_id if parent else None
         deadline = workflow.now() + timedelta(seconds=inp.wall_clock_s)
         lead = next(r for r in inp.roles if r.name == inp.lead)
         sessions = dict(inp.sessions)

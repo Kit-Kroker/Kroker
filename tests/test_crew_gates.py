@@ -223,3 +223,36 @@ async def test_the_escalation_budget_ends_the_crew_as_an_intent_gap():
                 id=f"crew-{uuid.uuid4()}", task_queue=TASK_QUEUE)
     assert res.run.exit_code == EXIT_INTENT_GAP
 
+
+async def test_a_crews_pending_item_names_its_parent_run():
+    """§E: an operator must see a crew item as part of its run, not as an
+    orphan. A FIELD, not a parse of the workflow-id prefix -- the prefix is a
+    fact about ids, not a contract for display."""
+    TURNS.clear()
+    DEFER["left"] = 1
+    ASK["left"] = 0
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=[CrewTaskWorkflow], activities=ACTIVITIES):
+            handle = await env.client.start_workflow(
+                CrewTaskWorkflow.run, _inp(policy=GatePolicy.HARD),
+                id=f"crew-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+            with env.auto_time_skipping_disabled():
+                for _ in range(100):
+                    pending = await handle.query(
+                        CrewTaskWorkflow.pending_decisions)
+                    if pending:
+                        break
+                    await asyncio.sleep(0.1)
+                assert pending
+                # Started directly, with no parent: the field must be present
+                # and honestly empty rather than absent or invented.
+                assert pending[0].parent_run_id is None
+                await handle.signal(
+                    CrewTaskWorkflow.submit_gate_decision,
+                    GateDecision(gate=pending[0].gate, round=pending[0].round,
+                                 outcome=GateOutcome.APPROVE,
+                                 decided_by="human"))
+            await handle.result()
+

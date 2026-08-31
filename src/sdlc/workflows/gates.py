@@ -53,6 +53,10 @@ class GateHost:
         # (question id, or gate_key(gate, round)). Rendered by sdlc.channels.
         self._pending: dict[str, PendingDecision] = {}
         self._status: str = "starting"
+        # E-88 §6: set by a gate host that is a CHILD workflow, so its
+        # pending items render under the run they belong to. None on a
+        # top-level host, which is every host but the crew.
+        self._parent_run_id: str | None = None
 
     # ------------------------- hooks (no-op) ---------------------------
 
@@ -167,7 +171,8 @@ class GateHost:
             decision = auto_decision
         else:
             pending = gate_pending(name, round, context,
-                                   opened_at=workflow.now())
+                                   opened_at=workflow.now(),
+                                   parent_run_id=self._parent_run_id)
             self._pending[key] = pending
             self._status = f"awaiting:{name}"
             await self._on_gate_awaited(name, round)
