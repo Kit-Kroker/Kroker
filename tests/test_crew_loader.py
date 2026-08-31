@@ -87,3 +87,15 @@ def test_rejects_a_role_the_layout_never_defines(tmp_path):
     root = _tree(tmp_path / "crew", layout=layout)
     with pytest.raises(CrewConfigError, match="ghost"):
         load_layout("code", root=root)
+
+
+def test_rejects_a_model_with_no_provider_separator(tmp_path):
+    """model_family() splits on the first ':' or '/'; a string with neither
+    IS its own family, so ADR-6's comparison silently compares a model to
+    itself. The separator is what makes the crew's decorrelation check mean
+    anything, so it is required here rather than assumed."""
+    role = dict(ROLE, model="glm-5.3")
+    root = _tree(tmp_path, roles={"coder": role})
+    with pytest.raises(CrewConfigError, match="provider"):
+        load_layout("code", root)
+

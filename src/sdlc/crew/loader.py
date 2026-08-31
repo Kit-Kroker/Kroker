@@ -10,6 +10,7 @@ from pathlib import Path
 
 import yaml
 
+from ..agents.loader import model_family
 from ..models import HarnessKind
 from .config import CrewLayout, CrewRole
 
@@ -69,6 +70,14 @@ def validate_crew(layout: CrewLayout, roles: dict[str, CrewRole],
                 f"role {name!r} declares harness 'crew', which is a "
                 f"composition mode and not a CLI: there is no subprocess to "
                 f"build for it")
+        if not any(sep in role.model for sep in (":", "/")):
+            raise CrewConfigError(
+                f"role {name!r} model {role.model!r} names no provider: "
+                f"model_family() splits on the first ':' or '/', so a string "
+                f"with neither is its own family and ADR-6 would compare this "
+                f"role to itself. Write the model in its CLI's own syntax, "
+                f"e.g. 'anthropic:claude-opus-5' or "
+                f"'zai-coding-plan/glm-5.3'")
         skill = root / "skills" / role.skill / "SKILL.md"
         if not skill.is_file():
             raise CrewConfigError(
@@ -82,6 +91,35 @@ def validate_crew(layout: CrewLayout, roles: dict[str, CrewRole],
         raise CrewConfigError(
             f"layout {layout.layout!r}: deliverable {layout.deliverable.path!r}"
             f" must resolve inside the round directory")
+
+
+def check_crew_families(lead: str, roles: list[CrewRole]) -> None:
+    """ADR-6 over a crew (spec §5, finding 5).
+
+    Pure: no I/O, so the activity path and the client-side pre-flight run
+    the identical rule and cannot drift. The rule is the factory's own --
+    model FAMILY inequality, not string inequality, because two models from
+    one provider are a correlated second opinion whatever they are called.
+
+    Writing roles are exempt from being compared to each other because a
+    layout has exactly one (validate_crew enforces that); every other role
+    is a second opinion and must decorrelate from the lead.
+    """
+    by_name = {r.name: r for r in roles}
+    if lead not in by_name:
+        raise CrewConfigError(
+            f"crew lead {lead!r} is not among the resolved roles "
+            f"{sorted(by_name)}")
+    lead_family = model_family(by_name[lead].model)
+    for role in roles:
+        if role.name == lead or role.writes:
+            continue
+        if model_family(role.model) == lead_family:
+            raise CrewConfigError(
+                f"ADR-6 violation: crew role {role.name!r} model "
+                f"{role.model!r} shares model family {lead_family!r} with the "
+                f"lead {lead!r} ({by_name[lead].model!r}) -- a second opinion "
+                f"from the same weights is not a second opinion")
 
 
 def read_skill(skill: str, root: Path | None = None) -> str:

@@ -344,7 +344,9 @@ async def load_crew(inp: LoadCrewInput) -> LoadedCrew:
     crew role file's model never enters check_adr6_families, so the lead's
     model must be named in a layer ADR-6 already validates — registry role,
     benchmark arm, or run override."""
-    from .loader import load_layout, read_skill, resolve_crew_roles
+    from .loader import (
+        check_crew_families, load_layout, read_skill, resolve_crew_roles,
+    )
     if inp.lead_model is None:
         raise ApplicationError(
             "a crew run must name the lead's model in the layer ADR-6 "
@@ -353,8 +355,10 @@ async def load_crew(inp: LoadCrewInput) -> LoadedCrew:
             "check_adr6_families (spec §5, finding 5)",
             type=CREW_MODEL_UNRESOLVED, non_retryable=True)
     layout, roles = load_layout(inp.layout)
-    return LoadedCrew(
-        layout=layout,
-        roles=resolve_crew_roles(layout, roles, inp.lead_harness,
-                                 inp.lead_model),
-        protocol=read_skill(roles[layout.lead].skill))
+    resolved = resolve_crew_roles(layout, roles, inp.lead_harness,
+                                  inp.lead_model)
+    # After resolution, never before: the RUN's lead model is what the crew
+    # must decorrelate from, and the role file's default may not be it.
+    check_crew_families(layout.lead, resolved)
+    return LoadedCrew(layout=layout, roles=resolved,
+                      protocol=read_skill(roles[layout.lead].skill))
