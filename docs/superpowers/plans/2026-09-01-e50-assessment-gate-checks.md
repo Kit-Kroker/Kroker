@@ -518,6 +518,24 @@ def test_a_second_apply_on_the_same_kind_and_key_revises_it_not_accumulates(stor
     assert rows[0].disposition is Disposition.ACCEPTED_RISK
 
 
+def test_two_applies_to_the_same_kind_and_key_leave_two_event_rows(store):
+    """The spec's testing bullet: revising a disposition updates the live
+    row but the audit trail keeps both events (mirrors capability_event)."""
+    store.apply("p", _fd(disposition=Disposition.FALSE_POSITIVE), expected_version=0, actor="maks")
+    store.apply(
+        "p",
+        _fd(disposition=Disposition.ACCEPTED_RISK, reason="changed my mind"),
+        expected_version=1,
+        actor="maks",
+    )
+    rows = store._conn.execute(
+        "SELECT operation FROM finding_disposition_event WHERE project = ? AND kind = ? "
+        "AND key = ? ORDER BY id",
+        ("p", "vulnerability", "SS1:hardcoded-secret:src/a.py:"),
+    ).fetchall()
+    assert [r[0] for r in rows] == ["dispose", "dispose"]
+
+
 def test_vulnerability_and_testability_dispositions_on_the_same_key_do_not_collide(store):
     """The (kind, key) composite primary key, not prefix sniffing, keeps
     the two finding families apart (GD7)."""
@@ -715,7 +733,7 @@ class BoardFindingDispositionStore(FindingDispositionStore):
 - [ ] **Step 5: Run test to verify it passes**
 
 Run: `pytest tests/test_dispositions_store.py -v`
-Expected: PASS (9 tests)
+Expected: PASS (10 tests)
 
 - [ ] **Step 6: Commit**
 
@@ -1045,30 +1063,25 @@ Modify `src/sdlc/cli.py`:
     )
 ```
 
-2. In `build_parser()`, right after `add_capability_parser(sub)`:
+2. In `build_parser()`, the existing `from .capability.cli import add_capability_parser` /
+   `add_capability_parser(sub)` pair is already there (`src/sdlc/cli.py:256-258`) — leave it
+   untouched. Insert these two new lines immediately after it:
 
 ```python
-from .capability.cli import add_capability_parser
+    from .dispositions.cli import add_dispositions_parser
 
-add_capability_parser(sub)
-
-from .dispositions.cli import add_dispositions_parser
-
-add_dispositions_parser(sub)
+    add_dispositions_parser(sub)
 ```
 
-3. In `main()`, right after the `if args.cmd == "capability":` block:
+3. In `main()`, the existing `if args.cmd == "capability":` block
+   (`src/sdlc/cli.py:517-520`) is already there — leave it untouched. Insert this new block
+   immediately after it:
 
 ```python
-if args.cmd == "capability":
-    from .capability.cli import run_capability
+    if args.cmd == "risk":
+        from .dispositions.cli import run_dispositions
 
-    raise SystemExit(run_capability(args))
-
-if args.cmd == "risk":
-    from .dispositions.cli import run_dispositions
-
-    raise SystemExit(run_dispositions(args))
+        raise SystemExit(run_dispositions(args))
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1094,13 +1107,14 @@ git commit -m "feat(dispositions): sdlc risk dispose|list|export CLI (E-50 GD7)"
 
 **Interfaces:**
 - Consumes: `risk.models.UnifiedRiskMap`, `risk.models.VulnerabilityClass`, `risk.models.Criticality`, `discover.map.CapabilityMap`, `scan.models.testability_identity`, `dispositions.models.FindingDisposition`, `gate.CheckResult`, `gate.CheckClass`
-- Produces: `unaccepted_confirmed_vulnerabilities(risk_map, dispositions) -> CheckResult | None`; `high_criticality_testability_blockers(risk_map, capability_map, dispositions) -> tuple[CheckResult | None, tuple[str, ...]]`; `tests.helpers_risk.capability_risk(bc_id="BC-001", **kw) -> CapabilityRisk`
+- Produces: `unaccepted_confirmed_vulnerabilities(risk_map, dispositions) -> CheckResult | None`; `high_criticality_testability_blockers(risk_map, capability_map, dispositions) -> tuple[CheckResult | None, tuple[str, ...]]`; `tests.helpers_risk.capability_risk(bc_id="BC-001", **kw) -> CapabilityRisk`; `tests.helpers_risk.capability_map(*caps) -> CapabilityMap`
 
-- [ ] **Step 1: Add the shared `CapabilityRisk` test helper**
+- [ ] **Step 1: Add the shared `CapabilityRisk` and `CapabilityMap` test helpers**
 
-Modify `tests/helpers_risk.py` — add imports and a builder every gates test shares, mirroring the file's own `capability()` builder:
+Modify `tests/helpers_risk.py` — add imports and two builders every gates test shares, mirroring the file's own `capability()` builder. `capability_map()` mirrors `tests/test_risk_build.py`'s own `_cmap` exactly: `CapabilityMap._counts_are_derived` (`discover/map.py`) rejects any capability whose `disposition.action` is absent from `by_action`, so every `CapabilityMap` fixture in this plan must derive it rather than omit it.
 
 ```python
+from sdlc.assessment.discover.map import CapabilityMap  # add to the existing discover.map import
 from sdlc.assessment.risk.models import (
     CapabilityRisk,
     Composite,
@@ -1133,6 +1147,19 @@ def capability_risk(bc_id: str = "BC-001", **kw) -> CapabilityRisk:
     )
     base.update(kw)
     return CapabilityRisk(**base)
+
+
+def capability_map(*caps) -> CapabilityMap:
+    """A CapabilityMap with by_action derived from the given capabilities'
+    dispositions -- `_counts_are_derived` rejects an action present on a
+    capability but absent from by_action, so every fixture must supply it
+    (mirrors test_risk_build.py's _cmap)."""
+    actions: dict = {}
+    for c in caps:
+        actions[c.disposition.action] = actions.get(c.disposition.action, 0) + 1
+    return CapabilityMap(
+        capabilities=tuple(caps), by_action=actions, collected=Measurement.measured(1.0)
+    )
 ```
 
 - [ ] **Step 2: Write the failing test**
@@ -1165,7 +1192,7 @@ from sdlc.assessment.scan.models import testability_identity
 from sdlc.dispositions.models import Disposition, FindingDisposition
 from sdlc.measurement import CollectionState, Measurement
 
-from tests.helpers_risk import capability, capability_risk
+from tests.helpers_risk import capability, capability_map, capability_risk
 
 MEASURED_JUDGMENT = Measurement.measured(1.0)
 
@@ -1240,13 +1267,31 @@ def test_a_potential_vulnerability_does_not_fail_the_check():
 
 def test_the_clause_defers_when_judgment_did_not_run():
     """GD3: CONFIRMED is only reachable through the judgment layer, so a map
-    that never ran one must not read as a clean PASS."""
+    that never ran one must not read as a clean PASS -- even when a row is
+    already CONFIRMED-shaped. A BASELINE-sourced row is structurally legal
+    (nothing couples classification to source at the type), so this pins
+    the implementation actually gating on judgment.state rather than
+    happening to see no vulnerabilities to check (a weaker map would pass
+    the check for the wrong reason)."""
     m = UnifiedRiskMap(
-        capabilities=(capability_risk(),),
+        capabilities=(capability_risk(vulnerabilities=(_vuln(),)),),
         collected=Measurement.measured(1.0),
         judgment=Measurement.not_collected("no risk proposer ran"),
     )
     assert unaccepted_confirmed_vulnerabilities(m, ()) is None
+
+
+def test_a_disposition_for_a_different_key_is_inert():
+    """A stale or unrelated disposition must not clear the real finding
+    (failure-modes table: 'inert for this run')."""
+    m = UnifiedRiskMap(
+        capabilities=(capability_risk(vulnerabilities=(_vuln(),)),),
+        collected=Measurement.measured(1.0),
+        judgment=MEASURED_JUDGMENT,
+    )
+    stale = (_disposition("SS1:some-other-finding:src/z.py:"),)
+    check = unaccepted_confirmed_vulnerabilities(m, stale)
+    assert check.passed is False
 
 
 def test_a_testability_kind_disposition_does_not_clear_a_vulnerability():
@@ -1280,10 +1325,7 @@ def test_vulnerability_clause_is_order_independent():
 
 
 def _map_with(bc_id, findings) -> CapabilityMap:
-    return CapabilityMap(
-        collected=Measurement.measured(1.0),
-        capabilities=(capability(bc_id=bc_id, testability=tuple(findings)),),
-    )
+    return capability_map(capability(bc_id=bc_id, testability=tuple(findings)))
 
 
 def _blocker(path="src/a.py", pattern="singleton-access"):
@@ -1341,12 +1383,9 @@ def test_a_blocker_on_a_measured_medium_capability_does_not_fail_or_defer():
 def test_an_uncollected_criticality_defers_its_own_blocker_even_with_a_measured_sibling():
     """The mixed-criticality fix: one uncollected capability must not read
     as a silent pass because a DIFFERENT capability happens to be rated."""
-    cmap = CapabilityMap(
-        collected=Measurement.measured(1.0),
-        capabilities=(
-            capability(bc_id="BC-001", testability=(_blocker(path="src/a.py"),)),
-            capability(bc_id="BC-002", testability=()),
-        ),
+    cmap = capability_map(
+        capability(bc_id="BC-001", testability=(_blocker(path="src/a.py"),)),
+        capability(bc_id="BC-002", testability=()),
     )
     uncollected = capability_risk(bc_id="BC-001")  # default: criticality not_collected
     measured_low = capability_risk(
@@ -1362,17 +1401,43 @@ def test_an_uncollected_criticality_defers_its_own_blocker_even_with_a_measured_
     assert "BC-001" in deferred[0]
 
 
+def test_a_blocker_on_a_bc_id_absent_from_the_risk_map_is_deferred_not_skipped():
+    """GD3's rationale forbids a silent skip: a capability the discover
+    phase carries but the risk phase never scored (an unjoinable bc_id)
+    must be visible in `deferred`, not quietly dropped."""
+    cmap = capability_map(capability(bc_id="BC-001", testability=(_blocker(),)))
+    rmap = UnifiedRiskMap(capabilities=(), collected=Measurement.measured(1.0))
+    check, deferred = high_criticality_testability_blockers(rmap, cmap, ())
+    assert check.passed is True
+    assert len(deferred) == 1
+    assert "BC-001" in deferred[0]
+
+
+def test_a_stale_testability_disposition_is_inert():
+    """A disposition for a different finding must not clear this one."""
+    cmap = _map_with("BC-001", [_blocker()])
+    rmap = UnifiedRiskMap(capabilities=(_high(),), collected=Measurement.measured(1.0))
+    stale = (_disposition("QS3:some-other-pattern:src/z.py:", kind="testability"),)
+    check, _ = high_criticality_testability_blockers(rmap, cmap, stale)
+    assert check.passed is False
+
+
 def test_testability_clause_is_order_independent():
-    """NFR-10."""
-    findings = [
-        _blocker("src/a.py", "singleton-access"),
-        _blocker("src/b.py", "sleep-in-production"),
+    """NFR-10. CapabilityMap enforces no sort on its capabilities (unlike
+    UnifiedRiskMap, which forces canonical order at construction) -- the
+    genuinely permutable axis here is capability_map's tuple order, plus
+    the findings list within one capability."""
+    caps = [
+        capability(bc_id="BC-001", testability=(_blocker("src/a.py", "singleton-access"),)),
+        capability(bc_id="BC-002", testability=(_blocker("src/b.py", "sleep-in-production"),)),
     ]
+    rmap = UnifiedRiskMap(
+        capabilities=(_high("BC-001"), _high("BC-002")), collected=Measurement.measured(1.0)
+    )
     first = None
     for _ in range(5):
-        random.shuffle(findings)
-        cmap = _map_with("BC-001", findings)
-        rmap = UnifiedRiskMap(capabilities=(_high(),), collected=Measurement.measured(1.0))
+        random.shuffle(caps)
+        cmap = capability_map(*caps)
         check, deferred = high_criticality_testability_blockers(rmap, cmap, ())
         out = check.model_dump_json() + "|" + "|".join(deferred)
         first = first if first is not None else out
@@ -1437,8 +1502,11 @@ def high_criticality_testability_blockers(
     dispositions: tuple[FindingDisposition, ...],
 ) -> tuple[CheckResult | None, tuple[str, ...]]:
     """GD3: evaluated per (bc_id, finding) pair. An uncollected criticality
-    defers only its own pair, never the whole clause -- a sibling
-    capability being measured must not silently clear it.
+    -- or a bc_id with no matching row in the risk map at all -- defers
+    only its own pair, never the whole clause: a sibling capability being
+    measured must not silently clear it (the mixed-criticality fix), and a
+    bc_id the risk phase never scored must not silently drop its blocker
+    either (the same silent-skip shape, one join away).
     """
     testability_by_bc_id = {cap.bc_id: cap.testability for cap in capability_map.capabilities}
     criticality_by_bc_id = {c.bc_id: c.criticality for c in risk_map.capabilities}
@@ -1447,13 +1515,17 @@ def high_criticality_testability_blockers(
     offending: set[str] = set()
     deferred: list[str] = []
     for bc_id in sorted(testability_by_bc_id):
-        rating = criticality_by_bc_id.get(bc_id)
-        if rating is None:
-            continue
         blockers = [f for f in testability_by_bc_id[bc_id] if f.severity == "blocks"]
         if not blockers:
             continue
-        if rating.collected.state is not CollectionState.MEASURED:
+        rating = criticality_by_bc_id.get(bc_id)
+        if rating is None:
+            deferred.extend(
+                f"testability blocker for {bc_id} ({testability_identity(f)}): "
+                f"no matching capability in the risk map"
+                for f in sorted(blockers, key=testability_identity)
+            )
+        elif rating.collected.state is not CollectionState.MEASURED:
             deferred.extend(
                 f"testability blocker for {bc_id} ({testability_identity(f)}): "
                 f"criticality is not_collected"
@@ -1481,13 +1553,13 @@ def high_criticality_testability_blockers(
 - [ ] **Step 5: Run test to verify it passes**
 
 Run: `pytest tests/test_gates_checks.py -v`
-Expected: PASS (11 tests)
+Expected: PASS (14 tests)
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add src/sdlc/assessment/gates/checks.py tests/helpers_risk.py tests/test_gates_checks.py
-git commit -m "feat(gates): the two live clauses -- vuln (judgment-gated) and testability (per-pair) (E-50 GD3)"
+git commit -m "feat(gates): the two live clauses -- vuln (judgment-gated) and testability (per-pair, never silently skipped) (E-50 GD3)"
 ```
 
 ---
@@ -1564,20 +1636,15 @@ def test_all_capabilities_partial_defers_the_whole_clause():
     assert len(deferred) == 2
 
 
-def test_composite_clause_is_order_independent():
-    """NFR-10."""
-    caps = [_scored("BC-001", 0.9), _scored("BC-002", 0.65), capability_risk("BC-003")]
-    first = None
-    for _ in range(5):
-        random.shuffle(caps)
-        m = UnifiedRiskMap(
-            capabilities=tuple(sorted(caps, key=lambda c: c.bc_id)),
-            collected=Measurement.measured(1.0),
-        )
-        check, warn, deferred = composite_threshold(m)
-        out = (check.model_dump_json() if check else "None") + f"|{warn}|" + "|".join(deferred)
-        first = first if first is not None else out
-        assert out == first
+# NOTE: composite_threshold has no order-independence test of its own.
+# UnifiedRiskMap._capabilities_are_sorted forces risk_map.capabilities into
+# canonical order at CONSTRUCTION time -- there is no valid way to build an
+# UnifiedRiskMap whose capability order differs, so shuffling a list and
+# re-sorting it before construction (an earlier version of this test) was
+# vacuous: the re-sort silently undid the shuffle. The genuinely free axes
+# for this module -- capability_map's tuple order (CapabilityMap enforces
+# no sort) and the dispositions tuple order -- are permuted below, at the
+# evaluate() level, which is where both axes are actually consumed.
 
 
 # --- evaluate --------------------------------------------------------------
@@ -1623,6 +1690,9 @@ def test_evaluate_warns_when_only_the_composite_warn_band_fires():
     )
     report = evaluate(rmap, _empty_map(), ())
     assert report.verdict is RiskGateVerdict.WARN
+    # GD5: detail names every contributing bc_id, even on a PASSED check --
+    # a WARN report must not be silent about which capability warned.
+    assert any("BC-001" in r for r in report.reasons)
 
 
 def test_a_pass_with_deferrals_names_them():
@@ -1642,22 +1712,31 @@ def test_no_check_row_is_ever_emitted_for_a_deferred_clause():
 
 
 def test_evaluate_is_order_independent():
-    """NFR-10."""
+    """NFR-10. risk_map.capabilities is fixed (the type forces canonical
+    order); the genuinely free axes are capability_map's tuple order and
+    the dispositions tuple order, both shuffled here across >= 2 elements
+    each -- a 1-element list cannot exercise a shuffle at all."""
+    rmap = UnifiedRiskMap(
+        capabilities=(
+            capability_risk(bc_id="BC-001", vulnerabilities=(_vuln("SS1:a:x:"),)),
+            _scored("BC-002", 0.7),
+        ),
+        collected=Measurement.measured(1.0),
+        judgment=MEASURED_JUDGMENT,
+    )
     caps = [
-        capability_risk(bc_id="BC-001", vulnerabilities=(_vuln("SS1:a:x:"),)),
-        _scored("BC-002", 0.7),
+        capability(bc_id="BC-001", testability=()),
+        capability(bc_id="BC-002", testability=()),
     ]
-    dispositions = [_disposition("SS1:a:x:", disposition=Disposition.MITIGATED_ELSEWHERE)]
+    dispositions = [
+        _disposition("SS1:a:x:", disposition=Disposition.MITIGATED_ELSEWHERE),
+        _disposition("QS3:unrelated:src/z.py:", kind="testability"),
+    ]
     first = None
     for _ in range(5):
         random.shuffle(caps)
         random.shuffle(dispositions)
-        rmap = UnifiedRiskMap(
-            capabilities=tuple(sorted(caps, key=lambda c: c.bc_id)),
-            collected=Measurement.measured(1.0),
-            judgment=MEASURED_JUDGMENT,
-        )
-        out = evaluate(rmap, _empty_map(), tuple(dispositions)).model_dump_json()
+        out = evaluate(rmap, capability_map(*caps), tuple(dispositions)).model_dump_json()
         first = first if first is not None else out
         assert out == first
 ```
@@ -1701,13 +1780,20 @@ def composite_threshold(
     if not any_measured:
         return None, None, tuple(sorted(deferred))
 
+    # GD5: detail names every contributing bc_id even when the check PASSES
+    # -- a WARN-band-only capability must still be visible in the report's
+    # `reasons` (evaluate() surfaces every non-empty detail regardless of
+    # passed/failed), not just a BLOCK-band one.
+    detail_parts = []
+    if measured_block:
+        detail_parts.append(f"unified composite >= 0.8 for: {sorted(measured_block)}")
+    if measured_warn:
+        detail_parts.append(f"unified composite in [0.6, 0.8) for: {sorted(measured_warn)}")
     check = CheckResult(
         name="risk_composite_below_threshold",
         passed=not measured_block,
         classification=CheckClass.ABSOLUTE,
-        detail=(
-            "" if not measured_block else f"unified composite >= 0.8 for: {sorted(measured_block)}"
-        ),
+        detail="; ".join(detail_parts),
     )
     warn = RiskGateVerdict.WARN if (not measured_block and measured_warn) else None
     return check, warn, tuple(sorted(deferred))
@@ -1759,7 +1845,7 @@ def evaluate(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/test_gates_checks.py -v`
-Expected: PASS (23 tests)
+Expected: PASS (25 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -1774,11 +1860,16 @@ git commit -m "feat(gates): per-capability composite clause and evaluate()'s BLO
 
 **Files:**
 - Modify: `src/sdlc/assessment/models.py`
+- Modify: `tests/test_assessment_models.py`
 - Test: `tests/test_assessment_models.py`
 
 **Interfaces:**
 - Consumes: `gates.models.RiskGateReport`, `gates.models.RiskGateOverride`, `gates.models.RiskGateVerdict`
 - Produces: `Assessment.gates: RiskGateReport | None`; `Assessment.gate_override: RiskGateOverride | None`
+
+**Two pre-existing tests break once `_gates_agrees_with_risk` lands, because they construct an `Assessment`/call `assemble()` with `risk` present and no `gates`:**
+- `tests/test_assessment_models.py::test_a_measured_assess_phase_with_a_payload_constructs` — fixed in this task's Step 3, since `Assessment(...)` already accepts a `gates` kwarg the moment the field exists.
+- `tests/test_assessment_workflow.py::test_assemble_reports_assessed_once_every_phase_collects` — calls `assemble(..., risk=UnifiedRiskMap(...))` with no `gates=`. `assemble()` itself does not gain a `gates` parameter until **Task 9** (it is the task that rewires `run()` and `assemble()` together), so this specific test **stays red between this task and Task 9** — a tracked, deliberate gap, not an oversight. Task 9's own Step 3 fixes it alongside `assemble()`'s signature change; this task's Step 4 explicitly confirms it is the one known-red test at that point, so "PASS" claims elsewhere stay honest.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1870,7 +1961,9 @@ def test_gate_override_is_accepted_on_a_block_verdict():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_assessment_models.py -v`
-Expected: FAIL — `TypeError: Assessment() got unexpected keyword argument 'gates'`
+Expected: FAIL, but not with a `TypeError` — `Assessment` carries no `model_config = ConfigDict(extra=...)`, so Pydantic's default (`extra="ignore"`) silently drops the unrecognized `gates=`/`gate_override=` kwargs at construction rather than rejecting them. The three validator tests
+(`test_a_measured_risk_map_must_carry_a_gates_report`, `test_an_uncollected_risk_map_must_not_carry_a_gates_report`, `test_gate_override_requires_a_block_verdict`) fail with
+`Failed: DID NOT RAISE <class 'pydantic_core._pydantic_core.ValidationError'>` (construction succeeds because no validator exists yet to reject the mismatch). `test_gate_override_is_accepted_on_a_block_verdict` fails with `AttributeError: 'Assessment' object has no attribute 'gate_override'` on its final `assert a.gate_override is not None` — the kwarg was accepted and discarded, so the attribute was never set.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -1923,10 +2016,37 @@ def _override_only_on_block(self) -> Assessment:
     return self
 ```
 
+**Fix the one pre-existing test this task's validator can already fix.**
+
+In `tests/test_assessment_models.py`, `test_a_measured_assess_phase_with_a_payload_constructs` (currently around line 432) constructs an `Assessment` with `risk=UnifiedRiskMap(...)` and no `gates=` — add one (`RiskGateReport`/`RiskGateVerdict` are already imported a few lines above this test by Step 1's own append):
+
+```python
+def test_a_measured_assess_phase_with_a_payload_constructs():
+    phases = _assess_dag(assess_measured=True)
+    a = Assessment(
+        repo_dir="/r",
+        triage=_triage(),
+        admitted=True,
+        admission_reason="verdict ready",
+        phases=phases,
+        terminal_status=terminal_status(True, phases),
+        scan=_scan_result(),
+        risk=UnifiedRiskMap(collected=Measurement.measured(1.0)),
+        gates=RiskGateReport(verdict=RiskGateVerdict.PASS),
+    )
+    assert a.risk is not None
+```
+
+`tests/test_assessment_workflow.py::test_assemble_reports_assessed_once_every_phase_collects` calls `assemble(...)` directly, and `assemble()` does not accept a `gates` keyword until **Task 9** changes its signature — this test cannot be fixed here. Leave it red; Task 9's own Step 3 fixes it alongside `assemble()`'s signature change, and Task 9's own Step 4 is where the full suite is confirmed green again.
+
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/test_assessment_models.py -v`
-Expected: PASS
+Expected: PASS (every test in this file, including the newly-fixed
+`test_a_measured_assess_phase_with_a_payload_constructs`).
+
+Run: `pytest tests/test_assessment_workflow.py -v`
+Expected: every test PASSES **except** `test_assemble_reports_assessed_once_every_phase_collects`. Neither `assemble()`'s signature nor this test file changed in this task, so the call site is still valid Python — but `assemble()` now constructs `Assessment(..., risk=<UnifiedRiskMap>, gates=None)` internally (its body is unchanged, so it never supplies `gates`), which trips `_gates_agrees_with_risk` and raises `pydantic.ValidationError` instead of returning. This ONE known-red test is expected and tracked here; it is not a regression to chase down now, and Task 9 is where it turns green again.
 
 - [ ] **Step 5: Commit**
 
@@ -2119,10 +2239,10 @@ from sdlc.measurement import CollectionState, Measurement
 from sdlc.models import GateDecision, GateOutcome
 from sdlc.triage.activities import TriagePin, TriagePinInput, TriageProbeInput, TriageSignalInput
 from sdlc.triage.models import SignalResult
-from sdlc.workflows.assessment import AssessmentInput, AssessmentWorkflow
+from sdlc.workflows.assessment import AssessmentInput, AssessmentWorkflow, risk_gate_skipped
 from sdlc.workflows.triage import TriageWorkflow
 
-from tests.helpers_risk import capability, capability_risk
+from tests.helpers_risk import capability, capability_map, capability_risk
 
 pytestmark = [pytest.mark.temporal, pytest.mark.asyncio]
 
@@ -2203,17 +2323,15 @@ def _blocker() -> TestabilityFinding:
 
 
 def _blocking_capability_map() -> CapabilityMap:
-    return CapabilityMap(
-        collected=Measurement.measured(1.0),
-        capabilities=(capability(bc_id="BC-001", testability=(_blocker(),)),),
-    )
+    # capability_map() (tests/helpers_risk.py) derives by_action -- a raw
+    # CapabilityMap(capabilities=(...)) with no by_action trips
+    # _counts_are_derived's "unlisted" branch (discover/map.py) the instant
+    # a capability carries a disposition action absent from that dict.
+    return capability_map(capability(bc_id="BC-001", testability=(_blocker(),)))
 
 
 def _clean_capability_map() -> CapabilityMap:
-    return CapabilityMap(
-        collected=Measurement.measured(1.0),
-        capabilities=(capability(bc_id="BC-001"),),
-    )
+    return capability_map(capability(bc_id="BC-001"))
 
 
 def _high_risk_map() -> UnifiedRiskMap:
@@ -2274,8 +2392,13 @@ def gate_repo(tmp_path):
     return str(tmp_path), sha
 
 
-async def _await_gate(env, wf_id, gate_name):
-    while True:
+async def _await_gate(env, wf_id, gate_name, *, max_polls: int = 30):
+    """Bounded on purpose: before Task 9's implementation exists, `run()`
+    never opens a "risk" gate at all, so an unbounded version of this
+    helper would hang forever (the workflow completes normally in the
+    background while polling keeps returning an empty list) rather than
+    failing the test cleanly."""
+    for _ in range(max_polls):
         try:
             items = await env.client.get_workflow_handle(wf_id).query(
                 AssessmentWorkflow.pending_decisions
@@ -2285,6 +2408,7 @@ async def _await_gate(env, wf_id, gate_name):
         except Exception:  # noqa: BLE001 -- not started
             pass
         await env.sleep(1)
+    raise AssertionError(f"no {gate_name!r} gate became pending after {max_polls} polls")
 
 
 def _acts(sha, discover_hit, risk_hit):
@@ -2404,15 +2528,150 @@ async def test_an_approved_block_stamps_an_override_and_continues(gate_repo, tmp
     assert result.terminal_status == PARTIAL  # E-51/E-52 still unbuilt
     for phase_id in (PhaseId.REPORT, PhaseId.GENERATE, PhaseId.FINISH):
         row = next(p for p in result.phases if p.phase is phase_id)
-        # Distinguishable from the rejected case's reason (GD2's whole point).
-        assert "risk gate" not in row.collected.reason
-        assert "not implemented" in row.collected.reason
+        # Distinguishable from the rejected case's reason (GD2's whole
+        # point) -- compared against risk_gate_skipped() itself, not a
+        # hardcoded "not implemented" substring, so this stays true once
+        # E-51/E-52 land and REPORT/GENERATE/FINISH stop being unbuilt
+        # stubs (their MEASURED reason, whatever it becomes, will still
+        # differ from risk_gate_skipped()'s).
+        assert row.collected.reason != risk_gate_skipped(phase_id).collected.reason
+
+
+async def test_a_revised_block_is_treated_as_rejected(gate_repo, tmp_path, monkeypatch):
+    """GD2's amendment, pinned: REVISE has no round concept for this gate,
+    so it leaves REPORT/GENERATE/FINISH unreached exactly like REJECT."""
+    repo_dir, sha = gate_repo
+    monkeypatch.setenv("SDLC_BOARD_DB", str(tmp_path / "board.sqlite3"))
+    acts = _acts(sha, _blocking_capability_map(), _high_risk_map())
+    wf_id = f"assess-{uuid.uuid4()}"
+
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=WORKFLOWS, activities=acts):
+            handle = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(
+                    repo_dir=repo_dir,
+                    project_key="acme",
+                    propose_discover=False,
+                    propose_risk=False,
+                ),
+                id=wf_id,
+                task_queue=TASK_QUEUE,
+            )
+            await _await_gate(env, wf_id, "risk")
+            await handle.signal(
+                AssessmentWorkflow.submit_gate_decision,
+                GateDecision(
+                    gate="risk",
+                    round=1,
+                    outcome=GateOutcome.REVISE,
+                    decided_by="human",
+                    comments="try again?",
+                ),
+            )
+            result = await handle.result()
+
+    assert result.gates.verdict == RiskGateVerdict.BLOCK
+    assert result.gate_override is None
+    for phase_id in (PhaseId.REPORT, PhaseId.GENERATE, PhaseId.FINISH):
+        row = next(p for p in result.phases if p.phase is phase_id)
+        assert row.collected.reason == risk_gate_skipped(phase_id).collected.reason
+
+
+async def test_load_dispositions_failing_falls_back_to_zero_not_a_crash(
+    gate_repo, tmp_path, monkeypatch
+):
+    """Failure-modes row: 'load_dispositions activity fails -> treated as
+    zero dispositions loaded for this run.' A real disposition sits in the
+    board, but the activity always raises, so run_or_degrade's fallback
+    must still let BLOCK fire -- proving the fallback is conservative
+    (nothing is treated as accepted that couldn't be confirmed), not a
+    silent 'assume everything is dispositioned.'"""
+    repo_dir, sha = gate_repo
+    db = tmp_path / "board.sqlite3"
+    monkeypatch.setenv("SDLC_BOARD_DB", str(db))
+    key = testability_identity(_blocker())
+
+    store = BoardFindingDispositionStore(db=db)
+    store.apply(
+        "acme",
+        FindingDisposition(
+            kind="testability",
+            key=key,
+            disposition=Disposition.ACCEPTED_RISK,
+            approved_by="maks",
+            reason="pre-seeded, should be unreachable",
+            decided_at=datetime.now(UTC),
+        ),
+        expected_version=0,
+        actor="maks",
+    )
+    store.close()
+
+    @activity.defn(name="triage_resolve_commit")
+    async def real_pin(inp: TriagePinInput) -> TriagePin:
+        return TriagePin(commit_sha=sha, toolchain="python")
+
+    @activity.defn(name="discover_memo_load")
+    async def fake_discover_hit(inp) -> CapabilityMap:
+        return _blocking_capability_map()
+
+    @activity.defn(name="risk_memo_load")
+    async def fake_risk_hit(inp) -> UnifiedRiskMap:
+        return _high_risk_map()
+
+    @activity.defn(name="load_dispositions")
+    async def failing_load_dispositions(inp):
+        raise RuntimeError("board unavailable")
+
+    acts = [
+        real_pin,
+        fake_baseline,
+        fake_scaffold,
+        fake_probe,
+        fake_secrets,
+        fake_misconfig,
+        fake_outliers,
+        fake_deps,
+        assessment_resolve_tree,
+        *SCAN_ACTS,
+        discover_context,
+        fake_discover_hit,
+        fake_risk_hit,
+        failing_load_dispositions,
+    ]
+    wf_id = f"assess-{uuid.uuid4()}"
+
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=WORKFLOWS, activities=acts):
+            handle = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(
+                    repo_dir=repo_dir,
+                    project_key="acme",
+                    propose_discover=False,
+                    propose_risk=False,
+                ),
+                id=wf_id,
+                task_queue=TASK_QUEUE,
+            )
+            # The pre-seeded disposition would clear this BLOCK if it were
+            # read; the gate must still open, proving it was not.
+            items = await _await_gate(env, wf_id, "risk")
+            assert items[0].gate == "risk"
+            await handle.signal(
+                AssessmentWorkflow.submit_gate_decision,
+                GateDecision(gate="risk", round=1, outcome=GateOutcome.REJECT, decided_by="human"),
+            )
+            result = await handle.result()
+
+    assert result.gates.verdict == RiskGateVerdict.BLOCK
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_assessment_workflow_risk_gate_e2e.py -v -m temporal`
-Expected: FAIL — `AssertionError` (no "risk" gate ever opens; `result.gates` is `None`)
+Expected: FAIL — `AssertionError: no 'risk' gate became pending after 30 polls`. Before this task's implementation, `run()` never calls `_risk_gate` at all, so the workflow completes normally in the background (the old code path) while `_await_gate` polls `pending_decisions` and only ever sees an empty list. `_await_gate`'s poll cap turns that into a clean, bounded failure rather than a hang.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -2525,6 +2784,15 @@ Add `_risk_gate` to `AssessmentWorkflow`, right after `_judge`:
         BLOCK opens a HARD gate the same way the readiness gate does;
         APPROVE stamps an audited override and REPORT/GENERATE/FINISH
         proceed; REJECT (or a HOLD timeout) leaves them unreached.
+
+        GD2 names only APPROVE/REJECT; GateOutcome also has REVISE
+        (TriageWorkflow's readiness gate uses it to mean "fix the build and
+        re-triage," a round-based retry). The risk gate has no round or
+        retry concept -- a deterministic verdict over the current risk map
+        does not change by asking again -- so REVISE is deliberately
+        treated identically to REJECT here: `decision.approved` is False
+        for both, and only an explicit APPROVE unblocks. This is a decision
+        recorded once, here, not an unexamined fallthrough.
         """
         if assess_out.risk is None:
             return RiskGateStepOutcome()
@@ -2613,7 +2881,7 @@ class AssessmentWorkflow(GateHost):
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/test_assessment_workflow_risk_gate_e2e.py -v -m temporal`
-Expected: PASS (2 tests)
+Expected: PASS (4 tests)
 
 Then run the full existing e2e suite to confirm nothing regressed:
 
@@ -2642,7 +2910,15 @@ git commit -m "feat(assessment): wire the risk gate into run() -- BLOCK pauses, 
 Append to `tests/test_assessment_workflow_risk_gate_e2e.py`:
 
 ```python
-from sdlc.assessment.risk.models import Composite, Factor
+from sdlc.assessment.risk.models import (
+    Composite,
+    Factor,
+    RiskSource,
+    Severity,
+    StrideCategory,
+    Vulnerability,
+    VulnerabilityClass,
+)
 from sdlc.assessment.scan.models import testability_identity
 
 
@@ -2749,11 +3025,99 @@ async def test_a_testability_disposition_clears_the_block_on_rerun(
 
     assert second_result.gates.verdict == RiskGateVerdict.PASS
     assert second_result.gate_override is None
+
+
+def _confirmed_vuln_risk_map(bc_id="BC-001") -> UnifiedRiskMap:
+    vuln = Vulnerability(
+        key="SS1:hardcoded-secret:payments/api.py:",
+        classification=VulnerabilityClass.CONFIRMED,
+        severity=Severity.HIGH,
+        stride_category=StrideCategory.INFORMATION_DISCLOSURE,
+        path="payments/api.py",
+        source=RiskSource.BASELINE,
+    )
+    cap = capability_risk(bc_id=bc_id, vulnerabilities=(vuln,))
+    # judgment MEASURED: CONFIRMED is only reachable through the judgment
+    # layer (GD3) -- unlike the testability fixtures above, this map must
+    # carry it directly since faking risk_memo_load bypasses _judge() (the
+    # method that would otherwise stamp it) entirely.
+    return UnifiedRiskMap(
+        capabilities=(cap,), collected=Measurement.measured(1.0), judgment=Measurement.measured(1.0)
+    )
+
+
+async def test_a_vulnerability_disposition_clears_the_block_on_rerun(
+    gate_repo, tmp_path, monkeypatch
+):
+    """The spec's own first e2e case: a confirmed vulnerability opens the
+    gate, and `sdlc risk dispose --kind vulnerability` clears it on
+    re-run -- mirrors the testability version above but for the OTHER live
+    clause, which the testability case alone does not exercise."""
+    repo_dir, sha = gate_repo
+    db = tmp_path / "board.sqlite3"
+    monkeypatch.setenv("SDLC_BOARD_DB", str(db))
+    acts = _acts(sha, _clean_capability_map(), _confirmed_vuln_risk_map())
+    key = "SS1:hardcoded-secret:payments/api.py:"
+
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=WORKFLOWS, activities=acts):
+            first_id = f"assess-{uuid.uuid4()}"
+            handle = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(
+                    repo_dir=repo_dir,
+                    project_key="acme",
+                    propose_discover=False,
+                    propose_risk=False,
+                ),
+                id=first_id,
+                task_queue=TASK_QUEUE,
+            )
+            await _await_gate(env, first_id, "risk")
+            await handle.signal(
+                AssessmentWorkflow.submit_gate_decision,
+                GateDecision(gate="risk", round=1, outcome=GateOutcome.REJECT, decided_by="human"),
+            )
+            first_result = await handle.result()
+            assert first_result.gates.verdict == RiskGateVerdict.BLOCK
+
+            store = BoardFindingDispositionStore(db=db)
+            store.apply(
+                "acme",
+                FindingDisposition(
+                    kind="vulnerability",
+                    key=key,
+                    disposition=Disposition.ACCEPTED_RISK,
+                    approved_by="maks",
+                    reason="known issue, ticket filed",
+                    decided_at=datetime.now(UTC),
+                ),
+                expected_version=0,
+                actor="maks",
+            )
+            store.close()
+
+            second_id = f"assess-{uuid.uuid4()}"
+            handle2 = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(
+                    repo_dir=repo_dir,
+                    project_key="acme",
+                    propose_discover=False,
+                    propose_risk=False,
+                ),
+                id=second_id,
+                task_queue=TASK_QUEUE,
+            )
+            second_result = await handle2.result()
+
+    assert second_result.gates.verdict == RiskGateVerdict.PASS
+    assert second_result.gate_override is None
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/test_assessment_workflow_risk_gate_e2e.py -v -m temporal -k "warn or disposition"`
+Run: `pytest tests/test_assessment_workflow_risk_gate_e2e.py -v -m temporal -k "warn or disposition or vulnerability"`
 Expected: FAIL if run against a pre-Task-9 tree (`ImportError`); once Task 9 has landed, this step instead confirms the two NEW tests fail before this task's fixtures exist — since Task 9 already wired `_risk_gate` fully, these two tests should in fact PASS immediately against Task 9's implementation with no further production code change. Run them to confirm.
 
 - [ ] **Step 3: No production code changes are needed**
@@ -2763,7 +3127,7 @@ Task 9's `_risk_gate`/`evaluate`/`load_dispositions` wiring already implements W
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/test_assessment_workflow_risk_gate_e2e.py -v -m temporal`
-Expected: PASS (4 tests total in this file)
+Expected: PASS (7 tests total in this file)
 
 - [ ] **Step 5: Commit**
 
