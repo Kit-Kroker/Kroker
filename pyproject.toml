@@ -16,7 +16,7 @@ dependencies = [
     "defusedxml>=0.7",
     "genai-prices>=0.0.60",
     "pydantic-ai-harness[codemode,exa]>=0.7",
-    "fastapi>=0.115",
+    "fastapi>=0.141.1",
     "uvicorn>=0.30",
 ]
 
