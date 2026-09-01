@@ -99,8 +99,9 @@ class CrewTaskWorkflow(GateHost):
         # §6: two questions per crew, durable. Exhaustion is a signal about clarify,
         # not just a brake.
         self._questions = 0
-        # The answer round N+1 must carry. Cleared once delivered.
+        # The answer round N+1 must carry, tagged with its target round.
         self._answer = ""
+        self._answer_round = 0
 
     @workflow.query
     def rounds(self) -> list[RoundRecord]:
@@ -333,8 +334,10 @@ class CrewTaskWorkflow(GateHost):
                     round=self._questions,
                     context=GateContext(spec_summary=(
                         f"crew task {inp.task_id} round {rnd} asks:\n"
-                        f"{reading.question}")))
+                        f"{reading.question}")),
+                    default_policy=GatePolicy.HARD)
                 self._answer = answer.comments or ""
+                self._answer_round = rnd + 1
 
             if reading.missing:
                 # The one surviving row of E-87's disagreement table: the
@@ -401,10 +404,9 @@ class CrewTaskWorkflow(GateHost):
                 f"--- BEGIN CRITIC OUTPUT ---\n{prev.critique}\n"
                 f"--- END CRITIC OUTPUT ---")
         answer = ""
-        if self._answer:
+        if self._answer and self._answer_round == rnd:
             answer = (f"\n\nA human answered your question from round "
                       f"{rnd - 1}: {self._answer}")
-            self._answer = ""
         return (f"{base}\n\nThis is round {rnd}. Your previous round's "
                 f"note is at round-{rnd - 1}/{inp.deliverable_path}. "
                 f"Continue from it; do not restate it.{critique}{answer}\n\n"

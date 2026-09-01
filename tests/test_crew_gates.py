@@ -278,14 +278,79 @@ async def test_the_escalation_budget_ends_the_crew_as_an_intent_gap():
     TURNS.clear()
     DEFER["left"] = 0
     ASK["left"] = 9
+    settings = GateSettings(
+        default_gate_policy=GatePolicy.OFF,
+        gates={"crew_question": GateConfig(policy=GatePolicy.OFF)})
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
         async with Worker(env.client, task_queue=TASK_QUEUE,
                           workflows=[CrewTaskWorkflow], activities=ACTIVITIES):
             res = await env.client.execute_workflow(
                 CrewTaskWorkflow.run,
-                _inp(policy=GatePolicy.OFF, rounds_max=9),
+                _inp(gate_settings=settings, rounds_max=9),
                 id=f"crew-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+    assert res.run.exit_code == EXIT_INTENT_GAP
+
+
+async def test_answer_survives_tool_resumptions_in_next_round():
+    """An answer delivered into round N+1 must survive multiple tool resumptions
+    within that round without being dropped, and must not leak into round N+2."""
+    TURNS.clear()
+    DEFER["left"] = 0
+    ASK["left"] = 1
+    wf_id = f"crew-{uuid.uuid4()}"
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=[CrewTaskWorkflow], activities=ACTIVITIES):
+            handle = await env.client.start_workflow(
+                CrewTaskWorkflow.run,
+                _inp(policy=GatePolicy.HARD, rounds_max=3,
+                     gate_settings=GateSettings(
+                         default_gate_policy=GatePolicy.HARD,
+                         gates={"tool_approval": GateConfig(policy=GatePolicy.OFF)})),
+                id=wf_id, task_queue=TASK_QUEUE)
+            with env.auto_time_skipping_disabled():
+                for _ in range(100):
+                    pending = await handle.query(
+                        CrewTaskWorkflow.pending_decisions)
+                    if pending and pending[0].gate == "crew_question":
+                        break
+                    await asyncio.sleep(0.1)
+                assert pending and pending[0].gate == "crew_question"
+                # Schedule tool deferral for round 2
+                DEFER["left"] = 1
+                await handle.signal(
+                    CrewTaskWorkflow.submit_gate_decision,
+                    GateDecision(gate="crew_question", round=pending[0].round,
+                                 outcome=GateOutcome.APPROVE,
+                                 decided_by="human", comments="use postgres"))
+            await handle.result()
+    lead_r2_turns = [t for t in TURNS if t.role == "coder" and t.round == 2]
+    # Round 2 has 2 turns: the initial turn (which suspended) and the resumed turn
+    assert len(lead_r2_turns) == 2
+    assert "use postgres" in lead_r2_turns[0].prompt
+    assert "use postgres" in lead_r2_turns[1].prompt
+
+    # Round 3 must NOT repeat round 1's answer
+    lead_r3_turns = [t for t in TURNS if t.role == "coder" and t.round == 3]
+    assert len(lead_r3_turns) == 1
+    assert "use postgres" not in lead_r3_turns[0].prompt
+
+
+from temporalio import workflow as temporal_workflow
+
+
+@temporal_workflow.defn
+class DummyParentWorkflow:
+    @temporal_workflow.run
+    async def run(self, inp: CrewTaskInput) -> None:
+        await temporal_workflow.execute_child_workflow(
+            CrewTaskWorkflow.run, inp,
+            id=f"{temporal_workflow.info().workflow_id}-child",
+            task_queue=TASK_QUEUE)
+
+
 async def test_a_crews_pending_item_names_its_parent_run():
     """§E: an operator must see a crew item as part of its run, not as an
     orphan. A FIELD, not a parse of the workflow-id prefix -- the prefix is a
@@ -293,28 +358,34 @@ async def test_a_crews_pending_item_names_its_parent_run():
     TURNS.clear()
     DEFER["left"] = 1
     ASK["left"] = 0
+    parent_id = f"parent-{uuid.uuid4()}"
+    child_id = f"{parent_id}-child"
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
         async with Worker(env.client, task_queue=TASK_QUEUE,
-                          workflows=[CrewTaskWorkflow], activities=ACTIVITIES):
-            handle = await env.client.start_workflow(
-                CrewTaskWorkflow.run, _inp(policy=GatePolicy.HARD),
-                id=f"crew-{uuid.uuid4()}", task_queue=TASK_QUEUE)
-            with env.auto_time_skipping_disabled():
-                for _ in range(100):
-                    pending = await handle.query(
+                          workflows=[CrewTaskWorkflow, DummyParentWorkflow],
+                          activities=ACTIVITIES):
+            parent_handle = await env.client.start_workflow(
+                DummyParentWorkflow.run, _inp(policy=GatePolicy.HARD),
+                id=parent_id, task_queue=TASK_QUEUE)
+            child_handle = env.client.get_workflow_handle(child_id)
+            pending = []
+            for _ in range(100):
+                try:
+                    pending = await child_handle.query(
                         CrewTaskWorkflow.pending_decisions)
                     if pending:
                         break
-                    await asyncio.sleep(0.1)
-                assert pending
-                # Started directly, with no parent: the field must be present
-                # and honestly empty rather than absent or invented.
-                assert pending[0].parent_run_id is None
-                await handle.signal(
-                    CrewTaskWorkflow.submit_gate_decision,
-                    GateDecision(gate=pending[0].gate, round=pending[0].round,
-                                 outcome=GateOutcome.APPROVE,
-                                 decided_by="human"))
-            await handle.result()
+                except Exception:
+                    pass
+                await asyncio.sleep(0.1)
+            assert pending, "the child crew never opened a gate"
+            # Started as child: parent_run_id must equal the parent workflow id!
+            assert pending[0].parent_run_id == parent_id
+            await child_handle.signal(
+                CrewTaskWorkflow.submit_gate_decision,
+                GateDecision(gate=pending[0].gate, round=pending[0].round,
+                             outcome=GateOutcome.APPROVE,
+                             decided_by="human"))
+            await parent_handle.result()
 
