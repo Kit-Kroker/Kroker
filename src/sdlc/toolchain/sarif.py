@@ -15,12 +15,12 @@ absolute floor.
 from __future__ import annotations
 
 from ..measurement import CollectionState
-from ..models import SecurityFinding, SecurityReport
+from ..models import SecurityFinding, SecurityReport, SecuritySeverity
 
 # SARIF result.level -> our severity scale (SecurityFinding.severity Literal).
 # semgrep emits "error" for its blocking rules, so error -> critical keeps the
 # SC-5 absolute floor biting. Unknown levels fall back to "high" (conservative).
-_LEVEL_TO_SEVERITY = {
+_LEVEL_TO_SEVERITY: dict[str, SecuritySeverity] = {
     "error": "critical",
     "warning": "high",
     "note": "medium",

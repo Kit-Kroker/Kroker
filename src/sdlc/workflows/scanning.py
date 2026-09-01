@@ -61,10 +61,10 @@ with workflow.unsafe.imports_passed_through():
 
 # Deterministic given a tree; the retry covers FS/git blips only. Mirrors
 # triage's SIGNAL_ACT, which these signals are the Tier 2 analogue of.
-SCAN_ACT = dict(
+SCAN_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=10), retry_policy=RetryPolicy(maximum_attempts=2)
 )
-TREE_ACT = dict(
+TREE_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=2), retry_policy=RetryPolicy(maximum_attempts=3)
 )
 

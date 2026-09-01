@@ -30,6 +30,7 @@ from ..models import (
     ScanSignalResult,
     ScanUpstream,
     Sensitivity,
+    SensitivityOrigin,
     SensitivityRecord,
     SignalOutput,
     SignalSource,
@@ -183,7 +184,7 @@ def _tokens(field: str) -> set[str]:
     return {w.lower() for w in words if w} | {lowered, lowered.replace("_", "")}
 
 
-def _origin(decl: TableDecl) -> str:
+def _origin(decl: TableDecl) -> SensitivityOrigin:
     """table | model | dto -- SS4's declared shape. A DTO is recognised by
     where it lives, which is the only thing that distinguishes it from a
     model at this depth."""

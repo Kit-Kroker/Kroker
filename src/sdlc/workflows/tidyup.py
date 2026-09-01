@@ -43,7 +43,7 @@ with workflow.unsafe.imports_passed_through():
     from .triage import TriageInput, TriageWorkflow
 
 # Local git only; a retry is free because the branch is force-created.
-VERIFY_ACT = dict(
+VERIFY_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=10), retry_policy=RetryPolicy(maximum_attempts=3)
 )
 

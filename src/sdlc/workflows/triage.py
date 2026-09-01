@@ -49,21 +49,21 @@ with workflow.unsafe.imports_passed_through():
     from .gates import GateHost
 
 # Read-only and idempotent -- retrying is free.
-PIN_ACT = dict(
+PIN_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=2), retry_policy=RetryPolicy(maximum_attempts=3)
 )
 # Deterministic given a tree and a sha; the retry covers FS/git blips only.
-SIGNAL_ACT = dict(
+SIGNAL_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=10), retry_policy=RetryPolicy(maximum_attempts=2)
 )
 # The only signal doing network I/O (E-41a's AdvisorySource).
-DEPS_ACT = dict(
+DEPS_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=15), retry_policy=RetryPolicy(maximum_attempts=3)
 )
 # ONE attempt, per triage_build_probe's own docstring: a ten-minute timeout
 # retried three times is a thirty-minute triage, and a deterministic build
 # failure does not become a success on attempt two.
-PROBE_ACT = dict(
+PROBE_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=40), retry_policy=RetryPolicy(maximum_attempts=1)
 )
 

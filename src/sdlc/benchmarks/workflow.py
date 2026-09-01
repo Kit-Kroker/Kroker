@@ -46,13 +46,13 @@ with workflow.unsafe.imports_passed_through():
     from .recorder import record_benchmark
     from .report import finalize_benchmark_report
 
-CHILD_ACT = dict(
+CHILD_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(hours=4), retry_policy=RetryPolicy(maximum_attempts=1)
 )
-RECORD_ACT = dict(
+RECORD_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=5)
 )
-ORACLE_ACT = dict(
+ORACLE_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=20), retry_policy=RetryPolicy(maximum_attempts=1)
 )
 

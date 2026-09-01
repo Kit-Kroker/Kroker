@@ -50,6 +50,7 @@ from .models import (
     QAReport,
     SecurityFinding,
     SecurityReport,
+    SecuritySeverity,
     ToolGrant,
 )
 from .observability.logfire_setup import span
@@ -596,6 +597,7 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
         run_id = activity.info().workflow_run_id
     except RuntimeError:
         run_id = "local"
+    run_id = run_id or "local"  # temporalio types the field as Optional
     with span("session.capture", task_id=inp.task_id, stdout_bytes=len(result._raw_stdout)):
         ref, digest = capture_session(
             harness, result._raw_stdout, run_id=run_id, task_id=inp.task_id, attempt=inp.attempt
@@ -864,7 +866,7 @@ async def run_lint(inp: LintInput) -> tuple[bool, str]:
 # Minimal deterministic security ruleset (FR-106 absolute floor). Each entry
 # is (compiled_regex, severity, rule_name, human_detail). Intentionally small
 # and offline; the seam for a real SAST is this function's return type.
-_SECURITY_RULES: list[tuple[re.Pattern, str, str, str]] = [
+_SECURITY_RULES: list[tuple[re.Pattern, SecuritySeverity, str, str]] = [
     (
         re.compile(r"(?i)(aws_secret_access_key|secret_key)\s*=\s*['\"][A-Za-z0-9/+]{20,}['\"]"),
         "critical",

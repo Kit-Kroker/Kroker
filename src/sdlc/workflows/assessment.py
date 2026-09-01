@@ -19,6 +19,7 @@ what remove that debt.
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import cast
 
 from pydantic import BaseModel, Field
 from temporalio import workflow
@@ -67,6 +68,7 @@ with workflow.unsafe.imports_passed_through():
     from ..assessment.discover.domain import consolidate
     from ..assessment.discover.map import (
         CapabilityMap,
+        DiscoverProposal,
         context_digest,
         guard_tripped,
     )
@@ -81,7 +83,7 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..assessment.risk.apply import apply_judgment, degraded
     from ..assessment.risk.build import map_digest, no_risk
-    from ..assessment.risk.models import RiskVerification, UnifiedRiskMap
+    from ..assessment.risk.models import RiskProposal, RiskVerification, UnifiedRiskMap
     from ..assessment.risk.prompt import render_risk_prompt
     from ..assessment.scan.models import ScanResult, ScanSignalId
     from ..assessment.verification import guard_reason
@@ -176,17 +178,17 @@ def skipped(phase: PhaseId) -> PhaseResult:
     )
 
 
-DISCOVER_ACT = dict(
+DISCOVER_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=10), retry_policy=RetryPolicy(maximum_attempts=2)
 )
 # Three attempts, not two: an IdentityConflictError means a concurrent
 # assessment wrote first, and a retry re-reads the registry and re-matches
 # (E-47a's loser behaviour) rather than replaying computed attachments.
-LOCK_ACT = dict(
+LOCK_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=2), retry_policy=RetryPolicy(maximum_attempts=3)
 )
 
-ASSESS_ACT = dict(
+ASSESS_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=5), retry_policy=RetryPolicy(maximum_attempts=2)
 )
 
@@ -391,7 +393,9 @@ class AssessmentWorkflow(GateHost):
         if inp.propose_discover and t_discover is not None:
             try:
                 run = await t_discover.run(render_discover_prompt(context))
-                proposal = run.output
+                # The TemporalAgent's run() is untyped generically; the
+                # discover agent's output_type IS DiscoverProposal.
+                proposal = cast(DiscoverProposal, run.output)
             except Exception as e:  # noqa: BLE001
                 # The role shipped and was invoked, but the call failed.
                 # Must fail closed rather than quietly laundering into baseline
@@ -611,7 +615,8 @@ class AssessmentWorkflow(GateHost):
 
         try:
             run = await t_risk.run(render_risk_prompt(cmap, baseline))
-            proposal = run.output
+            # The risk agent's output_type IS RiskProposal.
+            proposal = cast(RiskProposal, run.output)
         except Exception as e:  # noqa: BLE001
             return degraded(
                 baseline, f"the risk proposer ran and failed: {type(e).__name__}: {e}"[:300]

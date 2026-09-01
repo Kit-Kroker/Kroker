@@ -55,16 +55,26 @@ def baseline(context: CandidateContext) -> CandidateDisposition:
     candidate it overlaps, and FLAGging it would ask a human to adjudicate a
     boundary clause D2 already rejects.
     """
-    row = dict(candidate_id=context.candidate_id, source=DispositionSource.BASELINE)
     if context.guardrail_only:
         return CandidateDisposition(
-            **row, action=DiscoverAction.DE_SCOPE, rule="baseline_guardrail"
+            candidate_id=context.candidate_id,
+            source=DispositionSource.BASELINE,
+            action=DiscoverAction.DE_SCOPE,
+            rule="baseline_guardrail",
         )
     if context.possible_duplicate_of:
         return CandidateDisposition(
-            **row, action=DiscoverAction.FLAG, rule="baseline_possible_duplicate"
+            candidate_id=context.candidate_id,
+            source=DispositionSource.BASELINE,
+            action=DiscoverAction.FLAG,
+            rule="baseline_possible_duplicate",
         )
-    return CandidateDisposition(**row, action=DiscoverAction.CONFIRM, rule="baseline_confirm")
+    return CandidateDisposition(
+        candidate_id=context.candidate_id,
+        source=DispositionSource.BASELINE,
+        action=DiscoverAction.CONFIRM,
+        rule="baseline_confirm",
+    )
 
 
 def baseline_dispositions(context: DiscoverContext) -> tuple[CandidateDisposition, ...]:

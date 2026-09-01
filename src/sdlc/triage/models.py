@@ -33,10 +33,17 @@ class Verdict(StrEnum):
     INDETERMINATE = "indeterminate"
 
 
+# The four-valued severity scale every triage signal reports on. Shared so a
+# signal's `_finding` helper can type its parameter by the contract instead
+# of by `str`, which pydantic would accept at runtime but the type checker
+# correctly refuses at the boundary.
+FindingSeverity = Literal["critical", "high", "medium", "low"]
+
+
 class TriageFinding(BaseModel):
     signal: str  # signal id, e.g. "secrets"
     rule: str  # which rule inside it
-    severity: Literal["critical", "high", "medium", "low"]
+    severity: FindingSeverity
     detail: str
     path: str = ""
     line: int | None = None

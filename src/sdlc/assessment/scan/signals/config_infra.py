@@ -38,6 +38,7 @@ from ..models import (
     ScanSignalId,
     ScanSignalResult,
     SecurityObservation,
+    SeverityHint,
     SignalOutput,
     SignalSource,
     family_of,
@@ -103,7 +104,7 @@ _EXPOSE_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ),
 )
 
-_DB_RULES: tuple[tuple[str, str, re.Pattern[str], str], ...] = (
+_DB_RULES: tuple[tuple[str, SeverityHint, re.Pattern[str], str], ...] = (
     (
         "ss3_db_ssl_disabled",
         "high",
@@ -206,7 +207,7 @@ _KEY_VALUE = re.compile(r"""(?m)^\s*["']?([A-Za-z_][\w.\-]*)["']?\s*[:=]\s*["']?
 def _observation(
     category: str,
     rule: str,
-    severity: str,
+    severity: SeverityHint,
     detail: str,
     path: str,
     line: int,
@@ -236,7 +237,7 @@ def _ports(path: str, text: str) -> list[SecurityObservation]:
     for rule, pattern, detail in _EXPOSE_RULES:
         for match in pattern.finditer(text):
             value = match.group(1)
-            severity = "high" if value in _DATASTORE_PORTS else "info"
+            severity: SeverityHint = "high" if value in _DATASTORE_PORTS else "info"
             extra = (
                 " This is a datastore port, which is a materially "
                 "different exposure from a web port."

@@ -29,13 +29,14 @@ from collections.abc import Sequence
 from pydantic import BaseModel, Field
 
 from ..measurement import Measurement
+from .models import FindingSeverity
 
 
 class Advisory(BaseModel):
     package: str  # the normalized distribution name queried
     constraint: str = ""  # the declaration as written, when the caller has it
     advisory_id: str  # e.g. "GHSA-xxxx-xxxx-xxxx" / "PYSEC-2024-1"
-    severity: str  # critical | high | medium | low
+    severity: FindingSeverity  # critical | high | medium | low
     summary: str = ""
 
 
@@ -76,7 +77,7 @@ OSV_TIMEOUT_S = 20
 OSV_MAX_PACKAGES = 200
 
 # GHSA supplies MODERATE where our TriageFinding vocabulary says medium.
-_SEVERITY_WORDS = {
+_SEVERITY_WORDS: dict[str, FindingSeverity] = {
     "CRITICAL": "critical",
     "HIGH": "high",
     "MODERATE": "medium",
@@ -85,7 +86,7 @@ _SEVERITY_WORDS = {
 }
 
 
-def _severity(vuln: dict) -> str:
+def _severity(vuln: dict) -> FindingSeverity:
     """The advisory's severity label, defaulting to `high`.
 
     The default is not a fabricated measurement: the vulnerability itself is

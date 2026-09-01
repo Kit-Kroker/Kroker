@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from typing import cast
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
@@ -230,10 +231,20 @@ async def _research_subquestion_impl(
     usage = RoleUsage(role="research", model=inp.model)
     try:
         async with _heartbeating():
-            kwargs = dict(deps=deps, usage_limits=UsageLimits(request_limit=inp.max_requests))
+            usage_limits = UsageLimits(request_limit=inp.max_requests)
             if _model is not None:
-                kwargs["model"] = _model
-            result = await agent.run(sub_question_prompt(sub.question), **kwargs)
+                result = await agent.run(
+                    sub_question_prompt(sub.question),
+                    deps=deps,
+                    usage_limits=usage_limits,
+                    model=_model,
+                )
+            else:
+                result = await agent.run(
+                    sub_question_prompt(sub.question),
+                    deps=deps,
+                    usage_limits=usage_limits,
+                )
     except (BudgetExceeded, UsageLimitExceeded) as exc:
         # Expected exhaustion: degrade. NEVER re-raise -- the counter is
         # persisted, so a retry hits the same exhausted cap and burns six
@@ -248,8 +259,12 @@ async def _research_subquestion_impl(
         activity.logger.warning("sub-question %s cancelled mid-flight", sub.id)
         raise
 
+    # The research agent's output_type IS ResearchBrief; the generic run()
+    # result is untyped, so state the contract here.
     return SubQuestionFinding(
-        sub_question=sub, brief=result.output, usage=_usage_of(result, inp.model)
+        sub_question=sub,
+        brief=cast(ResearchBrief, result.output),
+        usage=_usage_of(result, inp.model),
     )
 
 

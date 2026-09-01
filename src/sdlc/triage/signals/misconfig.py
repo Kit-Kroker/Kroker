@@ -21,6 +21,7 @@ from collections.abc import Mapping
 
 from ...measurement import Measurement
 from ..models import (
+    FindingSeverity,
     FixClass,
     SignalResult,
     TriageFinding,
@@ -40,7 +41,7 @@ _FRAMEWORKS: dict[str, re.Pattern[str]] = {
 }
 
 # (rule, pattern, severity, fix_class, detail)
-_RULES: tuple[tuple[str, re.Pattern[str], str, FixClass, str], ...] = (
+_RULES: tuple[tuple[str, re.Pattern[str], FindingSeverity, FixClass, str], ...] = (
     (
         "permissive_cors",
         re.compile(
@@ -117,7 +118,7 @@ def detect_frameworks(blobs: Mapping[str, str]) -> set[str]:
 
 def _finding(
     rule: str,
-    severity: str,
+    severity: FindingSeverity,
     detail: str,
     fix_class: FixClass,
     path: str = "",

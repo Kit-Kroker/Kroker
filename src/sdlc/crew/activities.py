@@ -308,6 +308,7 @@ async def run_crew_turn(inp: CrewTurnInput) -> CrewTurnOutput:
         run_id = activity.info().workflow_run_id
     except RuntimeError:  # outside an activity, in tests
         run_id = "local"
+    run_id = run_id or "local"  # temporalio types the field as Optional
     try:
         ref, digest = capture_session(
             harness,

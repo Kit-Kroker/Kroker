@@ -11,7 +11,7 @@ import asyncio
 import os
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timedelta
-from typing import TypeVar
+from typing import TypeVar, cast
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
@@ -80,6 +80,7 @@ with workflow.unsafe.imports_passed_through():
         BenchmarkOutcome,
         BenchmarkRecord,
         BenchmarkScope,
+        JudgeKind,
         QualityScore,
         SpeedBag,
         WasteBag,
@@ -221,10 +222,10 @@ with workflow.unsafe.imports_passed_through():
     from .gates import GateHost
     from .scanning import scan_tree
 
-INTAKE_ACT = dict(
+INTAKE_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=2), retry_policy=RetryPolicy(maximum_attempts=3)
 )
-ACT = dict(
+ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=10), retry_policy=RetryPolicy(maximum_attempts=3)
 )
 # Coding/test-suite runs stream output in bursts; a quiet LLM turn can
@@ -233,15 +234,15 @@ ACT = dict(
 # to run silently" is a deployment/harness choice, not a code constant.
 LONG_ACT_HEARTBEAT_MINUTES = int(os.environ.get("SDLC_LONG_ACTIVITY_HEARTBEAT_MINUTES", "60"))
 LONG_ACT_TIMEOUT_HOURS = int(os.environ.get("SDLC_LONG_ACTIVITY_TIMEOUT_HOURS", "4"))
-LONG_ACT = dict(
+LONG_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(hours=LONG_ACT_TIMEOUT_HOURS),
     heartbeat_timeout=timedelta(minutes=LONG_ACT_HEARTBEAT_MINUTES),
     retry_policy=RetryPolicy(maximum_attempts=2),
 )
-RECORD_ACT = dict(
+RECORD_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=5)
 )
-MEM_ACT = dict(
+MEM_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=5)
 )
 # The stage output a _cached_stage producer is trusted to emit: the cache-hit
@@ -249,19 +250,19 @@ MEM_ACT = dict(
 StageT = TypeVar("StageT", bound=BaseModel)
 # Code-review C2: deterministic substring check — retrying cannot change the
 # outcome, so maximum_attempts=1 (no retries). Matches the *_ACT convention.
-VERIFY_ACT = dict(
+VERIFY_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=1),
     retry_policy=RetryPolicy(maximum_attempts=1),
 )
 # E-33: pricing is a deterministic local table lookup — retrying cannot
 # change the outcome (VERIFY_ACT rationale); the caller treats failure as
 # "price unknown", so 1 attempt, short timeout.
-PRICE_ACT = dict(
+PRICE_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=1)
 )
 # E-32: export is best-effort — a single attempt, no retry hammering (a failing
 # export must never change the run's return string).
-EXPORT_ACT = dict(
+EXPORT_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=2), retry_policy=RetryPolicy(maximum_attempts=1)
 )
 
@@ -269,7 +270,7 @@ EXPORT_ACT = dict(
 # it, so a lost write is a correctness bug, not a missing report. The store's
 # writes are idempotent (sync uses ON CONFLICT DO NOTHING), so retrying is
 # safe.
-BOARD_ACT = dict(
+BOARD_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=5)
 )
 
@@ -277,14 +278,14 @@ BOARD_ACT = dict(
 # integration head. Generous start_to_close (> the activity's internal test
 # 600s + fallback 600s + lint 300s worst case); 2 attempts like the per-task
 # test run. It does not heartbeat, so no heartbeat_timeout.
-INTEG_ACT = dict(
+INTEG_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=30), retry_policy=RetryPolicy(maximum_attempts=2)
 )
 
 # Fan-out research. Durations follow the shape measured by the prior art:
 # planning is short and schema-constrained; a sub-question runs a full agent
 # with search and page fetches and legitimately takes minutes.
-RESEARCH_PLAN_ACT = dict(
+RESEARCH_PLAN_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=5), retry_policy=RetryPolicy(maximum_attempts=3)
 )
 # The heartbeat is the important knob. A sub-question can run for many
@@ -292,7 +293,7 @@ RESEARCH_PLAN_ACT = dict(
 # start_to_close before rescheduling a lost worker; with it, ~60s.
 # Invariant: stage.HEARTBEAT_INTERVAL_SECONDS < heartbeat_timeout <
 # start_to_close_timeout.
-RESEARCH_SQ_ACT = dict(
+RESEARCH_SQ_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=20),
     heartbeat_timeout=timedelta(seconds=60),
     retry_policy=RetryPolicy(
@@ -307,7 +308,7 @@ RESEARCH_SQ_ACT = dict(
         non_retryable_error_types=["BudgetExceeded", "UsageLimitExceeded"],
     ),
 )
-RESEARCH_SYNTH_ACT = dict(
+RESEARCH_SYNTH_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=10), retry_policy=RetryPolicy(maximum_attempts=3)
 )
 
@@ -447,7 +448,7 @@ def _requirements_for_downstream(reqs: ClarifiedRequirements) -> str:
     return reqs.model_dump_json(exclude={"dropped", "dimensions_probed"})
 
 
-def _long_act(role_cfg: RoleConfig | None = None) -> dict:
+def _long_act(role_cfg: RoleConfig | None = None) -> workflow.ActivityConfig:
     """LONG_ACT, with a role's own timeout/heartbeat overrides if it has any."""
     if role_cfg is None:
         return LONG_ACT
@@ -455,7 +456,7 @@ def _long_act(role_cfg: RoleConfig | None = None) -> dict:
     minutes = role_cfg.activity_heartbeat_minutes
     if hours is None and minutes is None:
         return LONG_ACT
-    return dict(
+    return workflow.ActivityConfig(
         start_to_close_timeout=timedelta(
             hours=hours if hours is not None else LONG_ACT_TIMEOUT_HOURS
         ),
@@ -910,7 +911,7 @@ class FeatureWorkflow(GateHost):
             lead_harness=lead_harness,
             model=model,
             prompt_sha="",
-            quality=QualityScore(score=quality_score, judge=judge),
+            quality=QualityScore(score=quality_score, judge=cast(JudgeKind, judge)),
             cost=cost_bag_from_spend(spend, cost_usd),
             speed=SpeedBag(
                 wall_clock_s=(ended - started).total_seconds(), started_at=started, ended_at=ended
@@ -1929,7 +1930,11 @@ class FeatureWorkflow(GateHost):
                     # around this call -- the E-17 deferred loop, the
                     # escalations, the cost accumulation -- is unchanged.
                     assert crew_layout is not None
-                    crew = await workflow.execute_child_workflow(
+                    assert crew_roles is not None
+                    # mypy cannot match the MethodAsyncSingleParam overload
+                    # once the id/execution_timeout keywords are present,
+                    # although the shapes are identical.
+                    crew = await workflow.execute_child_workflow(  # type: ignore[call-overload]
                         CrewTaskWorkflow.run,
                         CrewTaskInput(
                             layout=crew_layout.layout,
@@ -1982,6 +1987,7 @@ class FeatureWorkflow(GateHost):
                         ),
                         **_long_act(role_cfg),
                     )
+                assert run is not None
                 for esc in run.escalations:
                     await self._record_escalation(cfg, task, esc)
                 for esc in escalations_from_denials(run.denials):
@@ -2565,7 +2571,7 @@ class FeatureWorkflow(GateHost):
             research_role = cfg.roles.get("research")
             deps = ResearchDeps(
                 run_id=workflow.info().workflow_id,
-                provider=research_role.provider if research_role else "fake",
+                provider=(research_role.provider or "fake") if research_role else "fake",
                 max_searches=cfg.research.max_searches,
                 max_fetches=cfg.research.max_fetches,
                 max_cost_usd=cfg.research.max_cost_usd,
@@ -2955,7 +2961,7 @@ class FeatureWorkflow(GateHost):
             research_role = cfg.roles.get("research") if cfg.research_enabled else None
             architect_deps = ResearchDeps(
                 run_id=workflow.info().workflow_id,
-                provider=research_role.provider if research_role else "fake",
+                provider=(research_role.provider or "fake") if research_role else "fake",
                 max_searches=cfg.research.max_searches,
                 max_fetches=cfg.research.max_fetches,
                 max_cost_usd=cfg.research.max_cost_usd,
@@ -3588,12 +3594,14 @@ class FeatureWorkflow(GateHost):
             )
             return f"merged-not-deployed:{pr_url}"
 
-        plan = self._deploy_plan(cfg)
+        deploy_plan = self._deploy_plan(cfg)
         attempt = 1
         while True:
             report = await workflow.execute_child_workflow(
                 DeploymentWorkflow.run,
-                DeploymentInput(plan=plan, cfg=cfg.deploy, repo_path=repo_path, attempt=attempt),
+                DeploymentInput(
+                    plan=deploy_plan, cfg=cfg.deploy, repo_path=repo_path, attempt=attempt
+                ),
                 # Derived, never generated: replay must produce the same id,
                 # and a retry round stays identifiable in the Temporal UI.
                 id=f"{workflow.info().workflow_id}-deploy-{attempt}",

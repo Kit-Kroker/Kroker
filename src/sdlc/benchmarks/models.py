@@ -16,6 +16,21 @@ from pydantic import BaseModel, Field
 from ..agents.loader import HARNESS_ROLES, PROPOSER_ROLES
 from ..models import GatePolicy, HarnessKind, PlanDrift, SessionDigest
 
+# Who scored a stage attempt. The set is pinned by tests/test_judge_literal.py;
+# _stage_record threads a plain str and relies on runtime validation, so
+# callers that cannot prove the literal use a cast against this alias.
+JudgeKind = Literal[
+    "contract",
+    "llm_judge",
+    "human_override",
+    "error",
+    "oracle",
+    "deep_review",
+    "adversary",
+    "handoff",
+    "staged_rubric",
+]
+
 
 class Arm(BaseModel):
     """A named role→model mix: one cell of the model×role sweep. `default`
@@ -56,17 +71,7 @@ class QualityScore(BaseModel):
     # one here is not a type error at the call site -- _stage_record passes
     # `judge: str` straight through -- it is a ValidationError swallowed by the
     # caller's `except Exception`. tests/test_judge_literal.py pins the set.
-    judge: Literal[
-        "contract",
-        "llm_judge",
-        "human_override",
-        "error",
-        "oracle",
-        "deep_review",
-        "adversary",
-        "handoff",
-        "staged_rubric",
-    ]
+    judge: JudgeKind
 
 
 class CostBag(BaseModel):

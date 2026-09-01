@@ -44,7 +44,7 @@ with workflow.unsafe.imports_passed_through():
 # the notify activity already attempts every configured route internally, and
 # the short schedule_to_start fails fast when no worker registered notify
 # rather than hanging the gate forever.
-NOTIFY_ACT = dict(
+NOTIFY_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(seconds=30),
     schedule_to_start_timeout=timedelta(seconds=5),
     retry_policy=RetryPolicy(maximum_attempts=1),

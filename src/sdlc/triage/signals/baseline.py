@@ -17,6 +17,7 @@ from ...measurement import Measurement
 from ...toolchain.adapters import ToolchainAdapter
 from ..models import (
     M_TESTS_PRESENT,
+    FindingSeverity,
     FixClass,
     SignalResult,
     TriageFinding,
@@ -55,7 +56,7 @@ def find_test_files(paths: Sequence[str], test_globs: Sequence[str]) -> list[str
 
 
 def _finding(
-    rule: str, severity: str, detail: str, fix_class: FixClass, path: str = ""
+    rule: str, severity: FindingSeverity, detail: str, fix_class: FixClass, path: str = ""
 ) -> TriageFinding:
     return TriageFinding(
         signal=SIGNAL_ID,

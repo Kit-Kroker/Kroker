@@ -13,6 +13,7 @@ the feature run instead of pinning it open.
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import Any
 
 from pydantic import BaseModel
 from temporalio import workflow
@@ -36,25 +37,25 @@ with workflow.unsafe.imports_passed_through():
     )
 
 # Read-only and idempotent -- retrying is free.
-VERSION_ACT = dict(
+VERSION_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=2), retry_policy=RetryPolicy(maximum_attempts=3)
 )
 # Build failures are deterministic and will not improve; the second attempt
 # exists for registry/network blips.
-APPLY_ACT = dict(
+APPLY_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(hours=1),
     heartbeat_timeout=timedelta(minutes=10),
     retry_policy=RetryPolicy(maximum_attempts=2),
 )
 # ONE attempt on purpose: retrying a smoke check would mask the very reading
 # being collected. Readiness polling is the activity's own job.
-SMOKE_ACT = dict(
+SMOKE_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=15),
     heartbeat_timeout=timedelta(minutes=2),
     retry_policy=RetryPolicy(maximum_attempts=1),
 )
 # The safety operation, retried hardest.
-ROLLBACK_ACT = dict(
+ROLLBACK_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(hours=1),
     retry_policy=RetryPolicy(maximum_attempts=5, initial_interval=timedelta(seconds=2)),
 )
@@ -85,7 +86,7 @@ class DeploymentWorkflow:
             await workflow.execute_activity(deploy_current_version, act_in, **VERSION_ACT)
         ).version
 
-        def _report(**over) -> DeployReport:
+        def _report(**over: Any) -> DeployReport:
             base = dict(
                 deployed=False,
                 environment=inp.plan.environment,
@@ -94,7 +95,7 @@ class DeploymentWorkflow:
                 apply_detail=apply_detail,
             )
             base.update(over)
-            return DeployReport(**base)
+            return DeployReport.model_validate(base)
 
         async def _rollback(reason: str) -> DeployReport:
             if previous is None:

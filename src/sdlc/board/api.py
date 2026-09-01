@@ -18,6 +18,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from ..artifacts.store import ref_to_path
+from ..models import ArtifactRef
 from .models import (
     ArtifactVersion,
     BoardArtifact,
@@ -123,7 +124,7 @@ def create_app(store_factory: Callable[[], BoardStore] | None = None) -> FastAPI
             raise HTTPException(404, str(e)) from e
         if v.key != key:
             raise HTTPException(404, f"version {version_id} belongs to {v.key!r}, not {key!r}")
-        path = ref_to_path(v)
+        path = ref_to_path(ArtifactRef(kind=v.key, uri=v.uri, sha256=v.sha256))
         if not path.exists():
             # Metadata outlives the blob: the version row and its sha256 are
             # still authoritative history even when runs/ has been pruned.

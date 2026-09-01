@@ -16,6 +16,13 @@ from pydantic import BaseModel, Field, model_validator
 
 from ...measurement import CollectionState, Measurement
 
+# Literal aliases shared by the signal producers, so a producer's rule table
+# or helper can be typed by the contract instead of by plain `str` (which
+# pydantic would accept at runtime but the type checker refuses).
+SensitivityOrigin = Literal["table", "model", "dto"]
+TestabilitySeverity = Literal["blocks", "impedes", "smell"]
+SeverityHint = Literal["info", "low", "medium", "high", "critical"]
+
 
 class ScanSignalId(StrEnum):
     """BrownKit's scan signal ids, kept verbatim: they are the traceable
@@ -255,7 +262,7 @@ class SensitivityRecord(BaseModel):
 
     classification: Sensitivity
     entity: str
-    origin: Literal["table", "model", "dto"]
+    origin: SensitivityOrigin
     fields: list[str]
     # S3 entry points reading or writing the entity, by local_id. Empty when
     # S3 reported not_collected -- the owing category's reason states that,
@@ -276,7 +283,7 @@ class TestabilityFinding(BaseModel):
     critical/high/medium/low, and collapsing them loses what FR-916 needs.
     """
 
-    severity: Literal["blocks", "impedes", "smell"]
+    severity: TestabilitySeverity
     pattern: str  # "static-clock-access"
     detail: str
     recommended_seam: str
@@ -288,7 +295,7 @@ class TestabilityFinding(BaseModel):
 
 # pytest must not collect these -- their names begin with "test" because the
 # domain is "testability", not because they are tests (pytest honours __test__).
-TestabilityFinding.__test__ = False
+TestabilityFinding.__test__ = False  # type: ignore[attr-defined]
 
 
 def testability_identity(f: TestabilityFinding) -> str:
@@ -390,7 +397,7 @@ class SecurityObservation(BaseModel):
     category: str
     rule: str
     detail: str
-    severity_hint: Literal["info", "low", "medium", "high", "critical"]
+    severity_hint: SeverityHint
     path: str
     line: int | None = None
     evidence: str = ""  # verbatim quote from path@commit_sha
@@ -521,7 +528,7 @@ class CiStageRecord(BaseModel):
         return self
 
 
-CiStageRecord.__test__ = False
+CiStageRecord.__test__ = False  # type: ignore[attr-defined]
 
 
 class EnvironmentRecord(BaseModel):
@@ -583,7 +590,7 @@ class ScanUpstream(BaseModel):
 
 
 TestLevel.__test__ = False  # type: ignore[attr-defined]
-TestFileRecord.__test__ = False
+TestFileRecord.__test__ = False  # type: ignore[attr-defined]
 
 
 class InheritedProducer(BaseModel):

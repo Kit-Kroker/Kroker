@@ -22,6 +22,7 @@ import inspect
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 
 import yaml
 from pydantic_ai import Agent, RunContext
@@ -29,10 +30,15 @@ from pydantic_ai.exceptions import ToolFailed
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.toolsets import FunctionToolset
 
-try:
-    from pydantic_ai.ui import create_web_app
-except ImportError:
+if TYPE_CHECKING:
+    # The public `pydantic_ai.ui` namespace re-exports lazily via
+    # __getattr__, which mypy cannot see through; _web is the real home.
     from pydantic_ai.ui._web import create_web_app
+else:
+    try:
+        from pydantic_ai.ui import create_web_app
+    except ImportError:
+        from pydantic_ai.ui._web import create_web_app
 
 
 # tools.py's tool signatures are lazy string annotations (its
@@ -182,7 +188,6 @@ def build_agent(cfg: ChatConfig | None = None) -> Agent:
         instructions=cfg.instructions,
     )
 
-    @agent.instructions
     async def _orientation(ctx: RunContext[OperatorDeps]) -> str:
         """One line per open run, recomputed each turn (spec 5.4)."""
         if ctx.deps is None or ctx.deps.poller is None:
@@ -192,6 +197,10 @@ def build_agent(cfg: ChatConfig | None = None) -> Agent:
         except Exception:  # noqa: BLE001 -- orientation is a nicety
             return "fleet state unavailable right now; use the tools"
         return "Current fleet:\n" + render.orientation(snap)
+
+    # The decorator's static signature does not admit an async
+    # RunContext[OperatorDeps] callable; at runtime it registers exactly that.
+    agent.instructions(cast(Any, _orientation))
 
     return agent
 

@@ -454,6 +454,7 @@ async def main() -> None:
                     f"-> {a.action.workflow} banks={a.action.banks}"
                 )
             return
+        assert client is not None
         existing = await fetch_existing(client)
         changes = plan_changes(desired, existing)
         if args.dry_run:
@@ -526,7 +527,8 @@ async def main() -> None:
         # so the converter returns raw decoded JSON (a dict) and every model
         # method on it is an AttributeError. transport.py:139 queries by name
         # and validates with a TypeAdapter for the same reason.
-        report = await handle.query(TriageWorkflow.triage)
+        # (call-overload: mypy misses the MethodSyncNoParam overload here.)
+        report = await handle.query(TriageWorkflow.triage)  # type: ignore[call-overload]
         print("no triage yet" if report is None else report.model_dump_json(indent=2))
         return
 
@@ -536,8 +538,11 @@ async def main() -> None:
         repo = os.path.abspath(args.repo)
         wf_id = triage_workflow_id(repo)
         assert client is not None
+        # (call-overload: mypy misses the start_workflow overload for a
+        # run-method plus id/task_queue keywords -- the FeatureWorkflow form
+        # above only passes because its run() takes an optional argument.)
         handle = await client.start_workflow(
-            TriageWorkflow.run,
+            TriageWorkflow.run,  # type: ignore[call-overload,arg-type]
             TriageInput(
                 repo_dir=repo,
                 commit=args.commit,
@@ -565,7 +570,9 @@ async def main() -> None:
         assert client is not None
         handle = client.get_workflow_handle(args.id)
         identities = [s.strip() for s in args.identities.split(",") if s.strip()]
-        await handle.signal(TidyUpWorkflow.select_items, identities)
+        await handle.signal(  # type: ignore[call-overload]
+            TidyUpWorkflow.select_items, identities
+        )
         print(
             f"selected {len(identities)} finding(s); "
             f"approve with: sdlc approve --id {args.id} --gate tidy_up"
@@ -579,7 +586,7 @@ async def main() -> None:
         wf_id = tidyup_workflow_id(repo)
         assert client is not None
         handle = await client.start_workflow(
-            TidyUpWorkflow.run,
+            TidyUpWorkflow.run,  # type: ignore[call-overload,arg-type]
             TidyUpInput(
                 repo_dir=repo,
                 commit=args.commit,
@@ -630,7 +637,7 @@ async def main() -> None:
         wf_id = assess_workflow_id(repo)
         assert client is not None
         handle = await client.start_workflow(
-            AssessmentWorkflow.run,
+            AssessmentWorkflow.run,  # type: ignore[call-overload,arg-type]
             AssessmentInput(
                 repo_dir=repo,
                 commit=args.commit,

@@ -3,7 +3,10 @@ testable outside the workflow, called once from the retro stage."""
 
 from __future__ import annotations
 
+from typing import Literal, cast
+
 from ..models import (
+    ClarificationDimension,
     ClarificationOutcome,
     GateOutcomeSummary,
     RoleUsage,
@@ -97,10 +100,15 @@ def build_run_summary(
         ClarificationOutcome(
             question_id=e.data.get("question_id", "?"),
             question=e.data.get("question", ""),
-            answered_by=answered.get(e.data.get("question_id"), "unanswered"),
+            # Event data is untyped at this boundary; the model validates the
+            # Literal at construction, the cast only states that contract.
+            answered_by=cast(
+                Literal["human", "suggested", "unanswered"],
+                answered.get(e.data.get("question_id"), "unanswered"),
+            ),
             # E-85. Absent on pre-E-85 runs, "" on the flag-off path; both
             # mean "no dimension", and "" is not a valid enum member.
-            dimension=e.data.get("dimension") or None,
+            dimension=cast(ClarificationDimension | None, e.data.get("dimension") or None),
         )
         for e in trace
         if e.kind is RunEventKind.CLARIFICATION_ASKED

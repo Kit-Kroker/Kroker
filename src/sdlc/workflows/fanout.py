@@ -21,7 +21,7 @@ T = TypeVar("T")
 
 
 async def run_or_degrade(
-    activity: Any, arg: Any, opts: dict[str, Any], *, fallback: Callable[[], T]
+    activity: Any, arg: Any, opts: workflow.ActivityConfig, *, fallback: Callable[[], T]
 ) -> T:
     """Run one activity, or return `fallback()` if it could not run.
 

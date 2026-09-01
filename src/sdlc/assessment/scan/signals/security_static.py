@@ -35,6 +35,7 @@ from ..models import (
     ScanSignalResult,
     ScanUpstream,
     SecurityObservation,
+    SeverityHint,
     SignalOutput,
     SignalSource,
     family_of,
@@ -48,7 +49,7 @@ VERSION = 1
 _MAX_EVIDENCE = 400
 
 # (rule, severity_hint, confidence, pattern, detail)
-TLS_RULES: tuple[tuple[str, str, Confidence, re.Pattern[str], str], ...] = (
+TLS_RULES: tuple[tuple[str, SeverityHint, Confidence, re.Pattern[str], str], ...] = (
     (
         "ss1_tls_verification_disabled",
         "high",
@@ -100,7 +101,7 @@ VALIDATION_MARKERS = re.compile(
 def _observation(
     category: str,
     rule: str,
-    severity: str,
+    severity: SeverityHint,
     confidence: Confidence,
     detail: str,
     path: str,

@@ -20,6 +20,7 @@ from collections.abc import Mapping
 from ...measurement import Measurement
 from ...toolchain.adapters import ToolchainAdapter
 from ..models import (
+    FindingSeverity,
     FixClass,
     SignalResult,
     TriageFinding,
@@ -107,7 +108,7 @@ def clone_groups(blobs: Mapping[str, str], window: int) -> list[list[tuple[str, 
 
 def _finding(
     rule: str,
-    severity: str,
+    severity: FindingSeverity,
     detail: str,
     fix_class: FixClass,
     path: str = "",

@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from ...measurement import Measurement
 from ..advisories import AdvisoryResult
 from ..models import (
+    FindingSeverity,
     FixClass,
     SignalResult,
     TriageFinding,
@@ -278,7 +279,7 @@ def _provides(name: str) -> tuple[str, ...]:
 
 def _finding(
     rule: str,
-    severity: str,
+    severity: FindingSeverity,
     detail: str,
     fix_class: FixClass,
     path: str = "",

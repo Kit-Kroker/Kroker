@@ -32,6 +32,7 @@ from ..models import (
     SignalOutput,
     SignalSource,
     TestabilityFinding,
+    TestabilitySeverity,
     family_of,
 )
 from ..testpaths import is_test_path
@@ -48,7 +49,7 @@ class _Pattern(BaseModel):
     model_config = {"frozen": True, "arbitrary_types_allowed": True}
 
     name: str
-    severity: str  # blocks | impedes | smell
+    severity: TestabilitySeverity  # blocks | impedes | smell
     regex: re.Pattern[str]
     seam: str
     detail: str

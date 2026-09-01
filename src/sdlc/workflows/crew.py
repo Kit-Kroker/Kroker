@@ -52,11 +52,11 @@ EXIT_BUDGET = 68
 EXIT_INTENT_GAP = 69
 
 # Read-only and cheap; retrying is free.
-FS_ACT = dict(
+FS_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=2), retry_policy=RetryPolicy(maximum_attempts=3)
 )
 # Commits. Retrying a failed `git add` is safe; retrying it forever is not.
-GIT_ACT = dict(
+GIT_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=5), retry_policy=RetryPolicy(maximum_attempts=2)
 )
 

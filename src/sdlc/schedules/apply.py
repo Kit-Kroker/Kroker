@@ -7,6 +7,8 @@ effect of a worker restart. See the spec's "explicit CLI apply" decision.
 
 from __future__ import annotations
 
+from typing import Literal, cast
+
 from temporalio.client import (
     Client,
     Schedule,
@@ -15,7 +17,12 @@ from temporalio.client import (
     ScheduleUpdate,
 )
 
-from ..models import KNOWN_SCHEDULE_WORKFLOWS, ScheduleAsset
+from ..models import (
+    KNOWN_SCHEDULE_WORKFLOWS,
+    ScheduleAction,
+    ScheduleAsset,
+    ScheduleSpecAsset,
+)
 from ..workflows.reflect import ReflectScheduleInput
 from .reconcile import Change
 
@@ -61,19 +68,23 @@ def from_temporal(sid: str, sched: Schedule) -> ScheduleAsset | None:
         return None
     if not sched.spec.cron_expressions:
         return None
-    inp = action.args[0]
+    # Tolerates both a decoded ReflectScheduleInput and the plain dict the
+    # default converter can hand back for an untyped arg.
+    inp = ReflectScheduleInput.model_validate(action.args[0])
     return ScheduleAsset(
         id=sid,
-        spec={
-            "cron": sched.spec.cron_expressions[0],
-            "timezone": sched.spec.time_zone_name or "UTC",
-        },
-        action={
-            "workflow": action.workflow,
-            "banks": inp.banks,
-            "backend": inp.backend,
-            "base_url": inp.base_url,
-        },
+        spec=ScheduleSpecAsset(
+            cron=sched.spec.cron_expressions[0],
+            timezone=sched.spec.time_zone_name or "UTC",
+        ),
+        action=ScheduleAction(
+            workflow=action.workflow,
+            banks=inp.banks,
+            # ReflectScheduleInput.backend is a plain str; ScheduleAction
+            # re-validates the literal at construction.
+            backend=cast(Literal["fake", "hindsight"], inp.backend),
+            base_url=inp.base_url,
+        ),
     )
 
 
@@ -106,9 +117,13 @@ async def apply_changes(
         elif c.action == "update":
             handle = client.get_schedule_handle(c.id)
             asset = by_id[c.id]
+
             # update() takes an updater that returns a ScheduleUpdate, never a
             # bare Schedule. The default-arg bind avoids the late-binding trap.
-            await handle.update(lambda _inp, a=asset: ScheduleUpdate(schedule=to_temporal(a)))
+            def _updater(_: object, a: ScheduleAsset = asset) -> ScheduleUpdate:
+                return ScheduleUpdate(schedule=to_temporal(a))
+
+            await handle.update(_updater)
             results.append(f"updated {c.id}")
         elif c.action == "noop":
             pass

@@ -16,6 +16,7 @@ import statistics
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import TypedDict
 
 from pydantic import BaseModel, Field
 
@@ -160,7 +161,12 @@ def decide(results: dict, *, delta_min: float = 0.05) -> PromptGateResult:
 
     base = [s for s in _scores(base_rows) if s is not None]
     work = [s for s in _scores(work_rows) if s is not None]
-    kept = {"scores_baseline": base, "scores_working": work}
+
+    class _KeptScores(TypedDict):
+        scores_baseline: list[float]
+        scores_working: list[float]
+
+    kept: _KeptScores = {"scores_baseline": base, "scores_working": work}
 
     if not base_rows:
         return PromptGateResult(

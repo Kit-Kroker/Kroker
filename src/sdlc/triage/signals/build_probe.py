@@ -18,6 +18,7 @@ from ...measurement import Measurement
 from ..models import (
     M_BUILDABLE,
     M_RUNNABLE,
+    FindingSeverity,
     FixClass,
     SignalResult,
     TriageFinding,
@@ -43,7 +44,9 @@ def _tail(text: str) -> str:
     return text[-MAX_DETAIL_CHARS:]
 
 
-def _finding(rule: str, severity: str, detail: str, fix_class: FixClass) -> TriageFinding:
+def _finding(
+    rule: str, severity: FindingSeverity, detail: str, fix_class: FixClass
+) -> TriageFinding:
     return TriageFinding(
         signal=SIGNAL_ID, rule=rule, severity=severity, detail=detail, fix_class=fix_class
     )

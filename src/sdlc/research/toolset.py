@@ -4,6 +4,8 @@ One core (the research agent), two callers (the stage and this tool)."""
 
 from __future__ import annotations
 
+from typing import cast
+
 from ..models import Gap, ResearchBrief
 from .deps import BudgetExceeded, ResearchDeps
 
@@ -40,7 +42,7 @@ async def research_subquery(deps: ResearchDeps, question: str) -> ResearchBrief:
             "missing) — cannot service an architect research call"
         )
     try:
-        return (await t_research.run(question, deps=deps)).output
+        return cast(ResearchBrief, (await t_research.run(question, deps=deps)).output)
     except BudgetExceeded as exc:
         return ResearchBrief(
             gaps=[

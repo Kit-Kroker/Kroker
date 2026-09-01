@@ -18,7 +18,7 @@ import yaml
 
 # Absolute: promptfoo loads this file standalone (see provider.py).
 from sdlc.agents.loader import model_family, model_id
-from sdlc.benchmarks.judge import JudgeInput, judge_artifact
+from sdlc.benchmarks.judge import JudgeInput, _judge_sync
 from sdlc.eval.verdict import JUDGE_UNAVAILABLE
 
 # role -> the key used in case.yaml's `rubrics:` map. Migrated verbatim from
@@ -90,7 +90,7 @@ def grade(output: str, context: dict) -> dict:
     except RubricError as e:
         return {"pass": False, "score": 0.0, "reason": str(e)}
 
-    qs = judge_artifact.sync(
+    qs = _judge_sync(
         JudgeInput(artifact_json=output, rubric=rubric, author_model=author, judge_model=judge)
     )
     if qs.score is None:

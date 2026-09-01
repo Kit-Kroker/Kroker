@@ -143,7 +143,9 @@ def compute_agreement(
     agree = sum(1 for d in diffs if d <= epsilon + 1e-9) / n
     mae = sum(diffs) / n
     sp = _spearman([h for h, _ in pairs], [j for _, j in pairs])
-    verdict = "calibrated" if agree >= threshold else "uncalibrated"
+    verdict: Literal["calibrated", "uncalibrated"] = (
+        "calibrated" if agree >= threshold else "uncalibrated"
+    )
     return AgreementStats(
         n=n,
         epsilon=epsilon,
@@ -174,10 +176,11 @@ class CalibrationReport(BaseModel):
 
 
 def _default_judge(inp: JudgeInput) -> QualityScore:
-    # judge_artifact.sync is attached in judge.py as a test/sync convenience.
-    from .judge import judge_artifact
+    # _judge_sync is the synchronous core; judge_artifact wraps it for the
+    # activity path (see judge.py).
+    from .judge import _judge_sync
 
-    return judge_artifact.sync(inp)
+    return _judge_sync(inp)
 
 
 def run_calibration(

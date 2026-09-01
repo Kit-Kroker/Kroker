@@ -21,7 +21,7 @@ from typing import Literal
 from pydantic import BaseModel, TypeAdapter
 
 from ..models import GateOutcome
-from ..pending import PendingDecision
+from ..pending import ClarifyPending, PendingDecision
 from .contract import Channel, ReferenceChannel, Reply
 
 PENDING_QUERY = "pending_decisions"
@@ -59,10 +59,9 @@ class Ambiguous(SelectorError):
 
 def describe(d: PendingDecision) -> str:
     """One ASCII line naming a pending item, for listings."""
-    gate = getattr(d, "gate", None)
-    if gate is not None:
-        return f"{gate} (round {d.round})"
-    return f"{d.key}: {d.question}"
+    if isinstance(d, ClarifyPending):
+        return f"{d.key}: {d.question}"
+    return f"{d.gate} (round {d.round})"
 
 
 def _listing(candidates: Sequence[PendingDecision]) -> str:
@@ -198,8 +197,7 @@ def _message(run_id: str, pending: PendingDecision, reply: Reply, confirmed: boo
             f"surface may have decided it first, or the workflow has not "
             f"processed the signal yet."
         )
-    gate = getattr(pending, "gate", None)
-    if gate is not None:
-        assert reply.outcome is not None
-        return f"{_PAST[reply.outcome]} gate '{gate}' (round {pending.round}) on {run_id}"
-    return f"answered {pending.key} on {run_id}"
+    if isinstance(pending, ClarifyPending):
+        return f"answered {pending.key} on {run_id}"
+    assert reply.outcome is not None
+    return f"{_PAST[reply.outcome]} gate '{pending.gate}' (round {pending.round}) on {run_id}"

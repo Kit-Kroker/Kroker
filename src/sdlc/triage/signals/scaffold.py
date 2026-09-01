@@ -25,7 +25,7 @@ from pydantic import BaseModel
 
 from ...measurement import Measurement
 from ...toolchain.adapters import ToolchainAdapter
-from ..models import M_STRUCTURE, FixClass, SignalResult, TriageFinding
+from ..models import M_STRUCTURE, FindingSeverity, FixClass, SignalResult, TriageFinding
 from .dependencies import imported_modules
 
 SIGNAL_ID = "scaffold"
@@ -142,7 +142,12 @@ def scaffolded_paths(blobs: Mapping[str, str]) -> dict[str, str]:
 
 
 def _finding(
-    rule: str, severity: str, detail: str, fix_class: FixClass, path: str = "", evidence: str = ""
+    rule: str,
+    severity: FindingSeverity,
+    detail: str,
+    fix_class: FixClass,
+    path: str = "",
+    evidence: str = "",
 ) -> TriageFinding:
     return TriageFinding(
         signal=SIGNAL_ID,

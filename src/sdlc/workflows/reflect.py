@@ -20,7 +20,7 @@ with workflow.unsafe.imports_passed_through():
 
 # Reflect consolidates a whole bank — slower than the 30s recall/retain ops
 # in feature.py's MEM_ACT, hence the longer ceiling.
-REFLECT_ACT = dict(
+REFLECT_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=10), retry_policy=RetryPolicy(maximum_attempts=3)
 )
 

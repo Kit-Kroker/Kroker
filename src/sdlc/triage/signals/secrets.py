@@ -20,6 +20,7 @@ import re
 from collections.abc import Sequence
 
 from ..models import (
+    FindingSeverity,
     FixClass,
     TriageFinding,
     dedupe_by_identity,
@@ -125,7 +126,7 @@ _GENERATOR_PLACEHOLDER = re.compile(r"^django-insecure-")
 
 def _finding(
     rule: str,
-    severity: str,
+    severity: FindingSeverity,
     detail: str,
     fix_class: FixClass,
     path: str = "",

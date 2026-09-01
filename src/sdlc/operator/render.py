@@ -17,7 +17,7 @@ from ..channels.contract import default_render
 from ..channels.inbox import RunInbox
 from ..dashboard.fleet import FleetSnapshot
 from ..models import RunState, RunSummary
-from ..pending import PendingDecision
+from ..pending import ClarifyPending, PendingDecision
 
 ORIENTATION_CAP = 20
 
@@ -33,8 +33,10 @@ def _pending_summary(pending: Sequence[PendingDecision]) -> str:
         return "pending: none"
     parts = []
     for d in pending:
-        gate = getattr(d, "gate", None)
-        parts.append(f"{gate} (round {d.round})" if gate else d.key)
+        if isinstance(d, ClarifyPending):
+            parts.append(d.key)
+        else:
+            parts.append(f"{d.gate} (round {d.round})")
     return "pending: " + ", ".join(parts)
 
 

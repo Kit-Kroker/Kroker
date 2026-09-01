@@ -100,7 +100,10 @@ def default_translate(d: PendingDecision, reply: Reply) -> SignalCall:
         return SignalCall(signal="answer_question", question_id=d.key, answer=reply.text)
     if isinstance(d, (StageGatePending, TaskEscalationPending, MergeGatePending)):
         # every gate variant -> submit_gate_decision; gate/round come from the
-        # pending item, so a reply can never land on the wrong round.
+        # pending item, so a reply can never land on the wrong round. A gate
+        # reply carries an outcome by contract -- a bare-text reply is a
+        # ClarifyPending, which took the branch above.
+        assert reply.outcome is not None
         guidance = reply.text if reply.outcome is GateOutcome.REVISE else None
         return SignalCall(
             signal="submit_gate_decision",

@@ -23,6 +23,11 @@ from pydantic import (
 
 from .measurement import CollectionState, Measurement
 
+# The severity scale a deterministic security scanner reports on (SS1/SS3's
+# finding contract). Triage's four-valued scale is spelled separately in
+# triage/models.py on purpose: same shape, different bounded context.
+SecuritySeverity = Literal["critical", "high", "medium", "low"]
+
 
 class ProjectMode(StrEnum):
     GREENFIELD = "greenfield"
@@ -558,7 +563,7 @@ class QAReport(BaseModel):
 
 
 class SecurityFinding(BaseModel):
-    severity: Literal["critical", "high", "medium", "low"]
+    severity: SecuritySeverity
     rule: str  # which scanner rule matched
     detail: str
     path: str = ""
