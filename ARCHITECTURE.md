@@ -4,8 +4,8 @@
 |---|---|
 | Status | Draft v1.0 |
 | Date | 2026-07-02 |
-| Last amended | 2026-09-01 — the crew, a multi-agent code stage (§§2, 3, 4, 14; E-88) |
-| Related | `PRD.md`, `SDLC-spec.md` (v2 + v2.1) — contracts in `src/factory/models/` are the source of truth |
+| Last amended | 2026-09-01 — the crew, a multi-agent code stage (§§2, 3, 4; E-88); §14 regenerated from `main`; §7 marked P4/unbuilt |
+| Related | `PRD.md`, `SDLC-spec-v2.md`, `ROADMAP.md`, `BENCHMARK.md` — contracts in `src/sdlc/models.py` are the source of truth |
 
 ---
 
@@ -57,7 +57,7 @@ through its validated diff artifact.
 |---|---|---|
 | Temporal server | run state, event history, timers, signals, schedules, visibility | business logic |
 | FactoryWorkflow | stage sequencing, gate waits, fix-loop bounds, budget counters | I/O, subprocesses, memory, nondeterminism |
-| MaintenanceWorkflow | DAPER cycle, repair gating, child factory runs | direct code patches |
+| MaintenanceWorkflow **(P4 — designed, not built)** | DAPER cycle, repair gating, child factory runs | direct code patches |
 | Proposer agents | typed artifact proposals (Requirements … RepairPlan) | tool calls, file access |
 | Harness runner activity | `claude -p` / `opencode run` execution, heartbeats, checkpoint commits, cost capture | leaving the worktree; choosing its own permissions |
 | CrewTaskWorkflow (E-88) | the code stage's round loop when a task runs as a crew: turn order, the four brakes, per-round checkpoints, its own `tool_approval` / `crew_question` gates | subprocesses and file I/O (every turn is an activity); writing repository files through any role but the lead |
@@ -160,7 +160,7 @@ Agent classes map to Temporal constructs (this is a rule, not a convention):
 | Automation (one LLM call) | activity via TemporalAgent | Product, Clarifier, Architect, Planner, Reviewer, Analyst, QA analyst, MergeVerdict, detector, repair planner |
 | Long-running (tools, iteration) | heartbeating activity | Developer / Resolver harness runs; optional Reviewer *deep-review* tier |
 | Conversational | external client ↔ workflow signals/queries | operators via MCP/dashboard |
-| Proactive | workflow (timer loop / Schedule) | MaintenanceWorkflow, nightly reflect |
+| Proactive | workflow (timer loop / Schedule) | nightly reflect; MaintenanceWorkflow **(P4, unbuilt)** |
 | Routing | deterministic workflow branch | intake (greenfield / brownfield / repair) |
 
 Agents are configuration (`config/agents.yaml`): role → kind
@@ -318,6 +318,15 @@ scores against human overrides and retains miscalibration, feeding threshold
 tuning.
 
 ## 7. Maintenance loop (DAPER)
+
+> ⚠️ **Status: designed, not built (P4).** `MaintenanceWorkflow` does not
+> exist —
+> `grep -rniE "MaintenanceWorkflow|DetectionReport|RepairPlan|DAPER" src/ --include=*.py`
+> returns nothing, and FR-501/502/503 are open. The section below is a
+> *design*, written in present tense; read every sentence in it as "will".
+> ROADMAP E-14 (the DAPER timer as a schedule asset) is explicitly blocked on
+> this workflow existing at all, and three external-idea candidates (A4, B2,
+> D1 in `docs/external-ideas-2026-09.md`) land on it and are blocked with it.
 
 Per-project proactive workflow: wake on timer or `nudge` signal →
 **Detect** (deterministic signal collection — CI, deploy health, quarantined
@@ -720,91 +729,96 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
 
 ## 14. Repository layout
 
-The top-level split mirrors the architecture layers, so file placement is
-always answerable by "which layer owns it." The `workflows/` vs
-`activities/` boundary is Temporal's determinism requirement and is enforced
-by an import-linter rule: nothing under `workflows/` may import
-`subprocess`, HTTP clients, the memory client, or the harness package.
+**Regenerated from `main` 2026-09-01.** The previous version of this section
+was a *design* tree that had drifted from the repository it claimed to
+describe: it named `src/factory/` (the package is `src/sdlc/`), `models/` and
+`activities/` as packages (both are single modules), `workflows/factory.py`
+(it is `feature.py`), `harness/claude_code.py` (it is `adapters.py`), and a
+`config/` directory that does not exist — while omitting roughly twenty real
+packages. What follows is the tree as it is; annotations say what each part
+owns.
+
+The `workflows/` vs everything-else split is Temporal's determinism
+requirement: workflow modules may not do I/O, and reach non-deterministic code
+only through activities or an explicit
+`with workflow.unsafe.imports_passed_through():` block. That rule is enforced
+at runtime by Temporal's workflow sandbox — there is no import-linter in this
+repo, and a violation surfaces as a sandbox error, not a lint failure.
 
 ```
-agentic-sdlc/
-├── PRD.md · ARCHITECTURE.md · SDLC-spec.md      # this document set
-├── config/
-│   ├── agents.yaml            # §2/§4: roles, kinds, models, context budgets, memory policies
-│   ├── pipeline.yaml          # gates (policy + confidence threshold), execution mode,
-│   │                          #   session bounds, budgets — per project
-│   ├── harness/               # claude-settings.json, opencode.json (pinned permissions)
-│   └── memory.yaml            # Hindsight URL, banks, scrub rules
-├── prompts/                   # one file per role + _shared_rules.md; versioned assets
-│                              #   (FR-806: edit → offline eval → deploy; in memo hash)
-├── crew/                      # §4: a crew as assets — layouts/, roles/, skills/<role>/SKILL.md
-├── src/factory/
-│   ├── models/                # §4-contracts — source of truth
-│   │   ├── artifacts.py       #   Requirements … CodeArtifact(files|diff_ref),
-│   │   │                      #   ValidationContract, HandoffSummary
-│   │   ├── refs.py            #   ArtifactRef, RecallSnapshot
-│   │   ├── gates.py           #   GateDecision, GatePolicy(+threshold)
-│   │   ├── maintenance.py     #   MaintenanceConfig, DetectionReport, RepairPlan
-│   │   ├── config.py          #   PipelineConfig(execution_mode, max_session_resumes), RoleConfig
-│   │   └── validators.py      #   Kahn DAG check, delta-vs-CodebaseMap, union checks,
-│   │                          #   cross-harness reviewer rule
-│   ├── workflows/             # deterministic only (import-linted)
-│   │   ├── factory.py         #   FactoryWorkflow: 15-stage DAG, scheduling (serial|waves
-│   │   │                      #   + overlap serialization), handoff flow
-│   │   ├── task.py            #   per-task loop: contract-first, resume-bounded sessions
-│   │   ├── gates.py           #   signal-wait gate helper + pending_decisions publishing
-│   │   ├── crew.py            #   CrewTaskWorkflow (GateHost): the round loop + brakes
-│   │   ├── maintenance.py     #   DAPER loop (report = re-detect)
-│   │   └── retro.py           #   scheduled reflect
-│   ├── activities/            # all non-determinism
-│   │   ├── harness.py         #   run_coding_task (heartbeats, checkpoint commits, cost)
-│   │   ├── repo.py            #   clone, worktree (from integration head),
-│   │   │                      #   get_task_diff (vs branch point), merge_into_integration, PR
-│   │   ├── qa.py              #   tests, coverage, lint
-│   │   ├── memory.py          #   recall_snapshot, retain, reflect
-│   │   ├── cartography.py     #   brownfield repo analysis (programmatic access)
-│   │   ├── notify.py          #   Slack/email push with deep links
-│   │   └── deploy.py
-│   ├── harness/               # CodingHarness protocol; claude_code.py, opencode.py
-│   ├── crew/                  # E-88: roles/layouts as files, the round's non-determinism
-│   │   ├── config.py          #   CrewRole, CrewLayout — the declarative shape
-│   │   ├── loader.py          #   boot checks: skill files, CLI resolvability, ADR-6 families
-│   │   ├── models.py          #   RoundRecord, RoundAdvisory, RoundReview, CrewQuestion
-│   │   ├── activities.py      #   prepare_crew, run_crew_turn, read_round, checkpoint_round
-│   │   └── worktree.py        #   .workspace/orchestration/<layout>/round-N/
-│   ├── agents/                # loader.py (agents.yaml → TemporalAgent), deterministic.py
-│   ├── memory/                # Hindsight client wrapper, scrub.py
-│   ├── board/                 # ADR-21: project-level artifact versions + task status
-│   │   ├── models.py          #   BoardArtifact/ArtifactVersion/BoardTask/BoardEvent
-│   │   ├── schema.py          #   idempotent SQLite DDL; $SDLC_BOARD_DB
-│   │   ├── transitions.py     #   task state machine (one table, both writers)
-│   │   ├── store.py           #   BoardStore — all SQL, transactions, optimistic locking
-│   │   ├── activities.py      #   workflow write path (in-process, no HTTP)
-│   │   └── api.py             #   agent read/write path (FastAPI)
-│   ├── memoization/           # content-addressed activity cache; per-run watermark (ADR-5)
-│   ├── hooks/                 # risk classes (pre_tool), budgets, env allowlist
-│   ├── observability/         # history → events.jsonl/report.html; trajectory export (P5)
-│   ├── worker.py              # two queues: ai-sdlc, ai-sdlc-harness
-│   └── cli.py
+Kroker/
+├── PRD.md · ARCHITECTURE.md · ROADMAP.md · BENCHMARK.md · SDLC-spec-v2.md
+├── agents/                    # §2/§4: 17 role folders (E-1/E-2, "agents as folders")
+│   ├── registry.yaml          #   role → kind, harness/model, prompts, memory policy
+│   └── <role>/                #   agent.yaml + instructions.md, versioned as assets
+│                              #   clarify · architect · planner · dev · reviewer · qa ·
+│                              #   analyst · adversary · deep_review · merge_verdict ·
+│                              #   research · risk · discover · handoff · test ·
+│                              #   devops · devops_planner
+├── crew/                      # §4: the multi-role code stage (E-88)
+│   ├── layouts/code.yaml      #   which roles assemble, round bound, deliverable, limits
+│   ├── roles/*.yaml           #   coder (lead, writes) · critic (non-writing, other vendor)
+│   └── skills/<role>/SKILL.md #   each role's round protocol
+├── policy/                    # containment.yaml (hook + native rules), notifications.yaml
+├── schedules/                 # nightly-reflect.yaml → Temporal Schedules (E-12/E-13)
+├── blueprints/                # apqc.yaml — process taxonomy for assessment
+├── benchmarks/cases/<case>/   # §9.8 golden cases: feature spec, rubrics, oracle/
+├── src/sdlc/
+│   ├── models.py              # THE contract module: artifacts, gates, config, harness
+│   │                          #   results, HarnessKind, PipelineConfig — source of truth
+│   ├── activities.py          # the main non-deterministic surface: harness runs, git,
+│   │                          #   worktrees, tests, PRs, containment resolution
+│   ├── workflows/             # deterministic only (Temporal sandbox)
+│   │   ├── feature.py         #   FeatureWorkflow — the 15-stage DAG, gates, fix loops
+│   │   ├── crew.py            #   CrewTaskWorkflow (E-88) — the round loop + brakes
+│   │   ├── gates.py           #   GateHost — signal-wait gates + pending publication
+│   │   ├── fanout.py          #   clarify probe fan-out (E-85)
+│   │   ├── deployment.py      #   stage-13 child: apply → smoke → rollback (E-67)
+│   │   ├── assessment.py · scanning.py · triage.py · tidyup.py   # Tier 0/2 (E-40…E-56)
+│   │   └── reflect.py         #   scheduled reflect (E-13)
+│   ├── crew/                  # E-88: config.py, loader.py, models.py, activities.py,
+│   │                          #   worktree.py — roles/layouts as files, the round's I/O
+│   ├── harness/               # adapters.py (claude_code · opencode · cursor + registry),
+│   │                          #   containment.py (policy → predicates), hook.py, session.py
+│   ├── agents/                # registry loader → pydantic-ai Agent / TemporalAgent
+│   ├── memory/                # Hindsight client + protocol, scrub, query hashing
+│   ├── memoization/           # content-addressed activity cache (ADR-5)
+│   ├── artifacts/             # claim-check store, capture, read, retention
+│   ├── board/                 # ADR-21: artifact versions, task lifecycle, events, API
+│   ├── benchmarks/            # eval harness: judge, scoring, sc_rollup, drift, oracle,
+│   │                          #   the matrices (error/task/waste/agreement), importers/
+│   ├── assessment/            # Tier 2 EDCR: scan/ signals, discover/, risk/
+│   ├── triage/                # Tier 0: admission, signals/, delta, advisories
+│   ├── capability/            # CapabilityMap identity, fingerprint, corrections (E-47)
+│   ├── context/               # brownfield: classify, CodebaseMap, delta, render
+│   ├── clarify/               # MAC-style probe fan-out + deterministic merge (E-85)
+│   ├── research/              # grounded briefs: toolset, tavily, verify, budget (FR-107)
+│   ├── channels/              # contract.py, transport.py, inbox.py — one channel
+│   │                          #   abstraction behind every surface (E-6/E-7/E-8, ADR-8)
+│   ├── dashboard/             # fleet poller, REST + SSE api, channel adapter (E-10)
+│   ├── operator/              # chat agent's tool layer — 12 verbs (E-86)
+│   ├── notify/                # routes, schedule, notifiers, render (E-9)
+│   ├── observability/         # trace, export (events.jsonl/report.html), usage, logfire
+│   ├── eval/                  # promptfoo prompt gate + verdicts (E-82)
+│   ├── deploy/ · toolchain/ · schedules/ · tidyup/
+│   ├── gate.py                # DeterministicQualityGate + ABSOLUTE_FLOOR
+│   ├── pending.py             # PendingDecision — the four gate variants
+│   ├── handoff.py · grounding.py · measurement.py · pricing.py · naming.py · prompts.py
+│   ├── worker.py              # queues ai-sdlc / ai-sdlc-harness; registers everything
+│   └── cli.py · cli_roles.py
 ├── interfaces/
-│   ├── dashboard/             # FastAPI api.py + static/index.html (§8)
-│   ├── mcp/                   # FastMCP operator server (§8)
-│   └── slack/                 # webhook → signals
-├── deploy/                    # docker-compose (temporal, hindsight+pg, minio),
-│                              #   Dockerfile.worker, Dockerfile.harness-worker (§9)
-├── tests/
-│   ├── unit/ · workflows/     # validators, parsers; time-skipping gate/signal tests
-│   ├── integration/           # real Hindsight container
-│   └── fakes/fake_harness.py  # deterministic claude/opencode stand-in for CI
-├── benchmarks/                # §9.8: eval harness — golden cases, rubric judging (E-27)
-│   ├── workflow.py            #   runs cases through FeatureWorkflow; per-cell harness/model/memory
-│   └── cases/<case>/          #   feature spec + rubrics; oracle/ = held-out acceptance suite (E-31)
-└── runs/                      # runtime, gitignored: worktrees, artifacts, report.html
-    ├── board.sqlite3          #   the board's mutable graph ($SDLC_BOARD_DB)
-    └── <run_id>/artifacts/    #   published artifact bodies, <key>-v<n>.json
+│   ├── dashboard/api/main.py  # composes the board + dashboard routers (+ /chat)
+│   ├── dashboard/frontend/    # Vue 3 SPA against the live API
+│   └── chat/                  # operator chat agent assets (E-86)
+├── tests/                     # ~466 files, flat; fakes/ and fixtures/ beneath
+│                              #   markers: slow · temporal · live · docker · crew ·
+│                              #   prompt_eval, all deselected by default addopts
+├── docs/superpowers/{specs,plans}/   # one design doc + one plan per epic
+├── Dockerfile · docker-compose.yml   # §9: temporal, hindsight+pg, minio, workers
+└── runs/                      # gitignored runtime: worktrees, artifacts, board.sqlite3
 ```
 
-A reference implementation of the core loop (models, harness adapters,
-FactoryWorkflow with contract-first task loop, dashboard, MCP server,
-maintenance workflow) exists as the project skeleton; it uses a flattened
-module layout and should be reorganized into the tree above as P1 hardening.
+**Not in this tree, and deliberately:** there is no `config/` directory (agent
+configuration lives in `agents/`, policy in `policy/`, and pipeline settings
+are `PipelineConfig` defaults overridden per run), no `interfaces/mcp/` (FR-602
+is open — E-11), and no maintenance package (§7 is P4, unbuilt).
