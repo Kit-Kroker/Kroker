@@ -14,26 +14,36 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _fixture(tmp_path: Path) -> Path:
-    fx = EvalFixture(role="clarify", case="c", prompt="build a login page",
-                     model="anthropic:glm-5.2", source_run_id="_built")
+    fx = EvalFixture(
+        role="clarify",
+        case="c",
+        prompt="build a login page",
+        model="anthropic:glm-5.2",
+        source_run_id="_built",
+    )
     p = tmp_path / "c.json"
     p.write_text(fx.model_dump_json(), encoding="utf-8")
     return p
 
 
 def _opts(tmp_path: Path, ref: str = "worktree") -> dict:
-    return {"config": {"role": "clarify", "instructions_ref": ref,
-                       "fixture_path": str(_fixture(tmp_path)),
-                       "agents_dir": str(AGENTS), "repo_root": str(ROOT)}}
+    return {
+        "config": {
+            "role": "clarify",
+            "instructions_ref": ref,
+            "fixture_path": str(_fixture(tmp_path)),
+            "agents_dir": str(AGENTS),
+            "repo_root": str(ROOT),
+        }
+    }
 
 
 def test_returns_output_key_with_serialized_artifact(tmp_path, monkeypatch):
-    monkeypatch.setattr("sdlc.eval.promptfoo.provider._MODEL_OVERRIDE",
-                        TestModel())
+    monkeypatch.setattr("sdlc.eval.promptfoo.provider._MODEL_OVERRIDE", TestModel())
     res = call_api("ignored", _opts(tmp_path), {})
     assert "output" in res
     assert res.get("error") is None
-    json.loads(res["output"])          # proposer output serializes to JSON
+    json.loads(res["output"])  # proposer output serializes to JSON
 
 
 def test_always_returns_output_even_on_error(tmp_path):
@@ -53,8 +63,7 @@ def test_never_raises_on_missing_fixture(tmp_path):
 
 
 def test_reports_latency(tmp_path, monkeypatch):
-    monkeypatch.setattr("sdlc.eval.promptfoo.provider._MODEL_OVERRIDE",
-                        TestModel())
+    monkeypatch.setattr("sdlc.eval.promptfoo.provider._MODEL_OVERRIDE", TestModel())
     res = call_api("ignored", _opts(tmp_path), {})
     assert isinstance(res["latencyMs"], int)
     assert res["latencyMs"] >= 0
@@ -63,8 +72,7 @@ def test_reports_latency(tmp_path, monkeypatch):
 def test_reports_token_usage(tmp_path, monkeypatch):
     """The config's native `cost` assert is an ABSOLUTE gating check; it is
     vacuous unless the provider actually reports usage."""
-    monkeypatch.setattr("sdlc.eval.promptfoo.provider._MODEL_OVERRIDE",
-                        TestModel())
+    monkeypatch.setattr("sdlc.eval.promptfoo.provider._MODEL_OVERRIDE", TestModel())
     res = call_api("ignored", _opts(tmp_path), {})
     assert set(res["tokenUsage"]) >= {"prompt", "completion", "total"}
     assert res["tokenUsage"]["total"] >= 0
@@ -72,8 +80,7 @@ def test_reports_token_usage(tmp_path, monkeypatch):
 
 def test_resolve_instructions_worktree_reads_the_file():
     text = resolve_instructions("clarify", "worktree", ROOT, AGENTS)
-    assert text == (AGENTS / "clarify" / "instructions.md").read_text(
-        encoding="utf-8")
+    assert text == (AGENTS / "clarify" / "instructions.md").read_text(encoding="utf-8")
 
 
 def test_resolve_instructions_git_ref_reads_from_git():
@@ -119,12 +126,16 @@ def test_provider_imports_fast_enough_for_the_promptfoo_worker():
     started = time.monotonic()
     proc = subprocess.run(
         [sys.executable, "-c", "import sdlc.eval.promptfoo.provider"],
-        capture_output=True, text=True, env=os.environ)
+        capture_output=True,
+        text=True,
+        env=os.environ,
+    )
     elapsed = time.monotonic() - started
     assert proc.returncode == 0, proc.stderr[-500:]
     assert elapsed < 8.0, (
         f"provider import took {elapsed:.1f}s; promptfoo's worker will time "
-        f"out. Something re-introduced a heavy import (sdlc.agents.roles?).")
+        f"out. Something re-introduced a heavy import (sdlc.agents.roles?)."
+    )
 
 
 def test_provider_does_not_import_agents_roles():
@@ -133,12 +144,13 @@ def test_provider_does_not_import_agents_roles():
     import subprocess
     import sys
 
-    code = ("import sys; import sdlc.eval.promptfoo.provider; "
-            "print('sdlc.agents.roles' in sys.modules)")
-    proc = subprocess.run([sys.executable, "-c", code],
-                          capture_output=True, text=True)
+    code = (
+        "import sys; import sdlc.eval.promptfoo.provider; print('sdlc.agents.roles' in sys.modules)"
+    )
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert proc.stdout.strip() == "False", (
-        "sdlc.agents.roles got pulled into the provider's import graph again")
+        "sdlc.agents.roles got pulled into the provider's import graph again"
+    )
 
 
 @pytest.mark.parametrize("module_name", ["provider", "absolute", "assertion"])
@@ -150,12 +162,17 @@ def test_loads_standalone_the_way_promptfoo_loads_it(module_name):
     """
     import importlib.util
 
-    path = (Path(__file__).resolve().parents[1] / "src" / "sdlc" / "eval"
-            / "promptfoo" / f"{module_name}.py")
-    spec = importlib.util.spec_from_file_location(f"_standalone_{module_name}",
-                                                  path)
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "sdlc"
+        / "eval"
+        / "promptfoo"
+        / f"{module_name}.py"
+    )
+    spec = importlib.util.spec_from_file_location(f"_standalone_{module_name}", path)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)          # must not raise
+    spec.loader.exec_module(module)  # must not raise
 
 
 def test_standalone_call_api_has_no_deferred_relative_import(tmp_path):
@@ -168,8 +185,9 @@ def test_standalone_call_api_has_no_deferred_relative_import(tmp_path):
 
     from pydantic_ai.models.test import TestModel
 
-    path = (Path(__file__).resolve().parents[1] / "src" / "sdlc" / "eval"
-            / "promptfoo" / "provider.py")
+    path = (
+        Path(__file__).resolve().parents[1] / "src" / "sdlc" / "eval" / "promptfoo" / "provider.py"
+    )
     spec = importlib.util.spec_from_file_location("_standalone_call", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

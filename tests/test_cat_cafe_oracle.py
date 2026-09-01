@@ -1,14 +1,13 @@
 """The cat-cafe held-out oracle exists and discriminates (E-34, spec §6)."""
+
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-ORACLE = (REPO_ROOT / "benchmarks" / "cases" / "cat-cafe-monitoring"
-          / "oracle")
+ORACLE = REPO_ROOT / "benchmarks" / "cases" / "cat-cafe-monitoring" / "oracle"
 
 
 def test_oracle_suite_files_exist():
-    for name in ("conftest.py", "test_activity.py", "test_risk.py",
-                 "test_monitoring.py"):
+    for name in ("conftest.py", "test_activity.py", "test_risk.py", "test_monitoring.py"):
         assert (ORACLE / name).is_file(), f"missing oracle/{name}"
 
 
@@ -33,9 +32,12 @@ def _run_oracle(tmp_path, break_risk=False):
         app_text += "\nRISK_ENABLED = False\n"
     (wt / "app.py").write_text(app_text, encoding="utf-8")
     return subprocess.run(
-        [sys.executable, "-m", "pytest", "oracle", "-q",
-         "-p", "no:cacheprovider"],
-        cwd=wt, capture_output=True, text=True, timeout=300)
+        [sys.executable, "-m", "pytest", "oracle", "-q", "-p", "no:cacheprovider"],
+        cwd=wt,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
 
 
 @pytest.mark.slow

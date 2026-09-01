@@ -6,25 +6,38 @@ from pathlib import Path
 from sdlc.eval.verdict import GateVerdict, JudgeStatus, decide, write_result
 
 
-def _results(baseline: list, working: list, *, absolute_ok: bool = True,
-             provider_error: str | None = None) -> dict:
+def _results(
+    baseline: list, working: list, *, absolute_ok: bool = True, provider_error: str | None = None
+) -> dict:
     """Shape of promptfoo's --output results.json, reduced to what we read."""
+
     def rows(label, scores):
         out = []
         for s in scores:
-            out.append({
-                "provider": {"label": label},
-                "error": provider_error,
-                "gradingResult": {"componentResults": [
-                    {"assertion": {"value": "absolute.py"},
-                     "pass": absolute_ok, "reason": "r"},
-                    {"assertion": {"value": "assertion.py"},
-                     "pass": True, "score": s, "reason": "r"},
-                ]},
-            })
+            out.append(
+                {
+                    "provider": {"label": label},
+                    "error": provider_error,
+                    "gradingResult": {
+                        "componentResults": [
+                            {
+                                "assertion": {"value": "absolute.py"},
+                                "pass": absolute_ok,
+                                "reason": "r",
+                            },
+                            {
+                                "assertion": {"value": "assertion.py"},
+                                "pass": True,
+                                "score": s,
+                                "reason": "r",
+                            },
+                        ]
+                    },
+                }
+            )
         return out
-    return {"results": {"results": rows("baseline", baseline)
-                        + rows("working", working)}}
+
+    return {"results": {"results": rows("baseline", baseline) + rows("working", working)}}
 
 
 def test_improvement_passes():
@@ -35,7 +48,7 @@ def test_improvement_passes():
 
 def test_dip_within_noise_passes():
     r = decide(_results([0.80, 0.80, 0.80], [0.78, 0.78, 0.78]))
-    assert r.verdict is GateVerdict.PASS      # 0.02 < delta_min 0.05
+    assert r.verdict is GateVerdict.PASS  # 0.02 < delta_min 0.05
 
 
 def test_clear_regression_fails():
@@ -62,8 +75,12 @@ def test_native_cost_gate_failure_is_absolute():
     res = _results([0.9], [0.9])
     for row in res["results"]["results"]:
         row["gradingResult"]["componentResults"].append(
-            {"assertion": {"type": "cost", "threshold": 0.5},
-             "pass": False, "reason": "cost 0.91 > 0.5"})
+            {
+                "assertion": {"type": "cost", "threshold": 0.5},
+                "pass": False,
+                "reason": "cost 0.91 > 0.5",
+            }
+        )
     r = decide(res)
     assert r.verdict is GateVerdict.FAIL_ABSOLUTE
     assert "cost" in r.reason
@@ -97,8 +114,7 @@ def test_no_baseline_rows_reports_no_baseline():
 def test_k_of_one_falls_back_to_delta_min():
     """One sample each -> no stderr -> the 0.05 floor decides."""
     assert decide(_results([0.80], [0.78])).verdict is GateVerdict.PASS
-    assert decide(_results([0.80], [0.60])).verdict is (
-        GateVerdict.FAIL_REGRESSION)
+    assert decide(_results([0.80], [0.60])).verdict is (GateVerdict.FAIL_REGRESSION)
 
 
 def test_write_result_round_trips(tmp_path):
@@ -213,7 +229,8 @@ def test_unavailable_rows_are_excluded_from_persisted_scores():
     res = _results([0.5], [0.5])
     working_row = res["results"]["results"][-1]
     working_row["gradingResult"]["componentResults"][1]["reason"] = (
-        f"{JUDGE_UNAVAILABLE}: judge errored")
+        f"{JUDGE_UNAVAILABLE}: judge errored"
+    )
     r = decide(res)
     assert r.scores_baseline == [0.5]
     assert r.scores_working == []

@@ -1,12 +1,16 @@
 # tests/test_discover_blueprint.py
 """E-48 DD11 (clause D8): MISSING is context, not failure."""
-import pytest
 
 from sdlc.assessment.discover.blueprint import (
-    BlueprintProcess, compare, load,
+    BlueprintProcess,
+    compare,
+    load,
 )
 from sdlc.assessment.discover.map import (
-    BlueprintStatus, CandidateDisposition, Capability, DiscoverAction,
+    BlueprintStatus,
+    CandidateDisposition,
+    Capability,
+    DiscoverAction,
     DispositionSource,
 )
 from sdlc.assessment.scan.models import CandidateMember, Confidence, MemberKind
@@ -14,8 +18,9 @@ from sdlc.measurement import CollectionState, Measurement
 
 PROCESSES = (
     BlueprintProcess(name="Manage Financial Resources", level=1, parent=""),
-    BlueprintProcess(name="Process Customer Payments", level=2,
-                     parent="Manage Financial Resources"),
+    BlueprintProcess(
+        name="Process Customer Payments", level=2, parent="Manage Financial Resources"
+    ),
     BlueprintProcess(name="Manage Human Capital", level=1, parent=""),
 )
 
@@ -24,13 +29,24 @@ def _cap(bc_id: str, name: str) -> Capability:
     """Built through the real Capability constructor so its validators run."""
     measured = Measurement.measured(1.0)
     disp = CandidateDisposition(
-        candidate_id=bc_id, action=DiscoverAction.CONFIRM,
-        source=DispositionSource.BASELINE, rule="baseline_confirm")
+        candidate_id=bc_id,
+        action=DiscoverAction.CONFIRM,
+        source=DispositionSource.BASELINE,
+        rule="baseline_confirm",
+    )
     return Capability(
-        bc_id=bc_id, local_key=bc_id, name=name, confidence=Confidence.HIGH,
-        members=(CandidateMember(kind=MemberKind.HTTP_ROUTE, value=f"POST /{name}", path="pay.py"),),
+        bc_id=bc_id,
+        local_key=bc_id,
+        name=name,
+        confidence=Confidence.HIGH,
+        members=(
+            CandidateMember(kind=MemberKind.HTTP_ROUTE, value=f"POST /{name}", path="pay.py"),
+        ),
         member_paths=("pay.py",),
-        cohesion=measured, coupling=measured, disposition=disp)
+        cohesion=measured,
+        coupling=measured,
+        disposition=disp,
+    )
 
 
 def test_a_matching_capability_is_present():
@@ -106,6 +122,7 @@ def test_two_extra_capabilities_sharing_name_sort_without_duplicate_key_error():
 
 def test_processes_stop_word_and_singularization():
     from sdlc.assessment.discover.blueprint import _tokens
+
     # "processes" -> "process" -> stop word -> dropped
     assert _tokens("manage processes") == frozenset()
     # "payments" -> "payment" -> kept
@@ -114,8 +131,8 @@ def test_processes_stop_word_and_singularization():
 
 def test_resolve_blueprint_path_env(monkeypatch, tmp_path):
     from sdlc.assessment.discover.blueprint import resolve_blueprint_path
+
     bp_file = tmp_path / "apqc.yaml"
     bp_file.write_text("name: test\nversion: 1\nprocesses: []\n", encoding="utf-8")
     monkeypatch.setenv("SDLC_BLUEPRINTS_DIR", str(tmp_path))
     assert resolve_blueprint_path() == bp_file
-

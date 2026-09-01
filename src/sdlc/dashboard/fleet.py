@@ -10,11 +10,12 @@ dashboard needs no database (spec D7): Temporal keeps closed workflows
 queryable for its retention period, so Temporal is the store. The bound is
 real -- history reaches back only as far as that retention.
 """
+
 from __future__ import annotations
 
 import asyncio
 import contextlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field, TypeAdapter
 
@@ -27,11 +28,10 @@ CLOSED_LIMIT = 20
 # Newest-first, so the just-finished run is always inside the cap. ORDER BY
 # requires advanced visibility; standard visibility (the dev server this
 # project deploys) rejects the clause, so _closed_run_ids falls back once.
-_CLOSED_QUERY = ("WorkflowType='FeatureWorkflow' AND "
-                 "ExecutionStatus!='Running'"
-                 " ORDER BY CloseTime DESC")
-_CLOSED_QUERY_UNORDERED = ("WorkflowType='FeatureWorkflow' AND "
-                           "ExecutionStatus!='Running'")
+_CLOSED_QUERY = (
+    "WorkflowType='FeatureWorkflow' AND ExecutionStatus!='Running' ORDER BY CloseTime DESC"
+)
+_CLOSED_QUERY_UNORDERED = "WorkflowType='FeatureWorkflow' AND ExecutionStatus!='Running'"
 _ORDER_BY_SUPPORTED = True
 
 _PENDING_LIST = TypeAdapter(list[PendingDecision])
@@ -40,6 +40,7 @@ _PENDING_LIST = TypeAdapter(list[PendingDecision])
 class FleetSnapshot(BaseModel):
     """One fan-out's result. Everything the dashboard serves derives from
     this -- both REST reads and every SSE event."""
+
     at: datetime
     total_open_runs: int = 0
     runs: list[RunState] = Field(default_factory=list)
@@ -54,11 +55,11 @@ async def _fetch_open(client, run_id: str):
     try:
         handle = client.get_workflow_handle(run_id)
         raw_state, raw_pending = await asyncio.gather(
-            handle.query("run_state"), handle.query("pending_decisions"))
-        state = (RunState.model_validate(raw_state)
-                 if raw_state is not None else None)
+            handle.query("run_state"), handle.query("pending_decisions")
+        )
+        state = RunState.model_validate(raw_state) if raw_state is not None else None
         return state, _PENDING_LIST.validate_python(raw_pending or [])
-    except Exception as e:      # noqa: BLE001 -- captured into errors[]
+    except Exception as e:  # noqa: BLE001 -- captured into errors[]
         return e
 
 
@@ -69,7 +70,7 @@ async def _fetch_closed(client, run_id: str):
         # None is ordinary: a run that terminated before retro has no
         # summary. That is a skip, not an error.
         return RunSummary.model_validate(raw) if raw is not None else None
-    except Exception as e:      # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
         return e
 
 
@@ -87,7 +88,7 @@ async def _closed_run_ids(client, limit: int) -> list[str]:
     if _ORDER_BY_SUPPORTED:
         try:
             return await _scan_closed(client, _CLOSED_QUERY, limit)
-        except Exception as e:    # noqa: BLE001 -- narrow retry, re-raise else
+        except Exception as e:  # noqa: BLE001 -- narrow retry, re-raise else
             if "ORDER BY" not in str(e):
                 raise
             # Standard visibility (dev server): the clause is rejected
@@ -96,20 +97,20 @@ async def _closed_run_ids(client, limit: int) -> list[str]:
     return await _scan_closed(client, _CLOSED_QUERY_UNORDERED, limit)
 
 
-async def fetch_fleet(client, *, now: datetime,
-                      closed_limit: int = CLOSED_LIMIT) -> FleetSnapshot:
+async def fetch_fleet(client, *, now: datetime, closed_limit: int = CLOSED_LIMIT) -> FleetSnapshot:
     """Discover open and recently-closed runs and fan out over both."""
     open_ids = await list_open_run_ids(client)
     closed_ids = await _closed_run_ids(client, closed_limit)
 
     open_results, closed_results = await asyncio.gather(
         asyncio.gather(*(_fetch_open(client, r) for r in open_ids)),
-        asyncio.gather(*(_fetch_closed(client, r) for r in closed_ids)))
+        asyncio.gather(*(_fetch_closed(client, r) for r in closed_ids)),
+    )
 
     open_id_set = set(open_ids)
 
     snap = FleetSnapshot(at=now, total_open_runs=len(open_ids))
-    for run_id, outcome in zip(open_ids, open_results):
+    for run_id, outcome in zip(open_ids, open_results, strict=False):
         if isinstance(outcome, Exception):
             snap.errors.append(InboxError(run_id=run_id, error=str(outcome)))
             continue
@@ -121,7 +122,7 @@ async def fetch_fleet(client, *, now: datetime,
             # runs -- it is still live, it just owes no decision.
             snap.inbox.append(RunInbox(run_id=run_id, pending=pending))
 
-    for run_id, outcome in zip(closed_ids, closed_results):
+    for run_id, outcome in zip(closed_ids, closed_results, strict=False):
         if run_id in open_id_set:
             # A run completing between the two visibility queries lands in
             # both lists; the open pass already rendered it, so rendering it
@@ -135,7 +136,7 @@ async def fetch_fleet(client, *, now: datetime,
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class FleetPoller:
@@ -156,8 +157,15 @@ class FleetPoller:
     module defaults.
     """
 
-    def __init__(self, client_factory, *, interval: float = 2.0,
-                 grace_s: float = 30.0, clock=None, fetch=None) -> None:
+    def __init__(
+        self,
+        client_factory,
+        *,
+        interval: float = 2.0,
+        grace_s: float = 30.0,
+        clock=None,
+        fetch=None,
+    ) -> None:
         self._client_factory = client_factory
         self._interval = interval
         self._grace_s = grace_s
@@ -208,6 +216,7 @@ class FleetPoller:
         """The cached snapshot when fresh, otherwise an inline fan-out."""
         async with self._lock:
             if self._fresh():
+                assert self._snapshot is not None
                 return self._snapshot
             return await self._fan_out()
 
@@ -224,8 +233,8 @@ class FleetPoller:
                     q.put_nowait(snap)
             except asyncio.CancelledError:
                 raise
-            except Exception:       # noqa: BLE001 -- a poll failure must
-                pass                # never kill the loop; next tick retries
+            except Exception:  # noqa: BLE001 -- a poll failure must
+                pass  # never kill the loop; next tick retries
             await asyncio.sleep(self._interval)
 
     def _cancel_pending_stop(self) -> None:
@@ -237,8 +246,8 @@ class FleetPoller:
         loop = asyncio.get_running_loop()
         self._cancel_pending_stop()
         self._stop_handle = loop.call_later(
-            self._grace_s,
-            lambda: asyncio.ensure_future(self._stop_if_idle()))
+            self._grace_s, lambda: asyncio.ensure_future(self._stop_if_idle())
+        )
 
     async def _stop_if_idle(self) -> None:
         if not self._subscribers:

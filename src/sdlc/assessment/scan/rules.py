@@ -9,6 +9,7 @@ thirteen signals rather than only the ones that share a module.
 Pure of temporalio; reads module source from disk, so it is called from
 ACTIVITY code, never from a workflow.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -29,7 +30,8 @@ def module_sha(dotted: str) -> str:
     if spec is None or not spec.origin:
         raise RuntimeError(
             f"cannot locate module {dotted!r} to hash -- the registry names "
-            f"it, so a missing module is registry drift, not a cache miss")
+            f"it, so a missing module is registry drift, not a cache miss"
+        )
     with open(spec.origin, "rb") as fh:
         return hashlib.sha256(fh.read()).hexdigest()
 

@@ -1,4 +1,5 @@
 """Board read verbs against a real BoardStore on a temp sqlite file."""
+
 import pytest
 
 from sdlc.board.store import BoardStore
@@ -35,7 +36,8 @@ async def test_list_projects_names_key_and_repo(deps):
 async def test_list_projects_empty_is_explicit(tmp_path):
     db = tmp_path / "empty.db"
     out = await tools.list_projects(
-        OperatorDeps(poller=None, board=lambda: BoardStore(db), starter=None))
+        OperatorDeps(poller=None, board=lambda: BoardStore(db), starter=None)
+    )
     assert "no projects" in out.lower()
 
 
@@ -47,16 +49,14 @@ async def test_a_bare_store_instead_of_a_factory_is_refused_clearly(tmp_path):
     store = BoardStore(tmp_path / "board.db")
     try:
         with pytest.raises(ToolError) as e:
-            await tools.list_projects(
-                OperatorDeps(poller=None, board=store, starter=None))
+            await tools.list_projects(OperatorDeps(poller=None, board=store, starter=None))
         assert "callable" in e.value.message
     finally:
         store.close()
 
 
 @pytest.mark.asyncio
-async def test_get_project_lists_artifact_keys_so_read_artifact_has_a_source(
-        deps):
+async def test_get_project_lists_artifact_keys_so_read_artifact_has_a_source(deps):
     out = await tools.get_project(deps, "kroker")
     assert "kroker" in out
 
@@ -69,8 +69,7 @@ async def test_get_project_unknown_is_a_tool_error(deps):
 
 
 @pytest.mark.asyncio
-async def test_list_tasks_without_a_plan_says_so_instead_of_raising_typeerror(
-        deps):
+async def test_list_tasks_without_a_plan_says_so_instead_of_raising_typeerror(deps):
     with pytest.raises(ToolError) as e:
         await tools.list_tasks(deps, "kroker")
     assert "plan" in e.value.message.lower()
@@ -79,8 +78,7 @@ async def test_list_tasks_without_a_plan_says_so_instead_of_raising_typeerror(
 @pytest.mark.asyncio
 async def test_list_tasks_rejects_an_unknown_status(deps):
     with pytest.raises(ToolError) as e:
-        await tools.list_tasks(deps, "kroker", plan_version=1,
-                               status="sideways")
+        await tools.list_tasks(deps, "kroker", plan_version=1, status="sideways")
     assert "sideways" in e.value.message
 
 

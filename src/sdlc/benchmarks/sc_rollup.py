@@ -6,6 +6,7 @@ definitions here are CHOICES, documented per rate.
 
 Pure aggregation + rendering, no I/O -- mirrors heatmap.py.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -26,14 +27,13 @@ MERGE_GATE = "merge"
 # Run outcomes that reached the merge gate. The criterion is REACHING it,
 # not passing it, so a merge-time rejection counts (feature.py:1757, 1791,
 # 1828, 1836).
-REACHED_PREFIXES: tuple[str, ...] = (
-    "deployed:", "merged-not-deployed:", "rejected:merge")
+REACHED_PREFIXES: tuple[str, ...] = ("deployed:", "merged-not-deployed:", "rejected:merge")
 
 
 class SCRate(BaseModel):
     criterion: str
     label: str
-    rate: float | None      # None when n < MIN_RUNS -- renders n/a
+    rate: float | None  # None when n < MIN_RUNS -- renders n/a
     n: int
     target: str
     proxy: bool = False
@@ -57,12 +57,12 @@ def _rate(n_hits: int, n: int) -> float | None:
     return n_hits / n
 
 
-def build_sc_rollup(summaries: list[RunSummary],
-                    records: list[BenchmarkRecord]) -> SCRollup:
+def build_sc_rollup(summaries: list[RunSummary], records: list[BenchmarkRecord]) -> SCRollup:
     ordered = sorted(summaries, key=lambda s: (s.started_at, s.run_id))
     return SCRollup(
         rates=[_sc1(ordered), _sc3(records), _sc4(ordered), *_sc6(ordered)],
-        sc4_series=_sc4_series(ordered))
+        sc4_series=_sc4_series(ordered),
+    )
 
 
 def _reached_merge(s: RunSummary) -> bool:
@@ -82,13 +82,16 @@ def _unattended_to_merge(s: RunSummary) -> bool:
 
 
 def _sc1(summaries: list[RunSummary]) -> SCRate:
-    hits = sum(1 for s in summaries
-               if _reached_merge(s) and _unattended_to_merge(s))
+    hits = sum(1 for s in summaries if _reached_merge(s) and _unattended_to_merge(s))
     return SCRate(
-        criterion="SC-1", label="runs reaching the merge gate unattended",
-        rate=_rate(hits, len(summaries)), n=len(summaries), target=">=0.80",
+        criterion="SC-1",
+        label="runs reaching the merge gate unattended",
+        rate=_rate(hits, len(summaries)),
+        n=len(summaries),
+        target=">=0.80",
         note="reached = outcome in deployed/merged-not-deployed/rejected:merge; "
-             "unattended = no human-decided gate before the merge gate")
+        "unattended = no human-decided gate before the merge gate",
+    )
 
 
 def _sc3(records: list[BenchmarkRecord]) -> SCRate:
@@ -110,26 +113,33 @@ def _sc3(records: list[BenchmarkRecord]) -> SCRate:
     # The denominator is LOOPS, not runs -- but the floor is one rule for
     # every rate: below MIN_RUNS observations, n/a rather than a percentage.
     return SCRate(
-        criterion="SC-3", label="fix loops that resolved",
-        rate=_rate(successes, loops), n=loops, target=">=0.70",
+        criterion="SC-3",
+        label="fix loops that resolved",
+        rate=_rate(successes, loops),
+        n=loops,
+        target=">=0.70",
         note="a loop = a (run, task) with any attempt at fix_attempts>0; "
-             "success = the final attempt passed; denominator is loops, "
-             f"and the n/a floor of {MIN_RUNS} applies to loops")
+        "success = the final attempt passed; denominator is loops, "
+        f"and the n/a floor of {MIN_RUNS} applies to loops",
+    )
 
 
 def _sc4(summaries: list[RunSummary]) -> SCRate:
     total = sum(len(s.clarifications) for s in summaries)
-    human = sum(1 for s in summaries for c in s.clarifications
-                if c.answered_by == "human")
+    human = sum(1 for s in summaries for c in s.clarifications if c.answered_by == "human")
     n_runs = sum(1 for s in summaries if s.clarifications)
     return SCRate(
-        criterion="SC-4", label="clarifications a human had to answer",
+        criterion="SC-4",
+        label="clarifications a human had to answer",
         rate=(human / total) if (total and n_runs >= MIN_RUNS) else None,
-        n=n_runs, target="<0.10 by run 10", proxy=True,
+        n=n_runs,
+        target="<0.10 by run 10",
+        proxy=True,
         note="PROXY: measures questions memory could not answer, which is the "
-             "intent of the criterion, but it is not literal repeat detection "
-             "-- ClarificationOutcome.question_id is not established as stable "
-             "across runs")
+        "intent of the criterion, but it is not literal repeat detection "
+        "-- ClarificationOutcome.question_id is not established as stable "
+        "across runs",
+    )
 
 
 def _sc4_series(summaries: list[RunSummary]) -> list[SC4Point]:
@@ -138,8 +148,9 @@ def _sc4_series(summaries: list[RunSummary]) -> list[SC4Point]:
         if not s.clarifications:
             continue
         human = sum(1 for c in s.clarifications if c.answered_by == "human")
-        out.append(SC4Point(index=len(out), run_id=s.run_id,
-                            human_rate=human / len(s.clarifications)))
+        out.append(
+            SC4Point(index=len(out), run_id=s.run_id, human_rate=human / len(s.clarifications))
+        )
     return out
 
 
@@ -149,19 +160,29 @@ def _sc6(summaries: list[RunSummary]) -> list[SCRate]:
     waved = sum(1 for g in soft if g.overrides)
     n = len(soft)
     return [
-        SCRate(criterion="SC-6", label="soft gates a human decided",
-               rate=_rate(human, n), n=n, target="<0.05",
-               note=f"denominator is soft gates, not runs; the n/a floor of "
-                    f"{MIN_RUNS} applies to soft gates"),
-        SCRate(criterion="SC-6-advisory",
-               label="soft gates with waved advisory checks",
-               rate=_rate(waved, n), n=n, target="<0.05",
-               note="reported separately from human decisions: different "
-                    "failures, and one average would hide both"),
+        SCRate(
+            criterion="SC-6",
+            label="soft gates a human decided",
+            rate=_rate(human, n),
+            n=n,
+            target="<0.05",
+            note=f"denominator is soft gates, not runs; the n/a floor of "
+            f"{MIN_RUNS} applies to soft gates",
+        ),
+        SCRate(
+            criterion="SC-6-advisory",
+            label="soft gates with waved advisory checks",
+            rate=_rate(waved, n),
+            n=n,
+            target="<0.05",
+            note="reported separately from human decisions: different "
+            "failures, and one average would hide both",
+        ),
     ]
 
 
 # ------------------------------------------------------------- rendering
+
 
 def render_sc_rollup_json(r: SCRollup) -> str:
     return r.model_dump_json(indent=2)
@@ -173,20 +194,23 @@ def _fmt(rate: float | None) -> str:
 
 def render_sc_rollup_markdown(r: SCRollup) -> str:
     """ASCII only (report.py:70-74)."""
-    lines = ["", "## Success criteria", "",
-             f"Rates below n={MIN_RUNS} render n/a rather than a percentage.",
-             "",
-             "| criterion | measure | rate | n | target | |",
-             "|---|---|---|---|---|---|"]
+    lines = [
+        "",
+        "## Success criteria",
+        "",
+        f"Rates below n={MIN_RUNS} render n/a rather than a percentage.",
+        "",
+        "| criterion | measure | rate | n | target | |",
+        "|---|---|---|---|---|---|",
+    ]
     for x in r.rates:
         flag = "PROXY" if x.proxy else ""
-        lines.append(f"| {x.criterion} | {x.label} | {_fmt(x.rate)} | "
-                     f"n={x.n} | {x.target} | {flag} |")
+        lines.append(
+            f"| {x.criterion} | {x.label} | {_fmt(x.rate)} | n={x.n} | {x.target} | {flag} |"
+        )
     if r.sc4_series:
-        lines += ["", "SC-4 series (human-answered fraction, by run order):",
-                  ""]
-        lines += [f"- {p.index}: {p.run_id} {p.human_rate:.2f}"
-                  for p in r.sc4_series]
+        lines += ["", "SC-4 series (human-answered fraction, by run order):", ""]
+        lines += [f"- {p.index}: {p.run_id} {p.human_rate:.2f}" for p in r.sc4_series]
     lines += ["", "Definitions:", ""]
     lines += [f"- **{x.criterion}**: {x.note}" for x in r.rates if x.note]
     return "\n".join(lines) + "\n"
@@ -198,10 +222,11 @@ def render_sc_rollup_html(r: SCRollup) -> str:
         f"<td>{_fmt(x.rate)}</td><td>{x.n}</td>"
         f"<td>{escape(x.target)}</td>"
         f"<td>{'PROXY' if x.proxy else ''}</td></tr>"
-        for x in r.rates)
+        for x in r.rates
+    )
     notes = "".join(
-        f"<li><b>{escape(x.criterion)}</b>: {escape(x.note)}</li>"
-        for x in r.rates if x.note)
+        f"<li><b>{escape(x.criterion)}</b>: {escape(x.note)}</li>" for x in r.rates if x.note
+    )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Success criteria</title>
 <style>

@@ -5,6 +5,7 @@ across layouts; a layout answers "which roles are assembled and by what
 rules". Merging them would duplicate every non-lead role per layout and
 produce two descriptions of one role that drift apart.
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -15,9 +16,9 @@ from ..models import HarnessKind
 class CrewRole(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    name: str                                  # filled from the filename
+    name: str  # filled from the filename
     harness: HarnessKind
-    model: str                                 # passed to the CLI verbatim
+    model: str  # passed to the CLI verbatim
     # "writes" means REPOSITORY files. Every role writes its own protocol
     # files under the orchestration dir; only the lead may touch the repo,
     # or the diff stops being attributable (spec §1).
@@ -50,6 +51,7 @@ class Deliverable(BaseModel):
     Round-relative because a round is the unit that gets retried: a
     layout-relative path would have round 2 overwrite round 1's evidence.
     """
+
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     path: str
@@ -67,11 +69,11 @@ class CrewLayout(BaseModel):
     limits: Limits
 
     @model_validator(mode="after")
-    def _lead_is_on_the_crew(self) -> "CrewLayout":
+    def _lead_is_on_the_crew(self) -> CrewLayout:
         if self.lead not in self.crew:
             raise ValueError(
-                f"layout {self.layout!r}: lead {self.lead!r} is not in "
-                f"crew {self.crew}")
+                f"layout {self.layout!r}: lead {self.lead!r} is not in crew {self.crew}"
+            )
         return self
 
     def roles(self) -> list[str]:

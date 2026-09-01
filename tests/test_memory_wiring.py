@@ -4,12 +4,12 @@ fix-loop retains a gotcha on failure. AST-based like test_memory_purity.py
 — a full time-skipping run would require faking the TemporalAgent
 activity surface (see test_factory_purity.py's docstring for why that's
 out of scope here)."""
+
 from __future__ import annotations
 
 import ast
 
 import pytest
-
 from test_factory_purity import FEATURE_PY, _load_class, _methods
 
 
@@ -22,11 +22,13 @@ def feature_class():
 
 def _calls_self_method(fn: ast.AST, method: str) -> bool:
     for node in ast.walk(fn):
-        if (isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr == method
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "self"):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == method
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "self"
+        ):
             return True
     return False
 
@@ -36,7 +38,8 @@ def test_run_calls_recall_at_least_three_times_source_count(feature_class):
     # E-32: the pipeline body lives in _pipeline now (run wraps it + _retro).
     src = ast.unparse(methods["_pipeline"])
     assert src.count("self._recall(") >= 3, (
-        "expected recall before clarify/architect/plan at minimum")
+        "expected recall before clarify/architect/plan at minimum"
+    )
 
 
 def test_run_calls_retain_for_stage_summaries(feature_class):

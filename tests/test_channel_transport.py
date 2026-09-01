@@ -5,19 +5,27 @@ import argparse
 import pytest
 
 from sdlc.channels.transport import (
-    Ambiguous, NoMatch, Selector, describe, match, match_key,
+    Ambiguous,
+    NoMatch,
+    Selector,
+    describe,
+    match,
+    match_key,
 )
 from sdlc.pending import (
-    ClarifyPending, MergeGatePending, StageGatePending, TaskEscalationPending,
+    ClarifyPending,
+    MergeGatePending,
+    StageGatePending,
+    TaskEscalationPending,
 )
 
-ARCH = StageGatePending(key="architecture#2", gate="architecture", round=2,
-                        spec_summary="s")
+ARCH = StageGatePending(key="architecture#2", gate="architecture", round=2, spec_summary="s")
 MERGE = MergeGatePending(key="merge#1", gate="merge", round=1)
 Q1 = ClarifyPending(key="Q1", question="OIDC or SAML?", why_it_matters="auth")
 Q2 = ClarifyPending(key="Q2", question="Which DB?", why_it_matters="storage")
-TASK = TaskEscalationPending(key="task:T1#1", gate="task:T1", round=1,
-                             task_id="T1", analysis="flaky", attempts=3)
+TASK = TaskEscalationPending(
+    key="task:T1#1", gate="task:T1", round=1, task_id="T1", analysis="flaky", attempts=3
+)
 
 
 def test_match_single_gate_without_name():
@@ -75,7 +83,7 @@ def test_no_match_on_empty_pending():
 def test_messages_are_ascii():
     with pytest.raises(Ambiguous) as e:
         match([ARCH, MERGE], Selector(reply_kind="gate"))
-    e.value.message.encode("ascii")   # raises UnicodeEncodeError if not
+    e.value.message.encode("ascii")  # raises UnicodeEncodeError if not
 
 
 def test_describe_gate_and_clarify():
@@ -84,7 +92,7 @@ def test_describe_gate_and_clarify():
 
 
 from sdlc.channels.contract import Reply
-from sdlc.channels.transport import SubmitResult, resolve, submit
+from sdlc.channels.transport import resolve, submit
 from sdlc.models import GateOutcome
 
 
@@ -122,7 +130,7 @@ async def test_resolve_validates_the_discriminated_union():
 
 @pytest.mark.asyncio
 async def test_submit_gate_sends_decision_with_the_pending_round():
-    h = StubHandle("run-1", [_raw()])          # nothing left pending
+    h = StubHandle("run-1", [_raw()])  # nothing left pending
     res = await submit(h, ARCH, Reply(outcome=GateOutcome.APPROVE, text="lgtm"))
 
     name, arg, _ = h.signals[0]
@@ -157,19 +165,19 @@ async def test_submit_revise_reports_revision_requested():
 
 @pytest.mark.asyncio
 async def test_submit_not_confirmed_when_item_survives_the_requery():
-    h = StubHandle("run-1", [_raw(ARCH)])      # still pending afterwards
+    h = StubHandle("run-1", [_raw(ARCH)])  # still pending afterwards
     res = await submit(h, ARCH, Reply(outcome=GateOutcome.APPROVE))
 
     assert res.confirmed is False
     assert res.message.startswith("not confirmed:")
     assert "decided it first" in res.message
-    assert "failed" not in res.message         # never claims failure
+    assert "failed" not in res.message  # never claims failure
     res.message.encode("ascii")
 
 
 @pytest.mark.asyncio
 async def test_submit_confirms_when_a_different_item_remains():
-    h = StubHandle("run-1", [_raw(Q1)])        # unrelated item still pending
+    h = StubHandle("run-1", [_raw(Q1)])  # unrelated item still pending
     res = await submit(h, ARCH, Reply(outcome=GateOutcome.APPROVE))
     assert res.confirmed is True
 
@@ -180,6 +188,7 @@ import sdlc.cli
 def _parse(argv):
     """Build the CLI parser the same way main() does, and parse argv."""
     import argparse
+
     p = argparse.ArgumentParser()
     sub = p.add_subparsers(dest="cmd", required=True)
     sdlc.cli.add_decision_parsers(sub)
@@ -239,8 +248,7 @@ def test_match_key_finds_the_item_by_its_resolution_key():
     key directly -- Selector's ambiguity resolution is a CLI concern that
     here would only add a way to hit the wrong item (spec 6)."""
     q1 = ClarifyPending(key="Q1", question="q1", why_it_matters="w")
-    arch = StageGatePending(key="architecture#1", gate="architecture",
-                            round=1, spec_summary="s")
+    arch = StageGatePending(key="architecture#1", gate="architecture", round=1, spec_summary="s")
     assert match_key([q1, arch], "architecture#1") is arch
     assert match_key([q1, arch], "Q1") is q1
 

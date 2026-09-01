@@ -3,6 +3,7 @@
 Surfaced as a pytest marker rather than a CI workflow because this repo has
 no CI yet (E-82 design doc 4.7). It becomes a one-line CI step unchanged.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -17,8 +18,7 @@ from .fixtures import validate_role
 from .promptfoo import promptfoo_bin
 from .promptfoo.config import build_config
 from .promptfoo.provider import resolve_instructions
-from .verdict import (GateVerdict, JudgeStatus, PromptGateResult, decide,
-                      write_result)
+from .verdict import GateVerdict, JudgeStatus, PromptGateResult, decide, write_result
 
 _DEFAULT_OUT = Path("runs") / "prompt_evals"
 # One agent call + one judge call, per provider, per repetition.
@@ -38,13 +38,17 @@ def prompt_sha(role: str, ref: str, repo_root: Path, agents_dir: Path) -> str:
 
 def _run_promptfoo(config_path: Path, out_path: Path) -> None:
     binary = promptfoo_bin()
+    assert binary is not None
     # Decode explicitly as UTF-8: `text=True` uses the locale encoding, which
     # is cp1252 on Windows, and promptfoo emits UTF-8 box-drawing in its
     # progress output -- the reader thread dies with UnicodeDecodeError before
     # any error text reaches us.
     proc = subprocess.run(
         [binary, "eval", "-c", str(config_path), "--output", str(out_path)],
-        capture_output=True, cwd=config_path.parent, env=os.environ)
+        capture_output=True,
+        cwd=config_path.parent,
+        env=os.environ,
+    )
     if not out_path.is_file():
         err = proc.stderr.decode("utf-8", errors="replace").strip()
         out = proc.stdout.decode("utf-8", errors="replace").strip()
@@ -52,16 +56,25 @@ def _run_promptfoo(config_path: Path, out_path: Path) -> None:
         # not stderr, so surface both.
         detail = (err or out)[-800:]
         raise GateUnavailable(
-            f"promptfoo produced no results.json (exit {proc.returncode}): "
-            f"{detail}")
+            f"promptfoo produced no results.json (exit {proc.returncode}): {detail}"
+        )
 
 
-def run_gate(role: str, case: str, *, repo_root: Path, cases_root: Path,
-             agents_dir: Path, judge_model: str, repeat: int = 3,
-             delta_min: float = 0.05, baseline_ref: str = "HEAD",
-             max_calls: int = 40,
-             mutation: str | None = None,
-             out_dir: Path | None = None) -> PromptGateResult:
+def run_gate(
+    role: str,
+    case: str,
+    *,
+    repo_root: Path,
+    cases_root: Path,
+    agents_dir: Path,
+    judge_model: str,
+    repeat: int = 3,
+    delta_min: float = 0.05,
+    baseline_ref: str = "HEAD",
+    max_calls: int = 40,
+    mutation: str | None = None,
+    out_dir: Path | None = None,
+) -> PromptGateResult:
     # Before any git/filesystem work: an unknown role must not surface as a
     # raw FileNotFoundError from `git show HEAD:agents/<role>/instructions.md`.
     validate_role(role)
@@ -69,29 +82,37 @@ def run_gate(role: str, case: str, *, repo_root: Path, cases_root: Path,
     if promptfoo_bin() is None:
         raise GateUnavailable(
             "promptfoo is not installed. `pip install -e .[eval]` — the gate "
-            "was explicitly requested, so this is a failure, not a skip.")
+            "was explicitly requested, so this is a failure, not a skip."
+        )
 
     sha_base = prompt_sha(role, baseline_ref, repo_root, agents_dir)
     # A mutation IS the working-tree prompt for this run. Hashing it rather
     # than the file is what stops the unchanged-prompt early exit from
     # skipping the whole suite.
-    sha_work = (hashlib.sha256(mutation.encode()).hexdigest()
-                if mutation is not None
-                else prompt_sha(role, "worktree", repo_root, agents_dir))
+    sha_work = (
+        hashlib.sha256(mutation.encode()).hexdigest()
+        if mutation is not None
+        else prompt_sha(role, "worktree", repo_root, agents_dir)
+    )
 
     if sha_base == sha_work:
         result = PromptGateResult(
-            verdict=GateVerdict.PASS, judge_status=JudgeStatus.NO_BASELINE,
-            role=role, case=case, prompt_sha_baseline=sha_base,
+            verdict=GateVerdict.PASS,
+            judge_status=JudgeStatus.NO_BASELINE,
+            role=role,
+            case=case,
+            prompt_sha_baseline=sha_base,
             prompt_sha_working=sha_work,
-            reason=f"prompt unchanged vs {baseline_ref} — no model calls made")
+            reason=f"prompt unchanged vs {baseline_ref} — no model calls made",
+        )
     else:
         planned = repeat * _CALLS_PER_REPEAT
         if planned > max_calls:
             raise GateUnavailable(
                 f"planned {planned} model calls (repeat={repeat} × 2 "
                 f"providers × 2 calls) exceeds max_calls={max_calls}. "
-                f"Lower --n or raise the ceiling deliberately.")
+                f"Lower --n or raise the ceiling deliberately."
+            )
         # Scratch dir under the repo, NOT the system temp: promptfoo resolves
         # `file://` provider paths relative to the config's directory, so the
         # config must sit on the same drive as this package for a relative
@@ -102,11 +123,18 @@ def run_gate(role: str, case: str, *, repo_root: Path, cases_root: Path,
         tmp = tempfile.mkdtemp(dir=scratch_root)
         try:
             tmp_path = Path(tmp)
-            cfg = build_config(role, case, repo_root=repo_root,
-                               cases_root=cases_root, agents_dir=agents_dir,
-                               judge_model=judge_model, out_dir=tmp_path,
-                               repeat=repeat, baseline_ref=baseline_ref,
-                               mutation=mutation)
+            cfg = build_config(
+                role,
+                case,
+                repo_root=repo_root,
+                cases_root=cases_root,
+                agents_dir=agents_dir,
+                judge_model=judge_model,
+                out_dir=tmp_path,
+                repeat=repeat,
+                baseline_ref=baseline_ref,
+                mutation=mutation,
+            )
             results_path = tmp_path / "results.json"
             _run_promptfoo(cfg, results_path)
             results = json.loads(results_path.read_text(encoding="utf-8"))

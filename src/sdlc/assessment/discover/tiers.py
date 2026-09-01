@@ -19,6 +19,7 @@ something the system does, reachable from outside the capability, and a table
 is something the system has. ENTITY_NAME makes the point from outside both
 sets. test_discover_tiers.py asserts the difference in both directions.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -27,23 +28,22 @@ from ...capability.models import SignalTier
 from ..scan.models import CandidateMember, MemberKind
 
 MEMBER_TIERS: dict[MemberKind, SignalTier] = {
-    MemberKind.HTTP_ROUTE:      SignalTier.CONTRACT,
-    MemberKind.CLI_COMMAND:     SignalTier.CONTRACT,
-    MemberKind.DB_TABLE:        SignalTier.CONTRACT,
-    MemberKind.QUEUE_TOPIC:     SignalTier.CONTRACT,
-    MemberKind.GRPC_METHOD:     SignalTier.CONTRACT,
-    MemberKind.SCHEDULED_JOB:   SignalTier.CONTRACT,
-    MemberKind.FRONTEND_ROUTE:  SignalTier.CONTRACT,
-    MemberKind.TEST_NAME:       SignalTier.BEHAVIORAL,
-    MemberKind.ENTITY_NAME:     SignalTier.BEHAVIORAL,
+    MemberKind.HTTP_ROUTE: SignalTier.CONTRACT,
+    MemberKind.CLI_COMMAND: SignalTier.CONTRACT,
+    MemberKind.DB_TABLE: SignalTier.CONTRACT,
+    MemberKind.QUEUE_TOPIC: SignalTier.CONTRACT,
+    MemberKind.GRPC_METHOD: SignalTier.CONTRACT,
+    MemberKind.SCHEDULED_JOB: SignalTier.CONTRACT,
+    MemberKind.FRONTEND_ROUTE: SignalTier.CONTRACT,
+    MemberKind.TEST_NAME: SignalTier.BEHAVIORAL,
+    MemberKind.ENTITY_NAME: SignalTier.BEHAVIORAL,
     MemberKind.EXPORTED_SYMBOL: SignalTier.STRUCTURAL,
-    MemberKind.PACKAGE_PATH:    SignalTier.LOCATIONAL,
-    MemberKind.FILE_PATH:       SignalTier.LOCATIONAL,
+    MemberKind.PACKAGE_PATH: SignalTier.LOCATIONAL,
+    MemberKind.FILE_PATH: SignalTier.LOCATIONAL,
 }
 
 
-def group_by_tier(
-        members: Iterable[CandidateMember]) -> dict[SignalTier, list[str]]:
+def group_by_tier(members: Iterable[CandidateMember]) -> dict[SignalTier, list[str]]:
     """Member values grouped into the tiers CapabilityFingerprint takes.
 
     Every tier is present, including empty ones: an absent key and an empty

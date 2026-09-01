@@ -9,6 +9,7 @@ means "the tree is explained", not "the tree is capability-owned".
 Pure: every input is a parameter. No disk, no subprocess, no repository code
 executed (NFR-9).
 """
+
 from __future__ import annotations
 
 import posixpath
@@ -21,8 +22,13 @@ from ..scan.sources import SOURCE_EXTENSIONS
 from ..scan.testpaths import is_test_path
 from . import refgraph
 from .models import (
-    ACCOUNTED_FOR, DEAD_GUARD_MAX_UNRESOLVED, DEFAULT_COVERAGE_FLOOR,
-    AttributionReport, FileAttribution, FileBucket, ReferenceGraph,
+    ACCOUNTED_FOR,
+    DEAD_GUARD_MAX_UNRESOLVED,
+    DEFAULT_COVERAGE_FLOOR,
+    AttributionReport,
+    FileAttribution,
+    FileBucket,
+    ReferenceGraph,
 )
 
 # Source-language build and tooling config. `is_config_path` alone would leave
@@ -34,12 +40,24 @@ from .models import (
 # one appears. conftest.py is excluded -- it is a test fixture, collected by
 # the test runner and reached via is_test_path (framework_discovered_test),
 # not build tooling.
-BUILD_TOOLING_NAMES: frozenset[str] = frozenset({
-    "setup.py", "manage.py", "noxfile.py", "tasks.py",
-    "webpack.config.js", "vite.config.ts", "rollup.config.js",
-    "jest.config.js", "karma.conf.js", "next.config.js",
-    "babel.config.js", "tailwind.config.js", "gulpfile.js", "build.rs",
-})
+BUILD_TOOLING_NAMES: frozenset[str] = frozenset(
+    {
+        "setup.py",
+        "manage.py",
+        "noxfile.py",
+        "tasks.py",
+        "webpack.config.js",
+        "vite.config.ts",
+        "rollup.config.js",
+        "jest.config.js",
+        "karma.conf.js",
+        "next.config.js",
+        "babel.config.js",
+        "tailwind.config.js",
+        "gulpfile.js",
+        "build.rs",
+    }
+)
 
 _SOURCE_EXTENSIONS = frozenset(SOURCE_EXTENSIONS)
 
@@ -48,15 +66,21 @@ def _in_denominator(path: str) -> bool:
     return posixpath.splitext(path)[1].lower() in _SOURCE_EXTENSIONS
 
 
-def _empty_report(reason: str, graph: ReferenceGraph, floor: float,
-                  skipped: Sequence[str]) -> AttributionReport:
+def _empty_report(
+    reason: str, graph: ReferenceGraph, floor: float, skipped: Sequence[str]
+) -> AttributionReport:
     """FR-915: attribution did not happen, so there is no ratio -- not a
     zero, and certainly not a one."""
     return AttributionReport(
-        files=(), counts={b: 0 for b in FileBucket},
-        coverage=Measurement.not_collected(reason), floor=floor,
-        meets_floor=False, dead_guard_tripped=False, graph=graph,
-        skipped=tuple(sorted(skipped)))
+        files=(),
+        counts={b: 0 for b in FileBucket},
+        coverage=Measurement.not_collected(reason),
+        floor=floor,
+        meets_floor=False,
+        dead_guard_tripped=False,
+        graph=graph,
+        skipped=tuple(sorted(skipped)),
+    )
 
 
 class _Context(NamedTuple):
@@ -72,63 +96,93 @@ def _classify(path: str, ctx: _Context) -> FileAttribution:
     """BUCKET_PRECEDENCE, in order. The first rule that fires wins."""
     if path in ctx.member_of:
         return FileAttribution(
-            path=path, bucket=FileBucket.MEMBER, rule="capability_member",
+            path=path,
+            bucket=FileBucket.MEMBER,
+            rule="capability_member",
             detail="claimed by a capability's member set",
-            capabilities=tuple(sorted(set(ctx.member_of[path]))))
+            capabilities=tuple(sorted(set(ctx.member_of[path]))),
+        )
     if path in ctx.skipped:
         return FileAttribution(
-            path=path, bucket=FileBucket.UNCLASSIFIED, rule="blob_unreadable",
-            detail="the blob could not be read at the pinned commit")
+            path=path,
+            bucket=FileBucket.UNCLASSIFIED,
+            rule="blob_unreadable",
+            detail="the blob could not be read at the pinned commit",
+        )
     if is_config_path(path):
         return FileAttribution(
-            path=path, bucket=FileBucket.INFRASTRUCTURE, rule="config_path",
-            detail="matches a configuration/infrastructure path rule")
+            path=path,
+            bucket=FileBucket.INFRASTRUCTURE,
+            rule="config_path",
+            detail="matches a configuration/infrastructure path rule",
+        )
     if posixpath.basename(path) in BUILD_TOOLING_NAMES:
         return FileAttribution(
-            path=path, bucket=FileBucket.INFRASTRUCTURE, rule="build_tooling",
-            detail="a build or tooling configuration file")
-    attached = sorted({
-        bc for neighbour in ctx.neighbours.get(path, ())
-        for bc in ctx.member_of.get(neighbour, ())})
+            path=path,
+            bucket=FileBucket.INFRASTRUCTURE,
+            rule="build_tooling",
+            detail="a build or tooling configuration file",
+        )
+    attached = sorted(
+        {
+            bc
+            for neighbour in ctx.neighbours.get(path, ())
+            for bc in ctx.member_of.get(neighbour, ())
+        }
+    )
     if attached:
         return FileAttribution(
-            path=path, bucket=FileBucket.ATTACHED,
+            path=path,
+            bucket=FileBucket.ATTACHED,
             rule="graph_connected_to_member",
             detail="shares an import edge with a capability member",
-            capabilities=tuple(attached))
+            capabilities=tuple(attached),
+        )
     # D7: `dead` is the claim a customer acts on by deleting code. All four
     # clauses must hold; any failure sends the file to unclassified, never to
     # a weaker positive.
     if path not in ctx.parsed:
         return FileAttribution(
-            path=path, bucket=FileBucket.UNCLASSIFIED,
+            path=path,
+            bucket=FileBucket.UNCLASSIFIED,
             rule="language_not_parsed",
-            detail="no import extractor covers this file's language")
+            detail="no import extractor covers this file's language",
+        )
     if path in ctx.entry_points:
         return FileAttribution(
-            path=path, bucket=FileBucket.UNCLASSIFIED,
+            path=path,
+            bucket=FileBucket.UNCLASSIFIED,
             rule="framework_discovered_entry_point",
-            detail="hosts an entry point, so it is reached by dispatch")
+            detail="hosts an entry point, so it is reached by dispatch",
+        )
     if is_test_path(path):
         return FileAttribution(
-            path=path, bucket=FileBucket.UNCLASSIFIED,
+            path=path,
+            bucket=FileBucket.UNCLASSIFIED,
             rule="framework_discovered_test",
-            detail="collected by a test runner by convention, not by import")
+            detail="collected by a test runner by convention, not by import",
+        )
     if ctx.neighbours.get(path):
         return FileAttribution(
-            path=path, bucket=FileBucket.UNCLASSIFIED,
+            path=path,
+            bucket=FileBucket.UNCLASSIFIED,
             rule="referenced_by_unattributed_file",
-            detail="referenced, but by nothing that reaches a capability")
+            detail="referenced, but by nothing that reaches a capability",
+        )
     if ctx.guard_tripped:
         return FileAttribution(
-            path=path, bucket=FileBucket.UNCLASSIFIED,
+            path=path,
+            bucket=FileBucket.UNCLASSIFIED,
             rule="dead_guard_tripped",
             detail="too many relative imports failed to resolve for an "
-                   "absence of references to be evidence")
+            "absence of references to be evidence",
+        )
     return FileAttribution(
-        path=path, bucket=FileBucket.DEAD,
+        path=path,
+        bucket=FileBucket.DEAD,
         rule="no_static_inbound_reference",
-        detail="nothing in this tree statically references this file")
+        detail="nothing in this tree statically references this file",
+    )
 
 
 def attribute(
@@ -155,11 +209,9 @@ def attribute(
     denominator = sorted(set(readable) | set(skipped_in))
 
     if not denominator:
-        return _empty_report("no source files in the tree", graph, floor,
-                             skipped_in)
+        return _empty_report("no source files in the tree", graph, floor, skipped_in)
     if not members:
-        return _empty_report("no capabilities to attribute against", graph,
-                             floor, skipped_in)
+        return _empty_report("no capabilities to attribute against", graph, floor, skipped_in)
 
     member_of: dict[str, list[str]] = {}
     for bc_id, paths in members.items():
@@ -172,22 +224,34 @@ def attribute(
         neighbours.setdefault(dst, set()).add(src)
 
     rate = graph.unresolved_relative_rate
-    guard_tripped = (rate.state is CollectionState.MEASURED
-                     and rate.value is not None
-                     and rate.value > max_unresolved)
+    guard_tripped = (
+        rate.state is CollectionState.MEASURED
+        and rate.value is not None
+        and rate.value > max_unresolved
+    )
 
     context = _Context(
-        member_of=member_of, neighbours=neighbours,
-        skipped=set(skipped_in), parsed=set(graph.parsed),
-        entry_points=set(entry_points), guard_tripped=guard_tripped)
+        member_of=member_of,
+        neighbours=neighbours,
+        skipped=set(skipped_in),
+        parsed=set(graph.parsed),
+        entry_points=set(entry_points),
+        guard_tripped=guard_tripped,
+    )
 
     files = tuple(_classify(path, context) for path in denominator)
     counts = {b: sum(1 for f in files if f.bucket is b) for b in FileBucket}
     accounted = sum(counts[b] for b in ACCOUNTED_FOR)
-    coverage = Measurement.measured(accounted / len(denominator))
+    ratio = accounted / len(denominator)
+    coverage = Measurement.measured(ratio)
 
     return AttributionReport(
-        files=files, counts=counts, coverage=coverage, floor=floor,
-        meets_floor=coverage.value >= floor,
+        files=files,
+        counts=counts,
+        coverage=coverage,
+        floor=floor,
+        meets_floor=ratio >= floor,
         dead_guard_tripped=guard_tripped,
-        graph=graph, skipped=tuple(skipped_in))
+        graph=graph,
+        skipped=tuple(skipped_in),
+    )

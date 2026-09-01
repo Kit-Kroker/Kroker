@@ -8,12 +8,13 @@ scheme in the same database.
 All identity SQL lives here. See board/store.py's docstring for why this is
 a second SQL owner over one file rather than a violation of its rule.
 """
+
 from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from ..board.schema import apply_schema, connect, db_path
 from .models import CapabilityFingerprint, CapabilityIdentity
@@ -36,7 +37,7 @@ class IdentityNotFoundError(IdentityStoreError):
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class CapabilityIdentityStore(ABC):
@@ -50,10 +51,16 @@ class CapabilityIdentityStore(ABC):
         """0 for a project that has never been written."""
 
     @abstractmethod
-    def apply(self, project: str, rows: Sequence[CapabilityIdentity], *,
-              expected_version: int, actor: str = "system",
-              operation: str = "resolve",
-              detail: str | None = None) -> int:
+    def apply(
+        self,
+        project: str,
+        rows: Sequence[CapabilityIdentity],
+        *,
+        expected_version: int,
+        actor: str = "system",
+        operation: str = "resolve",
+        detail: str | None = None,
+    ) -> int:
         """Upsert rows in one transaction. Returns the new registry_version.
 
         `detail` overrides the per-row event detail (which otherwise records
@@ -79,23 +86,38 @@ class BoardIdentityStore(CapabilityIdentityStore):
             "SELECT bc_id, first_seen_run, status, retired_reason, "
             "merged_into, derived_from, fingerprint "
             "FROM capability_identity WHERE project = ? ORDER BY bc_id",
-            (project,)).fetchall()
-        return [CapabilityIdentity(
-            bc_id=r[0], project=project, first_seen_run=r[1], status=r[2],
-            retired_reason=r[3], merged_into=r[4], derived_from=r[5],
-            fingerprint=CapabilityFingerprint.model_validate_json(r[6]))
-            for r in rows]
+            (project,),
+        ).fetchall()
+        return [
+            CapabilityIdentity(
+                bc_id=r[0],
+                project=project,
+                first_seen_run=r[1],
+                status=r[2],
+                retired_reason=r[3],
+                merged_into=r[4],
+                derived_from=r[5],
+                fingerprint=CapabilityFingerprint.model_validate_json(r[6]),
+            )
+            for r in rows
+        ]
 
     def registry_version(self, project: str) -> int:
         row = self._conn.execute(
-            "SELECT registry_version FROM capability_registry WHERE "
-            "project = ?", (project,)).fetchone()
+            "SELECT registry_version FROM capability_registry WHERE project = ?", (project,)
+        ).fetchone()
         return row[0] if row else 0
 
-    def apply(self, project: str, rows: Sequence[CapabilityIdentity], *,
-              expected_version: int, actor: str = "system",
-              operation: str = "resolve",
-              detail: str | None = None) -> int:
+    def apply(
+        self,
+        project: str,
+        rows: Sequence[CapabilityIdentity],
+        *,
+        expected_version: int,
+        actor: str = "system",
+        operation: str = "resolve",
+        detail: str | None = None,
+    ) -> int:
         # BEGIN IMMEDIATE takes the write lock up front (mirroring
         # board/store.py's _Tx), so the version read and the row writes are
         # one atomic transaction. connect() uses isolation_level=None, so the
@@ -108,11 +130,14 @@ class BoardIdentityStore(CapabilityIdentityStore):
                 raise IdentityConflictError(
                     f"registry_version for '{project}' is {current}, caller "
                     f"expected {expected_version}; reload and re-match "
-                    f"(do not replay computed attachments)")
+                    f"(do not replay computed attachments)"
+                )
             self._conn.execute(
                 "INSERT INTO capability_registry (project, registry_version, "
                 "next_ordinal) VALUES (?, 0, 1) "
-                "ON CONFLICT(project) DO NOTHING", (project,))
+                "ON CONFLICT(project) DO NOTHING",
+                (project,),
+            )
             for row in rows:
                 if row.project != project:
                     # apply() writes under the `project` argument, not
@@ -122,7 +147,8 @@ class BoardIdentityStore(CapabilityIdentityStore):
                     # unobservable. Per-project isolation cannot survive that.
                     raise IdentityStoreError(
                         f"row {row.bc_id} carries project='{row.project}' but "
-                        f"apply() was called for '{project}'")
+                        f"apply() was called for '{project}'"
+                    )
                 self._conn.execute(
                     "INSERT INTO capability_identity (project, bc_id, "
                     "first_seen_run, status, retired_reason, merged_into, "
@@ -135,21 +161,35 @@ class BoardIdentityStore(CapabilityIdentityStore):
                     "derived_from=excluded.derived_from, "
                     "fingerprint=excluded.fingerprint, "
                     "updated_at=excluded.updated_at",
-                    (project, row.bc_id, row.first_seen_run,
-                     row.status.value,
-                     row.retired_reason.value if row.retired_reason else None,
-                     row.merged_into, row.derived_from,
-                     row.fingerprint.model_dump_json(), _now()))
+                    (
+                        project,
+                        row.bc_id,
+                        row.first_seen_run,
+                        row.status.value,
+                        row.retired_reason.value if row.retired_reason else None,
+                        row.merged_into,
+                        row.derived_from,
+                        row.fingerprint.model_dump_json(),
+                        _now(),
+                    ),
+                )
                 self._conn.execute(
                     "INSERT INTO capability_event (project, bc_id, actor, "
                     "operation, detail, created_at) VALUES (?,?,?,?,?,?)",
-                    (project, row.bc_id, actor, operation,
-                     detail if detail is not None else row.status.value,
-                     _now()))
+                    (
+                        project,
+                        row.bc_id,
+                        actor,
+                        operation,
+                        detail if detail is not None else row.status.value,
+                        _now(),
+                    ),
+                )
             self._conn.execute(
                 "UPDATE capability_registry SET registry_version = ?, "
                 "next_ordinal = MAX(next_ordinal, ?) WHERE project = ?",
-                (expected_version + 1, _max_ordinal(rows) + 1, project))
+                (expected_version + 1, _max_ordinal(rows) + 1, project),
+            )
             self._conn.execute("COMMIT")
         except BaseException:
             self._conn.execute("ROLLBACK")
@@ -164,7 +204,9 @@ class BoardIdentityStore(CapabilityIdentityStore):
         self._conn.execute(
             "INSERT INTO capability_registry (project, registry_version, "
             "next_ordinal) VALUES (?, 0, 1) "
-            "ON CONFLICT(project) DO NOTHING", (project,))
+            "ON CONFLICT(project) DO NOTHING",
+            (project,),
+        )
 
         def _allocate() -> str:
             # Reserve the ordinal AT MINT TIME, atomically. The never-reuse
@@ -179,7 +221,8 @@ class BoardIdentityStore(CapabilityIdentityStore):
             advanced = self._conn.execute(
                 "UPDATE capability_registry SET next_ordinal = next_ordinal + 1 "
                 "WHERE project = ? RETURNING next_ordinal",
-                (project,)).fetchone()
+                (project,),
+            ).fetchone()
             return f"BC-{advanced[0] - 1:03d}"
 
         return _allocate

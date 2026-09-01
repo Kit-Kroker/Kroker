@@ -5,6 +5,7 @@ TemporalAgent tool-call activity actually receives (its own deserialized
 copy, budget always zeroed) -- the in-memory Budget.searches/fetches on any
 one of these objects proves nothing; only the on-disk count does.
 """
+
 import asyncio
 import os
 import time
@@ -16,9 +17,9 @@ from sdlc.research.deps import BudgetExceeded, ResearchDeps
 
 
 def _deps(run_id: str = "r1", max_fetches: int = 2) -> ResearchDeps:
-    return ResearchDeps(run_id=run_id, provider="fake",
-                        max_searches=2, max_fetches=max_fetches,
-                        max_cost_usd=1.0)
+    return ResearchDeps(
+        run_id=run_id, provider="fake", max_searches=2, max_fetches=max_fetches, max_cost_usd=1.0
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -37,13 +38,14 @@ async def test_charge_persisted_accumulates_across_separate_deps_copies():
     path = budget_path("r1")
     assert path.exists()
     import json
+
     assert json.loads(path.read_text())["fetches"] == 2
 
 
 @pytest.mark.asyncio
 async def test_charge_persisted_raises_when_cap_exceeded():
     await charge_persisted(_deps(), fetch=1)
-    await charge_persisted(_deps(), fetch=1)   # at max_fetches=2
+    await charge_persisted(_deps(), fetch=1)  # at max_fetches=2
     with pytest.raises(BudgetExceeded):
         await charge_persisted(_deps(), fetch=1)
 
@@ -55,6 +57,7 @@ async def test_charge_persisted_leaves_disk_unchanged_on_raise():
     with pytest.raises(BudgetExceeded):
         await charge_persisted(_deps(), fetch=1)
     import json
+
     assert json.loads(budget_path("r1").read_text())["fetches"] == 2
 
 
@@ -65,17 +68,19 @@ async def test_charge_persisted_separate_run_ids_do_not_share_budget():
     # run-b's budget is untouched by run-a's charges.
     await charge_persisted(_deps("run-b"), fetch=1)
     import json
+
     assert json.loads(budget_path("run-b").read_text())["fetches"] == 1
 
 
 @pytest.mark.asyncio
 async def test_charge_persisted_concurrent_calls_do_not_lose_increments():
     results = await asyncio.gather(
-        *[charge_persisted(_deps("run-c", max_fetches=20), fetch=1)
-          for _ in range(10)],
-        return_exceptions=True)
+        *[charge_persisted(_deps("run-c", max_fetches=20), fetch=1) for _ in range(10)],
+        return_exceptions=True,
+    )
     assert all(r is None for r in results), results
     import json
+
     assert json.loads(budget_path("run-c").read_text())["fetches"] == 10
 
 
@@ -92,5 +97,6 @@ async def test_charge_persisted_steals_a_stale_lock():
     await charge_persisted(_deps(), fetch=1)
 
     import json
+
     assert json.loads(budget_path("r1").read_text())["fetches"] == 1
     assert not lock.exists()

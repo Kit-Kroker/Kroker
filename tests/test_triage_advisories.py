@@ -1,5 +1,6 @@
 """Spec D11: the default collects nothing, and every failure path is
 not_collected rather than an empty advisory list."""
+
 import json
 from unittest.mock import patch
 
@@ -7,7 +8,9 @@ import pytest
 
 from sdlc.measurement import CollectionState
 from sdlc.triage.advisories import (
-    NoneAdvisorySource, OsvAdvisorySource, resolve_advisory_source,
+    NoneAdvisorySource,
+    OsvAdvisorySource,
+    resolve_advisory_source,
 )
 
 
@@ -46,16 +49,21 @@ class _FakeResponse:
 
 
 def _osv_payload():
-    return {"vulns": [{
-        "id": "GHSA-1234",
-        "summary": "Request smuggling in requests",
-        "database_specific": {"severity": "HIGH"},
-    }]}
+    return {
+        "vulns": [
+            {
+                "id": "GHSA-1234",
+                "summary": "Request smuggling in requests",
+                "database_specific": {"severity": "HIGH"},
+            }
+        ]
+    }
 
 
 def test_osv_maps_a_hit_to_a_typed_advisory():
-    with patch("sdlc.triage.advisories.urllib.request.urlopen",
-               return_value=_FakeResponse(_osv_payload())):
+    with patch(
+        "sdlc.triage.advisories.urllib.request.urlopen", return_value=_FakeResponse(_osv_payload())
+    ):
         r = OsvAdvisorySource().lookup("PyPI", ["requests"])
     assert r.collected.state is CollectionState.MEASURED
     assert r.collected.value == 1.0
@@ -65,29 +73,33 @@ def test_osv_maps_a_hit_to_a_typed_advisory():
 
 
 def test_osv_no_hits_is_a_measured_zero_not_not_collected():
-    with patch("sdlc.triage.advisories.urllib.request.urlopen",
-               return_value=_FakeResponse({"vulns": []})):
+    with patch(
+        "sdlc.triage.advisories.urllib.request.urlopen", return_value=_FakeResponse({"vulns": []})
+    ):
         r = OsvAdvisorySource().lookup("PyPI", ["requests"])
     assert r.collected.state is CollectionState.MEASURED
     assert r.collected.value == 0.0
 
 
-@pytest.mark.parametrize("boom", [
-    TimeoutError("timed out"),
-    OSError("connection refused"),
-    ValueError("not json"),
-])
+@pytest.mark.parametrize(
+    "boom",
+    [
+        TimeoutError("timed out"),
+        OSError("connection refused"),
+        ValueError("not json"),
+    ],
+)
 def test_every_osv_failure_path_is_not_collected(boom):
-    with patch("sdlc.triage.advisories.urllib.request.urlopen",
-               side_effect=boom):
+    with patch("sdlc.triage.advisories.urllib.request.urlopen", side_effect=boom):
         r = OsvAdvisorySource().lookup("PyPI", ["requests"])
     assert r.collected.state is CollectionState.NOT_COLLECTED
     assert r.advisories == []
 
 
 def test_a_non_200_is_not_collected():
-    with patch("sdlc.triage.advisories.urllib.request.urlopen",
-               return_value=_FakeResponse({}, status=503)):
+    with patch(
+        "sdlc.triage.advisories.urllib.request.urlopen", return_value=_FakeResponse({}, status=503)
+    ):
         r = OsvAdvisorySource().lookup("PyPI", ["requests"])
     assert r.collected.state is CollectionState.NOT_COLLECTED
     assert "503" in r.collected.reason

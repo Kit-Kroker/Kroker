@@ -13,6 +13,7 @@ stage actually calls is what makes the constraint executable. The content_key
 tests at the bottom pin the one remaining thing the helper cannot: that a
 non-empty extra really does move a key, i.e. that the term is load-bearing.
 """
+
 from __future__ import annotations
 
 import ast
@@ -32,11 +33,14 @@ from sdlc.workflows.feature import _clarify_memo_extra
 def _map(name: str = "cap001", tree: str = "t1") -> CodebaseMap:
     ok = Measurement.measured(1.0)
     return CodebaseMap(
-        tree_hash=tree, commit_sha="c" * 40,
-        modules=(MapModule(name=name, member_paths=("src/a.py",),
-                           confidence=Confidence.LOW),),
-        modules_collected=ok, contracts_collected=ok,
-        hot_spots_collected=ok, collected=ok)
+        tree_hash=tree,
+        commit_sha="c" * 40,
+        modules=(MapModule(name=name, member_paths=("src/a.py",), confidence=Confidence.LOW),),
+        modules_collected=ok,
+        contracts_collected=ok,
+        hot_spots_collected=ok,
+        collected=ok,
+    )
 
 
 def _cfg(**kw) -> PipelineConfig:
@@ -44,6 +48,7 @@ def _cfg(**kw) -> PipelineConfig:
 
 
 # ---- flag off: nothing is appended, at all ----------------------------
+
 
 @pytest.mark.parametrize("cmap", [None, _map()])
 def test_the_flag_off_extra_is_empty_with_or_without_a_tree(cmap):
@@ -60,6 +65,7 @@ def test_the_default_config_is_flag_off():
 
 # ---- flag on: every input that changes the answer moves the key -------
 
+
 def test_turning_the_flag_on_appends_the_probe_digest():
     extra = _clarify_memo_extra(_cfg(), _map())
     assert extra != ""
@@ -67,21 +73,22 @@ def test_turning_the_flag_on_appends_the_probe_digest():
 
 
 def test_a_different_tree_moves_the_extra():
-    assert _clarify_memo_extra(_cfg(), _map(name="cap001")) \
-        != _clarify_memo_extra(_cfg(), _map(name="cap999"))
+    assert _clarify_memo_extra(_cfg(), _map(name="cap001")) != _clarify_memo_extra(
+        _cfg(), _map(name="cap999")
+    )
 
 
 def test_the_same_tree_and_prompts_hit_the_same_extra():
-    assert _clarify_memo_extra(_cfg(), _map()) \
-        == _clarify_memo_extra(_cfg(), _map())
+    assert _clarify_memo_extra(_cfg(), _map()) == _clarify_memo_extra(_cfg(), _map())
 
 
 def test_a_different_cap_moves_the_extra():
     """Spec section 10 names the cap as the first knob the benchmark tunes.
     The cap decides which questions reach a human and which land on
     `dropped`, so a memo made under cap=3 is not the cap=8 artifact."""
-    assert _clarify_memo_extra(_cfg(clarify_question_cap=3), _map()) \
-        != _clarify_memo_extra(_cfg(clarify_question_cap=8), _map())
+    assert _clarify_memo_extra(_cfg(clarify_question_cap=3), _map()) != _clarify_memo_extra(
+        _cfg(clarify_question_cap=8), _map()
+    )
 
 
 def test_greenfield_has_no_tree_but_still_keys_stably():
@@ -96,14 +103,15 @@ def test_greenfield_has_no_tree_but_still_keys_stably():
 
 # ---- the extra is load-bearing in the key it feeds --------------------
 
+
 def _key(extra: str) -> str:
-    return content_key("clarify", '{"title": "x"}' + extra, "prompt-sha",
-                       "anthropic:glm-5.2", "none")
+    return content_key(
+        "clarify", '{"title": "x"}' + extra, "prompt-sha", "anthropic:glm-5.2", "none"
+    )
 
 
 def test_the_flag_off_key_equals_the_pre_e85_key():
-    assert _key(_clarify_memo_extra(PipelineConfig(), _map())) \
-        == _key("")
+    assert _key(_clarify_memo_extra(PipelineConfig(), _map())) == _key("")
 
 
 def test_the_flag_on_key_differs_from_the_pre_e85_key():
@@ -121,23 +129,23 @@ def test_the_flag_on_key_differs_from_the_pre_e85_key():
 
 @pytest.fixture(scope="module")
 def pipeline_src() -> str:
-    tree = ast.parse(FEATURE_PY.read_text(encoding="utf-8"),
-                     filename=str(FEATURE_PY))
+    tree = ast.parse(FEATURE_PY.read_text(encoding="utf-8"), filename=str(FEATURE_PY))
     return ast.unparse(_methods(_load_class(tree, "FeatureWorkflow"))["_pipeline"])
 
 
 def _clarify_cached_stage_call() -> ast.Call:
     """The `self._cached_stage(cfg, 'clarify', ...)` call in _pipeline."""
-    tree = ast.parse(FEATURE_PY.read_text(encoding="utf-8"),
-                     filename=str(FEATURE_PY))
+    tree = ast.parse(FEATURE_PY.read_text(encoding="utf-8"), filename=str(FEATURE_PY))
     body = _methods(_load_class(tree, "FeatureWorkflow"))["_pipeline"]
     for node in ast.walk(body):
-        if (isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr == "_cached_stage"
-                and len(node.args) >= 3
-                and isinstance(node.args[1], ast.Constant)
-                and node.args[1].value == "clarify"):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "_cached_stage"
+            and len(node.args) >= 3
+            and isinstance(node.args[1], ast.Constant)
+            and node.args[1].value == "clarify"
+        ):
             return node
     pytest.fail("no self._cached_stage(cfg, 'clarify', ...) call in _pipeline")
 
@@ -149,7 +157,8 @@ def test_the_clarify_stage_appends_the_extra_to_its_memo_input():
     key_arg = ast.unparse(_clarify_cached_stage_call().args[2])
     assert "_clarify_key_extra" in key_arg, (
         "the clarify stage's memo input dropped the E-85 extra; probe "
-        "edits, tree changes and cap changes would all serve stale memos")
+        "edits, tree changes and cap changes would all serve stale memos"
+    )
 
 
 def test_the_clarify_memo_input_still_carries_its_pre_e85_terms():

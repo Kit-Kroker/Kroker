@@ -3,6 +3,7 @@ FeatureWorkflow run. resolve()'s sibling -- the same query/validate path
 (``transport.fetch_pending``) applied to many handles instead of one the
 caller already named.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -15,12 +16,14 @@ from .transport import describe, fetch_pending
 
 class RunInbox(BaseModel):
     """One open run with at least one pending decision."""
+
     run_id: str
     pending: list[PendingDecision] = Field(default_factory=list)
 
 
 class InboxError(BaseModel):
     """An open run whose pending_decisions() query raised."""
+
     run_id: str
     error: str
 
@@ -33,6 +36,7 @@ class Inbox(BaseModel):
     count, "no runs listed" and "checked 3 runs, none had anything pending"
     would be indistinguishable.
     """
+
     total_open_runs: int = 0
     runs: list[RunInbox] = Field(default_factory=list)
     errors: list[InboxError] = Field(default_factory=list)
@@ -103,12 +107,11 @@ async def fetch_inbox(client) -> Inbox:
     concurrently, and aggregate. A run with nothing pending is dropped, not
     listed; a run whose query raised becomes an InboxError instead of
     aborting the whole fetch."""
-    run_ids = await list_open_run_ids(client, "FeatureWorkflow",
-                                      "CrewTaskWorkflow")
+    run_ids = await list_open_run_ids(client, "FeatureWorkflow", "CrewTaskWorkflow")
     results = await asyncio.gather(*(_fetch_one(client, rid) for rid in run_ids))
 
     inbox = Inbox(total_open_runs=len(run_ids))
-    for run_id, outcome in zip(run_ids, results):
+    for run_id, outcome in zip(run_ids, results, strict=False):
         if isinstance(outcome, Exception):
             inbox.errors.append(InboxError(run_id=run_id, error=str(outcome)))
         elif outcome:

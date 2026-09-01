@@ -34,9 +34,15 @@ def tmp_path():
 
 
 def _cfg(tmp_path: Path) -> dict:
-    p = build_config("clarify", "add-login-greenfield", repo_root=ROOT,
-                     cases_root=CASES, agents_dir=AGENTS,
-                     judge_model="openai/gpt-5.2", out_dir=tmp_path)
+    p = build_config(
+        "clarify",
+        "add-login-greenfield",
+        repo_root=ROOT,
+        cases_root=CASES,
+        agents_dir=AGENTS,
+        judge_model="openai/gpt-5.2",
+        out_dir=tmp_path,
+    )
     return yaml.safe_load(p.read_text(encoding="utf-8"))
 
 
@@ -68,23 +74,34 @@ def test_carries_the_native_cost_and_latency_gates(tmp_path):
 
 
 def test_baseline_ref_is_threaded_not_hardcoded(tmp_path):
-    p = build_config("clarify", "add-login-greenfield", repo_root=ROOT,
-                     cases_root=CASES, agents_dir=AGENTS,
-                     judge_model="openai/gpt-5.2", out_dir=tmp_path,
-                     baseline_ref="main")
+    p = build_config(
+        "clarify",
+        "add-login-greenfield",
+        repo_root=ROOT,
+        cases_root=CASES,
+        agents_dir=AGENTS,
+        judge_model="openai/gpt-5.2",
+        out_dir=tmp_path,
+        baseline_ref="main",
+    )
     cfg = yaml.safe_load(p.read_text(encoding="utf-8"))
     assert cfg["providers"][0]["config"]["instructions_ref"] == "main"
 
 
 def test_vars_carry_what_the_assertions_read(tmp_path):
     v = _cfg(tmp_path)["defaultTest"]["vars"]
-    for key in ("role", "case", "author_model", "judge_model",
-                "cases_root", "agents_dir"):
+    for key in ("role", "case", "author_model", "judge_model", "cases_root", "agents_dir"):
         assert key in v, key
 
 
 def test_fixture_is_written_next_to_the_config(tmp_path):
-    build_config("clarify", "add-login-greenfield", repo_root=ROOT,
-                 cases_root=CASES, agents_dir=AGENTS,
-                 judge_model="openai/gpt-5.2", out_dir=tmp_path)
+    build_config(
+        "clarify",
+        "add-login-greenfield",
+        repo_root=ROOT,
+        cases_root=CASES,
+        agents_dir=AGENTS,
+        judge_model="openai/gpt-5.2",
+        out_dir=tmp_path,
+    )
     assert (tmp_path / "fixture.json").is_file()

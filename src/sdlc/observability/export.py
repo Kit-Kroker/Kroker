@@ -3,6 +3,7 @@ activities.py owns the file writes; these turn state into strings.
 
 report.html is deliberately a deterministic, dependency-free template — the
 retro stage is `(deterministic + reflect)`, no LLM (SDLC-spec §58)."""
+
 from __future__ import annotations
 
 from html import escape
@@ -12,8 +13,7 @@ from .trace import RunEvent
 
 
 def render_events_jsonl(trace: list[RunEvent]) -> str:
-    lines = [e.model_dump_json()
-             for e in sorted(trace, key=lambda e: e.seq)]
+    lines = [e.model_dump_json() for e in sorted(trace, key=lambda e: e.seq)]
     return "\n".join(lines) + ("\n" if lines else "")
 
 
@@ -23,24 +23,46 @@ def _row(cells: list[str]) -> str:
 
 def render_report_html(s: RunSummary) -> str:
     stage_rows = "".join(
-        _row([st.stage, st.role, st.outcome, f"{st.duration_s:.1f}s",
-              "-" if st.cost_usd is None else f"${st.cost_usd:.4f}",
-              str(st.fix_attempts)])
-        for st in s.stages)
+        _row(
+            [
+                st.stage,
+                st.role,
+                st.outcome,
+                f"{st.duration_s:.1f}s",
+                "-" if st.cost_usd is None else f"${st.cost_usd:.4f}",
+                str(st.fix_attempts),
+            ]
+        )
+        for st in s.stages
+    )
     gate_rows = "".join(
-        _row([g.gate, str(g.round), g.policy, g.decided_by,
-              "yes" if g.approved else "no",
-              "-" if g.confidence is None else f"{g.confidence:.2f}",
-              ", ".join(g.overrides) or "-"])
-        for g in s.gates)
-    clar_rows = "".join(
-        _row([c.question_id, c.question, c.answered_by])
-        for c in s.clarifications)
+        _row(
+            [
+                g.gate,
+                str(g.round),
+                g.policy,
+                g.decided_by,
+                "yes" if g.approved else "no",
+                "-" if g.confidence is None else f"{g.confidence:.2f}",
+                ", ".join(g.overrides) or "-",
+            ]
+        )
+        for g in s.gates
+    )
+    clar_rows = "".join(_row([c.question_id, c.question, c.answered_by]) for c in s.clarifications)
     role_rows = "".join(
-        _row([u.role, u.model, str(u.calls),
-              str(u.input_tokens), str(u.output_tokens),
-              "-" if u.cost_usd is None else f"${u.cost_usd:.4f}"])
-        for u in s.roles)
+        _row(
+            [
+                u.role,
+                u.model,
+                str(u.calls),
+                str(u.input_tokens),
+                str(u.output_tokens),
+                "-" if u.cost_usd is None else f"${u.cost_usd:.4f}",
+            ]
+        )
+        for u in s.roles
+    )
     cost = "-" if s.cost_usd_total is None else f"${s.cost_usd_total:.4f}"
     budget = "-" if s.budget_usd is None else f"${s.budget_usd:.2f}"
     return f"""<!doctype html>

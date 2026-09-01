@@ -1,29 +1,41 @@
 """FR-913 (E-48): the deterministic packet the proposer judges."""
+
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
 from sdlc.assessment.discover.map import (
-    GUARDRAIL_RULES, CandidateContext, DiscoverContext, GraphSummary,
+    GUARDRAIL_RULES,
+    CandidateContext,
+    DiscoverContext,
+    GraphSummary,
 )
 from sdlc.assessment.scan.models import CandidateMember, Confidence, MemberKind
 from sdlc.measurement import Measurement
 
 MEASURED = Measurement.measured(1.0)
 NC = Measurement.not_collected("upstream degraded")
-GRAPH = GraphSummary(parsed=10, unparsed=2, edges=14,
-                     unresolved_relative_rate=Measurement.measured(0.0))
+GRAPH = GraphSummary(
+    parsed=10, unparsed=2, edges=14, unresolved_relative_rate=Measurement.measured(0.0)
+)
 
 
 def _ctx(**kw):
     base = dict(
-        candidate_id="C-01", name="payments", confidence=Confidence.HIGH,
-        sources=("S3-payments",), source_rules=("s3_http_route",),
-        members=(CandidateMember(kind=MemberKind.HTTP_ROUTE,
-                                 value="POST /pay", path="api/pay.py"),),
+        candidate_id="C-01",
+        name="payments",
+        confidence=Confidence.HIGH,
+        sources=("S3-payments",),
+        source_rules=("s3_http_route",),
+        members=(
+            CandidateMember(kind=MemberKind.HTTP_ROUTE, value="POST /pay", path="api/pay.py"),
+        ),
         member_paths=("api/pay.py",),
-        cohesion=MEASURED, coupling=MEASURED, guardrail_only=False)
+        cohesion=MEASURED,
+        coupling=MEASURED,
+        guardrail_only=False,
+    )
     return CandidateContext(**(base | kw))
 
 

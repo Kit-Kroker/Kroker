@@ -1,5 +1,6 @@
 """E-42 D3: the three fields a durable HITL gate reads, extracted so GateHost
 does not depend on the feature pipeline's PipelineConfig."""
+
 from __future__ import annotations
 
 from sdlc.models import GateConfig, GatePolicy, GateSettings, PipelineConfig

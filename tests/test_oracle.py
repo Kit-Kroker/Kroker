@@ -1,13 +1,17 @@
 """Pure grading logic for the held-out oracle (E-31)."""
+
 from sdlc.benchmarks.oracle import (
-    _truncate_diff, grade_from_junit, held_out_ok, language_match,
+    _truncate_diff,
+    grade_from_junit,
+    held_out_ok,
+    language_match,
 )
 
 JUNIT_MIXED = (
     '<testsuites><testsuite tests="4" failures="1" errors="1" skipped="0">'
     '<testcase name="a"/><testcase name="b"><failure/></testcase>'
     '<testcase name="c"><error/></testcase><testcase name="d"/>'
-    '</testsuite></testsuites>'
+    "</testsuite></testsuites>"
 )
 JUNIT_ROOT_SUITE = (
     '<testsuite tests="2" failures="0" errors="0" skipped="0">'
@@ -33,7 +37,7 @@ def test_grade_all_pass_is_one():
 
 def test_grade_excludes_skipped_from_denominator():
     score, passed, total, _ = grade_from_junit(JUNIT_WITH_SKIP)
-    assert (passed, total) == (2, 2)   # skipped test dropped from both
+    assert (passed, total) == (2, 2)  # skipped test dropped from both
     assert score == 1.0
 
 
@@ -78,7 +82,7 @@ JUNIT_WITH_FILE_ATTR = (
     'file="test_crud.py"><failure/></testcase>'
     '<testcase classname="test_crud" name="test_skipped" '
     'file="test_crud.py"><skipped/></testcase>'
-    '</testsuite></testsuites>'
+    "</testsuite></testsuites>"
 )
 
 JUNIT_NO_FILE_ATTR = (
@@ -87,8 +91,7 @@ JUNIT_NO_FILE_ATTR = (
 )
 
 JUNIT_NO_CLASSNAME = (
-    '<testsuite tests="1" failures="0" errors="0" skipped="0">'
-    '<testcase name="test_x"/></testsuite>'
+    '<testsuite tests="1" failures="0" errors="0" skipped="0"><testcase name="test_x"/></testsuite>'
 )
 
 
@@ -113,8 +116,10 @@ def test_grade_testcases_falls_back_to_name_when_neither_present():
 
 
 def test_grade_testcases_error_child_is_failure():
-    xml = ('<testsuite tests="1" failures="0" errors="1" skipped="0">'
-          '<testcase name="a"><error/></testcase></testsuite>')
+    xml = (
+        '<testsuite tests="1" failures="0" errors="1" skipped="0">'
+        '<testcase name="a"><error/></testcase></testsuite>'
+    )
     assert grade_testcases_from_junit(xml) == {"a": False}
 
 
@@ -138,6 +143,6 @@ def test_truncate_diff_truncates_long_text_with_marker():
     out = _truncate_diff(text, max_chars=20000)
     assert out.startswith("a" * 20000)
     assert out != text
-    assert len(out) > 20000   # marker appended
+    assert len(out) > 20000  # marker appended
     assert "truncated" in out
-    assert "5000" in out   # chars omitted count
+    assert "5000" in out  # chars omitted count

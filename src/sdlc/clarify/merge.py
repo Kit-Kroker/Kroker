@@ -11,13 +11,13 @@ Two different removals happen here and they mean different things:
   - DROP: a real question that lost the ranking cut. It IS recorded, on
     `dropped`, so the benchmark can score "material question never asked".
 """
+
 from __future__ import annotations
 
 import re
 from collections.abc import Sequence
 
-from ..models import (ClarificationDimension, ClarifiedRequirements,
-                      OpenQuestion)
+from ..models import ClarificationDimension, ClarifiedRequirements, OpenQuestion
 from .models import ClarifyRoute, ProbeResult
 from .routing import SUPERVISOR_DIMENSIONS
 
@@ -52,7 +52,9 @@ def _sort_key(q: OpenQuestion) -> tuple[float, int, str]:
     # questions before anything is sorted. +1.0 sorts after every real
     # score, since real scores negate to <= 0.0 and are compared ascending.
     materiality = -q.materiality if q.materiality is not None else 1.0
-    dim = _CANONICAL.get(q.dimension, len(_CANONICAL))
+    dim = (
+        _CANONICAL.get(q.dimension, len(_CANONICAL)) if q.dimension is not None else len(_CANONICAL)
+    )
     return (materiality, dim, q.id)
 
 
@@ -72,8 +74,7 @@ def merge_clarification(
     # open_questions NOR dropped. None is the honest fallback: the question
     # is real, its dimension is not knowable.
     candidates: list[OpenQuestion] = [
-        q if q.dimension in SUPERVISOR_DIMENSIONS
-        else q.model_copy(update={"dimension": None})
+        q if q.dimension in SUPERVISOR_DIMENSIONS else q.model_copy(update={"dimension": None})
         for q in route.questions
     ]
     for probe in probes:
@@ -88,8 +89,7 @@ def merge_clarification(
 
     # DISCARD ungrounded speculation before anything else, so it cannot win a
     # slot or pollute the dedup.
-    candidates = [q for q in candidates
-                  if q.dimension not in grounded or q.evidence]
+    candidates = [q for q in candidates if q.dimension not in grounded or q.evidence]
 
     # DISCARD anything below the bar both prompts already state. A sub-floor
     # question was never material, so it is NOT recorded on `dropped` --
@@ -99,9 +99,9 @@ def merge_clarification(
     # author that skipped the scale did not clear it either, and keeping
     # such questions would let them ride into a capped batch ahead of
     # genuinely scored ones the moment the pool is smaller than the cap.
-    candidates = [q for q in candidates
-                  if q.materiality is not None
-                  and q.materiality >= MATERIALITY_FLOOR]
+    candidates = [
+        q for q in candidates if q.materiality is not None and q.materiality >= MATERIALITY_FLOOR
+    ]
 
     # DEDUP, keeping the strongest claim for each distinct question.
     best: dict[str, OpenQuestion] = {}
@@ -128,6 +128,5 @@ def merge_clarification(
         out_of_scope=route.out_of_scope,
         open_questions=unique[:cap],
         dropped=unique[cap:],
-        dimensions_probed=sorted((p.dimension for p in probes),
-                                 key=lambda d: _CANONICAL[d]),
+        dimensions_probed=sorted((p.dimension for p in probes), key=lambda d: _CANONICAL[d]),
     )

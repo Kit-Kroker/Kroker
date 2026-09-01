@@ -4,11 +4,14 @@
 E-46 learned this at plan-3 cost -- a hand-maintained version int misses a
 real input, which is why its key carries rules_sha over the module bytes.
 """
+
 from __future__ import annotations
 
 from sdlc.assessment.risk import rules
 from sdlc.assessment.risk.models import (
-    ControlFamily, Criticality, Severity,
+    ControlFamily,
+    Criticality,
+    Severity,
 )
 
 
@@ -42,13 +45,11 @@ def test_severity_table_covers_every_hint_and_criticality_pair():
 
 
 def test_a_high_hint_on_a_high_criticality_capability_is_critical():
-    assert (rules.SEVERITY_TABLE[("high", Criticality.HIGH)]
-            is Severity.CRITICAL)
+    assert rules.SEVERITY_TABLE[("high", Criticality.HIGH)] is Severity.CRITICAL
 
 
 def test_a_high_hint_on_a_low_criticality_capability_is_not_critical():
-    assert (rules.SEVERITY_TABLE[("high", Criticality.LOW)]
-            is not Severity.CRITICAL)
+    assert rules.SEVERITY_TABLE[("high", Criticality.LOW)] is not Severity.CRITICAL
 
 
 def test_control_sources_declare_all_five_families():
@@ -60,18 +61,21 @@ def test_control_sources_declare_all_five_families():
 
 
 def test_weights_sum_to_one_per_composite():
-    for table in (rules.SECURITY_WEIGHTS, rules.QA_WEIGHTS,
-                  rules.UNIFIED_WEIGHTS):
+    for table in (rules.SECURITY_WEIGHTS, rules.QA_WEIGHTS, rules.UNIFIED_WEIGHTS):
         assert abs(sum(table.values()) - 1.0) < 1e-9
 
 
 def test_cross_capability_caps_are_declared():
     """RD10's depth and result caps are memo inputs: retuning one must
     invalidate exactly the assessments it would move."""
-    for cap in (rules.CASCADE_MAX_DEPTH, rules.CASCADE_MAX_PATHS,
-                rules.ESCALATION_MAX_DEPTH, rules.ESCALATION_MAX_PATHS,
-                rules.BOUNDARY_MAX_ROWS, rules.SHARED_MAX_ROWS,
-                rules.EDGE_EVIDENCE_MAX):
+    for cap in (
+        rules.CASCADE_MAX_DEPTH,
+        rules.CASCADE_MAX_PATHS,
+        rules.ESCALATION_MAX_DEPTH,
+        rules.ESCALATION_MAX_PATHS,
+        rules.BOUNDARY_MAX_ROWS,
+        rules.SHARED_MAX_ROWS,
+        rules.EDGE_EVIDENCE_MAX,
+    ):
         assert isinstance(cap, int) and cap > 0
     assert 0.0 <= rules.CASCADE_SOURCE_MIN_SECURITY <= 1.0
-

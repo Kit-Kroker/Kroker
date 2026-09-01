@@ -6,6 +6,7 @@ it created on the first attempt, not crash on `git worktree add -b`
 Reproduces the runtime error:
   git worktree add failed (rc=255): ... a branch named 'sdlc/<run>/<task>' already exists
 """
+
 import asyncio
 import os
 import shutil
@@ -16,8 +17,10 @@ from pathlib import Path
 import pytest
 
 from sdlc.activities import (
-    IntegrationInput, WorktreeInput,
-    create_worktree, setup_integration_branch,
+    IntegrationInput,
+    WorktreeInput,
+    create_worktree,
+    setup_integration_branch,
 )
 from tests.conftest import run_git
 
@@ -28,10 +31,12 @@ def test_create_worktree_reuses_on_repeat_call(git_repo):
     """A Temporal retry calls create_worktree again with identical input;
     the branch and worktree already exist from attempt #1, so attempt #2
     must reuse them rather than raise."""
-    setup = asyncio.run(setup_integration_branch(
-        IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")))
-    inp = WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="T01",
-                        from_ref=setup.head_sha)
+    setup = asyncio.run(
+        setup_integration_branch(
+            IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")
+        )
+    )
+    inp = WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="T01", from_ref=setup.head_sha)
 
     first = asyncio.run(create_worktree(inp))
     second = asyncio.run(create_worktree(inp))  # raises before the fix
@@ -45,17 +50,19 @@ def test_create_worktree_recovers_from_pruned_worktree(git_repo):
     """Worker died after creating the worktree; the dir was cleared and
     `git worktree prune` dropped the registration, but the branch lingers.
     A retry must check out the existing branch into a fresh worktree."""
-    setup = asyncio.run(setup_integration_branch(
-        IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")))
-    inp = WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="T02",
-                        from_ref=setup.head_sha)
+    setup = asyncio.run(
+        setup_integration_branch(
+            IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")
+        )
+    )
+    inp = WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="T02", from_ref=setup.head_sha)
 
     first = asyncio.run(create_worktree(inp))
-    shutil.rmtree(first.path)                       # crash: dir gone
-    run_git(["worktree", "prune"], git_repo)         # registration dropped
+    shutil.rmtree(first.path)  # crash: dir gone
+    run_git(["worktree", "prune"], git_repo)  # registration dropped
     assert run_git(["rev-parse", "--verify", first.branch], git_repo).strip()  # branch remains
 
-    recovered = asyncio.run(create_worktree(inp))    # raises before the fix
+    recovered = asyncio.run(create_worktree(inp))  # raises before the fix
 
     assert recovered.path == first.path
     assert recovered.branch == first.branch
@@ -81,10 +88,12 @@ def test_create_worktree_clears_stale_readonly_dir(git_repo):
       git worktree add failed (rc=128): checking out 'sdlc/<run>/<task>'
       fatal: '<path>' already exists
     """
-    setup = asyncio.run(setup_integration_branch(
-        IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")))
-    inp = WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="T03",
-                        from_ref=setup.head_sha)
+    setup = asyncio.run(
+        setup_integration_branch(
+            IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")
+        )
+    )
+    inp = WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="T03", from_ref=setup.head_sha)
 
     first = asyncio.run(create_worktree(inp))
     # Break the worktree's liveness: drop the .git pointer so rev-parse fails
@@ -105,9 +114,10 @@ def test_create_worktree_clears_stale_readonly_dir(git_repo):
     assert recovered.branch == first.branch
 
 
-@pytest.mark.skipif(sys.platform != "win32",
-                    reason="WinError 32 reproduction is Windows-specific; "
-                           "POSIX allows unlinking open files")
+@pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="WinError 32 reproduction is Windows-specific; POSIX allows unlinking open files",
+)
 def test_create_worktree_clears_stale_dir_with_locked_file(git_repo):
     """A prior worktree left a dead dir at the path containing a file held
     open by another process. On Windows this is WinError 32 — produced by
@@ -118,10 +128,12 @@ def test_create_worktree_clears_stale_dir_with_locked_file(git_repo):
     clear the path; it must fall back to ``<path>.N`` so the activity still
     succeeds, and the workflow treats the returned path as authoritative.
     """
-    setup = asyncio.run(setup_integration_branch(
-        IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")))
-    inp = WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="T04",
-                        from_ref=setup.head_sha)
+    setup = asyncio.run(
+        setup_integration_branch(
+            IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")
+        )
+    )
+    inp = WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="T04", from_ref=setup.head_sha)
 
     first = asyncio.run(create_worktree(inp))
     # Break the worktree's liveness: drop the .git pointer so rev-parse fails
@@ -150,5 +162,4 @@ def test_create_worktree_clears_stale_dir_with_locked_file(git_repo):
     assert recovered.branch == first.branch
     assert recovered.path != first.path
     assert os.path.isdir(recovered.path)
-    assert run_git(["rev-parse", "--is-inside-work-tree"],
-                   recovered.path).strip() == "true"
+    assert run_git(["rev-parse", "--is-inside-work-tree"], recovered.path).strip() == "true"

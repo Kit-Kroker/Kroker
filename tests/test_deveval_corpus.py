@@ -1,4 +1,5 @@
 """Every committed DevEval case is structurally sound and reviewed (E-79)."""
+
 from pathlib import Path
 
 import pytest
@@ -19,13 +20,20 @@ def test_case_is_complete_and_reviewed(case_dir):
     spec = load_case_spec(str(case_dir / "case.yaml"))
     assert spec.case_id == case_dir.name
     assert spec.language == "python"
-    for rel in ("oracle", "reference", "reference_artifacts",
-                "reference_env", "ATTRIBUTION.md", "tasks.yaml"):
+    for rel in (
+        "oracle",
+        "reference",
+        "reference_artifacts",
+        "reference_env",
+        "ATTRIBUTION.md",
+        "tasks.yaml",
+    ):
         assert (case_dir / rel).exists(), f"{case_dir.name}: missing {rel}"
 
     tasks_text = (case_dir / "tasks.yaml").read_text(encoding="utf-8")
     assert "DRAFT -- REVIEW BEFORE USE" not in tasks_text, (
-        f"{case_dir.name}: tasks.yaml is still an unreviewed draft")
+        f"{case_dir.name}: tasks.yaml is still an unreviewed draft"
+    )
 
     suite = load_task_suite(case_dir.name, cases_dir=CASES)
     assert suite is not None and suite.tasks
@@ -52,9 +60,11 @@ def test_oracle_suites_do_not_leak_into_reference(case_dir):
     """
     oracle = case_dir / "oracle"
     ref = case_dir / "reference"
-    leaked = [p.relative_to(oracle).as_posix()
-              for p in oracle.rglob("*.py")
-              if (ref / p.relative_to(oracle)).exists()]
+    leaked = [
+        p.relative_to(oracle).as_posix()
+        for p in oracle.rglob("*.py")
+        if (ref / p.relative_to(oracle)).exists()
+    ]
     assert not leaked, f"{case_dir.name}: oracle files present in reference/: {leaked}"
 
 
@@ -81,4 +91,5 @@ def test_every_task_node_id_exists_in_the_oracle(case_dir):
             path = oracle / rel
             assert path.is_file(), f"{case_dir.name}/{t.id}: no such file {rel}"
             assert f"def {name}(" in path.read_text(encoding="utf-8"), (
-                f"{case_dir.name}/{t.id}: {name} not defined in {rel}")
+                f"{case_dir.name}/{t.id}: {name} not defined in {rel}"
+            )

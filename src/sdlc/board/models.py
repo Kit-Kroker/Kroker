@@ -1,22 +1,23 @@
 # src/sdlc/board/models.py
 """Board entities. The mutable graph SQLite holds; artifact BODIES live in
 the claim-check store and are referenced by uri+sha256, never inlined here."""
+
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class ArtifactStatus(str, Enum):
+class ArtifactStatus(StrEnum):
     PROPOSED = "proposed"
     CURRENT = "current"
     SUPERSEDED = "superseded"
     REJECTED = "rejected"
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(StrEnum):
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     DONE = "done"
@@ -25,11 +26,12 @@ class TaskStatus(str, Enum):
     QUARANTINED = "quarantined"
 
 
-class Authority(str, Enum):
+class Authority(StrEnum):
     """Who moved a status. Only AUTHORITATIVE writes touch
     BoardTask.authoritative_status, which is what scoring reads."""
-    AUTHORITATIVE = "authoritative"      # workflow activities
-    OBSERVATIONAL = "observational"      # agents
+
+    AUTHORITATIVE = "authoritative"  # workflow activities
+    OBSERVATIONAL = "observational"  # agents
 
 
 class ArtifactVersion(BaseModel):
@@ -76,7 +78,7 @@ class TaskEvidence(BaseModel):
     plan_version: int
     task_id: str
     run_id: str
-    kind: str                 # qa | review | deep_review
+    kind: str  # qa | review | deep_review
     sha256: str
     uri: str
     created_at: datetime
@@ -85,8 +87,8 @@ class TaskEvidence(BaseModel):
 class BoardEvent(BaseModel):
     id: int
     project: str
-    subject: str              # "artifact:<key>" | "task:<plan_version>:<id>"
-    actor: str                # "workflow:<run_id>" | "agent:<name>"
+    subject: str  # "artifact:<key>" | "task:<plan_version>:<id>"
+    actor: str  # "workflow:<run_id>" | "agent:<name>"
     authority: Authority
     from_status: str | None = None
     to_status: str | None = None
@@ -97,6 +99,7 @@ class BoardEvent(BaseModel):
 class BoardStats(BaseModel):
     """Board-owned counters only. Quality/cost/speed rollup stays in
     benchmarks/ — duplicating it here would produce two scores that disagree."""
+
     project: str
     tasks_by_status: dict[str, int] = Field(default_factory=dict)
     total_fix_attempts: int = 0

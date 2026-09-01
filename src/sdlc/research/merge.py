@@ -5,11 +5,19 @@ reader, which is the point -- the model's judgment is confined to summary,
 confidence, and cross-cutting contradictions (research/stage.py's
 synthesize_brief), and it may never author a grounded finding.
 """
+
 from __future__ import annotations
 
-from ..models import (ConsultedSource, Contradiction, Gap, GroundedFinding,
-                      InferredFinding, ResearchBrief, SubQuestion,
-                      SubQuestionFinding)
+from ..models import (
+    ConsultedSource,
+    Contradiction,
+    Gap,
+    GroundedFinding,
+    InferredFinding,
+    ResearchBrief,
+    SubQuestion,
+    SubQuestionFinding,
+)
 
 
 def merge_briefs(findings: list[SubQuestionFinding]) -> ResearchBrief:
@@ -33,10 +41,13 @@ def merge_briefs(findings: list[SubQuestionFinding]) -> ResearchBrief:
         if f.failed:
             # A permanently failed sub-question is not silence: it becomes a
             # gap so a short brief is EXPLAINED rather than merely short.
-            gaps.append(Gap(
-                sub_question_id=f.sub_question.id,
-                what_is_missing=f.sub_question.question,
-                why_it_matters=f"this sub-question did not complete: {f.error}"))
+            gaps.append(
+                Gap(
+                    sub_question_id=f.sub_question.id,
+                    what_is_missing=f.sub_question.question,
+                    why_it_matters=f"this sub-question did not complete: {f.error}",
+                )
+            )
             continue
 
         for s in f.brief.sources_consulted:

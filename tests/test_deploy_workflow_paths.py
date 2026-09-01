@@ -1,25 +1,32 @@
 """Spec section 8: the six stage-13 paths, driven through the real
 FeatureWorkflow with mocked deploy activities. No Docker, no fake adapter --
 the adapters themselves are never involved."""
+
 from __future__ import annotations
 
 import asyncio
 import uuid
 
 import pytest
-from temporalio import activity, workflow
+from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
+from temporalio import workflow
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
-from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 
 from sdlc.activities import evaluate_gate
 from sdlc.models import (
-    GateConfig, GateDecision, GateOutcome, GatePolicy, SmokeState,
+    GateConfig,
+    GateDecision,
+    GateOutcome,
+    GatePolicy,
+    SmokeState,
 )
 from sdlc.observability.activities import export_run_artifacts
 from tests.fakes.canned import (
-    AGENT_SPECS, QUESTION_IDS, e2e_config, greenfield_idea,
+    AGENT_SPECS,
+    e2e_config,
+    greenfield_idea,
 )
 from tests.fakes.fake_activities import GIT_FAKES
 from tests.fakes.fake_deploy import DEPLOY_FAKES, reset
@@ -63,16 +70,27 @@ async def _run(cfg, tmp_path, monkeypatch, tag, driver=None):
     worker/environment close is an RPC error (F3 behavioral read)."""
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
-        async with Worker(env.client, task_queue=tag,
-                          workflows=[FeatureWorkflow, DeploymentWorkflow],
-                          activities=[evaluate_gate, export_run_artifacts,
-                                      *GIT_FAKES, *DEPLOY_FAKES,
-                                      *fake_agent_activities(AGENT_SPECS)],
-                          plugins=[PydanticAIPlugin()]):
+        data_converter=pydantic_data_converter
+    ) as env:
+        async with Worker(
+            env.client,
+            task_queue=tag,
+            workflows=[FeatureWorkflow, DeploymentWorkflow],
+            activities=[
+                evaluate_gate,
+                export_run_artifacts,
+                *GIT_FAKES,
+                *DEPLOY_FAKES,
+                *fake_agent_activities(AGENT_SPECS),
+            ],
+            plugins=[PydanticAIPlugin()],
+        ):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run, args=[greenfield_idea(), cfg, None],
-                id=f"{tag}-{uuid.uuid4()}", task_queue=tag)
+                FeatureWorkflow.run,
+                args=[greenfield_idea(), cfg, None],
+                id=f"{tag}-{uuid.uuid4()}",
+                task_queue=tag,
+            )
             if driver is not None:
                 with env.auto_time_skipping_disabled():
                     await driver(handle)
@@ -123,9 +141,14 @@ async def test_4_revise_retries_with_a_second_child(tmp_path, monkeypatch):
         await _wait_for_status(handle, "awaiting:deploy_failed")
         await handle.signal(
             FeatureWorkflow.submit_gate_decision,
-            GateDecision(gate="deploy_failed", round=1,
-                         outcome=GateOutcome.REVISE, decided_by="human",
-                         guidance="retry it"))
+            GateDecision(
+                gate="deploy_failed",
+                round=1,
+                outcome=GateOutcome.REVISE,
+                decided_by="human",
+                guidance="retry it",
+            ),
+        )
 
     result, _ = await _run(cfg, tmp_path, monkeypatch, "d4", driver)
     assert result.startswith("deployed:"), result

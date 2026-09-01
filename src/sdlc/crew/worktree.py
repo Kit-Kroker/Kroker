@@ -9,6 +9,7 @@ to that one command, so no state is written into the user's repository.
 (An exclude file cannot be worktree-private: info/exclude lives in the git
 COMMON dir, which a linked worktree shares with the main repo.)
 """
+
 from __future__ import annotations
 
 from pathlib import Path

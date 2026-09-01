@@ -1,16 +1,25 @@
 import json
 
 from sdlc.benchmarks.error_matrix import (
-    ErrorMatrix, ErrorMatrixCell, render_error_matrix_html, render_error_matrix_json)
+    ErrorMatrix,
+    ErrorMatrixCell,
+    render_error_matrix_html,
+    render_error_matrix_json,
+)
 
 
 def _em():
     return ErrorMatrix(
-        case_id="c1", error_classes=["functional", "security"],
+        case_id="c1",
+        error_classes=["functional", "security"],
         arms=["opencode#m1"],
-        cells=[ErrorMatrixCell(error_class="functional", arm_key="opencode#m1",
-                              avg_failure_mass=0.5, n_runs=2)],
-        max_value=0.5)
+        cells=[
+            ErrorMatrixCell(
+                error_class="functional", arm_key="opencode#m1", avg_failure_mass=0.5, n_runs=2
+            )
+        ],
+        max_value=0.5,
+    )
 
 
 def test_json_round_trips():
@@ -33,10 +42,15 @@ def test_html_handles_empty():
 
 
 def test_html_escapes_arm_key():
-    em = ErrorMatrix(case_id="c1", error_classes=["functional"], arms=["<x>"],
-                    cells=[ErrorMatrixCell(error_class="functional", arm_key="<x>",
-                                          avg_failure_mass=1.0, n_runs=1)],
-                    max_value=1.0)
+    em = ErrorMatrix(
+        case_id="c1",
+        error_classes=["functional"],
+        arms=["<x>"],
+        cells=[
+            ErrorMatrixCell(error_class="functional", arm_key="<x>", avg_failure_mass=1.0, n_runs=1)
+        ],
+        max_value=1.0,
+    )
     html = render_error_matrix_html(em)
     assert "<x>" not in html.split("<body>")[1]
     assert "&lt;x&gt;" in html

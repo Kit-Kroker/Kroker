@@ -1,13 +1,16 @@
 """Structural purity check for memory wiring — same approach as
 test_factory_purity.py's benchmark guard, applied to recall/retain."""
+
 from __future__ import annotations
 
 import ast
 
 import pytest
-
 from test_factory_purity import (
-    FEATURE_PY, _activity_calls_in_method, _load_class, _methods,
+    FEATURE_PY,
+    _activity_calls_in_method,
+    _load_class,
+    _methods,
 )
 
 _MEMORY_ACTIVITIES = {"recall_snapshot", "retain"}
@@ -28,8 +31,11 @@ def _is_memory_enabled_guard(stmt: ast.stmt) -> bool:
     if not (isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not)):
         return False
     src = ast.unparse(test.operand)
-    return src in ("cfg.memory.enabled",) and len(stmt.body) == 1 \
+    return (
+        src in ("cfg.memory.enabled",)
+        and len(stmt.body) == 1
         and isinstance(stmt.body[0], ast.Return)
+    )
 
 
 def test_recall_helper_is_guarded(feature_class):
@@ -58,4 +64,5 @@ def test_memory_activities_only_called_through_gated_helpers(feature_class):
         calls = _activity_calls_in_method(fn) & _MEMORY_ACTIVITIES
         assert not calls, (
             f"method {name!r} calls memory activity/activities {calls} "
-            f"directly — must go through _recall/_retain")
+            f"directly — must go through _recall/_retain"
+        )

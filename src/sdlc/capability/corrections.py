@@ -9,22 +9,26 @@ Application follows E-78's pattern (FR-1302): mutate the row, append one
 event with actor and operation. A purely event-sourced fold would be more
 elegant; a second persistence model inside one SQLite file would be worse.
 """
+
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field, model_validator
 
 from .models import (
-    CapabilityFingerprint, CapabilityIdentity, IdentityStatus, SignalTier,
+    CapabilityFingerprint,
+    CapabilityIdentity,
+    IdentityStatus,
+    SignalTier,
 )
 from .store import CapabilityIdentityStore
 
 
-class CorrectionOp(str, Enum):
-    MERGE = "merge"          # two ids are one capability
-    SPLIT = "split"          # one id should have been two
-    REATTACH = "reattach"    # a new id is really an existing capability
+class CorrectionOp(StrEnum):
+    MERGE = "merge"  # two ids are one capability
+    SPLIT = "split"  # one id should have been two
+    REATTACH = "reattach"  # a new id is really an existing capability
 
 
 class IdentityCorrection(BaseModel):
@@ -39,18 +43,19 @@ class IdentityCorrection(BaseModel):
     partition: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def _audited(self) -> "IdentityCorrection":
+    def _audited(self) -> IdentityCorrection:
         if not self.approved_by.strip():
             raise ValueError(
-                "approved_by is required -- an unattributed override is not "
-                "an audited one")
+                "approved_by is required -- an unattributed override is not an audited one"
+            )
         if not self.reason.strip():
             raise ValueError("reason is required")
         return self
 
 
-def apply_correction(store: CapabilityIdentityStore, project: str,
-                     correction: IdentityCorrection) -> int:
+def apply_correction(
+    store: CapabilityIdentityStore, project: str, correction: IdentityCorrection
+) -> int:
     """Apply one correction. Returns the resulting registry_version.
 
     Idempotent by TARGET-STATE check, not by dedupe key: humans retry CLI
@@ -62,27 +67,30 @@ def apply_correction(store: CapabilityIdentityStore, project: str,
 
     source = rows.get(correction.source_bc_id)
     if source is None:
-        raise ValueError(
-            f"unknown capability '{correction.source_bc_id}' in project "
-            f"'{project}'")
+        raise ValueError(f"unknown capability '{correction.source_bc_id}' in project '{project}'")
 
+    changed: list[CapabilityIdentity] | None
     if correction.operation is CorrectionOp.SPLIT:
         changed = _split(source, correction, store.allocator(project))
     else:
         changed = _absorb(source, correction, rows)
 
-    if changed is None:            # already in the target state
+    if changed is None:  # already in the target state
         return version
 
-    return store.apply(project, changed, expected_version=version,
-                       actor=correction.approved_by,
-                       operation=correction.operation.value,
-                       detail=correction.reason)
+    return store.apply(
+        project,
+        changed,
+        expected_version=version,
+        actor=correction.approved_by,
+        operation=correction.operation.value,
+        detail=correction.reason,
+    )
 
 
-def _absorb(source: CapabilityIdentity, correction: IdentityCorrection,
-            rows: dict[str, CapabilityIdentity]
-            ) -> list[CapabilityIdentity] | None:
+def _absorb(
+    source: CapabilityIdentity, correction: IdentityCorrection, rows: dict[str, CapabilityIdentity]
+) -> list[CapabilityIdentity] | None:
     """MERGE and REATTACH are the same write: the source is absorbed into the
     target, and the target inherits the source's fingerprint.
 
@@ -92,16 +100,13 @@ def _absorb(source: CapabilityIdentity, correction: IdentityCorrection,
     threshold again, and mints another new id.
     """
     if correction.target_bc_id is None:
-        raise ValueError(
-            f"operation={correction.operation.value} requires target_bc_id")
+        raise ValueError(f"operation={correction.operation.value} requires target_bc_id")
     target = rows.get(correction.target_bc_id)
     if target is None:
-        raise ValueError(
-            f"unknown capability '{correction.target_bc_id}'")
+        raise ValueError(f"unknown capability '{correction.target_bc_id}'")
 
     if source.bc_id == target.bc_id:
-        raise ValueError(
-            f"cannot {correction.operation.value} '{source.bc_id}' into itself")
+        raise ValueError(f"cannot {correction.operation.value} '{source.bc_id}' into itself")
 
     if target.status is not IdentityStatus.ACTIVE:
         # A non-active target is either MERGED (absorbing into it would build
@@ -110,20 +115,24 @@ def _absorb(source: CapabilityIdentity, correction: IdentityCorrection,
         # is recoverable from the CLI. Name the live head so the operator can
         # re-issue against it.
         head = _live_head(target.bc_id, rows)
-        suffix = (f" (live head is '{head}'; re-issue with --into {head})"
-                  if head != target.bc_id else "")
+        suffix = (
+            f" (live head is '{head}'; re-issue with --into {head})" if head != target.bc_id else ""
+        )
         raise ValueError(
             f"cannot {correction.operation.value} into "
-            f"'{target.bc_id}': it is {target.status.value}{suffix}")
+            f"'{target.bc_id}': it is {target.status.value}{suffix}"
+        )
 
-    if (source.status is IdentityStatus.MERGED
-            and source.merged_into == target.bc_id):
+    if source.status is IdentityStatus.MERGED and source.merged_into == target.bc_id:
         return None
 
-    absorbed = source.model_copy(update={
-        "status": IdentityStatus.MERGED,
-        "retired_reason": None,
-        "merged_into": target.bc_id})
+    absorbed = source.model_copy(
+        update={
+            "status": IdentityStatus.MERGED,
+            "retired_reason": None,
+            "merged_into": target.bc_id,
+        }
+    )
     survivor = target.model_copy(update={"fingerprint": source.fingerprint})
     return [absorbed, survivor]
 
@@ -149,8 +158,9 @@ def _live_head(bc_id: str, rows: dict[str, CapabilityIdentity]) -> str:
     return bc_id
 
 
-def _split(source: CapabilityIdentity, correction: IdentityCorrection,
-           allocate) -> list[CapabilityIdentity]:
+def _split(
+    source: CapabilityIdentity, correction: IdentityCorrection, allocate
+) -> list[CapabilityIdentity]:
     """Move the named members onto a freshly minted id. Members are matched
     across every tier, so a caller need not say which tier each belongs to."""
     if not correction.partition:
@@ -169,24 +179,28 @@ def _split(source: CapabilityIdentity, correction: IdentityCorrection,
     if unmatched:
         # A typo in one --member would otherwise move the rest and report
         # success, silently dropping the entry that matched nothing.
-        raise ValueError(
-            f"partition members not present in {source.bc_id}: {unmatched}")
+        raise ValueError(f"partition members not present in {source.bc_id}: {unmatched}")
     if not any(kept.values()):
         # Moving every member would leave the source as an empty husk -- no
         # shared tier can match again, and its export digest collides with
         # every other empty fingerprint.
         raise ValueError(
             f"partition {sorted(moving)} moves every member of "
-            f"{source.bc_id}; splitting it all out would leave an empty husk")
+            f"{source.bc_id}; splitting it all out would leave an empty husk"
+        )
 
     new_id = allocate()
     minted = CapabilityIdentity(
-        bc_id=new_id, project=source.project,
+        bc_id=new_id,
+        project=source.project,
         first_seen_run=source.first_seen_run,
-        status=IdentityStatus.ACTIVE, derived_from=source.bc_id,
-        fingerprint=CapabilityFingerprint(
-            tiers=taken, collected=source.fingerprint.collected))
-    remaining = source.model_copy(update={
-        "fingerprint": CapabilityFingerprint(
-            tiers=kept, collected=source.fingerprint.collected)})
+        status=IdentityStatus.ACTIVE,
+        derived_from=source.bc_id,
+        fingerprint=CapabilityFingerprint(tiers=taken, collected=source.fingerprint.collected),
+    )
+    remaining = source.model_copy(
+        update={
+            "fingerprint": CapabilityFingerprint(tiers=kept, collected=source.fingerprint.collected)
+        }
+    )
     return [remaining, minted]

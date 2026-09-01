@@ -1,29 +1,44 @@
 from datetime import datetime, timedelta
 
 from sdlc.benchmarks.models import (
-    BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag)
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    QualityScore,
+    SpeedBag,
+)
 from sdlc.benchmarks.task_matrix import build_task_matrix
 from sdlc.benchmarks.tasks import TaskSpec, TaskSuite
 from sdlc.models import HarnessKind
 
 
 def _suite():
-    return TaskSuite(case_id="c1", tasks=[
-        TaskSpec(id="t01", error_class="functional", oracle_tests=["x::y"]),
-        TaskSpec(id="t02", error_class="security", rubric="r"),
-    ])
+    return TaskSuite(
+        case_id="c1",
+        tasks=[
+            TaskSpec(id="t01", error_class="functional", oracle_tests=["x::y"]),
+            TaskSpec(id="t02", error_class="security", rubric="r"),
+        ],
+    )
 
 
 def _rec(*, run="b1", cell_model="m1", task_id, score, started):
     return BenchmarkRecord(
-        run_id=f"{run}/c1#opencode#{cell_model}", bench_run_id=run,
-        case_id="c1", scope=BenchmarkScope.ORACLE_TASK, stage="oracle",
-        task_id=task_id, role="oracle", harness=HarnessKind.OPENCODE,
-        model=cell_model, quality=QualityScore(score=score, judge="oracle"),
-        speed=SpeedBag(wall_clock_s=1.0, started_at=started,
-                      ended_at=started + timedelta(seconds=1)),
-        outcome=BenchmarkOutcome.PASS if (score or 0) >= 1.0
-        else BenchmarkOutcome.FAIL)
+        run_id=f"{run}/c1#opencode#{cell_model}",
+        bench_run_id=run,
+        case_id="c1",
+        scope=BenchmarkScope.ORACLE_TASK,
+        stage="oracle",
+        task_id=task_id,
+        role="oracle",
+        harness=HarnessKind.OPENCODE,
+        model=cell_model,
+        quality=QualityScore(score=score, judge="oracle"),
+        speed=SpeedBag(
+            wall_clock_s=1.0, started_at=started, ended_at=started + timedelta(seconds=1)
+        ),
+        outcome=BenchmarkOutcome.PASS if (score or 0) >= 1.0 else BenchmarkOutcome.FAIL,
+    )
 
 
 def test_build_task_matrix_one_column_per_run_cell():
@@ -62,13 +77,18 @@ def test_build_task_matrix_filters_other_case_and_scope():
     other_case = _rec(run="b1", task_id="t01", score=1.0, started=t0)
     other_case.case_id = "other"
     stage_rec = BenchmarkRecord(
-        run_id="b1/x", bench_run_id="b1", case_id="c1",
-        scope=BenchmarkScope.STAGE, stage="code", role="dev",
-        harness=HarnessKind.OPENCODE, model="m1",
+        run_id="b1/x",
+        bench_run_id="b1",
+        case_id="c1",
+        scope=BenchmarkScope.STAGE,
+        stage="code",
+        role="dev",
+        harness=HarnessKind.OPENCODE,
+        model="m1",
         quality=QualityScore(score=1.0, judge="contract"),
-        speed=SpeedBag(wall_clock_s=1.0, started_at=t0,
-                      ended_at=t0 + timedelta(seconds=1)),
-        outcome=BenchmarkOutcome.PASS)
+        speed=SpeedBag(wall_clock_s=1.0, started_at=t0, ended_at=t0 + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.PASS,
+    )
     tm = build_task_matrix("c1", [other_case, stage_rec], _suite())
     assert tm.columns == []
 

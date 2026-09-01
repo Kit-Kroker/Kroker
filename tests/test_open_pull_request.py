@@ -12,6 +12,7 @@ P2's exit criterion ("first brownfield feature merged via PR") depends on.
 that break, and a patch would assert against itself instead of against a
 process that actually ran.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -68,14 +69,12 @@ def gh_shim(tmp_path, monkeypatch) -> _GhShim:
         # this to be reachable at all -- which is the same lookup its
         # "is gh installed" precondition needs.
         launcher = bin_dir / "gh.cmd"
-        launcher.write_text(
-            f'@echo off\r\n"{sys.executable}" "{script}" %*\r\n',
-            encoding="utf-8")
+        launcher.write_text(f'@echo off\r\n"{sys.executable}" "{script}" %*\r\n', encoding="utf-8")
     else:
         launcher = bin_dir / "gh"
         launcher.write_text(
-            f'#!/bin/sh\nexec "{sys.executable}" "{script}" "$@"\n',
-            encoding="utf-8")
+            f'#!/bin/sh\nexec "{sys.executable}" "{script}" "$@"\n', encoding="utf-8"
+        )
         launcher.chmod(0o755)
 
     argv_path = tmp_path / "gh-argv.json"
@@ -95,13 +94,19 @@ def remote_repo(git_repo, tmp_path):
 
 
 def _open(worktree: str, base_branch: str = "main") -> str:
-    return asyncio.run(open_pull_request(PROpenInput(
-        worktree=worktree, title="Add health endpoint",
-        body="Brownfield endpoint modification.", base_branch=base_branch)))
+    return asyncio.run(
+        open_pull_request(
+            PROpenInput(
+                worktree=worktree,
+                title="Add health endpoint",
+                body="Brownfield endpoint modification.",
+                base_branch=base_branch,
+            )
+        )
+    )
 
 
-def test_missing_gh_is_non_retryable_and_names_gh(git_repo, tmp_path,
-                                                  monkeypatch):
+def test_missing_gh_is_non_retryable_and_names_gh(git_repo, tmp_path, monkeypatch):
     """A worker image without `gh` is a misconfiguration, not a blip: today
     it raises FileNotFoundError/WinError 2 and ACT retries it six times
     before killing a run in which every gate already passed."""
@@ -116,9 +121,7 @@ def test_missing_gh_is_non_retryable_and_names_gh(git_repo, tmp_path,
     assert "gh" in str(exc.value)
 
 
-def test_missing_gh_is_detected_before_anything_is_pushed(remote_repo,
-                                                          tmp_path,
-                                                          monkeypatch):
+def test_missing_gh_is_detected_before_anything_is_pushed(remote_repo, tmp_path, monkeypatch):
     """Pushing first and discovering `gh` second would leave a branch on the
     remote with no PR pointing at it, so the precondition runs first."""
     repo, remote = remote_repo
@@ -167,8 +170,7 @@ def test_gh_receives_the_title_body_and_base(remote_repo, gh_shim):
     argv = gh_shim.argv
     assert argv[:3] == ["pr", "create", "--title"]
     assert argv[3] == "Add health endpoint"
-    assert argv[argv.index("--body") + 1] == (
-        "Brownfield endpoint modification.")
+    assert argv[argv.index("--body") + 1] == ("Brownfield endpoint modification.")
     assert argv[argv.index("--base") + 1] == "release"
 
 
@@ -177,8 +179,7 @@ def test_gh_failure_carries_its_stderr(remote_repo, gh_shim, monkeypatch):
     non-zero exit status 1" -- gh's actual diagnostic is dropped on the way
     through Temporal. The same hazard `_git`'s docstring documents."""
     monkeypatch.setenv("GH_SHIM_EXIT", "1")
-    monkeypatch.setenv("GH_SHIM_STDERR",
-                       "a pull request for branch 'main' already exists")
+    monkeypatch.setenv("GH_SHIM_STDERR", "a pull request for branch 'main' already exists")
     repo, _ = remote_repo
 
     with pytest.raises(ApplicationError) as exc:

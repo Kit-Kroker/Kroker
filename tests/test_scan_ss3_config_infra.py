@@ -1,10 +1,15 @@
 """SS3's computed half: what the deployment declares about itself. The
 framework-defaults category is triage's misconfig, cited not copied (D2)."""
+
 from __future__ import annotations
 
 from sdlc.assessment.scan.models import (
-    C_DB_SECURITY, C_ENV_DIVERGENCE, C_EXPOSED_PORTS, C_FRAMEWORK_DEFAULTS,
-    C_LOG_MASKING, ScanSignalId,
+    C_DB_SECURITY,
+    C_ENV_DIVERGENCE,
+    C_EXPOSED_PORTS,
+    C_FRAMEWORK_DEFAULTS,
+    C_LOG_MASKING,
+    ScanSignalId,
 )
 from sdlc.assessment.scan.signals import config_infra
 from sdlc.measurement import CollectionState
@@ -18,7 +23,8 @@ BLOBS = {
         "    environment:\n"
         "      POSTGRES_HOST_AUTH_METHOD: trust\n"
         "    ports:\n"
-        "      - '5432:5432'\n"),
+        "      - '5432:5432'\n"
+    ),
     ".env.development": "DEBUG=true\nDATABASE_URL=postgres://u:p@localhost/db?sslmode=disable\n",
     ".env.production": "DEBUG=true\n",
     "src/audit.py": "import logging\nlogging.info('token=%s', token)\n",
@@ -43,8 +49,7 @@ def test_database_security_rules_fire_on_the_compose_and_the_url():
 
 def test_an_unsafe_value_in_a_production_env_file_is_recorded():
     out = config_infra.evaluate(BLOBS)
-    unsafe = [o for o in out.security
-              if o.rule == "ss3_unsafe_value_in_environment"]
+    unsafe = [o for o in out.security if o.rule == "ss3_unsafe_value_in_environment"]
     assert [o.path for o in unsafe] == [".env.production"]
     assert "DEBUG" in unsafe[0].detail
 
@@ -75,8 +80,7 @@ def test_a_tree_with_no_infrastructure_files_is_a_measured_zero_for_ports():
     """We read every config path in the tree; no EXPOSE anywhere is an
     answer, not a gap."""
     out = config_infra.evaluate({".env": "A=1\n", ".env.prod": "A=1\n"})
-    assert out.row.categories[C_EXPOSED_PORTS].state is \
-        CollectionState.MEASURED
+    assert out.row.categories[C_EXPOSED_PORTS].state is CollectionState.MEASURED
     assert out.row.categories[C_EXPOSED_PORTS].value == 0.0
 
 
@@ -94,9 +98,14 @@ def test_every_observation_declares_ss3():
 
 
 def test_is_config_path_selects_infrastructure_and_environment_files():
-    for path in ("Dockerfile", "docker-compose.yml", ".env.production",
-                 "k8s/deployment.yaml", "infra/main.tf",
-                 "appsettings.Production.json"):
+    for path in (
+        "Dockerfile",
+        "docker-compose.yml",
+        ".env.production",
+        "k8s/deployment.yaml",
+        "infra/main.tf",
+        "appsettings.Production.json",
+    ):
         assert config_infra.is_config_path(path) is True
     assert config_infra.is_config_path("src/app.py") is False
 
@@ -106,6 +115,6 @@ def test_a_log_call_in_a_test_file_is_not_attributed_to_the_product():
     observation attributed to the product is a finding a client cannot
     trust (QS3's rule, one signal over)."""
     out = config_infra.evaluate(
-        dict(BLOBS, **{"tests/conftest.py":
-                       "import logging\nlogging.info('token=%s', token)\n"}))
+        dict(BLOBS, **{"tests/conftest.py": "import logging\nlogging.info('token=%s', token)\n"})
+    )
     assert all(o.path != "tests/conftest.py" for o in out.security)

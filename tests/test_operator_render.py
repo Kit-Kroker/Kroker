@@ -1,5 +1,6 @@
 """Compact ASCII rendering; the agent never sees a raw model dump."""
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 
 from sdlc.channels.inbox import RunInbox
 from sdlc.dashboard.fleet import FleetSnapshot
@@ -7,17 +8,23 @@ from sdlc.models import RunState
 from sdlc.operator import render
 from sdlc.pending import ClarifyPending, StageGatePending
 
-AT = datetime(2026, 8, 20, 9, 0, tzinfo=timezone.utc)
-GATE = StageGatePending(key="architecture#2", gate="architecture", round=2,
-                        spec_summary="two services, one queue")
-Q1 = ClarifyPending(key="Q1", question="Which auth provider?",
-                    why_it_matters="drives the schema")
+AT = datetime(2026, 8, 20, 9, 0, tzinfo=UTC)
+GATE = StageGatePending(
+    key="architecture#2", gate="architecture", round=2, spec_summary="two services, one queue"
+)
+Q1 = ClarifyPending(key="Q1", question="Which auth provider?", why_it_matters="drives the schema")
 
 
 def a_run(run_id="feature-add-sso", **kw):
-    base = dict(run_id=run_id, title="Add SSO", mode="brownfield",
-                status="awaiting:architecture", started_at=AT,
-                current_stage="architecture", cost_usd_total=4.12)
+    base = dict(
+        run_id=run_id,
+        title="Add SSO",
+        mode="brownfield",
+        status="awaiting:architecture",
+        started_at=AT,
+        current_stage="architecture",
+        cost_usd_total=4.12,
+    )
     base.update(kw)
     return RunState(**base)
 
@@ -58,26 +65,27 @@ def test_pending_block_for_a_question_offers_the_suggestion_slot():
 
 
 def test_orientation_lists_one_line_per_open_run():
-    snap = FleetSnapshot(at=AT, total_open_runs=2,
-                         runs=[a_run("r1"), a_run("r2")],
-                         inbox=[RunInbox(run_id="r1", pending=[GATE])])
+    snap = FleetSnapshot(
+        at=AT,
+        total_open_runs=2,
+        runs=[a_run("r1"), a_run("r2")],
+        inbox=[RunInbox(run_id="r1", pending=[GATE])],
+    )
     out = render.orientation(snap)
     assert out.count("\n") >= 1
     assert "r1" in out and "r2" in out
-    assert "round 2" in out          # r1's pending item is attached
+    assert "round 2" in out  # r1's pending item is attached
 
 
 def test_orientation_degrades_to_a_count_past_the_cap():
-    snap = FleetSnapshot(at=AT, total_open_runs=30,
-                         runs=[a_run(f"r{i}") for i in range(30)])
+    snap = FleetSnapshot(at=AT, total_open_runs=30, runs=[a_run(f"r{i}") for i in range(30)])
     out = render.orientation(snap, cap=20)
     assert "30 open runs" in out
     assert "r29" not in out
 
 
 def test_orientation_with_no_open_runs_says_so():
-    assert "no open runs" in render.orientation(
-        FleetSnapshot(at=AT)).lower()
+    assert "no open runs" in render.orientation(FleetSnapshot(at=AT)).lower()
 
 
 def test_runs_view_open_excludes_closed_runs():
@@ -86,8 +94,12 @@ def test_runs_view_open_excludes_closed_runs():
 
 
 def test_inbox_view_groups_by_run():
-    snap = FleetSnapshot(at=AT, total_open_runs=1, runs=[a_run("r1")],
-                         inbox=[RunInbox(run_id="r1", pending=[GATE, Q1])])
+    snap = FleetSnapshot(
+        at=AT,
+        total_open_runs=1,
+        runs=[a_run("r1")],
+        inbox=[RunInbox(run_id="r1", pending=[GATE, Q1])],
+    )
     out = render.inbox_view(snap)
     assert "r1" in out
     assert "architecture#2" in out and "Q1" in out

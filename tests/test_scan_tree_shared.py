@@ -1,4 +1,5 @@
 """E-84 D1/D5: one extraction path, and it runs without a triage."""
+
 from __future__ import annotations
 
 import inspect
@@ -17,6 +18,7 @@ def test_the_assessment_phase_delegates_rather_than_duplicating():
     reason fanout.py exists at all. _scan must call scan_tree, not re-run the
     waves itself."""
     from sdlc.workflows.assessment import AssessmentWorkflow
+
     src = inspect.getsource(AssessmentWorkflow._scan)
     assert "scan_tree(" in src
     assert "for wave in WAVES" not in src

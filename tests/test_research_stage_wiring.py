@@ -1,8 +1,7 @@
 import ast
 from pathlib import Path
 
-FEATURE_PY = (Path(__file__).resolve().parents[1]
-              / "src" / "sdlc" / "workflows" / "feature.py")
+FEATURE_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "feature.py"
 
 
 def _run_method_src() -> str:
@@ -27,7 +26,7 @@ def test_research_feeds_brief_digest_into_clarify_key():
     src = _run_method_src()
     assert "brief_digest" in src
     # clarify's cached-stage input is idea + the digest, not idea alone.
-    assert 'idea.model_dump_json() + ' in src
+    assert "idea.model_dump_json() + " in src
 
 
 def test_research_stage_is_not_memoized():
@@ -35,9 +34,8 @@ def test_research_stage_is_not_memoized():
     research producer must not be wrapped in _cached_stage."""
     src = _run_method_src()
     # crude but effective: no _cached_stage call names "research".
-    assert '_cached_stage(\n' not in src or '"research"' not in src
-    assert '"research"' not in src.split("_cached_stage")[1] \
-        if "_cached_stage" in src else True
+    assert "_cached_stage(\n" not in src or '"research"' not in src
+    assert '"research"' not in src.split("_cached_stage")[1] if "_cached_stage" in src else True
 
 
 def test_research_retains_verified_findings():

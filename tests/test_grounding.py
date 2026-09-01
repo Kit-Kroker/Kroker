@@ -4,8 +4,13 @@ The profile split is the load-bearing part. EXTRACTED_TEXT's loosenings are
 justified by specific Tavily extraction bugs; applying them to code or
 transcripts would weaken the check SC-7 rests on.
 """
+
 from sdlc.grounding import (
-    Profile, Violation, normalize, quote_violation, verify_quote,
+    Profile,
+    Violation,
+    normalize,
+    quote_violation,
+    verify_quote,
 )
 
 EXTRACTED = Profile.EXTRACTED_TEXT
@@ -79,14 +84,12 @@ def test_empty_quote_never_grounds():
 
 
 def test_quote_violation_returns_none_when_grounded():
-    assert quote_violation("retries", "handles retries", VERBATIM,
-                           source="src/a.py@abc") is None
+    assert quote_violation("retries", "handles retries", VERBATIM, source="src/a.py@abc") is None
 
 
 def test_quote_violation_kinds():
     absent = quote_violation("missing", "haystack", VERBATIM, source="s")
-    assert absent == Violation(kind="quote_not_found", source="s",
-                               quote="missing")
+    assert absent == Violation(kind="quote_not_found", source="s", quote="missing")
     empty = quote_violation("  ", "haystack", VERBATIM, source="s")
     assert empty.kind == "quote_empty"
 

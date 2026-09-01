@@ -3,6 +3,7 @@
 Fully local: `eval capture` was the only target needing a Temporal client and
 it was retired with E-82 (fixtures are constructed, not captured).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -37,8 +38,7 @@ def default_judge_model(config_path: Path = _BENCH_CONFIG) -> str:
     data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     model = data.get("default_judge_model")
     if not model:
-        raise EvalError(f"no default_judge_model in {config_path}; "
-                        f"pass --judge-model")
+        raise EvalError(f"no default_judge_model in {config_path}; pass --judge-model")
     return model
 
 
@@ -51,9 +51,9 @@ def _resolve_case(role: str, case: str | None) -> str:
     if not found:
         raise EvalError(
             f"role '{role}' has no gated case; add a (role, case) pair to "
-            f"DEFAULT_PAIRS once its rubric and seed exist.")
-    raise EvalError(f"role '{role}' covers multiple cases "
-                    f"({', '.join(found)}); pass --case.")
+            f"DEFAULT_PAIRS once its rubric and seed exist."
+        )
+    raise EvalError(f"role '{role}' covers multiple cases ({', '.join(found)}); pass --case.")
 
 
 def render_report(r: PromptGateResult) -> str:
@@ -72,13 +72,20 @@ def render_report(r: PromptGateResult) -> str:
     return "\n".join(lines)
 
 
-def run_eval(role: str, *, case: str | None, against: str, k: int,
-             judge_model: str, gate: bool) -> str:
+def run_eval(
+    role: str, *, case: str | None, against: str, k: int, judge_model: str, gate: bool
+) -> str:
     try:
         result = run_gate(
-            role, _resolve_case(role, case), repo_root=_REPO_ROOT,
-            cases_root=_CASES_ROOT, agents_dir=_resolve_agents_dir(),
-            judge_model=judge_model, repeat=k, baseline_ref=against)
+            role,
+            _resolve_case(role, case),
+            repo_root=_REPO_ROOT,
+            cases_root=_CASES_ROOT,
+            agents_dir=_resolve_agents_dir(),
+            judge_model=judge_model,
+            repeat=k,
+            baseline_ref=against,
+        )
     except (GateUnavailable, FixtureError) as e:
         raise EvalError(str(e)) from e
     text = render_report(result)

@@ -4,11 +4,10 @@ from pydantic_ai.settings import ModelSettings
 from sdlc.models import AnalysisReport
 
 
-def build(model: str, instructions: str,
-          model_settings: ModelSettings) -> Agent:
+def build(model: str, instructions: str, model_settings: ModelSettings) -> Agent:
     return Agent(
         model,
-        name="analyst_agent",       # Temporal activity name -- NEVER rename
+        name="analyst_agent",  # Temporal activity name -- NEVER rename
         output_type=AnalysisReport,
         model_settings=model_settings,
         system_prompt=instructions,

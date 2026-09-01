@@ -12,7 +12,9 @@ from tests.fakes.hindsight_contract import ContractTransport
 # (disposition itself requires skepticism/literalism/empathy). The plan's
 # placeholder {} was a guess that the contract transport correctly rejects.
 _BANK_RESPONSE = {
-    "bank_id": "b", "name": "b", "mission": "",
+    "bank_id": "b",
+    "name": "b",
+    "mission": "",
     "disposition": {"skepticism": 3, "literalism": 3, "empathy": 3},
 }
 
@@ -28,8 +30,7 @@ def _clean():
 
 def _client(transport) -> HindsightMemory:
     mem = HindsightMemory(base_url="http://h.local", tenant="default")
-    mem._client = httpx.AsyncClient(base_url="http://h.local",
-                                    transport=transport)
+    mem._client = httpx.AsyncClient(base_url="http://h.local", transport=transport)
     return mem
 
 

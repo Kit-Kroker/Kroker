@@ -11,6 +11,7 @@ gating on the adapter would make QS1 report nothing for the JS/TS repositories
 Tier 0 actually receives (D4's reasoning, verbatim). The adapter's tuple stays
 the authority for the TRIAGE tier, which resolves a real toolchain first.
 """
+
 from __future__ import annotations
 
 import fnmatch
@@ -22,19 +23,46 @@ import posixpath
 # path ("cypress/**"), exactly as baseline.find_test_files handles them.
 TEST_PATH_GLOBS: tuple[str, ...] = (
     # python
-    "test_*.py", "*_test.py", "conftest.py", "tests/**", "*/tests/**",
+    "test_*.py",
+    "*_test.py",
+    "conftest.py",
+    "tests/**",
+    "*/tests/**",
     # javascript / typescript
-    "*.test.js", "*.test.jsx", "*.test.ts", "*.test.tsx",
-    "*.spec.js", "*.spec.jsx", "*.spec.ts", "*.spec.tsx",
-    "*.cy.js", "*.cy.ts", "__tests__/**", "*/__tests__/**",
+    "*.test.js",
+    "*.test.jsx",
+    "*.test.ts",
+    "*.test.tsx",
+    "*.spec.js",
+    "*.spec.jsx",
+    "*.spec.ts",
+    "*.spec.tsx",
+    "*.cy.js",
+    "*.cy.ts",
+    "__tests__/**",
+    "*/__tests__/**",
     # go / rust / jvm / dotnet
-    "*_test.go", "tests.rs", "*Test.java", "*Tests.java", "*Test.kt",
-    "*Test.cs", "*Tests.cs", "src/test/**", "*/src/test/**",
+    "*_test.go",
+    "tests.rs",
+    "*Test.java",
+    "*Tests.java",
+    "*Test.kt",
+    "*Test.cs",
+    "*Tests.cs",
+    "src/test/**",
+    "*/src/test/**",
     # ruby / php
-    "*_spec.rb", "*Test.php", "spec/**", "*/spec/**",
+    "*_spec.rb",
+    "*Test.php",
+    "spec/**",
+    "*/spec/**",
     # cross-language directories
-    "e2e/**", "*/e2e/**", "cypress/**", "*/cypress/**",
-    "playwright/**", "*/playwright/**",
+    "e2e/**",
+    "*/e2e/**",
+    "cypress/**",
+    "*/cypress/**",
+    "playwright/**",
+    "*/playwright/**",
 )
 
 
@@ -42,5 +70,6 @@ def is_test_path(path: str) -> bool:
     """True when `path` matches a test convention, by full repo-relative path
     OR by basename -- conventions come in both shapes."""
     base = posixpath.basename(path)
-    return any(fnmatch.fnmatch(path, glob) or fnmatch.fnmatch(base, glob)
-               for glob in TEST_PATH_GLOBS)
+    return any(
+        fnmatch.fnmatch(path, glob) or fnmatch.fnmatch(base, glob) for glob in TEST_PATH_GLOBS
+    )

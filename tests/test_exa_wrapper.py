@@ -16,11 +16,14 @@ def _ctx(deps: ResearchDeps) -> RunContext:
     return RunContext(deps=deps, model=None, usage=None, prompt=None)  # type: ignore[arg-type]
 
 
-def _deps(run_id: str = "r1", max_fetches: int = 5,
-         max_searches: int = 5) -> ResearchDeps:
-    return ResearchDeps(run_id=run_id, provider="tavily",
-                        max_searches=max_searches, max_fetches=max_fetches,
-                        max_cost_usd=10.0)
+def _deps(run_id: str = "r1", max_fetches: int = 5, max_searches: int = 5) -> ResearchDeps:
+    return ResearchDeps(
+        run_id=run_id,
+        provider="tavily",
+        max_searches=max_searches,
+        max_fetches=max_fetches,
+        max_cost_usd=10.0,
+    )
 
 
 class FakePageResult:
@@ -70,7 +73,7 @@ class FakeExaClient:
 
 def _wrapped_search_or_skip(**kwargs):
     WrappedExaSearch = get_wrapped_exa_search()
-    if WrappedExaSearch.__name__ == 'DummyExaSearch':
+    if WrappedExaSearch.__name__ == "DummyExaSearch":
         pytest.skip("pydantic_ai_harness not installed")
     client = FakeExaClient()
     capability = WrappedExaSearch(client=client, **kwargs)
@@ -110,7 +113,8 @@ async def test_get_page_charges_fetch_budget(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_page_raises_and_skips_the_call_when_fetch_budget_exhausted(
-        tmp_path, monkeypatch):
+    tmp_path, monkeypatch
+):
     monkeypatch.setenv("SDLC_RUNS_ROOT", str(tmp_path))
     toolset, client = _wrapped_search_or_skip()
 
@@ -135,7 +139,8 @@ async def test_web_search_charges_search_budget(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_web_search_raises_and_skips_the_call_when_search_budget_exhausted(
-        tmp_path, monkeypatch):
+    tmp_path, monkeypatch
+):
     monkeypatch.setenv("SDLC_RUNS_ROOT", str(tmp_path))
     toolset, client = _wrapped_search_or_skip()
 

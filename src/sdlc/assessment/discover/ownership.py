@@ -12,6 +12,7 @@ failure; E-50 owns gate checks and E-48 owns resolution (D11).
 Pure: every input is a parameter. No disk, no subprocess, no repository code
 executed (NFR-9).
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -20,9 +21,16 @@ from ...measurement import CollectionState, Measurement
 from ..scan.models import EvidenceRef
 from ..scan.naming import head_token, normalize
 from .models import (
-    DIRECTED_VERBS, READ_VERBS, WRITE_VERBS, EntityDeclaration,
-    EntityOwnership, L2Operation, OperationVerb, OwnershipOutcome,
-    OwnershipReport, OwnershipVerb,
+    DIRECTED_VERBS,
+    READ_VERBS,
+    WRITE_VERBS,
+    EntityDeclaration,
+    EntityOwnership,
+    L2Operation,
+    OperationVerb,
+    OwnershipOutcome,
+    OwnershipReport,
+    OwnershipVerb,
 )
 
 
@@ -36,21 +44,22 @@ def _empty(reason: str) -> OwnershipReport:
     """FR-915: ownership was not computed, so there are no rows -- not zero
     owners, and certainly not a map of unclaimed entities."""
     return OwnershipReport(
-        entities=(), counts={o: 0 for o in OwnershipOutcome},
-        collected=Measurement.not_collected(reason))
+        entities=(),
+        counts={o: 0 for o in OwnershipOutcome},
+        collected=Measurement.not_collected(reason),
+    )
 
 
 def _write_verb(verbs: set[OperationVerb]) -> OwnershipVerb:
     """CREATES only when every matching write creates; anything else is the
     broader MANAGES (D7 rule 2)."""
-    return (OwnershipVerb.CREATES if verbs == {OperationVerb.CREATE}
-            else OwnershipVerb.MANAGES)
+    return OwnershipVerb.CREATES if verbs == {OperationVerb.CREATE} else OwnershipVerb.MANAGES
 
 
-def _resolve(entity: str, decls: Sequence[EntityDeclaration],
-             declarers: set[str], ops: Sequence[L2Operation]) -> EntityOwnership:
-    decl_evidence = tuple(EvidenceRef(path=d.path, lines=str(d.line))
-                          for d in decls)
+def _resolve(
+    entity: str, decls: Sequence[EntityDeclaration], declarers: set[str], ops: Sequence[L2Operation]
+) -> EntityOwnership:
+    decl_evidence = tuple(EvidenceRef(path=d.path, lines=str(d.line)) for d in decls)
     op_evidence = tuple(o.evidence for o in ops)
     evidence = decl_evidence + op_evidence
 
@@ -69,54 +78,86 @@ def _resolve(entity: str, decls: Sequence[EntityDeclaration],
     # Rule 1 -- declaration site.
     if len(declarers) == 1:
         return EntityOwnership(
-            entity=entity, outcome=OwnershipOutcome.OWNED,
-            owner=next(iter(declarers)), verb=OwnershipVerb.OWNS,
+            entity=entity,
+            outcome=OwnershipOutcome.OWNED,
+            owner=next(iter(declarers)),
+            verb=OwnershipVerb.OWNS,
             rule="declared_in_sole_member",
-            claimants=claimants, evidence=evidence)
+            claimants=claimants,
+            evidence=evidence,
+        )
     if len(declarers) > 1:
         # 'declared_in_shared_file' is only true when one file carries two
         # capabilities; the same key declared in different files across
         # capabilities is a tie across files, and the rule must not
         # misname it (review finding 5).
-        rule = ("declared_in_shared_file"
-                if len({d.path for d in decls}) == 1 else "tied_declarers")
+        rule = "declared_in_shared_file" if len({d.path for d in decls}) == 1 else "tied_declarers"
         return EntityOwnership(
-            entity=entity, outcome=OwnershipOutcome.CONFLICT,
-            rule=rule, claimants=claimants, evidence=evidence)
+            entity=entity,
+            outcome=OwnershipOutcome.CONFLICT,
+            rule=rule,
+            claimants=claimants,
+            evidence=evidence,
+        )
 
     # Rule 2 -- sole writer.
     if len(writers) == 1:
         owner = next(iter(writers))
         return EntityOwnership(
-            entity=entity, outcome=OwnershipOutcome.OWNED, owner=owner,
-            verb=_write_verb({o.verb for o in ops
-                              if o.capability == owner
-                              and o.verb in WRITE_VERBS}),
-            rule="sole_writer", claimants=claimants, evidence=evidence)
+            entity=entity,
+            outcome=OwnershipOutcome.OWNED,
+            owner=owner,
+            verb=_write_verb(
+                {o.verb for o in ops if o.capability == owner and o.verb in WRITE_VERBS}
+            ),
+            rule="sole_writer",
+            claimants=claimants,
+            evidence=evidence,
+        )
     if len(writers) > 1:
         return EntityOwnership(
-            entity=entity, outcome=OwnershipOutcome.CONFLICT,
-            rule="tied_writers", claimants=claimants, evidence=evidence)
+            entity=entity,
+            outcome=OwnershipOutcome.CONFLICT,
+            rule="tied_writers",
+            claimants=claimants,
+            evidence=evidence,
+        )
 
     # Rule 3 -- sole reader.
     if len(readers) == 1:
         return EntityOwnership(
-            entity=entity, outcome=OwnershipOutcome.OWNED,
-            owner=next(iter(readers)), verb=OwnershipVerb.READS,
-            rule="sole_reader", claimants=claimants, evidence=evidence)
+            entity=entity,
+            outcome=OwnershipOutcome.OWNED,
+            owner=next(iter(readers)),
+            verb=OwnershipVerb.READS,
+            rule="sole_reader",
+            claimants=claimants,
+            evidence=evidence,
+        )
     if len(readers) > 1:
         return EntityOwnership(
-            entity=entity, outcome=OwnershipOutcome.CONFLICT,
-            rule="tied_readers", claimants=claimants, evidence=evidence)
+            entity=entity,
+            outcome=OwnershipOutcome.CONFLICT,
+            rule="tied_readers",
+            claimants=claimants,
+            evidence=evidence,
+        )
 
     # Rules 4/5 -- something touched it, but nothing readable said which way.
     if undirected:
         return EntityOwnership(
-            entity=entity, outcome=OwnershipOutcome.UNDIRECTED,
-            rule="undirected_only", claimants=claimants, evidence=evidence)
+            entity=entity,
+            outcome=OwnershipOutcome.UNDIRECTED,
+            rule="undirected_only",
+            claimants=claimants,
+            evidence=evidence,
+        )
     return EntityOwnership(
-        entity=entity, outcome=OwnershipOutcome.UNCLAIMED,
-        rule="no_claimant", evidence=decl_evidence)
+        entity=entity,
+        outcome=OwnershipOutcome.UNCLAIMED,
+        rule="no_claimant",
+        evidence=decl_evidence,
+    )
 
 
 def assign(
@@ -156,12 +197,11 @@ def assign(
         # Matching reads entity_keys, never object: route kinds keep strict
         # single-key matching (only they carry directed verbs), undirected
         # kinds match on any reduced token of their binding (review F1).
-        ops = sorted((o for o in operations if entity in o.entity_keys),
-                     key=lambda o: o.op_id)
+        ops = sorted((o for o in operations if entity in o.entity_keys), key=lambda o: o.op_id)
         rows.append(_resolve(entity, decls, declarers, ops))
 
     return OwnershipReport(
         entities=tuple(rows),
-        counts={o: sum(1 for r in rows if r.outcome is o)
-                for o in OwnershipOutcome},
-        collected=Measurement.measured(float(len(rows))))
+        counts={o: sum(1 for r in rows if r.outcome is o) for o in OwnershipOutcome},
+        collected=Measurement.measured(float(len(rows))),
+    )

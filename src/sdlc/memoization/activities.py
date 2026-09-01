@@ -1,5 +1,6 @@
 """Temporal activities wrapping the local cache — filesystem I/O must
 happen in an activity, never workflow code."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

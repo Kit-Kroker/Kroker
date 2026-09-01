@@ -13,7 +13,9 @@ from sdlc.models import MemoryKind, RetainItem
 from tests.fakes.hindsight_contract import ContractTransport
 
 _BANK_RESPONSE = {
-    "bank_id": "b", "name": "b", "mission": "",
+    "bank_id": "b",
+    "name": "b",
+    "mission": "",
     "disposition": {"skepticism": 3, "literalism": 3, "empathy": 3},
 }
 
@@ -28,18 +30,23 @@ def _clean():
 
 
 def _transport():
-    return ContractTransport(responses={
-        ("PUT", BANK_PATH): _BANK_RESPONSE,
-        # The retain 200 response requires success/bank_id/items_count/async.
-        ("POST", RETAIN_PATH): {"success": True, "bank_id": "b",
-                                "items_count": 1, "async": True},
-    })
+    return ContractTransport(
+        responses={
+            ("PUT", BANK_PATH): _BANK_RESPONSE,
+            # The retain 200 response requires success/bank_id/items_count/async.
+            ("POST", RETAIN_PATH): {
+                "success": True,
+                "bank_id": "b",
+                "items_count": 1,
+                "async": True,
+            },
+        }
+    )
 
 
 def _client(transport) -> HindsightMemory:
     mem = HindsightMemory(base_url="http://h.local")
-    mem._client = httpx.AsyncClient(base_url="http://h.local",
-                                    transport=transport)
+    mem._client = httpx.AsyncClient(base_url="http://h.local", transport=transport)
     return mem
 
 
@@ -49,9 +56,12 @@ def _sent(transport) -> dict:
 
 
 def _item(**over) -> RetainItem:
-    base = dict(kind=MemoryKind.STAGE_SUMMARY, bank="project:default",
-                text="the clarifier settled the scope",
-                metadata={"stage": "clarify", "run_id": "run-1"})
+    base = dict(
+        kind=MemoryKind.STAGE_SUMMARY,
+        bank="project:default",
+        text="the clarifier settled the scope",
+        metadata={"stage": "clarify", "run_id": "run-1"},
+    )
     base.update(over)
     return RetainItem(**base)
 
@@ -99,8 +109,7 @@ async def test_different_text_gets_a_different_document_id():
     t1, t2 = _transport(), _transport()
     await _client(t1).retain(_item())
     await _client(t2).retain(_item(text="something else entirely"))
-    assert (_sent(t1)["items"][0]["document_id"]
-            != _sent(t2)["items"][0]["document_id"])
+    assert _sent(t1)["items"][0]["document_id"] != _sent(t2)["items"][0]["document_id"]
 
 
 @pytest.mark.asyncio

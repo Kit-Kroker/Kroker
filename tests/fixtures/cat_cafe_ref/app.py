@@ -6,20 +6,21 @@ by any run — it validates the oracle, it is not an answer key. Pure ASGI,
 no framework, and no simulator at all (the contract forbids auto-starting
 one on import; this module simply has none).
 """
+
 from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
 
-RISK_ENABLED = True          # the broken-variant self-test flips this
+RISK_ENABLED = True  # the broken-variant self-test flips this
 ZONES = [
     {"kind": "rest_area", "x": 0.0, "y": 0.0},
     {"kind": "litter_box", "x": 10.0, "y": 0.0},
     {"kind": "water_bowl", "x": 0.0, "y": 10.0},
     {"kind": "food_bowl", "x": 10.0, "y": 10.0},
 ]
-ZONE_RADIUS = 1.0            # "at" a zone = within this distance
-NEAR_CAT = 5.0               # co-located cats = within this distance
+ZONE_RADIUS = 1.0  # "at" a zone = within this distance
+NEAR_CAT = 5.0  # co-located cats = within this distance
 
 _readings: dict[str, list[dict]] = {}
 
@@ -65,13 +66,12 @@ def _activity(cid: str) -> str | None:
                 return "drinking"
             if z["kind"] == "litter_box":
                 return "litter_box"
-            return "sleeping" if bpm <= 30 else None   # rest_area
+            return "sleeping" if bpm <= 30 else None  # rest_area
     for other in _readings:
         if other == cid:
             continue
         o = _latest(other)
-        if (_dist(x, y, o["x"], o["y"]) <= NEAR_CAT
-                and _speed(cid) > 0.2 and bpm >= 50):
+        if _dist(x, y, o["x"], o["y"]) <= NEAR_CAT and _speed(cid) > 0.2 and bpm >= 50:
             return "playing"
     return None
 
@@ -94,10 +94,14 @@ async def _read_json(receive) -> dict:
 
 
 async def _send_json(send, status: int, payload) -> None:
-    await send({"type": "http.response.start", "status": status,
-                "headers": [(b"content-type", b"application/json")]})
-    await send({"type": "http.response.body",
-                "body": json.dumps(payload).encode()})
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status,
+            "headers": [(b"content-type", b"application/json")],
+        }
+    )
+    await send({"type": "http.response.body", "body": json.dumps(payload).encode()})
 
 
 async def app(scope, receive, send):
@@ -105,22 +109,37 @@ async def app(scope, receive, send):
     method, path = scope["method"], scope["path"]
     if method == "POST" and path == "/telemetry":
         r = await _read_json(receive)
-        _readings.setdefault(str(r["cat_id"]), []).append({
-            "timestamp": r["timestamp"], "x": float(r["x"]),
-            "y": float(r["y"]),
-            "breathing_rate": float(r["breathing_rate"])})
+        _readings.setdefault(str(r["cat_id"]), []).append(
+            {
+                "timestamp": r["timestamp"],
+                "x": float(r["x"]),
+                "y": float(r["y"]),
+                "breathing_rate": float(r["breathing_rate"]),
+            }
+        )
         return await _send_json(send, 202, {"ok": True})
     if method == "GET" and path == "/floorplan":
         return await _send_json(send, 200, {"zones": ZONES})
     if method == "GET" and path == "/cats":
-        return await _send_json(send, 200, [
-            {"id": cid, "x": _latest(cid)["x"], "y": _latest(cid)["y"],
-             "activity": _activity(cid), "at_risk": _at_risk(cid)}
-            for cid in _readings])
+        return await _send_json(
+            send,
+            200,
+            [
+                {
+                    "id": cid,
+                    "x": _latest(cid)["x"],
+                    "y": _latest(cid)["y"],
+                    "activity": _activity(cid),
+                    "at_risk": _at_risk(cid),
+                }
+                for cid in _readings
+            ],
+        )
     if method == "GET" and path.startswith("/cats/"):
-        cid = path[len("/cats/"):]
+        cid = path[len("/cats/") :]
         if cid not in _readings:
             return await _send_json(send, 404, {"error": "unknown cat"})
-        return await _send_json(send, 200, {
-            "id": cid, "latest": _latest(cid), "history": _history(cid)})
+        return await _send_json(
+            send, 200, {"id": cid, "latest": _latest(cid), "history": _history(cid)}
+        )
     return await _send_json(send, 404, {"error": "not found"})

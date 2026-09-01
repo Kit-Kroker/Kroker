@@ -6,6 +6,7 @@ anthropic:glm-5.2 (same weights, no decorrelation) and would reject
 anthropic:claude-sonnet-4-6 vs anthropic:glm-5.2 (different weights, real
 decorrelation). See spec OQ-A4.
 """
+
 import pytest
 
 from sdlc.agents.loader import RegistryError, check_adversary_model, model_id
@@ -23,35 +24,43 @@ def test_model_id_without_separator_is_the_whole_string():
 
 def test_same_model_behind_different_providers_is_rejected():
     with pytest.raises(RegistryError, match="adversary"):
-        check_adversary_model({
-            "dev": "zai-coding-plan/glm-5.2",
-            "reviewer": "anthropic:glm-5.2",
-            "adversary": "openai/glm-5.2",
-        })
+        check_adversary_model(
+            {
+                "dev": "zai-coding-plan/glm-5.2",
+                "reviewer": "anthropic:glm-5.2",
+                "adversary": "openai/glm-5.2",
+            }
+        )
 
 
 def test_sharing_the_reviewers_model_is_rejected():
     with pytest.raises(RegistryError, match="adversary"):
-        check_adversary_model({
-            "dev": "zai-coding-plan/glm-5.2",
-            "reviewer": "anthropic:glm-5.2",
-            "adversary": "anthropic:glm-5.2",
-        })
+        check_adversary_model(
+            {
+                "dev": "zai-coding-plan/glm-5.2",
+                "reviewer": "anthropic:glm-5.2",
+                "adversary": "anthropic:glm-5.2",
+            }
+        )
 
 
 def test_different_model_sharing_a_provider_is_accepted():
-    check_adversary_model({
-        "dev": "zai-coding-plan/glm-5.2",
-        "reviewer": "anthropic:glm-5.2",
-        "adversary": "anthropic:claude-sonnet-4-6",
-    })
+    check_adversary_model(
+        {
+            "dev": "zai-coding-plan/glm-5.2",
+            "reviewer": "anthropic:glm-5.2",
+            "adversary": "anthropic:claude-sonnet-4-6",
+        }
+    )
 
 
 def test_absent_adversary_is_a_noop():
-    check_adversary_model({
-        "dev": "zai-coding-plan/glm-5.2",
-        "reviewer": "anthropic:glm-5.2",
-    })
+    check_adversary_model(
+        {
+            "dev": "zai-coding-plan/glm-5.2",
+            "reviewer": "anthropic:glm-5.2",
+        }
+    )
 
 
 def test_adversary_role_ships_and_is_wired():
@@ -69,7 +78,5 @@ def test_shipped_registry_satisfies_the_adversary_check():
     from sdlc.agents.loader import check_adversary_model, load_registry
 
     registry = load_registry()
-    check_adversary_model({n: c.model for n, c in registry.items()
-                           if c.model is not None})
-    assert model_id(registry["adversary"].model) != model_id(
-        registry["reviewer"].model)
+    check_adversary_model({n: c.model for n, c in registry.items() if c.model is not None})
+    assert model_id(registry["adversary"].model) != model_id(registry["reviewer"].model)

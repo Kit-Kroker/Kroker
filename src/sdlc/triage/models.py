@@ -4,11 +4,12 @@ Pure by design -- Pydantic and measurement.py only. This module must never
 import models.py, activities.py, or temporalio, exactly as measurement.py and
 grounding.py must not: a dependency here would appear as a reviewable import.
 """
+
 from __future__ import annotations
 
 import hashlib
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -16,29 +17,30 @@ from pydantic import BaseModel, Field, model_validator
 from ..measurement import CollectionState, Measurement
 
 
-class FixClass(str, Enum):
+class FixClass(StrEnum):
     """FR-904. MECHANICAL is a promise an E-44 child run can keep with a PR;
     everything it cannot is JUDGEMENT or STRUCTURAL. See spec D7 -- deleting a
     committed .env is mechanical, rotating the exposed credential is not."""
+
     MECHANICAL = "mechanical"
     JUDGEMENT = "judgement"
     STRUCTURAL = "structural"
 
 
-class Verdict(str, Enum):
+class Verdict(StrEnum):
     READY = "ready"
     NOT_READY = "not_ready"
     INDETERMINATE = "indeterminate"
 
 
 class TriageFinding(BaseModel):
-    signal: str                                 # signal id, e.g. "secrets"
-    rule: str                                   # which rule inside it
+    signal: str  # signal id, e.g. "secrets"
+    rule: str  # which rule inside it
     severity: Literal["critical", "high", "medium", "low"]
     detail: str
     path: str = ""
     line: int | None = None
-    evidence: str = ""                          # verbatim quote from path@commit_sha
+    evidence: str = ""  # verbatim quote from path@commit_sha
     fix_class: FixClass
     # E-44 D3: rule-scoped discriminator, supplied by the signal when a rule
     # can fire more than once for one path. "" is correct for a rule that
@@ -52,24 +54,25 @@ class SignalResult(BaseModel):
     """One signal's output. `collected` is a Measurement, not a bool: a signal
     that timed out reports not_collected and contributes nothing, which is
     distinguishable from a signal that ran and found nothing (FR-915)."""
+
     signal: str
-    version: int                                # bump invalidates E-46's memo key
-    collected: Measurement                      # MEASURED value = finding count
+    version: int  # bump invalidates E-46's memo key
+    collected: Measurement  # MEASURED value = finding count
     findings: list[TriageFinding] = Field(default_factory=list)
     metrics: dict[str, Measurement] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def _not_collected_has_no_findings(self) -> "SignalResult":
-        if (self.collected.state is CollectionState.NOT_COLLECTED
-                and self.findings):
+    def _not_collected_has_no_findings(self) -> SignalResult:
+        if self.collected.state is CollectionState.NOT_COLLECTED and self.findings:
             raise ValueError(
                 f"{self.signal}: NOT_COLLECTED carries {len(self.findings)} "
                 f"finding(s) -- those are findings from a run that did not "
-                f"happen. Partial output is UNKNOWN.")
+                f"happen. Partial output is UNKNOWN."
+            )
         return self
 
     @model_validator(mode="after")
-    def _identities_unique(self) -> "SignalResult":
+    def _identities_unique(self) -> SignalResult:
         """E-44 D3. Two findings with one identity are the same fact reported
         twice: the delta cannot key on them, and the severity tally
         double-counts. Signals collapse them with dedupe_by_identity; this
@@ -82,7 +85,8 @@ class SignalResult(BaseModel):
                 raise ValueError(
                     f"{self.signal}: duplicate finding identity {identity!r} "
                     f"-- the rule fires more than once per path and needs a "
-                    f"`key` (E-44 D3)")
+                    f"`key` (E-44 D3)"
+                )
             seen.add(identity)
         return self
 
@@ -91,6 +95,7 @@ class Readiness(BaseModel):
     """FR-901's four dimensions. Every value is positive-is-good, so the
     verdict rule is uniform: buildable/runnable/structure_discernible are
     1.0 or 0.0, tests_present is a count."""
+
     buildable: Measurement
     runnable: Measurement
     tests_present: Measurement
@@ -113,6 +118,7 @@ class ReadinessOverride(BaseModel):
     approved a not-ready repository, on a field anyone can set, would be worse
     than one that says "human" and leaves the principal unproven.
     """
+
     approved_by: Literal["human", "policy", "timeout"]
     reviewer: str | None = None
     reason: str
@@ -122,8 +128,8 @@ class ReadinessOverride(BaseModel):
 
 class RepoTriage(BaseModel):
     repo_dir: str
-    commit_sha: str                             # triage is pinned at a commit
-    toolchain: str | None = None                # None is a finding, not an error
+    commit_sha: str  # triage is pinned at a commit
+    toolchain: str | None = None  # None is a finding, not an error
     readiness: Readiness
     override: ReadinessOverride | None = None
     signals: list[SignalResult] = Field(default_factory=list)
@@ -138,8 +144,7 @@ M_BUILDABLE = "buildable"
 M_RUNNABLE = "runnable"
 M_TESTS_PRESENT = "tests_present"
 M_STRUCTURE = "structure_discernible"
-READINESS_KEYS: tuple[str, ...] = (
-    M_BUILDABLE, M_RUNNABLE, M_TESTS_PRESENT, M_STRUCTURE)
+READINESS_KEYS: tuple[str, ...] = (M_BUILDABLE, M_RUNNABLE, M_TESTS_PRESENT, M_STRUCTURE)
 
 
 def compute_readiness(signals: list[SignalResult]) -> Readiness:
@@ -156,17 +161,17 @@ def compute_readiness(signals: list[SignalResult]) -> Readiness:
     for sig in sorted(signals, key=lambda s: s.signal):
         for key, m in sig.metrics.items():
             if key not in READINESS_KEYS:
-                continue                      # signals may carry other metrics
+                continue  # signals may carry other metrics
             if key in reported:
                 raise ValueError(
                     f"readiness key {key!r} reported by more than one signal "
                     f"(second was {sig.signal!r}) -- exactly one signal owns "
-                    f"each dimension (FR-902)")
+                    f"each dimension (FR-902)"
+                )
             reported[key] = m
 
     dims = {
-        key: reported.get(key)
-        or Measurement.not_collected(f"no signal reported {key}")
+        key: reported.get(key) or Measurement.not_collected(f"no signal reported {key}")
         for key in READINESS_KEYS
     }
 
@@ -198,8 +203,7 @@ def evidence_key(text: str) -> str:
     the raw line is already carried in `evidence`, so this hides nothing that
     is not disclosed elsewhere.
     """
-    return hashlib.sha256(
-        text.encode("utf-8", "replace")).hexdigest()[:12]
+    return hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()[:12]
 
 
 def dedupe_by_identity(findings: list[TriageFinding]) -> list[TriageFinding]:

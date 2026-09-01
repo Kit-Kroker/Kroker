@@ -20,18 +20,19 @@ caller chooses between failing a stage, dropping a claim, or failing closed.
 Pure by design -- stdlib and Pydantic only. Must never import models.py or
 temporalio.
 """
+
 from __future__ import annotations
 
 import re
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel
 
 
-class Profile(str, Enum):
-    EXTRACTED_TEXT = "extracted_text"    # third-party extractor output
-    VERBATIM_BYTES = "verbatim_bytes"    # committed code, stored transcripts
+class Profile(StrEnum):
+    EXTRACTED_TEXT = "extracted_text"  # third-party extractor output
+    VERBATIM_BYTES = "verbatim_bytes"  # committed code, stored transcripts
 
 
 _WS = re.compile(r"\s+")
@@ -72,6 +73,7 @@ def normalize(text: str, profile: Profile) -> str:
 class Violation(BaseModel):
     """One unverifiable claim. `source` is whatever identifies the bytes:
     a url, a "path@sha", or a session ref."""
+
     kind: Literal["quote_not_found", "source_unavailable", "quote_empty"]
     source: str
     quote: str
@@ -91,8 +93,7 @@ def verify_quote(quote: str, haystack: str, profile: Profile) -> bool:
     return needle in normalize(haystack, profile)
 
 
-def quote_violation(quote: str, haystack: str, profile: Profile,
-                    source: str) -> Violation | None:
+def quote_violation(quote: str, haystack: str, profile: Profile, source: str) -> Violation | None:
     """The kind-aware form of verify_quote: None when grounded, otherwise the
     typed Violation. For callers that report why, rather than only whether."""
     if not normalize(quote, profile):

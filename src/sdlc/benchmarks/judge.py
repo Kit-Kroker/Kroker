@@ -6,27 +6,28 @@ QualityScore(score=None, judge="error") — the judge never raises, so a
 broken judge can never fail a benchmark cell; the record is simply excluded
 from the composite.
 """
+
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-from typing import Callable
 
 from pydantic_ai import Agent
 from temporalio import activity
 
 from .models import QualityScore
-from .vetoes import VetoConfigError, check, parse_vetoes
+from .vetoes import check, parse_vetoes
 
 
 @dataclass
 class JudgeInput:
-    artifact_json: str          # the stage's emitted artifact, serialized
-    rubric: str                 # rubric markdown/text for this case+stage
-    author_model: str           # to assert cross-family at call time
-    judge_model: str | None = None     # model the judge should USE (A1)
+    artifact_json: str  # the stage's emitted artifact, serialized
+    rubric: str  # rubric markdown/text for this case+stage
+    author_model: str  # to assert cross-family at call time
+    judge_model: str | None = None  # model the judge should USE (A1)
     # E-83: raw YAML text of this stage's vetoes. A STRING, not parsed
     # objects: JudgeInput crosses a Temporal activity boundary, and plain
     # text serializes under any converter -- the same reason `rubric` and
@@ -34,10 +35,14 @@ class JudgeInput:
     vetoes_yaml: str = ""
 
 
-def _build_judge_input(artifact_json: str, rubrics: dict[str, str],
-                       stage: str, author_model: str,
-                       judge_model: str | None,
-                       vetoes: dict[str, str] | None = None) -> JudgeInput | None:
+def _build_judge_input(
+    artifact_json: str,
+    rubrics: dict[str, str],
+    stage: str,
+    author_model: str,
+    judge_model: str | None,
+    vetoes: dict[str, str] | None = None,
+) -> JudgeInput | None:
     """Build a JudgeInput iff a rubric is registered for ``stage``.
 
     ``stage`` is the rubric-map key — i.e. the keys carried on
@@ -79,7 +84,7 @@ _JUDGE_SYSTEM_PROMPT = (
     "(no prose, no markdown fences):\n"
     '  {"score": <float between 0.0 and 1.0>, '
     '"components": {<name>: <float between 0.0 and 1.0>}}\n'
-    "The overall \"score\" must reflect the artifact's rubric compliance; "
+    'The overall "score" must reflect the artifact\'s rubric compliance; '
     "each component score must be grounded in a named rubric criterion. "
     "Do not invent components the rubric does not name."
 )
@@ -115,12 +120,10 @@ def generate_steps(rubric: str, judge_model: str) -> list[str]:
     key = (sha256(rubric.encode()).hexdigest(), judge_model)
     if key in _STEP_CACHE:
         return _STEP_CACHE[key]
-    raw = _run_judge_agent(judge_model, _STEPS_SYSTEM_PROMPT,
-                           f"Rubric:\n{rubric}")
+    raw = _run_judge_agent(judge_model, _STEPS_SYSTEM_PROMPT, f"Rubric:\n{rubric}")
     steps = json.loads(raw).get("steps") or []
     if not isinstance(steps, list) or not steps:
-        raise ValueError(
-            f"step generation returned no steps for rubric sha {key[0][:12]}")
+        raise ValueError(f"step generation returned no steps for rubric sha {key[0][:12]}")
     _STEP_CACHE[key] = [str(s) for s in steps]
     return _STEP_CACHE[key]
 
@@ -151,15 +154,16 @@ def _default_judge(inp: JudgeInput) -> str:
         raise RuntimeError(
             "no judge_model configured; cannot run production judge "
             "(set BenchmarkConfig.judge_model or inject a fn via "
-            "_set_judge_fn)")
+            "_set_judge_fn)"
+        )
     steps = generate_steps(inp.rubric, inp.judge_model)
     checklist = "\n".join(f"{i}. {s}" for i, s in enumerate(steps, 1))
     user_prompt = (
         f"Evaluation steps:\n{checklist}\n\n"
         f"Rubric (for component names and weights):\n{inp.rubric}\n\n"
-        f"Artifact:\n{inp.artifact_json}")
-    return _run_judge_agent(
-        inp.judge_model, _JUDGE_SYSTEM_PROMPT, user_prompt)
+        f"Artifact:\n{inp.artifact_json}"
+    )
+    return _run_judge_agent(inp.judge_model, _JUDGE_SYSTEM_PROMPT, user_prompt)
 
 
 def _judge_sync(inp: JudgeInput) -> QualityScore:
@@ -193,8 +197,7 @@ def _judge_sync(inp: JudgeInput) -> QualityScore:
         for f in failures:
             components[f.veto_id] = 0.0
         score = 0.0
-    return QualityScore(score=score, components=components,
-                        judge="staged_rubric")
+    return QualityScore(score=score, components=components, judge="staged_rubric")
 
 
 @activity.defn
@@ -203,7 +206,7 @@ async def judge_artifact(inp: JudgeInput) -> QualityScore:
 
 
 # test convenience
-judge_artifact.sync = _judge_sync   # type: ignore[attr-defined]
+judge_artifact.sync = _judge_sync  # type: ignore[attr-defined]
 
 
 # Repo root, derived from this module's location (editable install resolves
@@ -213,8 +216,7 @@ _CASES_DIR = Path(__file__).resolve().parents[3] / "benchmarks" / "cases"
 
 
 @activity.defn
-async def load_case_assets(case_id: str,
-                           rubric_files: dict[str, str]) -> dict[str, str]:
+async def load_case_assets(case_id: str, rubric_files: dict[str, str]) -> dict[str, str]:
     """Read each rubric file and return {stage: rubric_text}.
 
     ``rubric_files`` is the CaseSpec.rubrics map (stage -> file path). Paths

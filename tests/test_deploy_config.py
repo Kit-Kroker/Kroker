@@ -1,5 +1,6 @@
 """D-9: the deploy stage is opt-in. Nothing that exists today may start
 shelling out to Docker when E-67 lands."""
+
 from __future__ import annotations
 
 import pytest
@@ -34,7 +35,8 @@ def test_readiness_timeout_must_be_positive():
 
 def test_config_round_trips_through_dicts():
     """PipelineConfig is constructed from dicts in benchmark cell config."""
-    cfg = PipelineConfig(deploy={"enabled": True, "adapter": "script",
-                                 "commands": {"deploy": "make ship"}})
+    cfg = PipelineConfig(
+        deploy={"enabled": True, "adapter": "script", "commands": {"deploy": "make ship"}}
+    )
     assert cfg.deploy.enabled is True
     assert cfg.deploy.commands["deploy"] == "make ship"

@@ -1,4 +1,5 @@
 """E-84 D3: intake verifies the declared mode; the asymmetry is the point."""
+
 from __future__ import annotations
 
 from sdlc.context.classify import classify
@@ -7,8 +8,9 @@ from sdlc.models import ProjectMode
 
 
 def _repo(**over) -> RepoObservation:
-    base = dict(is_git_repo=True, base_branch_resolves=True,
-                commit_sha="a" * 40, source_file_count=12)
+    base = dict(
+        is_git_repo=True, base_branch_resolves=True, commit_sha="a" * 40, source_file_count=12
+    )
     return RepoObservation(**{**base, **over})
 
 

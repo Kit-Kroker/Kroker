@@ -1,6 +1,7 @@
 """Temporal activities wrapping the Memory backend. All memory I/O funnels
 through here — workflow code never touches a backend directly
 (ARCHITECTURE.md §2, 'memory is I/O')."""
+
 from __future__ import annotations
 
 import logging
@@ -25,10 +26,12 @@ def _backend(base_url: str, backend: str) -> Memory:
     input -- RecallInput/RetainInput are serialized into Temporal history."""
     if backend == "hindsight":
         from .hindsight_client import HindsightMemory
+
         return HindsightMemory(
             base_url=base_url,
             tenant=os.environ.get("SDLC_MEMORY_TENANT", "default"),
-            api_key=os.environ.get("SDLC_MEMORY_API_KEY") or None)
+            api_key=os.environ.get("SDLC_MEMORY_API_KEY") or None,
+        )
     return _fake_singleton
 
 
@@ -48,15 +51,17 @@ async def recall_snapshot(inp: RecallInput) -> RecallSnapshot:
     (logged) rather than blocking the pipeline on memory."""
     try:
         memory = _backend(inp.base_url, inp.backend)
-        return await memory.recall(inp.bank, inp.query, inp.filters,
-                                   inp.watermark)
+        return await memory.recall(inp.bank, inp.query, inp.filters, inp.watermark)
     except Exception:
         logger.warning("recall degraded to empty snapshot", exc_info=True)
-        query_hash = recall_query_hash(inp.bank, inp.query, inp.filters,
-                                       inp.watermark)
-        return RecallSnapshot(query_hash=query_hash, bank=inp.bank,
-                              watermark=inp.watermark or "unknown",
-                              items=[], degraded=True)
+        query_hash = recall_query_hash(inp.bank, inp.query, inp.filters, inp.watermark)
+        return RecallSnapshot(
+            query_hash=query_hash,
+            bank=inp.bank,
+            watermark=inp.watermark or "unknown",
+            items=[],
+            degraded=True,
+        )
 
 
 @dataclass

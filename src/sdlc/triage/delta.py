@@ -14,10 +14,11 @@ would report every finding it had found as fixed. That is the same conflation
 E-40 removed from report_from_sarif, which returned critical=0 for a malformed
 document. Five conditions (D5) produce UNVERIFIABLE instead.
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, model_validator
@@ -26,10 +27,10 @@ from ..measurement import CollectionState
 from .models import RepoTriage, SignalResult, TriageFinding, finding_identity
 
 
-class FindingState(str, Enum):
-    RESOLVED = "resolved"          # present before, absent after
-    PERSISTED = "persisted"        # present in both
-    NEW = "new"                    # absent before, present after
+class FindingState(StrEnum):
+    RESOLVED = "resolved"  # present before, absent after
+    PERSISTED = "persisted"  # present in both
+    NEW = "new"  # absent before, present after
     UNVERIFIABLE = "unverifiable"  # not measurable on one side
 
 
@@ -42,43 +43,56 @@ class FindingDelta(BaseModel):
     reason: str = ""
 
     @model_validator(mode="after")
-    def _unverifiable_states_a_reason(self) -> "FindingDelta":
+    def _unverifiable_states_a_reason(self) -> FindingDelta:
         if self.state is FindingState.UNVERIFIABLE and not self.reason:
             raise ValueError(
                 f"{self.identity}: UNVERIFIABLE without a reason -- the whole "
                 f"point of the state is that it says WHY it could not be "
-                f"measured")
+                f"measured"
+            )
         return self
 
 
-def _unusable(signal_id: str,
-              before: dict[str, SignalResult],
-              after: dict[str, SignalResult]) -> str:
+def _unusable(
+    signal_id: str, before: dict[str, SignalResult], after: dict[str, SignalResult]
+) -> str:
     """Why this signal's findings cannot be compared, or "" when they can."""
     b, a = before.get(signal_id), after.get(signal_id)
     for side, result in (("before", b), ("after", a)):
         if result is None:
-            return (f"signal {signal_id!r} did not report on the {side} "
-                    f"side, so its findings were never compared")
+            return (
+                f"signal {signal_id!r} did not report on the {side} "
+                f"side, so its findings were never compared"
+            )
         if result.collected.state is not CollectionState.MEASURED:
-            return (f"signal {signal_id!r} did not collect on the {side} "
-                    f"side: {result.collected.reason}")
+            return (
+                f"signal {signal_id!r} did not collect on the {side} "
+                f"side: {result.collected.reason}"
+            )
+    assert b is not None and a is not None
     if b.version != a.version:
-        return (f"signal {signal_id!r} changed version between the two "
-                f"triages (v{b.version} -> v{a.version}), so the two runs "
-                f"did not measure the same thing")
+        return (
+            f"signal {signal_id!r} changed version between the two "
+            f"triages (v{b.version} -> v{a.version}), so the two runs "
+            f"did not measure the same thing"
+        )
     return ""
 
 
-def _delta(identity: str, f: TriageFinding, state: FindingState,
-           reason: str = "") -> FindingDelta:
-    return FindingDelta(identity=identity, signal=f.signal, rule=f.rule,
-                        severity=f.severity, state=state, reason=reason)
+def _delta(identity: str, f: TriageFinding, state: FindingState, reason: str = "") -> FindingDelta:
+    return FindingDelta(
+        identity=identity,
+        signal=f.signal,
+        rule=f.rule,
+        severity=f.severity,
+        state=state,
+        reason=reason,
+    )
 
 
-def compute_delta(before: RepoTriage,
-                  after: RepoTriage | None,
-                  conflicted: Sequence[str] = ()) -> list[FindingDelta]:
+def compute_delta(
+    before: RepoTriage, after: RepoTriage | None, conflicted: Sequence[str] = ()
+) -> list[FindingDelta]:
     """Classify every finding across the two triages.
 
     `conflicted` carries the identities whose fix branch failed to merge into
@@ -88,21 +102,22 @@ def compute_delta(before: RepoTriage,
     UNVERIFIABLE (D5 rule 3).
     """
     blocked = set(conflicted)
-    before_f = {finding_identity(f): f
-                for s in before.signals for f in s.findings}
+    before_f = {finding_identity(f): f for s in before.signals for f in s.findings}
 
     if after is None:
         # D5 rule 4. Never an empty delta: "nothing resolved" and "nothing
         # was measured" must not render identically.
         return [
-            _delta(i, before_f[i], FindingState.UNVERIFIABLE,
-                   "no verification tree was produced, so the after state "
-                   "was never measured")
+            _delta(
+                i,
+                before_f[i],
+                FindingState.UNVERIFIABLE,
+                "no verification tree was produced, so the after state was never measured",
+            )
             for i in sorted(before_f)
         ]
 
-    after_f = {finding_identity(f): f
-               for s in after.signals for f in s.findings}
+    after_f = {finding_identity(f): f for s in after.signals for f in s.findings}
     before_s = {s.signal: s for s in before.signals}
     after_s = {s.signal: s for s in after.signals}
 
@@ -115,10 +130,15 @@ def compute_delta(before: RepoTriage,
             out.append(_delta(identity, f, FindingState.UNVERIFIABLE, reason))
             continue
         if identity in blocked:
-            out.append(_delta(
-                identity, f, FindingState.UNVERIFIABLE,
-                "the fix branch for this finding hit a merge conflict and is "
-                "not in the verification tree"))
+            out.append(
+                _delta(
+                    identity,
+                    f,
+                    FindingState.UNVERIFIABLE,
+                    "the fix branch for this finding hit a merge conflict and is "
+                    "not in the verification tree",
+                )
+            )
             continue
         if identity in before_f and identity in after_f:
             out.append(_delta(identity, f, FindingState.PERSISTED))

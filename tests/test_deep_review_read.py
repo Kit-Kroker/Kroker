@@ -3,7 +3,10 @@ import asyncio
 import pytest
 
 from sdlc.artifacts.read import (
-    DEEP_REVIEW_MAX_BYTES, LoadSessionInput, LoadSessionResult, load_session,
+    DEEP_REVIEW_MAX_BYTES,
+    LoadSessionInput,
+    LoadSessionResult,
+    load_session,
 )
 from sdlc.artifacts.store import LocalFileStore
 from sdlc.models import ArtifactRef
@@ -11,8 +14,9 @@ from sdlc.models import ArtifactRef
 
 def test_load_session_round_trips_scrubbed_jsonl(tmp_path):
     store = LocalFileStore(tmp_path)
-    ref = store.put("harness_session", "run1", "t1-a1.jsonl",
-                    b'{"kind":"file_read","target":"app.py"}\n')
+    ref = store.put(
+        "harness_session", "run1", "t1-a1.jsonl", b'{"kind":"file_read","target":"app.py"}\n'
+    )
     out = asyncio.run(load_session(LoadSessionInput(ref=ref)))
     assert isinstance(out, LoadSessionResult)
     assert out.truncated is False

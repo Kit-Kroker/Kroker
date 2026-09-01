@@ -4,6 +4,7 @@ ARCHITECTURE.md section 6/8.
 Every path comes from hindsight_api, which is pinned against the container's
 own OpenAPI schema. Callers only ever see the Memory protocol, so swapping
 this module or base_url leaves workflow code untouched."""
+
 from __future__ import annotations
 
 import asyncio
@@ -11,14 +12,18 @@ import hashlib
 import re
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 
 from ..models import RecallSnapshot, RetainItem
 from .hindsight_api import (
-    BANK_PATH, CONSOLIDATE_PATH, OPERATION_PATH,
-    RECALL_LIMIT_FIELD, RECALL_PATH, RETAIN_PATH,
+    BANK_PATH,
+    CONSOLIDATE_PATH,
+    OPERATION_PATH,
+    RECALL_LIMIT_FIELD,
+    RECALL_PATH,
+    RETAIN_PATH,
 )
 from .protocol import Memory
 from .query_hash import recall_query_hash
@@ -42,14 +47,14 @@ def _clear_client_cache() -> None:
     _CLIENTS.clear()
 
 
-def _client_for(base_url: str, tenant: str, api_key: str | None,
-                timeout_s: float) -> httpx.AsyncClient:
+def _client_for(
+    base_url: str, tenant: str, api_key: str | None, timeout_s: float
+) -> httpx.AsyncClient:
     key = (base_url, tenant, api_key)
     client = _CLIENTS.get(key)
     if client is None:
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-        client = httpx.AsyncClient(base_url=base_url, timeout=timeout_s,
-                                   headers=headers)
+        client = httpx.AsyncClient(base_url=base_url, timeout=timeout_s, headers=headers)
         _CLIENTS[key] = client
     return client
 
@@ -73,28 +78,25 @@ TAG_PROMOTED_KEYS: tuple[str, ...] = ("stage", "gate")
 
 def _tags(item: RetainItem) -> list[str]:
     tags = [f"kind:{item.kind.value}"]
-    tags += [f"{k}:{item.metadata[k]}"
-             for k in TAG_PROMOTED_KEYS if k in item.metadata]
+    tags += [f"{k}:{item.metadata[k]}" for k in TAG_PROMOTED_KEYS if k in item.metadata]
     return tags
 
 
 def _document_id(item: RetainItem) -> str:
     """Content-addressed, so Temporal's retries upsert rather than duplicate."""
-    return hashlib.sha256(
-        f"{item.bank}|{item.kind.value}|{item.text}".encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(f"{item.bank}|{item.kind.value}|{item.text}".encode()).hexdigest()
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 # Filter keys recall can honour -- the promoted tags plus the always-written
 # kind tag.
 _FILTERABLE = frozenset(TAG_PROMOTED_KEYS) | {"kind"}
 
-RECALL_KEEP = 10          # matches FakeMemory's slice size
-OVER_FETCH = 3            # advisory: recall asks for ~3x what it keeps
+RECALL_KEEP = 10  # matches FakeMemory's slice size
+OVER_FETCH = 3  # advisory: recall asks for ~3x what it keeps
 # RECALL_LIMIT_FIELD is max_tokens (Task 1 Step 4), not a result count, so
 # over-fetching means requesting a generous token budget rather than
 # RECALL_KEEP * OVER_FETCH. 4096 is the schema default; enough headroom that
@@ -111,7 +113,8 @@ def _filter_tags(filters: dict[str, str]) -> list[str]:
         raise ValueError(
             f"recall filter keys {unfilterable} are not promoted to Hindsight "
             f"tags, and Hindsight cannot filter on metadata; add them to "
-            f"TAG_PROMOTED_KEYS (filterable today: {sorted(_FILTERABLE)})")
+            f"TAG_PROMOTED_KEYS (filterable today: {sorted(_FILTERABLE)})"
+        )
     return [f"{k}:{v}" for k, v in sorted(filters.items())]
 
 
@@ -149,16 +152,20 @@ class ConsolidationFailed(RuntimeError):
 
 
 class HindsightMemory(Memory):
-    def __init__(self, base_url: str, tenant: str = "default",
-                 api_key: str | None = None, timeout_s: float = 30.0):
+    def __init__(
+        self,
+        base_url: str,
+        tenant: str = "default",
+        api_key: str | None = None,
+        timeout_s: float = 30.0,
+    ):
         self.base_url = base_url.rstrip("/")
         self.tenant = tenant
         self.api_key = api_key
         self._client = _client_for(self.base_url, tenant, api_key, timeout_s)
 
     def _path(self, template: str, bank: str, **extra: str) -> str:
-        return template.format(tenant=self.tenant, bank=_bank_id(bank),
-                               **extra)
+        return template.format(tenant=self.tenant, bank=_bank_id(bank), **extra)
 
     async def ensure_bank(self, bank: str) -> None:
         """Idempotent create-or-update. Without it the first recall against a
@@ -184,24 +191,28 @@ class HindsightMemory(Memory):
         resp = await self._client.post(
             self._path(RETAIN_PATH, item.bank),
             json={
-                "items": [{
-                    "content": item.text,
-                    "context": item.kind.value,
-                    "tags": _tags(item),
-                    "metadata": item.metadata,
-                    "timestamp": _now_iso(),
-                    "document_id": doc_id,
-                }],
+                "items": [
+                    {
+                        "content": item.text,
+                        "context": item.kind.value,
+                        "tags": _tags(item),
+                        "metadata": item.metadata,
+                        "timestamp": _now_iso(),
+                        "document_id": doc_id,
+                    }
+                ],
                 # Retain runs LLM fact extraction; synchronously it would
                 # exceed MEM_ACT's 30s ceiling. The operation_id is derived
                 # from content so Temporal's five retries are idempotent.
                 "async": True,
                 "operation_id": str(uuid.UUID(hex=doc_id[:32])),
-            })
+            },
+        )
         resp.raise_for_status()
 
-    async def recall(self, bank: str, query: str, filters: dict[str, str],
-                     watermark: str | None) -> RecallSnapshot:
+    async def recall(
+        self, bank: str, query: str, filters: dict[str, str], watermark: str | None
+    ) -> RecallSnapshot:
         await self.ensure_bank(bank)
         payload: dict[str, object] = {
             "query": query,
@@ -215,15 +226,16 @@ class HindsightMemory(Memory):
             payload["tags"] = tags
             payload["tags_match"] = "all_strict"
 
-        resp = await self._client.post(self._path(RECALL_PATH, bank),
-                                       json=payload)
+        resp = await self._client.post(self._path(RECALL_PATH, bank), json=payload)
         resp.raise_for_status()
         results = resp.json().get("results", [])
-        kept = [r["text"] for r in results
-                if _within_watermark(r, watermark)][:RECALL_KEEP]
+        kept = [r["text"] for r in results if _within_watermark(r, watermark)][:RECALL_KEEP]
         return RecallSnapshot(
             query_hash=recall_query_hash(bank, query, filters, watermark),
-            bank=bank, watermark=watermark or _now_iso(), items=kept)
+            bank=bank,
+            watermark=watermark or _now_iso(),
+            items=kept,
+        )
 
     async def reflect(self, bank: str) -> None:
         """Consolidation, not the /reflect question-answering endpoint --
@@ -244,7 +256,8 @@ class HindsightMemory(Memory):
         status = "unknown"
         while True:
             resp = await self._client.get(
-                self._path(OPERATION_PATH, bank, operation_id=operation_id))
+                self._path(OPERATION_PATH, bank, operation_id=operation_id)
+            )
             resp.raise_for_status()
             body = resp.json() or {}
             status = str(body.get("status", "unknown")).lower()
@@ -253,9 +266,11 @@ class HindsightMemory(Memory):
             if status in _TERMINAL_BAD:
                 raise ConsolidationFailed(
                     f"consolidation of {bank} ended {status}: "
-                    f"{body.get('error_message') or 'no detail'}")
+                    f"{body.get('error_message') or 'no detail'}"
+                )
             if time.monotonic() >= deadline:
                 raise ConsolidationFailed(
                     f"consolidation of {bank} did not finish within "
-                    f"{POLL_DEADLINE_S:.0f}s (last status {status})")
+                    f"{POLL_DEADLINE_S:.0f}s (last status {status})"
+                )
             await asyncio.sleep(POLL_INTERVAL_S)

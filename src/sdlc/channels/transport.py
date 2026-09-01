@@ -12,16 +12,17 @@ reaches a feature run, a triage, or a tidy-up unchanged.
 All operator-facing strings are ASCII: the Windows console cannot print
 non-ASCII (see the `schedules list` arrow fix).
 """
+
 from __future__ import annotations
 
-from typing import Literal, Sequence
+from collections.abc import Sequence
+from typing import Literal
 
 from pydantic import BaseModel, TypeAdapter
 
+from ..models import GateOutcome
 from ..pending import PendingDecision
 from .contract import Channel, ReferenceChannel, Reply
-
-from ..models import GateOutcome
 
 PENDING_QUERY = "pending_decisions"
 
@@ -32,6 +33,7 @@ class Selector(BaseModel):
     ``name`` is a gate name or a question id; ``None`` means "the only pending
     item of this reply_kind", which fails closed when there is more than one.
     """
+
     reply_kind: Literal["text", "gate"]
     name: str | None = None
 
@@ -40,8 +42,7 @@ class SelectorError(Exception):
     """Base for selector resolution failures. ``message`` is a fully formatted
     multi-line ASCII block the surface can print verbatim."""
 
-    def __init__(self, message: str,
-                 candidates: Sequence[PendingDecision] = ()) -> None:
+    def __init__(self, message: str, candidates: Sequence[PendingDecision] = ()) -> None:
         super().__init__(message)
         self.message = message
         self.candidates = list(candidates)
@@ -72,8 +73,9 @@ def _noun(reply_kind: str) -> str:
     return "gate" if reply_kind == "gate" else "question"
 
 
-def match(pendings: Sequence[PendingDecision], selector: Selector,
-          channel: Channel | None = None) -> PendingDecision:
+def match(
+    pendings: Sequence[PendingDecision], selector: Selector, channel: Channel | None = None
+) -> PendingDecision:
     """Resolve a selector to exactly one pending item, or raise.
 
     Candidates are narrowed by ``render(d).reply_kind`` rather than isinstance:
@@ -84,8 +86,7 @@ def match(pendings: Sequence[PendingDecision], selector: Selector,
     ch = channel or ReferenceChannel()
     noun = _noun(selector.reply_kind)
 
-    cands = [d for d in pendings
-             if ch.render(d).reply_kind == selector.reply_kind]
+    cands = [d for d in pendings if ch.render(d).reply_kind == selector.reply_kind]
     if selector.name is not None:
         cands = [d for d in cands if _name_of(d) == selector.name]
 
@@ -100,14 +101,13 @@ def match(pendings: Sequence[PendingDecision], selector: Selector,
 
     if len(cands) > 1:
         raise Ambiguous(
-            f"ambiguous -- {len(cands)} {noun}s pending:\n{_listing(cands)}",
-            candidates=cands)
+            f"ambiguous -- {len(cands)} {noun}s pending:\n{_listing(cands)}", candidates=cands
+        )
 
     return cands[0]
 
 
-def match_key(pendings: Sequence[PendingDecision],
-              key: str) -> PendingDecision:
+def match_key(pendings: Sequence[PendingDecision], key: str) -> PendingDecision:
     """Resolve a pending item by its exact resolution key, or raise NoMatch.
 
     match()'s sibling for surfaces that already hold the key -- the dashboard
@@ -147,6 +147,7 @@ _PAST = {
 class SubmitResult(BaseModel):
     """Outcome of one reply. ``confirmed`` is False when the item is still
     pending after the signal -- not an error (see ``message``)."""
+
     confirmed: bool
     message: str
 
@@ -165,14 +166,14 @@ async def fetch_pending(handle) -> list[PendingDecision]:
     return _PENDING_LIST.validate_python(raw)
 
 
-async def resolve(handle, selector: Selector,
-                  channel: Channel | None = None) -> PendingDecision:
+async def resolve(handle, selector: Selector, channel: Channel | None = None) -> PendingDecision:
     """Fetch what is pending and narrow it to the one item meant."""
     return match(await fetch_pending(handle), selector, channel)
 
 
-async def submit(handle, pending: PendingDecision, reply: Reply,
-                 channel: Channel | None = None) -> SubmitResult:
+async def submit(
+    handle, pending: PendingDecision, reply: Reply, channel: Channel | None = None
+) -> SubmitResult:
     """Translate a reply to its signal, send it, and verify it landed."""
     ch = channel or ReferenceChannel()
     call = ch.translate(pending, reply)
@@ -184,22 +185,21 @@ async def submit(handle, pending: PendingDecision, reply: Reply,
 
     still = await fetch_pending(handle)
     confirmed = pending.key not in {d.key for d in still}
-    return SubmitResult(
-        confirmed=confirmed,
-        message=_message(handle.id, pending, reply, confirmed))
+    return SubmitResult(confirmed=confirmed, message=_message(handle.id, pending, reply, confirmed))
 
 
-def _message(run_id: str, pending: PendingDecision, reply: Reply,
-             confirmed: bool) -> str:
+def _message(run_id: str, pending: PendingDecision, reply: Reply, confirmed: bool) -> str:
     if not confirmed:
         # Signal processing is asynchronous, so this is never reported as a
         # failure: the dominant cause is another surface winning the race,
         # which is FR-302 working as designed.
-        return (f"not confirmed: {describe(pending)} still pending -- another "
-                f"surface may have decided it first, or the workflow has not "
-                f"processed the signal yet.")
+        return (
+            f"not confirmed: {describe(pending)} still pending -- another "
+            f"surface may have decided it first, or the workflow has not "
+            f"processed the signal yet."
+        )
     gate = getattr(pending, "gate", None)
     if gate is not None:
-        return (f"{_PAST[reply.outcome]} gate '{gate}' "
-                f"(round {pending.round}) on {run_id}")
+        assert reply.outcome is not None
+        return f"{_PAST[reply.outcome]} gate '{gate}' (round {pending.round}) on {run_id}"
     return f"answered {pending.key} on {run_id}"

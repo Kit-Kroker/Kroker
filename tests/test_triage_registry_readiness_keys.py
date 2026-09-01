@@ -1,10 +1,15 @@
 """E-42 D8a: which readiness dimensions a signal owes is DECLARED, so a
 skipped or failed signal can report not_collected for exactly those keys
 instead of leaving them unreported."""
+
 from __future__ import annotations
 
 from sdlc.triage.models import (
-    M_BUILDABLE, M_RUNNABLE, M_STRUCTURE, M_TESTS_PRESENT, READINESS_KEYS,
+    M_BUILDABLE,
+    M_RUNNABLE,
+    M_STRUCTURE,
+    M_TESTS_PRESENT,
+    READINESS_KEYS,
 )
 from sdlc.triage.registry import SIGNALS
 
@@ -34,8 +39,7 @@ def test_every_readiness_key_has_exactly_one_owner():
     owners: dict[str, str] = {}
     for spec in SIGNALS.values():
         for key in spec.readiness_keys:
-            assert key not in owners, (
-                f"{key} claimed by {owners.get(key)} and {spec.id}")
+            assert key not in owners, f"{key} claimed by {owners.get(key)} and {spec.id}"
             owners[key] = spec.id
     assert set(owners) == set(READINESS_KEYS)
 
@@ -54,9 +58,7 @@ def test_the_declaration_matches_what_the_signals_actually_report():
     assert set(probe.metrics) == set(SIGNALS["build_probe"].readiness_keys)
 
     base = baseline.evaluate([], "", None)
-    assert (set(base.metrics) & set(READINESS_KEYS)
-            == set(SIGNALS["baseline"].readiness_keys))
+    assert set(base.metrics) & set(READINESS_KEYS) == set(SIGNALS["baseline"].readiness_keys)
 
     scaf = scaffold.evaluate([], {}, None, None)
-    assert (set(scaf.metrics) & set(READINESS_KEYS)
-            == set(SIGNALS["scaffold"].readiness_keys))
+    assert set(scaf.metrics) & set(READINESS_KEYS) == set(SIGNALS["scaffold"].readiness_keys)

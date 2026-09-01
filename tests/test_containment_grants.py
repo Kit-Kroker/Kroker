@@ -1,10 +1,14 @@
 """E-17: grants are single-use by construction, and a declined escalation is
 distinguishable from an ordinary denial."""
+
 import json
 
 from sdlc.harness.containment import (
-    ESCALATION_UNAVAILABLE, digest_tool_input, is_declined_reason,
-    load_grants, match_grant,
+    ESCALATION_UNAVAILABLE,
+    digest_tool_input,
+    is_declined_reason,
+    load_grants,
+    match_grant,
 )
 from sdlc.models import ToolGrant
 
@@ -12,10 +16,14 @@ INPUT = {"file_path": "/etc/passwd", "content": "x"}
 
 
 def _grant(**over) -> ToolGrant:
-    base = dict(tool_use_id="toolu_1", tool="Write",
-                input_digest=digest_tool_input(INPUT),
-                rule_id="no-out-of-worktree-write", approved=True,
-                reason="ok")
+    base = dict(
+        tool_use_id="toolu_1",
+        tool="Write",
+        input_digest=digest_tool_input(INPUT),
+        rule_id="no-out-of-worktree-write",
+        approved=True,
+        reason="ok",
+    )
     return ToolGrant(**{**base, **over})
 
 
@@ -26,8 +34,7 @@ def test_digest_is_stable_across_key_order():
 
 
 def test_digest_changes_with_content():
-    assert (digest_tool_input({"file_path": "/a"})
-            != digest_tool_input({"file_path": "/b"}))
+    assert digest_tool_input({"file_path": "/a"}) != digest_tool_input({"file_path": "/b"})
 
 
 def test_matching_grant_is_returned():

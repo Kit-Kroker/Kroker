@@ -2,6 +2,7 @@
 naming the plan that owes them -- E-45's unbuilt() discipline, one level
 down. Plans 2 and 3 replaced every stub body, so OWED_BY is empty and no scan
 row can name a plan."""
+
 from __future__ import annotations
 
 import pytest
@@ -27,12 +28,11 @@ def test_nothing_is_owed_any_more():
     """Plan 3's headline: OWED_BY is empty, so no scan row can name a plan.
     unbuilt_signal survives as the mechanism a FUTURE signal would use."""
     assert scan_acts.OWED_BY == {}
-    assert scan_acts.BUILT == {s for s in SCAN_ORDER
-                               if SCAN_SIGNALS[s].activity}
+    assert scan_acts.BUILT == {s for s in SCAN_ORDER if SCAN_SIGNALS[s].activity}
 
 
 def test_unbuilt_signal_still_works_for_a_future_signal():
     """The discipline outlives its current users: a fourteenth signal added
     later reports not_collected naming its owner rather than a zero."""
     with pytest.raises(KeyError):
-        scan_acts.unbuilt_signal(ScanSignalId.S1)   # nothing owes S1
+        scan_acts.unbuilt_signal(ScanSignalId.S1)  # nothing owes S1

@@ -1,5 +1,6 @@
 """The child workflow's decision logic. The pure helper is tested directly;
 the sequencing is tested through the parent in Task 7."""
+
 from __future__ import annotations
 
 import pathlib
@@ -10,8 +11,8 @@ from sdlc.workflows.deployment import DeploymentInput, needs_rollback
 
 def _r(state, name="c"):
     return SmokeCheckResult(
-        name=name, state=state,
-        detail="" if state is SmokeState.PASSED else "why")
+        name=name, state=state, detail="" if state is SmokeState.PASSED else "why"
+    )
 
 
 def test_all_passed_needs_no_rollback():

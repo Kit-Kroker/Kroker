@@ -7,19 +7,20 @@ are automatically offloaded to Temporal activities by TemporalAgent.
 IMPORTANT: agent names and toolset ids become Temporal activity names.
 Set them explicitly and never rename after deploying to production.
 """
+
 from __future__ import annotations
+
+import hashlib
+from datetime import timedelta
 
 from pydantic_ai import Agent
 from pydantic_ai.durable_exec.temporal import TemporalAgent
-from pydantic_ai.settings import ModelSettings
-from datetime import timedelta
-import hashlib
-import os
 from temporalio.common import RetryPolicy
 from temporalio.workflow import ActivityConfig
 
 from ..clarify.models import ClarifyRoute, ProbeResult
 from ..clarify.prompts import PROBE_SYSTEM, ROUTE_SCOPE
+from .loader import build_agents, load_registry
 
 AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=10))
 
@@ -42,8 +43,6 @@ CLARIFY_FANOUT_ACTIVITY_CONFIG = ActivityConfig(
     retry_policy=RetryPolicy(maximum_attempts=CLARIFY_FANOUT_MAX_ATTEMPTS),
 )
 
-from .loader import build_agents, load_registry
-
 # The registry (FR-201) is the single source of every role's model. It is
 # loaded AND validated here at import (loader.load_registry validates), so a
 # registry violating ADR-6 cannot even import this module, let alone boot a
@@ -56,7 +55,10 @@ REGISTRY = load_registry()
 def _model(role: str) -> str:
     """The model this role declares. KeyError is unreachable — REQUIRED_ROLES
     is checked during load_registry above."""
-    return REGISTRY[role].model
+    model = REGISTRY[role].model
+    assert model is not None
+    return model
+
 
 # Re-exported from agents/settings.py, which carries the rationale. It lives
 # there so the eval path can import the settings without triggering this
@@ -71,11 +73,11 @@ AGENTS = build_agents(REGISTRY, MODEL_SETTINGS)
 clarify_agent = AGENTS["clarify"]
 architect_agent = AGENTS["architect"]
 planner_agent = AGENTS["planner"]
-qa_analyst_agent = AGENTS["qa"]                 # role 'qa'
+qa_analyst_agent = AGENTS["qa"]  # role 'qa'
 reviewer_agent = AGENTS["reviewer"]
 analyst_agent = AGENTS["analyst"]
 merge_verdict_agent = AGENTS["merge_verdict"]
-devops_agent = AGENTS["devops_planner"]         # role 'devops_planner'
+devops_agent = AGENTS["devops_planner"]  # role 'devops_planner'
 
 # Optional research agent (2026-07-17). Present iff agents/research/ ships,
 # which it does; the STAGE runs only under cfg.research_enabled (feature.py).
@@ -120,10 +122,11 @@ risk_agent = AGENTS.get("risk")
 # prices and attributes the spend -- research had to hand RoleUsage back from
 # its activities precisely because fan-out moved its calls out of that reach.
 _clarify_role = REGISTRY["clarify"]
+assert _clarify_role.instructions is not None
 
 clarify_route_agent = Agent(
     _clarify_role.model,
-    name="clarify_route_agent",     # Temporal activity name -- NEVER rename
+    name="clarify_route_agent",  # Temporal activity name -- NEVER rename
     output_type=ClarifyRoute,
     model_settings=MODEL_SETTINGS,
     system_prompt=_clarify_role.instructions + "\n\n" + ROUTE_SCOPE,
@@ -131,10 +134,10 @@ clarify_route_agent = Agent(
 
 clarify_probe_agent = Agent(
     _clarify_role.model,
-    name="clarify_probe_agent",     # Temporal activity name -- NEVER rename
+    name="clarify_probe_agent",  # Temporal activity name -- NEVER rename
     output_type=ProbeResult,
     model_settings=MODEL_SETTINGS,
-    system_prompt=PROBE_SYSTEM,     # standalone -- see the note above
+    system_prompt=PROBE_SYSTEM,  # standalone -- see the note above
 )
 
 # Stage name -> registry role. Stage names (feature.py's pipeline vocabulary)
@@ -150,12 +153,12 @@ STAGE_ROLES: dict[str, str] = {
     "analyze": "analyst",
     "qa": "qa",
     "merge_verdict": "merge_verdict",
-    "research": "research",             # optional; present iff the folder ships
-    "deep_review": "deep_review",       # optional; present iff the folder ships
-    "handoff": "handoff",               # optional; present iff the folder ships
-    "adversary": "adversary",           # optional; present iff the folder ships
-    "discover": "discover",             # optional; present iff the folder ships
-    "risk": "risk",                     # optional; present iff the folder ships
+    "research": "research",  # optional; present iff the folder ships
+    "deep_review": "deep_review",  # optional; present iff the folder ships
+    "handoff": "handoff",  # optional; present iff the folder ships
+    "adversary": "adversary",  # optional; present iff the folder ships
+    "discover": "discover",  # optional; present iff the folder ships
+    "risk": "risk",  # optional; present iff the folder ships
 }
 
 # Both maps are keyed by stage and looked up together in _cached_stage. Keep
@@ -164,29 +167,26 @@ STAGE_ROLES: dict[str, str] = {
 # (research today, possibly others later) — without it, _model(role) would
 # KeyError at import on a tree that ships an OPTIONAL_ROLES slot but no folder.
 STAGE_MODELS: dict[str, str] = {
-    stage: _model(role) for stage, role in STAGE_ROLES.items()
-    if role in REGISTRY
+    stage: _model(role) for stage, role in STAGE_ROLES.items() if role in REGISTRY
 }
 
 # Prompt text now lives in agents/<role>/instructions.md (E-2). The hash is
 # over the same bytes it was over when the text was a Python constant --
 # tests/test_prompt_migration.py pins every value.
 _STAGE_PROMPTS: dict[str, str] = {
-    stage: REGISTRY[role].instructions for stage, role in STAGE_ROLES.items()
-    if role in REGISTRY and REGISTRY[role].instructions is not None
+    stage: prompt
+    for stage, role in STAGE_ROLES.items()
+    if role in REGISTRY and (prompt := REGISTRY[role].instructions) is not None
 }
 
 PROMPT_SHAS: dict[str, str] = {
-    stage: hashlib.sha256(prompt.encode()).hexdigest()
-    for stage, prompt in _STAGE_PROMPTS.items()
+    stage: hashlib.sha256(prompt.encode()).hexdigest() for stage, prompt in _STAGE_PROMPTS.items()
 }
 
 # Temporal-wrapped versions used inside workflows.
 t_clarify = TemporalAgent(clarify_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-t_clarify_route = TemporalAgent(clarify_route_agent,
-                                activity_config=CLARIFY_FANOUT_ACTIVITY_CONFIG)
-t_clarify_probe = TemporalAgent(clarify_probe_agent,
-                                activity_config=CLARIFY_FANOUT_ACTIVITY_CONFIG)
+t_clarify_route = TemporalAgent(clarify_route_agent, activity_config=CLARIFY_FANOUT_ACTIVITY_CONFIG)
+t_clarify_probe = TemporalAgent(clarify_probe_agent, activity_config=CLARIFY_FANOUT_ACTIVITY_CONFIG)
 t_architect = TemporalAgent(architect_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 t_planner = TemporalAgent(planner_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 t_qa = TemporalAgent(qa_analyst_agent, activity_config=AGENT_ACTIVITY_CONFIG)
@@ -198,38 +198,60 @@ t_devops = TemporalAgent(devops_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 # Optional: the research TemporalAgent exists iff agents/research/ shipped
 # and built cleanly. feature.py guards the stage with `t_research is not None`
 # AND cfg.research_enabled before invoking it.
-t_research = (TemporalAgent(research_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-              if research_agent is not None else None)
+t_research = (
+    TemporalAgent(research_agent, activity_config=AGENT_ACTIVITY_CONFIG)
+    if research_agent is not None
+    else None
+)
 
 t_deep_review = (
     TemporalAgent(deep_review_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-    if deep_review_agent is not None else None)
+    if deep_review_agent is not None
+    else None
+)
 
 t_handoff = (
     TemporalAgent(handoff_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-    if handoff_agent is not None else None)
+    if handoff_agent is not None
+    else None
+)
 
 t_adversary = (
     TemporalAgent(adversary_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-    if adversary_agent is not None else None)
+    if adversary_agent is not None
+    else None
+)
 
 # Optional: the discover TemporalAgent exists iff agents/discover/ shipped and
 # built cleanly. workflows/assessment.py guards the phase with
 # `t_discover is not None`, feature.py's t_research pattern (DD7).
 t_discover = (
     TemporalAgent(discover_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-    if discover_agent is not None else None)
+    if discover_agent is not None
+    else None
+)
 
 # Optional: the risk TemporalAgent exists iff agents/risk/ shipped and built
 # cleanly. workflows/assessment.py guards the phase with
 # `t_risk is not None`, t_discover's pattern (RD7).
 t_risk = (
     TemporalAgent(risk_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-    if risk_agent is not None else None)
+    if risk_agent is not None
+    else None
+)
 
-ALL_TEMPORAL_AGENTS = [t_clarify, t_clarify_route, t_clarify_probe,
-                       t_architect, t_planner, t_qa,
-                       t_reviewer, t_analyst, t_merge_verdict, t_devops]
+ALL_TEMPORAL_AGENTS = [
+    t_clarify,
+    t_clarify_route,
+    t_clarify_probe,
+    t_architect,
+    t_planner,
+    t_qa,
+    t_reviewer,
+    t_analyst,
+    t_merge_verdict,
+    t_devops,
+]
 if t_research is not None:
     ALL_TEMPORAL_AGENTS.append(t_research)
 if t_deep_review is not None:
@@ -242,4 +264,3 @@ if t_discover is not None:
     ALL_TEMPORAL_AGENTS.append(t_discover)
 if t_risk is not None:
     ALL_TEMPORAL_AGENTS.append(t_risk)
-

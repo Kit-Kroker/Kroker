@@ -9,11 +9,12 @@ Not-measured is never rendered as passed: an all-errored judge yields
 JudgeStatus.UNAVAILABLE, mirroring WasteBag's rule that a None bag must not
 be confused with an all-zero one.
 """
+
 from __future__ import annotations
 
 import statistics
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -34,14 +35,14 @@ JUDGE_UNAVAILABLE = "JUDGE_UNAVAILABLE"
 _ABSOLUTE_TYPES = {"cost", "latency"}
 
 
-class GateVerdict(str, Enum):
+class GateVerdict(StrEnum):
     PASS = "pass"
     FAIL_ABSOLUTE = "fail_absolute"
     FAIL_REGRESSION = "fail_regression"
     ERRORED = "errored"
 
 
-class JudgeStatus(str, Enum):
+class JudgeStatus(StrEnum):
     MEASURED = "measured"
     UNAVAILABLE = "unavailable"
     NO_BASELINE = "no_baseline"
@@ -68,8 +69,7 @@ class PromptGateResult(BaseModel):
     scores_baseline: list[float] = Field(default_factory=list)
     scores_working: list[float] = Field(default_factory=list)
     absolute_failures: list[str] = Field(default_factory=list)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 def _rows(results: dict) -> list[dict]:
@@ -109,11 +109,11 @@ def _absolute_failures(rows: list[dict]) -> list[str]:
     for row in rows:
         for c in _components(row):
             a = c.get("assertion") or {}
-            is_absolute = (_ABSOLUTE_MARKER in str(a.get("value"))
-                           or a.get("type") in _ABSOLUTE_TYPES)
+            is_absolute = (
+                _ABSOLUTE_MARKER in str(a.get("value")) or a.get("type") in _ABSOLUTE_TYPES
+            )
             if is_absolute and not c.get("pass", True):
-                out.append(c.get("reason")
-                           or f"{a.get('type', 'absolute')} assertion failed")
+                out.append(c.get("reason") or f"{a.get('type', 'absolute')} assertion failed")
     return out
 
 
@@ -140,20 +140,23 @@ def decide(results: dict, *, delta_min: float = 0.05) -> PromptGateResult:
     # failure reads as infra noise -> ERRORED). Surfaced by the E-83
     # mutation suite's scope_dropped case.
     provider_error = next(
-        (r["error"] for r in rows
-         if r.get("error") and r["error"] not in failures), None)
+        (r["error"] for r in rows if r.get("error") and r["error"] not in failures), None
+    )
     if provider_error is not None:
         return PromptGateResult(
-            verdict=GateVerdict.ERRORED, judge_status=JudgeStatus.UNAVAILABLE,
+            verdict=GateVerdict.ERRORED,
+            judge_status=JudgeStatus.UNAVAILABLE,
             reason=f"gate could not run — provider error: {provider_error} "
-                   f"(this is NOT a prompt regression)")
+            f"(this is NOT a prompt regression)",
+        )
 
     if failures:
         return PromptGateResult(
             verdict=GateVerdict.FAIL_ABSOLUTE,
             judge_status=JudgeStatus.UNAVAILABLE,
             absolute_failures=failures,
-            reason=f"absolute check failed: {failures[0]}")
+            reason=f"absolute check failed: {failures[0]}",
+        )
 
     base = [s for s in _scores(base_rows) if s is not None]
     work = [s for s in _scores(work_rows) if s is not None]
@@ -161,10 +164,13 @@ def decide(results: dict, *, delta_min: float = 0.05) -> PromptGateResult:
 
     if not base_rows:
         return PromptGateResult(
-            verdict=GateVerdict.PASS, judge_status=JudgeStatus.NO_BASELINE,
+            verdict=GateVerdict.PASS,
+            judge_status=JudgeStatus.NO_BASELINE,
             mean_working=statistics.fmean(work) if work else None,
-            n_working=len(work), **kept,
-            reason="no committed baseline — working-tree score only")
+            n_working=len(work),
+            **kept,
+            reason="no committed baseline — working-tree score only",
+        )
 
     if not base or not work:
         # The measured side's mean IS reported. The regression is NOT
@@ -173,12 +179,16 @@ def decide(results: dict, *, delta_min: float = 0.05) -> PromptGateResult:
         # "scored 1.00" observation became unrecoverable: the number lived
         # only in the results.json that run_gate deletes in its finally.
         return PromptGateResult(
-            verdict=GateVerdict.PASS, judge_status=JudgeStatus.UNAVAILABLE,
+            verdict=GateVerdict.PASS,
+            judge_status=JudgeStatus.UNAVAILABLE,
             mean_baseline=statistics.fmean(base) if base else None,
             mean_working=statistics.fmean(work) if work else None,
-            n_baseline=len(base), n_working=len(work), **kept,
+            n_baseline=len(base),
+            n_working=len(work),
+            **kept,
             reason="judge unavailable on at least one side — regression NOT "
-                   "evaluated (not measured, not passed)")
+            "evaluated (not measured, not passed)",
+        )
 
     mb, mw = statistics.fmean(base), statistics.fmean(work)
     delta = mw - mb
@@ -189,11 +199,19 @@ def decide(results: dict, *, delta_min: float = 0.05) -> PromptGateResult:
     return PromptGateResult(
         verdict=GateVerdict.FAIL_REGRESSION if regressed else GateVerdict.PASS,
         judge_status=JudgeStatus.MEASURED,
-        mean_baseline=mb, mean_working=mw, delta=delta, floor=floor,
-        n_baseline=len(base), n_working=len(work), **kept,
-        reason=(f"{'regression' if regressed else 'within noise'}: "
-                f"baseline {mb:.2f} -> working {mw:.2f} "
-                f"(delta {delta:+.2f}, floor {floor:.2f})"))
+        mean_baseline=mb,
+        mean_working=mw,
+        delta=delta,
+        floor=floor,
+        n_baseline=len(base),
+        n_working=len(work),
+        **kept,
+        reason=(
+            f"{'regression' if regressed else 'within noise'}: "
+            f"baseline {mb:.2f} -> working {mw:.2f} "
+            f"(delta {delta:+.2f}, floor {floor:.2f})"
+        ),
+    )
 
 
 def write_result(result: PromptGateResult, out_dir: Path) -> Path:

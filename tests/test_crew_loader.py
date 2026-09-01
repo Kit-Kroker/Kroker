@@ -1,6 +1,7 @@
 # tests/test_crew_loader.py
 """E-88 §5: a broken crew must kill the worker at startup, not forty minutes
 and one billed agent into a run. Every check here has a failure it prevents."""
+
 from __future__ import annotations
 
 import pytest
@@ -9,24 +10,22 @@ import yaml
 from sdlc.crew.loader import CrewConfigError, load_layout
 
 LAYOUT = {
-    "layout": "code", "lead": "coder", "crew": ["coder"],
+    "layout": "code",
+    "lead": "coder",
+    "crew": ["coder"],
     "rounds": {"max": 1},
     "deliverable": {"path": "notes.md", "schema": "notes-v1"},
-    "limits": {"wall_clock_s": 3000, "turn_timeout_s": 1800,
-               "cost_usd": 25.0},
+    "limits": {"wall_clock_s": 3000, "turn_timeout_s": 1800, "cost_usd": 25.0},
 }
-ROLE = {"harness": "opencode", "model": "zai-coding-plan/glm-5.3",
-        "writes": True, "skill": "coder"}
+ROLE = {"harness": "opencode", "model": "zai-coding-plan/glm-5.3", "writes": True, "skill": "coder"}
 
 
 def _tree(root, layout=None, roles=None, skills=("coder",)):
     (root / "layouts").mkdir(parents=True, exist_ok=True)
     (root / "roles").mkdir(parents=True, exist_ok=True)
-    (root / "layouts" / "code.yaml").write_text(
-        yaml.safe_dump(layout or LAYOUT), encoding="utf-8")
+    (root / "layouts" / "code.yaml").write_text(yaml.safe_dump(layout or LAYOUT), encoding="utf-8")
     for name, body in (roles or {"coder": ROLE}).items():
-        (root / "roles" / f"{name}.yaml").write_text(
-            yaml.safe_dump(body), encoding="utf-8")
+        (root / "roles" / f"{name}.yaml").write_text(yaml.safe_dump(body), encoding="utf-8")
     for s in skills:
         d = root / "skills" / s
         d.mkdir(parents=True, exist_ok=True)
@@ -51,9 +50,12 @@ def test_rejects_a_crew_with_no_writer(tmp_path):
 def test_rejects_two_writers(tmp_path):
     """Two writers make the diff unattributable (spec §1)."""
     layout = {**LAYOUT, "crew": ["coder", "second"]}
-    root = _tree(tmp_path / "crew", layout=layout,
-                 roles={"coder": ROLE, "second": {**ROLE, "skill": "second"}},
-                 skills=("coder", "second"))
+    root = _tree(
+        tmp_path / "crew",
+        layout=layout,
+        roles={"coder": ROLE, "second": {**ROLE, "skill": "second"}},
+        skills=("coder", "second"),
+    )
     with pytest.raises(CrewConfigError, match="exactly one"):
         load_layout("code", root=root)
 
@@ -61,8 +63,7 @@ def test_rejects_two_writers(tmp_path):
 def test_rejects_a_role_naming_crew_as_its_own_harness(tmp_path):
     """`crew` is a composition mode, not a CLI: a role selecting it would
     recurse and has no subprocess to build."""
-    root = _tree(tmp_path / "crew", roles={"coder": {**ROLE,
-                                                     "harness": "crew"}})
+    root = _tree(tmp_path / "crew", roles={"coder": {**ROLE, "harness": "crew"}})
     with pytest.raises(CrewConfigError, match="not a CLI"):
         load_layout("code", root=root)
 
@@ -74,9 +75,7 @@ def test_rejects_a_missing_skill_file(tmp_path):
 
 
 def test_rejects_a_deliverable_escaping_the_round_directory(tmp_path):
-    layout = {**LAYOUT,
-              "deliverable": {"path": "../../../etc/passwd",
-                              "schema": "notes-v1"}}
+    layout = {**LAYOUT, "deliverable": {"path": "../../../etc/passwd", "schema": "notes-v1"}}
     root = _tree(tmp_path / "crew", layout=layout)
     with pytest.raises(CrewConfigError, match="round directory"):
         load_layout("code", root=root)
@@ -100,12 +99,12 @@ def test_rejects_a_model_with_no_provider_separator(tmp_path):
         load_layout("code", root)
 
 
-def test_crew_cli_check_names_the_role_and_the_missing_binary(tmp_path,
-                                                              monkeypatch):
+def test_crew_cli_check_names_the_role_and_the_missing_binary(tmp_path, monkeypatch):
     """spec §5 friction 1: pointing a role at a CLI this image does not carry
     fails at RUNTIME today, after the other roles have already spent. The
     worker must die at startup instead, naming which role is wrong."""
     from sdlc.crew import loader as crew_loader
+
     root = _tree(tmp_path)
     monkeypatch.setattr(crew_loader.shutil, "which", lambda _: None)
     with pytest.raises(CrewConfigError) as e:
@@ -114,9 +113,9 @@ def test_crew_cli_check_names_the_role_and_the_missing_binary(tmp_path,
     assert "opencode" in str(e.value)
 
 
-def test_crew_cli_check_passes_when_every_binary_is_present(tmp_path,
-                                                            monkeypatch):
+def test_crew_cli_check_passes_when_every_binary_is_present(tmp_path, monkeypatch):
     from sdlc.crew import loader as crew_loader
+
     root = _tree(tmp_path)
     monkeypatch.setattr(crew_loader.shutil, "which", lambda n: f"/usr/bin/{n}")
     crew_loader.validate_crew_clis(root)
@@ -126,6 +125,7 @@ def test_crew_cli_check_is_a_noop_without_a_crew_tree(tmp_path):
     """A source checkout running the unit suite carries no crew assets, and
     that is not a defect -- the same reasoning CrewAssetsMissing exists for."""
     from sdlc.crew import loader as crew_loader
+
     crew_loader.validate_crew_clis(tmp_path / "nothing-here")
 
 
@@ -133,6 +133,7 @@ def test_the_shipped_layout_is_a_decorrelated_two_role_crew():
     """The real tree, not a fixture: this is the layout the factory selects,
     and its ADR-6 compliance is a property of the shipped files."""
     from sdlc.crew.loader import check_crew_families, crew_dir
+
     root = crew_dir()
     if root is None:
         pytest.skip("no crew/ tree in this checkout")
@@ -140,6 +141,3 @@ def test_the_shipped_layout_is_a_decorrelated_two_role_crew():
     assert layout.crew == ["coder", "critic"]
     assert layout.rounds.max == 2
     check_crew_families(layout.lead, list(roles.values()))
-
-
-

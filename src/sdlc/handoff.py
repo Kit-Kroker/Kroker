@@ -4,6 +4,7 @@ Pure functions -- no I/O, no Temporal, no LLM. A claim may reference only
 files the diff actually touched; anything else is the extractor attributing
 work to a file the task never opened, and is dropped rather than trusted.
 """
+
 from __future__ import annotations
 
 import re
@@ -32,6 +33,7 @@ class CrossCheckResult(BaseModel):
     naming a file the diff never touched and a claim quoting something nobody
     said are different extractor failures, and the waste metrics should not
     average them together."""
+
     kept: list[HandoffClaim] = Field(default_factory=list)
     dropped_paths: int = 0
     dropped_quotes: int = 0
@@ -67,9 +69,11 @@ def cross_check_claims(
         if not referenced <= allowed:
             result.dropped_paths += 1
             continue
-        if (session_text is not None and c.evidence.strip()
-                and not verify_quote(c.evidence, session_text,
-                                     Profile.VERBATIM_BYTES)):
+        if (
+            session_text is not None
+            and c.evidence.strip()
+            and not verify_quote(c.evidence, session_text, Profile.VERBATIM_BYTES)
+        ):
             result.dropped_quotes += 1
             continue
         result.kept.append(c)
@@ -108,7 +112,8 @@ def verified_integrity_flags(
     dropped = 0
     for f in flags:
         if f.evidence.strip() and not verify_quote(
-                f.evidence, session_text, Profile.VERBATIM_BYTES):
+            f.evidence, session_text, Profile.VERBATIM_BYTES
+        ):
             dropped += 1
             continue
         kept.append(f)
@@ -132,7 +137,8 @@ def verified_plan_deviations(
     dropped = 0
     for d in deviations:
         if d.evidence.strip() and not verify_quote(
-                d.evidence, session_text, Profile.VERBATIM_BYTES):
+            d.evidence, session_text, Profile.VERBATIM_BYTES
+        ):
             dropped += 1
             continue
         kept.append(d)

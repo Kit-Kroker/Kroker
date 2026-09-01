@@ -1,11 +1,15 @@
 import pytest
 
+from sdlc.agents import roles
 from sdlc.agents.loader import (
-    KNOWN_ROLES, OPTIONAL_ROLES, RegistryError, load_registry, model_family,
+    KNOWN_ROLES,
+    OPTIONAL_ROLES,
+    RegistryError,
+    load_registry,
+    model_family,
     validate_registry,
 )
-from sdlc.agents import roles
-from sdlc.models import DeepReviewReport, HarnessKind, RoleConfig
+from sdlc.models import DeepReviewReport, RoleConfig
 from tests.test_agents_registry import _complete_registry
 
 
@@ -24,13 +28,11 @@ def test_shipped_deep_review_builds_a_report_agent():
 
 def test_shipped_deep_review_family_differs_from_dev():
     reg = load_registry()
-    assert model_family(reg["deep_review"].model) \
-        != model_family(reg["dev"].model)
+    assert model_family(reg["deep_review"].model) != model_family(reg["dev"].model)
 
 
 def test_same_family_deep_review_and_dev_rejected():
-    roles_ = _complete_registry(
-        deep_review=RoleConfig(kind="proposer", model="zai-coding-plan/x"))
+    roles_ = _complete_registry(deep_review=RoleConfig(kind="proposer", model="zai-coding-plan/x"))
     with pytest.raises(RegistryError, match="deep_review"):
         validate_registry(roles_)
 

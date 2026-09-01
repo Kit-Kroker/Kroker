@@ -5,13 +5,13 @@ and ReadinessOverride.approved_by carries it verbatim so "policy" and
 "timeout" stay legible as non-human. reviewer is the established home for a
 self-asserted identity-- triage.py:115 does exactly this.
 """
+
 from sdlc.channels.contract import Reply
 from sdlc.dashboard.channel import DashboardChannel
 from sdlc.models import GateOutcome
 from sdlc.pending import ClarifyPending, StageGatePending
 
-ARCH = StageGatePending(key="architecture#1", gate="architecture", round=1,
-                        spec_summary="s")
+ARCH = StageGatePending(key="architecture#1", gate="architecture", round=1, spec_summary="s")
 Q1 = ClarifyPending(key="Q1", question="q", why_it_matters="w")
 
 

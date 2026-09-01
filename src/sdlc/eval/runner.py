@@ -1,5 +1,6 @@
 """Replay: build a proposer agent from supplied instructions text and run it
 on a fixture prompt. No Temporal — a plain synchronous model call."""
+
 from __future__ import annotations
 
 import json
@@ -20,9 +21,14 @@ def _to_json(output: Any) -> str:
     return json.dumps(output)
 
 
-def run_variant_detailed(role: str, instructions_text: str,
-                         fixture: EvalFixture, agents_dir: Path, *,
-                         model_override: Any | None = None) -> tuple[str, Any]:
+def run_variant_detailed(
+    role: str,
+    instructions_text: str,
+    fixture: EvalFixture,
+    agents_dir: Path,
+    *,
+    model_override: Any | None = None,
+) -> tuple[str, Any]:
     """As run_variant, but also returns the run's Usage.
 
     The promptfoo provider needs it to report tokenUsage/cost -- the native
@@ -37,8 +43,14 @@ def run_variant_detailed(role: str, instructions_text: str,
     return _to_json(result.output), result.usage
 
 
-def run_variant(role: str, instructions_text: str, fixture: EvalFixture,
-                agents_dir: Path, *, model_override: Any | None = None) -> str:
+def run_variant(
+    role: str,
+    instructions_text: str,
+    fixture: EvalFixture,
+    agents_dir: Path,
+    *,
+    model_override: Any | None = None,
+) -> str:
     """Build agents/<role>/agent.py's Agent with instructions_text as its
     system prompt, run it on the fixture prompt, return serialized output.
 
@@ -46,5 +58,6 @@ def run_variant(role: str, instructions_text: str, fixture: EvalFixture,
     passes nothing and the captured author model (fixture.model) is used, so
     both variants run under the same model and only the prompt differs.
     """
-    return run_variant_detailed(role, instructions_text, fixture, agents_dir,
-                                model_override=model_override)[0]
+    return run_variant_detailed(
+        role, instructions_text, fixture, agents_dir, model_override=model_override
+    )[0]

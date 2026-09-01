@@ -1,4 +1,5 @@
 """Shared test fixtures."""
+
 from __future__ import annotations
 
 import os
@@ -21,8 +22,11 @@ os.environ.setdefault("EXA_API_KEY", "test-dummy")
 
 def run_git(args: list[str], cwd: str | Path) -> str:
     return subprocess.run(
-        ["git", *args], cwd=str(cwd), check=True,
-        capture_output=True, text=True,
+        ["git", *args],
+        cwd=str(cwd),
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout
 
 
@@ -52,13 +56,20 @@ def git_repo(tmp_path, monkeypatch):
     return str(repo)
 
 
-_HARNESS_AGENT_YAML = (
-    b"kind: harness\nharness: opencode\nmodel: zai-coding-plan/glm-5.2\n")
+_HARNESS_AGENT_YAML = b"kind: harness\nharness: opencode\nmodel: zai-coding-plan/glm-5.2\n"
 _PROPOSER_AGENT_YAML = b"kind: proposer\nmodel: anthropic:glm-5.2\n"
 
 HARNESS_ROLE_NAMES = ("dev", "test", "devops")
-PROPOSER_ROLE_NAMES = ("clarify", "architect", "planner", "qa", "reviewer",
-                       "analyst", "merge_verdict", "devops_planner")
+PROPOSER_ROLE_NAMES = (
+    "clarify",
+    "architect",
+    "planner",
+    "qa",
+    "reviewer",
+    "analyst",
+    "merge_verdict",
+    "devops_planner",
+)
 
 _AGENT_PY = (
     "from pydantic_ai import Agent\n"
@@ -70,10 +81,14 @@ _AGENT_PY = (
 # Role -> agent name. Mirrors roles.py; NOT derived — 'qa' builds
 # qa_analyst_agent, 'devops_planner' builds devops_agent.
 _TEST_AGENT_NAMES = {
-    "clarify": "clarify_agent", "architect": "architect_agent",
-    "planner": "planner_agent", "qa": "qa_analyst_agent",
-    "reviewer": "reviewer_agent", "analyst": "analyst_agent",
-    "merge_verdict": "merge_verdict_agent", "devops_planner": "devops_agent",
+    "clarify": "clarify_agent",
+    "architect": "architect_agent",
+    "planner": "planner_agent",
+    "qa": "qa_analyst_agent",
+    "reviewer": "reviewer_agent",
+    "analyst": "analyst_agent",
+    "merge_verdict": "merge_verdict_agent",
+    "devops_planner": "devops_agent",
 }
 
 
@@ -94,84 +109,85 @@ def write_registry_dir(root, version=1):
         d = root / name
         d.mkdir(exist_ok=True)
         (d / "agent.yaml").write_bytes(_PROPOSER_AGENT_YAML)
-        (d / "instructions.md").write_bytes(b"do the thing")   # Task 2
+        (d / "instructions.md").write_bytes(b"do the thing")  # Task 2
         (d / "agent.py").write_bytes(
-            _AGENT_PY.format(name=_TEST_AGENT_NAMES[name]).encode())  # Task 3
+            _AGENT_PY.format(name=_TEST_AGENT_NAMES[name]).encode()
+        )  # Task 3
     # Optional research role (2026-07-17-research-agent-grounded-briefs).
     # A VALID research tree: agent.yaml (kind=research, provider=fake),
     # instructions.md, agent.py, and one tool file. Tests perturb one thing.
     r = root / "research"
     r.mkdir(exist_ok=True)
-    (r / "agent.yaml").write_bytes(
-        b"kind: research\nmodel: anthropic:glm-5.2\nprovider: fake\n")
+    (r / "agent.yaml").write_bytes(b"kind: research\nmodel: anthropic:glm-5.2\nprovider: fake\n")
     (r / "instructions.md").write_bytes(b"research the question")
     (r / "agent.py").write_bytes(
         b"from pydantic_ai import Agent\n"
         b"def build(model, instructions, model_settings, tool_paths, provider):\n"
         b"    return Agent(model, name='research_agent',\n"
         b"                 model_settings=model_settings,\n"
-        b"                 system_prompt=instructions)\n")
+        b"                 system_prompt=instructions)\n"
+    )
     (r / "tools").mkdir(exist_ok=True)
     (r / "tools" / "web_search.py").write_bytes(
-        b"async def web_search(query: str, max_results: int = 5) -> list:\n"
-        b"    return []\n")
+        b"async def web_search(query: str, max_results: int = 5) -> list:\n    return []\n"
+    )
     # Optional deep_review role (E-39): a plain proposer, non-dev family.
     dr = root / "deep_review"
     dr.mkdir(exist_ok=True)
-    (dr / "agent.yaml").write_bytes(
-        b"kind: proposer\nmodel: anthropic:glm-5.2\n")
+    (dr / "agent.yaml").write_bytes(b"kind: proposer\nmodel: anthropic:glm-5.2\n")
     (dr / "instructions.md").write_bytes(b"deep review the transcript")
     (dr / "agent.py").write_bytes(
         b"from pydantic_ai import Agent\n"
         b"def build(model, instructions, model_settings):\n"
         b"    return Agent(model, name='deep_review_agent',\n"
-        b"                 system_prompt=instructions)\n")
+        b"                 system_prompt=instructions)\n"
+    )
     # Optional handoff extractor (FR-805): a plain proposer. No ADR-6
     # constraint applies to it -- it is extraction, not review.
     ho = root / "handoff"
     ho.mkdir(exist_ok=True)
-    (ho / "agent.yaml").write_bytes(
-        b"kind: proposer\nmodel: anthropic:glm-5.2\n")
+    (ho / "agent.yaml").write_bytes(b"kind: proposer\nmodel: anthropic:glm-5.2\n")
     (ho / "instructions.md").write_bytes(b"extract the handoff")
     (ho / "agent.py").write_bytes(
         b"from pydantic_ai import Agent\n"
         b"def build(model, instructions, model_settings):\n"
         b"    return Agent(model, name='handoff_agent',\n"
-        b"                 system_prompt=instructions)\n")
+        b"                 system_prompt=instructions)\n"
+    )
     # Optional adversarial reviewer (spec part 2): a different MODEL ID from
     # dev/reviewer (both glm-5.2 here) so check_adversary_model passes.
     adv = root / "adversary"
     adv.mkdir(exist_ok=True)
-    (adv / "agent.yaml").write_bytes(
-        b"kind: proposer\nmodel: anthropic:claude-sonnet-4-6\n")
+    (adv / "agent.yaml").write_bytes(b"kind: proposer\nmodel: anthropic:claude-sonnet-4-6\n")
     (adv / "instructions.md").write_bytes(b"adversarially review the diff")
     (adv / "agent.py").write_bytes(
         b"from pydantic_ai import Agent\n"
         b"def build(model, instructions, model_settings):\n"
         b"    return Agent(model, name='adversary_agent',\n"
-        b"                 system_prompt=instructions)\n")
+        b"                 system_prompt=instructions)\n"
+    )
     # Optional discover proposer (E-48 DD7): a plain proposer.
     disc = root / "discover"
     disc.mkdir(exist_ok=True)
-    (disc / "agent.yaml").write_bytes(
-        b"kind: proposer\nmodel: anthropic:claude-sonnet-4-5\n")
+    (disc / "agent.yaml").write_bytes(b"kind: proposer\nmodel: anthropic:claude-sonnet-4-5\n")
     (disc / "instructions.md").write_bytes(b"judge candidate capabilities")
     (disc / "agent.py").write_bytes(
         b"from pydantic_ai import Agent\n"
         b"def build(model, instructions, model_settings):\n"
         b"    return Agent(model, name='discover_agent',\n"
-        b"                 system_prompt=instructions)\n")
+        b"                 system_prompt=instructions)\n"
+    )
     # Optional risk proposer (E-49 RD7): a plain proposer.
     rk = root / "risk"
     rk.mkdir(exist_ok=True)
-    (rk / "agent.yaml").write_bytes(
-        b"kind: proposer\nmodel: anthropic:claude-sonnet-4-5\n")
+    (rk / "agent.yaml").write_bytes(b"kind: proposer\nmodel: anthropic:claude-sonnet-4-5\n")
     (rk / "instructions.md").write_bytes(b"judge risk baseline")
     (rk / "agent.py").write_bytes(
         b"from pydantic_ai import Agent\n"
         b"def build(model, instructions, model_settings):\n"
         b"    return Agent(model, name='risk_agent',\n"
-        b"                 system_prompt=instructions)\n")
+        b"                 system_prompt=instructions)\n"
+    )
     return root
 
 
@@ -185,4 +201,5 @@ def repo_cases_root():
 def repo_agents_dir():
     """The real resolved agents/ tree (registry or repo agents)."""
     from sdlc.agents.loader import _resolve_agents_dir
+
     return _resolve_agents_dir()

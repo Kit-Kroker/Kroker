@@ -10,17 +10,18 @@ The adapter object is PURE — it produces command strings and identity only,
 never runs a subprocess. Execution lives in Temporal activities
 (activities.py), exactly as CodingHarness never runs in workflow code.
 """
+
 from __future__ import annotations
 
 import ast
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
 
-class ToolchainKind(str, Enum):
+class ToolchainKind(StrEnum):
     PYTHON = "python"
     # GO / TS / RUST are added by E-30a/b/c — each is the N-th adapter,
     # identical in shape, added on demand as the case corpus needs it.
@@ -44,12 +45,12 @@ class ToolchainAdapter(ABC):
     # silent zero. Language-level facts ONLY -- framework fingerprints and
     # misconfiguration rules live in their signal modules, because one
     # language serves many frameworks (spec D15).
-    manifests: tuple[str, ...] = ()          # files declaring direct deps
-    ecosystem: str | None = None             # OSV ecosystem name
+    manifests: tuple[str, ...] = ()  # files declaring direct deps
+    ecosystem: str | None = None  # OSV ecosystem name
     source_extensions: tuple[str, ...] = ()  # what counts as source
-    max_file_loc: int = 0                    # 0 disables the rule
-    max_function_loc: int = 0                # 0 disables the rule
-    min_clone_loc: int = 30                  # duplication window, in lines
+    max_file_loc: int = 0  # 0 disables the rule
+    max_function_loc: int = 0  # 0 disables the rule
+    min_clone_loc: int = 30  # duplication window, in lines
 
     def function_spans(self, text: str) -> list[tuple[str, int, int]] | None:
         """(name, first line, last line) for every function in `text`, or
@@ -73,8 +74,7 @@ class ToolchainAdapter(ABC):
         it never looks at the filesystem to decide."""
         return None
 
-    def classify_test_exit(
-            self, code: int) -> Literal["ran", "failed_to_run", "no_tests"]:
+    def classify_test_exit(self, code: int) -> Literal["ran", "failed_to_run", "no_tests"]:
         """Whether the suite RAN, as distinct from whether it PASSED.
 
         Load-bearing for the triage `runnable` dimension: "tests ran and some
@@ -91,8 +91,7 @@ class ToolchainAdapter(ABC):
         tooling is unavailable (see run_integration_checks)."""
 
     @abstractmethod
-    def lint_cmd(self) -> str:
-        ...
+    def lint_cmd(self) -> str: ...
 
     @abstractmethod
     def oracle_test_cmd(self, oracle_path: str, report_out: str) -> str:
@@ -136,7 +135,8 @@ class PythonToolchain(ToolchainAdapter):
         return sorted(
             (node.name, node.lineno, node.end_lineno or node.lineno)
             for node in ast.walk(tree)
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)))
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        )
 
     def install_cmd(self, marker: str) -> str | None:
         if marker == "requirements.txt":
@@ -146,8 +146,7 @@ class PythonToolchain(ToolchainAdapter):
         # builds `pip install .` in a temporary directory.
         return "pip install ."
 
-    def classify_test_exit(
-            self, code: int) -> Literal["ran", "failed_to_run", "no_tests"]:
+    def classify_test_exit(self, code: int) -> Literal["ran", "failed_to_run", "no_tests"]:
         # pytest exit codes: 0 ok, 1 tests failed, 2 interrupted,
         # 3 internal error, 4 usage error, 5 no tests collected.
         if code in (0, 1):
@@ -176,9 +175,11 @@ class PythonToolchain(ToolchainAdapter):
         # grade_testcases_from_junit (oracle.py) relies on to build the
         # "file.py::test_name" node ids that tasks.yaml oracle_tests entries
         # reference -- legacy keeps that attribute on the report.
-        return (f"pytest {oracle_path} -q "
-                f"--junitxml={report_out} -p no:cacheprovider "
-                f"-o junit_family=legacy")
+        return (
+            f"pytest {oracle_path} -q "
+            f"--junitxml={report_out} -p no:cacheprovider "
+            f"-o junit_family=legacy"
+        )
 
 
 TOOLCHAINS: dict[ToolchainKind, ToolchainAdapter] = {
@@ -199,8 +200,7 @@ def detect_with_marker(worktree: str) -> tuple[ToolchainAdapter, str] | None:
     return None
 
 
-def detect_with_marker_from_paths(
-        paths: Sequence[str]) -> tuple[ToolchainAdapter, str] | None:
+def detect_with_marker_from_paths(paths: Sequence[str]) -> tuple[ToolchainAdapter, str] | None:
     """The pinned-commit form of detect_with_marker: resolve (adapter, marker)
     from repo-relative tracked paths instead of statting a checkout.
 

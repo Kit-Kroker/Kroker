@@ -5,16 +5,20 @@ documents: TidyUpWorkflow's after-triage auto-approves its own OFF readiness
 gate, so TidyUpReport.after.override.approved_by == "policy" -- a machine
 placeholder. E-42's rule would admit that tree to a Tier 2 audit.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from sdlc.measurement import Measurement
 from sdlc.triage.admission import admits
 from sdlc.triage.models import (
-    Readiness, ReadinessOverride, RepoTriage, Verdict,
+    Readiness,
+    ReadinessOverride,
+    RepoTriage,
+    Verdict,
 )
 
 
@@ -23,27 +27,36 @@ def _triage(verdict: Verdict, approved_by: str | None = None) -> RepoTriage:
     override = None
     if approved_by is not None:
         override = ReadinessOverride(
-            approved_by=approved_by, reviewer="alice", reason="known",
-            decided_at=datetime(2026, 8, 10, tzinfo=timezone.utc),
-            gate_round=1)
+            approved_by=approved_by,
+            reviewer="alice",
+            reason="known",
+            decided_at=datetime(2026, 8, 10, tzinfo=UTC),
+            gate_round=1,
+        )
     return RepoTriage(
-        repo_dir="/r", commit_sha="a" * 40,
-        readiness=Readiness(buildable=ok, runnable=ok, tests_present=ok,
-                            structure_discernible=ok, verdict=verdict),
-        override=override)
+        repo_dir="/r",
+        commit_sha="a" * 40,
+        readiness=Readiness(
+            buildable=ok, runnable=ok, tests_present=ok, structure_discernible=ok, verdict=verdict
+        ),
+        override=override,
+    )
 
 
-@pytest.mark.parametrize("verdict,approved_by,tier0,tier2", [
-    (Verdict.READY,         None,      True,  True),
-    (Verdict.READY,         "policy",  True,  True),
-    (Verdict.NOT_READY,     None,      False, False),
-    (Verdict.INDETERMINATE, None,      False, False),
-    (Verdict.NOT_READY,     "policy",  True,  False),
-    (Verdict.NOT_READY,     "timeout", True,  False),
-    (Verdict.NOT_READY,     "human",   True,  True),
-    (Verdict.INDETERMINATE, "policy",  True,  False),
-    (Verdict.INDETERMINATE, "human",   True,  True),
-])
+@pytest.mark.parametrize(
+    "verdict,approved_by,tier0,tier2",
+    [
+        (Verdict.READY, None, True, True),
+        (Verdict.READY, "policy", True, True),
+        (Verdict.NOT_READY, None, False, False),
+        (Verdict.INDETERMINATE, None, False, False),
+        (Verdict.NOT_READY, "policy", True, False),
+        (Verdict.NOT_READY, "timeout", True, False),
+        (Verdict.NOT_READY, "human", True, True),
+        (Verdict.INDETERMINATE, "policy", True, False),
+        (Verdict.INDETERMINATE, "human", True, True),
+    ],
+)
 def test_admission_table(verdict, approved_by, tier0, tier2):
     t = _triage(verdict, approved_by)
     assert admits(t, require_human=False)[0] is tier0
@@ -53,8 +66,7 @@ def test_admission_table(verdict, approved_by, tier0, tier2):
 def test_a_refusal_carries_its_reason():
     """The reason lands on the Assessment, so a refusal is legible without a
     Temporal replay."""
-    ok, why = admits(_triage(Verdict.NOT_READY, "policy"),
-                     require_human=True)
+    ok, why = admits(_triage(Verdict.NOT_READY, "policy"), require_human=True)
     assert ok is False
     assert "policy" in why
     assert "not_ready" in why
@@ -82,6 +94,7 @@ def test_tidyup_delegates_rather_than_restating():
     import inspect
 
     from sdlc.tidyup import backlog
+
     assert "admits(" in inspect.getsource(backlog.admitted)
     assert "Verdict.READY" not in inspect.getsource(backlog.admitted)
     assert backlog.admitted(_triage(Verdict.NOT_READY, "policy")) is True

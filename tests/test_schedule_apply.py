@@ -1,15 +1,18 @@
 """Asset↔Temporal translation and plan formatting (E-12). The round-trip test
 covers both directions at once; fetch_existing/apply_changes are thin I/O and
 are exercised against a live server only in manual runs."""
+
 from __future__ import annotations
 
 import pytest
-
 from temporalio.client import ScheduleActionStartWorkflow
 
-from sdlc.models import ScheduleAsset, ScheduleAction, ScheduleSpecAsset
+from sdlc.models import ScheduleAction, ScheduleAsset, ScheduleSpecAsset
 from sdlc.schedules.apply import (
-    apply_changes, format_plan, from_temporal, to_temporal,
+    apply_changes,
+    format_plan,
+    from_temporal,
+    to_temporal,
 )
 from sdlc.schedules.reconcile import Change
 
@@ -18,10 +21,13 @@ def asset(sid: str = "nightly-reflect") -> ScheduleAsset:
     return ScheduleAsset(
         id=sid,
         spec=ScheduleSpecAsset(cron="0 3 * * *", timezone="UTC"),
-        action=ScheduleAction(workflow="ReflectWorkflow",
-                              banks=["project:default"],
-                              backend="hindsight",
-                              base_url="http://mem:9000"))
+        action=ScheduleAction(
+            workflow="ReflectWorkflow",
+            banks=["project:default"],
+            backend="hindsight",
+            base_url="http://mem:9000",
+        ),
+    )
 
 
 def test_round_trip_preserves_the_asset():
@@ -51,8 +57,9 @@ def test_from_temporal_ignores_schedules_we_do_not_manage():
 
 
 def test_format_plan_lists_every_change():
-    out = format_plan([Change("create", "a", "not on server"),
-                       Change("drift", "b", "on server, no yaml asset")])
+    out = format_plan(
+        [Change("create", "a", "not on server"), Change("drift", "b", "on server, no yaml asset")]
+    )
     assert "create" in out and "a" in out
     assert "drift" in out and "b" in out
 

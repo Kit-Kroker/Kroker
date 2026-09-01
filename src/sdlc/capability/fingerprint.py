@@ -4,13 +4,13 @@ Pure. The per-tier contributions returned alongside the total ARE the
 evidence trail an attachment records -- they fall out of scoring rather than
 being assembled separately, so evidence cannot drift from the decision.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from .models import CapabilityFingerprint, SignalTier
-
 from ..measurement import CollectionState
+from .models import CapabilityFingerprint, SignalTier
 
 
 def jaccard(a: Sequence[str], b: Sequence[str]) -> float:
@@ -24,9 +24,9 @@ def jaccard(a: Sequence[str], b: Sequence[str]) -> float:
     return len(sa & sb) / len(union)
 
 
-def score(a: CapabilityFingerprint, b: CapabilityFingerprint,
-          weights: Mapping[SignalTier, float]
-          ) -> tuple[float, dict[SignalTier, float]] | None:
+def score(
+    a: CapabilityFingerprint, b: CapabilityFingerprint, weights: Mapping[SignalTier, float]
+) -> tuple[float, dict[SignalTier, float]] | None:
     """Weighted Jaccard over tiers present on BOTH sides, or None when the
     pair is not comparable.
 
@@ -48,8 +48,7 @@ def score(a: CapabilityFingerprint, b: CapabilityFingerprint,
     if b.collected.state is not CollectionState.MEASURED:
         return None
 
-    shared = [t for t in SignalTier
-              if a.tiers.get(t) and b.tiers.get(t)]
+    shared = [t for t in SignalTier if a.tiers.get(t) and b.tiers.get(t)]
     if not shared:
         return None
 
@@ -68,7 +67,6 @@ def score(a: CapabilityFingerprint, b: CapabilityFingerprint,
     if denominator <= 0.0:
         return None
 
-    contributions: dict[SignalTier, float] = {
-        t: jaccard(a.tiers[t], b.tiers[t]) for t in shared}
+    contributions: dict[SignalTier, float] = {t: jaccard(a.tiers[t], b.tiers[t]) for t in shared}
     total = sum(weights[t] * contributions[t] for t in shared) / denominator
     return total, contributions

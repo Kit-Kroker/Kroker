@@ -8,11 +8,11 @@ Usage:
     python scripts/aggregate_benchmarks.py [--runs runs/benchmarks]
                                             [--out docs/benchmark-analysis.html]
 """
+
 from __future__ import annotations
 
 import argparse
 import datetime as dt
-import html
 import json
 import re
 from collections import defaultdict
@@ -28,7 +28,7 @@ def run_ts(run_id: str) -> int | None:
 
 
 def ts_to_iso(ts: int) -> str:
-    return dt.datetime.fromtimestamp(ts, tz=dt.timezone.utc).isoformat()
+    return dt.datetime.fromtimestamp(ts, tz=dt.UTC).isoformat()
 
 
 def parse_report(path: Path) -> list[dict]:
@@ -48,7 +48,7 @@ def parse_report(path: Path) -> list[dict]:
             continue
         if in_table and s.startswith("|"):
             cells = [c.strip() for c in s.strip("|").split("|")]
-            row = dict(zip(headers, cells))
+            row = dict(zip(headers, cells, strict=False))
             rows.append(row)
         elif in_table and not s.startswith("|"):
             break
@@ -79,9 +79,7 @@ def load_jsonl(path: Path) -> list[dict]:
 
 
 def aggregate(runs_dir: Path) -> dict:
-    run_dirs = sorted(
-        [p for p in runs_dir.iterdir() if p.is_dir() and p.name.startswith("bench-")]
-    )
+    run_dirs = sorted([p for p in runs_dir.iterdir() if p.is_dir() and p.name.startswith("bench-")])
 
     all_records: list[dict] = []
     runs_meta: list[dict] = []
@@ -104,9 +102,15 @@ def aggregate(runs_dir: Path) -> dict:
         stage_recs = [r for r in records if r.get("scope") == "stage"]
         task_recs = [r for r in records if r.get("scope") == "task_attempt"]
 
-        case = (records[0]["case_id"] if records
-                else (report_rows[0]["case"] if report_rows
-                      else run_id.split("bench-")[1].rsplit("-", 1)[0]))
+        case = (
+            records[0]["case_id"]
+            if records
+            else (
+                report_rows[0]["case"]
+                if report_rows
+                else run_id.split("bench-")[1].rsplit("-", 1)[0]
+            )
+        )
 
         total_wall = sum((r.get("speed") or {}).get("wall_clock_s") or 0 for r in records)
         stages_seen = sorted({r["stage"] for r in stage_recs if r.get("stage")})
@@ -162,35 +166,39 @@ def aggregate(runs_dir: Path) -> dict:
                     wall_by_stage[st] += w
 
         errors = [
-            {"stage": r.get("stage"), "error": r.get("error")}
-            for r in records if r.get("error")
+            {"stage": r.get("stage"), "error": r.get("error")} for r in records if r.get("error")
         ]
 
-        runs_meta.append({
-            "run_id": run_id,
-            "case": case,
-            "ts": ts,
-            "iso": iso,
-            "has_data": bool(records or any(num(rr.get("composite")) is not None for rr in report_rows)),
-            "stage_count": len(stages_seen),
-            "stages": stages_seen,
-            "task_count": code_total,
-            "task_ids": task_ids,
-            "tasks_passed": code_tasks_passed,
-            "total_wall_s": round(total_wall, 1),
-            "overall": overall,
-            "stage_outcomes": stage_outcomes,
-            "wall_by_stage": dict(wall_by_stage),
-            "fix_attempts_max": max((r.get("fix_attempts") or 0 for r in task_recs), default=0),
-            "errors": errors,
-            "record_count": len(records),
-        })
+        runs_meta.append(
+            {
+                "run_id": run_id,
+                "case": case,
+                "ts": ts,
+                "iso": iso,
+                "has_data": bool(
+                    records or any(num(rr.get("composite")) is not None for rr in report_rows)
+                ),
+                "stage_count": len(stages_seen),
+                "stages": stages_seen,
+                "task_count": code_total,
+                "task_ids": task_ids,
+                "tasks_passed": code_tasks_passed,
+                "total_wall_s": round(total_wall, 1),
+                "overall": overall,
+                "stage_outcomes": stage_outcomes,
+                "wall_by_stage": dict(wall_by_stage),
+                "fix_attempts_max": max((r.get("fix_attempts") or 0 for r in task_recs), default=0),
+                "errors": errors,
+                "record_count": len(records),
+            }
+        )
 
-    runs_meta.sort(key=lambda r: (r["ts"] or 0))
+    runs_meta.sort(key=lambda r: r["ts"] or 0)
 
     # Aggregations.
-    by_case = defaultdict(lambda: {"runs": 0, "with_data": 0, "passed": 0,
-                                   "wall": 0.0, "tasks": 0, "tasks_passed": 0})
+    by_case = defaultdict(
+        lambda: {"runs": 0, "with_data": 0, "passed": 0, "wall": 0.0, "tasks": 0, "tasks_passed": 0}
+    )
     for r in runs_meta:
         c = by_case[r["case"]]
         c["runs"] += 1
@@ -204,7 +212,8 @@ def aggregate(runs_dir: Path) -> dict:
 
     # Stage outcome matrix: case -> stage -> {pass,fail}.
     stage_matrix: dict[str, dict[str, dict[str, int]]] = defaultdict(
-        lambda: defaultdict(lambda: {"pass": 0, "fail": 0, "other": 0}))
+        lambda: defaultdict(lambda: {"pass": 0, "fail": 0, "other": 0})
+    )
     for r in runs_meta:
         for st, o in r["stage_outcomes"].items():
             bucket = stage_matrix[r["case"]][st]
@@ -216,28 +225,30 @@ def aggregate(runs_dir: Path) -> dict:
     # Flatten records for the detail table (lightweight fields only).
     detail = []
     for r in all_records:
-        detail.append({
-            "run_id": r["_run_id"],
-            "run_ts": r["_run_ts"],
-            "case": r.get("case_id"),
-            "scope": r.get("scope"),
-            "stage": r.get("stage"),
-            "task_id": r.get("task_id"),
-            "attempt": r.get("attempt"),
-            "role": r.get("role"),
-            "model": r.get("model"),
-            "outcome": r.get("outcome"),
-            "quality": (r.get("quality") or {}).get("score"),
-            "judge": (r.get("quality") or {}).get("judge"),
-            "wall_s": (r.get("speed") or {}).get("wall_clock_s"),
-            "cost_usd": (r.get("cost") or {}).get("usd"),
-            "fix_attempts": r.get("fix_attempts"),
-            "error": r.get("error"),
-            "started_at": (r.get("speed") or {}).get("started_at"),
-        })
+        detail.append(
+            {
+                "run_id": r["_run_id"],
+                "run_ts": r["_run_ts"],
+                "case": r.get("case_id"),
+                "scope": r.get("scope"),
+                "stage": r.get("stage"),
+                "task_id": r.get("task_id"),
+                "attempt": r.get("attempt"),
+                "role": r.get("role"),
+                "model": r.get("model"),
+                "outcome": r.get("outcome"),
+                "quality": (r.get("quality") or {}).get("score"),
+                "judge": (r.get("quality") or {}).get("judge"),
+                "wall_s": (r.get("speed") or {}).get("wall_clock_s"),
+                "cost_usd": (r.get("cost") or {}).get("usd"),
+                "fix_attempts": r.get("fix_attempts"),
+                "error": r.get("error"),
+                "started_at": (r.get("speed") or {}).get("started_at"),
+            }
+        )
 
     return {
-        "generated_at": dt.datetime.now(tz=dt.timezone.utc).isoformat(),
+        "generated_at": dt.datetime.now(tz=dt.UTC).isoformat(),
         "totals": {
             "runs": len(runs_meta),
             "with_data": sum(1 for r in runs_meta if r["has_data"]),
@@ -583,8 +594,10 @@ def main():
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(build_html(data), encoding="utf-8")
     print(f"wrote {args.out}  ({args.out.stat().st_size:,} bytes)")
-    print(f"  runs={data['totals']['runs']}  with_data={data['totals']['with_data']}  "
-          f"passed={data['totals']['passed']}  records={data['totals']['total_records']}")
+    print(
+        f"  runs={data['totals']['runs']}  with_data={data['totals']['with_data']}  "
+        f"passed={data['totals']['passed']}  records={data['totals']['total_records']}"
+    )
 
 
 if __name__ == "__main__":

@@ -1,11 +1,19 @@
 """The two extra clarify agents. They are NOT new registry roles: they reuse
 the clarify role's model, so agents/ stays at 15 roles."""
-from sdlc.agents.roles import (AGENT_ACTIVITY_CONFIG, ALL_TEMPORAL_AGENTS,
-                               CLARIFY_FANOUT_ACTIVITY_CONFIG,
-                               CLARIFY_FANOUT_MAX_ATTEMPTS, REGISTRY,
-                               clarify_agent, clarify_probe_agent,
-                               clarify_route_agent, t_clarify, t_clarify_probe,
-                               t_clarify_route)
+
+from sdlc.agents.roles import (
+    AGENT_ACTIVITY_CONFIG,
+    ALL_TEMPORAL_AGENTS,
+    CLARIFY_FANOUT_ACTIVITY_CONFIG,
+    CLARIFY_FANOUT_MAX_ATTEMPTS,
+    REGISTRY,
+    clarify_agent,
+    clarify_probe_agent,
+    clarify_route_agent,
+    t_clarify,
+    t_clarify_probe,
+    t_clarify_route,
+)
 from sdlc.clarify.models import ClarifyRoute, ProbeResult
 from sdlc.clarify.prompts import PROBE_SYSTEM, ROUTE_SCOPE
 
@@ -43,6 +51,7 @@ def test_the_registry_did_not_grow_a_role():
 # `_system_prompts` is the tuple pydantic-ai stores the constructor's
 # `system_prompt=` into; `Agent.system_prompt` is the decorator, not the
 # text. These assertions are the reason the attribute is read directly.
+
 
 def _system_prompt(agent) -> str:
     return "\n\n".join(agent._system_prompts)
@@ -84,6 +93,7 @@ def test_the_flag_off_agents_prompt_is_still_the_registry_prompt():
 
 # ---- bounded retries, or "probes fail open" is not true ---------------
 
+
 def test_the_fanout_agents_bound_their_retries():
     """AGENT_ACTIVITY_CONFIG sets no retry_policy, so Temporal's default --
     UNLIMITED attempts -- applies. Under the old single clarify call that
@@ -91,12 +101,13 @@ def test_the_fanout_agents_bound_their_retries():
     that never exhausts never raises, asyncio.gather never returns, and the
     stage HANGS instead of degrading (spec §8, D10)."""
     assert 1 <= CLARIFY_FANOUT_MAX_ATTEMPTS < 10
-    assert (CLARIFY_FANOUT_ACTIVITY_CONFIG["retry_policy"].maximum_attempts
-            == CLARIFY_FANOUT_MAX_ATTEMPTS)
+    assert (
+        CLARIFY_FANOUT_ACTIVITY_CONFIG["retry_policy"].maximum_attempts
+        == CLARIFY_FANOUT_MAX_ATTEMPTS
+    )
     # ...and it is the config the two agents are actually built with.
     for agent in (t_clarify_route, t_clarify_probe):
-        assert (agent.activity_config["retry_policy"].maximum_attempts
-                == CLARIFY_FANOUT_MAX_ATTEMPTS)
+        assert agent.activity_config["retry_policy"].maximum_attempts == CLARIFY_FANOUT_MAX_ATTEMPTS
 
 
 def test_no_other_agents_retry_behaviour_changed():

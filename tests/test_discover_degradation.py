@@ -1,5 +1,6 @@
 """FR-915 at the coverage ratio: a value that was never measured must not be
 representable as a measured one."""
+
 from __future__ import annotations
 
 from sdlc.assessment.discover.attribution import attribute
@@ -33,9 +34,10 @@ def test_a_not_collected_report_still_carries_every_bucket_count():
 
 
 def test_skipped_blobs_are_named_in_the_report():
-    report = attribute({"src/payments/api.py": "x = 1\n"},
-                       ["src/broken.py", "notes.md"], MEMBERS, [])
-    assert report.skipped == ("src/broken.py",)   # notes.md is not source
+    report = attribute(
+        {"src/payments/api.py": "x = 1\n"}, ["src/broken.py", "notes.md"], MEMBERS, []
+    )
+    assert report.skipped == ("src/broken.py",)  # notes.md is not source
     assert report.counts[FileBucket.UNCLASSIFIED] == 1
 
 

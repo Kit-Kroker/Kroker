@@ -18,6 +18,7 @@ recorded as a declared, opt-in, off-by-default egress under FR-703.
 Pure of temporalio, like the signal modules: the HTTP happens inside an
 activity, never in workflow code.
 """
+
 from __future__ import annotations
 
 import json
@@ -31,10 +32,10 @@ from ..measurement import Measurement
 
 
 class Advisory(BaseModel):
-    package: str            # the normalized distribution name queried
-    constraint: str = ""    # the declaration as written, when the caller has it
-    advisory_id: str        # e.g. "GHSA-xxxx-xxxx-xxxx" / "PYSEC-2024-1"
-    severity: str           # critical | high | medium | low
+    package: str  # the normalized distribution name queried
+    constraint: str = ""  # the declaration as written, when the caller has it
+    advisory_id: str  # e.g. "GHSA-xxxx-xxxx-xxxx" / "PYSEC-2024-1"
+    severity: str  # critical | high | medium | low
     summary: str = ""
 
 
@@ -42,6 +43,7 @@ class AdvisoryResult(BaseModel):
     """`collected` is a Measurement, not len(advisories): "we did not look"
     and "we looked and found none" are different facts (D11/D16). When
     MEASURED, its value is the number of advisories returned."""
+
     collected: Measurement
     advisories: list[Advisory] = Field(default_factory=list)
 
@@ -50,8 +52,7 @@ class AdvisorySource(ABC):
     name: str
 
     @abstractmethod
-    def lookup(self, ecosystem: str | None,
-               packages: Sequence[str]) -> AdvisoryResult:
+    def lookup(self, ecosystem: str | None, packages: Sequence[str]) -> AdvisoryResult:
         """Advisories for `packages` in `ecosystem`. MUST NOT raise: an
         unreachable database is a not_collected report, not a failed signal."""
 
@@ -60,15 +61,14 @@ class NoneAdvisorySource(AdvisorySource):
     """The default. Collects nothing, and says so with a reason the report
     carries, so "no vulnerabilities listed" is never mistaken for "none
     exist"."""
+
     name = "none"
 
     def __init__(self, reason: str = "no advisory source configured") -> None:
         self._reason = reason
 
-    def lookup(self, ecosystem: str | None,
-               packages: Sequence[str]) -> AdvisoryResult:
-        return AdvisoryResult(
-            collected=Measurement.not_collected(self._reason))
+    def lookup(self, ecosystem: str | None, packages: Sequence[str]) -> AdvisoryResult:
+        return AdvisoryResult(collected=Measurement.not_collected(self._reason))
 
 
 OSV_URL = "https://api.osv.dev/v1/query"
@@ -77,8 +77,11 @@ OSV_MAX_PACKAGES = 200
 
 # GHSA supplies MODERATE where our TriageFinding vocabulary says medium.
 _SEVERITY_WORDS = {
-    "CRITICAL": "critical", "HIGH": "high",
-    "MODERATE": "medium", "MEDIUM": "medium", "LOW": "low",
+    "CRITICAL": "critical",
+    "HIGH": "high",
+    "MODERATE": "medium",
+    "MEDIUM": "medium",
+    "LOW": "low",
 }
 
 
@@ -108,55 +111,67 @@ class OsvAdvisorySource(AdvisorySource):
     rather than answering for a prefix of the list -- a partial lookup
     presented as a lookup is the D16 error.
     """
+
     name = "osv"
 
-    def __init__(self, url: str = OSV_URL, timeout_s: int = OSV_TIMEOUT_S,
-                 max_packages: int = OSV_MAX_PACKAGES) -> None:
+    def __init__(
+        self,
+        url: str = OSV_URL,
+        timeout_s: int = OSV_TIMEOUT_S,
+        max_packages: int = OSV_MAX_PACKAGES,
+    ) -> None:
         self._url = url
         self._timeout_s = timeout_s
         self._max_packages = max_packages
 
-    def lookup(self, ecosystem: str | None,
-               packages: Sequence[str]) -> AdvisoryResult:
+    def lookup(self, ecosystem: str | None, packages: Sequence[str]) -> AdvisoryResult:
         if not ecosystem:
-            return AdvisoryResult(collected=Measurement.not_collected(
-                "the resolved toolchain declares no OSV ecosystem"))
+            return AdvisoryResult(
+                collected=Measurement.not_collected(
+                    "the resolved toolchain declares no OSV ecosystem"
+                )
+            )
         if len(packages) > self._max_packages:
-            return AdvisoryResult(collected=Measurement.not_collected(
-                f"{len(packages)} packages exceeds the {self._max_packages} "
-                f"query cap; a partial lookup is not a lookup"))
+            return AdvisoryResult(
+                collected=Measurement.not_collected(
+                    f"{len(packages)} packages exceeds the {self._max_packages} "
+                    f"query cap; a partial lookup is not a lookup"
+                )
+            )
         if not packages:
             return AdvisoryResult(collected=Measurement.measured(0.0))
 
         found: list[Advisory] = []
         for name in packages:
-            body = json.dumps(
-                {"package": {"name": name, "ecosystem": ecosystem}}).encode()
+            body = json.dumps({"package": {"name": name, "ecosystem": ecosystem}}).encode()
             try:
                 req = urllib.request.Request(
-                    self._url, data=body,
-                    headers={"Content-Type": "application/json"})
-                with urllib.request.urlopen(
-                        req, timeout=self._timeout_s) as resp:
+                    self._url, data=body, headers={"Content-Type": "application/json"}
+                )
+                with urllib.request.urlopen(req, timeout=self._timeout_s) as resp:
                     if resp.status != 200:
                         return AdvisoryResult(
                             collected=Measurement.not_collected(
-                                f"OSV returned HTTP {resp.status} for "
-                                f"{name!r}"))
+                                f"OSV returned HTTP {resp.status} for {name!r}"
+                            )
+                        )
                     payload = json.loads(resp.read().decode())
-            except Exception as exc:               # noqa: BLE001 -- docstring
-                return AdvisoryResult(collected=Measurement.not_collected(
-                    f"OSV lookup failed for {name!r}: "
-                    f"{type(exc).__name__}: {exc}"))
+            except Exception as exc:  # noqa: BLE001 -- docstring
+                return AdvisoryResult(
+                    collected=Measurement.not_collected(
+                        f"OSV lookup failed for {name!r}: {type(exc).__name__}: {exc}"
+                    )
+                )
             for vuln in payload.get("vulns") or []:
-                found.append(Advisory(
-                    package=name,
-                    advisory_id=str(vuln.get("id", "")),
-                    severity=_severity(vuln),
-                    summary=str(vuln.get("summary", ""))[:300]))
-        return AdvisoryResult(
-            collected=Measurement.measured(float(len(found))),
-            advisories=found)
+                found.append(
+                    Advisory(
+                        package=name,
+                        advisory_id=str(vuln.get("id", "")),
+                        severity=_severity(vuln),
+                        summary=str(vuln.get("summary", ""))[:300],
+                    )
+                )
+        return AdvisoryResult(collected=Measurement.measured(float(len(found))), advisories=found)
 
 
 ADVISORY_SOURCES: dict[str, type[AdvisorySource]] = {
@@ -174,6 +189,5 @@ def resolve_advisory_source(name: str) -> AdvisorySource:
     """
     cls = ADVISORY_SOURCES.get(name)
     if cls is None:
-        return NoneAdvisorySource(
-            f"unknown advisory source {name!r}; no lookup was performed")
+        return NoneAdvisorySource(f"unknown advisory source {name!r}; no lookup was performed")
     return cls()

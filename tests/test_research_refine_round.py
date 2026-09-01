@@ -3,21 +3,32 @@
 Round-1 findings are never discarded, round-2 ids never collide with round-1,
 and exhausting the round budget PROCEEDS with the current brief rather than
 rejecting -- research degrades a run, it never stops it."""
-import pytest
 
-from sdlc.models import (Contradiction, Gap, ResearchBrief, ResearchConfig,
-                         SubQuestion, SubQuestionFinding)
+from sdlc.models import (
+    Contradiction,
+    Gap,
+    ResearchBrief,
+    ResearchConfig,
+    SubQuestion,
+    SubQuestionFinding,
+)
 from sdlc.workflows.feature import _refine_seed, _should_refine
 
 
 def _brief() -> ResearchBrief:
     return ResearchBrief(
-        gaps=[Gap(sub_question_id="sq-0", what_is_missing="penalties",
-                  why_it_matters="drives the design")],
-        contradictions=[Contradiction(topic="date", positions=["a", "b"],
-                                      unresolved=True),
-                        Contradiction(topic="scope", positions=["c", "d"],
-                                      unresolved=False)])
+        gaps=[
+            Gap(
+                sub_question_id="sq-0",
+                what_is_missing="penalties",
+                why_it_matters="drives the design",
+            )
+        ],
+        contradictions=[
+            Contradiction(topic="date", positions=["a", "b"], unresolved=True),
+            Contradiction(topic="scope", positions=["c", "d"], unresolved=False),
+        ],
+    )
 
 
 def test_refine_is_allowed_on_the_first_revise():
@@ -29,8 +40,7 @@ def test_refine_is_exhausted_after_max_rounds():
 
 
 def test_refine_can_be_disabled_entirely():
-    assert _should_refine(round_n=1,
-                          cfg=ResearchConfig(max_refine_rounds=0)) is False
+    assert _should_refine(round_n=1, cfg=ResearchConfig(max_refine_rounds=0)) is False
 
 
 def test_the_seed_carries_gaps_and_only_UNRESOLVED_contradictions():

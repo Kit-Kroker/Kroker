@@ -2,9 +2,10 @@
 connectivity + naming"; both halves are here, and the naming half is
 naming.normalize so S5 can merge an S2 cluster with the S1 package and the S3
 controller that share its name."""
+
 from __future__ import annotations
 
-from sdlc.assessment.scan.models import MemberKind, ScanSignalId
+from sdlc.assessment.scan.models import MemberKind
 from sdlc.assessment.scan.signals import schema
 from sdlc.measurement import CollectionState
 
@@ -18,13 +19,15 @@ SQL = {
         "CREATE TABLE order_items (\n"
         "  id SERIAL PRIMARY KEY,\n"
         "  order_id INTEGER NOT NULL REFERENCES orders(id)\n"
-        ");\n"),
+        ");\n"
+    ),
     "migrations/0002_customers.sql": (
         "CREATE TABLE customers (\n"
         "  id SERIAL PRIMARY KEY,\n"
         "  email VARCHAR(255) NOT NULL,\n"
         "  phone VARCHAR(32)\n"
-        ");\n"),
+        ");\n"
+    ),
 }
 
 
@@ -45,8 +48,7 @@ def test_orders_and_order_items_cluster_on_the_head_token():
     ids = {c.local_id for c in out.sources}
     assert "S2-order" in ids
     order = next(c for c in out.sources if c.local_id == "S2-order")
-    tables = {m.value for m in order.members
-              if m.kind is MemberKind.DB_TABLE}
+    tables = {m.value for m in order.members if m.kind is MemberKind.DB_TABLE}
     assert tables == {"orders", "order_items"}
 
 
@@ -75,13 +77,16 @@ def test_a_foreign_key_does_not_merge_two_named_clusters():
 
 
 def test_orm_models_are_declarations_too():
-    blobs = {"app/models/payment.py": (
-        "from sqlalchemy import Column, ForeignKey, Integer, String\n"
-        "class Payment(Base):\n"
-        "    __tablename__ = 'payments'\n"
-        "    id = Column(Integer, primary_key=True)\n"
-        "    card_last4 = Column(String(4))\n"
-        "    order_id = Column(Integer, ForeignKey('orders.id'))\n")}
+    blobs = {
+        "app/models/payment.py": (
+            "from sqlalchemy import Column, ForeignKey, Integer, String\n"
+            "class Payment(Base):\n"
+            "    __tablename__ = 'payments'\n"
+            "    id = Column(Integer, primary_key=True)\n"
+            "    card_last4 = Column(String(4))\n"
+            "    order_id = Column(Integer, ForeignKey('orders.id'))\n"
+        )
+    }
     decls = schema.declarations(blobs)
     assert [d.name for d in decls] == ["payments"]
     assert "card_last4" in decls[0].fields
@@ -90,17 +95,20 @@ def test_orm_models_are_declarations_too():
 
 
 def test_a_prisma_schema_is_parsed():
-    blobs = {"prisma/schema.prisma": (
-        "model User {\n"
-        "  id    Int     @id @default(autoincrement())\n"
-        "  email String  @unique\n"
-        "  posts Post[]\n"
-        "}\n"
-        "model Post {\n"
-        "  id       Int  @id\n"
-        "  author   User @relation(fields: [authorId], references: [id])\n"
-        "  authorId Int\n"
-        "}\n")}
+    blobs = {
+        "prisma/schema.prisma": (
+            "model User {\n"
+            "  id    Int     @id @default(autoincrement())\n"
+            "  email String  @unique\n"
+            "  posts Post[]\n"
+            "}\n"
+            "model Post {\n"
+            "  id       Int  @id\n"
+            "  author   User @relation(fields: [authorId], references: [id])\n"
+            "  authorId Int\n"
+            "}\n"
+        )
+    }
     decls = schema.declarations(blobs)
     assert {d.name for d in decls} == {"User", "Post"}
     assert "email" in dict((d.name, d.fields) for d in decls)["User"]
@@ -118,8 +126,7 @@ def test_a_repository_with_no_schema_is_a_gap_not_a_zero():
 def test_a_fixture_schema_under_tests_is_not_a_capability():
     """P3-D9: a CREATE TABLE inside a test fixture describes the test, not the
     product."""
-    out = schema.evaluate({"tests/fixtures/seed.sql":
-                           "CREATE TABLE widgets (id INT);\n"})
+    out = schema.evaluate({"tests/fixtures/seed.sql": "CREATE TABLE widgets (id INT);\n"})
     assert out.row.collected.state is CollectionState.NOT_COLLECTED
 
 

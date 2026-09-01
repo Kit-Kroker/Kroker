@@ -1,5 +1,6 @@
 # tests/test_board_project_key.py
 """Board identity is its own field — not borrowed from the memory bank."""
+
 from sdlc.models import PipelineConfig
 
 

@@ -1,6 +1,7 @@
 """Plan 2 gives the scan memo its FIRST production caller. Plan 1 built
 memo.load/store and shipped eleven stubs, none of which could ever store --
 memo.store refuses anything not MEASURED."""
+
 from __future__ import annotations
 
 import subprocess
@@ -12,7 +13,7 @@ from sdlc.assessment.scan import memo
 from sdlc.assessment.scan.models import ScanSignalId
 from sdlc.measurement import CollectionState
 
-TREE = 40 * "ab"        # any stable 40-hex-shaped string
+TREE = 40 * "ab"  # any stable 40-hex-shaped string
 
 
 @pytest.fixture(autouse=True)
@@ -26,9 +27,10 @@ def _isolated_cache(tmp_path, monkeypatch):
 
 def _repo(tmp_path):
     """A real git repo, because these activities read blobs at a commit."""
+
     def run(*args):
-        subprocess.run(["git", *args], cwd=tmp_path, check=True,
-                       capture_output=True)
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+
     run("init", "-q")
     run("config", "user.email", "t@example.com")
     run("config", "user.name", "T")
@@ -38,11 +40,13 @@ def _repo(tmp_path):
         "from fastapi import APIRouter\n"
         "router = APIRouter()\n"
         "@router.post('/api/payments')\n"
-        "def create():\n    ...\n")
+        "def create():\n    ...\n"
+    )
     run("add", "-A")
     run("commit", "-q", "-m", "init")
-    sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmp_path,
-                         capture_output=True, text=True).stdout.strip()
+    sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=tmp_path, capture_output=True, text=True
+    ).stdout.strip()
     return str(tmp_path), sha
 
 
@@ -63,13 +67,11 @@ async def test_s3_reports_the_route(tmp_path):
     repo, sha = _repo(tmp_path)
     out = await acts.scan_entrypoints(_input(repo, sha))
     assert out.row.collected.state is CollectionState.MEASURED
-    assert any("POST /api/payments" in m.value
-               for c in out.sources for m in c.members)
+    assert any("POST /api/payments" in m.value for c in out.sources for m in c.members)
 
 
 @pytest.mark.asyncio
-async def test_a_measured_result_is_stored_and_served_from_the_memo(
-        tmp_path, monkeypatch):
+async def test_a_measured_result_is_stored_and_served_from_the_memo(tmp_path, monkeypatch):
     repo, sha = _repo(tmp_path)
     monkeypatch.setenv("SDLC_MEMOIZATION_CACHE_ROOT", str(tmp_path / "cache"))
     first = await acts.scan_packages(_input(repo, sha))
@@ -100,8 +102,7 @@ async def test_an_activity_never_raises(tmp_path):
 def test_built_and_owed_partition_the_activity_signals():
     """A body that lands without its OWED_BY entry removed would report
     'not implemented' forever; the reverse would KeyError at runtime."""
-    declared = {s for s in acts.SCAN_SIGNALS
-                if acts.SCAN_SIGNALS[s].activity}
+    declared = {s for s in acts.SCAN_SIGNALS if acts.SCAN_SIGNALS[s].activity}
     assert acts.BUILT | set(acts.OWED_BY) == declared
     assert not (acts.BUILT & set(acts.OWED_BY))
 

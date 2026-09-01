@@ -1,18 +1,19 @@
 """D6: the fixes live on unmerged branches, so the tree to re-triage has to be
 constructed. Real git in a tmp repo -- the activity is git behaviour, and a
 mocked subprocess would test the mock."""
+
 import subprocess
 
 import pytest
 
 from sdlc.activities import (
-    VerifyBranchInput, build_verification_branch,
+    VerifyBranchInput,
+    build_verification_branch,
 )
 
 
 def _git(args, cwd):
-    return subprocess.run(["git", *args], cwd=cwd, capture_output=True,
-                          text=True, check=True)
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True)
 
 
 @pytest.fixture()
@@ -45,9 +46,11 @@ async def test_merges_every_branch_and_reports_the_head(repo):
     r, base = repo
     _branch_with(r, "fix1", "b.txt", "one\n", base)
     _branch_with(r, "fix2", "c.txt", "two\n", base)
-    out = await build_verification_branch(VerifyBranchInput(
-        repo_path=str(r), base_sha=base, tidyup_id="t1",
-        branches=["fix1", "fix2"]))
+    out = await build_verification_branch(
+        VerifyBranchInput(
+            repo_path=str(r), base_sha=base, tidyup_id="t1", branches=["fix1", "fix2"]
+        )
+    )
     assert out.merged == ["fix1", "fix2"]
     assert out.conflicted == []
     assert out.head_sha != base
@@ -60,9 +63,11 @@ async def test_a_conflicting_branch_is_recorded_and_the_rest_still_merge(repo):
     _branch_with(r, "fix1", "shared.txt", "one\n", base)
     _branch_with(r, "fix2", "shared.txt", "two\n", base)
     _branch_with(r, "fix3", "d.txt", "three\n", base)
-    out = await build_verification_branch(VerifyBranchInput(
-        repo_path=str(r), base_sha=base, tidyup_id="t2",
-        branches=["fix1", "fix2", "fix3"]))
+    out = await build_verification_branch(
+        VerifyBranchInput(
+            repo_path=str(r), base_sha=base, tidyup_id="t2", branches=["fix1", "fix2", "fix3"]
+        )
+    )
     assert out.merged == ["fix1", "fix3"]
     assert out.conflicted == ["fix2"]
 
@@ -70,8 +75,9 @@ async def test_a_conflicting_branch_is_recorded_and_the_rest_still_merge(repo):
 @pytest.mark.asyncio
 async def test_no_branches_yields_the_base_and_merges_nothing(repo):
     r, base = repo
-    out = await build_verification_branch(VerifyBranchInput(
-        repo_path=str(r), base_sha=base, tidyup_id="t3", branches=[]))
+    out = await build_verification_branch(
+        VerifyBranchInput(repo_path=str(r), base_sha=base, tidyup_id="t3", branches=[])
+    )
     assert out.merged == [] and out.conflicted == []
     assert out.head_sha == base
 
@@ -81,8 +87,9 @@ async def test_the_verification_ref_is_local_and_never_pushed(repo):
     """Operator-run; delivery is PR-only until FR-1003/E-59."""
     r, base = repo
     _branch_with(r, "fix1", "b.txt", "one\n", base)
-    out = await build_verification_branch(VerifyBranchInput(
-        repo_path=str(r), base_sha=base, tidyup_id="t4", branches=["fix1"]))
+    out = await build_verification_branch(
+        VerifyBranchInput(repo_path=str(r), base_sha=base, tidyup_id="t4", branches=["fix1"])
+    )
     remotes = _git(["remote"], r).stdout.strip()
     assert remotes == "", "the fixture has no remote; nothing may add one"
     assert out.ref.startswith("sdlc/tidyup-verify/")
@@ -97,12 +104,14 @@ async def test_is_idempotent_across_a_retry(repo):
     measures, so that is the invariant pinned here."""
     r, base = repo
     _branch_with(r, "fix1", "b.txt", "one\n", base)
-    inp = VerifyBranchInput(repo_path=str(r), base_sha=base, tidyup_id="t5",
-                            branches=["fix1"])
+    inp = VerifyBranchInput(repo_path=str(r), base_sha=base, tidyup_id="t5", branches=["fix1"])
     first = await build_verification_branch(inp)
     second = await build_verification_branch(inp)
     assert first.merged == second.merged == ["fix1"]
-    tree_of = lambda sha: _git(["rev-parse", f"{sha}^{{tree}}"], r).stdout.strip()
+
+    def tree_of(sha):
+        return _git(["rev-parse", f"{sha}^{{tree}}"], r).stdout.strip()
+
     assert tree_of(first.head_sha) == tree_of(second.head_sha)
 
 
@@ -118,8 +127,9 @@ async def test_the_operators_repo_is_never_touched(repo):
     _branch_with(r, "fix1", "b.txt", "one\n", base)
     branch_before = _git(["branch", "--show-current"], r).stdout.strip()
     head_before = _git(["rev-parse", "HEAD"], r).stdout.strip()
-    out = await build_verification_branch(VerifyBranchInput(
-        repo_path=str(r), base_sha=base, tidyup_id="t6", branches=["fix1"]))
+    out = await build_verification_branch(
+        VerifyBranchInput(repo_path=str(r), base_sha=base, tidyup_id="t6", branches=["fix1"])
+    )
     assert out.merged == ["fix1"] and out.head_sha != base
     # The operator is still on their original branch, at their original HEAD.
     assert _git(["branch", "--show-current"], r).stdout.strip() == branch_before
@@ -135,12 +145,13 @@ async def test_a_dirty_working_tree_does_not_corrupt_the_operators_repo(repo):
     landed on whatever HEAD was -- moving the operator's main. In a worktree a
     dirty operator tree is irrelevant: nothing in their repo is touched."""
     r, base = repo
-    _branch_with(r, "fix1", "a.txt", "one\n", base)   # fix1 changes a.txt
+    _branch_with(r, "fix1", "a.txt", "one\n", base)  # fix1 changes a.txt
     # Dirty the operator's tree on the very file fix1 touches.
     (r / "a.txt").write_text("dirty uncommitted\n")
     main_before = _git(["rev-parse", "main"], r).stdout.strip()
-    out = await build_verification_branch(VerifyBranchInput(
-        repo_path=str(r), base_sha=base, tidyup_id="t7", branches=["fix1"]))
+    out = await build_verification_branch(
+        VerifyBranchInput(repo_path=str(r), base_sha=base, tidyup_id="t7", branches=["fix1"])
+    )
     assert out.merged == ["fix1"]
     # main did not move; the dirty change is still there, uncommitted.
     assert _git(["rev-parse", "main"], r).stdout.strip() == main_before

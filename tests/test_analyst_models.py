@@ -1,7 +1,12 @@
 """AnalysisReport / CriterionTrace / CoverageReport contracts + config field."""
+
 from sdlc.measurement import Measurement
 from sdlc.models import (
-    AnalysisReport, CoverageReport, CriterionTrace, PipelineConfig, ReviewFinding,
+    AnalysisReport,
+    CoverageReport,
+    CriterionTrace,
+    PipelineConfig,
+    ReviewFinding,
 )
 
 
@@ -22,7 +27,9 @@ def test_analysis_report_carries_findings_and_traces():
     r = AnalysisReport(
         traceability=[CriterionTrace(task_id="t1", criterion="c1", tests=["test_c1"])],
         findings=[ReviewFinding(assertion="c1", severity="low", detail="nit")],
-        summary="ok", confidence=0.9)
+        summary="ok",
+        confidence=0.9,
+    )
     assert r.traceability[0].tests == ["test_c1"]
     assert r.findings[0].severity == "low"
 

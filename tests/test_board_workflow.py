@@ -7,31 +7,35 @@ only level that can catch: a stage that forgets to publish, a task sync that
 drops rows, a rejected gate that moves the pointer, or a non-idempotent write
 that a Temporal re-execution would corrupt.
 """
+
 from __future__ import annotations
 
 import asyncio
 import uuid
 
 import pytest
-from temporalio import workflow
+from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
+from temporalio import activity, workflow
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
-from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 
 from sdlc.activities import evaluate_gate
-from sdlc.board.activities import (attach_task_evidence,
-                                   publish_artifact_version,
-                                   set_task_authoritative, sync_plan_tasks)
+from sdlc.board.activities import (
+    attach_task_evidence,
+    publish_artifact_version,
+    set_task_authoritative,
+    sync_plan_tasks,
+)
 from sdlc.board.models import ArtifactStatus, TaskStatus
 from sdlc.board.store import BoardStore
 from sdlc.models import GateConfig, GateDecision, GateOutcome, GatePolicy
 from sdlc.notify.contract import NotifyInput, Results
 from sdlc.observability.activities import export_run_artifacts
-from temporalio import activity
 from tests.fakes.canned import AGENT_SPECS, e2e_config, greenfield_idea
 from tests.fakes.fake_activities import BOARD_FAKES, GIT_FAKES
-from tests.fakes.fake_deploy import DEPLOY_FAKES, reset as reset_deploy
+from tests.fakes.fake_deploy import DEPLOY_FAKES
+from tests.fakes.fake_deploy import reset as reset_deploy
 
 with workflow.unsafe.imports_passed_through():
     from sdlc.workflows.deployment import DeploymentWorkflow
@@ -40,11 +44,15 @@ with workflow.unsafe.imports_passed_through():
 
 pytestmark = [pytest.mark.temporal, pytest.mark.asyncio]
 
-PROJECT = "default"   # PipelineConfig.project_key default
+PROJECT = "default"  # PipelineConfig.project_key default
 
 # The real board activities, swapped in for the no-op fakes GIT_FAKES carries.
-BOARD_REAL = [publish_artifact_version, sync_plan_tasks,
-              set_task_authoritative, attach_task_evidence]
+BOARD_REAL = [
+    publish_artifact_version,
+    sync_plan_tasks,
+    set_task_authoritative,
+    attach_task_evidence,
+]
 
 
 @activity.defn(name="notify")
@@ -66,8 +74,7 @@ def _unattended_cfg():
     """Every gate OFF so the run ships without a human driver (matches the
     deploy-path suite's _cfg)."""
     cfg = e2e_config()
-    cfg.gates = {name: GateConfig(policy=GatePolicy.OFF)
-                 for name in cfg.gates}
+    cfg.gates = {name: GateConfig(policy=GatePolicy.OFF) for name in cfg.gates}
     cfg.gates["deploy_failed"] = GateConfig(policy=GatePolicy.OFF)
     cfg.default_gate_policy = GatePolicy.OFF
     cfg.deploy.enabled = True
@@ -98,19 +105,26 @@ async def test_shipped_run_publishes_artifacts_tasks_and_evidence(board_env):
     cfg = _unattended_cfg()
     tag = f"board-ship-{uuid.uuid4()}"
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         async with Worker(
-                env.client, task_queue=tag,
-                workflows=[FeatureWorkflow, DeploymentWorkflow],
-                activities=[evaluate_gate, export_run_artifacts,
-                            _noop_notify,
-                            *_git_fakes_without_board(), *DEPLOY_FAKES,
-                            *fake_agent_activities(AGENT_SPECS),
-                            *BOARD_REAL],
-                plugins=[PydanticAIPlugin()]):
+            env.client,
+            task_queue=tag,
+            workflows=[FeatureWorkflow, DeploymentWorkflow],
+            activities=[
+                evaluate_gate,
+                export_run_artifacts,
+                _noop_notify,
+                *_git_fakes_without_board(),
+                *DEPLOY_FAKES,
+                *fake_agent_activities(AGENT_SPECS),
+                *BOARD_REAL,
+            ],
+            plugins=[PydanticAIPlugin()],
+        ):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run, args=[greenfield_idea(), cfg, None],
-                id=tag, task_queue=tag)
+                FeatureWorkflow.run, args=[greenfield_idea(), cfg, None], id=tag, task_queue=tag
+            )
             result = await handle.result()
 
     assert result.startswith("deployed:"), result
@@ -120,8 +134,7 @@ async def test_shipped_run_publishes_artifacts_tasks_and_evidence(board_env):
         # 1. Three project artifacts, all CURRENT (gates all approved).
         for key in ("requirements", "architecture", "plan"):
             art = store.get_artifact(PROJECT, key)
-            assert art.status is ArtifactStatus.CURRENT, \
-                f"{key}: {art.status}"
+            assert art.status is ArtifactStatus.CURRENT, f"{key}: {art.status}"
             assert art.current_version is not None, key
             assert len(store.list_versions(PROJECT, key)) >= 1, key
 
@@ -131,21 +144,18 @@ async def test_shipped_run_publishes_artifacts_tasks_and_evidence(board_env):
         plan_v = store.get_artifact(PROJECT, "plan").current_version
         tasks = store.list_tasks(PROJECT, plan_v)
         assert len(tasks) >= 1
-        assert all(t.authoritative_status is not TaskStatus.PENDING
-                   for t in tasks), \
+        assert all(t.authoritative_status is not TaskStatus.PENDING for t in tasks), (
             "a shipped run must not leave tasks PENDING on the board"
+        )
 
         # 3. At least one piece of evidence landed for the run's tasks.
-        total_evidence = sum(
-            len(store.list_evidence(PROJECT, plan_v, t.task_id))
-            for t in tasks)
+        total_evidence = sum(len(store.list_evidence(PROJECT, plan_v, t.task_id)) for t in tasks)
         assert total_evidence >= 1, "no evidence attached for any task"
     finally:
         store.close()
 
 
-async def test_rejected_architecture_records_rejected_and_keeps_pointer(
-        board_env):
+async def test_rejected_architecture_records_rejected_and_keeps_pointer(board_env):
     """A rejected design is still written as history, but the pointer must not
     move — status='rejected', current_version stays None, and no tasks are
     synced (the run ends at the architecture gate)."""
@@ -156,28 +166,39 @@ async def test_rejected_architecture_records_rejected_and_keeps_pointer(
     cfg.gates["architecture"] = GateConfig(policy=GatePolicy.HARD)
     tag = f"board-rej-{uuid.uuid4()}"
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(
-                    env.client, task_queue=tag,
-                    workflows=[FeatureWorkflow, DeploymentWorkflow],
-                    activities=[evaluate_gate, export_run_artifacts,
-                                _noop_notify,
-                                *_git_fakes_without_board(), *DEPLOY_FAKES,
-                                *fake_agent_activities(AGENT_SPECS),
-                                *BOARD_REAL],
-                    plugins=[PydanticAIPlugin()]):
+                env.client,
+                task_queue=tag,
+                workflows=[FeatureWorkflow, DeploymentWorkflow],
+                activities=[
+                    evaluate_gate,
+                    export_run_artifacts,
+                    _noop_notify,
+                    *_git_fakes_without_board(),
+                    *DEPLOY_FAKES,
+                    *fake_agent_activities(AGENT_SPECS),
+                    *BOARD_REAL,
+                ],
+                plugins=[PydanticAIPlugin()],
+            ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run, args=[greenfield_idea(), cfg, None],
-                    id=tag, task_queue=tag)
+                    FeatureWorkflow.run, args=[greenfield_idea(), cfg, None], id=tag, task_queue=tag
+                )
 
                 async def reject_arch(h):
                     await _wait_for_status(h, "awaiting:architecture")
                     await h.signal(
                         FeatureWorkflow.submit_gate_decision,
-                        GateDecision(gate="architecture", round=1,
-                                     outcome=GateOutcome.REJECT,
-                                     decided_by="human"))
+                        GateDecision(
+                            gate="architecture",
+                            round=1,
+                            outcome=GateOutcome.REJECT,
+                            decided_by="human",
+                        ),
+                    )
 
                 await reject_arch(handle)
                 result = await handle.result()
@@ -187,21 +208,18 @@ async def test_rejected_architecture_records_rejected_and_keeps_pointer(
     store = BoardStore(db=str(board_env / "board.sqlite3"))
     try:
         # Requirements was published (clarify completed) and is CURRENT.
-        assert store.get_artifact(PROJECT, "requirements").status \
-            is ArtifactStatus.CURRENT
+        assert store.get_artifact(PROJECT, "requirements").status is ArtifactStatus.CURRENT
 
         # Architecture was recorded as REJECTED history, pointer unmoved.
         arch = store.get_artifact(PROJECT, "architecture")
         assert arch.status is ArtifactStatus.REJECTED
-        assert arch.current_version is None, \
-            "a rejected design must not become the current pointer"
+        assert arch.current_version is None, "a rejected design must not become the current pointer"
 
         # No plan was published, so no task rows exist for any plan version.
         try:
             plan = store.get_artifact(PROJECT, "plan")
         except Exception:
             plan = None
-        assert plan is None, \
-            "rejecting architecture must not reach the plan stage"
+        assert plan is None, "rejecting architecture must not reach the plan stage"
     finally:
         store.close()

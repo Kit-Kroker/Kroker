@@ -1,6 +1,7 @@
 """E-42 D7: the commit is pinned ONCE, by an activity that also detects the
 toolchain. All seven signals then read the same tree, so every evidence
 citation resolves at the same path@sha."""
+
 from __future__ import annotations
 
 import subprocess
@@ -8,13 +9,14 @@ import subprocess
 import pytest
 
 from sdlc.triage.activities import (
-    TriagePin, TriagePinInput, triage_resolve_commit,
+    TriagePin,
+    TriagePinInput,
+    triage_resolve_commit,
 )
 
 
 def _git(args, cwd):
-    subprocess.run(["git", *args], cwd=cwd, check=True,
-                   capture_output=True, text=True)
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True)
 
 
 @pytest.fixture
@@ -63,5 +65,4 @@ async def test_no_marker_is_a_finding_not_an_error(tmp_path):
 async def test_unresolvable_commit_raises(repo):
     """D8: there is no honest artifact describing a tree we cannot read."""
     with pytest.raises(RuntimeError, match="does not resolve"):
-        await triage_resolve_commit(
-            TriagePinInput(repo_dir=str(repo), commit="deadbeef"))
+        await triage_resolve_commit(TriagePinInput(repo_dir=str(repo), commit="deadbeef"))

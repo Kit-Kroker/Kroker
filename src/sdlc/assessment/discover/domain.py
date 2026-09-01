@@ -8,6 +8,7 @@ editing this table.
 
 Pure by design.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -17,8 +18,7 @@ from .map import Capability, DomainEntity, DomainModel
 from .models import OwnershipOutcome, OwnershipReport
 
 
-def consolidate(ownership: OwnershipReport,
-                capabilities: Iterable[Capability]) -> DomainModel:
+def consolidate(ownership: OwnershipReport, capabilities: Iterable[Capability]) -> DomainModel:
     """One DomainEntity per ownership row, sorted by entity name.
 
     `capabilities` is accepted and currently unused for row construction: it
@@ -31,22 +31,35 @@ def consolidate(ownership: OwnershipReport,
         # P3-D5. An empty table would claim the repository has no entities,
         # which is the FR-915 conflation this codebase refuses everywhere
         # else.
-        return DomainModel(collected=Measurement.not_collected(
-            f"ownership did not collect: {ownership.collected.reason}"))
+        return DomainModel(
+            collected=Measurement.not_collected(
+                f"ownership did not collect: {ownership.collected.reason}"
+            )
+        )
 
-    rows = tuple(sorted(
-        (DomainEntity(
-            entity=e.entity, outcome=e.outcome, owner=e.owner, verb=e.verb,
-            # The owner is not its own reader. Sorted here because
-            # EntityOwnership.claimants is already sorted and set difference
-            # is not order-preserving.
-            readers=tuple(sorted(set(e.claimants) - {e.owner}
-                                 if e.owner else set(e.claimants))))
-         for e in ownership.entities),
-        key=lambda d: d.entity))
+    rows = tuple(
+        sorted(
+            (
+                DomainEntity(
+                    entity=e.entity,
+                    outcome=e.outcome,
+                    owner=e.owner,
+                    verb=e.verb,
+                    # The owner is not its own reader. Sorted here because
+                    # EntityOwnership.claimants is already sorted and set difference
+                    # is not order-preserving.
+                    readers=tuple(
+                        sorted(set(e.claimants) - {e.owner} if e.owner else set(e.claimants))
+                    ),
+                )
+                for e in ownership.entities
+            ),
+            key=lambda d: d.entity,
+        )
+    )
 
     return DomainModel(
         entities=rows,
-        counts={o: sum(1 for r in rows if r.outcome is o)
-                for o in OwnershipOutcome},
-        collected=Measurement.measured(float(len(rows))))
+        counts={o: sum(1 for r in rows if r.outcome is o) for o in OwnershipOutcome},
+        collected=Measurement.measured(float(len(rows))),
+    )

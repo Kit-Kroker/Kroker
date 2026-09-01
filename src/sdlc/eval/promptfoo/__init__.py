@@ -1,4 +1,5 @@
 """promptfoo integration for the prompt gate (E-82)."""
+
 from __future__ import annotations
 
 import os

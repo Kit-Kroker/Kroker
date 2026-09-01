@@ -1,36 +1,57 @@
 """D7/D10 and the authored DevTask. Pure -- no Temporal."""
+
+from datetime import UTC, datetime
+
 import pytest
 
 from sdlc.measurement import Measurement
 from sdlc.tidyup.backlog import admitted, mechanical_backlog, seeded_work_for
 from sdlc.triage.models import (
-    FixClass, Readiness, ReadinessOverride, RepoTriage, SignalResult,
-    TriageFinding, Verdict,
+    FixClass,
+    Readiness,
+    ReadinessOverride,
+    RepoTriage,
+    SignalResult,
+    TriageFinding,
+    Verdict,
 )
-from datetime import datetime, timezone
 
 
 def _f(rule, fix_class=FixClass.MECHANICAL, key="", path="p", signal="s"):
-    return TriageFinding(signal=signal, rule=rule, severity="high",
-                         detail=f"{rule} detail", path=path, key=key,
-                         evidence="the offending line", fix_class=fix_class)
+    return TriageFinding(
+        signal=signal,
+        rule=rule,
+        severity="high",
+        detail=f"{rule} detail",
+        path=path,
+        key=key,
+        evidence="the offending line",
+        fix_class=fix_class,
+    )
 
 
 def _triage(findings, verdict=Verdict.READY, override=None):
     m = Measurement.measured(1.0)
     return RepoTriage(
-        repo_dir="/r", commit_sha="a" * 40, override=override,
-        readiness=Readiness(buildable=m, runnable=m, tests_present=m,
-                            structure_discernible=m, verdict=verdict),
-        signals=[SignalResult(signal="s", version=4,
-                              collected=Measurement.measured(
-                                  float(len(findings))),
-                              findings=findings)])
+        repo_dir="/r",
+        commit_sha="a" * 40,
+        override=override,
+        readiness=Readiness(
+            buildable=m, runnable=m, tests_present=m, structure_discernible=m, verdict=verdict
+        ),
+        signals=[
+            SignalResult(
+                signal="s",
+                version=4,
+                collected=Measurement.measured(float(len(findings))),
+                findings=findings,
+            )
+        ],
+    )
 
 
 def test_backlog_holds_only_mechanical_findings():
-    t = _triage([_f("a"), _f("b", FixClass.JUDGEMENT),
-                 _f("c", FixClass.STRUCTURAL)])
+    t = _triage([_f("a"), _f("b", FixClass.JUDGEMENT), _f("c", FixClass.STRUCTURAL)])
     assert [f.rule for _, f in mechanical_backlog(t)] == ["a"]
 
 
@@ -58,8 +79,9 @@ def test_not_admitted_without_an_override(verdict):
 @pytest.mark.parametrize("verdict", [Verdict.NOT_READY, Verdict.INDETERMINATE])
 def test_admitted_with_an_audited_override(verdict):
     """D7: E-42's rule verbatim -- READY or override is not None."""
-    o = ReadinessOverride(approved_by="human", reason="proceeding anyway",
-                          decided_at=datetime.now(timezone.utc), gate_round=1)
+    o = ReadinessOverride(
+        approved_by="human", reason="proceeding anyway", decided_at=datetime.now(UTC), gate_round=1
+    )
     assert admitted(_triage([], verdict, override=o)) is True
 
 

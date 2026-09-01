@@ -21,12 +21,12 @@ Three facts the schema pinned that contradict earlier assumptions:
   not tenant-scoped, so ``OPERATION_PATH`` carries ``{bank}`` unlike the plan's
   original interface sketch.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 
-SCHEMA_PATH = (Path(__file__).resolve().parents[3]
-               / "tests" / "fixtures" / "hindsight-openapi.json")
+SCHEMA_PATH = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "hindsight-openapi.json"
 
 BANK_PATH = "/v1/{tenant}/banks/{bank}"
 RETAIN_PATH = "/v1/{tenant}/banks/{bank}/memories"

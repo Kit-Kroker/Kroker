@@ -1,6 +1,7 @@
 """_stage_record calls workflow.info(), so it cannot run outside a Temporal
 context. Following tests/test_pending_wiring.py, assert the signature and
 the call-site wiring from source instead of spinning up a server."""
+
 from __future__ import annotations
 
 import inspect

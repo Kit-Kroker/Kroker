@@ -15,6 +15,7 @@ Two things here are load-bearing and non-obvious:
   holds ONE deps object for the life of the mount, so without this the brake
   would be per-process rather than per-conversation-turn.
 """
+
 from __future__ import annotations
 
 import inspect
@@ -27,18 +28,32 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import ToolFailed
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.toolsets import FunctionToolset
+
 try:
     from pydantic_ai.ui import create_web_app
 except ImportError:
     from pydantic_ai.ui._web import create_web_app
 
 
-from ..models import GateOutcome, ProjectMode
+# tools.py's tool signatures are lazy string annotations (its
+# `from __future__ import annotations`), and pydantic_ai resolves them via
+# get_type_hints against THIS module's globals for the functions _bind
+# synthesises here -- so these imports are load-bearing at runtime, not
+# re-export sugar. The redundant aliases keep ruff's F401 from removing them.
+from ..models import GateOutcome as GateOutcome
+from ..models import ProjectMode as ProjectMode
 from . import render, tools
 from .deps import OperatorDeps
 from .errors import ToolError
-from .tools import ArtifactRead, ChangeReport, ReplyReceipt
-
+from .tools import (
+    ArtifactRead as ArtifactRead,
+)
+from .tools import (
+    ChangeReport as ChangeReport,
+)
+from .tools import (
+    ReplyReceipt as ReplyReceipt,
+)
 
 ASSETS_ENV = "SDLC_CHAT_ASSETS"
 
@@ -54,9 +69,18 @@ def asset_dir() -> Path:
     env = os.environ.get(ASSETS_ENV)
     return Path(env) if env else _REPO_ASSETS
 
-READ_TOOLS = (tools.list_runs, tools.get_run, tools.follow, tools.inbox,
-              tools.list_projects, tools.get_project, tools.list_tasks,
-              tools.project_events, tools.read_artifact)
+
+READ_TOOLS = (
+    tools.list_runs,
+    tools.get_run,
+    tools.follow,
+    tools.inbox,
+    tools.list_projects,
+    tools.get_project,
+    tools.list_tasks,
+    tools.project_events,
+    tools.read_artifact,
+)
 WRITE_TOOLS = (tools.start_run, tools.answer_question, tools.decide_gate)
 
 
@@ -76,8 +100,9 @@ def load_chat_config(root: Path | None = None) -> ChatConfig:
     root = Path(root) if root is not None else asset_dir()
     cfg_file = root / "agent.yaml"
     if not cfg_file.is_file():
-        raise ChatConfigError(f"missing {cfg_file}: the chat surface needs an "
-                              f"agent.yaml naming its model")
+        raise ChatConfigError(
+            f"missing {cfg_file}: the chat surface needs an agent.yaml naming its model"
+        )
     data = yaml.safe_load(cfg_file.read_text(encoding="utf-8")) or {}
     model = data.get("model")
     if not model:
@@ -89,10 +114,11 @@ def load_chat_config(root: Path | None = None) -> ChatConfig:
     if not instructions.strip():
         raise ChatConfigError(
             f"{prompt_file} is empty -- an empty system prompt is a boot-time "
-            f"bug, not a runtime surprise")
-    return ChatConfig(model=model,
-                      max_tokens=int(data.get("max_tokens", 64000)),
-                      instructions=instructions)
+            f"bug, not a runtime surprise"
+        )
+    return ChatConfig(
+        model=model, max_tokens=int(data.get("max_tokens", 64000)), instructions=instructions
+    )
 
 
 def _bind(fn):
@@ -124,8 +150,9 @@ def _bind(fn):
             # UnexpectedModelBehavior and kill the turn after all.
             raise ToolFailed(e.message) from None
 
-    ctx_param = inspect.Parameter("ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                                  annotation=RunContext[OperatorDeps])
+    ctx_param = inspect.Parameter(
+        "ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=RunContext[OperatorDeps]
+    )
     tool.__name__ = fn.__name__
     tool.__doc__ = fn.__doc__
     tool.__signature__ = sig.replace(parameters=[ctx_param, *rest])
@@ -152,7 +179,8 @@ def build_agent(cfg: ChatConfig | None = None) -> Agent:
         deps_type=OperatorDeps,
         toolsets=[build_toolset()],
         model_settings=ModelSettings(max_tokens=cfg.max_tokens),
-        instructions=cfg.instructions)
+        instructions=cfg.instructions,
+    )
 
     @agent.instructions
     async def _orientation(ctx: RunContext[OperatorDeps]) -> str:
@@ -161,7 +189,7 @@ def build_agent(cfg: ChatConfig | None = None) -> Agent:
             return ""
         try:
             snap = await ctx.deps.poller.snapshot()
-        except Exception:       # noqa: BLE001 -- orientation is a nicety
+        except Exception:  # noqa: BLE001 -- orientation is a nicety
             return "fleet state unavailable right now; use the tools"
         return "Current fleet:\n" + render.orientation(snap)
 
@@ -187,9 +215,11 @@ class _ResetPerRequest:
         self.deps = deps
 
     def _starts_a_turn(self, scope) -> bool:
-        return (scope.get("type") == "http"
-                and scope.get("method", "").upper() == "POST"
-                and scope.get("path", "").rstrip("/").endswith("/chat"))
+        return (
+            scope.get("type") == "http"
+            and scope.get("method", "").upper() == "POST"
+            and scope.get("path", "").rstrip("/").endswith("/chat")
+        )
 
     async def __call__(self, scope, receive, send):
         if self._starts_a_turn(scope):

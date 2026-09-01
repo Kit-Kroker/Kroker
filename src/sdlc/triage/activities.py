@@ -7,6 +7,7 @@ checkout (spec D6): a gitignored local .env cannot produce a false positive,
 untracked build output produces no noise, and every evidence citation is true
 against path@sha by construction.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -29,7 +30,12 @@ from .advisories import resolve_advisory_source
 from .gitread import is_over_size_limit, read_tree
 from .models import SignalResult
 from .signals import (
-    baseline, build_probe, dependencies, misconfig, outliers, scaffold,
+    baseline,
+    build_probe,
+    dependencies,
+    misconfig,
+    outliers,
+    scaffold,
     secrets,
 )
 
@@ -45,7 +51,7 @@ class TriageSignalInput:
 @dataclass
 class TriagePinInput:
     repo_dir: str
-    commit: str = "HEAD"        # an UNRESOLVED ref -- see TriagePin
+    commit: str = "HEAD"  # an UNRESOLVED ref -- see TriagePin
 
 
 @dataclass
@@ -64,17 +70,15 @@ async def triage_resolve_commit(inp: TriagePinInput) -> TriagePin:
     does not resolve is not a not_collected dimension, it is the absence of the
     tree the whole artifact claims to describe.
     """
-    proc = _git(["rev-parse", "--verify", f"{inp.commit}^{{commit}}"],
-                cwd=inp.repo_dir)
+    proc = _git(["rev-parse", "--verify", f"{inp.commit}^{{commit}}"], cwd=inp.repo_dir)
     if proc.returncode != 0:
         raise RuntimeError(
-            f"commit {inp.commit!r} does not resolve in {inp.repo_dir}: "
-            f"{proc.stderr.strip()}")
+            f"commit {inp.commit!r} does not resolve in {inp.repo_dir}: {proc.stderr.strip()}"
+        )
     commit_sha = proc.stdout.strip()
 
     found = detect_with_marker_from_paths(tracked_paths(inp.repo_dir, commit_sha))
-    return TriagePin(commit_sha=commit_sha,
-                     toolchain=found[0].kind.value if found else None)
+    return TriagePin(commit_sha=commit_sha, toolchain=found[0].kind.value if found else None)
 
 
 def tracked_paths(repo_dir: str, commit_sha: str) -> list[str]:
@@ -83,8 +87,7 @@ def tracked_paths(repo_dir: str, commit_sha: str) -> list[str]:
     not_collected, which is the only honest report for a tree we cannot read."""
     proc = _git(["ls-tree", "-r", "--name-only", commit_sha], cwd=repo_dir)
     if proc.returncode != 0:
-        raise RuntimeError(
-            f"git ls-tree failed for {commit_sha}: {proc.stderr.strip()}")
+        raise RuntimeError(f"git ls-tree failed for {commit_sha}: {proc.stderr.strip()}")
     return [line for line in proc.stdout.splitlines() if line]
 
 
@@ -109,17 +112,18 @@ async def triage_baseline(inp: TriageSignalInput) -> SignalResult:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
         gitignore = ""
         if ".gitignore" in paths:
-            gitignore = read_blob(inp.repo_dir, inp.commit_sha,
-                                  ".gitignore") or ""
+            gitignore = read_blob(inp.repo_dir, inp.commit_sha, ".gitignore") or ""
         found = detect_with_marker_from_paths(paths)
-        return baseline.evaluate(paths, gitignore,
-                                 found[0] if found else None)
-    except Exception as exc:                       # noqa: BLE001 -- see docstring
+        return baseline.evaluate(paths, gitignore, found[0] if found else None)
+    except Exception as exc:  # noqa: BLE001 -- see docstring
         _log.warning("triage baseline signal failed: %s", exc)
         return SignalResult(
-            signal=baseline.SIGNAL_ID, version=baseline.VERSION,
+            signal=baseline.SIGNAL_ID,
+            version=baseline.VERSION,
             collected=Measurement.not_collected(
-                f"baseline signal raised: {type(exc).__name__}: {exc}"))
+                f"baseline signal raised: {type(exc).__name__}: {exc}"
+            ),
+        )
 
 
 @activity.defn
@@ -136,28 +140,35 @@ async def triage_secrets(inp: TriageSignalInput) -> SignalResult:
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
         findings = list(secrets.env_file_findings(paths))
-        for path, blob in read_tree(inp.repo_dir, inp.commit_sha,
-                                    sorted(paths)):
+        for path, blob in read_tree(inp.repo_dir, inp.commit_sha, sorted(paths)):
             if is_over_size_limit(blob):
                 continue
             for finding in secrets.scan_text(path, blob):
                 if finding.evidence and not verify_quote(
-                        finding.evidence, blob, Profile.VERBATIM_BYTES):
+                    finding.evidence, blob, Profile.VERBATIM_BYTES
+                ):
                     _log.warning(
-                        "triage secrets: dropping unverifiable evidence for "
-                        "%s at %s", finding.rule, path)
+                        "triage secrets: dropping unverifiable evidence for %s at %s",
+                        finding.rule,
+                        path,
+                    )
                     continue
                 findings.append(finding)
         return SignalResult(
-            signal=secrets.SIGNAL_ID, version=secrets.VERSION,
+            signal=secrets.SIGNAL_ID,
+            version=secrets.VERSION,
             collected=Measurement.measured(float(len(findings))),
-            findings=findings)
-    except Exception as exc:                       # noqa: BLE001
+            findings=findings,
+        )
+    except Exception as exc:  # noqa: BLE001
         _log.warning("triage secrets signal failed: %s", exc)
         return SignalResult(
-            signal=secrets.SIGNAL_ID, version=secrets.VERSION,
+            signal=secrets.SIGNAL_ID,
+            version=secrets.VERSION,
             collected=Measurement.not_collected(
-                f"secrets signal raised: {type(exc).__name__}: {exc}"))
+                f"secrets signal raised: {type(exc).__name__}: {exc}"
+            ),
+        )
 
 
 def _verified(result: SignalResult, blobs: dict[str, str]) -> SignalResult:
@@ -175,12 +186,15 @@ def _verified(result: SignalResult, blobs: dict[str, str]) -> SignalResult:
             kept.append(finding)
             continue
         blob = blobs.get(finding.path)
-        if blob is not None and verify_quote(
-                finding.evidence, blob, Profile.VERBATIM_BYTES):
+        if blob is not None and verify_quote(finding.evidence, blob, Profile.VERBATIM_BYTES):
             kept.append(finding)
         else:
-            _log.warning("triage %s: dropping unverifiable evidence for %s "
-                         "at %s", result.signal, finding.rule, finding.path)
+            _log.warning(
+                "triage %s: dropping unverifiable evidence for %s at %s",
+                result.signal,
+                finding.rule,
+                finding.path,
+            )
     # collected.value is the finding COUNT. Dropping a finding without
     # updating it reports a count the artifact's findings list contradicts.
     update: dict[str, object] = {"findings": kept}
@@ -212,18 +226,20 @@ async def triage_dependencies(inp: TriageDependencyInput) -> SignalResult:
                 version=dependencies.VERSION,
                 collected=Measurement.not_collected(
                     "no toolchain marker resolved, so no manifests are "
-                    "identifiable and direct_dependencies was not measured"))
+                    "identifiable and direct_dependencies was not measured"
+                ),
+            )
 
         manifest_names = set(adapter.manifests)
         source_exts = tuple(adapter.source_extensions)
         wanted = sorted(
-            p for p in paths
-            if posixpath.basename(p) in manifest_names
-            or (source_exts and p.endswith(source_exts)))
+            p
+            for p in paths
+            if posixpath.basename(p) in manifest_names or (source_exts and p.endswith(source_exts))
+        )
 
         blobs = dict(read_tree(inp.repo_dir, inp.commit_sha, wanted))
-        manifests = {p: t for p, t in blobs.items()
-                     if posixpath.basename(p) in manifest_names}
+        manifests = {p: t for p, t in blobs.items() if posixpath.basename(p) in manifest_names}
         sources = [t for p, t in blobs.items() if p not in manifests]
 
         declared = dependencies.parse_manifests(manifests)
@@ -232,24 +248,27 @@ async def triage_dependencies(inp: TriageDependencyInput) -> SignalResult:
         # The OSV lookup uses blocking urllib in a loop; run it off the
         # event loop so 200 packages × 20s timeout does not pin the worker.
         advisories = await asyncio.to_thread(
-            source.lookup,
-            adapter.ecosystem,
-            sorted({d.name for d in declared}))
+            source.lookup, adapter.ecosystem, sorted({d.name for d in declared})
+        )
 
         result = dependencies.evaluate(
-            declared, lockfile_present,
-            dependencies.imported_modules(sources), advisories)
+            declared, lockfile_present, dependencies.imported_modules(sources), advisories
+        )
         return _verified(result, blobs)
-    except Exception as exc:                       # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("triage dependencies signal failed: %s", exc)
         return SignalResult(
-            signal=dependencies.SIGNAL_ID, version=dependencies.VERSION,
+            signal=dependencies.SIGNAL_ID,
+            version=dependencies.VERSION,
             collected=Measurement.not_collected(
-                f"dependencies signal raised: {type(exc).__name__}: {exc}"))
+                f"dependencies signal raised: {type(exc).__name__}: {exc}"
+            ),
+        )
 
 
-def commit_touch_counts(repo_dir: str, commit_sha: str,
-                        max_commits: int = 2000) -> dict[str, int] | None:
+def commit_touch_counts(
+    repo_dir: str, commit_sha: str, max_commits: int = 2000
+) -> dict[str, int] | None:
     """path -> commits touching it, over at most `max_commits` commits ending
     at `commit_sha`. None when history yields no usable signal (spec D13).
 
@@ -262,9 +281,18 @@ def commit_touch_counts(repo_dir: str, commit_sha: str,
     re-creations, not reproducibility at a pinned commit -- and since history
     only adjusts severity, a re-import degrades sharpness, never correctness.
     """
-    proc = _git(["-c", "core.quotepath=false", "log",
-                 f"--max-count={max_commits}", "--name-only",
-                 "--format=%x00", commit_sha], cwd=repo_dir)
+    proc = _git(
+        [
+            "-c",
+            "core.quotepath=false",
+            "log",
+            f"--max-count={max_commits}",
+            "--name-only",
+            "--format=%x00",
+            commit_sha,
+        ],
+        cwd=repo_dir,
+    )
     if proc.returncode != 0:
         return None
     if proc.stdout.count("\x00") <= 1:
@@ -289,24 +317,29 @@ async def triage_scaffold(inp: TriageSignalInput) -> SignalResult:
         # Fingerprints target specific paths; source extensions cover the
         # dead-code half and the structure ratio. Reading their union keeps
         # this to one pass.
-        wanted = sorted({
-            p for p in paths
-            if (exts and p.endswith(exts))
-            or any(fnmatch.fnmatch(p, fp.path_glob)
-                   for fp in scaffold.FINGERPRINTS)})
+        wanted = sorted(
+            {
+                p
+                for p in paths
+                if (exts and p.endswith(exts))
+                or any(fnmatch.fnmatch(p, fp.path_glob) for fp in scaffold.FINGERPRINTS)
+            }
+        )
         blobs = dict(read_tree(inp.repo_dir, inp.commit_sha, wanted))
 
         result = scaffold.evaluate(
-            paths, blobs,
-            commit_touch_counts(inp.repo_dir, inp.commit_sha),
-            adapter)
+            paths, blobs, commit_touch_counts(inp.repo_dir, inp.commit_sha), adapter
+        )
         return _verified(result, blobs)
-    except Exception as exc:                       # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("triage scaffold signal failed: %s", exc)
         return SignalResult(
-            signal=scaffold.SIGNAL_ID, version=scaffold.VERSION,
+            signal=scaffold.SIGNAL_ID,
+            version=scaffold.VERSION,
             collected=Measurement.not_collected(
-                f"scaffold signal raised: {type(exc).__name__}: {exc}"))
+                f"scaffold signal raised: {type(exc).__name__}: {exc}"
+            ),
+        )
 
 
 @activity.defn
@@ -319,19 +352,21 @@ async def triage_misconfig(inp: TriageSignalInput) -> SignalResult:
         # Config lives beside source: storage rules and IaC policies are the
         # world_readable_storage rule's whole subject and carry no source
         # extension.
-        config_suffixes = (".rules", ".json", ".yml", ".yaml", ".toml",
-                           ".ini", ".cfg", ".env")
-        wanted = sorted(p for p in paths
-                        if (exts and p.endswith(exts))
-                        or p.endswith(config_suffixes))
+        config_suffixes = (".rules", ".json", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".env")
+        wanted = sorted(
+            p for p in paths if (exts and p.endswith(exts)) or p.endswith(config_suffixes)
+        )
         blobs = dict(read_tree(inp.repo_dir, inp.commit_sha, wanted))
         return _verified(misconfig.evaluate(blobs), blobs)
-    except Exception as exc:                       # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("triage misconfig signal failed: %s", exc)
         return SignalResult(
-            signal=misconfig.SIGNAL_ID, version=misconfig.VERSION,
+            signal=misconfig.SIGNAL_ID,
+            version=misconfig.VERSION,
             collected=Measurement.not_collected(
-                f"misconfig signal raised: {type(exc).__name__}: {exc}"))
+                f"misconfig signal raised: {type(exc).__name__}: {exc}"
+            ),
+        )
 
 
 @activity.defn
@@ -347,12 +382,15 @@ async def triage_outliers(inp: TriageSignalInput) -> SignalResult:
         # No evidence quotes: a size or duplication finding cites a file and
         # a line, not a line's text, so _verified would be a no-op.
         return outliers.evaluate(blobs, adapter)
-    except Exception as exc:                       # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("triage outliers signal failed: %s", exc)
         return SignalResult(
-            signal=outliers.SIGNAL_ID, version=outliers.VERSION,
+            signal=outliers.SIGNAL_ID,
+            version=outliers.VERSION,
             collected=Measurement.not_collected(
-                f"outliers signal raised: {type(exc).__name__}: {exc}"))
+                f"outliers signal raised: {type(exc).__name__}: {exc}"
+            ),
+        )
 
 
 @dataclass
@@ -400,24 +438,22 @@ async def triage_build_probe(inp: TriageProbeInput) -> SignalResult:
     venv_dir = os.path.join(workdir, "venv")
     try:
         code, out = await _bounded_shell(
-            f'git clone --local --quiet "{inp.repo_dir}" "{clone}"',
-            workdir, 300)
+            f'git clone --local --quiet "{inp.repo_dir}" "{clone}"', workdir, 300
+        )
         if code != 0:
             raise RuntimeError(f"clone failed: {out[-1000:]}")
         code, out = await _bounded_shell(
-            f'git -c advice.detachedHead=false checkout --quiet '
-            f'"{inp.commit_sha}"', clone, 120)
+            f'git -c advice.detachedHead=false checkout --quiet "{inp.commit_sha}"', clone, 120
+        )
         if code != 0:
-            raise RuntimeError(f"checkout of {inp.commit_sha} failed: "
-                               f"{out[-1000:]}")
+            raise RuntimeError(f"checkout of {inp.commit_sha} failed: {out[-1000:]}")
 
         found = detect_with_marker(clone)
         if found is None:
             return build_probe.interpret(False, None, None, None, None)
         adapter, marker = found
 
-        code, out = await _bounded_shell(
-            f'"{sys.executable}" -m venv "{venv_dir}"', workdir, 300)
+        code, out = await _bounded_shell(f'"{sys.executable}" -m venv "{venv_dir}"', workdir, 300)
         if code != 0:
             raise RuntimeError(f"venv creation failed: {out[-1000:]}")
         env = _venv_env(venv_dir)
@@ -425,16 +461,13 @@ async def triage_build_probe(inp: TriageProbeInput) -> SignalResult:
         install = None
         install_command = adapter.install_cmd(marker)
         if install_command is not None:
-            code, out = await _bounded_shell(
-                install_command, clone, inp.install_timeout_s, env=env)
+            code, out = await _bounded_shell(install_command, clone, inp.install_timeout_s, env=env)
             install = build_probe.StepOutcome(code=code, output=out)
 
         build = None
         build_command = adapter.build_cmd()
-        if build_command is not None and install is not None \
-                and install.code == 0:
-            code, out = await _bounded_shell(
-                build_command, clone, inp.build_timeout_s, env=env)
+        if build_command is not None and install is not None and install.code == 0:
+            code, out = await _bounded_shell(build_command, clone, inp.build_timeout_s, env=env)
             build = build_probe.StepOutcome(code=code, output=out)
 
         test = None
@@ -444,21 +477,21 @@ async def triage_build_probe(inp: TriageProbeInput) -> SignalResult:
             # so its exit code never masks an install failure. A project that
             # does not declare pytest is a dependency-health finding (E-41a),
             # not a reason to leave runnability unmeasured.
-            await _bounded_shell(
-                "pip install -q pytest", clone, inp.install_timeout_s, env=env)
+            await _bounded_shell("pip install -q pytest", clone, inp.install_timeout_s, env=env)
             code, out = await _bounded_shell(
-                adapter.test_cmd(coverage=False), clone, inp.test_timeout_s,
-                env=env)
+                adapter.test_cmd(coverage=False), clone, inp.test_timeout_s, env=env
+            )
             test = build_probe.StepOutcome(code=code, output=out)
             if code != build_probe.TIMEOUT_CODE:
                 verdict = adapter.classify_test_exit(code)
 
         return build_probe.interpret(True, install, build, test, verdict)
-    except Exception as exc:                       # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("triage build probe failed: %s", exc)
         return SignalResult(
-            signal=build_probe.SIGNAL_ID, version=build_probe.VERSION,
-            collected=Measurement.not_collected(
-                f"build probe raised: {type(exc).__name__}: {exc}"))
+            signal=build_probe.SIGNAL_ID,
+            version=build_probe.VERSION,
+            collected=Measurement.not_collected(f"build probe raised: {type(exc).__name__}: {exc}"),
+        )
     finally:
         shutil.rmtree(workdir, ignore_errors=True)

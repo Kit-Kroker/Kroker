@@ -1,8 +1,16 @@
 """E-15/E-16: containment model contracts."""
+
 from sdlc.models import (
-    ContainmentConfig, ContainmentLayer, ContainmentReport, DeferredToolUse,
-    EscalationOutcome, HarnessKind, HarnessRunResult, PipelineConfig,
-    SessionDigest, ToolDenial, ToolGrant,
+    ContainmentLayer,
+    ContainmentReport,
+    DeferredToolUse,
+    EscalationOutcome,
+    HarnessKind,
+    HarnessRunResult,
+    PipelineConfig,
+    SessionDigest,
+    ToolDenial,
+    ToolGrant,
 )
 
 
@@ -13,9 +21,13 @@ def test_layer_is_str_enum_with_two_members():
 
 
 def test_tool_denial_round_trips():
-    d = ToolDenial(tool="Write", rule_id="no-out-of-worktree-write",
-                   layer=ContainmentLayer.HOOK, reason="scoped to worktree",
-                   target="/etc/passwd")
+    d = ToolDenial(
+        tool="Write",
+        rule_id="no-out-of-worktree-write",
+        layer=ContainmentLayer.HOOK,
+        reason="scoped to worktree",
+        target="/etc/passwd",
+    )
     assert ToolDenial.model_validate_json(d.model_dump_json()) == d
 
 
@@ -28,8 +40,7 @@ def test_containment_report_defaults_to_disabled():
 
 
 def test_harness_run_result_defaults_have_no_denials():
-    r = HarnessRunResult(harness=HarnessKind.CLAUDE_CODE, exit_code=0,
-                         summary="ok")
+    r = HarnessRunResult(harness=HarnessKind.CLAUDE_CODE, exit_code=0, summary="ok")
     assert r.denials == []
     assert r.containment is None
 
@@ -48,22 +59,27 @@ def test_pipeline_config_containment_is_off_by_default():
 def test_tool_grant_round_trips_through_json():
     """Grants travel on CodingTaskInput through the Temporal payload
     converter, so they must survive model_validate_json."""
-    g = ToolGrant(tool_use_id="toolu_1", tool="Write",
-                  input_digest="deadbeef", rule_id="no-out-of-worktree-write",
-                  approved=True, reason="fine by me")
+    g = ToolGrant(
+        tool_use_id="toolu_1",
+        tool="Write",
+        input_digest="deadbeef",
+        rule_id="no-out-of-worktree-write",
+        approved=True,
+        reason="fine by me",
+    )
     assert ToolGrant.model_validate_json(g.model_dump_json()) == g
 
 
 def test_deferred_tool_use_target_is_optional():
-    d = DeferredToolUse(tool_use_id="toolu_1", tool="Write",
-                        input_digest="deadbeef", rule_id="r", reason="why")
+    d = DeferredToolUse(
+        tool_use_id="toolu_1", tool="Write", input_digest="deadbeef", rule_id="r", reason="why"
+    )
     assert d.target is None
 
 
 def test_tool_denial_declines_default_to_false():
     """E-16 denials must keep their exact shape and meaning."""
-    d = ToolDenial(tool="Write", rule_id="r", layer=ContainmentLayer.HOOK,
-                   reason="nope")
+    d = ToolDenial(tool="Write", rule_id="r", layer=ContainmentLayer.HOOK, reason="nope")
     assert d.escalation_declined is False
 
 

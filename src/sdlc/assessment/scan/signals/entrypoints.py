@@ -16,6 +16,7 @@ so "partially extracted" is not representable in the contract.
 
 Pure: blobs in, records out.
 """
+
 from __future__ import annotations
 
 import posixpath
@@ -26,12 +27,24 @@ from pydantic import BaseModel
 
 from ....measurement import Measurement
 from ..models import (
-    C_BACKEND_ENTRY, CandidateMember, Confidence, EvidenceRef, MemberKind,
-    ScanSignalId, ScanSignalResult, SignalOutput, SignalSource, SourceCandidate,
+    C_BACKEND_ENTRY,
+    CandidateMember,
+    Confidence,
+    EvidenceRef,
+    MemberKind,
+    ScanSignalId,
+    ScanSignalResult,
+    SignalOutput,
+    SignalSource,
+    SourceCandidate,
     family_of,
 )
 from ..naming import (
-    GENERIC_NAMES, LAYER_NAMES, PATH_PREFIXES, head_token, normalize,
+    GENERIC_NAMES,
+    LAYER_NAMES,
+    PATH_PREFIXES,
+    head_token,
+    normalize,
     route_object,
 )
 
@@ -43,21 +56,23 @@ VERSION = 2
 
 class Framework(BaseModel):
     """One framework we can both DETECT and EXTRACT from."""
+
     name: str
     # regexes (MULTILINE) proving the framework is IMPORTED, not merely
     # mentioned. Anchored to import/require/using lines so the marker table
     # itself, a test fixture, or a `# ported from django` comment cannot trip
     # fail-closed on a repo that does not use the framework (review finding 4).
     detect: tuple[str, ...]
-    pattern: str                 # regex; groups are (method, path) or (name,)
+    pattern: str  # regex; groups are (method, path) or (name,)
     kind: MemberKind
-    method_group: int = 0        # 0 = no method group; the verb is implicit
+    method_group: int = 0  # 0 = no method group; the verb is implicit
     value_group: int = 1
 
 
 class Detector(BaseModel):
     """A framework we RECOGNIZE but cannot extract from. Its presence fails
     the signal closed (P2-D1) -- naming the gap is the whole point."""
+
     name: str
     detect: tuple[str, ...]
 
@@ -81,7 +96,10 @@ FRAMEWORKS: tuple[Framework, ...] = (
         name="fastapi",
         detect=(_PY_IMPORT.format(m="fastapi"),),
         pattern=r"@(?:\w+)\.(get|post|put|patch|delete)\(\s*['\"]([^'\"]+)",
-        kind=MemberKind.HTTP_ROUTE, method_group=1, value_group=2),
+        kind=MemberKind.HTTP_ROUTE,
+        method_group=1,
+        value_group=2,
+    ),
     Framework(
         name="flask",
         detect=(_PY_IMPORT.format(m="flask"),),
@@ -92,46 +110,67 @@ FRAMEWORKS: tuple[Framework, ...] = (
         # mixed methods= list yields its first declared method, which is one
         # of the route's true methods, never a guess.
         pattern=r"@(?:\w+)\.route\(\s*['\"]([^'\"]+)['\"]"
-                r"(?:[^)]*?methods\s*=\s*\[?\s*['\"]([A-Z]+)['\"])?",
-        kind=MemberKind.HTTP_ROUTE, method_group=2, value_group=1),
+        r"(?:[^)]*?methods\s*=\s*\[?\s*['\"]([A-Z]+)['\"])?",
+        kind=MemberKind.HTTP_ROUTE,
+        method_group=2,
+        value_group=1,
+    ),
     Framework(
         name="express",
         detect=(_ESM_IMPORT.format(m="express"), _CJS_REQUIRE.format(m="express")),
         pattern=r"\b(?:app|router)\.(get|post|put|patch|delete)"
-                r"\(\s*['\"]([^'\"]+)",
-        kind=MemberKind.HTTP_ROUTE, method_group=1, value_group=2),
+        r"\(\s*['\"]([^'\"]+)",
+        kind=MemberKind.HTTP_ROUTE,
+        method_group=1,
+        value_group=2,
+    ),
     Framework(
         name="nestjs",
         detect=(_ESM_IMPORT.format(m=r"@nestjs/common"),),
         pattern=r"@(Get|Post|Put|Patch|Delete)\(\s*['\"]?([^'\")]*)",
-        kind=MemberKind.HTTP_ROUTE, method_group=1, value_group=2),
+        kind=MemberKind.HTTP_ROUTE,
+        method_group=1,
+        value_group=2,
+    ),
     Framework(
         name="click",
         detect=(_PY_IMPORT.format(m="click"),),
         pattern=r"@\w+\.command\([^)]*\)\s*\ndef\s+(\w+)",
-        kind=MemberKind.CLI_COMMAND, value_group=1),
+        kind=MemberKind.CLI_COMMAND,
+        value_group=1,
+    ),
     Framework(
         name="celery",
         detect=(_PY_IMPORT.format(m="celery"),),
         pattern=r"@(?:shared_task|\w+\.task)\b[^\n]*\n(?:@[^\n]*\n)*"
-                r"def\s+(\w+)",
-        kind=MemberKind.SCHEDULED_JOB, value_group=1),
+        r"def\s+(\w+)",
+        kind=MemberKind.SCHEDULED_JOB,
+        value_group=1,
+    ),
 )
 
 UNSUPPORTED_FRAMEWORKS: tuple[Detector, ...] = (
     Detector(name="django", detect=(_PY_IMPORT.format(m="django"),)),
     Detector(name="spring", detect=(_JAVA_IMPORT.format(m=r"org\.springframework"),)),
-    Detector(name="rails", detect=(
-        r"(?m)^[ \t]*Rails\.application\b",
-        r"(?m)^[ \t]*(?:require|gem)[ ]+['\"]rails['\"]")),
+    Detector(
+        name="rails",
+        detect=(
+            r"(?m)^[ \t]*Rails\.application\b",
+            r"(?m)^[ \t]*(?:require|gem)[ ]+['\"]rails['\"]",
+        ),
+    ),
     Detector(name="laravel", detect=(_PHP_USE.format(m=r"Illuminate\\"),)),
     Detector(name="gin", detect=(_GO_IMPORT.format(m=r"github\.com/gin-gonic/gin"),)),
     Detector(name="echo", detect=(_GO_IMPORT.format(m=r"github\.com/labstack/echo"),)),
     Detector(name="aspnet", detect=(_CS_USING.format(m=r"Microsoft\.AspNetCore"),)),
-    Detector(name="grpc", detect=(
-        _PY_IMPORT.format(m="grpc"),
-        r"(?m)^[ \t]*import[ ]+io\.grpc",
-        _CS_USING.format(m=r"Grpc\.(?:AspNetCore|Core)"))),
+    Detector(
+        name="grpc",
+        detect=(
+            _PY_IMPORT.format(m="grpc"),
+            r"(?m)^[ \t]*import[ ]+io\.grpc",
+            _CS_USING.format(m=r"Grpc\.(?:AspNetCore|Core)"),
+        ),
+    ),
 )
 
 # Which member kind is most contract-ish, for choosing the rule a mixed
@@ -155,10 +194,10 @@ def detected(blobs: Mapping[str, str]) -> tuple[set[str], set[str]]:
     precise as the extraction (review finding 4, P2-D1).
     """
     text = "\n".join(blobs[p] for p in sorted(blobs))
-    supported = {f.name for f in FRAMEWORKS
-                 if any(re.search(d, text) for d in f.detect)}
-    unsupported = {d.name for d in UNSUPPORTED_FRAMEWORKS
-                   if any(re.search(p, text) for p in d.detect)}
+    supported = {f.name for f in FRAMEWORKS if any(re.search(d, text) for d in f.detect)}
+    unsupported = {
+        d.name for d in UNSUPPORTED_FRAMEWORKS if any(re.search(p, text) for p in d.detect)
+    }
     return supported, unsupported
 
 
@@ -178,7 +217,7 @@ def _specific_ancestor(path: str) -> str | None:
     ITSELF a layer/prefix ('server', 'api') -- which named the candidate after
     a delivery channel, contradicting the very rule that sent us here (review
     finding 5)."""
-    parts = path.split("/")[:-1]                      # drop the filename
+    parts = path.split("/")[:-1]  # drop the filename
     for seg in reversed(parts):
         if seg and not _is_non_specific(seg):
             return head_token(seg)
@@ -213,8 +252,7 @@ def _business_name(value: str, path: str, kind: MemberKind) -> str:
     return head_token(stem)
 
 
-def _members(blobs: Mapping[str, str], active: set[str]
-             ) -> list[tuple[CandidateMember, str]]:
+def _members(blobs: Mapping[str, str], active: set[str]) -> list[tuple[CandidateMember, str]]:
     """(member, business name) for every extractable entry point."""
     out: list[tuple[CandidateMember, str]] = []
     for framework in FRAMEWORKS:
@@ -237,8 +275,7 @@ def _members(blobs: Mapping[str, str], active: set[str]
                 # An OPTIONAL method group reads as None when it did not
                 # participate (Flask with no methods=), so fall through to
                 # the GET default rather than crashing or guessing.
-                method = (match.group(framework.method_group)
-                          if framework.method_group else None)
+                method = match.group(framework.method_group) if framework.method_group else None
                 if method:
                     value = f"{method.upper()} {raw}"
                 elif framework.kind is MemberKind.HTTP_ROUTE:
@@ -249,10 +286,12 @@ def _members(blobs: Mapping[str, str], active: set[str]
                 else:
                     value = raw
                 line = blobs[path].count("\n", 0, match.start()) + 1
-                out.append((
-                    CandidateMember(kind=framework.kind, value=value,
-                                    path=path, line=line),
-                    _business_name(value, path, framework.kind)))
+                out.append(
+                    (
+                        CandidateMember(kind=framework.kind, value=value, path=path, line=line),
+                        _business_name(value, path, framework.kind),
+                    )
+                )
     return out
 
 
@@ -268,10 +307,16 @@ def _contribution(members: list[CandidateMember]) -> Confidence:
 
 def _gap(reason: str) -> SignalOutput:
     nc = Measurement.not_collected(reason)
-    return SignalOutput(row=ScanSignalResult(
-        signal=ScanSignalId.S3, family=family_of(ScanSignalId.S3),
-        version=VERSION, source=SignalSource.COMPUTED, collected=nc,
-        categories={C_BACKEND_ENTRY: nc}))
+    return SignalOutput(
+        row=ScanSignalResult(
+            signal=ScanSignalId.S3,
+            family=family_of(ScanSignalId.S3),
+            version=VERSION,
+            source=SignalSource.COMPUTED,
+            collected=nc,
+            categories={C_BACKEND_ENTRY: nc},
+        )
+    )
 
 
 def evaluate(blobs: Mapping[str, str]) -> SignalOutput:
@@ -283,12 +328,14 @@ def evaluate(blobs: Mapping[str, str]) -> SignalOutput:
             f"backend_entry_points: detected framework(s) "
             f"{sorted(unsupported)} have no fingerprint in FRAMEWORKS; "
             f"extracting only {sorted(supported)} would hand a partial "
-            f"Contract tier downstream, which D5 forbids (P2-D1)")
+            f"Contract tier downstream, which D5 forbids (P2-D1)"
+        )
     if not supported:
         return _gap(
             f"backend_entry_points: no recognized backend framework in "
             f"{sorted(f.name for f in FRAMEWORKS)}; a repository with no "
-            f"parseable entry points is not a repository with none (D5)")
+            f"parseable entry points is not a repository with none (D5)"
+        )
 
     grouped: dict[str, list[CandidateMember]] = {}
     for member, name in _members(blobs, supported):
@@ -297,26 +344,34 @@ def evaluate(blobs: Mapping[str, str]) -> SignalOutput:
     candidates: list[SourceCandidate] = []
     for key, members in sorted(grouped.items()):
         by_kind = sorted({m.kind for m in members}, key=lambda k: k.value)
-        rule = next((r for kind, r in _KIND_RULE if kind in by_kind),
-                    "s3_entry_point")
+        rule = next((r for kind, r in _KIND_RULE if kind in by_kind), "s3_entry_point")
         counts = ", ".join(
-            f"{sum(1 for m in members if m.kind is kind)} "
-            f"{kind.value.replace('_', ' ')}(s)" for kind in by_kind)
-        candidates.append(SourceCandidate(
-            signal=ScanSignalId.S3, local_id=f"S3-{key}", name=key,
-            rule=rule,
-            detail=f"{counts} grouped by business operation, not by "
-                   f"technical type.",
-            confidence_contribution=_contribution(members),
-            members=members,
-            evidence=[EvidenceRef(path=m.path, lines=str(m.line))
-                      for m in members if m.path]))
+            f"{sum(1 for m in members if m.kind is kind)} {kind.value.replace('_', ' ')}(s)"
+            for kind in by_kind
+        )
+        candidates.append(
+            SourceCandidate(
+                signal=ScanSignalId.S3,
+                local_id=f"S3-{key}",
+                name=key,
+                rule=rule,
+                detail=f"{counts} grouped by business operation, not by technical type.",
+                confidence_contribution=_contribution(members),
+                members=members,
+                evidence=[EvidenceRef(path=m.path, lines=str(m.line)) for m in members if m.path],
+            )
+        )
 
     candidates.sort(key=lambda c: c.local_id)
     collected = Measurement.measured(float(len(candidates)))
     return SignalOutput(
         row=ScanSignalResult(
-            signal=ScanSignalId.S3, family=family_of(ScanSignalId.S3),
-            version=VERSION, source=SignalSource.COMPUTED,
-            collected=collected, categories={C_BACKEND_ENTRY: collected}),
-        sources=candidates)
+            signal=ScanSignalId.S3,
+            family=family_of(ScanSignalId.S3),
+            version=VERSION,
+            source=SignalSource.COMPUTED,
+            collected=collected,
+            categories={C_BACKEND_ENTRY: collected},
+        ),
+        sources=candidates,
+    )

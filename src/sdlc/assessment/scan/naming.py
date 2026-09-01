@@ -16,6 +16,7 @@ Known limitation, recorded as OQ-12: suffix stripping and singularization
 assume English identifiers. A non-English codebase degrades to
 LOW-confidence single-source candidates rather than to wrong ones.
 """
+
 from __future__ import annotations
 
 VERSION = 1
@@ -25,41 +26,141 @@ VERSION = 1
 # case-insensitive and picks the LONGEST match, so this tuple's order carries
 # no meaning ("Utils" must beat "Util" whichever is declared first).
 LAYER_SUFFIXES: tuple[str, ...] = (
-    "Controller", "Service", "Repository", "Handler", "Manager", "Resource",
-    "Router", "Route", "Consumer", "Listener", "Subscriber", "Publisher",
-    "Job", "Worker", "Task", "Scheduler", "Client", "Gateway", "Provider",
-    "Factory", "Builder", "Helper", "Helpers", "Utils", "Util", "Impl",
-    "Dao", "Dto", "Mapper", "Middleware", "ViewSet", "View", "Serializer",
-    "Schema", "Model", "Entity", "Repo", "Api", "Endpoint",
+    "Controller",
+    "Service",
+    "Repository",
+    "Handler",
+    "Manager",
+    "Resource",
+    "Router",
+    "Route",
+    "Consumer",
+    "Listener",
+    "Subscriber",
+    "Publisher",
+    "Job",
+    "Worker",
+    "Task",
+    "Scheduler",
+    "Client",
+    "Gateway",
+    "Provider",
+    "Factory",
+    "Builder",
+    "Helper",
+    "Helpers",
+    "Utils",
+    "Util",
+    "Impl",
+    "Dao",
+    "Dto",
+    "Mapper",
+    "Middleware",
+    "ViewSet",
+    "View",
+    "Serializer",
+    "Schema",
+    "Model",
+    "Entity",
+    "Repo",
+    "Api",
+    "Endpoint",
 )
 
 # Directory / module names that name no business capability. LOW contribution
 # and `s1_generic_name` (BrownKit's own list, extended with the container
 # directories a monorepo adds).
-GENERIC_NAMES: frozenset[str] = frozenset({
-    "util", "utils", "common", "core", "lib", "libs", "helper", "helpers",
-    "shared", "misc", "base", "internal", "pkg", "src", "app", "apps",
-    "packages", "modules", "code", "scripts", "tools", "vendor", "third_party",
-})
+GENERIC_NAMES: frozenset[str] = frozenset(
+    {
+        "util",
+        "utils",
+        "common",
+        "core",
+        "lib",
+        "libs",
+        "helper",
+        "helpers",
+        "shared",
+        "misc",
+        "base",
+        "internal",
+        "pkg",
+        "src",
+        "app",
+        "apps",
+        "packages",
+        "modules",
+        "code",
+        "scripts",
+        "tools",
+        "vendor",
+        "third_party",
+    }
+)
 
 # Names that describe a technical layer. Also LOW, but a DIFFERENT rule
 # (`s1_layer_name`), because E-48's guardrail -- "delivery channels and
 # deployment boundaries are not capabilities" -- needs the distinction, not
 # just its outcome (SourceCandidate's docstring).
-LAYER_NAMES: frozenset[str] = frozenset({
-    "controller", "controllers", "service", "services", "repository",
-    "repositories", "model", "models", "dto", "dtos", "api", "apis",
-    "handler", "handlers", "route", "routes", "router", "routers", "view",
-    "views", "serializer", "serializers", "middleware", "adapter", "adapters",
-    "interface", "interfaces", "schema", "schemas", "entity", "entities",
-    "config", "configs", "migration", "migrations", "test", "tests",
-    "mapper", "mappers", "dao", "daos", "resource", "resources",
-    # Delivery channels. E-48's guardrail names them explicitly: "delivery
-    # channels and deployment boundaries are not capabilities", so a file
-    # called cli.py or server.js names the channel, not the operation, and
-    # S3 falls back to its parent directory.
-    "cli", "server", "index", "main", "worker", "consumer", "job", "jobs",
-})
+LAYER_NAMES: frozenset[str] = frozenset(
+    {
+        "controller",
+        "controllers",
+        "service",
+        "services",
+        "repository",
+        "repositories",
+        "model",
+        "models",
+        "dto",
+        "dtos",
+        "api",
+        "apis",
+        "handler",
+        "handlers",
+        "route",
+        "routes",
+        "router",
+        "routers",
+        "view",
+        "views",
+        "serializer",
+        "serializers",
+        "middleware",
+        "adapter",
+        "adapters",
+        "interface",
+        "interfaces",
+        "schema",
+        "schemas",
+        "entity",
+        "entities",
+        "config",
+        "configs",
+        "migration",
+        "migrations",
+        "test",
+        "tests",
+        "mapper",
+        "mappers",
+        "dao",
+        "daos",
+        "resource",
+        "resources",
+        # Delivery channels. E-48's guardrail names them explicitly: "delivery
+        # channels and deployment boundaries are not capabilities", so a file
+        # called cli.py or server.js names the channel, not the operation, and
+        # S3 falls back to its parent directory.
+        "cli",
+        "server",
+        "index",
+        "main",
+        "worker",
+        "consumer",
+        "job",
+        "jobs",
+    }
+)
 
 
 def singularize(word: str) -> str:
@@ -76,8 +177,7 @@ def singularize(word: str) -> str:
     # markers: the first is already singular, the second is a Latin singular
     # whose trailing 's' is part of the stem. Stripping either invents a key
     # no source ever wrote (D9 rule 2).
-    if (len(word) > 2 and word.endswith("s")
-            and not word.endswith("ss") and not word.endswith("us")):
+    if len(word) > 2 and word.endswith("s") and not word.endswith("ss") and not word.endswith("us"):
         return word[:-1]
     return word
 
@@ -100,9 +200,10 @@ def head_token(name: str) -> str:
     for index, char in enumerate(first[1:], start=1):
         previous = first[index - 1]
         starts_word = char.isupper() and (
-            previous.islower()                       # payMent
-            or (index + 1 < len(first) and first[index + 1].islower()))
-        if starts_word:                              # HTTPServer -> HTTP
+            previous.islower()  # payMent
+            or (index + 1 < len(first) and first[index + 1].islower())
+        )
+        if starts_word:  # HTTPServer -> HTTP
             break
         out.append(char)
     return "".join(out)
@@ -117,8 +218,7 @@ def _strip_layer_suffix(name: str) -> str:
     by rule.
     """
     lowered = name.lower()
-    matches = [s for s in LAYER_SUFFIXES
-               if lowered.endswith(s.lower()) and len(name) > len(s)]
+    matches = [s for s in LAYER_SUFFIXES if lowered.endswith(s.lower()) and len(name) > len(s)]
     if not matches:
         return name
     return name[: -len(max(matches, key=len))]
@@ -141,10 +241,21 @@ def normalize(name: str) -> str:
 # consumer -- sources.py's rule: a table moves out when the second one
 # appears (D10). _is_non_specific reads it too, which is why the table moves
 # with route_object rather than the function alone.
-PATH_PREFIXES: frozenset[str] = frozenset({
-    "api", "apis", "rest", "graphql", "v1", "v2", "v3", "internal", "public",
-    "admin", "_next",
-})
+PATH_PREFIXES: frozenset[str] = frozenset(
+    {
+        "api",
+        "apis",
+        "rest",
+        "graphql",
+        "v1",
+        "v2",
+        "v3",
+        "internal",
+        "public",
+        "admin",
+        "_next",
+    }
+)
 
 
 def route_object(value: str) -> str | None:

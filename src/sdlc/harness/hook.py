@@ -14,6 +14,7 @@ solo — `defer` is discarded by the CLI when the assistant message carries
 sibling tool_use blocks, and the call would then fall through to
 acceptEdits. Every other path denies.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -23,8 +24,13 @@ from pathlib import Path
 
 from ..models import ToolGrant
 from .containment import (
-    ESCALATION_UNAVAILABLE, Action, Policy, evaluate, load_grants,
-    load_policy, match_grant,
+    ESCALATION_UNAVAILABLE,
+    Action,
+    Policy,
+    evaluate,
+    load_grants,
+    load_policy,
+    match_grant,
 )
 
 _EVENT = "PreToolUse"
@@ -60,8 +66,7 @@ def sibling_count(transcript_path: str | None, tool_use_id: str) -> int | None:
     if not transcript_path or not tool_use_id:
         return None
     try:
-        lines = Path(transcript_path).read_text(
-            encoding="utf-8", errors="replace").splitlines()
+        lines = Path(transcript_path).read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
         return None
     for ln in reversed(lines):
@@ -75,44 +80,48 @@ def sibling_count(transcript_path: str | None, tool_use_id: str) -> int | None:
         if not isinstance(ev, dict):
             continue
         message = ev.get("message")
-        content = (message or {}).get("content") if isinstance(
-            message, dict) else ev.get("content")
+        content = (message or {}).get("content") if isinstance(message, dict) else ev.get("content")
         if not isinstance(content, list):
             continue
-        blocks = [b for b in content
-                  if isinstance(b, dict) and b.get("type") == "tool_use"]
+        blocks = [b for b in content if isinstance(b, dict) and b.get("type") == "tool_use"]
         if any(b.get("id") == tool_use_id for b in blocks):
             return len(blocks)
     return None
 
 
-def _escalate(payload: dict, tool: str, tool_input: dict, rule_id: str,
-              reason: str, grants: list[ToolGrant]) -> dict:
+def _escalate(
+    payload: dict, tool: str, tool_input: dict, rule_id: str, reason: str, grants: list[ToolGrant]
+) -> dict:
     """Decide an ESCALATE match. Every branch that is not a clean defer or a
     granted allow ends in a deny — degradation is always toward deny."""
     tool_use_id = payload.get("tool_use_id") or ""
     grant = match_grant(grants, tool, tool_use_id, tool_input)
     if grant is not None:
         if grant.approved:
-            return _decision("allow", format_reason(
-                rule_id, f"approved: {grant.reason}" if grant.reason
-                else "approved"))
-        return _decision("deny", format_reason(
-            rule_id, f"rejected: {grant.reason}" if grant.reason
-            else "rejected"))
+            return _decision(
+                "allow",
+                format_reason(rule_id, f"approved: {grant.reason}" if grant.reason else "approved"),
+            )
+        return _decision(
+            "deny",
+            format_reason(rule_id, f"rejected: {grant.reason}" if grant.reason else "rejected"),
+        )
 
     siblings = sibling_count(payload.get("transcript_path"), tool_use_id)
     if siblings is None:
-        return _decision("deny", format_reason(
-            rule_id, f"{ESCALATION_UNAVAILABLE} (transcript): {reason}"))
+        return _decision(
+            "deny", format_reason(rule_id, f"{ESCALATION_UNAVAILABLE} (transcript): {reason}")
+        )
     if siblings > 1:
-        return _decision("deny", format_reason(
-            rule_id, f"{ESCALATION_UNAVAILABLE} (batched): {reason}"))
+        return _decision(
+            "deny", format_reason(rule_id, f"{ESCALATION_UNAVAILABLE} (batched): {reason}")
+        )
     return _decision("defer", format_reason(rule_id, reason))
 
 
-def decide(payload: dict, policy: Policy, worktree: str,
-           grants: list[ToolGrant] | None = None) -> dict:
+def decide(
+    payload: dict, policy: Policy, worktree: str, grants: list[ToolGrant] | None = None
+) -> dict:
     tool = payload.get("tool_name")
     tool_input = payload.get("tool_input") or {}
     if not isinstance(tool, str) or not isinstance(tool_input, dict):
@@ -123,8 +132,7 @@ def decide(payload: dict, policy: Policy, worktree: str,
     rule_id = verdict.rule_id or "unknown"
     reason = verdict.reason or "denied by containment policy"
     if verdict.action is Action.ESCALATE:
-        return _escalate(payload, tool, tool_input, rule_id, reason,
-                         grants or [])
+        return _escalate(payload, tool, tool_input, rule_id, reason, grants or [])
     return _decision("deny", format_reason(rule_id, reason))
 
 
@@ -140,11 +148,10 @@ def main(argv: list[str] | None = None) -> int:
         policy = load_policy(args.policy)
         grants = load_grants(args.grants)
         out = decide(payload, policy, args.worktree, grants)
-    except Exception as e:                        # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
         # Fail CLOSED. A hook that crashes open is worse than no hook: the
         # run would look contained while enforcing nothing.
-        out = _decision(
-            "deny", f"[containment-error] containment hook failed: {e}")
+        out = _decision("deny", f"[containment-error] containment hook failed: {e}")
 
     sys.stdout.write(json.dumps(out))
     sys.stdout.flush()

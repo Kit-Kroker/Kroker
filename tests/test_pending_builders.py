@@ -3,14 +3,17 @@ from __future__ import annotations
 from sdlc.gate import CheckClass, CheckResult
 from sdlc.models import OpenQuestion
 from sdlc.pending import (
-    GateContext, MergeGatePending, StageGatePending, TaskEscalationPending,
-    clarify_pending, gate_pending,
+    GateContext,
+    MergeGatePending,
+    StageGatePending,
+    TaskEscalationPending,
+    clarify_pending,
+    gate_pending,
 )
 
 
 def _q(qid, ans=None):
-    return OpenQuestion(id=qid, question=f"{qid}?", why_it_matters="w",
-                        suggested_answer="sugg")
+    return OpenQuestion(id=qid, question=f"{qid}?", why_it_matters="w", suggested_answer="sugg")
 
 
 def test_clarify_pending_skips_answered():
@@ -22,9 +25,9 @@ def test_clarify_pending_skips_answered():
 
 def test_gate_pending_merge_variant_carries_checks():
     ctx = GateContext(
-        checks=[CheckResult(name="coverage", passed=False,
-                            classification=CheckClass.ADVISORY)],
-        verdict="v")
+        checks=[CheckResult(name="coverage", passed=False, classification=CheckClass.ADVISORY)],
+        verdict="v",
+    )
     p = gate_pending("merge", 1, ctx)
     assert isinstance(p, MergeGatePending)
     assert p.key == "merge#1" and p.checks[0].name == "coverage" and p.verdict == "v"

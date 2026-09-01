@@ -8,9 +8,10 @@ this module instead.
 ASCII only, per channels/transport.py:12 -- the same strings can reach a
 Windows console through the CLI or a log line.
 """
+
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 from ..channels.contract import default_render
 from ..channels.inbox import RunInbox
@@ -38,28 +39,31 @@ def _pending_summary(pending: Sequence[PendingDecision]) -> str:
 
 
 def run_line(run: RunState, pending: Sequence[PendingDecision] = ()) -> str:
-    return " | ".join([
-        run.run_id,
-        run.mode,
-        f"stage {run.current_stage or 'not started'}",
-        run.status,
-        _pending_summary(pending),
-        _cost(run.cost_usd_total),
-    ])
+    return " | ".join(
+        [
+            run.run_id,
+            run.mode,
+            f"stage {run.current_stage or 'not started'}",
+            run.status,
+            _pending_summary(pending),
+            _cost(run.cost_usd_total),
+        ]
+    )
 
 
 def summary_line(s: RunSummary) -> str:
     status = getattr(s, "status", getattr(s, "outcome", "closed"))
-    return " | ".join([s.run_id, "closed", status,
-                       _cost(getattr(s, "cost_usd_total", None))])
+    return " | ".join([s.run_id, "closed", status, _cost(getattr(s, "cost_usd_total", None))])
 
 
 def pending_block(d: PendingDecision) -> str:
     r = default_render(d)
-    lines = [f"key: {r.key}",
-             f"title: {r.title}",
-             f"reply with: {r.reply_kind}",
-             f"detail: {r.body}"]
+    lines = [
+        f"key: {r.key}",
+        f"title: {r.title}",
+        f"reply with: {r.reply_kind}",
+        f"detail: {r.body}",
+    ]
     if r.suggested:
         lines.append(f"suggested: {r.suggested}")
     lines.extend(f"  {name}: {value}" for name, value in r.rows)
@@ -86,30 +90,29 @@ def runs_view(snap: FleetSnapshot, status: str) -> str:
 
 
 def run_detail(run: RunState, pending: Sequence[PendingDecision]) -> str:
-    blocks = [run_line(run, pending), f"title: {run.title}",
-              f"started: {run.started_at.isoformat()}"]
+    blocks = [
+        run_line(run, pending),
+        f"title: {run.title}",
+        f"started: {run.started_at.isoformat()}",
+    ]
     if run.repo_url:
         blocks.append(f"repo: {run.repo_url}")
     if run.budget_usd is not None:
-        blocks.append(f"budget: ${run.budget_usd:.2f} "
-                      f"({run.budget_crossings} crossing(s))")
+        blocks.append(f"budget: ${run.budget_usd:.2f} ({run.budget_crossings} crossing(s))")
     for d in pending:
         blocks.append("--\n" + pending_block(d))
     return "\n".join(blocks)
 
 
 def _inbox_run_block(item: RunInbox) -> str:
-    return "\n".join([f"run: {item.run_id}",
-                      *(pending_block(d) for d in item.pending)])
+    return "\n".join([f"run: {item.run_id}", *(pending_block(d) for d in item.pending)])
 
 
 def inbox_view(snap: FleetSnapshot) -> str:
     if not snap.inbox:
-        return (f"checked {snap.total_open_runs} open run(s); "
-                f"nothing pending a decision")
+        return f"checked {snap.total_open_runs} open run(s); nothing pending a decision"
     blocks = [_inbox_run_block(i) for i in snap.inbox]
-    head = (f"{len(snap.inbox)} of {snap.total_open_runs} open run(s) "
-            f"owe a decision:")
+    head = f"{len(snap.inbox)} of {snap.total_open_runs} open run(s) owe a decision:"
     return "\n\n".join([head, *blocks])
 
 
@@ -117,7 +120,6 @@ def orientation(snap: FleetSnapshot, cap: int = ORIENTATION_CAP) -> str:
     if not snap.runs:
         return "no open runs"
     if len(snap.runs) > cap:
-        return (f"{snap.total_open_runs} open runs -- too many to list; "
-                f"call list_runs for detail")
+        return f"{snap.total_open_runs} open runs -- too many to list; call list_runs for detail"
     lines = [run_line(r, pending_for(snap, r.run_id)) for r in snap.runs]
     return "\n".join(lines)

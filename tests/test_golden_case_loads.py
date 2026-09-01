@@ -3,7 +3,6 @@ from pathlib import Path
 from sdlc.benchmarks.cli import load_case_spec
 from sdlc.benchmarks.matrix import expand_matrix
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CASE = REPO_ROOT / "benchmarks" / "cases" / "add-login-greenfield" / "case.yaml"
 CONFIG = REPO_ROOT / "benchmarks" / "config.yaml"
@@ -14,12 +13,13 @@ def test_default_case_file_exists_and_loads():
     spec = load_case_spec(str(CASE))
     assert spec.case_id == "add-login-greenfield"
     cells = expand_matrix(spec)
-    assert len(cells) >= 2     # at least 2 harnesses × 1 model
+    assert len(cells) >= 2  # at least 2 harnesses × 1 model
 
 
 def test_config_yaml_has_weights():
     assert CONFIG.exists()
     import yaml
+
     cfg = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
     assert "weights" in cfg
     w = cfg["weights"]
@@ -32,8 +32,7 @@ def test_rubric_files_exist():
     assert (d / "rubric-clarifier.md").exists()
 
 
-CAT_CASE = (REPO_ROOT / "benchmarks" / "cases" / "cat-cafe-monitoring"
-            / "case.yaml")
+CAT_CASE = REPO_ROOT / "benchmarks" / "cases" / "cat-cafe-monitoring" / "case.yaml"
 
 
 def test_cat_cafe_case_loads_as_one_cell():
@@ -54,8 +53,7 @@ def test_cat_cafe_rubrics_are_all_registered():
     """A rubric file on disk that case.yaml does not name is dead weight;
     a named rubric with no file is silently skipped by load_case_assets."""
     spec = load_case_spec(str(CAT_CASE))
-    assert set(spec.rubrics) == {
-        "clarifier", "architect", "planner", "qa", "research"}
+    assert set(spec.rubrics) == {"clarifier", "architect", "planner", "qa", "research"}
     for rel in spec.rubrics.values():
         assert (CAT_CASE.parent / rel).exists()
 
@@ -65,8 +63,7 @@ def test_cat_cafe_description_preserves_every_activity():
     activities must survive into the case description."""
     spec = load_case_spec(str(CAT_CASE))
     body = spec.description.lower()
-    for activity in ("sleeping", "eating", "drinking", "litter",
-                     "playing", "fighting"):
+    for activity in ("sleeping", "eating", "drinking", "litter", "playing", "fighting"):
         assert activity in body, f"description dropped '{activity}'"
 
 
@@ -80,6 +77,11 @@ def test_cat_cafe_description_freezes_the_interface_contract():
     """The oracle grades through this contract; if a marker vanishes the
     oracle is asserting against an interface the case no longer freezes."""
     body = load_case_spec(str(CAT_CASE)).description
-    for marker in ("app:app", "POST /telemetry", "GET /floorplan",
-                   "GET /cats", "must not auto-start"):
+    for marker in (
+        "app:app",
+        "POST /telemetry",
+        "GET /floorplan",
+        "GET /cats",
+        "must not auto-start",
+    ):
         assert marker in body, f"contract marker {marker!r} missing"

@@ -1,5 +1,6 @@
 """D2: two routers, one process. The board's existing paths must not move --
 any agent client hitting /projects/* keeps working."""
+
 from interfaces.dashboard.api.main import app
 
 

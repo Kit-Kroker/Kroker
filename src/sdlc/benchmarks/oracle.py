@@ -6,6 +6,7 @@ language_match) and the grade_oracle Temporal activity (Task 4). The pure
 functions never do I/O so they unit-test without a Temporal environment or a
 git repo; the activity confines all git/shell/FS work.
 """
+
 from __future__ import annotations
 
 import os
@@ -123,8 +124,7 @@ def held_out_ok(changed_files: list[str], oracle_dirname: str = "oracle") -> boo
     the produced diff means the model itself wrote there -- a held-out breach
     the record must surface loudly."""
     prefix = oracle_dirname + "/"
-    return not any(f == oracle_dirname or f.startswith(prefix)
-                   for f in changed_files)
+    return not any(f == oracle_dirname or f.startswith(prefix) for f in changed_files)
 
 
 def language_match(manifest: str, detected: str | None) -> bool:
@@ -136,11 +136,11 @@ def language_match(manifest: str, detected: str | None) -> bool:
 class OracleInput:
     case_id: str
     repo_url: str
-    run_id: str            # child workflow id -> sdlc/<run_id>/integration
-    language: str          # manifest-declared (CaseSpec.language)
+    run_id: str  # child workflow id -> sdlc/<run_id>/integration
+    language: str  # manifest-declared (CaseSpec.language)
     base_branch: str = "main"
     test_timeout_s: int = 600
-    author_model: str = ""          # cell's dev model; only rubric tasks need it
+    author_model: str = ""  # cell's dev model; only rubric tasks need it
     judge_model: str | None = None  # spec.judge_model; only rubric tasks need it
 
 
@@ -161,17 +161,27 @@ def _cases_dir() -> Path:
     """Root holding benchmarks/cases/<case>/oracle/. Honors SDLC_CASES_ROOT
     (read at call time) so tests point it at a temp dir, mirroring
     recorder._root / activities._worktrees_root."""
-    return Path(os.environ.get(
-        "SDLC_CASES_ROOT",
-        str(Path(__file__).resolve().parents[3] / "benchmarks" / "cases")))
+    return Path(
+        os.environ.get(
+            "SDLC_CASES_ROOT", str(Path(__file__).resolve().parents[3] / "benchmarks" / "cases")
+        )
+    )
 
 
-def _grade(score, passed, total, lang, detected, held, detail,
-          task_grades: list[TaskGrade] | None = None) -> OracleGrade:
+def _grade(
+    score, passed, total, lang, detected, held, detail, task_grades: list[TaskGrade] | None = None
+) -> OracleGrade:
     return OracleGrade(
-        score=score, passed=passed, total=total, language_manifest=lang,
-        language_detected=detected, language_match=language_match(lang, detected),
-        held_out_ok=held, detail=detail, task_grades=task_grades or [])
+        score=score,
+        passed=passed,
+        total=total,
+        language_manifest=lang,
+        language_detected=detected,
+        language_match=language_match(lang, detected),
+        held_out_ok=held,
+        detail=detail,
+        task_grades=task_grades or [],
+    )
 
 
 @activity.defn
@@ -187,8 +197,7 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
     try:
         adapter = TOOLCHAINS[ToolchainKind(lang)]
     except (ValueError, KeyError):
-        return _grade(None, 0, 0, lang, None, True,
-                      f"no toolchain adapter for {lang!r}")
+        return _grade(None, 0, 0, lang, None, True, f"no toolchain adapter for {lang!r}")
 
     parent = tempfile.mkdtemp(prefix="oracle-")
     wt = os.path.join(parent, "wt")
@@ -198,8 +207,9 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
         # "already checked out" if the run's integration worktree still exists.
         add = _git(["worktree", "add", "--detach", wt, branch], inp.repo_url)
         if add.returncode != 0:
-            return _grade(None, 0, 0, lang, None, True,
-                          "no produced code (integration branch absent)")
+            return _grade(
+                None, 0, 0, lang, None, True, "no produced code (integration branch absent)"
+            )
 
         det = detect(wt)
         detected = det.kind.value if det else None
@@ -210,8 +220,7 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
 
         shutil.copytree(oracle_src, os.path.join(wt, "oracle"))
         report = os.path.join(wt, "oracle-report.xml")
-        await _bounded_shell(adapter.oracle_test_cmd("oracle", report),
-                             wt, inp.test_timeout_s)
+        await _bounded_shell(adapter.oracle_test_cmd("oracle", report), wt, inp.test_timeout_s)
         try:
             xml_text = Path(report).read_text(encoding="utf-8")
         except OSError:
@@ -236,8 +245,7 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
                 needs_diff = any(t.rubric for t in suite.tasks)
                 full_diff = ""
                 if needs_diff:
-                    diff_res = _git(
-                        ["diff", f"{inp.base_branch}...HEAD"], wt)
+                    diff_res = _git(["diff", f"{inp.base_branch}...HEAD"], wt)
                     full_diff = _truncate_diff(diff_res.stdout)
                 for t in suite.tasks:
                     if t.rubric:
@@ -247,10 +255,14 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
                         # activity otherwise, and a timeout would lose the
                         # whole cell's oracle grade, not just task grades.
                         _safe_heartbeat()
-                        qs = _judge_sync(JudgeInput(
-                            artifact_json=full_diff, rubric=t.rubric,
-                            author_model=inp.author_model,
-                            judge_model=inp.judge_model))
+                        qs = _judge_sync(
+                            JudgeInput(
+                                artifact_json=full_diff,
+                                rubric=t.rubric,
+                                author_model=inp.author_model,
+                                judge_model=inp.judge_model,
+                            )
+                        )
                         if qs.score is not None:
                             judge_scores[t.id] = qs.score
                 task_grades = grade_tasks(suite, testcase_results, judge_scores)
@@ -258,8 +270,7 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
             # a broken tasks.yaml or judge call never fails the case-level
             # oracle grade -- it just contributes no task grades.
             task_grades = []
-        return _grade(score, passed, total, lang, detected, held, detail,
-                     task_grades=task_grades)
+        return _grade(score, passed, total, lang, detected, held, detail, task_grades=task_grades)
     except Exception as e:  # fail-safe: a broken grader never fails a cell
         return _grade(None, 0, 0, lang, None, True, f"grade_oracle error: {e}")
     finally:

@@ -1,4 +1,5 @@
 """The todo-api reference oracle is authored and wired (E-31)."""
+
 from pathlib import Path
 
 from sdlc.benchmarks.cli import load_case_spec

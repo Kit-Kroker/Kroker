@@ -1,5 +1,6 @@
 """Live-run read verbs over a fake poller. No Temporal, no server, no model."""
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 
 import pytest
 
@@ -11,11 +12,11 @@ from sdlc.operator.deps import OperatorDeps
 from sdlc.operator.errors import ToolError
 from sdlc.pending import ClarifyPending, StageGatePending
 
-AT = datetime(2026, 8, 20, 9, 0, tzinfo=timezone.utc)
-GATE = StageGatePending(key="architecture#2", gate="architecture", round=2,
-                        spec_summary="two services")
-Q1 = ClarifyPending(key="Q1", question="Which auth provider?",
-                    why_it_matters="drives the schema")
+AT = datetime(2026, 8, 20, 9, 0, tzinfo=UTC)
+GATE = StageGatePending(
+    key="architecture#2", gate="architecture", round=2, spec_summary="two services"
+)
+Q1 = ClarifyPending(key="Q1", question="Which auth provider?", why_it_matters="drives the schema")
 
 
 class FakePoller:
@@ -27,16 +28,25 @@ class FakePoller:
 
 
 def a_run(run_id="feature-add-sso"):
-    return RunState(run_id=run_id, title="Add SSO", mode="brownfield",
-                    status="awaiting:architecture", started_at=AT,
-                    current_stage="architecture", cost_usd_total=4.12)
+    return RunState(
+        run_id=run_id,
+        title="Add SSO",
+        mode="brownfield",
+        status="awaiting:architecture",
+        started_at=AT,
+        current_stage="architecture",
+        cost_usd_total=4.12,
+    )
 
 
 @pytest.fixture
 def deps():
-    snap = FleetSnapshot(at=AT, total_open_runs=1, runs=[a_run()],
-                         inbox=[RunInbox(run_id="feature-add-sso",
-                                         pending=[GATE, Q1])])
+    snap = FleetSnapshot(
+        at=AT,
+        total_open_runs=1,
+        runs=[a_run()],
+        inbox=[RunInbox(run_id="feature-add-sso", pending=[GATE, Q1])],
+    )
     return OperatorDeps(poller=FakePoller(snap), board=None, starter=None)
 
 

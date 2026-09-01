@@ -1,6 +1,7 @@
 # src/sdlc/board/schema.py
 """SQLite DDL for the board. apply_schema is idempotent — safe to call on
 every BoardStore construction, which is how a fresh DB file bootstraps."""
+
 from __future__ import annotations
 
 import os
@@ -125,7 +126,7 @@ def connect(path: str | os.PathLike) -> sqlite3.Connection:
     parent = os.path.dirname(p)
     if parent:
         os.makedirs(parent, exist_ok=True)
-    conn = sqlite3.connect(p, isolation_level=None)   # explicit BEGIN control
+    conn = sqlite3.connect(p, isolation_level=None)  # explicit BEGIN control
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")

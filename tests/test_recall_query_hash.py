@@ -8,16 +8,13 @@ def test_hash_is_stable_across_filter_ordering():
 
 
 def test_watermark_changes_the_hash():
-    assert (recall_query_hash("b", "q", {}, "5")
-            != recall_query_hash("b", "q", {}, "6"))
+    assert recall_query_hash("b", "q", {}, "5") != recall_query_hash("b", "q", {}, "6")
 
 
 def test_absent_watermark_is_distinct_from_a_literal_none_string():
-    assert (recall_query_hash("b", "q", {}, None)
-            != recall_query_hash("b", "q", {}, "none"))
+    assert recall_query_hash("b", "q", {}, None) != recall_query_hash("b", "q", {}, "none")
 
 
 def test_bank_and_query_are_separated_unambiguously():
     # "a|b" + "c" must not collide with "a" + "b|c".
-    assert (recall_query_hash("a|b", "c", {}, None)
-            != recall_query_hash("a", "b|c", {}, None))
+    assert recall_query_hash("a|b", "c", {}, None) != recall_query_hash("a", "b|c", {}, None)

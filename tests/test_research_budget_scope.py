@@ -1,18 +1,18 @@
 """Scoped budgets: each sub-question gets its own counter so one cannot drain
 the run, while a shared 'run' counter still caps the total."""
+
 import json
 
 import pytest
 
-from sdlc.research.budget_store import (budget_path, charge_persisted,
-                                        charge_scoped)
+from sdlc.research.budget_store import budget_path, charge_persisted, charge_scoped
 from sdlc.research.deps import BudgetExceeded, ResearchDeps
 
 
 def _deps(run_id: str = "r1", max_fetches: int = 2) -> ResearchDeps:
-    return ResearchDeps(run_id=run_id, provider="fake",
-                        max_searches=2, max_fetches=max_fetches,
-                        max_cost_usd=1.0)
+    return ResearchDeps(
+        run_id=run_id, provider="fake", max_searches=2, max_fetches=max_fetches, max_cost_usd=1.0
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -54,22 +54,18 @@ async def test_charge_scoped_trips_on_the_run_ceiling_even_when_the_scope_is_fin
     # FETCH_COST_USD is 0.02, so 4 fetches = $0.08. A run ceiling of $0.05
     # trips on the third even though each sub-question scope allows more.
     for i in range(2):
-        await charge_scoped(_deps(max_fetches=10), fetch=1,
-                            scope=f"sq-{i}", run_max_cost_usd=0.05)
+        await charge_scoped(_deps(max_fetches=10), fetch=1, scope=f"sq-{i}", run_max_cost_usd=0.05)
     with pytest.raises(BudgetExceeded):
-        await charge_scoped(_deps(max_fetches=10), fetch=1,
-                            scope="sq-2", run_max_cost_usd=0.05)
+        await charge_scoped(_deps(max_fetches=10), fetch=1, scope="sq-2", run_max_cost_usd=0.05)
 
 
 @pytest.mark.asyncio
 async def test_charge_scoped_does_not_charge_the_scope_when_the_run_ceiling_trips():
     # The run check runs FIRST. A sub-question must not be billed for work
     # the run ceiling refused.
-    await charge_scoped(_deps(max_fetches=10), fetch=1,
-                        scope="sq-0", run_max_cost_usd=0.03)
+    await charge_scoped(_deps(max_fetches=10), fetch=1, scope="sq-0", run_max_cost_usd=0.03)
     with pytest.raises(BudgetExceeded):
-        await charge_scoped(_deps(max_fetches=10), fetch=1,
-                            scope="sq-1", run_max_cost_usd=0.03)
+        await charge_scoped(_deps(max_fetches=10), fetch=1, scope="sq-1", run_max_cost_usd=0.03)
     assert not budget_path("r1", "sq-1").exists()
 
 
@@ -80,8 +76,7 @@ async def test_charge_scoped_with_run_scope_charges_once_not_twice():
     Charging both -- as charge_scoped does for sub-questions -- writes that
     file twice, doubles the count, and makes max_searches/max_fetches bind at
     half. The single charge must record the counter once."""
-    await charge_scoped(_deps(max_fetches=2), fetch=1, scope="run",
-                        run_max_cost_usd=4.0)
+    await charge_scoped(_deps(max_fetches=2), fetch=1, scope="run", run_max_cost_usd=4.0)
     assert json.loads(budget_path("r1", "run").read_text())["fetches"] == 1
 
 
@@ -89,13 +84,10 @@ async def test_charge_scoped_with_run_scope_charges_once_not_twice():
 async def test_charge_scoped_with_run_scope_enforces_count_at_full_allowance():
     """The half-allowance symptom: max_fetches=2 must permit a 2nd fetch, not
     trip on it because the first call already recorded 2."""
-    await charge_scoped(_deps(max_fetches=2), fetch=1, scope="run",
-                        run_max_cost_usd=4.0)
-    await charge_scoped(_deps(max_fetches=2), fetch=1, scope="run",
-                        run_max_cost_usd=4.0)
+    await charge_scoped(_deps(max_fetches=2), fetch=1, scope="run", run_max_cost_usd=4.0)
+    await charge_scoped(_deps(max_fetches=2), fetch=1, scope="run", run_max_cost_usd=4.0)
     with pytest.raises(BudgetExceeded):
-        await charge_scoped(_deps(max_fetches=2), fetch=1, scope="run",
-                            run_max_cost_usd=4.0)
+        await charge_scoped(_deps(max_fetches=2), fetch=1, scope="run", run_max_cost_usd=4.0)
 
 
 @pytest.mark.asyncio
@@ -104,13 +96,15 @@ async def test_research_subquestion_charges_its_own_scope():
     # sub-question's scope rather than the shared run counter.
     from sdlc.models import ResearchBrief, SubQuestion
     from sdlc.research.stage import SubQuestionInput
-    from sdlc.research.stage import (
-        _research_subquestion_impl as research_subquestion)
+    from sdlc.research.stage import _research_subquestion_impl as research_subquestion
 
     inp = SubQuestionInput(
         sub_question=SubQuestion(id="sq-7", question="q"),
-        deps=_deps(), model="test-model", max_requests=40,
-        max_run_cost_usd=4.0)
+        deps=_deps(),
+        model="test-model",
+        max_requests=40,
+        max_run_cost_usd=4.0,
+    )
 
     captured = {}
 
@@ -126,6 +120,7 @@ async def test_research_subquestion_charges_its_own_scope():
             class _R:
                 output = ResearchBrief(summary="s")
                 usage = _U()
+
             return _R()
 
     await research_subquestion(inp, _agent=_Agent())

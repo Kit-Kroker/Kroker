@@ -1,6 +1,7 @@
 # tests/test_risk_severity.py
 """RD4: criticality is derived, severity is a table, and absence never
 becomes a rating."""
+
 from __future__ import annotations
 
 import random
@@ -8,28 +9,36 @@ import random
 from sdlc.assessment.risk.models import Criticality, Severity
 from sdlc.assessment.risk.severity import criticality, severity
 from sdlc.assessment.scan.models import (
-    CandidateMember, Confidence, MemberKind, Sensitivity, SensitivityRecord,
+    CandidateMember,
+    Confidence,
+    MemberKind,
+    Sensitivity,
+    SensitivityRecord,
 )
 from sdlc.measurement import CollectionState
-
 from tests.helpers_risk import capability
 
 
 def _sens(kind: Sensitivity) -> SensitivityRecord:
-    return SensitivityRecord(classification=kind, entity="customer",
-                             origin="table", fields=["email"], rule="r",
-                             confidence=Confidence.HIGH)
+    return SensitivityRecord(
+        classification=kind,
+        entity="customer",
+        origin="table",
+        fields=["email"],
+        rule="r",
+        confidence=Confidence.HIGH,
+    )
 
 
 def _route(value: str = "POST /api/pay") -> CandidateMember:
-    return CandidateMember(kind=MemberKind.HTTP_ROUTE, value=value,
-                           path="src/a.py")
+    return CandidateMember(kind=MemberKind.HTTP_ROUTE, value=value, path="src/a.py")
 
 
 def test_regulated_data_plus_a_reachable_route_is_high():
-    r = criticality(capability(sensitivity=(_sens(Sensitivity.HEALTH),),
-                               members=(_route(),)),
-                    sensitivity_collected=True)
+    r = criticality(
+        capability(sensitivity=(_sens(Sensitivity.HEALTH),), members=(_route(),)),
+        sensitivity_collected=True,
+    )
     assert r.level is Criticality.HIGH
 
 
@@ -49,9 +58,10 @@ def test_no_sensitivity_is_not_collected_when_ss4_did_not_collect():
 
 
 def test_a_high_hint_on_a_high_criticality_capability_is_critical():
-    r = criticality(capability(sensitivity=(_sens(Sensitivity.PII),),
-                               members=(_route(),)),
-                    sensitivity_collected=True)
+    r = criticality(
+        capability(sensitivity=(_sens(Sensitivity.PII),), members=(_route(),)),
+        sensitivity_collected=True,
+    )
     assert severity("high", r, Confidence.HIGH) is Severity.CRITICAL
 
 
@@ -80,6 +90,7 @@ def test_criticality_is_order_independent():
         random.shuffle(members)
         out = criticality(
             capability(sensitivity=tuple(records), members=tuple(members)),
-            sensitivity_collected=True).model_dump_json()
+            sensitivity_collected=True,
+        ).model_dump_json()
         first = first if first is not None else out
         assert out == first

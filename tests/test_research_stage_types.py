@@ -1,5 +1,6 @@
 """ResearchConfig gains fan-out bounds. The existing per-run caps are
 REINTERPRETED as per-sub-question; max_run_cost_usd is the new run ceiling."""
+
 from sdlc.models import ResearchConfig
 
 
@@ -25,8 +26,7 @@ def test_run_ceiling_covers_the_default_fan_out_width():
     assert cfg.max_run_cost_usd >= cfg.max_sub_questions * cfg.max_cost_usd
 
 
-from sdlc.models import (ResearchBrief, ResearchPlan, RoleUsage, SubQuestion,
-                         SubQuestionFinding)
+from sdlc.models import ResearchBrief, ResearchPlan, RoleUsage, SubQuestion, SubQuestionFinding
 
 
 def test_research_plan_carries_usage():
@@ -39,8 +39,8 @@ def test_research_plan_carries_usage():
 
 def test_sub_question_finding_carries_usage_and_a_brief():
     f = SubQuestionFinding(
-        sub_question=SubQuestion(id="sq-0", question="what?"),
-        brief=ResearchBrief(summary="s"))
+        sub_question=SubQuestion(id="sq-0", question="what?"), brief=ResearchBrief(summary="s")
+    )
     assert isinstance(f.usage, RoleUsage)
     assert f.failed is False
     assert f.error == ""
@@ -49,6 +49,9 @@ def test_sub_question_finding_carries_usage_and_a_brief():
 def test_sub_question_finding_can_represent_a_permanent_failure():
     f = SubQuestionFinding(
         sub_question=SubQuestion(id="sq-1", question="what?"),
-        brief=ResearchBrief(), failed=True, error="RefusalError: declined")
+        brief=ResearchBrief(),
+        failed=True,
+        error="RefusalError: declined",
+    )
     assert f.failed
     assert "declined" in f.error

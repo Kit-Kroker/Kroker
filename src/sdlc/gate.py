@@ -12,16 +12,17 @@ project's config marks it advisory. The advisory LLM `MergeVerdict` is NOT
 consulted here — it is only ever an advisory input to a SOFT merge gate,
 after this gate has already passed.
 """
+
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class CheckClass(str, Enum):
-    ABSOLUTE = "absolute"    # never overridable (lint, build, critical security)
-    ADVISORY = "advisory"    # overridable by an audited human decision
+class CheckClass(StrEnum):
+    ABSOLUTE = "absolute"  # never overridable (lint, build, critical security)
+    ADVISORY = "advisory"  # overridable by an audited human decision
 
 
 class CheckResult(BaseModel):
@@ -33,15 +34,16 @@ class CheckResult(BaseModel):
 
 class GateOverride(BaseModel):
     """An audited human override of a failed advisory check."""
+
     check: str
-    approved_by: str          # human identity (retained as calibration signal)
+    approved_by: str  # human identity (retained as calibration signal)
     reason: str
 
 
 class GateReport(BaseModel):
     passed: bool
-    blocking: list[str] = Field(default_factory=list)     # check names still blocking
-    overridden: list[str] = Field(default_factory=list)   # advisory checks waved through
+    blocking: list[str] = Field(default_factory=list)  # check names still blocking
+    overridden: list[str] = Field(default_factory=list)  # advisory checks waved through
     checks: list[CheckResult]
 
 
@@ -49,27 +51,27 @@ class QualityGateInput(BaseModel):
     """Input contract for the `evaluate_gate` activity. Lives next to the
     gate types it references (CheckResult/GateOverride) so the pure gate
     module is the single home for the gate's data model."""
+
     checks: list[CheckResult]
     overrides: list[GateOverride] | None = None
 
 
 # Never demotable to advisory, whatever a project configures.
-ABSOLUTE_FLOOR: frozenset[str] = frozenset({
-    "security_no_critical",
-    # FR-915: "the scan could not run" is as absolute as "the scan found a
-    # critical". Outside the floor, a call site could request ADVISORY and
-    # reopen the bypass this check exists to close.
-    "security_scan_collected",
-})
+ABSOLUTE_FLOOR: frozenset[str] = frozenset(
+    {
+        "security_no_critical",
+        # FR-915: "the scan could not run" is as absolute as "the scan found a
+        # critical". Outside the floor, a call site could request ADVISORY and
+        # reopen the bypass this check exists to close.
+        "security_scan_collected",
+    }
+)
 
 
-def build_check(name: str, passed: bool, requested: CheckClass,
-                detail: str = "") -> CheckResult:
+def build_check(name: str, passed: bool, requested: CheckClass, detail: str = "") -> CheckResult:
     """Construct a CheckResult, forcing floor checks to ABSOLUTE."""
-    classification = (CheckClass.ABSOLUTE if name in ABSOLUTE_FLOOR
-                      else requested)
-    return CheckResult(name=name, passed=passed,
-                       classification=classification, detail=detail)
+    classification = CheckClass.ABSOLUTE if name in ABSOLUTE_FLOOR else requested
+    return CheckResult(name=name, passed=passed, classification=classification, detail=detail)
 
 
 def evaluate_quality_gate(
@@ -83,10 +85,9 @@ def evaluate_quality_gate(
         if c.passed:
             continue
         if c.classification is CheckClass.ABSOLUTE:
-            blocking.append(c.name)                 # absolute: override ignored
+            blocking.append(c.name)  # absolute: override ignored
         elif c.name in override_names:
-            overridden.append(c.name)               # advisory: audited waiver
+            overridden.append(c.name)  # advisory: audited waiver
         else:
             blocking.append(c.name)
-    return GateReport(passed=not blocking, blocking=blocking,
-                      overridden=overridden, checks=checks)
+    return GateReport(passed=not blocking, blocking=blocking, overridden=overridden, checks=checks)

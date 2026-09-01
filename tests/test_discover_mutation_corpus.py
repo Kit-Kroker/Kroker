@@ -1,6 +1,7 @@
 """E-47b: known mutations against a synthetic tree, each with a labelled
 expected outcome. Generates ground truth instead of hand-labelling it, which
 is what E-47a's refactor corpus does for identity."""
+
 from __future__ import annotations
 
 from sdlc.assessment.discover.attribution import attribute
@@ -32,7 +33,7 @@ def test_baseline_attributes_the_import_chain():
 
 def test_mutation_deleting_the_only_import_makes_a_file_dead():
     tree = dict(BASE)
-    tree["src/payments/service.py"] = "pass\n"    # no longer imports repo
+    tree["src/payments/service.py"] = "pass\n"  # no longer imports repo
     report = attribute(tree, [], MEMBERS, [])
     assert _bucket(report, "src/payments/repo.py") is FileBucket.DEAD
 
@@ -53,8 +54,8 @@ def test_known_false_positive_a_dynamic_reference_reads_as_dead():
     """
     tree = dict(BASE)
     tree["src/payments/service.py"] = (
-        "import importlib\n"
-        "repo = importlib.import_module('src.payments.repo')\n")
+        "import importlib\nrepo = importlib.import_module('src.payments.repo')\n"
+    )
     report = attribute(tree, [], MEMBERS, [])
     assert _bucket(report, "src/payments/repo.py") is FileBucket.DEAD
 

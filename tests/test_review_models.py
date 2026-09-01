@@ -1,15 +1,22 @@
 from sdlc.models import (
-    PipelineConfig, ReviewFinding, ReviewReport, RoleConfig, TaskResult,
+    PipelineConfig,
+    ReviewFinding,
+    ReviewReport,
+    RoleConfig,
+    TaskResult,
 )
 
 
 def test_blocking_findings_filters_to_critical_and_high():
-    r = ReviewReport(approve=False, findings=[
-        ReviewFinding(assertion="a1", severity="critical", detail="boom"),
-        ReviewFinding(assertion="a2", severity="high", detail="bad"),
-        ReviewFinding(assertion="a3", severity="medium", detail="meh"),
-        ReviewFinding(assertion="a4", severity="low", detail="nit"),
-    ])
+    r = ReviewReport(
+        approve=False,
+        findings=[
+            ReviewFinding(assertion="a1", severity="critical", detail="boom"),
+            ReviewFinding(assertion="a2", severity="high", detail="bad"),
+            ReviewFinding(assertion="a3", severity="medium", detail="meh"),
+            ReviewFinding(assertion="a4", severity="low", detail="nit"),
+        ],
+    )
     sev = [f.severity for f in r.blocking_findings]
     assert sev == ["critical", "high"]
 

@@ -7,30 +7,41 @@ classification, control disposition) land in plan 2. Until then the baseline
 states what it does not know rather than guessing, exactly as E-48's DD6
 baseline does.
 """
+
 from __future__ import annotations
 
 import hashlib
 
+from ...measurement import CollectionState, Measurement
 from ..discover.map import Capability, CapabilityMap
 from ..scan.models import (
-    C_COVERAGE, C_DATA_SENSITIVITY, C_TESTABILITY, EvidenceRef,
+    C_COVERAGE,
+    C_DATA_SENSITIVITY,
+    C_TESTABILITY,
+    EvidenceRef,
     security_identity,
 )
-from ...measurement import CollectionState, Measurement
 from .composites import compose, unified
 from .controls import controls
 from .crosscap import system_view
 from .factors import qa_factors, security_factors
 from .models import (
-    CapabilityRisk, RiskSource, StrideCategory, SystemRisk, ThreatAssessment,
-    UnifiedRiskMap, Vulnerability, VulnerabilityClass,
+    CapabilityRisk,
+    RiskSource,
+    StrideCategory,
+    SystemRisk,
+    ThreatAssessment,
+    UnifiedRiskMap,
+    Vulnerability,
+    VulnerabilityClass,
 )
 from .severity import criticality, severity
 
 _NO_JUDGMENT = (
     "deterministic baseline: STRIDE applicability is the risk proposer's "
     "judgment, and this row records that no judgment was applied -- not a "
-    "finding of inapplicability. See UnifiedRiskMap.judgment for why")
+    "finding of inapplicability. See UnifiedRiskMap.judgment for why"
+)
 
 
 def _degraded_system(reason: str) -> SystemRisk:
@@ -44,7 +55,6 @@ def _degraded_system(reason: str) -> SystemRisk:
 
 
 def no_risk(reason: str) -> UnifiedRiskMap:
-
     """RD8: the phase produced no map, and says why.
 
     Never an empty map with a measured `collected` -- zero vulnerabilities
@@ -55,14 +65,14 @@ def no_risk(reason: str) -> UnifiedRiskMap:
 
 
 def _threats() -> tuple[ThreatAssessment, ...]:
-    return tuple(ThreatAssessment(category=c, applicable=False,
-                                  rationale=_NO_JUDGMENT)
-                 for c in StrideCategory)
+    return tuple(
+        ThreatAssessment(category=c, applicable=False, rationale=_NO_JUDGMENT)
+        for c in StrideCategory
+    )
 
 
 def _vulnerabilities(cap: Capability, rating) -> tuple[Vulnerability, ...]:
-    rows = sorted(cap.security,
-                  key=lambda o: (o.signal.value, o.rule, o.path, o.line or 0))
+    rows = sorted(cap.security, key=lambda o: (o.signal.value, o.rule, o.path, o.line or 0))
     return tuple(
         Vulnerability(
             key=security_identity(o),
@@ -73,58 +83,73 @@ def _vulnerabilities(cap: Capability, rating) -> tuple[Vulnerability, ...]:
             # The baseline cannot link a threat it did not judge; the
             # proposer's linkage replaces this in apply_judgment.
             stride_category=StrideCategory.INFORMATION_DISCLOSURE,
-            path=o.path, line=o.line,
-            evidence=(EvidenceRef(path=o.path,
-                                  lines=str(o.line) if o.line else ""),),
-            source=RiskSource.BASELINE)
-        for o in rows)
+            path=o.path,
+            line=o.line,
+            evidence=(EvidenceRef(path=o.path, lines=str(o.line) if o.line else ""),),
+            source=RiskSource.BASELINE,
+        )
+        for o in rows
+    )
 
 
-def build(cmap: CapabilityMap, *,
-          collected_categories: frozenset[str]) -> UnifiedRiskMap:
+def build(cmap: CapabilityMap, *, collected_categories: frozenset[str]) -> UnifiedRiskMap:
     """One CapabilityRisk per capability, sorted by bc_id."""
     if cmap.collected.state is not CollectionState.MEASURED:
         return no_risk(
             f"discover did not collect ({cmap.collected.reason}), so there "
-            f"is no capability set to assess")
+            f"is no capability set to assess"
+        )
     if not cmap.capabilities:
         return no_risk(
             "discover collected but identified no capabilities, so there is "
             "nothing to score -- a map over zero capabilities would read as "
-            "a clean risk map")
+            "a clean risk map"
+        )
 
     sensitivity_collected = C_DATA_SENSITIVITY in collected_categories
     rows: list[CapabilityRisk] = []
     for cap in sorted(cmap.capabilities, key=lambda c: c.bc_id):
         rating = criticality(cap, sensitivity_collected=sensitivity_collected)
-        control_rows = controls(cap,
-                                collected_categories=collected_categories)
+        control_rows = controls(cap, collected_categories=collected_categories)
         sec = compose(
-            security_factors(cap, rating=rating, controls_rows=control_rows,
-                             collected_categories=collected_categories),
-            label="security")
+            security_factors(
+                cap,
+                rating=rating,
+                controls_rows=control_rows,
+                collected_categories=collected_categories,
+            ),
+            label="security",
+        )
         qa = compose(
-            qa_factors(cap,
-                       coverage_collected=C_COVERAGE in collected_categories,
-                       testability_collected=C_TESTABILITY in collected_categories),
-            label="qa")
-        rows.append(CapabilityRisk(
-            bc_id=cap.bc_id, criticality=rating, threats=_threats(),
-            vulnerabilities=_vulnerabilities(cap, rating),
-            controls=control_rows, security=sec, qa=qa,
-            unified=unified(sec, qa)))
+            qa_factors(
+                cap,
+                coverage_collected=C_COVERAGE in collected_categories,
+                testability_collected=C_TESTABILITY in collected_categories,
+            ),
+            label="qa",
+        )
+        rows.append(
+            CapabilityRisk(
+                bc_id=cap.bc_id,
+                criticality=rating,
+                threats=_threats(),
+                vulnerabilities=_vulnerabilities(cap, rating),
+                controls=control_rows,
+                security=sec,
+                qa=qa,
+                unified=unified(sec, qa),
+            )
+        )
 
     rows_out = tuple(rows)
     try:
-        sys_view = system_view(cmap, rows_out,
-                               collected_categories=collected_categories)
+        sys_view = system_view(cmap, rows_out, collected_categories=collected_categories)
     except Exception as e:
         sys_view = _degraded_system(f"system view derivation failed: {e}")
 
     return UnifiedRiskMap(
-        capabilities=rows_out,
-        system=sys_view,
-        collected=Measurement.measured(1.0))
+        capabilities=rows_out, system=sys_view, collected=Measurement.measured(1.0)
+    )
 
 
 def map_digest(cmap: CapabilityMap) -> str:

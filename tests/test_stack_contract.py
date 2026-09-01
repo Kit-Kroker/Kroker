@@ -1,8 +1,11 @@
 from sdlc.agents.roles import _STAGE_PROMPTS
 from sdlc.models import QAReport, ValidationContract
 from sdlc.workflows.feature import (
-    DEFAULT_LINT_CMD, DEFAULT_TEST_CMD, _contract_shell_cmd,
-    _contract_stack_directive, _should_resume_session,
+    DEFAULT_LINT_CMD,
+    DEFAULT_TEST_CMD,
+    _contract_shell_cmd,
+    _contract_stack_directive,
+    _should_resume_session,
 )
 
 PLAN_PROMPT = _STAGE_PROMPTS["plan"]
@@ -36,8 +39,9 @@ def test_stack_directive_empty_when_contract_has_no_stack():
 
 
 def test_stack_directive_surfaces_stack_as_mandatory():
-    c = ValidationContract(task_id="t1", assertions=["a"],
-                           stack="TypeScript/Node.js monorepo, npm workspaces")
+    c = ValidationContract(
+        task_id="t1", assertions=["a"], stack="TypeScript/Node.js monorepo, npm workspaces"
+    )
     directive = _contract_stack_directive(c)
     assert "MANDATORY STACK" in directive
     assert "TypeScript/Node.js monorepo, npm workspaces" in directive
@@ -45,20 +49,17 @@ def test_stack_directive_surfaces_stack_as_mandatory():
 
 def test_resumes_when_stack_ok_and_under_budget():
     qa = QAReport(tests_passed=False, stack_mismatch=False)
-    assert _should_resume_session(qa, resumes=0, max_resumes=3,
-                                  near_ceiling=False) is True
+    assert _should_resume_session(qa, resumes=0, max_resumes=3, near_ceiling=False) is True
 
 
 def test_no_resume_when_over_budget():
     qa = QAReport(tests_passed=False, stack_mismatch=False)
-    assert _should_resume_session(qa, resumes=3, max_resumes=3,
-                                  near_ceiling=False) is False
+    assert _should_resume_session(qa, resumes=3, max_resumes=3, near_ceiling=False) is False
 
 
 def test_no_resume_when_near_context_ceiling():
     qa = QAReport(tests_passed=False, stack_mismatch=False)
-    assert _should_resume_session(qa, resumes=0, max_resumes=3,
-                                  near_ceiling=True) is False
+    assert _should_resume_session(qa, resumes=0, max_resumes=3, near_ceiling=True) is False
 
 
 def test_plan_prompt_requires_lint_commands_and_self_contained_install():
@@ -86,5 +87,4 @@ def test_no_resume_on_stack_mismatch_even_under_budget():
     starting point than a fresh one — never resume it, regardless of
     remaining resume budget or context headroom."""
     qa = QAReport(tests_passed=False, stack_mismatch=True)
-    assert _should_resume_session(qa, resumes=0, max_resumes=3,
-                                  near_ceiling=False) is False
+    assert _should_resume_session(qa, resumes=0, max_resumes=3, near_ceiling=False) is False

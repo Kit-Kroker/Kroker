@@ -5,53 +5,59 @@ Keep them SMALL: large artifacts (specs, diffs, logs) live in the
 artifact store / git; only references travel through Temporal history
 (claim-check pattern, 2MB payload limit).
 """
+
 from __future__ import annotations
 
 import os
 from datetime import datetime
-from enum import Enum, StrEnum
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import (
-    BaseModel, Field, PrivateAttr, field_validator, model_validator,
+    BaseModel,
+    Field,
+    PrivateAttr,
+    field_validator,
+    model_validator,
 )
 
 from .measurement import CollectionState, Measurement
 
 
-class ProjectMode(str, Enum):
+class ProjectMode(StrEnum):
     GREENFIELD = "greenfield"
     BROWNFIELD = "brownfield"
 
 
-class HarnessKind(str, Enum):
-    CLAUDE_CODE = "claude_code"   # claude -p
-    OPENCODE = "opencode"         # opencode run
-    CURSOR = "cursor"             # cursor-agent -p (E-35)
+class HarnessKind(StrEnum):
+    CLAUDE_CODE = "claude_code"  # claude -p
+    OPENCODE = "opencode"  # opencode run
+    CURSOR = "cursor"  # cursor-agent -p (E-35)
     # E-88: a COMPOSITION mode, not a CLI. A crew role's own harness is one
     # of the three above; `crew` says the stage runs as CrewTaskWorkflow.
     # Deliberately absent from HARNESSES: there is no subprocess to build.
     CREW = "crew"
 
 
-class GatePolicy(str, Enum):
-    HARD = "hard"    # always wait for a human decision
-    SOFT = "soft"    # auto-approve if quality signals pass, else escalate
-    OFF = "off"      # auto-approve
+class GatePolicy(StrEnum):
+    HARD = "hard"  # always wait for a human decision
+    SOFT = "soft"  # auto-approve if quality signals pass, else escalate
+    OFF = "off"  # auto-approve
 
 
-class GateOutcome(str, Enum):
-    APPROVE = "approve"    # proceed
-    REJECT = "reject"      # terminal
-    REVISE = "revise"      # loop back with guidance (Finding #6)
+class GateOutcome(StrEnum):
+    APPROVE = "approve"  # proceed
+    REJECT = "reject"  # terminal
+    REVISE = "revise"  # loop back with guidance (Finding #6)
 
 
-class TimeoutAction(str, Enum):
+class TimeoutAction(StrEnum):
     """What an expired gate does (FR-303). REJECT is today's behaviour and
     the default everywhere except `merge` -- see PipelineConfig.gates."""
-    REJECT = "reject"      # terminal, decided_by="timeout"
+
+    REJECT = "reject"  # terminal, decided_by="timeout"
     APPROVE = "approve"
-    HOLD = "hold"          # no final deadline; stays pending and visible
+    HOLD = "hold"  # no final deadline; stays pending and visible
 
 
 class GateConfig(BaseModel):
@@ -60,6 +66,7 @@ class GateConfig(BaseModel):
     only when policy == SOFT; the *_after_hours fields fall back to a
     fraction of PipelineConfig.gate_timeout_hours when None (see
     sdlc.notify.schedule.build_schedule)."""
+
     policy: GatePolicy = GatePolicy.HARD
     threshold: float = Field(default=0.8, ge=0.0, le=1.0)
     on_timeout: TimeoutAction = TimeoutAction.REJECT
@@ -67,7 +74,7 @@ class GateConfig(BaseModel):
     escalate_after_hours: int | None = Field(default=None, gt=0)
 
     @classmethod
-    def _coerce(cls, v: "GateConfig | GatePolicy | str | dict") -> "GateConfig":
+    def _coerce(cls, v: GateConfig | GatePolicy | str | dict) -> GateConfig:
         if isinstance(v, GateConfig):
             return v
         if isinstance(v, dict):
@@ -82,6 +89,7 @@ class GateSettings(BaseModel):
     roles, memory, research and deploy config it will never use, and taking the
     whole object would drag all of it into triage's input contract.
     """
+
     gates: dict[str, GateConfig] = Field(default_factory=dict)
     default_gate_policy: GatePolicy = GatePolicy.HARD
     gate_timeout_hours: int = 48
@@ -89,28 +97,31 @@ class GateSettings(BaseModel):
 
 class ArtifactRef(BaseModel):
     """Claim-check reference to a large artifact (spec, diff, report)."""
-    kind: str                      # e.g. "spec", "plan", "qa_report", "diff"
-    uri: str                       # s3://..., file://..., git ref, etc.
+
+    kind: str  # e.g. "spec", "plan", "qa_report", "diff"
+    uri: str  # s3://..., file://..., git ref, etc.
     sha256: str | None = None
 
 
 class SessionEvent(BaseModel):
     """One normalised harness-transcript event (ADR-16). Harness-agnostic;
     adapters map their native streams onto this schema."""
-    kind: str          # model_turn | tool_call | tool_result | file_read
-                       # | file_write | command | compaction | result
-                       # | tool_denied
+
+    kind: str  # model_turn | tool_call | tool_result | file_read
+    # | file_write | command | compaction | result
+    # | tool_denied
     tool: str | None = None
-    target: str | None = None      # file path or command line (scrubbed)
+    target: str | None = None  # file path or command line (scrubbed)
     exit_code: int | None = None
     tokens_in: int | None = None
     tokens_out: int | None = None
-    text: str | None = None        # payload (scrubbed)
+    text: str | None = None  # payload (scrubbed)
 
 
 class HarnessSession(BaseModel):
     """Canonical transcript of one harness run (ADR-16). NEVER enters
     workflow state — serialized to JSONL and claim-checked (E-38)."""
+
     harness: HarnessKind
     session_id: str | None = None
     model: str | None = None
@@ -124,35 +135,38 @@ class SessionDigest(BaseModel):
     """BENCHMARK §4.3 waste aggregates + decision-skeleton. Small and
     bounded — travels inline on HarnessRunResult; always kept, even when
     the full transcript is downgraded at retro (OQ-B7)."""
+
     tool_calls: int = 0
     file_reads: int = 0
-    file_rereads: int = 0          # same path read more than once
-    files_written: int = 0         # distinct paths written
-    rewrite_churn: int = 0         # paths written more than once
-    failed_commands: int = 0       # command events with exit_code not in (0, None)
+    file_rereads: int = 0  # same path read more than once
+    files_written: int = 0  # distinct paths written
+    rewrite_churn: int = 0  # paths written more than once
+    failed_commands: int = 0  # command events with exit_code not in (0, None)
     model_turns: int = 0
     compacted: bool = False
-    denials: int = 0               # E-16: blocked tool calls
-    escalations: int = 0           # E-17: tool calls that raised a gate
+    denials: int = 0  # E-16: blocked tool calls
+    escalations: int = 0  # E-17: tool calls that raised a gate
     input_tokens: int | None = None
     output_tokens: int | None = None
     decision_skeleton: list[str] = Field(default_factory=list)
 
 
-class ContainmentLayer(str, Enum):
+class ContainmentLayer(StrEnum):
     """Where a containment rule is enforced (E-15/E-16, ADR-17)."""
-    NATIVE = "native"   # declarative deny inside the harness CLI's own config
-    HOOK = "hook"       # per-call inspection callback
+
+    NATIVE = "native"  # declarative deny inside the harness CLI's own config
+    HOOK = "hook"  # per-call inspection callback
 
 
 class ToolDenial(BaseModel):
     """One blocked tool call. Small and bounded — travels inline on
     HarnessRunResult, same discipline as SessionDigest."""
+
     tool: str
     rule_id: str
     layer: ContainmentLayer
     reason: str
-    target: str | None = None     # path or command line (scrubbed)
+    target: str | None = None  # path or command line (scrubbed)
     # E-17: this denial was an ESCALATE rule the hook could not escalate
     # (batched call, or an unreadable transcript). No human was asked. It is
     # marked so the BATCHED outcome stays countable — see EscalationOutcome.
@@ -163,6 +177,7 @@ class ContainmentReport(BaseModel):
     """What containment was ACTUALLY in force for a run. Partial coverage
     is recorded rather than refused, so a harness with fewer layers is
     visibly less contained instead of silently so (spec §5)."""
+
     enabled: bool = False
     layers_active: list[ContainmentLayer] = Field(default_factory=list)
     rules_enforced: list[str] = Field(default_factory=list)
@@ -175,7 +190,8 @@ class ContainmentReport(BaseModel):
 class ContainmentConfig(BaseModel):
     """FR-703 containment knobs. `strict` promotes partial layer coverage
     from 'recorded' to 'refuse to start'."""
-    policy_path: str | None = None      # None -> $SDLC_CONTAINMENT_POLICY -> discovery
+
+    policy_path: str | None = None  # None -> $SDLC_CONTAINMENT_POLICY -> discovery
     strict: bool = False
 
 
@@ -183,28 +199,31 @@ class DeferredToolUse(BaseModel):
     """A tool call the harness suspended at, awaiting a human decision
     (E-17). Built activity-side from the CLI's `deferred_tool_use` payload;
     travels inline on HarnessRunResult — bounded, like ToolDenial."""
-    tool_use_id: str              # the CLI replays THIS id on resume
+
+    tool_use_id: str  # the CLI replays THIS id on resume
     tool: str
-    input_digest: str             # canonical digest of tool_input
+    input_digest: str  # canonical digest of tool_input
     rule_id: str
     reason: str
-    target: str | None = None     # scrubbed path/command, for the human
+    target: str | None = None  # scrubbed path/command, for the human
 
 
 class ToolGrant(BaseModel):
     """One human decision about one suspended call. Single-use falls out of
     tool_use_id: the replayed call reuses it, a genuinely new call gets a
     fresh one and matches nothing."""
+
     tool_use_id: str
     tool: str
     input_digest: str
     rule_id: str
-    approved: bool                # False = rejected / timed out / capped
-    reason: str = ""              # reaches the model verbatim
+    approved: bool  # False = rejected / timed out / capped
+    reason: str = ""  # reaches the model verbatim
 
 
-class EscalationOutcome(str, Enum):
+class EscalationOutcome(StrEnum):
     """How an escalation ended. BATCHED and CAPPED never reached a human."""
+
     APPROVED = "approved"
     REJECTED = "rejected"
     TIMEOUT = "timeout"
@@ -214,21 +233,22 @@ class EscalationOutcome(str, Enum):
 
 class ToolEscalation(BaseModel):
     """The workflow's record of one escalation, for events.jsonl + E-36."""
+
     tool: str
     rule_id: str
     target: str | None = None
     outcome: EscalationOutcome
-    decided_by: str = ""          # "" when nobody was asked
-    round: int = 0                # the (gate, round) identity; 0 = no gate
-
+    decided_by: str = ""  # "" when nobody was asked
+    round: int = 0  # the (gate, round) identity; 0 = no gate
 
 
 class IdeaBrief(BaseModel):
     """Pipeline input: the raw idea / feature request."""
+
     title: str
     description: str
     mode: ProjectMode
-    repo_url: str | None = None            # required for brownfield
+    repo_url: str | None = None  # required for brownfield
     base_branch: str = "main"
     constraints: list[str] = Field(default_factory=list)
 
@@ -240,12 +260,13 @@ class ClarificationDimension(StrEnum):
     is one domain in MAC's terms, so our experts specialise by the KIND of
     ambiguity they resolve rather than by business domain.
     """
-    FUNCTIONAL_INTENT  = "C1"   # the core behaviour change needed
-    BUSINESS_SEMANTICS = "C2"   # domain rules and constraints
-    TECHNICAL_CONTEXT  = "C3"   # architectural and dependency considerations
-    INTERFACE_SPEC     = "C4"   # API contracts and signatures
-    CODE_STRUCTURE     = "C5"   # repository patterns and conventions
-    DATA_SEMANTICS     = "C6"   # data invariants and constraints
+
+    FUNCTIONAL_INTENT = "C1"  # the core behaviour change needed
+    BUSINESS_SEMANTICS = "C2"  # domain rules and constraints
+    TECHNICAL_CONTEXT = "C3"  # architectural and dependency considerations
+    INTERFACE_SPEC = "C4"  # API contracts and signatures
+    CODE_STRUCTURE = "C5"  # repository patterns and conventions
+    DATA_SEMANTICS = "C6"  # data invariants and constraints
 
 
 class OpenQuestion(BaseModel):
@@ -253,12 +274,12 @@ class OpenQuestion(BaseModel):
     question: str
     why_it_matters: str
     suggested_answer: str | None = None
-    answer: str | None = None              # filled by human (or auto)
+    answer: str | None = None  # filled by human (or auto)
     # E-85: additive only -- a pre-E-85 artifact must still validate.
     dimension: ClarificationDimension | None = None
-    asked_by: str | None = None            # "supervisor" | "probe:C4"
+    asked_by: str | None = None  # "supervisor" | "probe:C4"
     materiality: float | None = Field(default=None, ge=0.0, le=1.0)
-    evidence: str | None = None            # repo path/symbol grounding it
+    evidence: str | None = None  # repo path/symbol grounding it
 
 
 class ClarifiedRequirements(BaseModel):
@@ -289,6 +310,7 @@ class BrownfieldDelta(BaseModel):
     grounding rules -- a modified path must exist and an added path must not
     (E-84 D8) -- and a single list cannot carry that distinction.
     """
+
     added: list[str] = Field(default_factory=list)
     modified: list[str] = Field(default_factory=list)
     removed: list[str] = Field(default_factory=list)
@@ -302,10 +324,10 @@ class ArchitectureSpec(BaseModel):
     risks: list[str] = Field(default_factory=list)
     spec_ref: ArtifactRef | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)  # FR-301
-    delta: BrownfieldDelta | None = None                    # E-84, brownfield
+    delta: BrownfieldDelta | None = None  # E-84, brownfield
 
     @model_validator(mode="after")
-    def _affected_modules_follow_the_delta(self) -> "ArchitectureSpec":
+    def _affected_modules_follow_the_delta(self) -> ArchitectureSpec:
         """E-84 D7: one authority for what changed.
 
         `affected_modules` predates the typed delta and is documented as the
@@ -327,23 +349,25 @@ class ValidationContract(BaseModel):
     QA and reviewers validate against this — never against the
     implementation or the worker's narrative.
     """
+
     task_id: str
-    assertions: list[str]                   # human-readable, test-mappable
+    assertions: list[str]  # human-readable, test-mappable
     test_commands: list[str] = Field(default_factory=list)
     lint_commands: list[str] = Field(default_factory=list)
-    stack: str = ""                         # e.g. "TypeScript/Node.js, npm
-                                             # workspaces" — copied verbatim
-                                             # from the architecture decision;
-                                             # a hard constraint, not a soft
-                                             # acceptance criterion
-    frozen: bool = True                     # set at plan gate; immutable after
+    stack: str = ""  # e.g. "TypeScript/Node.js, npm
+    # workspaces" — copied verbatim
+    # from the architecture decision;
+    # a hard constraint, not a soft
+    # acceptance criterion
+    frozen: bool = True  # set at plan gate; immutable after
 
 
 class HandoffClaim(BaseModel):
     """One assertion about the work, carrying the evidence for it.
     Evidence-first, mirroring IntegrityFlag."""
+
     text: str
-    evidence: str            # quote/reference from the scrubbed HarnessSession
+    evidence: str  # quote/reference from the scrubbed HarnessSession
 
 
 class HandoffSummary(BaseModel):
@@ -354,6 +378,7 @@ class HandoffSummary(BaseModel):
     extracted from the scrubbed session -- the diff cannot state WHY an
     approach was chosen or what was knowingly left undone.
     """
+
     task_id: str
     files_touched: list[str] = Field(default_factory=list)
     what_changed: list[HandoffClaim] = Field(default_factory=list)
@@ -368,11 +393,11 @@ class DevTask(BaseModel):
     depends_on: list[str] = Field(default_factory=list)
     acceptance_criteria: list[str]
     files_hint: list[str] = Field(default_factory=list)
-    overlaps: list[str] = Field(default_factory=list)   # modules shared with
-                                                        # other tasks (FR-104):
-                                                        # overlapping tasks
-                                                        # serialize in wave mode
-    contract: ValidationContract | None = None          # frozen at planning
+    overlaps: list[str] = Field(default_factory=list)  # modules shared with
+    # other tasks (FR-104):
+    # overlapping tasks
+    # serialize in wave mode
+    contract: ValidationContract | None = None  # frozen at planning
     role: Literal["dev", "test", "devops"] = "dev"
 
 
@@ -387,6 +412,7 @@ class PlanDrift(BaseModel):
     guessed wrong is a normal outcome. What it measures is planner
     calibration across many runs, not any single run's correctness.
     """
+
     files_hinted: int
     files_touched: int
     hinted_untouched: list[str] = Field(default_factory=list)
@@ -398,8 +424,7 @@ def _norm_path(p: str) -> str:
     return p.replace("\\", "/").strip().lstrip("./")
 
 
-def compute_plan_drift(task: "DevTask",
-                       files_touched: list[str]) -> PlanDrift | None:
+def compute_plan_drift(task: DevTask, files_touched: list[str]) -> PlanDrift | None:
     """Pure. None when either side is absent -- a prediction that was never
     made cannot be adhered to, and a diff that does not exist cannot be
     compared."""
@@ -437,32 +462,35 @@ class SeededWork(BaseModel):
     read at exactly one place -- the PR body -- so seeding it keeps stage 4
     onward free of `| None` handling.
     """
+
     arch: ArchitectureSpec
     plan: ImplementationPlan
 
     @model_validator(mode="after")
-    def _plan_is_not_empty(self) -> "SeededWork":
+    def _plan_is_not_empty(self) -> SeededWork:
         if not self.plan.tasks:
             raise ValueError(
                 "SeededWork with no tasks would open an empty PR -- the "
-                "vacuous-task bypass SC-5 already closed once")
+                "vacuous-task bypass SC-5 already closed once"
+            )
         return self
 
 
 class HarnessRunResult(BaseModel):
     """Normalized result from any coding harness invocation."""
+
     harness: HarnessKind
     session_id: str | None = None
     exit_code: int
-    summary: str                            # harness's final text (truncated)
+    summary: str  # harness's final text (truncated)
     cost_usd: float | None = None
-    commit_sha: str | None = None           # checkpoint commit after the run
+    commit_sha: str | None = None  # checkpoint commit after the run
     diff_ref: ArtifactRef | None = None
     # Observability for the context-ceiling trigger (Finding #7):
     input_tokens: int | None = None
     output_tokens: int | None = None
     context_window: int | None = None
-    compacted: bool = False                 # harness signalled a mid-run compaction
+    compacted: bool = False  # harness signalled a mid-run compaction
     # E-38 (ADR-16): full scrubbed transcript as a claim-checked ref; waste
     # digest inline. The raw stdout rides a PrivateAttr so it can never
     # serialize into workflow state.
@@ -471,7 +499,7 @@ class HarnessRunResult(BaseModel):
     # E-15/E-16: containment outcome. Bounded and inline — the workflow and
     # the E-36 heatmap read these without loading the session artifact.
     denials: list[ToolDenial] = Field(default_factory=list)
-    deferred: DeferredToolUse | None = None      # E-17: suspended tool call
+    deferred: DeferredToolUse | None = None  # E-17: suspended tool call
     escalations: list[ToolEscalation] = Field(default_factory=list)
     containment: ContainmentReport | None = None
     _raw_stdout: str = PrivateAttr(default="")
@@ -495,10 +523,10 @@ class TaskResult(BaseModel):
     attempts: int
     branch: str
     run: HarnessRunResult | None = None
-    handoff: HandoffSummary | None = None   # FR-805
-    qa: QAReport | None = None              # NEW: evidence for the merge gate
-    review: ReviewReport | None = None      # FR-204: clean-context review evidence
-    deep_review: "DeepReviewReport | None" = None   # E-39: advisory lens
+    handoff: HandoffSummary | None = None  # FR-805
+    qa: QAReport | None = None  # NEW: evidence for the merge gate
+    review: ReviewReport | None = None  # FR-204: clean-context review evidence
+    deep_review: DeepReviewReport | None = None  # E-39: advisory lens
     notes: str = ""
 
 
@@ -510,13 +538,14 @@ class QAReport(BaseModel):
     figure beside a measured one is a second registry for one fact -- the
     failure mode the agents.yaml / cfg.roles work already paid for once.
     """
+
     tests_passed: bool
     failing_tests: list[str] = Field(default_factory=list)
     issues: list[str] = Field(default_factory=list)
-    stack_mismatch: bool = False            # diff uses a fundamentally
-                                             # different language/runtime
-                                             # than the contract's frozen
-                                             # stack, not merely incomplete
+    stack_mismatch: bool = False  # diff uses a fundamentally
+    # different language/runtime
+    # than the contract's frozen
+    # stack, not merely incomplete
     # The runner aborted before the end of the suite (-x / --maxfail). Tests
     # ordered after the stopping point DID NOT RUN, which is a different fact
     # from "they ran and failed" -- the same distinction CoverageReport draws
@@ -530,7 +559,7 @@ class QAReport(BaseModel):
 
 class SecurityFinding(BaseModel):
     severity: Literal["critical", "high", "medium", "low"]
-    rule: str                               # which scanner rule matched
+    rule: str  # which scanner rule matched
     detail: str
     path: str = ""
 
@@ -544,6 +573,7 @@ class SecurityReport(BaseModel):
     is byte-identical to `critical=0` from a clean repository -- and the check
     reading this is absolute.
     """
+
     critical: int
     findings: list[SecurityFinding] = Field(default_factory=list)
     state: CollectionState
@@ -551,7 +581,7 @@ class SecurityReport(BaseModel):
 
 
 class ReviewFinding(BaseModel):
-    assertion: str                          # which contract assertion / concern
+    assertion: str  # which contract assertion / concern
     severity: Literal["critical", "high", "medium", "low"]
     detail: str
     suggested_fix: str = ""
@@ -562,6 +592,7 @@ class ReviewReport(BaseModel):
     orchestrator-assembled inputs only — frozen contract + materialized diff +
     test output. The reviewer holds no tools, no repo, no worker session, and
     never resumes the developer's harness session."""
+
     approve: bool
     findings: list[ReviewFinding] = Field(default_factory=list)
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)  # FR-301
@@ -575,6 +606,7 @@ class FeatureFlag(BaseModel):
     """NG7: recorded and exported to the adapter, never managed. The factory
     does not build feature flagging -- it names the flag the customer's own
     system owns."""
+
     name: str
     cohort: str = "all"
 
@@ -584,15 +616,16 @@ class SmokeCheck(BaseModel):
     exists (D-2), so it tests the requirement rather than the implementation.
     It may not reference an implementation detail the planner could not know
     at plan time -- ports and base URLs come from adapter config."""
+
     name: str
     kind: Literal["http", "command"]
-    path: str = ""                  # http: resolved against adapter.endpoint()
-    expect_status: int = 200        # http
-    command: str = ""               # command: expects exit 0
+    path: str = ""  # http: resolved against adapter.endpoint()
+    expect_status: int = 200  # http
+    command: str = ""  # command: expects exit 0
     timeout_s: int = Field(default=10, ge=1)
 
     @model_validator(mode="after")
-    def _kind_carries_its_fields(self) -> "SmokeCheck":
+    def _kind_carries_its_fields(self) -> SmokeCheck:
         if self.kind == "http" and not self.path.strip():
             raise ValueError("an http smoke check requires a path")
         if self.kind == "command" and not self.command.strip():
@@ -600,10 +633,10 @@ class SmokeCheck(BaseModel):
         return self
 
 
-class SmokeState(str, Enum):
+class SmokeState(StrEnum):
     PASSED = "passed"
-    FAILED = "failed"      # the assertion was evaluated and did not hold
-    ERRORED = "errored"    # we could not evaluate it at all
+    FAILED = "failed"  # the assertion was evaluated and did not hold
+    ERRORED = "errored"  # we could not evaluate it at all
 
 
 class SmokeCheckResult(BaseModel):
@@ -611,12 +644,13 @@ class SmokeCheckResult(BaseModel):
     is not a pass and is not a failed assertion -- collapsing the two is
     E-40's malformed-SARIF-reads-as-clean hole in a new location. Both
     non-passing states carry a reason, exactly as Measurement does."""
+
     name: str
     state: SmokeState
     detail: str = ""
 
     @model_validator(mode="after")
-    def _failure_explains_itself(self) -> "SmokeCheckResult":
+    def _failure_explains_itself(self) -> SmokeCheckResult:
         if self.state is not SmokeState.PASSED and not self.detail.strip():
             raise ValueError(f"{self.state.value} requires a detail")
         return self
@@ -638,6 +672,7 @@ class DeployPlan(BaseModel):
     Carries intent, never mechanics, and deliberately has NO adapter field:
     FR-1105 resolves the adapter from PipelineConfig.deploy.
     """
+
     environment: str
     version: str
     flag: FeatureFlag | None = None
@@ -649,6 +684,7 @@ class DeployPlan(BaseModel):
 class DeployReport(BaseModel):
     """FR-1104 outcome artifact. `deployed` is earned by passing smoke checks,
     never by a zero exit code."""
+
     deployed: bool
     environment: str
     version: str
@@ -662,22 +698,20 @@ class DeployReport(BaseModel):
     report_ref: ArtifactRef | None = None
 
     @model_validator(mode="after")
-    def _failure_accounts_for_the_rollback(self) -> "DeployReport":
+    def _failure_accounts_for_the_rollback(self) -> DeployReport:
         if self.rolled_back and not self.rolled_back_to:
             raise ValueError("rolled_back requires rolled_back_to")
-        if (not self.deployed and not self.rolled_back
-                and not self.rollback_reason.strip()):
-            raise ValueError(
-                "a failed deploy must say why it was not rolled back")
+        if not self.deployed and not self.rolled_back and not self.rollback_reason.strip():
+            raise ValueError("a failed deploy must say why it was not rolled back")
         return self
 
 
 class IntegrityFlag(BaseModel):
     """One anti-cheat observation drawn from the scrubbed transcript (E-39)."""
-    kind: Literal["oracle_peeking", "hardcoded_answer",
-                  "test_gaming", "excessive_backtracking"]
+
+    kind: Literal["oracle_peeking", "hardcoded_answer", "test_gaming", "excessive_backtracking"]
     detail: str
-    evidence: str            # a quote/reference from the scrubbed transcript
+    evidence: str  # a quote/reference from the scrubbed transcript
 
 
 class PlanDeviation(BaseModel):
@@ -687,9 +721,10 @@ class PlanDeviation(BaseModel):
     not in the transcript is dropped, because an advisory lens that can
     invent evidence is worse than no lens.
     """
+
     kind: Literal["unplanned_scope", "skipped_criterion", "approach_changed"]
     detail: str
-    evidence: str            # a VERBATIM span from the scrubbed transcript
+    evidence: str  # a VERBATIM span from the scrubbed transcript
 
 
 class DeepReviewReport(BaseModel):
@@ -698,11 +733,12 @@ class DeepReviewReport(BaseModel):
     ADR-6-independent of dev. NEVER blocks: the clean-context reviewer
     (ReviewReport) is the sole blocking lens; this report is recorded and
     retained for signal only. Fields are evidence-first."""
+
     findings: list[ReviewFinding] = Field(default_factory=list)
     integrity_flags: list[IntegrityFlag] = Field(default_factory=list)
     plan_deviations: list[PlanDeviation] = Field(default_factory=list)
     summary: str = ""
-    approve: bool = True          # advisory opinion only
+    approve: bool = True  # advisory opinion only
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
     @property
@@ -712,6 +748,7 @@ class DeepReviewReport(BaseModel):
 
 class CriterionTrace(BaseModel):
     """One acceptance criterion and the test(s) the Analyst says verify it."""
+
     task_id: str
     criterion: str
     tests: list[str] = Field(default_factory=list)
@@ -728,6 +765,7 @@ class AnalysisReport(BaseModel):
     pass/fail verdict. `findings` ride along for memory/observability and are
     NOT wired as a blocking gate check.
     """
+
     traceability: list[CriterionTrace] = Field(default_factory=list)
     findings: list[ReviewFinding] = Field(default_factory=list)
     summary: str = ""
@@ -740,8 +778,9 @@ class RoleUsage(BaseModel):
     cost_usd None is load-bearing: tokens are facts from the run; dollars
     are a lookup that can fail. A pricing miss must never discard tokens,
     so the field stays None until the first successfully priced call."""
-    role: str                       # "architect", "dev", "clarify", ...
-    model: str                      # last model seen for the role
+
+    role: str  # "architect", "dev", "clarify", ...
+    model: str  # last model seen for the role
     calls: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
@@ -757,18 +796,20 @@ class SubQuestion(BaseModel):
 
 class ConsultedSource(BaseModel):
     """Judgment before label: assess the source, THEN attach a relevance tag."""
+
     url: str
     title: str = ""
-    assessment: str = ""            # what this source is / is worth
-    relevance: str = ""             # e.g. "high" / "peripheral"
+    assessment: str = ""  # what this source is / is worth
+    relevance: str = ""  # e.g. "high" / "peripheral"
 
 
 class GroundedFinding(BaseModel):
     """quote BEFORE claim (spec §4): commit to a verbatim span actually in the
     fetched bytes, then state what it supports. The verifier (research/verify.py)
     asserts `quote` is a substring of the page fetched THIS run for `source_url`."""
+
     source_url: str
-    quote: str                      # verbatim span from bytes fetched this run
+    quote: str  # verbatim span from bytes fetched this run
     claim: str
     sub_question_ids: list[str] = Field(default_factory=list)
 
@@ -776,9 +817,10 @@ class GroundedFinding(BaseModel):
 class InferredFinding(BaseModel):
     """reasoning BEFORE claim. `fetched_at` is set only when the lead came from
     the corpus (a recalled lead honestly belongs here, never in grounded)."""
+
     reasoning: str
     claim: str
-    based_on: list[str] = Field(default_factory=list)   # source urls / lead ids
+    based_on: list[str] = Field(default_factory=list)  # source urls / lead ids
     fetched_at: str | None = None
 
 
@@ -800,6 +842,7 @@ class ResearchBrief(BaseModel):
     decompose -> gather -> what the bytes say -> what I concluded -> where
     sources disagree -> what I could not answer -> summary -> ref -> confidence.
     tests/test_research_models.py pins the order; a reorder is a regression."""
+
     sub_questions: list[SubQuestion] = Field(default_factory=list)
     sources_consulted: list[ConsultedSource] = Field(default_factory=list)
     grounded_findings: list[GroundedFinding] = Field(default_factory=list)
@@ -818,9 +861,9 @@ class ResearchPlan(BaseModel):
     list[SubQuestion]: fan-out moves the model call activity-side, out of
     _run_role's reach, so an activity that calls a model must hand its usage
     back or the spend is silently lost (E-33 amendment, fan-out design §7)."""
+
     sub_questions: list[SubQuestion] = Field(default_factory=list)
-    usage: RoleUsage = Field(
-        default_factory=lambda: RoleUsage(role="research", model="unknown"))
+    usage: RoleUsage = Field(default_factory=lambda: RoleUsage(role="research", model="unknown"))
 
 
 class SubQuestionFinding(BaseModel):
@@ -831,10 +874,10 @@ class SubQuestionFinding(BaseModel):
     of four sub-questions is worth far more than nothing -- and the merge
     turns this into a Gap so a short brief is explained rather than just
     short."""
+
     sub_question: SubQuestion
     brief: ResearchBrief = Field(default_factory=ResearchBrief)
-    usage: RoleUsage = Field(
-        default_factory=lambda: RoleUsage(role="research", model="unknown"))
+    usage: RoleUsage = Field(default_factory=lambda: RoleUsage(role="research", model="unknown"))
     failed: bool = False
     error: str = ""
 
@@ -846,17 +889,18 @@ class CoverageReport(BaseModel):
     advisory check passes as a no-op rather than forcing a spurious human
     override every run. A MEASURED 0.0 is a real zero and is graded as one.
     """
+
     coverage: Measurement
 
 
 class GateDecision(BaseModel):
-    gate: str                               # "architecture", "merge", ...
-    round: int = 1                          # revision round (Finding #6)
+    gate: str  # "architecture", "merge", ...
+    round: int = 1  # revision round (Finding #6)
     outcome: GateOutcome
     decided_by: Literal["human", "policy", "timeout"]
     reviewer: str | None = None
     comments: str | None = None
-    guidance: str | None = None             # fed back into the agent on 'revise'
+    guidance: str | None = None  # fed back into the agent on 'revise'
     decided_at: datetime | None = None
 
     @property
@@ -876,9 +920,10 @@ class DeploymentResult(BaseModel):
 
 class RoleConfig(BaseModel):
     """Which harness/model a 'doing' role uses. Enables cross-harness review."""
+
     kind: Literal["proposer", "harness", "research"] = "harness"
-    harness: HarnessKind | None = None      # None for proposer/research roles
-    model: str | None = None                # e.g. "zai-coding-plan/glm-5.2"
+    harness: HarnessKind | None = None  # None for proposer/research roles
+    model: str | None = None  # e.g. "zai-coding-plan/glm-5.2"
     # E-88: only for harness == CREW. `layout` names crew/layouts/<name>.yaml;
     # `lead_harness` is the run-level override for the LEAD's CLI, so a
     # benchmark cell can read `crew:<lead_harness>` and the harness dimension
@@ -900,7 +945,7 @@ class RoleConfig(BaseModel):
     # stage's memo — which content_key already did via prompt_sha before the
     # text moved house. Moving it buys no new cache capability.
     instructions: str | None = None
-    context_budget_tokens: int = 30_000     # FR-801: enforced at prompt assembly
+    context_budget_tokens: int = 30_000  # FR-801: enforced at prompt assembly
     extra_args: list[str] = Field(default_factory=list)
     # Long-running activity timeouts for this role's harness invocations
     # (coding/test/deploy runs). None falls back to the workflow-wide
@@ -910,18 +955,19 @@ class RoleConfig(BaseModel):
     activity_heartbeat_minutes: int | None = None
 
 
-class ExecutionMode(str, Enum):
-    SERIAL = "serial"    # default: consistent design decisions (ADR-13)
-    WAVES = "waves"      # dependency-ordered parallel; overlaps still serialize
+class ExecutionMode(StrEnum):
+    SERIAL = "serial"  # default: consistent design decisions (ADR-13)
+    WAVES = "waves"  # dependency-ordered parallel; overlaps still serialize
 
 
 class BenchmarkConfig(BaseModel):
     """Carried on PipelineConfig. case_id=None => not a benchmark run."""
+
     case_id: str | None = None
     bench_run_id: str | None = None
-    rubrics: dict[str, str] = Field(default_factory=dict)   # stage -> rubric text
-    vetoes: dict[str, str] = Field(default_factory=dict)   # stage -> veto YAML text (E-83)
-    judge_model: str | None = None                          # model the judge uses
+    rubrics: dict[str, str] = Field(default_factory=dict)  # stage -> rubric text
+    vetoes: dict[str, str] = Field(default_factory=dict)  # stage -> veto YAML text (E-83)
+    judge_model: str | None = None  # model the judge uses
 
 
 def gate_key(gate: str, round: int) -> str:
@@ -933,18 +979,19 @@ class MergeVerdict(BaseModel):
     """Advisory LLM proposer output (Finding #5). Consulted only under a
     SOFT merge policy, and only AFTER the DeterministicQualityGate passes.
     It can approve an already-clean build; it can never bypass the gate."""
+
     approve: bool
     confidence: float = Field(ge=0.0, le=1.0)
     rationale: str
     concerns: list[str] = Field(default_factory=list)
 
 
-class MemoryKind(str, Enum):
+class MemoryKind(StrEnum):
     STAGE_SUMMARY = "stage_summary"
     GOTCHA = "gotcha"
     GATE_FEEDBACK = "gate_feedback"
-    RESEARCH_FINDING = "research_finding"    # verified grounded findings only
-    RUN_SUMMARY = "run_summary"              # retro-stage per-run summary (E-32)
+    RESEARCH_FINDING = "research_finding"  # verified grounded findings only
+    RUN_SUMMARY = "run_summary"  # retro-stage per-run summary (E-32)
 
 
 class RecallSnapshot(BaseModel):
@@ -952,6 +999,7 @@ class RecallSnapshot(BaseModel):
     never a live side-channel. `degraded=True` means the backend was
     unreachable; the pipeline proceeds with an empty snapshot rather than
     blocking on memory."""
+
     query_hash: str
     bank: str
     watermark: str
@@ -968,21 +1016,23 @@ class RetainItem(BaseModel):
 
 def _memory_backend_default() -> Literal["fake", "hindsight"]:
     value = os.environ.get("SDLC_MEMORY_BACKEND", "fake")
-    return value if value in ("fake", "hindsight") else "fake"
+    if value == "hindsight":
+        return "hindsight"
+    return "fake"
 
 
 class MemoryConfig(BaseModel):
     """FR-400. `watermark=None` means "capture fresh at run start"; setting
     it pins a run to a prior freeze point (ADR-5 explicit "refresh
     memory")."""
+
     enabled: bool = Field(
-        default_factory=lambda: os.environ.get(
-            "SDLC_MEMORY_ENABLED", "false").lower() == "true")
-    backend: Literal["fake", "hindsight"] = Field(
-        default_factory=_memory_backend_default)
+        default_factory=lambda: os.environ.get("SDLC_MEMORY_ENABLED", "false").lower() == "true"
+    )
+    backend: Literal["fake", "hindsight"] = Field(default_factory=_memory_backend_default)
     base_url: str = Field(
-        default_factory=lambda: os.environ.get(
-            "SDLC_MEMORY_BASE_URL", "http://localhost:8888"))
+        default_factory=lambda: os.environ.get("SDLC_MEMORY_BASE_URL", "http://localhost:8888")
+    )
     org_bank: str = "org"
     project_bank: str = "project:default"
     watermark: str | None = None
@@ -994,6 +1044,7 @@ KNOWN_SCHEDULE_WORKFLOWS = {"ReflectWorkflow"}
 class ScheduleAction(BaseModel):
     """The start-workflow action of a schedule asset. Temporal Schedules can
     only start workflows, never activities — hence ReflectWorkflow."""
+
     workflow: str
     banks: list[str] = Field(min_length=1)
     backend: Literal["fake", "hindsight"] = "fake"
@@ -1003,9 +1054,7 @@ class ScheduleAction(BaseModel):
     @classmethod
     def _known_workflow(cls, v: str) -> str:
         if v not in KNOWN_SCHEDULE_WORKFLOWS:
-            raise ValueError(
-                f"unknown workflow {v!r}; known: "
-                f"{sorted(KNOWN_SCHEDULE_WORKFLOWS)}")
+            raise ValueError(f"unknown workflow {v!r}; known: {sorted(KNOWN_SCHEDULE_WORKFLOWS)}")
         return v
 
 
@@ -1018,14 +1067,15 @@ class ScheduleSpecAsset(BaseModel):
     def _cron_shape(cls, v: str) -> str:
         if len(v.split()) != 5:
             raise ValueError(
-                f"cron must have 5 whitespace-separated fields, got "
-                f"{len(v.split())}: {v!r}")
+                f"cron must have 5 whitespace-separated fields, got {len(v.split())}: {v!r}"
+            )
         return v
 
 
 class ScheduleAsset(BaseModel):
     """One schedules/<id>.yaml. `id` comes from the filename, not the body —
     the filename is the API."""
+
     id: str
     spec: ScheduleSpecAsset
     action: ScheduleAction
@@ -1042,6 +1092,7 @@ class ResearchConfig(BaseModel):
     the single-agent stage it replaces, which defeats the point. The run-level
     bound is max_run_cost_usd, enforced on the shared "run" budget scope.
     """
+
     max_sub_questions: int = 4
     """Fan-out width. A HARD SLICE applied to the planner's output, never a
     request the model is trusted to honour: measured behaviour is that a
@@ -1049,9 +1100,9 @@ class ResearchConfig(BaseModel):
     yes/no lookup. Also the practical concurrency bound, since each
     sub-question runs an agent with its own CodeMode sandbox."""
 
-    max_searches: int = 5               # per sub-question
-    max_fetches: int = 10               # per sub-question
-    max_cost_usd: float = 1.0           # per sub-question
+    max_searches: int = 5  # per sub-question
+    max_fetches: int = 10  # per sub-question
+    max_cost_usd: float = 1.0  # per sub-question
 
     max_run_cost_usd: float = 4.0
     """Hard whole-run ceiling across every sub-question and every refine
@@ -1077,6 +1128,7 @@ class ResearchConfig(BaseModel):
 class DeployConfig(BaseModel):
     """FR-1105: the hosting target is an adapter resolved from configuration,
     not a choice an agent makes. Off by default (D-9)."""
+
     enabled: bool = False
     adapter: Literal["compose", "script"] = "compose"
     # compose: base URL http smoke checks resolve against. The port is a
@@ -1094,20 +1146,21 @@ class PipelineConfig(BaseModel):
     # that addresses Hindsight, this addresses the board SQLite. Two stores,
     # two identifiers — sharing one by accident couples unrelated lifetimes.
     project_key: str = "default"
-    max_session_resumes: int = 3            # FR-802: past this, fresh session
-                                            # seeded with a handoff — compaction
-                                            # is failure, never continued
-    gates: dict[str, GateConfig] = Field(default_factory=lambda: {
-        "clarify": GateConfig(policy=GatePolicy.HARD),
-        "architecture": GateConfig(policy=GatePolicy.HARD),
-        "plan": GateConfig(policy=GatePolicy.SOFT),
-        # E-9: a merge gate that expires would discard a run which passed
-        # every absolute check. Holding keeps it pending and visible in the
-        # E-8 inbox instead. Every other gate keeps today's reject.
-        "merge": GateConfig(policy=GatePolicy.HARD,
-                            on_timeout=TimeoutAction.HOLD),
-        "deploy": GateConfig(policy=GatePolicy.HARD),
-    })
+    max_session_resumes: int = 3  # FR-802: past this, fresh session
+    # seeded with a handoff — compaction
+    # is failure, never continued
+    gates: dict[str, GateConfig] = Field(
+        default_factory=lambda: {
+            "clarify": GateConfig(policy=GatePolicy.HARD),
+            "architecture": GateConfig(policy=GatePolicy.HARD),
+            "plan": GateConfig(policy=GatePolicy.SOFT),
+            # E-9: a merge gate that expires would discard a run which passed
+            # every absolute check. Holding keeps it pending and visible in the
+            # E-8 inbox instead. Every other gate keeps today's reject.
+            "merge": GateConfig(policy=GatePolicy.HARD, on_timeout=TimeoutAction.HOLD),
+            "deploy": GateConfig(policy=GatePolicy.HARD),
+        }
+    )
     # Policy for gates not named in `gates` above — e.g. the per-task
     # escalation gate `task:<id>` fired when a dev task exhausts its fix
     # budget. Kept separate from `gates` since task ids aren't known upfront.
@@ -1119,59 +1172,59 @@ class PipelineConfig(BaseModel):
         if not isinstance(v, dict):
             return v
         return {k: GateConfig._coerce(gv) for k, gv in v.items()}
+
     benchmark: BenchmarkConfig = Field(default_factory=BenchmarkConfig)
     # Harness-execution roles ONLY (keys match DevTask.role). This is a
     # hardcoded MIRROR of the agents/ registry's harness roles, not a second registry:
     # PipelineConfig is constructed inside the workflow (feature.py:602), so
     # this default cannot read the file. agents/loader.py asserts the two agree
     # at boot. Change one, change both, or the worker won't start.
-    roles: dict[str, RoleConfig] = Field(default_factory=lambda: {
-        "dev": RoleConfig(harness=HarnessKind.OPENCODE,
-                          model="zai-coding-plan/glm-5.2"),
-        "test": RoleConfig(harness=HarnessKind.OPENCODE,
-                           model="zai-coding-plan/glm-5.2"),
-        "devops": RoleConfig(harness=HarnessKind.OPENCODE,
-                             model="zai-coding-plan/glm-5.2"),
-    })
-    max_fix_attempts: int = 2                # then escalate to human
-    max_tool_escalations: int = 3            # E-17: gates raised per task
-                                             # attempt; past this, deny
-    max_delta_retries: int = 1               # E-84 D11: brownfield re-prompt limit
-    max_gate_rounds: int = 2                # FR-301: bounded revision loop;
-                                            # exhaustion escalates to a hard
-                                            # human gate
+    roles: dict[str, RoleConfig] = Field(
+        default_factory=lambda: {
+            "dev": RoleConfig(harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.2"),
+            "test": RoleConfig(harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.2"),
+            "devops": RoleConfig(harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.2"),
+        }
+    )
+    max_fix_attempts: int = 2  # then escalate to human
+    max_tool_escalations: int = 3  # E-17: gates raised per task
+    # attempt; past this, deny
+    max_delta_retries: int = 1  # E-84 D11: brownfield re-prompt limit
+    max_gate_rounds: int = 2  # FR-301: bounded revision loop;
+    # exhaustion escalates to a hard
+    # human gate
     gate_timeout_hours: int = 48
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     memoization_enabled: bool = False
     research: ResearchConfig = Field(default_factory=ResearchConfig)
     deploy: DeployConfig = Field(default_factory=DeployConfig)
-    research_enabled: bool = False          # FR-107: off by default; the
-                                            # default pipeline is unchanged
-                                            # until a project opts in
-    containment_enabled: bool = False       # FR-703: off by default; the
-                                            # policy is a fence, not a
-                                            # sandbox — see ADR-17
+    research_enabled: bool = False  # FR-107: off by default; the
+    # default pipeline is unchanged
+    # until a project opts in
+    containment_enabled: bool = False  # FR-703: off by default; the
+    # policy is a fence, not a
+    # sandbox — see ADR-17
     containment: ContainmentConfig = Field(default_factory=ContainmentConfig)
-    review_enabled: bool = True             # FR-204: run the clean-context
-                                            # reviewer per task; disable to trade
-                                            # the anti-collusion check for cost
-    deep_review_enabled: bool = False       # FR-111/E-39: opt-in transcript
-                                            # lens; advisory, off by default
-    adversarial_review_enabled: bool = False   # spec part 2: decorrelated
-                                            # second opinion on the APPROVING
-                                            # path only. Off by default -- it
-                                            # changes hot-path outcomes and
-                                            # costs a call per approving
-                                            # attempt. Swept as a benchmark arm.
-    clarify_probes_enabled: bool = False    # E-85: off by default; the
-                                            # default pipeline stays the
-                                            # single-call clarifier.
-    clarify_question_cap: int = Field(default=5, ge=1)   # E-85 D9: hard cap
-                                            # on the batch a human sees. MAC
-                                            # held latency with "one
-                                            # clarification per turn"; our
-                                            # unit is a human blocking on
-                                            # gate_timeout_hours.
+    review_enabled: bool = True  # FR-204: run the clean-context
+    # reviewer per task; disable to trade
+    # the anti-collusion check for cost
+    deep_review_enabled: bool = False  # FR-111/E-39: opt-in transcript
+    # lens; advisory, off by default
+    adversarial_review_enabled: bool = False  # spec part 2: decorrelated
+    # second opinion on the APPROVING
+    # path only. Off by default -- it
+    # changes hot-path outcomes and
+    # costs a call per approving
+    # attempt. Swept as a benchmark arm.
+    clarify_probes_enabled: bool = False  # E-85: off by default; the
+    # default pipeline stays the
+    # single-call clarifier.
+    clarify_question_cap: int = Field(default=5, ge=1)  # E-85 D9: hard cap
+    # on the batch a human sees. MAC
+    # held latency with "one
+    # clarification per turn"; our
+    # unit is a human blocking on
+    # gate_timeout_hours.
     coverage_threshold: float = Field(default=0.0, ge=0.0, le=100.0)
     # FR-106: diff-scoped coverage (0..100) the advisory `coverage` check must
     # clear. Default 0.0 = effectively off until a project opts in AND its test
@@ -1184,16 +1237,19 @@ class PipelineConfig(BaseModel):
     def gate_settings(self) -> GateSettings:
         """Project the three gate fields. `gates` is copied, not aliased --
         a workflow handed these must not be able to mutate the config."""
-        return GateSettings(gates=dict(self.gates),
-                            default_gate_policy=self.default_gate_policy,
-                            gate_timeout_hours=self.gate_timeout_hours)
+        return GateSettings(
+            gates=dict(self.gates),
+            default_gate_policy=self.default_gate_policy,
+            gate_timeout_hours=self.gate_timeout_hours,
+        )
 
 
 class StageOutcome(BaseModel):
     """One stage's line in a RunSummary, projected from its BenchmarkRecord."""
+
     stage: str
     role: str
-    outcome: str            # BenchmarkOutcome value
+    outcome: str  # BenchmarkOutcome value
     duration_s: float
     cost_usd: float | None = None
     fix_attempts: int = 0
@@ -1202,19 +1258,21 @@ class StageOutcome(BaseModel):
 class ClarificationOutcome(BaseModel):
     """SC-4 signal: was a surfaced question answered by a human (operator time),
     auto-filled from the clarifier's suggested_answer, or left unanswered."""
+
     question_id: str
     question: str
     answered_by: Literal["human", "suggested", "unanswered"]
-    dimension: ClarificationDimension | None = None   # E-85
+    dimension: ClarificationDimension | None = None  # E-85
 
 
 class GateOutcomeSummary(BaseModel):
     """SC-6 + ARCHITECTURE §10 calibration signal: policy, who decided, the
     confidence available at decision time, and any advisory checks waved."""
+
     gate: str
     round: int
-    policy: str             # GatePolicy value
-    decided_by: str         # "human" | "policy" | "timeout"
+    policy: str  # GatePolicy value
+    decided_by: str  # "human" | "policy" | "timeout"
     approved: bool
     confidence: float | None = None
     overrides: list[str] = Field(default_factory=list)
@@ -1223,11 +1281,12 @@ class GateOutcomeSummary(BaseModel):
 class RunSummary(BaseModel):
     """Retro-stage (14) aggregate of one run (E-32). Retained to memory,
     exported to report.html, and exposed via the run_summary() query."""
+
     run_id: str
     mode: str
-    title: str = ""                     # E-10: closed runs render from here
+    title: str = ""  # E-10: closed runs render from here
     repo_url: str | None = None
-    outcome: str            # the run() return string
+    outcome: str  # the run() return string
     terminal_stage: str
     started_at: datetime
     ended_at: datetime
@@ -1235,10 +1294,10 @@ class RunSummary(BaseModel):
     stages: list[StageOutcome] = Field(default_factory=list)
     clarifications: list[ClarificationOutcome] = Field(default_factory=list)
     gates: list[GateOutcomeSummary] = Field(default_factory=list)
-    roles: list[RoleUsage] = Field(default_factory=list)   # E-33 rollup
+    roles: list[RoleUsage] = Field(default_factory=list)  # E-33 rollup
     cost_usd_total: float | None = None
-    budget_usd: float | None = None     # configured run budget; None = off
-    budget_crossings: int = 0           # budget-gate rounds raised (E-33)
+    budget_usd: float | None = None  # configured run budget; None = off
+    budget_crossings: int = 0  # budget-gate rounds raised (E-33)
     memory_enabled: bool = False
     memory_watermark: str | None = None
     memory_retains: int = 0
@@ -1255,12 +1314,13 @@ class RunState(BaseModel):
     cost_usd_total stays None rather than 0.0 when pricing failed: see
     RoleUsage.cost_usd. A pricing miss must never read as a free run.
     """
+
     run_id: str
     title: str
     repo_url: str | None = None
     mode: str
-    status: str                          # GateHost._status verbatim
-    current_stage: str | None = None     # last STAGE_STARTED in _trace
+    status: str  # GateHost._status verbatim
+    current_stage: str | None = None  # last STAGE_STARTED in _trace
     started_at: datetime
     decisions: list[GateDecision] = Field(default_factory=list)
     roles: list[RoleUsage] = Field(default_factory=list)

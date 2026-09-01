@@ -3,9 +3,9 @@ from __future__ import annotations
 import ast
 
 import pytest
-
 from test_factory_purity import FEATURE_PY, _load_class, _methods
-from sdlc.agents.roles import PROMPT_SHAS, STAGE_MODELS
+
+from sdlc.agents.roles import PROMPT_SHAS
 
 
 @pytest.fixture(scope="module")

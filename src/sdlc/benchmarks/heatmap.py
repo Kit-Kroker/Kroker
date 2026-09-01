@@ -4,6 +4,7 @@ Pure aggregation + rendering over BenchmarkRecords already on disk. No I/O,
 no temporalio -- mirrors observability/export.py. The finalize activity
 (report.py) owns the file writes.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -22,16 +23,32 @@ from .models import BenchmarkOutcome, BenchmarkRecord, BenchmarkScope
 # Record-vocabulary stage order (SDLC-spec 15-stage DAG); the synthetic
 # ``oracle`` column trails. Only columns with an observed cell are rendered.
 CANONICAL_STAGES: list[str] = [
-    "intake", "constitution", "context", "requirements", "research",
-    "clarify", "architecture", "planning", "code", "review", "adversary",
-    "handoff", "deep_review", "analyze", "qa", "quality_gate", "deploy",
+    "intake",
+    "constitution",
+    "context",
+    "requirements",
+    "research",
+    "clarify",
+    "architecture",
+    "planning",
+    "code",
+    "review",
+    "adversary",
+    "handoff",
+    "deep_review",
+    "analyze",
+    "qa",
+    "quality_gate",
+    "deploy",
     "retro",
 ]
 ORACLE_STAGE = "oracle"
 
 # A revise round re-enters a stage, so REVISED is rework alongside FAIL/ESCALATED.
 REWORK_OUTCOMES: set[BenchmarkOutcome] = {
-    BenchmarkOutcome.FAIL, BenchmarkOutcome.ESCALATED, BenchmarkOutcome.REVISED,
+    BenchmarkOutcome.FAIL,
+    BenchmarkOutcome.ESCALATED,
+    BenchmarkOutcome.REVISED,
 }
 
 
@@ -53,8 +70,9 @@ class Heatmap(BaseModel):
     language_by_case: dict[str, str] = Field(default_factory=dict)
 
 
-def build_heatmap(records: list[BenchmarkRecord],
-                  language_by_case: dict[str, str] | None = None) -> Heatmap:
+def build_heatmap(
+    records: list[BenchmarkRecord], language_by_case: dict[str, str] | None = None
+) -> Heatmap:
     language_by_case = language_by_case or {}
 
     runs_by_case: dict[str, set[str]] = defaultdict(set)
@@ -62,7 +80,8 @@ def build_heatmap(records: list[BenchmarkRecord],
         runs_by_case[r.case_id].add(r.run_id)
 
     acc: dict[tuple[str, str], dict[str, int]] = defaultdict(
-        lambda: {"gate": 0, "fix": 0, "oracle": 0})
+        lambda: {"gate": 0, "fix": 0, "oracle": 0}
+    )
     for r in records:
         if r.scope is BenchmarkScope.ORACLE_TASK:
             # task-level detail belongs in the task/error matrices (E-36
@@ -85,10 +104,17 @@ def build_heatmap(records: list[BenchmarkRecord],
     for (case, stage), a in acc.items():
         n_runs = max(len(runs_by_case[case]), 1)
         total = a["gate"] + a["fix"] + a["oracle"]
-        cells.append(HeatmapCell(
-            case=case, stage=stage, gate_rejects=a["gate"],
-            fix_attempts=a["fix"], oracle_fails=a["oracle"],
-            n_runs=n_runs, density=total / n_runs))
+        cells.append(
+            HeatmapCell(
+                case=case,
+                stage=stage,
+                gate_rejects=a["gate"],
+                fix_attempts=a["fix"],
+                oracle_fails=a["oracle"],
+                n_runs=n_runs,
+                density=total / n_runs,
+            )
+        )
 
     cases = sorted({c.case for c in cells})
     present = {c.stage for c in cells}
@@ -97,8 +123,9 @@ def build_heatmap(records: list[BenchmarkRecord],
     stages = ordered + unknown + ([ORACLE_STAGE] if ORACLE_STAGE in present else [])
     max_density = max((c.density for c in cells), default=0.0)
     lang = {c: language_by_case.get(c, "") for c in cases}
-    return Heatmap(cells=cells, cases=cases, stages=stages,
-                   max_density=max_density, language_by_case=lang)
+    return Heatmap(
+        cells=cells, cases=cases, stages=stages, max_density=max_density, language_by_case=lang
+    )
 
 
 def render_heatmap_json(hm: Heatmap) -> str:
@@ -107,7 +134,7 @@ def render_heatmap_json(hm: Heatmap) -> str:
 
 def _cell_color(density: float, max_density: float) -> str:
     ratio = 0.0 if max_density <= 0 else min(density / max_density, 1.0)
-    hue = 120 * (1 - ratio)          # 120=green (low) -> 0=red (high)
+    hue = 120 * (1 - ratio)  # 120=green (low) -> 0=red (high)
     return f"hsl({hue:.0f},70%,{85 - 25 * ratio:.0f}%)"
 
 
@@ -122,16 +149,18 @@ def _grid(hm: Heatmap, cases: list[str]) -> str:
             if c is None:
                 tds.append('<td class="empty"></td>')
                 continue
-            tip = (f"{case}/{stage}: {c.gate_rejects} rejects, "
-                   f"{c.fix_attempts} fix-attempts, {c.oracle_fails} "
-                   f"oracle-fails over {c.n_runs} runs = {c.density:.2f}/run")
+            tip = (
+                f"{case}/{stage}: {c.gate_rejects} rejects, "
+                f"{c.fix_attempts} fix-attempts, {c.oracle_fails} "
+                f"oracle-fails over {c.n_runs} runs = {c.density:.2f}/run"
+            )
             tds.append(
                 f'<td title="{escape(tip)}" '
                 f'style="background:{_cell_color(c.density, hm.max_density)}">'
-                f"{c.density:.2f}</td>")
+                f"{c.density:.2f}</td>"
+            )
         rows.append("<tr>" + "".join(tds) + "</tr>")
-    return (f"<table><tr><th>case \\ stage</th>{head}</tr>"
-            + "".join(rows) + "</table>")
+    return f"<table><tr><th>case \\ stage</th>{head}</tr>" + "".join(rows) + "</table>"
 
 
 def render_heatmap_html(hm: Heatmap, calibration_html: str = "") -> str:

@@ -13,6 +13,7 @@ These bytes are covered by probe_prompt_digest(), which joins the clarify
 stage's memoization input (feature.py). Editing any string in this module
 therefore invalidates exactly the runs it should.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -260,16 +261,22 @@ otherwise.
 }
 
 
-def probe_prompt(dimension: ClarificationDimension, *, idea_json: str,
-                 requirements_json: str, grounding: str) -> str:
+def probe_prompt(
+    dimension: ClarificationDimension, *, idea_json: str, requirements_json: str, grounding: str
+) -> str:
     """One probe's user prompt: shared cacheable prefix FIRST, then the
     dimension's scope, then this run's context. Nothing run-specific may move
     ahead of the prefix or the burst loses its shared cache entry."""
-    return (PROBE_PREFIX
-            + "\n" + SCOPES[dimension]
-            + "\n## The request\n" + idea_json
-            + "\n\n## Requirements so far\n" + requirements_json
-            + ("\n\n## Codebase context\n" + grounding if grounding else ""))
+    return (
+        PROBE_PREFIX
+        + "\n"
+        + SCOPES[dimension]
+        + "\n## The request\n"
+        + idea_json
+        + "\n\n## Requirements so far\n"
+        + requirements_json
+        + ("\n\n## Codebase context\n" + grounding if grounding else "")
+    )
 
 
 def probe_prompt_digest() -> str:

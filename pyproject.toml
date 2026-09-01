@@ -45,9 +45,22 @@ eval = ["promptfoo>=0.1.4"]
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+# benchmarks/cases/** are vendored fixtures (third-party reference repos and
+# their oracle tests) — data, not product code. Keep them byte-stable.
+extend-exclude = ["benchmarks/cases"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# load_dotenv()/logging.basicConfig must run before the imports they configure.
+"src/sdlc/worker.py" = ["E402"]
+# tests routinely set env vars / tweak sys.path before importing the package.
+"tests/**" = ["E402"]
+# FastAPI's `Depends()` in parameter defaults is the framework's own idiom.
+"src/sdlc/board/api.py" = ["B008"]
+# embedded HTML/CSS/JS template strings — line length is meaningless there
+"scripts/aggregate_benchmarks.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"

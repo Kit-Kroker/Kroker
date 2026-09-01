@@ -1,4 +1,5 @@
 """The handoff extraction role ships and is wired like every other role."""
+
 from sdlc.agents import roles
 from sdlc.agents.loader import KNOWN_ROLES, OPTIONAL_ROLES, load_registry
 from sdlc.models import HandoffSummary

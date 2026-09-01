@@ -3,6 +3,7 @@
 its findings reach the NEXT round's brief -- which is the only thing that can
 read them. At rounds.max 1 a critic is spend with no consumer, which is why
 this step also raises the shipped layout to 2."""
+
 from __future__ import annotations
 
 import uuid
@@ -14,8 +15,12 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.crew.activities import (
-    CheckpointInput, CrewTurnInput, CrewTurnOutput, PrepareCrewInput,
-    ReadRoundInput, RoundReading,
+    CheckpointInput,
+    CrewTurnInput,
+    CrewTurnOutput,
+    PrepareCrewInput,
+    ReadRoundInput,
+    RoundReading,
 )
 from sdlc.crew.models import TurnRecord
 from sdlc.models import HarnessKind, HarnessRunResult
@@ -27,10 +32,20 @@ TASK_QUEUE = "crew-critic"
 TURNS: list[CrewTurnInput] = []
 
 ROLES = [
-    {"name": "coder", "harness": "opencode", "model": "zai-coding-plan/glm-5.3",
-     "writes": True, "skill": "coder"},
-    {"name": "critic", "harness": "claude_code", "model": "anthropic:opus-5",
-     "writes": False, "skill": "critic"},
+    {
+        "name": "coder",
+        "harness": "opencode",
+        "model": "zai-coding-plan/glm-5.3",
+        "writes": True,
+        "skill": "coder",
+    },
+    {
+        "name": "critic",
+        "harness": "claude_code",
+        "model": "anthropic:opus-5",
+        "writes": False,
+        "skill": "critic",
+    },
 ]
 
 
@@ -42,21 +57,41 @@ async def fake_prepare(inp: PrepareCrewInput) -> str:
 @activity.defn(name="run_crew_turn")
 async def fake_turn(inp: CrewTurnInput) -> CrewTurnOutput:
     TURNS.append(inp)
-    run = HarnessRunResult(harness=inp.harness, exit_code=0, summary="ok",
-                           session_id=f"s-{inp.role}", cost_usd=0.5,
-                           input_tokens=100, output_tokens=20)
-    return CrewTurnOutput(run=run, record=TurnRecord(
-        role=inp.role, round=inp.round, attempt=inp.attempt,
-        harness=inp.harness, model=inp.model, session_id=f"s-{inp.role}",
-        cost_usd=0.5, input_tokens=100, output_tokens=20, exit_code=0))
+    run = HarnessRunResult(
+        harness=inp.harness,
+        exit_code=0,
+        summary="ok",
+        session_id=f"s-{inp.role}",
+        cost_usd=0.5,
+        input_tokens=100,
+        output_tokens=20,
+    )
+    return CrewTurnOutput(
+        run=run,
+        record=TurnRecord(
+            role=inp.role,
+            round=inp.round,
+            attempt=inp.attempt,
+            harness=inp.harness,
+            model=inp.model,
+            session_id=f"s-{inp.role}",
+            cost_usd=0.5,
+            input_tokens=100,
+            output_tokens=20,
+            exit_code=0,
+        ),
+    )
 
 
 @activity.defn(name="read_round")
 async def fake_read(inp: ReadRoundInput) -> RoundReading:
-    return RoundReading(deliverable_path="/w/notes.md",
-                        note_summary="added greet()", missing=False,
-                        critique="[major] api.py:20: no timeout",
-                        verdict="needs_work")
+    return RoundReading(
+        deliverable_path="/w/notes.md",
+        note_summary="added greet()",
+        missing=False,
+        critique="[major] api.py:20: no timeout",
+        verdict="needs_work",
+    )
 
 
 @activity.defn(name="checkpoint_round")
@@ -65,24 +100,36 @@ async def fake_checkpoint(inp: CheckpointInput) -> str | None:
 
 
 def _inp(**kw) -> CrewTaskInput:
-    base = dict(layout="code", lead="coder", roles=ROLES,
-                prompt="do the thing", worktree="/w", task_id="t1",
-                deliverable_path="notes.md", rounds_max=2,
-                wall_clock_s=3000, turn_timeout_s=1800, cost_usd=25.0)
+    base = dict(
+        layout="code",
+        lead="coder",
+        roles=ROLES,
+        prompt="do the thing",
+        worktree="/w",
+        task_id="t1",
+        deliverable_path="notes.md",
+        rounds_max=2,
+        wall_clock_s=3000,
+        turn_timeout_s=1800,
+        cost_usd=25.0,
+    )
     base.update(kw)
     return CrewTaskInput(**base)
 
 
 async def _run(inp: CrewTaskInput):
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
-        async with Worker(env.client, task_queue=TASK_QUEUE,
-                          workflows=[CrewTaskWorkflow],
-                          activities=[fake_prepare, fake_turn, fake_read,
-                                      fake_checkpoint]):
+        data_converter=pydantic_data_converter
+    ) as env:
+        async with Worker(
+            env.client,
+            task_queue=TASK_QUEUE,
+            workflows=[CrewTaskWorkflow],
+            activities=[fake_prepare, fake_turn, fake_read, fake_checkpoint],
+        ):
             return await env.client.execute_workflow(
-                CrewTaskWorkflow.run, inp,
-                id=f"crew-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                CrewTaskWorkflow.run, inp, id=f"crew-{uuid.uuid4()}", task_queue=TASK_QUEUE
+            )
 
 
 async def test_the_critic_turn_follows_the_lead_in_the_same_round():
@@ -127,8 +174,7 @@ async def test_the_critic_gets_its_own_session_not_the_leads():
     assert res.sessions["coder"] == "s-coder"
     assert res.sessions["critic"] == "s-critic"
     r2 = [t for t in TURNS if t.round == 2]
-    assert {t.role: t.session_id for t in r2} == {
-        "coder": "s-coder", "critic": "s-critic"}
+    assert {t.role: t.session_id for t in r2} == {"coder": "s-coder", "critic": "s-critic"}
 
 
 async def test_the_verdict_lands_on_the_round_record():
@@ -150,23 +196,46 @@ async def test_a_failing_critic_does_not_fail_the_round():
         TURNS.append(inp)
         if inp.role == "critic":
             raise ApplicationError("critic CLI crashed", non_retryable=True)
-        run = HarnessRunResult(harness=inp.harness, exit_code=0, summary="ok",
-                               session_id=f"s-{inp.role}", cost_usd=0.5,
-                               input_tokens=100, output_tokens=20)
-        return CrewTurnOutput(run=run, record=TurnRecord(
-            role=inp.role, round=inp.round, attempt=inp.attempt,
-            harness=inp.harness, model=inp.model, session_id=f"s-{inp.role}",
-            cost_usd=0.5, input_tokens=100, output_tokens=20, exit_code=0))
+        run = HarnessRunResult(
+            harness=inp.harness,
+            exit_code=0,
+            summary="ok",
+            session_id=f"s-{inp.role}",
+            cost_usd=0.5,
+            input_tokens=100,
+            output_tokens=20,
+        )
+        return CrewTurnOutput(
+            run=run,
+            record=TurnRecord(
+                role=inp.role,
+                round=inp.round,
+                attempt=inp.attempt,
+                harness=inp.harness,
+                model=inp.model,
+                session_id=f"s-{inp.role}",
+                cost_usd=0.5,
+                input_tokens=100,
+                output_tokens=20,
+                exit_code=0,
+            ),
+        )
 
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
-        async with Worker(env.client, task_queue=TASK_QUEUE,
-                          workflows=[CrewTaskWorkflow],
-                          activities=[fake_prepare, turn_with_critic_fail,
-                                      fake_read, fake_checkpoint]):
+        data_converter=pydantic_data_converter
+    ) as env:
+        async with Worker(
+            env.client,
+            task_queue=TASK_QUEUE,
+            workflows=[CrewTaskWorkflow],
+            activities=[fake_prepare, turn_with_critic_fail, fake_read, fake_checkpoint],
+        ):
             res = await env.client.execute_workflow(
-                CrewTaskWorkflow.run, _inp(rounds_max=1),
-                id=f"crew-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                CrewTaskWorkflow.run,
+                _inp(rounds_max=1),
+                id=f"crew-{uuid.uuid4()}",
+                task_queue=TASK_QUEUE,
+            )
     assert res.run.exit_code == 0
     assert len(res.rounds[0].turns) == 2
     assert res.rounds[0].turns[1].cost_incomplete is True

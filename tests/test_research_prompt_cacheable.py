@@ -2,8 +2,13 @@
 enough to cache. Under ~512 tokens a prefix is silently NOT cached -- no
 error, the counter just stays at zero -- so this is guarded by a test rather
 than a comment."""
-from sdlc.research.prompts import (PLAN_SYSTEM, SUB_QUESTION_PREFIX,
-                                   SYNTHESIS_SYSTEM, sub_question_prompt)
+
+from sdlc.research.prompts import (
+    PLAN_SYSTEM,
+    SUB_QUESTION_PREFIX,
+    SYNTHESIS_SYSTEM,
+    sub_question_prompt,
+)
 
 # ~4 chars per token is the standard rough conversion. 512 tokens is the
 # documented cache floor; 2400 chars gives headroom without being precious.
@@ -13,7 +18,8 @@ MIN_CACHEABLE_CHARS = 2400
 def test_prefix_is_long_enough_to_be_cacheable():
     assert len(SUB_QUESTION_PREFIX) >= MIN_CACHEABLE_CHARS, (
         "prefix is below the cache floor -- it will silently not be cached "
-        "and every parallel sub-question pays full input price")
+        "and every parallel sub-question pays full input price"
+    )
 
 
 def test_prefix_is_byte_identical_across_different_questions():

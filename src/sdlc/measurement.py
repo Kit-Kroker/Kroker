@@ -11,18 +11,19 @@ Pure by design -- Pydantic only. This module must never import models.py,
 activities.py, or temporalio; a dependency here would appear as a reviewable
 import.
 """
+
 from __future__ import annotations
 
 import math
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, model_validator
 
 
-class CollectionState(str, Enum):
+class CollectionState(StrEnum):
     MEASURED = "measured"
-    NOT_COLLECTED = "not_collected"   # we did not or could not measure
-    UNKNOWN = "unknown"               # we tried; the result is uninterpretable
+    NOT_COLLECTED = "not_collected"  # we did not or could not measure
+    UNKNOWN = "unknown"  # we tried; the result is uninterpretable
 
 
 class Measurement(BaseModel):
@@ -32,12 +33,13 @@ class Measurement(BaseModel):
     that parses but yields a non-finite rate is unknown. The distinction is
     whether an attempt produced output. Both require a reason.
     """
+
     state: CollectionState
     value: float | None = None
     reason: str = ""
 
     @model_validator(mode="after")
-    def _value_matches_state(self) -> "Measurement":
+    def _value_matches_state(self) -> Measurement:
         if self.state is CollectionState.MEASURED:
             if self.value is None:
                 raise ValueError("MEASURED requires a value")
@@ -49,25 +51,27 @@ class Measurement(BaseModel):
                 raise ValueError(
                     f"MEASURED must be finite (got {self.value!r}) -- a "
                     f"non-finite value is the conflation this type exists "
-                    f"to prevent")
+                    f"to prevent"
+                )
         else:
             if self.value is not None:
                 raise ValueError(
                     f"{self.state.value} must not carry a value "
                     f"(got {self.value!r}) -- that is the conflation this "
-                    f"type exists to prevent")
+                    f"type exists to prevent"
+                )
             if not self.reason.strip():
                 raise ValueError(f"{self.state.value} requires a reason")
         return self
 
     @classmethod
-    def measured(cls, value: float) -> "Measurement":
+    def measured(cls, value: float) -> Measurement:
         return cls(state=CollectionState.MEASURED, value=value)
 
     @classmethod
-    def not_collected(cls, reason: str) -> "Measurement":
+    def not_collected(cls, reason: str) -> Measurement:
         return cls(state=CollectionState.NOT_COLLECTED, reason=reason)
 
     @classmethod
-    def unknown(cls, reason: str) -> "Measurement":
+    def unknown(cls, reason: str) -> Measurement:
         return cls(state=CollectionState.UNKNOWN, reason=reason)

@@ -2,57 +2,86 @@
 calls. Registered on the e2e worker INSTEAD of the production activities, so
 the run touches no real git, subprocess, or network. Names must match the
 production activity names for Temporal dispatch."""
+
 from __future__ import annotations
 
 from temporalio import activity
 
 from sdlc.activities import (
-    CodingTaskInput, CoverageInput, DeltaCheckInput, DiffInput,
-    IntegrationChecks, IntegrationChecksInput, IntegrationHandle,
-    IntegrationInput, LintInput, MergeInput, MergeResult, PROpenInput,
-    QAInput, RepoProbeInput, SecurityScanInput, WorktreeHandle, WorktreeInput,
+    CodingTaskInput,
+    CoverageInput,
+    DeltaCheckInput,
+    DiffInput,
+    IntegrationChecks,
+    IntegrationChecksInput,
+    IntegrationHandle,
+    IntegrationInput,
+    LintInput,
+    MergeInput,
+    MergeResult,
+    PROpenInput,
+    QAInput,
+    RepoProbeInput,
+    SecurityScanInput,
+    WorktreeHandle,
+    WorktreeInput,
+)
+from sdlc.board.activities import (
+    AttachEvidenceInput,
+    PublishArtifactInput,
+    PublishArtifactResult,
+    SetTaskStatusInput,
+    SyncPlanTasksInput,
 )
 from sdlc.context.delta import DELTA_CHECK
 from sdlc.context.models import RepoObservation
 from sdlc.gate import CheckClass, CheckResult, build_check
-from sdlc.models import (
-    ArtifactRef, CoverageReport, HarnessRunResult, QAReport, SecurityReport,
-)
 from sdlc.measurement import CollectionState, Measurement
+from sdlc.models import (
+    ArtifactRef,
+    CoverageReport,
+    HarnessRunResult,
+    QAReport,
+    SecurityReport,
+)
 from sdlc.pricing import price_usage
-
-from sdlc.board.activities import (AttachEvidenceInput,
-                                   PublishArtifactInput,
-                                   PublishArtifactResult, SetTaskStatusInput,
-                                   SyncPlanTasksInput)
 
 
 @activity.defn(name="setup_integration_branch")
-async def fake_setup_integration_branch(
-        inp: IntegrationInput) -> IntegrationHandle:
+async def fake_setup_integration_branch(inp: IntegrationInput) -> IntegrationHandle:
     return IntegrationHandle(head_sha="deadbeef", worktree_path="/fake/integ")
 
 
 @activity.defn(name="create_worktree")
 async def fake_create_worktree(inp: WorktreeInput) -> WorktreeHandle:
-    return WorktreeHandle(path=f"/fake/wt/{inp.task_id}",
-                          branch=f"sdlc/{inp.run_id}/{inp.task_id}",
-                          branch_point="deadbeef")
+    return WorktreeHandle(
+        path=f"/fake/wt/{inp.task_id}",
+        branch=f"sdlc/{inp.run_id}/{inp.task_id}",
+        branch_point="deadbeef",
+    )
 
 
 @activity.defn(name="run_coding_task")
 async def fake_run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
     return HarnessRunResult(
-        harness=inp.harness, session_id="s1", exit_code=0,
-        summary="implemented", commit_sha="cafe1234",
-        input_tokens=1000, output_tokens=200, context_window=200000)
+        harness=inp.harness,
+        session_id="s1",
+        exit_code=0,
+        summary="implemented",
+        commit_sha="cafe1234",
+        input_tokens=1000,
+        output_tokens=200,
+        context_window=200000,
+    )
 
 
 @activity.defn(name="get_task_diff")
 async def fake_get_task_diff(inp: DiffInput) -> dict:
-    return {"stat": " app/main.py | 3 +++",
-            "patch": "diff --git a/app/main.py b/app/main.py\n+ok\n",
-            "files": ["app/main.py"]}
+    return {
+        "stat": " app/main.py | 3 +++",
+        "patch": "diff --git a/app/main.py b/app/main.py\n+ok\n",
+        "files": ["app/main.py"],
+    }
 
 
 @activity.defn(name="run_test_suite")
@@ -77,8 +106,7 @@ async def fake_open_pull_request(inp: PROpenInput) -> str:
 
 @activity.defn(name="security_scan")
 async def fake_security_scan(inp: SecurityScanInput) -> SecurityReport:
-    return SecurityReport(critical=0, findings=[],
-                          state=CollectionState.MEASURED)
+    return SecurityReport(critical=0, findings=[], state=CollectionState.MEASURED)
 
 
 @activity.defn(name="measure_coverage")
@@ -88,8 +116,7 @@ async def fake_measure_coverage(inp: CoverageInput) -> CoverageReport:
 
 
 @activity.defn(name="run_integration_checks")
-async def fake_run_integration_checks(
-        inp: IntegrationChecksInput) -> IntegrationChecks:
+async def fake_run_integration_checks(inp: IntegrationChecksInput) -> IntegrationChecks:
     # Offline orchestration proof: no real toolchain is detected in the fake
     # worktree, so the workflow takes the no-adapter fallback (per-task
     # aggregate green + fake run_lint) — identical to the pre-E-30 path the
@@ -97,19 +124,20 @@ async def fake_run_integration_checks(
     return IntegrationChecks(
         toolchain=None,
         qa=QAReport(tests_passed=False, issues=["fake: no adapter"]),
-        lint_clean=True, lint_detail="fake: no adapter (not linted)")
+        lint_clean=True,
+        lint_detail="fake: no adapter (not linted)",
+    )
 
 
 @activity.defn(name="publish_artifact_version")
-async def fake_publish_artifact_version(
-        inp: PublishArtifactInput) -> PublishArtifactResult:
+async def fake_publish_artifact_version(inp: PublishArtifactInput) -> PublishArtifactResult:
     # version_id must be a non-None int so FeatureWorkflow._plan_version is
     # set (the task-loop board writes early-return when it is None). The
     # value itself is irrelevant — the fakes never touch a real DB.
     return PublishArtifactResult(
-        ref=ArtifactRef(kind="board_artifact",
-                        uri="file:///fake/board", sha256="0" * 64),
-        version_id=1)
+        ref=ArtifactRef(kind="board_artifact", uri="file:///fake/board", sha256="0" * 64),
+        version_id=1,
+    )
 
 
 @activity.defn(name="sync_plan_tasks")
@@ -124,23 +152,19 @@ async def fake_set_task_authoritative(inp: SetTaskStatusInput) -> None:
 
 @activity.defn(name="attach_task_evidence")
 async def fake_attach_task_evidence(inp: AttachEvidenceInput) -> ArtifactRef:
-    return ArtifactRef(kind="board_evidence",
-                       uri="file:///fake/evidence", sha256="0" * 64)
+    return ArtifactRef(kind="board_evidence", uri="file:///fake/evidence", sha256="0" * 64)
 
 
 @activity.defn(name="classify_repo")
 async def fake_classify_repo(inp: RepoProbeInput) -> RepoObservation:
     return RepoObservation(
-        is_git_repo=True,
-        base_branch_resolves=True,
-        commit_sha="deadbeef" * 5,
-        source_file_count=10)
+        is_git_repo=True, base_branch_resolves=True, commit_sha="deadbeef" * 5, source_file_count=10
+    )
 
 
 @activity.defn(name="check_brownfield_delta")
 async def fake_check_brownfield_delta(inp: DeltaCheckInput) -> CheckResult:
-    return build_check(DELTA_CHECK, True, CheckClass.ABSOLUTE,
-                       "all resolve (fake)")
+    return build_check(DELTA_CHECK, True, CheckClass.ABSOLUTE, "all resolve (fake)")
 
 
 from sdlc.artifacts.retention import RetentionInput
@@ -158,18 +182,28 @@ async def fake_apply_session_retention(inp: RetentionInput) -> str:
 # separately as BOARD_FAKES so a temporal test can swap them out for the real
 # activities and exercise the board end-to-end (test_board_workflow.py).
 BOARD_FAKES = [
-    fake_publish_artifact_version, fake_sync_plan_tasks,
-    fake_set_task_authoritative, fake_attach_task_evidence,
+    fake_publish_artifact_version,
+    fake_sync_plan_tasks,
+    fake_set_task_authoritative,
+    fake_attach_task_evidence,
 ]
 
 GIT_FAKES = [
-    fake_setup_integration_branch, fake_create_worktree, fake_run_coding_task,
-    fake_get_task_diff, fake_run_test_suite, fake_run_lint,
-    fake_merge_into_integration, fake_open_pull_request,
-    fake_security_scan, fake_measure_coverage, fake_run_integration_checks,
-    fake_classify_repo, fake_check_brownfield_delta,
+    fake_setup_integration_branch,
+    fake_create_worktree,
+    fake_run_coding_task,
+    fake_get_task_diff,
+    fake_run_test_suite,
+    fake_run_lint,
+    fake_merge_into_integration,
+    fake_open_pull_request,
+    fake_security_scan,
+    fake_measure_coverage,
+    fake_run_integration_checks,
+    fake_classify_repo,
+    fake_check_brownfield_delta,
     fake_apply_session_retention,
-    price_usage,   # E-33: real activity — pure local table lookup, no network
+    price_usage,  # E-33: real activity — pure local table lookup, no network
     *BOARD_FAKES,
 ]
 
@@ -184,5 +218,4 @@ def git_fakes_except(*names: str) -> list:
     behaviour under test. Three modules broke exactly this way and stayed
     broken, because `temporal` is an opt-in marker the default run skips.
     """
-    return [f for f in GIT_FAKES
-            if f.__temporal_activity_definition.name not in names]
+    return [f for f in GIT_FAKES if f.__temporal_activity_definition.name not in names]

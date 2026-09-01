@@ -1,5 +1,6 @@
 """FR-913 (E-48 DD3): MemberKind -> SignalTier, total, and deliberately not
 CONTRACT_KINDS."""
+
 from __future__ import annotations
 
 import random
@@ -24,8 +25,7 @@ def test_contract_tier_and_contract_kinds_differ_by_exactly_db_table():
     operation is something the system DOES, and a table is something it HAS.
     Deriving either set from the other would be wrong.
     """
-    tier_contract = {k for k, t in MEMBER_TIERS.items()
-                     if t is SignalTier.CONTRACT}
+    tier_contract = {k for k, t in MEMBER_TIERS.items() if t is SignalTier.CONTRACT}
     assert tier_contract - CONTRACT_KINDS == {MemberKind.DB_TABLE}
     assert CONTRACT_KINDS - tier_contract == set()
 
@@ -41,21 +41,24 @@ def test_entity_name_belongs_to_neither_set():
 def test_group_by_tier_carries_every_tier_including_empty_ones():
     """An absent key and an empty list are different claims, and only one of
     them is true -- AttributionReport._counts_agree_with_files' rule."""
-    grouped = group_by_tier([
-        CandidateMember(kind=MemberKind.HTTP_ROUTE, value="POST /pay"),
-    ])
+    grouped = group_by_tier(
+        [
+            CandidateMember(kind=MemberKind.HTTP_ROUTE, value="POST /pay"),
+        ]
+    )
     assert set(grouped) == set(SignalTier)
     assert grouped[SignalTier.CONTRACT] == ["POST /pay"]
     assert grouped[SignalTier.BEHAVIORAL] == []
 
 
 def test_group_by_tier_is_sorted_and_deduped():
-    grouped = group_by_tier([
-        CandidateMember(kind=MemberKind.DB_TABLE, value="orders"),
-        CandidateMember(kind=MemberKind.DB_TABLE, value="accounts"),
-        CandidateMember(kind=MemberKind.DB_TABLE, value="orders",
-                        path="other.py"),
-    ])
+    grouped = group_by_tier(
+        [
+            CandidateMember(kind=MemberKind.DB_TABLE, value="orders"),
+            CandidateMember(kind=MemberKind.DB_TABLE, value="accounts"),
+            CandidateMember(kind=MemberKind.DB_TABLE, value="orders", path="other.py"),
+        ]
+    )
     assert grouped[SignalTier.CONTRACT] == ["accounts", "orders"]
 
 

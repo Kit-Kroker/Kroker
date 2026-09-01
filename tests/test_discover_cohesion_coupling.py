@@ -1,4 +1,5 @@
 """FR-913 (E-48 DD1): clause D1 as arithmetic, not opinion."""
+
 from __future__ import annotations
 
 import random
@@ -67,11 +68,14 @@ def test_both_are_order_independent():
     """NFR-10."""
     edges = [("a.py", "b.py"), ("a.py", "c.py"), ("b.py", "d.py")]
     owner_of = {"c.py": {"C-02"}, "d.py": {"C-03"}}
-    first = (cohesion({"a.py", "b.py"}, tuple(edges), PARSED),
-             coupling("C-01", {"a.py", "b.py"}, tuple(edges), owner_of, PARSED))
+    first = (
+        cohesion({"a.py", "b.py"}, tuple(edges), PARSED),
+        coupling("C-01", {"a.py", "b.py"}, tuple(edges), owner_of, PARSED),
+    )
     for _ in range(5):
         shuffled = edges[:]
         random.shuffle(shuffled)
-        assert (cohesion({"a.py", "b.py"}, tuple(shuffled), PARSED),
-                coupling("C-01", {"a.py", "b.py"}, tuple(shuffled), owner_of,
-                         PARSED)) == first
+        assert (
+            cohesion({"a.py", "b.py"}, tuple(shuffled), PARSED),
+            coupling("C-01", {"a.py", "b.py"}, tuple(shuffled), owner_of, PARSED),
+        ) == first

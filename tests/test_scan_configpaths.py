@@ -1,4 +1,5 @@
 """D10: the config-path table is shared, so SS3 must declare it."""
+
 from __future__ import annotations
 
 import pytest
@@ -11,19 +12,34 @@ from sdlc.assessment.scan.registry import SCAN_SIGNALS
 _CONFIGPATHS = "sdlc.assessment.scan.configpaths"
 
 
-@pytest.mark.parametrize("path", [
-    "Dockerfile", "svc/Dockerfile.prod", "docker-compose.yml",
-    ".env", ".env.production", "appsettings.Development.json",
-    "src/main/resources/application-prod.yaml", "k8s/deploy.yaml",
-    "infra/main.tf", "nginx.conf",
-])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "Dockerfile",
+        "svc/Dockerfile.prod",
+        "docker-compose.yml",
+        ".env",
+        ".env.production",
+        "appsettings.Development.json",
+        "src/main/resources/application-prod.yaml",
+        "k8s/deploy.yaml",
+        "infra/main.tf",
+        "nginx.conf",
+    ],
+)
 def test_config_paths_are_recognized(path):
     assert is_config_path(path)
 
 
-@pytest.mark.parametrize("path", [
-    "src/payments/api.py", "README.md", "tests/test_api.py", "app/page.tsx",
-])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "src/payments/api.py",
+        "README.md",
+        "tests/test_api.py",
+        "app/page.tsx",
+    ],
+)
 def test_non_config_paths_are_not(path):
     assert not is_config_path(path)
 

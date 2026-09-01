@@ -1,5 +1,5 @@
 """The chat mount is opt-in and can never take the dashboard down."""
-import pytest
+
 from fastapi import FastAPI
 
 from interfaces.dashboard.api import main
@@ -29,12 +29,12 @@ def test_flag_on_mounts_the_app(monkeypatch):
     assert any(getattr(r, "path", "") == "/chat" for r in app.routes)
 
 
-def test_a_broken_chat_config_skips_the_mount_instead_of_raising(monkeypatch,
-                                                                 caplog):
+def test_a_broken_chat_config_skips_the_mount_instead_of_raising(monkeypatch, caplog):
     monkeypatch.setenv("SDLC_CHAT_ENABLED", "1")
 
     def boom(*a, **kw):
         from sdlc.operator.agent import ChatConfigError
+
         raise ChatConfigError("missing agent.yaml")
 
     monkeypatch.setattr(main, "build_chat_app", boom)
@@ -58,7 +58,6 @@ def test_mounting_configures_logfire(monkeypatch):
     which lives inside configure(). A no-op without LOGFIRE_TOKEN."""
     monkeypatch.setenv("SDLC_CHAT_ENABLED", "1")
     called = []
-    monkeypatch.setattr(main, "configure_logfire",
-                        lambda: called.append(True) or False)
+    monkeypatch.setattr(main, "configure_logfire", lambda: called.append(True) or False)
     main.mount_chat(FastAPI(), FakePoller())
     assert called == [True]

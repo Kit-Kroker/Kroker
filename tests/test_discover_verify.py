@@ -1,8 +1,12 @@
 # tests/test_discover_verify.py
 """E-48 DD8 items 4-5: every reference resolves, every quote byte-verifies,
 and a violation drops the ITEM -- it does not fail the phase."""
+
 from sdlc.assessment.discover.map import (
-    DiscoverAction, DiscoverProposal, DispositionSource, EvidenceRef,
+    DiscoverAction,
+    DiscoverProposal,
+    DispositionSource,
+    EvidenceRef,
     ProposedDisposition,
 )
 from sdlc.assessment.discover.verify import verify_refs
@@ -16,8 +20,8 @@ def _proposal(*rows: ProposedDisposition) -> DiscoverProposal:
 
 def _row(cid: str, **kw) -> ProposedDisposition:
     return ProposedDisposition(
-        candidate_id=cid, action=DiscoverAction.CONFIRM,
-        rationale="it is a capability", **kw)
+        candidate_id=cid, action=DiscoverAction.CONFIRM, rationale="it is a capability", **kw
+    )
 
 
 def test_a_resolving_reference_survives():
@@ -59,10 +63,15 @@ def test_an_empty_file_resolves_and_is_not_confused_with_a_missing_one():
 
 def test_counts_are_over_references_not_dispositions():
     """P3-D2: the guard's denominator is references."""
-    p = _proposal(_row("C1", evidence=(
-        EvidenceRef(path="pay.py", lines="1-2"),
-        EvidenceRef(path="ghost.py"),
-    )))
+    p = _proposal(
+        _row(
+            "C1",
+            evidence=(
+                EvidenceRef(path="pay.py", lines="1-2"),
+                EvidenceRef(path="ghost.py"),
+            ),
+        )
+    )
     out = verify_refs(p, {"pay.py": SRC, "ghost.py": None})
     assert out.total_references == 2
     assert out.unresolved_references == 1
@@ -88,9 +97,11 @@ def test_one_bad_reference_does_not_refuse_a_different_candidate():
 
 def test_verification_is_order_independent():
     """NFR-10: byte-identical across input order."""
-    rows = [_row("C1", evidence=(EvidenceRef(path="pay.py", lines="1-2"),)),
-            _row("C2", evidence=(EvidenceRef(path="ghost.py"),)),
-            _row("C3")]
+    rows = [
+        _row("C1", evidence=(EvidenceRef(path="pay.py", lines="1-2"),)),
+        _row("C2", evidence=(EvidenceRef(path="ghost.py"),)),
+        _row("C3"),
+    ]
     blobs = {"pay.py": SRC, "ghost.py": None}
     a = verify_refs(_proposal(*rows), blobs)
     b = verify_refs(_proposal(*reversed(rows)), blobs)
@@ -100,15 +111,17 @@ def test_verification_is_order_independent():
 
 
 def test_a_quote_that_byte_verifies_survives():
-    p = _proposal(_row("C1", evidence=(
-        EvidenceRef(path="pay.py", lines="1-2"),), quote="gateway.charge"))
+    p = _proposal(
+        _row("C1", evidence=(EvidenceRef(path="pay.py", lines="1-2"),), quote="gateway.charge")
+    )
     out = verify_refs(p, {"pay.py": SRC})
     assert out.refusals == {}
 
 
 def test_a_quote_that_does_not_byte_verify_refuses_its_disposition():
-    p = _proposal(_row("C1", evidence=(
-        EvidenceRef(path="pay.py", lines="1-2"),), quote="gateway.refund"))
+    p = _proposal(
+        _row("C1", evidence=(EvidenceRef(path="pay.py", lines="1-2"),), quote="gateway.refund")
+    )
     out = verify_refs(p, {"pay.py": SRC})
     assert out.refusals["C1"][0] == "dropped_quote_unverified"
     assert out.unresolved_references == 1
@@ -116,15 +129,16 @@ def test_a_quote_that_does_not_byte_verify_refuses_its_disposition():
 
 def test_an_empty_quote_does_not_ground_trivially():
     """E-43 closed exactly this hole: "" in haystack is True."""
-    p = _proposal(_row("C1", evidence=(
-        EvidenceRef(path="pay.py", lines="1-2"),), quote="   "))
+    p = _proposal(_row("C1", evidence=(EvidenceRef(path="pay.py", lines="1-2"),), quote="   "))
     out = verify_refs(p, {"pay.py": SRC})
     assert out.refusals["C1"][0] == "dropped_quote_empty"
 
 
 def _context_with(cids: list[str]):
     from sdlc.assessment.discover.map import (
-        CandidateContext, DiscoverContext, GraphSummary,
+        CandidateContext,
+        DiscoverContext,
+        GraphSummary,
     )
     from sdlc.assessment.scan.models import CandidateMember, Confidence, MemberKind
     from sdlc.measurement import Measurement
@@ -132,19 +146,28 @@ def _context_with(cids: list[str]):
     measured = Measurement.measured(1.0)
     candidates = tuple(
         CandidateContext(
-            candidate_id=cid, name=f"name_{cid}", confidence=Confidence.HIGH,
-            sources=(f"S3-{cid}",), source_rules=("s3_http_route",),
-            members=(CandidateMember(kind=MemberKind.HTTP_ROUTE,
-                                     value="POST /pay", path="pay/api.py"),),
+            candidate_id=cid,
+            name=f"name_{cid}",
+            confidence=Confidence.HIGH,
+            sources=(f"S3-{cid}",),
+            source_rules=("s3_http_route",),
+            members=(
+                CandidateMember(kind=MemberKind.HTTP_ROUTE, value="POST /pay", path="pay/api.py"),
+            ),
             member_paths=("pay/api.py",),
-            cohesion=measured, coupling=measured, guardrail_only=False)
-        for cid in cids)
+            cohesion=measured,
+            coupling=measured,
+            guardrail_only=False,
+        )
+        for cid in cids
+    )
     return DiscoverContext(
         candidates=candidates,
         graph=GraphSummary(
-            parsed=1, unparsed=0, edges=1,
-            unresolved_relative_rate=Measurement.measured(0.0)),
-        collected=measured)
+            parsed=1, unparsed=0, edges=1, unresolved_relative_rate=Measurement.measured(0.0)
+        ),
+        collected=measured,
+    )
 
 
 def test_a_refused_verdict_is_not_reported_as_an_omission():
@@ -178,5 +201,3 @@ def test_pure_quote_fabrication_counts_in_total():
     assert out.total_references == 1
     assert out.unresolved_references == 1
     assert out.fabrication_rate == 1.0
-
-

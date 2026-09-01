@@ -10,6 +10,7 @@ agents/loader.py does not: under `pip install .` the package lives in
 site-packages, which has no relationship to where the policy asset lives.
 Order: explicit arg -> $SDLC_CONTAINMENT_POLICY -> repo-root discovery.
 """
+
 from __future__ import annotations
 
 import fnmatch
@@ -17,7 +18,7 @@ import hashlib
 import json
 import os
 import re
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -37,26 +38,28 @@ class ContainmentError(ValueError):
     """A policy that violates a structural invariant, or cannot be found."""
 
 
-class Predicate(str, Enum):
+class Predicate(StrEnum):
     """The complete predicate vocabulary. Adding a fifth is a code change
     plus a schema version bump — deliberately not an expression language."""
+
     PATH_OUTSIDE_WORKTREE = "path_outside_worktree"
     PATH_MATCHES = "path_matches"
     COMMAND_MATCHES = "command_matches"
     HOST_NOT_ALLOWLISTED = "host_not_allowlisted"
 
 
-class Action(str, Enum):
+class Action(StrEnum):
     """What a matched rule does. DENY is E-16's behaviour and the default;
     ESCALATE raises a human gate through FR-301/FR-302 (E-17)."""
+
     DENY = "deny"
     ESCALATE = "escalate"
 
 
 class Rule(BaseModel):
     id: str
-    layer: ContainmentLayer      # MINIMUM capability required (spec §4a)
-    action: Action = Action.DENY   # E-17; DENY keeps every E-16 rule as-is
+    layer: ContainmentLayer  # MINIMUM capability required (spec §4a)
+    action: Action = Action.DENY  # E-17; DENY keeps every E-16 rule as-is
     tools: list[str]
     predicate: Predicate
     reason: str
@@ -95,7 +98,8 @@ def _resolve_policy_path(path: str | os.PathLike | None = None) -> Path:
     raise ContainmentError(
         f"cannot locate the containment policy. Tried: an explicit path "
         f"argument; ${POLICY_PATH_ENV}; and walking up from {Path.cwd()} for "
-        f"a directory containing both pyproject.toml and agents/registry.yaml.")
+        f"a directory containing both pyproject.toml and agents/registry.yaml."
+    )
 
 
 def load_policy(path: str | os.PathLike | None = None) -> Policy:
@@ -109,8 +113,8 @@ def load_policy(path: str | os.PathLike | None = None) -> Policy:
     version = raw.get("version")
     if version != 1:
         raise ContainmentError(
-            f"unsupported containment policy version {version!r} in {p}; "
-            f"expected 1")
+            f"unsupported containment policy version {version!r} in {p}; expected 1"
+        )
 
     rules: list[Rule] = []
     seen: set[str] = set()
@@ -121,16 +125,15 @@ def load_policy(path: str | os.PathLike | None = None) -> Policy:
         seen.add(rid)
         try:
             rules.append(Rule.model_validate(entry))
-            if (rules[-1].action is Action.ESCALATE
-                    and rules[-1].layer is ContainmentLayer.NATIVE):
+            if rules[-1].action is Action.ESCALATE and rules[-1].layer is ContainmentLayer.NATIVE:
                 raise ContainmentError(
                     f"rule {rid!r} in {p} sets action: escalate with layer: "
                     f"native. A native `permissions.deny` strictly beats a hook "
                     f"allow, so an approved call would still be blocked — the "
-                    f"gate would be theatre. Escalating rules must be layer: hook.")
-        except Exception as e:                    # noqa: BLE001 - re-typed
-            raise ContainmentError(
-                f"invalid rule {rid!r} in {p}: {e}") from e
+                    f"gate would be theatre. Escalating rules must be layer: hook."
+                )
+        except Exception as e:  # noqa: BLE001 - re-typed
+            raise ContainmentError(f"invalid rule {rid!r} in {p}: {e}") from e
     return Policy(version=version, rules=rules, source_path=p.resolve())
 
 
@@ -138,7 +141,7 @@ class Verdict(BaseModel):
     allow: bool
     rule_id: str | None = None
     reason: str | None = None
-    action: Action = Action.DENY   # the matched rule's action; DENY when allowed
+    action: Action = Action.DENY  # the matched rule's action; DENY when allowed
 
 
 _URL_RE = re.compile(r"https?://[^\s'\"|;>)]+", re.IGNORECASE)
@@ -163,7 +166,7 @@ def _abs_under(path: str, worktree: str) -> bool:
             p = root / p
         p = p.resolve()
     except (OSError, ValueError):
-        return False        # unresolvable -> treat as outside (fail closed)
+        return False  # unresolvable -> treat as outside (fail closed)
     return p == root or root in p.parents
 
 
@@ -193,12 +196,10 @@ def host_allowed(host: str, allow_hosts: list[str]) -> bool:
     notification (or the reverse) is a policy hole.
     """
     h = host.lower()
-    return any(h == a.lower() or h.endswith("." + a.lower())
-               for a in allow_hosts)
+    return any(h == a.lower() or h.endswith("." + a.lower()) for a in allow_hosts)
 
 
-def _rule_denies(rule: Rule, tool: str, tool_input: dict,
-                 worktree: str) -> bool:
+def _rule_denies(rule: Rule, tool: str, tool_input: dict, worktree: str) -> bool:
     if tool not in rule.tools:
         return False
 
@@ -227,15 +228,13 @@ def _rule_denies(rule: Rule, tool: str, tool_input: dict,
     return False
 
 
-def evaluate(policy: Policy, tool: str, tool_input: dict,
-             worktree: str) -> Verdict:
+def evaluate(policy: Policy, tool: str, tool_input: dict, worktree: str) -> Verdict:
     """First matching rule wins. `worktree` is a PARAMETER, never computed:
     create_worktree may return <task>.N after a Windows lock fallback and its
     returned path is authoritative (activities.py:260-274)."""
     for rule in policy.rules:
         if _rule_denies(rule, tool, tool_input, worktree):
-            return Verdict(allow=False, rule_id=rule.id, reason=rule.reason,
-                           action=rule.action)
+            return Verdict(allow=False, rule_id=rule.id, reason=rule.reason, action=rule.action)
     return Verdict(allow=True)
 
 
@@ -256,14 +255,15 @@ def digest_tool_input(tool_input: dict) -> str:
     """Canonical digest of a tool call's input. Used by BOTH the activity
     (building a grant) and the hook (matching one), so canonicalisation can
     never disagree between them."""
-    canonical = json.dumps(tool_input, sort_keys=True,
-                           separators=(",", ":"), ensure_ascii=False,
-                           default=str)
+    canonical = json.dumps(
+        tool_input, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str
+    )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def match_grant(grants: list[ToolGrant], tool: str, tool_use_id: str,
-                tool_input: dict) -> ToolGrant | None:
+def match_grant(
+    grants: list[ToolGrant], tool: str, tool_use_id: str, tool_input: dict
+) -> ToolGrant | None:
     """The grant for exactly this call, or None. All three of tool name,
     tool_use_id and input digest must agree — the id gives single-use (the
     CLI replays the original id; a new call gets a new one) and the digest
@@ -272,8 +272,7 @@ def match_grant(grants: list[ToolGrant], tool: str, tool_use_id: str,
         return None
     digest = digest_tool_input(tool_input)
     for g in grants:
-        if (g.tool_use_id == tool_use_id and g.tool == tool
-                and g.input_digest == digest):
+        if g.tool_use_id == tool_use_id and g.tool == tool and g.input_digest == digest:
             return g
     return None
 

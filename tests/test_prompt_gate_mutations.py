@@ -7,6 +7,7 @@ known ways and requiring the gate to notice.
 Opt-in and token-spending, exactly like the gate it exercises:
     SDLC_PROMPT_EVAL=1 python -m pytest -m prompt_eval -k mutations
 """
+
 from __future__ import annotations
 
 import os
@@ -51,15 +52,23 @@ def _gate(mutation: str | None):
     # so the subprocess inherits real credentials. GEMINI_API_KEY (the judge)
     # is not clobbered by conftest but is only in .env, so this loads it too.
     from dotenv import load_dotenv
+
     load_dotenv(override=True)
     return run_gate(
-        _ROLE, _CASE, repo_root=_REPO, cases_root=_CASES,
+        _ROLE,
+        _CASE,
+        repo_root=_REPO,
+        cases_root=_CASES,
         agents_dir=_resolve_agents_dir(),
-        judge_model=default_judge_model(), repeat=3, mutation=mutation)
+        judge_model=default_judge_model(),
+        repeat=3,
+        mutation=mutation,
+    )
 
 
-@pytest.mark.skipif(os.getenv("SDLC_PROMPT_EVAL") != "1",
-                    reason="spends tokens; set SDLC_PROMPT_EVAL=1")
+@pytest.mark.skipif(
+    os.getenv("SDLC_PROMPT_EVAL") != "1", reason="spends tokens; set SDLC_PROMPT_EVAL=1"
+)
 def test_control_passes_and_costs_nothing():
     """The unchanged prompt must not fail. A gate that fails its own control
     is measuring noise, and nothing below it is interpretable."""
@@ -68,8 +77,9 @@ def test_control_passes_and_costs_nothing():
     assert "unchanged" in r.reason
 
 
-@pytest.mark.skipif(os.getenv("SDLC_PROMPT_EVAL") != "1",
-                    reason="spends tokens; set SDLC_PROMPT_EVAL=1")
+@pytest.mark.skipif(
+    os.getenv("SDLC_PROMPT_EVAL") != "1", reason="spends tokens; set SDLC_PROMPT_EVAL=1"
+)
 def test_scope_dropped_outcome_is_recorded():
     """The veto->FAIL_ABSOLUTE path is proven deterministically (unit tests
     in test_eval_absolute_vetoes.py + test_eval_verdict.py's
@@ -84,15 +94,18 @@ def test_scope_dropped_outcome_is_recorded():
     that the gate ran and produced a verdict."""
     r = _gate(_SCOPE_DROPPED)
     veto_fired = any("scope_preserved" in f for f in r.absolute_failures)
-    print(f"\nOQ-P5 scope_dropped outcome: {r.verdict.value} "
-          f"- scope_preserved veto fired: {veto_fired}")
+    print(
+        f"\nOQ-P5 scope_dropped outcome: {r.verdict.value} "
+        f"- scope_preserved veto fired: {veto_fired}"
+    )
     print(f"  reason: {r.reason}")
     print(f"  baseline scores: {r.scores_baseline}")
     print(f"  working  scores: {r.scores_working}")
 
 
-@pytest.mark.skipif(os.getenv("SDLC_PROMPT_EVAL") != "1",
-                    reason="spends tokens; set SDLC_PROMPT_EVAL=1")
+@pytest.mark.skipif(
+    os.getenv("SDLC_PROMPT_EVAL") != "1", reason="spends tokens; set SDLC_PROMPT_EVAL=1"
+)
 def test_inverted_instruction_outcome_is_recorded():
     """An inverted instruction (do NOT suggest answers; drop out_of_scope).
     Records whether the gate notices; the scope_discipline_declared veto
@@ -104,8 +117,9 @@ def test_inverted_instruction_outcome_is_recorded():
     print(f"  working  scores: {r.scores_working}")
 
 
-@pytest.mark.skipif(os.getenv("SDLC_PROMPT_EVAL") != "1",
-                    reason="spends tokens; set SDLC_PROMPT_EVAL=1")
+@pytest.mark.skipif(
+    os.getenv("SDLC_PROMPT_EVAL") != "1", reason="spends tokens; set SDLC_PROMPT_EVAL=1"
+)
 def test_truncated_prompt_outcome_is_recorded_either_way():
     """OQ-P5's original case, and the one this suite does NOT presume.
 

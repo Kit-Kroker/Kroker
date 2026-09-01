@@ -1,6 +1,7 @@
 """The shipped nightly-reflect asset (E-13, FR-404). Guards the scope
 boundary: project banks only — org_bank has no writers, so an org schedule
 would be a permanent no-op behind a checked box."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -35,7 +36,8 @@ def test_nightly_reflect_is_project_scoped_only():
     for bank in a.action.banks:
         assert bank.startswith("project:"), (
             f"{bank!r} is not project-scoped; org reflect is out of scope "
-            f"until something retains to org_bank")
+            f"until something retains to org_bank"
+        )
 
 
 def test_shipped_asset_translates_to_a_temporal_schedule():

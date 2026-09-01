@@ -1,7 +1,8 @@
 """follow: run-scoped fingerprints, early return, clamping, and the brake."""
+
 import asyncio
 import contextlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -13,29 +14,40 @@ from sdlc.operator.deps import OperatorDeps
 from sdlc.operator.errors import ToolError
 from sdlc.pending import StageGatePending
 
-AT = datetime(2026, 8, 20, 9, 0, tzinfo=timezone.utc)
-GATE = StageGatePending(key="architecture#1", gate="architecture", round=1,
-                        spec_summary="s")
+AT = datetime(2026, 8, 20, 9, 0, tzinfo=UTC)
+GATE = StageGatePending(key="architecture#1", gate="architecture", round=1, spec_summary="s")
 
 
 def a_run(run_id="r1", stage="dev", status="running", cost=None):
-    return RunState(run_id=run_id, title="Add SSO", mode="brownfield",
-                    status=status, started_at=AT, current_stage=stage,
-                    cost_usd_total=cost)
+    return RunState(
+        run_id=run_id,
+        title="Add SSO",
+        mode="brownfield",
+        status=status,
+        started_at=AT,
+        current_stage=stage,
+        cost_usd_total=cost,
+    )
 
 
 def _a_summary(run_id):
     """A closed-run entry, for asserting that closures elsewhere in the fleet
     do not end a run-scoped wait."""
     from sdlc.models import RunSummary
-    return RunSummary(run_id=run_id, mode="greenfield", outcome="deployed",
-                      terminal_stage="deploy", started_at=AT, ended_at=AT,
-                      duration_s=1.0)
+
+    return RunSummary(
+        run_id=run_id,
+        mode="greenfield",
+        outcome="deployed",
+        terminal_stage="deploy",
+        started_at=AT,
+        ended_at=AT,
+        duration_s=1.0,
+    )
 
 
 def snap(runs, inbox=(), at=AT):
-    return FleetSnapshot(at=at, total_open_runs=len(runs), runs=list(runs),
-                          inbox=list(inbox))
+    return FleetSnapshot(at=at, total_open_runs=len(runs), runs=list(runs), inbox=list(inbox))
 
 
 class ScriptedPoller:
@@ -62,8 +74,7 @@ def deps_for(poller, **kw):
 
 @pytest.mark.asyncio
 async def test_returns_when_the_followed_run_advances_a_stage():
-    p = ScriptedPoller(snap([a_run(stage="dev")]),
-                       [snap([a_run(stage="qa")])])
+    p = ScriptedPoller(snap([a_run(stage="dev")]), [snap([a_run(stage="qa")])])
     got = await tools.follow(deps_for(p), run_id="r1", timeout_s=5)
     assert got.timed_out is False
     assert "qa" in got.detail
@@ -72,9 +83,7 @@ async def test_returns_when_the_followed_run_advances_a_stage():
 
 @pytest.mark.asyncio
 async def test_returns_immediately_on_a_new_pending_decision():
-    p = ScriptedPoller(
-        snap([a_run()]),
-        [snap([a_run()], [RunInbox(run_id="r1", pending=[GATE])])])
+    p = ScriptedPoller(snap([a_run()]), [snap([a_run()], [RunInbox(run_id="r1", pending=[GATE])])])
     got = await tools.follow(deps_for(p), run_id="r1", timeout_s=5)
     assert got.timed_out is False
     assert "architecture" in got.detail
@@ -90,16 +99,18 @@ async def test_returns_when_the_run_leaves_the_open_set():
 
 @pytest.mark.asyncio
 async def test_another_runs_movement_does_not_end_a_scoped_follow():
-    p = ScriptedPoller(snap([a_run("r1"), a_run("r2")]),
-                       [snap([a_run("r1"), a_run("r2", stage="qa")])])
+    p = ScriptedPoller(
+        snap([a_run("r1"), a_run("r2")]), [snap([a_run("r1"), a_run("r2", stage="qa")])]
+    )
     got = await tools.follow(deps_for(p), run_id="r1", timeout_s=5)
     assert got.timed_out is True
 
 
 @pytest.mark.asyncio
 async def test_unscoped_follow_reports_any_runs_movement():
-    p = ScriptedPoller(snap([a_run("r1"), a_run("r2")]),
-                       [snap([a_run("r1"), a_run("r2", stage="qa")])])
+    p = ScriptedPoller(
+        snap([a_run("r1"), a_run("r2")]), [snap([a_run("r1"), a_run("r2", stage="qa")])]
+    )
     got = await tools.follow(deps_for(p), timeout_s=5)
     assert got.timed_out is False
     assert "r2" in got.detail
@@ -115,7 +126,6 @@ async def test_a_clock_only_snapshot_is_not_a_change():
 
 @pytest.mark.asyncio
 async def test_timeout_is_clamped_to_the_floor_and_ceiling():
-    p = ScriptedPoller(snap([a_run()]), [])
     assert tools._clamp(1) == tools.MIN_TIMEOUT_S
     assert tools._clamp(9999) == tools.MAX_TIMEOUT_S
     assert tools._clamp(60) == 60
@@ -149,8 +159,7 @@ async def test_a_cost_only_change_is_not_a_change():
     returned within seconds reporting "something changed that this report
     does not name", burning a model round trip toward the brake.
     """
-    p = ScriptedPoller(snap([a_run()]),
-                       [snap([a_run(cost=99.99)])])
+    p = ScriptedPoller(snap([a_run()]), [snap([a_run(cost=99.99)])])
     got = await tools.follow(deps_for(p), run_id="r1", timeout_s=5)
     assert got.timed_out is True
 
@@ -171,8 +180,7 @@ async def test_an_unrelated_run_closing_does_not_end_a_scoped_follow():
 @pytest.mark.asyncio
 async def test_every_reported_change_can_be_named():
     """No return should ever carry the 'cannot name it' fallback."""
-    p = ScriptedPoller(snap([a_run(stage="dev")]),
-                       [snap([a_run(stage="qa")])])
+    p = ScriptedPoller(snap([a_run(stage="dev")]), [snap([a_run(stage="qa")])])
     got = await tools.follow(deps_for(p), run_id="r1", timeout_s=5)
     assert got.changed
     assert "does not name" not in got.detail

@@ -6,6 +6,7 @@ fail-closed stance, same "a structural problem raises at load" rule. A typo in
 a notifier name must surface at boot, not for the first time while a gate is
 expiring.
 """
+
 from __future__ import annotations
 
 import os
@@ -40,8 +41,7 @@ class NotifyRoutes(BaseModel):
         """Primary always; fallback additionally on ESCALATE. A tier whose
         route is absent (unset env var, not configured) is skipped."""
         table = self.gates.get(gate) or self.default
-        tiers = (["primary", "fallback"]
-                 if reason is NotifyReason.ESCALATE else ["primary"])
+        tiers = ["primary", "fallback"] if reason is NotifyReason.ESCALATE else ["primary"]
         return [table[t] for t in tiers if t in table]
 
 
@@ -64,22 +64,23 @@ def _resolve_path(path: str | os.PathLike | None) -> Path:
     raise NotifyConfigError(
         f"cannot locate the notification routes asset. Tried: an explicit "
         f"path; ${ROUTES_PATH_ENV}; and walking up from {Path.cwd()} for a "
-        f"directory containing {' and '.join(_ROOT_MARKERS)}.")
+        f"directory containing {' and '.join(_ROOT_MARKERS)}."
+    )
 
 
 def _parse_route(raw: str, where: str) -> Route | None:
     """'log' -> Route(log); 'webhook:$X' -> Route(webhook, os.environ[X]).
     Returns None when an env-var target is unset: dropping the route beats
     POSTing to the literal string."""
-    from .notifiers import NOTIFIERS       # local: avoids an import cycle
+    from .notifiers import NOTIFIERS  # local: avoids an import cycle
 
-    notifier, _, target = raw.partition(":")
+    notifier, _, raw_target = raw.partition(":")
     notifier = notifier.strip()
     if notifier not in NOTIFIERS:
         raise NotifyConfigError(
-            f"unknown notifier {notifier!r} at {where}; "
-            f"known: {', '.join(sorted(NOTIFIERS))}")
-    target = target.strip() or None
+            f"unknown notifier {notifier!r} at {where}; known: {', '.join(sorted(NOTIFIERS))}"
+        )
+    target: str | None = raw_target.strip() or None
     if target and target.startswith("$"):
         target = os.environ.get(target[1:])
         if not target:
@@ -94,8 +95,7 @@ def _parse_table(raw: dict, where: str) -> dict[str, Route]:
         if value is None:
             continue
         if not isinstance(value, str):
-            raise NotifyConfigError(
-                f"{where}.{tier} must be a route string, got {type(value)}")
+            raise NotifyConfigError(f"{where}.{tier} must be a route string, got {type(value)}")
         route = _parse_route(value, f"{where}.{tier}")
         if route is not None:
             table[tier] = route
@@ -110,14 +110,13 @@ def load_routes(path: str | os.PathLike | None = None) -> NotifyRoutes:
     raw = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     if raw.get("version") != 1:
         raise NotifyConfigError(
-            f"unsupported notifications version {raw.get('version')!r} in {p}; "
-            f"expected 1")
+            f"unsupported notifications version {raw.get('version')!r} in {p}; expected 1"
+        )
 
     return NotifyRoutes(
         version=1,
         base_url=raw.get("base_url"),
         allow_hosts=list(raw.get("allow_hosts") or []),
         default=_parse_table(raw.get("default") or {}, "default"),
-        gates={g: _parse_table(t or {}, f"gates.{g}")
-               for g, t in (raw.get("gates") or {}).items()},
+        gates={g: _parse_table(t or {}, f"gates.{g}") for g, t in (raw.get("gates") or {}).items()},
     )

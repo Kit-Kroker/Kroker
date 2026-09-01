@@ -4,6 +4,7 @@ The advisory half arrives as an AdvisoryResult the activity fetched: this
 module never performs I/O, so "we did not look" reaches it as a Measurement
 rather than as an empty list (spec D11/D16).
 """
+
 from __future__ import annotations
 
 import posixpath
@@ -16,7 +17,10 @@ from pydantic import BaseModel
 from ...measurement import Measurement
 from ..advisories import AdvisoryResult
 from ..models import (
-    FixClass, SignalResult, TriageFinding, dedupe_by_identity,
+    FixClass,
+    SignalResult,
+    TriageFinding,
+    dedupe_by_identity,
 )
 
 SIGNAL_ID = "dependencies"
@@ -45,21 +49,40 @@ IMPORT_ALIASES: dict[str, tuple[str, ...]] = {
 
 # Packages that are legitimately never imported: runners, linters, build
 # backends, and plugins loaded through entry points.
-TOOLING_NAMES = frozenset({
-    "pytest", "ruff", "mypy", "coverage", "black", "flake8", "isort", "tox",
-    "hatchling", "setuptools", "wheel", "build", "twine", "pre-commit",
-    "pip", "uv", "poetry", "nox", "bandit", "pylint",
-})
-TOOLING_PREFIXES = ("pytest-", "types-", "flake8-", "sphinx", "mypy-",
-                    "pytest_")
+TOOLING_NAMES = frozenset(
+    {
+        "pytest",
+        "ruff",
+        "mypy",
+        "coverage",
+        "black",
+        "flake8",
+        "isort",
+        "tox",
+        "hatchling",
+        "setuptools",
+        "wheel",
+        "build",
+        "twine",
+        "pre-commit",
+        "pip",
+        "uv",
+        "poetry",
+        "nox",
+        "bandit",
+        "pylint",
+    }
+)
+TOOLING_PREFIXES = ("pytest-", "types-", "flake8-", "sphinx", "mypy-", "pytest_")
 
 
 class Declared(BaseModel):
     """One direct dependency as a manifest declares it."""
-    name: str                 # PEP 503 normalized
-    raw: str                  # the declaration verbatim -- used as evidence
-    manifest: str             # repo-relative path it came from
-    constraint: str = ""      # "" when unconstrained
+
+    name: str  # PEP 503 normalized
+    raw: str  # the declaration verbatim -- used as evidence
+    manifest: str  # repo-relative path it came from
+    constraint: str = ""  # "" when unconstrained
     line: int | None = None
 
 
@@ -72,13 +95,14 @@ def normalize(name: str) -> str:
 _REQ = re.compile(
     r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)"
     r"\s*(?:\[[^\]]*\])?"
-    r"\s*(?P<spec>[^;#]*)")
+    r"\s*(?P<spec>[^;#]*)"
+)
 
 
-def _declared(name: str, raw: str, manifest: str, spec: str,
-              line: int | None = None) -> Declared:
-    return Declared(name=normalize(name), raw=raw.strip(), manifest=manifest,
-                    constraint=spec.strip(), line=line)
+def _declared(name: str, raw: str, manifest: str, spec: str, line: int | None = None) -> Declared:
+    return Declared(
+        name=normalize(name), raw=raw.strip(), manifest=manifest, constraint=spec.strip(), line=line
+    )
 
 
 def parse_requirements(manifest: str, text: str) -> list[Declared]:
@@ -97,8 +121,7 @@ def parse_requirements(manifest: str, text: str) -> list[Declared]:
             continue
         match = _REQ.match(line)
         if match:
-            out.append(_declared(match.group("name"), line, manifest,
-                                 match.group("spec"), lineno))
+            out.append(_declared(match.group("name"), line, manifest, match.group("spec"), lineno))
     return out
 
 
@@ -137,8 +160,7 @@ def parse_pyproject(manifest: str, text: str) -> list[Declared]:
     for spec in specs:
         match = _REQ.match(str(spec))
         if match:
-            out.append(_declared(match.group("name"), str(spec), manifest,
-                                 match.group("spec")))
+            out.append(_declared(match.group("name"), str(spec), manifest, match.group("spec")))
 
     # Poetry: [tool.poetry.dependencies] is a dict, not a list. poetry.lock
     # is in PythonToolchain.lockfiles, so Poetry repos are in scope, and a
@@ -151,19 +173,19 @@ def parse_pyproject(manifest: str, text: str) -> list[Declared]:
     if isinstance(poetry_deps, dict):
         for name, spec in poetry_deps.items():
             if name == "python":
-                continue                  # Python version constraint, not a dep
+                continue  # Python version constraint, not a dep
             constraint = _poetry_constraint(spec)
-            out.append(Declared(
-                name=normalize(name), raw="", manifest=manifest,
-                constraint=constraint))
+            out.append(
+                Declared(name=normalize(name), raw="", manifest=manifest, constraint=constraint)
+            )
     for group in (poetry.get("group") or {}).values():
         group_deps = (group or {}).get("dependencies") or {}
         if isinstance(group_deps, dict):
             for name, spec in group_deps.items():
                 constraint = _poetry_constraint(spec)
-                out.append(Declared(
-                    name=normalize(name), raw="", manifest=manifest,
-                    constraint=constraint))
+                out.append(
+                    Declared(name=normalize(name), raw="", manifest=manifest, constraint=constraint)
+                )
 
     return out
 
@@ -186,12 +208,10 @@ def parse_manifests(blobs: Mapping[str, str]) -> list[Declared]:
 
 
 _FROM_IMPORT = re.compile(
-    r"^[ \t]*from[ \t]+(?P<path>[\w.]+)[ \t]+import[ \t]+(?P<names>[^\n#]+)",
-    re.MULTILINE)
+    r"^[ \t]*from[ \t]+(?P<path>[\w.]+)[ \t]+import[ \t]+(?P<names>[^\n#]+)", re.MULTILINE
+)
 
-_PLAIN_IMPORT = re.compile(
-    r"^[ \t]*import[ \t]+(?P<names>[^\n#]+)",
-    re.MULTILINE)
+_PLAIN_IMPORT = re.compile(r"^[ \t]*import[ \t]+(?P<names>[^\n#]+)", re.MULTILINE)
 
 
 def _add_name(out: set[str], raw: str) -> None:
@@ -256,17 +276,35 @@ def _provides(name: str) -> tuple[str, ...]:
     return (name, name.replace("-", "_"))
 
 
-def _finding(rule: str, severity: str, detail: str, fix_class: FixClass,
-             path: str = "", line: int | None = None,
-             evidence: str = "", key: str = "") -> TriageFinding:
-    return TriageFinding(signal=SIGNAL_ID, rule=rule, severity=severity,
-                         detail=detail, fix_class=fix_class, path=path,
-                         line=line, evidence=evidence, key=key)
+def _finding(
+    rule: str,
+    severity: str,
+    detail: str,
+    fix_class: FixClass,
+    path: str = "",
+    line: int | None = None,
+    evidence: str = "",
+    key: str = "",
+) -> TriageFinding:
+    return TriageFinding(
+        signal=SIGNAL_ID,
+        rule=rule,
+        severity=severity,
+        detail=detail,
+        fix_class=fix_class,
+        path=path,
+        line=line,
+        evidence=evidence,
+        key=key,
+    )
 
 
-def evaluate(declared: Sequence[Declared], lockfile_present: bool,
-             imported: set[str],
-             advisories: AdvisoryResult) -> SignalResult:
+def evaluate(
+    declared: Sequence[Declared],
+    lockfile_present: bool,
+    imported: set[str],
+    advisories: AdvisoryResult,
+) -> SignalResult:
     """Dependency health over parsed declarations.
 
     `imported` is the top-level module set from `imported_modules`.
@@ -278,16 +316,23 @@ def evaluate(declared: Sequence[Declared], lockfile_present: bool,
 
     for d in sorted(declared, key=lambda d: (d.manifest, d.name)):
         if not _is_pinned(d.constraint):
-            mitigation = ("a lockfile is tracked, so resolution is still "
-                          "reproducible" if lockfile_present
-                          else "no lockfile is tracked, so two installs can "
-                               "resolve to different versions")
-            findings.append(_finding(
-                "unpinned_dependency", "medium",
-                f"{d.name} is declared without an exact version and "
-                f"{mitigation}.",
-                FixClass.MECHANICAL, d.manifest, d.line, d.raw,
-                key=d.name))
+            mitigation = (
+                "a lockfile is tracked, so resolution is still reproducible"
+                if lockfile_present
+                else "no lockfile is tracked, so two installs can resolve to different versions"
+            )
+            findings.append(
+                _finding(
+                    "unpinned_dependency",
+                    "medium",
+                    f"{d.name} is declared without an exact version and {mitigation}.",
+                    FixClass.MECHANICAL,
+                    d.manifest,
+                    d.line,
+                    d.raw,
+                    key=d.name,
+                )
+            )
 
     by_name: dict[str, set[str]] = {}
     origin: dict[str, Declared] = {}
@@ -296,30 +341,39 @@ def evaluate(declared: Sequence[Declared], lockfile_present: bool,
         origin.setdefault(d.name, d)
     for name in sorted(by_name):
         if len(by_name[name]) > 1:
-            constraints = ", ".join(sorted(c or "(none)"
-                                           for c in by_name[name]))
-            findings.append(_finding(
-                "duplicate_dependency", "medium",
-                f"{name} is declared more than once with conflicting "
-                f"constraints ({constraints}); which one wins depends on "
-                f"install order.",
-                FixClass.MECHANICAL, origin[name].manifest,
-                key=name))
+            constraints = ", ".join(sorted(c or "(none)" for c in by_name[name]))
+            findings.append(
+                _finding(
+                    "duplicate_dependency",
+                    "medium",
+                    f"{name} is declared more than once with conflicting "
+                    f"constraints ({constraints}); which one wins depends on "
+                    f"install order.",
+                    FixClass.MECHANICAL,
+                    origin[name].manifest,
+                    key=name,
+                )
+            )
 
     for adv in advisories.advisories:
-        d = origin.get(normalize(adv.package))
-        findings.append(_finding(
-            "known_vulnerable", adv.severity,
-            f"{adv.package} matches {adv.advisory_id}"
-            f"{': ' + adv.summary if adv.summary else ''}. Upgrading is a "
-            f"one-line edit; deciding the upgrade is safe is not.",
-            # JUDGEMENT per spec D7's shape -- E-44 promises a MECHANICAL
-            # finding can be closed by a PR without judgement, and a version
-            # bump can break the build.
-            FixClass.JUDGEMENT,
-            d.manifest if d else "", d.line if d else None,
-            d.raw if d else "",
-            key=f"{adv.package}:{adv.advisory_id}"))
+        dep = origin.get(normalize(adv.package))
+        findings.append(
+            _finding(
+                "known_vulnerable",
+                adv.severity,
+                f"{adv.package} matches {adv.advisory_id}"
+                f"{': ' + adv.summary if adv.summary else ''}. Upgrading is a "
+                f"one-line edit; deciding the upgrade is safe is not.",
+                # JUDGEMENT per spec D7's shape -- E-44 promises a MECHANICAL
+                # finding can be closed by a PR without judgement, and a version
+                # bump can break the build.
+                FixClass.JUDGEMENT,
+                dep.manifest if dep else "",
+                dep.line if dep else None,
+                dep.raw if dep else "",
+                key=f"{adv.package}:{adv.advisory_id}",
+            )
+        )
 
     for name in sorted(by_name):
         if _is_tooling(name):
@@ -327,16 +381,24 @@ def evaluate(declared: Sequence[Declared], lockfile_present: bool,
         if any(module in imported for module in _provides(name)):
             continue
         d = origin[name]
-        findings.append(_finding(
-            "unused_dependency", "low",
-            f"{name} is declared but no source file imports it. Distribution "
-            f"names and import names diverge, so confirm before removing.",
-            FixClass.MECHANICAL, d.manifest, d.line, d.raw,
-            key=name))
+        findings.append(
+            _finding(
+                "unused_dependency",
+                "low",
+                f"{name} is declared but no source file imports it. Distribution "
+                f"names and import names diverge, so confirm before removing.",
+                FixClass.MECHANICAL,
+                d.manifest,
+                d.line,
+                d.raw,
+                key=name,
+            )
+        )
 
     findings = dedupe_by_identity(findings)
     return SignalResult(
-        signal=SIGNAL_ID, version=VERSION,
+        signal=SIGNAL_ID,
+        version=VERSION,
         collected=Measurement.measured(float(len(findings))),
         findings=findings,
         metrics={
@@ -344,4 +406,5 @@ def evaluate(declared: Sequence[Declared], lockfile_present: bool,
             # Passed through unchanged: a not_collected lookup stays
             # not_collected here (D16).
             M_VULNERABLE: advisories.collected,
-        })
+        },
+    )

@@ -8,6 +8,7 @@ killed the whole FeatureWorkflow, taking every other stage's records with
 it). _degraded_research_brief is the shape both paths land on -- these tests
 pin it: no findings, the shortfall recorded as a gap, empty grounded_findings
 so verify_brief passes it through the ordinary success path."""
+
 from pydantic_ai.exceptions import UsageLimitExceeded
 
 from sdlc.models import ResearchBrief

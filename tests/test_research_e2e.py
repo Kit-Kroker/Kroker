@@ -1,6 +1,7 @@
 """research -> clarify through a time-skipping worker with fake agents. Proves
 the stage runs, verifies grounding (no grounded findings -> no violation),
 gates, and hands off to clarify without a live provider."""
+
 from __future__ import annotations
 
 import asyncio
@@ -18,15 +19,24 @@ from temporalio.worker import Worker
 from sdlc.activities import evaluate_gate  # pure — reused, not faked
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
 from sdlc.models import (
-    GateConfig, GateDecision, GateOutcome, GatePolicy, GroundedFinding,
-    PipelineConfig, ResearchBrief, ResearchConfig,
+    GateConfig,
+    GateDecision,
+    GateOutcome,
+    GatePolicy,
+    GroundedFinding,
+    PipelineConfig,
+    ResearchBrief,
+    ResearchConfig,
 )
 from sdlc.research.verify import verify_brief_activity
 from tests.fakes.canned import (
-    AGENT_SPECS, QUESTION_IDS, greenfield_idea,
+    AGENT_SPECS,
+    QUESTION_IDS,
+    greenfield_idea,
 )
 from tests.fakes.fake_activities import GIT_FAKES
-from tests.fakes.fake_deploy import DEPLOY_FAKES, reset as reset_deploy
+from tests.fakes.fake_deploy import DEPLOY_FAKES
+from tests.fakes.fake_deploy import reset as reset_deploy
 
 with workflow.unsafe.imports_passed_through():
     from sdlc.workflows.deployment import DeploymentWorkflow
@@ -58,8 +68,9 @@ _RESEARCH_WITH_VIOLATION = ResearchBrief(
     summary="a grounded claim with no page file",
     confidence=0.5,
     grounded_findings=[
-        GroundedFinding(source_url="https://x/never-fetched",
-                        quote="anything", claim="c")])
+        GroundedFinding(source_url="https://x/never-fetched", quote="anything", claim="c")
+    ],
+)
 
 
 def _research_fake_activities(brief: ResearchBrief = _RESEARCH) -> list:
@@ -77,8 +88,7 @@ def _research_fake_activities(brief: ResearchBrief = _RESEARCH) -> list:
     function tools, so the default TestModel behaviour already produces [] for
     them and this override is unnecessary there."""
     agent = Agent(
-        TestModel(custom_output_args=brief.model_dump(mode="json"),
-                  call_tools=[]),
+        TestModel(custom_output_args=brief.model_dump(mode="json"), call_tools=[]),
         name="research_agent",
         output_type=ResearchBrief,
     )
@@ -97,23 +107,21 @@ async def _wait_for_status(handle, target: str, timeout_s: float = 30.0):
         if status == target:
             return
         await asyncio.sleep(0.05)
-    raise AssertionError(
-        f"timed out waiting for status {target!r} (last={last!r})")
+    raise AssertionError(f"timed out waiting for status {target!r} (last={last!r})")
 
 
 async def _drive(handle):
     # 1. clarify — answer the one open question (proves research handed off)
     await _wait_for_status(handle, "awaiting:clarify")
     for qid in QUESTION_IDS:
-        await handle.signal(FeatureWorkflow.answer_question,
-                            args=[qid, "yes"])
+        await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
     # 2. deploy gate — architecture/plan/research are OFF (auto-approved);
     #    merge auto-passes with clean fakes. Only deploy waits on a human.
     await _wait_for_status(handle, "awaiting:deploy")
     await handle.signal(
         FeatureWorkflow.submit_gate_decision,
-        GateDecision(gate="deploy", round=1, outcome=GateOutcome.APPROVE,
-                     decided_by="human"))
+        GateDecision(gate="deploy", round=1, outcome=GateOutcome.APPROVE, decided_by="human"),
+    )
 
 
 @pytest.mark.asyncio
@@ -124,37 +132,48 @@ async def test_research_stage_runs_and_hands_off():
     `awaiting:clarify` proves research ran without crashing — if the research
     agent activity or verify_brief_activity were unregistered, the workflow
     would fail with a Temporal activity-not-found error long before clarify."""
-    activities = [evaluate_gate, verify_brief_activity, *GIT_FAKES,
-                  *DEPLOY_FAKES,
-                  *_research_fake_activities(),
-                  *fake_agent_activities(AGENT_SPECS)]
+    activities = [
+        evaluate_gate,
+        verify_brief_activity,
+        *GIT_FAKES,
+        *DEPLOY_FAKES,
+        *_research_fake_activities(),
+        *fake_agent_activities(AGENT_SPECS),
+    ]
     cfg = PipelineConfig(
         research_enabled=True,
-        gates={"research": GateConfig(policy=GatePolicy.OFF),
-               "architecture": GateConfig(policy=GatePolicy.OFF),
-               "plan": GateConfig(policy=GatePolicy.OFF),
-               # clarify + merge + deploy default to HARD; the merge auto-passes
-               # on green fakes (no advisory blocking -> no human merge gate).
-               "deploy": GateConfig(policy=GatePolicy.HARD)},
+        gates={
+            "research": GateConfig(policy=GatePolicy.OFF),
+            "architecture": GateConfig(policy=GatePolicy.OFF),
+            "plan": GateConfig(policy=GatePolicy.OFF),
+            # clarify + merge + deploy default to HARD; the merge auto-passes
+            # on green fakes (no advisory blocking -> no human merge gate).
+            "deploy": GateConfig(policy=GatePolicy.HARD),
+        },
         memoization_enabled=False,
         review_enabled=True,
     )
     cfg.deploy.enabled = True
     reset_deploy()
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         # Disable auto-skipping: real (48h) gate timers otherwise race the
         # signal delivery (same justification as test_e2e_greenfield).
         with env.auto_time_skipping_disabled():
             async with Worker(
-                    env.client, task_queue=TASK_QUEUE,
-                    workflows=[FeatureWorkflow, DeploymentWorkflow],
-                    activities=activities,
-                    plugins=[PydanticAIPlugin()]):
+                env.client,
+                task_queue=TASK_QUEUE,
+                workflows=[FeatureWorkflow, DeploymentWorkflow],
+                activities=activities,
+                plugins=[PydanticAIPlugin()],
+            ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
                     args=[greenfield_idea(), cfg, None],
-                    id=f"e2e-research-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                    id=f"e2e-research-{uuid.uuid4()}",
+                    task_queue=TASK_QUEUE,
+                )
                 driver = asyncio.create_task(_drive(handle))
                 result = await handle.result()
                 await driver
@@ -164,7 +183,8 @@ async def test_research_stage_runs_and_hands_off():
 
 @pytest.mark.asyncio
 async def test_research_stage_degrades_instead_of_blocking_on_grounding_violation(
-        tmp_path, monkeypatch):
+    tmp_path, monkeypatch
+):
     """2026-07-20 human decision: an ungrounded finding (source_url never
     fetched this run) must fail the research STAGE, not the whole pipeline.
     The workflow records the research stage as failed and proceeds to
@@ -183,34 +203,44 @@ async def test_research_stage_degrades_instead_of_blocking_on_grounding_violatio
     [Violation(kind="source_unavailable", ...)] and the workflow inspects it
     (`if violations:`), records a FAIL stage record, and continues."""
     monkeypatch.setenv("SDLC_RUNS_ROOT", str(tmp_path))
-    activities = [evaluate_gate, verify_brief_activity, *GIT_FAKES,
-                  *DEPLOY_FAKES,
-                  *_research_fake_activities(_RESEARCH_WITH_VIOLATION),
-                  *fake_agent_activities(AGENT_SPECS)]
+    activities = [
+        evaluate_gate,
+        verify_brief_activity,
+        *GIT_FAKES,
+        *DEPLOY_FAKES,
+        *_research_fake_activities(_RESEARCH_WITH_VIOLATION),
+        *fake_agent_activities(AGENT_SPECS),
+    ]
     cfg = PipelineConfig(
         research_enabled=True,
-        gates={"research": GateConfig(policy=GatePolicy.OFF),
-               "architecture": GateConfig(policy=GatePolicy.OFF),
-               "plan": GateConfig(policy=GatePolicy.OFF),
-               "deploy": GateConfig(policy=GatePolicy.HARD)},
+        gates={
+            "research": GateConfig(policy=GatePolicy.OFF),
+            "architecture": GateConfig(policy=GatePolicy.OFF),
+            "plan": GateConfig(policy=GatePolicy.OFF),
+            "deploy": GateConfig(policy=GatePolicy.HARD),
+        },
         memoization_enabled=False,
         review_enabled=True,
     )
     cfg.deploy.enabled = True
     reset_deploy()
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(
-                    env.client, task_queue=TASK_QUEUE,
-                    workflows=[FeatureWorkflow, DeploymentWorkflow],
-                    activities=activities,
-                    plugins=[PydanticAIPlugin()]):
+                env.client,
+                task_queue=TASK_QUEUE,
+                workflows=[FeatureWorkflow, DeploymentWorkflow],
+                activities=activities,
+                plugins=[PydanticAIPlugin()],
+            ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
                     args=[greenfield_idea(), cfg, None],
                     id=f"e2e-research-violation-{uuid.uuid4()}",
-                    task_queue=TASK_QUEUE)
+                    task_queue=TASK_QUEUE,
+                )
                 driver = asyncio.create_task(_drive(handle))
                 result = await handle.result()
                 await driver
@@ -232,35 +262,45 @@ async def test_research_stage_degrades_instead_of_crashing_on_usage_limit_exceed
     workflow must catch it (feature.py wraps t_research.run in try/except)
     and substitute a degraded ResearchBrief, continuing to clarify/deploy
     exactly like test_research_stage_runs_and_hands_off -- not crash."""
-    activities = [evaluate_gate, verify_brief_activity, *GIT_FAKES,
-                  *DEPLOY_FAKES,
-                  *_research_fake_activities(),
-                  *fake_agent_activities(AGENT_SPECS)]
+    activities = [
+        evaluate_gate,
+        verify_brief_activity,
+        *GIT_FAKES,
+        *DEPLOY_FAKES,
+        *_research_fake_activities(),
+        *fake_agent_activities(AGENT_SPECS),
+    ]
     cfg = PipelineConfig(
         research_enabled=True,
         research=ResearchConfig(max_requests=0),
-        gates={"research": GateConfig(policy=GatePolicy.OFF),
-               "architecture": GateConfig(policy=GatePolicy.OFF),
-               "plan": GateConfig(policy=GatePolicy.OFF),
-               "deploy": GateConfig(policy=GatePolicy.HARD)},
+        gates={
+            "research": GateConfig(policy=GatePolicy.OFF),
+            "architecture": GateConfig(policy=GatePolicy.OFF),
+            "plan": GateConfig(policy=GatePolicy.OFF),
+            "deploy": GateConfig(policy=GatePolicy.HARD),
+        },
         memoization_enabled=False,
         review_enabled=True,
     )
     cfg.deploy.enabled = True
     reset_deploy()
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(
-                    env.client, task_queue=TASK_QUEUE,
-                    workflows=[FeatureWorkflow, DeploymentWorkflow],
-                    activities=activities,
-                    plugins=[PydanticAIPlugin()]):
+                env.client,
+                task_queue=TASK_QUEUE,
+                workflows=[FeatureWorkflow, DeploymentWorkflow],
+                activities=activities,
+                plugins=[PydanticAIPlugin()],
+            ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
                     args=[greenfield_idea(), cfg, None],
                     id=f"e2e-research-usagelimit-{uuid.uuid4()}",
-                    task_queue=TASK_QUEUE)
+                    task_queue=TASK_QUEUE,
+                )
                 driver = asyncio.create_task(_drive(handle))
                 result = await handle.result()
                 await driver

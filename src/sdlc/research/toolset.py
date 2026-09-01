@@ -1,6 +1,7 @@
 """Second research entry point (spec §8): the architect consults research
 mid-run via a tool, drawing down the SAME per-run budget as the stage would.
 One core (the research agent), two callers (the stage and this tool)."""
+
 from __future__ import annotations
 
 from ..models import Gap, ResearchBrief
@@ -32,15 +33,22 @@ async def research_subquery(deps: ResearchDeps, question: str) -> ResearchBrief:
     ResearchConfig's documented contract: exceeding a bound degrades to a
     brief with the shortfall recorded in `gaps`, never a crash."""
     from sdlc.agents.roles import t_research
+
     if t_research is None:
-        raise RuntimeError("research agent is not available (agents/research/ "
-                           "missing) — cannot service an architect research call")
+        raise RuntimeError(
+            "research agent is not available (agents/research/ "
+            "missing) — cannot service an architect research call"
+        )
     try:
         return (await t_research.run(question, deps=deps)).output
     except BudgetExceeded as exc:
         return ResearchBrief(
-            gaps=[Gap(sub_question_id="architect-midrun",
-                      what_is_missing=question,
-                      why_it_matters=str(exc))],
-            summary=f"Research budget exhausted before this sub-question "
-                    f"could be answered: {exc}")
+            gaps=[
+                Gap(
+                    sub_question_id="architect-midrun",
+                    what_is_missing=question,
+                    why_it_matters=str(exc),
+                )
+            ],
+            summary=f"Research budget exhausted before this sub-question could be answered: {exc}",
+        )

@@ -8,7 +8,8 @@ pipeline is test_e2e_greenfield.py's job, not this test's.
 
 Marked temporal: each such test spawns its own dev-server subprocess
 (pyproject's addopts excludes them from the default run)."""
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 
 import pytest
 from temporalio.testing import WorkflowEnvironment
@@ -29,16 +30,20 @@ async def test_run_state_answers_on_a_live_run():
     # the time-skipping test service does not implement ListWorkflowExecutions
     # (UNIMPLEMENTED on temporalio 1.31). The dev-server subprocess this
     # env actually spawns serves the full visibility API.
-    async with await WorkflowEnvironment.start_local(
-            data_converter=pydantic_data_converter) as env:
-        async with Worker(env.client, task_queue="dash-e2e",
-                          workflows=[FeatureWorkflow], activities=[]):
+    async with await WorkflowEnvironment.start_local(data_converter=pydantic_data_converter) as env:
+        async with Worker(
+            env.client, task_queue="dash-e2e", workflows=[FeatureWorkflow], activities=[]
+        ):
             handle = await env.client.start_workflow(
                 FeatureWorkflow.run,
-                args=[IdeaBrief(title="Add SSO", description="d",
-                                mode=ProjectMode.GREENFIELD),
-                      PipelineConfig(), None],
-                id="feature-add-sso", task_queue="dash-e2e")
+                args=[
+                    IdeaBrief(title="Add SSO", description="d", mode=ProjectMode.GREENFIELD),
+                    PipelineConfig(),
+                    None,
+                ],
+                id="feature-add-sso",
+                task_queue="dash-e2e",
+            )
             try:
                 state = await handle.query("run_state", result_type=RunState)
                 assert state is not None
@@ -50,8 +55,7 @@ async def test_run_state_answers_on_a_live_run():
                 # the very first workflow task answers with the stage set.
                 assert state.current_stage == "intake"
 
-                snap = await fetch_fleet(
-                    env.client, now=datetime.now(timezone.utc))
+                snap = await fetch_fleet(env.client, now=datetime.now(UTC))
                 assert "feature-add-sso" in {r.run_id for r in snap.runs}
             finally:
                 await handle.cancel()

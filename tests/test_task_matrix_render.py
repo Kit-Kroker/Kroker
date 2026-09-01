@@ -1,18 +1,29 @@
 import json
+from datetime import datetime
 
 from sdlc.benchmarks.task_matrix import (
-    TaskMatrix, TaskMatrixColumn, render_task_matrix_html, render_task_matrix_json)
-from datetime import datetime
+    TaskMatrix,
+    TaskMatrixColumn,
+    render_task_matrix_html,
+    render_task_matrix_json,
+)
 
 
 def _tm():
     col = TaskMatrixColumn(
-        bench_run_id="b1", cell_id="c1#opencode#m1", harness="opencode",
-        model="m1", started_at=datetime(2026, 7, 20, 10), mean_score=0.5)
+        bench_run_id="b1",
+        cell_id="c1#opencode#m1",
+        harness="opencode",
+        model="m1",
+        started_at=datetime(2026, 7, 20, 10),
+        mean_score=0.5,
+    )
     return TaskMatrix(
-        case_id="c1", task_ids=["t01", "t02"], columns=[col],
-        scores={"t01": {"b1#c1#opencode#m1": 1.0},
-               "t02": {"b1#c1#opencode#m1": None}})
+        case_id="c1",
+        task_ids=["t01", "t02"],
+        columns=[col],
+        scores={"t01": {"b1#c1#opencode#m1": 1.0}, "t02": {"b1#c1#opencode#m1": None}},
+    )
 
 
 def test_json_round_trips():

@@ -1,6 +1,7 @@
 """E-42 D2: the gate is shared code, not duplicated code. Writing FR-302's
 first-decision-wins rule twice is the failure shape
 2026-07-16-registry-drives-every-role was written about."""
+
 from __future__ import annotations
 
 import datetime as dt
@@ -48,12 +49,12 @@ def test_confidence_reaches_the_hook_as_a_parameter():
     sig = inspect.signature(GateHost._on_gate_decided)
     assert "confidence" in sig.parameters, (
         "_on_gate_decided must take confidence as a parameter, not read it "
-        "off shared instance state")
+        "off shared instance state"
+    )
     assert not hasattr(GateHost(), "_last_gate_confidence")
 
     # FeatureWorkflow's override must accept it too, or _gate's call breaks.
-    assert "confidence" in inspect.signature(
-        FeatureWorkflow._on_gate_decided).parameters
+    assert "confidence" in inspect.signature(FeatureWorkflow._on_gate_decided).parameters
 
 
 @pytest.fixture
@@ -63,21 +64,32 @@ def frozen_now(monkeypatch):
     the module object is shared (both files do `from temporalio import
     workflow`), so patching it once covers gates.py and feature.py alike."""
     from sdlc.workflows import gates as g
-    monkeypatch.setattr(
-        g.workflow, "now",
-        lambda: dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc))
+
+    monkeypatch.setattr(g.workflow, "now", lambda: dt.datetime(2026, 1, 1, tzinfo=dt.UTC))
 
 
 def test_first_decision_for_a_round_wins(frozen_now):
     """FR-302. decided_by is a Literal["human","policy","timeout"], so the two
     decisions are told apart by their comments, not by an invented name."""
     host = GateHost()
-    host.submit_gate_decision(GateDecision(
-        gate="readiness", round=1, outcome=GateOutcome.APPROVE,
-        decided_by="human", comments="first"))
-    host.submit_gate_decision(GateDecision(
-        gate="readiness", round=1, outcome=GateOutcome.REJECT,
-        decided_by="human", comments="second"))
+    host.submit_gate_decision(
+        GateDecision(
+            gate="readiness",
+            round=1,
+            outcome=GateOutcome.APPROVE,
+            decided_by="human",
+            comments="first",
+        )
+    )
+    host.submit_gate_decision(
+        GateDecision(
+            gate="readiness",
+            round=1,
+            outcome=GateOutcome.REJECT,
+            decided_by="human",
+            comments="second",
+        )
+    )
     kept = host._gate_decisions["readiness#1"]
     assert kept.comments == "first"
     assert kept.outcome is GateOutcome.APPROVE
@@ -86,20 +98,21 @@ def test_first_decision_for_a_round_wins(frozen_now):
 def test_submit_pops_only_that_round_from_pending(frozen_now):
     host = GateHost()
     host._pending["readiness#1"] = StageGatePending(
-        key="readiness#1", gate="readiness", round=1, spec_summary="s")
+        key="readiness#1", gate="readiness", round=1, spec_summary="s"
+    )
     host._pending["readiness#2"] = StageGatePending(
-        key="readiness#2", gate="readiness", round=2, spec_summary="s")
-    host.submit_gate_decision(GateDecision(
-        gate="readiness", round=1, outcome=GateOutcome.APPROVE,
-        decided_by="human"))
+        key="readiness#2", gate="readiness", round=2, spec_summary="s"
+    )
+    host.submit_gate_decision(
+        GateDecision(gate="readiness", round=1, outcome=GateOutcome.APPROVE, decided_by="human")
+    )
     assert "readiness#1" not in host._pending
     assert "readiness#2" in host._pending
 
 
 def test_pending_decisions_query_returns_the_registry():
     host = GateHost()
-    p = StageGatePending(key="readiness#1", gate="readiness", round=1,
-                         spec_summary="s")
+    p = StageGatePending(key="readiness#1", gate="readiness", round=1, spec_summary="s")
     host._pending[p.key] = p
     assert host.pending_decisions() == [p]
 

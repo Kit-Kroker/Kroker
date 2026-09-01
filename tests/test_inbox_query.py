@@ -4,6 +4,7 @@ answers: the inbox lists what a human owes a decision on, and a crew's gate
 is exactly that; the fleet lists RUNS, and a crew child is part of a run
 rather than one. Widening a shared constant would have silently changed
 both."""
+
 from __future__ import annotations
 
 import asyncio
@@ -25,19 +26,23 @@ class _Client:
 
         async def _gen():
             yield _WF("run-1")
+
         return _gen()
 
 
 def test_the_query_defaults_to_feature_workflows_only():
     assert _open_runs_query("FeatureWorkflow") == (
-        "(WorkflowType='FeatureWorkflow') AND ExecutionStatus='Running'")
+        "(WorkflowType='FeatureWorkflow') AND ExecutionStatus='Running'"
+    )
 
 
 def test_the_query_ors_every_named_type():
     q = _open_runs_query("FeatureWorkflow", "CrewTaskWorkflow")
-    assert q == ("(WorkflowType='FeatureWorkflow' OR "
-                 "WorkflowType='CrewTaskWorkflow') AND "
-                 "ExecutionStatus='Running'")
+    assert q == (
+        "(WorkflowType='FeatureWorkflow' OR "
+        "WorkflowType='CrewTaskWorkflow') AND "
+        "ExecutionStatus='Running'"
+    )
 
 
 def test_list_open_run_ids_stays_narrow_by_default():

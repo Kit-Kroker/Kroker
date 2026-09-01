@@ -5,9 +5,10 @@ module must never import models.py, activities.py, or temporalio, exactly as
 triage/models.py and capability/models.py must not: a dependency here would
 appear as a reviewable import.
 """
+
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -18,7 +19,7 @@ from .risk.models import UnifiedRiskMap
 from .scan.models import ScanResult
 
 
-class PhaseId(str, Enum):
+class PhaseId(StrEnum):
     """The EDCR DAG in execution order.
 
     REPORT follows ASSESS deliberately -- FR-911 deviation (a). The source
@@ -27,6 +28,7 @@ class PhaseId(str, Enum):
     complete. Declaration order IS the DAG order (see PHASE_ORDER), so there
     is no second list to disagree with this one.
     """
+
     INIT = "init"
     SCAN = "scan"
     DISCOVER = "discover"
@@ -56,6 +58,7 @@ class PhaseResult(BaseModel):
     Assessment, because an untyped bag would be a schema-less hole in the one
     artifact handed to a customer under FR-921.
     """
+
     phase: PhaseId
     collected: Measurement
 
@@ -64,6 +67,7 @@ class InitOutcome(BaseModel):
     """init's two halves: the phase row that lands in `phases`, and the
     artifact the admission rule reads. Separate because a failed triage child
     yields a row but no triage."""
+
     result: PhaseResult
     triage: RepoTriage | None = None
 
@@ -79,25 +83,24 @@ def terminal_status(admitted: bool, phases: list[PhaseResult]) -> str:
     if not admitted:
         return BLOCKED
     rest = [p for p in phases if p.phase is not PhaseId.INIT]
-    done = [p for p in rest
-            if p.collected.state is CollectionState.MEASURED]
+    done = [p for p in rest if p.collected.state is CollectionState.MEASURED]
     if not done:
         return NO_PHASES
     if len(done) < len(rest):
-        return PARTIAL          # the seam FR-922's budgets (E-55) reuse
+        return PARTIAL  # the seam FR-922's budgets (E-55) reuse
     return ASSESSED
 
 
 class Assessment(BaseModel):
     repo_dir: str
-    commit_sha: str = ""            # "" only when init failed to pin one
+    commit_sha: str = ""  # "" only when init failed to pin one
     toolchain: str | None = None
     # init's artifact -- in-history evidence (D3). None ONLY when the child
     # workflow itself failed, which is the one case where admission was never
     # consulted.
     triage: RepoTriage | None = None
     admitted: bool
-    admission_reason: str           # admits()' reason, verbatim
+    admission_reason: str  # admits()' reason, verbatim
     phases: list[PhaseResult] = Field(default_factory=list)
     terminal_status: str
     # E-46's typed field. There is deliberately no generic payload bag: each
@@ -116,7 +119,8 @@ class Assessment(BaseModel):
         if self.triage is None and self.admitted:
             raise ValueError(
                 "admitted with no triage -- admission is a function of a "
-                "RepoTriage (FR-903), so this state is a contradiction")
+                "RepoTriage (FR-903), so this state is a contradiction"
+            )
         return self
 
     @model_validator(mode="after")
@@ -126,7 +130,8 @@ class Assessment(BaseModel):
             raise ValueError(
                 f"phases must be the whole DAG in order -- expected "
                 f"{[p.value for p in PHASE_ORDER]}, got "
-                f"{[p.value for p in got]}")
+                f"{[p.value for p in got]}"
+            )
         return self
 
     @model_validator(mode="after")
@@ -142,7 +147,8 @@ class Assessment(BaseModel):
                 f"terminal_status {self.terminal_status!r} does not match "
                 f"the derived {expected!r} for admitted={self.admitted} "
                 f"and these phases -- the status is derived, never assigned "
-                f"(D6)")
+                f"(D6)"
+            )
         return self
 
     @model_validator(mode="after")
@@ -154,18 +160,20 @@ class Assessment(BaseModel):
         assessment claiming it did not scan while shipping scan output.
         """
         row = next((p for p in self.phases if p.phase is PhaseId.SCAN), None)
-        if row is None:                       # unreachable: the DAG validator
-            return self                       # already required every phase
+        if row is None:  # unreachable: the DAG validator
+            return self  # already required every phase
         measured = row.collected.state is CollectionState.MEASURED
         if measured and self.scan is None:
             raise ValueError(
                 "scan phase is measured but no ScanResult is present -- a "
-                "measured phase produced an artifact by definition")
+                "measured phase produced an artifact by definition"
+            )
         if not measured and self.scan is not None:
             raise ValueError(
                 f"scan phase is {row.collected.state.value} but a ScanResult "
                 f"is present -- an assessment cannot claim it did not scan "
-                f"while shipping scan output")
+                f"while shipping scan output"
+            )
         return self
 
     @model_validator(mode="after")
@@ -175,38 +183,39 @@ class Assessment(BaseModel):
         error messages are what a reader debugs against, and a generic one
         would name neither the phase nor the artifact.
         """
-        row = next((p for p in self.phases if p.phase is PhaseId.DISCOVER),
-                   None)
-        if row is None:                       # unreachable: the DAG validator
-            return self                       # already required every phase
+        row = next((p for p in self.phases if p.phase is PhaseId.DISCOVER), None)
+        if row is None:  # unreachable: the DAG validator
+            return self  # already required every phase
         measured = row.collected.state is CollectionState.MEASURED
         if measured and self.discover is None:
             raise ValueError(
                 "discover phase is measured but no CapabilityMap is present "
-                "-- a measured phase produced an artifact by definition")
+                "-- a measured phase produced an artifact by definition"
+            )
         if not measured and self.discover is not None:
             raise ValueError(
                 f"discover phase is {row.collected.state.value} but a "
                 f"CapabilityMap is present -- an assessment cannot claim it "
-                f"did not discover while shipping a capability map")
+                f"did not discover while shipping a capability map"
+            )
         return self
 
     @model_validator(mode="after")
     def _assess_agrees_with_its_phase(self) -> Assessment:
         """_scan_agrees_with_its_phase, for ASSESS (E-49)."""
-        row = next((p for p in self.phases if p.phase is PhaseId.ASSESS),
-                   None)
-        if row is None:                       # unreachable: the DAG validator
-            return self                       # already required every phase
+        row = next((p for p in self.phases if p.phase is PhaseId.ASSESS), None)
+        if row is None:  # unreachable: the DAG validator
+            return self  # already required every phase
         measured = row.collected.state is CollectionState.MEASURED
         if measured and self.risk is None:
             raise ValueError(
                 "assess phase is measured but no UnifiedRiskMap is present "
-                "-- a measured phase produced an artifact by definition")
+                "-- a measured phase produced an artifact by definition"
+            )
         if not measured and self.risk is not None:
             raise ValueError(
                 f"assess phase is {row.collected.state.value} but a "
                 f"UnifiedRiskMap is present -- an assessment cannot claim it "
-                f"did not assess while shipping a risk map")
+                f"did not assess while shipping a risk map"
+            )
         return self
-

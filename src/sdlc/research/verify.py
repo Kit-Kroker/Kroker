@@ -8,6 +8,7 @@ The rule (spec §5): `grounded` means the quote is a substring of the page fetch
 THIS run for its source_url, under grounding's EXTRACTED_TEXT profile. Every
 further loosening is a hole in the check — add none without a test proving the
 specific false-failure it fixes."""
+
 from __future__ import annotations
 
 import hashlib
@@ -71,11 +72,13 @@ def verify_brief(brief: ResearchBrief, run_id: str) -> list[Violation]:
     for f in brief.grounded_findings:
         page = d / page_filename(f.source_url)
         if not page.is_file():
-            violations.append(Violation(kind="source_unavailable",
-                                        source=f.source_url, quote=f.quote))
+            violations.append(
+                Violation(kind="source_unavailable", source=f.source_url, quote=f.quote)
+            )
             continue
-        v = quote_violation(f.quote, page.read_text(encoding="utf-8"),
-                            Profile.EXTRACTED_TEXT, source=f.source_url)
+        v = quote_violation(
+            f.quote, page.read_text(encoding="utf-8"), Profile.EXTRACTED_TEXT, source=f.source_url
+        )
         if v is not None:
             violations.append(v)
     return violations
@@ -108,13 +111,13 @@ class GroundingViolation(Exception):
 
     def __init__(self, violations: list[Violation]):
         self.violations = violations
-        lines = "\n".join(
-            f"- {v.kind}: {v.source}: {v.quote!r}" for v in violations)
+        lines = "\n".join(f"- {v.kind}: {v.source}: {v.quote!r}" for v in violations)
         super().__init__(
             "Grounded findings are not verified against bytes fetched this run. "
             "The research stage fails closed. Fix the quote to a verbatim span "
             "from a page fetched this run, or move the claim to "
-            "inferred_findings. Violations:\n" + lines)
+            "inferred_findings. Violations:\n" + lines
+        )
 
 
 @activity.defn

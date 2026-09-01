@@ -1,6 +1,7 @@
 """E-9 Task 5: the two reference transports. The webhook is the pipeline's
 second outbound egress after research (FR-703), so it fails closed on any
 host not explicitly allowlisted."""
+
 from __future__ import annotations
 
 import logging
@@ -8,7 +9,10 @@ import logging
 import pytest
 
 from sdlc.notify.notifiers import (
-    NOTIFIERS, EgressDenied, LogNotifier, WebhookNotifier,
+    NOTIFIERS,
+    EgressDenied,
+    LogNotifier,
+    WebhookNotifier,
 )
 
 
@@ -60,15 +64,13 @@ async def test_webhook_denies_a_non_allowlisted_host(monkeypatch):
 async def test_webhook_denies_when_the_allowlist_is_empty():
     """Fail closed: no allowlist means no egress, not unrestricted egress."""
     with pytest.raises(EgressDenied):
-        await WebhookNotifier(allow_hosts=[]).deliver(
-            "hello", "https://hooks.slack.com/x")
+        await WebhookNotifier(allow_hosts=[]).deliver("hello", "https://hooks.slack.com/x")
 
 
 @pytest.mark.asyncio
 async def test_webhook_without_a_target_is_a_config_error():
     with pytest.raises(EgressDenied):
-        await WebhookNotifier(allow_hosts=["hooks.slack.com"]).deliver(
-            "hello", None)
+        await WebhookNotifier(allow_hosts=["hooks.slack.com"]).deliver("hello", None)
 
 
 def test_containment_host_matching_is_reused_not_reimplemented():
@@ -76,5 +78,6 @@ def test_containment_host_matching_is_reused_not_reimplemented():
     hook -- two would drift and a host would be allowed in one and denied
     in the other."""
     from sdlc.harness.containment import host_allowed
+
     assert host_allowed("hooks.slack.com", ["slack.com"])
     assert not host_allowed("notslack.com", ["slack.com"])

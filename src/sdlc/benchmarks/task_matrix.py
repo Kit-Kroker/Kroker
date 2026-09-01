@@ -3,6 +3,7 @@ ORACLE_TASK records for one case (report.py::scan_case_records feeds this)
 and renders a persistent, cross-run pass/fail grid. Pure aggregation +
 rendering -- no I/O, mirrors heatmap.py.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -35,11 +36,9 @@ def _column_key(col: TaskMatrixColumn) -> str:
     return f"{col.bench_run_id}#{col.cell_id}"
 
 
-def build_task_matrix(case_id: str, records: list[BenchmarkRecord],
-                      suite: TaskSuite) -> TaskMatrix:
+def build_task_matrix(case_id: str, records: list[BenchmarkRecord], suite: TaskSuite) -> TaskMatrix:
     task_ids = [t.id for t in suite.tasks]
-    recs = [r for r in records
-           if r.scope is BenchmarkScope.ORACLE_TASK and r.case_id == case_id]
+    recs = [r for r in records if r.scope is BenchmarkScope.ORACLE_TASK and r.case_id == case_id]
 
     by_col: dict[tuple[str, str], list[BenchmarkRecord]] = defaultdict(list)
     for r in recs:
@@ -58,17 +57,21 @@ def build_task_matrix(case_id: str, records: list[BenchmarkRecord],
         mean_score = sum(present) / len(present) if present else None
         harness = next((r.harness.value for r in col_recs if r.harness), "")
         model = col_recs[0].model
-        col = TaskMatrixColumn(bench_run_id=bench_run_id, cell_id=cell_id,
-                               harness=harness, model=model,
-                               started_at=started, mean_score=mean_score)
+        col = TaskMatrixColumn(
+            bench_run_id=bench_run_id,
+            cell_id=cell_id,
+            harness=harness,
+            model=model,
+            started_at=started,
+            mean_score=mean_score,
+        )
         columns.append(col)
         key = _column_key(col)
         for tid in task_ids:
             scores[tid][key] = by_task.get(tid)
 
     columns.sort(key=lambda c: c.started_at)
-    return TaskMatrix(case_id=case_id, task_ids=task_ids, columns=columns,
-                      scores=scores)
+    return TaskMatrix(case_id=case_id, task_ids=task_ids, columns=columns, scores=scores)
 
 
 def render_task_matrix_json(tm: TaskMatrix) -> str:
@@ -95,14 +98,13 @@ def render_task_matrix_html(tm: TaskMatrix) -> str:
         for col in tm.columns:
             key = _column_key(col)
             ts = col.started_at.strftime("%m-%d %H:%M")
-            score_label = (f"{col.mean_score:.2f}" if col.mean_score is not None
-                          else "n/a")
+            score_label = f"{col.mean_score:.2f}" if col.mean_score is not None else "n/a"
             head_cells.append(
-                f"<th>{escape(ts)}<br>score {score_label}<br>"
-                f"{escape(col.model)}</th>")
-            total = sum(v for v in
-                       (tm.scores[tid].get(key) for tid in tm.task_ids)
-                       if v is not None)
+                f"<th>{escape(ts)}<br>score {score_label}<br>{escape(col.model)}</th>"
+            )
+            total = sum(
+                v for v in (tm.scores[tid].get(key) for tid in tm.task_ids) if v is not None
+            )
             sum_cells.append(f"<th>{total:.2f}</th>")
         rows = []
         for tid in tm.task_ids:
@@ -115,8 +117,8 @@ def render_task_matrix_html(tm: TaskMatrix) -> str:
             rows.append("<tr>" + "".join(tds) + "</tr>")
         body = (
             "<table><tr><th>task</th>" + "".join(head_cells) + "</tr>"
-            "<tr><th>sum</th>" + "".join(sum_cells) + "</tr>"
-            + "".join(rows) + "</table>")
+            "<tr><th>sum</th>" + "".join(sum_cells) + "</tr>" + "".join(rows) + "</table>"
+        )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Task history - {escape(tm.case_id)}</title>

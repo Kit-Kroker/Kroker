@@ -4,10 +4,11 @@ One BenchmarkRecord per stage boundary and per code-task attempt. The three
 dimensions (quality / cost / speed) are kept RAW — never pre-normalized — so
 the reporter can recompute under different weights without re-running.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -21,6 +22,7 @@ class Arm(BaseModel):
     (optional) sets the model for every overridable role; `role_models`
     overrides specific roles and wins over `default`. Roles left unset (with
     `default=None`) keep the registry default at run time."""
+
     name: str
     default: str | None = None
     role_models: dict[str, str] = Field(default_factory=dict)
@@ -33,14 +35,14 @@ class Arm(BaseModel):
         return base
 
 
-class BenchmarkScope(str, Enum):
+class BenchmarkScope(StrEnum):
     STAGE = "stage"
     TASK_ATTEMPT = "task_attempt"
     ORACLE = "oracle"
     ORACLE_TASK = "oracle_task"
 
 
-class BenchmarkOutcome(str, Enum):
+class BenchmarkOutcome(StrEnum):
     PASS = "pass"
     FAIL = "fail"
     REVISED = "revise"
@@ -48,15 +50,23 @@ class BenchmarkOutcome(str, Enum):
 
 
 class QualityScore(BaseModel):
-    score: float | None = None              # 0.0..1.0; None when judge errored
+    score: float | None = None  # 0.0..1.0; None when judge errored
     components: dict[str, float] = Field(default_factory=dict)
     # Non-DAG lenses (deep_review/adversary/handoff) are judges too. Omitting
     # one here is not a type error at the call site -- _stage_record passes
     # `judge: str` straight through -- it is a ValidationError swallowed by the
     # caller's `except Exception`. tests/test_judge_literal.py pins the set.
-    judge: Literal["contract", "llm_judge", "human_override", "error",
-                   "oracle", "deep_review", "adversary", "handoff",
-                   "staged_rubric"]
+    judge: Literal[
+        "contract",
+        "llm_judge",
+        "human_override",
+        "error",
+        "oracle",
+        "deep_review",
+        "adversary",
+        "handoff",
+        "staged_rubric",
+    ]
 
 
 class CostBag(BaseModel):
@@ -82,35 +92,41 @@ class WasteBag(BaseModel):
     must render blank; an all-zero bag would be indistinguishable from a
     genuinely clean run.
     """
+
     tool_calls: int = 0
     file_reads: int = 0
-    file_rereads: int = 0      # same path read more than once
-    files_written: int = 0     # distinct paths written
-    rewrite_churn: int = 0     # paths written more than once
-    failed_commands: int = 0   # command events with non-zero exit
+    file_rereads: int = 0  # same path read more than once
+    files_written: int = 0  # distinct paths written
+    rewrite_churn: int = 0  # paths written more than once
+    failed_commands: int = 0  # command events with non-zero exit
     model_turns: int = 0
-    denials: int = 0           # E-16: blocked tool calls
-    escalations: int = 0       # E-17: tool calls that raised a gate
+    denials: int = 0  # E-16: blocked tool calls
+    escalations: int = 0  # E-17: tool calls that raised a gate
     compacted: bool = False
 
     @classmethod
-    def from_digest(cls, d: SessionDigest | None) -> "WasteBag | None":
+    def from_digest(cls, d: SessionDigest | None) -> WasteBag | None:
         if d is None:
             return None
         return cls(
-            tool_calls=d.tool_calls, file_reads=d.file_reads,
-            file_rereads=d.file_rereads, files_written=d.files_written,
+            tool_calls=d.tool_calls,
+            file_reads=d.file_reads,
+            file_rereads=d.file_rereads,
+            files_written=d.files_written,
             rewrite_churn=d.rewrite_churn,
-            failed_commands=d.failed_commands, model_turns=d.model_turns,
-            denials=d.denials, escalations=d.escalations,
-            compacted=d.compacted)
+            failed_commands=d.failed_commands,
+            model_turns=d.model_turns,
+            denials=d.denials,
+            escalations=d.escalations,
+            compacted=d.compacted,
+        )
 
 
 class BenchmarkRecord(BaseModel):
     # identity
     run_id: str
-    bench_run_id: str                       # parent BenchmarkWorkflow id; "_drift/<date>" for drift
-    case_id: str                            # golden case name; "_production" for drift
+    bench_run_id: str  # parent BenchmarkWorkflow id; "_drift/<date>" for drift
+    case_id: str  # golden case name; "_production" for drift
     scope: BenchmarkScope
     stage: str
     task_id: str | None = None
@@ -127,8 +143,8 @@ class BenchmarkRecord(BaseModel):
     quality: QualityScore
     cost: CostBag = Field(default_factory=CostBag)
     speed: SpeedBag
-    waste: WasteBag | None = None           # None = no session captured
-    plan_drift: "PlanDrift | None" = None    # None = not measured (E-83)
+    waste: WasteBag | None = None  # None = no session captured
+    plan_drift: PlanDrift | None = None  # None = not measured (E-83)
     outcome: BenchmarkOutcome
     fix_attempts: int = 0
     error: str | None = None
@@ -142,6 +158,7 @@ class CompositeWeights(BaseModel):
 
 class CaseSpec(BaseModel):
     """A golden case: the idea + the (harness, model) matrix to run it on."""
+
     case_id: str
     idea_summary: str
     description: str = ""
@@ -152,7 +169,7 @@ class CaseSpec(BaseModel):
     # can be named in the error.
     harnesses: list[str]
     models: list[str]
-    judge_model: str                        # cross-family (ADR-6)
+    judge_model: str  # cross-family (ADR-6)
     rubrics: dict[str, str] = Field(default_factory=dict)  # stage -> rubric file
     # E-83: stage -> veto file. Mirrors `rubrics`. Absent = no vetoes for
     # that stage, which is not an error -- vetoes are opt-in per case.
@@ -197,6 +214,7 @@ class BenchmarkCell(BaseModel):
     """One cell of the matrix: a (case, harness, arm) triple to execute.
     `lead_harness` is set only on harness=CREW cells expanded from a
     `crew:<lead_harness>` entry — the CLI the crew's lead runs under."""
+
     case_id: str
     harness: HarnessKind
     lead_harness: HarnessKind | None = None
@@ -213,6 +231,7 @@ class BenchmarkSummary(BaseModel):
     """Aggregate over all records for one (case, stage, harness, model),
     split further by lead_harness on harness=CREW records -- otherwise a
     crew:<lead_harness> sweep blends different leads into one composite."""
+
     case_id: str
     stage: str
     harness: HarnessKind | None

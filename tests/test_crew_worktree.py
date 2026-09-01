@@ -3,12 +3,16 @@
 checks _abs_under(path, worktree); it stays out of the diff because
 checkpoint_round's add is pathspec-scoped (see test_crew_checkpoint.py),
 not because of any exclude file."""
+
 from __future__ import annotations
 
 import subprocess
 
 from sdlc.crew.worktree import (
-    ORCH_ROOT, orchestration_dir, prepare_orchestration, round_dir,
+    ORCH_ROOT,
+    orchestration_dir,
+    prepare_orchestration,
+    round_dir,
 )
 
 

@@ -2,6 +2,7 @@
 
 Pure by design -- see the package docstring in models.py.
 """
+
 from __future__ import annotations
 
 from ...measurement import Measurement
@@ -16,9 +17,9 @@ def _drivers(factors: tuple[Factor, ...]) -> tuple[Driver, ...]:
     deterministically (NFR-10) rather than by input order.
     """
     rows = [
-        Driver(factor_key=f.key, value=f.value.value,
-               contribution=f.value.value * f.weight)
-        for f in factors if f.collected
+        Driver(factor_key=f.key, value=v, contribution=v * f.weight)
+        for f in factors
+        if f.collected and (v := f.value.value) is not None
     ]
     rows.sort(key=lambda d: (-d.contribution, d.factor_key))
     return tuple(rows[:MAX_DRIVERS])
@@ -35,15 +36,16 @@ def compose(factors: tuple[Factor, ...], *, label: str) -> Composite:
     missing = [f.key for f in factors if not f.collected]
     if missing:
         value = Measurement.not_collected(
-            f"{label} composite: factor(s) {sorted(missing)} did not collect")
+            f"{label} composite: factor(s) {sorted(missing)} did not collect"
+        )
     else:
         total = sum(f.weight for f in factors)
         # A zero total weight is a rules.py bug, not a runtime condition; the
         # weight tables are asserted to sum to 1.0 in test_risk_rules_sha.
         value = Measurement.measured(
-            sum(f.value.value * f.weight for f in factors) / total)
-    return Composite(value=value, factors=factors,
-                     drivers=_drivers(factors))
+            sum(v * f.weight for f in factors if (v := f.value.value) is not None) / total
+        )
+    return Composite(value=value, factors=factors, drivers=_drivers(factors))
 
 
 def unified(security: Composite, qa: Composite) -> Composite:
@@ -53,9 +55,13 @@ def unified(security: Composite, qa: Composite) -> Composite:
     unsourced, the QA half is valueless, so this is too -- and says which
     half. FR-916 specifies exactly this latitude.
     """
-    factors = tuple(sorted(
-        (Factor(key=F_SECURITY, value=security.value,
-                weight=UNIFIED_WEIGHTS[F_SECURITY]),
-         Factor(key=F_QA, value=qa.value, weight=UNIFIED_WEIGHTS[F_QA])),
-        key=lambda f: f.key))
+    factors = tuple(
+        sorted(
+            (
+                Factor(key=F_SECURITY, value=security.value, weight=UNIFIED_WEIGHTS[F_SECURITY]),
+                Factor(key=F_QA, value=qa.value, weight=UNIFIED_WEIGHTS[F_QA]),
+            ),
+            key=lambda f: f.key,
+        )
+    )
     return compose(factors, label="unified")

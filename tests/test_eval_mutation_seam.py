@@ -2,6 +2,7 @@
 
 run_gate resolves its baseline with `git show HEAD:agents/<role>/...`, so
 editing the file on disk would move BOTH sides and measure nothing."""
+
 import shutil as _shutil
 import tempfile as _tf
 from pathlib import Path
@@ -32,10 +33,15 @@ def repo_out_dir():
 
 def test_mutation_lands_only_on_the_working_provider(repo_out_dir):
     cfg_path = build_config(
-        "clarify", "add-login-greenfield", repo_root=_REPO,
-        cases_root=_CASES, agents_dir=_resolve_agents_dir(),
-        judge_model="google:gemini-3.5-flash", out_dir=repo_out_dir,
-        mutation="Answer briefly.")
+        "clarify",
+        "add-login-greenfield",
+        repo_root=_REPO,
+        cases_root=_CASES,
+        agents_dir=_resolve_agents_dir(),
+        judge_model="google:gemini-3.5-flash",
+        out_dir=repo_out_dir,
+        mutation="Answer briefly.",
+    )
     cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
     baseline, working = cfg["providers"]
     assert baseline["label"] == "baseline"
@@ -46,9 +52,14 @@ def test_mutation_lands_only_on_the_working_provider(repo_out_dir):
 
 def test_no_mutation_leaves_the_config_unchanged(repo_out_dir):
     cfg_path = build_config(
-        "clarify", "add-login-greenfield", repo_root=_REPO,
-        cases_root=_CASES, agents_dir=_resolve_agents_dir(),
-        judge_model="google:gemini-3.5-flash", out_dir=repo_out_dir)
+        "clarify",
+        "add-login-greenfield",
+        repo_root=_REPO,
+        cases_root=_CASES,
+        agents_dir=_resolve_agents_dir(),
+        judge_model="google:gemini-3.5-flash",
+        out_dir=repo_out_dir,
+    )
     cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
     for p in cfg["providers"]:
         assert "instructions_text" not in p["config"]
@@ -66,17 +77,16 @@ def test_call_api_prefers_literal_text_over_the_git_ref(monkeypatch, tmp_path):
         cache_read_tokens = 0
         cache_write_tokens = 0
 
-    def _fake_run_variant_detailed(role, instructions, fixture, agents_dir,
-                                   *, model_override=None):
+    def _fake_run_variant_detailed(role, instructions, fixture, agents_dir, *, model_override=None):
         seen["instructions"] = instructions
         return "{}", _Usage()
 
     def _must_not_be_called(*args, **kwargs):
-        raise AssertionError("resolve_instructions must not be called when "
-                             "instructions_text is supplied")
+        raise AssertionError(
+            "resolve_instructions must not be called when instructions_text is supplied"
+        )
 
-    monkeypatch.setattr(prov, "run_variant_detailed",
-                        _fake_run_variant_detailed)
+    monkeypatch.setattr(prov, "run_variant_detailed", _fake_run_variant_detailed)
     monkeypatch.setattr(prov, "resolve_instructions", _must_not_be_called)
 
     # EvalFixture requires role, case, prompt, model, source_run_id.
@@ -84,12 +94,23 @@ def test_call_api_prefers_literal_text_over_the_git_ref(monkeypatch, tmp_path):
     fixture_path.write_text(
         '{"role": "clarify", "case": "add-login-greenfield", '
         '"prompt": "p", "model": "anthropic:glm-5.2", '
-        '"source_run_id": "test"}', encoding="utf-8")
+        '"source_run_id": "test"}',
+        encoding="utf-8",
+    )
 
-    out = call_api("", {"config": {
-        "role": "clarify", "fixture_path": str(fixture_path),
-        "agents_dir": str(_resolve_agents_dir()), "repo_root": str(_REPO),
-        "instructions_ref": "HEAD",
-        "instructions_text": "Answer briefly."}}, {})
+    out = call_api(
+        "",
+        {
+            "config": {
+                "role": "clarify",
+                "fixture_path": str(fixture_path),
+                "agents_dir": str(_resolve_agents_dir()),
+                "repo_root": str(_REPO),
+                "instructions_ref": "HEAD",
+                "instructions_text": "Answer briefly.",
+            }
+        },
+        {},
+    )
     assert out["error"] is None
     assert seen["instructions"] == "Answer briefly."

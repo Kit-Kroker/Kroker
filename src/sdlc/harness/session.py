@@ -2,6 +2,7 @@
 
 No IO, no Temporal — activity code composes these; tests hit them directly.
 """
+
 from __future__ import annotations
 
 from collections import Counter
@@ -22,8 +23,7 @@ def digest_of(session: HarnessSession) -> SessionDigest:
     downgraded (OQ-B7)."""
     reads: Counter[str] = Counter()
     writes: Counter[str] = Counter()
-    d = SessionDigest(input_tokens=session.input_tokens,
-                      output_tokens=session.output_tokens)
+    d = SessionDigest(input_tokens=session.input_tokens, output_tokens=session.output_tokens)
     skeleton: list[str] = []
     for ev in session.events:
         if ev.kind in _TOOL_KINDS:
@@ -57,10 +57,12 @@ def scrub_session(session: HarnessSession) -> HarnessSession:
     internal failure — the caller (capture) is fail-closed and stores
     nothing in that case."""
     events = [
-        ev.model_copy(update={
-            "text": scrub(ev.text) if ev.text else ev.text,
-            "target": scrub(ev.target) if ev.target else ev.target,
-        })
+        ev.model_copy(
+            update={
+                "text": scrub(ev.text) if ev.text else ev.text,
+                "target": scrub(ev.target) if ev.target else ev.target,
+            }
+        )
         for ev in session.events
     ]
     return session.model_copy(update={"events": events})
@@ -102,11 +104,11 @@ def session_text_from_jsonl(jsonl: str) -> str:
     events: list[SessionEvent] = []
     for i, line in enumerate(jsonl.splitlines()):
         if i == 0 or not line.strip():
-            continue                       # header / blank
+            continue  # header / blank
         try:
             events.append(SessionEvent.model_validate_json(line))
         except ValidationError:
-            continue                       # truncated/partial trailing line
+            continue  # truncated/partial trailing line
     return _events_to_text(events)
 
 

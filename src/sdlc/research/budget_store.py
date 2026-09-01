@@ -12,6 +12,7 @@ allowance), guarded by a sidecar lock file so concurrent calls (e.g.
 `asyncio.gather` over several `get_page` calls inside one `run_code` script)
 can't race past the cap.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -59,14 +60,13 @@ async def _acquire_lock(lock_path: Path) -> None:
                 lock_path.unlink(missing_ok=True)
                 continue
             if time.monotonic() > deadline:
-                raise TimeoutError(
-                    f"research budget lock held too long: {lock_path}")
+                raise TimeoutError(f"research budget lock held too long: {lock_path}") from None
             await asyncio.sleep(_LOCK_POLL_S)
 
 
-async def charge_persisted(deps: ResearchDeps, *,
-                           search: int = 0, fetch: int = 0,
-                           scope: str = "run") -> None:
+async def charge_persisted(
+    deps: ResearchDeps, *, search: int = 0, fetch: int = 0, scope: str = "run"
+) -> None:
     """Same contract as deps.charge(): enforces the bound BEFORE accounting
     for it, raising BudgetExceeded (and leaving the on-disk count untouched)
     if `search`/`fetch` would cross deps.max_searches/max_fetches/max_cost_usd
@@ -79,8 +79,7 @@ async def charge_persisted(deps: ResearchDeps, *,
     await _acquire_lock(lock_path)
     try:
         if path.exists():
-            budget = Budget.model_validate_json(
-                path.read_text(encoding="utf-8"))
+            budget = Budget.model_validate_json(path.read_text(encoding="utf-8"))
         else:
             budget = Budget()
         scratch = deps.model_copy(update={"budget": budget})
@@ -90,9 +89,9 @@ async def charge_persisted(deps: ResearchDeps, *,
         lock_path.unlink(missing_ok=True)
 
 
-async def charge_scoped(deps: ResearchDeps, *,
-                        search: int = 0, fetch: int = 0,
-                        scope: str, run_max_cost_usd: float) -> None:
+async def charge_scoped(
+    deps: ResearchDeps, *, search: int = 0, fetch: int = 0, scope: str, run_max_cost_usd: float
+) -> None:
     """Charge BOTH the sub-question scope and the shared run ceiling.
 
     The run counter is charged FIRST, so a sub-question is never billed for
@@ -109,14 +108,15 @@ async def charge_scoped(deps: ResearchDeps, *,
     exceeded).
     """
     if scope == "run":
-        scoped = deps.model_copy(update={
-            "max_cost_usd": min(deps.max_cost_usd, run_max_cost_usd)})
+        scoped = deps.model_copy(update={"max_cost_usd": min(deps.max_cost_usd, run_max_cost_usd)})
         await charge_persisted(scoped, search=search, fetch=fetch, scope="run")
         return
-    run_deps = deps.model_copy(update={
-        "max_cost_usd": run_max_cost_usd,
-        "max_searches": 10**9,
-        "max_fetches": 10**9,
-    })
+    run_deps = deps.model_copy(
+        update={
+            "max_cost_usd": run_max_cost_usd,
+            "max_searches": 10**9,
+            "max_fetches": 10**9,
+        }
+    )
     await charge_persisted(run_deps, search=search, fetch=fetch, scope="run")
     await charge_persisted(deps, search=search, fetch=fetch, scope=scope)

@@ -4,6 +4,7 @@ told now, when it dies, and the exact command that decides it.
 
 ASCII-only, like every other operator-facing string in the project.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -24,10 +25,15 @@ def _hours(delta) -> str:
     return f"{int(delta.total_seconds() // 3600)}h"
 
 
-def render_notification(pending: PendingDecision, reason: NotifyReason,
-                        run_id: str, opened_at: datetime, now: datetime,
-                        deadline: datetime | None,
-                        base_url: str | None) -> str:
+def render_notification(
+    pending: PendingDecision,
+    reason: NotifyReason,
+    run_id: str,
+    opened_at: datetime,
+    now: datetime,
+    deadline: datetime | None,
+    base_url: str | None,
+) -> str:
     r = default_render(pending)
     gate = getattr(pending, "gate", None)
     subject = f"Gate '{gate}'" if gate else "A question"
@@ -54,8 +60,10 @@ def render_notification(pending: PendingDecision, reason: NotifyReason,
     lines.append("")
     if reason is not NotifyReason.EXPIRE:
         if gate:
-            lines += [f"  sdlc approve {run_id} --gate {gate}",
-                      f"  sdlc reject {run_id} --gate {gate}"]
+            lines += [
+                f"  sdlc approve {run_id} --gate {gate}",
+                f"  sdlc reject {run_id} --gate {gate}",
+            ]
         else:
             lines.append(f"  sdlc answer {run_id} --question {pending.key}")
         if base_url:

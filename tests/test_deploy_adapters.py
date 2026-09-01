@@ -1,11 +1,14 @@
 """FR-1105/ADR-19. The adapter object is PURE -- command strings and identity
 only, never a subprocess. Same rule and same shape as toolchain/adapters.py."""
+
 from __future__ import annotations
 
-import pytest
-
 from sdlc.deploy.adapters import (
-    ADAPTERS, ComposeAdapter, DeployKind, ScriptAdapter, resolve,
+    ADAPTERS,
+    ComposeAdapter,
+    DeployKind,
+    ScriptAdapter,
+    resolve,
 )
 from sdlc.models import DeployConfig, DeployPlan, FeatureFlag
 
@@ -40,8 +43,7 @@ def test_env_omits_flag_keys_when_there_is_no_flag():
 
 def test_env_exports_the_flag_when_present():
     """NG7: exported for the customer's own flag system to read."""
-    env = resolve(DeployConfig()).env(
-        _plan(flag=FeatureFlag(name="sso", cohort="beta")))
+    env = resolve(DeployConfig()).env(_plan(flag=FeatureFlag(name="sso", cohort="beta")))
     assert env["DEPLOY_FLAG"] == "sso"
     assert env["DEPLOY_COHORT"] == "beta"
 
@@ -76,8 +78,7 @@ def test_compose_endpoint_prefers_configured_base_url():
 
 
 def test_compose_endpoint_falls_back_to_a_local_default():
-    assert ComposeAdapter(DeployConfig()).endpoint(_plan()).startswith(
-        "http://localhost")
+    assert ComposeAdapter(DeployConfig()).endpoint(_plan()).startswith("http://localhost")
 
 
 def test_script_uses_make_targets_by_default():
@@ -88,8 +89,7 @@ def test_script_uses_make_targets_by_default():
 
 
 def test_script_targets_are_overridable():
-    a = ScriptAdapter(DeployConfig(adapter="script",
-                                   commands={"deploy": "./ship.sh"}))
+    a = ScriptAdapter(DeployConfig(adapter="script", commands={"deploy": "./ship.sh"}))
     assert a.apply_cmd(_plan()) == "./ship.sh"
     assert a.rollback_cmd(_plan(), "v1") == "make rollback"
 
@@ -97,7 +97,7 @@ def test_script_targets_are_overridable():
 def test_adapters_never_shell_out():
     """The purity rule, asserted as a reviewable import check."""
     import pathlib
-    src = pathlib.Path("src/sdlc/deploy/adapters.py").read_text(
-        encoding="utf-8")
+
+    src = pathlib.Path("src/sdlc/deploy/adapters.py").read_text(encoding="utf-8")
     for forbidden in ("subprocess", "asyncio", "os.system", "requests"):
         assert forbidden not in src, forbidden

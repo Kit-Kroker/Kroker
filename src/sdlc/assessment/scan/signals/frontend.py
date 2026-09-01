@@ -17,6 +17,7 @@ downstream while looking complete.
 
 Pure: blobs in, records out.
 """
+
 from __future__ import annotations
 
 import posixpath
@@ -27,8 +28,16 @@ from pydantic import BaseModel
 
 from ....measurement import Measurement
 from ..models import (
-    C_FRONTEND_ENTRY, CandidateMember, Confidence, EvidenceRef, MemberKind,
-    ScanSignalId, ScanSignalResult, SignalOutput, SignalSource, SourceCandidate,
+    C_FRONTEND_ENTRY,
+    CandidateMember,
+    Confidence,
+    EvidenceRef,
+    MemberKind,
+    ScanSignalId,
+    ScanSignalResult,
+    SignalOutput,
+    SignalSource,
+    SourceCandidate,
     family_of,
 )
 from ..naming import head_token, normalize
@@ -37,7 +46,13 @@ SIGNAL_ID = "S4"
 VERSION = 1
 
 FRONTEND_EXTENSIONS: tuple[str, ...] = (
-    ".tsx", ".jsx", ".ts", ".js", ".vue", ".svelte", ".json",
+    ".tsx",
+    ".jsx",
+    ".ts",
+    ".js",
+    ".vue",
+    ".svelte",
+    ".json",
 )
 
 # A dependency name in a package.json is the honest detector: a framework a
@@ -63,9 +78,13 @@ UNSUPPORTED_DEPS: tuple[tuple[str, str], ...] = (
 # (framework, path regex, the group holding the route-bearing path segment)
 _FILE_ROUTES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("next", re.compile(r"^(?:src/)?app/(.*/)?page\.(?:tsx|jsx|ts|js)$")),
-    ("next", re.compile(
-        r"^(?:src/)?pages/(?!api/)(?!_(?:app|document|error))(.*)"
-        r"\.(?:tsx|jsx|ts|js)$")),
+    (
+        "next",
+        re.compile(
+            r"^(?:src/)?pages/(?!api/)(?!_(?:app|document|error))(.*)"
+            r"\.(?:tsx|jsx|ts|js)$"
+        ),
+    ),
     ("sveltekit", re.compile(r"^(?:src/)?routes/(.*/)?\+page\.svelte$")),
     ("nuxt", re.compile(r"^(?:src/)?pages/(.*)\.vue$")),
 )
@@ -78,9 +97,16 @@ _CONFIG_ROUTES: tuple[re.Pattern[str], ...] = (
 )
 
 # Segments that prefix a route rather than name a journey.
-_PATH_PREFIXES: frozenset[str] = frozenset({
-    "app", "pages", "routes", "src", "_next", "public",
-})
+_PATH_PREFIXES: frozenset[str] = frozenset(
+    {
+        "app",
+        "pages",
+        "routes",
+        "src",
+        "_next",
+        "public",
+    }
+)
 
 
 class _Route(BaseModel):
@@ -118,12 +144,10 @@ def detected(blobs: Mapping[str, str]) -> tuple[set[str], set[str]]:
     """(supported, unsupported) frontend frameworks the repository DEPENDS
     on, read from every package.json in the tree."""
     manifests = "\n".join(
-        blobs[p] for p in sorted(blobs)
-        if posixpath.basename(p) == "package.json")
-    supported = {name for name, pattern in SUPPORTED_DEPS
-                 if re.search(pattern, manifests)}
-    unsupported = {name for name, pattern in UNSUPPORTED_DEPS
-                   if re.search(pattern, manifests)}
+        blobs[p] for p in sorted(blobs) if posixpath.basename(p) == "package.json"
+    )
+    supported = {name for name, pattern in SUPPORTED_DEPS if re.search(pattern, manifests)}
+    unsupported = {name for name, pattern in UNSUPPORTED_DEPS if re.search(pattern, manifests)}
     return supported, unsupported
 
 
@@ -135,8 +159,7 @@ def _file_routes(blobs: Mapping[str, str], active: set[str]) -> list[_Route]:
                 continue
             match = pattern.match(path)
             if match:
-                out.append(_Route(value=_url_from_path(match.group(1) or ""),
-                                  path=path))
+                out.append(_Route(value=_url_from_path(match.group(1) or ""), path=path))
                 break
     return out
 
@@ -152,10 +175,13 @@ def _config_routes(blobs: Mapping[str, str]) -> list[_Route]:
                 raw = match.group(1).strip()
                 if not raw.startswith("/"):
                     continue
-                out.append(_Route(
-                    value=re.sub(r"\*+$", "*", raw),
-                    path=path,
-                    line=text.count("\n", 0, match.start()) + 1))
+                out.append(
+                    _Route(
+                        value=re.sub(r"\*+$", "*", raw),
+                        path=path,
+                        line=text.count("\n", 0, match.start()) + 1,
+                    )
+                )
     return out
 
 
@@ -174,14 +200,19 @@ def _journey(route: _Route) -> str:
 
 def _gap(reason: str) -> SignalOutput:
     nc = Measurement.not_collected(reason)
-    return SignalOutput(row=ScanSignalResult(
-        signal=ScanSignalId.S4, family=family_of(ScanSignalId.S4),
-        version=VERSION, source=SignalSource.COMPUTED, collected=nc,
-        categories={C_FRONTEND_ENTRY: nc}))
+    return SignalOutput(
+        row=ScanSignalResult(
+            signal=ScanSignalId.S4,
+            family=family_of(ScanSignalId.S4),
+            version=VERSION,
+            source=SignalSource.COMPUTED,
+            collected=nc,
+            categories={C_FRONTEND_ENTRY: nc},
+        )
+    )
 
 
-def evaluate(blobs: Mapping[str, str],
-             skipped: Sequence[str] = ()) -> SignalOutput:
+def evaluate(blobs: Mapping[str, str], skipped: Sequence[str] = ()) -> SignalOutput:
     """`blobs` is path -> text for every readable, in-bound frontend blob.
     `skipped` names the blobs over MAX_BLOB_BYTES; a partial route set must
     not pass as a complete one (spec section 6)."""
@@ -189,19 +220,22 @@ def evaluate(blobs: Mapping[str, str],
         return _gap(
             f"frontend_entry_points: {len(skipped)} blob(s) over "
             f"MAX_BLOB_BYTES not read (first: {skipped[0]}); a partial scan "
-            f"must not pass as a complete one (spec section 6)")
+            f"must not pass as a complete one (spec section 6)"
+        )
     supported, unsupported = detected(blobs)
     if unsupported:
         return _gap(
             f"frontend_entry_points: detected framework(s) "
             f"{sorted(unsupported)} have no fingerprint here; extracting only "
             f"{sorted(supported)} would hand a partial route set downstream "
-            f"while looking complete (D5, P2-D1)")
+            f"while looking complete (D5, P2-D1)"
+        )
     if not supported:
         return _gap(
             "frontend_entry_points: no frontend framework in any package.json "
             "dependency list -- BrownKit's has_frontend=false adaptation, "
-            "recorded as a gap rather than as an empty route list (D5)")
+            "recorded as a gap rather than as an empty route list (D5)"
+        )
 
     routes = _file_routes(blobs, supported) + _config_routes(blobs)
     if not routes:
@@ -209,7 +243,8 @@ def evaluate(blobs: Mapping[str, str],
             f"frontend_entry_points: {sorted(supported)} is declared, but no "
             f"route matched a file convention or a literal router path -- a "
             f"framework whose routes we cannot read is not a framework with "
-            f"no routes (D5)")
+            f"no routes (D5)"
+        )
 
     grouped: dict[str, list[_Route]] = {}
     for route in routes:
@@ -218,28 +253,42 @@ def evaluate(blobs: Mapping[str, str],
 
     candidates: list[SourceCandidate] = []
     for key, group in sorted(grouped.items()):
-        members = [CandidateMember(kind=MemberKind.FRONTEND_ROUTE,
-                                   value=r.value, path=r.path, line=r.line)
-                   for r in group]
-        candidates.append(SourceCandidate(
-            signal=ScanSignalId.S4, local_id=f"S4-{key}", name=key,
-            rule="s4_route_journey",
-            detail=f"{len(members)} route(s) grouped by user journey, not by "
-                   f"component hierarchy.",
-            confidence_contribution=(
-                Confidence.HIGH if len(members) > 2
-                else Confidence.MEDIUM if len(members) > 1
-                else Confidence.LOW),
-            members=members,
-            evidence=[EvidenceRef(path=r.path,
-                                  lines=str(r.line) if r.line else "")
-                      for r in group]))
+        members = [
+            CandidateMember(kind=MemberKind.FRONTEND_ROUTE, value=r.value, path=r.path, line=r.line)
+            for r in group
+        ]
+        candidates.append(
+            SourceCandidate(
+                signal=ScanSignalId.S4,
+                local_id=f"S4-{key}",
+                name=key,
+                rule="s4_route_journey",
+                detail=f"{len(members)} route(s) grouped by user journey, not by "
+                f"component hierarchy.",
+                confidence_contribution=(
+                    Confidence.HIGH
+                    if len(members) > 2
+                    else Confidence.MEDIUM
+                    if len(members) > 1
+                    else Confidence.LOW
+                ),
+                members=members,
+                evidence=[
+                    EvidenceRef(path=r.path, lines=str(r.line) if r.line else "") for r in group
+                ],
+            )
+        )
 
     candidates.sort(key=lambda c: c.local_id)
     collected = Measurement.measured(float(len(candidates)))
     return SignalOutput(
         row=ScanSignalResult(
-            signal=ScanSignalId.S4, family=family_of(ScanSignalId.S4),
-            version=VERSION, source=SignalSource.COMPUTED,
-            collected=collected, categories={C_FRONTEND_ENTRY: collected}),
-        sources=candidates)
+            signal=ScanSignalId.S4,
+            family=family_of(ScanSignalId.S4),
+            version=VERSION,
+            source=SignalSource.COMPUTED,
+            collected=collected,
+            categories={C_FRONTEND_ENTRY: collected},
+        ),
+        sources=candidates,
+    )

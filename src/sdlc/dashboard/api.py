@@ -13,11 +13,12 @@ Unauthenticated by design, contained by localhost-bind (spec D4, OQ-11).
 X-Actor is self-asserted -- it reaches GateDecision.reviewer, never
 decided_by. E-60/FR-1004 is where that stops being acceptable.
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
-from typing import Callable
+from collections.abc import Callable
 
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
@@ -61,18 +62,15 @@ async def _handle(poller: FleetPoller, run_id: str):
     return client.get_workflow_handle(run_id)
 
 
-async def _default_starter(idea: IdeaBrief, cfg: PipelineConfig,
-                           wf_id: str) -> str:
+async def _default_starter(idea: IdeaBrief, cfg: PipelineConfig, wf_id: str) -> str:
     raise HTTPException(503, "no starter configured")
 
 
-def create_router(poller: FleetPoller,
-                  starter: Callable | None = None) -> APIRouter:
+def create_router(poller: FleetPoller, starter: Callable | None = None) -> APIRouter:
     router = APIRouter()
     start_run = starter or _default_starter
 
-    async def _reply(run_id: str, key: str, reply: Reply, actor: str,
-                     want: str):
+    async def _reply(run_id: str, key: str, reply: Reply, actor: str, want: str):
         handle = await _handle(poller, run_id)
         try:
             pending = await resolve_key(handle, key)
@@ -88,8 +86,7 @@ def create_router(poller: FleetPoller,
         # confirmed=False is informational, never an error: the dominant
         # cause is another surface winning the race, which is FR-302
         # working as designed (transport._message).
-        return await submit(handle, pending, reply,
-                            channel=DashboardChannel(actor=actor))
+        return await submit(handle, pending, reply, channel=DashboardChannel(actor=actor))
 
     @router.get("/runs")
     async def list_runs():
@@ -119,9 +116,8 @@ def create_router(poller: FleetPoller,
             async with poller.subscribe() as q:
                 while True:
                     try:
-                        snap = await asyncio.wait_for(q.get(),
-                                                      timeout=HEARTBEAT_S)
-                    except asyncio.TimeoutError:
+                        snap = await asyncio.wait_for(q.get(), timeout=HEARTBEAT_S)
+                    except TimeoutError:
                         # Keeps idle connections alive through proxies and
                         # makes a dead poller detectable.
                         yield ": heartbeat\n\n"
@@ -147,30 +143,38 @@ def create_router(poller: FleetPoller,
         return StreamingResponse(stream(), media_type="text/event-stream")
 
     @router.post("/runs/{run_id}/answer")
-    async def answer(run_id: str, body: AnswerBody,
-                     x_actor: str = Header(default="human:unknown",
-                                           alias="X-Actor")):
-        return await _reply(run_id, body.key, Reply(text=body.text), x_actor,
-                            want="text")
+    async def answer(
+        run_id: str,
+        body: AnswerBody,
+        x_actor: str = Header(default="human:unknown", alias="X-Actor"),
+    ):
+        return await _reply(run_id, body.key, Reply(text=body.text), x_actor, want="text")
 
     @router.post("/runs/{run_id}/decide")
-    async def decide(run_id: str, body: DecideBody,
-                     x_actor: str = Header(default="human:unknown",
-                                           alias="X-Actor")):
-        return await _reply(run_id, body.key,
-                            Reply(outcome=body.outcome, text=body.text or None),
-                            x_actor, want="gate")
+    async def decide(
+        run_id: str,
+        body: DecideBody,
+        x_actor: str = Header(default="human:unknown", alias="X-Actor"),
+    ):
+        return await _reply(
+            run_id,
+            body.key,
+            Reply(outcome=body.outcome, text=body.text or None),
+            x_actor,
+            want="gate",
+        )
 
     @router.post("/runs", response_model=StartedRun)
     async def start(body: StartBody):
-        idea = IdeaBrief(title=body.title, description=body.description,
-                         mode=body.mode, repo_url=body.repo)
+        idea = IdeaBrief(
+            title=body.title, description=body.description, mode=body.mode, repo_url=body.repo
+        )
         wf_id = f"feature-{slug(body.title)}"
         try:
             await start_run(idea, PipelineConfig(), wf_id)
         except HTTPException:
             raise
-        except Exception as e:      # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
             if "already started" in str(e).lower():
                 raise HTTPException(409, f"run {wf_id!r} already exists") from e
             raise HTTPException(502, str(e)) from e

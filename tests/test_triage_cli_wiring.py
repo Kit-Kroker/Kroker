@@ -2,6 +2,7 @@
 channels/transport.py resolves signals and queries BY NAME and imports nothing
 workflow-specific, so the gate surface GateHost gave TriageWorkflow is already
 reachable. This test is that claim, checked rather than asserted."""
+
 from __future__ import annotations
 
 import datetime as dt
@@ -12,21 +13,19 @@ from sdlc.workflows.triage import TriageWorkflow
 
 
 def test_triage_workflow_has_the_hitl_surface():
-    for name in ("submit_gate_decision", "status", "pending_decisions",
-                 "pending_gate"):
+    for name in ("submit_gate_decision", "status", "pending_decisions", "pending_gate"):
         assert hasattr(TriageWorkflow, name), name
     assert issubclass(TriageWorkflow, GateHost)
 
 
 def test_transport_stays_workflow_agnostic():
-    src = pathlib.Path("src/sdlc/channels/transport.py").read_text(
-        encoding="utf-8")
+    src = pathlib.Path("src/sdlc/channels/transport.py").read_text(encoding="utf-8")
     # The docstring names FeatureWorkflow by way of explaining the invariant
     # ("Nothing here imports FeatureWorkflow"); the assertion is about IMPORTS,
     # not prose. Check only the import lines.
     import_lines = "\n".join(
-        l for l in src.splitlines()
-        if l.strip().startswith(("import ", "from ")))
+        line for line in src.splitlines() if line.strip().startswith(("import ", "from "))
+    )
     assert "FeatureWorkflow" not in import_lines
     assert "TriageWorkflow" not in import_lines
 
@@ -50,12 +49,12 @@ def test_triage_workflow_id_is_distinct_per_run():
     assess -> fix -> re-triage loop is the first thing that would hit it."""
     from sdlc.cli import triage_workflow_id
 
-    a = triage_workflow_id("/srv/checkouts/MyRepo",
-                           dt.datetime(2026, 8, 9, 10, 15, 0,
-                                       tzinfo=dt.timezone.utc))
-    b = triage_workflow_id("/srv/checkouts/MyRepo",
-                           dt.datetime(2026, 8, 9, 10, 16, 0,
-                                       tzinfo=dt.timezone.utc))
+    a = triage_workflow_id(
+        "/srv/checkouts/MyRepo", dt.datetime(2026, 8, 9, 10, 15, 0, tzinfo=dt.UTC)
+    )
+    b = triage_workflow_id(
+        "/srv/checkouts/MyRepo", dt.datetime(2026, 8, 9, 10, 16, 0, tzinfo=dt.UTC)
+    )
     assert a != b
     assert a == "triage-myrepo-20260809T101500Z"
     # Still names the repository: an operator reading `sdlc inbox` must be able

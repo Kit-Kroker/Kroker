@@ -11,6 +11,7 @@ OQ-11 closes, not before.
 Lives beside cli approve/reject/revise in vocabulary: --by is the approver,
 --reason is retained as calibration signal.
 """
+
 from __future__ import annotations
 
 import sys
@@ -38,8 +39,12 @@ def add_capability_parser(sub) -> None:
     s = capsub.add_parser("split")
     s.add_argument("--project", required=True)
     s.add_argument("--from", dest="source", required=True)
-    s.add_argument("--member", action="append", default=[],
-                   help="fingerprint member moving to the new id; repeatable")
+    s.add_argument(
+        "--member",
+        action="append",
+        default=[],
+        help="fingerprint member moving to the new id; repeatable",
+    )
     s.add_argument("--reason", required=True)
     s.add_argument("--by", required=True, help="approver identity")
     s.add_argument("--db", default=None)
@@ -59,22 +64,23 @@ def run_capability(args) -> int:
     try:
         if args.cap_cmd == "list":
             for row in store.load(args.project):
-                suffix = (f" -> {row.merged_into}" if row.merged_into else "")
+                suffix = f" -> {row.merged_into}" if row.merged_into else ""
                 print(f"{row.bc_id}  {row.status.value}{suffix}")
             return 0
 
         if args.cap_cmd == "export":
-            path = write_export(args.out, args.project,
-                                store.load(args.project))
+            path = write_export(args.out, args.project, store.load(args.project))
             print(f"wrote {path}")
             return 0
 
         correction = IdentityCorrection(
             operation=CorrectionOp(args.cap_cmd),
-            approved_by=args.by, reason=args.reason,
+            approved_by=args.by,
+            reason=args.reason,
             source_bc_id=args.source,
             target_bc_id=getattr(args, "target", None),
-            partition=list(getattr(args, "member", [])))
+            partition=list(getattr(args, "member", [])),
+        )
         version = apply_correction(store, args.project, correction)
         print(f"{args.cap_cmd}: {args.source} -> registry_version {version}")
         return 0

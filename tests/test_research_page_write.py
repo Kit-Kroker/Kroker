@@ -2,6 +2,7 @@
 previous content or the complete new content, never a partial write --
 verify_brief reads these files and a truncated read is a spurious
 quote_not_found that fails the research stage closed."""
+
 import asyncio
 
 import pytest
@@ -28,8 +29,7 @@ def test_write_page_creates_parent_directories():
 
 def test_write_page_leaves_no_temp_files_behind():
     write_page("r1", "https://example.com/a", "x")
-    assert [p.name for p in pages_dir("r1").iterdir()] == [
-        page_filename("https://example.com/a")]
+    assert [p.name for p in pages_dir("r1").iterdir()] == [page_filename("https://example.com/a")]
 
 
 def test_write_page_overwrites_atomically_never_exposing_a_partial_read():

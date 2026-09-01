@@ -3,6 +3,7 @@
 Filesystem I/O, so this is ACTIVITY-side code: a workflow must never call it.
 Kept out of models.py and registry.py so those stay pure.
 """
+
 from __future__ import annotations
 
 import logging
@@ -19,9 +20,9 @@ _log = logging.getLogger(__name__)
 
 
 def _key(signal_id: ScanSignalId, tree_hash: str) -> str:
-    return cache.signal_key(signal_id.value,
-                            SCAN_SIGNALS[signal_id].version,
-                            rules_sha(signal_id), tree_hash)
+    return cache.signal_key(
+        signal_id.value, SCAN_SIGNALS[signal_id].version, rules_sha(signal_id), tree_hash
+    )
 
 
 def load(signal_id: ScanSignalId, tree_hash: str) -> SignalOutput | None:
@@ -36,13 +37,13 @@ def load(signal_id: ScanSignalId, tree_hash: str) -> SignalOutput | None:
     try:
         return SignalOutput.model_validate_json(raw)
     except ValidationError:
-        _log.warning("scan memo for %s did not validate; recomputing",
-                     signal_id.value)
+        _log.warning("scan memo for %s did not validate; recomputing", signal_id.value)
         return None
 
 
-def store(signal_id: ScanSignalId, tree_hash: str, out: SignalOutput,
-          upstream: ScanUpstream | None = None) -> bool:
+def store(
+    signal_id: ScanSignalId, tree_hash: str, out: SignalOutput, upstream: ScanUpstream | None = None
+) -> bool:
     """Cache `out` and report whether it was stored.
 
     Three rules, all of them the same rule: never serve a failure forever.
@@ -63,11 +64,11 @@ def store(signal_id: ScanSignalId, tree_hash: str, out: SignalOutput,
         raise ValueError(
             f"{signal_id.value} consumes {[c.value for c in consumes]} but "
             f"store() was called without its upstream -- a consuming signal's "
-            f"output is only cacheable when its inputs collected (P3-D5)")
+            f"output is only cacheable when its inputs collected (P3-D5)"
+        )
     if out.row.collected.state is not CollectionState.MEASURED:
         return False
-    if upstream is not None and not all(
-            upstream.measured(c) for c in consumes):
+    if upstream is not None and not all(upstream.measured(c) for c in consumes):
         return False
     cache.put(_key(signal_id, tree_hash), out.model_dump_json())
     return True

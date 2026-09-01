@@ -1,11 +1,17 @@
 """E-46 contracts. Pure -- no Temporal, no filesystem."""
+
 from __future__ import annotations
 
 import pytest
 
 from sdlc.assessment.scan.models import (
-    SCAN_ORDER, Confidence, ScanSignalId, SignalFamily, SignalSource,
-    confidence_from, family_of,
+    SCAN_ORDER,
+    Confidence,
+    ScanSignalId,
+    SignalFamily,
+    SignalSource,
+    confidence_from,
+    family_of,
 )
 
 
@@ -22,13 +28,15 @@ def test_family_is_derived_from_the_id_prefix():
     assert family_of(ScanSignalId.QS2) is SignalFamily.QA
 
 
-@pytest.mark.parametrize("signals,expected", [
-    ([ScanSignalId.S1, ScanSignalId.S2, ScanSignalId.S3], Confidence.HIGH),
-    ([ScanSignalId.S1, ScanSignalId.S2, ScanSignalId.S3, ScanSignalId.S4],
-     Confidence.HIGH),
-    ([ScanSignalId.S1, ScanSignalId.S3], Confidence.MEDIUM),
-    ([ScanSignalId.S1], Confidence.LOW),
-])
+@pytest.mark.parametrize(
+    "signals,expected",
+    [
+        ([ScanSignalId.S1, ScanSignalId.S2, ScanSignalId.S3], Confidence.HIGH),
+        ([ScanSignalId.S1, ScanSignalId.S2, ScanSignalId.S3, ScanSignalId.S4], Confidence.HIGH),
+        ([ScanSignalId.S1, ScanSignalId.S3], Confidence.MEDIUM),
+        ([ScanSignalId.S1], Confidence.LOW),
+    ],
+)
 def test_confidence_counts_distinct_signals(signals, expected):
     assert confidence_from(signals) is expected
 
@@ -36,8 +44,7 @@ def test_confidence_counts_distinct_signals(signals, expected):
 def test_confidence_counts_signals_not_candidates():
     """FR-912: never the depth of one source. Two S1 groupings do not
     corroborate each other."""
-    assert confidence_from(
-        [ScanSignalId.S1, ScanSignalId.S1, ScanSignalId.S1]) is Confidence.LOW
+    assert confidence_from([ScanSignalId.S1, ScanSignalId.S1, ScanSignalId.S1]) is Confidence.LOW
 
 
 def test_confidence_from_nothing_is_low_not_an_error():
@@ -47,5 +54,4 @@ def test_confidence_from_nothing_is_low_not_an_error():
 
 
 def test_source_has_exactly_three_states():
-    assert {s.value for s in SignalSource} == {
-        "computed", "inherited", "extended"}
+    assert {s.value for s in SignalSource} == {"computed", "inherited", "extended"}

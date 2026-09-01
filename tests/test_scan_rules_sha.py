@@ -1,6 +1,7 @@
 """D10: the memo key hashes the rules, not just a version number. This is the
 test that would have caught E-3 -- and its second half is the one the spec's
 first draft got wrong."""
+
 from __future__ import annotations
 
 from sdlc.assessment.scan.models import ScanSignalId
@@ -27,7 +28,8 @@ def test_a_shared_rule_module_reaches_both_its_consumers(monkeypatch):
     before_s3, before_s5 = rules_sha(ScanSignalId.S3), rules_sha(ScanSignalId.S5)
     monkeypatch.setattr(
         "sdlc.assessment.scan.rules.module_sha",
-        lambda dotted: "edited" if dotted == naming else module_sha(dotted))
+        lambda dotted: "edited" if dotted == naming else module_sha(dotted),
+    )
     assert rules_sha(ScanSignalId.S3) != before_s3
     assert rules_sha(ScanSignalId.S5) != before_s5
 
@@ -40,7 +42,8 @@ def test_an_upstream_signals_module_reaches_its_consumer(monkeypatch):
     before = rules_sha(ScanSignalId.SS1)
     monkeypatch.setattr(
         "sdlc.assessment.scan.rules.module_sha",
-        lambda dotted: "edited" if dotted == s3_module else module_sha(dotted))
+        lambda dotted: "edited" if dotted == s3_module else module_sha(dotted),
+    )
     assert rules_sha(ScanSignalId.SS1) != before
 
 
@@ -50,7 +53,8 @@ def test_an_unrelated_signals_module_does_not_move_the_key(monkeypatch):
     before = rules_sha(ScanSignalId.QS3)
     monkeypatch.setattr(
         "sdlc.assessment.scan.rules.module_sha",
-        lambda dotted: "edited" if dotted == s3_module else module_sha(dotted))
+        lambda dotted: "edited" if dotted == s3_module else module_sha(dotted),
+    )
     assert rules_sha(ScanSignalId.QS3) == before
 
 
@@ -63,7 +67,8 @@ def test_the_naming_module_reaches_s1_too(monkeypatch):
     before = rules_sha(ScanSignalId.S1)
     monkeypatch.setattr(
         "sdlc.assessment.scan.rules.module_sha",
-        lambda dotted: "edited" if dotted == naming else module_sha(dotted))
+        lambda dotted: "edited" if dotted == naming else module_sha(dotted),
+    )
     assert rules_sha(ScanSignalId.S1) != before
 
 
@@ -73,36 +78,32 @@ def test_the_sources_module_reaches_both_s1_and_s3(monkeypatch):
     change S3's output while its memo key stood still -- the D10 hazard in the
     epic whose headline invariant is D10. S1 reads the same tuple, so both
     hash it."""
-    sources = next(m for m in SCAN_SIGNALS[ScanSignalId.S1].rule_modules
-                   if m.endswith(".sources"))
+    sources = next(m for m in SCAN_SIGNALS[ScanSignalId.S1].rule_modules if m.endswith(".sources"))
     assert sources in SCAN_SIGNALS[ScanSignalId.S3].rule_modules
     assert sources == "sdlc.assessment.scan.sources"
     for sid in (ScanSignalId.S1, ScanSignalId.S3):
         before = rules_sha(sid)
         monkeypatch.setattr(
             "sdlc.assessment.scan.rules.module_sha",
-            lambda dotted: "edited" if dotted == sources
-            else module_sha(dotted))
+            lambda dotted: "edited" if dotted == sources else module_sha(dotted),
+        )
         assert rules_sha(sid) != before
-        monkeypatch.setattr(
-            "sdlc.assessment.scan.rules.module_sha", module_sha)
+        monkeypatch.setattr("sdlc.assessment.scan.rules.module_sha", module_sha)
 
 
 def test_the_testpaths_module_reaches_all_four_of_its_consumers(monkeypatch):
     """P3-D9: S2, QS1, QS2 and QS3 all decide what a test file is with the
     same table, so editing a glob must move all four keys."""
     testpaths = "sdlc.assessment.scan.testpaths"
-    for sid in (ScanSignalId.S2, ScanSignalId.QS1, ScanSignalId.QS2,
-                ScanSignalId.QS3):
+    for sid in (ScanSignalId.S2, ScanSignalId.QS1, ScanSignalId.QS2, ScanSignalId.QS3):
         assert testpaths in SCAN_SIGNALS[sid].rule_modules
         before = rules_sha(sid)
         monkeypatch.setattr(
             "sdlc.assessment.scan.rules.module_sha",
-            lambda dotted: "edited" if dotted == testpaths
-            else module_sha(dotted))
+            lambda dotted: "edited" if dotted == testpaths else module_sha(dotted),
+        )
         assert rules_sha(sid) != before, sid.value
-        monkeypatch.setattr("sdlc.assessment.scan.rules.module_sha",
-                            module_sha)
+        monkeypatch.setattr("sdlc.assessment.scan.rules.module_sha", module_sha)
 
 
 def test_s3s_module_reaches_ss4_now_that_ss4_consumes_it(monkeypatch):
@@ -112,5 +113,6 @@ def test_s3s_module_reaches_ss4_now_that_ss4_consumes_it(monkeypatch):
     before = rules_sha(ScanSignalId.SS4)
     monkeypatch.setattr(
         "sdlc.assessment.scan.rules.module_sha",
-        lambda dotted: "edited" if dotted == s3_module else module_sha(dotted))
+        lambda dotted: "edited" if dotted == s3_module else module_sha(dotted),
+    )
     assert rules_sha(ScanSignalId.SS4) != before

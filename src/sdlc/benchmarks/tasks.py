@@ -6,6 +6,7 @@ by the cross-family LLM judge against a rubric. Loading is pure (one YAML
 read, no other I/O); a case with no file simply has no task-level records —
 existing case-level oracle grading is unaffected.
 """
+
 from __future__ import annotations
 
 import os
@@ -16,8 +17,12 @@ import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 ERROR_CLASSES: list[str] = [
-    "functional", "security", "performance",
-    "data_integrity", "error_handling", "api_contract",
+    "functional",
+    "security",
+    "performance",
+    "data_integrity",
+    "error_handling",
+    "api_contract",
 ]
 
 
@@ -31,18 +36,18 @@ class TaskSpec(BaseModel):
     @classmethod
     def _known_class(cls, v: str) -> str:
         if v not in ERROR_CLASSES:
-            raise ValueError(
-                f"unknown error_class {v!r}; must be one of {ERROR_CLASSES}")
+            raise ValueError(f"unknown error_class {v!r}; must be one of {ERROR_CLASSES}")
         return v
 
     @model_validator(mode="after")
-    def _exactly_one_grading_mode(self) -> "TaskSpec":
+    def _exactly_one_grading_mode(self) -> TaskSpec:
         has_tests = bool(self.oracle_tests)
         has_rubric = bool(self.rubric)
         if has_tests == has_rubric:
             raise ValueError(
                 f"task {self.id!r} must set exactly one of oracle_tests or "
-                f"rubric (has_tests={has_tests}, has_rubric={has_rubric})")
+                f"rubric (has_tests={has_tests}, has_rubric={has_rubric})"
+            )
         return self
 
 
@@ -51,7 +56,7 @@ class TaskSuite(BaseModel):
     tasks: list[TaskSpec]
 
     @model_validator(mode="after")
-    def _unique_ids(self) -> "TaskSuite":
+    def _unique_ids(self) -> TaskSuite:
         ids = [t.id for t in self.tasks]
         dupes = sorted({i for i in ids if ids.count(i) > 1})
         if dupes:
@@ -68,9 +73,11 @@ class TaskGrade(BaseModel):
 
 
 def _cases_dir() -> Path:
-    return Path(os.environ.get(
-        "SDLC_CASES_ROOT",
-        str(Path(__file__).resolve().parents[3] / "benchmarks" / "cases")))
+    return Path(
+        os.environ.get(
+            "SDLC_CASES_ROOT", str(Path(__file__).resolve().parents[3] / "benchmarks" / "cases")
+        )
+    )
 
 
 def load_task_suite(case_id: str, cases_dir: Path | None = None) -> TaskSuite | None:
@@ -87,8 +94,9 @@ def load_task_suite(case_id: str, cases_dir: Path | None = None) -> TaskSuite | 
     return TaskSuite(case_id=case_id, tasks=data.get("tasks", []))
 
 
-def grade_tasks(suite: TaskSuite, testcase_results: dict[str, bool],
-                judge_scores: dict[str, float]) -> list[TaskGrade]:
+def grade_tasks(
+    suite: TaskSuite, testcase_results: dict[str, bool], judge_scores: dict[str, float]
+) -> list[TaskGrade]:
     """Combine already-computed JUnit + judge results into per-task grades.
 
     Pure -- no I/O. testcase_results is {"file::name": passed} from
@@ -97,27 +105,48 @@ def grade_tasks(suite: TaskSuite, testcase_results: dict[str, bool],
     out: list[TaskGrade] = []
     for t in suite.tasks:
         if t.oracle_tests:
-            found = [testcase_results[nid] for nid in t.oracle_tests
-                    if nid in testcase_results]
+            found = [testcase_results[nid] for nid in t.oracle_tests if nid in testcase_results]
             if not found:
-                out.append(TaskGrade(
-                    task_id=t.id, error_class=t.error_class, score=None,
-                    judge="error",
-                    detail=f"none of {t.oracle_tests} found in oracle report"))
+                out.append(
+                    TaskGrade(
+                        task_id=t.id,
+                        error_class=t.error_class,
+                        score=None,
+                        judge="error",
+                        detail=f"none of {t.oracle_tests} found in oracle report",
+                    )
+                )
                 continue
             passed_n = sum(1 for ok in found if ok)
-            out.append(TaskGrade(
-                task_id=t.id, error_class=t.error_class,
-                score=passed_n / len(found), judge="oracle",
-                detail=f"{passed_n}/{len(found)} mapped oracle tests passed"))
+            out.append(
+                TaskGrade(
+                    task_id=t.id,
+                    error_class=t.error_class,
+                    score=passed_n / len(found),
+                    judge="oracle",
+                    detail=f"{passed_n}/{len(found)} mapped oracle tests passed",
+                )
+            )
         else:
             score = judge_scores.get(t.id)
             if score is None:
-                out.append(TaskGrade(
-                    task_id=t.id, error_class=t.error_class, score=None,
-                    judge="error", detail="judge did not return a score"))
+                out.append(
+                    TaskGrade(
+                        task_id=t.id,
+                        error_class=t.error_class,
+                        score=None,
+                        judge="error",
+                        detail="judge did not return a score",
+                    )
+                )
             else:
-                out.append(TaskGrade(
-                    task_id=t.id, error_class=t.error_class, score=score,
-                    judge="llm_judge", detail="rubric-graded"))
+                out.append(
+                    TaskGrade(
+                        task_id=t.id,
+                        error_class=t.error_class,
+                        score=score,
+                        judge="llm_judge",
+                        detail="rubric-graded",
+                    )
+                )
     return out

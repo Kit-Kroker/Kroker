@@ -13,6 +13,7 @@ counterfactual, answerable only by running a case with
 adversarial_review_enabled on and off and comparing held-out oracle
 pass-fraction against cost.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -44,19 +45,18 @@ class AgreementMatrix(BaseModel):
     max_by_metric: dict[str, float] = Field(default_factory=dict)
 
 
-def build_agreement_matrix(case_id: str, records: list[BenchmarkRecord],
-                           suite: TaskSuite | None = None) -> AgreementMatrix:
-    recs = [r for r in records
-            if r.case_id == case_id and r.task_id
-            and r.stage == ADVERSARY_STAGE]
+def build_agreement_matrix(
+    case_id: str, records: list[BenchmarkRecord], suite: TaskSuite | None = None
+) -> AgreementMatrix:
+    recs = [r for r in records if r.case_id == case_id and r.task_id and r.stage == ADVERSARY_STAGE]
     if not recs:
-        return AgreementMatrix(case_id=case_id,
-                               metrics=list(AGREEMENT_METRICS))
+        return AgreementMatrix(case_id=case_id, metrics=list(AGREEMENT_METRICS))
 
     totals: dict[tuple[str, str], int] = defaultdict(int)
     splits: dict[tuple[str, str], int] = defaultdict(int)
     spend: dict[tuple[str, str], float] = defaultdict(float)
     for r in recs:
+        assert r.task_id is not None
         arm = f"{r.harness.value if r.harness else ''}#{r.model}"
         key = (r.task_id, arm)
         totals[key] += 1
@@ -68,14 +68,26 @@ def build_agreement_matrix(case_id: str, records: list[BenchmarkRecord],
     cells: list[AgreementCell] = []
     for key, n in totals.items():
         task_id, arm = key
-        cells.append(AgreementCell(
-            task_id=task_id, arm_key=arm, metric="split_rate",
-            value=splits[key] / n, n_records=n))
+        cells.append(
+            AgreementCell(
+                task_id=task_id,
+                arm_key=arm,
+                metric="split_rate",
+                value=splits[key] / n,
+                n_records=n,
+            )
+        )
         # No split means no cost PER split -- a blank cell, never a 0.0.
         if splits[key]:
-            cells.append(AgreementCell(
-                task_id=task_id, arm_key=arm, metric="cost_per_split",
-                value=spend[key] / splits[key], n_records=n))
+            cells.append(
+                AgreementCell(
+                    task_id=task_id,
+                    arm_key=arm,
+                    metric="cost_per_split",
+                    value=spend[key] / splits[key],
+                    n_records=n,
+                )
+            )
 
     observed = {c.task_id for c in cells}
     if suite is not None:
@@ -85,12 +97,16 @@ def build_agreement_matrix(case_id: str, records: list[BenchmarkRecord],
         task_ids = sorted(observed)
 
     max_by_metric = {
-        m: max((c.value for c in cells if c.metric == m), default=0.0)
-        for m in AGREEMENT_METRICS}
+        m: max((c.value for c in cells if c.metric == m), default=0.0) for m in AGREEMENT_METRICS
+    }
     return AgreementMatrix(
-        case_id=case_id, metrics=list(AGREEMENT_METRICS), task_ids=task_ids,
-        arms=sorted({c.arm_key for c in cells}), cells=cells,
-        max_by_metric=max_by_metric)
+        case_id=case_id,
+        metrics=list(AGREEMENT_METRICS),
+        task_ids=task_ids,
+        arms=sorted({c.arm_key for c in cells}),
+        cells=cells,
+        max_by_metric=max_by_metric,
+    )
 
 
 def render_agreement_matrix_json(am: AgreementMatrix) -> str:
@@ -99,7 +115,7 @@ def render_agreement_matrix_json(am: AgreementMatrix) -> str:
 
 def _cell_color(value: float, max_value: float) -> str:
     ratio = 0.0 if max_value <= 0 else min(value / max_value, 1.0)
-    g_b = round(255 - 229 * ratio)   # white (low) -> dark red (high)
+    g_b = round(255 - 229 * ratio)  # white (low) -> dark red (high)
     return f"rgb(255,{g_b},{g_b})"
 
 
@@ -115,28 +131,33 @@ def _grid(am: AgreementMatrix, metric: str) -> str:
             if c is None:
                 tds.append('<td class="empty"></td>')
                 continue
-            tip = (f"{task_id} / {arm}: {c.value:.2f} {metric} "
-                   f"over {c.n_records} adversary records")
+            tip = f"{task_id} / {arm}: {c.value:.2f} {metric} over {c.n_records} adversary records"
             tds.append(
                 f'<td title="{escape(tip)}" '
                 f'style="background:{_cell_color(c.value, mx)}">'
-                f"{c.value:.2f}</td>")
+                f"{c.value:.2f}</td>"
+            )
         rows.append("<tr>" + "".join(tds) + "</tr>")
-    return (f"<h2>{escape(metric)}</h2>"
-            f"<table><tr><th>task \\ arm</th>{head}</tr>"
-            + "".join(rows) + "</table>")
+    return (
+        f"<h2>{escape(metric)}</h2>"
+        f"<table><tr><th>task \\ arm</th>{head}</tr>" + "".join(rows) + "</table>"
+    )
 
 
 def render_agreement_matrix_html(am: AgreementMatrix) -> str:
     if not am.cells:
-        body = ("<p>No adversary records. The lens runs only when "
-                "adversarial_review_enabled is set AND the primary reviewer "
-                "approved.</p>")
+        body = (
+            "<p>No adversary records. The lens runs only when "
+            "adversarial_review_enabled is set AND the primary reviewer "
+            "approved.</p>"
+        )
     else:
         body = "".join(_grid(am, m) for m in am.metrics)
-        body += ("<p><em>Descriptive only: split rate does not say the "
-                 "adversary was right. That needs an on/off arm comparison "
-                 "against the held-out oracle.</em></p>")
+        body += (
+            "<p><em>Descriptive only: split rate does not say the "
+            "adversary was right. That needs an on/off arm comparison "
+            "against the held-out oracle.</em></p>"
+        )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Reviewer agreement - {escape(am.case_id)}</title>

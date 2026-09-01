@@ -1,5 +1,9 @@
 from sdlc.models import (
-    MemoryConfig, MemoryKind, PipelineConfig, RecallSnapshot, RetainItem,
+    MemoryConfig,
+    MemoryKind,
+    PipelineConfig,
+    RecallSnapshot,
+    RetainItem,
 )
 
 
@@ -10,8 +14,9 @@ def test_recall_snapshot_defaults_not_degraded():
 
 
 def test_retain_item_requires_kind_bank_text():
-    item = RetainItem(kind=MemoryKind.GOTCHA, bank="org", text="did a thing",
-                      metadata={"run_id": "r1"})
+    item = RetainItem(
+        kind=MemoryKind.GOTCHA, bank="org", text="did a thing", metadata={"run_id": "r1"}
+    )
     assert item.kind is MemoryKind.GOTCHA
     assert item.metadata["run_id"] == "r1"
 

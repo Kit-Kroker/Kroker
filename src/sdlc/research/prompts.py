@@ -9,6 +9,7 @@ cache_creation_input_tokens simply stays 0, with no error and no warning.
 Guarded by tests/test_research_prompt_cacheable.py. Do not trim for tidiness,
 and NEVER interpolate the question into the prefix.
 """
+
 from __future__ import annotations
 
 SUB_QUESTION_PREFIX = """\

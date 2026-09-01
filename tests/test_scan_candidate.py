@@ -1,11 +1,15 @@
 """D8: confidence is derived from distinct source signals, never assigned."""
+
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
 from sdlc.assessment.scan.models import (
-    CandidateMember, Confidence, MemberKind, ScanCandidate,
+    CandidateMember,
+    Confidence,
+    MemberKind,
+    ScanCandidate,
 )
 
 
@@ -14,9 +18,13 @@ def _m(value: str) -> CandidateMember:
 
 
 def _candidate(sources: list[str], confidence: Confidence) -> ScanCandidate:
-    return ScanCandidate(candidate_id="C-01", name="Payments",
-                         sources=sources, confidence=confidence,
-                         members=[_m("GET /pay")])
+    return ScanCandidate(
+        candidate_id="C-01",
+        name="Payments",
+        sources=sources,
+        confidence=confidence,
+        members=[_m("GET /pay")],
+    )
 
 
 def test_three_distinct_signals_is_high():
@@ -25,14 +33,12 @@ def test_three_distinct_signals_is_high():
 
 
 def test_two_distinct_signals_is_medium():
-    assert _candidate(["S1-pay", "S3-pay"],
-                      Confidence.MEDIUM).confidence is Confidence.MEDIUM
+    assert _candidate(["S1-pay", "S3-pay"], Confidence.MEDIUM).confidence is Confidence.MEDIUM
 
 
 def test_two_candidates_from_one_signal_is_low():
     """The load-bearing case: S1 seeing two groupings is one opinion."""
-    assert _candidate(["S1-pay", "S1-billing"],
-                      Confidence.LOW).confidence is Confidence.LOW
+    assert _candidate(["S1-pay", "S1-billing"], Confidence.LOW).confidence is Confidence.LOW
 
 
 def test_a_disagreeing_confidence_does_not_construct():
@@ -61,8 +67,12 @@ def test_candidate_id_is_not_a_bc_id():
 
 
 def test_possible_duplicate_defaults_empty_and_is_sorted():
-    c = ScanCandidate(candidate_id="C-02", name="Refunds",
-                      sources=["S3-refunds"], confidence=Confidence.LOW,
-                      members=[_m("GET /refund")],
-                      possible_duplicate_of=["C-09", "C-01"])
+    c = ScanCandidate(
+        candidate_id="C-02",
+        name="Refunds",
+        sources=["S3-refunds"],
+        confidence=Confidence.LOW,
+        members=[_m("GET /refund")],
+        possible_duplicate_of=["C-09", "C-01"],
+    )
     assert c.possible_duplicate_of == ["C-01", "C-09"]

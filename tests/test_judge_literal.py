@@ -5,14 +5,22 @@ so _stage_record raised ValidationError inside _run_deep_review's bare
 `except Exception: return None` — the lens paid for its LLM call and
 recorded nothing, silently, on every run.
 """
+
 import pytest
+from pydantic import ValidationError
 
 from sdlc.benchmarks.models import QualityScore
 
 # Every judge value emitted anywhere in workflows/feature.py.
 EMITTED_JUDGES = [
-    "contract", "llm_judge", "human_override", "error", "oracle",
-    "deep_review", "adversary", "handoff",
+    "contract",
+    "llm_judge",
+    "human_override",
+    "error",
+    "oracle",
+    "deep_review",
+    "adversary",
+    "handoff",
     # E-83: the staged judge. "llm_judge" is retained, not retired -- every
     # record written before E-83 carries it, and that is exactly what makes
     # the measurement discontinuity queryable rather than silent.
@@ -26,5 +34,5 @@ def test_judge_literal_admits_every_emitted_value(judge):
 
 
 def test_judge_literal_still_rejects_unknown():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         QualityScore(score=1.0, judge="not_a_judge")

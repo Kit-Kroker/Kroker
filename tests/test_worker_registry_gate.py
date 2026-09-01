@@ -7,7 +7,8 @@ def test_worker_validates_registry_at_boot():
     src = WORKER_SRC.read_text(encoding="utf-8")
     assert "validate_registry" in src, (
         "worker.main() must validate the agent registry at boot so a "
-        "same-family developer/reviewer config fails closed (FR-204)")
+        "same-family developer/reviewer config fails closed (FR-204)"
+    )
     assert "load_registry(" in src
 
 

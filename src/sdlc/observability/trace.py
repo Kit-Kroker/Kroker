@@ -4,15 +4,16 @@ Pure pydantic, sandbox-safe: no temporalio, no I/O. The workflow accumulates
 a list[RunEvent] in state (already durable in Temporal history); events.jsonl
 is a rendering of it, not a second source of truth.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class RunEventKind(str, Enum):
+class RunEventKind(StrEnum):
     STAGE_STARTED = "stage_started"
     STAGE_ENDED = "stage_ended"
     GATE_AWAITED = "gate_awaited"
@@ -30,6 +31,7 @@ class RunEventKind(str, Enum):
 class RunEvent(BaseModel):
     """One domain event. `data` is a flat str->str map so events.jsonl stays a
     stable, greppable line format; numeric values are stringified at emit."""
+
     seq: int
     at: datetime
     kind: RunEventKind

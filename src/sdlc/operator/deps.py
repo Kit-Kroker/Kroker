@@ -11,6 +11,7 @@ waits forever without reporting is not. reset_request_state() additionally
 zeroes it per HTTP request; agent.py installs that as ASGI middleware,
 because create_web_app holds one deps object for the life of the mount.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -21,13 +22,13 @@ from .errors import ToolError
 
 @dataclass
 class OperatorDeps:
-    poller: Any                 # dashboard.fleet.FleetPoller
-    board: Any                  # () -> BoardStore. A FACTORY, not a store:
-                                # tools._board opens and closes one per call
-                                # inside the worker thread it runs on, because
-                                # sqlite connections are bound to the thread
-                                # that opened them (check_same_thread).
-    starter: Any                # async (IdeaBrief, PipelineConfig, str) -> str
+    poller: Any  # dashboard.fleet.FleetPoller
+    board: Any  # () -> BoardStore. A FACTORY, not a store:
+    # tools._board opens and closes one per call
+    # inside the worker thread it runs on, because
+    # sqlite connections are bound to the thread
+    # that opened them (check_same_thread).
+    starter: Any  # async (IdeaBrief, PipelineConfig, str) -> str
     actor: str = "chat:unknown"
     max_artifact_bytes: int = 32 * 1024
     max_follow_calls: int = 10
@@ -40,7 +41,8 @@ class OperatorDeps:
         if self.follow_calls >= self.max_follow_calls:
             raise ToolError(
                 f"refusing a {self.follow_calls + 1}th consecutive wait; "
-                f"report to the operator before waiting again")
+                f"report to the operator before waiting again"
+            )
         self.follow_calls += 1
 
     def note_other_tool(self) -> None:

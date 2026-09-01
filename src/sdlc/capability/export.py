@@ -13,6 +13,7 @@ Opt-in and off by default: writing into a client repository is a
 trust-boundary decision, the same framing triage/advisories.py uses for an
 outbound lookup.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -36,14 +37,17 @@ def fingerprint_sha256(fp: CapabilityFingerprint) -> str:
     in the client-facing artifact is exactly the ambiguity measurement.py
     exists to prevent."""
     canonical = json.dumps(
-        {"tiers": {t.value: fp.tiers.get(t, []) for t in SignalTier},
-         "collected": fp.collected.state.value},
-        sort_keys=True, separators=(",", ":"))
+        {
+            "tiers": {t.value: fp.tiers.get(t, []) for t in SignalTier},
+            "collected": fp.collected.state.value,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def build_export(project: str,
-                 rows: Sequence[CapabilityIdentity]) -> dict:
+def build_export(project: str, rows: Sequence[CapabilityIdentity]) -> dict:
     """The payload. Retired and merged rows are included deliberately: a
     delivered document citing them must still resolve."""
     return {
@@ -53,8 +57,7 @@ def build_export(project: str,
             {
                 "bc_id": r.bc_id,
                 "status": r.status.value,
-                "retired_reason": (r.retired_reason.value
-                                   if r.retired_reason else None),
+                "retired_reason": (r.retired_reason.value if r.retired_reason else None),
                 "merged_into": r.merged_into,
                 "derived_from": r.derived_from,
                 "fingerprint_sha256": fingerprint_sha256(r.fingerprint),
@@ -64,14 +67,12 @@ def build_export(project: str,
     }
 
 
-def write_export(path: str | os.PathLike, project: str,
-                 rows: Sequence[CapabilityIdentity]) -> str:
+def write_export(path: str | os.PathLike, project: str, rows: Sequence[CapabilityIdentity]) -> str:
     """Write the export, creating parents. Deterministic bytes: identical
     input yields an identical file, so a no-change assessment produces no
     diff in the client's repository."""
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    body = json.dumps(build_export(project, rows), indent=2,
-                      sort_keys=False, ensure_ascii=False)
+    body = json.dumps(build_export(project, rows), indent=2, sort_keys=False, ensure_ascii=False)
     target.write_text(body + "\n", encoding="utf-8")
     return str(target)

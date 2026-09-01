@@ -21,19 +21,22 @@ def test_clarify_prompt_matches_what_the_workflow_sends():
     built the same way BenchmarkWorkflow builds its IdeaBrief
     (benchmarks/workflow.py:157-158)."""
     import yaml
+
     from sdlc.models import IdeaBrief, ProjectMode
     from sdlc.prompts import clarify_prompt
 
     spec = yaml.safe_load(
-        (CASES / "add-login-greenfield" / "case.yaml").read_text(
-            encoding="utf-8"))
-    idea = IdeaBrief(title=spec["case_id"], description=spec["description"],
-                     mode=ProjectMode(spec["mode"]),
-                     repo_url=spec.get("repo_url"))
+        (CASES / "add-login-greenfield" / "case.yaml").read_text(encoding="utf-8")
+    )
+    idea = IdeaBrief(
+        title=spec["case_id"],
+        description=spec["description"],
+        mode=ProjectMode(spec["mode"]),
+        repo_url=spec.get("repo_url"),
+    )
     expected = clarify_prompt(idea.model_dump_json(), [])
 
-    assert build_fixture("clarify", "add-login-greenfield",
-                         CASES, AGENTS).prompt == expected
+    assert build_fixture("clarify", "add-login-greenfield", CASES, AGENTS).prompt == expected
 
 
 def test_fixture_carries_the_role_registry_model():
@@ -61,10 +64,10 @@ def test_planner_fixture_uses_the_frozen_architecture_seed():
 
     from sdlc.prompts import planner_prompt
 
-    arch = json.loads((CASES / "cat-cafe-monitoring" / "seeds"
-                       / "architecture.json").read_text(encoding="utf-8"))
-    expected = planner_prompt(json.dumps(arch, separators=(",", ":")),
-                              [], None)
+    arch = json.loads(
+        (CASES / "cat-cafe-monitoring" / "seeds" / "architecture.json").read_text(encoding="utf-8")
+    )
+    expected = planner_prompt(json.dumps(arch, separators=(",", ":")), [], None)
     fx = build_fixture("planner", "cat-cafe-monitoring", CASES, AGENTS)
     assert fx.prompt == expected
 
@@ -75,13 +78,11 @@ def test_qa_fixture_uses_the_frozen_seeds():
     from sdlc.prompts import qa_prompt
 
     seeds = CASES / "cat-cafe-monitoring" / "seeds"
-    assertions = json.loads(
-        (seeds / "assertions.json").read_text(encoding="utf-8"))["assertions"]
+    assertions = json.loads((seeds / "assertions.json").read_text(encoding="utf-8"))["assertions"]
     qa_raw = (seeds / "qa_raw.json").read_text(encoding="utf-8").strip()
     diff = json.loads((seeds / "diff.json").read_text(encoding="utf-8"))
     expected = qa_prompt(assertions, qa_raw, diff["stat"], diff["patch"])
-    assert build_fixture("qa", "cat-cafe-monitoring",
-                         CASES, AGENTS).prompt == expected
+    assert build_fixture("qa", "cat-cafe-monitoring", CASES, AGENTS).prompt == expected
 
 
 def test_missing_seed_names_the_directory():

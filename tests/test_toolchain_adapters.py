@@ -1,12 +1,15 @@
 """ToolchainAdapter: pure command/identity resolution (ADR-15, FR-108)."""
+
 from sdlc.toolchain.adapters import (
-    PythonToolchain, TOOLCHAINS, ToolchainKind, detect,
+    TOOLCHAINS,
+    PythonToolchain,
+    ToolchainKind,
+    detect,
 )
 
 
 def test_detect_python_by_pyproject(tmp_path):
-    (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n",
-                                             encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
     a = detect(str(tmp_path))
     assert a is not None and a.kind is ToolchainKind.PYTHON
 
@@ -53,7 +56,11 @@ def test_python_build_cmd_is_none():
 
 def test_registry_has_python_markers():
     assert TOOLCHAINS[ToolchainKind.PYTHON].markers == (
-        "pyproject.toml", "requirements.txt", "setup.py", "setup.cfg")
+        "pyproject.toml",
+        "requirements.txt",
+        "setup.py",
+        "setup.cfg",
+    )
 
 
 def test_python_oracle_test_cmd_targets_path_and_emits_junit():

@@ -9,4 +9,5 @@ that repository's root would be copied into the generated case's reference/
 dir, and would then suppress collection of the real oracle during
 `sdlc benchmark verify-case`.
 """
+
 collect_ignore_glob = ["mini_calc/*"]

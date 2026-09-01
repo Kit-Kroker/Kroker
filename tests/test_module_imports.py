@@ -11,6 +11,7 @@ os.environ.setdefault("ANTHROPIC_API_KEY", "test-dummy")
 
 def test_merge_verdict_model():
     from sdlc.models import MergeVerdict
+
     v = MergeVerdict(approve=True, confidence=0.9, rationale="clean build")
     assert v.approve is True
     assert v.confidence == 0.9
@@ -19,7 +20,8 @@ def test_merge_verdict_model():
 
 def test_roles_and_workflow_import_cleanly():
     import importlib
+
     roles = importlib.import_module("sdlc.agents.roles")
     assert hasattr(roles, "t_merge_verdict")
-    assert not hasattr(roles, "t_gate")          # renamed away
+    assert not hasattr(roles, "t_gate")  # renamed away
     importlib.import_module("sdlc.workflows.feature")

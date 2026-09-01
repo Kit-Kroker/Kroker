@@ -2,6 +2,7 @@
 image tag, so a rollback is observable from outside: the endpoint reports
 which version is serving. HEALTHY=0 makes a version that fails its smoke
 check without failing its build."""
+
 import os
 
 from fastapi import FastAPI, Response

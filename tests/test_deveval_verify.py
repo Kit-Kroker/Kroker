@@ -1,6 +1,7 @@
 """E-79 spec section 7: an imported case whose gold implementation cannot
 pass its own oracle is broken, and must be caught at import rather than in a
 benchmark run."""
+
 from pathlib import Path
 
 import pytest
@@ -34,6 +35,7 @@ def test_verify_case_red_when_the_reference_is_broken(tmp_path):
 def test_verify_case_reports_a_missing_reference(tmp_path):
     convert_repo(FIXTURE, tmp_path, judge_model="google:gemini-3.5-flash")
     import shutil
+
     shutil.rmtree(tmp_path / "deveval-mini-calc" / "reference")
     result = verify_case(tmp_path / "deveval-mini-calc")
     assert not result.ok

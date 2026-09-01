@@ -16,14 +16,14 @@ def test_new_workflow_has_empty_pending_registry():
 
 def test_pending_decisions_query_returns_registry_values():
     wf = FeatureWorkflow()
-    p = StageGatePending(key="architecture#1", gate="architecture", round=1,
-                         spec_summary="x")
+    p = StageGatePending(key="architecture#1", gate="architecture", round=1, spec_summary="x")
     wf._pending[p.key] = p
     assert wf.pending_decisions() == [p]
 
 
 def test_gate_accepts_context_param():
     import inspect
+
     sig = inspect.signature(FeatureWorkflow._gate)
     assert "context" in sig.parameters
 
@@ -50,8 +50,7 @@ from sdlc.pending import ClarifyPending
 def test_answer_question_pops_only_that_question():
     wf = FeatureWorkflow()
     for qid in ("Q1", "Q2"):
-        wf._pending[qid] = ClarifyPending(
-            key=qid, question=f"{qid}?", why_it_matters="w")
+        wf._pending[qid] = ClarifyPending(key=qid, question=f"{qid}?", why_it_matters="w")
 
     wf.answer_question("Q1", "Use OIDC")
 
@@ -72,17 +71,17 @@ def test_answer_question_is_still_first_answer_wins():
 
 def test_submit_gate_decision_pops_that_gate(monkeypatch):
     from sdlc.workflows import feature as feat
-    monkeypatch.setattr(
-        feat.workflow, "now",
-        lambda: dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc))
+
+    monkeypatch.setattr(feat.workflow, "now", lambda: dt.datetime(2026, 1, 1, tzinfo=dt.UTC))
 
     wf = FeatureWorkflow()
     wf._pending["architecture#2"] = StageGatePending(
-        key="architecture#2", gate="architecture", round=2, spec_summary="s")
+        key="architecture#2", gate="architecture", round=2, spec_summary="s"
+    )
 
-    wf.submit_gate_decision(GateDecision(
-        gate="architecture", round=2, outcome=GateOutcome.APPROVE,
-        decided_by="human"))
+    wf.submit_gate_decision(
+        GateDecision(gate="architecture", round=2, outcome=GateOutcome.APPROVE, decided_by="human")
+    )
 
     assert wf.pending_decisions() == []
     assert wf._gate_decisions["architecture#2"].outcome is GateOutcome.APPROVE
@@ -93,11 +92,13 @@ def test_every_pending_variant_can_name_its_parent_run():
     one kind of item ungroupable -- and the union is what the inbox
     deserialises into."""
     from sdlc.pending import (
-        ClarifyPending, MergeGatePending, StageGatePending,
+        ClarifyPending,
+        MergeGatePending,
+        StageGatePending,
         TaskEscalationPending,
     )
-    for cls in (ClarifyPending, StageGatePending, TaskEscalationPending,
-                MergeGatePending):
+
+    for cls in (ClarifyPending, StageGatePending, TaskEscalationPending, MergeGatePending):
         assert "parent_run_id" in cls.model_fields
         assert cls.model_fields["parent_run_id"].default is None
 
@@ -106,8 +107,9 @@ def test_gate_pending_passes_parent_run_id_to_variants():
     """gate_pending stamps parent_run_id onto all constructed pending variants."""
     from sdlc.pending import GateContext, gate_pending
 
-    p_stage = gate_pending("architecture", 1, GateContext(spec_summary="spec"),
-                           parent_run_id="parent-wf-123")
+    p_stage = gate_pending(
+        "architecture", 1, GateContext(spec_summary="spec"), parent_run_id="parent-wf-123"
+    )
     assert p_stage.parent_run_id == "parent-wf-123"
 
     p_tool = gate_pending("tool_approval", 1, None, parent_run_id="parent-wf-123")

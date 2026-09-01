@@ -1,15 +1,26 @@
 from sdlc.models import (
-    ConsultedSource, Contradiction, Gap, GroundedFinding, InferredFinding,
-    MemoryKind, PipelineConfig, ResearchBrief, ResearchConfig, RoleConfig,
-    SubQuestion,
+    ConsultedSource,
+    GroundedFinding,
+    InferredFinding,
+    MemoryKind,
+    PipelineConfig,
+    ResearchBrief,
+    ResearchConfig,
+    RoleConfig,
 )
 
 # The SGR cascade, in the ONE order the spec commits to. This literal IS the
 # design (spec §4); a reorder is a silent regression, so it gets a guard.
 _BRIEF_ORDER = [
-    "sub_questions", "sources_consulted", "grounded_findings",
-    "inferred_findings", "contradictions", "gaps", "summary",
-    "brief_ref", "confidence",
+    "sub_questions",
+    "sources_consulted",
+    "grounded_findings",
+    "inferred_findings",
+    "contradictions",
+    "gaps",
+    "summary",
+    "brief_ref",
+    "confidence",
 ]
 
 

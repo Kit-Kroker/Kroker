@@ -1,47 +1,78 @@
 """FR-913 (E-48): assembling the proposer's packet from a ScanResult."""
+
 from __future__ import annotations
 
 import random
 
 from sdlc.assessment.discover.context import build_context, entry_point_paths
 from sdlc.assessment.scan.models import (
-    CATEGORIES, SCAN_ORDER, CandidateMember, Confidence, MemberKind,
-    ScanCandidate, ScanResult, ScanSignalResult, SecurityObservation,
-    SignalSource, SourceCandidate, family_of,
+    CATEGORIES,
+    SCAN_ORDER,
+    CandidateMember,
+    Confidence,
+    MemberKind,
+    ScanCandidate,
+    ScanResult,
+    ScanSignalResult,
+    SecurityObservation,
+    SignalSource,
+    SourceCandidate,
+    family_of,
 )
 from sdlc.measurement import CollectionState, Measurement
 
 PAY = ScanCandidate(
-    candidate_id="C-01", name="payments", sources=["S1-payments",
-                                                   "S3-payments"],
+    candidate_id="C-01",
+    name="payments",
+    sources=["S1-payments", "S3-payments"],
     confidence=Confidence.MEDIUM,
-    members=[CandidateMember(kind=MemberKind.HTTP_ROUTE, value="POST /pay",
-                             path="pay/api.py", line=10),
-             CandidateMember(kind=MemberKind.FILE_PATH, value="pay/core.py",
-                             path="pay/core.py")])
+    members=[
+        CandidateMember(kind=MemberKind.HTTP_ROUTE, value="POST /pay", path="pay/api.py", line=10),
+        CandidateMember(kind=MemberKind.FILE_PATH, value="pay/core.py", path="pay/core.py"),
+    ],
+)
 UTIL = ScanCandidate(
-    candidate_id="C-02", name="services", sources=["S1-services"],
+    candidate_id="C-02",
+    name="services",
+    sources=["S1-services"],
     confidence=Confidence.LOW,
-    members=[CandidateMember(kind=MemberKind.PACKAGE_PATH, value="services",
-                             path="services/__init__.py")])
+    members=[
+        CandidateMember(kind=MemberKind.PACKAGE_PATH, value="services", path="services/__init__.py")
+    ],
+)
 
 SOURCES = [
-    SourceCandidate(signal="S1", local_id="S1-payments", name="payments",
-                    rule="s1_domain_term", detail="", 
-                    confidence_contribution=Confidence.HIGH,
-                    members=[CandidateMember(kind=MemberKind.PACKAGE_PATH,
-                                             value="pay")]),
-    SourceCandidate(signal="S3", local_id="S3-payments", name="payments",
-                    rule="s3_http_route", detail="",
-                    confidence_contribution=Confidence.HIGH,
-                    members=[CandidateMember(kind=MemberKind.HTTP_ROUTE,
-                                             value="POST /pay",
-                                             path="pay/api.py", line=10)]),
-    SourceCandidate(signal="S1", local_id="S1-services", name="services",
-                    rule="s1_layer_name", detail="",
-                    confidence_contribution=Confidence.LOW,
-                    members=[CandidateMember(kind=MemberKind.PACKAGE_PATH,
-                                             value="services")]),
+    SourceCandidate(
+        signal="S1",
+        local_id="S1-payments",
+        name="payments",
+        rule="s1_domain_term",
+        detail="",
+        confidence_contribution=Confidence.HIGH,
+        members=[CandidateMember(kind=MemberKind.PACKAGE_PATH, value="pay")],
+    ),
+    SourceCandidate(
+        signal="S3",
+        local_id="S3-payments",
+        name="payments",
+        rule="s3_http_route",
+        detail="",
+        confidence_contribution=Confidence.HIGH,
+        members=[
+            CandidateMember(
+                kind=MemberKind.HTTP_ROUTE, value="POST /pay", path="pay/api.py", line=10
+            )
+        ],
+    ),
+    SourceCandidate(
+        signal="S1",
+        local_id="S1-services",
+        name="services",
+        rule="s1_layer_name",
+        detail="",
+        confidence_contribution=Confidence.LOW,
+        members=[CandidateMember(kind=MemberKind.PACKAGE_PATH, value="services")],
+    ),
 ]
 
 INVENTORY = {
@@ -60,10 +91,17 @@ def _signals() -> list[ScanSignalResult]:
     not construct.
     """
     val = Measurement.measured(0.0)
-    return [ScanSignalResult(signal=s, family=family_of(s), version=1,
-                             source=SignalSource.COMPUTED, collected=val,
-                             categories={k: val for k in CATEGORIES[s]})
-            for s in SCAN_ORDER]
+    return [
+        ScanSignalResult(
+            signal=s,
+            family=family_of(s),
+            version=1,
+            source=SignalSource.COMPUTED,
+            collected=val,
+            categories={k: val for k in CATEGORIES[s]},
+        )
+        for s in SCAN_ORDER
+    ]
 
 
 def _scan(**kw) -> ScanResult:
@@ -92,9 +130,14 @@ def test_a_layer_named_candidate_is_flagged_guardrail_only():
 
 def test_security_observations_join_on_member_paths():
     obs = SecurityObservation(
-        signal="SS1", category="tls_enforcement", rule="plaintext_http",
-        detail="", severity_hint="medium", path="pay/api.py",
-        confidence=Confidence.MEDIUM)
+        signal="SS1",
+        category="tls_enforcement",
+        rule="plaintext_http",
+        detail="",
+        severity_hint="medium",
+        path="pay/api.py",
+        confidence=Confidence.MEDIUM,
+    )
     ctx = build_context(_scan(security=[obs]), INVENTORY, [])
     by_id = {c.candidate_id: c for c in ctx.candidates}
     assert len(by_id["C-01"].security) == 1
@@ -124,11 +167,16 @@ def test_unresolvable_source_prevents_guardrail_only_flip():
     supported *only* by layer rules. An unresolvable source must record the
     miss and keep guardrail_only=False."""
     cand = ScanCandidate(
-        candidate_id="C-03", name="mixed",
+        candidate_id="C-03",
+        name="mixed",
         sources=["S1-services", "S3-missing"],
         confidence=Confidence.MEDIUM,
-        members=[CandidateMember(kind=MemberKind.PACKAGE_PATH, value="services",
-                                 path="services/__init__.py")])
+        members=[
+            CandidateMember(
+                kind=MemberKind.PACKAGE_PATH, value="services", path="services/__init__.py"
+            )
+        ],
+    )
     ctx = build_context(_scan(candidates=[cand]), INVENTORY, [])
     mixed = ctx.candidates[0]
     assert "unresolved" in mixed.source_rules
@@ -145,6 +193,5 @@ def test_the_packet_is_order_independent():
         random.shuffle(srcs)
         items = list(INVENTORY.items())
         random.shuffle(items)
-        again = build_context(_scan(candidates=cands, sources=srcs),
-                              dict(items), [])
+        again = build_context(_scan(candidates=cands, sources=srcs), dict(items), [])
         assert again.model_dump_json() == first

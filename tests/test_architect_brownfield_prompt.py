@@ -1,4 +1,5 @@
 """E-84 D13: the Architect instructions teach the delta."""
+
 from __future__ import annotations
 
 from pathlib import Path

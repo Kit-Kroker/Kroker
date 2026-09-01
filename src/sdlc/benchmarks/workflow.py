@@ -10,6 +10,7 @@ Determinism rule: workflow code never touches the filesystem. All I/O
 (reading records.jsonl, writing report.md) lives in the
 finalize_benchmark_report activity, invoked via execute_activity.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -20,29 +21,51 @@ from temporalio.common import RetryPolicy
 with workflow.unsafe.imports_passed_through():
     from ..agents.loader import HARNESS_ROLES, validate_run_roles
     from ..agents.roles import STAGE_MODELS
-    from ..models import (BenchmarkConfig, GateConfig, HarnessKind,
-                          IdeaBrief, PipelineConfig, ProjectMode, RoleConfig)
+    from ..models import (
+        BenchmarkConfig,
+        GateConfig,
+        HarnessKind,
+        IdeaBrief,
+        PipelineConfig,
+        ProjectMode,
+        RoleConfig,
+    )
     from ..workflows.feature import FeatureWorkflow
     from .judge import load_case_assets
     from .matrix import expand_matrix
-    from .models import (BenchmarkCell, BenchmarkOutcome, BenchmarkRecord,
-                         BenchmarkScope, CaseSpec, QualityScore, SpeedBag)
+    from .models import (
+        BenchmarkCell,
+        BenchmarkOutcome,
+        BenchmarkRecord,
+        BenchmarkScope,
+        CaseSpec,
+        QualityScore,
+        SpeedBag,
+    )
     from .oracle import OracleGrade, OracleInput, grade_oracle
     from .recorder import record_benchmark
     from .report import finalize_benchmark_report
 
-CHILD_ACT = dict(start_to_close_timeout=timedelta(hours=4),
-                 retry_policy=RetryPolicy(maximum_attempts=1))
-RECORD_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
-                  retry_policy=RetryPolicy(maximum_attempts=5))
-ORACLE_ACT = dict(start_to_close_timeout=timedelta(minutes=20),
-                  retry_policy=RetryPolicy(maximum_attempts=1))
+CHILD_ACT = dict(
+    start_to_close_timeout=timedelta(hours=4), retry_policy=RetryPolicy(maximum_attempts=1)
+)
+RECORD_ACT = dict(
+    start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=5)
+)
+ORACLE_ACT = dict(
+    start_to_close_timeout=timedelta(minutes=20), retry_policy=RetryPolicy(maximum_attempts=1)
+)
 
 
-def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
-                 cell: BenchmarkCell, bench_run_id: str,
-                 rubrics: dict[str, str] | None = None,
-                 vetoes: dict[str, str] | None = None) -> PipelineConfig:
+def _cell_config(
+    base: PipelineConfig,
+    idea: IdeaBrief,
+    spec: CaseSpec,
+    cell: BenchmarkCell,
+    bench_run_id: str,
+    rubrics: dict[str, str] | None = None,
+    vetoes: dict[str, str] | None = None,
+) -> PipelineConfig:
     """Build a per-cell PipelineConfig from the cell's arm: each role in
     role_models is overridden to its model (harness roles carry the cell's
     harness + the base role's context budget / extra args; proposer roles are
@@ -56,28 +79,31 @@ def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
         if role in HARNESS_ROLES:
             rc = base.roles.get(role)
             roles[role] = RoleConfig(
-                harness=cell.harness, model=model,
+                harness=cell.harness,
+                model=model,
                 # spec §5: a crew:<lead_harness> cell's lead CLI reaches
                 # the role here; every other harness leaves it unset.
-                lead_harness=(cell.lead_harness
-                              if cell.harness is HarnessKind.CREW else None),
-                context_budget_tokens=(rc.context_budget_tokens
-                                       if rc else 30_000),
-                extra_args=[*(rc.extra_args if rc else []),
-                            *spec.extra_args_by_model.get(model, [])])
+                lead_harness=(cell.lead_harness if cell.harness is HarnessKind.CREW else None),
+                context_budget_tokens=(rc.context_budget_tokens if rc else 30_000),
+                extra_args=[
+                    *(rc.extra_args if rc else []),
+                    *spec.extra_args_by_model.get(model, []),
+                ],
+            )
         else:
             roles[role] = RoleConfig(kind="proposer", model=model)
     cfg.roles = roles
 
     # Per-run ADR-6 (Task 3): resolve the review roles, defaulting any the arm
     # did not override to the registry model (STAGE_MODELS).
+    base_dev = base.roles["dev"].model
+    assert base_dev is not None
     adr6 = {
-        "dev": resolved.get("dev", base.roles["dev"].model),
+        "dev": resolved.get("dev", base_dev),
         "reviewer": resolved.get("reviewer", STAGE_MODELS["review"]),
     }
     if "deep_review" in STAGE_MODELS:
-        adr6["deep_review"] = resolved.get("deep_review",
-                                           STAGE_MODELS["deep_review"])
+        adr6["deep_review"] = resolved.get("deep_review", STAGE_MODELS["deep_review"])
     validate_run_roles(adr6)
 
     # research provider is a property of the RUN, not the repo (registry keeps
@@ -88,9 +114,12 @@ def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
     if spec.research_enabled:
         cfg.roles["research"] = RoleConfig(kind="research", provider="tavily")
     cfg.benchmark = BenchmarkConfig(
-        case_id=spec.case_id, bench_run_id=bench_run_id,
-        rubrics=dict(rubrics or {}), vetoes=dict(vetoes or {}),
-        judge_model=spec.judge_model)
+        case_id=spec.case_id,
+        bench_run_id=bench_run_id,
+        rubrics=dict(rubrics or {}),
+        vetoes=dict(vetoes or {}),
+        judge_model=spec.judge_model,
+    )
     # A benchmark matrix run is unattended by default, so every gate in the
     # child FeatureWorkflow runs under spec.gate_policy (SOFT unless the case
     # or --gate-policy overrides it) rather than the case's own gates dict —
@@ -102,9 +131,14 @@ def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
     return cfg
 
 
-def _oracle_record(base_cell: BenchmarkCell, grade: OracleGrade,
-                   bench_run_id: str, run_id: str,
-                   started: datetime, ended: datetime) -> BenchmarkRecord:
+def _oracle_record(
+    base_cell: BenchmarkCell,
+    grade: OracleGrade,
+    bench_run_id: str,
+    run_id: str,
+    started: datetime,
+    ended: datetime,
+) -> BenchmarkRecord:
     """Build the stage='oracle' record from a grade. An integrity breach
     (held-out or language mismatch) sets .error so it surfaces in the report's
     failure section -- loud, never silent."""
@@ -112,47 +146,75 @@ def _oracle_record(base_cell: BenchmarkCell, grade: OracleGrade,
     if not grade.held_out_ok:
         err = "held-out breach: oracle path in produced diff"
     elif not grade.language_match:
-        err = (f"language mismatch: manifest={grade.language_manifest} "
-               f"detected={grade.language_detected}")
-    outcome = (BenchmarkOutcome.PASS if (grade.score or 0.0) >= 1.0
-               else BenchmarkOutcome.FAIL)
+        err = (
+            f"language mismatch: manifest={grade.language_manifest} "
+            f"detected={grade.language_detected}"
+        )
+    outcome = BenchmarkOutcome.PASS if (grade.score or 0.0) >= 1.0 else BenchmarkOutcome.FAIL
     return BenchmarkRecord(
-        run_id=run_id, bench_run_id=bench_run_id, case_id=base_cell.case_id,
-        scope=BenchmarkScope.ORACLE, stage="oracle", role="oracle",
-        harness=base_cell.harness, lead_harness=base_cell.lead_harness,
+        run_id=run_id,
+        bench_run_id=bench_run_id,
+        case_id=base_cell.case_id,
+        scope=BenchmarkScope.ORACLE,
+        stage="oracle",
+        role="oracle",
+        harness=base_cell.harness,
+        lead_harness=base_cell.lead_harness,
         model=base_cell.arm_name,
         quality=QualityScore(
-            score=grade.score, judge="oracle",
-            components={"passed": float(grade.passed),
-                        "total": float(grade.total),
-                        "held_out_ok": float(grade.held_out_ok),
-                        "language_match": float(grade.language_match)}),
-        speed=SpeedBag(wall_clock_s=(ended - started).total_seconds(),
-                       started_at=started, ended_at=ended),
-        outcome=outcome, error=err)
+            score=grade.score,
+            judge="oracle",
+            components={
+                "passed": float(grade.passed),
+                "total": float(grade.total),
+                "held_out_ok": float(grade.held_out_ok),
+                "language_match": float(grade.language_match),
+            },
+        ),
+        speed=SpeedBag(
+            wall_clock_s=(ended - started).total_seconds(), started_at=started, ended_at=ended
+        ),
+        outcome=outcome,
+        error=err,
+    )
 
 
-def _oracle_task_records(base_cell: BenchmarkCell, grade: OracleGrade,
-                         bench_run_id: str, run_id: str,
-                         started: datetime, ended: datetime
-                         ) -> list[BenchmarkRecord]:
+def _oracle_task_records(
+    base_cell: BenchmarkCell,
+    grade: OracleGrade,
+    bench_run_id: str,
+    run_id: str,
+    started: datetime,
+    ended: datetime,
+) -> list[BenchmarkRecord]:
     """One record per TaskGrade in grade.task_grades. error_class is not
     stored on the record -- task_matrix.py / error_matrix.py join it from
     tasks.yaml by (case_id, task_id) at aggregation time, so the write path
     only needs the scope + the already-existing task_id field."""
     out: list[BenchmarkRecord] = []
     for t in grade.task_grades:
-        outcome = (BenchmarkOutcome.PASS if (t.score or 0.0) >= 1.0
-                  else BenchmarkOutcome.FAIL)
-        out.append(BenchmarkRecord(
-            run_id=run_id, bench_run_id=bench_run_id, case_id=base_cell.case_id,
-            scope=BenchmarkScope.ORACLE_TASK, stage="oracle", task_id=t.task_id,
-            role="oracle", harness=base_cell.harness,
-            lead_harness=base_cell.lead_harness, model=base_cell.arm_name,
-            quality=QualityScore(score=t.score, judge=t.judge),
-            speed=SpeedBag(wall_clock_s=(ended - started).total_seconds(),
-                          started_at=started, ended_at=ended),
-            outcome=outcome))
+        outcome = BenchmarkOutcome.PASS if (t.score or 0.0) >= 1.0 else BenchmarkOutcome.FAIL
+        out.append(
+            BenchmarkRecord(
+                run_id=run_id,
+                bench_run_id=bench_run_id,
+                case_id=base_cell.case_id,
+                scope=BenchmarkScope.ORACLE_TASK,
+                stage="oracle",
+                task_id=t.task_id,
+                role="oracle",
+                harness=base_cell.harness,
+                lead_harness=base_cell.lead_harness,
+                model=base_cell.arm_name,
+                quality=QualityScore(score=t.score, judge=t.judge),
+                speed=SpeedBag(
+                    wall_clock_s=(ended - started).total_seconds(),
+                    started_at=started,
+                    ended_at=ended,
+                ),
+                outcome=outcome,
+            )
+        )
     return out
 
 
@@ -163,27 +225,41 @@ class BenchmarkWorkflow:
         spec = CaseSpec.model_validate_json(spec_json)
         bench_run_id = workflow.info().workflow_id
         cells = expand_matrix(spec)
-        idea = IdeaBrief(title=spec.case_id, description=spec.description,
-                         mode=ProjectMode(spec.mode), repo_url=spec.repo_url)
+        idea = IdeaBrief(
+            title=spec.case_id,
+            description=spec.description,
+            mode=ProjectMode(spec.mode),
+            repo_url=spec.repo_url,
+        )
         base = PipelineConfig()
         # Load rubric text once (file I/O in the activity, not the workflow);
         # the same {stage: text} map is reused across every cell.
         rubrics = await workflow.execute_activity(
-            load_case_assets, args=[spec.case_id, dict(spec.rubrics)],
-            **RECORD_ACT)
+            load_case_assets, args=[spec.case_id, dict(spec.rubrics)], **RECORD_ACT
+        )
         # E-83: veto files use the same {stage: path} -> {stage: text} shape as
         # rubrics. load_case_assets is generic over file contents, so it does
         # not care that this text is YAML. Skipped entirely when no vetoes are
         # registered (the common case -- vetoes are opt-in per case).
-        veto_assets = await workflow.execute_activity(
-            load_case_assets, args=[spec.case_id, dict(spec.vetoes)],
-            **RECORD_ACT) if spec.vetoes else {}
+        veto_assets = (
+            await workflow.execute_activity(
+                load_case_assets, args=[spec.case_id, dict(spec.vetoes)], **RECORD_ACT
+            )
+            if spec.vetoes
+            else {}
+        )
         for cell in cells:
             child_id = f"{bench_run_id}/{cell.cell_id}"
             try:
-                cfg = _cell_config(base, idea, spec, cell,
-                                   bench_run_id=bench_run_id, rubrics=rubrics,
-                                   vetoes=veto_assets)
+                cfg = _cell_config(
+                    base,
+                    idea,
+                    spec,
+                    cell,
+                    bench_run_id=bench_run_id,
+                    rubrics=rubrics,
+                    vetoes=veto_assets,
+                )
             except Exception as e:
                 # an ADR-6-violating arm is rejected at the boundary — the cell
                 # never runs, so there is nothing to grade; log and skip it
@@ -191,8 +267,10 @@ class BenchmarkWorkflow:
                 continue
             try:
                 await workflow.execute_child_workflow(
-                    FeatureWorkflow.run, args=[idea, cfg, None],
-                    id=child_id, task_queue=workflow.info().task_queue,
+                    FeatureWorkflow.run,
+                    args=[idea, cfg, None],
+                    id=child_id,
+                    task_queue=workflow.info().task_queue,
                 )
             except Exception as e:
                 # a failed/escalated cell is a data point, not a crash
@@ -202,26 +280,31 @@ class BenchmarkWorkflow:
                 started = workflow.now()
                 grade = await workflow.execute_activity(
                     grade_oracle,
-                    OracleInput(case_id=spec.case_id,
-                                repo_url=spec.repo_url or "",
-                                run_id=child_id, language=spec.language,
-                                base_branch=idea.base_branch,
-                                author_model=cell.role_models.get("dev", ""),
-                                judge_model=spec.judge_model),
-                    **ORACLE_ACT)
+                    OracleInput(
+                        case_id=spec.case_id,
+                        repo_url=spec.repo_url or "",
+                        run_id=child_id,
+                        language=spec.language,
+                        base_branch=idea.base_branch,
+                        author_model=cell.role_models.get("dev", ""),
+                        judge_model=spec.judge_model,
+                    ),
+                    **ORACLE_ACT,
+                )
                 ended = workflow.now()
                 await workflow.execute_activity(
                     record_benchmark,
-                    _oracle_record(cell, grade, bench_run_id, child_id,
-                                   started, ended),
-                    **RECORD_ACT)
-                for rec in _oracle_task_records(cell, grade, bench_run_id,
-                                                child_id, started, ended):
-                    await workflow.execute_activity(
-                        record_benchmark, rec, **RECORD_ACT)
+                    _oracle_record(cell, grade, bench_run_id, child_id, started, ended),
+                    **RECORD_ACT,
+                )
+                for rec in _oracle_task_records(
+                    cell, grade, bench_run_id, child_id, started, ended
+                ):
+                    await workflow.execute_activity(record_benchmark, rec, **RECORD_ACT)
 
         # All file I/O (aggregate + write_report) is isolated in this
         # activity — workflow code stays deterministic and replay-safe.
         report_path = await workflow.execute_activity(
-            finalize_benchmark_report, bench_run_id, **RECORD_ACT)
+            finalize_benchmark_report, bench_run_id, **RECORD_ACT
+        )
         return report_path

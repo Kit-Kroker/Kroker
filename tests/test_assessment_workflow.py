@@ -2,6 +2,7 @@
 """E-45. Pure helpers directly; sequencing through the workflow environment
 lives in tests/test_assessment_workflow_e2e.py, following
 tests/test_tidyup_workflow.py."""
+
 from __future__ import annotations
 
 import inspect
@@ -10,74 +11,107 @@ import pytest
 
 from sdlc.assessment.discover.map import CapabilityMap
 from sdlc.assessment.models import (
-    ASSESSED, BLOCKED, PARTIAL, PHASE_ORDER, PhaseId, PhaseResult,
+    ASSESSED,
+    BLOCKED,
+    PARTIAL,
+    PHASE_ORDER,
     InitOutcome,
+    PhaseId,
+    PhaseResult,
 )
 from sdlc.assessment.scan.models import (
-    CATEGORIES, SCAN_ORDER, ScanResult, ScanSignalResult, SignalSource,
+    CATEGORIES,
+    SCAN_ORDER,
+    ScanResult,
+    ScanSignalResult,
+    SignalSource,
     family_of,
 )
 from sdlc.measurement import CollectionState, Measurement
 from sdlc.models import GatePolicy
 from sdlc.triage.models import Readiness, RepoTriage, Verdict
 from sdlc.workflows.assessment import (
-    PHASE_OWNER, AssessmentInput, AssessmentWorkflow, DiscoverOutcome, assemble,
-    no_discover, skipped, unbuilt,
+    PHASE_OWNER,
+    AssessmentInput,
+    AssessmentWorkflow,
+    assemble,
+    no_discover,
+    skipped,
+    unbuilt,
 )
 
 
 def _triage() -> RepoTriage:
     ok = Measurement.measured(1.0)
     return RepoTriage(
-        repo_dir="/r", commit_sha="a" * 40, toolchain="python",
-        readiness=Readiness(buildable=ok, runnable=ok, tests_present=ok,
-                            structure_discernible=ok,
-                            verdict=Verdict.READY))
+        repo_dir="/r",
+        commit_sha="a" * 40,
+        toolchain="python",
+        readiness=Readiness(
+            buildable=ok,
+            runnable=ok,
+            tests_present=ok,
+            structure_discernible=ok,
+            verdict=Verdict.READY,
+        ),
+    )
 
 
 def _scan_result() -> ScanResult:
     """A minimal measured ScanResult, so a measured SCAN phase satisfies the
     E-46 phase-agreement validator."""
     val = Measurement.measured(0.0)
-    return ScanResult(signals=[
-        ScanSignalResult(signal=s, family=family_of(s), version=1,
-                         source=SignalSource.COMPUTED, collected=val,
-                         categories={k: val for k in CATEGORIES[s]})
-        for s in SCAN_ORDER])
+    return ScanResult(
+        signals=[
+            ScanSignalResult(
+                signal=s,
+                family=family_of(s),
+                version=1,
+                source=SignalSource.COMPUTED,
+                collected=val,
+                categories={k: val for k in CATEGORIES[s]},
+            )
+            for s in SCAN_ORDER
+        ]
+    )
 
 
 from sdlc.assessment.risk.models import UnifiedRiskMap
 
 
-def _rest_after_discover(discover: PhaseResult | None = None
-                         ) -> list[PhaseResult]:
+def _rest_after_discover(discover: PhaseResult | None = None) -> list[PhaseResult]:
     """SCAN (E-46), DISCOVER (E-48), and ASSESS (E-49) are built; the other three are stubs.
 
     DISCOVER and ASSESS default to not_collected so a caller that does not care about
     their pairing need not supply their maps.
     """
-    out = [PhaseResult(phase=PhaseId.SCAN,
-                       collected=Measurement.measured(0.0)),
-           discover or PhaseResult(
-               phase=PhaseId.DISCOVER,
-               collected=Measurement.not_collected("discover not run")),
-           PhaseResult(
-               phase=PhaseId.ASSESS,
-               collected=Measurement.not_collected("assess not run"))]
-    out += [unbuilt(p) for p in PHASE_ORDER
-            if p not in (PhaseId.INIT, PhaseId.SCAN, PhaseId.DISCOVER, PhaseId.ASSESS)]
+    out = [
+        PhaseResult(phase=PhaseId.SCAN, collected=Measurement.measured(0.0)),
+        discover
+        or PhaseResult(
+            phase=PhaseId.DISCOVER, collected=Measurement.not_collected("discover not run")
+        ),
+        PhaseResult(phase=PhaseId.ASSESS, collected=Measurement.not_collected("assess not run")),
+    ]
+    out += [
+        unbuilt(p)
+        for p in PHASE_ORDER
+        if p not in (PhaseId.INIT, PhaseId.SCAN, PhaseId.DISCOVER, PhaseId.ASSESS)
+    ]
     return out
 
 
 def _init(ok: bool = True) -> InitOutcome:
     if not ok:
-        return InitOutcome(result=PhaseResult(
-            phase=PhaseId.INIT,
-            collected=Measurement.not_collected("triage child failed: boom")))
+        return InitOutcome(
+            result=PhaseResult(
+                phase=PhaseId.INIT, collected=Measurement.not_collected("triage child failed: boom")
+            )
+        )
     return InitOutcome(
-        result=PhaseResult(phase=PhaseId.INIT,
-                           collected=Measurement.measured(1.0)),
-        triage=_triage())
+        result=PhaseResult(phase=PhaseId.INIT, collected=Measurement.measured(1.0)),
+        triage=_triage(),
+    )
 
 
 def test_input_defaults():
@@ -103,7 +137,11 @@ def test_every_post_init_phase_has_an_owner():
     # PHASE_OWNER; every other post-init phase still names the item that owes
     # its body.
     assert set(PHASE_OWNER) == set(PHASE_ORDER) - {
-        PhaseId.INIT, PhaseId.SCAN, PhaseId.DISCOVER, PhaseId.ASSESS}
+        PhaseId.INIT,
+        PhaseId.SCAN,
+        PhaseId.DISCOVER,
+        PhaseId.ASSESS,
+    }
 
 
 def test_assemble_fills_the_whole_dag_on_a_refusal():
@@ -135,8 +173,7 @@ def test_assemble_on_a_failed_child_has_no_commit_and_is_not_admitted():
 
 
 def test_assemble_on_an_admitted_run_reports_partial_once_scan_lands():
-    a = assemble("/r", _init(), True, "verdict ready", _rest_after_discover(),
-                 scan=_scan_result())
+    a = assemble("/r", _init(), True, "verdict ready", _rest_after_discover(), scan=_scan_result())
     assert a.admitted is True
     assert a.terminal_status == PARTIAL
     assert [p.phase for p in a.phases] == list(PHASE_ORDER)
@@ -144,19 +181,35 @@ def test_assemble_on_an_admitted_run_reports_partial_once_scan_lands():
 
 def test_assemble_reports_assessed_once_every_phase_collects():
     """The status flips by itself when E-46..E-52 land -- no workflow edit."""
-    rest = [PhaseResult(phase=p, collected=Measurement.measured(1.0))
-            for p in PHASE_ORDER if p is not PhaseId.INIT]
-    assert assemble("/r", _init(), True, "verdict ready", rest,
-                    scan=_scan_result(),
-                    discover=CapabilityMap(
-                        collected=Measurement.measured(0.0)),
-                    risk=UnifiedRiskMap(
-                        collected=Measurement.measured(0.0))).terminal_status == ASSESSED
+    rest = [
+        PhaseResult(phase=p, collected=Measurement.measured(1.0))
+        for p in PHASE_ORDER
+        if p is not PhaseId.INIT
+    ]
+    assert (
+        assemble(
+            "/r",
+            _init(),
+            True,
+            "verdict ready",
+            rest,
+            scan=_scan_result(),
+            discover=CapabilityMap(collected=Measurement.measured(0.0)),
+            risk=UnifiedRiskMap(collected=Measurement.measured(0.0)),
+        ).terminal_status
+        == ASSESSED
+    )
 
 
 def test_assemble_orders_phases_canonically_regardless_of_arrival():
-    a = assemble("/r", _init(), True, "verdict ready",
-                 list(reversed(_rest_after_discover())), scan=_scan_result())
+    a = assemble(
+        "/r",
+        _init(),
+        True,
+        "verdict ready",
+        list(reversed(_rest_after_discover())),
+        scan=_scan_result(),
+    )
     assert [p.phase for p in a.phases] == list(PHASE_ORDER)
 
 
@@ -167,7 +220,7 @@ def test_assemble_rejects_a_partial_rest_on_an_admitted_run():
     contradiction on the face of an FR-921 bundle (review finding 1). The
     not-admitted path still fills with skipped(), whose message is then
     truthful."""
-    partial = [unbuilt(PhaseId.REPORT)]        # one of the unbuilt phases
+    partial = [unbuilt(PhaseId.REPORT)]  # one of the unbuilt phases
     with pytest.raises(ValueError, match="admitted"):
         assemble("/r", _init(), True, "verdict ready", partial)
 
@@ -183,9 +236,15 @@ def test_the_run_body_calls_the_phases_in_dag_order():
     reordering to match the source methodology's numbering. This guards the
     run body against that, since PHASE_ORDER alone would not catch it."""
     src = inspect.getsource(AssessmentWorkflow.run)
-    calls = ["self._init(", "self._scan(", "self._discover(",
-             "self._assess(", "self._report(", "self._generate(",
-             "self._finish("]
+    calls = [
+        "self._init(",
+        "self._scan(",
+        "self._discover(",
+        "self._assess(",
+        "self._report(",
+        "self._generate(",
+        "self._finish(",
+    ]
     positions = [src.index(c) for c in calls]
     assert positions == sorted(positions)
 
@@ -224,10 +283,8 @@ def test_a_measured_discover_reaches_the_artifact():
     the workflow's side: assemble() must be handed the map whenever the phase
     row is measured."""
     cap_map = CapabilityMap(collected=Measurement.measured(0.0))
-    rest = _rest_after_discover(PhaseResult(
-        phase=PhaseId.DISCOVER, collected=cap_map.collected))
-    a = assemble("/r", _init(), True, "verdict ready", rest,
-                 scan=_scan_result(), discover=cap_map)
+    rest = _rest_after_discover(PhaseResult(phase=PhaseId.DISCOVER, collected=cap_map.collected))
+    a = assemble("/r", _init(), True, "verdict ready", rest, scan=_scan_result(), discover=cap_map)
     assert a.discover is not None
     assert a.terminal_status == PARTIAL
 
@@ -265,20 +322,22 @@ def test_the_run_body_passes_the_outputs_into_assess():
 
 # --- E-49 plan 2: the judgment layer ----------------------------------
 
+
 def test_assess_input_carries_a_propose_risk_knob():
     """RD7's off switch, propose_discover's shape."""
     from sdlc.workflows.assessment import AssessmentInput
+
     assert AssessmentInput(repo_dir="/x").propose_risk is True
-    assert AssessmentInput(repo_dir="/x", propose_risk=False).propose_risk \
-        is False
+    assert AssessmentInput(repo_dir="/x", propose_risk=False).propose_risk is False
 
 
 def test_the_judgment_reasons_do_not_converge():
-    """"no proposer is configured" and "the proposer ran and was refused"
+    """ "no proposer is configured" and "the proposer ran and was refused"
     are different facts and must read differently (P2-D2)."""
     import inspect
 
     from sdlc.workflows import assessment
+
     src = inspect.getsource(assessment.AssessmentWorkflow._judge)
     assert "no risk proposer ran" in src
     assert "the risk proposer ran and failed" in src
@@ -290,8 +349,7 @@ def test_a_failed_judgment_never_fails_the_phase():
     import inspect
 
     from sdlc.workflows import assessment
+
     src = inspect.getsource(assessment.AssessmentWorkflow._judge)
     assert "no_assess" not in src
     assert src.count("degraded(") >= 4
-
-

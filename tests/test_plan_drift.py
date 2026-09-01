@@ -3,17 +3,16 @@
 A SIGNAL, never a gate. files_hint is named a hint; a planner that guessed
 wrong is a normal outcome, and the drift is interesting precisely because it
 is not an error."""
+
 from sdlc.models import DevTask, compute_plan_drift
 
 
 def _task(**kw):
-    return DevTask(id="t1", title="t", description="d",
-                   acceptance_criteria=["ac"], **kw)
+    return DevTask(id="t1", title="t", description="d", acceptance_criteria=["ac"], **kw)
 
 
 def test_exact_adherence_reports_zero_drift():
-    d = compute_plan_drift(_task(files_hint=["a.py", "b.py"]),
-                           ["a.py", "b.py"])
+    d = compute_plan_drift(_task(files_hint=["a.py", "b.py"]), ["a.py", "b.py"])
     assert d is not None
     assert d.files_hinted == 2
     assert d.files_touched == 2

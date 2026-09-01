@@ -11,6 +11,7 @@ mirroring measure_coverage's Measurement discipline — a broken scan must never
 fabricate a blocking finding OR crash the gate, and must not read as a passing
 absolute floor.
 """
+
 from __future__ import annotations
 
 from ..measurement import CollectionState
@@ -75,11 +76,14 @@ def _findings_and_skipped(doc: dict) -> tuple[list[SecurityFinding], int]:
             severity = _LEVEL_TO_SEVERITY.get(res.get("level", "warning"), "high")
             message = res.get("message")
             detail = message.get("text", "") if isinstance(message, dict) else ""
-            findings.append(SecurityFinding(
-                severity=severity,
-                rule=str(res.get("ruleId") or "sarif"),
-                detail=str(detail or ""),
-                path=_first_location_path(res)))
+            findings.append(
+                SecurityFinding(
+                    severity=severity,
+                    rule=str(res.get("ruleId") or "sarif"),
+                    detail=str(detail or ""),
+                    path=_first_location_path(res),
+                )
+            )
     return findings, skipped
 
 
@@ -89,8 +93,11 @@ def report_from_sarif(doc: dict) -> SecurityReport:
     a broken scan must not fabricate a blocking finding OR crash the gate --
     but it must also not read as a passing absolute floor."""
     if not _is_well_formed(doc):
-        return SecurityReport(critical=0, state=CollectionState.NOT_COLLECTED,
-                              reason="SARIF document malformed or partial")
+        return SecurityReport(
+            critical=0,
+            state=CollectionState.NOT_COLLECTED,
+            reason="SARIF document malformed or partial",
+        )
     findings, skipped = _findings_and_skipped(doc)
     # Code review #2: a results array that had entries but yielded zero
     # parseable findings is an unreadable scan, byte-identical to nothing if
@@ -99,11 +106,12 @@ def report_from_sarif(doc: dict) -> SecurityReport:
     # and stays MEASURED.
     if not findings and skipped:
         return SecurityReport(
-            critical=0, state=CollectionState.NOT_COLLECTED,
-            reason=f"SARIF results array had {skipped} entry/ies, none parseable")
+            critical=0,
+            state=CollectionState.NOT_COLLECTED,
+            reason=f"SARIF results array had {skipped} entry/ies, none parseable",
+        )
     critical = sum(1 for f in findings if f.severity == "critical")
-    return SecurityReport(critical=critical, findings=findings,
-                          state=CollectionState.MEASURED)
+    return SecurityReport(critical=critical, findings=findings, state=CollectionState.MEASURED)
 
 
 def _is_well_formed(doc: dict) -> bool:

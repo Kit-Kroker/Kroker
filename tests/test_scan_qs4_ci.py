@@ -1,10 +1,14 @@
 """QS4's computed half: what the pipeline does, and which environments the
 repository declares on each side. ci_present is triage's baseline, inherited
 and folded in by the workflow (D2/D7)."""
+
 from __future__ import annotations
 
 from sdlc.assessment.scan.models import (
-    C_CI_PRESENT, C_CI_STAGES, C_ENV_DRIFT, TestLevel,
+    C_CI_PRESENT,
+    C_CI_STAGES,
+    C_ENV_DRIFT,
+    TestLevel,
 )
 from sdlc.assessment.scan.signals import ci
 from sdlc.measurement import CollectionState
@@ -31,8 +35,7 @@ jobs:
       - run: ./deploy.sh
 """
 
-PATHS = [".github/workflows/ci.yml", ".env.production", ".env.staging",
-         "src/app.py"]
+PATHS = [".github/workflows/ci.yml", ".env.production", ".env.staging", "src/app.py"]
 BLOBS = {".github/workflows/ci.yml": WORKFLOW}
 
 
@@ -61,8 +64,7 @@ def test_a_deploy_job_names_its_environment():
 def test_blocking_is_not_collected_on_every_stage():
     """A required check is a branch-protection setting, not a tracked file."""
     out = ci.evaluate(PATHS, BLOBS)
-    assert all(s.blocking.state is CollectionState.NOT_COLLECTED
-               for s in out.ci)
+    assert all(s.blocking.state is CollectionState.NOT_COLLECTED for s in out.ci)
 
 
 def test_drift_is_computed_between_ci_and_config():
@@ -93,8 +95,10 @@ def test_an_unparseable_workflow_does_not_pass_a_partial_stage_list_as_complete(
     the parseable files would assert an incomplete count as the whole -- the
     FR-915 conflation. The category names the refused file; env_drift is a
     gap for the same reason (the CI side is unreadable)."""
-    blobs = {".github/workflows/ci.yml": WORKFLOW,
-             ".github/workflows/broken.yml": "jobs: [unbalanced\n"}
+    blobs = {
+        ".github/workflows/ci.yml": WORKFLOW,
+        ".github/workflows/broken.yml": "jobs: [unbalanced\n",
+    }
     out = ci.evaluate(PATHS + [".github/workflows/broken.yml"], blobs)
     assert out.row.categories[C_CI_STAGES].state is CollectionState.NOT_COLLECTED
     assert "broken.yml" in out.row.categories[C_CI_STAGES].reason
@@ -107,26 +111,24 @@ def test_a_yaml_bomb_is_refused_rather_than_expanded():
     """P3-D8: safe_load does not execute code, but anchors still expand, and
     CI files come from an untrusted repository (NFR-9)."""
     bomb = "a: &a [x,x,x,x,x,x,x,x,x]\n" + "".join(
-        f"{chr(98 + i)}: &{chr(98 + i)} ["
-        + ",".join([f"*{chr(97 + i)}"] * 9) + "]\n"
-        for i in range(8))
+        f"{chr(98 + i)}: &{chr(98 + i)} [" + ",".join([f"*{chr(97 + i)}"] * 9) + "]\n"
+        for i in range(8)
+    )
     # 72 alias references, over MAX_ALIASES. Asserted on the guard itself:
     # the evaluate() assertion below would also pass if the document merely
     # parsed to something with no jobs, which is not what this test is about.
     assert ci._safe_yaml(bomb) is None
-    out = ci.evaluate([".github/workflows/bomb.yml"],
-                      {".github/workflows/bomb.yml": bomb})
+    out = ci.evaluate([".github/workflows/bomb.yml"], {".github/workflows/bomb.yml": bomb})
     assert out.ci == []
     assert out.row.categories[C_CI_STAGES].state is CollectionState.NOT_COLLECTED
 
 
 def test_a_gitlab_pipeline_is_parsed_too():
-    blobs = {".gitlab-ci.yml": (
-        "stages: [build, test]\n"
-        "unit:\n"
-        "  stage: test\n"
-        "  script:\n"
-        "    - pytest -q\n")}
+    blobs = {
+        ".gitlab-ci.yml": (
+            "stages: [build, test]\nunit:\n  stage: test\n  script:\n    - pytest -q\n"
+        )
+    }
     out = ci.evaluate([".gitlab-ci.yml"], blobs)
     assert [s.stage for s in out.ci] == ["unit"]
     assert out.ci[0].runs_tests is True

@@ -7,6 +7,7 @@ renders as a native side-by-side matrix and no custom compare loop exists.
 Contract (promptfoo docs, providers/python): return a dict that ALWAYS
 carries "output", even on failure. This function therefore never raises.
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -34,8 +35,7 @@ def _token_usage(usage: Any) -> dict:
     crashing a gate run."""
     prompt = getattr(usage, "input_tokens", 0) or 0
     completion = getattr(usage, "output_tokens", 0) or 0
-    return {"prompt": prompt, "completion": completion,
-            "total": prompt + completion}
+    return {"prompt": prompt, "completion": completion, "total": prompt + completion}
 
 
 def _cost_usd(usage: Any, model: str) -> float | None:
@@ -52,26 +52,28 @@ def _cost_usd(usage: Any, model: str) -> float | None:
     # fails the same way under promptfoo's standalone load, just later -- at
     # call time rather than import time.
     from sdlc.pricing import PriceUsageInput, compute_price
-    return compute_price(PriceUsageInput(
-        model=model,
-        input_tokens=getattr(usage, "input_tokens", 0) or 0,
-        output_tokens=getattr(usage, "output_tokens", 0) or 0,
-        cache_read_tokens=getattr(usage, "cache_read_tokens", 0) or 0,
-        cache_write_tokens=getattr(usage, "cache_write_tokens", 0) or 0))
+
+    return compute_price(
+        PriceUsageInput(
+            model=model,
+            input_tokens=getattr(usage, "input_tokens", 0) or 0,
+            output_tokens=getattr(usage, "output_tokens", 0) or 0,
+            cache_read_tokens=getattr(usage, "cache_read_tokens", 0) or 0,
+            cache_write_tokens=getattr(usage, "cache_write_tokens", 0) or 0,
+        )
+    )
 
 
-def resolve_instructions(role: str, ref: str, repo_root: Path,
-                         agents_dir: Path) -> str:
+def resolve_instructions(role: str, ref: str, repo_root: Path, agents_dir: Path) -> str:
     """Instructions text at `ref`: the worktree file, or `git show`."""
     if ref == "worktree":
-        return (agents_dir / role / "instructions.md").read_text(
-            encoding="utf-8")
+        return (agents_dir / role / "instructions.md").read_text(encoding="utf-8")
     rel = f"agents/{role}/instructions.md"
-    proc = subprocess.run(["git", "show", f"{ref}:{rel}"], cwd=repo_root,
-                          capture_output=True, text=True)
+    proc = subprocess.run(
+        ["git", "show", f"{ref}:{rel}"], cwd=repo_root, capture_output=True, text=True
+    )
     if proc.returncode != 0:
-        raise FileNotFoundError(
-            f"{rel} does not exist at ref '{ref}': {proc.stderr.strip()}")
+        raise FileNotFoundError(f"{rel} does not exist at ref '{ref}': {proc.stderr.strip()}")
     return proc.stdout
 
 
@@ -87,13 +89,17 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
         # touching agents/<role>/instructions.md, because the baseline side
         # is resolved with `git show` and a worktree edit would move both.
         literal = cfg.get("instructions_text")
-        instructions = literal if literal is not None else resolve_instructions(
-            cfg["role"], cfg["instructions_ref"], Path(cfg["repo_root"]),
-            agents_dir)
+        instructions = (
+            literal
+            if literal is not None
+            else resolve_instructions(
+                cfg["role"], cfg["instructions_ref"], Path(cfg["repo_root"]), agents_dir
+            )
+        )
         fixture = load_fixture(Path(cfg["fixture_path"]))
         out, usage = run_variant_detailed(
-            cfg["role"], instructions, fixture, agents_dir,
-            model_override=_MODEL_OVERRIDE)
+            cfg["role"], instructions, fixture, agents_dir, model_override=_MODEL_OVERRIDE
+        )
         return {
             "output": out,
             "error": None,
@@ -101,7 +107,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
             "cost": _cost_usd(usage, fixture.model),
             "latencyMs": int((time.monotonic() - started) * 1000),
         }
-    except Exception as exc:                      # never raise -- see docstring
+    except Exception as exc:  # never raise -- see docstring
         return {
             "output": "",
             "error": f"{type(exc).__name__}: {exc}",

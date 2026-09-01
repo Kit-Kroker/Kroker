@@ -1,4 +1,5 @@
 """Write verbs: kind enforcement, derived rounds, receipts, actor identity."""
+
 import pytest
 
 from sdlc.channels.transport import SubmitResult
@@ -8,8 +9,7 @@ from sdlc.operator.deps import OperatorDeps
 from sdlc.operator.errors import ToolError
 from sdlc.pending import ClarifyPending, StageGatePending
 
-GATE = StageGatePending(key="architecture#2", gate="architecture", round=2,
-                        spec_summary="s")
+GATE = StageGatePending(key="architecture#2", gate="architecture", round=2, spec_summary="s")
 Q1 = ClarifyPending(key="Q1", question="q", why_it_matters="w")
 
 
@@ -49,6 +49,7 @@ def deps(monkeypatch, submitted):
             if d.key == key:
                 return d
         from sdlc.channels.transport import NoMatch
+
         raise NoMatch(f"no pending item with key '{key}' on this run")
 
     async def fake_submit(h, pending, reply, channel=None):
@@ -64,16 +65,14 @@ def deps(monkeypatch, submitted):
         started.append((idea, cfg, wf_id))
         return wf_id
 
-    d = OperatorDeps(poller=FakePoller(handle), board=None,
-                     starter=fake_starter, actor="chat:mika")
+    d = OperatorDeps(poller=FakePoller(handle), board=None, starter=fake_starter, actor="chat:mika")
     d.started = started
     return d
 
 
 @pytest.mark.asyncio
 async def test_decide_gate_returns_a_confirmed_receipt(deps, submitted):
-    got = await tools.decide_gate(deps, "feature-add-sso", "architecture#2",
-                                  GateOutcome.APPROVE)
+    got = await tools.decide_gate(deps, "feature-add-sso", "architecture#2", GateOutcome.APPROVE)
     assert got.confirmed is True
     assert got.run_id == "feature-add-sso"
     assert got.key == "architecture#2"
@@ -81,16 +80,16 @@ async def test_decide_gate_returns_a_confirmed_receipt(deps, submitted):
 
 @pytest.mark.asyncio
 async def test_decide_gate_never_types_the_round(deps, submitted):
-    await tools.decide_gate(deps, "feature-add-sso", "architecture#2",
-                            GateOutcome.APPROVE)
+    await tools.decide_gate(deps, "feature-add-sso", "architecture#2", GateOutcome.APPROVE)
     _, _, _, call = submitted[0]
-    assert call.decision.round == 2          # from the pending item, not typed
+    assert call.decision.round == 2  # from the pending item, not typed
 
 
 @pytest.mark.asyncio
 async def test_decide_gate_stamps_the_actor_as_reviewer(deps, submitted):
-    await tools.decide_gate(deps, "feature-add-sso", "architecture#2",
-                            GateOutcome.REVISE, text="split the queue")
+    await tools.decide_gate(
+        deps, "feature-add-sso", "architecture#2", GateOutcome.REVISE, text="split the queue"
+    )
     _, _, _, call = submitted[0]
     assert call.decision.reviewer == "chat:mika"
     assert call.decision.decided_by == "human"
@@ -100,16 +99,14 @@ async def test_decide_gate_stamps_the_actor_as_reviewer(deps, submitted):
 @pytest.mark.asyncio
 async def test_decide_gate_refuses_a_question_key(deps):
     with pytest.raises(ToolError) as e:
-        await tools.decide_gate(deps, "feature-add-sso", "Q1",
-                                GateOutcome.APPROVE)
+        await tools.decide_gate(deps, "feature-add-sso", "Q1", GateOutcome.APPROVE)
     assert "answer_question" in e.value.message
 
 
 @pytest.mark.asyncio
 async def test_answer_question_refuses_a_gate_key(deps):
     with pytest.raises(ToolError) as e:
-        await tools.answer_question(deps, "feature-add-sso", "architecture#2",
-                                    "sure")
+        await tools.answer_question(deps, "feature-add-sso", "architecture#2", "sure")
     assert "decide_gate" in e.value.message
 
 
@@ -132,20 +129,19 @@ async def test_stale_key_is_a_tool_error_telling_the_model_to_re_read(deps):
 @pytest.mark.asyncio
 async def test_unconfirmed_is_reported_not_raised(deps, monkeypatch):
     async def unconfirmed(h, pending, reply, channel=None):
-        return SubmitResult(confirmed=False, message="not confirmed: still "
-                                                     "pending")
+        return SubmitResult(confirmed=False, message="not confirmed: still pending")
+
     monkeypatch.setattr(tools, "submit", unconfirmed)
-    got = await tools.decide_gate(deps, "feature-add-sso", "architecture#2",
-                                  GateOutcome.APPROVE)
+    got = await tools.decide_gate(deps, "feature-add-sso", "architecture#2", GateOutcome.APPROVE)
     assert got.confirmed is False
     assert "not confirmed" in got.detail
 
 
 @pytest.mark.asyncio
 async def test_start_run_builds_the_workflow_id_from_the_title(deps):
-    run_id = await tools.start_run(deps, title="Add SSO",
-                                   mode=ProjectMode.BROWNFIELD,
-                                   repo="git@example.com:k.git")
+    run_id = await tools.start_run(
+        deps, title="Add SSO", mode=ProjectMode.BROWNFIELD, repo="git@example.com:k.git"
+    )
     assert run_id.startswith("feature-")
     idea, _, wf_id = deps.started[0]
     assert wf_id == run_id
@@ -156,8 +152,7 @@ async def test_start_run_builds_the_workflow_id_from_the_title(deps):
 @pytest.mark.asyncio
 async def test_start_run_requires_a_repo_for_brownfield(deps):
     with pytest.raises(ToolError) as e:
-        await tools.start_run(deps, title="Add SSO",
-                              mode=ProjectMode.BROWNFIELD)
+        await tools.start_run(deps, title="Add SSO", mode=ProjectMode.BROWNFIELD)
     assert "repo" in e.value.message.lower()
 
 
@@ -165,10 +160,10 @@ async def test_start_run_requires_a_repo_for_brownfield(deps):
 async def test_start_run_reports_a_duplicate_id_clearly(deps):
     async def already(idea, cfg, wf_id):
         raise RuntimeError("Workflow execution already started")
+
     deps.starter = already
     with pytest.raises(ToolError) as e:
-        await tools.start_run(deps, title="Add SSO",
-                              mode=ProjectMode.GREENFIELD)
+        await tools.start_run(deps, title="Add SSO", mode=ProjectMode.GREENFIELD)
     assert "already" in e.value.message.lower()
 
 
@@ -183,9 +178,9 @@ async def test_writes_reset_the_follow_streak(deps):
 async def test_start_run_uses_the_id_the_starter_returns(deps):
     async def renaming_starter(idea, cfg, wf_id):
         return wf_id + "-2"
+
     deps.starter = renaming_starter
-    got = await tools.start_run(deps, title="Add SSO",
-                                mode=ProjectMode.GREENFIELD)
+    got = await tools.start_run(deps, title="Add SSO", mode=ProjectMode.GREENFIELD)
     assert got == "feature-add-sso-2"
 
 

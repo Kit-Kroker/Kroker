@@ -1,4 +1,5 @@
 """OperatorDeps carries collaborators and enforces the follow-call brake."""
+
 import pytest
 
 from sdlc.operator.deps import OperatorDeps
@@ -37,7 +38,7 @@ def test_any_other_tool_resets_the_streak():
     d.note_follow()
     d.note_other_tool()
     d.note_follow()
-    d.note_follow()          # streak restarted, so this is still allowed
+    d.note_follow()  # streak restarted, so this is still allowed
     assert d.follow_calls == 2
 
 

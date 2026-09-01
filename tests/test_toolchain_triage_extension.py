@@ -3,17 +3,20 @@ weight: pytest exits 1 for test failures and 2/3/4 for collection errors, and
 "the suite ran and failed" is a different readiness fact from "the suite could
 not run".
 """
+
 import pytest
 
 from sdlc.toolchain.adapters import (
-    PythonToolchain, ToolchainKind, detect, detect_with_marker,
+    PythonToolchain,
+    ToolchainKind,
+    detect,
+    detect_with_marker,
     detect_with_marker_from_paths,
 )
 
 
 def test_install_cmd_for_requirements_uses_the_requirements_file():
-    assert PythonToolchain().install_cmd("requirements.txt") == (
-        "pip install -r requirements.txt")
+    assert PythonToolchain().install_cmd("requirements.txt") == ("pip install -r requirements.txt")
 
 
 @pytest.mark.parametrize("marker", ["pyproject.toml", "setup.py", "setup.cfg"])
@@ -23,14 +26,17 @@ def test_install_cmd_for_packaging_markers_is_non_editable(marker):
     assert PythonToolchain().install_cmd(marker) == "pip install ."
 
 
-@pytest.mark.parametrize("code,expected", [
-    (0, "ran"),            # all passed
-    (1, "ran"),            # tests failed -- the suite still RAN
-    (2, "failed_to_run"),  # interrupted
-    (3, "failed_to_run"),  # internal error
-    (4, "failed_to_run"),  # usage error
-    (5, "no_tests"),       # nothing collected
-])
+@pytest.mark.parametrize(
+    "code,expected",
+    [
+        (0, "ran"),  # all passed
+        (1, "ran"),  # tests failed -- the suite still RAN
+        (2, "failed_to_run"),  # interrupted
+        (3, "failed_to_run"),  # internal error
+        (4, "failed_to_run"),  # usage error
+        (5, "no_tests"),  # nothing collected
+    ],
+)
 def test_classify_test_exit(code, expected):
     assert PythonToolchain().classify_test_exit(code) == expected
 
@@ -61,8 +67,7 @@ def test_detect_still_returns_just_the_adapter(tmp_path):
 
 
 def test_detect_with_marker_from_paths_matches_a_root_marker():
-    found = detect_with_marker_from_paths(
-        ["pyproject.toml", "src/app.py", "README.md"])
+    found = detect_with_marker_from_paths(["pyproject.toml", "src/app.py", "README.md"])
     assert found is not None
     adapter, marker = found
     assert adapter.kind is ToolchainKind.PYTHON
@@ -71,23 +76,22 @@ def test_detect_with_marker_from_paths_matches_a_root_marker():
 
 def test_detect_with_marker_from_paths_ignores_a_nested_marker():
     # A marker nested under a subdir is not a root-level toolchain marker.
-    assert detect_with_marker_from_paths(
-        ["src/pyproject.toml", "app.py"]) is None
+    assert detect_with_marker_from_paths(["src/pyproject.toml", "app.py"]) is None
 
 
 def test_detect_with_marker_from_paths_is_none_for_unrecognized_paths():
-    assert detect_with_marker_from_paths(
-        ["README.md", "docs/guide.md"]) is None
+    assert detect_with_marker_from_paths(["README.md", "docs/guide.md"]) is None
 
 
 # ---- E-41a-d adapter extension ---------------------------------------
 
-from sdlc.toolchain.adapters import PythonToolchain, ToolchainAdapter
+from sdlc.toolchain.adapters import ToolchainAdapter
 
 
 class _Bare(ToolchainAdapter):
     """An adapter that has not thought about triage. It must instantiate and
     degrade, not fail (spec section 4)."""
+
     kind = None
     markers = ()
 
@@ -106,7 +110,7 @@ def test_a_triage_unaware_adapter_degrades_rather_than_failing():
     assert a.manifests == ()
     assert a.ecosystem is None
     assert a.source_extensions == ()
-    assert a.max_file_loc == 0          # 0 disables the rule
+    assert a.max_file_loc == 0  # 0 disables the rule
     assert a.max_function_loc == 0
     assert a.min_clone_loc == 30
     assert a.function_spans("def f():\n    pass\n") is None
@@ -122,14 +126,7 @@ def test_python_declares_its_triage_facts():
 
 
 def test_function_spans_reports_name_and_line_range():
-    text = ("import os\n"
-            "\n"
-            "def small():\n"
-            "    return 1\n"
-            "\n"
-            "async def big():\n"
-            "    x = 1\n"
-            "    return x\n")
+    text = "import os\n\ndef small():\n    return 1\n\nasync def big():\n    x = 1\n    return x\n"
     spans = PythonToolchain().function_spans(text)
     assert ("small", 3, 4) in spans
     assert ("big", 6, 8) in spans

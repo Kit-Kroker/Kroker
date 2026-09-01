@@ -5,6 +5,7 @@ Exists only because Temporal Schedules start workflows, never activities:
 bank list. Each bank is its own activity execution so one bank's backend
 failure retries independently without re-reflecting the others.
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -19,8 +20,9 @@ with workflow.unsafe.imports_passed_through():
 
 # Reflect consolidates a whole bank — slower than the 30s recall/retain ops
 # in feature.py's MEM_ACT, hence the longer ceiling.
-REFLECT_ACT = dict(start_to_close_timeout=timedelta(minutes=10),
-                   retry_policy=RetryPolicy(maximum_attempts=3))
+REFLECT_ACT = dict(
+    start_to_close_timeout=timedelta(minutes=10), retry_policy=RetryPolicy(maximum_attempts=3)
+)
 
 
 class ReflectScheduleInput(BaseModel):
@@ -41,9 +43,9 @@ class ReflectWorkflow:
             try:
                 await workflow.execute_activity(
                     reflect,
-                    ReflectInput(bank=bank, backend=inp.backend,
-                                 base_url=inp.base_url),
-                    **REFLECT_ACT)
+                    ReflectInput(bank=bank, backend=inp.backend, base_url=inp.base_url),
+                    **REFLECT_ACT,
+                )
             except Exception:
                 # One unreachable bank must not skip the others, but the run
                 # still fails below — a silent no-op is the failure mode this
@@ -51,6 +53,6 @@ class ReflectWorkflow:
                 failed.append(bank)
         if failed:
             raise ApplicationError(
-                f"reflect failed for banks: {', '.join(failed)}",
-                non_retryable=True)
+                f"reflect failed for banks: {', '.join(failed)}", non_retryable=True
+            )
         return len(inp.banks)

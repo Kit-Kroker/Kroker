@@ -9,6 +9,7 @@ to prevent, one stage earlier.
 Pure: the caller supplies the path set. The activity that reads git lives in
 activities.py, so this stays testable against a frozenset.
 """
+
 from __future__ import annotations
 
 from ..gate import CheckClass, CheckResult, build_check
@@ -33,8 +34,7 @@ def normalize_path(path: str) -> str:
     return p.lstrip("/")
 
 
-def check_delta(delta: BrownfieldDelta | None,
-                paths: frozenset[str]) -> CheckResult:
+def check_delta(delta: BrownfieldDelta | None, paths: frozenset[str]) -> CheckResult:
     """Resolve every claimed path against the tree at the pinned commit.
 
     `paths` is EVERY file in the tree, not the map's attributed files.
@@ -46,31 +46,41 @@ def check_delta(delta: BrownfieldDelta | None,
     """
     if delta is None:
         return build_check(
-            DELTA_CHECK, False, CheckClass.ABSOLUTE,
+            DELTA_CHECK,
+            False,
+            CheckClass.ABSOLUTE,
             "no delta proposed: a brownfield architecture must state what it "
-            "adds, modifies and removes against the existing tree")
+            "adds, modifies and removes against the existing tree",
+        )
     if not (delta.added or delta.modified or delta.removed):
         return build_check(
-            DELTA_CHECK, False, CheckClass.ABSOLUTE,
+            DELTA_CHECK,
+            False,
+            CheckClass.ABSOLUTE,
             "the delta names no files: an architecture that changes nothing "
-            "cannot be planned or implemented")
+            "cannot be planned or implemented",
+        )
 
     known = {normalize_path(p) for p in paths}
     problems: list[str] = []
-    for label, claimed in (("modified", delta.modified),
-                           ("removed", delta.removed)):
+    for label, claimed in (("modified", delta.modified), ("removed", delta.removed)):
         problems.extend(
             f"{label} {p!r} does not exist at the pinned commit"
-            for p in claimed if normalize_path(p) not in known)
+            for p in claimed
+            if normalize_path(p) not in known
+        )
     problems.extend(
         f"added {p!r} already exists at the pinned commit"
-        for p in delta.added if normalize_path(p) in known)
+        for p in delta.added
+        if normalize_path(p) in known
+    )
 
     if problems:
-        return build_check(
-            DELTA_CHECK, False, CheckClass.ABSOLUTE,
-            "; ".join(sorted(problems)))
+        return build_check(DELTA_CHECK, False, CheckClass.ABSOLUTE, "; ".join(sorted(problems)))
     return build_check(
-        DELTA_CHECK, True, CheckClass.ABSOLUTE,
+        DELTA_CHECK,
+        True,
+        CheckClass.ABSOLUTE,
         f"{len(delta.added)} added, {len(delta.modified)} modified, "
-        f"{len(delta.removed)} removed -- all resolve")
+        f"{len(delta.removed)} removed -- all resolve",
+    )

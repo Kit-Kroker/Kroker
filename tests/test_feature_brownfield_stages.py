@@ -1,4 +1,5 @@
 """E-84 D3/D4/D6/D13: the brownfield branch, wired."""
+
 from __future__ import annotations
 
 import asyncio
@@ -6,38 +7,64 @@ import inspect
 import uuid
 
 import pytest
+from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 from temporalio import activity
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
-from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 
 from sdlc.activities import RepoProbeInput, evaluate_gate
 from sdlc.assessment.activities import (
-    AssessmentTree, AssessmentTreeInput, ScanSignalInput,
+    AssessmentTree,
+    AssessmentTreeInput,
+    ScanSignalInput,
 )
 from sdlc.assessment.scan.models import (
-    CATEGORIES, CandidateMember, Confidence, MemberKind,
-    ScanSignalId, ScanSignalResult, SignalOutput, SignalSource,
-    SourceCandidate, family_of,
+    CATEGORIES,
+    CandidateMember,
+    Confidence,
+    MemberKind,
+    ScanSignalId,
+    ScanSignalResult,
+    SignalOutput,
+    SignalSource,
+    SourceCandidate,
+    family_of,
 )
 from sdlc.context.models import RepoObservation
-from sdlc.models import (
-    AnalysisReport, ArchitectureDecision, ArchitectureSpec, BrownfieldDelta,
-    ClarifiedRequirements, GateDecision, GateOutcome, IdeaBrief,
-    ImplementationPlan, MergeVerdict, ProjectMode, QAReport, ReviewReport,
-)
 from sdlc.measurement import Measurement
+from sdlc.models import (
+    AnalysisReport,
+    ArchitectureDecision,
+    ArchitectureSpec,
+    BrownfieldDelta,
+    ClarifiedRequirements,
+    GateDecision,
+    GateOutcome,
+    IdeaBrief,
+    ImplementationPlan,
+    MergeVerdict,
+    ProjectMode,
+    QAReport,
+    ReviewReport,
+)
 from sdlc.observability.activities import export_run_artifacts
 from sdlc.workflows.deployment import DeploymentWorkflow
 from sdlc.workflows.feature import FeatureWorkflow
 from tests.fakes.canned import (
-    ANALYSIS_OK, CLARIFIED, MERGE_OK, PLAN, QA_OK, QUESTION_IDS, REVIEW_OK,
+    ANALYSIS_OK,
+    CLARIFIED,
+    MERGE_OK,
+    PLAN,
+    QA_OK,
+    QUESTION_IDS,
+    REVIEW_OK,
     e2e_config,
 )
 from tests.fakes.fake_activities import GIT_FAKES, fake_classify_repo
 from tests.fakes.fake_agents import fake_agent_activities
-from tests.fakes.fake_deploy import DEPLOY_FAKES, reset as reset_deploy
+from tests.fakes.fake_deploy import DEPLOY_FAKES
+from tests.fakes.fake_deploy import reset as reset_deploy
 
 
 def test_the_pipeline_reads_the_mode():
@@ -69,9 +96,13 @@ async def fake_resolve_tree(inp: AssessmentTreeInput) -> AssessmentTree:
 def _make_measured_signal(sid: ScanSignalId) -> SignalOutput:
     m = Measurement.measured(1.0)
     row = ScanSignalResult(
-        signal=sid, family=family_of(sid), version=1,
-        source=SignalSource.COMPUTED, collected=m,
-        categories={k: m for k in CATEGORIES[sid]})
+        signal=sid,
+        family=family_of(sid),
+        version=1,
+        source=SignalSource.COMPUTED,
+        collected=m,
+        categories={k: m for k in CATEGORIES[sid]},
+    )
     sources = []
     if sid == ScanSignalId.S1:
         sources = [
@@ -83,12 +114,12 @@ def _make_measured_signal(sid: ScanSignalId) -> SignalOutput:
                 detail="main app",
                 confidence_contribution=Confidence.HIGH,
                 members=[
-                    CandidateMember(kind=MemberKind.HTTP_ROUTE,
-                                    value="GET /health",
-                                    path="app/main.py", line=10),
-                    CandidateMember(kind=MemberKind.FILE_PATH,
-                                    value="app/main.py",
-                                    path="app/main.py"),
+                    CandidateMember(
+                        kind=MemberKind.HTTP_ROUTE, value="GET /health", path="app/main.py", line=10
+                    ),
+                    CandidateMember(
+                        kind=MemberKind.FILE_PATH, value="app/main.py", path="app/main.py"
+                    ),
                 ],
             )
         ]
@@ -151,16 +182,24 @@ async def fake_scan_ci(inp: ScanSignalInput) -> SignalOutput:
 
 
 SCAN_FAKES = [
-    fake_scan_packages, fake_scan_schema, fake_scan_entrypoints,
-    fake_scan_frontend, fake_scan_security_static, fake_scan_config_infra,
-    fake_scan_sensitivity, fake_scan_tests_inventory, fake_scan_coverage,
-    fake_scan_testability, fake_scan_ci,
+    fake_scan_packages,
+    fake_scan_schema,
+    fake_scan_entrypoints,
+    fake_scan_frontend,
+    fake_scan_security_static,
+    fake_scan_config_infra,
+    fake_scan_sensitivity,
+    fake_scan_tests_inventory,
+    fake_scan_coverage,
+    fake_scan_testability,
+    fake_scan_ci,
 ]
 
 ARCH_BROWNFIELD = ArchitectureSpec(
     overview="Brownfield endpoint modification.",
-    decisions=[ArchitectureDecision(
-        id="d1", decision="Update endpoint", rationale="matches stack")],
+    decisions=[
+        ArchitectureDecision(id="d1", decision="Update endpoint", rationale="matches stack")
+    ],
     delta=BrownfieldDelta(modified=["app/main.py"]),
     confidence=0.95,
 )
@@ -193,44 +232,54 @@ async def _drive(handle):
         await _wait_for_status(handle, f"awaiting:{gate}")
         await handle.signal(
             FeatureWorkflow.submit_gate_decision,
-            GateDecision(gate=gate, round=1, outcome=GateOutcome.APPROVE,
-                         decided_by="human"))
+            GateDecision(gate=gate, round=1, outcome=GateOutcome.APPROVE, decided_by="human"),
+        )
 
 
 @pytest.mark.temporal
 @pytest.mark.asyncio
 async def test_brownfield_intake_rejects_non_git_repo():
     """D3: intake observes the repo is not a git repo -> fails closed."""
+
     @activity.defn(name="classify_repo")
     async def fake_bad_classify(inp: RepoProbeInput) -> RepoObservation:
         return RepoObservation(
-            is_git_repo=False, base_branch_resolves=False,
-            reason="not a git repository")
+            is_git_repo=False, base_branch_resolves=False, reason="not a git repository"
+        )
 
     activities = [
-        evaluate_gate, export_run_artifacts,
+        evaluate_gate,
+        export_run_artifacts,
         *[a for a in GIT_FAKES if a is not fake_classify_repo],
         fake_bad_classify,
     ]
 
-    idea = IdeaBrief(title="Brownfield task", description="Modify endpoint",
-                     mode=ProjectMode.BROWNFIELD, repo_url="/invalid/repo",
-                     base_branch="main")
+    idea = IdeaBrief(
+        title="Brownfield task",
+        description="Modify endpoint",
+        mode=ProjectMode.BROWNFIELD,
+        repo_url="/invalid/repo",
+        base_branch="main",
+    )
     cfg = e2e_config()
 
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(
-                    env.client, task_queue="bf-intake",
-                    workflows=[FeatureWorkflow, DeploymentWorkflow],
-                    activities=activities,
-                    plugins=[PydanticAIPlugin()]):
+                env.client,
+                task_queue="bf-intake",
+                workflows=[FeatureWorkflow, DeploymentWorkflow],
+                activities=activities,
+                plugins=[PydanticAIPlugin()],
+            ):
                 res = await env.client.execute_workflow(
                     FeatureWorkflow.run,
                     args=[idea, cfg],
                     id=f"bf-intake-{uuid.uuid4()}",
-                    task_queue="bf-intake")
+                    task_queue="bf-intake",
+                )
     assert res.startswith("rejected:intake")
     assert "not a git repository" in res
 
@@ -243,29 +292,42 @@ async def test_brownfield_full_run_ships_end_to_end():
     is checked, and pipeline reaches deployed."""
     reset_deploy()
     activities = [
-        evaluate_gate, export_run_artifacts, fake_resolve_tree, *SCAN_FAKES,
-        *GIT_FAKES, *DEPLOY_FAKES, *fake_agent_activities(BROWNFIELD_SPECS),
+        evaluate_gate,
+        export_run_artifacts,
+        fake_resolve_tree,
+        *SCAN_FAKES,
+        *GIT_FAKES,
+        *DEPLOY_FAKES,
+        *fake_agent_activities(BROWNFIELD_SPECS),
     ]
 
-    idea = IdeaBrief(title="Brownfield task", description="Modify endpoint",
-                     mode=ProjectMode.BROWNFIELD, repo_url="/fake/repo",
-                     base_branch="main")
+    idea = IdeaBrief(
+        title="Brownfield task",
+        description="Modify endpoint",
+        mode=ProjectMode.BROWNFIELD,
+        repo_url="/fake/repo",
+        base_branch="main",
+    )
     cfg = e2e_config()
     cfg.deploy.enabled = True
 
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(
-                    env.client, task_queue="bf-e2e",
-                    workflows=[FeatureWorkflow, DeploymentWorkflow],
-                    activities=activities,
-                    plugins=[PydanticAIPlugin()]):
+                env.client,
+                task_queue="bf-e2e",
+                workflows=[FeatureWorkflow, DeploymentWorkflow],
+                activities=activities,
+                plugins=[PydanticAIPlugin()],
+            ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
                     args=[idea, cfg],
                     id=f"bf-e2e-{uuid.uuid4()}",
-                    task_queue="bf-e2e")
+                    task_queue="bf-e2e",
+                )
                 driver = asyncio.create_task(_drive(handle))
                 result = await handle.result()
                 await driver

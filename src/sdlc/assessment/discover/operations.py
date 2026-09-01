@@ -11,6 +11,7 @@ commit, so SC-7's "zero fabricated path/line refs" holds by construction.
 Pure: every input is a parameter. No disk, no subprocess, no repository code
 executed (NFR-9).
 """
+
 from __future__ import annotations
 
 import re
@@ -20,7 +21,10 @@ from ...measurement import CollectionState, Measurement
 from ..scan.models import CandidateMember, EvidenceRef, MemberKind
 from ..scan.naming import head_token, normalize, route_object
 from .models import (
-    CONTRACT_KINDS, ROUTE_SHAPED_KINDS, DecompositionReport, L2Operation,
+    CONTRACT_KINDS,
+    ROUTE_SHAPED_KINDS,
+    DecompositionReport,
+    L2Operation,
     OperationVerb,
 )
 
@@ -116,37 +120,40 @@ def decompose(
     operations: list[L2Operation] = []
     for bc_id in sorted(members):
         contract = sorted(
-            (m for m in members[bc_id] if m.kind in CONTRACT_KINDS),
-            key=CandidateMember.sort_key)
+            (m for m in members[bc_id] if m.kind in CONTRACT_KINDS), key=CandidateMember.sort_key
+        )
         for index, member in enumerate(contract, start=1):
             verb, rule = _verb(member)
             obj = _object(member)
             if obj:
                 name = f"{verb.value}_{obj}"
             elif member.kind in ROUTE_SHAPED_KINDS:
-                name = verb.value        # spec's pinned bare-verb fallback
+                name = verb.value  # spec's pinned bare-verb fallback
             else:
-                name = member.value      # a command's own name IS the name
-            operations.append(L2Operation(
-                op_id=f"{bc_id}-OP-{index:02d}",
-                capability=bc_id,
-                verb=verb,
-                name=name,
-                object=obj,
-                binding=member.value,
-                kind=member.kind,
-                rule=rule,
-                entity_keys=_entity_keys(member, obj),
-                evidence=EvidenceRef(
-                    path=member.path,
-                    lines="" if member.line is None else str(member.line)),
-            ))
+                name = member.value  # a command's own name IS the name
+            operations.append(
+                L2Operation(
+                    op_id=f"{bc_id}-OP-{index:02d}",
+                    capability=bc_id,
+                    verb=verb,
+                    name=name,
+                    object=obj,
+                    binding=member.value,
+                    kind=member.kind,
+                    rule=rule,
+                    entity_keys=_entity_keys(member, obj),
+                    evidence=EvidenceRef(
+                        path=member.path, lines="" if member.line is None else str(member.line)
+                    ),
+                )
+            )
 
     return DecompositionReport(
         operations=tuple(operations),
         by_capability={
-            bc_id: sum(1 for o in operations if o.capability == bc_id)
-            for bc_id in sorted(members)},
+            bc_id: sum(1 for o in operations if o.capability == bc_id) for bc_id in sorted(members)
+        },
         # The value is the row count, following SS4's convention that a
         # Measurement carries something worth reading, not a bare flag.
-        collected=Measurement.measured(float(len(operations))))
+        collected=Measurement.measured(float(len(operations))),
+    )

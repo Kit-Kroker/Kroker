@@ -1,12 +1,13 @@
+from sdlc.memoization.cache import content_key
 from sdlc.models import PipelineConfig, RoleConfig
 from sdlc.workflows.feature import resolve_role_model
-from sdlc.memoization.cache import content_key
 
 
 def test_resolver_falls_back_to_registry_default():
     cfg = PipelineConfig()  # no proposer overrides
     # architect stage default comes from STAGE_MODELS (registry)
     from sdlc.agents.roles import STAGE_MODELS
+
     assert resolve_role_model(cfg, "architect") == STAGE_MODELS["architect"]
 
 
@@ -28,7 +29,9 @@ def test_memo_key_moves_with_per_role_model():
     override = PipelineConfig()
     override.roles["architect"] = RoleConfig(kind="proposer", model="openai/gpt-5.2")
     k_base = content_key("architect", "{}", "sha", resolve_role_model(base, "architect"), "none")
-    k_over = content_key("architect", "{}", "sha", resolve_role_model(override, "architect"), "none")
+    k_over = content_key(
+        "architect", "{}", "sha", resolve_role_model(override, "architect"), "none"
+    )
     assert k_base != k_over
 
 
@@ -43,6 +46,6 @@ def test_no_raw_stage_models_lookup_in_feature_workflow():
     src = Path("src/sdlc/workflows/feature.py").read_text(encoding="utf-8")
     # strip the resolver body (the one legitimate raw lookup)
     src_wo_resolver = re.sub(
-        r"def resolve_role_model.*?return STAGE_MODELS\[stage\]",
-        "", src, flags=re.DOTALL)
+        r"def resolve_role_model.*?return STAGE_MODELS\[stage\]", "", src, flags=re.DOTALL
+    )
     assert "STAGE_MODELS[" not in src_wo_resolver

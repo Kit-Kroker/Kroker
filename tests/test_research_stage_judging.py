@@ -1,5 +1,6 @@
 """The research stage is judged against a rubric, not hardcoded to a
 contract score."""
+
 import inspect
 
 from sdlc.workflows import feature
@@ -26,6 +27,6 @@ def test_research_record_no_longer_hardcodes_contract_judge():
     record happens to be last."""
     src = inspect.getsource(feature.FeatureWorkflow._pipeline)
     idx = src.index("quality_score=_r_quality.score")
-    block = src[max(0, idx - 350):idx + 50]
+    block = src[max(0, idx - 350) : idx + 50]
     assert "quality_score=None" not in block
     assert 'judge="contract"' not in block

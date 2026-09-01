@@ -2,6 +2,7 @@
 worktree, or a model lives here; the workflow stays deterministic and does
 none of it.
 """
+
 from __future__ import annotations
 
 import json
@@ -17,11 +18,19 @@ from ..harness.adapters import HARNESSES, HarnessRequest
 from ..models import HarnessKind, HarnessRunResult, ToolGrant
 from .config import CrewLayout, CrewRole
 from .models import (
-    MAX_NOTE_BYTES, CrewQuestion, RoundAdvisory, RoundNote, RoundReview,
-    TurnBeat, TurnRecord,
+    MAX_NOTE_BYTES,
+    CrewQuestion,
+    RoundAdvisory,
+    RoundNote,
+    RoundReview,
+    TurnBeat,
+    TurnRecord,
 )
 from .worktree import (
-    ORCH_ROOT, orchestration_dir, prepare_orchestration, round_dir,
+    ORCH_ROOT,
+    orchestration_dir,
+    prepare_orchestration,
+    round_dir,
 )
 
 # 4x the note cap: enough headroom for JSON overhead, small enough that a
@@ -69,16 +78,13 @@ class RoundReading:
     question: str = ""
 
 
-def _resolve_in_round(worktree: str, layout: str, rnd: int,
-                      rel: str) -> Path:
+def _resolve_in_round(worktree: str, layout: str, rnd: int, rel: str) -> Path:
     """Resolve a model-supplied relative path and prove it stayed inside the
     round directory. Rejected, never sanitised."""
     base = round_dir(worktree, layout, rnd).resolve()
     target = (base / rel).resolve()
     if not target.is_relative_to(base):
-        raise CrewProtocolError(
-            f"deliverable {rel!r} resolves outside the round directory "
-            f"{base}")
+        raise CrewProtocolError(f"deliverable {rel!r} resolves outside the round directory {base}")
     return target
 
 
@@ -94,8 +100,8 @@ def _read_schema(path: Path, schema: str, model):
     size = path.stat().st_size
     if size > MAX_ROUND_FILE_BYTES:
         raise CrewProtocolError(
-            f"{path.name} is too large: {size} bytes exceeds "
-            f"{MAX_ROUND_FILE_BYTES}")
+            f"{path.name} is too large: {size} bytes exceeds {MAX_ROUND_FILE_BYTES}"
+        )
     raw = path.read_text(encoding="utf-8", errors="replace")
     try:
         payload = json.loads(raw)
@@ -108,7 +114,8 @@ def _read_schema(path: Path, schema: str, model):
         raise CrewProtocolError(
             f"{path.name} declares schema {declared!r}; only {schema!r} is "
             f"understood, and an unknown schema is an error rather than a "
-            f"best-effort parse")
+            f"best-effort parse"
+        )
     try:
         return model(**payload)
     except ValidationError as e:
@@ -117,18 +124,16 @@ def _read_schema(path: Path, schema: str, model):
 
 @activity.defn
 async def read_round(inp: ReadRoundInput) -> RoundReading:
-    path = _resolve_in_round(inp.worktree, inp.layout, inp.round,
-                             inp.deliverable_path)
+    path = _resolve_in_round(inp.worktree, inp.layout, inp.round, inp.deliverable_path)
     if not path.is_file():
         # The agent exited without running the protocol: crash, refusal, or
         # it left the skill. The workflow decides what that means.
-        return RoundReading(deliverable_path=None, note_summary="",
-                            missing=True)
+        return RoundReading(deliverable_path=None, note_summary="", missing=True)
     size = path.stat().st_size
     if size > MAX_ROUND_FILE_BYTES:
         raise CrewProtocolError(
-            f"{path.name} is too large: {size} bytes exceeds "
-            f"{MAX_ROUND_FILE_BYTES}")
+            f"{path.name} is too large: {size} bytes exceeds {MAX_ROUND_FILE_BYTES}"
+        )
     raw = path.read_text(encoding="utf-8", errors="replace")
     try:
         payload = json.loads(raw)
@@ -141,11 +146,10 @@ async def read_round(inp: ReadRoundInput) -> RoundReading:
         raise CrewProtocolError(
             f"{path.name} declares schema {schema!r}; only 'notes-v1' is "
             f"understood, and an unknown schema is an error rather than a "
-            f"best-effort parse")
+            f"best-effort parse"
+        )
     note = RoundNote(**payload)
-    summary = "\n".join(
-        [note.what_changed, note.why, note.verification, note.left_undone]
-    ).strip()
+    summary = "\n".join([note.what_changed, note.why, note.verification, note.left_undone]).strip()
 
     base = round_dir(inp.worktree, inp.layout, inp.round)
     advisory = _read_schema(base / "advisor.md", "advisor-v1", RoundAdvisory)
@@ -153,8 +157,10 @@ async def read_round(inp: ReadRoundInput) -> RoundReading:
     q = _read_schema(base / "question.json", "question-v1", CrewQuestion)
     question = ""
     if q is not None:
-        question = (f"{q.question}\n\nWhy it matters: {q.why_it_matters}\n"
-                    f"Evidence the agent gathered first: {q.evidence}")
+        question = (
+            f"{q.question}\n\nWhy it matters: {q.why_it_matters}\n"
+            f"Evidence the agent gathered first: {q.evidence}"
+        )
 
     parts: list[str] = []
     if advisory is not None:
@@ -164,13 +170,16 @@ async def read_round(inp: ReadRoundInput) -> RoundReading:
         if advisory.suggestions:
             parts.append(f"Suggestions: {advisory.suggestions}")
     if review is not None:
-        parts += [f"[{f.severity}] {f.where}: {f.what}"
-                  for f in review.findings]
+        parts += [f"[{f.severity}] {f.where}: {f.what}" for f in review.findings]
 
-    return RoundReading(deliverable_path=str(path), note_summary=summary,
-                        missing=False, critique="\n".join(parts),
-                        verdict=review.verdict if review else None,
-                        question=question)
+    return RoundReading(
+        deliverable_path=str(path),
+        note_summary=summary,
+        missing=False,
+        critique="\n".join(parts),
+        verdict=review.verdict if review else None,
+        question=question,
+    )
 
 
 # The error type a workflow matches on to tell "the agent produced a bad
@@ -225,7 +234,7 @@ def _resume_target(inp: CrewTurnInput) -> str | None:
     continue rather than re-pay the whole context (spec §3)."""
     try:
         details = activity.info().heartbeat_details
-    except RuntimeError:                       # outside an activity, in tests
+    except RuntimeError:  # outside an activity, in tests
         details = ()
     if details:
         beat = TurnBeat(**details[-1])
@@ -248,24 +257,28 @@ async def run_crew_turn(inp: CrewTurnInput) -> CrewTurnOutput:
     # The activity is the only actor that knows the round, so it owns the
     # round dir: the agent must not have to mkdir to follow the protocol,
     # and a dir nobody created would read as EXIT_PROTOCOL_VIOLATION.
-    round_dir(inp.worktree, inp.layout, inp.round).mkdir(
-        parents=True, exist_ok=True)
+    round_dir(inp.worktree, inp.layout, inp.round).mkdir(parents=True, exist_ok=True)
     session_id = _resume_target(inp)
     # A non-lead role reads the repository (cwd) and writes only the
     # protocol tree (write_root). The lead gets None -- a write_root would
     # fence it out of the repository, which is its whole job.
-    write_root = (None if inp.writes
-                  else str(orchestration_dir(inp.worktree, inp.layout)))
-    req = HarnessRequest(prompt=inp.prompt, cwd=inp.worktree,
-                         model=inp.model, session_id=session_id,
-                         timeout_s=inp.turn_timeout_s,
-                         write_root=write_root)
+    write_root = None if inp.writes else str(orchestration_dir(inp.worktree, inp.layout))
+    req = HarnessRequest(
+        prompt=inp.prompt,
+        cwd=inp.worktree,
+        model=inp.model,
+        session_id=session_id,
+        timeout_s=inp.turn_timeout_s,
+        write_root=write_root,
+    )
     try:
         _, report = _resolve_containment(harness, inp, req)
     except ContainmentError as e:
-        raise ApplicationError(f"crew turn for role {inp.role!r}: {e}",
-                               type=CREW_CONTAINMENT_REFUSED,
-                               non_retryable=True) from e
+        raise ApplicationError(
+            f"crew turn for role {inp.role!r}: {e}",
+            type=CREW_CONTAINMENT_REFUSED,
+            non_retryable=True,
+        ) from e
 
     seen = TurnBeat(session_id=session_id, round=inp.round)
 
@@ -279,7 +292,7 @@ async def run_crew_turn(inp: CrewTurnInput) -> CrewTurnOutput:
                     setattr(seen, k, v)
         try:
             activity.heartbeat(seen.model_dump())
-        except RuntimeError:                   # outside an activity, in tests
+        except RuntimeError:  # outside an activity, in tests
             pass
 
     result = await harness.run(req, heartbeat=_beat)
@@ -293,35 +306,45 @@ async def run_crew_turn(inp: CrewTurnInput) -> CrewTurnOutput:
     # run_coding_task treats it: losing the RECORD must not fail the turn.
     try:
         run_id = activity.info().workflow_run_id
-    except RuntimeError:                       # outside an activity, in tests
+    except RuntimeError:  # outside an activity, in tests
         run_id = "local"
     try:
         ref, digest = capture_session(
-            harness, result._raw_stdout, run_id=run_id,
+            harness,
+            result._raw_stdout,
+            run_id=run_id,
             task_id=f"{inp.task_id}-{inp.role}-r{inp.round}",
-            attempt=inp.attempt)
+            attempt=inp.attempt,
+        )
         result.session_ref = ref
         result.session_digest = digest
-    except Exception:                          # noqa: BLE001
+    except Exception:  # noqa: BLE001
         pass
 
     record = TurnRecord(
-        role=inp.role, round=inp.round, attempt=inp.attempt,
-        harness=inp.harness, model=inp.model,
+        role=inp.role,
+        round=inp.round,
+        attempt=inp.attempt,
+        harness=inp.harness,
+        model=inp.model,
         session_id=result.session_id or session_id,
-        cost_usd=result.cost_usd, input_tokens=result.input_tokens,
+        cost_usd=result.cost_usd,
+        input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
-        context_window=result.context_window, exit_code=result.exit_code,
-        cost_incomplete=result.cost_usd is None)
+        context_window=result.context_window,
+        exit_code=result.exit_code,
+        cost_incomplete=result.cost_usd is None,
+    )
 
     # A suspended tool call is NOT a failure: the workflow must see it, gate
     # it, and resume. Only a genuine non-zero exit is an agent-level failure.
     if result.exit_code != 0 and result.deferred is None:
         raise ApplicationError(
-            f"crew turn failed: role={inp.role} round={inp.round} "
-            f"exit_code={result.exit_code}",
+            f"crew turn failed: role={inp.role} round={inp.round} exit_code={result.exit_code}",
             record.model_dump(mode="json"),
-            type=AGENT_FAILURE, non_retryable=True)
+            type=AGENT_FAILURE,
+            non_retryable=True,
+        )
 
     return CrewTurnOutput(run=result, record=record)
 
@@ -349,10 +372,8 @@ async def checkpoint_round(inp: CheckpointInput) -> str | None:
     # common-dir state, no races between parallel tasks, nothing written
     # into the user's repository. (info/exclude lives in the git COMMON
     # dir, so a linked worktree cannot have a private exclude file.)
-    add = _git(["add", "-A", "--", ".", f":(exclude){ORCH_ROOT}"],
-               inp.worktree)
-    if (add.returncode != 0
-            and "ignored by one of your .gitignore files" in add.stderr):
+    add = _git(["add", "-A", "--", ".", f":(exclude){ORCH_ROOT}"], inp.worktree)
+    if add.returncode != 0 and "ignored by one of your .gitignore files" in add.stderr:
         # The target repo (or a stale COMMON-dir info/exclude left by an
         # older run) already ignores ORCH_ROOT itself. Naming an
         # already-ignored path in ANY pathspec -- exclude clause included --
@@ -369,14 +390,20 @@ async def checkpoint_round(inp: CheckpointInput) -> str | None:
         detail = add.stderr.strip() or add.stdout.strip()
         hint = ""
         if "not a git repository" in detail:
-            hint = (" (the worktree was a repository when this crew started; "
-                    "the agent likely deleted or reinitialized it)")
-        raise RuntimeError(f"git add failed in {inp.worktree}: "
-                           f"{detail}{hint}")
+            hint = (
+                " (the worktree was a repository when this crew started; "
+                "the agent likely deleted or reinitialized it)"
+            )
+        raise RuntimeError(f"git add failed in {inp.worktree}: {detail}{hint}")
     commit = _git(
-        ["commit", "-m", f"sdlc crew checkpoint round {inp.round} "
-                         f"(exit={inp.exit_code})", "--allow-empty"],
-        inp.worktree)
+        [
+            "commit",
+            "-m",
+            f"sdlc crew checkpoint round {inp.round} (exit={inp.exit_code})",
+            "--allow-empty",
+        ],
+        inp.worktree,
+    )
     if commit.returncode != 0:
         return None
     return _git(["rev-parse", "HEAD"], inp.worktree).stdout.strip()
@@ -410,20 +437,24 @@ async def load_crew(inp: LoadCrewInput) -> LoadedCrew:
     model must be named in a layer ADR-6 already validates — registry role,
     benchmark arm, or run override."""
     from .loader import (
-        check_crew_families, load_layout, read_skill, resolve_crew_roles,
+        check_crew_families,
+        load_layout,
+        read_skill,
+        resolve_crew_roles,
     )
+
     if inp.lead_model is None:
         raise ApplicationError(
             "a crew run must name the lead's model in the layer ADR-6 "
             "already validates (registry role, benchmark arm, run "
             "override); the crew role file's model never enters "
             "check_adr6_families (spec §5, finding 5)",
-            type=CREW_MODEL_UNRESOLVED, non_retryable=True)
+            type=CREW_MODEL_UNRESOLVED,
+            non_retryable=True,
+        )
     layout, roles = load_layout(inp.layout)
-    resolved = resolve_crew_roles(layout, roles, inp.lead_harness,
-                                  inp.lead_model)
+    resolved = resolve_crew_roles(layout, roles, inp.lead_harness, inp.lead_model)
     # After resolution, never before: the RUN's lead model is what the crew
     # must decorrelate from, and the role file's default may not be it.
     check_crew_families(layout.lead, resolved)
-    return LoadedCrew(layout=layout, roles=resolved,
-                      protocol=read_skill(roles[layout.lead].skill))
+    return LoadedCrew(layout=layout, roles=resolved, protocol=read_skill(roles[layout.lead].skill))

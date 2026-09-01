@@ -32,9 +32,8 @@ def test_deep_review_is_advisory_not_in_success_condition():
     pred = "if task_passed and review_ok:"
     assert pred in src
     idx = src.find(pred)
-    line = src[idx: src.find("\n", idx)]
-    assert "deep_review" not in line, (
-        "deep_review must never gate the task success path")
+    line = src[idx : src.find("\n", idx)]
+    assert "deep_review" not in line, "deep_review must never gate the task success path"
 
 
 def test_both_returns_carry_deep_review():
@@ -51,6 +50,6 @@ def test_deep_review_never_resumes_a_session():
     # deep_review is a proposer: it must not pass a session_id to any harness.
     src = _src()
     idx = src.find("async def _run_deep_review")
-    body = src[idx: idx + 1600]
+    body = src[idx : idx + 1600]
     assert "run_coding_task" not in body
     assert "session_id" not in body

@@ -1,12 +1,12 @@
 """The API key must never reach a `RecallInput`/`RetainInput`: those are
 serialized into Temporal workflow history, which is durable storage."""
+
 from __future__ import annotations
 
 import dataclasses
 
 import pytest
 
-from sdlc.memory import activities
 from sdlc.memory.activities import RecallInput, RetainInput, _backend
 from sdlc.memory.fake import FakeMemory
 
@@ -35,4 +35,5 @@ def test_tenant_defaults_and_key_is_optional(monkeypatch):
 def test_activity_inputs_carry_no_credential_field(model):
     names = {f.name for f in dataclasses.fields(model)}
     assert not (names & {"api_key", "token", "authorization", "tenant"}), (
-        f"{model.__name__} would write a credential into Temporal history")
+        f"{model.__name__} would write a credential into Temporal history"
+    )

@@ -5,6 +5,7 @@ the same shape as HARNESSES (ADR-2) and TOOLCHAINS (ADR-15).
 `webhook` is a generic JSON POST that Slack and Discord accept as-is; anything
 else is a receiving shim, not our substrate (NG7).
 """
+
 from __future__ import annotations
 
 import json
@@ -46,8 +47,8 @@ class WebhookNotifier:
         host = urlparse(target).hostname or ""
         if not host_allowed(host, self.allow_hosts):
             raise EgressDenied(
-                f"host {host!r} is not in the notification allow_hosts "
-                f"(policy/notifications.yaml)")
+                f"host {host!r} is not in the notification allow_hosts (policy/notifications.yaml)"
+            )
         await self._post(target, {"text": text})
 
     async def _post(self, url: str, payload: dict) -> None:
@@ -55,8 +56,11 @@ class WebhookNotifier:
 
         def _send() -> None:
             req = urllib.request.Request(
-                url, data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"}, method="POST")
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
             with urllib.request.urlopen(req, timeout=POST_TIMEOUT_S):
                 pass
 
@@ -65,5 +69,5 @@ class WebhookNotifier:
 
 NOTIFIERS: dict[str, object] = {
     "log": LogNotifier(),
-    "webhook": WebhookNotifier(),      # allow_hosts injected per-run (Task 6)
+    "webhook": WebhookNotifier(),  # allow_hosts injected per-run (Task 6)
 }

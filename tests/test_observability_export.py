@@ -1,27 +1,48 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sdlc.models import (
-    ClarificationOutcome, GateOutcomeSummary, RoleUsage, RunSummary,
+    ClarificationOutcome,
+    GateOutcomeSummary,
+    RoleUsage,
+    RunSummary,
     StageOutcome,
 )
 from sdlc.observability.export import render_events_jsonl, render_report_html
 from sdlc.observability.trace import RunEvent, RunEventKind
 
-T0 = datetime(2026, 7, 22, 12, 0, tzinfo=timezone.utc)
+T0 = datetime(2026, 7, 22, 12, 0, tzinfo=UTC)
 
 
 def _summary():
     return RunSummary(
-        run_id="r1", mode="greenfield", outcome="deployed:http://pr",
-        terminal_stage="deploy", started_at=T0, ended_at=T0, duration_s=0.0,
-        stages=[StageOutcome(stage="clarify", role="clarify", outcome="pass",
-                             duration_s=2.0, cost_usd=0.1)],
-        clarifications=[ClarificationOutcome(question_id="q1", question="scope?",
-                                             answered_by="human")],
-        gates=[GateOutcomeSummary(gate="merge", round=1, policy="soft",
-                                  decided_by="human", approved=True,
-                                  overrides=["coverage"])],
-        cost_usd_total=0.1, memory_enabled=True, memory_watermark="3",
+        run_id="r1",
+        mode="greenfield",
+        outcome="deployed:http://pr",
+        terminal_stage="deploy",
+        started_at=T0,
+        ended_at=T0,
+        duration_s=0.0,
+        stages=[
+            StageOutcome(
+                stage="clarify", role="clarify", outcome="pass", duration_s=2.0, cost_usd=0.1
+            )
+        ],
+        clarifications=[
+            ClarificationOutcome(question_id="q1", question="scope?", answered_by="human")
+        ],
+        gates=[
+            GateOutcomeSummary(
+                gate="merge",
+                round=1,
+                policy="soft",
+                decided_by="human",
+                approved=True,
+                overrides=["coverage"],
+            )
+        ],
+        cost_usd_total=0.1,
+        memory_enabled=True,
+        memory_watermark="3",
         memory_retains=2,
     )
 
@@ -50,14 +71,28 @@ def test_report_html_is_self_contained_and_covers_sections():
 
 
 def test_report_html_renders_role_table():
-    now = datetime.now(timezone.utc)
-    s = RunSummary(run_id="r1", mode="greenfield", outcome="deployed:x",
-                   terminal_stage="deploy", started_at=now, ended_at=now,
-                   duration_s=1.0,
-                   roles=[RoleUsage(role="architect", model="anthropic:o",
-                                    calls=2, input_tokens=1500,
-                                    output_tokens=300, cost_usd=1.25)],
-                   budget_usd=5.0, budget_crossings=1)
+    now = datetime.now(UTC)
+    s = RunSummary(
+        run_id="r1",
+        mode="greenfield",
+        outcome="deployed:x",
+        terminal_stage="deploy",
+        started_at=now,
+        ended_at=now,
+        duration_s=1.0,
+        roles=[
+            RoleUsage(
+                role="architect",
+                model="anthropic:o",
+                calls=2,
+                input_tokens=1500,
+                output_tokens=300,
+                cost_usd=1.25,
+            )
+        ],
+        budget_usd=5.0,
+        budget_crossings=1,
+    )
     html = render_report_html(s)
     assert "architect" in html
     assert "$1.2500" in html

@@ -6,6 +6,7 @@ from sdlc.research.protocol import SearchProvider, make_provider
 @pytest.fixture(autouse=True)
 def _corpus(monkeypatch):
     from pathlib import Path
+
     corpus = Path(__file__).resolve().parent / "fakes" / "research_corpus"
     monkeypatch.setenv("SDLC_RESEARCH_FAKE_CORPUS", str(corpus))
 

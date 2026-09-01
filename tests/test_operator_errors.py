@@ -1,4 +1,5 @@
 """Domain exceptions become typed, actionable, traceback-free ToolErrors."""
+
 import pytest
 
 from sdlc.board.store import ConflictError, InvalidTransition, NotFoundError
@@ -25,8 +26,7 @@ def test_board_not_found_keeps_the_stores_own_message():
 
 def test_conflict_and_invalid_transition_are_distinguishable():
     assert "conflict" in translate(ConflictError("row_version")).message.lower()
-    assert "transition" in translate(
-        InvalidTransition("PENDING -> DONE")).message.lower()
+    assert "transition" in translate(InvalidTransition("PENDING -> DONE")).message.lower()
 
 
 def test_unknown_exception_leaks_no_detail():

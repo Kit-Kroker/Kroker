@@ -7,32 +7,34 @@ docstring names this module's job: "scan emits hints and /assess assigns
 severity (E-49). A field called `severity` would invite a consumer to treat a
 pattern match as a rating."
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterable
 
+from ...measurement import Measurement
 from ..discover.map import Capability
 from ..scan.models import Confidence, MemberKind, Sensitivity
-from ...measurement import Measurement
 from .models import Criticality, CriticalityRating, Severity
 from .rules import LOW_CONFIDENCE_SHIFT, SEVERITY_TABLE
 
 # Externally reachable member kinds. A DB table or an exported symbol is not
 # an exposure surface on its own; a route is.
-REACHABLE_KINDS: frozenset[MemberKind] = frozenset({
-    MemberKind.HTTP_ROUTE, MemberKind.FRONTEND_ROUTE, MemberKind.GRPC_METHOD,
-})
+REACHABLE_KINDS: frozenset[MemberKind] = frozenset(
+    {
+        MemberKind.HTTP_ROUTE,
+        MemberKind.FRONTEND_ROUTE,
+        MemberKind.GRPC_METHOD,
+    }
+)
 
 # Regulated classes outrank PII alone for impact purposes.
-_REGULATED = frozenset({Sensitivity.HEALTH, Sensitivity.REGULATORY,
-                        Sensitivity.FINANCIAL})
+_REGULATED = frozenset({Sensitivity.HEALTH, Sensitivity.REGULATORY, Sensitivity.FINANCIAL})
 
-_ORDER = (Severity.INFO, Severity.LOW, Severity.MEDIUM, Severity.HIGH,
-          Severity.CRITICAL)
+_ORDER = (Severity.INFO, Severity.LOW, Severity.MEDIUM, Severity.HIGH, Severity.CRITICAL)
 
 
-def criticality(cap: Capability, *,
-                sensitivity_collected: bool) -> CriticalityRating:
+def criticality(cap: Capability, *, sensitivity_collected: bool) -> CriticalityRating:
     """HIGH/MEDIUM/LOW from the data the capability handles and whether it is
     externally reachable.
 
@@ -43,9 +45,12 @@ def criticality(cap: Capability, *,
     rating (RD4).
     """
     if not sensitivity_collected:
-        return CriticalityRating(collected=Measurement.not_collected(
-            "criticality needs SS4, which did not collect -- an empty "
-            "sensitivity set is not evidence that no entity is regulated"))
+        return CriticalityRating(
+            collected=Measurement.not_collected(
+                "criticality needs SS4, which did not collect -- an empty "
+                "sensitivity set is not evidence that no entity is regulated"
+            )
+        )
 
     regulated = any(r.classification in _REGULATED for r in cap.sensitivity)
     sensitive = bool(cap.sensitivity)
@@ -62,8 +67,7 @@ def criticality(cap: Capability, *,
     return CriticalityRating(level=level, collected=Measurement.measured(1.0))
 
 
-def severity(hint: str, rating: CriticalityRating,
-             confidence: Confidence) -> Severity:
+def severity(hint: str, rating: CriticalityRating, confidence: Confidence) -> Severity:
     """The table, then the confidence step. Confidence never RAISES."""
     # An unrated capability is scored at MEDIUM -- neither the benefit of the
     # doubt (LOW would understate) nor an unearned escalation (HIGH would
@@ -87,4 +91,3 @@ def max_severity(values: Iterable[Severity]) -> Severity:
         if _ORDER.index(value) > _ORDER.index(out):
             out = value
     return out
-

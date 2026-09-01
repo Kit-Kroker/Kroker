@@ -8,6 +8,7 @@ Operator-run only. triage_build_probe executes the triaged repository's own
 code as the worker user with network access (NFR-9); E-57 and E-21 are what
 remove that debt.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -22,41 +23,58 @@ with workflow.unsafe.imports_passed_through():
     from ..models import GateDecision, GateOutcome, GateSettings
     from ..pending import GateContext
     from ..triage.activities import (
-        TriageDependencyInput, TriagePin, TriagePinInput, TriageProbeInput,
-        TriageSignalInput, triage_baseline, triage_build_probe,
-        triage_dependencies, triage_misconfig, triage_outliers,
-        triage_resolve_commit, triage_scaffold, triage_secrets,
+        TriageDependencyInput,
+        TriagePin,
+        TriagePinInput,
+        TriageProbeInput,
+        TriageSignalInput,
+        triage_baseline,
+        triage_build_probe,
+        triage_dependencies,
+        triage_misconfig,
+        triage_outliers,
+        triage_resolve_commit,
+        triage_scaffold,
+        triage_secrets,
     )
     from ..triage.models import (
-        ReadinessOverride, RepoTriage, SignalResult, Verdict, compute_readiness,
+        ReadinessOverride,
+        RepoTriage,
+        SignalResult,
+        Verdict,
+        compute_readiness,
     )
     from ..triage.registry import SIGNALS
     from .fanout import run_or_degrade
     from .gates import GateHost
 
 # Read-only and idempotent -- retrying is free.
-PIN_ACT = dict(start_to_close_timeout=timedelta(minutes=2),
-               retry_policy=RetryPolicy(maximum_attempts=3))
+PIN_ACT = dict(
+    start_to_close_timeout=timedelta(minutes=2), retry_policy=RetryPolicy(maximum_attempts=3)
+)
 # Deterministic given a tree and a sha; the retry covers FS/git blips only.
-SIGNAL_ACT = dict(start_to_close_timeout=timedelta(minutes=10),
-                  retry_policy=RetryPolicy(maximum_attempts=2))
+SIGNAL_ACT = dict(
+    start_to_close_timeout=timedelta(minutes=10), retry_policy=RetryPolicy(maximum_attempts=2)
+)
 # The only signal doing network I/O (E-41a's AdvisorySource).
-DEPS_ACT = dict(start_to_close_timeout=timedelta(minutes=15),
-                retry_policy=RetryPolicy(maximum_attempts=3))
+DEPS_ACT = dict(
+    start_to_close_timeout=timedelta(minutes=15), retry_policy=RetryPolicy(maximum_attempts=3)
+)
 # ONE attempt, per triage_build_probe's own docstring: a ten-minute timeout
 # retried three times is a thirty-minute triage, and a deterministic build
 # failure does not become a success on attempt two.
-PROBE_ACT = dict(start_to_close_timeout=timedelta(minutes=40),
-                 retry_policy=RetryPolicy(maximum_attempts=1))
+PROBE_ACT = dict(
+    start_to_close_timeout=timedelta(minutes=40), retry_policy=RetryPolicy(maximum_attempts=1)
+)
 
 
 class TriageInput(BaseModel):
     repo_dir: str
-    commit: str = "HEAD"                # resolved to a sha by D7's activity
-    build_probe: bool = True            # D6
-    advisory_source: str = "none"       # E-41a: declared egress, off by default
+    commit: str = "HEAD"  # resolved to a sha by D7's activity
+    build_probe: bool = True  # D6
+    advisory_source: str = "none"  # E-41a: declared egress, off by default
     gates: GateSettings = Field(default_factory=GateSettings)
-    max_gate_rounds: int = 2            # D9's bound on the REVISE loop
+    max_gate_rounds: int = 2  # D9's bound on the REVISE loop
 
 
 def skipped_signal(signal_id: str, reason: str) -> SignalResult:
@@ -69,19 +87,23 @@ def skipped_signal(signal_id: str, reason: str) -> SignalResult:
     """
     spec = SIGNALS[signal_id]
     return SignalResult(
-        signal=signal_id, version=spec.version,
+        signal=signal_id,
+        version=spec.version,
         collected=Measurement.not_collected(reason),
-        metrics={key: Measurement.not_collected(reason)
-                 for key in spec.readiness_keys})
+        metrics={key: Measurement.not_collected(reason) for key in spec.readiness_keys},
+    )
 
 
 def _readiness_summary(t: RepoTriage) -> str:
     """ASCII render for the gate's pending item. Names the verdict, the
     dimensions that blocked it, and the finding counts by severity."""
     r = t.readiness
-    dims = {"buildable": r.buildable, "runnable": r.runnable,
-            "tests_present": r.tests_present,
-            "structure_discernible": r.structure_discernible}
+    dims = {
+        "buildable": r.buildable,
+        "runnable": r.runnable,
+        "tests_present": r.tests_present,
+        "structure_discernible": r.structure_discernible,
+    }
     blocking = []
     for name, m in dims.items():
         if m.state is not CollectionState.MEASURED:
@@ -93,13 +115,14 @@ def _readiness_summary(t: RepoTriage) -> str:
         for f in s.findings:
             counts[f.severity] = counts.get(f.severity, 0) + 1
     order = ("critical", "high", "medium", "low")
-    tally = ", ".join(f"{sev}: {counts[sev]}" for sev in order
-                      if sev in counts) or "none"
-    return (f"verdict: {r.verdict.value}\n"
-            f"commit: {t.commit_sha}\n"
-            f"toolchain: {t.toolchain or 'unknown'}\n"
-            f"blocking:\n" + ("\n".join(blocking) or "  none") + "\n"
-            f"findings ({tally})")
+    tally = ", ".join(f"{sev}: {counts[sev]}" for sev in order if sev in counts) or "none"
+    return (
+        f"verdict: {r.verdict.value}\n"
+        f"commit: {t.commit_sha}\n"
+        f"toolchain: {t.toolchain or 'unknown'}\n"
+        f"blocking:\n" + ("\n".join(blocking) or "  none") + "\n"
+        f"findings ({tally})"
+    )
 
 
 def override_from(decision: GateDecision) -> ReadinessOverride | None:
@@ -111,11 +134,12 @@ def override_from(decision: GateDecision) -> ReadinessOverride | None:
     if not decision.approved:
         return None
     return ReadinessOverride(
-        approved_by=decision.decided_by,      # Literal["human","policy","timeout"]
-        reviewer=decision.reviewer,           # self-asserted identity (FR-1004)
+        approved_by=decision.decided_by,  # Literal["human","policy","timeout"]
+        reviewer=decision.reviewer,  # self-asserted identity (FR-1004)
         reason=decision.comments or "",
         decided_at=decision.decided_at or workflow.now(),
-        gate_round=decision.round)
+        gate_round=decision.round,
+    )
 
 
 @workflow.defn
@@ -134,12 +158,13 @@ class TriageWorkflow(GateHost):
         (E-41 D3). The rule itself lives in fanout.run_or_degrade so
         AssessmentWorkflow shares it rather than restating it (E-46 D14)."""
         return await run_or_degrade(
-            activity, arg, opts,
-            fallback=lambda: skipped_signal(
-                signal_id, f"{signal_id} activity failed or timed out"))
+            activity,
+            arg,
+            opts,
+            fallback=lambda: skipped_signal(signal_id, f"{signal_id} activity failed or timed out"),
+        )
 
-    async def _fan_out(self, inp: TriageInput,
-                       commit_sha: str) -> list[SignalResult]:
+    async def _fan_out(self, inp: TriageInput, commit_sha: str) -> list[SignalResult]:
         sig = TriageSignalInput(repo_dir=inp.repo_dir, commit_sha=commit_sha)
         jobs = [
             self._one("baseline", triage_baseline, sig, SIGNAL_ACT),
@@ -147,35 +172,46 @@ class TriageWorkflow(GateHost):
             self._one("scaffold", triage_scaffold, sig, SIGNAL_ACT),
             self._one("misconfig", triage_misconfig, sig, SIGNAL_ACT),
             self._one("outliers", triage_outliers, sig, SIGNAL_ACT),
-            self._one("dependencies", triage_dependencies,
-                      TriageDependencyInput(
-                          repo_dir=inp.repo_dir, commit_sha=commit_sha,
-                          advisory_source=inp.advisory_source),
-                      DEPS_ACT),
+            self._one(
+                "dependencies",
+                triage_dependencies,
+                TriageDependencyInput(
+                    repo_dir=inp.repo_dir,
+                    commit_sha=commit_sha,
+                    advisory_source=inp.advisory_source,
+                ),
+                DEPS_ACT,
+            ),
         ]
         if inp.build_probe:
-            jobs.append(self._one(
-                "build_probe", triage_build_probe,
-                TriageProbeInput(repo_dir=inp.repo_dir,
-                                 commit_sha=commit_sha),
-                PROBE_ACT))
+            jobs.append(
+                self._one(
+                    "build_probe",
+                    triage_build_probe,
+                    TriageProbeInput(repo_dir=inp.repo_dir, commit_sha=commit_sha),
+                    PROBE_ACT,
+                )
+            )
         results = list(await asyncio.gather(*jobs))
         if not inp.build_probe:
-            results.append(skipped_signal(
-                "build_probe", "build probe not run (--no-build-probe)"))
+            results.append(skipped_signal("build_probe", "build probe not run (--no-build-probe)"))
         return results
 
     async def _assess(self, inp: TriageInput) -> RepoTriage:
         pin: TriagePin = await workflow.execute_activity(
             triage_resolve_commit,
             TriagePinInput(repo_dir=inp.repo_dir, commit=inp.commit),
-            **PIN_ACT)
+            **PIN_ACT,
+        )
         self._status = "running"
         signals = await self._fan_out(inp, pin.commit_sha)
-        return RepoTriage(repo_dir=inp.repo_dir, commit_sha=pin.commit_sha,
-                          toolchain=pin.toolchain,
-                          readiness=compute_readiness(signals),
-                          signals=signals)
+        return RepoTriage(
+            repo_dir=inp.repo_dir,
+            commit_sha=pin.commit_sha,
+            toolchain=pin.toolchain,
+            readiness=compute_readiness(signals),
+            signals=signals,
+        )
 
     @workflow.run
     async def run(self, inp: TriageInput) -> RepoTriage:
@@ -187,9 +223,11 @@ class TriageWorkflow(GateHost):
                 return self._triage
 
             decision = await self._gate(
-                "readiness", inp.gates, round=round,
-                context=GateContext(
-                    spec_summary=_readiness_summary(self._triage)))
+                "readiness",
+                inp.gates,
+                round=round,
+                context=GateContext(spec_summary=_readiness_summary(self._triage)),
+            )
 
             if decision.outcome is GateOutcome.REVISE:
                 # D9: the operator fixed something. Re-resolve and look again
@@ -210,9 +248,11 @@ class TriageWorkflow(GateHost):
             self._status = "triaged:ready"
             return self._triage
         decision = await self._gate(
-            "readiness", inp.gates, round=inp.max_gate_rounds + 1,
-            context=GateContext(
-                spec_summary=_readiness_summary(self._triage)))
+            "readiness",
+            inp.gates,
+            round=inp.max_gate_rounds + 1,
+            context=GateContext(spec_summary=_readiness_summary(self._triage)),
+        )
         if decision.approved:
             self._triage.override = override_from(decision)
             self._status = f"triaged:{verdict.value}+override"

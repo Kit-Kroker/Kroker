@@ -11,6 +11,7 @@ A violation drops the ITEM, never the phase (DD8). The phase-level guard
 lives in the workflow, which is the only place that can turn a rate into a
 not_collected PhaseResult.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -28,6 +29,7 @@ class RefVerification(BaseModel):
     disposition: stamp() owns the disposition shape, and building one here
     would be a second producer of the same row (P3-D1).
     """
+
     proposal: DiscoverProposal
     refusals: dict[str, tuple[str, str]] = {}
     total_references: int = 0
@@ -43,20 +45,20 @@ class RefVerification(BaseModel):
         return self.unresolved_references / self.total_references
 
 
-def verify_refs(proposal: DiscoverProposal,
-                blobs: Mapping[str, str | None]) -> RefVerification:
+def verify_refs(proposal: DiscoverProposal, blobs: Mapping[str, str | None]) -> RefVerification:
     """DD8 items 4-5 over every disposition.
 
     `blobs` maps every path the proposal cited to its bytes at the pinned
     commit, or None when it did not resolve. The caller reads them;
     verification.verify_rows decides.
     """
-    out = verify_rows(proposal.dispositions, blobs,
-                      id_of=lambda row: row.candidate_id)
+    out = verify_rows(proposal.dispositions, blobs, id_of=lambda row: row.candidate_id)
     return RefVerification(
         proposal=DiscoverProposal(dispositions=list(out.survivors)),
-        refusals=out.refusals, total_references=out.total_references,
-        unresolved_references=out.unresolved_references)
+        refusals=out.refusals,
+        total_references=out.total_references,
+        unresolved_references=out.unresolved_references,
+    )
 
 
 def cited_paths(proposal: DiscoverProposal) -> tuple[str, ...]:

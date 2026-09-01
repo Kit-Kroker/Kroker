@@ -12,10 +12,12 @@ Asymmetries handled here:
               continue with `-s <session_id>`; optional `--attach <url>`
               to reuse a warm `opencode serve` instance.
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import shutil
@@ -23,18 +25,29 @@ import subprocess
 import sys
 import tempfile
 import time
-import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..memory.scrub import scrub
 from ..models import (
-    ContainmentLayer, ContainmentReport, DeferredToolUse, HarnessKind,
-    HarnessRunResult, HarnessSession, SessionEvent, ToolDenial, ToolGrant,
+    ContainmentLayer,
+    ContainmentReport,
+    DeferredToolUse,
+    HarnessKind,
+    HarnessRunResult,
+    HarnessSession,
+    SessionEvent,
+    ToolDenial,
+    ToolGrant,
 )
 from .containment import (
-    Action, Policy, Predicate, Rule, digest_tool_input, is_declined_reason,
+    Action,
+    Policy,
+    Predicate,
+    Rule,
+    digest_tool_input,
+    is_declined_reason,
     target_of,
 )
 
@@ -77,20 +90,34 @@ def _split_reason(text: str) -> tuple[str, str]:
 # Never the worker's full os.environ (that is a bigger secret channel than
 # the prompt). Covers POSIX + Windows toolchain essentials.
 ENV_ALLOWLIST: tuple[str, ...] = (
-    "PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "TMP", "TEMP",
-    "SYSTEMROOT", "SYSTEMDRIVE", "USERPROFILE", "PATHEXT", "COMSPEC",
-    "GIT_EXEC_PATH", "GIT_SSH", "SSH_AUTH_SOCK",
+    "PATH",
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "TMPDIR",
+    "TMP",
+    "TEMP",
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
+    "USERPROFILE",
+    "PATHEXT",
+    "COMSPEC",
+    "GIT_EXEC_PATH",
+    "GIT_SSH",
+    "SSH_AUTH_SOCK",
     # Without these, Windows' Python install manager (`py install`) can't
     # find its real cache/install root and silently falls back to a
     # relative "Python/" directory inside the task's cwd — which then gets
     # swept into the checkpoint commit by `git add -A` and collides with
     # integration's own copy of the same fallback during merge.
-    "LOCALAPPDATA", "APPDATA",
+    "LOCALAPPDATA",
+    "APPDATA",
 )
 
 
-def build_env(req_env: dict[str, str],
-              allowlist: tuple[str, ...] = ENV_ALLOWLIST) -> dict[str, str]:
+def build_env(
+    req_env: dict[str, str], allowlist: tuple[str, ...] = ENV_ALLOWLIST
+) -> dict[str, str]:
     """Curated child environment: allowlisted worker vars, then the
     request's injected (repo-scoped, short-TTL) credentials."""
     env = {k: os.environ[k] for k in allowlist if k in os.environ}
@@ -101,9 +128,9 @@ def build_env(req_env: dict[str, str],
 @dataclass
 class HarnessRequest:
     prompt: str
-    cwd: str                              # the task's git worktree
+    cwd: str  # the task's git worktree
     model: str | None = None
-    session_id: str | None = None         # resume/continue a prior run
+    session_id: str | None = None  # resume/continue a prior run
     timeout_s: int = 3600
     env: dict[str, str] = field(default_factory=dict)
     extra_args: list[str] = field(default_factory=list)
@@ -140,21 +167,24 @@ def _log_live_event(line: str) -> None:
         tokens = part.get("tokens")
         if not isinstance(tokens, dict):
             tokens = {}
-        _log.info("harness step_finish session_id=%s input_tokens=%s "
-                  "output_tokens=%s cost_usd=%s", session_id,
-                  tokens.get("input"), tokens.get("output"), part.get("cost"))
+        _log.info(
+            "harness step_finish session_id=%s input_tokens=%s output_tokens=%s cost_usd=%s",
+            session_id,
+            tokens.get("input"),
+            tokens.get("output"),
+            part.get("cost"),
+        )
     elif ev_type == "text":
         part = ev.get("part")
         if not isinstance(part, dict):
             part = {}
-        _log.debug("harness text session_id=%s chars=%d", session_id,
-                   len(part.get("text") or ""))
+        _log.debug("harness text session_id=%s chars=%d", session_id, len(part.get("text") or ""))
 
 
 class CodingHarness(ABC):
     kind: HarnessKind
-    cli: str = ""                          # executable name on PATH
-    expected_version: str | None = None    # E-24 pin; None = declared-unpinned
+    cli: str = ""  # executable name on PATH
+    expected_version: str | None = None  # E-24 pin; None = declared-unpinned
 
     def version_cmd(self) -> list[str]:
         return [self.cli, "--version"]
@@ -182,14 +212,14 @@ class CodingHarness(ABC):
     # escalate rules as plain denials, reported via rules_escalatable.
     supports_escalation: bool = False
 
-    def apply_containment(self, policy: Policy, req: HarnessRequest,
-                          grants: list[ToolGrant] | None = None
-                          ) -> ContainmentReport:
+    def apply_containment(
+        self, policy: Policy, req: HarnessRequest, grants: list[ToolGrant] | None = None
+    ) -> ContainmentReport:
         """Compile `policy` into this CLI's own mechanisms, mutating `req`.
         Base default: enforce nothing and say so."""
         return ContainmentReport(
-            enabled=True, layers_active=[],
-            rules_unenforceable=[r.id for r in policy.rules])
+            enabled=True, layers_active=[], rules_unenforceable=[r.id for r in policy.rules]
+        )
 
     def normalise_deferral(self, stdout: str) -> DeferredToolUse | None:
         """The tool call this run suspended at, if any (E-17, mirroring
@@ -201,16 +231,20 @@ class CodingHarness(ABC):
         normalise_session). Base default: none reported."""
         return []
 
-    async def run(self, req: HarnessRequest,
-                  heartbeat=None) -> HarnessRunResult:
+    async def run(self, req: HarnessRequest, heartbeat=None) -> HarnessRunResult:
         cmd = self.build_cmd(req)
         # Resolve via PATH — Windows npm shims are .cmd files that
         # CreateProcess can't find without an explicit extension.
         resolved = shutil.which(cmd[0])
         if resolved:
             cmd[0] = resolved
-        _log.debug("harness start kind=%s model=%s session_id=%s cwd=%s",
-                   self.kind.value, req.model, req.session_id, req.cwd)
+        _log.debug(
+            "harness start kind=%s model=%s session_id=%s cwd=%s",
+            self.kind.value,
+            req.model,
+            req.session_id,
+            req.cwd,
+        )
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=req.cwd,
@@ -218,7 +252,7 @@ class CodingHarness(ABC):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             limit=10_000_000,  # opencode text events can exceed the 64KB
-                               # default StreamReader line limit
+            # default StreamReader line limit
         )
 
         async def _pump() -> bytes:
@@ -235,7 +269,7 @@ class CodingHarness(ABC):
                     line, buf = buf.split(b"\n", 1)
                     _log_live_event(line.decode(errors="replace"))
                 if heartbeat:
-                    heartbeat()          # keep the Temporal activity alive
+                    heartbeat()  # keep the Temporal activity alive
             if buf.strip():
                 _log_live_event(buf.decode(errors="replace"))
             return b"".join(chunks)
@@ -261,10 +295,9 @@ class CodingHarness(ABC):
                 asyncio.gather(_pump(), _pump_stderr(), proc.wait()),
                 timeout=req.timeout_s,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
-            _log.warning("harness timeout kind=%s cwd=%s cmd=%s",
-                        self.kind.value, req.cwd, cmd)
+            _log.warning("harness timeout kind=%s cwd=%s cmd=%s", self.kind.value, req.cwd, cmd)
             raise
         except Exception:
             try:
@@ -274,22 +307,31 @@ class CodingHarness(ABC):
             raise
         duration_s = time.monotonic() - start
 
-        result = self.parse(stdout_b.decode(errors="replace"),
-                            proc.returncode or 0)
+        result = self.parse(stdout_b.decode(errors="replace"), proc.returncode or 0)
         # E-38: keep the raw stream for activity-side capture. PrivateAttr —
         # never serialized, never enters workflow state.
         result._raw_stdout = stdout_b.decode(errors="replace")
         if result.context_window is None:
             result.context_window = context_window_for(req.model)
 
-        _log.info("harness done kind=%s exit_code=%s session_id=%s "
-                  "duration_s=%.1f input_tokens=%s output_tokens=%s cost_usd=%s",
-                  self.kind.value, result.exit_code, result.session_id,
-                  duration_s, result.input_tokens, result.output_tokens,
-                  result.cost_usd)
+        _log.info(
+            "harness done kind=%s exit_code=%s session_id=%s "
+            "duration_s=%.1f input_tokens=%s output_tokens=%s cost_usd=%s",
+            self.kind.value,
+            result.exit_code,
+            result.session_id,
+            duration_s,
+            result.input_tokens,
+            result.output_tokens,
+            result.cost_usd,
+        )
         if result.exit_code != 0 or stderr_s:
-            _log.warning("harness stderr kind=%s exit_code=%s stderr=%s",
-                        self.kind.value, result.exit_code, stderr_s)
+            _log.warning(
+                "harness stderr kind=%s exit_code=%s stderr=%s",
+                self.kind.value,
+                result.exit_code,
+                stderr_s,
+            )
         return result
 
 
@@ -298,21 +340,28 @@ class ClaudeCodeHarness(CodingHarness):
     cli = "claude"
     expected_version = "2.1.218"
 
-    def __init__(self, allowed_tools: str = "Read,Edit,Write,Bash",
-                 permission_mode: str = "acceptEdits"):
+    def __init__(
+        self, allowed_tools: str = "Read,Edit,Write,Bash", permission_mode: str = "acceptEdits"
+    ):
         self.allowed_tools = allowed_tools
         self.permission_mode = permission_mode
 
     def build_cmd(self, req: HarnessRequest) -> list[str]:
         cmd = [
-            "claude", "-p", req.prompt,
+            "claude",
+            "-p",
+            req.prompt,
             # E-38: stream-json emits the full event stream (transcript
             # source) AND a final `result` event with the same fields the
             # old plain-json payload carried. --verbose is required by the
             # CLI for stream-json in print mode.
-            "--output-format", "stream-json", "--verbose",
-            "--allowedTools", self.allowed_tools,
-            "--permission-mode", self.permission_mode,
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--allowedTools",
+            self.allowed_tools,
+            "--permission-mode",
+            self.permission_mode,
         ]
         if req.model:
             cmd += ["--model", req.model]
@@ -323,9 +372,9 @@ class ClaudeCodeHarness(CodingHarness):
     containment = frozenset({ContainmentLayer.NATIVE, ContainmentLayer.HOOK})
     supports_escalation = True
 
-    def apply_containment(self, policy: Policy, req: HarnessRequest,
-                          grants: list[ToolGrant] | None = None
-                          ) -> ContainmentReport:
+    def apply_containment(
+        self, policy: Policy, req: HarnessRequest, grants: list[ToolGrant] | None = None
+    ) -> ContainmentReport:
         """Both layers, deliberately overlapping (E-15 spec §4a).
 
         `permissions.deny` is the floor a buggy hook cannot weaken (verified:
@@ -338,36 +387,46 @@ class ClaudeCodeHarness(CodingHarness):
         block the very call the human approved.
         """
         grants_path = self._write_grants(grants)
-        hooks = [{
-            "matcher": "|".join(sorted({t for r in policy.rules
-                                        for t in r.tools})),
-            "hooks": [{"type": "command",
-                       "command": self._hook_command(req, policy.source_path,
-                                                     grants_path)}],
-        }] if policy.rules else []
+        hooks = (
+            [
+                {
+                    "matcher": "|".join(sorted({t for r in policy.rules for t in r.tools})),
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": self._hook_command(req, policy.source_path, grants_path),
+                        }
+                    ],
+                }
+            ]
+            if policy.rules
+            else []
+        )
 
-        deny = [p for r in policy.rules if ContainmentLayer.NATIVE is r.layer
-                for p in self._native_patterns(r)]
+        deny = [
+            p
+            for r in policy.rules
+            if ContainmentLayer.NATIVE is r.layer
+            for p in self._native_patterns(r)
+        ]
 
         doc = {"hooks": {"PreToolUse": hooks}, "permissions": {"deny": deny}}
 
         # OUTSIDE the worktree, always: writes inside the worktree are
         # permitted by design, so a settings file placed there is a file the
         # agent may rewrite — it could edit its own policy.
-        fd, path = tempfile.mkstemp(prefix="sdlc-containment-",
-                                    suffix=".json")
+        fd, path = tempfile.mkstemp(prefix="sdlc-containment-", suffix=".json")
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump(doc, fh)
 
-        req.extra_args = [*req.extra_args, "--settings", path,
-                          "--include-hook-events"]
+        req.extra_args = [*req.extra_args, "--settings", path, "--include-hook-events"]
         return ContainmentReport(
             enabled=True,
             layers_active=[ContainmentLayer.NATIVE, ContainmentLayer.HOOK],
             rules_enforced=[r.id for r in policy.rules],
             rules_unenforceable=[],
-            rules_escalatable=[r.id for r in policy.rules
-                               if r.action is Action.ESCALATE])
+            rules_escalatable=[r.id for r in policy.rules if r.action is Action.ESCALATE],
+        )
 
     @staticmethod
     def _write_grants(grants: list[ToolGrant] | None) -> str | None:
@@ -382,9 +441,9 @@ class ClaudeCodeHarness(CodingHarness):
         return path
 
     @staticmethod
-    def _hook_command(req: HarnessRequest,
-                      source_path: "Path | None" = None,
-                      grants_path: str | None = None) -> str:
+    def _hook_command(
+        req: HarnessRequest, source_path: Path | None = None, grants_path: str | None = None
+    ) -> str:
         """Absolute interpreter path: the child's PATH is allowlisted and may
         resolve a different `python` than the worker's venv. Forward slashes
         because claude runs hooks through Git Bash on Windows. The policy
@@ -427,8 +486,7 @@ class ClaudeCodeHarness(CodingHarness):
                 ev = json.loads(ln)
             except json.JSONDecodeError:
                 continue
-            if (ev.get("subtype") == "hook_response"
-                    and ev.get("hook_event") == "PreToolUse"):
+            if ev.get("subtype") == "hook_response" and ev.get("hook_event") == "PreToolUse":
                 try:
                     hso = json.loads(ev.get("output") or "{}")
                     hso = hso.get("hookSpecificOutput") or {}
@@ -438,16 +496,18 @@ class ClaudeCodeHarness(CodingHarness):
                     reasons.append(hso.get("permissionDecisionReason") or "")
             elif ev.get("type") == "result":
                 for i, pd in enumerate(ev.get("permission_denials") or []):
-                    rule_id, reason = _split_reason(
-                        reasons[i] if i < len(reasons) else "")
+                    rule_id, reason = _split_reason(reasons[i] if i < len(reasons) else "")
                     tool_input = pd.get("tool_input") or {}
-                    denials.append(ToolDenial(
-                        tool=pd.get("tool_name") or "unknown",
-                        rule_id=rule_id, layer=ContainmentLayer.HOOK,
-                        reason=reason,
-                        escalation_declined=is_declined_reason(reason),
-                        target=target_of(pd.get("tool_name") or "",
-                                         tool_input)))
+                    denials.append(
+                        ToolDenial(
+                            tool=pd.get("tool_name") or "unknown",
+                            rule_id=rule_id,
+                            layer=ContainmentLayer.HOOK,
+                            reason=reason,
+                            escalation_declined=is_declined_reason(reason),
+                            target=target_of(pd.get("tool_name") or "", tool_input),
+                        )
+                    )
         return denials
 
     def normalise_deferral(self, stdout: str) -> DeferredToolUse | None:
@@ -467,18 +527,15 @@ class ClaudeCodeHarness(CodingHarness):
                 continue
             if not isinstance(ev, dict):
                 continue
-            if (ev.get("subtype") == "hook_response"
-                    and ev.get("hook_event") == "PreToolUse"):
+            if ev.get("subtype") == "hook_response" and ev.get("hook_event") == "PreToolUse":
                 try:
                     hso = json.loads(ev.get("output") or "{}")
                     hso = hso.get("hookSpecificOutput") or {}
                 except json.JSONDecodeError:
                     continue
                 if hso.get("permissionDecision") == "defer":
-                    rule_id, reason = _split_reason(
-                        hso.get("permissionDecisionReason") or "")
-            elif (ev.get("type") == "result"
-                    and ev.get("stop_reason") == "tool_deferred"):
+                    rule_id, reason = _split_reason(hso.get("permissionDecisionReason") or "")
+            elif ev.get("type") == "result" and ev.get("stop_reason") == "tool_deferred":
                 deferred = ev.get("deferred_tool_use") or {}
         if not deferred:
             return None
@@ -489,10 +546,12 @@ class ClaudeCodeHarness(CodingHarness):
             tool_use_id=deferred.get("id") or "",
             tool=tool,
             input_digest=digest_tool_input(tool_input),
-            rule_id=rule_id, reason=reason,
+            rule_id=rule_id,
+            reason=reason,
             # Scrubbed here, not later: this target is rendered into a gate a
             # HUMAN reads, an exposure denial targets never had.
-            target=scrub(raw_target) if raw_target else raw_target)
+            target=scrub(raw_target) if raw_target else raw_target,
+        )
 
     def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
         session_id = cost = summary = None
@@ -516,13 +575,18 @@ class ClaudeCodeHarness(CodingHarness):
             input_tokens = usage.get("input_tokens")
             output_tokens = usage.get("output_tokens")
         else:
-            _log.warning("claude parse: no result event in stream, falling "
-                         "back to raw stdout as summary")
+            _log.warning(
+                "claude parse: no result event in stream, falling back to raw stdout as summary"
+            )
             summary = stdout
         return HarnessRunResult(
-            harness=self.kind, session_id=session_id, exit_code=exit_code,
-            summary=(summary or "")[:SUMMARY_MAX], cost_usd=cost,
-            input_tokens=input_tokens, output_tokens=output_tokens,
+            harness=self.kind,
+            session_id=session_id,
+            exit_code=exit_code,
+            summary=(summary or "")[:SUMMARY_MAX],
+            cost_usd=cost,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
         )
 
     # tool name -> canonical event kind + which input field is the target
@@ -555,47 +619,52 @@ class ClaudeCodeHarness(CodingHarness):
                         continue
                     btype = block.get("type")
                     if btype == "text" and block.get("text"):
-                        events.append(SessionEvent(kind="model_turn",
-                                                   text=block["text"]))
+                        events.append(SessionEvent(kind="model_turn", text=block["text"]))
                     elif btype == "tool_use":
                         name = block.get("name") or "tool"
                         kind, field = self._TOOL_MAP.get(name, ("tool_call", ""))
                         inp = block.get("input") or {}
                         target = inp.get(field) if field else json.dumps(inp)[:500]
-                        events.append(SessionEvent(kind=kind, tool=name,
-                                                   target=target))
+                        events.append(SessionEvent(kind=kind, tool=name, target=target))
                     elif btype == "tool_result":
                         content = block.get("content")
                         if isinstance(content, list):
                             content = " ".join(
-                                c.get("text", "") for c in content
-                                if isinstance(c, dict))
-                        events.append(SessionEvent(
-                            kind="tool_result",
-                            exit_code=1 if block.get("is_error") else None,
-                            text=(content or "")[:2000] or None))
+                                c.get("text", "") for c in content if isinstance(c, dict)
+                            )
+                        events.append(
+                            SessionEvent(
+                                kind="tool_result",
+                                exit_code=1 if block.get("is_error") else None,
+                                text=(content or "")[:2000] or None,
+                            )
+                        )
             elif etype == "result":
                 usage = ev.get("usage") or {}
                 cost = ev.get("total_cost_usd")
                 in_tok = usage.get("input_tokens")
                 out_tok = usage.get("output_tokens")
-                events.append(SessionEvent(kind="result",
-                                           text=(ev.get("result") or "")[:2000]))
+                events.append(SessionEvent(kind="result", text=(ev.get("result") or "")[:2000]))
         # E-16: denials are part of the transcript, so the digest counts
         # them on clean-green runs too (the same reasoning as OQ-B7's
         # keep-aggregates-pre-truncation rule).
         for d in self.normalise_denials(stdout):
-            events.append(SessionEvent(
-                kind="tool_denied", tool=d.tool, target=d.target))
-        
+            events.append(SessionEvent(kind="tool_denied", tool=d.tool, target=d.target))
+
         deferred = self.normalise_deferral(stdout)
         if deferred is not None:
-            events.append(SessionEvent(kind="tool_deferred",
-                                       tool=deferred.tool,
-                                       target=deferred.target))
-        return HarnessSession(harness=self.kind, session_id=session_id,
-                              model=model, events=events, cost_usd=cost,
-                              input_tokens=in_tok, output_tokens=out_tok)
+            events.append(
+                SessionEvent(kind="tool_deferred", tool=deferred.tool, target=deferred.target)
+            )
+        return HarnessSession(
+            harness=self.kind,
+            session_id=session_id,
+            model=model,
+            events=events,
+            cost_usd=cost,
+            input_tokens=in_tok,
+            output_tokens=out_tok,
+        )
 
 
 class OpenCodeHarness(CodingHarness):
@@ -640,16 +709,16 @@ class OpenCodeHarness(CodingHarness):
         # end-of-options marker yargs honors, forcing everything after it
         # to be positional regardless of leading characters.
         cmd.append("--")
-        cmd.append(req.prompt)            # positional, must come last
+        cmd.append(req.prompt)  # positional, must come last
         return cmd
 
     # `--pure` (build_cmd) disables external plugins, which are opencode's
     # only hook mechanism. The native permission block is what remains.
     containment = frozenset({ContainmentLayer.NATIVE})
 
-    def apply_containment(self, policy: Policy, req: HarnessRequest,
-                          grants: list[ToolGrant] | None = None
-                          ) -> ContainmentReport:
+    def apply_containment(
+        self, policy: Policy, req: HarnessRequest, grants: list[ToolGrant] | None = None
+    ) -> ContainmentReport:
         """Compile native-layer rules into opencode's `permission` config.
 
         opencode (1.18.4, verified) has NO `--config` flag and no config-path
@@ -669,7 +738,7 @@ class OpenCodeHarness(CodingHarness):
         unenforceable: list[str] = []
         for rule in policy.rules:
             if ContainmentLayer.HOOK is rule.layer:
-                unenforceable.append(rule.id)   # needs a hook we do not have
+                unenforceable.append(rule.id)  # needs a hook we do not have
                 continue
             if rule.predicate is Predicate.COMMAND_MATCHES:
                 bucket = perms.setdefault("bash", {})
@@ -694,7 +763,7 @@ class OpenCodeHarness(CodingHarness):
                 if not isinstance(doc, dict):
                     doc = {}
             except json.JSONDecodeError:
-                doc = {}                       # JSONC/unparseable -> start fresh
+                doc = {}  # JSONC/unparseable -> start fresh
         existing = doc.get("permission")
         if isinstance(existing, dict):
             for tool, rules in perms.items():
@@ -704,8 +773,11 @@ class OpenCodeHarness(CodingHarness):
         path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
 
         return ContainmentReport(
-            enabled=True, layers_active=[ContainmentLayer.NATIVE],
-            rules_enforced=enforced, rules_unenforceable=unenforceable)
+            enabled=True,
+            layers_active=[ContainmentLayer.NATIVE],
+            rules_enforced=enforced,
+            rules_unenforceable=unenforceable,
+        )
 
     def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
         """Parse opencode's ``--format json`` event stream.
@@ -720,8 +792,9 @@ class OpenCodeHarness(CodingHarness):
         # opencode emits one step_finish per step (tool call / turn), each
         # reporting that step's own tokens/cost, not a running total — so
         # these must be summed across every step_finish, not just the first.
-        input_tokens = output_tokens = 0
-        cost = 0.0
+        input_tokens: int | None = 0
+        output_tokens: int | None = 0
+        cost: float | None = 0.0
         saw_tokens = saw_cost = False
         parsed_any = False
         for ln in stdout.splitlines():
@@ -753,13 +826,19 @@ class OpenCodeHarness(CodingHarness):
         output_tokens = output_tokens if saw_tokens else None
         cost = cost if saw_cost else None
         if not parsed_any:
-            _log.warning("opencode parse: no events parsed from stdout "
-                         "(parsed_any=False); falling back to raw stdout")
+            _log.warning(
+                "opencode parse: no events parsed from stdout "
+                "(parsed_any=False); falling back to raw stdout"
+            )
         summary = "\n".join(text_parts) if parsed_any else stdout
         return HarnessRunResult(
-            harness=self.kind, session_id=session_id, exit_code=exit_code,
-            summary=(summary or "")[:SUMMARY_MAX], cost_usd=cost,
-            input_tokens=input_tokens, output_tokens=output_tokens,
+            harness=self.kind,
+            session_id=session_id,
+            exit_code=exit_code,
+            summary=(summary or "")[:SUMMARY_MAX],
+            cost_usd=cost,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
         )
 
     # opencode tool name -> canonical kind + target field in state.input
@@ -790,30 +869,40 @@ class OpenCodeHarness(CodingHarness):
             part = ev.get("part") or {}
             etype = ev.get("type")
             if etype == "text" and part.get("text"):
-                events.append(SessionEvent(kind="model_turn",
-                                           text=part["text"][:2000]))
+                events.append(SessionEvent(kind="model_turn", text=part["text"][:2000]))
             elif etype == "tool":
                 name = (part.get("tool") or "tool").lower()
                 kind, field = self._TOOL_MAP.get(name, ("tool_call", ""))
                 state = part.get("state") or {}
                 inp = state.get("input") or {}
                 target = inp.get(field) if field else json.dumps(inp)[:500]
-                events.append(SessionEvent(
-                    kind=kind, tool=name, target=target,
-                    exit_code=1 if state.get("status") == "error" else None))
+                events.append(
+                    SessionEvent(
+                        kind=kind,
+                        tool=name,
+                        target=target,
+                        exit_code=1 if state.get("status") == "error" else None,
+                    )
+                )
             elif etype == "step_finish":
                 tokens = part.get("tokens") or {}
                 if isinstance(tokens.get("input"), (int, float)):
-                    in_tok += tokens["input"]; saw_tokens = True
+                    in_tok += tokens["input"]
+                    saw_tokens = True
                 if isinstance(tokens.get("output"), (int, float)):
-                    out_tok += tokens["output"]; saw_tokens = True
+                    out_tok += tokens["output"]
+                    saw_tokens = True
                 if isinstance(part.get("cost"), (int, float)):
-                    cost += part["cost"]; saw_cost = True
+                    cost += part["cost"]
+                    saw_cost = True
         return HarnessSession(
-            harness=self.kind, session_id=session_id, events=events,
+            harness=self.kind,
+            session_id=session_id,
+            events=events,
             input_tokens=in_tok if saw_tokens else None,
             output_tokens=out_tok if saw_tokens else None,
-            cost_usd=cost if saw_cost else None)
+            cost_usd=cost if saw_cost else None,
+        )
 
 
 class CursorHarness(CodingHarness):
@@ -832,8 +921,7 @@ class CursorHarness(CodingHarness):
 
     def build_cmd(self, req: HarnessRequest) -> list[str]:
         # cursor-agent mirrors Claude Code's Agent-SDK stream-json output.
-        cmd = ["cursor-agent", "-p", req.prompt,
-               "--output-format", "stream-json"]
+        cmd = ["cursor-agent", "-p", req.prompt, "--output-format", "stream-json"]
         if req.model:
             cmd += ["--model", req.model]
         if req.session_id:
@@ -864,21 +952,26 @@ class CursorHarness(CodingHarness):
                 payload = ev
         if payload is not None:
             session_id = payload.get("session_id")
-            cost = payload.get("total_cost_usd")   # ASSUMPTION: may be absent
-                                                    # -> cursor cells are
-                                                    # quality-only (spec §5)
+            cost = payload.get("total_cost_usd")  # ASSUMPTION: may be absent
+            # -> cursor cells are
+            # quality-only (spec §5)
             summary = payload.get("result") or payload.get("content")
             usage = payload.get("usage") or {}
             input_tokens = usage.get("input_tokens")
             output_tokens = usage.get("output_tokens")
         else:
-            _log.warning("cursor parse: no result event in stream, falling "
-                         "back to raw stdout as summary")
+            _log.warning(
+                "cursor parse: no result event in stream, falling back to raw stdout as summary"
+            )
             summary = stdout
         return HarnessRunResult(
-            harness=self.kind, session_id=session_id, exit_code=exit_code,
-            summary=(summary or "")[:SUMMARY_MAX], cost_usd=cost,
-            input_tokens=input_tokens, output_tokens=output_tokens,
+            harness=self.kind,
+            session_id=session_id,
+            exit_code=exit_code,
+            summary=(summary or "")[:SUMMARY_MAX],
+            cost_usd=cost,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
         )
 
     # Cursor tool name -> canonical event kind + which input field is the
@@ -915,35 +1008,41 @@ class CursorHarness(CodingHarness):
                         continue
                     btype = block.get("type")
                     if btype == "text" and block.get("text"):
-                        events.append(SessionEvent(kind="model_turn",
-                                                   text=block["text"]))
+                        events.append(SessionEvent(kind="model_turn", text=block["text"]))
                     elif btype == "tool_use":
                         name = block.get("name") or "tool"
                         kind, field = self._TOOL_MAP.get(name, ("tool_call", ""))
                         inp = block.get("input") or {}
                         target = inp.get(field) if field else json.dumps(inp)[:500]
-                        events.append(SessionEvent(kind=kind, tool=name,
-                                                   target=target))
+                        events.append(SessionEvent(kind=kind, tool=name, target=target))
                     elif btype == "tool_result":
                         content = block.get("content")
                         if isinstance(content, list):
                             content = " ".join(
-                                c.get("text", "") for c in content
-                                if isinstance(c, dict))
-                        events.append(SessionEvent(
-                            kind="tool_result",
-                            exit_code=1 if block.get("is_error") else None,
-                            text=(content or "")[:2000] or None))
+                                c.get("text", "") for c in content if isinstance(c, dict)
+                            )
+                        events.append(
+                            SessionEvent(
+                                kind="tool_result",
+                                exit_code=1 if block.get("is_error") else None,
+                                text=(content or "")[:2000] or None,
+                            )
+                        )
             elif etype == "result":
                 usage = ev.get("usage") or {}
                 cost = ev.get("total_cost_usd")
                 in_tok = usage.get("input_tokens")
                 out_tok = usage.get("output_tokens")
-                events.append(SessionEvent(kind="result",
-                                           text=(ev.get("result") or "")[:2000]))
-        return HarnessSession(harness=self.kind, session_id=session_id,
-                              model=model, events=events, cost_usd=cost,
-                              input_tokens=in_tok, output_tokens=out_tok)
+                events.append(SessionEvent(kind="result", text=(ev.get("result") or "")[:2000]))
+        return HarnessSession(
+            harness=self.kind,
+            session_id=session_id,
+            model=model,
+            events=events,
+            cost_usd=cost,
+            input_tokens=in_tok,
+            output_tokens=out_tok,
+        )
 
 
 HARNESSES: dict[HarnessKind, CodingHarness] = {
@@ -956,8 +1055,7 @@ HARNESSES: dict[HarnessKind, CodingHarness] = {
 _VERSION_RE = re.compile(r"(\d+\.\d+(?:\.\d+)?)")
 
 
-def check_harness_versions(
-        harnesses: dict[HarnessKind, CodingHarness] | None = None) -> None:
+def check_harness_versions(harnesses: dict[HarnessKind, CodingHarness] | None = None) -> None:
     """E-24 (folded into E-35): warn when an installed harness CLI has drifted
     from its pinned version — the failure mode where a silent CLI upgrade
     breaks an adapter's parse. Never raises (a patch bump must not brick the
@@ -969,17 +1067,20 @@ def check_harness_versions(
             _log.debug("harness version check: %s not on PATH, skipping", h.cli)
             continue
         try:
-            out = subprocess.run(h.version_cmd(), capture_output=True,
-                                 text=True, timeout=10)
+            out = subprocess.run(h.version_cmd(), capture_output=True, text=True, timeout=10)
         except (OSError, subprocess.SubprocessError) as e:
-            _log.debug("harness version check: %s --version failed: %s",
-                       h.cli, e)
+            _log.debug("harness version check: %s --version failed: %s", h.cli, e)
             continue
         m = _VERSION_RE.search(out.stdout or "")
         found = m.group(1) if m else None
         if found != h.expected_version:
-            _log.warning("harness version drift: %s is %s, pinned %s "
-                         "(adapter parse may break; capture a fresh transcript "
-                         "and update the pin)", h.cli, found, h.expected_version)
+            _log.warning(
+                "harness version drift: %s is %s, pinned %s "
+                "(adapter parse may break; capture a fresh transcript "
+                "and update the pin)",
+                h.cli,
+                found,
+                h.expected_version,
+            )
         else:
             _log.debug("harness version ok: %s %s", h.cli, found)

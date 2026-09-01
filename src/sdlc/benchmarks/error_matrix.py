@@ -4,6 +4,7 @@ Scans every bench_run_id's ORACLE_TASK records for that case
 class an arm (harness#model) fails most, averaged per run. Pure
 aggregation + rendering -- no I/O, mirrors heatmap.py / task_matrix.py.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -30,23 +31,31 @@ class ErrorMatrix(BaseModel):
     max_value: float = 0.0
 
 
-def build_error_matrix(case_id: str, records: list[BenchmarkRecord],
-                       suite: TaskSuite) -> ErrorMatrix:
+def build_error_matrix(
+    case_id: str, records: list[BenchmarkRecord], suite: TaskSuite
+) -> ErrorMatrix:
     class_by_task = {t.id: t.error_class for t in suite.tasks}
-    recs = [r for r in records
-           if r.scope is BenchmarkScope.ORACLE_TASK and r.case_id == case_id
-           and r.task_id in class_by_task and r.quality.score is not None]
+    recs = [
+        r
+        for r in records
+        if r.scope is BenchmarkScope.ORACLE_TASK
+        and r.case_id == case_id
+        and r.task_id in class_by_task
+        and r.quality.score is not None
+    ]
 
     # failure mass per (bench_run_id, arm_key, error_class) run-instance
     mass: dict[tuple[str, str, str], float] = defaultdict(float)
     runs_by_arm_class: dict[tuple[str, str], set[str]] = defaultdict(set)
     for r in recs:
+        assert r.task_id is not None
+        assert r.quality.score is not None
         h = r.harness.value if r.harness else ""
         if r.lead_harness:
             h = f"{h}:{r.lead_harness.value}"
         arm_key = f"{h}#{r.model}"
         cls = class_by_task[r.task_id]
-        mass[(r.bench_run_id, arm_key, cls)] += (1.0 - r.quality.score)
+        mass[(r.bench_run_id, arm_key, cls)] += 1.0 - r.quality.score
         runs_by_arm_class[(arm_key, cls)].add(r.bench_run_id)
 
     totals: dict[tuple[str, str], float] = defaultdict(float)
@@ -56,16 +65,19 @@ def build_error_matrix(case_id: str, records: list[BenchmarkRecord],
     cells: list[ErrorMatrixCell] = []
     for (arm_key, cls), total in totals.items():
         n_runs = len(runs_by_arm_class[(arm_key, cls)])
-        cells.append(ErrorMatrixCell(
-            error_class=cls, arm_key=arm_key,
-            avg_failure_mass=total / n_runs, n_runs=n_runs))
+        cells.append(
+            ErrorMatrixCell(
+                error_class=cls, arm_key=arm_key, avg_failure_mass=total / n_runs, n_runs=n_runs
+            )
+        )
 
     arms = sorted({c.arm_key for c in cells})
     present = {c.error_class for c in cells}
     classes = [c for c in ERROR_CLASSES if c in present]
     max_value = max((c.avg_failure_mass for c in cells), default=0.0)
-    return ErrorMatrix(case_id=case_id, error_classes=classes, arms=arms,
-                       cells=cells, max_value=max_value)
+    return ErrorMatrix(
+        case_id=case_id, error_classes=classes, arms=arms, cells=cells, max_value=max_value
+    )
 
 
 def render_error_matrix_json(em: ErrorMatrix) -> str:
@@ -74,7 +86,7 @@ def render_error_matrix_json(em: ErrorMatrix) -> str:
 
 def _cell_color(value: float, max_value: float) -> str:
     ratio = 0.0 if max_value <= 0 else min(value / max_value, 1.0)
-    g_b = round(255 - 229 * ratio)   # white (low) -> dark red (high)
+    g_b = round(255 - 229 * ratio)  # white (low) -> dark red (high)
     return f"rgb(255,{g_b},{g_b})"
 
 
@@ -92,15 +104,17 @@ def render_error_matrix_html(em: ErrorMatrix) -> str:
                 if c is None:
                     tds.append('<td class="empty"></td>')
                     continue
-                tip = (f"{cls} / {arm}: {c.avg_failure_mass:.2f} avg failure "
-                      f"mass/run over {c.n_runs} runs")
+                tip = (
+                    f"{cls} / {arm}: {c.avg_failure_mass:.2f} avg failure "
+                    f"mass/run over {c.n_runs} runs"
+                )
                 tds.append(
                     f'<td title="{escape(tip)}" '
                     f'style="background:{_cell_color(c.avg_failure_mass, em.max_value)}">'
-                    f"{c.avg_failure_mass:.2f}</td>")
+                    f"{c.avg_failure_mass:.2f}</td>"
+                )
             rows.append("<tr>" + "".join(tds) + "</tr>")
-        body = (f"<table><tr><th>error class \\ arm</th>{head}</tr>"
-               + "".join(rows) + "</table>")
+        body = f"<table><tr><th>error class \\ arm</th>{head}</tr>" + "".join(rows) + "</table>"
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Error-class matrix - {escape(em.case_id)}</title>

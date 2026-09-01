@@ -8,9 +8,10 @@ is (starlette/testclient.py: handle_request -> portal.call(self.app, ...)).
 Reading the raw body messages keeps the three behaviors under test --
 frame shape, dedupe, heartbeat -- without a real socket.
 """
+
 import asyncio
 import contextlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi import FastAPI
@@ -18,13 +19,19 @@ from fastapi import FastAPI
 from sdlc.dashboard.api import create_router
 from sdlc.dashboard.fleet import FleetSnapshot
 
-AT = datetime(2026, 8, 18, 9, 0, tzinfo=timezone.utc)
+AT = datetime(2026, 8, 18, 9, 0, tzinfo=UTC)
 
 _SCOPE = {
-    "type": "http", "asgi": {"version": "3.0", "spec_version": "2.3"},
-    "http_version": "1.1", "method": "GET", "scheme": "http",
-    "path": "/events", "raw_path": b"/events", "query_string": b"",
-    "headers": [(b"host", b"testserver")], "client": ("testclient", 50000),
+    "type": "http",
+    "asgi": {"version": "3.0", "spec_version": "2.3"},
+    "http_version": "1.1",
+    "method": "GET",
+    "scheme": "http",
+    "path": "/events",
+    "raw_path": b"/events",
+    "query_string": b"",
+    "headers": [(b"host", b"testserver")],
+    "client": ("testclient", 50000),
     "server": ("testserver", 80),
 }
 
@@ -104,7 +111,7 @@ async def _events(snaps, want: int):
 
     content_type, lines = await _stream(snaps, stop)
     assert content_type.startswith("text/event-stream")
-    return [l[len("data: "):] for l in lines if l.startswith("data: ")]
+    return [line[len("data: ") :] for line in lines if line.startswith("data: ")]
 
 
 @pytest.mark.asyncio
@@ -122,13 +129,13 @@ async def test_stream_suppresses_a_snapshot_that_differs_only_by_its_clock():
     same = FleetSnapshot(at=AT + timedelta(seconds=2), total_open_runs=1)
     changed = FleetSnapshot(at=AT + timedelta(seconds=4), total_open_runs=2)
     frames = await _events([a, same, changed], 2)
-    assert [FleetSnapshot.model_validate_json(f).total_open_runs
-            for f in frames] == [1, 2]
+    assert [FleetSnapshot.model_validate_json(f).total_open_runs for f in frames] == [1, 2]
 
 
 @pytest.mark.asyncio
 async def test_stream_sends_a_heartbeat_comment_when_idle(monkeypatch):
     import sdlc.dashboard.api as mod
+
     monkeypatch.setattr(mod, "HEARTBEAT_S", 0.01)
     _, lines = await _stream([], lambda line: line.startswith(":"))
     assert "heartbeat" in lines[-1]

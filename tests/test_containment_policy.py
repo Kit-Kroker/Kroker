@@ -1,10 +1,14 @@
 """E-15/E-16: policy asset parsing and resolution."""
-import pytest
 
 from pathlib import Path
 
+import pytest
+
 from sdlc.harness.containment import (
-    Action, ContainmentError, Predicate, load_policy,
+    Action,
+    ContainmentError,
+    Predicate,
+    load_policy,
 )
 from sdlc.models import ContainmentLayer
 
@@ -33,8 +37,7 @@ def _write(tmp_path, text):
 
 def test_loads_rules_in_declared_order(tmp_path):
     pol = load_policy(_write(tmp_path, GOOD))
-    assert [r.id for r in pol.rules] == [
-        "no-out-of-worktree-write", "no-recursive-force-delete"]
+    assert [r.id for r in pol.rules] == ["no-out-of-worktree-write", "no-recursive-force-delete"]
     assert pol.rules[0].layer is ContainmentLayer.HOOK
     assert pol.rules[0].predicate is Predicate.PATH_OUTSIDE_WORKTREE
     assert pol.rules[1].patterns == ["rm -rf *"]
@@ -52,13 +55,16 @@ def test_rejects_unknown_predicate(tmp_path):
 
 
 def test_rejects_duplicate_rule_id(tmp_path):
-    dup = GOOD + """
+    dup = (
+        GOOD
+        + """
   - id: no-out-of-worktree-write
     layer: hook
     tools: [Write]
     predicate: path_outside_worktree
     reason: "dup"
 """
+    )
     with pytest.raises(ContainmentError, match="duplicate"):
         load_policy(_write(tmp_path, dup))
 
@@ -91,7 +97,8 @@ def test_rules_default_to_deny(tmp_path):
         "version: 1\nrules:\n"
         "  - id: r\n    layer: hook\n    tools: [Write]\n"
         "    predicate: path_outside_worktree\n    reason: nope\n",
-        encoding="utf-8")
+        encoding="utf-8",
+    )
     policy = load_policy(p)
     assert policy.rules[0].action is Action.DENY
 
@@ -103,7 +110,8 @@ def test_escalate_action_parses(tmp_path):
         "  - id: r\n    layer: hook\n    action: escalate\n"
         "    tools: [Write]\n"
         "    predicate: path_outside_worktree\n    reason: nope\n",
-        encoding="utf-8")
+        encoding="utf-8",
+    )
     assert load_policy(p).rules[0].action is Action.ESCALATE
 
 
@@ -117,7 +125,8 @@ def test_escalate_on_a_native_rule_is_refused(tmp_path):
         "    tools: [Bash]\n"
         "    predicate: command_matches\n    patterns: ['rm -rf *']\n"
         "    reason: nope\n",
-        encoding="utf-8")
+        encoding="utf-8",
+    )
     with pytest.raises(ContainmentError, match="escalate"):
         load_policy(p)
 
@@ -125,8 +134,7 @@ def test_escalate_on_a_native_rule_is_refused(tmp_path):
 def test_shipped_asset_escalates_only_the_out_of_worktree_write():
     """The mechanism must run on the DEFAULT policy, not only in tests
     (E-27's lesson), and the hard denials must stay hard."""
-    policy = load_policy(Path(__file__).parents[1] / "policy"
-                         / "containment.yaml")
+    policy = load_policy(Path(__file__).parents[1] / "policy" / "containment.yaml")
     by_action = {r.id: r.action for r in policy.rules}
     assert by_action["no-out-of-worktree-write"] is Action.ESCALATE
     assert by_action["no-recursive-force-delete"] is Action.DENY

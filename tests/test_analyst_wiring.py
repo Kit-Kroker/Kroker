@@ -1,6 +1,10 @@
 """Analyst agent is defined, prompt-hashed, and in the temporal-agent list."""
+
 from sdlc.agents.roles import (
-    ALL_TEMPORAL_AGENTS, PROMPT_SHAS, analyst_agent, t_analyst,
+    ALL_TEMPORAL_AGENTS,
+    PROMPT_SHAS,
+    analyst_agent,
+    t_analyst,
 )
 from sdlc.models import AnalysisReport
 

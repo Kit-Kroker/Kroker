@@ -6,18 +6,21 @@ Every signal reads blob bytes at the pinned commit. NOTHING here executes the
 assessed repository's code -- the init phase's build probe remains the only
 place that happens (NFR-9, E-46 D12).
 """
+
 from __future__ import annotations
 
 import logging
-
 from collections.abc import Sequence
+
 from pydantic import BaseModel, Field
 from temporalio import activity
 
 from ..activities import _git
 from ..capability.matcher import resolve
 from ..capability.models import (
-    Advisory, IdentityAttachment, ProposedCapability,
+    Advisory,
+    IdentityAttachment,
+    ProposedCapability,
 )
 from ..capability.rows import identity_rows
 from ..capability.store import BoardIdentityStore
@@ -29,38 +32,73 @@ from .discover.attribution import attribute
 from .discover.blueprint import DEFAULT_BLUEPRINT, compare, load, not_compared
 from .discover.context import build_context
 from .discover.map import (
-    BlueprintComparison, Capability, CapabilityMap, DiscoverContext,
-    DiscoverProposal, GraphSummary,
+    BlueprintComparison,
+    Capability,
+    CapabilityMap,
+    DiscoverContext,
+    DiscoverProposal,
+    GraphSummary,
 )
 from .discover.models import (
-    AttributionReport, DecompositionReport, EntityDeclaration, FileBucket,
-    OwnershipOutcome, OwnershipReport, ReferenceGraph,
+    AttributionReport,
+    DecompositionReport,
+    EntityDeclaration,
+    FileBucket,
+    OwnershipOutcome,
+    OwnershipReport,
+    ReferenceGraph,
 )
-from .discover.verify import RefVerification, cited_paths, verify_refs
 from .discover.operations import decompose
 from .discover.ownership import assign
+from .discover.verify import RefVerification, cited_paths, verify_refs
 from .risk import memo as risk_memo
-from .risk.build import build as build_risk, no_risk
+from .risk.build import build as build_risk
+from .risk.build import no_risk
 from .risk.models import (
-    ProposedBoundary, ProposedControl, ProposedEscalation, ProposedThreat,
-    ProposedVulnerability, RiskProposal, RiskVerification, UnifiedRiskMap,
+    ProposedBoundary,
+    ProposedControl,
+    ProposedEscalation,
+    ProposedThreat,
+    ProposedVulnerability,
+    RiskProposal,
+    RiskVerification,
+    UnifiedRiskMap,
 )
 from .risk.rules import rules_sha as risk_rules_sha
-from .verification import cited_paths_of, verify_rows
 from .scan import memo
+from .scan.configpaths import is_config_path
 from .scan.models import (
-    CATEGORIES, CandidateMember, ScanResult, ScanSignalId, ScanSignalResult,
-    ScanUpstream, SignalOutput, SignalSource, family_of,
+    CATEGORIES,
+    CandidateMember,
+    ScanResult,
+    ScanSignalId,
+    ScanSignalResult,
+    ScanUpstream,
+    SignalOutput,
+    SignalSource,
+    family_of,
 )
 from .scan.registry import SCAN_SIGNALS
 from .scan.signals import (
-    ci as ci_signal, config_infra, coverage as coverage_signal, entrypoints,
-    frontend, packages, schema, sensitivity, security_static, testability,
+    ci as ci_signal,
+)
+from .scan.signals import (
+    config_infra,
+    entrypoints,
+    frontend,
+    packages,
+    schema,
+    security_static,
+    sensitivity,
+    testability,
     tests_inventory,
 )
-from .scan.configpaths import is_config_path
+from .scan.signals import (
+    coverage as coverage_signal,
+)
 from .scan.sources import SOURCE_EXTENSIONS
 from .scan.testpaths import is_test_path
+from .verification import cited_paths_of, verify_rows
 
 _log = logging.getLogger(__name__)
 
@@ -75,8 +113,7 @@ class AssessmentTree(BaseModel):
 
 
 @activity.defn
-async def assessment_resolve_tree(
-        inp: AssessmentTreeInput) -> AssessmentTree:
+async def assessment_resolve_tree(inp: AssessmentTreeInput) -> AssessmentTree:
     """The tree object of the pinned commit, which is what the scan memo keys
     on (D10).
 
@@ -88,12 +125,12 @@ async def assessment_resolve_tree(
     that does not resolve is not a not_collected dimension, it is the absence
     of the tree the whole artifact claims to describe.
     """
-    proc = _git(["rev-parse", "--verify", f"{inp.commit_sha}^{{tree}}"],
-                cwd=inp.repo_dir)
+    proc = _git(["rev-parse", "--verify", f"{inp.commit_sha}^{{tree}}"], cwd=inp.repo_dir)
     if proc.returncode != 0:
         raise RuntimeError(
             f"commit {inp.commit_sha!r} does not resolve to a tree in "
-            f"{inp.repo_dir}: {proc.stderr.strip()}")
+            f"{inp.repo_dir}: {proc.stderr.strip()}"
+        )
     return AssessmentTree(tree_hash=proc.stdout.strip())
 
 
@@ -101,11 +138,21 @@ async def assessment_resolve_tree(
 # from it: a body that lands without its OWED_BY entry removed would report
 # "not implemented" forever, and removing the entry without landing the body
 # is a KeyError in unbuilt_signal.
-BUILT: frozenset[ScanSignalId] = frozenset({
-    ScanSignalId.S1, ScanSignalId.S2, ScanSignalId.S3, ScanSignalId.S4,
-    ScanSignalId.SS1, ScanSignalId.SS3, ScanSignalId.SS4, ScanSignalId.QS1,
-    ScanSignalId.QS2, ScanSignalId.QS3, ScanSignalId.QS4,
-})
+BUILT: frozenset[ScanSignalId] = frozenset(
+    {
+        ScanSignalId.S1,
+        ScanSignalId.S2,
+        ScanSignalId.S3,
+        ScanSignalId.S4,
+        ScanSignalId.SS1,
+        ScanSignalId.SS3,
+        ScanSignalId.SS4,
+        ScanSignalId.QS1,
+        ScanSignalId.QS2,
+        ScanSignalId.QS3,
+        ScanSignalId.QS4,
+    }
+)
 
 # Which plan owes each remaining signal's body. Empty after plan 3: every
 # declared activity has landed.
@@ -123,7 +170,8 @@ def _assert_bodies_are_accounted_for() -> None:
         raise RuntimeError(
             f"BUILT {sorted(s.value for s in BUILT)} and OWED_BY "
             f"{sorted(s.value for s in OWED_BY)} must partition the declared "
-            f"activities {sorted(s.value for s in declared)}")
+            f"activities {sorted(s.value for s in declared)}"
+        )
 
 
 _assert_bodies_are_accounted_for()
@@ -133,6 +181,7 @@ class ScanSignalInput(BaseModel):
     """One signal's activity input. `upstream` is empty for wave 1 and carries
     the DECLARED consumed signals' payloads plus their row-level `collected`
     for wave 2 (spec section 5, P3-D4)."""
+
     repo_dir: str
     commit_sha: str
     tree_hash: str
@@ -147,15 +196,17 @@ def unbuilt_signal(signal_id: ScanSignalId) -> SignalOutput:
     declaration: this is the ACTIVITY's half of the row, and the workflow
     folds the inherited producer in afterwards (D7).
     """
-    reason = (f"{signal_id.value} not implemented "
-              f"({OWED_BY[signal_id]}, E-46)")
-    return SignalOutput(row=ScanSignalResult(
-        signal=signal_id, family=family_of(signal_id),
-        version=SCAN_SIGNALS[signal_id].version,
-        source=SignalSource.COMPUTED,
-        collected=Measurement.not_collected(reason),
-        categories={k: Measurement.not_collected(reason)
-                    for k in CATEGORIES[signal_id]}))
+    reason = f"{signal_id.value} not implemented ({OWED_BY[signal_id]}, E-46)"
+    return SignalOutput(
+        row=ScanSignalResult(
+            signal=signal_id,
+            family=family_of(signal_id),
+            version=SCAN_SIGNALS[signal_id].version,
+            source=SignalSource.COMPUTED,
+            collected=Measurement.not_collected(reason),
+            categories={k: Measurement.not_collected(reason) for k in CATEGORIES[signal_id]},
+        )
+    )
 
 
 def failed_signal(signal_id: ScanSignalId, exc: Exception) -> SignalOutput:
@@ -163,20 +214,22 @@ def failed_signal(signal_id: ScanSignalId, exc: Exception) -> SignalOutput:
     read the tree must not take the other twelve down with it (E-41 D3).
     Distinct from unbuilt_signal because "we tried and could not" is not
     "nobody has written this yet" -- the reason strings must not converge."""
-    reason = (f"{signal_id.value} failed: "
-              f"{type(exc).__name__}: {exc}"[:300])
-    return SignalOutput(row=ScanSignalResult(
-        signal=signal_id, family=family_of(signal_id),
-        version=SCAN_SIGNALS[signal_id].version,
-        source=SignalSource.COMPUTED,
-        collected=Measurement.not_collected(reason),
-        categories={k: Measurement.not_collected(reason)
-                    for k in CATEGORIES[signal_id]}))
+    reason = f"{signal_id.value} failed: {type(exc).__name__}: {exc}"[:300]
+    return SignalOutput(
+        row=ScanSignalResult(
+            signal=signal_id,
+            family=family_of(signal_id),
+            version=SCAN_SIGNALS[signal_id].version,
+            source=SignalSource.COMPUTED,
+            collected=Measurement.not_collected(reason),
+            categories={k: Measurement.not_collected(reason) for k in CATEGORIES[signal_id]},
+        )
+    )
 
 
-def _source_blobs(repo_dir: str, commit_sha: str, paths: list[str],
-                  extensions: tuple[str, ...]
-                  ) -> tuple[dict[str, str], list[str]]:
+def _source_blobs(
+    repo_dir: str, commit_sha: str, paths: list[str], extensions: tuple[str, ...]
+) -> tuple[dict[str, str], list[str]]:
     """(blobs, skipped) for source files at the pinned commit.
 
     `skipped` carries the oversized ones so a caller can report a partial
@@ -191,8 +244,9 @@ def _source_blobs(repo_dir: str, commit_sha: str, paths: list[str],
     return blobs, [p for p in wanted if p not in blobs]
 
 
-def _blobs_for(repo_dir: str, commit_sha: str,
-               paths: Sequence[str]) -> tuple[dict[str, str], list[str]]:
+def _blobs_for(
+    repo_dir: str, commit_sha: str, paths: Sequence[str]
+) -> tuple[dict[str, str], list[str]]:
     """(blobs, skipped) for an explicit path list, size-guarded.
 
     The companion to _source_blobs, which selects by extension. A config file,
@@ -221,11 +275,10 @@ async def scan_packages(inp: ScanSignalInput) -> SignalOutput:
         return hit
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
-        blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
-                                       SOURCE_EXTENSIONS)
+        blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths, SOURCE_EXTENSIONS)
         loc = {p: text.count("\n") + 1 for p, text in blobs.items()}
         out = packages.evaluate(paths, loc, skipped)
-    except Exception as exc:                        # noqa: BLE001 -- see helper
+    except Exception as exc:  # noqa: BLE001 -- see helper
         _log.warning("S1 failed: %s", exc)
         return failed_signal(ScanSignalId.S1, exc)
     memo.store(ScanSignalId.S1, inp.tree_hash, out)
@@ -244,10 +297,11 @@ async def scan_schema(inp: ScanSignalInput) -> SignalOutput:
         return hit
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
-        blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
-                                       SOURCE_EXTENSIONS + schema.EXTRA_EXTENSIONS)
+        blobs, skipped = _source_blobs(
+            inp.repo_dir, inp.commit_sha, paths, SOURCE_EXTENSIONS + schema.EXTRA_EXTENSIONS
+        )
         out = schema.evaluate(blobs, skipped)
-    except Exception as exc:                        # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("S2 failed: %s", exc)
         return failed_signal(ScanSignalId.S2, exc)
     memo.store(ScanSignalId.S2, inp.tree_hash, out)
@@ -261,10 +315,9 @@ async def scan_entrypoints(inp: ScanSignalInput) -> SignalOutput:
         return hit
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
-        blobs, _ = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
-                                 SOURCE_EXTENSIONS)
+        blobs, _ = _source_blobs(inp.repo_dir, inp.commit_sha, paths, SOURCE_EXTENSIONS)
         out = entrypoints.evaluate(blobs)
-    except Exception as exc:                        # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("S3 failed: %s", exc)
         return failed_signal(ScanSignalId.S3, exc)
     memo.store(ScanSignalId.S3, inp.tree_hash, out)
@@ -279,10 +332,11 @@ async def scan_frontend(inp: ScanSignalInput) -> SignalOutput:
         return hit
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
-        blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
-                                       frontend.FRONTEND_EXTENSIONS)
+        blobs, skipped = _source_blobs(
+            inp.repo_dir, inp.commit_sha, paths, frontend.FRONTEND_EXTENSIONS
+        )
         out = frontend.evaluate(blobs, skipped)
-    except Exception as exc:                        # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("S4 failed: %s", exc)
         return failed_signal(ScanSignalId.S4, exc)
     memo.store(ScanSignalId.S4, inp.tree_hash, out)
@@ -296,10 +350,9 @@ async def scan_security_static(inp: ScanSignalInput) -> SignalOutput:
         return hit
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
-        blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
-                                       SOURCE_EXTENSIONS)
+        blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths, SOURCE_EXTENSIONS)
         out = security_static.evaluate(blobs, inp.upstream, skipped)
-    except Exception as exc:                        # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("SS1 failed: %s", exc)
         return failed_signal(ScanSignalId.SS1, exc)
     memo.store(ScanSignalId.SS1, inp.tree_hash, out, inp.upstream)
@@ -317,12 +370,10 @@ async def scan_config_infra(inp: ScanSignalInput) -> SignalOutput:
         return hit
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
-        wanted = sorted({p for p in paths
-                         if is_config_path(p)
-                         or p.endswith(SOURCE_EXTENSIONS)})
+        wanted = sorted({p for p in paths if is_config_path(p) or p.endswith(SOURCE_EXTENSIONS)})
         blobs, skipped = _blobs_for(inp.repo_dir, inp.commit_sha, wanted)
         out = config_infra.evaluate(blobs, skipped)
-    except Exception as exc:                        # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("SS3 failed: %s", exc)
         return failed_signal(ScanSignalId.SS3, exc)
     memo.store(ScanSignalId.SS3, inp.tree_hash, out)
@@ -337,10 +388,11 @@ async def scan_sensitivity(inp: ScanSignalInput) -> SignalOutput:
         return hit
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
-        blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
-                                       SOURCE_EXTENSIONS + schema.EXTRA_EXTENSIONS)
+        blobs, skipped = _source_blobs(
+            inp.repo_dir, inp.commit_sha, paths, SOURCE_EXTENSIONS + schema.EXTRA_EXTENSIONS
+        )
         out = sensitivity.evaluate(blobs, inp.upstream, skipped)
-    except Exception as exc:                        # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("SS4 failed: %s", exc)
         return failed_signal(ScanSignalId.SS4, exc)
     memo.store(ScanSignalId.SS4, inp.tree_hash, out, inp.upstream)
@@ -358,7 +410,7 @@ async def scan_tests_inventory(inp: ScanSignalInput) -> SignalOutput:
         test_paths = [p for p in paths if is_test_path(p)]
         blobs, skipped = _blobs_for(inp.repo_dir, inp.commit_sha, test_paths)
         out = tests_inventory.evaluate(paths, blobs, skipped)
-    except Exception as exc:                        # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("QS1 failed: %s", exc)
         return failed_signal(ScanSignalId.QS1, exc)
     memo.store(ScanSignalId.QS1, inp.tree_hash, out)
@@ -375,11 +427,10 @@ async def scan_coverage(inp: ScanSignalInput) -> SignalOutput:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
         tracked = set(paths)
         reports, skipped_reports = _blobs_for(
-            inp.repo_dir, inp.commit_sha,
-            [p for p in coverage_signal.REPORT_PATHS if p in tracked])
-        out = coverage_signal.evaluate(paths, reports, inp.upstream,
-                                       skipped_reports)
-    except Exception as exc:                        # noqa: BLE001
+            inp.repo_dir, inp.commit_sha, [p for p in coverage_signal.REPORT_PATHS if p in tracked]
+        )
+        out = coverage_signal.evaluate(paths, reports, inp.upstream, skipped_reports)
+    except Exception as exc:  # noqa: BLE001
         _log.warning("QS2 failed: %s", exc)
         return failed_signal(ScanSignalId.QS2, exc)
     memo.store(ScanSignalId.QS2, inp.tree_hash, out, inp.upstream)
@@ -393,10 +444,9 @@ async def scan_testability(inp: ScanSignalInput) -> SignalOutput:
         return hit
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
-        blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
-                                       SOURCE_EXTENSIONS)
+        blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths, SOURCE_EXTENSIONS)
         out = testability.evaluate(blobs, skipped)
-    except Exception as exc:                        # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("QS3 failed: %s", exc)
         return failed_signal(ScanSignalId.QS3, exc)
     memo.store(ScanSignalId.QS3, inp.tree_hash, out)
@@ -414,7 +464,7 @@ async def scan_ci(inp: ScanSignalInput) -> SignalOutput:
         ci_paths = [p for p in paths if ci_signal.is_ci_path(p)]
         blobs, skipped = _blobs_for(inp.repo_dir, inp.commit_sha, ci_paths)
         out = ci_signal.evaluate(paths, blobs, skipped)
-    except Exception as exc:                        # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("QS4 failed: %s", exc)
         return failed_signal(ScanSignalId.QS4, exc)
     memo.store(ScanSignalId.QS4, inp.tree_hash, out)
@@ -424,6 +474,7 @@ async def scan_ci(inp: ScanSignalInput) -> SignalOutput:
 class DiscoverContextInput(BaseModel):
     """Discover's read of the tree. `tree_hash` is carried for DD10's memo
     key even though this activity does not itself memoize -- the phase does."""
+
     repo_dir: str
     commit_sha: str
     tree_hash: str
@@ -436,8 +487,12 @@ def _no_context(reason: str) -> DiscoverContext:
     return DiscoverContext(
         collected=Measurement.not_collected(reason),
         graph=GraphSummary(
-            parsed=0, unparsed=0, edges=0,
-            unresolved_relative_rate=Measurement.not_collected(reason)))
+            parsed=0,
+            unparsed=0,
+            edges=0,
+            unresolved_relative_rate=Measurement.not_collected(reason),
+        ),
+    )
 
 
 @activity.defn
@@ -451,25 +506,23 @@ async def discover_context(inp: DiscoverContextInput) -> DiscoverContext:
     """
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
-        blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths,
-                                       SOURCE_EXTENSIONS)
-    except Exception as exc:                        # noqa: BLE001
+        blobs, skipped = _source_blobs(inp.repo_dir, inp.commit_sha, paths, SOURCE_EXTENSIONS)
+    except Exception as exc:  # noqa: BLE001
         _log.warning("discover_context tree read failed: %s", exc)
-        return _no_context(
-            f"could not read the tree: {type(exc).__name__}: {exc}"[:300])
+        return _no_context(f"could not read the tree: {type(exc).__name__}: {exc}"[:300])
 
     try:
         return build_context(inp.scan, blobs, skipped)
-    except Exception as exc:                        # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("discover_context build_context failed: %s", exc)
-        return _no_context(
-            f"could not build context: {type(exc).__name__}: {exc}"[:300])
+        return _no_context(f"could not build context: {type(exc).__name__}: {exc}"[:300])
 
 
 class DiscoverMemoInput(BaseModel):
     """DD10's key terms the workflow supplies. `identity_registry_version` is
     deliberately absent: it is store state, and a workflow that carried a
     stale one would key against a registry that had already moved."""
+
     project: str
     tree_hash: str
     context_digest: str
@@ -496,9 +549,13 @@ async def discover_memo_load(inp: DiscoverMemoInput) -> CapabilityMap | None:
     finally:
         store.close()
     return discover_memo.load(
-        project=inp.project, tree_hash=inp.tree_hash,
-        context_digest=inp.context_digest, registry_version=version,
-        prompt_sha=inp.prompt_sha, model=inp.model)
+        project=inp.project,
+        tree_hash=inp.tree_hash,
+        context_digest=inp.context_digest,
+        registry_version=version,
+        prompt_sha=inp.prompt_sha,
+        model=inp.model,
+    )
 
 
 @activity.defn
@@ -507,15 +564,20 @@ async def discover_memo_store(inp: DiscoverMemoStoreInput) -> bool:
     whose ids the map actually carries. Keying it at the pre-lock version
     would guarantee a miss on every subsequent run (P2-D3)."""
     return discover_memo.store(
-        project=inp.key.project, tree_hash=inp.key.tree_hash,
+        project=inp.key.project,
+        tree_hash=inp.key.tree_hash,
         context_digest=inp.key.context_digest,
         registry_version=inp.registry_version,
-        prompt_sha=inp.key.prompt_sha, model=inp.key.model, out=inp.out)
+        prompt_sha=inp.key.prompt_sha,
+        model=inp.key.model,
+        out=inp.out,
+    )
 
 
 class DiscoverLockInput(BaseModel):
     """Clause D4's input: the boundaries that survived disposition, each with
     the fingerprint this assessment observed."""
+
     project: str
     run_id: str
     proposed: list[ProposedCapability] = Field(default_factory=list)
@@ -549,22 +611,28 @@ async def discover_lock(inp: DiscoverLockInput) -> DiscoverLockOutcome:
     try:
         version = store.registry_version(inp.project)
         registry = store.load(inp.project)
-        result = resolve(inp.proposed, registry,
-                         allocate=store.allocator(inp.project))
+        result = resolve(inp.proposed, registry, allocate=store.allocator(inp.project))
         rows = identity_rows(
-            inp.project, inp.run_id, result,
-            {p.local_key: p.fingerprint for p in inp.proposed}, registry)
+            inp.project,
+            inp.run_id,
+            result,
+            {p.local_key: p.fingerprint for p in inp.proposed},
+            registry,
+        )
         # P2-D7: a write with no rows bumps the version and records nothing,
         # invalidating every project memo for a change that did not happen.
         new_version = (
-            store.apply(inp.project, rows, expected_version=version,
-                        actor="assessment", operation="resolve")
-            if rows else version)
+            store.apply(
+                inp.project, rows, expected_version=version, actor="assessment", operation="resolve"
+            )
+            if rows
+            else version
+        )
     finally:
         store.close()
-    return DiscoverLockOutcome(attachments=result.attachments,
-                               advisories=result.advisories,
-                               registry_version=new_version)
+    return DiscoverLockOutcome(
+        attachments=result.attachments, advisories=result.advisories, registry_version=new_version
+    )
 
 
 class DiscoverFinalizeInput(BaseModel):
@@ -574,6 +642,7 @@ class DiscoverFinalizeInput(BaseModel):
     lock has run -- which is why attribution runs after disposition rather
     than before (E-47b D1).
     """
+
     repo_dir: str
     commit_sha: str
     members: dict[str, list[CandidateMember]] = Field(default_factory=dict)
@@ -599,16 +668,18 @@ def no_finalize(reason: str) -> DiscoverFinalizeOutcome:
     nc = Measurement.not_collected(reason)
     return DiscoverFinalizeOutcome(
         attribution=AttributionReport(
-            counts={b: 0 for b in FileBucket}, coverage=nc, meets_floor=False,
-            graph=ReferenceGraph(unresolved_relative_rate=nc)),
+            counts={b: 0 for b in FileBucket},
+            coverage=nc,
+            meets_floor=False,
+            graph=ReferenceGraph(unresolved_relative_rate=nc),
+        ),
         decomposition=DecompositionReport(collected=nc),
-        ownership=OwnershipReport(counts={o: 0 for o in OwnershipOutcome},
-                                  collected=nc))
+        ownership=OwnershipReport(counts={o: 0 for o in OwnershipOutcome}, collected=nc),
+    )
 
 
 @activity.defn
-async def discover_finalize(
-        inp: DiscoverFinalizeInput) -> DiscoverFinalizeOutcome:
+async def discover_finalize(inp: DiscoverFinalizeInput) -> DiscoverFinalizeOutcome:
     """Coverage, L2 operations and entity ownership over the locked set.
 
     Reads the tree a second time, deliberately (DD4): passing the reference
@@ -627,29 +698,32 @@ async def discover_finalize(
     try:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
         blobs, skipped = _source_blobs(
-            inp.repo_dir, inp.commit_sha, paths,
-            SOURCE_EXTENSIONS + schema.EXTRA_EXTENSIONS)
-    except Exception as exc:                        # noqa: BLE001
+            inp.repo_dir, inp.commit_sha, paths, SOURCE_EXTENSIONS + schema.EXTRA_EXTENSIONS
+        )
+    except Exception as exc:  # noqa: BLE001
         _log.warning("discover_finalize tree read failed: %s", exc)
-        return no_finalize(
-            f"could not read the tree: {type(exc).__name__}: {exc}"[:300])
+        return no_finalize(f"could not read the tree: {type(exc).__name__}: {exc}"[:300])
 
-    member_paths = {bc_id: sorted({m.path for m in members if m.path})
-                    for bc_id, members in inp.members.items()}
+    member_paths = {
+        bc_id: sorted({m.path for m in members if m.path}) for bc_id, members in inp.members.items()
+    }
     # attribute() filters the denominator to SOURCE_EXTENSIONS itself, so the
     # wider schema read above costs one pass, not a second git call.
-    attribution = attribute(blobs, skipped, member_paths,
-                            inp.entry_point_paths)
-    decomposition = decompose(inp.members,
-                              contract_collected=inp.contract_collected)
-    declarations = [EntityDeclaration(name=d.name, path=d.path, line=d.line)
-                    for d in schema.declarations(blobs)]
-    ownership = assign(declarations, member_paths, decomposition.operations,
-                       schema_collected=inp.schema_collected,
-                       contract_collected=inp.contract_collected)
-    return DiscoverFinalizeOutcome(attribution=attribution,
-                                   decomposition=decomposition,
-                                   ownership=ownership)
+    attribution = attribute(blobs, skipped, member_paths, inp.entry_point_paths)
+    decomposition = decompose(inp.members, contract_collected=inp.contract_collected)
+    declarations = [
+        EntityDeclaration(name=d.name, path=d.path, line=d.line) for d in schema.declarations(blobs)
+    ]
+    ownership = assign(
+        declarations,
+        member_paths,
+        decomposition.operations,
+        schema_collected=inp.schema_collected,
+        contract_collected=inp.contract_collected,
+    )
+    return DiscoverFinalizeOutcome(
+        attribution=attribution, decomposition=decomposition, ownership=ownership
+    )
 
 
 def _committed_blob(repo_dir: str, commit_sha: str, path: str) -> str | None:
@@ -670,6 +744,7 @@ class VerifyRefsInput(BaseModel):
     """DD8 items 4-5's inputs. The proposal travels whole rather than as a
     path list: the pure function needs the quotes too, and splitting them
     would put half the verification decision in the activity."""
+
     repo_dir: str
     commit_sha: str
     proposal: DiscoverProposal
@@ -710,10 +785,8 @@ async def load_blueprint(inp: BlueprintInput) -> BlueprintComparison:
     """
     loaded = load(inp.path)
     if loaded is None:
-        return not_compared(
-            f"the blueprint {inp.path!r} is missing or did not parse")
-    return compare(inp.capabilities, loaded.processes,
-                   name=loaded.name, version=loaded.version)
+        return not_compared(f"the blueprint {inp.path!r} is missing or did not parse")
+    return compare(inp.capabilities, loaded.processes, name=loaded.name, version=loaded.version)
 
 
 class AssessRiskInput(BaseModel):
@@ -726,6 +799,7 @@ class AssessRiskInput(BaseModel):
     make), and a payload field nothing reads is a field a reader must
     disprove.
     """
+
     capability_map: CapabilityMap
     collected_categories: list[str] = Field(default_factory=list)
 
@@ -743,9 +817,9 @@ async def assess_risk(inp: AssessRiskInput) -> UnifiedRiskMap:
     """
     try:
         return build_risk(
-            inp.capability_map,
-            collected_categories=frozenset(inp.collected_categories))
-    except Exception as exc:                              # noqa: BLE001
+            inp.capability_map, collected_categories=frozenset(inp.collected_categories)
+        )
+    except Exception as exc:  # noqa: BLE001
         _log.warning("assess_risk failed: %s", exc)
         return no_risk(f"assess raised: {type(exc).__name__}: {exc}"[:300])
 
@@ -754,6 +828,7 @@ class RiskMemoInput(BaseModel):
     """`rules_sha` is deliberately ABSENT and computed inside the activity:
     rules_sha() reads module bytes off disk, which is I/O a workflow must
     never do. `map_digest` is pure, so the workflow computes that one."""
+
     project: str
     tree_hash: str
     map_digest: str
@@ -768,26 +843,35 @@ class RiskMemoStoreInput(BaseModel):
 
 @activity.defn
 async def risk_memo_load(inp: RiskMemoInput) -> UnifiedRiskMap | None:
-    return risk_memo.load(project=inp.project, tree_hash=inp.tree_hash,
-                          map_digest=inp.map_digest,
-                          rules_sha=risk_rules_sha(),
-                          prompt_sha=inp.prompt_sha, model=inp.model)
+    return risk_memo.load(
+        project=inp.project,
+        tree_hash=inp.tree_hash,
+        map_digest=inp.map_digest,
+        rules_sha=risk_rules_sha(),
+        prompt_sha=inp.prompt_sha,
+        model=inp.model,
+    )
 
 
 @activity.defn
 async def risk_memo_store(inp: RiskMemoStoreInput) -> bool:
     k = inp.key
-    return risk_memo.store(project=k.project, tree_hash=k.tree_hash,
-                           map_digest=k.map_digest,
-                           rules_sha=risk_rules_sha(),
-                           prompt_sha=k.prompt_sha, model=k.model,
-                           out=inp.out)
+    return risk_memo.store(
+        project=k.project,
+        tree_hash=k.tree_hash,
+        map_digest=k.map_digest,
+        rules_sha=risk_rules_sha(),
+        prompt_sha=k.prompt_sha,
+        model=k.model,
+        out=inp.out,
+    )
 
 
 class VerifyRiskRefsInput(BaseModel):
     """RD6's inputs. The proposal travels whole rather than as a path list:
     the pure function needs the quotes too, and splitting them would put half
     the verification decision in the activity."""
+
     repo_dir: str
     commit_sha: str
     proposal: RiskProposal
@@ -807,28 +891,18 @@ async def verify_risk_refs(inp: VerifyRiskRefsInput) -> RiskVerification:
     """
     rows = inp.proposal.rows
     blobs: dict[str, str | None] = {
-        path: _committed_blob(inp.repo_dir, inp.commit_sha, path)
-        for path in cited_paths_of(rows)
+        path: _committed_blob(inp.repo_dir, inp.commit_sha, path) for path in cited_paths_of(rows)
     }
     out = verify_rows(rows, blobs, id_of=lambda row: row.row_id)
     return RiskVerification(
         proposal=RiskProposal(
-            threats=[r for r in out.survivors
-                     if isinstance(r, ProposedThreat)],
-            vulnerabilities=[r for r in out.survivors
-                             if isinstance(r, ProposedVulnerability)],
-            controls=[r for r in out.survivors
-                      if isinstance(r, ProposedControl)],
-            boundaries=[r for r in out.survivors
-                        if isinstance(r, ProposedBoundary)],
-            escalations=[r for r in out.survivors
-                         if isinstance(r, ProposedEscalation)]),
-        refusals=out.refusals, total_references=out.total_references,
-        unresolved_references=out.unresolved_references)
-
-
-
-
-
-
-
+            threats=[r for r in out.survivors if isinstance(r, ProposedThreat)],
+            vulnerabilities=[r for r in out.survivors if isinstance(r, ProposedVulnerability)],
+            controls=[r for r in out.survivors if isinstance(r, ProposedControl)],
+            boundaries=[r for r in out.survivors if isinstance(r, ProposedBoundary)],
+            escalations=[r for r in out.survivors if isinstance(r, ProposedEscalation)],
+        ),
+        refusals=out.refusals,
+        total_references=out.total_references,
+        unresolved_references=out.unresolved_references,
+    )

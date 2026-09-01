@@ -4,6 +4,7 @@ File I/O lives in the activity; the workflow passes only serializable args.
 Missing files are skipped (that stage just won't be judged) rather than
 crashing the run.
 """
+
 import asyncio
 
 from sdlc.benchmarks.judge import load_case_assets
@@ -17,8 +18,7 @@ def test_load_case_assets_reads_two_rubric_files(tmp_path):
         "clarifier": str(tmp_path / "rubric-clarifier.md"),
     }
     out = asyncio.run(load_case_assets("ignored", rubric_files))
-    assert out == {"architect": "arch rubric body",
-                   "clarifier": "clar rubric body"}
+    assert out == {"architect": "arch rubric body", "clarifier": "clar rubric body"}
 
 
 def test_load_case_assets_skips_missing_file(tmp_path):

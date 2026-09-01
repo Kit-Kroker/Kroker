@@ -18,6 +18,7 @@ parse, degrades ALONE -- the other workflows still report.
 
 Pure: paths and blobs in, records out. Nothing here runs a pipeline.
 """
+
 from __future__ import annotations
 
 import posixpath
@@ -28,9 +29,19 @@ import yaml
 
 from ....measurement import Measurement
 from ..models import (
-    C_CI_PRESENT, C_CI_STAGES, C_ENV_DRIFT, CiStageRecord, EnvironmentRecord,
-    EvidenceRef, ScanSignalId, ScanSignalResult, SignalOutput, SignalSource,
-    TestLevel, family_of, inherited_pending,
+    C_CI_PRESENT,
+    C_CI_STAGES,
+    C_ENV_DRIFT,
+    CiStageRecord,
+    EnvironmentRecord,
+    EvidenceRef,
+    ScanSignalId,
+    ScanSignalResult,
+    SignalOutput,
+    SignalSource,
+    TestLevel,
+    family_of,
+    inherited_pending,
 )
 
 SIGNAL_ID = "QS4"
@@ -53,24 +64,41 @@ _CI_PATTERNS: tuple[re.Pattern[str], ...] = (
 
 # The environment names a drift comparison is meaningful over. A free-form
 # name would make every directory an "environment".
-ENVIRONMENT_NAMES: frozenset[str] = frozenset({
-    "dev", "development", "test", "testing", "qa", "uat", "stage", "staging",
-    "preprod", "pre-production", "prod", "production", "sandbox", "demo",
-})
+ENVIRONMENT_NAMES: frozenset[str] = frozenset(
+    {
+        "dev",
+        "development",
+        "test",
+        "testing",
+        "qa",
+        "uat",
+        "stage",
+        "staging",
+        "preprod",
+        "pre-production",
+        "prod",
+        "production",
+        "sandbox",
+        "demo",
+    }
+)
 
 _ENV_CONFIG_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(^|/)\.env\.([A-Za-z0-9_-]+)$"),
     re.compile(r"(^|/)appsettings\.([A-Za-z]+)\.json$"),
     re.compile(r"(^|/)application-([A-Za-z0-9]+)\.(?:ya?ml|properties)$"),
     re.compile(r"(^|/)config/([A-Za-z0-9]+)\.(?:ya?ml|json|toml)$"),
-    re.compile(r"(^|/)(?:k8s|kubernetes|deploy|overlays|helm)/"
-               r"([A-Za-z0-9]+)/"),
+    re.compile(
+        r"(^|/)(?:k8s|kubernetes|deploy|overlays|helm)/"
+        r"([A-Za-z0-9]+)/"
+    ),
 )
 
 _TEST_CMD = re.compile(
     r"(?i)\b(pytest|tox\b|npm (?:run )?test|yarn test|pnpm test|go test"
     r"|mvn\b[^\n]*\btest|gradle\b[^\n]*\btest|jest|vitest|cargo test"
-    r"|dotnet test|rspec|phpunit|playwright test|cypress run)")
+    r"|dotnet test|rspec|phpunit|playwright test|cypress run)"
+)
 
 # (level, pattern). Ordered: the strongest claim first, same rule as QS1's.
 _LEVEL_HINTS: tuple[tuple[TestLevel, re.Pattern[str]], ...] = (
@@ -115,7 +143,8 @@ def _safe_yaml(text: str) -> dict | None:
 def _unreadable_blocking() -> Measurement:
     return Measurement.not_collected(
         "required checks are a branch-protection setting, not a tracked "
-        "file, so they are not readable at a pinned commit (E-59)")
+        "file, so they are not readable at a pinned commit (E-59)"
+    )
 
 
 def _levels(text: str, runs_tests: bool) -> list[TestLevel]:
@@ -133,8 +162,7 @@ def _step_text(job: dict) -> str:
     if isinstance(steps, list):
         for step in steps:
             if isinstance(step, dict):
-                parts.extend(str(step.get(k, ""))
-                             for k in ("run", "uses", "name"))
+                parts.extend(str(step.get(k, "")) for k in ("run", "uses", "name"))
             elif isinstance(step, str):
                 parts.append(step)
     script = job.get("script")
@@ -159,10 +187,10 @@ def _jobs(doc: dict) -> list[tuple[str, dict]]:
     the top level, where a job is any mapping carrying a `script`."""
     jobs = doc.get("jobs")
     if isinstance(jobs, dict):
-        return [(str(name), job) for name, job in jobs.items()
-                if isinstance(job, dict)]
-    return [(str(name), job) for name, job in doc.items()
-            if isinstance(job, dict) and "script" in job]
+        return [(str(name), job) for name, job in jobs.items() if isinstance(job, dict)]
+    return [
+        (str(name), job) for name, job in doc.items() if isinstance(job, dict) and "script" in job
+    ]
 
 
 def _stages_from_doc(path: str, doc: dict) -> list[CiStageRecord]:
@@ -173,10 +201,17 @@ def _stages_from_doc(path: str, doc: dict) -> list[CiStageRecord]:
     for order, (name, job) in enumerate(_jobs(doc)):
         body = _step_text(job)
         runs_tests = bool(_TEST_CMD.search(body))
-        out.append(CiStageRecord(
-            workflow=path, stage=name, order=order, runs_tests=runs_tests,
-            test_levels=_levels(f"{name}\n{body}", runs_tests),
-            deploys_to=_environment(job), blocking=_unreadable_blocking()))
+        out.append(
+            CiStageRecord(
+                workflow=path,
+                stage=name,
+                order=order,
+                runs_tests=runs_tests,
+                test_levels=_levels(f"{name}\n{body}", runs_tests),
+                deploys_to=_environment(job),
+                blocking=_unreadable_blocking(),
+            )
+        )
     return out
 
 
@@ -184,28 +219,32 @@ def _stages_from_jenkinsfile(path: str, text: str) -> list[CiStageRecord]:
     matches = list(_JENKINS_STAGE.finditer(text))
     out: list[CiStageRecord] = []
     for order, match in enumerate(matches):
-        end = (matches[order + 1].start() if order + 1 < len(matches)
-               else len(text))
-        body = text[match.end():end]
+        end = matches[order + 1].start() if order + 1 < len(matches) else len(text)
+        body = text[match.end() : end]
         runs_tests = bool(_TEST_CMD.search(body))
-        out.append(CiStageRecord(
-            workflow=path, stage=match.group(1), order=order,
-            runs_tests=runs_tests,
-            test_levels=_levels(f"{match.group(1)}\n{body}", runs_tests),
-            blocking=_unreadable_blocking()))
+        out.append(
+            CiStageRecord(
+                workflow=path,
+                stage=match.group(1),
+                order=order,
+                runs_tests=runs_tests,
+                test_levels=_levels(f"{match.group(1)}\n{body}", runs_tests),
+                blocking=_unreadable_blocking(),
+            )
+        )
     return out
 
 
-def evaluate(paths: Sequence[str],
-             blobs: Mapping[str, str],
-             skipped: Sequence[str] = ()) -> SignalOutput:
+def evaluate(
+    paths: Sequence[str], blobs: Mapping[str, str], skipped: Sequence[str] = ()
+) -> SignalOutput:
     """`paths` is every tracked path (the config side of the drift
     comparison); `blobs` is path -> text for the CI files that were read.
     `skipped` names CI files over MAX_BLOB_BYTES; an unreadable CI file makes
     the stage list partial exactly as a refused one does (spec section 6)."""
     ci_paths = sorted(p for p in paths if is_ci_path(p))
     stages: list[CiStageRecord] = []
-    refused: list[str] = list(skipped)             # oversized == unreadable
+    refused: list[str] = list(skipped)  # oversized == unreadable
     for path in ci_paths:
         text = blobs.get(path)
         if text is None:
@@ -230,14 +269,24 @@ def evaluate(paths: Sequence[str],
             f"ci_stages: {len(refused)} CI file(s) not parsed -- over "
             f"MAX_BLOB_BYTES or unparseable (first: {refused[0]}); a partial "
             f"stage list must not pass as a complete one (spec section 6, "
-            f"P3-D8)")
+            f"P3-D8)"
+        )
         return SignalOutput(
             row=ScanSignalResult(
-                signal=ScanSignalId.QS4, family=family_of(ScanSignalId.QS4),
-                version=VERSION, source=SignalSource.COMPUTED, collected=nc,
-                categories={C_CI_STAGES: nc, C_ENV_DRIFT: nc,
-                            C_CI_PRESENT: inherited_pending(C_CI_PRESENT)}),
-            ci=[], environments=[])
+                signal=ScanSignalId.QS4,
+                family=family_of(ScanSignalId.QS4),
+                version=VERSION,
+                source=SignalSource.COMPUTED,
+                collected=nc,
+                categories={
+                    C_CI_STAGES: nc,
+                    C_ENV_DRIFT: nc,
+                    C_CI_PRESENT: inherited_pending(C_CI_PRESENT),
+                },
+            ),
+            ci=[],
+            environments=[],
+        )
 
     in_ci = {s.deploys_to for s in stages if s.deploys_to}
     in_config: dict[str, list[str]] = {}
@@ -248,29 +297,37 @@ def evaluate(paths: Sequence[str],
 
     environments = [
         EnvironmentRecord(
-            name=name, in_ci=name in in_ci, in_config=name in in_config,
-            evidence=[EvidenceRef(path=p) for p in in_config.get(name, [])])
-        for name in sorted(in_ci | set(in_config))]
+            name=name,
+            in_ci=name in in_ci,
+            in_config=name in in_config,
+            evidence=[EvidenceRef(path=p) for p in in_config.get(name, [])],
+        )
+        for name in sorted(in_ci | set(in_config))
+    ]
 
     if ci_paths:
-        drift = Measurement.measured(
-            float(sum(1 for e in environments if e.drifted)))
+        drift = Measurement.measured(float(sum(1 for e in environments if e.drifted)))
     else:
         drift = Measurement.not_collected(
             "env_drift: no CI configuration in the tree, so there is no "
             "pipeline side to compare the committed environment configs "
             "against (P3-D11). The declared-scope comparison BrownKit makes "
-            "needs /enrich's qa_scope, which is E-56")
+            "needs /enrich's qa_scope, which is E-56"
+        )
 
     return SignalOutput(
         row=ScanSignalResult(
-            signal=ScanSignalId.QS4, family=family_of(ScanSignalId.QS4),
-            version=VERSION, source=SignalSource.COMPUTED,
+            signal=ScanSignalId.QS4,
+            family=family_of(ScanSignalId.QS4),
+            version=VERSION,
+            source=SignalSource.COMPUTED,
             collected=Measurement.measured(float(len(stages))),
             categories={
                 C_CI_STAGES: Measurement.measured(float(len(stages))),
                 C_ENV_DRIFT: drift,
                 C_CI_PRESENT: inherited_pending(C_CI_PRESENT),
-            }),
+            },
+        ),
         ci=stages,
-        environments=environments)
+        environments=environments,
+    )

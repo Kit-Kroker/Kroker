@@ -3,6 +3,7 @@ filename is the schedule id. Deliberately mirrors agents/loader.py's
 fail-closed shape — a malformed asset raises here, during `schedules apply`,
 rather than silently at 3am.
 """
+
 from __future__ import annotations
 
 import os
@@ -29,8 +30,7 @@ def load_schedules(path: str | os.PathLike | None = None) -> list[ScheduleAsset]
     id. Resolution order: explicit arg, then $SDLC_SCHEDULES_DIR, then the
     shipped default. A missing or empty directory yields []; a malformed asset
     raises ScheduleError."""
-    resolved = Path(path or os.environ.get(SCHEDULES_DIR_ENV)
-                    or DEFAULT_SCHEDULES_DIR)
+    resolved = Path(path or os.environ.get(SCHEDULES_DIR_ENV) or DEFAULT_SCHEDULES_DIR)
     if not resolved.is_dir():
         return []
     assets: list[ScheduleAsset] = []

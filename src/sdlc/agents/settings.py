@@ -9,6 +9,7 @@ readiness timeout far below that, so it imports from here instead (E-82).
 ``roles.py`` re-exports ``MODEL_SETTINGS`` from this module, so existing
 imports keep working unchanged.
 """
+
 from __future__ import annotations
 
 import os
@@ -19,5 +20,4 @@ from pydantic_ai.settings import ModelSettings
 # default truncates the tool-call arguments to {} on larger schemas (or when
 # the model spends tokens on reasoning first). Override via
 # SDLC_MODEL_MAX_TOKENS.
-MODEL_SETTINGS = ModelSettings(max_tokens=int(
-    os.environ.get("SDLC_MODEL_MAX_TOKENS", "64000")))
+MODEL_SETTINGS = ModelSettings(max_tokens=int(os.environ.get("SDLC_MODEL_MAX_TOKENS", "64000")))

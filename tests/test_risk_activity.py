@@ -1,16 +1,19 @@
 # tests/test_risk_activity.py
 """The one activity seam. Never raises: a failure is a not_collected map."""
+
 from __future__ import annotations
 
 import pytest
 
 from sdlc.assessment.activities import AssessRiskInput, assess_risk
-from sdlc.assessment.discover.map import CapabilityMap, DiscoverAction
+from sdlc.assessment.discover.map import CapabilityMap
 from sdlc.assessment.scan.models import (
-    C_AUTHN_AUTHZ, C_DB_SECURITY, C_INPUT_VALIDATION, C_TLS,
+    C_AUTHN_AUTHZ,
+    C_DB_SECURITY,
+    C_INPUT_VALIDATION,
+    C_TLS,
 )
 from sdlc.measurement import CollectionState, Measurement
-
 from tests.helpers_risk import capability
 
 ALL = [C_AUTHN_AUTHZ, C_INPUT_VALIDATION, C_TLS, C_DB_SECURITY]
@@ -25,9 +28,9 @@ def _cmap(*caps) -> CapabilityMap:
     actions = {}
     for c in caps:
         actions[c.disposition.action] = actions.get(c.disposition.action, 0) + 1
-    return CapabilityMap(capabilities=tuple(caps),
-                         by_action=actions,
-                         collected=Measurement.measured(1.0))
+    return CapabilityMap(
+        capabilities=tuple(caps), by_action=actions, collected=Measurement.measured(1.0)
+    )
 
 
 def _inp(cmap: CapabilityMap) -> AssessRiskInput:
@@ -43,8 +46,7 @@ async def test_it_scores_a_capability_map():
 
 @pytest.mark.asyncio
 async def test_an_uncollected_map_yields_not_collected():
-    out = await assess_risk(_inp(
-        CapabilityMap(collected=Measurement.not_collected("no discover"))))
+    out = await assess_risk(_inp(CapabilityMap(collected=Measurement.not_collected("no discover"))))
     assert out.collected.state is CollectionState.NOT_COLLECTED
 
 

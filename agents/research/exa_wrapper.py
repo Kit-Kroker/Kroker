@@ -9,12 +9,13 @@ from sdlc.research.verify import write_page
 
 logger = logging.getLogger(__name__)
 
+
 def get_wrapped_exa_search():
     """Factory to lazily load and configure ExaSearch subclass."""
     try:
+        from pydantic_ai.messages import ToolReturn
         from pydantic_ai_harness.exa import ExaSearch
         from pydantic_ai_harness.exa._toolset import ExaSearchToolset
-        from pydantic_ai.messages import ToolReturn
 
         class WrappedExaSearchToolset(ExaSearchToolset):
             """Charges the run's persisted budget (Task 8: deps.charge()
@@ -22,18 +23,24 @@ def get_wrapped_exa_search():
             before each Exa call, and mirrors get_page's fetched text to the
             page cache the grounding verifier reads."""
 
-            async def web_search(self, ctx: RunContext[ResearchDeps],
-                                 query: str) -> ToolReturn[str]:
+            async def web_search(
+                self, ctx: RunContext[ResearchDeps], query: str
+            ) -> ToolReturn[str]:
                 await charge_scoped(
-                    ctx.deps, search=1, scope=ctx.deps.scope,
-                    run_max_cost_usd=ctx.deps.max_run_cost_usd)
+                    ctx.deps,
+                    search=1,
+                    scope=ctx.deps.scope,
+                    run_max_cost_usd=ctx.deps.max_run_cost_usd,
+                )
                 return await super().web_search(query)
 
-            async def get_page(self, ctx: RunContext[ResearchDeps],
-                               url: str) -> ToolReturn[str]:
+            async def get_page(self, ctx: RunContext[ResearchDeps], url: str) -> ToolReturn[str]:
                 await charge_scoped(
-                    ctx.deps, fetch=1, scope=ctx.deps.scope,
-                    run_max_cost_usd=ctx.deps.max_run_cost_usd)
+                    ctx.deps,
+                    fetch=1,
+                    scope=ctx.deps.scope,
+                    run_max_cost_usd=ctx.deps.max_run_cost_usd,
+                )
                 result = await super().get_page(url)
 
                 content = result.return_value
@@ -47,16 +54,21 @@ def get_wrapped_exa_search():
 
                 return result
 
-            async def deep_search(self, ctx: RunContext[ResearchDeps],
-                                  question: str) -> ToolReturn[str]:
+            async def deep_search(
+                self, ctx: RunContext[ResearchDeps], question: str
+            ) -> ToolReturn[str]:
                 await charge_scoped(
-                    ctx.deps, search=1, scope=ctx.deps.scope,
-                    run_max_cost_usd=ctx.deps.max_run_cost_usd)
+                    ctx.deps,
+                    search=1,
+                    scope=ctx.deps.scope,
+                    run_max_cost_usd=ctx.deps.max_run_cost_usd,
+                )
                 return await super().deep_search(question)
 
         class WrappedExaSearch(ExaSearch):
             """Subclass ExaSearch to route its tools through the budget-
             charging, page-caching WrappedExaSearchToolset."""
+
             def get_toolset(self):
                 toolset = WrappedExaSearchToolset(
                     client=self.client,
@@ -80,7 +92,9 @@ def get_wrapped_exa_search():
 
         return WrappedExaSearch
     except ImportError:
+
         class DummyExaSearch:
             def __init__(self, **kwargs):
                 pass
+
         return DummyExaSearch

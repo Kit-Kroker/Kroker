@@ -6,6 +6,7 @@ pydantic_ai and temporalio -- which is how sdlc/operator/tools.py, advertised
 as framework-free, came to load every TemporalAgent at import time. Anything
 that wants a slug now imports it from here instead.
 """
+
 from __future__ import annotations
 
 import re

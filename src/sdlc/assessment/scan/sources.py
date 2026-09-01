@@ -14,10 +14,26 @@ mirrors triage/signals/scaffold.py's own _SOURCE_EXTENSIONS, re-declared
 here rather than imported -- scan/ may not import triage/signals/ (module
 purity, spec section 3).
 """
+
 from __future__ import annotations
 
 SOURCE_EXTENSIONS: tuple[str, ...] = (
-    ".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".rs", ".java", ".rb",
-    ".php", ".cs", ".kt", ".swift", ".scala", ".ex", ".exs",
-    ".vue", ".svelte",
+    ".py",
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".go",
+    ".rs",
+    ".java",
+    ".rb",
+    ".php",
+    ".cs",
+    ".kt",
+    ".swift",
+    ".scala",
+    ".ex",
+    ".exs",
+    ".vue",
+    ".svelte",
 )

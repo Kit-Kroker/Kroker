@@ -1,5 +1,6 @@
 """Per-case config, no fake adapter. A case opts into stage 13 explicitly --
 today no benchmark case reaches it at all."""
+
 from __future__ import annotations
 
 from sdlc.benchmarks.models import CaseSpec

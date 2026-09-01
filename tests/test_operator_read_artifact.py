@@ -1,4 +1,5 @@
 """read_artifact: 32 KB budget, offset paging, no fishing, pruned blobs."""
+
 import pytest
 
 from sdlc.artifacts.store import LocalFileStore, ref_to_path
@@ -21,8 +22,12 @@ def board_factory(tmp_path):
     seed = make()
     seed.ensure_project("kroker")
     seed.publish_artifact_version(
-        "kroker", "spec", run_id="feature-x",
-        content=BIG.encode("utf-8"), actor="workflow:feature-x")
+        "kroker",
+        "spec",
+        run_id="feature-x",
+        content=BIG.encode("utf-8"),
+        actor="workflow:feature-x",
+    )
     seed.close()
     return make
 
@@ -59,14 +64,14 @@ async def test_a_small_artifact_is_not_marked_truncated(deps, board_factory):
     st = board_factory()
     try:
         st.publish_artifact_version(
-            "kroker", "plan", run_id="feature-x", content=b"short",
-            actor="workflow:feature-x")
+            "kroker", "plan", run_id="feature-x", content=b"short", actor="workflow:feature-x"
+        )
     finally:
         st.close()
     got = await tools.read_artifact(deps, "kroker", "plan")
     assert got.content == "short"
     assert got.truncated is False
-    assert got.next_offset == None
+    assert got.next_offset is None
 
 
 @pytest.mark.asyncio
@@ -79,19 +84,17 @@ async def test_unknown_key_is_refused_and_points_at_get_project(deps):
 @pytest.mark.asyncio
 async def test_offset_past_the_end_is_a_tool_error_not_an_empty_read(deps):
     with pytest.raises(ToolError) as e:
-        await tools.read_artifact(deps, "kroker", "spec",
-                                  offset=len(BIG) + 10)
+        await tools.read_artifact(deps, "kroker", "spec", offset=len(BIG) + 10)
     assert "offset" in e.value.message.lower()
 
 
 @pytest.mark.asyncio
-async def test_pruned_blob_reports_metadata_instead_of_crashing(deps,
-                                                                board_factory):
+async def test_pruned_blob_reports_metadata_instead_of_crashing(deps, board_factory):
     st = board_factory()
     try:
         _, version_id = st.publish_artifact_version(
-            "kroker", "arch", run_id="feature-x", content=b"temp",
-            actor="workflow:feature-x")
+            "kroker", "arch", run_id="feature-x", content=b"temp", actor="workflow:feature-x"
+        )
         v = st.get_version("kroker", version_id)
     finally:
         st.close()

@@ -15,11 +15,12 @@ The vocabulary is a CLOSED set of three kinds, deliberately minimal: it covers
 every veto currently written in rubric prose and nothing more. A fourth kind
 is added when a fourth rubric needs one, not in anticipation.
 """
+
 from __future__ import annotations
 
 import json
 import re
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 
 import yaml
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
@@ -52,8 +53,7 @@ class NonEmpty(BaseModel):
     fields: list[str]
 
 
-Veto = Annotated[Union[MentionsAll, NotBoth, NonEmpty],
-                 Field(discriminator="kind")]
+Veto = Annotated[MentionsAll | NotBoth | NonEmpty, Field(discriminator="kind")]
 _ADAPTER = TypeAdapter(list[Veto])
 
 
@@ -105,33 +105,29 @@ def _check_one(artifact: dict, v: Veto) -> VetoFailure | None:
         # "replaying". That false negative made the scope_dropped veto pass on
         # words that merely CONTAIN the term, not name it -- which made the
         # OQ-P5 result unreliable (E-83 review).
-        missing = [t for t in v.terms
-                   if not re.search(r"\b" + re.escape(t.lower()) + r"\b", hay)]
+        missing = [t for t in v.terms if not re.search(r"\b" + re.escape(t.lower()) + r"\b", hay)]
         if missing:
             return VetoFailure(
-                veto_id=v.id,
-                reason=f"required term(s) absent: {', '.join(missing)}")
+                veto_id=v.id, reason=f"required term(s) absent: {', '.join(missing)}"
+            )
         return None
 
     if isinstance(v, NotBoth):
         if artifact.get(v.field) != v.equals:
             return None
-        populated = [f for f in v.and_any_nonempty
-                     if not _is_empty(artifact.get(f))]
+        populated = [f for f in v.and_any_nonempty if not _is_empty(artifact.get(f))]
         if populated:
             return VetoFailure(
                 veto_id=v.id,
-                reason=f"{v.field} == {v.equals!r} contradicts non-empty "
-                       f"{', '.join(populated)}")
+                reason=f"{v.field} == {v.equals!r} contradicts non-empty {', '.join(populated)}",
+            )
         return None
 
     # NonEmpty. A missing field cannot be non-empty; treating absence as a
     # pass would make the veto vacuous.
     blank = [f for f in v.fields if _is_empty(artifact.get(f))]
     if blank:
-        return VetoFailure(veto_id=v.id,
-                           reason=f"field(s) empty or absent: "
-                                  f"{', '.join(blank)}")
+        return VetoFailure(veto_id=v.id, reason=f"field(s) empty or absent: {', '.join(blank)}")
     return None
 
 
@@ -167,4 +163,5 @@ def validate_fields(vetoes: list[Veto], output_type: type[BaseModel]) -> None:
             raise VetoConfigError(
                 f"veto '{v.id}' names field(s) absent from "
                 f"{output_type.__name__}: {', '.join(unknown)}. "
-                f"Known fields: {', '.join(sorted(known))}")
+                f"Known fields: {', '.join(sorted(known))}"
+            )

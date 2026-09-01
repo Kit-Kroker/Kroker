@@ -11,6 +11,7 @@ from sdlc.models import HarnessKind, HarnessRunResult
 class _PyHarness(CodingHarness):
     """Runs a short Python script as the subprocess so these tests don't
     depend on the real claude/opencode CLIs being installed."""
+
     kind = HarnessKind.OPENCODE
 
     def __init__(self, script: str):
@@ -20,8 +21,7 @@ class _PyHarness(CodingHarness):
         return [sys.executable, "-c", self.script]
 
     def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
-        return HarnessRunResult(harness=self.kind, exit_code=exit_code,
-                                 summary=stdout[:4000])
+        return HarnessRunResult(harness=self.kind, exit_code=exit_code, summary=stdout[:4000])
 
 
 @pytest.mark.asyncio
@@ -29,12 +29,7 @@ async def test_large_stderr_does_not_deadlock(tmp_path):
     # Writes well past the OS pipe buffer (64KB) to stderr while also
     # writing to stdout. Before the fix, nothing read stderr, so the child
     # blocks once its stderr pipe fills, and the run never finishes.
-    script = (
-        "import sys\n"
-        "sys.stderr.write('e' * 200_000)\n"
-        "sys.stderr.flush()\n"
-        "print('done')\n"
-    )
+    script = "import sys\nsys.stderr.write('e' * 200_000)\nsys.stderr.flush()\nprint('done')\n"
     harness = _PyHarness(script)
     result = await asyncio.wait_for(
         harness.run(HarnessRequest(prompt="x", cwd=str(tmp_path), timeout_s=10)),
@@ -59,11 +54,7 @@ async def test_lifecycle_summary_logged(tmp_path, caplog):
 @pytest.mark.asyncio
 async def test_stderr_logged_as_warning_on_failure(tmp_path, caplog):
     caplog.set_level(logging.WARNING, logger="sdlc.harness.adapters")
-    script = (
-        "import sys\n"
-        "sys.stderr.write('boom detail')\n"
-        "sys.exit(1)\n"
-    )
+    script = "import sys\nsys.stderr.write('boom detail')\nsys.exit(1)\n"
     harness = _PyHarness(script)
     result = await harness.run(HarnessRequest(prompt="x", cwd=str(tmp_path)))
     assert result.exit_code == 1
@@ -88,26 +79,36 @@ from sdlc.harness.adapters import _log_live_event
 def test_log_live_event_step_start_logged_at_info(caplog):
     caplog.set_level(logging.INFO, logger="sdlc.harness.adapters")
     _log_live_event(json.dumps({"type": "step_start", "sessionID": "abc"}))
-    assert any("step_start" in r.message and "abc" in r.message
-               for r in caplog.records)
+    assert any("step_start" in r.message and "abc" in r.message for r in caplog.records)
 
 
 def test_log_live_event_step_finish_logs_tokens_and_cost(caplog):
     caplog.set_level(logging.INFO, logger="sdlc.harness.adapters")
-    _log_live_event(json.dumps({
-        "type": "step_finish", "sessionID": "abc",
-        "part": {"tokens": {"input": 10, "output": 2}, "cost": 0.01},
-    }))
-    assert any("step_finish" in r.message and "input_tokens=10" in r.message
-               for r in caplog.records)
+    _log_live_event(
+        json.dumps(
+            {
+                "type": "step_finish",
+                "sessionID": "abc",
+                "part": {"tokens": {"input": 10, "output": 2}, "cost": 0.01},
+            }
+        )
+    )
+    assert any(
+        "step_finish" in r.message and "input_tokens=10" in r.message for r in caplog.records
+    )
 
 
 def test_log_live_event_text_logged_at_debug_with_length_not_content(caplog):
     caplog.set_level(logging.DEBUG, logger="sdlc.harness.adapters")
-    _log_live_event(json.dumps({
-        "type": "text", "sessionID": "abc",
-        "part": {"text": "some repo content that should not be logged verbatim"},
-    }))
+    _log_live_event(
+        json.dumps(
+            {
+                "type": "text",
+                "sessionID": "abc",
+                "part": {"text": "some repo content that should not be logged verbatim"},
+            }
+        )
+    )
     messages = [r.message for r in caplog.records]
     assert any("chars=" in m for m in messages)
     assert not any("some repo content" in m for m in messages)
@@ -115,7 +116,7 @@ def test_log_live_event_text_logged_at_debug_with_length_not_content(caplog):
 
 def test_log_live_event_ignores_non_json_and_unknown_type(caplog):
     caplog.set_level(logging.DEBUG, logger="sdlc.harness.adapters")
-    _log_live_event("not json at all")             # must not raise
+    _log_live_event("not json at all")  # must not raise
     _log_live_event(json.dumps({"type": "something_else"}))
     assert caplog.records == []
 
@@ -123,7 +124,7 @@ def test_log_live_event_ignores_non_json_and_unknown_type(caplog):
 def test_log_live_event_ignores_non_dict_json(caplog):
     caplog.set_level(logging.DEBUG, logger="sdlc.harness.adapters")
     for line in ("42", "[1,2,3]", "true", "null"):
-        _log_live_event(line)   # must not raise
+        _log_live_event(line)  # must not raise
     assert caplog.records == []
 
 
@@ -145,20 +146,39 @@ async def test_run_logs_events_as_they_stream(tmp_path, caplog):
 
 def test_log_live_event_survives_non_dict_part(caplog):
     caplog.set_level(logging.DEBUG, logger="sdlc.harness.adapters")
-    _log_live_event(json.dumps({
-        "type": "step_finish", "sessionID": "s", "part": "oops",
-    }))
-    _log_live_event(json.dumps({
-        "type": "text", "sessionID": "s", "part": [1, 2],
-    }))
-    _log_live_event(json.dumps({
-        "type": "step_finish", "sessionID": "s", "part": {"tokens": 5},
-    }))
+    _log_live_event(
+        json.dumps(
+            {
+                "type": "step_finish",
+                "sessionID": "s",
+                "part": "oops",
+            }
+        )
+    )
+    _log_live_event(
+        json.dumps(
+            {
+                "type": "text",
+                "sessionID": "s",
+                "part": [1, 2],
+            }
+        )
+    )
+    _log_live_event(
+        json.dumps(
+            {
+                "type": "step_finish",
+                "sessionID": "s",
+                "part": {"tokens": 5},
+            }
+        )
+    )
 
 
 class _PyHarnessNoTruncate(CodingHarness):
     """Like _PyHarness but parse() doesn't truncate to SUMMARY_MAX, so the
     test can assert the full raw stdout survived _pump()'s chunked read."""
+
     kind = HarnessKind.OPENCODE
 
     def __init__(self, script: str):
@@ -168,8 +188,7 @@ class _PyHarnessNoTruncate(CodingHarness):
         return [sys.executable, "-c", self.script]
 
     def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
-        return HarnessRunResult(harness=self.kind, exit_code=exit_code,
-                                 summary=stdout)
+        return HarnessRunResult(harness=self.kind, exit_code=exit_code, summary=stdout)
 
 
 @pytest.mark.asyncio

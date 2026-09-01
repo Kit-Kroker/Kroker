@@ -5,10 +5,14 @@ names LOW. The classification is carried as the RULE that fired, not as a
 boolean, because E-48's "delivery channels and deployment boundaries are not
 capabilities" guardrail needs the distinction (SourceCandidate's docstring).
 """
+
 from __future__ import annotations
 
 from sdlc.assessment.scan.models import (
-    C_PACKAGES, Confidence, MemberKind, ScanSignalId,
+    C_PACKAGES,
+    Confidence,
+    MemberKind,
+    ScanSignalId,
 )
 from sdlc.assessment.scan.signals import packages
 from sdlc.measurement import CollectionState
@@ -90,8 +94,8 @@ def test_a_parent_directory_carries_only_its_own_files():
     out = packages.evaluate(TREE, LOC)
     src = _by_id(out)["S1-src"]  # noqa: E501 -- depth-1 slug has no separator
     files = [m for m in src.members if m.kind is MemberKind.FILE_PATH]
-    assert files == []                    # src/ directly contains no source
-    assert src.metrics["file_count"].value == 6.0    # recursive
+    assert files == []  # src/ directly contains no source
+    assert src.metrics["file_count"].value == 6.0  # recursive
 
 
 def test_loc_estimate_is_not_collected_when_a_blob_was_skipped():
@@ -107,8 +111,7 @@ def test_loc_estimate_is_not_collected_when_a_blob_was_skipped():
 def test_depth_is_bounded_at_three():
     tree = ["a/b/c/d/deep.py"]
     out = packages.evaluate(tree, {"a/b/c/d/deep.py": 5})
-    depths = {len(c.local_id.removeprefix("S1-").split("--"))
-              for c in out.sources}
+    depths = {len(c.local_id.removeprefix("S1-").split("--")) for c in out.sources}
     assert max(depths) <= 3
 
 

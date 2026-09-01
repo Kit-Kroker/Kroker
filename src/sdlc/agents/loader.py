@@ -11,6 +11,7 @@ package lands in site-packages, which is why the old
 parents[3]/config/agents.yaml walk resolved to a path that never existed in
 the image. Order: explicit arg -> $SDLC_AGENTS_DIR -> repo-root discovery.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -23,7 +24,7 @@ import yaml
 
 from ..models import RoleConfig
 
-if TYPE_CHECKING:                       # pydantic_ai import is not free
+if TYPE_CHECKING:  # pydantic_ai import is not free
     from pydantic_ai import Agent
 
 AGENTS_DIR_ENV = "SDLC_AGENTS_DIR"
@@ -44,10 +45,18 @@ HARNESS_ROLES = frozenset({"dev", "test", "devops"})
 
 # Proposer roles, one per agent in agents/roles.py. 'devops_planner' PLANS
 # devops tasks; the 'devops' harness role above RUNS them.
-PROPOSER_ROLES = frozenset({
-    "clarify", "architect", "planner", "qa", "reviewer", "analyst",
-    "merge_verdict", "devops_planner",
-})
+PROPOSER_ROLES = frozenset(
+    {
+        "clarify",
+        "architect",
+        "planner",
+        "qa",
+        "reviewer",
+        "analyst",
+        "merge_verdict",
+        "devops_planner",
+    }
+)
 
 REQUIRED_ROLES = HARNESS_ROLES | PROPOSER_ROLES
 
@@ -60,7 +69,8 @@ REQUIRED_ROLES = HARNESS_ROLES | PROPOSER_ROLES
 # making it required would fail boot on a feature-only deployment. 'risk'
 # joins it for the identical reason at the next phase (E-49 RD7).
 OPTIONAL_ROLES: frozenset[str] = frozenset(
-    {"research", "deep_review", "handoff", "adversary", "discover", "risk"})
+    {"research", "deep_review", "handoff", "adversary", "discover", "risk"}
+)
 
 # REQUIRED_ROLES gates PRESENCE (a missing one fails boot).
 # KNOWN_ROLES gates RECOGNITION (an unknown directory fails boot).
@@ -106,7 +116,8 @@ def _resolve_agents_dir(path: str | os.PathLike | None = None) -> Path:
         raise RegistryError(
             f"{LEGACY_AGENTS_ENV} was renamed to {AGENTS_DIR_ENV} and now names "
             f"a DIRECTORY (the registry is agents/<role>/, not one YAML file). "
-            f"Unset {LEGACY_AGENTS_ENV} and set {AGENTS_DIR_ENV}.")
+            f"Unset {LEGACY_AGENTS_ENV} and set {AGENTS_DIR_ENV}."
+        )
     if path is not None:
         return Path(path)
     env = os.environ.get(AGENTS_DIR_ENV)
@@ -118,7 +129,8 @@ def _resolve_agents_dir(path: str | os.PathLike | None = None) -> Path:
     raise RegistryError(
         f"cannot locate the agents registry. Tried: an explicit path argument; "
         f"${AGENTS_DIR_ENV}; and walking up from {Path.cwd()} for a directory "
-        f"containing both pyproject.toml and agents/registry.yaml.")
+        f"containing both pyproject.toml and agents/registry.yaml."
+    )
 
 
 def _parse(path: str | os.PathLike | None = None) -> dict[str, RoleConfig]:
@@ -130,12 +142,10 @@ def _parse(path: str | os.PathLike | None = None) -> dict[str, RoleConfig]:
 
     reg = root / "registry.yaml"
     if not reg.is_file():
-        raise RegistryError(
-            f"missing {reg}: every registry declares its version")
+        raise RegistryError(f"missing {reg}: every registry declares its version")
     version = (yaml.safe_load(reg.read_text(encoding="utf-8")) or {}).get("version")
     if version != 1:
-        raise RegistryError(
-            f"unsupported registry version {version!r} in {reg}; expected 1")
+        raise RegistryError(f"unsupported registry version {version!r} in {reg}; expected 1")
 
     roles: dict[str, RoleConfig] = {}
     for d in sorted(p for p in root.iterdir() if p.is_dir()):
@@ -148,7 +158,8 @@ def _parse_role(name: str, d: Path) -> RoleConfig:
         raise RegistryError(
             f"unknown role directory '{name}' in {d.parent}: the directory name "
             f"is the role name, so this is a typo, not an extension point. "
-            f"Known roles: {', '.join(sorted(KNOWN_ROLES))}")
+            f"Known roles: {', '.join(sorted(KNOWN_ROLES))}"
+        )
     f = d / "agent.yaml"
     if not f.is_file():
         raise RegistryError(f"role '{name}': missing {f}")
@@ -158,7 +169,8 @@ def _parse_role(name: str, d: Path) -> RoleConfig:
         raise RegistryError(
             f"role directory '{name}' contains an agent.yaml declaring role "
             f"'{declared}': the filename is the API and must agree with its "
-            f"contents")
+            f"contents"
+        )
     cfg = RoleConfig(**data)
     instructions_file = d / "instructions.md"
     needs_prompt = cfg.kind != "harness"
@@ -171,7 +183,8 @@ def _parse_role(name: str, d: Path) -> RoleConfig:
         if not text.strip():
             raise RegistryError(
                 f"role '{name}': {instructions_file} is empty — an empty system "
-                f"prompt is a boot-time bug, not a runtime surprise")
+                f"prompt is a boot-time bug, not a runtime surprise"
+            )
         cfg = cfg.model_copy(update={"instructions": text})
         if not (d / "agent.py").is_file():
             raise RegistryError(f"role '{name}': missing {d / 'agent.py'}")
@@ -180,13 +193,15 @@ def _parse_role(name: str, d: Path) -> RoleConfig:
             if not tools_dir.is_dir():
                 raise RegistryError(
                     f"role '{name}' is kind=research and must carry a tools/ "
-                    f"directory (it is the only role that may): {tools_dir}")
+                    f"directory (it is the only role that may): {tools_dir}"
+                )
             tool_files = _validate_tool_files(name, tools_dir)
             cfg = cfg.model_copy(update={"tool_files": tool_files})
     elif instructions_file.exists() or (d / "agent.py").exists():
         raise RegistryError(
             f"role '{name}' is kind=harness and carries instructions.md or "
-            f"agent.py, which would never be read: silent dead config")
+            f"agent.py, which would never be read: silent dead config"
+        )
     return cfg
 
 
@@ -208,19 +223,20 @@ def check_adr6_families(role_models: dict[str, str]) -> None:
     dev = role_models.get("dev")
     rev = role_models.get("reviewer")
     if dev is None or rev is None:
-        raise RegistryError(
-            "ADR-6 check requires both 'dev' and 'reviewer' models")
+        raise RegistryError("ADR-6 check requires both 'dev' and 'reviewer' models")
     if model_family(dev) == model_family(rev):
         raise RegistryError(
             f"ADR-6 violation: reviewer family '{model_family(rev)}' "
             f"equals the family of 'dev' — anti-collusion review requires a "
-            f"different model family than the developer's authoring model")
+            f"different model family than the developer's authoring model"
+        )
     dr = role_models.get("deep_review")
     if dr is not None and model_family(dr) == model_family(dev):
         raise RegistryError(
             f"ADR-6 violation: deep_review family '{model_family(dr)}' "
             f"equals the family of 'dev' — the transcript lens must not "
-            f"correlate with the authoring model")
+            f"correlate with the authoring model"
+        )
 
 
 def check_adversary_model(role_models: dict[str, str]) -> None:
@@ -242,7 +258,8 @@ def check_adversary_model(role_models: dict[str, str]) -> None:
             raise RegistryError(
                 f"ADR-6 violation: adversary model '{adv}' is the same model "
                 f"as '{other}' ('{peer}') -- a second opinion from the same "
-                f"weights is not a second opinion")
+                f"weights is not a second opinion"
+            )
 
 
 def validate_run_roles(role_models: dict[str, str]) -> None:
@@ -267,25 +284,23 @@ def validate_registry(roles: dict[str, RoleConfig]) -> None:
     """
     missing = sorted(REQUIRED_ROLES - set(roles))
     if missing:
-        raise RegistryError(
-            f"registry is missing required role(s): {', '.join(missing)}")
+        raise RegistryError(f"registry is missing required role(s): {', '.join(missing)}")
     for name in ("dev", "reviewer"):
         if roles[name].model is None:
             raise RegistryError(f"role '{name}' must declare a model")
     dev, rev = roles["dev"], roles["reviewer"]
-    role_models = {"dev": dev.model, "reviewer": rev.model}
+    assert dev.model is not None and rev.model is not None
+    role_models: dict[str, str] = {"dev": dev.model, "reviewer": rev.model}
     if "deep_review" in roles:
         if roles["deep_review"].model is None:
             raise RegistryError("role 'deep_review' must declare a model")
         role_models["deep_review"] = roles["deep_review"].model
     check_adr6_families(role_models)
-    check_adversary_model({n: c.model for n, c in roles.items()
-                           if c.model is not None})
-    if rev.kind == "harness" and rev.harness is not None \
-            and rev.harness == dev.harness:
+    check_adversary_model({n: c.model for n, c in roles.items() if c.model is not None})
+    if rev.kind == "harness" and rev.harness is not None and rev.harness == dev.harness:
         raise RegistryError(
-            "deep-review harness reviewer must use a different harness than "
-            "the developer")
+            "deep-review harness reviewer must use a different harness than the developer"
+        )
     for name, cfg in roles.items():
         if cfg.kind != "research":
             continue
@@ -293,15 +308,18 @@ def validate_registry(roles: dict[str, RoleConfig]) -> None:
             raise RegistryError(
                 f"role '{name}' is kind=research and must name a provider "
                 f"(tavily, exa, or fake); ADR-6 does not apply — it reviews "
-                f"nothing")
+                f"nothing"
+            )
         if cfg.provider == "tavily" and not os.environ.get("TAVILY_API_KEY"):
             raise RegistryError(
                 f"role '{name}' declares provider: tavily but TAVILY_API_KEY is "
-                f"not set — fail closed. Use provider: fake for CI/offline.")
+                f"not set — fail closed. Use provider: fake for CI/offline."
+            )
         if cfg.provider == "exa" and not os.environ.get("EXA_API_KEY"):
             raise RegistryError(
                 f"role '{name}' declares provider: exa but EXA_API_KEY is "
-                f"not set — fail closed. Use provider: fake for CI/offline.")
+                f"not set — fail closed. Use provider: fake for CI/offline."
+            )
     _validate_pipeline_mirror(roles)
 
 
@@ -314,18 +332,24 @@ def _validate_pipeline_mirror(roles: dict[str, RoleConfig]) -> None:
     The mirror is DELIBERATE and spans the crew knobs too (layout,
     lead_harness): when a registry role opts into a crew, PipelineConfig.
     roles' default must be changed in the same commit (spec §5 layer 1)."""
-    from ..models import PipelineConfig      # local: avoid an import cycle at
-                                              # module scope via models -> ...
+    from ..models import PipelineConfig  # local: avoid an import cycle at
+
+    # module scope via models -> ...
     default_roles = PipelineConfig().roles
     if set(default_roles) != HARNESS_ROLES:
         raise RegistryError(
             f"PipelineConfig.roles must mirror exactly the harness roles "
-            f"{sorted(HARNESS_ROLES)}; it has {sorted(default_roles)}")
+            f"{sorted(HARNESS_ROLES)}; it has {sorted(default_roles)}"
+        )
     for name in sorted(HARNESS_ROLES):
         reg, dflt = roles[name], default_roles[name]
-        if (reg.kind, reg.harness, reg.model, reg.layout, reg.lead_harness) \
-                != (dflt.kind, dflt.harness, dflt.model, dflt.layout,
-                    dflt.lead_harness):
+        if (reg.kind, reg.harness, reg.model, reg.layout, reg.lead_harness) != (
+            dflt.kind,
+            dflt.harness,
+            dflt.model,
+            dflt.layout,
+            dflt.lead_harness,
+        ):
             raise RegistryError(
                 f"PipelineConfig.roles['{name}'] does not mirror the agents/ "
                 f"registry (change one, change both, in the same commit): "
@@ -334,7 +358,8 @@ def _validate_pipeline_mirror(roles: dict[str, RoleConfig]) -> None:
                 f"lead_harness={reg.lead_harness}); PipelineConfig default "
                 f"has (kind={dflt.kind}, harness={dflt.harness}, "
                 f"model={dflt.model}, layout={dflt.layout}, "
-                f"lead_harness={dflt.lead_harness})")
+                f"lead_harness={dflt.lead_harness})"
+            )
 
 
 def _load_build(name: str, d: Path):
@@ -353,8 +378,8 @@ def _load_build(name: str, d: Path):
     build = getattr(module, "build", None)
     if not callable(build):
         raise RegistryError(
-            f"role '{name}': {f} defines no callable build(model, "
-            f"instructions, model_settings)")
+            f"role '{name}': {f} defines no callable build(model, instructions, model_settings)"
+        )
     return build
 
 
@@ -371,12 +396,12 @@ def _validate_tool_files(role: str, tools_dir: Path) -> list[str]:
             continue
         stem = f.stem
         tree = ast.parse(f.read_text(encoding="utf-8"), filename=str(f))
-        funcs = [n for n in tree.body
-                 if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        funcs = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
         if not any(fn.name == stem for fn in funcs):
             raise RegistryError(
                 f"role '{role}': tool file {f.name} defines no function named "
-                f"'{stem}' — the filename is the API (mismatch)")
+                f"'{stem}' — the filename is the API (mismatch)"
+            )
         fn = next(fn for fn in funcs if fn.name == stem)
         args = fn.args
         params = [*args.posonlyargs, *args.args, *args.kwonlyargs]
@@ -385,18 +410,19 @@ def _validate_tool_files(role: str, tools_dir: Path) -> list[str]:
             raise RegistryError(
                 f"role '{role}': tool '{stem}' has an unannotated signature "
                 f"(params={unannotated}, return_annotated={fn.returns is not None})"
-                f" — tool signatures must be fully typed")
+                f" — tool signatures must be fully typed"
+            )
         paths.append(str(f.resolve()))
     if not paths:
         raise RegistryError(
-            f"role '{role}': tools/ is empty — a research role with no tools "
-            f"cannot fetch anything")
+            f"role '{role}': tools/ is empty — a research role with no tools cannot fetch anything"
+        )
     return paths
 
 
-def build_agents(roles: dict[str, RoleConfig], model_settings,
-                 agents_dir: str | os.PathLike | None = None
-                 ) -> dict[str, "Agent"]:
+def build_agents(
+    roles: dict[str, RoleConfig], model_settings, agents_dir: str | os.PathLike | None = None
+) -> dict[str, Agent]:
     """Construct every proposer role's Agent from its own agent.py.
 
     MUST be called only AFTER load_registry() has returned: validation precedes
@@ -412,9 +438,8 @@ def build_agents(roles: dict[str, RoleConfig], model_settings,
     which tree it loaded, and re-resolving would import agent.py from the
     shipped registry while validating a different one.
     """
-    root = Path(agents_dir) if agents_dir is not None \
-        else _resolve_agents_dir(None)
-    agents: dict[str, "Agent"] = {}
+    root = Path(agents_dir) if agents_dir is not None else _resolve_agents_dir(None)
+    agents: dict[str, Agent] = {}
     seen: dict[str, str] = {}
     for name, cfg in roles.items():
         if cfg.kind == "harness":
@@ -424,14 +449,14 @@ def build_agents(roles: dict[str, RoleConfig], model_settings,
             # Research build takes its tool paths and provider name too. Tool
             # modules are imported HERE — after the whole registry validated
             # (validation precedes import; registry spec finding 3).
-            agent = build(cfg.model, cfg.instructions, model_settings,
-                          cfg.tool_files, cfg.provider)
+            agent = build(cfg.model, cfg.instructions, model_settings, cfg.tool_files, cfg.provider)
         else:
             agent = build(cfg.model, cfg.instructions, model_settings)
         if agent.name in seen:
             raise RegistryError(
                 f"roles '{seen[agent.name]}' and '{name}' both build an agent "
-                f"named '{agent.name}': colliding Temporal activity names")
+                f"named '{agent.name}': colliding Temporal activity names"
+            )
         seen[agent.name] = name
         agents[name] = agent
     return agents

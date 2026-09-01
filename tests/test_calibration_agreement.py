@@ -1,4 +1,4 @@
-from sdlc.benchmarks.calibration import AgreementStats, compute_agreement
+from sdlc.benchmarks.calibration import compute_agreement
 
 
 def test_perfect_agreement():
@@ -29,7 +29,7 @@ def test_anti_correlation_spearman_negative():
 
 def test_tied_human_scores_do_not_crash_spearman():
     s = compute_agreement([(0.5, 0.4), (0.5, 0.6), (0.5, 0.5)])
-    assert s.spearman == 0.0     # zero variance in human ranks -> defined as 0
+    assert s.spearman == 0.0  # zero variance in human ranks -> defined as 0
 
 
 def test_empty_pairs_safe():
@@ -39,5 +39,5 @@ def test_empty_pairs_safe():
 
 def test_single_pair_spearman_zero():
     s = compute_agreement([(0.5, 0.5)])
-    assert s.spearman == 0.0     # n<2 undefined -> 0.0
+    assert s.spearman == 0.0  # n<2 undefined -> 0.0
     assert s.agreement_rate == 1.0

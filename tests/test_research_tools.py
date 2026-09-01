@@ -10,8 +10,7 @@ AGENTS_TOOLS = Path(__file__).resolve().parents[1] / "agents" / "research" / "to
 
 
 def _load_tool(name: str):
-    spec = importlib.util.spec_from_file_location(
-        f"_tool_{name}", AGENTS_TOOLS / f"{name}.py")
+    spec = importlib.util.spec_from_file_location(f"_tool_{name}", AGENTS_TOOLS / f"{name}.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return getattr(mod, name)
@@ -28,8 +27,9 @@ def deps(monkeypatch, tmp_path):
     corpus = Path(__file__).resolve().parent / "fakes" / "research_corpus"
     monkeypatch.setenv("SDLC_RESEARCH_FAKE_CORPUS", str(corpus))
     monkeypatch.setenv("SDLC_RUNS_ROOT", str(tmp_path))
-    return ResearchDeps(run_id="r1", provider="fake", max_searches=2,
-                        max_fetches=2, max_cost_usd=1.0)
+    return ResearchDeps(
+        run_id="r1", provider="fake", max_searches=2, max_fetches=2, max_cost_usd=1.0
+    )
 
 
 # web_search/fetch_page (and their budget-cap tests) were removed with them
@@ -55,8 +55,7 @@ async def test_read_repo_missing_file_returns_string(deps, monkeypatch, tmp_path
 
 
 @pytest.mark.asyncio
-async def test_read_repo_out_of_root_returns_string_not_raises(
-        deps, monkeypatch, tmp_path):
+async def test_read_repo_out_of_root_returns_string_not_raises(deps, monkeypatch, tmp_path):
     """A path escaping the root must be REFUSED GRACEFULLY (a model-visible
     string), never raised. A raised ValueError becomes a Temporal
     ApplicationFailure that the tool-call activity retries with no cap — an

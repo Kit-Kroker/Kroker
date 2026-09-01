@@ -1,13 +1,14 @@
 """FleetPoller: lazy start, grace-period stop, and a REST read whose
 correctness never depends on the poller being up (spec D6)."""
+
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from sdlc.dashboard.fleet import FleetPoller, FleetSnapshot
 
-AT = datetime(2026, 8, 18, 9, 0, tzinfo=timezone.utc)
+AT = datetime(2026, 8, 18, 9, 0, tzinfo=UTC)
 
 
 class _Clock:
@@ -29,9 +30,13 @@ def _poller(clock=None, **kw):
         calls.append(now)
         return FleetSnapshot(at=now, total_open_runs=len(calls))
 
-    p = FleetPoller(lambda: None, clock=clock, fetch=fake_fetch,
-                    interval=kw.pop("interval", 0.01),
-                    grace_s=kw.pop("grace_s", 0.05))
+    p = FleetPoller(
+        lambda: None,
+        clock=clock,
+        fetch=fake_fetch,
+        interval=kw.pop("interval", 0.01),
+        grace_s=kw.pop("grace_s", 0.05),
+    )
     p.calls = calls
     return p
 
@@ -148,6 +153,6 @@ async def test_a_subscriber_who_never_consumes_is_bounded():
     the queue drops oldest under pressure (E-10 review B7)."""
     p = _poller()
     async with p.subscribe() as q:
-        await asyncio.wait_for(q.get(), timeout=2)   # delivery is flowing
-        await asyncio.sleep(0.3)                     # many ticks pile up
+        await asyncio.wait_for(q.get(), timeout=2)  # delivery is flowing
+        await asyncio.sleep(0.3)  # many ticks pile up
         assert 1 <= q.qsize() <= 8

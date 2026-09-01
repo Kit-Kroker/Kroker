@@ -1,21 +1,29 @@
 """E-67/FR-1104: the deploy contract. A smoke result that was never
 observed must not be representable as a pass, and a failed deploy must
 account for what happened to the rollback."""
+
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
 from sdlc.models import (
-    DeployPlan, DeployReport, FeatureFlag, RollbackPolicy, SmokeCheck,
-    SmokeCheckResult, SmokeState,
+    DeployPlan,
+    DeployReport,
+    FeatureFlag,
+    RollbackPolicy,
+    SmokeCheck,
+    SmokeCheckResult,
+    SmokeState,
 )
 
 
 def _plan(**over) -> DeployPlan:
-    base = dict(environment="staging", version="v1",
-                smoke_checks=[SmokeCheck(name="health", kind="http",
-                                         path="/health")])
+    base = dict(
+        environment="staging",
+        version="v1",
+        smoke_checks=[SmokeCheck(name="health", kind="http", path="/health")],
+    )
     base.update(over)
     return DeployPlan(**base)
 
@@ -57,14 +65,12 @@ def test_non_passing_result_must_explain_itself(state):
 
 def test_errored_is_not_passed():
     """D-3: 'we could not reach it' is not 'it works'."""
-    r = SmokeCheckResult(name="health", state=SmokeState.ERRORED,
-                         detail="connection refused")
+    r = SmokeCheckResult(name="health", state=SmokeState.ERRORED, detail="connection refused")
     assert r.passed is False
 
 
 def _report(**over) -> DeployReport:
-    base = dict(deployed=True, environment="staging", version="v1",
-                adapter="compose")
+    base = dict(deployed=True, environment="staging", version="v1", adapter="compose")
     base.update(over)
     return DeployReport(**base)
 
@@ -81,8 +87,7 @@ def test_failed_deploy_without_rollback_must_say_why():
 
 def test_failed_deploy_with_no_previous_version_is_representable():
     """First-ever deploy: nothing to restore, and the report says so."""
-    r = _report(deployed=False, rolled_back=False,
-                rollback_reason="no previous version to restore")
+    r = _report(deployed=False, rolled_back=False, rollback_reason="no previous version to restore")
     assert r.rolled_back is False
 
 
@@ -94,8 +99,14 @@ def test_flag_is_recorded_not_managed():
 def test_report_carries_the_apply_output():
     """F4: the deploy command's output must travel on the report so the
     deploy_failed gate can show the human what the apply produced."""
-    r = DeployReport(deployed=False, environment="staging", version="v1",
-                     adapter="compose", rolled_back=True, rolled_back_to="v0",
-                     rollback_reason="smoke failed",
-                     apply_detail="building... done")
+    r = DeployReport(
+        deployed=False,
+        environment="staging",
+        version="v1",
+        adapter="compose",
+        rolled_back=True,
+        rolled_back_to="v0",
+        rollback_reason="smoke failed",
+        apply_detail="building... done",
+    )
     assert r.apply_detail == "building... done"

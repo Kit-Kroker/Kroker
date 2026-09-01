@@ -3,6 +3,7 @@ the real adapter mechanics are proven by the docker-marked integration test.
 
 Behaviour is driven by module-level state so a test can script a run without
 threading config through FeatureWorkflow's whole call chain."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -10,8 +11,12 @@ from dataclasses import dataclass, field
 from temporalio import activity
 
 from sdlc.deploy.activities import (
-    ApplyResult, CurrentVersionResult, DeployActivityInput, RollbackInput,
-    SmokeCheckInput, SmokeCheckOutput,
+    ApplyResult,
+    CurrentVersionResult,
+    DeployActivityInput,
+    RollbackInput,
+    SmokeCheckInput,
+    SmokeCheckOutput,
 )
 from sdlc.models import SmokeCheckResult, SmokeState
 
@@ -20,11 +25,11 @@ from sdlc.models import SmokeCheckResult, SmokeState
 class DeployScript:
     """What the fakes should do. `smoke_states` is consumed one entry per
     apply, so a REVISE retry can succeed where attempt 1 failed."""
+
     previous_version: str | None = "v0"
     apply_fails: bool = False
     rollback_fails: bool = False
-    smoke_states: list[SmokeState] = field(
-        default_factory=lambda: [SmokeState.PASSED])
+    smoke_states: list[SmokeState] = field(default_factory=lambda: [SmokeState.PASSED])
     applies: int = 0
     rollbacks: int = 0
 
@@ -55,9 +60,15 @@ async def fake_apply(inp: DeployActivityInput) -> ApplyResult:
 async def fake_smoke(inp: SmokeCheckInput) -> SmokeCheckOutput:
     idx = min(SCRIPT.applies - 1, len(SCRIPT.smoke_states) - 1)
     state = SCRIPT.smoke_states[idx]
-    return SmokeCheckOutput(results=[SmokeCheckResult(
-        name="liveness", state=state,
-        detail="" if state is SmokeState.PASSED else f"fake {state.value}")])
+    return SmokeCheckOutput(
+        results=[
+            SmokeCheckResult(
+                name="liveness",
+                state=state,
+                detail="" if state is SmokeState.PASSED else f"fake {state.value}",
+            )
+        ]
+    )
 
 
 @activity.defn(name="deploy_rollback")

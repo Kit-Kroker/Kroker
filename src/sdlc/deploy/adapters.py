@@ -13,15 +13,16 @@ Two adapters ship. FR-1105 requires one reference (compose); script is the
 second because a seam with a single implementation quietly becomes a
 substrate -- and it preserves any target repo that already has `make deploy`.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from enum import Enum
+from enum import StrEnum
 
 from ..models import DeployConfig, DeployPlan
 
 
-class DeployKind(str, Enum):
+class DeployKind(StrEnum):
     COMPOSE = "compose"
     SCRIPT = "script"
 
@@ -66,6 +67,7 @@ class DeployAdapter(ABC):
 class ComposeAdapter(DeployAdapter):
     """FR-1105 reference adapter. Assumes the target repo's compose file
     reads ${IMAGE_TAG} for the image it builds/runs."""
+
     kind = DeployKind.COMPOSE
     DEFAULT_BASE_URL = "http://localhost:8000"
 
@@ -95,10 +97,9 @@ class ComposeAdapter(DeployAdapter):
 class ScriptAdapter(DeployAdapter):
     """The generalization of the pre-E-67 hardcoded deploy shell-out.
     Delegates semantics to a convention the target repo already owns."""
+
     kind = DeployKind.SCRIPT
-    DEFAULTS = {"deploy": "make deploy",
-                "rollback": "make rollback",
-                "version": "make version"}
+    DEFAULTS = {"deploy": "make deploy", "rollback": "make rollback", "version": "make version"}
 
     def _cmd(self, key: str) -> str:
         return self.cfg.commands.get(key, self.DEFAULTS[key])

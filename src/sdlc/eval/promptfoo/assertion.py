@@ -9,6 +9,7 @@ assertScoringFunction sees one test, so neither can compare providers.
 The ONE hard failure here is an ADR-6 violation: a judge sharing a model
 family with the author is a configuration error, not a measurement.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -40,21 +41,20 @@ def load_rubric(case: str, role: str, cases_root: Path) -> str:
     case_yaml = cases_root / case / "case.yaml"
     if not case_yaml.is_file():
         raise RubricError(f"no case.yaml at {case_yaml}")
-    rubrics = (yaml.safe_load(case_yaml.read_text(encoding="utf-8")) or {}
-               ).get("rubrics") or {}
+    rubrics = (yaml.safe_load(case_yaml.read_text(encoding="utf-8")) or {}).get("rubrics") or {}
     key = RUBRIC_KEY.get(role, role)
     rel = rubrics.get(key)
     if not rel:
         raise RubricError(
             f"no rubric for role '{role}' (key '{key}') in {case_yaml}. "
             f"Author {cases_root / case}/rubric-{key}.md and list it under "
-            f"`rubrics:` before evaluating this role.")
+            f"`rubrics:` before evaluating this role."
+        )
     path = cases_root / case / rel
     try:
         return path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        raise RubricError(
-            f"rubric file {path} named in {case_yaml} does not exist")
+        raise RubricError(f"rubric file {path} named in {case_yaml} does not exist") from None
 
 
 def grade(output: str, context: dict) -> dict:
@@ -62,10 +62,13 @@ def grade(output: str, context: dict) -> dict:
     author, judge = v.get("author_model", ""), v.get("judge_model", "")
 
     if model_family(judge) == model_family(author):
-        return {"pass": False, "score": 0.0,
-                "reason": f"ADR-6 violation: judge '{judge}' shares family "
-                          f"'{model_family(judge)}' with author '{author}'. "
-                          f"Pick a different family."}
+        return {
+            "pass": False,
+            "score": 0.0,
+            "reason": f"ADR-6 violation: judge '{judge}' shares family "
+            f"'{model_family(judge)}' with author '{author}'. "
+            f"Pick a different family.",
+        }
     # Family alone is not enough. A provider prefix says who SERVES a model,
     # not what it is -- this repo runs `anthropic:glm-5.2` against
     # ANTHROPIC_BASE_URL=api.z.ai, so `zai-coding-plan/glm-5.2` would clear
@@ -73,29 +76,33 @@ def grade(output: str, context: dict) -> dict:
     # output. loader.py:237 already guards the adversary this way; the judge
     # needs the same guard for the same reason.
     if model_id(judge) == model_id(author):
-        return {"pass": False, "score": 0.0,
-                "reason": f"ADR-6 violation: judge '{judge}' and author "
-                          f"'{author}' are the same model "
-                          f"'{model_id(judge)}' behind different provider "
-                          f"prefixes. Two prefixes over the same weights "
-                          f"decorrelate nothing."}
+        return {
+            "pass": False,
+            "score": 0.0,
+            "reason": f"ADR-6 violation: judge '{judge}' and author "
+            f"'{author}' are the same model "
+            f"'{model_id(judge)}' behind different provider "
+            f"prefixes. Two prefixes over the same weights "
+            f"decorrelate nothing.",
+        }
     try:
         rubric = load_rubric(v["case"], v["role"], Path(v["cases_root"]))
     except RubricError as e:
         return {"pass": False, "score": 0.0, "reason": str(e)}
 
-    qs = judge_artifact.sync(JudgeInput(
-        artifact_json=output, rubric=rubric, author_model=author,
-        judge_model=judge))
+    qs = judge_artifact.sync(
+        JudgeInput(artifact_json=output, rubric=rubric, author_model=author, judge_model=judge)
+    )
     if qs.score is None:
         # promptfoo rejects a null score and would default a missing one to
         # 1.0, so report a placeholder number and flag it; verdict._scores
         # drops JUDGE_UNAVAILABLE rows before averaging.
-        return {"pass": True, "score": 0.0,
-                "reason": f"{JUDGE_UNAVAILABLE}: judge errored — advisory, "
-                          f"excluded from the mean"}
-    return {"pass": True, "score": qs.score,
-            "reason": f"advisory rubric score {qs.score:.2f}"}
+        return {
+            "pass": True,
+            "score": 0.0,
+            "reason": f"{JUDGE_UNAVAILABLE}: judge errored — advisory, excluded from the mean",
+        }
+    return {"pass": True, "score": qs.score, "reason": f"advisory rubric score {qs.score:.2f}"}
 
 
 def get_assert(output: str, context) -> dict:

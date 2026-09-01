@@ -5,11 +5,12 @@ it lives in root models.py. Siting it here would invert the dependency
 direction (D2) and open the cycle models.py -> context -> assessment -> triage
 -> models.py.
 """
+
 from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, model_validator
 
 from ..assessment.scan.models import Confidence, MemberKind
 from ..measurement import CollectionState, Measurement
@@ -24,6 +25,7 @@ class RepoObservation(BaseModel):
     and the scan decides what it can map, so two definitions of "has code"
     would let a repository pass intake and then produce an empty map.
     """
+
     is_git_repo: bool
     base_branch_resolves: bool
     commit_sha: str = ""
@@ -34,6 +36,7 @@ class RepoObservation(BaseModel):
 class IntakeVerdict(BaseModel):
     """Stage 0's output. `mode` is what was DECLARED -- intake verifies a
     declaration, it never reclassifies behind the operator's back."""
+
     mode: ProjectMode
     ok: bool
     warning: str = ""
@@ -42,6 +45,7 @@ class IntakeVerdict(BaseModel):
 
 class MapModule(BaseModel):
     """One S5-merged candidate, as the Architect sees it."""
+
     model_config = {"frozen": True}
     name: str
     member_paths: tuple[str, ...] = ()
@@ -50,6 +54,7 @@ class MapModule(BaseModel):
 
 class MapContract(BaseModel):
     """One externally-reachable member: a route, a command, a topic."""
+
     model_config = {"frozen": True}
     kind: MemberKind
     value: str
@@ -64,6 +69,7 @@ class HotSpot(BaseModel):
     QS2 did not, the hot spots that exist say which signal produced them
     rather than presenting as a complete set.
     """
+
     model_config = {"frozen": True}
     path: str
     source: Literal["testability", "coverage"]
@@ -80,6 +86,7 @@ class CodebaseMap(BaseModel):
     would bloat every run's history against ADR-10 and push this past the
     Architect's context_budget_tokens (FR-801).
     """
+
     tree_hash: str
     commit_sha: str
     modules: tuple[MapModule, ...] = ()
@@ -91,12 +98,13 @@ class CodebaseMap(BaseModel):
     collected: Measurement
 
     @model_validator(mode="after")
-    def _unmeasured_carries_no_payload(self) -> "CodebaseMap":
+    def _unmeasured_carries_no_payload(self) -> CodebaseMap:
         if self.collected.state is not CollectionState.MEASURED:
             if self.modules or self.contracts or self.hot_spots:
                 raise ValueError(
                     f"collected={self.collected.state.value} carries no "
                     f"payload, but modules/contracts/hot_spots are present "
                     f"-- a context stage that did not collect has nothing to "
-                    f"show (FR-915)")
+                    f"show (FR-915)"
+                )
         return self

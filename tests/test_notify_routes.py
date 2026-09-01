@@ -1,6 +1,7 @@
 """E-9 Task 4: routes as a versioned asset, mirroring policy/containment.yaml.
 Unknown notifier names fail at LOAD, not at send -- a typo must not surface
 for the first time during an expiring gate."""
+
 from __future__ import annotations
 
 import pytest
@@ -32,8 +33,7 @@ def test_non_escalate_reasons_go_to_primary_only(tmp_path, monkeypatch):
     monkeypatch.setenv("MERGE_HOOK", "https://hooks.slack.com/a")
     monkeypatch.setenv("ONCALL_HOOK", "https://hooks.slack.com/b")
     routes = load_routes(_write(tmp_path))
-    for reason in (NotifyReason.OPENED, NotifyReason.REMIND,
-                   NotifyReason.EXPIRE):
+    for reason in (NotifyReason.OPENED, NotifyReason.REMIND, NotifyReason.EXPIRE):
         got = routes.routes_for("merge", reason)
         assert [r.target for r in got] == ["https://hooks.slack.com/a"]
 
@@ -43,8 +43,7 @@ def test_escalate_adds_the_fallback_route(tmp_path, monkeypatch):
     monkeypatch.setenv("ONCALL_HOOK", "https://hooks.slack.com/b")
     routes = load_routes(_write(tmp_path))
     got = routes.routes_for("merge", NotifyReason.ESCALATE)
-    assert [r.target for r in got] == ["https://hooks.slack.com/a",
-                                       "https://hooks.slack.com/b"]
+    assert [r.target for r in got] == ["https://hooks.slack.com/a", "https://hooks.slack.com/b"]
 
 
 def test_unlisted_gate_falls_back_to_default(tmp_path):
@@ -53,8 +52,7 @@ def test_unlisted_gate_falls_back_to_default(tmp_path):
     assert [(r.notifier, r.target) for r in got] == [("log", None)]
 
 
-def test_unset_env_var_drops_the_route_rather_than_sending_a_literal(
-        tmp_path, monkeypatch):
+def test_unset_env_var_drops_the_route_rather_than_sending_a_literal(tmp_path, monkeypatch):
     """A literal '$MERGE_HOOK' POSTed to nowhere is worse than no route."""
     monkeypatch.delenv("MERGE_HOOK", raising=False)
     monkeypatch.setenv("ONCALL_HOOK", "https://hooks.slack.com/b")
@@ -87,5 +85,6 @@ def test_env_var_overrides_discovery(tmp_path, monkeypatch):
 def test_shipped_asset_parses():
     """policy/notifications.yaml must always load -- it is the default."""
     from pathlib import Path
+
     root = Path(__file__).resolve().parents[1]
     assert load_routes(root / "policy" / "notifications.yaml").version == 1

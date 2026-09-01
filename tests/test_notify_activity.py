@@ -1,8 +1,9 @@
 """E-9 Task 6: the activity. Every route is attempted; a raising transport
 becomes a reported failure, never an exception that reaches the workflow."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -10,7 +11,7 @@ from sdlc.notify import activities as act
 from sdlc.notify.contract import NotifyInput, NotifyReason
 from sdlc.pending import ClarifyPending
 
-T0 = datetime(2026, 7, 26, 12, 0, tzinfo=timezone.utc)
+T0 = datetime(2026, 7, 26, 12, 0, tzinfo=UTC)
 
 ASSET = """
 version: 1
@@ -34,10 +35,14 @@ def routes(tmp_path, monkeypatch):
 def _input(reason=NotifyReason.OPENED) -> NotifyInput:
     return NotifyInput(
         run_id="abc123",
-        pending=ClarifyPending(key="q1", question="Which datastore?",
-                               why_it_matters="Drives the schema."),
-        reason=reason, opened_at=T0, now=T0,
-        deadline=T0 + timedelta(hours=48))
+        pending=ClarifyPending(
+            key="q1", question="Which datastore?", why_it_matters="Drives the schema."
+        ),
+        reason=reason,
+        opened_at=T0,
+        now=T0,
+        deadline=T0 + timedelta(hours=48),
+    )
 
 
 @pytest.mark.asyncio
@@ -54,8 +59,7 @@ async def test_escalate_delivers_to_primary_and_fallback(routes):
 
 
 @pytest.mark.asyncio
-async def test_a_raising_transport_is_reported_not_propagated(routes,
-                                                              monkeypatch):
+async def test_a_raising_transport_is_reported_not_propagated(routes, monkeypatch):
     class Boom:
         async def deliver(self, text, target):
             raise RuntimeError("slack is down")
@@ -67,8 +71,7 @@ async def test_a_raising_transport_is_reported_not_propagated(routes,
 
 
 @pytest.mark.asyncio
-async def test_a_broken_routes_asset_is_reported_not_propagated(monkeypatch,
-                                                                tmp_path):
+async def test_a_broken_routes_asset_is_reported_not_propagated(monkeypatch, tmp_path):
     bad = tmp_path / "notifications.yaml"
     bad.write_text("version: 99\n", encoding="utf-8")
     monkeypatch.setenv("SDLC_NOTIFY_ROUTES", str(bad))
@@ -78,14 +81,14 @@ async def test_a_broken_routes_asset_is_reported_not_propagated(monkeypatch,
 
 @pytest.mark.asyncio
 async def test_no_configured_route_yields_no_results(routes, monkeypatch):
-    monkeypatch.setattr(act, "load_routes",
-                        lambda: _routes_with_no_primary())
+    monkeypatch.setattr(act, "load_routes", lambda: _routes_with_no_primary())
     out = await act.notify(_input())
     assert out.results == []
 
 
 def _routes_with_no_primary():
     from sdlc.notify.routes import NotifyRoutes
+
     return NotifyRoutes(version=1, default={}, gates={})
 
 
@@ -110,8 +113,10 @@ async def test_webhook_gets_the_allowlist_injected(routes, monkeypatch):
 
 def _webhook_routes():
     from sdlc.notify.routes import NotifyRoutes, Route
+
     return NotifyRoutes(
-        version=1, allow_hosts=["hooks.slack.com"],
-        default={"primary": Route(notifier="webhook",
-                                  target="https://hooks.slack.com/x")},
-        gates={})
+        version=1,
+        allow_hosts=["hooks.slack.com"],
+        default={"primary": Route(notifier="webhook", target="https://hooks.slack.com/x")},
+        gates={},
+    )

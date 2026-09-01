@@ -6,6 +6,7 @@ same bytes -- so the ONLY way this migration can be wrong is if a prompt
 changed while moving. These literals were computed from roles.py before the
 constants were deleted. A diff here is a migration bug, never an improvement.
 """
+
 import hashlib
 
 from sdlc.agents.roles import PROMPT_SHAS, REGISTRY, STAGE_ROLES
@@ -49,5 +50,7 @@ def test_crlf_and_lf_instructions_hash_identically(tmp_path):
     crlf = tmp_path / "crlf.md"
     lf.write_bytes(b"line one\nline two")
     crlf.write_bytes(b"line one\r\nline two")
-    assert (hashlib.sha256(lf.read_text(encoding="utf-8").encode()).hexdigest()
-            == hashlib.sha256(crlf.read_text(encoding="utf-8").encode()).hexdigest())
+    assert (
+        hashlib.sha256(lf.read_text(encoding="utf-8").encode()).hexdigest()
+        == hashlib.sha256(crlf.read_text(encoding="utf-8").encode()).hexdigest()
+    )

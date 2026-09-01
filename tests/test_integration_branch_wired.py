@@ -2,6 +2,7 @@
 that accumulates completed task work; each task branches from the current
 integration head and merges back on success. Tests are AST-based (matching
 the project's structural-purity convention — see test_factory_purity.py)."""
+
 import ast
 import pathlib
 
@@ -30,13 +31,15 @@ def _fn(tree, name):
 
 def test_workflow_calls_setup_integration_branch(feature_src):
     assert "setup_integration_branch" in feature_src, (
-        "FeatureWorkflow.run must call setup_integration_branch at run start")
+        "FeatureWorkflow.run must call setup_integration_branch at run start"
+    )
 
 
 def test_workflow_calls_merge_into_integration(feature_src):
     assert "merge_into_integration" in feature_src, (
         "on task completion, run_one must merge the task branch back into "
-        "the integration branch (ADR-14)")
+        "the integration branch (ADR-14)"
+    )
 
 
 def test_dev_task_branches_from_integration_head(feature_src):
@@ -51,23 +54,27 @@ def test_integration_handle_dataclass_returned_by_setup_activity():
     not a bare SHA string — the workflow needs the worktree path too."""
     src = ACT.read_text(encoding="utf-8")
     tree = ast.parse(src)
-    cls_names = {n.name for n in ast.walk(tree)
-                 if isinstance(n, ast.ClassDef)}
+    cls_names = {n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)}
     assert "IntegrationHandle" in cls_names, (
         "activities.py must define an IntegrationHandle dataclass "
-        "(Resolution A: workflow needs the worktree path)")
+        "(Resolution A: workflow needs the worktree path)"
+    )
 
 
 def test_integration_handle_has_head_sha_and_worktree_path():
     src = ACT.read_text(encoding="utf-8")
     tree = ast.parse(src)
-    cls = next(n for n in ast.walk(tree)
-               if isinstance(n, ast.ClassDef) and n.name == "IntegrationHandle")
-    fields = {t.target.id for t in cls.body
-              if isinstance(t, ast.AnnAssign) and isinstance(t.target, ast.Name)}
+    cls = next(
+        n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "IntegrationHandle"
+    )
+    fields = {
+        t.target.id
+        for t in cls.body
+        if isinstance(t, ast.AnnAssign) and isinstance(t.target, ast.Name)
+    }
     assert {"head_sha", "worktree_path"}.issubset(fields), (
-        f"IntegrationHandle must expose head_sha and worktree_path; "
-        f"found {sorted(fields)}")
+        f"IntegrationHandle must expose head_sha and worktree_path; found {sorted(fields)}"
+    )
 
 
 def test_workflow_threads_worktree_path_not_repo_path(feature_src):
@@ -75,7 +82,8 @@ def test_workflow_threads_worktree_path_not_repo_path(feature_src):
     worktree (self._integration_wt), NOT idea.repo_url / repo_path."""
     assert "_integration_wt" in feature_src, (
         "merge stage must use the integration worktree path "
-        "(self._integration_wt), not the bare repo_path")
+        "(self._integration_wt), not the bare repo_path"
+    )
 
 
 def test_run_one_does_not_merge(feature_tree, feature_src):
@@ -87,21 +95,23 @@ def test_run_one_does_not_merge(feature_tree, feature_src):
     assert body is not None
     assert "merge_into_integration" not in body, (
         "run_one must NOT merge (Resolution B: wave-mode race). "
-        "Merge happens in a separate _merge_task helper, after run_one.")
+        "Merge happens in a separate _merge_task helper, after run_one."
+    )
 
 
 def test_merge_task_helper_exists(feature_tree):
     """Resolution B: a _merge_task helper carries the merge + conflict
     check + head update, called from both SERIAL and wave paths."""
-    methods = {n.name for n in ast.walk(feature_tree)
-               if isinstance(n, ast.AsyncFunctionDef)}
+    methods = {n.name for n in ast.walk(feature_tree) if isinstance(n, ast.AsyncFunctionDef)}
     assert "_merge_task" in methods, (
         "_merge_task helper missing — both SERIAL and wave paths must "
-        "funnel merges through it (Resolution B)")
+        "funnel merges through it (Resolution B)"
+    )
 
 
 def test_merge_task_helper_calls_merge_activity(feature_tree, feature_src):
     helper = _fn(feature_tree, "_merge_task")
     body = ast.get_source_segment(feature_src, helper)
     assert body is not None and "merge_into_integration" in body, (
-        "_merge_task must call the merge_into_integration activity")
+        "_merge_task must call the merge_into_integration activity"
+    )

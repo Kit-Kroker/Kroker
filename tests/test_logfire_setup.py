@@ -1,4 +1,5 @@
 """E-38: Logfire slice is env-gated and a strict no-op without a token."""
+
 import importlib
 
 import sdlc.observability.logfire_setup as lf
@@ -15,7 +16,7 @@ def _reload(monkeypatch, token):
 def test_disabled_without_token(monkeypatch):
     mod = _reload(monkeypatch, None)
     assert mod.configure() is False
-    with mod.span("x", n=1):        # nullcontext — must not raise, no import
+    with mod.span("x", n=1):  # nullcontext — must not raise, no import
         pass
 
 

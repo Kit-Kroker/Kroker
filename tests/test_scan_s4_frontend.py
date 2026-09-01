@@ -1,6 +1,7 @@
 """S4: routes as the user meets them. BrownKit groups by user journey, not by
 component hierarchy -- so /payments, /payments/:id and /payments/new are ONE
 candidate."""
+
 from __future__ import annotations
 
 from sdlc.assessment.scan.models import MemberKind
@@ -18,8 +19,9 @@ NEXT_APP = {
 
 def test_next_app_router_pages_become_routes():
     out = frontend.evaluate(NEXT_APP)
-    routes = {m.value for c in out.sources for m in c.members
-              if m.kind is MemberKind.FRONTEND_ROUTE}
+    routes = {
+        m.value for c in out.sources for m in c.members if m.kind is MemberKind.FRONTEND_ROUTE
+    }
     assert "/payments" in routes
     assert "/payments/:id" in routes
     # A route group is a layout device, not a URL segment.
@@ -42,7 +44,8 @@ def test_react_router_config_routes_are_extracted():
             "export const router = createBrowserRouter([\n"
             "  { path: '/orders', element: <Orders /> },\n"
             "  { path: '/orders/:id', element: <Order /> },\n"
-            "]);\n"),
+            "]);\n"
+        ),
     }
     out = frontend.evaluate(blobs)
     assert out.row.collected.state is CollectionState.MEASURED

@@ -6,6 +6,7 @@ it passed while `from ..cli import slug` -- one regex helper -- transitively
 loaded pydantic_ai, temporalio and the whole agent registry, constructing
 every TemporalAgent at import time. What matters is what ACTUALLY loads.
 """
+
 import ast
 import pathlib
 import subprocess
@@ -47,11 +48,14 @@ def test_importing_tools_does_not_load_a_framework_transitively():
         "import sys; import sdlc.operator.tools; "
         "print(','.join(sorted(m for m in "
         "('pydantic_ai', 'fastapi', 'starlette', 'temporalio') "
-        "if m in sys.modules)))")
-    out = subprocess.run([sys.executable, "-c", probe], capture_output=True,
-                         text=True, cwd=REPO, timeout=300)
+        "if m in sys.modules)))"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, cwd=REPO, timeout=300
+    )
     assert out.returncode == 0, out.stderr
     loaded = [m for m in out.stdout.strip().split(",") if m]
     assert loaded == [], (
         f"importing sdlc.operator.tools loaded {loaded}; E-11's MCP server "
-        f"imports this module expecting a leaf")
+        f"imports this module expecting a leaf"
+    )

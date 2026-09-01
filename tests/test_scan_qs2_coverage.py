@@ -1,17 +1,26 @@
 """QS2: coverage without running the suite (D12). A committed report when
 there is one, BrownKit's tested_files/significant_files proxy when there is
 not -- and never a bare percentage."""
+
 from __future__ import annotations
 
 from sdlc.assessment.scan.models import (
-    C_COVERAGE, Confidence, ScanSignalId, ScanUpstream, TestFileRecord,
+    C_COVERAGE,
+    Confidence,
+    ScanSignalId,
+    ScanUpstream,
+    TestFileRecord,
     TestLevel,
 )
 from sdlc.assessment.scan.signals import coverage
 from sdlc.measurement import CollectionState, Measurement
 
-PATHS = ["src/payments/service.py", "src/payments/gateway.py",
-         "src/payments/__init__.py", "tests/test_service.py"]
+PATHS = [
+    "src/payments/service.py",
+    "src/payments/gateway.py",
+    "src/payments/__init__.py",
+    "tests/test_service.py",
+]
 
 REPORT = """<?xml version="1.0" ?>
 <coverage line-rate="0.75">
@@ -25,11 +34,18 @@ REPORT = """<?xml version="1.0" ?>
 
 def _qs1_ok() -> ScanUpstream:
     return ScanUpstream(
-        tests=[TestFileRecord(
-            path="tests/test_service.py", level=TestLevel.UNIT,
-            rule="qs1_unit_by_elimination", mapping_rule="naming_convention",
-            covers=["src/payments/service.py"], confidence=Confidence.MEDIUM)],
-        collected={ScanSignalId.QS1: Measurement.measured(1.0)})
+        tests=[
+            TestFileRecord(
+                path="tests/test_service.py",
+                level=TestLevel.UNIT,
+                rule="qs1_unit_by_elimination",
+                mapping_rule="naming_convention",
+                covers=["src/payments/service.py"],
+                confidence=Confidence.MEDIUM,
+            )
+        ],
+        collected={ScanSignalId.QS1: Measurement.measured(1.0)},
+    )
 
 
 def test_a_committed_report_is_read_per_file():
@@ -57,8 +73,7 @@ def test_the_proxy_is_used_when_no_report_is_committed():
 
 def test_the_proxy_is_unavailable_when_qs1_did_not_collect():
     """Section 5: a missing QS1 must not make QS2 read as zero coverage."""
-    up = ScanUpstream(collected={
-        ScanSignalId.QS1: Measurement.not_collected("QS1 timed out")})
+    up = ScanUpstream(collected={ScanSignalId.QS1: Measurement.not_collected("QS1 timed out")})
     out = coverage.evaluate(PATHS, {}, up)
     assert out.row.collected.state is CollectionState.NOT_COLLECTED
     assert "QS1" in out.row.categories[C_COVERAGE].reason
@@ -68,8 +83,7 @@ def test_the_proxy_is_unavailable_when_qs1_did_not_collect():
 def test_a_report_is_used_even_when_qs1_degraded():
     """The report path does not depend on QS1 at all, so a QS1 failure must
     not suppress a coverage number the repository actually committed."""
-    up = ScanUpstream(collected={
-        ScanSignalId.QS1: Measurement.not_collected("QS1 timed out")})
+    up = ScanUpstream(collected={ScanSignalId.QS1: Measurement.not_collected("QS1 timed out")})
     out = coverage.evaluate(PATHS, {"coverage.xml": REPORT}, up)
     assert out.row.collected.state is CollectionState.MEASURED
     assert all(r.source == "report" for r in out.coverage)
@@ -79,7 +93,8 @@ def test_a_non_finite_rate_is_unknown_not_measured():
     """The guard measure_coverage already carries, for the same reason: nan
     >= threshold is False, which fabricates a passing advisory."""
     bad = REPORT.replace('line-rate="0.9"', 'line-rate="nan"').replace(
-        'line-rate="0.2"', 'line-rate="inf"')
+        'line-rate="0.2"', 'line-rate="inf"'
+    )
     out = coverage.evaluate(PATHS, {"coverage.xml": bad}, _qs1_ok())
     assert out.row.categories[C_COVERAGE].state is CollectionState.UNKNOWN
     assert out.coverage == []
@@ -92,5 +107,4 @@ def test_an_unparseable_report_falls_back_to_the_proxy():
 
 def test_output_is_byte_identical_across_input_orderings():
     reference = coverage.evaluate(PATHS, {}, _qs1_ok()).model_dump_json()
-    assert coverage.evaluate(list(reversed(PATHS)), {},
-                             _qs1_ok()).model_dump_json() == reference
+    assert coverage.evaluate(list(reversed(PATHS)), {}, _qs1_ok()).model_dump_json() == reference

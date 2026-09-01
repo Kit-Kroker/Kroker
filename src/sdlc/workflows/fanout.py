@@ -9,6 +9,7 @@ because these failures happen outside the activity.
 Two copies of that rule would agree only by coincidence -- the reason E-42 D2
 extracted GateHost out of FeatureWorkflow.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -19,8 +20,9 @@ from temporalio import workflow
 T = TypeVar("T")
 
 
-async def run_or_degrade(activity: Any, arg: Any, opts: dict[str, Any], *,
-                         fallback: Callable[[], T]) -> T:
+async def run_or_degrade(
+    activity: Any, arg: Any, opts: dict[str, Any], *, fallback: Callable[[], T]
+) -> T:
     """Run one activity, or return `fallback()` if it could not run.
 
     `fallback` takes no arguments so the caller closes over whatever its own
@@ -28,5 +30,5 @@ async def run_or_degrade(activity: Any, arg: Any, opts: dict[str, Any], *,
     """
     try:
         return await workflow.execute_activity(activity, arg, **opts)
-    except Exception:                                   # noqa: BLE001
+    except Exception:  # noqa: BLE001
         return fallback()

@@ -23,6 +23,7 @@ proposer agents honor ``cfg.roles`` (so a real worker can run the workflow
 end-to-end with ``TestModel`` rather than faking the TemporalAgent
 activity surface).
 """
+
 from __future__ import annotations
 
 import ast
@@ -30,8 +31,7 @@ from pathlib import Path
 
 import pytest
 
-FEATURE_PY = (Path(__file__).resolve().parents[1]
-              / "src" / "sdlc" / "workflows" / "feature.py")
+FEATURE_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "feature.py"
 
 _BENCHMARK_ACTIVITIES = {"record_benchmark", "judge_artifact"}
 _GATED_HELPERS = {"_record", "_judge"}
@@ -57,21 +57,25 @@ def _is_benchmarking_guard(stmt: ast.stmt) -> bool:
     if not isinstance(stmt, ast.If):
         return False
     test = stmt.test
-    if not (isinstance(test, ast.UnaryOp)
-            and isinstance(test.op, ast.Not)
-            and isinstance(test.operand, ast.Call)):
+    if not (
+        isinstance(test, ast.UnaryOp)
+        and isinstance(test.op, ast.Not)
+        and isinstance(test.operand, ast.Call)
+    ):
         return False
     call = test.operand
     func = call.func
-    return (isinstance(func, ast.Attribute)
-            and func.attr == "_benchmarking"
-            and isinstance(func.value, ast.Name)
-            and func.value.id == "self"
-            and len(call.args) == 1
-            and isinstance(call.args[0], ast.Name)
-            and call.args[0].id == "cfg"
-            and len(stmt.body) == 1
-            and isinstance(stmt.body[0], ast.Return))
+    return (
+        isinstance(func, ast.Attribute)
+        and func.attr == "_benchmarking"
+        and isinstance(func.value, ast.Name)
+        and func.value.id == "self"
+        and len(call.args) == 1
+        and isinstance(call.args[0], ast.Name)
+        and call.args[0].id == "cfg"
+        and len(stmt.body) == 1
+        and isinstance(stmt.body[0], ast.Return)
+    )
 
 
 def _activity_names_in(stmt: ast.stmt) -> set[str]:
@@ -81,10 +85,12 @@ def _activity_names_in(stmt: ast.stmt) -> set[str]:
         if not isinstance(node, ast.Call):
             continue
         func = node.func
-        if not (isinstance(func, ast.Attribute)
-                and func.attr == "execute_activity"
-                and isinstance(func.value, ast.Name)
-                and func.value.id == "workflow"):
+        if not (
+            isinstance(func, ast.Attribute)
+            and func.attr == "execute_activity"
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "workflow"
+        ):
             continue
         if node.args and isinstance(node.args[0], ast.Name):
             names.add(node.args[0].id)
@@ -92,15 +98,14 @@ def _activity_names_in(stmt: ast.stmt) -> set[str]:
 
 
 def _benchmarking_guard_precedes_activity(
-        fn: ast.FunctionDef | ast.AsyncFunctionDef,
-        activity_name: str) -> bool:
+    fn: ast.FunctionDef | ast.AsyncFunctionDef, activity_name: str
+) -> bool:
     """True iff a ``_benchmarking`` early-return guard appears in the function
     body BEFORE the first ``execute_activity(activity_name, ...)`` call. (The
     guard may be preceded by setup like a fallback assignment.)"""
     body = list(fn.body)
-    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value,
-                                                             ast.Constant):
-        body = body[1:]      # skip docstring
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+        body = body[1:]  # skip docstring
     guard_seen = False
     for stmt in body:
         if not guard_seen and _is_benchmarking_guard(stmt):
@@ -111,8 +116,7 @@ def _benchmarking_guard_precedes_activity(
     return True
 
 
-def _activity_calls_in_method(fn: ast.FunctionDef | ast.AsyncFunctionDef
-                              ) -> set[str]:
+def _activity_calls_in_method(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
     """Names of all activities invoked via workflow.execute_activity(X, ...)
     anywhere in ``fn`` (walked, not just top-level)."""
     names: set[str] = set()
@@ -120,10 +124,12 @@ def _activity_calls_in_method(fn: ast.FunctionDef | ast.AsyncFunctionDef
         if not isinstance(node, ast.Call):
             continue
         func = node.func
-        if not (isinstance(func, ast.Attribute)
-                and func.attr == "execute_activity"
-                and isinstance(func.value, ast.Name)
-                and func.value.id == "workflow"):
+        if not (
+            isinstance(func, ast.Attribute)
+            and func.attr == "execute_activity"
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "workflow"
+        ):
             continue
         if node.args and isinstance(node.args[0], ast.Name):
             names.add(node.args[0].id)
@@ -140,27 +146,26 @@ def feature_class() -> ast.ClassDef:
 def test_record_helper_is_guarded(feature_class):
     methods = _methods(feature_class)
     assert "_record" in methods, "_record helper missing"
-    assert _benchmarking_guard_precedes_activity(methods["_record"],
-                                                 "record_benchmark"), (
+    assert _benchmarking_guard_precedes_activity(methods["_record"], "record_benchmark"), (
         "_record must guard its record_benchmark call with "
         "`if not self._benchmarking(cfg): return` BEFORE the call — this is "
         "the production purity invariant (no recorder calls when case_id is "
-        "None)")
+        "None)"
+    )
 
 
 def test_judge_helper_is_guarded(feature_class):
     methods = _methods(feature_class)
     assert "_judge" in methods, "_judge helper missing"
-    assert _benchmarking_guard_precedes_activity(methods["_judge"],
-                                                 "judge_artifact"), (
+    assert _benchmarking_guard_precedes_activity(methods["_judge"], "judge_artifact"), (
         "_judge must guard its judge_artifact call with "
         "`if not self._benchmarking(cfg): return <fallback>` BEFORE the call "
         "— this is the production purity invariant (no judge calls when "
-        "case_id is None)")
+        "case_id is None)"
+    )
 
 
-def test_benchmark_activities_only_called_through_gated_helpers(
-        feature_class):
+def test_benchmark_activities_only_called_through_gated_helpers(feature_class):
     """No direct ``workflow.execute_activity(record_benchmark/judge_artifact,
     ...)`` calls outside ``_record``/``_judge``. Prevents an unguarded
     call sneaking in on any other code path."""
@@ -172,7 +177,8 @@ def test_benchmark_activities_only_called_through_gated_helpers(
         assert not calls, (
             f"method {name!r} calls benchmark activity/activities {calls} "
             f"directly — benchmark activities must only be invoked through "
-            f"the gated _record/_judge helpers")
+            f"the gated _record/_judge helpers"
+        )
 
 
 def test_gated_helpers_call_the_right_activities(feature_class):
@@ -190,5 +196,5 @@ def test_benchmarking_predicate_is_the_case_id_check(feature_class):
     assert "_benchmarking" in methods, "_benchmarking predicate missing"
     src = ast.unparse(methods["_benchmarking"])
     assert "case_id" in src, (
-        "_benchmarking must gate on cfg.benchmark.case_id; predicate was: "
-        f"{src!r}")
+        f"_benchmarking must gate on cfg.benchmark.case_id; predicate was: {src!r}"
+    )

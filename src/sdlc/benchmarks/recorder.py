@@ -4,6 +4,7 @@ records.jsonl per (bench_run_id, cell_id) under SDLC_BENCHMARKS_ROOT
 (default runs/benchmarks/). One JSON object per line — a partial last line
 is skipped on read so a crashed writer never corrupts the readable history.
 """
+
 from __future__ import annotations
 
 import os
@@ -43,19 +44,19 @@ def _sanitize_segment(s: str, allow_slash: bool) -> str:
     return "".join(out)
 
 
-def records_path(bench_run_id: str, cell_id: str | None,
-                 root: str | None = None) -> Path:
-    base = (Path(root if root is not None else _root())
-            / _sanitize_segment(bench_run_id, allow_slash=True))
+def records_path(bench_run_id: str, cell_id: str | None, root: str | None = None) -> Path:
+    base = Path(root if root is not None else _root()) / _sanitize_segment(
+        bench_run_id, allow_slash=True
+    )
     if cell_id:
         return base / f"{_sanitize_segment(cell_id, allow_slash=False)}.jsonl"
     return base / "records.jsonl"
 
 
 class RecordStore:
-    def __init__(self, root: str | None = None,
-                 bench_run_id: str = "b1",
-                 cell_id: str | None = None) -> None:
+    def __init__(
+        self, root: str | None = None, bench_run_id: str = "b1", cell_id: str | None = None
+    ) -> None:
         self.path = records_path(bench_run_id, cell_id, root)
 
     def append(self, record: BenchmarkRecord) -> None:
@@ -67,7 +68,7 @@ class RecordStore:
         if not self.path.exists():
             return []
         out: list[BenchmarkRecord] = []
-        with open(self.path, "r", encoding="utf-8") as f:
+        with open(self.path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -75,7 +76,7 @@ class RecordStore:
                 try:
                     out.append(BenchmarkRecord.model_validate_json(line))
                 except Exception:
-                    continue     # skip corrupt / partial line
+                    continue  # skip corrupt / partial line
         return out
 
 
@@ -86,8 +87,7 @@ async def record_benchmark(record: BenchmarkRecord) -> None:
     Non-deterministic I/O (filesystem) — must live in an activity, never in
     workflow code. Retries on failure via Temporal RetryPolicy.
     """
-    store = RecordStore(bench_run_id=record.bench_run_id,
-                        cell_id=_cell_id_for(record))
+    store = RecordStore(bench_run_id=record.bench_run_id, cell_id=_cell_id_for(record))
     store.append(record)
 
 

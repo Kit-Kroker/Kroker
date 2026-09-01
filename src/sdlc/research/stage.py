@@ -5,6 +5,7 @@ why each return type carries a RoleUsage: fan-out moves the call out of
 _run_role's reach, and an activity that calls a model must hand its usage back
 or the spend is silently lost (E-33 amendment, fan-out design §7).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -16,8 +17,15 @@ from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.usage import UsageLimits
 from temporalio import activity
 
-from ..models import (Contradiction, Gap, ResearchBrief, ResearchPlan,
-                      RoleUsage, SubQuestion, SubQuestionFinding)
+from ..models import (
+    Contradiction,
+    Gap,
+    ResearchBrief,
+    ResearchPlan,
+    RoleUsage,
+    SubQuestion,
+    SubQuestionFinding,
+)
 from .deps import BudgetExceeded, ResearchDeps
 from .merge import merge_briefs
 from .prompts import PLAN_SYSTEM, SYNTHESIS_SYSTEM, sub_question_prompt
@@ -26,6 +34,7 @@ from .prompts import PLAN_SYSTEM, SYNTHESIS_SYSTEM, sub_question_prompt
 class _PlannerOutput(BaseModel):
     """Structured-output shape for the planner. A flat list of strings: ids
     are assigned by us, not the model, so they stay stable and offsettable."""
+
     sub_questions: list[str] = Field(default_factory=list)
 
 
@@ -33,6 +42,7 @@ class PlanInput(BaseModel):
     """Serves BOTH the first plan and a refine replan. A replan is just a plan
     with a seed: the human's guidance plus the machine-readable gaps and
     contradictions round one could not resolve."""
+
     idea_json: str
     max_sub_questions: int
     model: str
@@ -48,12 +58,15 @@ def _usage_of(result, model: str) -> RoleUsage:
     pricing must stay replay-safe and must never fail a stage."""
     u = result.usage
     return RoleUsage(
-        role="research", model=model, calls=1,
+        role="research",
+        model=model,
+        calls=1,
         input_tokens=u.input_tokens or 0,
         output_tokens=u.output_tokens or 0,
         cache_read_tokens=u.cache_read_tokens or 0,
         cache_write_tokens=u.cache_write_tokens or 0,
-        cost_usd=None)
+        cost_usd=None,
+    )
 
 
 def _plan_prompt(inp: PlanInput) -> str:
@@ -65,16 +78,13 @@ def _plan_prompt(inp: PlanInput) -> str:
     if inp.guidance:
         parts.append(f"\nFocus specifically on: {inp.guidance}\n")
     if inp.gaps:
-        parts.append("\nA previous round left these questions unanswered — "
-                     "target them:\n")
-        parts.extend(f"- {g.what_is_missing} ({g.why_it_matters})\n"
-                     for g in inp.gaps)
+        parts.append("\nA previous round left these questions unanswered — target them:\n")
+        parts.extend(f"- {g.what_is_missing} ({g.why_it_matters})\n" for g in inp.gaps)
     if inp.contradictions:
-        parts.append("\nA previous round found these unresolved conflicts — "
-                     "target them:\n")
-        parts.extend(f"- {c.topic}: {' vs '.join(c.positions)}\n"
-                     for c in inp.contradictions
-                     if c.unresolved)
+        parts.append("\nA previous round found these unresolved conflicts — target them:\n")
+        parts.extend(
+            f"- {c.topic}: {' vs '.join(c.positions)}\n" for c in inp.contradictions if c.unresolved
+        )
     return "".join(parts)
 
 
@@ -88,11 +98,10 @@ async def _plan_research_impl(inp: PlanInput, _model=None) -> ResearchPlan:
     that planners return the top of whatever range they are given, even for a
     yes/no lookup -- so the config value, not the question, decides the width.
     """
-    agent = Agent(_model or inp.model, output_type=_PlannerOutput,
-                  system_prompt=PLAN_SYSTEM)
+    agent = Agent(_model or inp.model, output_type=_PlannerOutput, system_prompt=PLAN_SYSTEM)
     result = await agent.run(_plan_prompt(inp))
     texts = [t.strip() for t in result.output.sub_questions if t and t.strip()]
-    texts = texts[:inp.max_sub_questions]
+    texts = texts[: inp.max_sub_questions]
 
     if not texts:
         # Degrade to exactly today's behaviour: one investigation covering the
@@ -101,9 +110,11 @@ async def _plan_research_impl(inp: PlanInput, _model=None) -> ResearchPlan:
 
     activity.logger.info("planned %d sub-questions", len(texts))
     return ResearchPlan(
-        sub_questions=[SubQuestion(id=f"sq-{inp.id_offset + i}", question=t)
-                       for i, t in enumerate(texts)],
-        usage=_usage_of(result, inp.model))
+        sub_questions=[
+            SubQuestion(id=f"sq-{inp.id_offset + i}", question=t) for i, t in enumerate(texts)
+        ],
+        usage=_usage_of(result, inp.model),
+    )
 
 
 @activity.defn(name="plan_research")
@@ -173,15 +184,20 @@ def _degraded(sub: SubQuestion, exc: Exception) -> ResearchBrief:
     a gap -- ResearchConfig's documented contract. Never grounded, so
     verify_brief passes it through the ordinary success path."""
     return ResearchBrief(
-        gaps=[Gap(sub_question_id=sub.id,
-                  what_is_missing=sub.question,
-                  why_it_matters=f"research stopped early: {exc}")],
-        summary=f"Research stopped early: {exc}")
+        gaps=[
+            Gap(
+                sub_question_id=sub.id,
+                what_is_missing=sub.question,
+                why_it_matters=f"research stopped early: {exc}",
+            )
+        ],
+        summary=f"Research stopped early: {exc}",
+    )
 
 
-async def _research_subquestion_impl(inp: SubQuestionInput,
-                                     _model=None, _agent=None
-                                     ) -> SubQuestionFinding:
+async def _research_subquestion_impl(
+    inp: SubQuestionInput, _model=None, _agent=None
+) -> SubQuestionFinding:
     """Research ONE sub-question. The fan-out unit.
 
     Runs the PLAIN research_agent, not the TemporalAgent: inside an activity
@@ -195,37 +211,35 @@ async def _research_subquestion_impl(inp: SubQuestionInput,
     sub = inp.sub_question
     if _agent is None:
         from sdlc.agents.roles import research_agent
+
         if research_agent is None:
-            raise RuntimeError(
-                "research agent is not available (agents/research/ missing)")
+            raise RuntimeError("research agent is not available (agents/research/ missing)")
         agent = research_agent
     else:
         agent = _agent
 
     # Each sub-question charges its OWN scope so one cannot drain the run.
-    deps = inp.deps.model_copy(update={
-        "budget": inp.deps.budget.model_copy(),
-        "scope": sub.id,
-        "max_run_cost_usd": inp.max_run_cost_usd,
-    })
+    deps = inp.deps.model_copy(
+        update={
+            "budget": inp.deps.budget.model_copy(),
+            "scope": sub.id,
+            "max_run_cost_usd": inp.max_run_cost_usd,
+        }
+    )
 
     usage = RoleUsage(role="research", model=inp.model)
     try:
         async with _heartbeating():
-            kwargs = dict(deps=deps,
-                          usage_limits=UsageLimits(
-                              request_limit=inp.max_requests))
+            kwargs = dict(deps=deps, usage_limits=UsageLimits(request_limit=inp.max_requests))
             if _model is not None:
                 kwargs["model"] = _model
-            result = await agent.run(sub_question_prompt(sub.question),
-                                     **kwargs)
+            result = await agent.run(sub_question_prompt(sub.question), **kwargs)
     except (BudgetExceeded, UsageLimitExceeded) as exc:
         # Expected exhaustion: degrade. NEVER re-raise -- the counter is
         # persisted, so a retry hits the same exhausted cap and burns six
         # attempts with backoff for a guaranteed failure.
         activity.logger.info("sub-question %s degraded: %s", sub.id, exc)
-        return SubQuestionFinding(sub_question=sub,
-                                  brief=_degraded(sub, exc), usage=usage)
+        return SubQuestionFinding(sub_question=sub, brief=_degraded(sub, exc), usage=usage)
     except asyncio.CancelledError:
         # Graceful shutdown cancels in-flight activities. Heartbeat on the way
         # out so the server learns immediately rather than waiting out
@@ -234,8 +248,9 @@ async def _research_subquestion_impl(inp: SubQuestionInput,
         activity.logger.warning("sub-question %s cancelled mid-flight", sub.id)
         raise
 
-    return SubQuestionFinding(sub_question=sub, brief=result.output,
-                              usage=_usage_of(result, inp.model))
+    return SubQuestionFinding(
+        sub_question=sub, brief=result.output, usage=_usage_of(result, inp.model)
+    )
 
 
 @activity.defn(name="research_subquestion")
@@ -256,6 +271,7 @@ class _SynthesisOutput(BaseModel):
     so ResearchBrief.confidence's ge/le is inert on this path. Putting the
     bound on _SynthesisOutput catches an out-of-range value at the boundary
     where pydantic-ai validates the model's structured output."""
+
     summary: str = ""
     contradictions: list[Contradiction] = Field(default_factory=list)
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -277,12 +293,15 @@ def _numbered_sources(brief: ResearchBrief) -> str:
     cannot drift."""
     return "".join(
         f"[{n}] {s.title or s.url} — {s.url}\n"
-        for n, s in enumerate(brief.sources_consulted, start=1))
+        for n, s in enumerate(brief.sources_consulted, start=1)
+    )
 
 
 def _synthesis_prompt(inp: SynthesizeInput, merged: ResearchBrief) -> str:
-    parts = [f"Original question / feature idea:\n\n{inp.idea_json}\n",
-             "\nWhat the analysts found:\n"]
+    parts = [
+        f"Original question / feature idea:\n\n{inp.idea_json}\n",
+        "\nWhat the analysts found:\n",
+    ]
     for f in inp.findings:
         parts.append(f"\n--- On: {f.sub_question.question}\n")
         if f.failed:
@@ -298,8 +317,9 @@ def _synthesis_prompt(inp: SynthesizeInput, merged: ResearchBrief) -> str:
     return "".join(parts)
 
 
-async def _synthesize_brief_impl(inp: SynthesizeInput, _model=None
-                                 ) -> tuple[ResearchBrief, RoleUsage]:
+async def _synthesize_brief_impl(
+    inp: SynthesizeInput, _model=None
+) -> tuple[ResearchBrief, RoleUsage]:
     """Merge N partial briefs into one ResearchBrief.
 
     Structure comes from code (merge_briefs), prose from the model. The model
@@ -318,25 +338,25 @@ async def _synthesize_brief_impl(inp: SynthesizeInput, _model=None
     if not inp.findings:
         return merged, RoleUsage(role="research", model=inp.model)
 
-    agent = Agent(_model or inp.model, output_type=_SynthesisOutput,
-                  system_prompt=SYNTHESIS_SYSTEM)
+    agent = Agent(_model or inp.model, output_type=_SynthesisOutput, system_prompt=SYNTHESIS_SYSTEM)
     result = await agent.run(_synthesis_prompt(inp, merged))
     out = result.output
 
-    return merged.model_copy(update={
-        "summary": out.summary,
-        # Within-sub-question conflicts (already in `merged`) PLUS the
-        # cross-sub-question ones only visible now that independent
-        # investigations sit side by side. The second kind is unreachable in a
-        # single agent turn and is the depth payoff of fanning out.
-        "contradictions": merged.contradictions + out.contradictions,
-        "confidence": out.confidence,
-    }), _usage_of(result, inp.model)
+    return merged.model_copy(
+        update={
+            "summary": out.summary,
+            # Within-sub-question conflicts (already in `merged`) PLUS the
+            # cross-sub-question ones only visible now that independent
+            # investigations sit side by side. The second kind is unreachable in a
+            # single agent turn and is the depth payoff of fanning out.
+            "contradictions": merged.contradictions + out.contradictions,
+            "confidence": out.confidence,
+        }
+    ), _usage_of(result, inp.model)
 
 
 @activity.defn(name="synthesize_brief")
-async def synthesize_brief(inp: SynthesizeInput
-                           ) -> tuple[ResearchBrief, RoleUsage]:
+async def synthesize_brief(inp: SynthesizeInput) -> tuple[ResearchBrief, RoleUsage]:
     """Thin activity wrapper -- see `plan_research`'s wrapper docstring for
     why the `_model` test seam cannot live on the registered activity's own
     signature."""

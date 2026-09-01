@@ -11,6 +11,7 @@ Operator-run only. The fix runs execute the triaged repository's build and
 test commands, which is a wider exposure than E-42's build probe alone
 (NFR-9). E-57 and E-21 are what remove that debt.
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -22,12 +23,18 @@ from temporalio.common import RetryPolicy
 with workflow.unsafe.imports_passed_through():
     from ..activities import VerifyBranchInput, build_verification_branch
     from ..models import (
-        GateConfig, GatePolicy, GateSettings, IdeaBrief, PipelineConfig,
+        GateConfig,
+        GatePolicy,
+        GateSettings,
+        IdeaBrief,
+        PipelineConfig,
         ProjectMode,
     )
     from ..pending import GateContext
     from ..tidyup.backlog import (
-        admitted, mechanical_backlog, seeded_work_for,
+        admitted,
+        mechanical_backlog,
+        seeded_work_for,
     )
     from ..triage.delta import FindingDelta, compute_delta
     from ..triage.models import RepoTriage, Verdict
@@ -36,8 +43,9 @@ with workflow.unsafe.imports_passed_through():
     from .triage import TriageInput, TriageWorkflow
 
 # Local git only; a retry is free because the branch is force-created.
-VERIFY_ACT = dict(start_to_close_timeout=timedelta(minutes=10),
-                  retry_policy=RetryPolicy(maximum_attempts=3))
+VERIFY_ACT = dict(
+    start_to_close_timeout=timedelta(minutes=10), retry_policy=RetryPolicy(maximum_attempts=3)
+)
 
 
 def _fix_gates() -> dict[str, GateConfig]:
@@ -69,13 +77,13 @@ class TidyUpInput(BaseModel):
     base_branch: str = "main"
     gates: GateSettings = Field(default_factory=GateSettings)
     fix_cfg: PipelineConfig = Field(default_factory=_default_fix_cfg)
-    max_fix_runs: int = 10          # D10: a cap on spend, not on honesty
+    max_fix_runs: int = 10  # D10: a cap on spend, not on honesty
 
 
 class FixRunResult(BaseModel):
     identity: str
     workflow_id: str
-    outcome: str                    # FeatureWorkflow's return string, verbatim
+    outcome: str  # FeatureWorkflow's return string, verbatim
     pr_url: str | None = None
     branch: str | None = None
     merged_into_verify: bool = False
@@ -129,8 +137,7 @@ def branches_to_verify(runs: list[FixRunResult]) -> list[str]:
     return [r.branch for r in runs if r.branch and reached_a_pr(r.outcome)]
 
 
-def unrecognized_selection(selected: list[str] | None,
-                           backlog: list[str]) -> list[str]:
+def unrecognized_selection(selected: list[str] | None, backlog: list[str]) -> list[str]:
     """Identities the operator signalled via select_items that were NOT in the
     backlog. Surfaced in the report rather than dropped silently, so the count
     the CLI confirms (the send count) and the count the workflow keeps can be
@@ -161,10 +168,15 @@ def _backlog_summary(pairs, deferred_from: int) -> str:
     for n, (identity, f) in enumerate(pairs):
         mark = "  " if n < deferred_from else "* "
         lines.append(f"{mark}{identity}  [{f.severity}] {f.detail[:90]}")
-    tail = ("\n\n(* beyond max_fix_runs; deferred with the reason recorded)"
-            if len(pairs) > deferred_from else "")
-    return (f"{len(pairs)} mechanically-fixable finding(s). Approving opens "
-            f"one PR per item.\n\n" + "\n".join(lines) + tail)
+    tail = (
+        "\n\n(* beyond max_fix_runs; deferred with the reason recorded)"
+        if len(pairs) > deferred_from
+        else ""
+    )
+    return (
+        f"{len(pairs)} mechanically-fixable finding(s). Approving opens "
+        f"one PR per item.\n\n" + "\n".join(lines) + tail
+    )
 
 
 @workflow.defn
@@ -186,19 +198,25 @@ class TidyUpWorkflow(GateHost):
         cannot retroactively change what ran."""
         self._selected = list(identities)
 
-    async def _triage(self, inp: TidyUpInput, suffix: str,
-                      commit: str, gating: bool = True) -> RepoTriage:
+    async def _triage(
+        self, inp: TidyUpInput, suffix: str, commit: str, gating: bool = True
+    ) -> RepoTriage:
         return await workflow.execute_child_workflow(
             TriageWorkflow.run,
-            TriageInput(repo_dir=inp.repo_dir, commit=commit,
-                        build_probe=inp.build_probe,
-                        advisory_source=inp.advisory_source,
-                        gates=triage_gates(inp.gates, gating)),
+            TriageInput(
+                repo_dir=inp.repo_dir,
+                commit=commit,
+                build_probe=inp.build_probe,
+                advisory_source=inp.advisory_source,
+                gates=triage_gates(inp.gates, gating),
+            ),
             id=f"{workflow.info().workflow_id}-triage-{suffix}",
-            task_queue=workflow.info().task_queue)
+            task_queue=workflow.info().task_queue,
+        )
 
-    async def _fix_run(self, inp: TidyUpInput, index: int, identity: str,
-                       finding, signal_version: int) -> FixRunResult:
+    async def _fix_run(
+        self, inp: TidyUpInput, index: int, identity: str, finding, signal_version: int
+    ) -> FixRunResult:
         """One accepted finding -> one governed run -> one PR.
 
         A child that raises degrades THIS item only, never the tidy-up --
@@ -210,23 +228,33 @@ class TidyUpWorkflow(GateHost):
             outcome = await workflow.execute_child_workflow(
                 FeatureWorkflow.run,
                 args=[
-                    IdeaBrief(title=f"tidy-up: {finding.rule}",
-                              description=finding.detail,
-                              mode=ProjectMode.BROWNFIELD,
-                              repo_url=inp.repo_dir,
-                              base_branch=inp.base_branch),
+                    IdeaBrief(
+                        title=f"tidy-up: {finding.rule}",
+                        description=finding.detail,
+                        mode=ProjectMode.BROWNFIELD,
+                        repo_url=inp.repo_dir,
+                        base_branch=inp.base_branch,
+                    ),
                     inp.fix_cfg,
                     seeded_work_for(identity, finding, signal_version),
                 ],
-                id=wf_id, task_queue=workflow.info().task_queue)
-        except Exception as e:                      # noqa: BLE001
+                id=wf_id,
+                task_queue=workflow.info().task_queue,
+            )
+        except Exception as e:  # noqa: BLE001
             return FixRunResult(
-                identity=identity, workflow_id=wf_id,
-                outcome=f"failed:{type(e).__name__}: {e}"[:300])
+                identity=identity,
+                workflow_id=wf_id,
+                outcome=f"failed:{type(e).__name__}: {e}"[:300],
+            )
         pr = outcome.split(":", 1)[1] if reached_a_pr(outcome) else None
-        return FixRunResult(identity=identity, workflow_id=wf_id,
-                            outcome=outcome, pr_url=pr,
-                            branch=branch if reached_a_pr(outcome) else None)
+        return FixRunResult(
+            identity=identity,
+            workflow_id=wf_id,
+            outcome=outcome,
+            pr_url=pr,
+            branch=branch if reached_a_pr(outcome) else None,
+        )
 
     @workflow.run
     async def run(self, inp: TidyUpInput) -> TidyUpReport:
@@ -239,8 +267,8 @@ class TidyUpWorkflow(GateHost):
 
         def _finish(**kw) -> TidyUpReport:
             self._report = TidyUpReport(
-                before=before, backlog=backlog,
-                readiness_before=before.readiness.verdict, **kw)
+                before=before, backlog=backlog, readiness_before=before.readiness.verdict, **kw
+            )
             return self._report
 
         if not admitted(before):
@@ -259,23 +287,23 @@ class TidyUpWorkflow(GateHost):
         # arrives during the gate-await is applied to `chosen` below, with
         # the report's `deferred` as the post-selection truth. The summary is
         # thus the best pre-decision view, never a commitment.
-        pre_selected = (set(self._selected) if self._selected is not None
-                        else set())
-        summary_pairs = (pairs if not pre_selected
-                         else [p for p in pairs if p[0] in pre_selected])
+        pre_selected = set(self._selected) if self._selected is not None else set()
+        summary_pairs = pairs if not pre_selected else [p for p in pairs if p[0] in pre_selected]
         decision = await self._gate(
-            "tidy_up", inp.gates,
-            context=GateContext(spec_summary=_backlog_summary(
-                summary_pairs, inp.max_fix_runs)))
+            "tidy_up",
+            inp.gates,
+            context=GateContext(spec_summary=_backlog_summary(summary_pairs, inp.max_fix_runs)),
+        )
         if not decision.approved:
             self._status = "rejected:tidy_up"
             return _finish(deltas=compute_delta(before, None))
 
         # D8: read the selection ONCE, here.
-        chosen = (backlog if self._selected is None
-                  else [i for i in backlog if i in set(self._selected)])
-        accepted = chosen[:inp.max_fix_runs]
-        deferred = chosen[inp.max_fix_runs:]
+        chosen = (
+            backlog if self._selected is None else [i for i in backlog if i in set(self._selected)]
+        )
+        accepted = chosen[: inp.max_fix_runs]
+        deferred = chosen[inp.max_fix_runs :]
         # Identities the operator asked for that were never in the backlog.
         # Surfaced in the report rather than dropped silently.
         unrecognized = unrecognized_selection(self._selected, backlog)
@@ -285,37 +313,47 @@ class TidyUpWorkflow(GateHost):
         runs: list[FixRunResult] = []
         for index, identity in enumerate(accepted):
             finding = by_identity[identity]
-            runs.append(await self._fix_run(
-                inp, index, identity, finding,
-                versions.get(finding.signal, 0)))
+            runs.append(
+                await self._fix_run(inp, index, identity, finding, versions.get(finding.signal, 0))
+            )
 
         branches = branches_to_verify(runs)
         if not branches:
             # D5 rule 4: nothing to measure, and the report says so.
             self._status = "tidied:no-branches"
-            return _finish(accepted=accepted, deferred=deferred,
-                           unrecognized=unrecognized, runs=runs,
-                           deltas=compute_delta(before, None))
+            return _finish(
+                accepted=accepted,
+                deferred=deferred,
+                unrecognized=unrecognized,
+                runs=runs,
+                deltas=compute_delta(before, None),
+            )
 
         self._status = "verifying"
         verify = await workflow.execute_activity(
             build_verification_branch,
-            VerifyBranchInput(repo_path=inp.repo_dir,
-                              base_sha=before.commit_sha,
-                              tidyup_id=workflow.info().workflow_id,
-                              branches=branches),
-            **VERIFY_ACT)
+            VerifyBranchInput(
+                repo_path=inp.repo_dir,
+                base_sha=before.commit_sha,
+                tidyup_id=workflow.info().workflow_id,
+                branches=branches,
+            ),
+            **VERIFY_ACT,
+        )
         merged = set(verify.merged)
         for r in runs:
             r.merged_into_verify = r.branch in merged
-        conflicted = [r.identity for r in runs
-                      if r.branch and r.branch not in merged]
+        conflicted = [r.identity for r in runs if r.branch and r.branch not in merged]
 
-        after = await self._triage(inp, "after", verify.head_sha,
-                                   gating=False)
+        after = await self._triage(inp, "after", verify.head_sha, gating=False)
         self._status = "tidied"
-        return _finish(after=after, verify_ref=verify.ref,
-                       accepted=accepted, deferred=deferred,
-                       unrecognized=unrecognized, runs=runs,
-                       readiness_after=after.readiness.verdict,
-                       deltas=compute_delta(before, after, conflicted))
+        return _finish(
+            after=after,
+            verify_ref=verify.ref,
+            accepted=accepted,
+            deferred=deferred,
+            unrecognized=unrecognized,
+            runs=runs,
+            readiness_after=after.readiness.verdict,
+            deltas=compute_delta(before, after, conflicted),
+        )

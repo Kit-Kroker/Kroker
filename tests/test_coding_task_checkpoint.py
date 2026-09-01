@@ -21,12 +21,17 @@ same trigger as production, deterministic across platforms. It is set
 *after* worktree creation so only the checkpoint-commit git calls run
 under the dubious condition.
 """
+
 import asyncio
 
 import sdlc.activities
 from sdlc.activities import (
-    CodingTaskInput, IntegrationInput, WorktreeInput,
-    create_worktree, run_coding_task, setup_integration_branch,
+    CodingTaskInput,
+    IntegrationInput,
+    WorktreeInput,
+    create_worktree,
+    run_coding_task,
+    setup_integration_branch,
 )
 from sdlc.harness.adapters import CodingHarness
 from sdlc.models import HarnessKind, HarnessRunResult
@@ -35,6 +40,7 @@ from sdlc.models import HarnessKind, HarnessRunResult
 class _StubHarness(CodingHarness):
     """Harness that does no real work — lets us test run_coding_task's
     checkpoint-commit logic without spawning claude/opencode."""
+
     kind = HarnessKind.CLAUDE_CODE
 
     def build_cmd(self, req):  # never called — run() is overridden
@@ -44,27 +50,31 @@ class _StubHarness(CodingHarness):
         raise NotImplementedError
 
     async def run(self, req, heartbeat=None):
-        return HarnessRunResult(
-            harness=self.kind, exit_code=0, summary="stub")
+        return HarnessRunResult(harness=self.kind, exit_code=0, summary="stub")
 
 
 def test_checkpoint_survives_dubious_ownership(git_repo, monkeypatch):
-    setup = asyncio.run(setup_integration_branch(
-        IntegrationInput(repo_path=git_repo, run_id="run-cp",
-                         base_branch="main")))
-    wt = asyncio.run(create_worktree(
-        WorktreeInput(repo_path=git_repo, run_id="run-cp", task_id="T",
-                      from_ref=setup.head_sha)))
+    setup = asyncio.run(
+        setup_integration_branch(
+            IntegrationInput(repo_path=git_repo, run_id="run-cp", base_branch="main")
+        )
+    )
+    wt = asyncio.run(
+        create_worktree(
+            WorktreeInput(repo_path=git_repo, run_id="run-cp", task_id="T", from_ref=setup.head_sha)
+        )
+    )
 
     # Flip on git's dubious-ownership check — the production trigger is a
     # different SID; this flag forces the same code path deterministically.
     monkeypatch.setenv("GIT_TEST_ASSUME_DIFFERENT_OWNER", "1")
-    monkeypatch.setitem(sdlc.activities.HARNESSES,
-                        HarnessKind.CLAUDE_CODE, _StubHarness())
+    monkeypatch.setitem(sdlc.activities.HARNESSES, HarnessKind.CLAUDE_CODE, _StubHarness())
 
-    result = asyncio.run(run_coding_task(  # raises before the fix
-        CodingTaskInput(harness=HarnessKind.CLAUDE_CODE,
-                        prompt="noop", worktree=wt.path)))
+    result = asyncio.run(
+        run_coding_task(  # raises before the fix
+            CodingTaskInput(harness=HarnessKind.CLAUDE_CODE, prompt="noop", worktree=wt.path)
+        )
+    )
 
     assert result.commit_sha  # checkpoint commit landed despite dubious ownership
 
@@ -76,25 +86,36 @@ def test_checkpoint_surfaces_git_stderr_on_failure(git_repo, monkeypatch):
     deleting the worktree's .git pointer so ``git add`` cannot find a
     repository, then assert git's diagnostic text is in the raised error.
     """
-    monkeypatch.setitem(sdlc.activities.HARNESSES,
-                        HarnessKind.CLAUDE_CODE, _StubHarness())
-    setup = asyncio.run(setup_integration_branch(
-        IntegrationInput(repo_path=git_repo, run_id="run-stderr",
-                         base_branch="main")))
-    wt = asyncio.run(create_worktree(
-        WorktreeInput(repo_path=git_repo, run_id="run-stderr", task_id="T",
-                      from_ref=setup.head_sha)))
+    monkeypatch.setitem(sdlc.activities.HARNESSES, HarnessKind.CLAUDE_CODE, _StubHarness())
+    setup = asyncio.run(
+        setup_integration_branch(
+            IntegrationInput(repo_path=git_repo, run_id="run-stderr", base_branch="main")
+        )
+    )
+    wt = asyncio.run(
+        create_worktree(
+            WorktreeInput(
+                repo_path=git_repo, run_id="run-stderr", task_id="T", from_ref=setup.head_sha
+            )
+        )
+    )
 
     import os
+
     git_link = os.path.join(wt.path, ".git")
     if os.path.exists(git_link):
         os.remove(git_link)
 
     import pytest
+
     with pytest.raises(RuntimeError) as exc_info:
-        asyncio.run(run_coding_task(
-            CodingTaskInput(harness=HarnessKind.CLAUDE_CODE,
-                            prompt="noop", worktree=wt.path)))
+        asyncio.run(
+            run_coding_task(
+                CodingTaskInput(harness=HarnessKind.CLAUDE_CODE, prompt="noop", worktree=wt.path)
+            )
+        )
     # git's own diagnostic — not just "non-zero exit status 128".
-    assert "not a git repository" in str(exc_info.value).lower() \
+    assert (
+        "not a git repository" in str(exc_info.value).lower()
         or "fatal" in str(exc_info.value).lower()
+    )

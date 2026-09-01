@@ -17,6 +17,7 @@ collects them with inspect.getmembers, which walks the MRO
 (temporalio/workflow/_definition.py:288). Only @workflow.run must be defined
 on the concrete class (_definition.py:128).
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -26,8 +27,13 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from ..models import (
-        GateConfig, GateDecision, GateOutcome, GatePolicy, GateSettings,
-        TimeoutAction, gate_key,
+        GateConfig,
+        GateDecision,
+        GateOutcome,
+        GatePolicy,
+        GateSettings,
+        TimeoutAction,
+        gate_key,
     )
     from ..notify.activities import notify
     from ..notify.contract import NotifyInput, NotifyReason, Results
@@ -38,9 +44,11 @@ with workflow.unsafe.imports_passed_through():
 # the notify activity already attempts every configured route internally, and
 # the short schedule_to_start fails fast when no worker registered notify
 # rather than hanging the gate forever.
-NOTIFY_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
-                  schedule_to_start_timeout=timedelta(seconds=5),
-                  retry_policy=RetryPolicy(maximum_attempts=1))
+NOTIFY_ACT = dict(
+    start_to_close_timeout=timedelta(seconds=30),
+    schedule_to_start_timeout=timedelta(seconds=5),
+    retry_policy=RetryPolicy(maximum_attempts=1),
+)
 
 
 class GateHost:
@@ -63,9 +71,14 @@ class GateHost:
     async def _on_gate_awaited(self, name: str, round: int) -> None:
         """A gate has opened and is now waiting on a human."""
 
-    async def _on_gate_decided(self, name: str, round: int,
-                               policy: GatePolicy, decision: GateDecision,
-                               confidence: float | None = None) -> None:
+    async def _on_gate_decided(
+        self,
+        name: str,
+        round: int,
+        policy: GatePolicy,
+        decision: GateDecision,
+        confidence: float | None = None,
+    ) -> None:
         """A gate has been decided, by a human, a policy, or a timeout.
 
         `confidence` is a PARAMETER, never instance state: gates interleave.
@@ -75,9 +88,9 @@ class GateHost:
         SC-6's calibration compare reads.
         """
 
-    async def _on_notified(self, gate: str, reason: NotifyReason,
-                           notifier: str, delivered: bool,
-                           error: str = "") -> None:
+    async def _on_notified(
+        self, gate: str, reason: NotifyReason, notifier: str, delivered: bool, error: str = ""
+    ) -> None:
         """One notification route reported its delivery outcome."""
 
     # -------------------- signals / queries (HITL) ----------------------
@@ -117,18 +130,21 @@ class GateHost:
         try:
             out: Results = await workflow.execute_activity(
                 notify,
-                NotifyInput(run_id=workflow.info().workflow_id,
-                            pending=pending, reason=reason,
-                            opened_at=opened_at, now=workflow.now(),
-                            deadline=deadline),
-                **NOTIFY_ACT)
-        except Exception as e:                # noqa: BLE001
-            await self._on_notified(gate, reason, "unresolved", False,
-                                    str(e)[:200])
+                NotifyInput(
+                    run_id=workflow.info().workflow_id,
+                    pending=pending,
+                    reason=reason,
+                    opened_at=opened_at,
+                    now=workflow.now(),
+                    deadline=deadline,
+                ),
+                **NOTIFY_ACT,
+            )
+        except Exception as e:  # noqa: BLE001
+            await self._on_notified(gate, reason, "unresolved", False, str(e)[:200])
             return
         for r in out.results:
-            await self._on_notified(gate, reason, r.notifier, r.delivered,
-                                    (r.error or "")[:200])
+            await self._on_notified(gate, reason, r.notifier, r.delivered, (r.error or "")[:200])
 
     async def _wait_for_decision(self, key, pending, schedule, expires):
         """Wait for the gate's signal, firing each notification as its
@@ -137,50 +153,53 @@ class GateHost:
         cancel -- the reason this is a loop rather than a detached
         coroutine."""
         opened_at = schedule[0][0]
-        decided = lambda: key in self._gate_decisions      # noqa: E731
+        decided = lambda: key in self._gate_decisions  # noqa: E731
         for at, reason in schedule:
             try:
-                await workflow.wait_condition(
-                    decided, timeout=at - workflow.now())
+                await workflow.wait_condition(decided, timeout=at - workflow.now())
                 return self._gate_decisions[key]
             except TimeoutError:
                 await self._notify(pending, reason, opened_at, expires)
-        if expires is None:                    # HOLD: wait without a deadline
+        if expires is None:  # HOLD: wait without a deadline
             await workflow.wait_condition(decided)
             return self._gate_decisions[key]
         return None
 
-    async def _gate(self, name: str, settings: GateSettings,
-                    auto_decision: GateDecision | None = None,
-                    round: int = 1,
-                    context: GateContext | None = None,
-                    confidence: float | None = None,
-                    default_policy: GatePolicy | None = None) -> GateDecision:
+    async def _gate(
+        self,
+        name: str,
+        settings: GateSettings,
+        auto_decision: GateDecision | None = None,
+        round: int = 1,
+        context: GateContext | None = None,
+        confidence: float | None = None,
+        default_policy: GatePolicy | None = None,
+    ) -> GateDecision:
         """Durable HITL gate with policy-based auto-approval."""
         gate_cfg = settings.gates.get(
-            name,
-            GateConfig(policy=default_policy or settings.default_gate_policy))
+            name, GateConfig(policy=default_policy or settings.default_gate_policy)
+        )
         policy = gate_cfg.policy
         key = gate_key(name, round)
 
         if policy == GatePolicy.OFF:
-            decision = GateDecision(gate=name, round=round,
-                                    outcome=GateOutcome.APPROVE,
-                                    decided_by="policy")
+            decision = GateDecision(
+                gate=name, round=round, outcome=GateOutcome.APPROVE, decided_by="policy"
+            )
         elif policy == GatePolicy.SOFT and auto_decision and auto_decision.approved:
             decision = auto_decision
         else:
-            pending = gate_pending(name, round, context,
-                                   opened_at=workflow.now(),
-                                   parent_run_id=self._parent_run_id)
+            pending = gate_pending(
+                name, round, context, opened_at=workflow.now(), parent_run_id=self._parent_run_id
+            )
             self._pending[key] = pending
             self._status = f"awaiting:{name}"
             await self._on_gate_awaited(name, round)
             schedule, expires = build_schedule(
-                gate_cfg, settings.gate_timeout_hours, workflow.now())
+                gate_cfg, settings.gate_timeout_hours, workflow.now()
+            )
             try:
-                decided = await self._wait_for_decision(
-                    key, pending, schedule, expires)
+                decided = await self._wait_for_decision(key, pending, schedule, expires)
                 if decided is not None:
                     decision = decided
                 else:
@@ -188,12 +207,16 @@ class GateHost:
                     # schedule has no final deadline, so _wait_for_decision
                     # waits without one.
                     decision = GateDecision(
-                        gate=name, round=round, decided_by="timeout",
-                        outcome=(GateOutcome.APPROVE
-                                 if gate_cfg.on_timeout is TimeoutAction.APPROVE
-                                 else GateOutcome.REJECT),
-                        comments=f"no decision within "
-                                 f"{settings.gate_timeout_hours}h")
+                        gate=name,
+                        round=round,
+                        decided_by="timeout",
+                        outcome=(
+                            GateOutcome.APPROVE
+                            if gate_cfg.on_timeout is TimeoutAction.APPROVE
+                            else GateOutcome.REJECT
+                        ),
+                        comments=f"no decision within {settings.gate_timeout_hours}h",
+                    )
             finally:
                 self._status = "running"
                 self._pending.pop(key, None)

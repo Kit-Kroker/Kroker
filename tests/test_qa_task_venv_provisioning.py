@@ -6,6 +6,7 @@ failed with ModuleNotFoundError on every attempt -- indistinguishable from a
 real bug in the generated code (see bench-cat-cafe-monitoring-1785186777:
 45/45 code-stage attempts failed this way; the same worktrees passed cleanly
 once re-run against a real venv)."""
+
 import pytest
 
 from sdlc.activities import QAInput, run_test_suite
@@ -22,8 +23,7 @@ MODULE_WITH_DEP = (
     "def covered():\n    return list(SortedList([3, 1, 2]))\n"
 )
 TESTFILE_WITH_DEP = (
-    "from mod import covered\n\n\n"
-    "def test_covered():\n    assert covered() == [1, 2, 3]\n"
+    "from mod import covered\n\n\ndef test_covered():\n    assert covered() == [1, 2, 3]\n"
 )
 
 
@@ -55,8 +55,7 @@ async def test_run_test_suite_installs_deps_from_requirements_txt(tmp_path):
     then failed on ModuleNotFoundError regardless of code quality (see
     bench-todo-api-greenfield-1785444047: 12/12 code attempts failed this
     way; the same tree passed 41/41 once requirements.txt was installed)."""
-    (tmp_path / "requirements.txt").write_text(
-        REQUIREMENTS_WITH_DEP, encoding="utf-8")
+    (tmp_path / "requirements.txt").write_text(REQUIREMENTS_WITH_DEP, encoding="utf-8")
     (tmp_path / "mod.py").write_text(MODULE_WITH_DEP, encoding="utf-8")
     (tmp_path / "test_mod.py").write_text(TESTFILE_WITH_DEP, encoding="utf-8")
 
@@ -70,8 +69,7 @@ async def test_run_test_suite_installs_deps_from_requirements_txt(tmp_path):
 async def test_run_test_suite_installs_deps_from_requirements_dev_txt(tmp_path):
     """Test-only dependencies conventionally live in a dev requirements file;
     a project carrying only that one must provision just the same."""
-    (tmp_path / "requirements-dev.txt").write_text(
-        REQUIREMENTS_DEV, encoding="utf-8")
+    (tmp_path / "requirements-dev.txt").write_text(REQUIREMENTS_DEV, encoding="utf-8")
     (tmp_path / "requirements.txt").write_text("", encoding="utf-8")
     (tmp_path / "mod.py").write_text(MODULE_WITH_DEP, encoding="utf-8")
     (tmp_path / "test_mod.py").write_text(TESTFILE_WITH_DEP, encoding="utf-8")
@@ -87,8 +85,9 @@ async def test_run_test_suite_skips_provisioning_without_a_python_adapter(tmp_pa
     # bare-PATH behaviour untouched (e.g. a non-Python contract command).
     (tmp_path / "ok.txt").write_text("nothing to detect here\n", encoding="utf-8")
 
-    report = await run_test_suite(QAInput(
-        worktree=str(tmp_path), test_cmd="python -c \"print('no tests ran')\""))
+    report = await run_test_suite(
+        QAInput(worktree=str(tmp_path), test_cmd="python -c \"print('no tests ran')\"")
+    )
 
     assert (tmp_path / ".sdlc-venv").is_dir() is False
     assert report.tests_passed is True

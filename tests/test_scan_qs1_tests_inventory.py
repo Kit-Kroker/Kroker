@@ -1,10 +1,14 @@
 """QS1: every test file, its level, and what it covers. The mapping is what
 QS2's proxy is computed from, so an over-eager mapping inflates a coverage
 number -- which is why an ambiguous match is `unmapped`, not a guess."""
+
 from __future__ import annotations
 
 from sdlc.assessment.scan.models import (
-    C_TEST_LEVELS, C_TEST_MAPPING, C_TESTS_PRESENT, TestLevel,
+    C_TEST_LEVELS,
+    C_TEST_MAPPING,
+    C_TESTS_PRESENT,
+    TestLevel,
 )
 from sdlc.assessment.scan.signals import tests_inventory
 from sdlc.measurement import CollectionState
@@ -22,24 +26,30 @@ BLOBS = {
     "tests/test_service.py": (
         "import pytest\n"
         "from payments.service import settle\n"
-        "def test_settle():\n    assert settle(1)\n"),
+        "def test_settle():\n    assert settle(1)\n"
+    ),
     "tests/integration/test_gateway.py": (
-        "import pytest, psycopg\n"
-        "def test_gateway_writes():\n    ...\n"),
+        "import pytest, psycopg\ndef test_gateway_writes():\n    ...\n"
+    ),
     "e2e/checkout.spec.ts": (
         "import { test, expect } from '@playwright/test';\n"
-        "test('checkout', async ({ page }) => {});\n"),
+        "test('checkout', async ({ page }) => {});\n"
+    ),
     "src/web/Button.test.tsx": (
         "import { describe, it } from 'vitest';\n"
-        "describe('Button', () => { it('renders', () => {}) });\n"),
+        "describe('Button', () => { it('renders', () => {}) });\n"
+    ),
 }
 
 
 def test_every_test_file_is_inventoried():
     out = tests_inventory.evaluate(PATHS, BLOBS)
     assert {r.path for r in out.tests} == {
-        "tests/test_service.py", "tests/integration/test_gateway.py",
-        "e2e/checkout.spec.ts", "src/web/Button.test.tsx"}
+        "tests/test_service.py",
+        "tests/integration/test_gateway.py",
+        "e2e/checkout.spec.ts",
+        "src/web/Button.test.tsx",
+    }
 
 
 def test_levels_are_classified_by_the_strongest_signal_first():
@@ -60,8 +70,7 @@ def test_frameworks_are_recorded_when_a_signature_matches():
 
 
 def test_a_test_with_no_signature_is_unknown_not_unit():
-    out = tests_inventory.evaluate(
-        ["tests/test_mystery.py"], {"tests/test_mystery.py": "x = 1\n"})
+    out = tests_inventory.evaluate(["tests/test_mystery.py"], {"tests/test_mystery.py": "x = 1\n"})
     assert out.tests[0].level is TestLevel.UNKNOWN
     assert out.tests[0].rule == "qs1_no_level_signature"
 
@@ -84,7 +93,9 @@ def test_an_ambiguous_match_is_unmapped_rather_than_a_guess():
     """Two `service.py` files and one `test_service.py`: guessing would
     inflate QS2's proxy for whichever package won the coin toss."""
     paths = ["src/a/service.py", "src/b/service.py", "tests/test_service.py"]
-    out = tests_inventory.evaluate(paths, {"tests/test_service.py": "import pytest\ndef test_x(): ...\n"})
+    out = tests_inventory.evaluate(
+        paths, {"tests/test_service.py": "import pytest\ndef test_x(): ...\n"}
+    )
     record = out.tests[0]
     assert record.mapping_rule == "unmapped"
     assert record.covers == []
@@ -113,7 +124,8 @@ def test_a_skipped_test_blob_is_a_gap_not_an_unknown_classification():
     out = tests_inventory.evaluate(
         ["tests/test_service.py", "tests/huge.py"],
         {"tests/test_service.py": "import pytest\ndef test_x(): ...\n"},
-        skipped=["tests/huge.py"])
+        skipped=["tests/huge.py"],
+    )
     assert out.row.categories[C_TEST_LEVELS].state is CollectionState.NOT_COLLECTED
     assert "huge.py" in out.row.categories[C_TEST_LEVELS].reason
     assert out.tests == []

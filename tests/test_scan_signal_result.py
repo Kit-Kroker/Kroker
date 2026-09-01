@@ -1,28 +1,39 @@
 """D2/D3: an inherited row cites findings and copies none, and coverage is
 tracked per category because a row cannot be half-measured."""
+
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
 from sdlc.assessment.scan.models import (
-    C_CREDENTIAL_STORAGE, C_INPUT_VALIDATION, CATEGORIES, InheritedProducer,
-    ScanSignalId, ScanSignalResult, SignalFamily, SignalSource,
+    C_CREDENTIAL_STORAGE,
+    C_INPUT_VALIDATION,
+    CATEGORIES,
+    InheritedProducer,
+    ScanSignalId,
+    ScanSignalResult,
+    SignalFamily,
+    SignalSource,
 )
 from sdlc.measurement import CollectionState, Measurement
 
 
 def _producer() -> InheritedProducer:
-    return InheritedProducer(producer="triage:secrets", version=2,
-                             finding_ids=["secrets:aws_key:.env:abc123"])
+    return InheritedProducer(
+        producer="triage:secrets", version=2, finding_ids=["secrets:aws_key:.env:abc123"]
+    )
 
 
 def _row(source: SignalSource, **kw) -> ScanSignalResult:
     base = dict(
-        signal=ScanSignalId.SS1, family=SignalFamily.SECURITY, version=1,
-        source=source, collected=Measurement.measured(1.0),
-        categories={k: Measurement.not_collected("plan 3")
-                    for k in CATEGORIES[ScanSignalId.SS1]})
+        signal=ScanSignalId.SS1,
+        family=SignalFamily.SECURITY,
+        version=1,
+        source=source,
+        collected=Measurement.measured(1.0),
+        categories={k: Measurement.not_collected("plan 3") for k in CATEGORIES[ScanSignalId.SS1]},
+    )
     return ScanSignalResult(**(base | kw))
 
 
@@ -57,8 +68,7 @@ def test_a_missing_declared_category_is_refused():
 
 
 def test_an_undeclared_category_is_refused():
-    cats = {k: Measurement.not_collected("x")
-            for k in CATEGORIES[ScanSignalId.SS1]}
+    cats = {k: Measurement.not_collected("x") for k in CATEGORIES[ScanSignalId.SS1]}
     with pytest.raises(ValidationError, match="undeclared"):
         _row(SignalSource.COMPUTED, categories=cats | {"invented": Measurement.measured(1.0)})
 
@@ -67,11 +77,11 @@ def test_producer_version_is_pinned_so_a_triage_bump_is_visible():
     p = _producer()
     assert p.version == 2, (
         "the producing signal's version is recorded, so a triage version bump "
-        "changes the assessment visibly rather than silently")
+        "changes the assessment visibly rather than silently"
+    )
 
 
 def test_not_collected_row_may_still_declare_its_categories():
-    row = _row(SignalSource.COMPUTED,
-               collected=Measurement.not_collected("scan stub (plan 2)"))
+    row = _row(SignalSource.COMPUTED, collected=Measurement.not_collected("scan stub (plan 2)"))
     assert row.collected.state is CollectionState.NOT_COLLECTED
     assert set(row.categories) == set(CATEGORIES[ScanSignalId.SS1])

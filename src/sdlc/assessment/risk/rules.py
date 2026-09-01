@@ -5,24 +5,33 @@ RULE_MODULES. Retuning a weight must invalidate exactly the assessments it
 would move, which a hand-maintained version int does not achieve -- E-46's
 D10 records why.
 """
+
 from __future__ import annotations
 
 import hashlib
 
 from ..scan.models import (
-    C_AUTHN_AUTHZ, C_DB_SECURITY, C_INPUT_VALIDATION, C_TLS, CATEGORIES,
+    C_AUTHN_AUTHZ,
+    C_DB_SECURITY,
+    C_INPUT_VALIDATION,
+    C_TLS,
+    CATEGORIES,
     ScanSignalId,
 )
 from ..scan.rules import module_sha
 from .models import (
-    ControlFamily, Criticality, EDGE_EVIDENCE_MAX, Severity,
+    EDGE_EVIDENCE_MAX as EDGE_EVIDENCE_MAX,
+)
+from .models import (
+    ControlFamily,
+    Criticality,
+    Severity,
 )
 
 # --- severity (RD4) -----------------------------------------------------
 # A table, not a formula: it is auditable in the FR-921 bundle and reviewable
 # as a diff. Read as (severity_hint, capability criticality) -> Severity.
-_ORDER = (Severity.INFO, Severity.LOW, Severity.MEDIUM, Severity.HIGH,
-          Severity.CRITICAL)
+_ORDER = (Severity.INFO, Severity.LOW, Severity.MEDIUM, Severity.HIGH, Severity.CRITICAL)
 _HINT_INDEX = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 _CRIT_SHIFT = {Criticality.HIGH: 1, Criticality.MEDIUM: 0, Criticality.LOW: -1}
 
@@ -43,18 +52,20 @@ CONTROL_SOURCES: dict[ControlFamily, tuple[str, ...]] = {
     ControlFamily.AUTHENTICATION: (C_AUTHN_AUTHZ,),
     ControlFamily.VALIDATION: (C_INPUT_VALIDATION,),
     ControlFamily.ENCRYPTION: (C_TLS, C_DB_SECURITY),
-    ControlFamily.AUTHORIZATION: (),    # SS1 collapses authn and authz
-    ControlFamily.MONITORING: (),       # log_masking is masking, not presence
+    ControlFamily.AUTHORIZATION: (),  # SS1 collapses authn and authz
+    ControlFamily.MONITORING: (),  # log_masking is masking, not presence
 }
 
 NO_SOURCE_REASON: dict[ControlFamily, str] = {
     ControlFamily.AUTHORIZATION: (
         "SS1 collapses authentication and authorization into one "
         "authn_authz category, so authorization has no separate source "
-        "(E-49 RD5); an SS1 v2 that separates them is the follow-up"),
+        "(E-49 RD5); an SS1 v2 that separates them is the follow-up"
+    ),
     ControlFamily.MONITORING: (
         "no scan signal collects monitoring presence -- log_masking is "
-        "masking, not presence (E-49 RD5)"),
+        "masking, not presence (E-49 RD5)"
+    ),
 }
 
 # --- composites ---------------------------------------------------------
@@ -69,11 +80,15 @@ F_SECURITY = "security"
 F_QA = "qa"
 
 SECURITY_WEIGHTS: dict[str, float] = {
-    F_EXPOSURE: 0.25, F_IMPACT: 0.4, F_LIKELIHOOD: 0.35,
+    F_EXPOSURE: 0.25,
+    F_IMPACT: 0.4,
+    F_LIKELIHOOD: 0.35,
 }
 QA_WEIGHTS: dict[str, float] = {
-    F_CHANGE_VELOCITY: 0.15, F_COVERAGE_GAP: 0.35,
-    F_DEFECT_DENSITY: 0.15, F_TESTABILITY: 0.35,
+    F_CHANGE_VELOCITY: 0.15,
+    F_COVERAGE_GAP: 0.35,
+    F_DEFECT_DENSITY: 0.15,
+    F_TESTABILITY: 0.35,
 }
 UNIFIED_WEIGHTS: dict[str, float] = {F_QA: 0.4, F_SECURITY: 0.6}
 
@@ -81,10 +96,12 @@ UNIFIED_WEIGHTS: dict[str, float] = {F_QA: 0.4, F_SECURITY: 0.6}
 UNSOURCED_QA: dict[str, str] = {
     F_DEFECT_DENSITY: (
         "defect_density: no issue-tracker input; /enrich (E-56) is the "
-        "declared stage input that would supply it"),
+        "declared stage input that would supply it"
+    ),
     F_CHANGE_VELOCITY: (
         "change_velocity: no signal reads git history, and E-41b found "
-        "history least reliable on this repository population"),
+        "history least reliable on this repository population"
+    ),
 }
 
 # --- cross-capability caps (RD10) ---------------------------------------
@@ -92,7 +109,8 @@ UNSOURCED_QA: dict[str, str] = {
 # scan's own CATEGORIES rather than hand-listed: a second list of the same
 # categories is the duplicate registry ADR-6 already cost us.
 SECURITY_CATEGORIES: frozenset[str] = frozenset(
-    CATEGORIES[ScanSignalId.SS1] + CATEGORIES[ScanSignalId.SS3])
+    CATEGORIES[ScanSignalId.SS1] + CATEGORIES[ScanSignalId.SS3]
+)
 
 SHARED_MAX_ROWS = 100
 BOUNDARY_MAX_ROWS = 100

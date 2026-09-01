@@ -2,6 +2,7 @@
 """E-88 §2/§4. Sequencing is tested through the workflow with time skipping,
 following tests/test_assessment_workflow_e2e.py; the decisions themselves are
 pure and tested directly."""
+
 from __future__ import annotations
 
 import uuid
@@ -13,15 +14,25 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.crew.activities import (
-    CheckpointInput, CrewTurnInput, CrewTurnOutput, PrepareCrewInput,
-    ReadRoundInput, RoundReading,
+    CheckpointInput,
+    CrewTurnInput,
+    CrewTurnOutput,
+    PrepareCrewInput,
+    ReadRoundInput,
+    RoundReading,
 )
 from sdlc.crew.models import TurnRecord
 from sdlc.models import (
-    ArtifactRef, HarnessKind, HarnessRunResult, SessionDigest,
+    ArtifactRef,
+    HarnessKind,
+    HarnessRunResult,
+    SessionDigest,
 )
 from sdlc.workflows.crew import (
-    EXIT_BUDGET, EXIT_DEADLINE, EXIT_PROTOCOL_VIOLATION, CrewTaskInput,
+    EXIT_BUDGET,
+    EXIT_DEADLINE,
+    EXIT_PROTOCOL_VIOLATION,
+    CrewTaskInput,
     CrewTaskWorkflow,
 )
 
@@ -44,24 +55,39 @@ async def fake_prepare(inp: PrepareCrewInput) -> str:
 @activity.defn(name="run_crew_turn")
 async def fake_turn(inp: CrewTurnInput) -> CrewTurnOutput:
     _STATE["turns"] += 1
-    run = HarnessRunResult(harness=HarnessKind.OPENCODE, exit_code=0,
-                           summary="ok", session_id="s-1", cost_usd=0.5,
-                           input_tokens=100, output_tokens=20,
-                           session_ref=SESSION_REF,
-                           session_digest=SESSION_DIGEST)
-    return CrewTurnOutput(run=run, record=TurnRecord(
-        role=inp.role, round=inp.round, attempt=inp.attempt,
-        harness=inp.harness, model=inp.model, session_id="s-1",
-        cost_usd=0.5, exit_code=0))
+    run = HarnessRunResult(
+        harness=HarnessKind.OPENCODE,
+        exit_code=0,
+        summary="ok",
+        session_id="s-1",
+        cost_usd=0.5,
+        input_tokens=100,
+        output_tokens=20,
+        session_ref=SESSION_REF,
+        session_digest=SESSION_DIGEST,
+    )
+    return CrewTurnOutput(
+        run=run,
+        record=TurnRecord(
+            role=inp.role,
+            round=inp.round,
+            attempt=inp.attempt,
+            harness=inp.harness,
+            model=inp.model,
+            session_id="s-1",
+            cost_usd=0.5,
+            exit_code=0,
+        ),
+    )
 
 
 @activity.defn(name="read_round")
 async def fake_read(inp: ReadRoundInput) -> RoundReading:
     if _STATE["missing"]:
-        return RoundReading(deliverable_path=None, note_summary="",
-                            missing=True)
-    return RoundReading(deliverable_path="/w/round-1/notes.md",
-                        note_summary="added greet()", missing=False)
+        return RoundReading(deliverable_path=None, note_summary="", missing=True)
+    return RoundReading(
+        deliverable_path="/w/round-1/notes.md", note_summary="added greet()", missing=False
+    )
 
 
 @activity.defn(name="checkpoint_round")
@@ -74,24 +100,40 @@ ACTIVITIES = [fake_prepare, fake_turn, fake_read, fake_checkpoint]
 
 def _inp(**kw) -> CrewTaskInput:
     base = dict(
-        layout="code", lead="coder",
-        roles=[{"name": "coder", "harness": "opencode", "model": "glm-5.3",
-                "writes": True, "skill": "coder"}],
-        prompt="do the thing", worktree="/w", task_id="t1",
-        deliverable_path="notes.md", rounds_max=1, wall_clock_s=3000,
-        turn_timeout_s=1800, cost_usd=25.0)
+        layout="code",
+        lead="coder",
+        roles=[
+            {
+                "name": "coder",
+                "harness": "opencode",
+                "model": "glm-5.3",
+                "writes": True,
+                "skill": "coder",
+            }
+        ],
+        prompt="do the thing",
+        worktree="/w",
+        task_id="t1",
+        deliverable_path="notes.md",
+        rounds_max=1,
+        wall_clock_s=3000,
+        turn_timeout_s=1800,
+        cost_usd=25.0,
+    )
     base.update(kw)
     return CrewTaskInput(**base)
 
 
 async def _run(inp: CrewTaskInput):
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
-        async with Worker(env.client, task_queue=TASK_QUEUE,
-                          workflows=[CrewTaskWorkflow], activities=ACTIVITIES):
+        data_converter=pydantic_data_converter
+    ) as env:
+        async with Worker(
+            env.client, task_queue=TASK_QUEUE, workflows=[CrewTaskWorkflow], activities=ACTIVITIES
+        ):
             return await env.client.execute_workflow(
-                CrewTaskWorkflow.run, inp,
-                id=f"crew-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                CrewTaskWorkflow.run, inp, id=f"crew-{uuid.uuid4()}", task_queue=TASK_QUEUE
+            )
 
 
 async def test_a_one_role_crew_completes_one_round():

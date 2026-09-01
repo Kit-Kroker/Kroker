@@ -4,6 +4,7 @@ A single-shot "score this against the rubric" prompt gave a gutted clarify
 prompt 1.00 (OQ-P5). Generating explicit evaluation steps first is G-Eval's
 actual mechanism, and the one half of it that works without logprobs --
 which google:gemini-3.5-flash does not expose."""
+
 import pytest
 
 from sdlc.benchmarks import judge as judge_mod
@@ -50,26 +51,25 @@ def test_generate_steps_is_cached_per_rubric_sha(monkeypatch):
 
 def test_generate_steps_recaches_per_judge_model(monkeypatch):
     calls = []
-    monkeypatch.setattr(judge_mod, "_run_judge_agent",
-                        lambda m, s, u: calls.append(m) or '{"steps": ["a"]}')
+    monkeypatch.setattr(
+        judge_mod, "_run_judge_agent", lambda m, s, u: calls.append(m) or '{"steps": ["a"]}'
+    )
     generate_steps("r", "model-a")
     generate_steps("r", "model-b")
     assert calls == ["model-a", "model-b"]
 
 
 def test_generate_steps_raises_on_unparseable_output(monkeypatch):
-    monkeypatch.setattr(judge_mod, "_run_judge_agent",
-                        lambda m, s, u: "not json")
-    with pytest.raises(Exception):
+    monkeypatch.setattr(judge_mod, "_run_judge_agent", lambda m, s, u: "not json")
+    with pytest.raises(ValueError):
         generate_steps("r", "m")
 
 
 def test_generate_steps_raises_on_an_empty_step_list(monkeypatch):
     """Zero steps would silently degrade phase 2 back to the single-shot
     judge under the new label -- the discontinuity marker would then lie."""
-    monkeypatch.setattr(judge_mod, "_run_judge_agent",
-                        lambda m, s, u: '{"steps": []}')
-    with pytest.raises(Exception):
+    monkeypatch.setattr(judge_mod, "_run_judge_agent", lambda m, s, u: '{"steps": []}')
+    with pytest.raises(ValueError):
         generate_steps("r", "m")
 
 
@@ -84,10 +84,14 @@ def test_default_judge_runs_both_phases(monkeypatch):
         return '{"score": 0.4, "components": {"scope_preserved": 0.4}}'
 
     monkeypatch.setattr(judge_mod, "_run_judge_agent", _fake)
-    qs = judge_mod.judge_artifact.sync(judge_mod.JudgeInput(
-        artifact_json='{"summary": "x"}', rubric="the rubric",
-        author_model="anthropic:glm-5.2",
-        judge_model="google:gemini-3.5-flash"))
+    qs = judge_mod.judge_artifact.sync(
+        judge_mod.JudgeInput(
+            artifact_json='{"summary": "x"}',
+            rubric="the rubric",
+            author_model="anthropic:glm-5.2",
+            judge_model="google:gemini-3.5-flash",
+        )
+    )
     assert len(prompts) == 2
     assert qs.score == 0.4
     assert qs.judge == "staged_rubric"
@@ -96,10 +100,10 @@ def test_default_judge_runs_both_phases(monkeypatch):
 def test_step_generation_failure_is_not_measured(monkeypatch):
     """NOT a fallback to the old judge: that would make the discontinuity
     marker lie about which instrument produced the number."""
-    monkeypatch.setattr(judge_mod, "_run_judge_agent",
-                        lambda m, s, u: "garbage")
-    qs = judge_mod.judge_artifact.sync(judge_mod.JudgeInput(
-        artifact_json="{}", rubric="r", author_model="a", judge_model="b"))
+    monkeypatch.setattr(judge_mod, "_run_judge_agent", lambda m, s, u: "garbage")
+    qs = judge_mod.judge_artifact.sync(
+        judge_mod.JudgeInput(artifact_json="{}", rubric="r", author_model="a", judge_model="b")
+    )
     assert qs.score is None
     assert qs.judge == "error"
 
@@ -109,9 +113,9 @@ def test_injected_judge_fn_still_short_circuits_both_phases():
     injects a fake keeps working and makes no model call."""
     judge_mod._set_judge_fn(lambda _i: '{"score": 0.7, "components": {}}')
     try:
-        qs = judge_mod.judge_artifact.sync(judge_mod.JudgeInput(
-            artifact_json="{}", rubric="r", author_model="a",
-            judge_model="b"))
+        qs = judge_mod.judge_artifact.sync(
+            judge_mod.JudgeInput(artifact_json="{}", rubric="r", author_model="a", judge_model="b")
+        )
     finally:
         judge_mod._set_judge_fn(None)
     assert qs.score == 0.7

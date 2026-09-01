@@ -3,25 +3,27 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sdlc.eval.promptfoo.absolute import (output_type_for,
-                                          validates_as_output_type)
+from sdlc.eval.promptfoo.absolute import output_type_for, validates_as_output_type
 
 AGENTS = Path(__file__).resolve().parents[1] / "agents"
 
 # Every required field of ClarifiedRequirements. open_questions=[] is a
 # legitimate outcome (the clarifier had nothing to ask), so an empty LIST is
 # never a failure -- see test_empty_required_list_is_allowed below.
-GOOD = json.dumps({
-    "summary": "Add a login page with email and password.",
-    "functional_requirements": ["User can submit email + password"],
-    "non_functional_requirements": ["Passwords are hashed at rest"],
-    "out_of_scope": ["OAuth providers"],
-    "open_questions": [],
-})
+GOOD = json.dumps(
+    {
+        "summary": "Add a login page with email and password.",
+        "functional_requirements": ["User can submit email + password"],
+        "non_functional_requirements": ["Passwords are hashed at rest"],
+        "out_of_scope": ["OAuth providers"],
+        "open_questions": [],
+    }
+)
 
 
 def test_output_type_for_clarify():
     from sdlc.models import ClarifiedRequirements
+
     assert output_type_for("clarify", AGENTS) is ClarifiedRequirements
 
 

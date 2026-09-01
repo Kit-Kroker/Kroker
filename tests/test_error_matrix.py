@@ -2,29 +2,42 @@ from datetime import datetime, timedelta
 
 from sdlc.benchmarks.error_matrix import build_error_matrix
 from sdlc.benchmarks.models import (
-    BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag)
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    QualityScore,
+    SpeedBag,
+)
 from sdlc.benchmarks.tasks import TaskSpec, TaskSuite
 from sdlc.models import HarnessKind
 
 
 def _suite():
-    return TaskSuite(case_id="c1", tasks=[
-        TaskSpec(id="t01", error_class="functional", oracle_tests=["x::y"]),
-        TaskSpec(id="t02", error_class="security", rubric="r"),
-    ])
+    return TaskSuite(
+        case_id="c1",
+        tasks=[
+            TaskSpec(id="t01", error_class="functional", oracle_tests=["x::y"]),
+            TaskSpec(id="t02", error_class="security", rubric="r"),
+        ],
+    )
 
 
 def _rec(*, run, model, task_id, score):
     t = datetime(2026, 7, 20, 10)
     return BenchmarkRecord(
-        run_id=f"{run}/c1#opencode#{model}", bench_run_id=run, case_id="c1",
-        scope=BenchmarkScope.ORACLE_TASK, stage="oracle", task_id=task_id,
-        role="oracle", harness=HarnessKind.OPENCODE, model=model,
+        run_id=f"{run}/c1#opencode#{model}",
+        bench_run_id=run,
+        case_id="c1",
+        scope=BenchmarkScope.ORACLE_TASK,
+        stage="oracle",
+        task_id=task_id,
+        role="oracle",
+        harness=HarnessKind.OPENCODE,
+        model=model,
         quality=QualityScore(score=score, judge="oracle"),
-        speed=SpeedBag(wall_clock_s=1.0, started_at=t,
-                      ended_at=t + timedelta(seconds=1)),
-        outcome=BenchmarkOutcome.PASS if (score or 0) >= 1.0
-        else BenchmarkOutcome.FAIL)
+        speed=SpeedBag(wall_clock_s=1.0, started_at=t, ended_at=t + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.PASS if (score or 0) >= 1.0 else BenchmarkOutcome.FAIL,
+    )
 
 
 def test_build_error_matrix_averages_failure_mass_over_runs_for_same_arm():
@@ -33,9 +46,8 @@ def test_build_error_matrix_averages_failure_mass_over_runs_for_same_arm():
         _rec(run="b2", model="m1", task_id="t01", score=1.0),  # 0.0 failure mass
     ]
     em = build_error_matrix("c1", recs, _suite())
-    cell = next(c for c in em.cells if c.arm_key == "opencode#m1"
-               and c.error_class == "functional")
-    assert cell.avg_failure_mass == 0.5   # (1.0 + 0.0) / 2 runs
+    cell = next(c for c in em.cells if c.arm_key == "opencode#m1" and c.error_class == "functional")
+    assert cell.avg_failure_mass == 0.5  # (1.0 + 0.0) / 2 runs
     assert cell.n_runs == 2
 
 
@@ -97,10 +109,12 @@ def test_build_error_matrix_n_runs_scoped_per_error_class():
     ]
     em = build_error_matrix("c1", recs, _suite())
 
-    functional = next(c for c in em.cells if c.arm_key == "opencode#m1"
-                     and c.error_class == "functional")
-    security = next(c for c in em.cells if c.arm_key == "opencode#m1"
-                   and c.error_class == "security")
+    functional = next(
+        c for c in em.cells if c.arm_key == "opencode#m1" and c.error_class == "functional"
+    )
+    security = next(
+        c for c in em.cells if c.arm_key == "opencode#m1" and c.error_class == "security"
+    )
 
     # Functional: both runs contributed (b1: score=0.5, b2: score=0.8)
     assert functional.n_runs == 2

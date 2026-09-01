@@ -6,6 +6,7 @@ Two invariants, both easy to break and expensive to notice:
   * dynamic imports must not run before validation, or the registry spec's
     finding 3 comes back through a new door.
 """
+
 import pytest
 
 from sdlc.agents.loader import RegistryError, build_agents, load_registry
@@ -56,7 +57,7 @@ def test_proposer_missing_agent_py_rejected(tmp_path):
 def test_agent_py_without_build_rejected(tmp_path):
     root = write_registry_dir(tmp_path / "agents")
     (root / "reviewer" / "agent.py").write_bytes(b"x = 1\n")
-    roles = load_registry(root)          # structural check is at build time
+    roles = load_registry(root)  # structural check is at build time
     with pytest.raises(RegistryError, match="build"):
         build_agents(roles, MODEL_SETTINGS, agents_dir=root)
 
@@ -65,7 +66,8 @@ def test_duplicate_agent_names_rejected(tmp_path):
     """Only reachable now that construction is distributed across files."""
     root = write_registry_dir(tmp_path / "agents")
     (root / "analyst" / "agent.py").write_bytes(
-        _AGENT_PY.format(name="reviewer_agent").encode())   # steals the name
+        _AGENT_PY.format(name="reviewer_agent").encode()
+    )  # steals the name
     roles = load_registry(root)
     with pytest.raises(RegistryError, match="reviewer_agent"):
         build_agents(roles, MODEL_SETTINGS, agents_dir=root)
@@ -78,9 +80,11 @@ def test_validation_precedes_import(tmp_path):
     inside load_registry, this is what catches it."""
     root = write_registry_dir(tmp_path / "agents")
     (root / "reviewer" / "agent.yaml").write_bytes(
-        b"kind: proposer\nmodel: zai-coding-plan/other\n")     # dev's family
+        b"kind: proposer\nmodel: zai-coding-plan/other\n"
+    )  # dev's family
     for role in ("clarify", "architect"):
         (root / role / "agent.py").write_bytes(
-            b"raise RuntimeError('this module must never be imported')\n")
+            b"raise RuntimeError('this module must never be imported')\n"
+        )
     with pytest.raises(RegistryError, match="family"):
         load_registry(root)

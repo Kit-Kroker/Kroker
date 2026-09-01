@@ -16,6 +16,7 @@ S5 safe: it never has to be RIGHT, only never silently wrong. Deciding a
 genuine merge is E-48's D2 (CONFIRM | SPLIT | MERGE | DE-SCOPE | FLAG), a
 proposer with the context to do it.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -24,8 +25,12 @@ from pydantic import BaseModel, Field
 
 from ...measurement import CollectionState, Measurement
 from .models import (
-    CandidateMember, ScanCandidate, ScanSignalId, SourceCandidate,
-    confidence_from, signal_of,
+    CandidateMember,
+    ScanCandidate,
+    ScanSignalId,
+    SourceCandidate,
+    confidence_from,
+    signal_of,
 )
 from .naming import normalize
 
@@ -51,8 +56,7 @@ def _paths(members: frozenset[CandidateMember]) -> frozenset[str]:
     return frozenset(m.path for m in members if m.path)
 
 
-def _overlaps(a: frozenset[CandidateMember],
-              b: frozenset[CandidateMember]) -> bool:
+def _overlaps(a: frozenset[CandidateMember], b: frozenset[CandidateMember]) -> bool:
     """Two differently-named candidates that cite the SAME file path cannot be
     merged and must not be silently split either: flag both for E-48 to settle
     (D9 rule 2).
@@ -72,8 +76,9 @@ def _dup_sort_key(candidate_id: str) -> int:
     return int(candidate_id.rsplit("-", 1)[-1])
 
 
-def merge(sources: Sequence[SourceCandidate],
-          upstream: Mapping[ScanSignalId, Measurement]) -> MergeOutput:
+def merge(
+    sources: Sequence[SourceCandidate], upstream: Mapping[ScanSignalId, Measurement]
+) -> MergeOutput:
     """`upstream` is each consumed signal's row-level `collected`, which is
     what separates "merged zero because there was nothing" (a gap) from
     "merged zero because the sources found none" (a real zero)."""
@@ -83,41 +88,49 @@ def merge(sources: Sequence[SourceCandidate],
         groups.setdefault(key, []).append(candidate)
 
     ordered = sorted(groups.items())
-    member_sets = [frozenset(m for c in group for m in c.members)
-                   for _, group in ordered]
+    member_sets = [frozenset(m for c in group for m in c.members) for _, group in ordered]
     ids = [f"C-{i:02d}" for i in range(1, len(ordered) + 1)]
 
     candidates: list[ScanCandidate] = []
-    for index, (key, group) in enumerate(ordered):
+    for index, (_key, group) in enumerate(ordered):
         local_ids = sorted({c.local_id for c in group})
-        candidates.append(ScanCandidate(
-            candidate_id=ids[index],
-            # The alphabetically-first raw name, so the display name is a
-            # name a source actually used rather than one this function
-            # invented from the normalized key.
-            name=sorted(c.name for c in group)[0],
-            sources=local_ids,
-            confidence=confidence_from(signal_of(i) for i in local_ids),
-            members=sorted(member_sets[index],
-                           key=CandidateMember.sort_key),
-            possible_duplicate_of=sorted(
-                (ids[other] for other in range(len(ordered))
-                 if other != index
-                 and _overlaps(member_sets[index], member_sets[other])),
-                key=_dup_sort_key)))
+        candidates.append(
+            ScanCandidate(
+                candidate_id=ids[index],
+                # The alphabetically-first raw name, so the display name is a
+                # name a source actually used rather than one this function
+                # invented from the normalized key.
+                name=sorted(c.name for c in group)[0],
+                sources=local_ids,
+                confidence=confidence_from(signal_of(i) for i in local_ids),
+                members=sorted(member_sets[index], key=CandidateMember.sort_key),
+                possible_duplicate_of=sorted(
+                    (
+                        ids[other]
+                        for other in range(len(ordered))
+                        if other != index and _overlaps(member_sets[index], member_sets[other])
+                    ),
+                    key=_dup_sort_key,
+                ),
+            )
+        )
 
     if candidates:
-        return MergeOutput(candidates=candidates,
-                           collected=Measurement.measured(float(len(candidates))))
+        return MergeOutput(
+            candidates=candidates, collected=Measurement.measured(float(len(candidates)))
+        )
 
     unmeasured = sorted(
-        s.value for s, m in upstream.items()
-        if m.state is not CollectionState.MEASURED)
+        s.value for s, m in upstream.items() if m.state is not CollectionState.MEASURED
+    )
     if unmeasured:
         # Merging nothing because every source failed is not a measured zero
         # (FR-915). Naming the signals is what tells an operator whether the
         # repository has no capabilities or the scan could not see them.
-        return MergeOutput(collected=Measurement.not_collected(
-            f"candidate_merge: no source candidates, and {unmeasured} did "
-            f"not collect -- a merge over nothing is not a measured zero"))
+        return MergeOutput(
+            collected=Measurement.not_collected(
+                f"candidate_merge: no source candidates, and {unmeasured} did "
+                f"not collect -- a merge over nothing is not a measured zero"
+            )
+        )
     return MergeOutput(collected=Measurement.measured(0.0))

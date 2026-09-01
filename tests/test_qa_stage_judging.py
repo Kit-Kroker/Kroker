@@ -1,6 +1,8 @@
 """The QA report is judged against a rubric in its OWN record, leaving the
 deterministic stage="code" record's contract score untouched."""
+
 import inspect
+import re
 
 from sdlc.workflows import feature
 
@@ -19,8 +21,9 @@ def test_code_record_keeps_its_deterministic_contract_score():
     src = inspect.getsource(feature.FeatureWorkflow._dev_task)
     # Anchor on the code-stage BenchmarkRecord specifically (role=task.role),
     # not the E-32 FIX_ATTEMPT emit which also carries stage="code".
-    start = src.index('stage="code", role=task.role')
-    block = src[start:start + 400]
+    m = re.search(r'stage="code",\s*role=task\.role', src)
+    assert m
+    block = src[m.start() : m.start() + 400]
     assert 'judge="contract"' in block
 
 
@@ -41,7 +44,7 @@ def test_pass_gate_uses_qa_raw_not_the_llm_qa_report():
     derived from qa_raw.tests_passed, never qa.tests_passed."""
     src = inspect.getsource(feature.FeatureWorkflow._dev_task)
     def_idx = src.index("task_passed = ")
-    definition = src[def_idx: src.index("\n", def_idx)]
+    definition = src[def_idx : src.index("\n", def_idx)]
     assert "qa_raw.tests_passed" in definition
     assert "qa.tests_passed" not in definition
     # every use of the gate elsewhere in the method must be the shared

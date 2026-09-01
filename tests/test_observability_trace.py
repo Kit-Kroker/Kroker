@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sdlc.observability.trace import RunEvent, RunEventKind
 
@@ -6,7 +6,7 @@ from sdlc.observability.trace import RunEvent, RunEventKind
 def test_run_event_serializes_json_line():
     ev = RunEvent(
         seq=3,
-        at=datetime(2026, 7, 22, 12, 0, tzinfo=timezone.utc),
+        at=datetime(2026, 7, 22, 12, 0, tzinfo=UTC),
         kind=RunEventKind.GATE_DECIDED,
         stage="architecture",
         data={"decided_by": "human", "approved": "true"},

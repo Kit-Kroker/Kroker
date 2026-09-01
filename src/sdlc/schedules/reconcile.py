@@ -2,6 +2,7 @@
 every reconcile rule is unit-testable; apply.py supplies `existing` and turns
 Changes into API calls.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,13 +12,12 @@ from ..models import ScheduleAsset
 
 @dataclass(frozen=True)
 class Change:
-    action: str          # create | update | noop | drift
+    action: str  # create | update | noop | drift
     id: str
     reason: str = ""
 
 
-def plan_changes(desired: list[ScheduleAsset],
-                 existing: dict[str, ScheduleAsset]) -> list[Change]:
+def plan_changes(desired: list[ScheduleAsset], existing: dict[str, ScheduleAsset]) -> list[Change]:
     """Diff yaml assets against server state. Never emits a delete: a server
     schedule with no yaml is reported as drift, and only apply's explicit
     --prune turns that into a deletion."""

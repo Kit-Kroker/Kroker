@@ -10,6 +10,7 @@ builds the artifact, and is exercised end-to-end by the temporal e2e
 Asserting the serialized SignalOutput/MergeOutput is the same standard
 E-47a applies to identity allocation: an equal-comparing model with a
 differently-ordered list is not the same artifact to a memo or a bundle."""
+
 from __future__ import annotations
 
 import random
@@ -27,20 +28,23 @@ TREE = [
     "src/utils/strings.py",
 ]
 BLOBS = {
-    "src/payments/api.py": ("from fastapi import APIRouter\n"
-                            "router = APIRouter()\n"
-                            "@router.post('/api/payments')\n"
-                            "def create():\n    ...\n"),
-    "src/orders/api.py": ("from fastapi import APIRouter\n"
-                          "router = APIRouter()\n"
-                          "@router.get('/api/orders')\n"
-                          "def list_orders():\n    ...\n"),
+    "src/payments/api.py": (
+        "from fastapi import APIRouter\n"
+        "router = APIRouter()\n"
+        "@router.post('/api/payments')\n"
+        "def create():\n    ...\n"
+    ),
+    "src/orders/api.py": (
+        "from fastapi import APIRouter\n"
+        "router = APIRouter()\n"
+        "@router.get('/api/orders')\n"
+        "def list_orders():\n    ...\n"
+    ),
     "src/utils/strings.py": "def slug(s):\n    return s\n",
     "src/payments/__init__.py": "",
 }
 LOC = {p: t.count("\n") + 1 for p, t in BLOBS.items()}
-MEASURED = {ScanSignalId.S1: Measurement.measured(1.0),
-            ScanSignalId.S3: Measurement.measured(1.0)}
+MEASURED = {ScanSignalId.S1: Measurement.measured(1.0), ScanSignalId.S3: Measurement.measured(1.0)}
 
 
 def test_s1_is_byte_identical_across_input_orderings():
@@ -62,6 +66,7 @@ def test_s3_is_byte_identical_across_input_orderings():
 def test_the_whole_capability_chain_is_byte_identical():
     """S1 -> S3 -> S5 end to end, which is what the memo caches and what
     NFR-10 will be measured against."""
+
     def run(order_seed: int) -> str:
         paths = list(TREE)
         items = list(BLOBS.items())
@@ -90,8 +95,15 @@ def test_every_pure_signal_module_is_order_independent():
 
     from sdlc.assessment.scan.models import ScanUpstream
     from sdlc.assessment.scan.signals import (
-        ci, config_infra, coverage, frontend, schema, security_static,
-        sensitivity, testability, tests_inventory,
+        ci,
+        config_infra,
+        coverage,
+        frontend,
+        schema,
+        security_static,
+        sensitivity,
+        testability,
+        tests_inventory,
     )
 
     tree = {
@@ -105,9 +117,12 @@ def test_every_pure_signal_module_is_order_independent():
         ".github/workflows/ci.yml": "jobs:\n  test:\n    steps:\n      - run: pytest\n",
     }
     paths = sorted(tree)
-    up = ScanUpstream(collected={
-        s: Measurement.measured(1.0)
-        for s in (ScanSignalId.S2, ScanSignalId.S3, ScanSignalId.QS1)})
+    up = ScanUpstream(
+        collected={
+            s: Measurement.measured(1.0)
+            for s in (ScanSignalId.S2, ScanSignalId.S3, ScanSignalId.QS1)
+        }
+    )
 
     cases = [
         ("S2", lambda t, p: schema.evaluate(t)),
@@ -127,5 +142,4 @@ def test_every_pure_signal_module_is_order_independent():
             shuffled_paths = list(paths)
             random.Random(seed).shuffle(items)
             random.Random(seed).shuffle(shuffled_paths)
-            assert run(dict(items), shuffled_paths).model_dump_json() == \
-                reference, name
+            assert run(dict(items), shuffled_paths).model_dump_json() == reference, name

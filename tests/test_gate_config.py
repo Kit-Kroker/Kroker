@@ -2,7 +2,10 @@ import pytest
 from pydantic import ValidationError
 
 from sdlc.models import (
-    ArchitectureSpec, GateConfig, GatePolicy, ImplementationPlan,
+    ArchitectureSpec,
+    GateConfig,
+    GatePolicy,
+    ImplementationPlan,
     PipelineConfig,
 )
 

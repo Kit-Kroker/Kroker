@@ -1,18 +1,20 @@
 """Pure yaml→server diff (E-12). No Temporal client involved: plan_changes is
 a function of desired vs existing, so every reconcile rule is testable here."""
+
 from __future__ import annotations
 
 from sdlc.models import ScheduleAction, ScheduleAsset, ScheduleSpecAsset
 from sdlc.schedules.reconcile import plan_changes
 
 
-def asset(sid: str = "nightly-reflect", cron: str = "0 3 * * *",
-          banks: list[str] | None = None) -> ScheduleAsset:
+def asset(
+    sid: str = "nightly-reflect", cron: str = "0 3 * * *", banks: list[str] | None = None
+) -> ScheduleAsset:
     return ScheduleAsset(
         id=sid,
         spec=ScheduleSpecAsset(cron=cron),
-        action=ScheduleAction(workflow="ReflectWorkflow",
-                              banks=banks or ["project:default"]))
+        action=ScheduleAction(workflow="ReflectWorkflow", banks=banks or ["project:default"]),
+    )
 
 
 def _by_id(changes):
@@ -48,13 +50,18 @@ def test_server_schedule_with_no_yaml_is_drift_not_delete():
 
 
 def test_mixed_plan_covers_every_case():
-    desired = [asset(sid="keep"), asset(sid="change", cron="0 5 * * *"),
-               asset(sid="new")]
-    existing = {"keep": asset(sid="keep"),
-                "change": asset(sid="change", cron="0 9 * * *"),
-                "gone": asset(sid="gone")}
+    desired = [asset(sid="keep"), asset(sid="change", cron="0 5 * * *"), asset(sid="new")]
+    existing = {
+        "keep": asset(sid="keep"),
+        "change": asset(sid="change", cron="0 9 * * *"),
+        "gone": asset(sid="gone"),
+    }
     assert _by_id(plan_changes(desired, existing)) == {
-        "keep": "noop", "change": "update", "new": "create", "gone": "drift"}
+        "keep": "noop",
+        "change": "update",
+        "new": "create",
+        "gone": "drift",
+    }
 
 
 def test_empty_both_sides_is_empty_plan():

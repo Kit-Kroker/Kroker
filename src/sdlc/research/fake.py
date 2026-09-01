@@ -5,6 +5,7 @@ require TAVILY_API_KEY. The corpus is a directory with an index.json:
      "pages":    {"<url>": "<relative filename>.txt"}}
 
 `search` returns hits whose key is a case-insensitive substring of the query."""
+
 from __future__ import annotations
 
 import json
@@ -19,14 +20,14 @@ def _corpus_dir() -> Path:
     if not root:
         raise RuntimeError(
             "FakeProvider needs $SDLC_RESEARCH_FAKE_CORPUS pointing at a "
-            "corpus directory (index.json + page files)")
+            "corpus directory (index.json + page files)"
+        )
     return Path(root)
 
 
 class FakeProvider(SearchProvider):
     def _index(self) -> dict:
-        return json.loads(
-            (_corpus_dir() / "index.json").read_text(encoding="utf-8"))
+        return json.loads((_corpus_dir() / "index.json").read_text(encoding="utf-8"))
 
     async def search(self, query: str, max_results: int) -> list[SearchHit]:
         idx = self._index()

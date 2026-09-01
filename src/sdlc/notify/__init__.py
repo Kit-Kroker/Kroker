@@ -5,10 +5,14 @@ notification says, where it goes, and how it is delivered. All file I/O lives
 in `activities.py`, because the workflow sandbox cannot read files (the same
 split as harness containment).
 """
-from .contract import DeliveryResult, NotifyInput, Notifier, NotifyReason
+
+from .contract import DeliveryResult, Notifier, NotifyInput, NotifyReason
 from .schedule import build_schedule
 
 __all__ = [
-    "DeliveryResult", "NotifyInput", "Notifier", "NotifyReason",
+    "DeliveryResult",
+    "NotifyInput",
+    "Notifier",
+    "NotifyReason",
     "build_schedule",
 ]

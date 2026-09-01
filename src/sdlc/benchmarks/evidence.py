@@ -14,6 +14,7 @@ connection. `report.py` imports `from temporalio import activity` for
 finalize_benchmark_report, so it is imported LAZILY below rather than at
 module scope.
 """
+
 from __future__ import annotations
 
 import os
@@ -31,6 +32,7 @@ class Evidence(BaseModel):
     """Everything a score run reads, plus the notes explaining what was
     missing. `notes` is rendered into report.md so a degraded score is
     visibly degraded rather than quietly partial."""
+
     records: list[BenchmarkRecord] = Field(default_factory=list)
     summaries: list[RunSummary] = Field(default_factory=list)
     selector: str = "_all"
@@ -45,8 +47,7 @@ def export_root(root: str | None = None) -> Path:
     return Path(os.environ.get("SDLC_EXPORT_ROOT", DEFAULT_EXPORT_ROOT))
 
 
-def load_run_summaries(root: str | None = None
-                       ) -> tuple[list[RunSummary], list[str]]:
+def load_run_summaries(root: str | None = None) -> tuple[list[RunSummary], list[str]]:
     """Every runs/*/summary.json under the export root, plus notes for the
     ones that could not be read. A malformed export degrades that one run,
     never the rollup."""
@@ -57,18 +58,22 @@ def load_run_summaries(root: str | None = None
     out: list[RunSummary] = []
     for p in sorted(base.glob("*/summary.json")):
         try:
-            out.append(RunSummary.model_validate_json(
-                p.read_text(encoding="utf-8")))
-        except Exception as e:                              # noqa: BLE001
+            out.append(RunSummary.model_validate_json(p.read_text(encoding="utf-8")))
+        except Exception as e:  # noqa: BLE001
             notes.append(f"unreadable summary {p.parent.name}: {e}")
     if not out and not notes:
         notes.append(f"no summary.json under {base}; no SC rates computed")
     return out, notes
 
 
-def load_evidence(*, bench: str | None = None, case: str | None = None,
-                  all_: bool = False, root: str | None = None,
-                  export_root_: str | None = None) -> Evidence:
+def load_evidence(
+    *,
+    bench: str | None = None,
+    case: str | None = None,
+    all_: bool = False,
+    root: str | None = None,
+    export_root_: str | None = None,
+) -> Evidence:
     """Load records for exactly one selector, plus every run summary.
 
     Selectors are mutually exclusive so a score directory always has one
@@ -76,11 +81,9 @@ def load_evidence(*, bench: str | None = None, case: str | None = None,
     """
     from .report import _read_all, scan_case_records
 
-    chosen = [x for x in (bench, case, True if all_ else None)
-              if x is not None]
+    chosen = [x for x in (bench, case, True if all_ else None) if x is not None]
     if len(chosen) != 1:
-        raise ValueError(
-            "exactly one of bench=, case=, all_= must be given")
+        raise ValueError("exactly one of bench=, case=, all_= must be given")
 
     notes: list[str] = []
     if bench is not None:
@@ -97,8 +100,7 @@ def load_evidence(*, bench: str | None = None, case: str | None = None,
         notes.append(f"no benchmark records for selector {selector}")
 
     summaries, s_notes = load_run_summaries(export_root_)
-    return Evidence(records=records, summaries=summaries, selector=selector,
-                    notes=notes + s_notes)
+    return Evidence(records=records, summaries=summaries, selector=selector, notes=notes + s_notes)
 
 
 def _read_all_benches(root: str | None) -> list[BenchmarkRecord]:

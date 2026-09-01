@@ -2,8 +2,15 @@
 cache. Under ~512 tokens a prefix is silently NOT cached -- no error, the
 counter just stays at zero -- so this is a test, not a comment. Modelled on
 tests/test_research_prompt_cacheable.py."""
-from sdlc.clarify.prompts import (PROBE_PREFIX, PROBE_SYSTEM, ROUTE_SCOPE,
-                                  SCOPES, probe_prompt, probe_prompt_digest)
+
+from sdlc.clarify.prompts import (
+    PROBE_PREFIX,
+    PROBE_SYSTEM,
+    ROUTE_SCOPE,
+    SCOPES,
+    probe_prompt,
+    probe_prompt_digest,
+)
 from sdlc.models import ClarificationDimension
 
 # ~4 chars per token; 512 tokens is the documented cache floor. 2400 chars
@@ -16,15 +23,19 @@ C6 = ClarificationDimension.DATA_SEMANTICS
 
 
 def _prompt(dim):
-    return probe_prompt(dim, idea_json='{"title": "x"}',
-                        requirements_json='{"summary": "s"}',
-                        grounding="src/api/routes.py")
+    return probe_prompt(
+        dim,
+        idea_json='{"title": "x"}',
+        requirements_json='{"summary": "s"}',
+        grounding="src/api/routes.py",
+    )
 
 
 def test_prefix_is_long_enough_to_be_cacheable():
     assert len(PROBE_PREFIX) >= MIN_CACHEABLE_CHARS, (
         "prefix is below the cache floor -- it will silently not be cached "
-        "and every parallel probe pays full input price")
+        "and every parallel probe pays full input price"
+    )
 
 
 def test_prefix_is_byte_identical_across_different_dimensions():
@@ -75,8 +86,7 @@ def test_editing_a_scope_block_moves_the_digest(monkeypatch):
 
 def test_editing_the_prefix_moves_the_digest(monkeypatch):
     before = probe_prompt_digest()
-    monkeypatch.setattr("sdlc.clarify.prompts.PROBE_PREFIX",
-                        PROBE_PREFIX + "\nOne more rule.\n")
+    monkeypatch.setattr("sdlc.clarify.prompts.PROBE_PREFIX", PROBE_PREFIX + "\nOne more rule.\n")
     assert probe_prompt_digest() != before
 
 

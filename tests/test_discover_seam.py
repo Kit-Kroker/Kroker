@@ -6,10 +6,13 @@ built L2Operations by hand -- object set by hand -- that decompose() would
 never produce. These tests pipe one into the other, with members shaped
 exactly as S3 emits them.
 """
+
 from __future__ import annotations
 
 from sdlc.assessment.discover.models import (
-    EntityDeclaration, OwnershipOutcome, OwnershipVerb,
+    EntityDeclaration,
+    OwnershipOutcome,
+    OwnershipVerb,
 )
 from sdlc.assessment.discover.operations import decompose
 from sdlc.assessment.discover.ownership import assign
@@ -27,8 +30,13 @@ def _m(kind: MemberKind, value: str, path: str, line: int):
 
 def _seam(members, declarations, member_paths):
     operations = decompose(members, contract_collected=MEASURED).operations
-    return assign(declarations, member_paths, operations,
-                  schema_collected=MEASURED, contract_collected=MEASURED)
+    return assign(
+        declarations,
+        member_paths,
+        operations,
+        schema_collected=MEASURED,
+        contract_collected=MEASURED,
+    )
 
 
 def _row(report, entity: str):
@@ -42,7 +50,9 @@ def test_a_cli_written_table_is_undirected_not_unclaimed():
     reading -- a CLI-written table is not an untouched table."""
     report = _seam(
         {"BC-014": [_m(MemberKind.CLI_COMMAND, "sync_orders", "cli.py", 7)]},
-        [ORDERS], {"BC-014": ["cli.py"]})
+        [ORDERS],
+        {"BC-014": ["cli.py"]},
+    )
     row = _row(report, "order")
     assert row.outcome is OwnershipOutcome.UNDIRECTED
     assert row.claimants == ("BC-014",)
@@ -53,9 +63,10 @@ def test_a_flask_shaped_post_route_owns_its_table():
     through the seam, the POST member decomposes to CREATE and the writer
     owns the table its declaration site does not cover."""
     report = _seam(
-        {"BC-014": [_m(MemberKind.HTTP_ROUTE, "POST /api/payments",
-                       "api/pay.py", 31)]},
-        [PAYMENTS], {"BC-014": ["api/pay.py"]})
+        {"BC-014": [_m(MemberKind.HTTP_ROUTE, "POST /api/payments", "api/pay.py", 31)]},
+        [PAYMENTS],
+        {"BC-014": ["api/pay.py"]},
+    )
     row = _row(report, "payment")
     assert row.outcome is OwnershipOutcome.OWNED
     assert row.owner == "BC-014"
@@ -67,12 +78,14 @@ def test_a_sole_reader_keeps_its_undirected_co_claimant():
     """A GET route on orders in one capability and a settle CLI job naming
     orders in another: the reader owns, and the row still shows the CLI's
     contact rather than erasing it (review finding 3, through the seam)."""
-    report = _seam({
-        "BC-007": [_m(MemberKind.HTTP_ROUTE, "GET /api/orders/{id}",
-                      "api/orders.py", 12)],
-        "BC-014": [_m(MemberKind.SCHEDULED_JOB, "settle_orders",
-                      "jobs/settle.py", 3)],
-    }, [ORDERS], {"BC-007": ["api/orders.py"], "BC-014": ["jobs/settle.py"]})
+    report = _seam(
+        {
+            "BC-007": [_m(MemberKind.HTTP_ROUTE, "GET /api/orders/{id}", "api/orders.py", 12)],
+            "BC-014": [_m(MemberKind.SCHEDULED_JOB, "settle_orders", "jobs/settle.py", 3)],
+        },
+        [ORDERS],
+        {"BC-007": ["api/orders.py"], "BC-014": ["jobs/settle.py"]},
+    )
     row = _row(report, "order")
     assert row.outcome is OwnershipOutcome.OWNED
     assert row.owner == "BC-007"

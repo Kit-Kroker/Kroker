@@ -6,14 +6,17 @@ in the Temporal sandbox. The mirror-check makes drift a boot failure instead of
 a silent divergence — which is exactly how ADR-6 came to validate a role that
 never ran.
 """
+
 import pytest
+from test_agents_registry import _complete_registry
 
 from sdlc.agents.loader import (
-    HARNESS_ROLES, RegistryError, _validate_pipeline_mirror, validate_registry,
+    HARNESS_ROLES,
+    RegistryError,
+    _validate_pipeline_mirror,
+    validate_registry,
 )
 from sdlc.models import HarnessKind, PipelineConfig, RoleConfig
-
-from test_agents_registry import _complete_registry
 
 
 def test_pipeline_default_roles_are_exactly_the_harness_roles():
@@ -22,23 +25,28 @@ def test_pipeline_default_roles_are_exactly_the_harness_roles():
 
 def test_shipped_registry_and_pipeline_default_agree():
     from sdlc.agents.loader import load_registry
-    validate_registry(load_registry())        # must not raise
+
+    validate_registry(load_registry())  # must not raise
 
 
 def test_registry_drifting_from_pipeline_default_is_rejected():
     """A different-family model keeps ADR-6 satisfied, so this fails on the
     mirror and nothing else."""
     roles = _complete_registry(
-        dev=RoleConfig(kind="harness", harness=HarnessKind.OPENCODE,
-                       model="zai-coding-plan/some-other-coder"))
+        dev=RoleConfig(
+            kind="harness", harness=HarnessKind.OPENCODE, model="zai-coding-plan/some-other-coder"
+        )
+    )
     with pytest.raises(RegistryError, match="mirror"):
         validate_registry(roles)
 
 
 def test_mirror_error_names_the_role_and_both_values():
     roles = _complete_registry(
-        test=RoleConfig(kind="harness", harness=HarnessKind.OPENCODE,
-                        model="zai-coding-plan/drifted"))
+        test=RoleConfig(
+            kind="harness", harness=HarnessKind.OPENCODE, model="zai-coding-plan/drifted"
+        )
+    )
     with pytest.raises(RegistryError) as exc:
         validate_registry(roles)
     assert "test" in str(exc.value)
@@ -50,9 +58,12 @@ def _crew_registry():
     """A registry whose dev role opts into a crew (spec §5 layer 1) —
     layout and lead_harness set, every other role exactly _complete."""
     roles = _complete_registry()
-    roles["dev"] = RoleConfig(harness=HarnessKind.CREW, layout="code",
-                              lead_harness=HarnessKind.OPENCODE,
-                              model="zai-coding-plan/glm-5.3")
+    roles["dev"] = RoleConfig(
+        harness=HarnessKind.CREW,
+        layout="code",
+        lead_harness=HarnessKind.OPENCODE,
+        model="zai-coding-plan/glm-5.3",
+    )
     return roles
 
 
@@ -62,13 +73,14 @@ class _CrewDefaultPipelineConfig:
 
     def __init__(self) -> None:
         self.roles = {
-            "dev": RoleConfig(harness=HarnessKind.CREW, layout="code",
-                              lead_harness=HarnessKind.OPENCODE,
-                              model="zai-coding-plan/glm-5.3"),
-            "test": RoleConfig(harness=HarnessKind.OPENCODE,
-                               model="zai-coding-plan/glm-5.2"),
-            "devops": RoleConfig(harness=HarnessKind.OPENCODE,
-                                 model="zai-coding-plan/glm-5.2"),
+            "dev": RoleConfig(
+                harness=HarnessKind.CREW,
+                layout="code",
+                lead_harness=HarnessKind.OPENCODE,
+                model="zai-coding-plan/glm-5.3",
+            ),
+            "test": RoleConfig(harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.2"),
+            "devops": RoleConfig(harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.2"),
         }
 
 
@@ -76,9 +88,8 @@ def test_mirror_accepts_a_matching_crew_configured_pair(monkeypatch):
     """spec §5 layer 1: when a registry role opts into a crew and
     PipelineConfig's default is changed in the same commit, the boot check
     passes — layout and lead_harness mirror too, not just the triple."""
-    monkeypatch.setattr("sdlc.models.PipelineConfig",
-                        _CrewDefaultPipelineConfig)
-    _validate_pipeline_mirror(_crew_registry())      # must not raise
+    monkeypatch.setattr("sdlc.models.PipelineConfig", _CrewDefaultPipelineConfig)
+    _validate_pipeline_mirror(_crew_registry())  # must not raise
 
 
 def test_registry_crew_vs_non_crew_default_is_rejected():

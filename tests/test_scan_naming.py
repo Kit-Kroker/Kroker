@@ -1,57 +1,81 @@
 """D9: S3's grouping and S5's merge must share one normalizer. Two copies
 would agree only by coincidence."""
+
 from __future__ import annotations
 
 import pytest
 
 from sdlc.assessment.scan.naming import (
-    GENERIC_NAMES, LAYER_NAMES, LAYER_SUFFIXES, head_token, normalize,
+    GENERIC_NAMES,
+    LAYER_NAMES,
+    LAYER_SUFFIXES,
+    head_token,
+    normalize,
     singularize,
 )
 
 
-@pytest.mark.parametrize("word,expected", [
-    ("payments", "payment"),
-    ("categories", "category"),
-    ("classes", "class"),
-    ("boxes", "box"),
-    ("batches", "batch"),
-    ("dishes", "dish"),
-    ("status", "status"),      # "ss" is not a plural marker
-    ("address", "address"),
-    ("api", "api"),
-    ("s", "s"),                # too short to strip
-])
+@pytest.mark.parametrize(
+    "word,expected",
+    [
+        ("payments", "payment"),
+        ("categories", "category"),
+        ("classes", "class"),
+        ("boxes", "box"),
+        ("batches", "batch"),
+        ("dishes", "dish"),
+        ("status", "status"),  # "ss" is not a plural marker
+        ("address", "address"),
+        ("api", "api"),
+        ("s", "s"),  # too short to strip
+    ],
+)
 def test_singularize(word, expected):
     assert singularize(word) == expected
 
 
-@pytest.mark.parametrize("name", [
-    "PaymentController", "PaymentService", "PaymentRepository",
-    "PaymentHandler", "payments", "payment_service", "Payments",
-])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "PaymentController",
+        "PaymentService",
+        "PaymentRepository",
+        "PaymentHandler",
+        "payments",
+        "payment_service",
+        "Payments",
+    ],
+)
 def test_the_payments_family_normalizes_to_one_token(name):
     """D9's worked example: PaymentController (S3) + payments/ (S1) must
     reach the same key or S5 cannot merge them."""
     assert normalize(name) == "payment"
 
 
-@pytest.mark.parametrize("name,expected", [
-    ("PaymentSettlementJob", "Payment"),
-    ("PaymentEventConsumer", "Payment"),
-    ("PaymentController", "Payment"),
-    ("payment_settlement_job", "payment"),
-    ("payments", "payments"),
-    ("catcafe", "catcafe"),
-    ("HTTPServer", "HTTP"),          # an acronym run is one token
-])
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("PaymentSettlementJob", "Payment"),
+        ("PaymentEventConsumer", "Payment"),
+        ("PaymentController", "Payment"),
+        ("payment_settlement_job", "payment"),
+        ("payments", "payments"),
+        ("catcafe", "catcafe"),
+        ("HTTPServer", "HTTP"),  # an acronym run is one token
+    ],
+)
 def test_head_token(name, expected):
     assert head_token(name) == expected
 
 
-@pytest.mark.parametrize("name", [
-    "PaymentController", "PaymentSettlementJob", "PaymentEventConsumer",
-])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "PaymentController",
+        "PaymentSettlementJob",
+        "PaymentEventConsumer",
+    ],
+)
 def test_the_three_channel_names_reach_one_merge_key(name):
     """BrownKit's rule verbatim: PaymentController + PaymentSettlementJob +
     PaymentEventConsumer is ONE candidate, not three. Suffix-stripping alone

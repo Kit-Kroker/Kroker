@@ -3,6 +3,7 @@
 Everything a model wrote is untrusted: schemas are exact, sizes are capped,
 and a value that fails to parse is an error rather than a best-effort guess.
 """
+
 from __future__ import annotations
 
 from typing import Literal
@@ -20,6 +21,7 @@ MAX_NOTE_BYTES = 64_000
 class RoundNote(BaseModel):
     """The lead's round deliverable. The WORK is the diff, in git; this is
     what the diff cannot say."""
+
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     schema_name: Literal["notes-v1"] = Field(alias="schema")
@@ -32,6 +34,7 @@ class RoundNote(BaseModel):
 class RoundAdvisory(BaseModel):
     """The critic's response to the lead's round. Prose, because its consumer
     is the next round's brief and the reader is a model."""
+
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     schema_name: Literal["advisor-v1"] = Field(alias="schema")
@@ -52,12 +55,12 @@ class RoundReview(BaseModel):
     """A verdict plus its evidence. `verdict` is a closed set because it
     drives a control decision -- a free string would let a model invent an
     outcome the workflow has no branch for."""
+
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     schema_name: Literal["review-v1"] = Field(alias="schema")
     verdict: Literal["approve", "needs_work"]
-    findings: list[ReviewFinding] = Field(default_factory=list,
-                                          max_length=100)
+    findings: list[ReviewFinding] = Field(default_factory=list, max_length=100)
 
 
 class CrewQuestion(BaseModel):
@@ -68,6 +71,7 @@ class CrewQuestion(BaseModel):
     class nor evidence is not a question. Forwarding one spends a human's
     attention on an agent that did not do its reading.
     """
+
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     schema_name: Literal["question-v1"] = Field(alias="schema")
@@ -79,6 +83,7 @@ class CrewQuestion(BaseModel):
 class TurnBeat(BaseModel):
     """What a turn's heartbeat carries so a retry can resume rather than
     restart (spec §3). Crosses the Temporal boundary as a plain dict."""
+
     model_config = ConfigDict(extra="forbid")
 
     session_id: str | None = None
@@ -92,6 +97,7 @@ class TurnBeat(BaseModel):
 class TurnRecord(BaseModel):
     """One agent turn, keyed by (role, round, attempt) so abandoned attempts
     stay countable."""
+
     model_config = ConfigDict(extra="forbid")
 
     role: str
@@ -131,12 +137,13 @@ class RoundRecord(BaseModel):
         vals = [t.cost_usd for t in self.turns]
         if any(v is None for v in vals):
             return None
-        return sum(vals)
+        return sum(v for v in vals if v is not None)
 
 
 class CrewRunResult(BaseModel):
     """What CrewTaskWorkflow returns. `run` is the shared contract the
     factory already consumes; the rest is crew-specific and additive."""
+
     model_config = ConfigDict(extra="forbid")
 
     run: HarnessRunResult

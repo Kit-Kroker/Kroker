@@ -3,13 +3,18 @@
 The unit tests here pin the contract and the skip predicate; the end-to-end
 'no proposer was called' assertion is the temporal test at the bottom.
 """
+
 import inspect
 
 import pytest
 
 from sdlc.models import (
-    ArchitectureSpec, ArchitectureDecision, DevTask, ImplementationPlan,
-    SeededWork, ValidationContract,
+    ArchitectureDecision,
+    ArchitectureSpec,
+    DevTask,
+    ImplementationPlan,
+    SeededWork,
+    ValidationContract,
 )
 from sdlc.workflows.feature import FeatureWorkflow
 
@@ -18,16 +23,29 @@ def _seeded():
     return SeededWork(
         arch=ArchitectureSpec(
             overview="Tidy-up: add .env to .gitignore",
-            decisions=[ArchitectureDecision(
-                id="D1", decision="Edit .gitignore only",
-                rationale="triage finding baseline/gitignore_missing_env")]),
-        plan=ImplementationPlan(tasks=[DevTask(
-            id="T01", title="gitignore_missing_env in .gitignore",
-            description="Add .env to .gitignore.",
-            acceptance_criteria=["triage no longer reports the rule"],
-            files_hint=[".gitignore"],
-            contract=ValidationContract(
-                task_id="T01", assertions=[".env is ignored"], frozen=True))]))
+            decisions=[
+                ArchitectureDecision(
+                    id="D1",
+                    decision="Edit .gitignore only",
+                    rationale="triage finding baseline/gitignore_missing_env",
+                )
+            ],
+        ),
+        plan=ImplementationPlan(
+            tasks=[
+                DevTask(
+                    id="T01",
+                    title="gitignore_missing_env in .gitignore",
+                    description="Add .env to .gitignore.",
+                    acceptance_criteria=["triage no longer reports the rule"],
+                    files_hint=[".gitignore"],
+                    contract=ValidationContract(
+                        task_id="T01", assertions=[".env is ignored"], frozen=True
+                    ),
+                )
+            ]
+        ),
+    )
 
 
 def test_seeded_work_carries_an_arch_and_a_plan():
@@ -46,8 +64,8 @@ def test_run_accepts_seeded_as_a_third_argument():
     sig = inspect.signature(FeatureWorkflow.run)
     params = list(sig.parameters)
     assert params[1:] == ["idea", "cfg", "seeded"], (
-        "Task 7 starts children with args=[idea, cfg, seeded]; the order and "
-        "names are the contract")
+        "Task 7 starts children with args=[idea, cfg, seeded]; the order and names are the contract"
+    )
     assert sig.parameters["seeded"].default is None
 
 
@@ -67,14 +85,14 @@ async def test_seeded_run_skips_clarify_architect_and_planner():
     import asyncio
     import uuid
 
+    from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
     from temporalio.contrib.pydantic import pydantic_data_converter
     from temporalio.testing import WorkflowEnvironment
     from temporalio.worker import Worker
-    from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 
     from sdlc.activities import evaluate_gate
     from sdlc.models import GateDecision, GateOutcome
-    from tests.fakes.canned import AGENT_SPECS, PLAN, ARCH, e2e_config, greenfield_idea
+    from tests.fakes.canned import AGENT_SPECS, ARCH, PLAN, e2e_config, greenfield_idea
     from tests.fakes.fake_activities import GIT_FAKES
     from tests.fakes.fake_agents import fake_agent_activities
 
@@ -86,7 +104,7 @@ async def test_seeded_run_skips_clarify_architect_and_planner():
     activities = [evaluate_gate, *GIT_FAKES, *fake_agent_activities(specs)]
 
     seeded = SeededWork(arch=ARCH, plan=PLAN)
-    cfg = e2e_config()            # every gate HARD; merge auto-passes clean
+    cfg = e2e_config()  # every gate HARD; merge auto-passes clean
 
     async def _wait_for_status(handle, target, timeout_s=15.0):
         deadline = asyncio.get_event_loop().time() + timeout_s
@@ -97,26 +115,34 @@ async def test_seeded_run_skips_clarify_architect_and_planner():
         raise AssertionError(f"timed out waiting for status {target!r}")
 
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(
-                    env.client, task_queue="seeded",
-                    workflows=[FeatureWorkflow],
-                    activities=activities,
-                    plugins=[PydanticAIPlugin()]):
+                env.client,
+                task_queue="seeded",
+                workflows=[FeatureWorkflow],
+                activities=activities,
+                plugins=[PydanticAIPlugin()],
+            ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
                     args=[greenfield_idea(), cfg, seeded],
-                    id=f"seeded-{uuid.uuid4()}", task_queue="seeded")
+                    id=f"seeded-{uuid.uuid4()}",
+                    task_queue="seeded",
+                )
+
                 # A seeded run skips clarify/architecture/plan; service only
                 # the deploy gate (merge auto-passes against the clean fakes).
                 async def _drive():
                     await _wait_for_status(handle, "awaiting:deploy")
                     await handle.signal(
                         FeatureWorkflow.submit_gate_decision,
-                        GateDecision(gate="deploy", round=1,
-                                     outcome=GateOutcome.APPROVE,
-                                     decided_by="human"))
+                        GateDecision(
+                            gate="deploy", round=1, outcome=GateOutcome.APPROVE, decided_by="human"
+                        ),
+                    )
+
                 driver = asyncio.create_task(_drive())
                 result = await handle.result()
                 await driver

@@ -19,6 +19,7 @@ degrades the judgment layer).
 The blobs are read by the CALLING activity and passed in; this module
 decides.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
@@ -42,6 +43,7 @@ class VerifiableRow(Protocol):
     `row_id`, and renaming either would change a landed contract for the
     verifier's convenience.
     """
+
     evidence: tuple[EvidenceRef, ...]
     quote: str
 
@@ -53,6 +55,7 @@ class Fabricating(Protocol):
     """What guard_reason needs. A protocol rather than a concrete type so the
     typed wrappers (RefVerification, RiskVerification) can each keep their own
     Pydantic shape for the Temporal boundary."""
+
     total_references: int
     unresolved_references: int
 
@@ -72,6 +75,7 @@ class RowVerification(Generic[R]):
     caller owns the row shape, and building one here would be a second
     producer of the same row (E-48 P3-D1).
     """
+
     survivors: tuple[R, ...]
     refusals: dict[str, tuple[str, str]]
     total_references: int
@@ -94,7 +98,7 @@ def _line_span(text: str) -> int:
 
 
 def _range_refusal(ref: EvidenceRef, body: str) -> str:
-    """"" when the range lies inside the file. `lines` is "" for a whole-file
+    """ "" when the range lies inside the file. `lines` is "" for a whole-file
     reference, "42" for one line, "42-78" for a span."""
     if not ref.lines:
         return ""
@@ -109,8 +113,7 @@ def _range_refusal(ref: EvidenceRef, body: str) -> str:
     return ""
 
 
-def _refuse(row: VerifiableRow,
-            blobs: Mapping[str, str | None]) -> tuple[str, str, int]:
+def _refuse(row: VerifiableRow, blobs: Mapping[str, str | None]) -> tuple[str, str, int]:
     """(rule, detail, unresolved_count) for one row.
 
     ("", "", 0) means every reference resolved. The unresolved count is over
@@ -129,9 +132,7 @@ def _refuse(row: VerifiableRow,
             unresolved += 1
             if not first_rule:
                 first_rule = "dropped_ref_unresolved"
-                first_detail = (
-                    f"evidence path {ref.path!r} does not resolve at the "
-                    f"pinned commit")
+                first_detail = f"evidence path {ref.path!r} does not resolve at the pinned commit"
             continue
         refusal = _range_refusal(ref, body)
         if refusal:
@@ -140,7 +141,8 @@ def _refuse(row: VerifiableRow,
                 first_rule = refusal
                 first_detail = (
                     f"evidence lines {ref.lines!r} lie outside {ref.path!r}, "
-                    f"which has {_line_span(body)} line(s)")
+                    f"which has {_line_span(body)} line(s)"
+                )
 
     if row.quote:
         if not row.quote.strip():
@@ -149,30 +151,32 @@ def _refuse(row: VerifiableRow,
                 first_rule = "dropped_quote_empty"
                 first_detail = (
                     "the quote is blank, and an empty quote grounds trivially "
-                    "against any file (E-43)")
+                    "against any file (E-43)"
+                )
         elif not row.evidence:
             unresolved += 1
             if not first_rule:
                 first_rule = "dropped_quote_unanchored"
                 first_detail = (
-                    "the quote names no evidence path, so there is nothing to "
-                    "verify it against")
+                    "the quote names no evidence path, so there is nothing to verify it against"
+                )
         else:
             body = blobs.get(row.evidence[0].path)
-            if body is not None and not verify_quote(
-                    row.quote, body, Profile.VERBATIM_BYTES):
+            if body is not None and not verify_quote(row.quote, body, Profile.VERBATIM_BYTES):
                 unresolved += 1
                 if not first_rule:
                     first_rule = "dropped_quote_unverified"
                     first_detail = (
                         f"the quote does not byte-verify against "
-                        f"{row.evidence[0].path!r} under VERBATIM_BYTES")
+                        f"{row.evidence[0].path!r} under VERBATIM_BYTES"
+                    )
 
     return first_rule, first_detail, unresolved
 
 
-def verify_rows(rows: Iterable[R], blobs: Mapping[str, str | None], *,
-                id_of: Callable[[R], str]) -> RowVerification[R]:
+def verify_rows(
+    rows: Iterable[R], blobs: Mapping[str, str | None], *, id_of: Callable[[R], str]
+) -> RowVerification[R]:
     """Every reference resolved, every quote byte-verified.
 
     `blobs` maps every path the rows cited to their bytes at the pinned
@@ -196,9 +200,12 @@ def verify_rows(rows: Iterable[R], blobs: Mapping[str, str | None], *,
         else:
             survivors.append(row)
 
-    return RowVerification(survivors=tuple(survivors), refusals=refusals,
-                           total_references=total,
-                           unresolved_references=unresolved_total)
+    return RowVerification(
+        survivors=tuple(survivors),
+        refusals=refusals,
+        total_references=total,
+        unresolved_references=unresolved_total,
+    )
 
 
 def cited_paths_of(rows: Iterable[VerifiableRow]) -> tuple[str, ...]:
@@ -219,10 +226,12 @@ def guard_reason(v: Fabricating) -> str:
     """
     if v.fabrication_rate <= CITATION_GUARD_MAX_UNRESOLVED:
         return ""
-    return (f"the proposer's citation fabrication rate is "
-            f"{v.unresolved_references}/"
-            f"{v.total_references} = "
-            f"{v.fabrication_rate:.2f}, past the "
-            f"{CITATION_GUARD_MAX_UNRESOLVED:.2f} guard -- too many "
-            f"references failed to resolve for the surviving ones to be "
-            f"evidence")
+    return (
+        f"the proposer's citation fabrication rate is "
+        f"{v.unresolved_references}/"
+        f"{v.total_references} = "
+        f"{v.fabrication_rate:.2f}, past the "
+        f"{CITATION_GUARD_MAX_UNRESOLVED:.2f} guard -- too many "
+        f"references failed to resolve for the surviving ones to be "
+        f"evidence"
+    )

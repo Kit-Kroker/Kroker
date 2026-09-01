@@ -1,13 +1,19 @@
 """E-44. Pure helpers directly; sequencing through the workflow, following
 tests/test_triage_workflow.py."""
+
 from __future__ import annotations
 
 import pytest
 
 from sdlc.models import GatePolicy
 from sdlc.workflows.tidyup import (
-    FixRunResult, TidyUpInput, TidyUpReport, TidyUpWorkflow,
-    branches_to_verify, fix_workflow_id, reached_a_pr, triage_gates,
+    FixRunResult,
+    TidyUpInput,
+    TidyUpReport,
+    branches_to_verify,
+    fix_workflow_id,
+    reached_a_pr,
+    triage_gates,
     unrecognized_selection,
 )
 
@@ -28,16 +34,19 @@ def test_fix_cfg_disables_the_deploy_gate():
     assert inp.fix_cfg.deploy.enabled is False
 
 
-@pytest.mark.parametrize("outcome,expected", [
-    ("deployed:https://example/pr/1", True),
-    ("merged-not-deployed:https://example/pr/1", True),
-    ("merged-not-deployed:skipped:benchmark-run-has-no-remote", True),
-    ("rejected:merge:soft-verdict", False),
-    ("rejected:plan", False),
-    ("rejected:budget", False),
-    ("failed:plan-validation:cycle", False),
-    ("", False),
-])
+@pytest.mark.parametrize(
+    "outcome,expected",
+    [
+        ("deployed:https://example/pr/1", True),
+        ("merged-not-deployed:https://example/pr/1", True),
+        ("merged-not-deployed:skipped:benchmark-run-has-no-remote", True),
+        ("rejected:merge:soft-verdict", False),
+        ("rejected:plan", False),
+        ("rejected:budget", False),
+        ("failed:plan-validation:cycle", False),
+        ("", False),
+    ],
+)
 def test_reached_a_pr(outcome, expected):
     """D6 step 6: 'produced a branch worth merging' is read off the return
     string, which is the only thing FeatureWorkflow gives a caller."""
@@ -46,19 +55,19 @@ def test_reached_a_pr(outcome, expected):
 
 def test_branches_to_verify_keeps_accepted_order_and_drops_failures():
     runs = [
-        FixRunResult(identity="a", workflow_id="w-fix-00",
-                     outcome="merged-not-deployed:u", branch="b0"),
-        FixRunResult(identity="b", workflow_id="w-fix-01",
-                     outcome="rejected:merge:soft-verdict", branch="b1"),
-        FixRunResult(identity="c", workflow_id="w-fix-02",
-                     outcome="deployed:u", branch="b2"),
+        FixRunResult(
+            identity="a", workflow_id="w-fix-00", outcome="merged-not-deployed:u", branch="b0"
+        ),
+        FixRunResult(
+            identity="b", workflow_id="w-fix-01", outcome="rejected:merge:soft-verdict", branch="b1"
+        ),
+        FixRunResult(identity="c", workflow_id="w-fix-02", outcome="deployed:u", branch="b2"),
     ]
     assert branches_to_verify(runs) == ["b0", "b2"]
 
 
 def test_branches_to_verify_drops_a_run_with_no_branch():
-    runs = [FixRunResult(identity="a", workflow_id="w", outcome="deployed:u",
-                         branch=None)]
+    runs = [FixRunResult(identity="a", workflow_id="w", outcome="deployed:u", branch=None)]
     assert branches_to_verify(runs) == []
 
 
@@ -73,6 +82,7 @@ def test_report_defaults_are_honest_about_an_unmeasured_after():
     """TidyUpReport.before is required (a report always has a baseline); the
     after side is optional and None until the verification triage runs."""
     from pydantic import ValidationError
+
     with pytest.raises(ValidationError):
         TidyUpReport(before=None, readiness_before=None)  # type: ignore[arg-type]
 
@@ -81,8 +91,10 @@ def test_before_triage_inherits_the_operators_gates():
     """The before-triage gates admission, so the operator's HARD readiness
     setting applies unchanged."""
     from sdlc.models import GateConfig, GatePolicy, GateSettings
-    hard = GateSettings(default_gate_policy=GatePolicy.HARD,
-                        gates={"readiness": GateConfig(policy=GatePolicy.HARD)})
+
+    hard = GateSettings(
+        default_gate_policy=GatePolicy.HARD, gates={"readiness": GateConfig(policy=GatePolicy.HARD)}
+    )
     assert triage_gates(hard, gating=True) is hard
 
 
@@ -92,8 +104,10 @@ def test_after_triage_never_parks_on_a_readiness_gate():
     after-verdict is INDETERMINATE, which a HARD readiness gate would block
     on. OFF resolves automatically; the verdict is still recorded."""
     from sdlc.models import GateConfig, GatePolicy, GateSettings
-    hard = GateSettings(default_gate_policy=GatePolicy.HARD,
-                        gates={"readiness": GateConfig(policy=GatePolicy.HARD)})
+
+    hard = GateSettings(
+        default_gate_policy=GatePolicy.HARD, gates={"readiness": GateConfig(policy=GatePolicy.HARD)}
+    )
     after = triage_gates(hard, gating=False)
     assert after.default_gate_policy is GatePolicy.OFF
 

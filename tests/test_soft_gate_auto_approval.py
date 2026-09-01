@@ -3,8 +3,7 @@ from sdlc.workflows.feature import _auto_decision_for
 
 
 def _cfg(policy: GatePolicy, threshold: float = 0.8) -> PipelineConfig:
-    return PipelineConfig(gates={"architecture": GateConfig(policy=policy,
-                                                            threshold=threshold)})
+    return PipelineConfig(gates={"architecture": GateConfig(policy=policy, threshold=threshold)})
 
 
 def test_soft_high_confidence_auto_approves():
@@ -54,10 +53,12 @@ def test_revisable_stage_passes_auto_decision():
     src = SRC.read_text(encoding="utf-8")
     assert "_auto_decision_for(" in src, (
         "_revisable_stage must call _auto_decision_for to compute an "
-        "auto_decision from the artifact's confidence (FR-301)")
+        "auto_decision from the artifact's confidence (FR-301)"
+    )
     # The auto_decision must actually reach _gate(), not just be computed.
     assert "auto_decision=auto" in src, (
-        "_revisable_stage must pass auto_decision=auto into self._gate()")
+        "_revisable_stage must pass auto_decision=auto into self._gate()"
+    )
 
 
 def test_merge_soft_path_uses_auto_decision_for():
@@ -67,8 +68,9 @@ def test_merge_soft_path_uses_auto_decision_for():
     # verdict.approve check alone.
     idx = src.find('"merge_verdict"')
     assert idx != -1, "merge stage no longer calls t_merge_verdict"
-    tail = src[idx: idx + 700]
+    tail = src[idx : idx + 700]
     assert "_auto_decision_for(" in tail, (
         "merge gate's soft path must route through _auto_decision_for so "
         "verdict.confidence is checked against cfg.gates['merge'].threshold, "
-        "not just verdict.approve")
+        "not just verdict.approve"
+    )

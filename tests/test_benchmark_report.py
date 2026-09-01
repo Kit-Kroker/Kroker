@@ -1,8 +1,13 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sdlc.benchmarks.models import (
-    BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, CompositeWeights,
-    CostBag, QualityScore, SpeedBag,
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    CompositeWeights,
+    CostBag,
+    QualityScore,
+    SpeedBag,
 )
 from sdlc.benchmarks.recorder import RecordStore
 from sdlc.benchmarks.report import aggregate, render_markdown
@@ -11,15 +16,24 @@ from sdlc.models import HarnessKind
 
 def _rec(model, q, usd, secs):
     return BenchmarkRecord(
-        run_id="r", bench_run_id="b1", case_id="c1",
-        scope=BenchmarkScope.STAGE, stage="code", role="dev",
-        harness=HarnessKind.CLAUDE_CODE, model=model, prompt_sha="",
+        run_id="r",
+        bench_run_id="b1",
+        case_id="c1",
+        scope=BenchmarkScope.STAGE,
+        stage="code",
+        role="dev",
+        harness=HarnessKind.CLAUDE_CODE,
+        model=model,
+        prompt_sha="",
         quality=QualityScore(score=q, judge="contract"),
         cost=CostBag(usd=usd),
-        speed=SpeedBag(wall_clock_s=secs,
-                       started_at=datetime(2026, 7, 4, 10),
-                       ended_at=datetime(2026, 7, 4, 10) + timedelta(seconds=secs)),
-        outcome=BenchmarkOutcome.PASS)
+        speed=SpeedBag(
+            wall_clock_s=secs,
+            started_at=datetime(2026, 7, 4, 10),
+            ended_at=datetime(2026, 7, 4, 10) + timedelta(seconds=secs),
+        ),
+        outcome=BenchmarkOutcome.PASS,
+    )
 
 
 def test_aggregate_reads_store_and_returns_summaries(tmp_path):
@@ -33,9 +47,12 @@ def test_aggregate_reads_store_and_returns_summaries(tmp_path):
 
 
 def test_render_markdown_has_headers_and_rows(tmp_path):
-    sums = aggregate("b1", CompositeWeights(), root=str(tmp_path),
-                     _records=[_rec("sonnet", 0.9, 1.0, 100),
-                               _rec("opus", 0.5, 0.5, 50)])
+    sums = aggregate(
+        "b1",
+        CompositeWeights(),
+        root=str(tmp_path),
+        _records=[_rec("sonnet", 0.9, 1.0, 100), _rec("opus", 0.5, 0.5, 50)],
+    )
     md = render_markdown(sums)
     assert "| case" in md or "case" in md
     assert "sonnet" in md and "opus" in md
@@ -58,15 +75,23 @@ def test_render_markdown_surfaces_stage_failures():
     per the 2026-07-20 decision) still leaves a trace in the human-facing
     report instead of vanishing silently."""
     failed = BenchmarkRecord(
-        run_id="r", bench_run_id="b1", case_id="c1",
-        scope=BenchmarkScope.STAGE, stage="research", role="research",
-        model="google:gemini-3.5-flash", prompt_sha="",
+        run_id="r",
+        bench_run_id="b1",
+        case_id="c1",
+        scope=BenchmarkScope.STAGE,
+        stage="research",
+        role="research",
+        model="google:gemini-3.5-flash",
+        prompt_sha="",
         quality=QualityScore(score=None, judge="error"),
-        speed=SpeedBag(wall_clock_s=1.0,
-                       started_at=datetime(2026, 7, 4, 10),
-                       ended_at=datetime(2026, 7, 4, 10) + timedelta(seconds=1)),
+        speed=SpeedBag(
+            wall_clock_s=1.0,
+            started_at=datetime(2026, 7, 4, 10),
+            ended_at=datetime(2026, 7, 4, 10) + timedelta(seconds=1),
+        ),
         outcome=BenchmarkOutcome.FAIL,
-        error="rejected:research.grounding: quote_not_found: https://x/1: 'q'")
+        error="rejected:research.grounding: quote_not_found: https://x/1: 'q'",
+    )
     sums = aggregate("b1", CompositeWeights(), _records=[failed])
     md = render_markdown(sums)
     assert "Stage failures" in md
@@ -76,16 +101,17 @@ def test_render_markdown_surfaces_stage_failures():
 
 def test_resolve_language_map_reads_case_manifests(tmp_path):
     from sdlc.benchmarks.report import resolve_language_map
+
     (tmp_path / "c1").mkdir()
-    (tmp_path / "c1" / "case.yaml").write_text(
-        "case_id: c1\nlanguage: python\n", encoding="utf-8")
-    (tmp_path / "c2").mkdir()          # no case.yaml
+    (tmp_path / "c1" / "case.yaml").write_text("case_id: c1\nlanguage: python\n", encoding="utf-8")
+    (tmp_path / "c2").mkdir()  # no case.yaml
     m = resolve_language_map(["c1", "c2"], cases_dir=tmp_path)
     assert m == {"c1": "python", "c2": ""}
 
 
 def test_write_heatmap_emits_both_files(tmp_path):
     from sdlc.benchmarks.report import write_heatmap
+
     recs = [_rec("sonnet", 0.9, 1.0, 100)]
     html_p, json_p = write_heatmap(recs, tmp_path, {"c1": "python"})
     assert html_p.exists() and json_p.exists()
@@ -94,38 +120,60 @@ def test_write_heatmap_emits_both_files(tmp_path):
 
 
 def test_render_markdown_appends_calibration_when_provided():
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from sdlc.benchmarks.calibration import CalibrationReport
-    from sdlc.benchmarks.report import aggregate, render_markdown
     from sdlc.benchmarks.models import CompositeWeights
-    sums = aggregate("b1", CompositeWeights(),
-                     _records=[_rec("sonnet", 0.9, 1.0, 100)])
+    from sdlc.benchmarks.report import aggregate, render_markdown
+
+    sums = aggregate("b1", CompositeWeights(), _records=[_rec("sonnet", 0.9, 1.0, 100)])
     rep = CalibrationReport(
-        rubric="architect", judge_model="j", n_fixtures=10, epsilon=0.15,
-        threshold=0.75, agreement_rate=0.8, mae=0.1, spearman=0.7,
-        verdict="calibrated", computed_at=datetime(2026, 7, 24, tzinfo=timezone.utc))
+        rubric="architect",
+        judge_model="j",
+        n_fixtures=10,
+        epsilon=0.15,
+        threshold=0.75,
+        agreement_rate=0.8,
+        mae=0.1,
+        spearman=0.7,
+        verdict="calibrated",
+        computed_at=datetime(2026, 7, 24, tzinfo=UTC),
+    )
     md = render_markdown(sums, calibration={"architect": rep})
     assert "Rubric calibration" in md
 
 
 def test_scan_case_records_reads_across_multiple_bench_run_ids(tmp_path):
     from datetime import datetime, timedelta
+
     from sdlc.benchmarks.models import (
-        BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag)
+        BenchmarkOutcome,
+        BenchmarkRecord,
+        BenchmarkScope,
+        QualityScore,
+        SpeedBag,
+    )
     from sdlc.benchmarks.recorder import RecordStore
     from sdlc.benchmarks.report import scan_case_records
     from sdlc.models import HarnessKind
+
     t = datetime(2026, 7, 20, 10)
 
     def rec(run, task_id):
         return BenchmarkRecord(
-            run_id=f"{run}/c1#opencode#m1", bench_run_id=run, case_id="c1",
-            scope=BenchmarkScope.ORACLE_TASK, stage="oracle", task_id=task_id,
-            role="oracle", harness=HarnessKind.OPENCODE, model="m1",
+            run_id=f"{run}/c1#opencode#m1",
+            bench_run_id=run,
+            case_id="c1",
+            scope=BenchmarkScope.ORACLE_TASK,
+            stage="oracle",
+            task_id=task_id,
+            role="oracle",
+            harness=HarnessKind.OPENCODE,
+            model="m1",
             quality=QualityScore(score=1.0, judge="oracle"),
-            speed=SpeedBag(wall_clock_s=1.0, started_at=t,
-                          ended_at=t + timedelta(seconds=1)),
-            outcome=BenchmarkOutcome.PASS)
+            speed=SpeedBag(wall_clock_s=1.0, started_at=t, ended_at=t + timedelta(seconds=1)),
+            outcome=BenchmarkOutcome.PASS,
+        )
 
     RecordStore(root=str(tmp_path), bench_run_id="b1").append(rec("b1", "t01"))
     RecordStore(root=str(tmp_path), bench_run_id="b2").append(rec("b2", "t01"))
@@ -136,24 +184,38 @@ def test_scan_case_records_reads_across_multiple_bench_run_ids(tmp_path):
 
 def test_scan_case_records_filters_other_cases(tmp_path):
     from datetime import datetime, timedelta
+
     from sdlc.benchmarks.models import (
-        BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag)
+        BenchmarkOutcome,
+        BenchmarkRecord,
+        BenchmarkScope,
+        QualityScore,
+        SpeedBag,
+    )
     from sdlc.benchmarks.recorder import RecordStore
     from sdlc.benchmarks.report import scan_case_records
     from sdlc.models import HarnessKind
+
     t = datetime(2026, 7, 20, 10)
     rec = BenchmarkRecord(
-        run_id="b1/other#opencode#m1", bench_run_id="b1", case_id="other-case",
-        scope=BenchmarkScope.ORACLE_TASK, stage="oracle", task_id="t01",
-        role="oracle", harness=HarnessKind.OPENCODE, model="m1",
+        run_id="b1/other#opencode#m1",
+        bench_run_id="b1",
+        case_id="other-case",
+        scope=BenchmarkScope.ORACLE_TASK,
+        stage="oracle",
+        task_id="t01",
+        role="oracle",
+        harness=HarnessKind.OPENCODE,
+        model="m1",
         quality=QualityScore(score=1.0, judge="oracle"),
-        speed=SpeedBag(wall_clock_s=1.0, started_at=t,
-                      ended_at=t + timedelta(seconds=1)),
-        outcome=BenchmarkOutcome.PASS)
+        speed=SpeedBag(wall_clock_s=1.0, started_at=t, ended_at=t + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.PASS,
+    )
     RecordStore(root=str(tmp_path), bench_run_id="b1").append(rec)
     assert scan_case_records("c1", root=str(tmp_path)) == []
 
 
 def test_scan_case_records_empty_root_returns_empty(tmp_path):
     from sdlc.benchmarks.report import scan_case_records
+
     assert scan_case_records("c1", root=str(tmp_path / "does-not-exist")) == []

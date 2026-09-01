@@ -5,6 +5,7 @@ Split note: reading the current version is its OWN activity rather than a
 step inside deploy_apply. If apply raises, the workflow must still hold the
 prior version -- that is exactly the path where a rollback is needed.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -16,10 +17,13 @@ from pydantic import BaseModel
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
-from .adapters import resolve
 from ..models import (
-    DeployConfig, DeployPlan, SmokeCheckResult, SmokeState,
+    DeployConfig,
+    DeployPlan,
+    SmokeCheckResult,
+    SmokeState,
 )
+from .adapters import resolve
 
 # A version probe or an apply that hangs must not sit on the activity's
 # start_to_close_timeout doing nothing visible; these bound the subprocess
@@ -54,18 +58,20 @@ class ApplyResult(BaseModel):
     detail: str = ""
 
 
-async def _run(cmd: str, cwd: str, env: dict[str, str],
-               timeout_s: int) -> tuple[int, str]:
+async def _run(cmd: str, cwd: str, env: dict[str, str], timeout_s: int) -> tuple[int, str]:
     """Run `cmd` in `cwd` with `env` layered over the worker's own. Returns
     (returncode, combined output). Never raises on a nonzero exit -- callers
     decide what a failure means."""
     proc = await asyncio.create_subprocess_shell(
-        cmd, cwd=cwd, env={**os.environ, **env},
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+        cmd,
+        cwd=cwd,
+        env={**os.environ, **env},
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
     )
     try:
         out_b, _ = await asyncio.wait_for(proc.communicate(), timeout_s)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         proc.kill()
         await proc.wait()
         return 124, f"timed out after {timeout_s}s"
@@ -73,17 +79,19 @@ async def _run(cmd: str, cwd: str, env: dict[str, str],
 
 
 @activity.defn
-async def deploy_current_version(
-        inp: DeployActivityInput) -> CurrentVersionResult:
+async def deploy_current_version(inp: DeployActivityInput) -> CurrentVersionResult:
     """Best-effort read of what is running now, BEFORE anything changes.
 
     A failed or empty probe is not an error: it means we have no rollback
     target, which the DeployReport states plainly rather than pretending a
     rollback is available."""
     adapter = resolve(inp.cfg)
-    code, out = await _run(adapter.current_version_cmd(inp.plan),
-                           inp.repo_path, adapter.env(inp.plan),
-                           VERSION_TIMEOUT_S)
+    code, out = await _run(
+        adapter.current_version_cmd(inp.plan),
+        inp.repo_path,
+        adapter.env(inp.plan),
+        VERSION_TIMEOUT_S,
+    )
     if code != 0:
         activity.logger.info("version probe failed (%s): %s", code, out[-200:])
         return CurrentVersionResult(version=None)
@@ -100,10 +108,13 @@ async def deploy_apply(inp: DeployActivityInput) -> ApplyResult:
         # is what actually stops Temporal retrying.
         raise ApplicationError(
             "refusing to apply a DeployPlan that is not frozen "
-            "(it must be frozen at the plan gate)", non_retryable=True)
+            "(it must be frozen at the plan gate)",
+            non_retryable=True,
+        )
     adapter = resolve(inp.cfg)
-    code, out = await _run(adapter.apply_cmd(inp.plan), inp.repo_path,
-                           adapter.env(inp.plan), APPLY_TIMEOUT_S)
+    code, out = await _run(
+        adapter.apply_cmd(inp.plan), inp.repo_path, adapter.env(inp.plan), APPLY_TIMEOUT_S
+    )
     if code != 0:
         raise RuntimeError(f"deploy failed ({code}): {out[-2000:]}")
     return ApplyResult(endpoint=adapter.endpoint(inp.plan), detail=out[-2000:])
@@ -136,14 +147,14 @@ def _http_once(url: str, expect_status: int, timeout_s: int) -> SmokeCheckResult
         with urllib.request.urlopen(url, timeout=timeout_s) as resp:
             status = resp.status
     except urllib.error.HTTPError as e:
-        status = e.code           # a response IS an evaluation
+        status = e.code  # a response IS an evaluation
     except Exception:
-        return None               # no response: we learned nothing
+        return None  # no response: we learned nothing
     return SmokeCheckResult(
-        name="", state=(SmokeState.PASSED if status == expect_status
-                        else SmokeState.FAILED),
-        detail=("" if status == expect_status
-                else f"expected {expect_status}, got {status}"))
+        name="",
+        state=(SmokeState.PASSED if status == expect_status else SmokeState.FAILED),
+        detail=("" if status == expect_status else f"expected {expect_status}, got {status}"),
+    )
 
 
 async def _await_readiness(url: str, timeout_s: int) -> None:
@@ -172,7 +183,8 @@ async def smoke_check(inp: SmokeCheckInput) -> SmokeCheckOutput:
     if http_checks and inp.endpoint:
         await _await_readiness(
             inp.endpoint.rstrip("/") + "/" + http_checks[0].path.lstrip("/"),
-            inp.cfg.readiness_timeout_s)
+            inp.cfg.readiness_timeout_s,
+        )
 
     results: list[SmokeCheckResult] = []
     for check in inp.plan.smoke_checks:
@@ -183,34 +195,33 @@ async def smoke_check(inp: SmokeCheckInput) -> SmokeCheckOutput:
                 # no base_url). The check cannot be evaluated and must not
                 # read as a failure -- skipping it (not erroring) is what
                 # keeps D-7's "make deploy" target working.
-                activity.logger.info(
-                    "skipping http check %r: no endpoint configured",
-                    check.name)
+                activity.logger.info("skipping http check %r: no endpoint configured", check.name)
                 continue
             url = inp.endpoint.rstrip("/") + "/" + check.path.lstrip("/")
-            outcome = await asyncio.to_thread(
-                _http_once, url, check.expect_status, check.timeout_s)
+            outcome = await asyncio.to_thread(_http_once, url, check.expect_status, check.timeout_s)
             if outcome is None:
-                results.append(SmokeCheckResult(
-                    name=check.name, state=SmokeState.ERRORED,
-                    detail=f"no response from {url} within "
-                           f"{check.timeout_s}s"))
+                results.append(
+                    SmokeCheckResult(
+                        name=check.name,
+                        state=SmokeState.ERRORED,
+                        detail=f"no response from {url} within {check.timeout_s}s",
+                    )
+                )
             else:
                 results.append(outcome.model_copy(update={"name": check.name}))
             continue
 
-        code, out = await _run(check.command, inp.repo_path, env,
-                               check.timeout_s)
+        code, out = await _run(check.command, inp.repo_path, env, check.timeout_s)
         if code == 124:
-            results.append(SmokeCheckResult(
-                name=check.name, state=SmokeState.ERRORED, detail=out))
+            results.append(SmokeCheckResult(name=check.name, state=SmokeState.ERRORED, detail=out))
         elif code != 0:
-            results.append(SmokeCheckResult(
-                name=check.name, state=SmokeState.FAILED,
-                detail=f"exit {code}: {out[-500:]}"))
+            results.append(
+                SmokeCheckResult(
+                    name=check.name, state=SmokeState.FAILED, detail=f"exit {code}: {out[-500:]}"
+                )
+            )
         else:
-            results.append(SmokeCheckResult(
-                name=check.name, state=SmokeState.PASSED))
+            results.append(SmokeCheckResult(name=check.name, state=SmokeState.PASSED))
     return SmokeCheckOutput(results=results)
 
 
@@ -221,7 +232,10 @@ async def deploy_rollback(inp: RollbackInput) -> None:
     the worst outcome in the system."""
     adapter = resolve(inp.cfg)
     code, out = await _run(
-        adapter.rollback_cmd(inp.plan, inp.to_version), inp.repo_path,
-        adapter.env(inp.plan, version=inp.to_version), APPLY_TIMEOUT_S)
+        adapter.rollback_cmd(inp.plan, inp.to_version),
+        inp.repo_path,
+        adapter.env(inp.plan, version=inp.to_version),
+        APPLY_TIMEOUT_S,
+    )
     if code != 0:
         raise RuntimeError(f"rollback failed ({code}): {out[-2000:]}")

@@ -3,6 +3,7 @@
 Activities run in the worker process; workflows never touch subprocesses,
 the filesystem, or the network directly.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -18,6 +19,7 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import defusedxml.ElementTree as DET
 from defusedxml.common import DefusedXmlException
@@ -25,19 +27,21 @@ from pydantic import BaseModel
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
+from .artifacts.capture import capture_session
 from .assessment.scan.sources import SOURCE_EXTENSIONS
 from .context.delta import DELTA_CHECK, check_delta
 from .context.models import RepoObservation
-
-from .artifacts.capture import capture_session
-from .observability.logfire_setup import span
 from .gate import (
-    CheckClass, CheckResult, GateOverride, GateReport, QualityGateInput,
-    build_check, evaluate_quality_gate,
+    CheckClass,
+    CheckResult,
+    GateReport,
+    QualityGateInput,
+    build_check,
+    evaluate_quality_gate,
 )
 from .harness.adapters import HARNESSES, HarnessRequest
 from .harness.containment import ContainmentError, load_policy
-from .toolchain.adapters import ToolchainKind, detect
+from .measurement import CollectionState, Measurement
 from .models import (
     BrownfieldDelta,
     CoverageReport,
@@ -48,8 +52,11 @@ from .models import (
     SecurityReport,
     ToolGrant,
 )
-from .measurement import CollectionState, Measurement
+from .observability.logfire_setup import span
+from .toolchain.adapters import ToolchainKind, detect
 
+if TYPE_CHECKING:
+    from .crew.activities import CrewTurnInput
 
 _log = logging.getLogger(__name__)
 
@@ -85,9 +92,13 @@ def _git(args: list[str], cwd: str) -> subprocess.CompletedProcess:
     # here reads stdin, so closing it is always safe and removes a latent
     # console-less failure mode.
     return subprocess.run(
-        ["git", "-c", "safe.directory=*", *args], cwd=cwd,
-        capture_output=True, encoding="utf-8", errors="replace",
-        stdin=subprocess.DEVNULL)
+        ["git", "-c", "safe.directory=*", *args],
+        cwd=cwd,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        stdin=subprocess.DEVNULL,
+    )
 
 
 def _chmod_retry(func, p, _exc):
@@ -138,15 +149,19 @@ def _find_live_worktree_for_branch(repo_path: str, branch: str) -> str | None:
     """
     result = subprocess.run(
         ["git", "worktree", "list", "--porcelain"],
-        cwd=repo_path, capture_output=True, encoding="utf-8", errors="replace")
+        cwd=repo_path,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     if result.returncode != 0:
         return None
     current_path: str | None = None
     for line in result.stdout.splitlines():
         if line.startswith("worktree "):
-            current_path = os.path.normpath(line[len("worktree "):].strip())
+            current_path = os.path.normpath(line[len("worktree ") :].strip())
         elif line.startswith("branch ") and current_path is not None:
-            ref = line[len("branch "):].strip()
+            ref = line[len("branch ") :].strip()
             if ref == branch or ref == f"refs/heads/{branch}":
                 return current_path
     return None
@@ -169,17 +184,16 @@ def _clear_worktree_dir(repo_path: str, path: str) -> None:
     responsible for falling back to an alternate path; no amount of
     in-process retry can release a CWD lock.
     """
-    subprocess.run(["git", "worktree", "remove", "-f", path],
-                   cwd=repo_path, capture_output=True)
-    subprocess.run(["git", "worktree", "prune"],
-                   cwd=repo_path, capture_output=True)
+    subprocess.run(["git", "worktree", "remove", "-f", path], cwd=repo_path, capture_output=True)
+    subprocess.run(["git", "worktree", "prune"], cwd=repo_path, capture_output=True)
     if not os.path.exists(path):
         return
     _rmtree_with_retry(path)
 
 
-def _ensure_worktree(repo_path: str, branch: str, path: str,
-                     from_ref: str, max_alt: int = 8) -> str:
+def _ensure_worktree(
+    repo_path: str, branch: str, path: str, from_ref: str, max_alt: int = 8
+) -> str:
     """Idempotently create (or reuse) a worktree checked out to ``branch``.
 
     Returns the worktree path (which may differ from ``path`` if a
@@ -206,8 +220,7 @@ def _ensure_worktree(repo_path: str, branch: str, path: str,
     is left behind for the OS / a later janitor to clean up once the lock
     holder releases.
     """
-    subprocess.run(["git", "worktree", "prune"],
-                   cwd=repo_path, capture_output=True)
+    subprocess.run(["git", "worktree", "prune"], cwd=repo_path, capture_output=True)
 
     # Normalize so candidate paths and git's reported paths use the same
     # separator (git emits forward slashes on Windows; os.path.join emits
@@ -224,8 +237,10 @@ def _ensure_worktree(repo_path: str, branch: str, path: str,
     candidates = [path] + [f"{path}.{i}" for i in range(1, max_alt)]
     last_clear_err: Exception | None = None
     for cand in candidates:
-        live = os.path.isdir(cand) and _git(
-            ["rev-parse", "--is-inside-work-tree"], cand).returncode == 0
+        live = (
+            os.path.isdir(cand)
+            and _git(["rev-parse", "--is-inside-work-tree"], cand).returncode == 0
+        )
         if live:
             return cand
 
@@ -236,30 +251,43 @@ def _ensure_worktree(repo_path: str, branch: str, path: str,
                 last_clear_err = e
                 continue  # try the next candidate path
 
-        branch_exists = subprocess.run(
-            ["git", "rev-parse", "--verify", "--quiet", branch],
-            cwd=repo_path, capture_output=True).returncode == 0
+        branch_exists = (
+            subprocess.run(
+                ["git", "rev-parse", "--verify", "--quiet", branch],
+                cwd=repo_path,
+                capture_output=True,
+            ).returncode
+            == 0
+        )
 
         if branch_exists:
             wt = subprocess.run(
                 ["git", "worktree", "add", cand, branch],
-                cwd=repo_path, capture_output=True,
-                encoding="utf-8", errors="replace")
+                cwd=repo_path,
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+            )
         else:
             wt = subprocess.run(
                 ["git", "worktree", "add", "-b", branch, cand, from_ref],
-                cwd=repo_path, capture_output=True,
-                encoding="utf-8", errors="replace")
+                cwd=repo_path,
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+            )
         if wt.returncode != 0:
             raise RuntimeError(
                 f"git worktree add failed (rc={wt.returncode}): "
-                f"{wt.stderr.strip() or wt.stdout.strip()}")
+                f"{wt.stderr.strip() or wt.stdout.strip()}"
+            )
         return cand
 
     raise RuntimeError(
         f"could not clear or create worktree at {path} (tried {len(candidates)} "
         f"candidate paths). Last clear error: {last_clear_err!r}. Likely a "
-        f"process is holding the dir as its CWD — kill it or reboot.")
+        f"process is holding the dir as its CWD — kill it or reboot."
+    )
 
 
 @dataclass
@@ -267,14 +295,14 @@ class WorktreeInput:
     repo_path: str
     run_id: str
     task_id: str
-    from_ref: str          # integration head SHA (ADR-14) — NOT base_branch
+    from_ref: str  # integration head SHA (ADR-14) — NOT base_branch
 
 
 @dataclass
 class WorktreeHandle:
     path: str
     branch: str
-    branch_point: str      # SHA the task branched from (diff anchor)
+    branch_point: str  # SHA the task branched from (diff anchor)
 
 
 @activity.defn
@@ -290,8 +318,12 @@ async def create_worktree(inp: WorktreeInput) -> WorktreeHandle:
     branch = f"sdlc/{inp.run_id}/{inp.task_id}"
     actual = _ensure_worktree(inp.repo_path, branch, path, inp.from_ref)
     point = subprocess.run(
-        ["git", "rev-parse", inp.from_ref], cwd=inp.repo_path,
-        capture_output=True, encoding="utf-8", errors="replace").stdout.strip()
+        ["git", "rev-parse", inp.from_ref],
+        cwd=inp.repo_path,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+    ).stdout.strip()
     return WorktreeHandle(path=actual, branch=branch, branch_point=point)
 
 
@@ -312,6 +344,7 @@ class IntegrationHandle:
     and the path. The SHA advances after each merge; the path is stable
     for the run.
     """
+
     head_sha: str
     worktree_path: str
 
@@ -370,12 +403,8 @@ async def merge_into_integration(inp: MergeInput) -> MergeResult:
     (WinError 267) inside ``subprocess.run``. Falls back to the
     canonical path only for replay of histories recorded before this
     field existed."""
-    ipath = (inp.integration_path
-             or os.path.join(_worktrees_root(), inp.run_id, "integration"))
-    merge = _git(
-        ["merge", "--no-ff", "-m", f"merge {inp.task_branch}",
-         inp.task_branch],
-        ipath)
+    ipath = inp.integration_path or os.path.join(_worktrees_root(), inp.run_id, "integration")
+    merge = _git(["merge", "--no-ff", "-m", f"merge {inp.task_branch}", inp.task_branch], ipath)
     if merge.returncode != 0:
         # Distinguish a real conflict from an infra/config failure via the
         # git index's unmerged entries (locale-independent) — must be read
@@ -383,8 +412,7 @@ async def merge_into_integration(inp: MergeInput) -> MergeResult:
         unmerged = _git(["ls-files", "--unmerged"], ipath).stdout
         _git(["merge", "--abort"], ipath)
         if not unmerged.strip():
-            raise RuntimeError(
-                f"git merge failed (not a conflict): {merge.stderr.strip()}")
+            raise RuntimeError(f"git merge failed (not a conflict): {merge.stderr.strip()}")
         head = _git(["rev-parse", "HEAD"], ipath).stdout.strip()
         return MergeResult(merged=False, conflict=True, integration_head=head)
     head = _git(["rev-parse", "HEAD"], ipath).stdout.strip()
@@ -394,9 +422,9 @@ async def merge_into_integration(inp: MergeInput) -> MergeResult:
 @dataclass
 class VerifyBranchInput:
     repo_path: str
-    base_sha: str            # the commit the baseline triage pinned
-    tidyup_id: str           # the TidyUpWorkflow's id -- makes the ref unique
-    branches: list[str]      # fix-run integration branches, in accepted order
+    base_sha: str  # the commit the baseline triage pinned
+    tidyup_id: str  # the TidyUpWorkflow's id -- makes the ref unique
+    branches: list[str]  # fix-run integration branches, in accepted order
 
 
 @dataclass
@@ -451,13 +479,13 @@ async def build_verification_branch(inp: VerifyBranchInput) -> VerifyResult:
     if reset.returncode != 0:
         raise RuntimeError(
             f"git reset to base_sha {inp.base_sha} failed: "
-            f"{reset.stderr.strip() or reset.stdout.strip()}")
+            f"{reset.stderr.strip() or reset.stdout.strip()}"
+        )
 
     merged: list[str] = []
     conflicted: list[str] = []
     for branch in inp.branches:
-        result = _git(["merge", "--no-ff", "-m", f"tidy-up: {branch}", branch],
-                      worktree)
+        result = _git(["merge", "--no-ff", "-m", f"tidy-up: {branch}", branch], worktree)
         if result.returncode == 0:
             merged.append(branch)
             continue
@@ -469,13 +497,12 @@ async def build_verification_branch(inp: VerifyBranchInput) -> VerifyResult:
         _git(["merge", "--abort"], worktree)
         if not unmerged.strip():
             raise RuntimeError(
-                f"git merge of {branch} failed (not a conflict): "
-                f"{result.stderr.strip()}")
+                f"git merge of {branch} failed (not a conflict): {result.stderr.strip()}"
+            )
         conflicted.append(branch)
 
     head = _git(["rev-parse", "HEAD"], worktree).stdout.strip()
-    return VerifyResult(ref=ref, head_sha=head, merged=merged,
-                        conflicted=conflicted)
+    return VerifyResult(ref=ref, head_sha=head, merged=merged, conflicted=conflicted)
 
 
 @dataclass
@@ -486,7 +513,7 @@ class CodingTaskInput:
     model: str | None = None
     session_id: str | None = None
     timeout_s: int = 3600
-    task_id: str = "task"       # E-38: session artifact naming
+    task_id: str = "task"  # E-38: session artifact naming
     attempt: int = 1
     # E-15/E-16 (FR-703). Flags travel; the YAML is loaded activity-side,
     # because the workflow sandbox cannot read files — same split as the
@@ -499,8 +526,9 @@ class CodingTaskInput:
     grants: list[ToolGrant] = field(default_factory=list)
 
 
-def _resolve_containment(harness, inp: CodingTaskInput,
-                         req: HarnessRequest | None = None):
+def _resolve_containment(
+    harness, inp: CodingTaskInput | CrewTurnInput, req: HarnessRequest | None = None
+):
     """Load the policy and compile it into `req`, or fail closed.
 
     Returns (policy, report) — both None when containment is disabled.
@@ -510,15 +538,16 @@ def _resolve_containment(harness, inp: CodingTaskInput,
     if not inp.containment_enabled:
         return None, None
 
-    policy = load_policy(inp.containment_policy_path)   # raises: fail closed
+    policy = load_policy(inp.containment_policy_path)  # raises: fail closed
 
     if not harness.containment:
         raise ContainmentError(
             f"containment is enabled but the {harness.kind.value} harness "
             f"cannot enforce any layer; refusing to start an unpoliced run "
-            f"(ADR-17). Disable containment or choose another harness.")
+            f"(ADR-17). Disable containment or choose another harness."
+        )
 
-    if req is None:                     # unit-test path: compile a probe
+    if req is None:  # unit-test path: compile a probe
         req = HarnessRequest(prompt=inp.prompt, cwd=inp.worktree)
     report = harness.apply_containment(policy, req, inp.grants)
 
@@ -526,7 +555,8 @@ def _resolve_containment(harness, inp: CodingTaskInput,
         raise ContainmentError(
             f"containment_strict is set and the {harness.kind.value} harness "
             f"leaves these rules unenforceable: "
-            f"{', '.join(report.rules_unenforceable)}")
+            f"{', '.join(report.rules_unenforceable)}"
+        )
     return policy, report
 
 
@@ -539,18 +569,20 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
     """
     harness = HARNESSES[inp.harness]
     req = HarnessRequest(
-        prompt=inp.prompt, cwd=inp.worktree, model=inp.model,
-        session_id=inp.session_id, timeout_s=inp.timeout_s,
+        prompt=inp.prompt,
+        cwd=inp.worktree,
+        model=inp.model,
+        session_id=inp.session_id,
+        timeout_s=inp.timeout_s,
     )
     _, report = _resolve_containment(harness, inp, req)
-    with span("harness.run", harness=inp.harness.value,
-              task_id=inp.task_id, attempt=inp.attempt):
+    with span("harness.run", harness=inp.harness.value, task_id=inp.task_id, attempt=inp.attempt):
         result = await harness.run(req, heartbeat=activity.heartbeat)
     result.containment = report
     try:
         result.denials = harness.normalise_denials(result._raw_stdout)
         result.deferred = harness.normalise_deferral(result._raw_stdout)
-    except Exception:                     # noqa: BLE001
+    except Exception:  # noqa: BLE001
         # Best-effort, exactly like capture_session: losing the RECORD of a
         # denial must never fail a task whose denial was already enforced.
         # A lost deferral simply means no escalation is raised — the call
@@ -564,12 +596,10 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
         run_id = activity.info().workflow_run_id
     except RuntimeError:
         run_id = "local"
-    with span("session.capture", task_id=inp.task_id,
-              stdout_bytes=len(result._raw_stdout)):
+    with span("session.capture", task_id=inp.task_id, stdout_bytes=len(result._raw_stdout)):
         ref, digest = capture_session(
-            harness, result._raw_stdout,
-            run_id=run_id,
-            task_id=inp.task_id, attempt=inp.attempt)
+            harness, result._raw_stdout, run_id=run_id, task_id=inp.task_id, attempt=inp.attempt
+        )
         result.session_ref = ref
         result.session_digest = digest
     # Checkpoint commit — the resume point if anything downstream fails.
@@ -586,14 +616,15 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
             # itself must have deleted/overwritten it (e.g. ran `git init`
             # on a "greenfield" task) — this is agent misbehavior, not a
             # worktree-setup bug.
-            hint = (" (the worktree's .git was intact when this task started; "
-                    "the coding agent likely deleted or reinitialized it)")
-        raise RuntimeError(
-            f"git add failed in {inp.worktree}: {detail}{hint}")
+            hint = (
+                " (the worktree's .git was intact when this task started; "
+                "the coding agent likely deleted or reinitialized it)"
+            )
+        raise RuntimeError(f"git add failed in {inp.worktree}: {detail}{hint}")
     commit = _git(
-        ["commit", "-m", f"sdlc checkpoint (exit={result.exit_code})",
-         "--allow-empty"],
-        inp.worktree)
+        ["commit", "-m", f"sdlc checkpoint (exit={result.exit_code})", "--allow-empty"],
+        inp.worktree,
+    )
     if commit.returncode == 0:
         result.commit_sha = _git(["rev-parse", "HEAD"], inp.worktree).stdout.strip()
     return result
@@ -602,7 +633,7 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
 @dataclass
 class DiffInput:
     worktree: str
-    branch_point: str      # SHA the task branched from — NOT base_branch
+    branch_point: str  # SHA the task branched from — NOT base_branch
     max_chars: int = 60_000
 
 
@@ -615,7 +646,7 @@ async def get_task_diff(inp: DiffInput) -> dict:
     stat = _git(["diff", "--stat", rng], inp.worktree).stdout
     patch = _git(["diff", rng], inp.worktree).stdout
     files = _git(["diff", "--name-only", rng], inp.worktree).stdout.splitlines()
-    return {"stat": stat, "patch": patch[:inp.max_chars], "files": files}
+    return {"stat": stat, "patch": patch[: inp.max_chars], "files": files}
 
 
 @dataclass
@@ -653,13 +684,12 @@ async def _ensure_py_launcher_versions(cmd: str, cwd: str) -> str | None:
         code, _ = await _bounded_shell(f"py -{version} --version", cwd, 15)
         if code == 0:
             continue
-        install_code, out = await _bounded_shell(
-            f"py install {version}", cwd, 300)
+        install_code, out = await _bounded_shell(f"py install {version}", cwd, 300)
         notes.append(
             f"py -{version} was not installed on this host; "
             f"auto-provisioned via `py install {version}` "
-            + ("succeeded" if install_code == 0
-               else f"failed: {out[-500:]}"))
+            + ("succeeded" if install_code == 0 else f"failed: {out[-500:]}")
+        )
     return "\n".join(notes) if notes else None
 
 
@@ -696,24 +726,29 @@ async def run_test_suite(inp: QAInput) -> QAReport:
                 issues.insert(0, provisioning)
             return QAReport(tests_passed=False, failing_tests=[], issues=issues)
     proc = await asyncio.create_subprocess_shell(
-        inp.test_cmd, cwd=inp.worktree, env=env,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+        inp.test_cmd,
+        cwd=inp.worktree,
+        env=env,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
     )
     try:
-        out_b, _ = await asyncio.wait_for(
-            proc.communicate(), timeout=inp.timeout_s)
-    except asyncio.TimeoutError:
+        out_b, _ = await asyncio.wait_for(proc.communicate(), timeout=inp.timeout_s)
+    except TimeoutError:
         proc.kill()
         await proc.wait()
         return QAReport(
-            tests_passed=False, failing_tests=[],
-            issues=[f"test command timed out after {inp.timeout_s}s "
-                    f"(cmd: {inp.test_cmd!r}) — likely hung on a "
-                    "long-running process (e.g. a dev server) rather "
-                    "than exiting after a one-shot test run"])
+            tests_passed=False,
+            failing_tests=[],
+            issues=[
+                f"test command timed out after {inp.timeout_s}s "
+                f"(cmd: {inp.test_cmd!r}) — likely hung on a "
+                "long-running process (e.g. a dev server) rather "
+                "than exiting after a one-shot test run"
+            ],
+        )
     out = out_b.decode(errors="replace")
-    failing = [ln.split(" ")[0] for ln in out.splitlines()
-               if ln.startswith("FAILED")]
+    failing = [ln.split(" ")[0] for ln in out.splitlines() if ln.startswith("FAILED")]
     # pytest's dedicated exit code for "collected zero tests" (distinct from
     # 1 = tests ran and some failed). A task whose own scope doesn't add
     # tests yet (e.g. an early module task in a task-per-commit greenfield
@@ -725,15 +760,17 @@ async def run_test_suite(inp: QAInput) -> QAReport:
     # mistaken for this case.
     if proc.returncode == 5 and "no tests ran" in out:
         return QAReport(tests_passed=True, failing_tests=[], issues=[])
-    issues: list[str] = []
+    issues = []
     if proc.returncode != 0:
         issues = [_diagnostic_slice(out)]
         if provisioning:
             issues.insert(0, provisioning)
-    return QAReport(tests_passed=proc.returncode == 0,
-                    failing_tests=failing[:50],
-                    issues=issues,
-                    stopped_early=_stopped_early(out))
+    return QAReport(
+        tests_passed=proc.returncode == 0,
+        failing_tests=failing[:50],
+        issues=issues,
+        stopped_early=_stopped_early(out),
+    )
 
 
 _FAILURES_BANNER = "= FAILURES ="
@@ -780,12 +817,12 @@ def _diagnostic_slice(out: str, limit: int = _QA_OUTPUT_MAX) -> str:
     summary_at = rest.find(_SUMMARY_BANNER)
     warnings_at = rest.find(_WARNINGS_BANNER)
     ends = [i for i in (warnings_at, summary_at) if i != -1]
-    failures = rest[:min(ends)] if ends else rest
+    failures = rest[: min(ends)] if ends else rest
 
     # A third of the budget is plenty for the summary's one line per test, and
     # never lets it crowd out the tracebacks the way the warnings block did.
-    summary = rest[summary_at:][:limit // 3] if summary_at != -1 else ""
-    return failures[-max(limit - len(summary), 0):] + summary
+    summary = rest[summary_at:][: limit // 3] if summary_at != -1 else ""
+    return failures[-max(limit - len(summary), 0) :] + summary
 
 
 @dataclass
@@ -806,17 +843,17 @@ async def run_lint(inp: LintInput) -> tuple[bool, str]:
     if provisioning:
         _log.info("run_lint: %s", provisioning)
     proc = await asyncio.create_subprocess_shell(
-        inp.lint_cmd, cwd=inp.worktree,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+        inp.lint_cmd,
+        cwd=inp.worktree,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
     )
     try:
-        out_b, _ = await asyncio.wait_for(
-            proc.communicate(), timeout=inp.timeout_s)
-    except asyncio.TimeoutError:
+        out_b, _ = await asyncio.wait_for(proc.communicate(), timeout=inp.timeout_s)
+    except TimeoutError:
         proc.kill()
         await proc.wait()
-        return False, (f"lint command timed out after {inp.timeout_s}s "
-                       f"(cmd: {inp.lint_cmd!r})")
+        return False, (f"lint command timed out after {inp.timeout_s}s (cmd: {inp.lint_cmd!r})")
     out = out_b.decode(errors="replace")
     detail = out[-2000:]
     if provisioning and proc.returncode != 0:
@@ -828,12 +865,19 @@ async def run_lint(inp: LintInput) -> tuple[bool, str]:
 # is (compiled_regex, severity, rule_name, human_detail). Intentionally small
 # and offline; the seam for a real SAST is this function's return type.
 _SECURITY_RULES: list[tuple[re.Pattern, str, str, str]] = [
-    (re.compile(r"(?i)(aws_secret_access_key|secret_key)\s*=\s*['\"][A-Za-z0-9/+]{20,}['\"]"),
-     "critical", "hardcoded-secret", "hardcoded credential/secret literal"),
-    (re.compile(r"\beval\s*\("),
-     "critical", "dangerous-eval", "use of eval() on untrusted input"),
-    (re.compile(r"subprocess\.[a-z_]+\([^)]*shell\s*=\s*True"),
-     "high", "shell-injection", "subprocess call with shell=True"),
+    (
+        re.compile(r"(?i)(aws_secret_access_key|secret_key)\s*=\s*['\"][A-Za-z0-9/+]{20,}['\"]"),
+        "critical",
+        "hardcoded-secret",
+        "hardcoded credential/secret literal",
+    ),
+    (re.compile(r"\beval\s*\("), "critical", "dangerous-eval", "use of eval() on untrusted input"),
+    (
+        re.compile(r"subprocess\.[a-z_]+\([^)]*shell\s*=\s*True"),
+        "high",
+        "shell-injection",
+        "subprocess call with shell=True",
+    ),
 ]
 
 _SECURITY_SCAN_EXTENSIONS = (".py", ".js", ".ts", ".go", ".rb", ".java")
@@ -844,8 +888,12 @@ _VENV_DIR_NAME = ".sdlc-venv"
 
 # Ordered: the base file first, so a dev file's own `-r requirements.txt`
 # is already satisfied and a pin in the dev file wins on conflict.
-_REQUIREMENTS_FILES = ("requirements.txt", "requirements-dev.txt",
-                       "requirements/base.txt", "requirements/dev.txt")
+_REQUIREMENTS_FILES = (
+    "requirements.txt",
+    "requirements-dev.txt",
+    "requirements/base.txt",
+    "requirements/dev.txt",
+)
 
 # Directories that hold dependency source rather than the work under review.
 # `.sdlc-venv` is ours -- _ensure_python_env creates it INSIDE the worktree,
@@ -855,11 +903,25 @@ _REQUIREMENTS_FILES = ("requirements.txt", "requirements-dev.txt",
 # had run (bench-todo-api-greenfield-1785444047: 14 critical findings, all 14
 # inside .sdlc-venv, none from produced code). The rest are the equivalent
 # conventions a produced project brings on its own.
-_SCAN_SKIP_DIRS = frozenset({
-    ".git", _VENV_DIR_NAME, ".venv", "venv", "env", "node_modules",
-    "__pycache__", ".tox", ".mypy_cache", ".pytest_cache", "site-packages",
-    "vendor", "dist", "build", ".next",
-})
+_SCAN_SKIP_DIRS = frozenset(
+    {
+        ".git",
+        _VENV_DIR_NAME,
+        ".venv",
+        "venv",
+        "env",
+        "node_modules",
+        "__pycache__",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        "site-packages",
+        "vendor",
+        "dist",
+        "build",
+        ".next",
+    }
+)
 
 
 @dataclass
@@ -882,18 +944,17 @@ async def security_scan(inp: SecurityScanInput) -> SecurityReport:
                 continue
             fpath = os.path.join(dirpath, fname)
             try:
-                text = pathlib.Path(fpath).read_text(
-                    encoding="utf-8", errors="replace")
+                text = pathlib.Path(fpath).read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
             rel = os.path.relpath(fpath, root)
             for pattern, severity, rule, detail in _SECURITY_RULES:
                 if pattern.search(text):
-                    findings.append(SecurityFinding(
-                        severity=severity, rule=rule, detail=detail, path=rel))
+                    findings.append(
+                        SecurityFinding(severity=severity, rule=rule, detail=detail, path=rel)
+                    )
     critical = sum(1 for f in findings if f.severity == "critical")
-    return SecurityReport(critical=critical, findings=findings,
-                          state=CollectionState.MEASURED)
+    return SecurityReport(critical=critical, findings=findings, state=CollectionState.MEASURED)
 
 
 @dataclass
@@ -918,19 +979,23 @@ async def measure_coverage(inp: CoverageInput) -> CoverageReport:
     never force a human override."""
     path = os.path.join(inp.worktree, "coverage.xml")
     if not os.path.isfile(path):
-        return CoverageReport(coverage=Measurement.not_collected(
-            "no coverage.xml (seam not measured)"))
+        return CoverageReport(
+            coverage=Measurement.not_collected("no coverage.xml (seam not measured)")
+        )
     try:
         root = DET.parse(path).getroot()
     except (DefusedXmlException, DET.ParseError, OSError):
-        return CoverageReport(coverage=Measurement.not_collected(
-            "coverage.xml unparseable or unsafe"))
+        return CoverageReport(
+            coverage=Measurement.not_collected("coverage.xml unparseable or unsafe")
+        )
     rates: list[float] = []
     skipped_non_finite = 0
     for cls in root.iter("class"):
         fname = cls.get("filename") or ""
-        if any(fname == cf or fname.endswith("/" + cf) or cf.endswith("/" + fname)
-               for cf in inp.changed_files):
+        if any(
+            fname == cf or fname.endswith("/" + cf) or cf.endswith("/" + fname)
+            for cf in inp.changed_files
+        ):
             try:
                 rate = float(cls.get("line-rate", "0"))
             except ValueError:
@@ -946,10 +1011,16 @@ async def measure_coverage(inp: CoverageInput) -> CoverageReport:
             rates.append(max(0.0, min(100.0, rate * 100.0)))
     if not rates:
         if skipped_non_finite:
-            return CoverageReport(coverage=Measurement.unknown(
-                f"{skipped_non_finite} changed-file line-rate(s) non-finite"))
-        return CoverageReport(coverage=Measurement.not_collected(
-            "no changed file found in coverage.xml (seam not measured)"))
+            return CoverageReport(
+                coverage=Measurement.unknown(
+                    f"{skipped_non_finite} changed-file line-rate(s) non-finite"
+                )
+            )
+        return CoverageReport(
+            coverage=Measurement.not_collected(
+                "no changed file found in coverage.xml (seam not measured)"
+            )
+        )
     # Unweighted mean of per-class line-rates — an approximation of true
     # diff coverage, not a line-weighted average. A 500-line file at 50%
     # and a 5-line file at 100% average to 75% here, though true line
@@ -996,8 +1067,9 @@ async def read_committed_bytes(inp: CommittedBytesInput) -> str | None:
     return proc.stdout
 
 
-async def _bounded_shell(cmd: str, cwd: str, timeout_s: int,
-                         env: dict[str, str] | None = None) -> tuple[int, str]:
+async def _bounded_shell(
+    cmd: str, cwd: str, timeout_s: int, env: dict[str, str] | None = None
+) -> tuple[int, str]:
     """Run a shell command bounded by timeout_s, combining stdout+stderr.
     On timeout: kill and return (-1, message). See run_test_suite's docstring
     for why an unbounded shell command is dangerous in an activity.
@@ -1007,11 +1079,11 @@ async def _bounded_shell(cmd: str, cwd: str, timeout_s: int,
     from _ensure_python_env) does NOT merge with it automatically — callers
     must pass a full environment dict."""
     proc = await asyncio.create_subprocess_shell(
-        cmd, cwd=cwd, env=env,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        cmd, cwd=cwd, env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
+    )
     try:
         out_b, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         proc.kill()
         await proc.wait()
         return -1, f"command timed out after {timeout_s}s (cmd: {cmd!r})"
@@ -1029,14 +1101,15 @@ class IntegrationChecksInput:
 
 @dataclass
 class IntegrationChecks:
-    toolchain: str | None          # ToolchainKind value, or None if undetected
+    toolchain: str | None  # ToolchainKind value, or None if undetected
     qa: QAReport
     lint_clean: bool
     lint_detail: str
 
 
 async def _ensure_python_env(
-        worktree: str, timeout_s: int) -> tuple[dict[str, str] | None, str | None]:
+    worktree: str, timeout_s: int
+) -> tuple[dict[str, str] | None, str | None]:
     """ToolchainAdapter is intentionally PURE (ADR-15): it returns bare
     command strings like "pytest -q ..." / "ruff check .", never touching a
     subprocess. Those bare commands only mean anything if pytest/ruff are
@@ -1066,7 +1139,8 @@ async def _ensure_python_env(
 
     if not os.path.isdir(venv_dir):
         code, out = await _bounded_shell(
-            f'"{sys.executable}" -m venv "{venv_dir}"', worktree, timeout_s)
+            f'"{sys.executable}" -m venv "{venv_dir}"', worktree, timeout_s
+        )
         if code != 0:
             return None, f"venv creation failed: {out[-1000:]}"
 
@@ -1074,10 +1148,8 @@ async def _ensure_python_env(
     # (so pydantic etc. resolve), then unconditionally guarantee the tools
     # the adapter's commands need — belt-and-suspenders for a project whose
     # [dev] extra forgot pytest/ruff, or has no packaging metadata at all.
-    await _bounded_shell(
-        f'"{py_exe}" -m pip install -q -e ".[dev]"', worktree, timeout_s)
-    await _bounded_shell(
-        f'"{py_exe}" -m pip install -q -e "{worktree}"', worktree, timeout_s)
+    await _bounded_shell(f'"{py_exe}" -m pip install -q -e ".[dev]"', worktree, timeout_s)
+    await _bounded_shell(f'"{py_exe}" -m pip install -q -e "{worktree}"', worktree, timeout_s)
     # Both `-e` installs above hard-error on a project carrying no
     # pyproject.toml/setup.py ("does not appear to be a Python project") —
     # yet `requirements.txt` is itself one of PythonToolchain's markers, so
@@ -1088,11 +1160,10 @@ async def _ensure_python_env(
     # tree passed 41/41 once requirements.txt was installed).
     for req in _REQUIREMENTS_FILES:
         if os.path.isfile(os.path.join(worktree, req)):
-            await _bounded_shell(
-                f'"{py_exe}" -m pip install -q -r "{req}"', worktree, timeout_s)
+            await _bounded_shell(f'"{py_exe}" -m pip install -q -r "{req}"', worktree, timeout_s)
     await _bounded_shell(
-        f'"{py_exe}" -m pip install -q pytest pytest-cov ruff',
-        worktree, timeout_s)
+        f'"{py_exe}" -m pip install -q pytest pytest-cov ruff', worktree, timeout_s
+    )
 
     env = dict(os.environ)
     env["PATH"] = venv_bin + os.pathsep + env.get("PATH", "")
@@ -1110,8 +1181,7 @@ _PYTEST_USAGE_ERROR = 4
 
 
 @activity.defn
-async def run_integration_checks(
-        inp: IntegrationChecksInput) -> IntegrationChecks:
+async def run_integration_checks(inp: IntegrationChecksInput) -> IntegrationChecks:
     """FR-108/ADR-15: resolve the toolchain by marker file and run
     coverage-instrumented tests + lint against the merged integration head.
     Emits coverage.xml into inp.worktree, where measure_coverage reads — the
@@ -1124,9 +1194,10 @@ async def run_integration_checks(
     if adapter is None:
         return IntegrationChecks(
             toolchain=None,
-            qa=QAReport(tests_passed=False,
-                        issues=["no toolchain adapter for this worktree"]),
-            lint_clean=True, lint_detail="no toolchain adapter (not linted)")
+            qa=QAReport(tests_passed=False, issues=["no toolchain adapter for this worktree"]),
+            lint_clean=True,
+            lint_detail="no toolchain adapter (not linted)",
+        )
 
     env = None
     if adapter.kind is ToolchainKind.PYTHON:
@@ -1134,29 +1205,35 @@ async def run_integration_checks(
         if setup_error:
             qa = QAReport(tests_passed=False, issues=[setup_error])
             return IntegrationChecks(
-                toolchain=adapter.kind.value, qa=qa,
-                lint_clean=False, lint_detail=setup_error)
+                toolchain=adapter.kind.value, qa=qa, lint_clean=False, lint_detail=setup_error
+            )
 
     code, out = await _bounded_shell(
-        adapter.test_cmd(coverage=True), inp.worktree, inp.test_timeout_s, env=env)
+        adapter.test_cmd(coverage=True), inp.worktree, inp.test_timeout_s, env=env
+    )
     if code == _PYTEST_USAGE_ERROR:
         # Coverage tooling unavailable — get the honest green signal without it.
-        prefix = ("coverage instrumentation unavailable (pytest usage error); "
-                  "coverage left unmeasured\n")
+        prefix = (
+            "coverage instrumentation unavailable (pytest usage error); coverage left unmeasured\n"
+        )
         code, out = await _bounded_shell(
-            adapter.test_cmd(coverage=False), inp.worktree, inp.test_timeout_s, env=env)
+            adapter.test_cmd(coverage=False), inp.worktree, inp.test_timeout_s, env=env
+        )
         out = prefix + out
-    failing = [ln.split(" ")[0] for ln in out.splitlines()
-               if ln.startswith("FAILED")]
-    qa = QAReport(tests_passed=code == 0, failing_tests=failing[:50],
-                  issues=[] if code == 0 else [_diagnostic_slice(out)],
-                  stopped_early=_stopped_early(out))
+    failing = [ln.split(" ")[0] for ln in out.splitlines() if ln.startswith("FAILED")]
+    qa = QAReport(
+        tests_passed=code == 0,
+        failing_tests=failing[:50],
+        issues=[] if code == 0 else [_diagnostic_slice(out)],
+        stopped_early=_stopped_early(out),
+    )
 
     lcode, ldetail = await _bounded_shell(
-        adapter.lint_cmd(), inp.worktree, inp.lint_timeout_s, env=env)
+        adapter.lint_cmd(), inp.worktree, inp.lint_timeout_s, env=env
+    )
     return IntegrationChecks(
-        toolchain=adapter.kind.value, qa=qa,
-        lint_clean=lcode == 0, lint_detail=ldetail[-2000:])
+        toolchain=adapter.kind.value, qa=qa, lint_clean=lcode == 0, lint_detail=ldetail[-2000:]
+    )
 
 
 @dataclass
@@ -1195,31 +1272,32 @@ async def open_pull_request(inp: PROpenInput) -> str:
             "gh CLI not found on PATH: the worker cannot open a pull request "
             "without it (it is installed in the worker image; a source "
             "checkout needs it installed separately)",
-            non_retryable=True)
+            non_retryable=True,
+        )
 
     remote = _git(["remote", "get-url", "origin"], inp.worktree)
     if remote.returncode != 0:
         raise ApplicationError(
             f"no 'origin' remote in {inp.worktree!r}: "
             f"{remote.stderr.strip() or remote.stdout.strip()}",
-            non_retryable=True)
+            non_retryable=True,
+        )
 
     push = _git(["push", "-u", "origin", "HEAD"], inp.worktree)
     if push.returncode != 0:
-        raise RuntimeError(
-            f"git push failed: {push.stderr.strip() or push.stdout.strip()}")
+        raise RuntimeError(f"git push failed: {push.stderr.strip() or push.stdout.strip()}")
 
     # stdin=DEVNULL for the console-less-worker reason _git documents.
     pr = subprocess.run(
-        [gh, "pr", "create", "--title", inp.title, "--body", inp.body,
-         "--base", inp.base_branch],
-        cwd=inp.worktree, capture_output=True, encoding="utf-8",
-        errors="replace", stdin=subprocess.DEVNULL,
+        [gh, "pr", "create", "--title", inp.title, "--body", inp.body, "--base", inp.base_branch],
+        cwd=inp.worktree,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        stdin=subprocess.DEVNULL,
     )
     if pr.returncode != 0:
-        raise ApplicationError(
-            f"gh pr create failed: "
-            f"{pr.stderr.strip() or pr.stdout.strip()}")
+        raise ApplicationError(f"gh pr create failed: {pr.stderr.strip() or pr.stdout.strip()}")
     return pr.stdout.strip()  # PR url
 
 
@@ -1247,37 +1325,45 @@ async def classify_repo(inp: RepoProbeInput) -> RepoObservation:
         probe = _git(["rev-parse", "--is-inside-work-tree"], cwd=inp.repo_dir)
         if probe.returncode != 0:
             return RepoObservation(
-                is_git_repo=False, base_branch_resolves=False,
-                reason=(probe.stderr.strip() or
-                        f"{inp.repo_dir!r} is not reachable")[:300])
+                is_git_repo=False,
+                base_branch_resolves=False,
+                reason=(probe.stderr.strip() or f"{inp.repo_dir!r} is not reachable")[:300],
+            )
 
-        rev = _git(["rev-parse", "--verify", f"{inp.base_branch}^{{commit}}"],
-                   cwd=inp.repo_dir)
+        rev = _git(["rev-parse", "--verify", f"{inp.base_branch}^{{commit}}"], cwd=inp.repo_dir)
         if rev.returncode != 0:
             return RepoObservation(
-                is_git_repo=True, base_branch_resolves=False,
-                reason=(rev.stderr.strip() or
-                        f"branch {inp.base_branch!r} does not resolve")[:300])
+                is_git_repo=True,
+                base_branch_resolves=False,
+                reason=(rev.stderr.strip() or f"branch {inp.base_branch!r} does not resolve")[:300],
+            )
         commit_sha = rev.stdout.strip()
 
-        listing = _git(["-c", "core.quotepath=false", "ls-tree", "-r",
-                        "--name-only", commit_sha], cwd=inp.repo_dir)
+        listing = _git(
+            ["-c", "core.quotepath=false", "ls-tree", "-r", "--name-only", commit_sha],
+            cwd=inp.repo_dir,
+        )
         if listing.returncode != 0:
             return RepoObservation(
-                is_git_repo=True, base_branch_resolves=True,
+                is_git_repo=True,
+                base_branch_resolves=True,
                 commit_sha=commit_sha,
-                reason=(listing.stderr.strip() or
-                        "could not list the tree")[:300])
+                reason=(listing.stderr.strip() or "could not list the tree")[:300],
+            )
 
-        count = sum(1 for p in listing.stdout.splitlines()
-                    if p.strip().endswith(SOURCE_EXTENSIONS))
+        count = sum(1 for p in listing.stdout.splitlines() if p.strip().endswith(SOURCE_EXTENSIONS))
         return RepoObservation(
-            is_git_repo=True, base_branch_resolves=True,
-            commit_sha=commit_sha, source_file_count=count)
+            is_git_repo=True,
+            base_branch_resolves=True,
+            commit_sha=commit_sha,
+            source_file_count=count,
+        )
     except Exception as exc:
         return RepoObservation(
-            is_git_repo=False, base_branch_resolves=False,
-            reason=f"{inp.repo_dir!r} probe failed: {exc}"[:300])
+            is_git_repo=False,
+            base_branch_resolves=False,
+            reason=f"{inp.repo_dir!r} probe failed: {exc}"[:300],
+        )
 
 
 class DeltaCheckInput(BaseModel):
@@ -1296,19 +1382,23 @@ async def check_brownfield_delta(inp: DeltaCheckInput) -> CheckResult:
     context_budget_tokens (FR-801).
     """
     try:
-        listing = _git(["-c", "core.quotepath=false", "ls-tree", "-r",
-                        "--name-only", inp.commit_sha], cwd=inp.repo_dir)
+        listing = _git(
+            ["-c", "core.quotepath=false", "ls-tree", "-r", "--name-only", inp.commit_sha],
+            cwd=inp.repo_dir,
+        )
     except Exception as exc:
         return build_check(
-            DELTA_CHECK, False, CheckClass.ABSOLUTE,
-            f"could not list the tree at {inp.commit_sha[:12]}: {exc}")
+            DELTA_CHECK,
+            False,
+            CheckClass.ABSOLUTE,
+            f"could not list the tree at {inp.commit_sha[:12]}: {exc}",
+        )
     if listing.returncode != 0:
         return build_check(
-            DELTA_CHECK, False, CheckClass.ABSOLUTE,
-            f"could not list the tree at {inp.commit_sha[:12]}: "
-            f"{listing.stderr.strip()[:200]}")
+            DELTA_CHECK,
+            False,
+            CheckClass.ABSOLUTE,
+            f"could not list the tree at {inp.commit_sha[:12]}: {listing.stderr.strip()[:200]}",
+        )
     paths = frozenset(p for p in listing.stdout.splitlines() if p.strip())
     return check_delta(inp.delta, paths)
-
-
-

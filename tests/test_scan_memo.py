@@ -1,12 +1,17 @@
 """D10: cache the row with its payload, and never cache a result that is not
 MEASURED."""
+
 from __future__ import annotations
 
 import pytest
 
 from sdlc.assessment.scan import memo
 from sdlc.assessment.scan.models import (
-    CATEGORIES, ScanSignalId, ScanSignalResult, SignalOutput, SignalSource,
+    CATEGORIES,
+    ScanSignalId,
+    ScanSignalResult,
+    SignalOutput,
+    SignalSource,
     family_of,
 )
 from sdlc.measurement import Measurement
@@ -19,12 +24,17 @@ def _isolated_cache(tmp_path, monkeypatch):
 
 
 def _out(sid: ScanSignalId, measured: bool) -> SignalOutput:
-    val = (Measurement.measured(3.0) if measured
-           else Measurement.not_collected("activity timed out"))
-    return SignalOutput(row=ScanSignalResult(
-        signal=sid, family=family_of(sid), version=1,
-        source=SignalSource.COMPUTED, collected=val,
-        categories={k: val for k in CATEGORIES[sid]}))
+    val = Measurement.measured(3.0) if measured else Measurement.not_collected("activity timed out")
+    return SignalOutput(
+        row=ScanSignalResult(
+            signal=sid,
+            family=family_of(sid),
+            version=1,
+            source=SignalSource.COMPUTED,
+            collected=val,
+            categories={k: val for k in CATEGORIES[sid]},
+        )
+    )
 
 
 def test_key_changes_with_every_term():
@@ -63,9 +73,9 @@ def test_a_different_tree_misses():
 
 
 def test_corrupt_cache_content_is_a_miss_not_a_crash():
-    from sdlc.memoization import cache
     from sdlc.assessment.scan.rules import rules_sha
-    key = signal_key(ScanSignalId.QS3.value, 1,
-                     rules_sha(ScanSignalId.QS3), "tree1")
+    from sdlc.memoization import cache
+
+    key = signal_key(ScanSignalId.QS3.value, 1, rules_sha(ScanSignalId.QS3), "tree1")
     cache.put(key, "{not json")
     assert memo.load(ScanSignalId.QS3, "tree1") is None

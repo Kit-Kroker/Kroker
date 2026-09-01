@@ -12,6 +12,7 @@ Pure of temporalio, like the signal modules. The single-blob `read_blob` in
 activities.py survives for the genuinely single-file case (baseline's
 .gitignore).
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -53,22 +54,25 @@ class TreeReader:
         self._commit_sha = commit_sha
         self._proc: subprocess.Popen | None = None
 
-    def __enter__(self) -> "TreeReader":
+    def __enter__(self) -> TreeReader:
         self._proc = subprocess.Popen(
             ["git", "-c", "safe.directory=*", "cat-file", "--batch"],
             cwd=self._repo_dir,
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL)
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
         return self
 
     def __exit__(self, *exc) -> None:
         proc, self._proc = self._proc, None
         if proc is None:
             return
+        assert proc.stdin is not None
         try:
             proc.stdin.close()
             proc.wait(timeout=30)
-        except Exception:                          # noqa: BLE001
+        except Exception:  # noqa: BLE001
             proc.kill()
             proc.wait()
 
@@ -90,6 +94,7 @@ class TreeReader:
         proc = self._proc
         if proc is None:
             raise RuntimeError("TreeReader used outside its context manager")
+        assert proc.stdin is not None and proc.stdout is not None
         proc.stdin.write(f"{self._commit_sha}:{path}\n".encode())
         proc.stdin.flush()
         header = proc.stdout.readline().decode(errors="replace").strip()
@@ -103,14 +108,13 @@ class TreeReader:
             return None
         size = int(parts[2])
         payload = proc.stdout.read(size)
-        proc.stdout.read(1)                        # the trailing LF
+        proc.stdout.read(1)  # the trailing LF
         if parts[1] != "blob":
             return None
         return payload.decode(errors="replace")
 
 
-def read_tree(repo_dir: str, commit_sha: str,
-              paths: Sequence[str]) -> Iterator[tuple[str, str]]:
+def read_tree(repo_dir: str, commit_sha: str, paths: Sequence[str]) -> Iterator[tuple[str, str]]:
     """(path, text) for every path resolving to a readable text blob.
 
     Skips non-blobs and binary content. The size cap is NOT applied here:
@@ -125,6 +129,6 @@ def read_tree(repo_dir: str, commit_sha: str,
     with TreeReader(repo_dir, commit_sha) as reader:
         for path in paths:
             text = reader.read(path)
-            if text is None or "\x00" in text:     # binary; nothing to quote
+            if text is None or "\x00" in text:  # binary; nothing to quote
                 continue
             yield path, text

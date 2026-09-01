@@ -1,5 +1,6 @@
 """schedules/*.yaml loader (E-12). Mirrors agents/loader.py's fail-closed
 idiom: a malformed asset must never reach the Temporal client."""
+
 from __future__ import annotations
 
 import pytest
@@ -30,7 +31,7 @@ def test_loads_valid_asset_and_takes_id_from_filename(tmp_path):
     assert len(assets) == 1
     a = assets[0]
     assert isinstance(a, ScheduleAsset)
-    assert a.id == "nightly-reflect"          # filename is the API
+    assert a.id == "nightly-reflect"  # filename is the API
     assert a.spec.cron == "0 3 * * *"
     assert a.spec.timezone == "UTC"
     assert a.action.workflow == "ReflectWorkflow"
@@ -39,13 +40,17 @@ def test_loads_valid_asset_and_takes_id_from_filename(tmp_path):
 
 
 def test_timezone_defaults_to_utc(tmp_path):
-    _write(tmp_path, "s.yaml", """\
+    _write(
+        tmp_path,
+        "s.yaml",
+        """\
 spec:
   cron: "0 3 * * *"
 action:
   workflow: ReflectWorkflow
   banks: ["project:default"]
-""")
+""",
+    )
     assert load_schedules(tmp_path)[0].spec.timezone == "UTC"
 
 
@@ -68,12 +73,16 @@ def test_empty_banks_raises(tmp_path):
 
 
 def test_missing_banks_raises(tmp_path):
-    _write(tmp_path, "bad.yaml", """\
+    _write(
+        tmp_path,
+        "bad.yaml",
+        """\
 spec:
   cron: "0 3 * * *"
 action:
   workflow: ReflectWorkflow
-""")
+""",
+    )
     with pytest.raises(ScheduleError):
         load_schedules(tmp_path)
 

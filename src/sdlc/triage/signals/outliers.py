@@ -10,6 +10,7 @@ delta.
 Both size rules are STRUCTURAL. Splitting a file or a function is design
 work, and E-44 must not pick it up as a mechanical PR.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -19,7 +20,10 @@ from collections.abc import Mapping
 from ...measurement import Measurement
 from ...toolchain.adapters import ToolchainAdapter
 from ..models import (
-    FixClass, SignalResult, TriageFinding, dedupe_by_identity,
+    FixClass,
+    SignalResult,
+    TriageFinding,
+    dedupe_by_identity,
 )
 
 SIGNAL_ID = "outliers"
@@ -55,8 +59,7 @@ def normalized_lines(text: str) -> list[tuple[int, str]]:
     return out
 
 
-def clone_groups(blobs: Mapping[str, str],
-                 window: int) -> list[list[tuple[str, int]]]:
+def clone_groups(blobs: Mapping[str, str], window: int) -> list[list[tuple[str, int]]]:
     """Groups of identical `window`-line normalized blocks spanning two or
     more FILES, as [(path, first original line number), ...].
 
@@ -74,12 +77,12 @@ def clone_groups(blobs: Mapping[str, str],
     this signal's oversized_file finding, not a cross-file duplication one.
     """
     if window <= 0:
-        return []          # every single line would match: meaningless
+        return []  # every single line would match: meaningless
     index: dict[str, list[tuple[str, int, int]]] = {}
     for path in sorted(blobs):
         lines = normalized_lines(blobs[path])
         for i in range(len(lines) - window + 1):
-            chunk = "\n".join(text for _, text in lines[i:i + window])
+            chunk = "\n".join(text for _, text in lines[i : i + window])
             key = hashlib.sha256(chunk.encode("utf-8")).hexdigest()
             # (path, normalized index, original line number): the index drives
             # continuation, the line number is what a human is shown.
@@ -102,16 +105,30 @@ def clone_groups(blobs: Mapping[str, str],
     return groups
 
 
-def _finding(rule: str, severity: str, detail: str, fix_class: FixClass,
-             path: str = "", line: int | None = None,
-             evidence: str = "", key: str = "") -> TriageFinding:
-    return TriageFinding(signal=SIGNAL_ID, rule=rule, severity=severity,
-                         detail=detail, fix_class=fix_class, path=path,
-                         line=line, evidence=evidence, key=key)
+def _finding(
+    rule: str,
+    severity: str,
+    detail: str,
+    fix_class: FixClass,
+    path: str = "",
+    line: int | None = None,
+    evidence: str = "",
+    key: str = "",
+) -> TriageFinding:
+    return TriageFinding(
+        signal=SIGNAL_ID,
+        rule=rule,
+        severity=severity,
+        detail=detail,
+        fix_class=fix_class,
+        path=path,
+        line=line,
+        evidence=evidence,
+        key=key,
+    )
 
 
-def evaluate(blobs: Mapping[str, str],
-             toolchain: ToolchainAdapter | None) -> SignalResult:
+def evaluate(blobs: Mapping[str, str], toolchain: ToolchainAdapter | None) -> SignalResult:
     """Size and duplication over source blobs the caller already filtered to
     the adapter's source extensions."""
     findings: list[TriageFinding] = []
@@ -126,11 +143,16 @@ def evaluate(blobs: Mapping[str, str],
             loc = len(blobs[path].splitlines())
             max_seen = max(max_seen, loc)
             if toolchain.max_file_loc and loc > toolchain.max_file_loc:
-                findings.append(_finding(
-                    "oversized_file", "medium",
-                    f"{path} is {loc} lines, above the {toolchain.max_file_loc}"
-                    f"-line limit for this stack. Splitting it is design work.",
-                    FixClass.STRUCTURAL, path))
+                findings.append(
+                    _finding(
+                        "oversized_file",
+                        "medium",
+                        f"{path} is {loc} lines, above the {toolchain.max_file_loc}"
+                        f"-line limit for this stack. Splitting it is design work.",
+                        FixClass.STRUCTURAL,
+                        path,
+                    )
+                )
         file_metric = Measurement.measured(float(max_seen))
 
         max_fn = 0
@@ -143,25 +165,30 @@ def evaluate(blobs: Mapping[str, str],
             for name, start, end in spans:
                 loc = end - start + 1
                 max_fn = max(max_fn, loc)
-                if toolchain.max_function_loc \
-                        and loc > toolchain.max_function_loc:
-                    findings.append(_finding(
-                        "oversized_function", "medium",
-                        f"{name}() in {path} is {loc} lines, above the "
-                        f"{toolchain.max_function_loc}-line limit. Splitting "
-                        f"it is design work.",
-                        FixClass.STRUCTURAL, path, start,
-                        key=name))
+                if toolchain.max_function_loc and loc > toolchain.max_function_loc:
+                    findings.append(
+                        _finding(
+                            "oversized_function",
+                            "medium",
+                            f"{name}() in {path} is {loc} lines, above the "
+                            f"{toolchain.max_function_loc}-line limit. Splitting "
+                            f"it is design work.",
+                            FixClass.STRUCTURAL,
+                            path,
+                            start,
+                            key=name,
+                        )
+                    )
         if parsed_any:
             fn_metric = Measurement.measured(float(max_fn))
         elif not blobs:
             fn_metric = Measurement.not_collected(
-                "no source files to parse, so function length was not "
-                "measured")
+                "no source files to parse, so function length was not measured"
+            )
         else:
             fn_metric = Measurement.not_collected(
-                "this toolchain declares no function parser, so function "
-                "length was not measured")
+                "this toolchain declares no function parser, so function length was not measured"
+            )
 
     total_lines = sum(len(t.splitlines()) for t in blobs.values())
     window = toolchain.min_clone_loc if toolchain else 30
@@ -169,33 +196,39 @@ def evaluate(blobs: Mapping[str, str],
         dup_metric = Measurement.not_collected(
             f"{len(blobs)} files / {total_lines} lines exceeds the "
             f"{MAX_FILES}/{MAX_LINES} duplication cap; a partial scan is not "
-            f"a scan")
+            f"a scan"
+        )
     else:
         groups = clone_groups(blobs, window)
         duplicated = len(groups) * window
         for group in groups:
             paths = sorted({path for path, _ in group})
             path, line = group[0]
-            findings.append(_finding(
-                "duplicated_block", "medium",
-                f"A {window}-line block is identical across "
-                f"{', '.join(paths)}. Deduplicating requires deciding where "
-                f"the shared code belongs.",
-                FixClass.JUDGEMENT, path, line,
-                key=",".join(paths)))
+            findings.append(
+                _finding(
+                    "duplicated_block",
+                    "medium",
+                    f"A {window}-line block is identical across "
+                    f"{', '.join(paths)}. Deduplicating requires deciding where "
+                    f"the shared code belongs.",
+                    FixClass.JUDGEMENT,
+                    path,
+                    line,
+                    key=",".join(paths),
+                )
+            )
         # An approximation, and deliberately the understating one: merged
         # groups are counted at one window each even when the clone is longer,
         # and total_lines counts raw lines including blanks. A duplication
         # ratio that reads low on a bad repo costs a nudge; one that reads
         # high on a clean repo costs the report's credibility.
-        dup_metric = Measurement.measured(
-            duplicated / total_lines if total_lines else 0.0)
+        dup_metric = Measurement.measured(duplicated / total_lines if total_lines else 0.0)
 
     findings = dedupe_by_identity(findings)
     return SignalResult(
-        signal=SIGNAL_ID, version=VERSION,
+        signal=SIGNAL_ID,
+        version=VERSION,
         collected=Measurement.measured(float(len(findings))),
         findings=findings,
-        metrics={M_MAX_FILE_LOC: file_metric,
-                 M_FUNCTION_LOC: fn_metric,
-                 M_DUP_RATIO: dup_metric})
+        metrics={M_MAX_FILE_LOC: file_metric, M_FUNCTION_LOC: fn_metric, M_DUP_RATIO: dup_metric},
+    )

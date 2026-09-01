@@ -1,5 +1,6 @@
 """E-85's flag is off by default: the default pipeline must be byte-identical
 to pre-E-85, so the benchmark can run both arms."""
+
 import pytest
 from pydantic import ValidationError
 

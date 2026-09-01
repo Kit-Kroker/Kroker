@@ -4,6 +4,7 @@ Generated into a scratch dir and never committed: a hand-maintained config
 would drift from agents/<role>/agent.yaml. The two providers differ ONLY in
 instructions_ref -- that is the A/B axis (E-82 design doc 4.3).
 """
+
 from __future__ import annotations
 
 import os
@@ -30,17 +31,25 @@ def _rel_file_url(target: Path, out_dir: Path) -> str:
     return "file://" + os.path.relpath(target, out_dir).replace("\\", "/")
 
 
-def build_config(role: str, case: str, *, repo_root: Path, cases_root: Path,
-                 agents_dir: Path, judge_model: str, out_dir: Path,
-                 repeat: int = 3, baseline_ref: str = "HEAD",
-                 max_cost_usd: float = 0.50,
-                 max_latency_ms: int = 120_000,
-                 mutation: str | None = None) -> Path:
+def build_config(
+    role: str,
+    case: str,
+    *,
+    repo_root: Path,
+    cases_root: Path,
+    agents_dir: Path,
+    judge_model: str,
+    out_dir: Path,
+    repeat: int = 3,
+    baseline_ref: str = "HEAD",
+    max_cost_usd: float = 0.50,
+    max_latency_ms: int = 120_000,
+    mutation: str | None = None,
+) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     fixture = build_fixture(role, case, cases_root, agents_dir)
     fixture_path = out_dir / "fixture.json"
-    fixture_path.write_text(fixture.model_dump_json(indent=2),
-                            encoding="utf-8")
+    fixture_path.write_text(fixture.model_dump_json(indent=2), encoding="utf-8")
 
     provider_cfg = {
         "role": role,
@@ -61,10 +70,13 @@ def build_config(role: str, case: str, *, repo_root: Path, cases_root: Path,
 
     cfg = {
         "description": f"prompt gate: {role} on {case}",
-        "prompts": ["{{input}}"],       # unused: the fixture is the input
+        "prompts": ["{{input}}"],  # unused: the fixture is the input
         "providers": [
-            {"id": provider_id, "label": "baseline",
-             "config": {**provider_cfg, "instructions_ref": baseline_ref}},
+            {
+                "id": provider_id,
+                "label": "baseline",
+                "config": {**provider_cfg, "instructions_ref": baseline_ref},
+            },
             {"id": provider_id, "label": "working", "config": working_cfg},
         ],
         "defaultTest": {
@@ -79,12 +91,10 @@ def build_config(role: str, case: str, *, repo_root: Path, cases_root: Path,
             # ABSOLUTE first (they gate), advisory judge last. Order is
             # cosmetic to promptfoo but keeps results.json readable.
             "assert": [
-                {"type": "python",
-                 "value": _rel_file_url(_HERE / "absolute.py", out_dir)},
+                {"type": "python", "value": _rel_file_url(_HERE / "absolute.py", out_dir)},
                 {"type": "cost", "threshold": max_cost_usd},
                 {"type": "latency", "threshold": max_latency_ms},
-                {"type": "python",
-                 "value": _rel_file_url(_HERE / "assertion.py", out_dir)},
+                {"type": "python", "value": _rel_file_url(_HERE / "assertion.py", out_dir)},
             ],
         },
         "tests": [{"vars": {"input": fixture.prompt}}],

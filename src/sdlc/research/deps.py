@@ -15,6 +15,7 @@ runs/<run_id>/research/budget.json), NOT a Task 6 concern.
 was the original mechanism for keeping this counter in-process across the
 fan-out; CodeMode is untestable via TestModel under TemporalAgent and has been
 dropped in favour of plain sequential tools. See task-6-brief-amended.md.)"""
+
 from __future__ import annotations
 
 from typing import Literal
@@ -65,15 +66,12 @@ def charge(deps: ResearchDeps, *, search: int = 0, fetch: int = 0) -> None:
     BudgetExceeded if a cap (count or cost) would be crossed."""
     b = deps.budget
     if search and b.searches + search > deps.max_searches:
-        raise BudgetExceeded(
-            f"search budget exhausted ({deps.max_searches} searches)")
+        raise BudgetExceeded(f"search budget exhausted ({deps.max_searches} searches)")
     if fetch and b.fetches + fetch > deps.max_fetches:
-        raise BudgetExceeded(
-            f"fetch budget exhausted ({deps.max_fetches} fetches)")
+        raise BudgetExceeded(f"fetch budget exhausted ({deps.max_fetches} fetches)")
     projected = b.cost_usd + search * SEARCH_COST_USD + fetch * FETCH_COST_USD
     if projected > deps.max_cost_usd:
-        raise BudgetExceeded(
-            f"cost budget exhausted (${deps.max_cost_usd:.2f})")
+        raise BudgetExceeded(f"cost budget exhausted (${deps.max_cost_usd:.2f})")
     b.searches += search
     b.fetches += fetch
     b.cost_usd = projected

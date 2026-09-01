@@ -1,23 +1,37 @@
 from datetime import datetime
 
 from sdlc.benchmarks.models import (
-    BenchmarkCell, BenchmarkOutcome, BenchmarkRecord,
-    BenchmarkScope, BenchmarkSummary, CaseSpec, CompositeWeights, CostBag,
-    QualityScore, SpeedBag,
+    BenchmarkCell,
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    BenchmarkSummary,
+    CaseSpec,
+    CompositeWeights,
+    CostBag,
+    QualityScore,
+    SpeedBag,
 )
 from sdlc.models import BenchmarkConfig, HarnessKind
 
 
 def _record(**kw):
     base = dict(
-        run_id="r1", bench_run_id="b1", case_id="add-login",
-        scope=BenchmarkScope.STAGE, stage="architecture", role="architect",
-        model="anthropic:claude-sonnet-4-6", prompt_sha="abc",
+        run_id="r1",
+        bench_run_id="b1",
+        case_id="add-login",
+        scope=BenchmarkScope.STAGE,
+        stage="architecture",
+        role="architect",
+        model="anthropic:claude-sonnet-4-6",
+        prompt_sha="abc",
         quality=QualityScore(score=0.8, judge="llm_judge"),
         cost=CostBag(usd=0.1, input_tokens=100, output_tokens=50),
-        speed=SpeedBag(wall_clock_s=12.0,
-                       started_at=datetime(2026, 7, 4, 10),
-                       ended_at=datetime(2026, 7, 4, 10, 0, 12)),
+        speed=SpeedBag(
+            wall_clock_s=12.0,
+            started_at=datetime(2026, 7, 4, 10),
+            ended_at=datetime(2026, 7, 4, 10, 0, 12),
+        ),
         outcome=BenchmarkOutcome.PASS,
     )
     base.update(kw)
@@ -38,9 +52,14 @@ def test_harness_optional_for_proposer():
 
 
 def test_task_attempt_record_carries_task_id_and_attempt():
-    r = _record(scope=BenchmarkScope.TASK_ATTEMPT, stage="code",
-                task_id="T1", attempt=0, role="dev",
-                harness=HarnessKind.CLAUDE_CODE)
+    r = _record(
+        scope=BenchmarkScope.TASK_ATTEMPT,
+        stage="code",
+        task_id="T1",
+        attempt=0,
+        role="dev",
+        harness=HarnessKind.CLAUDE_CODE,
+    )
     assert r.task_id == "T1" and r.attempt == 0
 
 
@@ -70,35 +89,49 @@ def test_case_spec_matrix_axes():
 
 
 def test_benchmark_cell_identity():
-    c = BenchmarkCell(case_id="add-login", harness=HarnessKind.OPENCODE,
-                      arm_name="anthropic-claude-sonnet-4-6")
+    c = BenchmarkCell(
+        case_id="add-login", harness=HarnessKind.OPENCODE, arm_name="anthropic-claude-sonnet-4-6"
+    )
     assert c.cell_id == "add-login#opencode#anthropic-claude-sonnet-4-6"
 
 
 def test_benchmark_cell_identity_includes_lead_harness():
     """spec §5: `crew:<lead_harness>` rides the cell id so crew vs
     crew:claude_code cells over the same arm cannot collide."""
-    c = BenchmarkCell(case_id="add-login", harness=HarnessKind.CREW,
-                      lead_harness=HarnessKind.CLAUDE_CODE, arm_name="zai-glm")
+    c = BenchmarkCell(
+        case_id="add-login",
+        harness=HarnessKind.CREW,
+        lead_harness=HarnessKind.CLAUDE_CODE,
+        arm_name="zai-glm",
+    )
     assert c.cell_id == "add-login#crew:claude_code#zai-glm"
 
 
 def test_case_spec_harnesses_stay_raw_strings():
     """`crew:claude_code` must survive validation unparsed — parsing is
     expand_matrix's job, so the error names the entry at expansion time."""
-    spec = CaseSpec(case_id="c", idea_summary="s",
-                    harnesses=["crew:claude_code"],
-                    models=["zai-coding-plan/glm-5.2"],
-                    judge_model="openai/gpt-5.2")
+    spec = CaseSpec(
+        case_id="c",
+        idea_summary="s",
+        harnesses=["crew:claude_code"],
+        models=["zai-coding-plan/glm-5.2"],
+        judge_model="openai/gpt-5.2",
+    )
     assert spec.harnesses == ["crew:claude_code"]
 
 
 def test_benchmark_summary_aggregates_fields():
-    s = BenchmarkSummary(case_id="add-login", stage="code",
-                         harness=HarnessKind.CLAUDE_CODE,
-                         model="anthropic:claude-sonnet-4-6",
-                         n=3, mean_quality=0.9, mean_cost_usd=0.5,
-                         mean_wall_clock_s=120.0, composite=0.88)
+    s = BenchmarkSummary(
+        case_id="add-login",
+        stage="code",
+        harness=HarnessKind.CLAUDE_CODE,
+        model="anthropic:claude-sonnet-4-6",
+        n=3,
+        mean_quality=0.9,
+        mean_cost_usd=0.5,
+        mean_wall_clock_s=120.0,
+        composite=0.88,
+    )
     assert s.n == 3 and s.composite == 0.88
 
 
@@ -112,10 +145,13 @@ def test_quality_score_accepts_oracle_judge():
 
 
 def test_case_spec_language_defaults_none_and_accepts_value():
-    base = dict(case_id="c", idea_summary="s",
-                harnesses=[HarnessKind.OPENCODE],
-                models=["zai-coding-plan/glm-5.2"],
-                judge_model="openai/gpt-5.2")
+    base = dict(
+        case_id="c",
+        idea_summary="s",
+        harnesses=[HarnessKind.OPENCODE],
+        models=["zai-coding-plan/glm-5.2"],
+        judge_model="openai/gpt-5.2",
+    )
     assert CaseSpec(**base).language is None
     assert CaseSpec(**base, language="python").language == "python"
 

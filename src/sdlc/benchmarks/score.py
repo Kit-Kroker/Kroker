@@ -4,6 +4,7 @@ Every grid module stays pure (build_* + render_*); this module owns the
 filesystem. Missing inputs degrade with a note in report.md and exit 0 --
 a gap in the corpus is not a crash.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -22,14 +23,11 @@ def parse_weights(s: str) -> CompositeWeights:
     renormalises over whichever axes have data in each group."""
     parts = [p.strip() for p in s.split(",")]
     if len(parts) != 3:
-        raise ValueError(
-            f"--weights takes three floats as quality,cost,speed; got {s!r}")
+        raise ValueError(f"--weights takes three floats as quality,cost,speed; got {s!r}")
     try:
         q, c, sp = (float(p) for p in parts)
     except ValueError as e:
-        raise ValueError(
-            f"--weights takes three floats as quality,cost,speed; got {s!r}"
-        ) from e
+        raise ValueError(f"--weights takes three floats as quality,cost,speed; got {s!r}") from e
     return CompositeWeights(quality=q, cost=c, speed=sp)
 
 
@@ -41,17 +39,19 @@ def load_config_weights(path: Path | None = None) -> CompositeWeights:
         return CompositeWeights()
     try:
         data = yaml.safe_load(Path(p).read_text(encoding="utf-8")) or {}
-    except Exception:                                        # noqa: BLE001
+    except Exception:  # noqa: BLE001
         return CompositeWeights()
     w = data.get("weights") or {}
     return CompositeWeights(
         quality=float(w.get("quality", 0.6)),
         cost=float(w.get("cost", 0.2)),
-        speed=float(w.get("speed", 0.2)))
+        speed=float(w.get("speed", 0.2)),
+    )
 
 
 def default_out_dir(selector: str, root: str | None = None) -> Path:
     from .recorder import _root
+
     base = Path(root if root is not None else _root())
     return base / selector / "score"
 
@@ -84,18 +84,21 @@ def judge_mix_notes(records) -> list[str]:
         f"case {case}: quality scores span {len(kinds)} judge instruments "
         f"({', '.join(sorted(kinds))}) - E-83 changed the judge, so means "
         f"across this boundary mix two scales"
-        for case, kinds in sorted(by_case.items()) if len(kinds) > 1
+        for case, kinds in sorted(by_case.items())
+        if len(kinds) > 1
     ]
 
 
-def write_score(ev: Evidence, out_dir: Path,
-                weights: CompositeWeights) -> list[Path]:
+def write_score(ev: Evidence, out_dir: Path, weights: CompositeWeights) -> list[Path]:
     """Write every grid the evidence supports. Returns the paths written."""
     from .calibration import load_calibration_reports, render_calibration_html
-    from .report import (aggregate, render_markdown, resolve_language_map,
-                         write_heatmap)
-    from .sc_rollup import (build_sc_rollup, render_sc_rollup_html,
-                            render_sc_rollup_json, render_sc_rollup_markdown)
+    from .report import aggregate, render_markdown, resolve_language_map, write_heatmap
+    from .sc_rollup import (
+        build_sc_rollup,
+        render_sc_rollup_html,
+        render_sc_rollup_json,
+        render_sc_rollup_markdown,
+    )
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -107,15 +110,16 @@ def write_score(ev: Evidence, out_dir: Path,
     summaries = aggregate("", weights, _records=ev.records)
 
     lang = resolve_language_map(sorted({r.case_id for r in ev.records}))
-    html_p, json_p = write_heatmap(ev.records, out_dir, lang,
-                                   render_calibration_html(calibration))
+    html_p, json_p = write_heatmap(ev.records, out_dir, lang, render_calibration_html(calibration))
     written += [html_p, json_p]
 
     written += _write_case_matrices(ev, out_dir, notes)
 
     rollup = build_sc_rollup(ev.summaries, ev.records)
-    for name, text in (("sc-rollup.html", render_sc_rollup_html(rollup)),
-                       ("sc-rollup.json", render_sc_rollup_json(rollup))):
+    for name, text in (
+        ("sc-rollup.html", render_sc_rollup_html(rollup)),
+        ("sc-rollup.json", render_sc_rollup_json(rollup)),
+    ):
         p = out_dir / name
         p.write_text(text, encoding="utf-8")
         written.append(p)
@@ -138,22 +142,20 @@ def _render_notes(notes: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _write_case_matrices(ev: Evidence, out_dir: Path,
-                         notes: list[str]) -> list[Path]:
+def _write_case_matrices(ev: Evidence, out_dir: Path, notes: list[str]) -> list[Path]:
     """Per-case grids. The waste matrix takes no tasks.yaml dependency and
     is written for every case; the task and error matrices need the suite
     and are skipped with a note when it is absent (today dispatch_history
     raises here, cli.py:92)."""
-    from .error_matrix import (build_error_matrix, render_error_matrix_html,
-                               render_error_matrix_json)
-    from .task_matrix import (build_task_matrix, render_task_matrix_html,
-                              render_task_matrix_json)
+    from .agreement_matrix import (
+        build_agreement_matrix,
+        render_agreement_matrix_html,
+        render_agreement_matrix_json,
+    )
+    from .error_matrix import build_error_matrix, render_error_matrix_html, render_error_matrix_json
+    from .task_matrix import build_task_matrix, render_task_matrix_html, render_task_matrix_json
     from .tasks import load_task_suite
-    from .waste_matrix import (build_waste_matrix, render_waste_matrix_html,
-                               render_waste_matrix_json)
-    from .agreement_matrix import (build_agreement_matrix,
-                                   render_agreement_matrix_html,
-                                   render_agreement_matrix_json)
+    from .waste_matrix import build_waste_matrix, render_waste_matrix_html, render_waste_matrix_json
 
     written: list[Path] = []
     cases = sorted({r.case_id for r in ev.records})
@@ -163,9 +165,10 @@ def _write_case_matrices(ev: Evidence, out_dir: Path,
 
         try:
             suite = load_task_suite(case_id)
-        except Exception as e:                               # noqa: BLE001
-            notes.append(f"case {case_id}: malformed tasks.yaml, task and "
-                         f"error matrices skipped ({e})")
+        except Exception as e:  # noqa: BLE001
+            notes.append(
+                f"case {case_id}: malformed tasks.yaml, task and error matrices skipped ({e})"
+            )
             suite = None
 
         wm = build_waste_matrix(case_id, ev.records, suite)
@@ -177,8 +180,10 @@ def _write_case_matrices(ev: Evidence, out_dir: Path,
             p.write_text(text, encoding="utf-8")
             written.append(p)
         if not wm.cells:
-            notes.append(f"case {case_id}: no harness waste recorded "
-                         f"(runs predating waste capture, or no coding tasks)")
+            notes.append(
+                f"case {case_id}: no harness waste recorded "
+                f"(runs predating waste capture, or no coding tasks)"
+            )
 
         am = build_agreement_matrix(case_id, ev.records, suite)
         for name, text in (
@@ -191,8 +196,7 @@ def _write_case_matrices(ev: Evidence, out_dir: Path,
 
         if suite is None:
             if not any(f"case {case_id}: malformed" in n for n in notes):
-                notes.append(f"case {case_id}: no tasks.yaml, task and error "
-                             f"matrices skipped")
+                notes.append(f"case {case_id}: no tasks.yaml, task and error matrices skipped")
             continue
 
         tm = build_task_matrix(case_id, ev.records, suite)

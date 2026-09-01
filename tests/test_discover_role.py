@@ -1,5 +1,6 @@
 # tests/test_discover_role.py
 """E-48 DD7/P3-D3: the discover proposer is an OPTIONAL, KNOWN role."""
+
 from sdlc.agents import loader, roles
 
 
@@ -34,4 +35,5 @@ def test_the_proposer_can_only_return_dispositions():
     """ADR-22 at the type: the output_type has one field and it is
     dispositions. A proposer that could return capabilities would author."""
     from sdlc.assessment.discover.map import DiscoverProposal
+
     assert set(DiscoverProposal.model_fields) == {"dispositions"}

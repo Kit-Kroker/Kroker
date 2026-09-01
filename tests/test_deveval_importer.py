@@ -1,9 +1,11 @@
 """E-79: DevEval corpus conversion. Every test here is pure or tmp_path-
 scoped -- the importer never touches the network."""
+
 import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from sdlc.benchmarks.importers.deveval import RepoConfig, load_repo_config
 
@@ -24,8 +26,7 @@ MANIFEST = {
 
 
 def test_load_repo_config_reads_every_declared_path(tmp_path):
-    (tmp_path / "repo_config.json").write_text(
-        json.dumps(MANIFEST), encoding="utf-8")
+    (tmp_path / "repo_config.json").write_text(json.dumps(MANIFEST), encoding="utf-8")
     cfg = load_repo_config(tmp_path)
     assert isinstance(cfg, RepoConfig)
     assert cfg.prd == "docs/PRD.md"
@@ -40,8 +41,7 @@ def test_load_repo_config_ignores_unknown_keys(tmp_path):
     """DevEval manifests carry prompt blobs we do not consume; extra keys
     must not break the import."""
     extra = dict(MANIFEST, coarse_unit_test_prompt={"x": "y"})
-    (tmp_path / "repo_config.json").write_text(
-        json.dumps(extra), encoding="utf-8")
+    (tmp_path / "repo_config.json").write_text(json.dumps(extra), encoding="utf-8")
     assert load_repo_config(tmp_path).language == "python"
 
 
@@ -53,15 +53,14 @@ def test_load_repo_config_raises_on_missing_manifest(tmp_path):
 
 def test_load_repo_config_raises_on_missing_required_key(tmp_path):
     broken = {k: v for k, v in MANIFEST.items() if k != "PRD"}
-    (tmp_path / "repo_config.json").write_text(
-        json.dumps(broken), encoding="utf-8")
-    with pytest.raises(Exception):
+    (tmp_path / "repo_config.json").write_text(json.dumps(broken), encoding="utf-8")
+    with pytest.raises(ValidationError):
         load_repo_config(tmp_path)
 
 
 from sdlc.benchmarks.importers.deveval import collect_node_ids
 
-TEST_SRC = '''
+TEST_SRC = """
 import unittest
 
 def test_module_level():
@@ -75,7 +74,7 @@ class TestThing(unittest.TestCase):
         assert True
     def setUp(self):
         pass
-'''
+"""
 
 
 def test_collect_node_ids_finds_functions_and_methods(tmp_path):
@@ -83,8 +82,7 @@ def test_collect_node_ids_finds_functions_and_methods(tmp_path):
     d.mkdir()
     (d / "test_a.py").write_text(TEST_SRC, encoding="utf-8")
     ids = collect_node_ids(d, "unit_tests")
-    assert ids == ["unit_tests/test_a.py::test_method",
-                   "unit_tests/test_a.py::test_module_level"]
+    assert ids == ["unit_tests/test_a.py::test_method", "unit_tests/test_a.py::test_module_level"]
 
 
 def test_collect_node_ids_skips_non_test_files(tmp_path):
@@ -93,8 +91,7 @@ def test_collect_node_ids_skips_non_test_files(tmp_path):
     (d / "__init__.py").write_text("", encoding="utf-8")
     (d / "conftest.py").write_text("def test_nope(): pass", encoding="utf-8")
     (d / "test_a.py").write_text("def test_one(): pass", encoding="utf-8")
-    assert collect_node_ids(d, "unit_tests") == [
-        "unit_tests/test_a.py::test_one"]
+    assert collect_node_ids(d, "unit_tests") == ["unit_tests/test_a.py::test_one"]
 
 
 def test_collect_node_ids_uses_forward_slashes(tmp_path):
@@ -113,28 +110,36 @@ def test_collect_node_ids_raises_on_unparseable_test(tmp_path):
         collect_node_ids(d, "unit_tests")
 
 
-from sdlc.benchmarks.importers.deveval import (draft_task_suite,
-                                               render_tasks_yaml)
+from sdlc.benchmarks.importers.deveval import draft_task_suite, render_tasks_yaml
 
 
 def test_draft_task_suite_groups_by_test_file():
-    ids = ["unit_tests/test_check_date.py::test_a",
-           "unit_tests/test_check_date.py::test_b",
-           "acceptance_tests/test_cli.py::test_c"]
+    ids = [
+        "unit_tests/test_check_date.py::test_a",
+        "unit_tests/test_check_date.py::test_b",
+        "acceptance_tests/test_cli.py::test_c",
+    ]
     suite = draft_task_suite(ids)
     assert suite["tasks"] == [
-        {"id": "cli", "error_class": "functional",
-         "oracle_tests": ["acceptance_tests/test_cli.py::test_c"]},
-        {"id": "check_date", "error_class": "functional",
-         "oracle_tests": ["unit_tests/test_check_date.py::test_a",
-                          "unit_tests/test_check_date.py::test_b"]},
+        {
+            "id": "cli",
+            "error_class": "functional",
+            "oracle_tests": ["acceptance_tests/test_cli.py::test_c"],
+        },
+        {
+            "id": "check_date",
+            "error_class": "functional",
+            "oracle_tests": [
+                "unit_tests/test_check_date.py::test_a",
+                "unit_tests/test_check_date.py::test_b",
+            ],
+        },
     ]
 
 
 def test_draft_task_suite_ids_are_unique():
     """Same stem in two dirs must not collide -- TaskSuite rejects dupes."""
-    ids = ["unit_tests/test_core.py::test_a",
-           "acceptance_tests/test_core.py::test_b"]
+    ids = ["unit_tests/test_core.py::test_a", "acceptance_tests/test_core.py::test_b"]
     suite = draft_task_suite(ids)
     task_ids = [t["id"] for t in suite["tasks"]]
     assert len(task_ids) == len(set(task_ids))
@@ -144,19 +149,18 @@ def test_draft_task_suite_validates_against_the_real_loader(tmp_path):
     """The emitted draft must load through benchmarks.tasks.load_task_suite,
     or the case is dead on arrival."""
     from sdlc.benchmarks.tasks import load_task_suite
+
     ids = ["unit_tests/test_a.py::test_one"]
     case = tmp_path / "deveval-x"
     case.mkdir()
-    (case / "tasks.yaml").write_text(
-        render_tasks_yaml(draft_task_suite(ids)), encoding="utf-8")
+    (case / "tasks.yaml").write_text(render_tasks_yaml(draft_task_suite(ids)), encoding="utf-8")
     suite = load_task_suite("deveval-x", cases_dir=tmp_path)
     assert suite is not None
     assert suite.tasks[0].oracle_tests == ["unit_tests/test_a.py::test_one"]
 
 
 def test_render_tasks_yaml_carries_a_review_banner():
-    text = render_tasks_yaml(draft_task_suite(
-        ["unit_tests/test_a.py::test_one"]))
+    text = render_tasks_yaml(draft_task_suite(["unit_tests/test_a.py::test_one"]))
     assert "REVIEW" in text
 
 
@@ -170,8 +174,7 @@ from sdlc.benchmarks.importers.deveval import detect_network
 
 def test_detect_network_flags_urllib(tmp_path):
     p = tmp_path / "test_q.py"
-    p.write_text("import urllib.request\nurllib.request.urlopen(u)\n",
-                 encoding="utf-8")
+    p.write_text("import urllib.request\nurllib.request.urlopen(u)\n", encoding="utf-8")
     required, evidence = detect_network([p])
     assert required is True
     assert any("urllib" in e for e in evidence)
@@ -179,8 +182,7 @@ def test_detect_network_flags_urllib(tmp_path):
 
 def test_detect_network_flags_http_urls(tmp_path):
     p = tmp_path / "test_q.py"
-    p.write_text('URL = "http://export.arxiv.org/api/query"\n',
-                 encoding="utf-8")
+    p.write_text('URL = "http://export.arxiv.org/api/query"\n', encoding="utf-8")
     required, _ = detect_network([p])
     assert required is True
 
@@ -198,15 +200,17 @@ def test_detect_network_evidence_names_file_and_line(tmp_path):
     assert "test_q.py:2" in evidence[0]
 
 
-from sdlc.benchmarks.importers.deveval import (build_case_dict, case_id_for,
-                                               frozen_contract,
-                                               render_case_yaml)
+from sdlc.benchmarks.importers.deveval import (
+    build_case_dict,
+    case_id_for,
+    frozen_contract,
+    render_case_yaml,
+)
 
 
 def test_case_id_is_slugged_and_prefixed():
     assert case_id_for("ArXiv_digest") == "deveval-arxiv-digest"
-    assert case_id_for("particle-swarm-optimization") == (
-        "deveval-particle-swarm-optimization")
+    assert case_id_for("particle-swarm-optimization") == ("deveval-particle-swarm-optimization")
 
 
 def test_frozen_contract_contains_both_artifacts_and_a_freeze_notice():
@@ -220,10 +224,14 @@ def test_build_case_dict_matches_the_CaseSpec_contract():
     """The emitted dict must construct a CaseSpec, or `benchmark run` dies
     on a case the importer swore was valid."""
     case = build_case_dict(
-        case_id="deveval-x", prd="# Introduction\nA tool.\n",
-        contract="CONTRACT", language="python",
-        judge_model="google:gemini-3.5-flash", network_required=False,
-        repo_url="/srv/scratch-repos/deveval-x")
+        case_id="deveval-x",
+        prd="# Introduction\nA tool.\n",
+        contract="CONTRACT",
+        language="python",
+        judge_model="google:gemini-3.5-flash",
+        network_required=False,
+        repo_url="/srv/scratch-repos/deveval-x",
+    )
     assert case["case_id"] == "deveval-x"
     assert case["language"] == "python"
     assert case["network_required"] is False
@@ -233,11 +241,16 @@ def test_build_case_dict_matches_the_CaseSpec_contract():
 
 def test_render_case_yaml_round_trips_through_load_case_spec(tmp_path):
     from sdlc.benchmarks.cli import load_case_spec
+
     case = build_case_dict(
-        case_id="deveval-x", prd="# Introduction\nA tool.\n",
-        contract="CONTRACT", language="python",
-        judge_model="google:gemini-3.5-flash", network_required=True,
-        repo_url="/srv/scratch-repos/deveval-x")
+        case_id="deveval-x",
+        prd="# Introduction\nA tool.\n",
+        contract="CONTRACT",
+        language="python",
+        judge_model="google:gemini-3.5-flash",
+        network_required=True,
+        repo_url="/srv/scratch-repos/deveval-x",
+    )
     p = tmp_path / "case.yaml"
     p.write_text(render_case_yaml(case), encoding="utf-8")
     spec = load_case_spec(str(p))
@@ -253,23 +266,26 @@ FIXTURE = Path(__file__).resolve().parent / "fixtures" / "mini_calc"
 
 
 def _convert(tmp_path):
-    return convert_repo(FIXTURE, tmp_path,
-                        judge_model="google:gemini-3.5-flash")
+    return convert_repo(FIXTURE, tmp_path, judge_model="google:gemini-3.5-flash")
 
 
 def test_convert_repo_writes_every_expected_path(tmp_path):
     report = _convert(tmp_path)
     case = tmp_path / "deveval-mini-calc"
     assert isinstance(report, ImportReport)
-    for rel in ("case.yaml", "tasks.yaml", "ATTRIBUTION.md",
-                "oracle/unit_tests/test_calc.py",
-                "oracle/acceptance_tests/test_cli.py",
-                "reference/calc.py",
-                "reference_artifacts/UML_class.md",
-                "reference_artifacts/UML_sequence.md",
-                "reference_artifacts/architecture_design.md",
-                "reference_env/requirements.txt",
-                "reference_env/examples/run.sh"):
+    for rel in (
+        "case.yaml",
+        "tasks.yaml",
+        "ATTRIBUTION.md",
+        "oracle/unit_tests/test_calc.py",
+        "oracle/acceptance_tests/test_cli.py",
+        "reference/calc.py",
+        "reference_artifacts/UML_class.md",
+        "reference_artifacts/UML_sequence.md",
+        "reference_artifacts/architecture_design.md",
+        "reference_env/requirements.txt",
+        "reference_env/examples/run.sh",
+    ):
         assert (case / rel).is_file(), f"missing {rel}"
 
 
@@ -287,6 +303,7 @@ def test_convert_repo_keeps_docs_and_tests_out_of_reference(tmp_path):
 def test_convert_repo_case_yaml_loads_and_tasks_validate(tmp_path):
     from sdlc.benchmarks.cli import load_case_spec
     from sdlc.benchmarks.tasks import load_task_suite
+
     _convert(tmp_path)
     spec = load_case_spec(str(tmp_path / "deveval-mini-calc" / "case.yaml"))
     assert spec.case_id == "deveval-mini-calc"
@@ -323,6 +340,7 @@ def test_convert_repo_emits_the_oracle_path_shim(tmp_path):
 def test_oracle_shim_is_not_collected_as_a_task(tmp_path):
     """conftest.py must not become a draft task -- it is not a test file."""
     from sdlc.benchmarks.tasks import load_task_suite
+
     _convert(tmp_path)
     suite = load_task_suite("deveval-mini-calc", cases_dir=tmp_path)
     assert "conftest" not in {t.id for t in suite.tasks}
@@ -331,6 +349,7 @@ def test_oracle_shim_is_not_collected_as_a_task(tmp_path):
 def _fixture_copy(tmp_path, **manifest_overrides):
     """A writable copy of the mini_calc fixture with manifest tweaks."""
     import shutil
+
     src = tmp_path / "src" / "mini_calc"
     shutil.copytree(FIXTURE, src)
     cfg = json.loads((src / "repo_config.json").read_text(encoding="utf-8"))
@@ -346,16 +365,15 @@ def test_convert_repo_handles_a_repo_with_no_dependency_file(tmp_path):
     out = tmp_path / "cases"
     report = convert_repo(src, out, judge_model="google:gemini-3.5-flash")
     assert report.has_dependency_file is False
-    assert not (out / "deveval-mini-calc" / "reference_env"
-                / "requirements.txt").exists()
+    assert not (out / "deveval-mini-calc" / "reference_env" / "requirements.txt").exists()
     assert (out / "deveval-mini-calc" / "case.yaml").is_file()
 
 
-def test_convert_repo_keeps_a_root_level_requirements_out_of_reference(
-        tmp_path):
+def test_convert_repo_keeps_a_root_level_requirements_out_of_reference(tmp_path):
     """TextCNN/chakin/geotext/lice declare requirements.txt at the repo root;
     it belongs to reference_env/, not to the gold implementation."""
     import shutil
+
     src = _fixture_copy(tmp_path, dependencies="requirements.txt")
     shutil.copyfile(src / "docs" / "requirements.txt", src / "requirements.txt")
     out = tmp_path / "cases"
@@ -376,17 +394,16 @@ def test_collect_node_ids_matches_pytest_suffix_pattern(tmp_path):
     (d / "test_two.py").write_text("def test_two(): pass", encoding="utf-8")
     assert collect_node_ids(d, "unit_tests") == [
         "unit_tests/test_two.py::test_two",
-        "unit_tests/unit_test.py::test_one"]
+        "unit_tests/unit_test.py::test_one",
+    ]
 
 
 def test_collect_node_ids_does_not_double_count_a_dual_match(tmp_path):
     """`test_thing_test.py` matches both patterns -- collect it once."""
     d = tmp_path / "unit_tests"
     d.mkdir()
-    (d / "test_thing_test.py").write_text(
-        "def test_x(): pass", encoding="utf-8")
-    assert collect_node_ids(d, "unit_tests") == [
-        "unit_tests/test_thing_test.py::test_x"]
+    (d / "test_thing_test.py").write_text("def test_x(): pass", encoding="utf-8")
+    assert collect_node_ids(d, "unit_tests") == ["unit_tests/test_thing_test.py::test_x"]
 
 
 def test_convert_repo_copies_root_data_dirs_into_the_oracle(tmp_path):
@@ -396,8 +413,7 @@ def test_convert_repo_copies_root_data_dirs_into_the_oracle(tmp_path):
     without it their suites fail on FileNotFoundError, not on code quality."""
     src = _fixture_copy(tmp_path)
     (src / "data_file").mkdir()
-    (src / "data_file" / "sample.csv").write_text("a,b\n1,2\n",
-                                                  encoding="utf-8")
+    (src / "data_file" / "sample.csv").write_text("a,b\n1,2\n", encoding="utf-8")
     out = tmp_path / "cases"
     convert_repo(src, out, judge_model="google:gemini-3.5-flash")
     case = out / "deveval-mini-calc"
@@ -426,22 +442,24 @@ def test_vetted_false_positive_clears_the_network_flag(tmp_path):
     clearance is recorded in the importer so a re-import reproduces it,
     rather than being a hand-edit a re-import would clobber."""
     from sdlc.benchmarks.importers import deveval as dv
+
     src = _fixture_copy(tmp_path)
     (src / "calc.py").write_text(
-        "# see http://example.com for the algorithm\n"
-        "def add(a, b):\n    return a + b\n", encoding="utf-8")
+        "# see http://example.com for the algorithm\ndef add(a, b):\n    return a + b\n",
+        encoding="utf-8",
+    )
     out = tmp_path / "cases"
 
     flagged = convert_repo(src, out, judge_model="google:gemini-3.5-flash")
     assert flagged.network_required is True
 
     import shutil as _sh
+
     _sh.rmtree(out)
     orig = dv.NETWORK_VETTED_OFFLINE
     dv.NETWORK_VETTED_OFFLINE = orig | {"mini_calc"}
     try:
-        cleared = convert_repo(src, out,
-                               judge_model="google:gemini-3.5-flash")
+        cleared = convert_repo(src, out, judge_model="google:gemini-3.5-flash")
     finally:
         dv.NETWORK_VETTED_OFFLINE = orig
     assert cleared.network_required is False

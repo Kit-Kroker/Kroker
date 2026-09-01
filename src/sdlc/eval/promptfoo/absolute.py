@@ -6,10 +6,11 @@ broken whatever a rubric says, so this never degrades to advisory.
 The output_type is read off the role's real agent.py rather than a hardcoded
 map, so a role that changes its type needs no edit here.
 """
+
 from __future__ import annotations
 
 import json
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 
 import yaml
@@ -18,12 +19,11 @@ from pydantic import BaseModel, ValidationError
 # Absolute: promptfoo loads this file standalone (see provider.py).
 from sdlc.agents.loader import _load_build
 from sdlc.agents.settings import MODEL_SETTINGS
-from sdlc.benchmarks.vetoes import (Veto, VetoConfigError, check,
-                                    parse_vetoes, validate_fields)
+from sdlc.benchmarks.vetoes import Veto, VetoConfigError, check, parse_vetoes, validate_fields
 from sdlc.eval.promptfoo.assertion import RUBRIC_KEY
 
 
-@lru_cache(maxsize=None)
+@cache
 def output_type_for(role: str, agents_dir: Path) -> type[BaseModel]:
     """Build the role's agent with a throwaway model id and read its declared
     output type. No model call happens -- Agent construction is lazy."""
@@ -51,25 +51,29 @@ def _blank_required_strings(t: type[BaseModel], data: dict) -> list[str]:
     return out
 
 
-def validates_as_output_type(output: str, role: str,
-                             agents_dir: Path) -> dict:
+def validates_as_output_type(output: str, role: str, agents_dir: Path) -> dict:
     t = output_type_for(role, Path(agents_dir))
     name = getattr(t, "__name__", str(t))
     if not output.strip():
-        return {"pass": False, "score": 0.0,
-                "reason": f"empty output — cannot validate as {name} "
-                          f"(check the provider's `error` field)"}
+        return {
+            "pass": False,
+            "score": 0.0,
+            "reason": f"empty output — cannot validate as {name} "
+            f"(check the provider's `error` field)",
+        }
     try:
         data = json.loads(output)
         t.model_validate(data)
     except (json.JSONDecodeError, ValidationError, TypeError) as e:
-        return {"pass": False, "score": 0.0,
-                "reason": f"output does not validate as {name}: {e}"}
+        return {"pass": False, "score": 0.0, "reason": f"output does not validate as {name}: {e}"}
     blank = _blank_required_strings(t, data)
     if blank:
-        return {"pass": False, "score": 0.0,
-                "reason": f"{name} validates but required string field(s) "
-                          f"are blank: {', '.join(blank)}"}
+        return {
+            "pass": False,
+            "score": 0.0,
+            "reason": f"{name} validates but required string field(s) "
+            f"are blank: {', '.join(blank)}",
+        }
     return {"pass": True, "score": 1.0, "reason": f"validates as {name}"}
 
 
@@ -92,8 +96,7 @@ def load_vetoes(case: str, role: str, cases_root: Path) -> list[Veto]:
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError as e:
-        raise VetoConfigError(
-            f"veto file {path} named in {case_yaml} does not exist") from e
+        raise VetoConfigError(f"veto file {path} named in {case_yaml} does not exist") from e
     return parse_vetoes(text)
 
 
@@ -101,8 +104,9 @@ def get_assert(output: str, context) -> dict:
     """promptfoo's Python assertion entry point -- the name is fixed by
     promptfoo (`getattr(script_module, "get_assert")`). Returns a
     GradingResult dict: {pass, score, reason}."""
-    v = (context if isinstance(context, dict)
-         else {"vars": getattr(context, "vars", {}) or {}}).get("vars", {})
+    v = (
+        context if isinstance(context, dict) else {"vars": getattr(context, "vars", {}) or {}}
+    ).get("vars", {})
     role, agents_dir = v["role"], Path(v["agents_dir"])
 
     # Type validity first: an output that does not parse is broken whatever a
@@ -116,12 +120,13 @@ def get_assert(output: str, context) -> dict:
         vetoes = load_vetoes(v["case"], role, Path(v["cases_root"]))
         validate_fields(vetoes, output_type_for(role, agents_dir))
     except VetoConfigError as e:
-        return {"pass": False, "score": 0.0,
-                "reason": f"veto configuration error: {e}"}
+        return {"pass": False, "score": 0.0, "reason": f"veto configuration error: {e}"}
 
     failures = check(json.loads(output), vetoes)
     if failures:
-        return {"pass": False, "score": 0.0,
-                "reason": "; ".join(f"veto {f.veto_id}: {f.reason}"
-                                    for f in failures)}
+        return {
+            "pass": False,
+            "score": 0.0,
+            "reason": "; ".join(f"veto {f.veto_id}: {f.reason}" for f in failures),
+        }
     return result

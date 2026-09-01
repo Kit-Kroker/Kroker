@@ -2,6 +2,7 @@
 (blocks | impedes | smell) answers a different question than
 critical/high/medium/low, which is why the record does not reuse
 TriageFinding's scale."""
+
 from __future__ import annotations
 
 from sdlc.assessment.scan.models import testability_identity
@@ -18,16 +19,12 @@ BLOBS = {
         "def next_run():\n"
         "    now = datetime.datetime.now()\n"
         "    jitter = random.random()\n"
-        "    return now, jitter\n"),
-    "src/client.py": (
-        "import requests\n"
-        "\n"
-        "def fetch(url):\n"
-        "    return requests.get(url).json()\n"),
+        "    return now, jitter\n"
+    ),
+    "src/client.py": ("import requests\n\ndef fetch(url):\n    return requests.get(url).json()\n"),
     "tests/test_scheduler.py": (
-        "import datetime\n"
-        "def test_next_run():\n"
-        "    assert datetime.datetime.now()\n"),
+        "import datetime\ndef test_next_run():\n    assert datetime.datetime.now()\n"
+    ),
 }
 
 
@@ -46,22 +43,18 @@ def test_test_files_are_not_scanned():
 def test_one_finding_per_path_and_pattern_with_the_count_in_the_detail():
     """P3-D10: a per-line finding turns a common habit into thousands of rows
     and makes every key move when a line moves."""
-    blobs = {"src/a.py": "import datetime\n" + (
-        "x = datetime.datetime.now()\n" * 5)}
+    blobs = {"src/a.py": "import datetime\n" + ("x = datetime.datetime.now()\n" * 5)}
     out = testability.evaluate(blobs)
     clock = [f for f in out.testability if f.pattern == "static-clock-access"]
     assert len(clock) == 1
     assert "5" in clock[0].detail
-    assert clock[0].line == 2          # the FIRST occurrence
+    assert clock[0].line == 2  # the FIRST occurrence
 
 
 def test_identity_is_stable_when_a_line_moves():
-    a = testability.evaluate({"src/a.py":
-                              "import datetime\nx = datetime.datetime.now()\n"})
-    b = testability.evaluate({"src/a.py":
-                              "import datetime\n\n\nx = datetime.datetime.now()\n"})
-    assert testability_identity(a.testability[0]) == \
-        testability_identity(b.testability[0])
+    a = testability.evaluate({"src/a.py": "import datetime\nx = datetime.datetime.now()\n"})
+    b = testability.evaluate({"src/a.py": "import datetime\n\n\nx = datetime.datetime.now()\n"})
+    assert testability_identity(a.testability[0]) == testability_identity(b.testability[0])
 
 
 def test_every_finding_carries_a_seam_and_a_verbatim_quote():
@@ -86,8 +79,8 @@ def test_a_skipped_source_blob_is_a_gap_not_a_clean_tree():
     means the tree was NOT fully scanned, so zero would assert an incomplete
     scan as a clean result -- the FR-915 conflation (spec section 6)."""
     out = testability.evaluate(
-        {"src/a.py": "def add(a, b):\n    return a + b\n"},
-        skipped=["src/huge.py"])
+        {"src/a.py": "def add(a, b):\n    return a + b\n"}, skipped=["src/huge.py"]
+    )
     assert out.row.collected.state is CollectionState.NOT_COLLECTED
     assert "huge.py" in out.row.collected.reason
     assert out.testability == []

@@ -7,6 +7,7 @@ only ever confirm the client agreed with itself. Here the schema is the
 authority: an undefined path, an undefined method, a malformed request body,
 or a canned response that does not match the documented response shape all
 fail."""
+
 from __future__ import annotations
 
 import json
@@ -28,8 +29,7 @@ _DOC: dict[str, Any] = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
 
 def _regex(template: str) -> re.Pattern:
     parts = re.split(r"(\{[^}]+\})", template)
-    body = "".join(r"[^/]+" if p.startswith("{") else re.escape(p)
-                   for p in parts)
+    body = "".join(r"[^/]+" if p.startswith("{") else re.escape(p) for p in parts)
     return re.compile("^" + body + "$")
 
 
@@ -39,8 +39,7 @@ def _match_path(path: str) -> str:
     /memories/{id}."""
     candidates = [t for t in _DOC["paths"] if _regex(t).match(path)]
     if not candidates:
-        raise ContractViolation(
-            f"{path} is no path in the Hindsight OpenAPI schema")
+        raise ContractViolation(f"{path} is no path in the Hindsight OpenAPI schema")
     return min(candidates, key=lambda t: t.count("{"))
 
 
@@ -73,8 +72,7 @@ def _deref(node: Any, _seen: frozenset[str] = frozenset()) -> Any:
             if len(node) == 1:
                 return base
             merged = dict(base)
-            merged.update({k: _deref(v, _seen | {ref})
-                           for k, v in node.items() if k != "$ref"})
+            merged.update({k: _deref(v, _seen | {ref}) for k, v in node.items() if k != "$ref"})
             return merged
         return {k: _deref(v, _seen) for k, v in node.items()}
     if isinstance(node, list):
@@ -85,14 +83,16 @@ def _deref(node: Any, _seen: frozenset[str] = frozenset()) -> Any:
 def _validate(schema: Any, instance: Any, label: str) -> None:
     if schema is None:
         return
-    errors = sorted(Draft202012Validator(_deref(schema))
-                    .iter_errors(instance), key=lambda e: e.path)
+    errors = sorted(
+        Draft202012Validator(_deref(schema)).iter_errors(instance), key=lambda e: e.path
+    )
     if errors:
         first = errors[0]
         raise ContractViolation(
             f"{label} violates the Hindsight schema at "
             f"{'/'.join(str(p) for p in first.path) or '<root>'}: "
-            f"{first.message}")
+            f"{first.message}"
+        )
 
 
 class ContractTransport(httpx.MockTransport):
@@ -116,35 +116,43 @@ class ContractTransport(httpx.MockTransport):
         if operation is None:
             raise ContractViolation(
                 f"{request.method} is not served on {template}; "
-                f"schema allows {sorted(_DOC['paths'][template])}")
+                f"schema allows {sorted(_DOC['paths'][template])}"
+            )
 
         if request.content:
             try:
                 body = json.loads(request.content)
             except json.JSONDecodeError as exc:
-                raise ContractViolation(
-                    f"request body to {template} is not JSON: {exc}") from exc
-            _validate(_json_schema(operation.get("requestBody")), body,
-                      f"request body to {request.method} {template}")
+                raise ContractViolation(f"request body to {template} is not JSON: {exc}") from exc
+            _validate(
+                _json_schema(operation.get("requestBody")),
+                body,
+                f"request body to {request.method} {template}",
+            )
 
         # Response lookup: keys use hindsight_api's templates ({tenant}/{bank}),
         # but the schema serves literal `default`/{bank_id}, so equality on the
         # resolved schema template misses. Match the concrete path against the
         # response keys' templates structurally — the same regex _match_path
         # uses, applied to the response map instead of the schema's paths.
-        matches = [(m, t) for (m, t) in self._responses
-                   if m == request.method.upper()
-                   and _regex(t).match(request.url.path)]
+        matches = [
+            (m, t)
+            for (m, t) in self._responses
+            if m == request.method.upper() and _regex(t).match(request.url.path)
+        ]
         if not matches:
             raise ContractViolation(
                 f"test supplied no canned response for "
                 f"{request.method} {request.url.path}; "
-                f"available: {sorted(self._responses)}")
+                f"available: {sorted(self._responses)}"
+            )
         _, resp_template = min(matches, key=lambda mt: mt[1].count("{"))
         payload = self._responses[(request.method.upper(), resp_template)]
 
-        ok = (operation.get("responses", {}).get("200")
-              or operation.get("responses", {}).get("201") or {})
-        _validate(_json_schema(ok), payload,
-                  f"canned response for {request.method} {template}")
+        ok = (
+            operation.get("responses", {}).get("200")
+            or operation.get("responses", {}).get("201")
+            or {}
+        )
+        _validate(_json_schema(ok), payload, f"canned response for {request.method} {template}")
         return httpx.Response(200, json=payload)

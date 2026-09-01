@@ -2,6 +2,7 @@
 """RD7: the risk proposer is an OPTIONAL, KNOWN role, exactly as discover
 is -- an assessment-only agent must not fail boot on a feature-only
 deployment."""
+
 from sdlc.agents import loader, roles
 
 
@@ -35,5 +36,11 @@ def test_the_proposer_can_only_return_dispositions():
     proposer that could return a CapabilityRisk would author the number
     FR-917 gates on."""
     from sdlc.assessment.risk.models import RiskProposal
+
     assert set(RiskProposal.model_fields) == {
-        "threats", "vulnerabilities", "controls", "boundaries", "escalations"}
+        "threats",
+        "vulnerabilities",
+        "controls",
+        "boundaries",
+        "escalations",
+    }

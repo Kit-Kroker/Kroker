@@ -1,9 +1,13 @@
 """Pure trace -> RunSummary aggregation (E-32). No I/O, no temporalio: unit-
 testable outside the workflow, called once from the retro stage."""
+
 from __future__ import annotations
 
 from ..models import (
-    ClarificationOutcome, GateOutcomeSummary, RoleUsage, RunSummary,
+    ClarificationOutcome,
+    GateOutcomeSummary,
+    RoleUsage,
+    RunSummary,
     StageOutcome,
 )
 from .trace import RunEvent, RunEventKind
@@ -49,25 +53,30 @@ def _role_rollup(trace: list[RunEvent]) -> list[RoleUsage]:
         bag = bags.setdefault(role, RoleUsage(role=role, model=model))
         cost = d.get("cost_usd")
         merge_usage(
-            bag, model=model,
+            bag,
+            model=model,
             input_tokens=int(d.get("input_tokens", "0")),
             output_tokens=int(d.get("output_tokens", "0")),
             cache_read_tokens=int(d.get("cache_read_tokens", "0")),
             cache_write_tokens=int(d.get("cache_write_tokens", "0")),
-            cost_usd=float(cost) if cost is not None else None)
+            cost_usd=float(cost) if cost is not None else None,
+        )
     return list(bags.values())
 
 
 def build_run_summary(
-    *, run_id: str, mode: str, outcome: str,
+    *,
+    run_id: str,
+    mode: str,
+    outcome: str,
     trace: list[RunEvent],
-    memory_enabled: bool, memory_watermark: str | None,
+    memory_enabled: bool,
+    memory_watermark: str | None,
     budget_usd: float | None = None,
     title: str = "",
     repo_url: str | None = None,
 ) -> RunSummary:
-    stages = [_stage_outcome(e) for e in trace
-              if e.kind is RunEventKind.STAGE_ENDED]
+    stages = [_stage_outcome(e) for e in trace if e.kind is RunEventKind.STAGE_ENDED]
 
     # Dedup gates by (gate, round), last-wins: the merge stage emits a bare
     # GATE_DECIDED from _gate and then an enriched one carrying overrides;
@@ -79,8 +88,11 @@ def build_run_summary(
             gate_by_key[(g.gate, g.round)] = g
     gates = list(gate_by_key.values())
 
-    answered = {e.data.get("question_id"): e.data.get("answered_by", "unanswered")
-                for e in trace if e.kind is RunEventKind.CLARIFICATION_ANSWERED}
+    answered = {
+        e.data.get("question_id"): e.data.get("answered_by", "unanswered")
+        for e in trace
+        if e.kind is RunEventKind.CLARIFICATION_ANSWERED
+    }
     clarifications = [
         ClarificationOutcome(
             question_id=e.data.get("question_id", "?"),
@@ -90,31 +102,41 @@ def build_run_summary(
             # mean "no dimension", and "" is not a valid enum member.
             dimension=e.data.get("dimension") or None,
         )
-        for e in trace if e.kind is RunEventKind.CLARIFICATION_ASKED
+        for e in trace
+        if e.kind is RunEventKind.CLARIFICATION_ASKED
     ]
 
-    terminal = next((e.stage for e in reversed(trace)
-                     if e.kind is RunEventKind.STAGE_ENDED and e.stage),
-                    "intake")
+    terminal = next(
+        (e.stage for e in reversed(trace) if e.kind is RunEventKind.STAGE_ENDED and e.stage),
+        "intake",
+    )
     roles = _role_rollup(trace)
     role_costs = [u.cost_usd for u in roles if u.cost_usd is not None]
     budget_crossings = sum(
-        1 for e in trace
-        if e.kind is RunEventKind.GATE_DECIDED
-        and e.data.get("gate") == "budget")
+        1 for e in trace if e.kind is RunEventKind.GATE_DECIDED and e.data.get("gate") == "budget"
+    )
     started = trace[0].at
     ended = trace[-1].at
     retains = sum(1 for e in trace if e.kind is RunEventKind.MEMORY_RETAINED)
 
     return RunSummary(
-        run_id=run_id, mode=mode, outcome=outcome, terminal_stage=terminal,
-        title=title, repo_url=repo_url,
-        started_at=started, ended_at=ended,
+        run_id=run_id,
+        mode=mode,
+        outcome=outcome,
+        terminal_stage=terminal,
+        title=title,
+        repo_url=repo_url,
+        started_at=started,
+        ended_at=ended,
         duration_s=(ended - started).total_seconds(),
-        stages=stages, clarifications=clarifications, gates=gates,
+        stages=stages,
+        clarifications=clarifications,
+        gates=gates,
         roles=roles,
         cost_usd_total=(sum(role_costs) if role_costs else None),
-        budget_usd=budget_usd, budget_crossings=budget_crossings,
-        memory_enabled=memory_enabled, memory_watermark=memory_watermark,
+        budget_usd=budget_usd,
+        budget_crossings=budget_crossings,
+        memory_enabled=memory_enabled,
+        memory_watermark=memory_watermark,
         memory_retains=retains,
     )

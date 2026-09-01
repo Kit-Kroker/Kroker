@@ -1,6 +1,7 @@
 """D14: the degrade-alone rule has one home. Two copies of it in two
 workflows agree only by coincidence -- the reason E-42 D2 extracted
 GateHost."""
+
 from __future__ import annotations
 
 import asyncio
@@ -38,8 +39,7 @@ def test_fallback_is_called_with_no_arguments_on_failure(monkeypatch):
         calls.append("fallback")
         return "degraded"
 
-    got = asyncio.run(
-        fanout.run_or_degrade("act", "arg", {}, fallback=fallback))
+    got = asyncio.run(fanout.run_or_degrade("act", "arg", {}, fallback=fallback))
     assert got == "degraded"
     assert calls == ["fallback"]
 
@@ -50,6 +50,6 @@ def test_success_returns_the_activity_result(monkeypatch):
 
     monkeypatch.setattr(fanout.workflow, "execute_activity", ok)
     got = asyncio.run(
-        fanout.run_or_degrade("act", "arg", {},
-                              fallback=lambda: pytest.fail("not reached")))
+        fanout.run_or_degrade("act", "arg", {}, fallback=lambda: pytest.fail("not reached"))
+    )
     assert got == "ran:arg"

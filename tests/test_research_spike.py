@@ -23,6 +23,7 @@ bodies are verbatim):
      definition raised ValueError at decoration time. The test body and
      its no-raise assertion are unchanged.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -30,7 +31,7 @@ import uuid
 
 import pytest
 from pydantic import BaseModel
-from pydantic_ai import Agent, ModelRetry, RunContext
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.durable_exec.temporal import PydanticAIPlugin, TemporalAgent
 from pydantic_ai.models.test import TestModel
 from temporalio import workflow
@@ -85,25 +86,36 @@ class _SpikeWorkflow:
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(strict=True, reason="Task 1 finding A: TemporalAgent silently drops @agent.output_validator (runs in no context). Recorded decision-gate output; see FINDING block. A future pydantic-ai release that fixes this will turn this xfail green (strict=True flags that).")
+@pytest.mark.xfail(
+    strict=True,
+    reason="Task 1 finding A: TemporalAgent silently drops "
+    "@agent.output_validator (runs in no context). Recorded "
+    "decision-gate output; see FINDING block. A future pydantic-ai "
+    "release that fixes this will turn this xfail green "
+    "(strict=True flags that).",
+)
 async def test_output_validator_survives_temporalization_and_runs_activity_side():
     _VALIDATOR_RAN_IN.clear()
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         async with Worker(
-                env.client, task_queue="spike-ov",
-                workflows=[_SpikeWorkflow],
-                activities=list(t_spike.temporal_activities),
-                plugins=[PydanticAIPlugin()]):
+            env.client,
+            task_queue="spike-ov",
+            workflows=[_SpikeWorkflow],
+            activities=list(t_spike.temporal_activities),
+            plugins=[PydanticAIPlugin()],
+        ):
             out = await env.client.execute_workflow(
-                _SpikeWorkflow.run, id=f"spike-ov-{uuid.uuid4()}",
-                task_queue="spike-ov")
+                _SpikeWorkflow.run, id=f"spike-ov-{uuid.uuid4()}", task_queue="spike-ov"
+            )
     assert out == "hello"
     # THE finding: the validator ran, and it ran activity-side.
     assert _VALIDATOR_RAN_IN, "output_validator did not run at all"
     assert _VALIDATOR_RAN_IN[-1] == "activity", (
         f"output_validator ran in {_VALIDATOR_RAN_IN[-1]} context — "
-        "verification must move to a post-run activity (see FINDING)")
+        "verification must move to a post-run activity (see FINDING)"
+    )
 
 
 # --- Test B setup (module-level — Temporal forbids local workflow classes).
@@ -132,7 +144,15 @@ class _CodeModeWorkflow:
 
 
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="Task 1 finding B: CodeMode's run_code cannot be exercised via TestModel under TemporalAgent — Monty rejects TestModel's dummy code, Temporal retries the failing activity forever with no bound. The body's asyncio.wait_for(timeout=60) used to convert that hang into a deterministic TimeoutError but every run paid 60s for it. See FINDING B below; this stays skip until a real-LLM integration test proves the path.")
+@pytest.mark.skip(
+    reason="Task 1 finding B: CodeMode's run_code cannot be exercised via "
+    "TestModel under TemporalAgent — Monty rejects TestModel's dummy "
+    "code, Temporal retries the failing activity forever with no "
+    "bound. The body's asyncio.wait_for(timeout=60) used to convert "
+    "that hang into a deterministic TimeoutError but every run paid "
+    "60s for it. See FINDING B below; this stays skip until a "
+    "real-LLM integration test proves the path."
+)
 async def test_codemode_run_code_executes_through_temporal_agent():
     # NOTE: asyncio.wait_for bounds an observed INDEFINITE HANG. With plain
     # TestModel(call_tools=['run_code']), CodeMode's Monty type-checker
@@ -141,17 +161,21 @@ async def test_codemode_run_code_executes_through_temporal_agent():
     # converts that hang into a deterministic asyncio.TimeoutError so the
     # suite can complete. See FINDING B.
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         async with Worker(
-                env.client, task_queue="spike-cm",
-                workflows=[_CodeModeWorkflow],
-                activities=list(t_cm.temporal_activities),
-                plugins=[PydanticAIPlugin()]):
+            env.client,
+            task_queue="spike-cm",
+            workflows=[_CodeModeWorkflow],
+            activities=list(t_cm.temporal_activities),
+            plugins=[PydanticAIPlugin()],
+        ):
             await asyncio.wait_for(
                 env.client.execute_workflow(
-                    _CodeModeWorkflow.run, id=f"spike-cm-{uuid.uuid4()}",
-                    task_queue="spike-cm"),
-                timeout=60.0)
+                    _CodeModeWorkflow.run, id=f"spike-cm-{uuid.uuid4()}", task_queue="spike-cm"
+                ),
+                timeout=60.0,
+            )
     # Reaching here without an exception proves run_code executed through the
     # temporalized agent. (TestModel's tool-call shape may vary; assert only
     # that dispatch did not raise.)

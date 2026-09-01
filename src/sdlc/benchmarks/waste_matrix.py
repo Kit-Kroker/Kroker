@@ -9,6 +9,7 @@ WasteBag, so a case with no tasks.yaml still gets a grid. A record with
 waste=None contributes NOTHING: it was not measured, and a zero cell
 would claim it was.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -25,8 +26,12 @@ from .tasks import TaskSuite
 # boolean; all four ride on the record and land in the JSON, but none gets
 # a grid.
 WASTE_METRICS: list[str] = [
-    "tool_calls", "file_rereads", "rewrite_churn",
-    "failed_commands", "denials", "escalations",
+    "tool_calls",
+    "file_rereads",
+    "rewrite_churn",
+    "failed_commands",
+    "denials",
+    "escalations",
 ]
 
 
@@ -34,7 +39,7 @@ class WasteCell(BaseModel):
     task_id: str
     arm_key: str
     metric: str
-    value: float          # mean over runs of the per-run summed metric
+    value: float  # mean over runs of the per-run summed metric
     n_runs: int
 
 
@@ -47,10 +52,10 @@ class WasteMatrix(BaseModel):
     max_by_metric: dict[str, float] = Field(default_factory=dict)
 
 
-def build_waste_matrix(case_id: str, records: list[BenchmarkRecord],
-                       suite: TaskSuite | None = None) -> WasteMatrix:
-    recs = [r for r in records
-            if r.case_id == case_id and r.task_id and r.waste is not None]
+def build_waste_matrix(
+    case_id: str, records: list[BenchmarkRecord], suite: TaskSuite | None = None
+) -> WasteMatrix:
+    recs = [r for r in records if r.case_id == case_id and r.task_id and r.waste is not None]
     if not recs:
         return WasteMatrix(case_id=case_id, metrics=list(WASTE_METRICS))
 
@@ -58,10 +63,10 @@ def build_waste_matrix(case_id: str, records: list[BenchmarkRecord],
     per_run: dict[tuple[str, str, str, str], float] = defaultdict(float)
     runs: dict[tuple[str, str, str], set[str]] = defaultdict(set)
     for r in recs:
+        assert r.task_id is not None
         arm = f"{r.harness.value if r.harness else ''}#{r.model}"
         for metric in WASTE_METRICS:
-            per_run[(r.bench_run_id, r.task_id, arm, metric)] += float(
-                getattr(r.waste, metric))
+            per_run[(r.bench_run_id, r.task_id, arm, metric)] += float(getattr(r.waste, metric))
         runs[(r.task_id, arm, "")].add(r.bench_run_id)
 
     totals: dict[tuple[str, str, str], float] = defaultdict(float)
@@ -71,8 +76,9 @@ def build_waste_matrix(case_id: str, records: list[BenchmarkRecord],
     cells: list[WasteCell] = []
     for (task_id, arm, metric), total in totals.items():
         n = len(runs[(task_id, arm, "")]) or 1
-        cells.append(WasteCell(task_id=task_id, arm_key=arm, metric=metric,
-                               value=total / n, n_runs=n))
+        cells.append(
+            WasteCell(task_id=task_id, arm_key=arm, metric=metric, value=total / n, n_runs=n)
+        )
 
     observed = {c.task_id for c in cells}
     if suite is not None:
@@ -82,12 +88,16 @@ def build_waste_matrix(case_id: str, records: list[BenchmarkRecord],
         task_ids = sorted(observed)
 
     max_by_metric = {
-        m: max((c.value for c in cells if c.metric == m), default=0.0)
-        for m in WASTE_METRICS}
+        m: max((c.value for c in cells if c.metric == m), default=0.0) for m in WASTE_METRICS
+    }
     return WasteMatrix(
-        case_id=case_id, metrics=list(WASTE_METRICS), task_ids=task_ids,
-        arms=sorted({c.arm_key for c in cells}), cells=cells,
-        max_by_metric=max_by_metric)
+        case_id=case_id,
+        metrics=list(WASTE_METRICS),
+        task_ids=task_ids,
+        arms=sorted({c.arm_key for c in cells}),
+        cells=cells,
+        max_by_metric=max_by_metric,
+    )
 
 
 def render_waste_matrix_json(wm: WasteMatrix) -> str:
@@ -96,7 +106,7 @@ def render_waste_matrix_json(wm: WasteMatrix) -> str:
 
 def _cell_color(value: float, max_value: float) -> str:
     ratio = 0.0 if max_value <= 0 else min(value / max_value, 1.0)
-    g_b = round(255 - 229 * ratio)   # white (low) -> dark red (high)
+    g_b = round(255 - 229 * ratio)  # white (low) -> dark red (high)
     return f"rgb(255,{g_b},{g_b})"
 
 
@@ -113,16 +123,17 @@ def _grid(wm: WasteMatrix, metric: str) -> str:
                 # not measured on this arm -- blank, never 0
                 tds.append('<td class="empty"></td>')
                 continue
-            tip = (f"{task_id} / {arm}: {c.value:.1f} {metric} per run "
-                   f"over {c.n_runs} runs")
+            tip = f"{task_id} / {arm}: {c.value:.1f} {metric} per run over {c.n_runs} runs"
             tds.append(
                 f'<td title="{escape(tip)}" '
                 f'style="background:{_cell_color(c.value, mx)}">'
-                f"{c.value:.1f}</td>")
+                f"{c.value:.1f}</td>"
+            )
         rows.append("<tr>" + "".join(tds) + "</tr>")
-    return (f"<h2>{escape(metric)}</h2>"
-            f"<table><tr><th>task \\ arm</th>{head}</tr>"
-            + "".join(rows) + "</table>")
+    return (
+        f"<h2>{escape(metric)}</h2>"
+        f"<table><tr><th>task \\ arm</th>{head}</tr>" + "".join(rows) + "</table>"
+    )
 
 
 def render_waste_matrix_html(wm: WasteMatrix) -> str:

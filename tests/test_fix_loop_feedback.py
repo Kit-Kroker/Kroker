@@ -6,6 +6,7 @@ the dash, and spent its remaining attempts re-confirming the stack directive
 (see bench-todo-api-greenfield-1785444047: 8 of 12 attempts burned this way,
 while the deterministic ModuleNotFoundError that actually failed the gate was
 never shown to it)."""
+
 from sdlc.models import QAReport, ReviewFinding, ReviewReport
 from sdlc.workflows.feature import _fix_loop_issues
 
@@ -23,15 +24,15 @@ def test_llm_qa_issues_are_forwarded():
 def test_deterministic_test_output_is_forwarded_when_llm_qa_is_silent():
     """The gate anchors on qa_raw; the prompt must carry the same evidence."""
     qa = QAReport(tests_passed=True, issues=[])
-    qa_raw = QAReport(tests_passed=False,
-                      issues=["E   ModuleNotFoundError: No module named 'fastapi'"])
+    qa_raw = QAReport(
+        tests_passed=False, issues=["E   ModuleNotFoundError: No module named 'fastapi'"]
+    )
     issues = _fix_loop_issues(qa, qa_raw, None)
     assert "ModuleNotFoundError" in issues
 
 
 def test_deterministic_failing_tests_are_forwarded_without_issue_text():
-    qa_raw = QAReport(tests_passed=False,
-                      failing_tests=["tests/test_app.py::test_delete"])
+    qa_raw = QAReport(tests_passed=False, failing_tests=["tests/test_app.py::test_delete"])
     issues = _fix_loop_issues(QAReport(tests_passed=True), qa_raw, None)
     assert "tests/test_app.py::test_delete" in issues
 
@@ -45,10 +46,8 @@ def test_both_judges_are_combined_not_shadowed():
 
 
 def test_review_blocking_findings_still_included():
-    review = _review(ReviewFinding(severity="high", assertion="a1",
-                                   detail="unchecked index"))
-    issues = _fix_loop_issues(QAReport(tests_passed=True),
-                              QAReport(tests_passed=True), review)
+    review = _review(ReviewFinding(severity="high", assertion="a1", detail="unchecked index"))
+    issues = _fix_loop_issues(QAReport(tests_passed=True), QAReport(tests_passed=True), review)
     assert "unchecked index" in issues
 
 
@@ -62,8 +61,7 @@ def test_green_deterministic_run_contributes_nothing():
 def test_no_actionable_feedback_yields_empty_string():
     """Neither judge has anything to say, yet the task was marked failed —
     a harness bug, not a task to re-attempt. Callers branch on this."""
-    issues = _fix_loop_issues(QAReport(tests_passed=True),
-                              QAReport(tests_passed=False), None)
+    issues = _fix_loop_issues(QAReport(tests_passed=True), QAReport(tests_passed=False), None)
     assert issues == ""
 
 

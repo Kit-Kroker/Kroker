@@ -1,10 +1,13 @@
 """run_integration_checks: the end-to-end coverage seam (E-30, FR-106/FR-108).
 
 Proves the artifact now crosses into the worktree measure_coverage reads."""
+
 import pytest
 
 from sdlc.activities import (
-    CoverageInput, IntegrationChecksInput, measure_coverage,
+    CoverageInput,
+    IntegrationChecksInput,
+    measure_coverage,
     run_integration_checks,
 )
 from sdlc.measurement import CollectionState
@@ -30,8 +33,7 @@ MODULE_WITH_DEP = (
     "def uncovered():\n    return 2\n"
 )
 TESTFILE_WITH_DEP = (
-    "from mod import covered\n\n\n"
-    "def test_covered():\n    assert covered() == [1, 2, 3]\n"
+    "from mod import covered\n\n\ndef test_covered():\n    assert covered() == [1, 2, 3]\n"
 )
 
 
@@ -42,16 +44,16 @@ async def test_integration_checks_produces_real_coverage(tmp_path):
     (tmp_path / "mod.py").write_text(MODULE, encoding="utf-8")
     (tmp_path / "test_mod.py").write_text(TESTFILE, encoding="utf-8")
 
-    checks = await run_integration_checks(IntegrationChecksInput(
-        worktree=str(tmp_path), changed_files=["mod.py"]))
+    checks = await run_integration_checks(
+        IntegrationChecksInput(worktree=str(tmp_path), changed_files=["mod.py"])
+    )
 
     assert checks.toolchain == "python"
     assert checks.qa.tests_passed is True
     assert (tmp_path / "coverage.xml").is_file(), "coverage.xml must be emitted"
 
     # The gate reader now finds the artifact and measures a diff-scoped %.
-    cov = await measure_coverage(CoverageInput(
-        worktree=str(tmp_path), changed_files=["mod.py"]))
+    cov = await measure_coverage(CoverageInput(worktree=str(tmp_path), changed_files=["mod.py"]))
     assert cov.coverage.state is CollectionState.MEASURED
     assert 0.0 < cov.coverage.value < 100.0  # covered + uncovered => partial
 
@@ -69,8 +71,9 @@ async def test_integration_checks_installs_the_produced_projects_own_deps(tmp_pa
     (tmp_path / "mod.py").write_text(MODULE_WITH_DEP, encoding="utf-8")
     (tmp_path / "test_mod.py").write_text(TESTFILE_WITH_DEP, encoding="utf-8")
 
-    checks = await run_integration_checks(IntegrationChecksInput(
-        worktree=str(tmp_path), changed_files=["mod.py"]))
+    checks = await run_integration_checks(
+        IntegrationChecksInput(worktree=str(tmp_path), changed_files=["mod.py"])
+    )
 
     assert checks.toolchain == "python"
     assert checks.qa.tests_passed is True, checks.qa.issues
@@ -80,8 +83,9 @@ async def test_integration_checks_installs_the_produced_projects_own_deps(tmp_pa
 @pytest.mark.asyncio
 async def test_integration_checks_degrades_without_adapter(tmp_path):
     # No marker file -> no adapter -> caller falls back to the pre-E-30 path.
-    checks = await run_integration_checks(IntegrationChecksInput(
-        worktree=str(tmp_path), changed_files=[]))
+    checks = await run_integration_checks(
+        IntegrationChecksInput(worktree=str(tmp_path), changed_files=[])
+    )
     assert checks.toolchain is None
-    assert checks.lint_clean is True          # not linted => never blocking
-    assert checks.qa.tests_passed is False    # signals "no integration run here"
+    assert checks.lint_clean is True  # not linted => never blocking
+    assert checks.qa.tests_passed is False  # signals "no integration run here"

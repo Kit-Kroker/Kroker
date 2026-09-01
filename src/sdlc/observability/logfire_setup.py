@@ -5,6 +5,7 @@ is a no-op (nullcontext), and logfire is never imported. Span attributes
 must be metadata only — counts, durations, sizes, ids. NEVER transcript
 payloads: the scrub-before-store invariant applies to telemetry too.
 """
+
 from __future__ import annotations
 
 import os
@@ -35,4 +36,3 @@ def span(name: str, **attrs):
     except ImportError:
         return nullcontext()
     return logfire.span(name, **attrs)
-

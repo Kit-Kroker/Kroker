@@ -1,8 +1,8 @@
 """grade_oracle end-to-end: a hidden suite grades produced code through the
 adapter (E-31). This is the proof the increment exists to deliver."""
+
 import subprocess
 import textwrap
-from pathlib import Path
 
 import pytest
 
@@ -11,15 +11,15 @@ from sdlc.benchmarks.oracle import OracleInput, grade_oracle
 # A pure-stdlib ASGI app: importable with zero extra deps, drivable by
 # httpx.ASGITransport. Returns 200 for any GET -- enough for a 1-pass/1-fail
 # oracle.
-FIXTURE_APP = textwrap.dedent('''
+FIXTURE_APP = textwrap.dedent("""
     async def app(scope, receive, send):
         assert scope["type"] == "http"
         await send({"type": "http.response.start", "status": 200,
                     "headers": [(b"content-type", b"text/plain")]})
         await send({"type": "http.response.body", "body": b"ok"})
-''')
+""")
 
-ORACLE_CONFTEST = textwrap.dedent('''
+ORACLE_CONFTEST = textwrap.dedent("""
     import os, sys
     import httpx, pytest_asyncio
     ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -33,9 +33,9 @@ ORACLE_CONFTEST = textwrap.dedent('''
         async with httpx.AsyncClient(transport=transport,
                                      base_url="http://testserver") as c:
             yield c
-''')
+""")
 
-ORACLE_TEST = textwrap.dedent('''
+ORACLE_TEST = textwrap.dedent("""
     import pytest
 
     @pytest.mark.asyncio
@@ -47,12 +47,13 @@ ORACLE_TEST = textwrap.dedent('''
     async def test_fail(client):
         r = await client.get("/")
         assert r.status_code == 404   # deliberately wrong -> one failure
-''')
+""")
 
 
 def _git(args, cwd):
-    subprocess.run(["git", "-c", "safe.directory=*", *args], cwd=cwd,
-                   check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-c", "safe.directory=*", *args], cwd=cwd, check=True, capture_output=True
+    )
 
 
 @pytest.mark.asyncio
@@ -85,12 +86,19 @@ async def test_grade_oracle_grades_produced_code(tmp_path):
     monkeypatch_env = {"SDLC_CASES_ROOT": str(cases)}
 
     import os
+
     old = os.environ.get("SDLC_CASES_ROOT")
     os.environ.update(monkeypatch_env)
     try:
-        grade = await grade_oracle(OracleInput(
-            case_id="case", repo_url=str(repo), run_id=run_id,
-            language="python", base_branch="main"))
+        grade = await grade_oracle(
+            OracleInput(
+                case_id="case",
+                repo_url=str(repo),
+                run_id=run_id,
+                language="python",
+                base_branch="main",
+            )
+        )
     finally:
         if old is None:
             os.environ.pop("SDLC_CASES_ROOT", None)
@@ -104,8 +112,9 @@ async def test_grade_oracle_grades_produced_code(tmp_path):
     assert grade.language_match is True
     assert grade.language_detected == "python"
     # throwaway worktree cleaned up: only the original repo worktree remains
-    wt = subprocess.run(["git", "worktree", "list"], cwd=repo,
-                        capture_output=True, text=True).stdout
+    wt = subprocess.run(
+        ["git", "worktree", "list"], cwd=repo, capture_output=True, text=True
+    ).stdout
     assert "oracle-" not in wt
 
 
@@ -125,11 +134,14 @@ async def test_grade_oracle_missing_branch_returns_none(tmp_path):
     (cases / "case" / "oracle" / "test_x.py").write_text("def test_x():\n    assert True\n")
 
     import os
+
     os.environ["SDLC_CASES_ROOT"] = str(cases)
     try:
-        grade = await grade_oracle(OracleInput(
-            case_id="case", repo_url=str(repo),
-            run_id="never/ran#h#m", language="python"))
+        grade = await grade_oracle(
+            OracleInput(
+                case_id="case", repo_url=str(repo), run_id="never/ran#h#m", language="python"
+            )
+        )
     finally:
         os.environ.pop("SDLC_CASES_ROOT", None)
     assert grade.score is None
@@ -141,11 +153,12 @@ async def test_grade_oracle_unknown_language_returns_none(tmp_path):
     cases = tmp_path / "cases"
     (cases / "case" / "oracle").mkdir(parents=True)
     import os
+
     os.environ["SDLC_CASES_ROOT"] = str(cases)
     try:
-        grade = await grade_oracle(OracleInput(
-            case_id="case", repo_url=str(tmp_path), run_id="r#h#m",
-            language="cobol"))
+        grade = await grade_oracle(
+            OracleInput(case_id="case", repo_url=str(tmp_path), run_id="r#h#m", language="cobol")
+        )
     finally:
         os.environ.pop("SDLC_CASES_ROOT", None)
     assert grade.score is None
@@ -183,19 +196,27 @@ async def test_grade_oracle_populates_oracle_mapped_task_grades(tmp_path):
         "tasks:\n"
         "  - id: t01\n"
         "    error_class: functional\n"
-        "    oracle_tests: [\"test_crud.py::test_ok\"]\n"
+        '    oracle_tests: ["test_crud.py::test_ok"]\n'
         "  - id: t02\n"
         "    error_class: functional\n"
-        "    oracle_tests: [\"test_crud.py::test_fail\"]\n",
-        encoding="utf-8")
+        '    oracle_tests: ["test_crud.py::test_fail"]\n',
+        encoding="utf-8",
+    )
 
     import os
+
     old = os.environ.get("SDLC_CASES_ROOT")
     os.environ["SDLC_CASES_ROOT"] = str(cases)
     try:
-        grade = await grade_oracle(OracleInput(
-            case_id="case", repo_url=str(repo), run_id=run_id,
-            language="python", base_branch="main"))
+        grade = await grade_oracle(
+            OracleInput(
+                case_id="case",
+                repo_url=str(repo),
+                run_id=run_id,
+                language="python",
+                base_branch="main",
+            )
+        )
     finally:
         if old is None:
             os.environ.pop("SDLC_CASES_ROOT", None)
@@ -232,23 +253,28 @@ async def test_grade_oracle_populates_rubric_mapped_task_grades(tmp_path, monkey
     (odir / "conftest.py").write_text(ORACLE_CONFTEST)
     (odir / "test_crud.py").write_text(ORACLE_TEST)
     (cases / "case" / "tasks.yaml").write_text(
-        "tasks:\n"
-        "  - id: t01\n"
-        "    error_class: security\n"
-        "    rubric: \"Uses a secure default.\"\n",
-        encoding="utf-8")
+        'tasks:\n  - id: t01\n    error_class: security\n    rubric: "Uses a secure default."\n',
+        encoding="utf-8",
+    )
 
     judge_mod._set_judge_fn(lambda inp: '{"score": 0.75, "components": {}}')
 
     import os
+
     old = os.environ.get("SDLC_CASES_ROOT")
     os.environ["SDLC_CASES_ROOT"] = str(cases)
     try:
-        grade = await grade_oracle(OracleInput(
-            case_id="case", repo_url=str(repo), run_id=run_id,
-            language="python", base_branch="main",
-            author_model="anthropic:claude-sonnet-4-6",
-            judge_model="openai/gpt-5.2"))
+        grade = await grade_oracle(
+            OracleInput(
+                case_id="case",
+                repo_url=str(repo),
+                run_id=run_id,
+                language="python",
+                base_branch="main",
+                author_model="anthropic:claude-sonnet-4-6",
+                judge_model="openai/gpt-5.2",
+            )
+        )
     finally:
         if old is None:
             os.environ.pop("SDLC_CASES_ROOT", None)
@@ -276,15 +302,17 @@ async def test_grade_oracle_no_tasks_yaml_gives_empty_task_grades(tmp_path):
 
     cases = tmp_path / "cases"
     (cases / "case" / "oracle").mkdir(parents=True)
-    (cases / "case" / "oracle" / "test_x.py").write_text(
-        "def test_x():\n    assert True\n")
+    (cases / "case" / "oracle" / "test_x.py").write_text("def test_x():\n    assert True\n")
 
     import os
+
     os.environ["SDLC_CASES_ROOT"] = str(cases)
     try:
-        grade = await grade_oracle(OracleInput(
-            case_id="case", repo_url=str(repo),
-            run_id="never/ran#h#m", language="python"))
+        grade = await grade_oracle(
+            OracleInput(
+                case_id="case", repo_url=str(repo), run_id="never/ran#h#m", language="python"
+            )
+        )
     finally:
         os.environ.pop("SDLC_CASES_ROOT", None)
     assert grade.task_grades == []
@@ -318,16 +346,24 @@ async def test_grade_oracle_malformed_tasks_yaml_never_fails_case_grade(tmp_path
     (odir / "test_crud.py").write_text(ORACLE_TEST)
     # malformed: unknown error_class
     (cases / "case" / "tasks.yaml").write_text(
-        "tasks:\n  - id: t01\n    error_class: bogus\n"
-        "    oracle_tests: [\"x::y\"]\n", encoding="utf-8")
+        'tasks:\n  - id: t01\n    error_class: bogus\n    oracle_tests: ["x::y"]\n',
+        encoding="utf-8",
+    )
 
     import os
+
     old = os.environ.get("SDLC_CASES_ROOT")
     os.environ["SDLC_CASES_ROOT"] = str(cases)
     try:
-        grade = await grade_oracle(OracleInput(
-            case_id="case", repo_url=str(repo), run_id=run_id,
-            language="python", base_branch="main"))
+        grade = await grade_oracle(
+            OracleInput(
+                case_id="case",
+                repo_url=str(repo),
+                run_id=run_id,
+                language="python",
+                base_branch="main",
+            )
+        )
     finally:
         if old is None:
             os.environ.pop("SDLC_CASES_ROOT", None)

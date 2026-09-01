@@ -1,19 +1,31 @@
 """E-15: the other two harnesses. Unequal capability, reported not hidden."""
+
 import json
-from pathlib import Path
 
 from sdlc.harness.adapters import CursorHarness, HarnessRequest, OpenCodeHarness
 from sdlc.harness.containment import Policy, Rule
 from sdlc.models import ContainmentLayer
 
-POLICY = Policy(version=1, rules=[
-    Rule(id="hook-only", layer=ContainmentLayer.HOOK,
-         tools=["Write"], predicate="path_outside_worktree",
-         reason="Writes are scoped to the task worktree."),
-    Rule(id="native-ok", layer=ContainmentLayer.NATIVE,
-         tools=["Bash"], predicate="command_matches",
-         patterns=["rm -rf *"], reason="Destructive recursive delete."),
-])
+POLICY = Policy(
+    version=1,
+    rules=[
+        Rule(
+            id="hook-only",
+            layer=ContainmentLayer.HOOK,
+            tools=["Write"],
+            predicate="path_outside_worktree",
+            reason="Writes are scoped to the task worktree.",
+        ),
+        Rule(
+            id="native-ok",
+            layer=ContainmentLayer.NATIVE,
+            tools=["Bash"],
+            predicate="command_matches",
+            patterns=["rm -rf *"],
+            reason="Destructive recursive delete.",
+        ),
+    ],
+)
 
 
 def test_opencode_declares_native_only():
@@ -42,14 +54,14 @@ def test_opencode_merges_into_an_existing_config_without_clobbering(tmp_path):
     the worktree's opencode.json, which may already hold the repo's own keys
     (plugin block, prior denies). Those must be preserved, not overwritten."""
     pre = tmp_path / "opencode.json"
-    pre.write_text(json.dumps({
-        "plugin": ["x"], "permission": {"bash": {"old": "ask"}}}),
-        encoding="utf-8")
+    pre.write_text(
+        json.dumps({"plugin": ["x"], "permission": {"bash": {"old": "ask"}}}), encoding="utf-8"
+    )
     req = HarnessRequest(prompt="p", cwd=str(tmp_path))
     OpenCodeHarness().apply_containment(POLICY, req)
     doc = json.loads(pre.read_text(encoding="utf-8"))
-    assert doc["plugin"] == ["x"]                          # preserved
-    assert doc["permission"]["bash"]["old"] == "ask"       # pre-existing kept
+    assert doc["plugin"] == ["x"]  # preserved
+    assert doc["permission"]["bash"]["old"] == "ask"  # pre-existing kept
     assert doc["permission"]["bash"]["rm -rf *"] == "deny"  # new deny added
 
 

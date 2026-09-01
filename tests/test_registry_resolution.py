@@ -7,10 +7,14 @@
 replacement: explicit arg -> $SDLC_AGENTS_DIR -> repo-root discovery -> a
 RegistryError that names all three.
 """
+
 import pytest
 
 from sdlc.agents.loader import (
-    AGENTS_DIR_ENV, LEGACY_AGENTS_ENV, RegistryError, _resolve_agents_dir,
+    AGENTS_DIR_ENV,
+    LEGACY_AGENTS_ENV,
+    RegistryError,
+    _resolve_agents_dir,
 )
 
 
@@ -32,14 +36,13 @@ def test_repo_root_discovered_by_marker_files(tmp_path, monkeypatch):
     nested = root / "src" / "deep"
     nested.mkdir(parents=True)
     monkeypatch.delenv(AGENTS_DIR_ENV, raising=False)
-    monkeypatch.chdir(nested)                      # discovery walks UP from cwd
+    monkeypatch.chdir(nested)  # discovery walks UP from cwd
     assert _resolve_agents_dir(None) == root / "agents"
 
 
-def test_unresolvable_raises_registry_error_naming_all_mechanisms(
-        tmp_path, monkeypatch):
+def test_unresolvable_raises_registry_error_naming_all_mechanisms(tmp_path, monkeypatch):
     monkeypatch.delenv(AGENTS_DIR_ENV, raising=False)
-    monkeypatch.chdir(tmp_path)                    # no markers anywhere above
+    monkeypatch.chdir(tmp_path)  # no markers anywhere above
     with pytest.raises(RegistryError) as exc:
         _resolve_agents_dir(None)
     msg = str(exc.value)

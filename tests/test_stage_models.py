@@ -4,6 +4,7 @@ Without this, changing one role's model in agents.yaml leaves content_key
 unmoved and that stage serves a cache entry computed by the PREVIOUS model.
 The hardcoded MODEL constant masked this by making every stage share a model.
 """
+
 from sdlc.agents import roles
 from sdlc.memoization.cache import content_key
 
@@ -15,10 +16,18 @@ def test_stage_models_and_prompt_shas_span_the_same_keyspace():
 
 
 def test_prompt_shas_cover_every_stage_including_qa_and_merge_verdict():
-    for stage in ("clarify", "architect", "plan", "devops", "review",
-                  "analyze", "qa", "merge_verdict"):
+    for stage in (
+        "clarify",
+        "architect",
+        "plan",
+        "devops",
+        "review",
+        "analyze",
+        "qa",
+        "merge_verdict",
+    ):
         assert stage in roles.PROMPT_SHAS
-        assert len(roles.PROMPT_SHAS[stage]) == 64      # sha256 hex digest
+        assert len(roles.PROMPT_SHAS[stage]) == 64  # sha256 hex digest
 
 
 def test_model_constant_is_gone():
@@ -41,6 +50,7 @@ def test_agents_bind_their_own_roles_model():
 def test_changing_one_roles_model_moves_only_that_stages_key():
     """The finding-2 regression test: per-role models MUST be per-stage memo
     inputs."""
+
     def key_for(stage: str, model: str) -> str:
         return content_key(stage, "{}", roles.PROMPT_SHAS[stage], model, "none")
 
@@ -56,6 +66,7 @@ def test_changing_one_roles_model_moves_only_that_stages_key():
 
 def test_research_is_a_stage_but_optional():
     from sdlc.agents import roles
+
     assert roles.STAGE_ROLES["research"] == "research"
     # Present in the shipped tree, so it resolves a model + prompt sha.
     assert "research" in roles.STAGE_MODELS

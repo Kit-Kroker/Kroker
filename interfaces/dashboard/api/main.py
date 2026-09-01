@@ -14,6 +14,7 @@ working. The dashboard mounts under /api.
 
 Bound to localhost, unauthenticated, by design (spec D4 / OQ-11).
 """
+
 import logging
 import os
 
@@ -40,8 +41,8 @@ async def _connect() -> Client:
     # pydantic_data_converter is non-negotiable: without it RunState and
     # PendingDecision do not round-trip (cli.py:317).
     return await Client.connect(
-        os.environ.get("TEMPORAL_HOST", "localhost:7233"),
-        data_converter=pydantic_data_converter)
+        os.environ.get("TEMPORAL_HOST", "localhost:7233"), data_converter=pydantic_data_converter
+    )
 
 
 poller = FleetPoller(_connect)
@@ -50,8 +51,8 @@ poller = FleetPoller(_connect)
 async def _start(idea: IdeaBrief, cfg: PipelineConfig, wf_id: str) -> str:
     client = await poller._client_or_connect()
     handle = await client.start_workflow(
-        FeatureWorkflow.run, args=[idea, cfg, None],
-        id=wf_id, task_queue=TASK_QUEUE)
+        FeatureWorkflow.run, args=[idea, cfg, None], id=wf_id, task_queue=TASK_QUEUE
+    )
     return handle.id
 
 
@@ -78,13 +79,14 @@ def mount_chat(target, fleet_poller) -> bool:
         # connection here would be pinned to the import thread by sqlite's
         # check_same_thread, and would never be closed -- board/api.py:65
         # opens one per request for exactly these reasons.
-        deps = OperatorDeps(poller=fleet_poller, board=BoardStore,
-                            starter=_start, actor="chat:local")
+        deps = OperatorDeps(
+            poller=fleet_poller, board=BoardStore, starter=_start, actor="chat:local"
+        )
         target.mount("/chat", build_chat_app(deps))
     except ChatConfigError as e:
         log.warning("chat surface not mounted: %s", e)
         return False
-    except Exception as e:      # noqa: BLE001 -- never fatal to the dashboard
+    except Exception as e:  # noqa: BLE001 -- never fatal to the dashboard
         log.warning("chat surface not mounted: %s: %s", type(e).__name__, e)
         return False
     log.info("chat surface mounted at /chat")
