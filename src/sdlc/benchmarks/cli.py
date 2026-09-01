@@ -171,8 +171,10 @@ async def _run_matrix(case_path: str, gate_policy: str | None = None) -> str:
                            cell.role_models.get("dev"))
     if gate_policy is not None:
         spec = spec.model_copy(update={"gate_policy": GatePolicy(gate_policy)})
+    import os
     client = await Client.connect(
-        "localhost:7233", data_converter=pydantic_data_converter)
+        os.environ.get("TEMPORAL_HOST", "localhost:7233"),
+        data_converter=pydantic_data_converter)
     handle = await client.start_workflow(
         BenchmarkWorkflow.run, spec.model_dump_json(),
         id=f"bench-{spec.case_id}-{int(__import__('time').time())}",
