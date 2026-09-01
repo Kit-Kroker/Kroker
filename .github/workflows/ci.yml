@@ -31,11 +31,10 @@ jobs:
       - name: Pytest
         run: |
           pytest > /tmp/pytest.log 2>&1; status=$?
-          {
-            echo '### pytest result'
-            echo '```'
-            grep -E "FAILED|ERROR|=+ .*(passed|failed|error).* =+|^E  " /tmp/pytest.log | tail -80
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          tail -5 /tmp/pytest.log
+          # Surface the failing tests as annotations: the raw log needs a
+          # sign-in to read, annotations do not.
+          grep -E "^FAILED|^ERROR" /tmp/pytest.log | head -10 | while read -r line; do
+            echo "::error title=pytest::${line:0:250}"
+          done
+          grep -E "=+ .*(passed|failed|error).* =+" /tmp/pytest.log | tail -2
           exit $status
