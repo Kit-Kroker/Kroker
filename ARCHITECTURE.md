@@ -4,7 +4,7 @@
 |---|---|
 | Status | Draft v1.0 |
 | Date | 2026-07-02 |
-| Last amended | 2026-08-07 — agent board (§§1, 2, 8, 13, 14; ADR-21) |
+| Last amended | 2026-09-01 — the crew, a multi-agent code stage (§§2, 3, 4, 14; E-88) |
 | Related | `PRD.md`, `SDLC-spec.md` (v2 + v2.1) — contracts in `src/factory/models/` are the source of truth |
 
 ---
@@ -60,6 +60,7 @@ through its validated diff artifact.
 | MaintenanceWorkflow | DAPER cycle, repair gating, child factory runs | direct code patches |
 | Proposer agents | typed artifact proposals (Requirements … RepairPlan) | tool calls, file access |
 | Harness runner activity | `claude -p` / `opencode run` execution, heartbeats, checkpoint commits, cost capture | leaving the worktree; choosing its own permissions |
+| CrewTaskWorkflow (E-88) | the code stage's round loop when a task runs as a crew: turn order, the four brakes, per-round checkpoints, its own `tool_approval` / `crew_question` gates | subprocesses and file I/O (every turn is an activity); writing repository files through any role but the lead |
 | Support activities | Hindsight retain/recall/reflect, worktree/PR ops, test/lint/coverage runs, notifications | decision-making |
 | Deterministic stages | constitution, quality gate, summary/export | LLM calls |
 | Hindsight | world facts, experiences, mental models per bank | overriding validators or contracts |
@@ -101,6 +102,17 @@ task gate (accept / retry with guidance / quarantine). Every harness run
 ends with a checkpoint commit, and every completed task emits a
 `HandoffSummary` (what changed, decisions, open concerns) consumed by
 subsequent tasks and the merge stage.
+
+**One session or a crew (E-88):** a task's implementation is by default one
+harness session driven by an activity. It may instead run as a **crew** — a
+`CrewTaskWorkflow` child holding a round loop, where a round is *lead turn →
+critic turn → read the round's files → decide*. The round machine lives in
+workflow code and every turn is an activity, so a lost worker costs one round
+rather than a task: each round ends in a checkpoint commit. `HarnessKind.CREW`
+is a **composition mode, not a CLI** — each role still names one of the real
+harnesses — so the crew is selected per role config (`harness: crew`, `layout:
+<name>`) and everything upstream and downstream of the stage is unchanged: the
+child returns the same `HarnessRunResult` the single-session path returns.
 
 **Execution mode:** implementation defaults to **serial** — parallel
 implementers make divergent design decisions even with worktree isolation
@@ -209,6 +221,45 @@ tools, repo, or worker session — so it *cannot* wander or be polluted. The
 doer has tools; the judge does not. A harness **deep-review** tier is
 configurable per project/task for high-risk work; when enabled, the
 harness-inequality clause re-applies to that path.
+
+**The crew (E-88), when one harness session is not the unit of work.** A crew
+is assets, not code: `crew/roles/<name>.yaml` declares a role's harness, model,
+skill, and whether it `writes`; `crew/layouts/<name>.yaml` assembles roles with
+a round bound, a deliverable, and limits. Three rules hold it together:
+
+- **Exactly one role writes repository files, and it is the lead** — otherwise
+  the diff stops being attributable to a role.
+- **Every non-lead role differs in model family from the lead** (ADR-6, the
+  reviewer rule applied to the crew). Checked when the crew loads and again in
+  a client-side pre-flight; a model string carrying no provider separator is
+  rejected, because family comparison would otherwise be meaningless.
+- **A role's harness must be installed.** The worker refuses to boot on a crew
+  whose CLI is missing, rather than discovering it one billed agent into a run.
+
+**The fence is an argument, not a new predicate.** Non-lead roles keep `cwd` at
+the worktree — a critic must read the code it is criticising — and set
+`HarnessRequest.write_root` to their orchestration subtree, which becomes the
+containment hook's confinement root. The shipped `no-out-of-worktree-write`
+rule does the work unchanged. Its honest limit: that rule is hook-layer, so a
+non-lead role on a harness with no hook layer is not confined by it and, under
+`containment_strict`, refuses — which makes containment a statement about a
+crew's *composition*.
+
+**Round files are untrusted input.** Roles communicate through
+`.workspace/orchestration/<layout>/round-N/`: `notes-v1` (the lead's
+deliverable, which fills `HarnessRunResult.summary`), `advisor-v1` and
+`review-v1` (the critic, read by the next round's brief), and `question-v1`
+(any role, which raises a gate). Each is exact-schema and size-capped, an
+unknown `schema` value is a hard error rather than a best-effort parse, and
+contents are data — never instructions.
+
+**A crew stops for a human without leaving the child.** `CrewTaskWorkflow` is
+a `GateHost`, so a contained turn's `deferred` tool escalation and a role's
+`question-v1` both become ordinary pending decisions answered by the existing
+signals. Each carries `parent_run_id`, so the inbox groups a crew's gate under
+the run it belongs to while the fleet view keeps listing runs, not children.
+Four brakes bound the loop: wall clock, per-turn timeout, cost cap, and the
+round bound, with a separate budget on escalations.
 
 ## 5. Human-in-the-loop architecture
 
@@ -686,6 +737,7 @@ agentic-sdlc/
 │   └── memory.yaml            # Hindsight URL, banks, scrub rules
 ├── prompts/                   # one file per role + _shared_rules.md; versioned assets
 │                              #   (FR-806: edit → offline eval → deploy; in memo hash)
+├── crew/                      # §4: a crew as assets — layouts/, roles/, skills/<role>/SKILL.md
 ├── src/factory/
 │   ├── models/                # §4-contracts — source of truth
 │   │   ├── artifacts.py       #   Requirements … CodeArtifact(files|diff_ref),
@@ -701,6 +753,7 @@ agentic-sdlc/
 │   │   │                      #   + overlap serialization), handoff flow
 │   │   ├── task.py            #   per-task loop: contract-first, resume-bounded sessions
 │   │   ├── gates.py           #   signal-wait gate helper + pending_decisions publishing
+│   │   ├── crew.py            #   CrewTaskWorkflow (GateHost): the round loop + brakes
 │   │   ├── maintenance.py     #   DAPER loop (report = re-detect)
 │   │   └── retro.py           #   scheduled reflect
 │   ├── activities/            # all non-determinism
@@ -713,6 +766,12 @@ agentic-sdlc/
 │   │   ├── notify.py          #   Slack/email push with deep links
 │   │   └── deploy.py
 │   ├── harness/               # CodingHarness protocol; claude_code.py, opencode.py
+│   ├── crew/                  # E-88: roles/layouts as files, the round's non-determinism
+│   │   ├── config.py          #   CrewRole, CrewLayout — the declarative shape
+│   │   ├── loader.py          #   boot checks: skill files, CLI resolvability, ADR-6 families
+│   │   ├── models.py          #   RoundRecord, RoundAdvisory, RoundReview, CrewQuestion
+│   │   ├── activities.py      #   prepare_crew, run_crew_turn, read_round, checkpoint_round
+│   │   └── worktree.py        #   .workspace/orchestration/<layout>/round-N/
 │   ├── agents/                # loader.py (agents.yaml → TemporalAgent), deterministic.py
 │   ├── memory/                # Hindsight client wrapper, scrub.py
 │   ├── board/                 # ADR-21: project-level artifact versions + task status
