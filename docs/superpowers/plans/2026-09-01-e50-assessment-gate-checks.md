@@ -406,7 +406,7 @@ git commit -m "feat(dispositions): FindingDisposition, kind-discriminated (E-50 
 
 **Interfaces:**
 - Consumes: `sdlc.board.schema.apply_schema`, `sdlc.board.schema.connect`, `sdlc.board.schema.db_path`, `dispositions.models.FindingDisposition`, `dispositions.models.Disposition`
-- Produces: `FindingDispositionStore` (ABC): `load(project) -> list[FindingDisposition]`; `registry_version(project) -> int`; `apply(project, disposition, *, expected_version, actor, operation="dispose", detail=None) -> int`. `BoardFindingDispositionStore(FindingDispositionStore)`; `FindingDispositionConflictError`; `FindingDispositionStoreError`
+- Produces: `FindingDispositionStore` (ABC): `load(project) -> list[FindingDisposition]`; `registry_version(project) -> int`; `apply(project, disposition, *, expected_version, actor, operation="dispose", detail=None) -> int`; `events(project, kind, key) -> list[str]`. `BoardFindingDispositionStore(FindingDispositionStore)`; `FindingDispositionConflictError`; `FindingDispositionStoreError`
 
 - [ ] **Step 1: Add the DDL**
 
@@ -528,12 +528,8 @@ def test_two_applies_to_the_same_kind_and_key_leave_two_event_rows(store):
         expected_version=1,
         actor="maks",
     )
-    rows = store._conn.execute(
-        "SELECT operation FROM finding_disposition_event WHERE project = ? AND kind = ? "
-        "AND key = ? ORDER BY id",
-        ("p", "vulnerability", "SS1:hardcoded-secret:src/a.py:"),
-    ).fetchall()
-    assert [r[0] for r in rows] == ["dispose", "dispose"]
+    ops = store.events("p", "vulnerability", "SS1:hardcoded-secret:src/a.py:")
+    assert ops == ["dispose", "dispose"]
 
 
 def test_vulnerability_and_testability_dispositions_on_the_same_key_do_not_collide(store):
@@ -633,6 +629,14 @@ class FindingDispositionStore(ABC):
         """Upsert one disposition, keyed on (project, kind, key). Returns
         the new registry_version."""
 
+    @abstractmethod
+    def events(self, project: str, kind: str, key: str) -> list[str]:
+        """Every operation recorded for this (project, kind, key), oldest
+        first -- the audit trail apply() writes alongside the live row on
+        every call, revision included. Read-only surface over
+        finding_disposition_event, for a caller (or a test) that needs the
+        history rather than just the current disposition."""
+
 
 class BoardFindingDispositionStore(FindingDispositionStore):
     def __init__(self, db: str | os.PathLike | None = None) -> None:
@@ -728,6 +732,14 @@ class BoardFindingDispositionStore(FindingDispositionStore):
             self._conn.execute("ROLLBACK")
             raise
         return expected_version + 1
+
+    def events(self, project: str, kind: str, key: str) -> list[str]:
+        rows = self._conn.execute(
+            "SELECT operation FROM finding_disposition_event WHERE project = ? AND kind = ? "
+            "AND key = ? ORDER BY id",
+            (project, kind, key),
+        ).fetchall()
+        return [r[0] for r in rows]
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
@@ -1425,8 +1437,7 @@ def test_a_stale_testability_disposition_is_inert():
 def test_testability_clause_is_order_independent():
     """NFR-10. CapabilityMap enforces no sort on its capabilities (unlike
     UnifiedRiskMap, which forces canonical order at construction) -- the
-    genuinely permutable axis here is capability_map's tuple order, plus
-    the findings list within one capability."""
+    genuinely permutable axis here is capability_map's tuple order."""
     caps = [
         capability(bc_id="BC-001", testability=(_blocker("src/a.py", "singleton-access"),)),
         capability(bc_id="BC-002", testability=(_blocker("src/b.py", "sleep-in-production"),)),
@@ -2018,7 +2029,7 @@ def _override_only_on_block(self) -> Assessment:
 
 **Fix the one pre-existing test this task's validator can already fix.**
 
-In `tests/test_assessment_models.py`, `test_a_measured_assess_phase_with_a_payload_constructs` (currently around line 432) constructs an `Assessment` with `risk=UnifiedRiskMap(...)` and no `gates=` — add one (`RiskGateReport`/`RiskGateVerdict` are already imported a few lines above this test by Step 1's own append):
+In `tests/test_assessment_models.py`, `test_a_measured_assess_phase_with_a_payload_constructs` (currently around line 432) constructs an `Assessment` with `risk=UnifiedRiskMap(...)` and no `gates=` — add one. `RiskGateReport`/`RiskGateVerdict` are already imported by Step 1's own append further down in the file (module-level imports don't need to precede a function's definition, only its execution, so the placement is fine at runtime — pytest collects the whole module before running any test):
 
 ```python
 def test_a_measured_assess_phase_with_a_payload_constructs():
@@ -2184,6 +2195,7 @@ git commit -m "feat(assessment): load_dispositions activity, uncached (E-50 GD8)
 
 **Files:**
 - Modify: `src/sdlc/workflows/assessment.py`
+- Modify: `tests/test_assessment_workflow.py` — closes the known-red gap Task 7 opened
 - Test: `tests/test_assessment_workflow_risk_gate_e2e.py`
 
 **Interfaces:**
@@ -2200,6 +2212,7 @@ gate's mechanics, and REJECT vs APPROVE diverge exactly as GD2 states."""
 from __future__ import annotations
 
 import subprocess
+import time
 import uuid
 from datetime import UTC, datetime
 
@@ -2392,13 +2405,21 @@ def gate_repo(tmp_path):
     return str(tmp_path), sha
 
 
-async def _await_gate(env, wf_id, gate_name, *, max_polls: int = 30):
-    """Bounded on purpose: before Task 9's implementation exists, `run()`
-    never opens a "risk" gate at all, so an unbounded version of this
-    helper would hang forever (the workflow completes normally in the
-    background while polling keeps returning an empty list) rather than
-    failing the test cleanly."""
-    for _ in range(max_polls):
+async def _await_gate(env, wf_id, gate_name, *, timeout_seconds: float = 60.0):
+    """Bounded on purpose, by a wall-clock DEADLINE rather than a poll
+    count: before Task 9's implementation exists, `run()` never opens a
+    "risk" gate at all, so an unbounded version of this helper would hang
+    forever (the workflow completes normally in the background while
+    polling keeps returning an empty list) rather than failing the test
+    cleanly. A poll count sized for the common case would flake instead --
+    this e2e drives the real triage child plus all thirteen scan signals
+    plus discover_context before the gate can even open, which itself
+    takes genuine wall-clock time (env.sleep only skips virtual time while
+    the workflow is otherwise idle, not while real activities are still
+    running), and a loaded CI host makes that worse. 60s is generous
+    against that pipeline, not against the gate wait itself."""
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
         try:
             items = await env.client.get_workflow_handle(wf_id).query(
                 AssessmentWorkflow.pending_decisions
@@ -2408,7 +2429,7 @@ async def _await_gate(env, wf_id, gate_name, *, max_polls: int = 30):
         except Exception:  # noqa: BLE001 -- not started
             pass
         await env.sleep(1)
-    raise AssertionError(f"no {gate_name!r} gate became pending after {max_polls} polls")
+    raise AssertionError(f"no {gate_name!r} gate became pending within {timeout_seconds}s")
 
 
 def _acts(sha, discover_hit, risk_hit):
@@ -2671,7 +2692,7 @@ async def test_load_dispositions_failing_falls_back_to_zero_not_a_crash(
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_assessment_workflow_risk_gate_e2e.py -v -m temporal`
-Expected: FAIL — `AssertionError: no 'risk' gate became pending after 30 polls`. Before this task's implementation, `run()` never calls `_risk_gate` at all, so the workflow completes normally in the background (the old code path) while `_await_gate` polls `pending_decisions` and only ever sees an empty list. `_await_gate`'s poll cap turns that into a clean, bounded failure rather than a hang.
+Expected: FAIL — `AssertionError: no 'risk' gate became pending within 60.0s`. Before this task's implementation, `run()` never calls `_risk_gate` at all, so the workflow completes normally in the background (the old code path) while `_await_gate` polls `pending_decisions` and only ever sees an empty list. `_await_gate`'s deadline turns that into a clean, bounded failure — generous enough to absorb the real triage/scan/discover pipeline's own wall-clock cost — rather than a hang.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -2771,6 +2792,36 @@ def assemble(
         risk=risk,
         gates=gates,
         gate_override=gate_override,
+    )
+```
+
+**Close the known-red gap Task 7 opened.** `assemble()` now accepts `gates`, so fix
+`tests/test_assessment_workflow.py::test_assemble_reports_assessed_once_every_phase_collects`
+— add the import (`from sdlc.assessment.gates.models import RiskGateReport, RiskGateVerdict`,
+alongside the file's existing `from sdlc.assessment.risk.models import UnifiedRiskMap`) and pass
+`gates=`:
+
+```python
+def test_assemble_reports_assessed_once_every_phase_collects():
+    """The status flips by itself when E-46..E-52 land -- no workflow edit."""
+    rest = [
+        PhaseResult(phase=p, collected=Measurement.measured(1.0))
+        for p in PHASE_ORDER
+        if p is not PhaseId.INIT
+    ]
+    assert (
+        assemble(
+            "/r",
+            _init(),
+            True,
+            "verdict ready",
+            rest,
+            scan=_scan_result(),
+            discover=CapabilityMap(collected=Measurement.measured(0.0)),
+            risk=UnifiedRiskMap(collected=Measurement.measured(0.0)),
+            gates=RiskGateReport(verdict=RiskGateVerdict.PASS),
+        ).terminal_status
+        == ASSESSED
     )
 ```
 
@@ -2883,15 +2934,19 @@ class AssessmentWorkflow(GateHost):
 Run: `pytest tests/test_assessment_workflow_risk_gate_e2e.py -v -m temporal`
 Expected: PASS (4 tests)
 
-Then run the full existing e2e suite to confirm nothing regressed:
+Then run the full existing e2e suite, plus the file this task just touched, to confirm nothing
+regressed and Task 7's known-red gap is closed:
 
-Run: `pytest tests/test_assessment_workflow_e2e.py -v -m temporal`
-Expected: PASS (all previously-passing tests still pass — `assemble()`'s new keyword-only parameters default to `None`, so every existing call site is unaffected)
+Run: `pytest tests/test_assessment_workflow_e2e.py tests/test_assessment_workflow.py -v -m temporal`
+Expected: PASS, with **no known-red tests remaining** — `assemble()`'s two new keyword-only
+parameters default to `None`, so every existing call site is unaffected except
+`test_assemble_reports_assessed_once_every_phase_collects`, which this task's own edit fixed.
+The full-suite-PASS claim is genuinely true from this point on, not deferred further.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/sdlc/workflows/assessment.py tests/test_assessment_workflow_risk_gate_e2e.py
+git add src/sdlc/workflows/assessment.py tests/test_assessment_workflow_risk_gate_e2e.py tests/test_assessment_workflow.py
 git commit -m "feat(assessment): wire the risk gate into run() -- BLOCK pauses, APPROVE overrides, REJECT skips (E-50 GD1/GD2)"
 ```
 
@@ -2957,7 +3012,10 @@ async def test_a_warn_verdict_opens_no_gate_and_phases_proceed(gate_repo, tmp_pa
     assert result.gates.verdict == RiskGateVerdict.WARN
     assert result.gate_override is None
     row = next(p for p in result.phases if p.phase is PhaseId.REPORT)
-    assert "not implemented" in row.collected.reason  # phases ran normally
+    # Stable across E-51/E-52 landing, unlike a hardcoded "not implemented"
+    # substring (finding 13's fix, applied here too): phases ran normally,
+    # not risk-gate-skipped.
+    assert row.collected.reason != risk_gate_skipped(PhaseId.REPORT).collected.reason
 
 
 async def test_a_testability_disposition_clears_the_block_on_rerun(
@@ -3118,7 +3176,7 @@ async def test_a_vulnerability_disposition_clears_the_block_on_rerun(
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_assessment_workflow_risk_gate_e2e.py -v -m temporal -k "warn or disposition or vulnerability"`
-Expected: FAIL if run against a pre-Task-9 tree (`ImportError`); once Task 9 has landed, this step instead confirms the two NEW tests fail before this task's fixtures exist — since Task 9 already wired `_risk_gate` fully, these two tests should in fact PASS immediately against Task 9's implementation with no further production code change. Run them to confirm.
+Expected: FAIL if run against a pre-Task-9 tree (`ImportError`); once Task 9 has landed, this step instead confirms the three NEW tests fail before this task's fixtures exist — since Task 9 already wired `_risk_gate` fully, these three tests should in fact PASS immediately against Task 9's implementation with no further production code change. Run them to confirm.
 
 - [ ] **Step 3: No production code changes are needed**
 
