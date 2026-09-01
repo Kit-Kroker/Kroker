@@ -14,23 +14,23 @@ from pydantic_ai import (
     ToolDenied,
 )
 
-agent = Agent('openai:gpt-5.2', name='approval_agent', output_type=[str, DeferredToolRequests])
+agent = Agent("openai:gpt-5.2", name="approval_agent", output_type=[str, DeferredToolRequests])
 
 
 @agent.tool_plain(requires_approval=True)
 def delete_file(path: str) -> str:
-    return f'File {path!r} deleted'
+    return f"File {path!r} deleted"
 
 
-result = agent.run_sync('Delete __init__.py')
+result = agent.run_sync("Delete __init__.py")
 messages = result.all_messages()
 
 assert isinstance(result.output, DeferredToolRequests)
 results = DeferredToolResults()
 for call in result.output.approvals:
-    results.approvals[call.tool_call_id] = ToolDenied('Deleting files is not allowed')
+    results.approvals[call.tool_call_id] = ToolDenied("Deleting files is not allowed")
 
-result = agent.run_sync('Continue', message_history=messages, deferred_tool_results=results)
+result = agent.run_sync("Continue", message_history=messages, deferred_tool_results=results)
 print(result.output)
 ```
 
@@ -48,14 +48,14 @@ Raise `ModelRetry` from inside the tool when the model should correct and try ag
 ```python
 from pydantic_ai import Agent, ModelRetry, RunContext
 
-agent = Agent('openai:gpt-5.2', name='retry_agent', deps_type=dict[str, int])
+agent = Agent("openai:gpt-5.2", name="retry_agent", deps_type=dict[str, int])
 
 
 @agent.tool(retries=2)
 def get_user_by_name(ctx: RunContext[dict[str, int]], name: str) -> int:
     user_id = ctx.deps.get(name)
     if user_id is None:
-        raise ModelRetry(f'No user found with name {name!r}')
+        raise ModelRetry(f"No user found with name {name!r}")
     return user_id
 ```
 
@@ -76,14 +76,14 @@ from pathlib import Path
 
 from pydantic_ai import Agent, ToolFailed
 
-agent = Agent('openai:gpt-5.2')
+agent = Agent("openai:gpt-5.2")
 
 
 @agent.tool_plain
 def read_file(path: str) -> str:
     file_path = Path(path)
     if not file_path.is_file():
-        raise ToolFailed(f'File not found: {path}')
+        raise ToolFailed(f"File not found: {path}")
     return file_path.read_text()
 ```
 
@@ -100,12 +100,17 @@ Use `args_validator=` when arguments are structurally valid but still need busin
 ```python
 from pydantic_ai import Agent, DeferredToolRequests, ModelRetry, RunContext
 
-agent = Agent('openai:gpt-5.2', name='validation_agent', deps_type=int, output_type=[str, DeferredToolRequests])
+agent = Agent(
+    "openai:gpt-5.2",
+    name="validation_agent",
+    deps_type=int,
+    output_type=[str, DeferredToolRequests],
+)
 
 
 def validate_sum_limit(ctx: RunContext[int], x: int, y: int) -> None:
     if x + y > ctx.deps:
-        raise ModelRetry(f'Sum of x and y must not exceed {ctx.deps}')
+        raise ModelRetry(f"Sum of x and y must not exceed {ctx.deps}")
 
 
 @agent.tool(requires_approval=True, args_validator=validate_sum_limit)
@@ -127,15 +132,15 @@ Example with `ToolReturn`:
 ```python
 from pydantic_ai import Agent, BinaryContent, ToolReturn
 
-agent = Agent('openai:gpt-5.2', name='tool_return_agent')
+agent = Agent("openai:gpt-5.2", name="tool_return_agent")
 
 
 @agent.tool_plain
 def click_and_capture(x: int, y: int) -> ToolReturn:
     return ToolReturn(
-        return_value=f'Successfully clicked at ({x}, {y})',
-        content=['After:', BinaryContent(data=b'png-data', media_type='image/png')],
-        metadata={'coordinates': {'x': x, 'y': y}},
+        return_value=f"Successfully clicked at ({x}, {y})",
+        content=["After:", BinaryContent(data=b"png-data", media_type="image/png")],
+        metadata={"coordinates": {"x": x, "y": y}},
     )
 ```
 
@@ -172,12 +177,12 @@ Use tool-level deferred loading when the agent has many tools and the model shou
 ```python
 from pydantic_ai import Agent
 
-agent = Agent('openai:gpt-5.2', name='tool_search_agent')
+agent = Agent("openai:gpt-5.2", name="tool_search_agent")
 
 
 @agent.tool_plain(defer_loading=True)
 def lookup_internal_policy(policy_name: str) -> str:
-    return f'policy details for {policy_name}'
+    return f"policy details for {policy_name}"
 ```
 
 Good fit:

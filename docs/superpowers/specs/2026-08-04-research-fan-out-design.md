@@ -95,13 +95,13 @@ buys depth if the per-unit budget is real. The existing fields are therefore
 
 ```python
 class ResearchConfig(BaseModel):
-    max_sub_questions: int = 4          # NEW — hard slice
-    max_searches: int = 5               # now PER sub-question
-    max_fetches: int = 10               # now PER sub-question
-    max_cost_usd: float = 1.0           # now PER sub-question
-    max_run_cost_usd: float = 4.0       # NEW — hard run ceiling
-    max_requests: int = 40              # unchanged, per sub-question
-    max_refine_rounds: int = 1          # NEW — see §6
+    max_sub_questions: int = 4  # NEW — hard slice
+    max_searches: int = 5  # now PER sub-question
+    max_fetches: int = 10  # now PER sub-question
+    max_cost_usd: float = 1.0  # now PER sub-question
+    max_run_cost_usd: float = 4.0  # NEW — hard run ceiling
+    max_requests: int = 40  # unchanged, per sub-question
+    max_refine_rounds: int = 1  # NEW — see §6
 ```
 
 `budget_store.budget_path(run_id)` gains a scope parameter →
@@ -165,18 +165,22 @@ reject via `if not gate.approved`. This wires the third outcome.
 round_n = 1
 while True:
     violations = await execute_activity(verify_brief_activity, [brief, run_id])
-    if violations:                       # fail closed — unchanged
+    if violations:  # fail closed — unchanged
         ...
         break
     gate = await self._gate("research", cfg, round=round_n)
-    if gate.outcome == GateOutcome.APPROVE: break
-    if gate.outcome == GateOutcome.REJECT:  return "rejected:research"
-    if round_n > cfg.research.max_refine_rounds: break   # proceed with what we have
+    if gate.outcome == GateOutcome.APPROVE:
+        break
+    if gate.outcome == GateOutcome.REJECT:
+        return "rejected:research"
+    if round_n > cfg.research.max_refine_rounds:
+        break  # proceed with what we have
     round_n += 1
-    more   = await execute_activity(replan_research, idea, gate.guidance,
-                                    brief.gaps, brief.contradictions)
-    parts += await gather(...)                            # NEW sub-questions only
-    brief  = await execute_activity(synthesize_brief, idea, parts)   # re-merge ALL
+    more = await execute_activity(
+        replan_research, idea, gate.guidance, brief.gaps, brief.contradictions
+    )
+    parts += await gather(...)  # NEW sub-questions only
+    brief = await execute_activity(synthesize_brief, idea, parts)  # re-merge ALL
 ```
 
 Four properties:

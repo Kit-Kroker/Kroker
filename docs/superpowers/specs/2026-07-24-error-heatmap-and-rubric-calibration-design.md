@@ -59,18 +59,19 @@ New pure module `src/sdlc/benchmarks/heatmap.py` (mirrors
 class HeatmapCell(BaseModel):
     case: str
     stage: str
-    gate_rejects: int      # outcome in {FAIL, ESCALATED, REVISED}
-    fix_attempts: int      # sum of record.fix_attempts
-    oracle_fails: int      # scope=ORACLE, outcome=FAIL (oracle column only)
-    n_runs: int            # distinct run_id for the CASE
-    density: float         # (gate_rejects + fix_attempts + oracle_fails) / max(n_runs, 1)
+    gate_rejects: int  # outcome in {FAIL, ESCALATED, REVISED}
+    fix_attempts: int  # sum of record.fix_attempts
+    oracle_fails: int  # scope=ORACLE, outcome=FAIL (oracle column only)
+    n_runs: int  # distinct run_id for the CASE
+    density: float  # (gate_rejects + fix_attempts + oracle_fails) / max(n_runs, 1)
+
 
 class Heatmap(BaseModel):
-    cells: list[HeatmapCell]         # sparse: only (case, stage) pairs seen
-    cases: list[str]                 # row order, sorted
-    stages: list[str]                # column order, canonical (see 2.3)
-    max_density: float               # colour-scale ceiling (>=0)
-    language_by_case: dict[str, str] # case -> declared language ("" if none)
+    cells: list[HeatmapCell]  # sparse: only (case, stage) pairs seen
+    cases: list[str]  # row order, sorted
+    stages: list[str]  # column order, canonical (see 2.3)
+    max_density: float  # colour-scale ceiling (>=0)
+    language_by_case: dict[str, str]  # case -> declared language ("" if none)
 ```
 
 ### 2.2 Density definition
@@ -243,9 +244,9 @@ implemented in-module with average-rank tie handling):
 class AgreementStats(BaseModel):
     n: int
     epsilon: float
-    agreement_rate: float   # fraction with |judge - human| <= epsilon
-    mae: float              # mean absolute error
-    spearman: float         # rank correlation (0.0 when undefined, n<2 or zero-variance)
+    agreement_rate: float  # fraction with |judge - human| <= epsilon
+    mae: float  # mean absolute error
+    spearman: float  # rank correlation (0.0 when undefined, n<2 or zero-variance)
     verdict: Literal["calibrated", "uncalibrated"]  # calibrated iff rate >= threshold
 ```
 

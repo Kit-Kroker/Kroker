@@ -17,8 +17,9 @@ DAG stage 13 is a single hardcoded subprocess:
 ```python
 await workflow.execute_activity(
     deploy,
-    DeployInput(environment="staging", version=idea.title,
-                command="make deploy ENV=staging", cwd=repo_path),
+    DeployInput(
+        environment="staging", version=idea.title, command="make deploy ENV=staging", cwd=repo_path
+    ),
     **_long_act(cfg.roles.get("devops")),
 )
 self._status = "deployed"

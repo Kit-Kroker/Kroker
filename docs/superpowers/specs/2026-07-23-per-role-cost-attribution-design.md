@@ -45,14 +45,15 @@ holds.
 ```python
 class RoleUsage(BaseModel):
     """One role's accumulated model spend across the run (E-33)."""
-    role: str                       # "architect", "dev", "clarify", ...
-    model: str                      # last model seen for the role
-    calls: int = 0                  # agent runs / harness invocations
+
+    role: str  # "architect", "dev", "clarify", ...
+    model: str  # last model seen for the role
+    calls: int = 0  # agent runs / harness invocations
     input_tokens: int = 0
     output_tokens: int = 0
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
-    cost_usd: float | None = None   # None = tokens known, price unknown
+    cost_usd: float | None = None  # None = tokens known, price unknown
 ```
 
 - `cost_usd=None` is load-bearing: **a pricing miss never discards tokens.**
@@ -75,11 +76,12 @@ class RoleUsage(BaseModel):
 
 ```python
 class PriceUsageInput(BaseModel):
-    model: str                      # e.g. "anthropic:claude-opus-4-8"
+    model: str  # e.g. "anthropic:claude-opus-4-8"
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
+
 
 @activity.defn
 async def price_usage(req: PriceUsageInput) -> float | None: ...
@@ -100,9 +102,9 @@ async def _run_role(self, cfg, role: str, agent, *args, **kwargs):
     result = await agent.run(*args, **kwargs)
     usage = result.usage()
     usd = await workflow.execute_activity(price_usage, ...)
-    self._accumulate(role, model, usage, usd)   # + emits MODEL_USAGE event
+    self._accumulate(role, model, usage, usd)  # + emits MODEL_USAGE event
     await self._check_budget(cfg)
-    return result                                # callers still take .output
+    return result  # callers still take .output
 ```
 
 - All 8 proposer call sites (`t_clarify`, `t_architect`, `t_planner`, `t_qa`,

@@ -131,12 +131,12 @@ a recursive force-delete is not a maybe.
 
 ```python
 class ToolGrant(BaseModel):
-    tool_use_id: str          # the deferred call's own id
+    tool_use_id: str  # the deferred call's own id
     tool: str
-    input_digest: str         # sha256 over canonical json of tool_input
+    input_digest: str  # sha256 over canonical json of tool_input
     rule_id: str
-    approved: bool            # False = rejected / timed out / capped
-    reason: str = ""          # the human's words; reaches the model verbatim
+    approved: bool  # False = rejected / timed out / capped
+    reason: str = ""  # the human's words; reaches the model verbatim
 ```
 
 `digest_tool_input()` lives in `containment.py` and is used by **both** the
@@ -196,7 +196,9 @@ observable (`batched` outcome, §6), and no worse than not having E-17.
 ### 4. Adapters — escalation as a declared capability (ADR-17's pattern)
 
 ```python
-supports_escalation: bool = False                        # base: no
+supports_escalation: bool = False  # base: no
+
+
 def normalise_deferral(self, stdout) -> DeferredToolUse | None: ...
 ```
 
@@ -226,23 +228,28 @@ in `_dev_task` (`feature.py:735-749`):
 
 ```python
 grants: list[ToolGrant] = []
-asked = 0                              # cap counter, per task attempt
+asked = 0  # cap counter, per task attempt
 while True:
     run = await workflow.execute_activity(
-        run_coding_task, CodingTaskInput(..., session_id=session_id,
-                                         grants=grants), **_long_act(role_cfg))
+        run_coding_task,
+        CodingTaskInput(..., session_id=session_id, grants=grants),
+        **_long_act(role_cfg),
+    )
     if run.deferred is None:
         break
     session_id = run.session_id
     if asked >= cfg.max_tool_escalations:
         grants = [_rejecting_grant(run.deferred, "escalation cap reached")]
-        continue                       # one more resume, only to deliver the deny
+        continue  # one more resume, only to deliver the deny
     asked += 1
     self._escalation_round += 1
     decision = await self._gate(
-        "tool_approval", cfg, round=self._escalation_round,
+        "tool_approval",
+        cfg,
+        round=self._escalation_round,
         context=GateContext(spec_summary=_escalation_summary(task, run.deferred)),
-        default_policy=GatePolicy.HARD)
+        default_policy=GatePolicy.HARD,
+    )
     grants = [_grant_from(run.deferred, decision)]
 ```
 
@@ -281,20 +288,22 @@ flag: `action: escalate` in the asset **is** the switch, under the existing
 ### 6. What is recorded
 
 ```python
-class DeferredToolUse(BaseModel):     # from the CLI, on HarnessRunResult
+class DeferredToolUse(BaseModel):  # from the CLI, on HarnessRunResult
     tool_use_id: str
     tool: str
     input_digest: str
     rule_id: str
     reason: str
-    target: str | None = None         # scrubbed path/command, for the human
+    target: str | None = None  # scrubbed path/command, for the human
+
 
 class EscalationOutcome(str, Enum):
     APPROVED = "approved"
     REJECTED = "rejected"
-    TIMEOUT  = "timeout"
-    CAPPED   = "capped"
-    BATCHED  = "batched"              # denied without asking (§3)
+    TIMEOUT = "timeout"
+    CAPPED = "capped"
+    BATCHED = "batched"  # denied without asking (§3)
+
 
 class ToolEscalation(BaseModel):
     tool: str

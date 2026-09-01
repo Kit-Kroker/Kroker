@@ -167,9 +167,9 @@ the same discipline `measurement.py` and `grounding.py` carry.
 
 ```python
 class FixClass(str, Enum):
-    MECHANICAL = "mechanical"      # FR-904: eligible for an E-44 child run
-    JUDGEMENT  = "judgement"       # needs a human decision
-    STRUCTURAL = "structural"      # needs design work, not a patch
+    MECHANICAL = "mechanical"  # FR-904: eligible for an E-44 child run
+    JUDGEMENT = "judgement"  # needs a human decision
+    STRUCTURAL = "structural"  # needs design work, not a patch
 
 
 class Verdict(str, Enum):
@@ -179,20 +179,20 @@ class Verdict(str, Enum):
 
 
 class TriageFinding(BaseModel):
-    signal: str                        # signal id, e.g. "secrets"
-    rule: str                          # which rule inside it
+    signal: str  # signal id, e.g. "secrets"
+    rule: str  # which rule inside it
     severity: Literal["critical", "high", "medium", "low"]
     detail: str
     path: str = ""
     line: int | None = None
-    evidence: str = ""                 # verbatim quote from path@commit_sha (D5)
+    evidence: str = ""  # verbatim quote from path@commit_sha (D5)
     fix_class: FixClass
 
 
 class SignalResult(BaseModel):
     signal: str
-    version: int                       # bump invalidates E-46's (tree hash, signal version) memo
-    collected: Measurement             # MEASURED value = finding count
+    version: int  # bump invalidates E-46's (tree hash, signal version) memo
+    collected: Measurement  # MEASURED value = finding count
     findings: list[TriageFinding] = Field(default_factory=list)
     metrics: dict[str, Measurement] = Field(default_factory=dict)  # readiness dimensions
 
@@ -204,17 +204,17 @@ class SignalResult(BaseModel):
 
 
 class Readiness(BaseModel):
-    buildable: Measurement             # 1.0 / 0.0 when measured
+    buildable: Measurement  # 1.0 / 0.0 when measured
     runnable: Measurement
-    tests_present: Measurement         # count of discovered test files
+    tests_present: Measurement  # count of discovered test files
     structure_discernible: Measurement
     verdict: Verdict
 
 
 class RepoTriage(BaseModel):
     repo_dir: str
-    commit_sha: str                    # triage is pinned at a commit (FR-901)
-    toolchain: str | None              # None is a finding, not an error
+    commit_sha: str  # triage is pinned at a commit (FR-901)
+    toolchain: str | None  # None is a finding, not an error
     readiness: Readiness
     signals: list[SignalResult] = Field(default_factory=list)
 ```

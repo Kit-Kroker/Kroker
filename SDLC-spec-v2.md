@@ -226,9 +226,9 @@ All v1 contracts kept, with three changes:
        # propose-mode (v1, kept — fine for small greenfield tasks & QA test files)
        files: list[FileSpec] | None = None
        # harness-mode (new): claude -p / opencode run acted in the sandbox
-       diff_ref: ArtifactRef | None = None      # commit/patch in task worktree
+       diff_ref: ArtifactRef | None = None  # commit/patch in task worktree
        commit_sha: str | None = None
-       harness_session: str | None = None        # resume handle for fix loops
+       harness_session: str | None = None  # resume handle for fix loops
        # exactly one of files / diff_ref must be set (model validator)
    ```
    Reviewer, Analyst, QA, and the gate consume the materialized diff either
@@ -255,7 +255,7 @@ All v1 contracts kept, with three changes:
      context ceiling" (`input_tokens > fraction × context_window`) rather
      than guess, and detect a harness that silently compacted mid-task.
 
-Enum fix carried from review: `TaskStatus` drops the duplicate — 
+Enum fix carried from review: `TaskStatus` drops the duplicate —
 `pending | running | done | blocked | failed` (no separate `in_progress`).
 
 ---

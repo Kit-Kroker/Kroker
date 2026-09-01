@@ -175,12 +175,13 @@ imported inside the sandbox via `workflow.unsafe.imports_passed_through()`.
 class RunState(BaseModel):
     """Live counterpart to RunSummary: what a run looks like mid-flight.
     Field names mirror RunSummary where they overlap, deliberately."""
+
     run_id: str
     title: str
     repo_url: str | None
     mode: str
-    status: str                    # GateHost._status verbatim
-    current_stage: str | None      # last STAGE_STARTED in _trace
+    status: str  # GateHost._status verbatim
+    current_stage: str | None  # last STAGE_STARTED in _trace
     started_at: datetime
     decisions: list[GateDecision]  # _gate_decisions, ordered
     roles: list[RoleUsage]
@@ -225,9 +226,9 @@ class FleetSnapshot(BaseModel):
     at: datetime
     total_open_runs: int
     runs: list[RunState]
-    closed: list[RunSummary]     # D7, 20 most recent
-    inbox: list[RunInbox]        # reused from channels/inbox.py
-    errors: list[InboxError]     # reused from channels/inbox.py
+    closed: list[RunSummary]  # D7, 20 most recent
+    inbox: list[RunInbox]  # reused from channels/inbox.py
+    errors: list[InboxError]  # reused from channels/inbox.py
 ```
 
 The inbox half needs **no new models**. `RunInbox` and `InboxError` already

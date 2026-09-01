@@ -92,30 +92,36 @@ class ToolchainKind(str, Enum):
     PYTHON = "python"
     # GO/TS/RUST added by E-30a/b/c
 
+
 class ToolchainAdapter(ABC):
     kind: ToolchainKind
-    marker: str                        # relative marker filename to detect by
+    marker: str  # relative marker filename to detect by
 
     @abstractmethod
-    def test_cmd(self) -> str: ...     # coverage-INSTRUMENTED, emits Cobertura
+    def test_cmd(self) -> str: ...  # coverage-INSTRUMENTED, emits Cobertura
     @abstractmethod
     def lint_cmd(self) -> str: ...
-    def build_cmd(self) -> str | None: # None where no separate build (Python)
+    def build_cmd(self) -> str | None:  # None where no separate build (Python)
         return None
+
 
 class PythonToolchain(ToolchainAdapter):
     kind = ToolchainKind.PYTHON
     marker = "pyproject.toml"
+
     def test_cmd(self) -> str:
         # coverage.py emits Cobertura; --cov-report=xml:coverage.xml lands it
         # exactly where measure_coverage reads. -q --maxfail keeps output bounded.
         return "pytest -q --maxfail=25 --cov=. --cov-report=xml:coverage.xml"
+
     def lint_cmd(self) -> str:
         return "ruff check ."
+
 
 TOOLCHAINS: dict[ToolchainKind, ToolchainAdapter] = {
     ToolchainKind.PYTHON: PythonToolchain(),
 }
+
 
 def detect(worktree: str) -> ToolchainAdapter | None:
     """First adapter whose marker file exists at the worktree root. Returns
@@ -176,6 +182,7 @@ New activity in `activities.py`:
 class IntegrationChecksInput:
     worktree: str
     changed_files: list[str]
+
 
 @activity.defn
 async def run_integration_checks(inp) -> IntegrationChecks:

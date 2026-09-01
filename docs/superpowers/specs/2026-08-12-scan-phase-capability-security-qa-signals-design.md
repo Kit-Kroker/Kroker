@@ -95,9 +95,9 @@ An inherited row cites findings by `finding_identity()` and copies none:
 
 ```python
 class InheritedProducer(BaseModel):
-    producer: str            # "triage:secrets"
-    version: int             # the producer's declared version, pinned
-    finding_ids: list[str]   # finding_identity() values
+    producer: str  # "triage:secrets"
+    version: int  # the producer's declared version, pinned
+    finding_ids: list[str]  # finding_identity() values
 ```
 
 Pinning `version` makes a triage version bump visible in the assessment rather
@@ -308,7 +308,7 @@ async def run_or_degrade(activity, arg, opts, *, fallback):
     THIS signal while every other one still reports."""
     try:
         return await workflow.execute_activity(activity, arg, **opts)
-    except Exception:                                   # noqa: BLE001
+    except Exception:  # noqa: BLE001
         return fallback()
 ```
 
@@ -365,9 +365,20 @@ in their own docstrings: a dependency there would appear as a reviewable import.
 
 ```python
 class ScanSignalId(str, Enum):
-    S1 = "S1"; S2 = "S2"; S3 = "S3"; S4 = "S4"; S5 = "S5"
-    SS1 = "SS1"; SS2 = "SS2"; SS3 = "SS3"; SS4 = "SS4"
-    QS1 = "QS1"; QS2 = "QS2"; QS3 = "QS3"; QS4 = "QS4"
+    S1 = "S1"
+    S2 = "S2"
+    S3 = "S3"
+    S4 = "S4"
+    S5 = "S5"
+    SS1 = "SS1"
+    SS2 = "SS2"
+    SS3 = "SS3"
+    SS4 = "SS4"
+    QS1 = "QS1"
+    QS2 = "QS2"
+    QS3 = "QS3"
+    QS4 = "QS4"
+
 
 # Declaration order IS the order -- a hand-written tuple beside the enum is a
 # second registry, exactly as PHASE_ORDER records.
@@ -375,9 +386,9 @@ SCAN_ORDER: tuple[ScanSignalId, ...] = tuple(ScanSignalId)
 
 
 class SignalFamily(str, Enum):
-    CAPABILITY = "capability"    # S1-S5
-    SECURITY = "security"        # SS1-SS4
-    QA = "qa"                    # QS1-QS4
+    CAPABILITY = "capability"  # S1-S5
+    SECURITY = "security"  # SS1-SS4
+    QA = "qa"  # QS1-QS4
 
 
 class SignalSource(str, Enum):
@@ -394,11 +405,11 @@ class ScanSignalSpec(BaseModel):
     family: SignalFamily
     version: int
     source: SignalSource
-    activity: str = ""            # COMPUTED / EXTENDED: @activity.defn name
-    inherits: str = ""            # INHERITED / EXTENDED: "triage:secrets"
-    rule_modules: tuple[str, ...] = ()   # shared modules, folded into rules_sha
-    consumes: tuple[ScanSignalId, ...] = ()   # upstream signals (§5)
-    categories: tuple[str, ...] = ()     # the keys this signal owes (D3)
+    activity: str = ""  # COMPUTED / EXTENDED: @activity.defn name
+    inherits: str = ""  # INHERITED / EXTENDED: "triage:secrets"
+    rule_modules: tuple[str, ...] = ()  # shared modules, folded into rules_sha
+    consumes: tuple[ScanSignalId, ...] = ()  # upstream signals (§5)
+    categories: tuple[str, ...] = ()  # the keys this signal owes (D3)
 
     @model_validator(mode="after")
     def _source_fields_agree(self) -> "ScanSignalSpec": ...
@@ -440,14 +451,14 @@ class MemberKind(str, Enum):
 
 class CandidateMember(BaseModel):
     kind: MemberKind
-    value: str                    # "POST /api/payments", "orders", "settle-daily"
+    value: str  # "POST /api/payments", "orders", "settle-daily"
     path: str = ""
     line: int | None = None
 
 
 class EvidenceRef(BaseModel):
     path: str
-    lines: str = ""               # "42-78"; "" means whole file
+    lines: str = ""  # "42-78"; "" means whole file
 
 
 class Confidence(str, Enum):
@@ -459,11 +470,12 @@ class Confidence(str, Enum):
 class SourceCandidate(BaseModel):
     """One candidate as seen by ONE source signal (S1-S4). Not a capability:
     /discover (E-48) decides that and E-47a assigns the id."""
+
     signal: ScanSignalId
-    local_id: str                 # "S1-payments"
+    local_id: str  # "S1-payments"
     name: str
-    rule: str                     # the rule that fired, e.g. "s1_layer_name"
-    detail: str                   # why, in one sentence
+    rule: str  # the rule that fired, e.g. "s1_layer_name"
+    detail: str  # why, in one sentence
     confidence_contribution: Confidence
     members: list[CandidateMember]
     evidence: list[EvidenceRef]
@@ -484,10 +496,10 @@ a count that could not be computed is not a zero.
 
 ```python
 class ScanCandidate(BaseModel):
-    candidate_id: str             # "C-01" -- assessment-local, NOT a BC-NNN
+    candidate_id: str  # "C-01" -- assessment-local, NOT a BC-NNN
     name: str
-    sources: list[str]            # local_ids merged into this candidate
-    confidence: Confidence        # DERIVED (D8), never assigned
+    sources: list[str]  # local_ids merged into this candidate
+    confidence: Confidence  # DERIVED (D8), never assigned
     members: list[CandidateMember]
     possible_duplicate_of: list[str] = Field(default_factory=list)
 
@@ -507,7 +519,7 @@ class ScanSignalResult(BaseModel):
     family: SignalFamily
     version: int
     source: SignalSource
-    collected: Measurement                          # MEASURED value = record count
+    collected: Measurement  # MEASURED value = record count
     categories: dict[str, Measurement] = Field(default_factory=dict)
     producer: InheritedProducer | None = None
 
@@ -519,6 +531,7 @@ class SignalOutput(BaseModel):
     """One computed signal's whole output -- the row AND its payload, cached as
     a unit (D10). An activity returns this; the workflow folds in the inherited
     half (D7)."""
+
     row: ScanSignalResult
     sources: list[SourceCandidate] = Field(default_factory=list)
     data_sensitivity: list[SensitivityRecord] = Field(default_factory=list)
@@ -542,9 +555,9 @@ class SignalOutput(BaseModel):
 
 
 class ScanResult(BaseModel):
-    signals: list[ScanSignalResult]          # all 13, in SCAN_ORDER
-    sources: list[SourceCandidate]           # S1-S4
-    candidates: list[ScanCandidate]          # S5
+    signals: list[ScanSignalResult]  # all 13, in SCAN_ORDER
+    sources: list[SourceCandidate]  # S1-S4
+    candidates: list[ScanCandidate]  # S5
     data_sensitivity: list[SensitivityRecord]
     testability: list[TestabilityFinding]
 
@@ -584,7 +597,7 @@ class Sensitivity(str, Enum):
 
 class SensitivityRecord(BaseModel):
     classification: Sensitivity
-    entity: str                        # table (S2) or model name
+    entity: str  # table (S2) or model name
     origin: Literal["table", "model", "dto"]
     fields: list[str]
     # S3 entry points that read or write the entity, by local_id. Empty when S3
@@ -598,13 +611,13 @@ class SensitivityRecord(BaseModel):
 
 class TestabilityFinding(BaseModel):
     severity: Literal["blocks", "impedes", "smell"]
-    pattern: str                       # "static-clock-access"
+    pattern: str  # "static-clock-access"
     detail: str
-    recommended_seam: str              # "Inject IClock"
+    recommended_seam: str  # "Inject IClock"
     path: str
     line: int | None = None
-    evidence: str = ""                 # verbatim quote from path@commit_sha
-    key: str = ""                      # rule-scoped discriminator (E-44 D3)
+    evidence: str = ""  # verbatim quote from path@commit_sha
+    key: str = ""  # rule-scoped discriminator (E-44 D3)
 ```
 
 `TestabilityFinding` deliberately carries `evidence` and `key` with

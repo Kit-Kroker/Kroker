@@ -82,6 +82,7 @@ class SeededWork(BaseModel):
     """E-44: an ImplementationPlan authored deterministically, not by the
     planner. Stages 0-3 are skipped; everything from _dev_task down is
     unchanged and still binding."""
+
     arch: ArchitectureSpec
     plan: ImplementationPlan
 ```
@@ -135,7 +136,7 @@ cycle.
 
 ```python
 def finding_identity(f: TriageFinding) -> str:
-    return f"{f.signal}:{f.rule}:{f.path}:{f.key}"    # never `line`
+    return f"{f.signal}:{f.rule}:{f.path}:{f.key}"  # never `line`
 ```
 
 The default `""` keeps all seven signals valid without edits, which creates a
@@ -160,9 +161,9 @@ re-deriving policy.
 
 ```python
 class FindingState(str, Enum):
-    RESOLVED     = "resolved"      # before yes, after no
-    PERSISTED    = "persisted"     # both
-    NEW          = "new"           # after only
+    RESOLVED = "resolved"  # before yes, after no
+    PERSISTED = "persisted"  # both
+    NEW = "new"  # after only
     UNVERIFIABLE = "unverifiable"  # not measurable on one side
 ```
 
@@ -291,14 +292,17 @@ produce the same ids.
 # src/sdlc/triage/models.py
 class TriageFinding(BaseModel):
     ...
-    key: str = ""          # D3: rule-scoped discriminator; never `line`
+    key: str = ""  # D3: rule-scoped discriminator; never `line`
+
 
 class SignalResult(BaseModel):
     ...
-    @model_validator(mode="after")
-    def _identities_unique(self) -> "SignalResult": ...   # D3
 
-def finding_identity(f: TriageFinding) -> str: ...        # D3
+    @model_validator(mode="after")
+    def _identities_unique(self) -> "SignalResult": ...  # D3
+
+
+def finding_identity(f: TriageFinding) -> str: ...  # D3
 ```
 
 ### New — `src/sdlc/triage/delta.py` (pure: Pydantic + `.models` only)
@@ -306,17 +310,19 @@ def finding_identity(f: TriageFinding) -> str: ...        # D3
 ```python
 class FindingState(str, Enum): ...
 
+
 class FindingDelta(BaseModel):
     identity: str
     signal: str
     rule: str
     severity: Literal["critical", "high", "medium", "low"]
     state: FindingState
-    reason: str = ""                    # required when UNVERIFIABLE
+    reason: str = ""  # required when UNVERIFIABLE
 
-def compute_delta(before: RepoTriage,
-                  after: RepoTriage | None,
-                  conflicted: list[str] = ()) -> list[FindingDelta]: ...
+
+def compute_delta(
+    before: RepoTriage, after: RepoTriage | None, conflicted: list[str] = ()
+) -> list[FindingDelta]: ...
 ```
 
 ### New — `src/sdlc/workflows/tidyup.py`
@@ -327,25 +333,27 @@ class TidyUpInput(BaseModel):
     commit: str = "HEAD"
     build_probe: bool = True
     advisory_source: str = "none"
-    gates: GateSettings = ...           # the tidy_up gate
-    fix_cfg: PipelineConfig = ...       # D9: deploy gate OFF
+    gates: GateSettings = ...  # the tidy_up gate
+    fix_cfg: PipelineConfig = ...  # D9: deploy gate OFF
     max_fix_runs: int = 10
+
 
 class FixRunResult(BaseModel):
     identity: str
     workflow_id: str
-    outcome: str                        # FeatureWorkflow's return string, verbatim
+    outcome: str  # FeatureWorkflow's return string, verbatim
     pr_url: str | None = None
     branch: str | None = None
     merged_into_verify: bool = False
+
 
 class TidyUpReport(BaseModel):
     before: RepoTriage
     after: RepoTriage | None
     verify_ref: str | None
-    backlog: list[str]                  # every mechanical identity
-    accepted: list[str]                 # the subset approved
-    deferred: list[str]                 # accepted but beyond max_fix_runs
+    backlog: list[str]  # every mechanical identity
+    accepted: list[str]  # the subset approved
+    deferred: list[str]  # accepted but beyond max_fix_runs
     runs: list[FixRunResult]
     deltas: list[FindingDelta]
     readiness_before: Verdict
@@ -355,7 +363,7 @@ class TidyUpReport(BaseModel):
 ### New — `src/sdlc/models.py`
 
 ```python
-class SeededWork(BaseModel):            # D1
+class SeededWork(BaseModel):  # D1
     arch: ArchitectureSpec
     plan: ImplementationPlan
 ```

@@ -21,12 +21,12 @@ from pydantic_ai import Agent
 
 from pydantic_ai_harness import CodeMode
 
-agent = Agent('anthropic:claude-sonnet-4-6', capabilities=[CodeMode()])
+agent = Agent("anthropic:claude-sonnet-4-6", capabilities=[CodeMode()])
 
 
 @agent.tool_plain
 def get_weather(city: str) -> dict:
-    return {'city': city, 'temp_f': 72, 'condition': 'sunny'}
+    return {"city": city, "temp_f": 72, "condition": "sunny"}
 
 
 @agent.tool_plain
@@ -40,12 +40,12 @@ The model could generate code like:
 import asyncio
 
 paris, tokyo = await asyncio.gather(
-    get_weather(city='Paris'),
-    get_weather(city='Tokyo'),
+    get_weather(city="Paris"),
+    get_weather(city="Tokyo"),
 )
-paris_c = await convert_temp(fahrenheit=paris['temp_f'])
-tokyo_c = await convert_temp(fahrenheit=tokyo['temp_f'])
-{'paris': paris_c, 'tokyo': tokyo_c}
+paris_c = await convert_temp(fahrenheit=paris["temp_f"])
+tokyo_c = await convert_temp(fahrenheit=tokyo["temp_f"])
+{"paris": paris_c, "tokyo": tokyo_c}
 ```
 
 This performs four tool calls, across two dependent stages, inside one `run_code` invocation.
@@ -57,10 +57,10 @@ The `tools` parameter controls which tools move behind `run_code`.
 ```python
 from pydantic_ai_harness import CodeMode
 
-CodeMode(tools='all')
-CodeMode(tools=['search', 'fetch'])
-CodeMode(tools=lambda ctx, td: td.name in {'search', 'fetch'})
-CodeMode(tools={'code_mode': True})
+CodeMode(tools="all")
+CodeMode(tools=["search", "fetch"])
+CodeMode(tools=lambda ctx, td: td.name in {"search", "fetch"})
+CodeMode(tools={"code_mode": True})
 ```
 
 Metadata-based selection is useful when the project already groups tools into toolsets:
@@ -73,9 +73,9 @@ from pydantic_ai_harness import CodeMode
 search_tools = FunctionToolset(tools=[search, fetch]).with_metadata(code_mode=True)
 
 agent = Agent(
-    'anthropic:claude-sonnet-4-6',
+    "anthropic:claude-sonnet-4-6",
     toolsets=[search_tools],
-    capabilities=[CodeMode(tools={'code_mode': True})],
+    capabilities=[CodeMode(tools={"code_mode": True})],
 )
 ```
 
@@ -99,7 +99,7 @@ If the user expects a raw dict or list back, avoid unnecessary `print()` stateme
 from pydantic_ai_harness import CodeMode
 
 CodeMode(
-    tools='all',
+    tools="all",
     max_retries=3,
 )
 ```
@@ -165,7 +165,7 @@ from pydantic_ai import Agent
 
 from pydantic_ai_harness import CodeMode
 
-agent = Agent.from_file('agent.yaml', custom_capability_types=[CodeMode])
+agent = Agent.from_file("agent.yaml", custom_capability_types=[CodeMode])
 ```
 
 The same pattern applies when passing arguments:
@@ -185,7 +185,7 @@ That makes CodeMode much easier to debug than a plain blob of generated code.
 ```python {test="skip" lint="skip"}
 for msg in result.all_messages():
     for part in msg.parts:
-        if isinstance(part, ToolReturnPart) and part.tool_name == 'run_code':
-            tool_calls = part.metadata['tool_calls']    # dict[str, ToolCallPart]
-            tool_returns = part.metadata['tool_returns'] # dict[str, ToolReturnPart]
+        if isinstance(part, ToolReturnPart) and part.tool_name == "run_code":
+            tool_calls = part.metadata["tool_calls"]  # dict[str, ToolCallPart]
+            tool_returns = part.metadata["tool_returns"]  # dict[str, ToolReturnPart]
 ```

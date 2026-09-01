@@ -173,22 +173,22 @@ ordering (§Testing), not for skipping it.
 
 ```python
 class ResearchBrief(BaseModel):
-    sub_questions:      list[SubQuestion]      # decompose
-    sources_consulted:  list[ConsultedSource]  # gather
-    grounded_findings:  list[GroundedFinding]  # what the bytes say
-    inferred_findings:  list[InferredFinding]  # what I concluded (flagged)
-    contradictions:     list[Contradiction]    # where sources disagree
-    gaps:               list[Gap]              # what I could not answer
-    summary:            str
-    brief_ref:          ArtifactRef | None
-    confidence:         float                  # last, as in AnalysisReport
+    sub_questions: list[SubQuestion]  # decompose
+    sources_consulted: list[ConsultedSource]  # gather
+    grounded_findings: list[GroundedFinding]  # what the bytes say
+    inferred_findings: list[InferredFinding]  # what I concluded (flagged)
+    contradictions: list[Contradiction]  # where sources disagree
+    gaps: list[Gap]  # what I could not answer
+    summary: str
+    brief_ref: ArtifactRef | None
+    confidence: float  # last, as in AnalysisReport
 ```
 
 ```python
 class GroundedFinding(BaseModel):
     source_url: str
-    quote: str                  # verbatim span from bytes fetched THIS run
-    claim: str                  # what the quote supports
+    quote: str  # verbatim span from bytes fetched THIS run
+    claim: str  # what the quote supports
     sub_question_ids: list[str]
 ```
 

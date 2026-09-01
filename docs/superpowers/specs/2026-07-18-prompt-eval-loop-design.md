@@ -113,11 +113,11 @@ it and owns argument parsing and process exit codes.
 ```python
 # src/sdlc/eval/fixtures.py
 class EvalFixture(BaseModel):
-    role: str            # one of the six supported roles
-    case: str            # label / filename stem, e.g. "add-login"
-    prompt: str          # the exact user-prompt string the agent received
-    model: str           # author model used in the captured run (A and B share it)
-    source_run_id: str   # provenance
+    role: str  # one of the six supported roles
+    case: str  # label / filename stem, e.g. "add-login"
+    prompt: str  # the exact user-prompt string the agent received
+    model: str  # author model used in the captured run (A and B share it)
+    source_run_id: str  # provenance
     captured_at: datetime
 ```
 
@@ -157,9 +157,8 @@ cross-family judge check (§5).
 ### 4. Replay (`runner.py`)
 
 ```python
-def run_variant(role: str, instructions_text: str, fixture: EvalFixture,
-                agents_dir: Path) -> str:
-    build = _load_build(role, agents_dir / role)          # reuse loader's private import
+def run_variant(role: str, instructions_text: str, fixture: EvalFixture, agents_dir: Path) -> str:
+    build = _load_build(role, agents_dir / role)  # reuse loader's private import
     agent = build(fixture.model, instructions_text, MODEL_SETTINGS)
     result = agent.run_sync(fixture.prompt)
     return result.output.model_dump_json()

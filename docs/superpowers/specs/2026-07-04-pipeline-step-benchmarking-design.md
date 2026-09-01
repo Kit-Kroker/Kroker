@@ -46,41 +46,46 @@ class BenchmarkScope(str, Enum):
     STAGE = "stage"
     TASK_ATTEMPT = "task_attempt"
 
+
 class BenchmarkOutcome(str, Enum):
     PASS = "pass"
     FAIL = "fail"
-    REVISED = "revise"        # a gate sent the stage back (revise outcome)
-    ESCALATED = "escalated"   # fix-loop / budget exhaustion → human gate
+    REVISED = "revise"  # a gate sent the stage back (revise outcome)
+    ESCALATED = "escalated"  # fix-loop / budget exhaustion → human gate
+
 
 class QualityScore(BaseModel):
-    score: float | None               # 0.0 .. 1.0, None when judge errored
+    score: float | None  # 0.0 .. 1.0, None when judge errored
     components: dict[str, float] = {}  # e.g. {"contract_pass": 0.9, "rubric_coverage": 0.8}
     judge: Literal["contract", "llm_judge", "human_override", "error"]
+
 
 class CostBag(BaseModel):
     usd: float | None
     input_tokens: int | None
     output_tokens: int | None
 
+
 class SpeedBag(BaseModel):
     wall_clock_s: float
     started_at: datetime
     ended_at: datetime
 
+
 class BenchmarkRecord(BaseModel):
     # identity
-    run_id: str                       # the cell's FactoryWorkflow run id
-    bench_run_id: str                 # the parent BenchmarkWorkflow run id
-                                      #   ("_drift" for production-drift records)
-    case_id: str                      # golden case name; "_production" for drift
+    run_id: str  # the cell's FactoryWorkflow run id
+    bench_run_id: str  # the parent BenchmarkWorkflow run id
+    #   ("_drift" for production-drift records)
+    case_id: str  # golden case name; "_production" for drift
     scope: BenchmarkScope
-    stage: str                        # one of the 14 stages
-    task_id: str | None = None        # only when scope == TASK_ATTEMPT
-    attempt: int | None = None        # fix-loop attempt index (0 = first try)
-    role: str                         # architect | dev | reviewer | qa | ...
-    harness: HarnessKind | None = None   # null for pure proposers
-    model: str                        # e.g. "anthropic:claude-sonnet-4-6"
-    prompt_sha: str                   # role prompt version (already in memo hash)
+    stage: str  # one of the 14 stages
+    task_id: str | None = None  # only when scope == TASK_ATTEMPT
+    attempt: int | None = None  # fix-loop attempt index (0 = first try)
+    role: str  # architect | dev | reviewer | qa | ...
+    harness: HarnessKind | None = None  # null for pure proposers
+    model: str  # e.g. "anthropic:claude-sonnet-4-6"
+    prompt_sha: str  # role prompt version (already in memo hash)
 
     # dimensions (raw)
     quality: QualityScore
@@ -88,7 +93,7 @@ class BenchmarkRecord(BaseModel):
     speed: SpeedBag
 
     outcome: BenchmarkOutcome
-    fix_attempts: int = 0             # total attempts for the task (code stage)
+    fix_attempts: int = 0  # total attempts for the task (code stage)
     error: str | None = None
 ```
 
@@ -165,8 +170,9 @@ benchmarks/                       # golden-case tree (versioned assets, like pro
 
 ```python
 class BenchmarkConfig(BaseModel):
-    case_id: str | None = None     # None ⇒ not a benchmark run (pure path)
+    case_id: str | None = None  # None ⇒ not a benchmark run (pure path)
     bench_run_id: str | None = None
+
 
 class PipelineConfig(BaseModel):
     ...

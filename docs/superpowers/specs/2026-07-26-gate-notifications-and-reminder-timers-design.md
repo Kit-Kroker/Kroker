@@ -28,8 +28,9 @@ try:
     )
     decision = self._gate_decisions[key]
 except TimeoutError:
-    decision = GateDecision(gate=name, round=round,
-                            outcome=GateOutcome.REJECT, decided_by="timeout")
+    decision = GateDecision(
+        gate=name, round=round, outcome=GateOutcome.REJECT, decided_by="timeout"
+    )
 ```
 
 Three defects, in ascending order of severity:
@@ -97,18 +98,19 @@ gain meaning as identities. Nothing here has to be unbuilt for that.
 
 ```python
 class TimeoutAction(str, Enum):
-    REJECT  = "reject"    # today's behaviour — the default
+    REJECT = "reject"  # today's behaviour — the default
     APPROVE = "approve"
-    HOLD    = "hold"      # no final deadline; stays in the E-8 inbox
+    HOLD = "hold"  # no final deadline; stays in the E-8 inbox
 
 
 class GateConfig(BaseModel):
     """Per-gate policy, the SOFT confidence bar, and the timer schedule."""
+
     policy: GatePolicy = GatePolicy.HARD
     threshold: float = Field(default=0.8, ge=0.0, le=1.0)
     on_timeout: TimeoutAction = TimeoutAction.REJECT
-    remind_after_hours: int | None = None       # None -> derived (§4)
-    escalate_after_hours: int | None = None     # None -> derived (§4)
+    remind_after_hours: int | None = None  # None -> derived (§4)
+    escalate_after_hours: int | None = None  # None -> derived (§4)
 ```
 
 `GateConfig._coerce` (`models.py:47`) is unchanged: a bare string or
@@ -145,7 +147,7 @@ transport.
 
 ```python
 NOTIFIERS: dict[str, Notifier] = {
-    "log":     LogNotifier(),      # default; zero-config; deterministic
+    "log": LogNotifier(),  # default; zero-config; deterministic
     "webhook": WebhookNotifier(),  # generic JSON POST (Slack/Discord-shaped)
 }
 ```
@@ -236,10 +238,10 @@ async def _wait_for_decision(self, key, pending, schedule, expires):
         except TimeoutError:
             await self._notify(pending, reason, deadline=at)
 
-    if expires is None:                 # HOLD: wait without a deadline
+    if expires is None:  # HOLD: wait without a deadline
         await workflow.wait_condition(decided)
         return self._gate_decisions[key]
-    return None                         # expired undecided
+    return None  # expired undecided
 ```
 
 Under a non-`HOLD` config the last schedule entry is `(expire_at, "expire")`,
@@ -252,9 +254,11 @@ disagree.
 ### Schedule construction (pure, unit-testable)
 
 ```python
-def build_schedule(cfg, gate, opened_at) -> tuple[
-    list[tuple[datetime, NotifyReason]],   # sorted notification deadlines
-    datetime | None,                       # final deadline; None under HOLD
+def build_schedule(
+    cfg, gate, opened_at
+) -> tuple[
+    list[tuple[datetime, NotifyReason]],  # sorted notification deadlines
+    datetime | None,  # final deadline; None under HOLD
 ]: ...
 ```
 

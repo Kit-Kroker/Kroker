@@ -115,15 +115,16 @@ class WasteBag(BaseModel):
     """§4.3 coordination-and-waste aggregates for one coding attempt:
     activity that did not advance the goal. Projected from SessionDigest,
     minus the unbounded skeleton and the token fields CostBag already owns."""
+
     tool_calls: int = 0
     file_reads: int = 0
-    file_rereads: int = 0      # same path read more than once
-    files_written: int = 0     # distinct paths written
-    rewrite_churn: int = 0     # paths written more than once
-    failed_commands: int = 0   # command events with non-zero exit
+    file_rereads: int = 0  # same path read more than once
+    files_written: int = 0  # distinct paths written
+    rewrite_churn: int = 0  # paths written more than once
+    failed_commands: int = 0  # command events with non-zero exit
     model_turns: int = 0
-    denials: int = 0           # E-16 blocked tool calls
-    escalations: int = 0       # E-17 calls that raised a gate
+    denials: int = 0  # E-16 blocked tool calls
+    escalations: int = 0  # E-17 calls that raised a gate
     compacted: bool = False
 
     @classmethod

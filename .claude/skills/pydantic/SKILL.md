@@ -26,11 +26,11 @@ from pydantic import BaseModel, Field
 
 class Person(BaseModel):
     name: str
-    age: int = Field(description='The age of the person')
+    age: int = Field(description="The age of the person")
     birthdate: date | None = None
 
 
-p = Person(name='John', age=20, birthdate='1970-01-01')
+p = Person(name="John", age=20, birthdate="1970-01-01")
 ```
 
 ## Constraints and field metadata
@@ -47,7 +47,7 @@ The `Field()` function can be attached to model fields using the assignment form
 
 ```python
 class User(BaseModel):
-    first_name: str = Field(alias='name')
+    first_name: str = Field(alias="name")
 ```
 
 or using the annotated pattern:
@@ -88,16 +88,17 @@ custom validators:
 ```python
 from annotated_types import Gt  # annotated_types is an alternative to the `Field()` function.
 
+
 class Model(BaseModel):
     constrained_int_ok: Annotated[int, Gt(1)]  # This is good
 
     constrained_int_bad: int
 
-    @field_validator('constrained_int_bad')  # This is bad
+    @field_validator("constrained_int_bad")  # This is bad
     @classmethod
     def validate(cls, v: int):
         if not v > 1:
-            raise ValueError('Value is not greater than 1')
+            raise ValueError("Value is not greater than 1")
 ```
 
 Sometimes, constraints can't be expressed using the `Field()` function. For example, string constraints such
@@ -178,7 +179,7 @@ If you are defining Pydantic models in a module, avoid using `from __future__ im
 
 ```python
 class Model(BaseModel):
-    self_ref: 'Model'
+    self_ref: "Model"
 ```
 
 Also note that in Python >= 3.14, annotations evaluation is deferred, so you should not use string annotations at all.
@@ -188,7 +189,7 @@ Also note that in Python >= 3.14, annotations evaluation is deferred, so you sho
 You might be tempted to define aliases like this:
 
 ```python
-JsonValue: TypeAlias = 'list[JsonValue] | dict[str, JsonValue] | str | bool | int | float | None'
+JsonValue: TypeAlias = "list[JsonValue] | dict[str, JsonValue] | str | bool | int | float | None"
 ```
 
 The alias needs to be quoted because it is a recursive one. Pydantic will generally *not* be able to evaluate the alias.
@@ -199,7 +200,9 @@ type JsonValue = list[JsonValue] | dict[str, JsonValue] | str | bool | int | flo
 # Or, if not on Python >= 3.12:
 from typing_extensions import TypeAliasType
 
-JsonValue = TypeAliasType('JsonValue', 'list[JsonValue] | dict[str, JsonValue] | str | bool | int | float | None')
+JsonValue = TypeAliasType(
+    "JsonValue", "list[JsonValue] | dict[str, JsonValue] | str | bool | int | float | None"
+)
 ```
 
 ### Model subclasses, discriminated unions
@@ -225,14 +228,14 @@ class Main(BaseModel):
     model: Base
 
 
-m = Main(model=Sub1(base_field=1, sub1_field='test'))
+m = Main(model=Sub1(base_field=1, sub1_field="test"))
 ```
 
 This example works, but will not behave as expected when serializing `m`:
 
 ```python
 m.model_dump()
-#> {'model': {'base_field': 1}} -> sub1_field missing
+# > {'model': {'base_field': 1}} -> sub1_field missing
 ```
 
 This is because Pydantic serializes the model according to the defined type (`Base`), not the runtime value.
@@ -242,15 +245,17 @@ Instead, try to use discriminated unions (provided that you can set a `type` fie
 
 ```python
 class Sub1(Base):
-    type: Literal['sub1']
+    type: Literal["sub1"]
     sub1_field: str
 
 
 class Sub2(Base):
-    type: Literal['sub2']
+    type: Literal["sub2"]
     sub2_field: bool
 
-Subs = Annotated[Sub1 | Sub2, Field(discriminator='type')]
+
+Subs = Annotated[Sub1 | Sub2, Field(discriminator="type")]
+
 
 class Main(BaseModel):
     model: Subs
@@ -262,7 +267,8 @@ or generics:
 class Main[BaseT: Base](BaseModel):
     model: BaseT
 
-m = Main[Sub1](model={'base_field': 1, 'sub1_field': 'test'})  # Will work
+
+m = Main[Sub1](model={"base_field": 1, "sub1_field": "test"})  # Will work
 ```
 
 using [polymorphic serialization](https://pydantic.dev/docs/validation/latest/concepts/serialization/#polymorphic-serialization) (in Pydantic >=2.13)

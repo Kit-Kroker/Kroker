@@ -283,42 +283,48 @@ All in `src/sdlc/assessment/discover/models.py`, beside E-47b's contracts.
 ```python
 # D4. The other half of this pairing is E-48's MemberKind -> SignalTier map;
 # neither may be derived from the other (two coincidental agreements).
-CONTRACT_KINDS: frozenset[MemberKind] = frozenset({
-    MemberKind.HTTP_ROUTE, MemberKind.CLI_COMMAND, MemberKind.GRPC_METHOD,
-    MemberKind.SCHEDULED_JOB, MemberKind.QUEUE_TOPIC,
-    MemberKind.FRONTEND_ROUTE,
-})
+CONTRACT_KINDS: frozenset[MemberKind] = frozenset(
+    {
+        MemberKind.HTTP_ROUTE,
+        MemberKind.CLI_COMMAND,
+        MemberKind.GRPC_METHOD,
+        MemberKind.SCHEDULED_JOB,
+        MemberKind.QUEUE_TOPIC,
+        MemberKind.FRONTEND_ROUTE,
+    }
+)
 
 
 class OperationVerb(str, Enum):
     """What an operation does. NOT OwnershipVerb (D6): that describes a
     capability's relationship to an entity, a different subject."""
+
     CREATE = "create"
     READ = "read"
     UPDATE = "update"
     DELETE = "delete"
-    INVOKE = "invoke"        # direction unknown
-    SCHEDULE = "schedule"    # direction unknown
-    CONSUME = "consume"      # direction unknown
-    RENDER = "render"        # direction unknown
+    INVOKE = "invoke"  # direction unknown
+    SCHEDULE = "schedule"  # direction unknown
+    CONSUME = "consume"  # direction unknown
+    RENDER = "render"  # direction unknown
 
 
-WRITE_VERBS: frozenset[OperationVerb]   # CREATE, UPDATE, DELETE
-READ_VERBS: frozenset[OperationVerb]    # READ
+WRITE_VERBS: frozenset[OperationVerb]  # CREATE, UPDATE, DELETE
+READ_VERBS: frozenset[OperationVerb]  # READ
 DIRECTED_VERBS = WRITE_VERBS | READ_VERBS
 
 
 class L2Operation(BaseModel):
     model_config = {"frozen": True}
-    op_id: str                  # "BC-014-OP-03", assessment-local (D5)
-    capability: str             # bc_id
+    op_id: str  # "BC-014-OP-03", assessment-local (D5)
+    capability: str  # bc_id
     verb: OperationVerb
-    name: str                   # "create_payment"
-    object: str                 # "payment"; "" when underivable
-    binding: str                # "POST /api/payments", verbatim
+    name: str  # "create_payment"
+    object: str  # "payment"; "" when underivable
+    binding: str  # "POST /api/payments", verbatim
     kind: MemberKind
     evidence: EvidenceRef
-    rule: str                   # the mapping rule that fired
+    rule: str  # the mapping rule that fired
 
 
 class DecompositionReport(BaseModel):
@@ -333,6 +339,7 @@ class DecompositionReport(BaseModel):
 class OwnershipVerb(str, Enum):
     """TRACKS is deliberately absent (D6): no deterministic trigger exists,
     and it is reserved for E-48's proposer."""
+
     OWNS = "owns"
     CREATES = "creates"
     MANAGES = "manages"
@@ -341,13 +348,14 @@ class OwnershipVerb(str, Enum):
 
 class OwnershipOutcome(str, Enum):
     OWNED = "owned"
-    CONFLICT = "conflict"          # 2+ tied claimants (D8)
-    UNDIRECTED = "undirected"      # claimants, none with readable direction
-    UNCLAIMED = "unclaimed"        # nothing touches it
+    CONFLICT = "conflict"  # 2+ tied claimants (D8)
+    UNDIRECTED = "undirected"  # claimants, none with readable direction
+    UNCLAIMED = "unclaimed"  # nothing touches it
 
 
 class EntityDeclaration(BaseModel):
     """D2: what assign() needs from S2, without importing a signal."""
+
     model_config = {"frozen": True}
     name: str
     path: str

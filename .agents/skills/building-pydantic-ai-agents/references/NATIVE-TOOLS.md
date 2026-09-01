@@ -13,8 +13,10 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import WebSearchTool
 
-agent = Agent('openai-responses:gpt-5.2', name='web_search_agent', capabilities=[NativeTool(WebSearchTool())])
-result = agent.run_sync('Give me a sentence with the biggest news in AI this week.')
+agent = Agent(
+    "openai-responses:gpt-5.2", name="web_search_agent", capabilities=[NativeTool(WebSearchTool())]
+)
+result = agent.run_sync("Give me a sentence with the biggest news in AI this week.")
 print(result.output)
 ```
 
@@ -46,14 +48,14 @@ from pydantic_ai.native_tools import WebSearchTool
 
 
 async def prepared_web_search(ctx: RunContext[dict]) -> WebSearchTool | None:
-    if not ctx.deps.get('location'):
+    if not ctx.deps.get("location"):
         return None
-    return WebSearchTool(user_location={'city': ctx.deps['location']})
+    return WebSearchTool(user_location={"city": ctx.deps["location"]})
 
 
 agent = Agent(
-    'openai-responses:gpt-5.2',
-    name='dynamic_web_search_agent',
+    "openai-responses:gpt-5.2",
+    name="dynamic_web_search_agent",
     capabilities=[NativeTool(prepared_web_search)],
     deps_type=dict,
 )
@@ -71,7 +73,9 @@ Use provider-adaptive capabilities — `WebSearch()`, `WebFetch()`, `MCP()`, `Im
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import WebSearch
 
-agent = Agent('anthropic:claude-sonnet-4-6', name='adaptive_web_search_agent', capabilities=[WebSearch()])
+agent = Agent(
+    "anthropic:claude-sonnet-4-6", name="adaptive_web_search_agent", capabilities=[WebSearch()]
+)
 ```
 
 Use native tools (`NativeTool(WebSearchTool(...))`) when:

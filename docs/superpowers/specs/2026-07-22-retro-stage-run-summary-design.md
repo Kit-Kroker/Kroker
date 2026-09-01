@@ -41,8 +41,8 @@ Extract today's `run()` body verbatim into `async def _pipeline(self, idea, cfg)
 @workflow.run
 async def run(self, idea: IdeaBrief, cfg: PipelineConfig | None = None) -> str:
     cfg = cfg or PipelineConfig()
-    result = await self._pipeline(idea, cfg)   # returns on EVERY terminal path
-    await self._retro(cfg, idea, result)       # stage 14
+    result = await self._pipeline(idea, cfg)  # returns on EVERY terminal path
+    await self._retro(cfg, idea, result)  # stage 14
     return result
 ```
 
@@ -80,6 +80,7 @@ class RunEventKind(str, Enum):
     MEMORY_RETAINED = "memory_retained"
     RUN_FINISHED = "run_finished"
 
+
 class RunEvent(BaseModel):
     seq: int
     at: datetime
@@ -108,30 +109,33 @@ Added to `src/sdlc/models.py`:
 class StageOutcome(BaseModel):
     stage: str
     role: str
-    outcome: str            # BenchmarkOutcome value
+    outcome: str  # BenchmarkOutcome value
     duration_s: float
     cost_usd: float | None = None
     fix_attempts: int = 0
+
 
 class ClarificationOutcome(BaseModel):
     question_id: str
     question: str
     answered_by: Literal["human", "suggested", "unanswered"]  # SC-4 signal
 
+
 class GateOutcomeSummary(BaseModel):
     gate: str
     round: int
-    policy: str             # GatePolicy value
-    decided_by: str         # "human" | "policy" | "timeout"
+    policy: str  # GatePolicy value
+    decided_by: str  # "human" | "policy" | "timeout"
     approved: bool
-    confidence: float | None = None                          # §10 calibration
-    overrides: list[str] = Field(default_factory=list)       # advisory checks waved (SC-6)
+    confidence: float | None = None  # §10 calibration
+    overrides: list[str] = Field(default_factory=list)  # advisory checks waved (SC-6)
+
 
 class RunSummary(BaseModel):
     run_id: str
-    mode: str               # IdeaBrief.mode
-    outcome: str            # the run() return string
-    terminal_stage: str     # last stage reached
+    mode: str  # IdeaBrief.mode
+    outcome: str  # the run() return string
+    terminal_stage: str  # last stage reached
     started_at: datetime
     ended_at: datetime
     duration_s: float

@@ -8,9 +8,9 @@ Read this file when the user needs the core `Agent` workflow: creating agents, c
 from pydantic_ai import Agent
 
 agent = Agent(
-    'anthropic:claude-sonnet-4-6',
-    name='hello_world_agent',
-    instructions='Be concise, reply with one sentence.',
+    "anthropic:claude-sonnet-4-6",
+    name="hello_world_agent",
+    instructions="Be concise, reply with one sentence.",
 )
 
 result = agent.run_sync('Where does "hello world" come from?')
@@ -34,8 +34,8 @@ class CityLocation(BaseModel):
     country: str
 
 
-agent = Agent('google:gemini-3-flash-preview', name='city_location_agent', output_type=CityLocation)
-result = agent.run_sync('Where were the olympics held in 2012?')
+agent = Agent("google:gemini-3-flash-preview", name="city_location_agent", output_type=CityLocation)
+result = agent.run_sync("Where were the olympics held in 2012?")
 print(result.output)
 ```
 
@@ -53,7 +53,7 @@ Use `deps_type=...` plus `RunContext[...]` when tools or instructions need app s
 ```python
 from pydantic_ai import Agent, RunContext
 
-agent = Agent('openai:gpt-5.2', name='greeting_agent', deps_type=str)
+agent = Agent("openai:gpt-5.2", name="greeting_agent", deps_type=str)
 
 
 @agent.instructions
@@ -87,8 +87,8 @@ class UserContext:
     user_name: str
 
 
-agent = Agent.from_file('agent.yaml', deps_type=UserContext)
-result = agent.run_sync('Find recent papers on AI safety', deps=UserContext(user_name='Alice'))
+agent = Agent.from_file("agent.yaml", deps_type=UserContext)
+result = agent.run_sync("Find recent papers on AI safety", deps=UserContext(user_name="Alice"))
 ```
 
 Template strings are part of the spec flow, so route template-string questions here too.
@@ -123,17 +123,17 @@ from collections.abc import AsyncIterable
 
 from pydantic_ai import Agent, AgentStreamEvent, FunctionToolCallEvent, RunContext
 
-agent = Agent('openai:gpt-5.2', name='streaming_agent')
+agent = Agent("openai:gpt-5.2", name="streaming_agent")
 
 
 async def stream_handler(ctx: RunContext, events: AsyncIterable[AgentStreamEvent]):
     async for event in events:
         if isinstance(event, FunctionToolCallEvent):
-            print(f'Calling {event.part.tool_name}...')
+            print(f"Calling {event.part.tool_name}...")
 
 
 async def main():
-    await agent.run('Do the task', event_stream_handler=stream_handler)
+    await agent.run("Do the task", event_stream_handler=stream_handler)
 ```
 
 Deferred tool calls also surface as batch-level events: `DeferredToolRequestsEvent` (once per batch of deferred calls, before any `HandleDeferredToolCalls` handler runs) and `DeferredToolResultsEvent` (when a handler resolves requests inline). Use these to tell a frontend the run is paused waiting for approvals or external calls.
@@ -149,11 +149,11 @@ from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.openai import OpenAIChatModel
 
 fallback = FallbackModel(
-    OpenAIChatModel('gpt-5.2'),
-    AnthropicModel('claude-sonnet-4-6'),
+    OpenAIChatModel("gpt-5.2"),
+    AnthropicModel("claude-sonnet-4-6"),
 )
 
-agent = Agent(fallback, name='fallback_agent')
+agent = Agent(fallback, name="fallback_agent")
 ```
 
 Good defaults:

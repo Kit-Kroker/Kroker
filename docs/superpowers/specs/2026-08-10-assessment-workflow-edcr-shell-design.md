@@ -230,19 +230,19 @@ class PhaseId(str, Enum):
     SCAN = "scan"
     DISCOVER = "discover"
     ASSESS = "assess"
-    REPORT = "report"          # after ASSESS -- FR-911 deviation (a)
+    REPORT = "report"  # after ASSESS -- FR-911 deviation (a)
     GENERATE = "generate"
     FINISH = "finish"
 
 
 class PhaseResult(BaseModel):
     phase: PhaseId
-    collected: Measurement     # not_collected names the owing E-item
+    collected: Measurement  # not_collected names the owing E-item
 
 
 class Assessment(BaseModel):
     repo_dir: str
-    commit_sha: str = ""       # "" only when init failed to pin one
+    commit_sha: str = ""  # "" only when init failed to pin one
     toolchain: str | None = None
     # init's artifact -- in-history evidence (D3). None ONLY when the child
     # workflow itself failed (§6), which is also the only case where
@@ -251,7 +251,7 @@ class Assessment(BaseModel):
     # can admit a repository whose triage never materialized.
     triage: RepoTriage | None = None
     admitted: bool
-    admission_reason: str      # admits()' reason, verbatim
+    admission_reason: str  # admits()' reason, verbatim
     phases: list[PhaseResult]
     terminal_status: str
 ```
@@ -261,7 +261,7 @@ the caller needs the artifact and the phase row is what lands in `phases`:
 
 ```python
 class InitOutcome(BaseModel):
-    result: PhaseResult            # measured, or not_collected on child failure
+    result: PhaseResult  # measured, or not_collected on child failure
     triage: RepoTriage | None
 ```
 
@@ -287,25 +287,24 @@ to the child, which owns its own bound.
 ```python
 @workflow.defn
 class AssessmentWorkflow(GateHost):
-
     @workflow.query
     def assessment(self) -> Assessment | None: ...
 
     @workflow.run
     async def run(self, inp: AssessmentInput) -> Assessment:
-        init = await self._init(inp)                  # TriageWorkflow child
-        if init.triage is None:                       # §6 -- child failed
+        init = await self._init(inp)  # TriageWorkflow child
+        if init.triage is None:  # §6 -- child failed
             return self._assembled(init, False, init.result.collected.reason)
         ok, why = admits(init.triage, require_human=True)
         if not ok:
             return self._assembled(init, False, why)
         rest = [
-            await self._scan(inp),                    # E-46
-            await self._discover(inp),                # E-48
-            await self._assess(inp),                  # E-49
-            await self._report(inp),                  # E-52, AFTER assess
-            await self._generate(inp),                # E-52
-            await self._finish(inp),                  # E-51
+            await self._scan(inp),  # E-46
+            await self._discover(inp),  # E-48
+            await self._assess(inp),  # E-49
+            await self._report(inp),  # E-52, AFTER assess
+            await self._generate(inp),  # E-52
+            await self._finish(inp),  # E-51
         ]
         return self._assembled(init, True, why, rest)
 ```

@@ -65,8 +65,9 @@ using the same `GateConfig.threshold` — one rule, one field, everywhere a soft
 **New pure helper**, alongside `_gate()` in `feature.py`:
 
 ```python
-def _auto_decision_for(name: str, cfg: PipelineConfig,
-                       confidence: float | None) -> GateDecision | None:
+def _auto_decision_for(
+    name: str, cfg: PipelineConfig, confidence: float | None
+) -> GateDecision | None:
     """SOFT + confidence >= threshold -> an APPROVE decision _gate() can
     short-circuit on. None confidence (missing/legacy artifact) or below
     threshold -> None, falling through to the human wait -- never a
@@ -77,10 +78,14 @@ def _auto_decision_for(name: str, cfg: PipelineConfig,
         return None
     if confidence < gate_cfg.threshold:
         return None
-    return GateDecision(gate=name, round=1, outcome=GateOutcome.APPROVE,
-                        decided_by="policy",
-                        comments=f"auto-approved: confidence={confidence:.2f} "
-                                 f">= threshold={gate_cfg.threshold:.2f}")
+    return GateDecision(
+        gate=name,
+        round=1,
+        outcome=GateOutcome.APPROVE,
+        decided_by="policy",
+        comments=f"auto-approved: confidence={confidence:.2f} "
+        f">= threshold={gate_cfg.threshold:.2f}",
+    )
 ```
 
 `_gate()`'s existing signature (`auto_decision: GateDecision | None = None`) and SOFT branch are unchanged — they already do the right thing once a non-`None` `auto_decision` actually arrives.

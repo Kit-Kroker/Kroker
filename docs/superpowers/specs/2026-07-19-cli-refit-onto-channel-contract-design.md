@@ -135,8 +135,7 @@ returns an item, so all of it is unit-testable with no Temporal server.
 
 ```python
 def match(pendings, selector, channel=ReferenceChannel()):
-    cands = [d for d in pendings
-             if channel.render(d).reply_kind == selector.reply_kind]
+    cands = [d for d in pendings if channel.render(d).reply_kind == selector.reply_kind]
     if selector.name is not None:
         cands = [d for d in cands if _name_of(d) == selector.name]
     if not cands:
@@ -168,8 +167,7 @@ async def submit(handle, pending, reply, channel=ReferenceChannel()):
         await handle.signal(call.signal, args=[call.question_id, call.answer])
     else:
         await handle.signal(call.signal, call.decision)
-    still = await handle.query("pending_decisions",
-                               result_type=list[PendingDecision])
+    still = await handle.query("pending_decisions", result_type=list[PendingDecision])
     confirmed = pending.key not in {d.key for d in still}
     return SubmitResult(confirmed=confirmed, message=...)
 ```
@@ -193,7 +191,8 @@ Two lines, both in signal handlers, no stage logic touched:
 @workflow.signal
 def answer_question(self, question_id: str, answer: str) -> None:
     self._question_answers.setdefault(question_id, answer)
-    self._pending.pop(question_id, None)            # new
+    self._pending.pop(question_id, None)  # new
+
 
 @workflow.signal
 def submit_gate_decision(self, decision: GateDecision) -> None:
@@ -201,7 +200,7 @@ def submit_gate_decision(self, decision: GateDecision) -> None:
     if key not in self._gate_decisions:
         decision.decided_at = workflow.now()
         self._gate_decisions[key] = decision
-    self._pending.pop(key, None)                    # new
+    self._pending.pop(key, None)  # new
 ```
 
 The clarify line fixes §1.3. The gate line is redundant with the `finally` at

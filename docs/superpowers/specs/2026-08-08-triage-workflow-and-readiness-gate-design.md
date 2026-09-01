@@ -100,9 +100,9 @@ retains a `GATE_FEEDBACK` memory (FR-401). Triage has neither a `RunSummary`
 nor a memory bank. Both collapse into:
 
 ```python
-async def _on_gate_decided(self, name: str, round: int,
-                           policy: GatePolicy,
-                           decision: GateDecision) -> None:
+async def _on_gate_decided(
+    self, name: str, round: int, policy: GatePolicy, decision: GateDecision
+) -> None:
     """Hook: what this workflow does with a decided gate. No-op by default."""
 ```
 
@@ -304,6 +304,7 @@ src/sdlc/
 class GateSettings(BaseModel):
     """The three fields a durable HITL gate reads. Extracted so GateHost does
     not depend on the feature pipeline's PipelineConfig."""
+
     gates: dict[str, GateConfig] = Field(default_factory=dict)
     default_gate_policy: GatePolicy = GatePolicy.HARD
     gate_timeout_hours: int = 48
@@ -311,6 +312,7 @@ class GateSettings(BaseModel):
 
 class PipelineConfig(BaseModel):
     ...
+
     def gate_settings(self) -> GateSettings: ...
 ```
 
@@ -321,9 +323,10 @@ class ReadinessOverride(BaseModel):
     """FR-903: an audited decision to proceed despite a verdict that is not
     READY. Local and pure -- this module must not import models.py, so
     GateDecision cannot appear here; TriageWorkflow maps one to the other."""
-    approved_by: Literal["human", "policy", "timeout"]   # decided_by
-    reviewer: str | None = None    # GateDecision.reviewer -- see FR-1004
-    reason: str                    # GateDecision.comments
+
+    approved_by: Literal["human", "policy", "timeout"]  # decided_by
+    reviewer: str | None = None  # GateDecision.reviewer -- see FR-1004
+    reason: str  # GateDecision.comments
     decided_at: datetime
     gate_round: int
 
@@ -334,7 +337,7 @@ class RepoTriage(BaseModel):
     toolchain: str | None = None
     readiness: Readiness
     signals: list[SignalResult] = Field(default_factory=list)
-    override: ReadinessOverride | None = None      # NEW
+    override: ReadinessOverride | None = None  # NEW
 ```
 
 ### `workflows/triage.py`
@@ -342,11 +345,11 @@ class RepoTriage(BaseModel):
 ```python
 class TriageInput(BaseModel):
     repo_dir: str
-    commit: str = "HEAD"                # resolved to a sha by D7's activity
-    build_probe: bool = True            # D6
-    advisory_source: str = "none"       # E-41a: off by default, declared egress
+    commit: str = "HEAD"  # resolved to a sha by D7's activity
+    build_probe: bool = True  # D6
+    advisory_source: str = "none"  # E-41a: off by default, declared egress
     gates: GateSettings = Field(default_factory=GateSettings)
-    max_gate_rounds: int = 2            # D9's bound
+    max_gate_rounds: int = 2  # D9's bound
 ```
 
 ### `triage/activities.py`
@@ -355,12 +358,14 @@ class TriageInput(BaseModel):
 @dataclass
 class TriagePinInput:
     repo_dir: str
-    commit: str = "HEAD"        # an unresolved ref -- see D7
+    commit: str = "HEAD"  # an unresolved ref -- see D7
+
 
 @dataclass
 class TriagePin:
     commit_sha: str
     toolchain: str | None
+
 
 @activity.defn
 async def triage_resolve_commit(inp: TriagePinInput) -> TriagePin: ...
@@ -373,7 +378,7 @@ class SignalSpec(BaseModel):
     id: str
     version: int
     activity: str
-    readiness_keys: tuple[str, ...] = ()   # D8a: which dimensions this signal owes
+    readiness_keys: tuple[str, ...] = ()  # D8a: which dimensions this signal owes
 ```
 
 `build_probe` → `("buildable", "runnable")`; `baseline` → `("tests_present",)`;
@@ -527,7 +532,7 @@ sdlc triage show --id <workflow-id>       # prints the triage() query result
 **One expected edit, not collateral damage:** `tests/test_pending_wiring.py:30`
 asserts `"def pending_decisions("` and `"self._pending.pop("` appear in
 `feature.py`'s *source text*. Both move to `gates.py`, so that test is
-re-pointed. (`test_gate_accepts_context_param` survives — 
+re-pointed. (`test_gate_accepts_context_param` survives —
 `inspect.signature(FeatureWorkflow._gate)` resolves through the MRO.
 `test_soft_gate_auto_approval` survives — `_revisable_stage` does not move.)
 

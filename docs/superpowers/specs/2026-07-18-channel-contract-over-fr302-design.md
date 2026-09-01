@@ -87,26 +87,31 @@ surfaces implement. No surface is constructed here.
 # src/sdlc/pending.py
 from typing import Literal
 from pydantic import BaseModel
-from .gate import CheckResult          # reused, not redefined
+from .gate import CheckResult  # reused, not redefined
+
 
 class PendingDecision(BaseModel):
     """Base for the discriminated union returned by pending_decisions()."""
-    key: str          # resolution key: question_id, or gate_key(gate, round)
+
+    key: str  # resolution key: question_id, or gate_key(gate, round)
     kind: Literal["clarify", "stage_gate", "task_escalation", "merge_gate"]
 
-class ClarifyPending(PendingDecision):        # reply -> answer_question
+
+class ClarifyPending(PendingDecision):  # reply -> answer_question
     kind: Literal["clarify"] = "clarify"
     question: str
     why_it_matters: str
     suggested_answer: str | None = None
 
-class StageGatePending(PendingDecision):      # reply -> submit_gate_decision
+
+class StageGatePending(PendingDecision):  # reply -> submit_gate_decision
     kind: Literal["stage_gate"] = "stage_gate"
     gate: str
     round: int
     spec_summary: str
 
-class TaskEscalationPending(PendingDecision): # reply -> submit_gate_decision
+
+class TaskEscalationPending(PendingDecision):  # reply -> submit_gate_decision
     kind: Literal["task_escalation"] = "task_escalation"
     gate: str
     round: int
@@ -114,7 +119,8 @@ class TaskEscalationPending(PendingDecision): # reply -> submit_gate_decision
     analysis: str
     attempts: int
 
-class MergeGatePending(PendingDecision):      # reply -> submit_gate_decision
+
+class MergeGatePending(PendingDecision):  # reply -> submit_gate_decision
     kind: Literal["merge_gate"] = "merge_gate"
     gate: str
     round: int
@@ -139,12 +145,12 @@ the variant by gate name (`merge` → `MergeGatePending`, `task:*` →
 
 ```python
 class GateContext(BaseModel):
-    spec_summary: str | None = None      # stage gates
-    checks: list[CheckResult] = []       # merge gate
-    verdict: str | None = None           # merge gate
-    analysis: str | None = None          # task escalation
-    attempts: int | None = None          # task escalation
-    task_id: str | None = None           # task escalation
+    spec_summary: str | None = None  # stage gates
+    checks: list[CheckResult] = []  # merge gate
+    verdict: str | None = None  # merge gate
+    analysis: str | None = None  # task escalation
+    attempts: int | None = None  # task escalation
+    task_id: str | None = None  # task escalation
 ```
 
 ## 5. Layer B — interface types and the Protocol
@@ -156,27 +162,32 @@ from pydantic import BaseModel
 from sdlc.models import GateDecision, GateOutcome
 from sdlc.pending import PendingDecision
 
-class RenderedDecision(BaseModel):        # surface-neutral presentation
+
+class RenderedDecision(BaseModel):  # surface-neutral presentation
     key: str
     title: str
     body: str
-    reply_kind: Literal["text", "gate"]   # text=answer; gate=approve/revise/reject
-    suggested: str | None = None          # suggested answer / default
-    rows: list[tuple[str, str]] = []      # extra display rows (e.g. check table)
+    reply_kind: Literal["text", "gate"]  # text=answer; gate=approve/revise/reject
+    suggested: str | None = None  # suggested answer / default
+    rows: list[tuple[str, str]] = []  # extra display rows (e.g. check table)
 
-class Reply(BaseModel):                   # what a surface collects from the operator
-    outcome: GateOutcome | None = None    # gate replies
-    text: str | None = None               # answer text, or comment/guidance
 
-class SignalCall(BaseModel):              # translate's output; transport invokes it
+class Reply(BaseModel):  # what a surface collects from the operator
+    outcome: GateOutcome | None = None  # gate replies
+    text: str | None = None  # answer text, or comment/guidance
+
+
+class SignalCall(BaseModel):  # translate's output; transport invokes it
     signal: Literal["answer_question", "submit_gate_decision"]
-    question_id: str | None = None        # answer_question
-    answer: str | None = None             # answer_question
+    question_id: str | None = None  # answer_question
+    answer: str | None = None  # answer_question
     decision: GateDecision | None = None  # submit_gate_decision
+
 
 class Channel(Protocol):
     def render(self, d: PendingDecision) -> RenderedDecision: ...
     def translate(self, d: PendingDecision, reply: Reply) -> SignalCall: ...
+
 
 class PushChannel(Channel, Protocol):
     async def deliver(self, r: RenderedDecision) -> None: ...

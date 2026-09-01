@@ -31,18 +31,18 @@ export LOGFIRE_READ_TOKEN=<your-read-token>
 ```python
 from logfire.query_client import LogfireQueryClient
 
-with LogfireQueryClient(read_token='<token>') as client:
+with LogfireQueryClient(read_token="<token>") as client:
     # Column-oriented JSON (default)
-    result = client.query_json(sql='SELECT start_timestamp, message FROM records LIMIT 10')
+    result = client.query_json(sql="SELECT start_timestamp, message FROM records LIMIT 10")
 
     # Row-oriented JSON
-    rows = client.query_json_rows(sql='SELECT start_timestamp, message FROM records LIMIT 10')
+    rows = client.query_json_rows(sql="SELECT start_timestamp, message FROM records LIMIT 10")
 
     # CSV
-    csv_data = client.query_csv(sql='SELECT start_timestamp, message FROM records LIMIT 10')
+    csv_data = client.query_csv(sql="SELECT start_timestamp, message FROM records LIMIT 10")
 
     # Apache Arrow (requires pyarrow)
-    arrow_table = client.query_arrow(sql='SELECT start_timestamp, message FROM records LIMIT 10')
+    arrow_table = client.query_arrow(sql="SELECT start_timestamp, message FROM records LIMIT 10")
 
     # Token info
     info = client.info()
@@ -51,11 +51,11 @@ with LogfireQueryClient(read_token='<token>') as client:
 With time filtering:
 
 ```python
-with LogfireQueryClient(read_token='<token>') as client:
+with LogfireQueryClient(read_token="<token>") as client:
     result = client.query_json(
-        sql='SELECT message, exception_type FROM records WHERE is_exception LIMIT 20',
-        min_timestamp='2025-01-01T00:00:00Z',
-        max_timestamp='2025-01-02T00:00:00Z',
+        sql="SELECT message, exception_type FROM records WHERE is_exception LIMIT 20",
+        min_timestamp="2025-01-01T00:00:00Z",
+        max_timestamp="2025-01-02T00:00:00Z",
     )
 ```
 
@@ -66,8 +66,8 @@ import os
 from logfire.query_client import LogfireQueryClient
 
 # Reads from LOGFIRE_READ_TOKEN env var
-with LogfireQueryClient(read_token=os.environ['LOGFIRE_READ_TOKEN']) as client:
-    result = client.query_json(sql='SELECT message FROM records LIMIT 5')
+with LogfireQueryClient(read_token=os.environ["LOGFIRE_READ_TOKEN"]) as client:
+    result = client.query_json(sql="SELECT message FROM records LIMIT 5")
 ```
 
 ---
@@ -77,18 +77,12 @@ with LogfireQueryClient(read_token=os.environ['LOGFIRE_READ_TOKEN']) as client:
 ```python
 from logfire.query_client import AsyncLogfireQueryClient
 
-async with AsyncLogfireQueryClient(read_token='<token>') as client:
-    result = await client.query_json(
-        sql='SELECT start_timestamp, message FROM records LIMIT 10'
-    )
-    rows = await client.query_json_rows(
-        sql='SELECT start_timestamp, message FROM records LIMIT 10'
-    )
-    csv_data = await client.query_csv(
-        sql='SELECT start_timestamp, message FROM records LIMIT 10'
-    )
+async with AsyncLogfireQueryClient(read_token="<token>") as client:
+    result = await client.query_json(sql="SELECT start_timestamp, message FROM records LIMIT 10")
+    rows = await client.query_json_rows(sql="SELECT start_timestamp, message FROM records LIMIT 10")
+    csv_data = await client.query_csv(sql="SELECT start_timestamp, message FROM records LIMIT 10")
     arrow_table = await client.query_arrow(
-        sql='SELECT start_timestamp, message FROM records LIMIT 10'
+        sql="SELECT start_timestamp, message FROM records LIMIT 10"
     )
 ```
 
@@ -103,9 +97,9 @@ PEP 249 compliant interface. Works with pandas, Jupyter, and marimo.
 ```python
 import logfire.db_api
 
-with logfire.db_api.connect(read_token='<token>') as conn:
+with logfire.db_api.connect(read_token="<token>") as conn:
     cursor = conn.cursor()
-    cursor.execute('SELECT start_timestamp, message FROM records LIMIT 10')
+    cursor.execute("SELECT start_timestamp, message FROM records LIMIT 10")
     rows = cursor.fetchall()
     for row in rows:
         print(row)
@@ -117,8 +111,7 @@ Use `%(name)s` syntax (pyformat style) to safely pass parameters:
 
 ```python
 cursor.execute(
-    'SELECT message FROM records WHERE service_name = %(service)s LIMIT 10',
-    {'service': 'my-app'}
+    "SELECT message FROM records WHERE service_name = %(service)s LIMIT 10", {"service": "my-app"}
 )
 ```
 
@@ -128,8 +121,8 @@ cursor.execute(
 import pandas as pd
 import logfire.db_api
 
-with logfire.db_api.connect(read_token='<token>') as conn:
-    df = pd.read_sql('SELECT start_timestamp, message, duration FROM records LIMIT 100', conn)
+with logfire.db_api.connect(read_token="<token>") as conn:
+    df = pd.read_sql("SELECT start_timestamp, message, duration FROM records LIMIT 100", conn)
     print(df.describe())
 ```
 
@@ -140,13 +133,13 @@ import logfire.db_api
 from datetime import timedelta, datetime, timezone
 
 # Custom row limit
-conn = logfire.db_api.connect(read_token='<token>', limit=1000)
+conn = logfire.db_api.connect(read_token="<token>", limit=1000)
 
 # Query last 7 days (default is 24 hours)
-conn = logfire.db_api.connect(read_token='<token>', min_timestamp=timedelta(days=7))
+conn = logfire.db_api.connect(read_token="<token>", min_timestamp=timedelta(days=7))
 
 # Disable default timestamp filter
-conn = logfire.db_api.connect(read_token='<token>', min_timestamp=None)
+conn = logfire.db_api.connect(read_token="<token>", min_timestamp=None)
 
 # Per-cursor overrides
 cursor = conn.cursor()
@@ -227,9 +220,9 @@ curl -G 'https://logfire-api.pydantic.dev/v1/query' \
 import httpx
 
 response = httpx.get(
-    'https://logfire-api.pydantic.dev/v1/query',
-    params={'sql': 'SELECT start_timestamp, message FROM records LIMIT 5'},
-    headers={'Authorization': f'Bearer {read_token}'},
+    "https://logfire-api.pydantic.dev/v1/query",
+    params={"sql": "SELECT start_timestamp, message FROM records LIMIT 5"},
+    headers={"Authorization": f"Bearer {read_token}"},
 )
 data = response.json()
 ```

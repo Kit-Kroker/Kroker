@@ -10,26 +10,26 @@ Use `TestModel` for fast deterministic tests and `FunctionModel` for custom resp
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 
-agent = Agent('openai:gpt-5.2', name='test_model_agent')
+agent = Agent("openai:gpt-5.2", name="test_model_agent")
 
 with agent.override(model=TestModel()):
-    result = agent.run_sync('test prompt')
-    assert result.output == 'success (no tool calls)'
+    result = agent.run_sync("test prompt")
+    assert result.output == "success (no tool calls)"
 ```
 
 ```python
 from pydantic_ai import Agent, ModelResponse, TextPart
 from pydantic_ai.models.function import FunctionModel
 
-agent = Agent('openai:gpt-5.2', name='function_model_agent')
+agent = Agent("openai:gpt-5.2", name="function_model_agent")
 
 
 def custom_model(messages, info):
-    return ModelResponse(parts=[TextPart(content='mocked response')])
+    return ModelResponse(parts=[TextPart(content="mocked response")])
 
 
 with agent.override(model=FunctionModel(custom_model)):
-    result = agent.run_sync('test prompt')
+    result = agent.run_sync("test prompt")
 ```
 
 Default split:
@@ -44,11 +44,11 @@ Use `capture_run_messages()` when the user needs the exact request/response hist
 ```python
 from pydantic_ai import Agent, UnexpectedModelBehavior, capture_run_messages
 
-agent = Agent('openai:gpt-5.2', name='debug_agent')
+agent = Agent("openai:gpt-5.2", name="debug_agent")
 
 with capture_run_messages() as messages:
     try:
-        agent.run_sync('Please get me the volume of a box with size 6.')
+        agent.run_sync("Please get me the volume of a box with size 6.")
     except UnexpectedModelBehavior:
         print(messages)
 ```
@@ -74,7 +74,7 @@ Give each agent an explicit `name=` so its run span is labeled in Logfire:
 ```python
 from pydantic_ai import Agent
 
-agent = Agent('openai:gpt-5.2', name='support_agent')
+agent = Agent("openai:gpt-5.2", name="support_agent")
 ```
 
 When omitted, the name is inferred from the variable the agent is assigned to and falls back to `'agent'` when it can't be (e.g. agents kept in a list or dict). A stable name pays off most when several agents run in one app and you need to tell their traces apart.

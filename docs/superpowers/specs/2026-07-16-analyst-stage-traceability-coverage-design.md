@@ -58,7 +58,7 @@ never a raw transcript):
 class CriterionTrace(BaseModel):
     task_id: str
     criterion: str
-    tests: list[str] = Field(default_factory=list)   # test ids/names that verify it
+    tests: list[str] = Field(default_factory=list)  # test ids/names that verify it
 
 
 class AnalysisReport(BaseModel):
@@ -70,11 +70,12 @@ class AnalysisReport(BaseModel):
     The Analyst PROPOSES the criterion->test mapping; the DeterministicQualityGate
     ENFORCES completeness (FR-106). This model never carries a pass/fail verdict.
     """
+
     traceability: list[CriterionTrace] = Field(default_factory=list)
-    findings: list[ReviewFinding] = Field(default_factory=list)   # integration-level
-                                                                  # concerns; carried
-                                                                  # for memory/observability,
-                                                                  # NOT a blocking check
+    findings: list[ReviewFinding] = Field(default_factory=list)  # integration-level
+    # concerns; carried
+    # for memory/observability,
+    # NOT a blocking check
     summary: str = ""
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 ```
@@ -92,8 +93,9 @@ class CoverageReport(BaseModel):
     `measured=False` means no coverage artifact was emitted by the run's test
     commands — the seam could not measure, so the check passes rather than
     forcing a spurious human override every run."""
+
     measured: bool
-    diff_pct: float | None = None       # 0..100 over changed files
+    diff_pct: float | None = None  # 0..100 over changed files
     detail: str = ""
 ```
 
@@ -104,7 +106,7 @@ The **workflow**, not the LLM, derives the traceability verdict. A pure helper
 
 ```python
 def untraced_criteria(
-    authoritative: list[tuple[str, str]],      # (task_id, criterion) from plan
+    authoritative: list[tuple[str, str]],  # (task_id, criterion) from plan
     report: AnalysisReport,
 ) -> list[str]:
     """Criteria that the Analyst's mapping either OMITS or maps to zero tests.
@@ -120,10 +122,18 @@ Two advisory checks are appended to the existing `checks` list (the
 
 ```python
 untraced = untraced_criteria(authoritative, analysis)
-checks.append(build_check(
-    "traceability", not untraced, CheckClass.ADVISORY,
-    detail=(f"{len(untraced)} criterion(s) without a test: {untraced[:10]}"
-            if untraced else "every acceptance criterion traces to >=1 test")))
+checks.append(
+    build_check(
+        "traceability",
+        not untraced,
+        CheckClass.ADVISORY,
+        detail=(
+            f"{len(untraced)} criterion(s) without a test: {untraced[:10]}"
+            if untraced
+            else "every acceptance criterion traces to >=1 test"
+        ),
+    )
+)
 
 cov = await workflow.execute_activity(measure_coverage, CoverageInput(...), **ACT)
 if not cov.measured:
@@ -151,7 +161,8 @@ read, reproducible across Temporal retries):
 @dataclass
 class CoverageInput:
     worktree: str
-    changed_files: list[str]     # from the integration diff (get_task_diff .files)
+    changed_files: list[str]  # from the integration diff (get_task_diff .files)
+
 
 @activity.defn
 async def measure_coverage(inp: CoverageInput) -> CoverageReport:

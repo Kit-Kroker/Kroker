@@ -91,23 +91,24 @@ from pydantic_ai import Agent
 
 from pydantic_ai_harness import CodeMode
 
-agent = Agent('anthropic:claude-sonnet-4-6', capabilities=[CodeMode()])
+agent = Agent("anthropic:claude-sonnet-4-6", capabilities=[CodeMode()])
 
 
 @agent.tool_plain
 def get_temperature_f(city: str) -> float:
-    return {'Paris': 68.0, 'Tokyo': 77.0}[city]
+    return {"Paris": 68.0, "Tokyo": 77.0}[city]
 
 
 @agent.tool_plain
 def convert_temp(fahrenheit: float) -> float:
     return round((fahrenheit - 32) * 5 / 9, 1)
 
+
 result = agent.run_sync(
-    'Compare the weather in Paris and Tokyo, and report both temperatures in Celsius.'
+    "Compare the weather in Paris and Tokyo, and report both temperatures in Celsius."
 )
 print(result.output)
-#> Paris is 20.0 C and Tokyo is 25.0 C.
+# > Paris is 20.0 C and Tokyo is 25.0 C.
 ```
 
 The model writes a single Python script that fetches both temperatures with `asyncio.gather` and then

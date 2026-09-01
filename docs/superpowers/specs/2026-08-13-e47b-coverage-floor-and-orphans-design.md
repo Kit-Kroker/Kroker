@@ -133,12 +133,25 @@ infrastructure that *is* in the denominator is source-language build and
 tooling config, so a small basename table sits beside it:
 
 ```python
-BUILD_TOOLING_NAMES: frozenset[str] = frozenset({
-    "setup.py", "conftest.py", "manage.py", "noxfile.py", "tasks.py",
-    "webpack.config.js", "vite.config.ts", "rollup.config.js",
-    "jest.config.js", "karma.conf.js", "next.config.js",
-    "babel.config.js", "tailwind.config.js", "gulpfile.js", "build.rs",
-})
+BUILD_TOOLING_NAMES: frozenset[str] = frozenset(
+    {
+        "setup.py",
+        "conftest.py",
+        "manage.py",
+        "noxfile.py",
+        "tasks.py",
+        "webpack.config.js",
+        "vite.config.ts",
+        "rollup.config.js",
+        "jest.config.js",
+        "karma.conf.js",
+        "next.config.js",
+        "babel.config.js",
+        "tailwind.config.js",
+        "gulpfile.js",
+        "build.rs",
+    }
+)
 ```
 
 It lives in `discover/attribution.py`, not a shared `scan/` rule module: it has
@@ -273,20 +286,23 @@ class FileBucket(str, Enum):
     DEAD = "dead"
     UNCLASSIFIED = "unclassified"
 
+
 # Precedence IS declaration order; derived, never restated (PHASE_ORDER's rule).
 BUCKET_PRECEDENCE: tuple[FileBucket, ...] = tuple(FileBucket)
 ACCOUNTED_FOR: frozenset[FileBucket] = frozenset(
-    {FileBucket.MEMBER, FileBucket.INFRASTRUCTURE, FileBucket.ATTACHED})
+    {FileBucket.MEMBER, FileBucket.INFRASTRUCTURE, FileBucket.ATTACHED}
+)
 
 
 class FileAttribution(BaseModel):
     """One file's verdict, carrying the rule that produced it."""
+
     model_config = {"frozen": True}
     path: str
     bucket: FileBucket
     rule: str
     detail: str
-    capabilities: tuple[str, ...] = ()   # bc_ids, sorted
+    capabilities: tuple[str, ...] = ()  # bc_ids, sorted
 ```
 
 `capabilities` is non-empty if and only if the bucket is `MEMBER` or `ATTACHED`,
@@ -298,29 +314,29 @@ citing none, is a contradiction the type should not be able to express. This is
 class UnresolvedEdge(BaseModel):
     model_config = {"frozen": True}
     source_path: str
-    target: str          # the raw module string, verbatim
-    form: str            # "python_relative", "js_bare", "rust_mod", ...
-    reason: str          # "no_matching_path" | "ambiguous_suffix"
-    relative: bool       # only relative failures feed the guard rate
+    target: str  # the raw module string, verbatim
+    form: str  # "python_relative", "js_bare", "rust_mod", ...
+    reason: str  # "no_matching_path" | "ambiguous_suffix"
+    relative: bool  # only relative failures feed the guard rate
 
 
 class ReferenceGraph(BaseModel):
-    edges: tuple[tuple[str, str], ...] = ()      # (importer, imported), sorted
+    edges: tuple[tuple[str, str], ...] = ()  # (importer, imported), sorted
     unresolved: tuple[UnresolvedEdge, ...] = ()
-    parsed: tuple[str, ...] = ()                 # extractor covered these
-    unparsed: tuple[str, ...] = ()               # extension not in the table
+    parsed: tuple[str, ...] = ()  # extractor covered these
+    unparsed: tuple[str, ...] = ()  # extension not in the table
     unresolved_relative_rate: Measurement
 
 
 class AttributionReport(BaseModel):
     files: tuple[FileAttribution, ...] = ()
     counts: dict[FileBucket, int]
-    coverage: Measurement                        # the ratio, or not_collected
-    floor: float = DEFAULT_COVERAGE_FLOOR        # 0.90
+    coverage: Measurement  # the ratio, or not_collected
+    floor: float = DEFAULT_COVERAGE_FLOOR  # 0.90
     meets_floor: bool
     dead_guard_tripped: bool
     graph: ReferenceGraph
-    skipped: tuple[str, ...] = ()                # blobs that could not be read
+    skipped: tuple[str, ...] = ()  # blobs that could not be read
 ```
 
 `meets_floor` is **derived and validated, never assigned** — the

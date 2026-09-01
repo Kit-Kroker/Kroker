@@ -22,9 +22,9 @@ tasks (`workflows/feature.py:1801`) and injected into the next dev prompt
 ```python
 handoff = HandoffSummary(
     task_id=task.id,
-    what_changed=[task.title],      # the task's own title, echoed back
-    files_touched=diff["files"],    # populated, never injected anywhere
-    open_concerns=[],               # injected — and always empty
+    what_changed=[task.title],  # the task's own title, echoed back
+    files_touched=diff["files"],  # populated, never injected anywhere
+    open_concerns=[],  # injected — and always empty
 )
 ```
 
@@ -86,8 +86,9 @@ New in `src/sdlc/models.py`:
 class HandoffClaim(BaseModel):
     """One assertion about the work, carrying its evidence. Evidence-first,
     mirroring IntegrityFlag (models.py:399)."""
+
     text: str
-    evidence: str      # quote from the scrubbed HarnessSession
+    evidence: str  # quote from the scrubbed HarnessSession
 ```
 
 `HandoffSummary` becomes:

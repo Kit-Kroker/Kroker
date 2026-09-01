@@ -78,10 +78,11 @@ Evidence-first ordering — §7 flags `ReviewReport`'s `approve → findings`
 ```python
 class IntegrityFlag(BaseModel):
     """One anti-cheat observation drawn from the transcript (E-39)."""
-    kind: Literal["oracle_peeking", "hardcoded_answer",
-                  "test_gaming", "excessive_backtracking"]
+
+    kind: Literal["oracle_peeking", "hardcoded_answer", "test_gaming", "excessive_backtracking"]
     detail: str
-    evidence: str            # a quote/reference from the scrubbed transcript
+    evidence: str  # a quote/reference from the scrubbed transcript
+
 
 class DeepReviewReport(BaseModel):
     """Advisory full-transcript lens (E-39). Reads the SCRUBBED
@@ -89,10 +90,11 @@ class DeepReviewReport(BaseModel):
     family is ADR-6-independent of dev. NEVER blocks: the clean-context
     reviewer (ReviewReport) is the sole blocking lens; this report is
     recorded and retained for signal only."""
-    findings: list[ReviewFinding] = Field(default_factory=list)   # evidence first
+
+    findings: list[ReviewFinding] = Field(default_factory=list)  # evidence first
     integrity_flags: list[IntegrityFlag] = Field(default_factory=list)
     summary: str = ""
-    approve: bool = True          # advisory opinion only
+    approve: bool = True  # advisory opinion only
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
     @property
@@ -137,7 +139,8 @@ Mirrors `agents/reviewer/`:
       if model_family(dr.model) == model_family(dev.model):
           raise RegistryError(
               "ADR-6 violation: deep_review family '…' equals the family of "
-              "'dev' — the transcript lens must not correlate with authoring")
+              "'dev' — the transcript lens must not correlate with authoring"
+          )
   ```
 
 **`agents/roles.py`:**
@@ -159,9 +162,10 @@ A new activity dereferences the claim-check:
 # artifacts/read.py (or beside capture.py)
 DEEP_REVIEW_MAX_BYTES = 512 * 1024
 
+
 @activity.defn
 async def load_session(inp: LoadSessionInput) -> LoadSessionResult:
-    assert inp.ref.kind == "harness_session"   # scrubbed-only by construction
+    assert inp.ref.kind == "harness_session"  # scrubbed-only by construction
     data = ref_to_path(inp.ref).read_bytes()
     truncated = len(data) > DEEP_REVIEW_MAX_BYTES
     text = data[:DEEP_REVIEW_MAX_BYTES].decode("utf-8", errors="replace")

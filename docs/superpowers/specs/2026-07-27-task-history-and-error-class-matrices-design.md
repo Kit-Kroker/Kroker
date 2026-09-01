@@ -94,13 +94,15 @@ taxonomy stable and comparable across cases.
 ```python
 class TaskSpec(BaseModel):
     id: str
-    error_class: str                    # validated against ERROR_CLASSES
+    error_class: str  # validated against ERROR_CLASSES
     oracle_tests: list[str] = []
     rubric: str | None = None
+
 
 class TaskSuite(BaseModel):
     case_id: str
     tasks: list[TaskSpec]
+
 
 class TaskGrade(BaseModel):
     task_id: str
@@ -109,11 +111,14 @@ class TaskGrade(BaseModel):
     judge: Literal["oracle", "llm_judge", "error"]
     detail: str
 
+
 ERROR_CLASSES: list[str] = [...]
 
+
 def load_task_suite(case_id: str, cases_dir: Path | None = None) -> TaskSuite | None: ...
-def grade_tasks(suite: TaskSuite, testcase_results: dict[str, bool],
-                judge_scores: dict[str, float]) -> list[TaskGrade]: ...
+def grade_tasks(
+    suite: TaskSuite, testcase_results: dict[str, bool], judge_scores: dict[str, float]
+) -> list[TaskGrade]: ...
 ```
 
 `load_task_suite` returns `None` when `tasks.yaml` is absent (opt-in);
@@ -154,15 +159,19 @@ try:
         judge_scores = {}
         for t in suite.tasks:
             if t.rubric:
-                qs = _judge_sync(JudgeInput(
-                    artifact_json=diff_text, rubric=t.rubric,
-                    author_model=inp.author_model,
-                    judge_model=inp.judge_model))
+                qs = _judge_sync(
+                    JudgeInput(
+                        artifact_json=diff_text,
+                        rubric=t.rubric,
+                        author_model=inp.author_model,
+                        judge_model=inp.judge_model,
+                    )
+                )
                 if qs.score is not None:
                     judge_scores[t.id] = qs.score
         task_grades = grade_tasks(suite, testcase_results, judge_scores)
 except Exception:
-    task_grades = []   # a broken suite/judge never fails the case grade
+    task_grades = []  # a broken suite/judge never fails the case grade
 ```
 
 `_judge_sync` (from `judge.py`) is called **in-process**, not as a
@@ -175,8 +184,8 @@ workflow-level activity calls.
 call site from the cell's resolved roles / the case spec:
 
 ```python
-author_model: str = ""       # cell.role_models.get("dev", "") — judged code's author
-judge_model: str | None = None   # spec.judge_model
+author_model: str = ""  # cell.role_models.get("dev", "") — judged code's author
+judge_model: str | None = None  # spec.judge_model
 ```
 
 Both are only read when a task has `rubric` set; oracle-only cases need
@@ -196,13 +205,21 @@ run_id, started, ended) -> list[BenchmarkRecord]`, one record per
 
 ```python
 BenchmarkRecord(
-    run_id=run_id, bench_run_id=bench_run_id, case_id=base_cell.case_id,
-    scope=BenchmarkScope.ORACLE_TASK, stage="oracle", task_id=t.task_id,
-    role="oracle", harness=base_cell.harness, model=base_cell.arm_name,
+    run_id=run_id,
+    bench_run_id=bench_run_id,
+    case_id=base_cell.case_id,
+    scope=BenchmarkScope.ORACLE_TASK,
+    stage="oracle",
+    task_id=t.task_id,
+    role="oracle",
+    harness=base_cell.harness,
+    model=base_cell.arm_name,
     quality=QualityScore(score=t.score, judge=t.judge),
-    speed=SpeedBag(wall_clock_s=(ended-started).total_seconds(),
-                   started_at=started, ended_at=ended),
-    outcome=PASS if (t.score or 0.0) >= 1.0 else FAIL)
+    speed=SpeedBag(
+        wall_clock_s=(ended - started).total_seconds(), started_at=started, ended_at=ended
+    ),
+    outcome=PASS if (t.score or 0.0) >= 1.0 else FAIL,
+)
 ```
 
 `error_class` is **not** on the record — joined from `tasks.yaml` by
@@ -236,14 +253,17 @@ class TaskMatrixColumn(BaseModel):
     started_at: datetime
     mean_score: float | None
 
+
 class TaskMatrix(BaseModel):
     case_id: str
-    task_ids: list[str]                          # canonical order, from tasks.yaml
-    columns: list[TaskMatrixColumn]               # chronological
-    scores: dict[str, dict[str, float | None]]    # task_id -> {cell_key: score}
+    task_ids: list[str]  # canonical order, from tasks.yaml
+    columns: list[TaskMatrixColumn]  # chronological
+    scores: dict[str, dict[str, float | None]]  # task_id -> {cell_key: score}
 
-def build_task_matrix(case_id: str, records: list[BenchmarkRecord],
-                      suite: TaskSuite) -> TaskMatrix: ...
+
+def build_task_matrix(
+    case_id: str, records: list[BenchmarkRecord], suite: TaskSuite
+) -> TaskMatrix: ...
 def render_task_matrix_html(tm: TaskMatrix) -> str: ...
 def render_task_matrix_json(tm: TaskMatrix) -> str: ...
 ```
@@ -265,19 +285,22 @@ def render_task_matrix_json(tm: TaskMatrix) -> str: ...
 ```python
 class ErrorMatrixCell(BaseModel):
     error_class: str
-    arm_key: str              # "harness#model"
+    arm_key: str  # "harness#model"
     avg_failure_mass: float
     n_runs: int
 
+
 class ErrorMatrix(BaseModel):
     case_id: str
-    error_classes: list[str]   # ERROR_CLASSES order, only rows with data
-    arms: list[str]            # arm_key, sorted
+    error_classes: list[str]  # ERROR_CLASSES order, only rows with data
+    arms: list[str]  # arm_key, sorted
     cells: list[ErrorMatrixCell]
     max_value: float
 
-def build_error_matrix(case_id: str, records: list[BenchmarkRecord],
-                       suite: TaskSuite) -> ErrorMatrix: ...
+
+def build_error_matrix(
+    case_id: str, records: list[BenchmarkRecord], suite: TaskSuite
+) -> ErrorMatrix: ...
 def render_error_matrix_html(em: ErrorMatrix) -> str: ...
 def render_error_matrix_json(em: ErrorMatrix) -> str: ...
 ```

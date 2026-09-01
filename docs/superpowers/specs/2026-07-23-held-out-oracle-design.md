@@ -87,10 +87,12 @@ Runs **only** the oracle suite and emits canonical **JUnit XML**. Parallels
 ```python
 class ToolchainAdapter(ABC):
     ...
+
     @abstractmethod
     def oracle_test_cmd(self, oracle_path: str, report_out: str) -> str:
         """Run ONLY the tests under oracle_path, emitting a JUnit XML report at
         report_out. Held-out oracle grade reads tests/failures/errors from it."""
+
 
 class PythonToolchain(ToolchainAdapter):
     def oracle_test_cmd(self, oracle_path: str, report_out: str) -> str:
@@ -109,13 +111,14 @@ The adapter object stays **pure** (command strings only); execution is in
 class OracleInput:
     case_id: str
     repo_url: str
-    run_id: str                 # child workflow id -> sdlc/<run_id>/integration
-    language: str               # manifest-declared (CaseSpec.language)
-    base_branch: str = "main"   # for the produced-diff (held-out) computation
+    run_id: str  # child workflow id -> sdlc/<run_id>/integration
+    language: str  # manifest-declared (CaseSpec.language)
+    base_branch: str = "main"  # for the produced-diff (held-out) computation
+
 
 @dataclass
 class OracleGrade:
-    score: float | None         # fraction passing, or None (excluded)
+    score: float | None  # fraction passing, or None (excluded)
     passed: int
     total: int
     language_manifest: str

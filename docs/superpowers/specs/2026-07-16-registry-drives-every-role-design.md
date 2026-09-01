@@ -157,7 +157,7 @@ this adds no cycle.
 
 ```python
 def load_registry(path=None) -> dict[str, RoleConfig]:
-    roles = _parse(path)      # existing parse logic, extracted
+    roles = _parse(path)  # existing parse logic, extracted
     validate_registry(roles)
     return roles
 ```
@@ -224,8 +224,9 @@ docstring at `:240` warns. The three call sites (`:662`, `:699`, `:737`) pass th
 explicitly from the caller, which knows both names:
 
 ```python
-_quality = await self._judge(cfg, reqs.model_dump_json(), "clarifier",
-                             author_model=STAGE_MODELS["clarify"])
+_quality = await self._judge(
+    cfg, reqs.model_dump_json(), "clarifier", author_model=STAGE_MODELS["clarify"]
+)
 ```
 
 The stale docstring paragraph goes. ADR-6 cross-family for the judge is unaffected — the

@@ -201,7 +201,7 @@ from sdlc.models import ClarifiedRequirements
 def build(model: str, instructions: str, model_settings: ModelSettings) -> Agent:
     return Agent(
         model,
-        name="clarify_agent",          # Temporal activity name — NEVER rename (finding 7)
+        name="clarify_agent",  # Temporal activity name — NEVER rename (finding 7)
         output_type=ClarifiedRequirements,
         model_settings=model_settings,
         system_prompt=instructions,
@@ -224,9 +224,9 @@ Finding 8 is a rule, not a note:
 
 ```python
 def load_registry(path=None) -> dict[str, RoleConfig]:
-    roles = _parse(path)          # walk dirs; read agent.yaml + instructions.md
-    validate_registry(roles)      # UNCHANGED — same dict, same checks, same order
-    return roles                  # no agent.py has been imported yet
+    roles = _parse(path)  # walk dirs; read agent.yaml + instructions.md
+    validate_registry(roles)  # UNCHANGED — same dict, same checks, same order
+    return roles  # no agent.py has been imported yet
 
 
 def build_agents(roles) -> dict[str, Agent]:
@@ -261,12 +261,12 @@ Structural errors, all `RegistryError`, raised during the walk:
 
 ```python
 REGISTRY = load_registry()
-AGENTS   = build_agents(REGISTRY)
+AGENTS = build_agents(REGISTRY)
 
-clarify_agent   = AGENTS["clarify"]          # module-level names preserved verbatim:
-architect_agent = AGENTS["architect"]        # feature.py and worker.py do not change
-qa_analyst_agent = AGENTS["qa"]              # role 'qa'            -> qa_analyst_agent
-devops_agent     = AGENTS["devops_planner"]  # role 'devops_planner' -> devops_agent
+clarify_agent = AGENTS["clarify"]  # module-level names preserved verbatim:
+architect_agent = AGENTS["architect"]  # feature.py and worker.py do not change
+qa_analyst_agent = AGENTS["qa"]  # role 'qa'            -> qa_analyst_agent
+devops_agent = AGENTS["devops_planner"]  # role 'devops_planner' -> devops_agent
 ...
 t_clarify = TemporalAgent(clarify_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 ```

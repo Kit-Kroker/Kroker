@@ -52,14 +52,15 @@ place to carry a session.
 
 ```python
 class SessionEvent(BaseModel):
-    kind: str          # model_turn | tool_call | tool_result | file_read
-                       # | file_write | command | compaction | result
+    kind: str  # model_turn | tool_call | tool_result | file_read
+    # | file_write | command | compaction | result
     tool: str | None = None
-    target: str | None = None    # file path or command line (scrubbed)
+    target: str | None = None  # file path or command line (scrubbed)
     exit_code: int | None = None
     tokens_in: int | None = None
     tokens_out: int | None = None
-    text: str | None = None      # payload (scrubbed)
+    text: str | None = None  # payload (scrubbed)
+
 
 class HarnessSession(BaseModel):
     harness: HarnessKind
@@ -70,19 +71,20 @@ class HarnessSession(BaseModel):
     output_tokens: int | None = None
     cost_usd: float | None = None
 
+
 class SessionDigest(BaseModel):
     tool_calls: int = 0
     file_reads: int = 0
-    file_rereads: int = 0        # same path read >1x
+    file_rereads: int = 0  # same path read >1x
     files_written: int = 0
-    rewrite_churn: int = 0       # files written >1x
-    failed_commands: int = 0     # command events with exit_code != 0
+    rewrite_churn: int = 0  # files written >1x
+    failed_commands: int = 0  # command events with exit_code != 0
     model_turns: int = 0
     compacted: bool = False
     input_tokens: int | None = None
     output_tokens: int | None = None
-    decision_skeleton: list[str] = []   # ordered "tool target", no payloads,
-                                        # capped (SKELETON_MAX = 200 entries)
+    decision_skeleton: list[str] = []  # ordered "tool target", no payloads,
+    # capped (SKELETON_MAX = 200 entries)
 ```
 
 `HarnessRunResult` gains:

@@ -130,8 +130,9 @@ therefore appears as a reviewable import rather than as drift.
 # measurement.py
 class CollectionState(StrEnum):
     MEASURED = "measured"
-    NOT_COLLECTED = "not_collected"   # we did not or could not measure
-    UNKNOWN = "unknown"               # we tried; the result is uninterpretable
+    NOT_COLLECTED = "not_collected"  # we did not or could not measure
+    UNKNOWN = "unknown"  # we tried; the result is uninterpretable
+
 
 class Measurement(BaseModel):
     state: CollectionState

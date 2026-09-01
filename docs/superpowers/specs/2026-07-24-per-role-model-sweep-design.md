@@ -119,13 +119,14 @@ reviewer's family with nothing checking it.
 
 ```python
 class Arm(BaseModel):
-    name: str                                # cell-id component; git-safe
-    default: str | None = None               # model for unspecified roles
-    role_models: dict[str, str] = {}         # role -> model overrides
+    name: str  # cell-id component; git-safe
+    default: str | None = None  # model for unspecified roles
+    role_models: dict[str, str] = {}  # role -> model overrides
+
 
 class CaseSpec(BaseModel):
     ...
-    arms: list[Arm] = []                     # per-role model mixes
+    arms: list[Arm] = []  # per-role model mixes
     # `models` retained for backward compat: desugared to one arm per model
     # (Arm(name=safe(m), default=m)) when `arms` is empty.
 ```

@@ -246,7 +246,8 @@ class MentionsAll(BaseModel):
     kind: Literal["mentions_all"]
     id: str
     terms: list[str]
-    fields: list[str] = Field(default_factory=list)   # empty = whole artifact
+    fields: list[str] = Field(default_factory=list)  # empty = whole artifact
+
 
 class NotBoth(BaseModel):
     kind: Literal["not_both"]
@@ -255,13 +256,14 @@ class NotBoth(BaseModel):
     equals: bool | str | int
     and_any_nonempty: list[str]
 
+
 class NonEmpty(BaseModel):
     kind: Literal["nonempty"]
     id: str
     fields: list[str]
 
-Veto = Annotated[MentionsAll | NotBoth | NonEmpty,
-                 Field(discriminator="kind")]
+
+Veto = Annotated[MentionsAll | NotBoth | NonEmpty, Field(discriminator="kind")]
 ```
 
 The vocabulary is deliberately minimal: it covers all three vetoes currently
@@ -374,10 +376,11 @@ class PlanDrift(BaseModel):
     indistinguishable from a task that executed exactly to plan -- the same
     rule WasteBag states for its own bag.
     """
+
     files_hinted: int
     files_touched: int
-    hinted_untouched: list[str]     # planner expected them; nothing was written
-    touched_unhinted: list[str]     # written; the planner did not anticipate them
+    hinted_untouched: list[str]  # planner expected them; nothing was written
+    touched_unhinted: list[str]  # written; the planner did not anticipate them
 ```
 
 Computed in the workflow from `DevTask.files_hint` and the materialized diff.
@@ -415,7 +418,7 @@ Changes:
    class PlanDeviation(BaseModel):
        kind: Literal["unplanned_scope", "skipped_criterion", "approach_changed"]
        detail: str
-       evidence: str      # VERBATIM transcript span
+       evidence: str  # VERBATIM transcript span
    ```
 3. `verified_integrity_flags`' verification is extended to deviations: a
    deviation whose `evidence` is not present in the transcript is **dropped**,

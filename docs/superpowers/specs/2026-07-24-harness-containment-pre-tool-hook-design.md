@@ -166,18 +166,19 @@ No I/O, no CLI knowledge, no subprocess. The entire risk-classing decision
 lives here so it is unit-testable as a table.
 
 ```python
-class ContainmentLayer(str, Enum):     # models.py convention, not StrEnum
-    NATIVE = "native"   # declarative deny inside the CLI's own config
-    HOOK   = "hook"     # per-call inspection callback
+class ContainmentLayer(str, Enum):  # models.py convention, not StrEnum
+    NATIVE = "native"  # declarative deny inside the CLI's own config
+    HOOK = "hook"  # per-call inspection callback
+
 
 class Verdict(BaseModel):
     allow: bool
     rule_id: str | None = None
     reason: str | None = None
 
+
 def load_policy(path: str) -> Policy: ...
-def evaluate(policy: Policy, tool: str, tool_input: dict,
-             worktree: str) -> Verdict: ...
+def evaluate(policy: Policy, tool: str, tool_input: dict, worktree: str) -> Verdict: ...
 ```
 
 `worktree` is a **parameter, never computed.** `create_worktree`
@@ -283,7 +284,7 @@ class ToolDenial(BaseModel):
     rule_id: str
     layer: ContainmentLayer
     reason: str
-    target: str | None = None     # path or command, scrubbed
+    target: str | None = None  # path or command, scrubbed
 ```
 
 `HarnessRunResult` gains `denials: list[ToolDenial]` and

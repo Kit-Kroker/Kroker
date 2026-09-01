@@ -187,7 +187,7 @@ class OperatorDeps:
     actor: str = "chat"
     max_artifact_bytes: int = 32 * 1024
     max_follow_calls: int = 10
-    _follow_calls: int = 0          # reset per HTTP request
+    _follow_calls: int = 0  # reset per HTTP request
 ```
 
 Passed to `create_web_app(deps=…)` and reached in tools through

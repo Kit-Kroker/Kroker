@@ -172,48 +172,51 @@ feeds the SC-4 rollup, so a required field would break stored runs.
 ```python
 class ClarificationDimension(StrEnum):
     """SWE-RPG's practitioner-derived clarification taxonomy."""
-    FUNCTIONAL_INTENT  = "C1"
+
+    FUNCTIONAL_INTENT = "C1"
     BUSINESS_SEMANTICS = "C2"
-    TECHNICAL_CONTEXT  = "C3"
-    INTERFACE_SPEC     = "C4"
-    CODE_STRUCTURE     = "C5"
-    DATA_SEMANTICS     = "C6"
+    TECHNICAL_CONTEXT = "C3"
+    INTERFACE_SPEC = "C4"
+    CODE_STRUCTURE = "C5"
+    DATA_SEMANTICS = "C6"
 
 
-class OpenQuestion(BaseModel):           # models.py:232 -- additive only
+class OpenQuestion(BaseModel):  # models.py:232 -- additive only
     id: str
     question: str
     why_it_matters: str
     suggested_answer: str | None = None
     answer: str | None = None
     # E-85:
-    dimension:   ClarificationDimension | None = None
-    asked_by:    str | None = None    # "supervisor" | "probe:C4"
+    dimension: ClarificationDimension | None = None
+    asked_by: str | None = None  # "supervisor" | "probe:C4"
     materiality: float | None = None  # ranking key; None sorts last
-    evidence:    str | None = None    # repo path/symbol this is grounded in
+    evidence: str | None = None  # repo path/symbol this is grounded in
 
 
 class ClarifiedRequirements(BaseModel):  # models.py:240 -- additive only
     ...
     # E-85:
     dimensions_probed: list[ClarificationDimension] = Field(default_factory=list)
-    dropped:           list[OpenQuestion]           = Field(default_factory=list)
+    dropped: list[OpenQuestion] = Field(default_factory=list)
 
 
 class ClarifyRoute(BaseModel):
     """clarify_route's output. Internal to the stage: never persisted, never
     reaches the human. Merge folds it into ClarifiedRequirements."""
+
     summary: str
     functional_requirements: list[str]
     non_functional_requirements: list[str]
     out_of_scope: list[str]
-    questions: list[OpenQuestion]              # C1/C2 only, asked_by="supervisor"
-    live_dimensions: list[ClarificationDimension]   # which probes to run
+    questions: list[OpenQuestion]  # C1/C2 only, asked_by="supervisor"
+    live_dimensions: list[ClarificationDimension]  # which probes to run
 
 
 class ProbeResult(BaseModel):
     """One probe's answer. An empty `questions` list is a valid, expected
     result -- it means is_ambiguous() returned 0 for this dimension."""
+
     dimension: ClarificationDimension
     questions: list[OpenQuestion]
 ```

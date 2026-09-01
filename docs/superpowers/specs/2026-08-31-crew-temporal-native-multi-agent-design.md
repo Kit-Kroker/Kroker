@@ -154,8 +154,8 @@ recorder, and `drift.py`, the child returns:
 
 ```python
 class CrewRunResult(BaseModel):
-    run: HarnessRunResult            # the LEAD's: its tokens, its window, its summary
-    sessions: dict[str, str]         # role -> session_id
+    run: HarnessRunResult  # the LEAD's: its tokens, its window, its summary
+    sessions: dict[str, str]  # role -> session_id
     session_refs: list[ArtifactRef]  # one scrubbed transcript per turn
     rounds: list[RoundRecord]
 ```
@@ -254,8 +254,16 @@ cheap rather than merely permitted.
 (`harness.run(req, heartbeat=activity.heartbeat)`); it gains a payload:
 
 ```python
-activity.heartbeat({"session_id": sid, "round": n, "phase": "streaming",
-                    "cost_usd": running, "input_tokens": ..., "output_tokens": ...})
+activity.heartbeat(
+    {
+        "session_id": sid,
+        "round": n,
+        "phase": "streaming",
+        "cost_usd": running,
+        "input_tokens": ...,
+        "output_tokens": ...,
+    }
+)
 ```
 
 A retry reads `activity.info().heartbeat_details` and resumes that session instead of starting a new
@@ -404,10 +412,12 @@ stops deciding it permanently.
 `check_adr6_families` already validates:
 
 ```python
-{"dev": "zai-coding-plan/glm-5.3",              # the lead's model for THIS run
- "reviewer": "...",                              # the stage reviewer, as today
- "crew:code:critic": "anthropic:claude-opus-5",
- "crew:code:reviewer": "..."}
+{
+    "dev": "zai-coding-plan/glm-5.3",  # the lead's model for THIS run
+    "reviewer": "...",  # the stage reviewer, as today
+    "crew:code:critic": "anthropic:claude-opus-5",
+    "crew:code:reviewer": "...",
+}
 ```
 
 with one added rule, stated in the same terms as the existing `dev`/`reviewer` pair: **every

@@ -60,8 +60,7 @@ already named.
 `list_open_run_ids(client)` calls:
 
 ```python
-client.list_workflows(
-    "WorkflowType='FeatureWorkflow' AND ExecutionStatus='Running'")
+client.list_workflows("WorkflowType='FeatureWorkflow' AND ExecutionStatus='Running'")
 ```
 
 Filtering by `WorkflowType` server-side matters because the same task queue
@@ -85,16 +84,19 @@ right for inbox too and should not be reimplemented.
 from pydantic import BaseModel
 from ..pending import PendingDecision
 
+
 class RunInbox(BaseModel):
     run_id: str
     pending: list[PendingDecision]
+
 
 class InboxError(BaseModel):
     run_id: str
     error: str
 
+
 class Inbox(BaseModel):
-    runs: list[RunInbox] = []      # only runs with >=1 pending item
+    runs: list[RunInbox] = []  # only runs with >=1 pending item
     errors: list[InboxError] = []  # runs whose query raised
 ```
 
@@ -110,8 +112,7 @@ async def list_open_run_ids(client) -> list[str]:
 
 async def fetch_inbox(client) -> Inbox:
     run_ids = await list_open_run_ids(client)
-    results = await asyncio.gather(
-        *(_fetch_one(client, rid) for rid in run_ids))
+    results = await asyncio.gather(*(_fetch_one(client, rid) for rid in run_ids))
     inbox = Inbox()
     for rid, outcome in zip(run_ids, results):
         if isinstance(outcome, Exception):
@@ -125,7 +126,7 @@ async def _fetch_one(client, run_id: str):
     try:
         handle = client.get_workflow_handle_for(FeatureWorkflow.run, run_id)
         return await fetch_pending(handle)
-    except Exception as e:                     # noqa: BLE001 -- captured, not raised
+    except Exception as e:  # noqa: BLE001 -- captured, not raised
         return e
 ```
 

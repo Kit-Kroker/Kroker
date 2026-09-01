@@ -372,27 +372,32 @@ class RepoObservation(BaseModel):
     source_file_count: int = 0
     reason: str = ""
 
+
 class IntakeVerdict(BaseModel):
     mode: ProjectMode
     ok: bool
     warning: str = ""
     reason: str = ""
 
-class MapModule(BaseModel):          # from ScanResult.candidates (S5-merged)
+
+class MapModule(BaseModel):  # from ScanResult.candidates (S5-merged)
     name: str
     member_paths: tuple[str, ...]
     confidence: Confidence
 
-class MapContract(BaseModel):        # from contract-kind CandidateMembers
+
+class MapContract(BaseModel):  # from contract-kind CandidateMembers
     kind: MemberKind
-    value: str                       # "POST /api/payments"
+    value: str  # "POST /api/payments"
     path: str
     line: int | None = None
 
-class HotSpot(BaseModel):            # from testability + coverage records
+
+class HotSpot(BaseModel):  # from testability + coverage records
     path: str
     reason: str
     metric: Measurement
+
 
 class CodebaseMap(BaseModel):
     tree_hash: str
