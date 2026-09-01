@@ -472,6 +472,7 @@ class HarnessRunResult(BaseModel):
     # the E-36 heatmap read these without loading the session artifact.
     denials: list[ToolDenial] = Field(default_factory=list)
     deferred: DeferredToolUse | None = None      # E-17: suspended tool call
+    escalations: list[ToolEscalation] = Field(default_factory=list)
     containment: ContainmentReport | None = None
     _raw_stdout: str = PrivateAttr(default="")
 

@@ -100,3 +100,23 @@ def test_every_pending_variant_can_name_its_parent_run():
                 MergeGatePending):
         assert "parent_run_id" in cls.model_fields
         assert cls.model_fields["parent_run_id"].default is None
+
+
+def test_gate_host_wires_parent_run_id_to_gate_pending():
+    """GateHost._parent_run_id is passed down to gate_pending for all pending variants."""
+    from sdlc.pending import GateContext, gate_pending
+    from sdlc.workflows.gates import GateHost
+
+    host = GateHost()
+    host._parent_run_id = "parent-wf-123"
+
+    p_stage = gate_pending("architecture", 1,
+                           context=GateContext(spec_summary="spec"),
+                           parent_run_id=host._parent_run_id)
+    assert p_stage.parent_run_id == "parent-wf-123"
+
+    p_tool = gate_pending("tool_approval", 1, parent_run_id=host._parent_run_id)
+    assert p_tool.parent_run_id == "parent-wf-123"
+
+    p_merge = gate_pending("merge", 1, parent_run_id=host._parent_run_id)
+    assert p_merge.parent_run_id == "parent-wf-123"

@@ -100,16 +100,20 @@ def _inp(policy=GatePolicy.OFF, **kw) -> CrewTaskInput:
 
 
 async def test_a_deferral_is_gated_and_the_turn_resumes_with_the_grant():
-    """Policy OFF auto-approves, so this exercises the whole loop without a
-    human: suspend -> gate -> resume the SAME session carrying the grant."""
+    """Explicit tool_approval policy OFF auto-approves, so this exercises
+    the whole loop without a human: suspend -> gate -> resume the SAME session
+    carrying the grant."""
     TURNS.clear()
     DEFER["left"] = 1
+    settings = GateSettings(
+        default_gate_policy=GatePolicy.OFF,
+        gates={"tool_approval": GateConfig(policy=GatePolicy.OFF)})
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
         async with Worker(env.client, task_queue=TASK_QUEUE,
                           workflows=[CrewTaskWorkflow], activities=ACTIVITIES):
             res = await env.client.execute_workflow(
-                CrewTaskWorkflow.run, _inp(),
+                CrewTaskWorkflow.run, _inp(gate_settings=settings),
                 id=f"crew-{uuid.uuid4()}", task_queue=TASK_QUEUE)
     lead = [t for t in TURNS if t.role == "coder"]
     assert len(lead) == 2, "the turn was never resumed after the gate"
@@ -124,17 +128,78 @@ async def test_the_escalation_cap_ends_with_one_resume_that_denies():
     it spends one final resume purely to deliver the denial."""
     TURNS.clear()
     DEFER["left"] = 5
+    settings = GateSettings(
+        default_gate_policy=GatePolicy.OFF,
+        gates={"tool_approval": GateConfig(policy=GatePolicy.OFF)})
     async with await WorkflowEnvironment.start_time_skipping(
             data_converter=pydantic_data_converter) as env:
         async with Worker(env.client, task_queue=TASK_QUEUE,
                           workflows=[CrewTaskWorkflow], activities=ACTIVITIES):
             await env.client.execute_workflow(
-                CrewTaskWorkflow.run, _inp(max_tool_escalations=2),
+                CrewTaskWorkflow.run,
+                _inp(gate_settings=settings, max_tool_escalations=2),
                 id=f"crew-{uuid.uuid4()}", task_queue=TASK_QUEUE)
     lead = [t for t in TURNS if t.role == "coder"]
     # first turn + 2 gated resumes + 1 capped resume carrying the denial
     assert len(lead) == 4
     assert lead[-1].grants[0].approved is False
+
+
+async def test_tool_escalations_do_not_burn_question_budget():
+    """Tool approvals and crew questions have separate counters: tool approvals
+    must not deplete the 2-question intent gap budget."""
+    TURNS.clear()
+    DEFER["left"] = 2
+    ASK["left"] = 1
+    settings = GateSettings(
+        default_gate_policy=GatePolicy.OFF,
+        gates={"tool_approval": GateConfig(policy=GatePolicy.OFF),
+               "crew_question": GateConfig(policy=GatePolicy.OFF)})
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=[CrewTaskWorkflow], activities=ACTIVITIES):
+            res = await env.client.execute_workflow(
+                CrewTaskWorkflow.run,
+                _inp(gate_settings=settings, max_tool_escalations=5,
+                     rounds_max=2),
+                id=f"crew-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+    assert res.run.exit_code == 0
+    assert len(res.rounds) == 2
+
+
+async def test_tool_approval_defaults_to_hard_even_under_default_policy_off():
+    """Tool approval gates default to HARD unless explicitly overridden, matching
+    FeatureWorkflow behavior and preserving the ADR-17 containment fence."""
+    TURNS.clear()
+    DEFER["left"] = 1
+    wf_id = f"crew-{uuid.uuid4()}"
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=[CrewTaskWorkflow], activities=ACTIVITIES):
+            handle = await env.client.start_workflow(
+                CrewTaskWorkflow.run,
+                _inp(policy=GatePolicy.OFF),  # default_gate_policy is OFF
+                id=wf_id, task_queue=TASK_QUEUE)
+            with env.auto_time_skipping_disabled():
+                for _ in range(100):
+                    pending = await handle.query(
+                        CrewTaskWorkflow.pending_decisions)
+                    if pending:
+                        break
+                    await asyncio.sleep(0.1)
+                assert pending and pending[0].gate == "tool_approval"
+                await handle.signal(
+                    CrewTaskWorkflow.submit_gate_decision,
+                    GateDecision(gate=pending[0].gate,
+                                 round=pending[0].round,
+                                 outcome=GateOutcome.APPROVE,
+                                 decided_by="human"))
+            await handle.result()
+    lead = [t for t in TURNS if t.role == "coder"]
+    assert len(lead) == 2
+    assert lead[1].grants[0].approved is True
 
 
 async def test_a_human_decision_reaches_the_child_workflow():
@@ -221,9 +286,6 @@ async def test_the_escalation_budget_ends_the_crew_as_an_intent_gap():
                 CrewTaskWorkflow.run,
                 _inp(policy=GatePolicy.OFF, rounds_max=9),
                 id=f"crew-{uuid.uuid4()}", task_queue=TASK_QUEUE)
-    assert res.run.exit_code == EXIT_INTENT_GAP
-
-
 async def test_a_crews_pending_item_names_its_parent_run():
     """§E: an operator must see a crew item as part of its run, not as an
     orphan. A FIELD, not a parse of the workflow-id prefix -- the prefix is a

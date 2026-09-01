@@ -1,13 +1,9 @@
 """CrewTaskWorkflow (E-88) -- a coding stage as a round loop.
 
-The round machine, the brakes, and the durable state live here; every side
-effect is an activity. That is the whole point of the design: E-87 hand-wrote
-this inside an activity, complete with a journal file and a recovery path,
-because an activity has no history of its own.
-
-Deliberately NOT here yet (E-88 step 2): the critic role, GateHost, and the
-`deferred` gate. A suspended tool call is returned upward, where
-feature.py's existing E-17 loop already handles it.
+The round machine, the brakes, containment, the critic role, GateHost, and the
+durable state live here; every side effect is an activity. That is the whole
+point of the design: E-87 hand-wrote this inside an activity, complete with a
+journal file and a recovery path, because an activity has no history of its own.
 """
 from __future__ import annotations
 
@@ -28,8 +24,8 @@ with workflow.unsafe.imports_passed_through():
     from ..crew.config import CrewRole
     from ..crew.models import CrewRunResult, RoundRecord, TurnRecord
     from ..models import (
-        GatePolicy, GateSettings, HarnessKind, HarnessRunResult, ToolDenial,
-        ToolGrant,
+        EscalationOutcome, GatePolicy, GateSettings, HarnessKind,
+        HarnessRunResult, ToolDenial, ToolEscalation, ToolGrant,
     )
     from ..pending import GateContext
     from .gates import GateHost
@@ -72,7 +68,6 @@ class CrewTaskInput(BaseModel):
     containment_enabled: bool = False
     containment_policy_path: str | None = None
     containment_strict: bool = False
-    grants: list[ToolGrant] = Field(default_factory=list)
     # E-88 §6: the gate is hosted HERE, so the child needs the same three
     # fields GateHost reads. GateSettings exists precisely so a gate host
     # need not take the whole PipelineConfig.
@@ -99,9 +94,11 @@ class CrewTaskWorkflow(GateHost):
         super().__init__()
         self._status = "starting"
         self._rounds: list[RoundRecord] = []
-        # §6: two per crew, durable. Exhaustion is a signal about clarify,
+        # Tool approvals hosted inside the crew turn loop
+        self._tool_escalations = 0
+        # §6: two questions per crew, durable. Exhaustion is a signal about clarify,
         # not just a brake.
-        self._escalations = 0
+        self._questions = 0
         # The answer round N+1 must carry. Cleared once delivered.
         self._answer = ""
 
@@ -118,6 +115,7 @@ class CrewTaskWorkflow(GateHost):
         sessions = dict(inp.sessions)
         refs: list = []
         denials: list[ToolDenial] = []
+        escalations: list[ToolEscalation] = []
         spent = 0.0
         last: TurnRecord | None = None
         last_run: HarnessRunResult | None = None
@@ -219,22 +217,35 @@ class CrewTaskWorkflow(GateHost):
                         tool_use_id=d.tool_use_id, tool=d.tool,
                         input_digest=d.input_digest, rule_id=d.rule_id,
                         approved=False, reason="escalation cap reached")]
+                    escalations.append(ToolEscalation(
+                        tool=d.tool, rule_id=d.rule_id, target=d.target,
+                        outcome=EscalationOutcome.CAPPED, decided_by="policy"))
                     continue
                 asked += 1
-                self._escalations += 1
+                self._tool_escalations += 1
                 decision = await self._gate(
                     "tool_approval", inp.gate_settings,
-                    round=self._escalations,
+                    round=self._tool_escalations,
                     context=GateContext(spec_summary=(
                         f"crew task {inp.task_id} round {rnd}: the "
                         f"{lead.name} suspended at {d.tool} on "
                         f"{d.target or '(no target)'} — rule {d.rule_id}: "
-                        f"{d.reason}")))
+                        f"{d.reason}")),
+                    default_policy=GatePolicy.HARD)
                 grants = [ToolGrant(
                     tool_use_id=d.tool_use_id, tool=d.tool,
                     input_digest=d.input_digest, rule_id=d.rule_id,
                     approved=decision.approved,
                     reason=decision.comments or "")]
+                escalations.append(ToolEscalation(
+                    tool=d.tool, rule_id=d.rule_id, target=d.target,
+                    outcome=(EscalationOutcome.APPROVED
+                             if decision.approved
+                             else EscalationOutcome.TIMEOUT
+                             if decision.decided_by == "timeout"
+                             else EscalationOutcome.REJECTED),
+                    decided_by=decision.decided_by,
+                    round=self._tool_escalations))
             if failed:
                 break
 
@@ -268,7 +279,7 @@ class CrewTaskWorkflow(GateHost):
                         **_turn_act(budget_s))
                 except ActivityError as e:
                     # A critic that fails does NOT fail the round: the lead's
-                    # work is already committed and reviewable, and losing a
+                    # work is already in the worktree and reviewable, and losing a
                     # second opinion is a smaller loss than discarding a
                     # round. Its cost is still recovered and counted.
                     record.turns.append(
@@ -281,6 +292,11 @@ class CrewTaskWorkflow(GateHost):
                 if aux.record.session_id:
                     sessions[role.name] = aux.record.session_id
             if exit_code == EXIT_DEADLINE:
+                commit_sha = await workflow.execute_activity(
+                    checkpoint_round,
+                    CheckpointInput(worktree=inp.worktree, round=rnd,
+                                    exit_code=out.run.exit_code),
+                    **GIT_ACT)
                 break
 
             self._status = f"round:{rnd}:reading"
@@ -295,28 +311,30 @@ class CrewTaskWorkflow(GateHost):
             record.verdict = reading.verdict
             record.critique = reading.critique
 
-            if reading.question:
-                # §6: two escalations per crew. Exhaustion ends the crew as
-                # an intent gap rather than looping -- a lead that keeps
-                # asking is evidence clarify under-performed on this task,
-                # and that is worth surfacing rather than absorbing.
-                if self._escalations >= 2:
-                    exit_code = EXIT_INTENT_GAP
-                    break
-                self._escalations += 1
-                answer = await self._gate(
-                    "crew_question", inp.gate_settings,
-                    round=self._escalations,
-                    context=GateContext(spec_summary=(
-                        f"crew task {inp.task_id} round {rnd} asks:\n"
-                        f"{reading.question}")))
-                self._answer = answer.comments or ""
-
+            # Checkpoint the round before gating questions or exiting on
+            # protocol violation, so work is never lost to a timeout or break.
             commit_sha = await workflow.execute_activity(
                 checkpoint_round,
                 CheckpointInput(worktree=inp.worktree, round=rnd,
                                 exit_code=out.run.exit_code),
                 **GIT_ACT)
+
+            if reading.question:
+                # §6: two escalations per crew. Exhaustion ends the crew as
+                # an intent gap rather than looping -- a lead that keeps
+                # asking is evidence clarify under-performed on this task,
+                # and that is worth surfacing rather than absorbing.
+                if self._questions >= 2:
+                    exit_code = EXIT_INTENT_GAP
+                    break
+                self._questions += 1
+                answer = await self._gate(
+                    "crew_question", inp.gate_settings,
+                    round=self._questions,
+                    context=GateContext(spec_summary=(
+                        f"crew task {inp.task_id} round {rnd} asks:\n"
+                        f"{reading.question}")))
+                self._answer = answer.comments or ""
 
             if reading.missing:
                 # The one surviving row of E-87's disagreement table: the
@@ -352,6 +370,7 @@ class CrewTaskWorkflow(GateHost):
             cost_usd=None if cost_incomplete else spent,
             commit_sha=commit_sha,
             denials=denials,
+            escalations=escalations,
             input_tokens=last.input_tokens if last else None,
             output_tokens=last.output_tokens if last else None,
             context_window=last.context_window if last else None,
@@ -385,6 +404,7 @@ class CrewTaskWorkflow(GateHost):
         if self._answer:
             answer = (f"\n\nA human answered your question from round "
                       f"{rnd - 1}: {self._answer}")
+            self._answer = ""
         return (f"{base}\n\nThis is round {rnd}. Your previous round's "
                 f"note is at round-{rnd - 1}/{inp.deliverable_path}. "
                 f"Continue from it; do not restate it.{critique}{answer}\n\n"

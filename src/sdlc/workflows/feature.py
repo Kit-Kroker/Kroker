@@ -1568,7 +1568,6 @@ class FeatureWorkflow(GateHost):
                             containment_enabled=cfg.containment_enabled,
                             containment_policy_path=cfg.containment.policy_path,
                             containment_strict=cfg.containment.strict,
-                            grants=grants,
                             gate_settings=cfg.gate_settings(),
                             max_tool_escalations=cfg.max_tool_escalations),
                         id=f"{workflow.info().workflow_id}-crew-"
@@ -1594,6 +1593,8 @@ class FeatureWorkflow(GateHost):
                                         grants=grants),
                         **_long_act(role_cfg),
                     )
+                for esc in run.escalations:
+                    await self._record_escalation(cfg, task, esc)
                 for esc in escalations_from_denials(run.denials):
                     await self._record_escalation(cfg, task, esc)
                 if run.deferred is None or capped:

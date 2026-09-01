@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 from pathlib import Path
 
 import yaml
@@ -171,7 +172,6 @@ async def _run_matrix(case_path: str, gate_policy: str | None = None) -> str:
                            cell.role_models.get("dev"))
     if gate_policy is not None:
         spec = spec.model_copy(update={"gate_policy": GatePolicy(gate_policy)})
-    import os
     client = await Client.connect(
         os.environ.get("TEMPORAL_HOST", "localhost:7233"),
         data_converter=pydantic_data_converter)

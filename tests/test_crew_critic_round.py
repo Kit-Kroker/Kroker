@@ -136,3 +136,37 @@ async def test_the_verdict_lands_on_the_round_record():
     res = await _run(_inp(rounds_max=1))
     assert res.rounds[0].verdict == "needs_work"
     assert "no timeout" in res.rounds[0].critique
+
+
+async def test_a_failing_critic_does_not_fail_the_round():
+    """A critic failure does not fail the round: the lead's work is kept and
+    the round completes, while the critic's turn error is recorded."""
+    from temporalio.exceptions import ApplicationError
+
+    TURNS.clear()
+
+    @activity.defn(name="run_crew_turn")
+    async def turn_with_critic_fail(inp: CrewTurnInput) -> CrewTurnOutput:
+        TURNS.append(inp)
+        if inp.role == "critic":
+            raise ApplicationError("critic CLI crashed", non_retryable=True)
+        run = HarnessRunResult(harness=inp.harness, exit_code=0, summary="ok",
+                               session_id=f"s-{inp.role}", cost_usd=0.5,
+                               input_tokens=100, output_tokens=20)
+        return CrewTurnOutput(run=run, record=TurnRecord(
+            role=inp.role, round=inp.round, attempt=inp.attempt,
+            harness=inp.harness, model=inp.model, session_id=f"s-{inp.role}",
+            cost_usd=0.5, input_tokens=100, output_tokens=20, exit_code=0))
+
+    async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter) as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE,
+                          workflows=[CrewTaskWorkflow],
+                          activities=[fake_prepare, turn_with_critic_fail,
+                                      fake_read, fake_checkpoint]):
+            res = await env.client.execute_workflow(
+                CrewTaskWorkflow.run, _inp(rounds_max=1),
+                id=f"crew-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+    assert res.run.exit_code == 0
+    assert len(res.rounds[0].turns) == 2
+    assert res.rounds[0].turns[1].cost_incomplete is True

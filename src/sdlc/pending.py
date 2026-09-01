@@ -104,7 +104,7 @@ def clarify_pending(
 
 
 def gate_pending(
-    name: str, round: int, context: GateContext | None,
+    name: str, round: int, context: GateContext | None = None,
     *, opened_at: datetime | None = None,
     parent_run_id: str | None = None,
 ) -> PendingDecision:

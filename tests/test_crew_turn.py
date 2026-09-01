@@ -19,6 +19,13 @@ from sdlc.models import (
 pytestmark = pytest.mark.asyncio
 
 
+@pytest.fixture(autouse=True)
+def _reset_fake_harness():
+    FakeHarness.applied = []
+    yield
+    FakeHarness.applied = []
+
+
 class FakeHarness:
     kind = HarnessKind.OPENCODE
 
