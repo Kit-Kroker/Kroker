@@ -54,6 +54,7 @@ from .models import (
     ToolGrant,
 )
 from .observability.logfire_setup import span
+from .process import kill_process_tree
 from .toolchain.adapters import ToolchainKind, detect
 
 if TYPE_CHECKING:
@@ -731,14 +732,15 @@ async def run_test_suite(inp: QAInput) -> QAReport:
         inp.test_cmd,
         cwd=inp.worktree,
         env=env,
+        stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
+        start_new_session=True,  # C6: whole tree killable as a group
     )
     try:
         out_b, _ = await asyncio.wait_for(proc.communicate(), timeout=inp.timeout_s)
     except TimeoutError:
-        proc.kill()
-        await proc.wait()
+        await asyncio.shield(kill_process_tree(proc))
         return QAReport(
             tests_passed=False,
             failing_tests=[],
@@ -749,6 +751,9 @@ async def run_test_suite(inp: QAInput) -> QAReport:
                 "than exiting after a one-shot test run"
             ],
         )
+    except asyncio.CancelledError:
+        await asyncio.shield(kill_process_tree(proc))
+        raise
     out = out_b.decode(errors="replace")
     failing = [ln.split(" ")[0] for ln in out.splitlines() if ln.startswith("FAILED")]
     # pytest's dedicated exit code for "collected zero tests" (distinct from
@@ -847,15 +852,19 @@ async def run_lint(inp: LintInput) -> tuple[bool, str]:
     proc = await asyncio.create_subprocess_shell(
         inp.lint_cmd,
         cwd=inp.worktree,
+        stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
+        start_new_session=True,  # C6: whole tree killable as a group
     )
     try:
         out_b, _ = await asyncio.wait_for(proc.communicate(), timeout=inp.timeout_s)
     except TimeoutError:
-        proc.kill()
-        await proc.wait()
+        await asyncio.shield(kill_process_tree(proc))
         return False, (f"lint command timed out after {inp.timeout_s}s (cmd: {inp.lint_cmd!r})")
+    except asyncio.CancelledError:
+        await asyncio.shield(kill_process_tree(proc))
+        raise
     out = out_b.decode(errors="replace")
     detail = out[-2000:]
     if provisioning and proc.returncode != 0:
@@ -1081,14 +1090,22 @@ async def _bounded_shell(
     from _ensure_python_env) does NOT merge with it automatically — callers
     must pass a full environment dict."""
     proc = await asyncio.create_subprocess_shell(
-        cmd, cwd=cwd, env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
+        cmd,
+        cwd=cwd,
+        env=env,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        start_new_session=True,  # C6: whole tree killable as a group
     )
     try:
         out_b, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
     except TimeoutError:
-        proc.kill()
-        await proc.wait()
+        await asyncio.shield(kill_process_tree(proc))
         return -1, f"command timed out after {timeout_s}s (cmd: {cmd!r})"
+    except asyncio.CancelledError:
+        await asyncio.shield(kill_process_tree(proc))
+        raise
     return (proc.returncode or 0), out_b.decode(errors="replace")
 
 
