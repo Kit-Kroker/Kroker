@@ -24,6 +24,8 @@ from ..capability.models import (
 )
 from ..capability.rows import identity_rows
 from ..capability.store import BoardIdentityStore
+from ..dispositions.models import FindingDisposition
+from ..dispositions.store import BoardFindingDispositionStore
 from ..measurement import Measurement
 from ..triage.activities import tracked_paths
 from ..triage.gitread import is_over_size_limit, read_tree
@@ -906,3 +908,16 @@ async def verify_risk_refs(inp: VerifyRiskRefsInput) -> RiskVerification:
         total_references=out.total_references,
         unresolved_references=out.unresolved_references,
     )
+
+
+@activity.defn
+async def load_dispositions(project: str, db: str | None = None) -> tuple[FindingDisposition, ...]:
+    """FR-304 (E-50): loads every finding disposition recorded for the project.
+
+    The activity runs in the worker's process and reads the board DB directly.
+    """
+    store = BoardFindingDispositionStore(db=db)
+    try:
+        return tuple(store.load(project))
+    finally:
+        store.close()
