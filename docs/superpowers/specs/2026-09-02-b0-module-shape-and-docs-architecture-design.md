@@ -233,16 +233,17 @@ We are not inventing a second ID system. We are giving the existing one a level 
 
 `docs/modes/feature-clause-writing.md` carries the method. Whether pytest gains a marker that cites clause IDs is deliberately left to (A), where there will be a real migrated slice to try it on.
 
-**Where clauses sit among the other things this repo writes down.** Four artifacts answer four different questions, and conflating them is how a specification quietly overwrites behaviour that was a contract:
+**Where clauses sit among the other things this repo writes down.** Three artifacts answer three different questions, and conflating them is how a specification quietly overwrites behaviour that was a contract:
 
 | Artifact | Question |
 |---|---|
 | a design spec under `docs/superpowers/specs/` | what we **intend** |
 | a slice's numbered clauses | what **behaviour** matters |
-| tests and the product's own evals | what we **verify** |
-| telemetry (`src/sdlc/observability/`) | what actually **happened** |
+| the test suite | what we **verify** |
 
 The distinction that earns its place here is the second against the first. A spec describes a system as someone means it to be; a system that already exists is defined by what it does, and some of what it does is load-bearing precisely because nobody designed it. Clauses are written from observed behaviour, not from intent — which is why they live beside the code and a spec does not.
+
+A fourth question — *what actually happened* when an agent worked on this repository — has no artifact here, and B0 does not add one. It is recorded as deferred rather than answered. Note that Kroker the product implements telemetry, evals and golden cases for the pipelines it runs on other repositories (`src/sdlc/observability/`, `src/sdlc/eval/`, `benchmarks/cases/`); those are product features and are not this repository's development harness. The two must not be conflated in either direction: nothing in B0 or its successors adds product functionality, and the product's machinery is not repurposed as our own tooling without a decision that says so.
 
 ## 5. Test placement
 
