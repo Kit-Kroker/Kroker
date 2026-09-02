@@ -106,6 +106,7 @@ def _needs_temporal_client(args) -> bool:
         or args.cmd == "eval"
         or args.cmd == "calibrate"
         or args.cmd == "capability"
+        or args.cmd == "risk"
     )
     return not local_only
 
@@ -256,6 +257,10 @@ def build_parser() -> argparse.ArgumentParser:
     from .capability.cli import add_capability_parser
 
     add_capability_parser(sub)
+
+    from .dispositions.cli import add_dispositions_parser
+
+    add_dispositions_parser(sub)
 
     tr = sub.add_parser("triage")
     trsub = tr.add_subparsers(dest="triage_cmd")
@@ -519,6 +524,11 @@ async def main() -> None:
         from .capability.cli import run_capability
 
         raise SystemExit(run_capability(args))
+
+    if args.cmd == "risk":
+        from .dispositions.cli import run_dispositions
+
+        raise SystemExit(run_dispositions(args))
 
     if args.cmd == "triage" and args.triage_cmd == "show":
         assert client is not None
