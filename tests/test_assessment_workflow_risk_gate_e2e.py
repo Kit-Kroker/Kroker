@@ -34,9 +34,16 @@ from sdlc.assessment.discover.map import CapabilityMap
 from sdlc.assessment.gates.models import RiskGateVerdict
 from sdlc.assessment.models import PARTIAL, PhaseId
 from sdlc.assessment.risk.models import (
+    Composite,
     Criticality,
     CriticalityRating,
+    Factor,
+    RiskSource,
+    Severity,
+    StrideCategory,
     UnifiedRiskMap,
+    Vulnerability,
+    VulnerabilityClass,
 )
 from sdlc.assessment.scan.models import TestabilityFinding, testability_identity
 from sdlc.dispositions.models import Disposition, FindingDisposition
@@ -479,3 +486,201 @@ async def test_load_dispositions_failing_falls_back_to_zero_not_a_crash(
             result = await handle.result()
 
     assert result.gates.verdict == RiskGateVerdict.BLOCK
+
+
+def _warn_risk_map() -> UnifiedRiskMap:
+    cap = capability_risk(
+        bc_id="BC-001",
+        unified=Composite(
+            value=Measurement.measured(0.65),
+            factors=(Factor(key="x", value=Measurement.measured(0.65)),),
+        ),
+    )
+    return UnifiedRiskMap(capabilities=(cap,), collected=Measurement.measured(1.0))
+
+
+async def test_a_warn_verdict_opens_no_gate_and_phases_proceed(gate_repo, tmp_path, monkeypatch):
+    repo_dir, sha = gate_repo
+    monkeypatch.setenv("SDLC_BOARD_DB", str(tmp_path / "board.sqlite3"))
+    acts = _acts(sha, _clean_capability_map(), _warn_risk_map())
+
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=WORKFLOWS, activities=acts):
+            handle = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(
+                    repo_dir=repo_dir,
+                    project_key="acme",
+                    propose_discover=False,
+                    propose_risk=False,
+                ),
+                id=f"assess-{uuid.uuid4()}",
+                task_queue=TASK_QUEUE,
+            )
+            # No signal is sent: a WARN must never leave the workflow waiting.
+            result = await handle.result()
+
+    assert result.gates.verdict == RiskGateVerdict.WARN
+    assert result.gate_override is None
+    row = next(p for p in result.phases if p.phase is PhaseId.REPORT)
+    # Stable across E-51/E-52 landing, unlike a hardcoded "not implemented"
+    # substring (finding 13's fix, applied here too): phases ran normally,
+    # not risk-gate-skipped.
+    assert row.collected.reason != risk_gate_skipped(PhaseId.REPORT).collected.reason
+
+
+async def test_a_testability_disposition_clears_the_block_on_rerun(
+    gate_repo, tmp_path, monkeypatch
+):
+    """FR-917's persistence promise, end to end: the SAME finding BLOCKs the
+    first run and does not even open a gate on the second, once dispositioned."""
+    repo_dir, sha = gate_repo
+    db = tmp_path / "board.sqlite3"
+    monkeypatch.setenv("SDLC_BOARD_DB", str(db))
+    acts = _acts(sha, _blocking_capability_map(), _high_risk_map())
+    key = testability_identity(_blocker())
+
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=WORKFLOWS, activities=acts):
+            first_id = f"assess-{uuid.uuid4()}"
+            handle = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(
+                    repo_dir=repo_dir,
+                    project_key="acme",
+                    propose_discover=False,
+                    propose_risk=False,
+                ),
+                id=first_id,
+                task_queue=TASK_QUEUE,
+            )
+            await _await_gate(env, first_id, "risk")
+            await handle.signal(
+                AssessmentWorkflow.submit_gate_decision,
+                GateDecision(gate="risk", round=1, outcome=GateOutcome.REJECT, decided_by="human"),
+            )
+            first_result = await handle.result()
+            assert first_result.gates.verdict == RiskGateVerdict.BLOCK
+
+            store = BoardFindingDispositionStore(db=db)
+            store.apply(
+                "acme",
+                FindingDisposition(
+                    kind="testability",
+                    key=key,
+                    disposition=Disposition.ACCEPTED_RISK,
+                    approved_by="maks",
+                    reason="known pattern, ticket filed",
+                    decided_at=datetime.now(UTC),
+                ),
+                expected_version=0,
+                actor="maks",
+            )
+            store.close()
+
+            second_id = f"assess-{uuid.uuid4()}"
+            handle2 = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(
+                    repo_dir=repo_dir,
+                    project_key="acme",
+                    propose_discover=False,
+                    propose_risk=False,
+                ),
+                id=second_id,
+                task_queue=TASK_QUEUE,
+            )
+            second_result = await handle2.result()
+
+    assert second_result.gates.verdict == RiskGateVerdict.PASS
+    assert second_result.gate_override is None
+
+
+def _confirmed_vuln_risk_map(bc_id="BC-001") -> UnifiedRiskMap:
+    vuln = Vulnerability(
+        key="SS1:hardcoded-secret:payments/api.py:",
+        classification=VulnerabilityClass.CONFIRMED,
+        severity=Severity.HIGH,
+        stride_category=StrideCategory.INFORMATION_DISCLOSURE,
+        path="payments/api.py",
+        source=RiskSource.BASELINE,
+    )
+    cap = capability_risk(bc_id=bc_id, vulnerabilities=(vuln,))
+    # judgment MEASURED: CONFIRMED is only reachable through the judgment
+    # layer (GD3) -- unlike the testability fixtures above, this map must
+    # carry it directly since faking risk_memo_load bypasses _judge() (the
+    # method that would otherwise stamp it) entirely.
+    return UnifiedRiskMap(
+        capabilities=(cap,),
+        collected=Measurement.measured(1.0),
+        judgment=Measurement.measured(1.0),
+    )
+
+
+async def test_a_vulnerability_disposition_clears_the_block_on_rerun(
+    gate_repo, tmp_path, monkeypatch
+):
+    """The spec's own first e2e case: a confirmed vulnerability opens the
+    gate, and `sdlc risk dispose --kind vulnerability` clears it on
+    re-run -- mirrors the testability version above but for the OTHER live
+    clause, which the testability case alone does not exercise."""
+    repo_dir, sha = gate_repo
+    db = tmp_path / "board.sqlite3"
+    monkeypatch.setenv("SDLC_BOARD_DB", str(db))
+    acts = _acts(sha, _clean_capability_map(), _confirmed_vuln_risk_map())
+    key = "SS1:hardcoded-secret:payments/api.py:"
+
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=WORKFLOWS, activities=acts):
+            first_id = f"assess-{uuid.uuid4()}"
+            handle = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(
+                    repo_dir=repo_dir,
+                    project_key="acme",
+                    propose_discover=False,
+                    propose_risk=False,
+                ),
+                id=first_id,
+                task_queue=TASK_QUEUE,
+            )
+            await _await_gate(env, first_id, "risk")
+            await handle.signal(
+                AssessmentWorkflow.submit_gate_decision,
+                GateDecision(gate="risk", round=1, outcome=GateOutcome.REJECT, decided_by="human"),
+            )
+            first_result = await handle.result()
+            assert first_result.gates.verdict == RiskGateVerdict.BLOCK
+
+            store = BoardFindingDispositionStore(db=db)
+            store.apply(
+                "acme",
+                FindingDisposition(
+                    kind="vulnerability",
+                    key=key,
+                    disposition=Disposition.ACCEPTED_RISK,
+                    approved_by="maks",
+                    reason="known issue, ticket filed",
+                    decided_at=datetime.now(UTC),
+                ),
+                expected_version=0,
+                actor="maks",
+            )
+            store.close()
+
+            second_id = f"assess-{uuid.uuid4()}"
+            handle2 = await env.client.start_workflow(
+                AssessmentWorkflow.run,
+                AssessmentInput(
+                    repo_dir=repo_dir,
+                    project_key="acme",
+                    propose_discover=False,
+                    propose_risk=False,
+                ),
+                id=second_id,
+                task_queue=TASK_QUEUE,
+            )
+            second_result = await handle2.result()
+
+    assert second_result.gates.verdict == RiskGateVerdict.PASS
+    assert second_result.gate_override is None
