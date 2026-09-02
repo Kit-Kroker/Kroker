@@ -35,6 +35,7 @@ with workflow.unsafe.imports_passed_through():
         DiscoverLockInput,
         DiscoverMemoInput,
         DiscoverMemoStoreInput,
+        LoadDispositionsInput,
         RiskMemoInput,
         RiskMemoStoreInput,
         VerifyRefsInput,
@@ -46,6 +47,7 @@ with workflow.unsafe.imports_passed_through():
         discover_memo_load,
         discover_memo_store,
         load_blueprint,
+        load_dispositions,
         no_finalize,
         risk_memo_load,
         risk_memo_store,
@@ -73,6 +75,8 @@ with workflow.unsafe.imports_passed_through():
         guard_tripped,
     )
     from ..assessment.discover.verify import RefVerification
+    from ..assessment.gates.checks import evaluate
+    from ..assessment.gates.models import RiskGateOverride, RiskGateReport, RiskGateVerdict
     from ..assessment.models import (
         PHASE_ORDER,
         Assessment,
@@ -90,7 +94,8 @@ with workflow.unsafe.imports_passed_through():
     from ..capability.models import ProposedCapability
     from ..measurement import CollectionState, Measurement
     from ..memoization.cache import NO_PROPOSER
-    from ..models import GateSettings
+    from ..models import GateDecision, GateSettings
+    from ..pending import GateContext
     from ..triage.admission import admits
     from ..triage.models import RepoTriage
     from .fanout import run_or_degrade
@@ -224,6 +229,52 @@ def no_assess(reason: str) -> AssessOutcome:
     )
 
 
+class RiskGateStepOutcome(BaseModel):
+    """_risk_gate's result: the report (None only when ASSESS did not
+    measure), the audited override (None unless BLOCK was approved), and
+    whether REPORT/GENERATE/FINISH must be skipped (GD1/GD2)."""
+
+    gates: RiskGateReport | None = None
+    override: RiskGateOverride | None = None
+    blocked: bool = False
+
+
+def risk_gate_skipped(phase: PhaseId) -> PhaseResult:
+    """A phase that exists but was never reached because the risk gate
+    (FR-917) BLOCKed and was not overridden (E-50 GD2)."""
+    return PhaseResult(
+        phase=phase,
+        collected=Measurement.not_collected(
+            "not run: risk gate BLOCKed and was not overridden (FR-917)"
+        ),
+    )
+
+
+def _risk_gate_summary(report: RiskGateReport) -> str:
+    lines = [f"verdict: {report.verdict.value}"]
+    if report.reasons:
+        lines.append("reasons:")
+        lines.extend(f"  {r}" for r in report.reasons)
+    if report.deferred:
+        lines.append("deferred:")
+        lines.extend(f"  {d}" for d in report.deferred)
+    return "\n".join(lines)
+
+
+def risk_override_from(decision: GateDecision) -> RiskGateOverride | None:
+    """FR-304, mirroring triage.py's override_from -- every APPROVE records
+    an override, with approved_by carrying decided_by VERBATIM (E-50 GD5)."""
+    if not decision.approved:
+        return None
+    return RiskGateOverride(
+        approved_by=decision.decided_by,
+        reviewer=decision.reviewer,
+        reason=decision.comments or "",
+        decided_at=decision.decided_at or workflow.now(),
+        gate_round=decision.round,
+    )
+
+
 def assemble(
     repo_dir: str,
     init: InitOutcome,
@@ -233,6 +284,8 @@ def assemble(
     scan: ScanResult | None = None,
     discover: CapabilityMap | None = None,
     risk: UnifiedRiskMap | None = None,
+    gates: RiskGateReport | None = None,
+    gate_override: RiskGateOverride | None = None,
 ) -> Assessment:
     """The ONLY constructor of an Assessment and the only caller of
     terminal_status: one place where the artifact is built means the derived
@@ -269,14 +322,16 @@ def assemble(
         scan=scan,
         discover=discover,
         risk=risk,
+        gates=gates,
+        gate_override=gate_override,
     )
 
 
 @workflow.defn
 class AssessmentWorkflow(GateHost):
-    """Inherits GateHost although it opens no gate of its own: status,
-    pending_decisions and submit_gate_decision come free, and E-50's
-    assessment gate checks will open gates here."""
+    """Inherits GateHost for two gates: the readiness gate is the CHILD
+    TriageWorkflow's; the risk gate (E-50, FR-917) is this workflow's own,
+    opened by _risk_gate right after ASSESS."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -658,6 +713,55 @@ class AssessmentWorkflow(GateHost):
                 f"the proposer's dispositions could not be applied: {type(e).__name__}: {e}"[:300],
             )
 
+    async def _risk_gate(
+        self, inp: AssessmentInput, discover_out: DiscoverOutcome, assess_out: AssessOutcome
+    ) -> RiskGateStepOutcome:
+        """E-50 (FR-917, GD1/GD2). The checks run right after ASSESS. A
+        BLOCK opens a HARD gate the same way the readiness gate does;
+        APPROVE stamps an audited override and REPORT/GENERATE/FINISH
+        proceed; REJECT (or a HOLD timeout) leaves them unreached.
+
+        GD2 names only APPROVE/REJECT; GateOutcome also has REVISE
+        (TriageWorkflow's readiness gate uses it to mean "fix the build and
+        re-triage," a round-based retry). The risk gate has no round or
+        retry concept -- a deterministic verdict over the current risk map
+        does not change by asking again -- so REVISE is deliberately
+        treated identically to REJECT here: `decision.approved` is False
+        for both, and only an explicit APPROVE unblocks. This is a decision
+        recorded once, here, not an unexamined fallthrough.
+        """
+        if assess_out.risk is None:
+            return RiskGateStepOutcome()
+
+        dispositions = await run_or_degrade(
+            load_dispositions,
+            LoadDispositionsInput(project=inp.project_key),
+            ASSESS_ACT,
+            fallback=lambda: (),
+        )
+        report = evaluate(assess_out.risk, discover_out.map, dispositions)
+        if report.verdict is not RiskGateVerdict.BLOCK:
+            return RiskGateStepOutcome(gates=report)
+
+        decision = await self._gate(
+            "risk", inp.gates, context=GateContext(spec_summary=_risk_gate_summary(report))
+        )
+        if decision.approved:
+            return RiskGateStepOutcome(gates=report, override=risk_override_from(decision))
+        return RiskGateStepOutcome(gates=report, blocked=True)
+
+    @workflow.update
+    def apply_risk_gate_override(self, override: RiskGateOverride) -> str:
+        """GD1/GD2/FR-304: post-run override applied to a completed assessment."""
+        if self._assessment is None:
+            raise ValueError("workflow has not produced an assessment yet")
+        if self._assessment.gates is None:
+            raise ValueError("assessment has no risk gate report")
+        if self._assessment.gates.verdict is RiskGateVerdict.PASS:
+            raise ValueError("cannot override a passing verdict")
+        self._assessment = self._assessment.model_copy(update={"gate_override": override})
+        return "override applied"
+
     async def _report(self, inp: AssessmentInput) -> PhaseResult:
         """E-52 owns this body: the five role reports."""
         return unbuilt(PhaseId.REPORT)
@@ -692,14 +796,26 @@ class AssessmentWorkflow(GateHost):
         scan_out = await self._scan(inp, init.triage)
         discover_out = await self._discover(inp, init.triage, scan_out)
         assess_out = await self._assess(inp, init.triage, discover_out, scan_out)
-        rest = [
-            scan_out.result,
-            discover_out.result,
-            assess_out.result,
-            await self._report(inp),  # AFTER assess -- FR-911 dev. (a)
-            await self._generate(inp),
-            await self._finish(inp),
-        ]
+        gate_out = await self._risk_gate(inp, discover_out, assess_out)
+
+        if gate_out.blocked:
+            rest = [
+                scan_out.result,
+                discover_out.result,
+                assess_out.result,
+                risk_gate_skipped(PhaseId.REPORT),
+                risk_gate_skipped(PhaseId.GENERATE),
+                risk_gate_skipped(PhaseId.FINISH),
+            ]
+        else:
+            rest = [
+                scan_out.result,
+                discover_out.result,
+                assess_out.result,
+                await self._report(inp),  # AFTER assess -- FR-911 dev. (a)
+                await self._generate(inp),
+                await self._finish(inp),
+            ]
         return self._done(
             assemble(
                 inp.repo_dir,
@@ -710,5 +826,7 @@ class AssessmentWorkflow(GateHost):
                 scan=scan_out.scan,
                 discover=discover_out.map,
                 risk=assess_out.risk,
+                gates=gate_out.gates,
+                gate_override=gate_out.override,
             )
         )

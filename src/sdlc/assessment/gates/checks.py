@@ -5,6 +5,8 @@ Pure by design -- see the package docstring in models.py.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from ...dispositions.models import FindingDisposition
 from ...gate import CheckClass, CheckResult
 from ...measurement import CollectionState
@@ -44,8 +46,8 @@ def unaccepted_confirmed_vulnerabilities(
 
 def high_criticality_testability_blockers(
     risk_map: UnifiedRiskMap,
-    capability_map: CapabilityMap,
-    dispositions: tuple[FindingDisposition, ...],
+    capability_map: CapabilityMap | None = None,
+    dispositions: tuple[FindingDisposition, ...] = (),
 ) -> tuple[CheckResult | None, tuple[str, ...]]:
     """GD3: evaluated per (bc_id, finding) pair. An uncollected criticality
     -- or a bc_id with no matching row in the risk map at all -- defers
@@ -54,7 +56,8 @@ def high_criticality_testability_blockers(
     bc_id the risk phase never scored must not silently drop its blocker
     either (the same silent-skip shape, one join away).
     """
-    testability_by_bc_id = {cap.bc_id: cap.testability for cap in capability_map.capabilities}
+    caps = capability_map.capabilities if capability_map is not None else ()
+    testability_by_bc_id = {cap.bc_id: cap.testability for cap in caps}
     criticality_by_bc_id = {c.bc_id: c.criticality for c in risk_map.capabilities}
     accepted = {d.key for d in dispositions if d.kind == "testability"}
 
@@ -143,13 +146,14 @@ def composite_threshold(
 
 def evaluate(
     risk_map: UnifiedRiskMap,
-    capability_map: CapabilityMap,
-    dispositions: tuple[FindingDisposition, ...],
+    capability_map: CapabilityMap | None = None,
+    dispositions: tuple[FindingDisposition, ...] | Iterable[FindingDisposition] = (),
 ) -> RiskGateReport:
     """FR-917: the three clauses, GD4's precedence -- BLOCK > WARN > PASS."""
-    vuln_check = unaccepted_confirmed_vulnerabilities(risk_map, dispositions)
+    disp_tuple = tuple(dispositions)
+    vuln_check = unaccepted_confirmed_vulnerabilities(risk_map, disp_tuple)
     testability_check, testability_deferred = high_criticality_testability_blockers(
-        risk_map, capability_map, dispositions
+        risk_map, capability_map, disp_tuple
     )
     composite_check, composite_warn, composite_deferred = composite_threshold(risk_map)
 

@@ -910,14 +910,17 @@ async def verify_risk_refs(inp: VerifyRiskRefsInput) -> RiskVerification:
     )
 
 
-@activity.defn
-async def load_dispositions(project: str, db: str | None = None) -> tuple[FindingDisposition, ...]:
-    """FR-304 (E-50): loads every finding disposition recorded for the project.
+class LoadDispositionsInput(BaseModel):
+    project: str
 
-    The activity runs in the worker's process and reads the board DB directly.
-    """
-    store = BoardFindingDispositionStore(db=db)
+
+@activity.defn
+async def load_dispositions(inp: LoadDispositionsInput) -> tuple[FindingDisposition, ...]:
+    """FR-304 (E-50 GD8): dispositions persisted from a prior run, read
+    fresh every run -- never memoized, since a disposition recorded between
+    runs must be visible on the very next one."""
+    store = BoardFindingDispositionStore()
     try:
-        return tuple(store.load(project))
+        return tuple(store.load(inp.project))
     finally:
         store.close()

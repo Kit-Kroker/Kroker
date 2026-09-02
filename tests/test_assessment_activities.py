@@ -1,42 +1,59 @@
 # tests/test_assessment_activities.py
-"""E-50: tests for assessment activities."""
+"""FR-304 (E-50 GD8): re-runs read persisted dispositions through one
+activity, never memoized -- a disposition recorded between runs must be
+visible on the very next one."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
-from sdlc.assessment.activities import load_dispositions
+from sdlc.assessment.activities import LoadDispositionsInput, load_dispositions
 from sdlc.dispositions.models import Disposition, FindingDisposition
 from sdlc.dispositions.store import BoardFindingDispositionStore
 
+pytestmark = pytest.mark.asyncio
 
-@pytest.mark.asyncio
-async def test_load_dispositions_reads_every_finding_for_the_project(tmp_path):
-    from datetime import UTC, datetime
 
-    db = tmp_path / "board.sqlite3"
-    store = BoardFindingDispositionStore(db=db)
-    store.apply(
-        "p",
-        FindingDisposition(
-            kind="vulnerability",
-            key="SS1:hardcoded-secret:src/a.py:",
-            disposition=Disposition.ACCEPTED_RISK,
-            approved_by="maks",
-            reason="reviewed",
-            decided_at=datetime.now(UTC),
-        ),
-        expected_version=0,
-        actor="maks",
+@pytest.fixture(autouse=True)
+def board(tmp_path, monkeypatch):
+    monkeypatch.setenv("SDLC_BOARD_DB", str(tmp_path / "board.sqlite3"))
+    return tmp_path / "board.sqlite3"
+
+
+def _fd(**kw) -> FindingDisposition:
+    base = dict(
+        kind="vulnerability",
+        key="SS1:hardcoded-secret:src/a.py:",
+        disposition=Disposition.ACCEPTED_RISK,
+        approved_by="maks",
+        reason="reviewed, tolerated",
+        decided_at=datetime.now(UTC),
     )
+    base.update(kw)
+    return FindingDisposition(**base)
+
+
+async def test_no_dispositions_yet_returns_empty():
+    out = await load_dispositions(LoadDispositionsInput(project="acme"))
+    assert out == ()
+
+
+async def test_a_persisted_disposition_is_read_back():
+    store = BoardFindingDispositionStore()
+    store.apply("acme", _fd(), expected_version=0, actor="maks")
     store.close()
-    rows = await load_dispositions("p", db=str(db))
-    assert len(rows) == 1
-    assert rows[0].key == "SS1:hardcoded-secret:src/a.py:"
+
+    out = await load_dispositions(LoadDispositionsInput(project="acme"))
+    assert len(out) == 1
+    assert out[0].key == "SS1:hardcoded-secret:src/a.py:"
 
 
-@pytest.mark.asyncio
-async def test_load_dispositions_returns_empty_tuple_for_a_fresh_project(tmp_path):
-    db = tmp_path / "board.sqlite3"
-    rows = await load_dispositions("brand-new-project", db=str(db))
-    assert rows == ()
+async def test_projects_are_isolated():
+    store = BoardFindingDispositionStore()
+    store.apply("acme", _fd(), expected_version=0, actor="maks")
+    store.close()
+
+    out = await load_dispositions(LoadDispositionsInput(project="other"))
+    assert out == ()

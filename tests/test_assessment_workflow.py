@@ -181,6 +181,8 @@ def test_assemble_on_an_admitted_run_reports_partial_once_scan_lands():
 
 def test_assemble_reports_assessed_once_every_phase_collects():
     """The status flips by itself when E-46..E-52 land -- no workflow edit."""
+    from sdlc.assessment.gates.models import RiskGateReport, RiskGateVerdict
+
     rest = [
         PhaseResult(phase=p, collected=Measurement.measured(1.0))
         for p in PHASE_ORDER
@@ -196,6 +198,7 @@ def test_assemble_reports_assessed_once_every_phase_collects():
             scan=_scan_result(),
             discover=CapabilityMap(collected=Measurement.measured(0.0)),
             risk=UnifiedRiskMap(collected=Measurement.measured(0.0)),
+            gates=RiskGateReport(verdict=RiskGateVerdict.PASS),
         ).terminal_status
         == ASSESSED
     )
@@ -353,3 +356,179 @@ def test_a_failed_judgment_never_fails_the_phase():
     src = inspect.getsource(assessment.AssessmentWorkflow._judge)
     assert "no_assess" not in src
     assert src.count("degraded(") >= 4
+
+
+# --- E-50: workflow wiring and gate override update handler --------------
+from datetime import UTC, datetime
+
+from sdlc.assessment.gates.models import RiskGateOverride, RiskGateVerdict
+from sdlc.assessment.risk.models import (
+    RiskSource,
+    Severity,
+    StrideCategory,
+    Vulnerability,
+    VulnerabilityClass,
+)
+from sdlc.dispositions.models import Disposition, FindingDisposition
+
+
+def _confirmed_vuln() -> Vulnerability:
+    return Vulnerability(
+        key="SS1:hardcoded-secret:src/a.py:",
+        classification=VulnerabilityClass.CONFIRMED,
+        severity=Severity.HIGH,
+        stride_category=StrideCategory.INFORMATION_DISCLOSURE,
+        path="src/a.py",
+        source=RiskSource.BASELINE,
+    )
+
+
+def _disposition(key="SS1:hardcoded-secret:src/a.py:") -> FindingDisposition:
+    return FindingDisposition(
+        kind="vulnerability",
+        key=key,
+        disposition=Disposition.ACCEPTED_RISK,
+        approved_by="maks",
+        reason="reviewed",
+        decided_at=datetime.now(UTC),
+    )
+
+
+def _risk_map(collected: Measurement | None = None) -> UnifiedRiskMap:
+    from tests.helpers_risk import capability_risk
+
+    return UnifiedRiskMap(
+        capabilities=(capability_risk(),),
+        collected=collected or Measurement.measured(1.0),
+    )
+
+
+def _assess_dag(assess_measured: bool = True) -> list[PhaseResult]:
+    out = []
+    for phase in PHASE_ORDER:
+        if phase is PhaseId.ASSESS and not assess_measured:
+            out.append(
+                PhaseResult(phase=phase, collected=Measurement.not_collected("assess not run"))
+            )
+        elif phase is PhaseId.DISCOVER:
+            out.append(
+                PhaseResult(phase=phase, collected=Measurement.not_collected("discover not run"))
+            )
+        else:
+            out.append(PhaseResult(phase=phase, collected=Measurement.measured(1.0)))
+    return out
+
+
+# --- the pure evaluate step in the workflow ------------------------------
+
+
+def test_assemble_threads_gates_through():
+    """assemble() now accepts and populates `gates` (FR-917)."""
+    from sdlc.assessment.gates.models import RiskGateReport
+    from sdlc.assessment.models import PhaseId, PhaseResult
+    from sdlc.workflows.assessment import assemble, unbuilt
+
+    report = RiskGateReport(
+        verdict=RiskGateVerdict.PASS,
+        checks=(),
+        deferred=(),
+        reasons=(),
+    )
+    rest = [
+        PhaseResult(phase=PhaseId.SCAN, collected=Measurement.measured(0.0)),
+        PhaseResult(
+            phase=PhaseId.DISCOVER, collected=Measurement.not_collected("discover not run")
+        ),
+        PhaseResult(phase=PhaseId.ASSESS, collected=Measurement.measured(1.0)),
+    ]
+    rest += [
+        unbuilt(p)
+        for p in PHASE_ORDER
+        if p not in (PhaseId.INIT, PhaseId.SCAN, PhaseId.DISCOVER, PhaseId.ASSESS)
+    ]
+    a = assemble(
+        "/r",
+        _init(),
+        True,
+        "verdict ready",
+        rest,
+        scan=_scan_result(),
+        risk=_risk_map(),
+        gates=report,
+    )
+    assert a.gates is not None
+    assert a.gates.verdict is RiskGateVerdict.PASS
+
+
+def test_evaluate_gates_pure_step_evaluates_against_dispositions():
+    from sdlc.assessment.gates.checks import evaluate
+    from tests.helpers_risk import capability_risk
+
+    rmap = UnifiedRiskMap(
+        capabilities=(capability_risk(vulnerabilities=(_confirmed_vuln(),)),),
+        collected=Measurement.measured(1.0),
+        judgment=Measurement.measured(1.0),
+    )
+    cmap = CapabilityMap(collected=Measurement.measured(1.0))
+    # Without the disposition: BLOCK
+    assert evaluate(rmap, cmap, ()).verdict is RiskGateVerdict.BLOCK
+    # With the disposition: PASS
+    assert evaluate(rmap, cmap, (_disposition(),)).verdict is RiskGateVerdict.PASS
+
+
+# --- gate override update handler (GD1/GD2/FR-304) -----------------------
+
+
+def test_apply_risk_gate_override_accepts_when_blocking():
+    """An override submitted against a BLOCK verdict updates the artifact."""
+    from sdlc.assessment.gates.models import RiskGateReport
+
+    wf = AssessmentWorkflow()
+    # Simulate a run that ended in BLOCK
+    wf._assessment = assemble(
+        "/r",
+        _init(),
+        True,
+        "verdict ready",
+        _assess_dag(assess_measured=True),
+        scan=_scan_result(),
+        risk=_risk_map(),
+        gates=RiskGateReport(verdict=RiskGateVerdict.BLOCK, checks=(), deferred=(), reasons=()),
+    )
+    override = RiskGateOverride(
+        approved_by="human",
+        reviewer="maks",
+        reason="production incident mitigates this differently",
+        decided_at=datetime.now(UTC),
+        gate_round=1,
+    )
+    result = wf.apply_risk_gate_override(override)
+    assert result == "override applied"
+    assert wf._assessment.gate_override is not None
+    assert wf._assessment.gate_override.reviewer == "maks"
+
+
+def test_apply_risk_gate_override_rejects_when_already_passing():
+    """GD1: override on a PASS verdict is an error."""
+    from sdlc.assessment.gates.models import RiskGateReport
+
+    wf = AssessmentWorkflow()
+    wf._assessment = assemble(
+        "/r",
+        _init(),
+        True,
+        "verdict ready",
+        _assess_dag(assess_measured=True),
+        scan=_scan_result(),
+        risk=_risk_map(),
+        gates=RiskGateReport(verdict=RiskGateVerdict.PASS, checks=(), deferred=(), reasons=()),
+    )
+    override = RiskGateOverride(
+        approved_by="human",
+        reviewer="maks",
+        reason="redundant",
+        decided_at=datetime.now(UTC),
+        gate_round=1,
+    )
+    with pytest.raises(ValueError, match="cannot override a passing verdict"):
+        wf.apply_risk_gate_override(override)
