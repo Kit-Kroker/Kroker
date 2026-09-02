@@ -4,6 +4,8 @@ same session; an agent-level failure must not be retried at all."""
 
 from __future__ import annotations
 
+import tempfile
+
 import pytest
 from temporalio.exceptions import ApplicationError
 
@@ -72,9 +74,15 @@ class FakeHarness:
         return None
 
 
+# The activity mkdirs the round dir under the worktree, so the default must
+# be a writable temp location: a POSIX-looking "/w" is a root-owned path on
+# Linux and the mkdir raises PermissionError there.
+_DEFAULT_WORKTREE = tempfile.mkdtemp(prefix="sdlc-crew-turn-test-")
+
+
 def _inp(**kw):
     base = dict(
-        worktree="/w",
+        worktree=_DEFAULT_WORKTREE,
         layout="code",
         role="coder",
         harness=HarnessKind.OPENCODE,
