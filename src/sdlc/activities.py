@@ -215,12 +215,19 @@ def _ensure_worktree(
       - neither present -> fresh ``add -b`` cut from ``from_ref``
 
     Windows-only failure mode: if a stale ``path`` is held open by another
-    process (WinError 32 — typically an orphan coding-agent subprocess
-    whose CWD is the worktree, or a Defender real-time scan), no in-process
-    API can move or delete it. We fall back to ``path.1``, ``path.2``, ...
-    up to ``max_alt`` so the activity can still succeed; the orphaned dir
-    is left behind for the OS / a later janitor to clean up once the lock
-    holder releases.
+    process (WinError 32), no in-process API can move or delete it. We
+    fall back to ``path.1``, ``path.2``, ... up to ``max_alt`` so the
+    activity can still succeed; the orphaned dir is left behind for the
+    OS / a later janitor to clean up once the lock holder releases.
+
+    An orphan coding-agent subprocess holding the CWD open was the main
+    cause of this — fixed at the root by ``kill_process_tree``
+    (``src/sdlc/process.py``, C6), which now kills every process a timed-
+    out or cancelled harness/shell run started, not just the direct
+    child. This fallback stays as defense in depth for the remaining
+    causes: a Defender/Search-Indexer real-time scan transiently holding a
+    handle during its scan of a newly-populated worktree dir, or an
+    ungraceful worker crash that bypassed cleanup.
     """
     subprocess.run(["git", "worktree", "prune"], cwd=repo_path, capture_output=True)
 

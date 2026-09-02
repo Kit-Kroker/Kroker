@@ -51,14 +51,14 @@ buildable as written until someone settles what it means.
 | C3 | **Fail-closed on a missing gate** — an absent/unconfigured required check yields `MISCONFIGURED` and a failing verdict, never a quiet green run | factory | ✅ Gap verified | `gate.py`: `evaluate_quality_gate` judges only the checks it is handed. Generalize `ABSOLUTE_FLOOR` (`:57`) + `build_check` (`:66`) with a required-checks manifest — no new verdict enum needed |
 | C4 | **Advisory + deterministic pairing rule** — every LLM check ships with a deterministic enforcement path behind it (the playbook's "skill makes violations rare, hook makes them near-impossible") | playbook | ⚠️ Needs an owner | a principle with no completion criterion. Make it an audit — adversary / deep_review / MergeVerdict → what deterministic check stands behind each — or drop it |
 | C5 | **Reviewer tuning from feedback** — rate findings, cap nit volume, periodically recalibrate thresholds | playbook | Extends | reviewer + retro (confidence calibration is already retained and fed back — extend the same loop to findings) |
-| C6 | **Kill the whole process tree on timeout** — a timed-out or cancelled harness must terminate every process it started, not just the one it spawned | *found in review* | 🔴 **Live defect** | `harness/adapters.py:265,271` plus `activities.py:706,816,1015` all call `proc.kill()`, and no `start_new_session` / `killpg` / `CREATE_NEW_PROCESS_GROUP` / `taskkill /T` exists anywhere in the tree. Already worked around rather than fixed: `activities.py:202` names "an orphan coding-agent subprocess whose CWD is the worktree" and falls back to `path.1`, `path.2`. Independent of E-88 |
+| C6 | **Kill the whole process tree on timeout** — a timed-out or cancelled harness must terminate every process it started, not just the one it spawned | *found in review* | ✅ **Fixed** | `harness/adapters.py:265,271` plus `activities.py:706,816,1015` all call `proc.kill()`, and no `start_new_session` / `killpg` / `CREATE_NEW_PROCESS_GROUP` / `taskkill /T` exists anywhere in the tree. Already worked around rather than fixed: `activities.py:202` names "an orphan coding-agent subprocess whose CWD is the worktree" and falls back to `path.1`, `path.2`. Independent of E-88 — fixed via `src/sdlc/process.py`: `kill_process_tree`, wired into all 5 spawn sites (the 4 named here plus `deploy/activities.py:65`, found during implementation) |
 
 > **C6 is not from a source.** It is a defect in this repo that assessing the
 > sources exposed. Orphans keep burning tokens against an activity that already
 > failed, hold the worktree open, and can write into a tree whose diff was
 > already measured against the running integration head (ADR-14). POSIX:
-> `start_new_session=True` + `os.killpg`. Windows: `CREATE_NEW_PROCESS_GROUP` +
-> `taskkill /F /T`.
+> `start_new_session=True` + `os.killpg`. Windows: `taskkill /F /T` from the root
+> pid. Fixed 2026-09-02: see `src/sdlc/process.py`.
 
 ## D. Learning and the quality cycle
 
