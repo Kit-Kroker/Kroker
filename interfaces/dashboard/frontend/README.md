@@ -2,7 +2,7 @@
 
 Vue 3 SPA for the AI-SDLC pipeline's human-in-the-loop surface. See
 `docs/superpowers/specs/2026-07-05-dashboard-vue3-frontend-design.md` for the
-design and `design/Factory Console.dc.html` for the visual/behavioral
+design and `records/2026-07-12-factory-console/Factory Console.dc.html` for the visual/behavioral
 prototype this was ported from.
 
 ## Run
