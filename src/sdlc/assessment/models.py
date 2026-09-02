@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, model_validator
 from ..measurement import CollectionState, Measurement
 from ..triage.models import RepoTriage
 from .discover.map import CapabilityMap
+from .gates.models import RiskGateOverride, RiskGateReport, RiskGateVerdict
 from .risk.models import UnifiedRiskMap
 from .scan.models import ScanResult
 
@@ -113,6 +114,9 @@ class Assessment(BaseModel):
     discover: CapabilityMap | None = None
     # E-49's typed field (FR-916).
     risk: UnifiedRiskMap | None = None
+    # E-50's typed fields (FR-917 / FR-304).
+    gates: RiskGateReport | None = None
+    gate_override: RiskGateOverride | None = None
 
     @model_validator(mode="after")
     def _no_triage_means_not_admitted(self) -> Assessment:
@@ -218,4 +222,43 @@ class Assessment(BaseModel):
                 f"UnifiedRiskMap is present -- an assessment cannot claim it "
                 f"did not assess while shipping a risk map"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _gates_agrees_with_risk(self) -> Assessment:
+        """GD1: the risk gate evaluates the risk map, so it runs iff the
+        risk phase produced one (measured -> measured; uncollected ->
+        uncollected with the same reason).
+        """
+        row = next((p for p in self.phases if p.phase is PhaseId.ASSESS), None)
+        if row is None:
+            return self
+        measured = row.collected.state is CollectionState.MEASURED
+        if measured and self.gates is None:
+            raise ValueError(
+                "_gates_agrees_with_risk: assess phase is measured so "
+                "Assessment.gates must be populated (E-50)"
+            )
+        if not measured and self.gates is not None:
+            raise ValueError(
+                f"_gates_agrees_with_risk: assess phase is "
+                f"{row.collected.state.value} ({row.collected.reason}) so "
+                f"Assessment.gates must be None"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _override_only_when_not_passing(self) -> Assessment:
+        """An override is an audited exception -- attaching one to a PASS
+        verdict is meaningless and indicates caller confusion (GD1).
+        """
+        if self.gate_override is not None:
+            if self.gates is None:
+                raise ValueError(
+                    "_override_only_when_not_passing: gate_override supplied with no gates report"
+                )
+            if self.gates.verdict is RiskGateVerdict.PASS:
+                raise ValueError(
+                    "_override_only_when_not_passing: gate_override supplied for a PASS verdict"
+                )
         return self

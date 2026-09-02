@@ -440,5 +440,115 @@ def test_a_measured_assess_phase_with_a_payload_constructs():
         terminal_status=terminal_status(True, phases),
         scan=_scan_result(),
         risk=UnifiedRiskMap(collected=Measurement.measured(1.0)),
+        gates=_report(RiskGateVerdict.PASS),
     )
     assert a.risk is not None
+
+
+# --- E-50: the gates payload and its phase-agreement validator -----------
+from sdlc.assessment.gates.models import (
+    RiskGateOverride,
+    RiskGateReport,
+    RiskGateVerdict,
+)
+
+
+def _report(verdict=RiskGateVerdict.PASS) -> RiskGateReport:
+    return RiskGateReport(verdict=verdict, checks=(), deferred=(), reasons=())
+
+
+def _risk_map(collected: Measurement | None = None) -> UnifiedRiskMap:
+    from tests.helpers_risk import capability_risk
+
+    return UnifiedRiskMap(
+        capabilities=(capability_risk(),),
+        collected=collected or Measurement.measured(1.0),
+    )
+
+
+def test_assessment_gates_agrees_with_risk_collected_state():
+    """GD1/FR-917: measured risk -> measured gates; uncollected risk ->
+    uncollected gates with the SAME reason."""
+    phases = _assess_dag(assess_measured=True)
+    a = Assessment(
+        repo_dir="/r",
+        triage=_triage(),
+        admitted=True,
+        admission_reason="verdict ready",
+        phases=phases,
+        terminal_status=terminal_status(True, phases),
+        scan=_scan_result(),
+        risk=_risk_map(),
+        gates=_report(RiskGateVerdict.PASS),
+    )
+    assert a.gates.verdict is RiskGateVerdict.PASS
+
+
+def test_assessment_rejects_a_gates_report_when_risk_did_not_collect():
+    phases = _assess_dag(assess_measured=False)
+    with pytest.raises(ValidationError, match="_gates_agrees_with_risk"):
+        Assessment(
+            repo_dir="/r",
+            triage=_triage(),
+            admitted=True,
+            admission_reason="verdict ready",
+            phases=phases,
+            terminal_status=terminal_status(True, phases),
+            scan=_scan_result(),
+            risk=None,
+            gates=_report(RiskGateVerdict.PASS),
+        )
+
+
+def test_gate_override_allows_an_unaccepted_finding_when_attested():
+    from datetime import UTC, datetime
+
+    override = RiskGateOverride(
+        approved_by="human",
+        reviewer="maks",
+        reason="production incident mitigates this differently",
+        decided_at=datetime.now(UTC),
+        gate_round=1,
+    )
+    phases = _assess_dag(assess_measured=True)
+    a = Assessment(
+        repo_dir="/r",
+        triage=_triage(),
+        admitted=True,
+        admission_reason="verdict ready",
+        phases=phases,
+        terminal_status=terminal_status(True, phases),
+        scan=_scan_result(),
+        risk=_risk_map(),
+        gates=_report(RiskGateVerdict.BLOCK),
+        gate_override=override,
+    )
+    assert a.gate_override is not None
+    assert a.gate_override.reviewer == "maks"
+
+
+def test_an_override_is_rejected_when_verdict_is_pass():
+    """An override is an audited exception -- attaching one to a PASS is
+    meaningless and indicates caller confusion (GD1)."""
+    from datetime import UTC, datetime
+
+    override = RiskGateOverride(
+        approved_by="human",
+        reason="redundant",
+        decided_at=datetime.now(UTC),
+        gate_round=1,
+    )
+    phases = _assess_dag(assess_measured=True)
+    with pytest.raises(ValidationError, match="_override_only_when_not_passing"):
+        Assessment(
+            repo_dir="/r",
+            triage=_triage(),
+            admitted=True,
+            admission_reason="verdict ready",
+            phases=phases,
+            terminal_status=terminal_status(True, phases),
+            scan=_scan_result(),
+            risk=_risk_map(),
+            gates=_report(RiskGateVerdict.PASS),
+            gate_override=override,
+        )
