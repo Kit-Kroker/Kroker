@@ -91,6 +91,78 @@ expect other concurrent worktrees to exist for other tasks/features. Don't
 assume you're at the canonical repo root; don't assume you're the only
 active worktree.
 
+## How this repo is cut
+
+Cut along the seams of the process — a stage is the unit of agent work, not
+technical layers or domain entities. The seam test is the common closure
+principle: things that change together live together.
+
+The pipeline uses vertical slices under `src/sdlc/stages/<stage>/`.
+Horizontal packages (`harness/`, `board/`, `channels/`, `memory/`,
+`observability/`, `artifacts/`) serve generic subdomains and are deliberately
+not forced into the stage shape. Non-pipeline domains cut recursively into
+phases of their own process (`assessment` → scan / discover / risk / gates).
+
+Two binding rules govern slices:
+- **Cross-stage calls are banned**; the orchestrator (`FeatureWorkflow`) is the
+  sole coordinator. Importing a *type* another stage produces is not a call.
+- **The producer owns its artifacts.** A stage's `models.py` holds what it
+  produces; `core/` holds only what no stage produces — configuration and
+  envelopes (`PipelineConfig`, `GateDecision`, `RoleConfig`, `IdeaBrief`).
+
+See [`docs/framework.md`](docs/framework.md) for the seam contract and
+`docs/superpowers/specs/2026-09-02-b0-module-shape-and-docs-architecture-design.md`
+for the architectural rationale.
+
+## File size
+
+One hard ceiling: **1000 physical lines per file**. No soft target, no waiver.
+Size is governed by the process seam; the ceiling is a tripwire against
+monsters, not a design guide.
+
+`.file-size-baseline.json` records pre-existing oversized files. Baselined
+files may shrink, never grow; entries delete themselves automatically once a
+file drops under 1000 lines. The ceiling covers authored code and living
+documentation (`src/`, `tests/`, `scripts/`, `interfaces/`, `agents/`,
+`crew/`, `blueprints/`, `policy/`, `docs/`, root `*.md`). Historical records
+(`docs/superpowers/`), verbatim exports (`records/`), vendored data
+(`benchmarks/`, fixture schemas), and generated artifacts are exempt.
+`scripts/check_file_size.py` is the authority.
+
+## Who may change what
+
+- **The sandbox boundary.** Orchestrator agents working in the primary checkout
+  may edit specs, stage contracts, and schemas. Sandboxed coding harnesses
+  (`claude -p`, `opencode run` inside a per-task worktree) may modify only
+  code and tests, and may never edit `<stage>.md` contracts or root specs.
+  Reason: when Kroker runs against Kroker, a harness is editing this repo, and
+  a harness that can rewrite the contract it is judged against has no contract.
+- **The artifact boundary.** Whoever changes a stage's behaviour must update
+  its clauses in the same diff. A clause without code and code without a clause
+  are both defects.
+
+## Where each stage lives
+
+> Migration is piecemeal. **This table is the authoritative map** while it is in progress: look a stage up here rather than searching two locations. Updating it is part of moving a stage, not a follow-up.
+
+| Stage | Lives in | Status |
+|---|---|---|
+| intake | `src/sdlc/workflows/feature.py` | in `feature.py` |
+| context (brownfield) | `src/sdlc/workflows/feature.py` | in `feature.py` |
+| research | `src/sdlc/workflows/feature.py` | in `feature.py` |
+| clarify | `src/sdlc/workflows/feature.py` | **pilot — moves first (spec A)** |
+| architecture | `src/sdlc/workflows/feature.py` | in `feature.py` |
+| plan | `src/sdlc/workflows/feature.py` | in `feature.py` |
+| code | `src/sdlc/workflows/feature.py` | in `feature.py` |
+| review | `src/sdlc/workflows/feature.py` | in `feature.py` |
+| qa | `src/sdlc/workflows/feature.py` | **pilot — moves first (spec A)** |
+| analyze | `src/sdlc/workflows/feature.py` | in `feature.py` |
+| merge | `src/sdlc/workflows/feature.py` | in `feature.py` |
+| deploy | `src/sdlc/workflows/feature.py` | in `feature.py` |
+| retro / reflect | `src/sdlc/workflows/feature.py` | in `feature.py` |
+
+Rule: **you touched a stage, you move it.**
+
 ## Further reading
 
 - [`README.md`](README.md) — roles table, human-in-the-loop CLI, how to run
@@ -98,6 +170,6 @@ active worktree.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — component responsibilities, the
   stage DAG, the crew (`CrewTaskWorkflow`, E-88), ADRs.
 - [`ROADMAP.md`](ROADMAP.md) — FR/NFR status, open questions, what's landed
-  vs. in flight.
-- `docs/foundation.md`, `docs/BENCHMARK.md`, and the self-contained schema
-  docs under `docs/*.html` for deeper contract- and benchmark-level detail.
+  vs. in flight; per-epic detail lives in `docs/roadmap/`.
+- `docs/reference/foundation.md`, `BENCHMARK.md`, and the generated schema pages
+  under `docs/schemas/` for deeper contract- and benchmark-level detail.
