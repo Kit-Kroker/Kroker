@@ -128,7 +128,7 @@ The reasoning matters, because a lower number is the obvious counter-proposal an
 
 ### 2.1 Scope
 
-The ceiling applies to **authored source and living documents**: `src/**`, `tests/**`, `scripts/**`, `interfaces/**`, `agents/**`, `crew/**`, `blueprints/**`, `policy/**`, root-level `*.md`, and `docs/**` except where exempted below. Including `docs/**` is deliberate: B0's own outputs (`docs/features/<area>.md`, `docs/roadmap/tier-*.md`) are living documents, and a documentation architecture whose products escape its own ceiling would be self-defeating.
+The ceiling applies to **authored source and living documents**: `src/**`, `tests/**`, `scripts/**`, `interfaces/**`, `agents/**`, `crew/**`, `blueprints/**`, `policy/**`, root-level `*.md`, and `docs/**` except where exempted below. Including `docs/**` is deliberate: B0's own outputs (`docs/features/<area>.md`, `docs/roadmap/<group>.md`) are living documents, and a documentation architecture whose products escape its own ceiling would be self-defeating.
 
 Exempt, each for a stated reason:
 
@@ -202,7 +202,7 @@ docs/
     slice-migration.md
     focused-specs.md
   roadmap/
-    tier-*.md               # ROADMAP.md §§9-17, split by tier
+    <group>.md              # ROADMAP.md §§9-17, one file per epic group
   reference/                # durable companions, still true:
                             #   foundation.md, architecture-review-2026-07.md,
                             #   presentation-pipeline-temporal.md
@@ -217,7 +217,7 @@ docs/
 
 `reference/`, `reports/` and `schemas/` are where the twelve files currently loose in `docs/` land — three, three and six respectively. Naming their homes is part of B0's job: an architecture that leaves a fifth of the existing tree unaccounted for is not an architecture. The `reference` / `reports` split is by *durability*, not by date: a reference document is maintained when it goes stale, a report is a snapshot that is never updated. `docs/superpowers/reviews/` exists today alongside `specs/` and `plans/` and is listed so the tree is complete.
 
-**The root monoliths.** `ROADMAP.md` splits into `docs/roadmap/tier-*.md` behind a thin root index. `ARCHITECTURE.md` and `PRD.md` stay whole: both are read end-to-end and both serve as a single-grep anchor for "what is true on main", and neither is large enough to be the problem `ROADMAP.md` is. The existing convention that `ARCHITECTURE.md` and `ROADMAP.md` describe **main only** — in-flight work lives in its design doc until merge — is preserved and stated explicitly in `documentation-rules.md`, because it is currently tribal knowledge.
+**The root monoliths.** `ROADMAP.md` splits into `docs/roadmap/<group>.md` behind a thin root index. `ARCHITECTURE.md` and `PRD.md` stay whole: both are read end-to-end and both serve as a single-grep anchor for "what is true on main", and neither is large enough to be the problem `ROADMAP.md` is. The existing convention that `ARCHITECTURE.md` and `ROADMAP.md` describe **main only** — in-flight work lives in its design doc until merge — is preserved and stated explicitly in `documentation-rules.md`, because it is currently tribal knowledge.
 
 The `FactoryWorkflow` → `FeatureWorkflow` drift is fixed at **all four sites** (`ARCHITECTURE.md:36`, `:59`, `:73`, `:336`), not only in §3. Two of them are in §2, ahead of §3 — fixing §3 alone would leave the doc wrong in its first diagram, which is the very thing this fix exists to prevent.
 
@@ -309,7 +309,7 @@ B0 fixes the location and the principle only. The Vue design system, the compone
 4. Templates for `<stage>.md` and a slice's `AGENTS.md`, the latter carrying §1.2's rules.
 5. `StageContext` (eleven services), the `step` signature, the parameter-vs-service rule, the producer-owns ownership rule, and the `ACTIVITIES` / `STAGE_MODULES` registration contract — specified here as contracts; the code lands in (A).
 6. `scripts/check_file_size.py` (default and `--full` modes, physical-line measurement per §2.2), `.file-size-baseline.json` seeded with the six files in §2.1, the `pre-commit` hook entry, and the CI step.
-7. `ROADMAP.md` split into `docs/roadmap/tier-*.md` plus a thin root index.
+7. `ROADMAP.md` split into `docs/roadmap/<group>.md` plus a thin root index.
 8. `ARCHITECTURE.md` drift fix at lines 36, 59, 73 and 336.
 9. `docs/` reorganised: `reference/`, `reports/`, `schemas/` created and the twelve loose files rehomed.
 10. `records/` created; `design/` dissolved into `records/2026-07-12-factory-console/`.

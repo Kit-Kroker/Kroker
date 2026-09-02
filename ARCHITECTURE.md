@@ -33,7 +33,7 @@ flowchart TB
     TS <-->|task dispatch| W
 
     subgraph W[Temporal workers]
-        FW[FactoryWorkflow + MaintenanceWorkflow<br/>deterministic orchestration]
+        FW[FeatureWorkflow + MaintenanceWorkflow<br/>deterministic orchestration]
         FW --> PA[Proposer agents<br/>Pydantic AI · TemporalAgent]
         FW --> HR[Harness runner<br/>claude -p · opencode run]
         FW --> SA[Support activities<br/>memory · git · QA · notify]
@@ -56,7 +56,7 @@ through its validated diff artifact.
 | Component | Owns | Never does |
 |---|---|---|
 | Temporal server | run state, event history, timers, signals, schedules, visibility | business logic |
-| FactoryWorkflow | stage sequencing, gate waits, fix-loop bounds, budget counters | I/O, subprocesses, memory, nondeterminism |
+| FeatureWorkflow | stage sequencing, gate waits, fix-loop bounds, budget counters | I/O, subprocesses, memory, nondeterminism |
 | MaintenanceWorkflow **(P4 — designed, not built)** | DAPER cycle, repair gating, child factory runs | direct code patches |
 | Proposer agents | typed artifact proposals (Requirements … RepairPlan) | tool calls, file access |
 | Harness runner activity | `claude -p` / `opencode run` execution, heartbeats, checkpoint commits, cost capture | leaving the worktree; choosing its own permissions |
@@ -70,7 +70,7 @@ through its validated diff artifact.
 
 ## 3. Pipeline architecture
 
-Stage DAG (SDLC-spec v2 §1). One `FactoryWorkflow` per run; the code stage
+Stage DAG (SDLC-spec v2 §1). One `FeatureWorkflow` per run; the code stage
 fans out per-task child work in dependency-ordered parallel waves.
 
 ```mermaid
@@ -333,7 +333,7 @@ Per-project proactive workflow: wake on timer or `nudge` signal →
 tasks, error budgets — then agent triage with a confidence floor) →
 **Analyze** → **Plan** (`RepairPlan{confidence, actions[]}`) → confidence
 gate (below threshold: notify + hard gate; timeout = inaction) →
-**Execute** — `code_fix` actions start brownfield FactoryWorkflow children
+**Execute** — `code_fix` actions start brownfield FeatureWorkflow children
 (repairs go *through* the factory, never around it); ops actions
 (rollback/restart/scale) run directly under risk classes → **Report**,
 which is *re-verification*, not summary: detection re-runs on the repaired
