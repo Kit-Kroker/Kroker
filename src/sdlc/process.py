@@ -83,6 +83,7 @@ async def _kill_windows(proc: asyncio.subprocess.Process) -> None:
         "/T",
         "/PID",
         str(proc.pid),
+        stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.DEVNULL,
     )

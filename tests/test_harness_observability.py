@@ -1,11 +1,15 @@
 import asyncio
+import json
 import logging
+import os
 import sys
+import time
 
 import pytest
 
-from sdlc.harness.adapters import CodingHarness, HarnessRequest
+from sdlc.harness.adapters import CodingHarness, HarnessRequest, _log_live_event
 from sdlc.models import HarnessKind, HarnessRunResult
+from tests.conftest import _pid_alive
 
 
 class _PyHarness(CodingHarness):
@@ -71,9 +75,47 @@ async def test_timeout_logs_warning(tmp_path, caplog):
     assert any("harness timeout" in r.message for r in caplog.records)
 
 
-import json
+async def _wait_for_pidfile(path: str, timeout_s: float = 10.0) -> int:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if os.path.exists(path):
+            content = open(path).read().strip()
+            if content:
+                return int(content)
+        await asyncio.sleep(0.05)
+    raise TimeoutError(f"grandchild never wrote {path}")
 
-from sdlc.harness.adapters import _log_live_event
+
+def _wait_until_dead(pid: int, timeout_s: float = 10.0) -> None:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if not _pid_alive(pid):
+            return
+        time.sleep(0.1)
+    raise AssertionError(f"pid {pid} still alive after {timeout_s}s")
+
+
+@pytest.mark.asyncio
+async def test_timeout_kills_grandchild(tmp_path):
+    pidfile = str(tmp_path / "grandchild.pid")
+    pidfile_str = pidfile.replace("\\", "/")
+    script = (
+        "import subprocess, sys, time\n"
+        "gc = subprocess.Popen([sys.executable, '-c', "
+        f'\'import os,time; open("{pidfile_str}","w").\''
+        "'write(str(os.getpid())); time.sleep(60)'])\n"
+        "time.sleep(60)\n"
+    )
+    harness = _PyHarness(script)
+    run_task = asyncio.ensure_future(
+        harness.run(HarnessRequest(prompt="x", cwd=str(tmp_path), timeout_s=2))
+    )
+    grandchild_pid = await _wait_for_pidfile(pidfile)
+
+    with pytest.raises(asyncio.TimeoutError):
+        await run_task
+
+    _wait_until_dead(grandchild_pid)
 
 
 def test_log_live_event_step_start_logged_at_info(caplog):

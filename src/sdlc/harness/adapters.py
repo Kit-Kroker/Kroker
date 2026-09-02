@@ -41,6 +41,7 @@ from ..models import (
     ToolDenial,
     ToolGrant,
 )
+from ..process import kill_process_tree
 from .containment import (
     Action,
     Policy,
@@ -249,10 +250,13 @@ class CodingHarness(ABC):
             *cmd,
             cwd=req.cwd,
             env=build_env(req.env),
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             limit=10_000_000,  # opencode text events can exceed the 64KB
             # default StreamReader line limit
+            start_new_session=True,  # C6: makes the whole tree killable as
+            # a POSIX process group; a documented no-op on Windows
         )
 
         async def _pump() -> bytes:
@@ -296,14 +300,16 @@ class CodingHarness(ABC):
                 timeout=req.timeout_s,
             )
         except TimeoutError:
-            proc.kill()
+            await asyncio.shield(kill_process_tree(proc))
             _log.warning("harness timeout kind=%s cwd=%s cmd=%s", self.kind.value, req.cwd, cmd)
             raise
+        except asyncio.CancelledError:
+            # Temporal activity cancellation. shield() so a second cancel
+            # landing mid-cleanup can't abort the kill before it completes.
+            await asyncio.shield(kill_process_tree(proc))
+            raise
         except Exception:
-            try:
-                proc.kill()
-            except ProcessLookupError:
-                pass
+            await asyncio.shield(kill_process_tree(proc))
             raise
         duration_s = time.monotonic() - start
 

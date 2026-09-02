@@ -34,6 +34,7 @@ def _pid_alive(pid: int) -> bool:
             ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
             capture_output=True,
             text=True,
+            stdin=subprocess.DEVNULL,
         ).stdout
         return str(pid) in out
     try:
