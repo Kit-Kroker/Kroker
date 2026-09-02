@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import sys
-import time
 
 import pytest
 
 from sdlc.activities import LintInput, QAInput, run_lint, run_test_suite
-from tests.conftest import _pid_alive
+from tests.conftest import _wait_for_pidfile_async, _wait_until_dead
 
 
 def _sleep_cmd(seconds: float) -> str:
@@ -51,26 +49,6 @@ def _grandchild_sleep_cmd(tmp_path, pidfile: str, seconds: float) -> str:
     return f'"{sys.executable}" "{parent_script}" "{grandchild_script}" "{pidfile}" "{seconds}"'
 
 
-async def _wait_for_pidfile(path: str, timeout_s: float = 10.0) -> int:
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        if os.path.exists(path):
-            content = open(path).read().strip()
-            if content:
-                return int(content)
-        await asyncio.sleep(0.05)
-    raise TimeoutError(f"grandchild never wrote {path}")
-
-
-def _wait_until_dead(pid: int, timeout_s: float = 10.0) -> None:
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        if not _pid_alive(pid):
-            return
-        time.sleep(0.1)
-    raise AssertionError(f"pid {pid} still alive after {timeout_s}s")
-
-
 def test_run_test_suite_times_out_on_hung_command(tmp_path):
     report = asyncio.run(
         run_test_suite(QAInput(worktree=str(tmp_path), test_cmd=_sleep_cmd(5), timeout_s=1))
@@ -107,7 +85,7 @@ def test_run_test_suite_timeout_kills_grandchild(tmp_path):
                 )
             )
         )
-        grandchild_pid = await _wait_for_pidfile(pidfile)
+        grandchild_pid = await _wait_for_pidfile_async(pidfile)
         report = await task
         return grandchild_pid, report
 
@@ -129,7 +107,7 @@ def test_run_test_suite_cancelled_propagates_and_kills_grandchild(tmp_path):
                 )
             )
         )
-        grandchild_pid = await _wait_for_pidfile(pidfile)
+        grandchild_pid = await _wait_for_pidfile_async(pidfile)
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task

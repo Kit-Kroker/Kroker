@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -44,6 +46,37 @@ def _pid_alive(pid: int) -> bool:
         return False
     except PermissionError:
         return True
+
+
+def _wait_until_dead(pid: int, timeout_s: float = 10.0) -> None:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if not _pid_alive(pid):
+            return
+        time.sleep(0.1)
+    raise AssertionError(f"pid {pid} still alive after {timeout_s}s")
+
+
+def _wait_for_pidfile(path: str, timeout_s: float = 10.0) -> int:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if os.path.exists(path):
+            content = open(path).read().strip()
+            if content:
+                return int(content)
+        time.sleep(0.05)
+    raise TimeoutError(f"grandchild never wrote {path}")
+
+
+async def _wait_for_pidfile_async(path: str, timeout_s: float = 10.0) -> int:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if os.path.exists(path):
+            content = open(path).read().strip()
+            if content:
+                return int(content)
+        await asyncio.sleep(0.05)
+    raise TimeoutError(f"grandchild never wrote {path}")
 
 
 def run_git(args: list[str], cwd: str | Path) -> str:

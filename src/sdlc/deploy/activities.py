@@ -23,6 +23,7 @@ from ..models import (
     SmokeCheckResult,
     SmokeState,
 )
+from ..process import kill_process_tree
 from .adapters import resolve
 
 # A version probe or an apply that hangs must not sit on the activity's
@@ -66,15 +67,19 @@ async def _run(cmd: str, cwd: str, env: dict[str, str], timeout_s: int) -> tuple
         cmd,
         cwd=cwd,
         env={**os.environ, **env},
+        stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
+        start_new_session=True,  # C6: whole tree killable as a group
     )
     try:
         out_b, _ = await asyncio.wait_for(proc.communicate(), timeout_s)
     except TimeoutError:
-        proc.kill()
-        await proc.wait()
+        await asyncio.shield(kill_process_tree(proc))
         return 124, f"timed out after {timeout_s}s"
+    except asyncio.CancelledError:
+        await asyncio.shield(kill_process_tree(proc))
+        raise
     return proc.returncode or 0, out_b.decode(errors="replace")[-4000:]
 
 

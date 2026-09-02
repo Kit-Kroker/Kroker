@@ -6,12 +6,11 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
-import time
 
 import pytest
 
 from sdlc.process import kill_process_tree
-from tests.conftest import _pid_alive
+from tests.conftest import _pid_alive, _wait_for_pidfile, _wait_until_dead
 
 
 def _spawn_grandchild_script(pidfile: str) -> str:
@@ -29,26 +28,6 @@ def _spawn_grandchild_script(pidfile: str) -> str:
         "'write(str(os.getpid())); time.sleep(60)'])\n"
         "time.sleep(60)\n"
     )
-
-
-def _wait_for_pidfile(path: str, timeout_s: float = 10.0) -> int:
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        if os.path.exists(path):
-            content = open(path).read().strip()
-            if content:
-                return int(content)
-        time.sleep(0.05)
-    raise TimeoutError(f"grandchild never wrote {path}")
-
-
-def _wait_until_dead(pid: int, timeout_s: float = 10.0) -> None:
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        if not _pid_alive(pid):
-            return
-        time.sleep(0.1)
-    raise AssertionError(f"pid {pid} still alive after {timeout_s}s")
 
 
 @pytest.mark.asyncio

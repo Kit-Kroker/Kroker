@@ -3,7 +3,9 @@ adapters themselves stay subprocess-free."""
 
 from __future__ import annotations
 
+import asyncio
 import os
+import sys
 
 import pytest
 
@@ -11,10 +13,12 @@ from sdlc.deploy.activities import (
     ApplyResult,
     CurrentVersionResult,
     DeployActivityInput,
+    _run,
     deploy_apply,
     deploy_current_version,
 )
 from sdlc.models import DeployConfig, DeployPlan
+from tests.conftest import _wait_for_pidfile_async, _wait_until_dead
 
 
 def _inp(tmp_path, **cfg_over) -> DeployActivityInput:
@@ -79,3 +83,53 @@ async def test_apply_exports_the_plan_environment(tmp_path):
     inp = _inp(tmp_path, commands={"deploy": f'printf "%s" "$DEPLOY_VERSION" > "{out.as_posix()}"'})
     await deploy_apply(inp)
     assert out.read_text().strip() == "v2"
+
+
+_GRANDCHILD_SCRIPT = """\
+import os, sys, time
+with open(sys.argv[1], "w") as f:
+    f.write(str(os.getpid()))
+time.sleep(float(sys.argv[2]))
+"""
+
+_PARENT_SCRIPT = """\
+import subprocess, sys, time
+subprocess.Popen([sys.executable, sys.argv[1], sys.argv[2], sys.argv[3]])
+time.sleep(float(sys.argv[3]))
+"""
+
+
+def _write_script(tmp_path, name: str, content: str) -> str:
+    p = tmp_path / name
+    p.write_text(content)
+    return str(p)
+
+
+def _grandchild_sleep_cmd(tmp_path, pidfile: str, seconds: float) -> str:
+    grandchild_script = _write_script(tmp_path, "grandchild.py", _GRANDCHILD_SCRIPT)
+    parent_script = _write_script(tmp_path, "parent.py", _PARENT_SCRIPT)
+    return f'"{sys.executable}" "{parent_script}" "{grandchild_script}" "{pidfile}" "{seconds}"'
+
+
+@pytest.mark.asyncio
+async def test_run_timeout_kills_grandchild(tmp_path):
+    pidfile = str(tmp_path / "grandchild.pid")
+    cmd = _grandchild_sleep_cmd(tmp_path, pidfile, 60)
+    task = asyncio.ensure_future(_run(cmd, str(tmp_path), {}, timeout_s=2))
+    grandchild_pid = await _wait_for_pidfile_async(pidfile)
+    code, out = await task
+    assert code == 124
+    assert "timed out" in out
+    _wait_until_dead(grandchild_pid)
+
+
+@pytest.mark.asyncio
+async def test_run_cancelled_propagates_and_kills_grandchild(tmp_path):
+    pidfile = str(tmp_path / "grandchild.pid")
+    cmd = _grandchild_sleep_cmd(tmp_path, pidfile, 60)
+    task = asyncio.ensure_future(_run(cmd, str(tmp_path), {}, timeout_s=30))
+    grandchild_pid = await _wait_for_pidfile_async(pidfile)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    _wait_until_dead(grandchild_pid)

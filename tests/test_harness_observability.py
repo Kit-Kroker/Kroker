@@ -1,15 +1,13 @@
 import asyncio
 import json
 import logging
-import os
 import sys
-import time
 
 import pytest
 
 from sdlc.harness.adapters import CodingHarness, HarnessRequest, _log_live_event
 from sdlc.models import HarnessKind, HarnessRunResult
-from tests.conftest import _pid_alive
+from tests.conftest import _wait_for_pidfile_async, _wait_until_dead
 
 
 class _PyHarness(CodingHarness):
@@ -75,26 +73,6 @@ async def test_timeout_logs_warning(tmp_path, caplog):
     assert any("harness timeout" in r.message for r in caplog.records)
 
 
-async def _wait_for_pidfile(path: str, timeout_s: float = 10.0) -> int:
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        if os.path.exists(path):
-            content = open(path).read().strip()
-            if content:
-                return int(content)
-        await asyncio.sleep(0.05)
-    raise TimeoutError(f"grandchild never wrote {path}")
-
-
-def _wait_until_dead(pid: int, timeout_s: float = 10.0) -> None:
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        if not _pid_alive(pid):
-            return
-        time.sleep(0.1)
-    raise AssertionError(f"pid {pid} still alive after {timeout_s}s")
-
-
 @pytest.mark.asyncio
 async def test_timeout_kills_grandchild(tmp_path):
     pidfile = str(tmp_path / "grandchild.pid")
@@ -110,7 +88,7 @@ async def test_timeout_kills_grandchild(tmp_path):
     run_task = asyncio.ensure_future(
         harness.run(HarnessRequest(prompt="x", cwd=str(tmp_path), timeout_s=2))
     )
-    grandchild_pid = await _wait_for_pidfile(pidfile)
+    grandchild_pid = await _wait_for_pidfile_async(pidfile)
 
     with pytest.raises(asyncio.TimeoutError):
         await run_task
