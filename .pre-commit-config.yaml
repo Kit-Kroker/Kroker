@@ -21,3 +21,11 @@ repos:
       - id: check-toml
       - id: check-added-large-files
       - id: check-merge-conflict
+
+  - repo: local
+    hooks:
+      - id: check-file-size
+        name: file-size ratchet (1000 lines)
+        entry: python scripts/check_file_size.py
+        language: system
+        pass_filenames: true

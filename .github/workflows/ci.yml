@@ -25,6 +25,9 @@ jobs:
       - name: Ruff format check
         run: ruff format --check .
 
+      - name: File-size ratchet
+        run: python scripts/check_file_size.py --full
+
       - name: Mypy
         run: mypy src
 
