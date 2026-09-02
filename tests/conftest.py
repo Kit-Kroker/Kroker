@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,30 @@ import pytest
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-dummy")
 os.environ.setdefault("OPENAI_API_KEY", "test-dummy")
 os.environ.setdefault("EXA_API_KEY", "test-dummy")
+
+
+def _pid_alive(pid: int) -> bool:
+    """Cross-platform liveness check for a test to assert a process died.
+
+    NOT os.kill(pid, 0) on Windows: signal.CTRL_C_EVENT == 0, so that call
+    sends a console-control event (GenerateConsoleCtrlEvent) rather than
+    checking existence, and only affects processes sharing the caller's
+    console/process group -- neither a safe probe nor a reliable kill.
+    """
+    if sys.platform.startswith("win"):
+        out = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+            capture_output=True,
+            text=True,
+        ).stdout
+        return str(pid) in out
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
 
 
 def run_git(args: list[str], cwd: str | Path) -> str:
