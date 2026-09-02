@@ -86,6 +86,7 @@ def run_git(args: list[str], cwd: str | Path) -> str:
         check=True,
         capture_output=True,
         text=True,
+        stdin=subprocess.DEVNULL,
     ).stdout
 
 
