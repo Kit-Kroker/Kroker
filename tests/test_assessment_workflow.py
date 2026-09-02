@@ -361,7 +361,7 @@ def test_a_failed_judgment_never_fails_the_phase():
 # --- E-50: workflow wiring and gate override update handler --------------
 from datetime import UTC, datetime
 
-from sdlc.assessment.gates.models import RiskGateOverride, RiskGateVerdict
+from sdlc.assessment.gates.models import RiskGateVerdict
 from sdlc.assessment.risk.models import (
     RiskSource,
     Severity,
@@ -474,61 +474,3 @@ def test_evaluate_gates_pure_step_evaluates_against_dispositions():
     assert evaluate(rmap, cmap, ()).verdict is RiskGateVerdict.BLOCK
     # With the disposition: PASS
     assert evaluate(rmap, cmap, (_disposition(),)).verdict is RiskGateVerdict.PASS
-
-
-# --- gate override update handler (GD1/GD2/FR-304) -----------------------
-
-
-def test_apply_risk_gate_override_accepts_when_blocking():
-    """An override submitted against a BLOCK verdict updates the artifact."""
-    from sdlc.assessment.gates.models import RiskGateReport
-
-    wf = AssessmentWorkflow()
-    # Simulate a run that ended in BLOCK
-    wf._assessment = assemble(
-        "/r",
-        _init(),
-        True,
-        "verdict ready",
-        _assess_dag(assess_measured=True),
-        scan=_scan_result(),
-        risk=_risk_map(),
-        gates=RiskGateReport(verdict=RiskGateVerdict.BLOCK, checks=(), deferred=(), reasons=()),
-    )
-    override = RiskGateOverride(
-        approved_by="human",
-        reviewer="maks",
-        reason="production incident mitigates this differently",
-        decided_at=datetime.now(UTC),
-        gate_round=1,
-    )
-    result = wf.apply_risk_gate_override(override)
-    assert result == "override applied"
-    assert wf._assessment.gate_override is not None
-    assert wf._assessment.gate_override.reviewer == "maks"
-
-
-def test_apply_risk_gate_override_rejects_when_already_passing():
-    """GD1: override on a PASS verdict is an error."""
-    from sdlc.assessment.gates.models import RiskGateReport
-
-    wf = AssessmentWorkflow()
-    wf._assessment = assemble(
-        "/r",
-        _init(),
-        True,
-        "verdict ready",
-        _assess_dag(assess_measured=True),
-        scan=_scan_result(),
-        risk=_risk_map(),
-        gates=RiskGateReport(verdict=RiskGateVerdict.PASS, checks=(), deferred=(), reasons=()),
-    )
-    override = RiskGateOverride(
-        approved_by="human",
-        reviewer="maks",
-        reason="redundant",
-        decided_at=datetime.now(UTC),
-        gate_round=1,
-    )
-    with pytest.raises(ValueError, match="cannot override a passing verdict"):
-        wf.apply_risk_gate_override(override)

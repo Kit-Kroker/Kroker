@@ -226,39 +226,35 @@ class Assessment(BaseModel):
 
     @model_validator(mode="after")
     def _gates_agrees_with_risk(self) -> Assessment:
-        """GD1: the risk gate evaluates the risk map, so it runs iff the
-        risk phase produced one (measured -> measured; uncollected ->
-        uncollected with the same reason).
+        """GD5: the risk gate evaluates the risk map, so it runs iff the
+        risk phase produced one (self.risk is not None -> gates is not None;
+        self.risk is None -> gates is None).
         """
-        row = next((p for p in self.phases if p.phase is PhaseId.ASSESS), None)
-        if row is None:
-            return self
-        measured = row.collected.state is CollectionState.MEASURED
-        if measured and self.gates is None:
+        if self.risk is not None and self.gates is None:
             raise ValueError(
-                "_gates_agrees_with_risk: assess phase is measured so "
+                "_gates_agrees_with_risk: UnifiedRiskMap is present so "
                 "Assessment.gates must be populated (E-50)"
             )
-        if not measured and self.gates is not None:
+        if self.risk is None and self.gates is not None:
             raise ValueError(
-                f"_gates_agrees_with_risk: assess phase is "
-                f"{row.collected.state.value} ({row.collected.reason}) so "
-                f"Assessment.gates must be None"
+                "_gates_agrees_with_risk: UnifiedRiskMap is None so Assessment.gates must be None"
             )
         return self
 
     @model_validator(mode="after")
-    def _override_only_when_not_passing(self) -> Assessment:
-        """An override is an audited exception -- attaching one to a PASS
-        verdict is meaningless and indicates caller confusion (GD1).
+    def _override_only_on_block(self) -> Assessment:
+        """GD5: an override is an audited exception -- attaching one to anything
+        other than a BLOCK verdict is meaningless (WARN does not block, PASS
+        has no findings to override).
         """
         if self.gate_override is not None:
             if self.gates is None:
                 raise ValueError(
-                    "_override_only_when_not_passing: gate_override supplied with no gates report"
+                    "_override_only_on_block: gate_override supplied with no gates report"
                 )
-            if self.gates.verdict is RiskGateVerdict.PASS:
+            if self.gates.verdict is not RiskGateVerdict.BLOCK:
                 raise ValueError(
-                    "_override_only_when_not_passing: gate_override supplied for a PASS verdict"
+                    f"_override_only_on_block: gate_override supplied for a "
+                    f"{self.gates.verdict.value} verdict -- overrides apply only to BLOCK"
                 )
         return self

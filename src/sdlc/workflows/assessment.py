@@ -730,7 +730,7 @@ class AssessmentWorkflow(GateHost):
         for both, and only an explicit APPROVE unblocks. This is a decision
         recorded once, here, not an unexamined fallthrough.
         """
-        if assess_out.risk is None:
+        if assess_out.risk is None or discover_out.map is None:
             return RiskGateStepOutcome()
 
         dispositions = await run_or_degrade(
@@ -749,18 +749,6 @@ class AssessmentWorkflow(GateHost):
         if decision.approved:
             return RiskGateStepOutcome(gates=report, override=risk_override_from(decision))
         return RiskGateStepOutcome(gates=report, blocked=True)
-
-    @workflow.update
-    def apply_risk_gate_override(self, override: RiskGateOverride) -> str:
-        """GD1/GD2/FR-304: post-run override applied to a completed assessment."""
-        if self._assessment is None:
-            raise ValueError("workflow has not produced an assessment yet")
-        if self._assessment.gates is None:
-            raise ValueError("assessment has no risk gate report")
-        if self._assessment.gates.verdict is RiskGateVerdict.PASS:
-            raise ValueError("cannot override a passing verdict")
-        self._assessment = self._assessment.model_copy(update={"gate_override": override})
-        return "override applied"
 
     async def _report(self, inp: AssessmentInput) -> PhaseResult:
         """E-52 owns this body: the five role reports."""

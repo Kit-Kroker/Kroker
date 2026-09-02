@@ -500,6 +500,22 @@ def test_assessment_rejects_a_gates_report_when_risk_did_not_collect():
         )
 
 
+def test_assessment_rejects_missing_gates_when_risk_is_present():
+    phases = _assess_dag(assess_measured=True)
+    with pytest.raises(ValidationError, match="_gates_agrees_with_risk"):
+        Assessment(
+            repo_dir="/r",
+            triage=_triage(),
+            admitted=True,
+            admission_reason="verdict ready",
+            phases=phases,
+            terminal_status=terminal_status(True, phases),
+            scan=_scan_result(),
+            risk=_risk_map(),
+            gates=None,
+        )
+
+
 def test_gate_override_allows_an_unaccepted_finding_when_attested():
     from datetime import UTC, datetime
 
@@ -529,7 +545,7 @@ def test_gate_override_allows_an_unaccepted_finding_when_attested():
 
 def test_an_override_is_rejected_when_verdict_is_pass():
     """An override is an audited exception -- attaching one to a PASS is
-    meaningless and indicates caller confusion (GD1)."""
+    meaningless and indicates caller confusion (GD1/GD5)."""
     from datetime import UTC, datetime
 
     override = RiskGateOverride(
@@ -539,7 +555,7 @@ def test_an_override_is_rejected_when_verdict_is_pass():
         gate_round=1,
     )
     phases = _assess_dag(assess_measured=True)
-    with pytest.raises(ValidationError, match="_override_only_when_not_passing"):
+    with pytest.raises(ValidationError, match="_override_only_on_block"):
         Assessment(
             repo_dir="/r",
             triage=_triage(),
@@ -550,5 +566,31 @@ def test_an_override_is_rejected_when_verdict_is_pass():
             scan=_scan_result(),
             risk=_risk_map(),
             gates=_report(RiskGateVerdict.PASS),
+            gate_override=override,
+        )
+
+
+def test_an_override_is_rejected_when_verdict_is_warn():
+    """GD5: WARN does not block, so attaching an override to WARN is rejected."""
+    from datetime import UTC, datetime
+
+    override = RiskGateOverride(
+        approved_by="human",
+        reason="unnecessary for warn",
+        decided_at=datetime.now(UTC),
+        gate_round=1,
+    )
+    phases = _assess_dag(assess_measured=True)
+    with pytest.raises(ValidationError, match="_override_only_on_block"):
+        Assessment(
+            repo_dir="/r",
+            triage=_triage(),
+            admitted=True,
+            admission_reason="verdict ready",
+            phases=phases,
+            terminal_status=terminal_status(True, phases),
+            scan=_scan_result(),
+            risk=_risk_map(),
+            gates=_report(RiskGateVerdict.WARN),
             gate_override=override,
         )
