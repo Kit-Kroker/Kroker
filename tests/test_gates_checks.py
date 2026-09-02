@@ -12,6 +12,7 @@ from sdlc.assessment.gates.checks import (
     unaccepted_confirmed_vulnerabilities,
 )
 from sdlc.assessment.risk.models import (
+    CapabilityRisk,
     Criticality,
     CriticalityRating,
     RiskSource,
@@ -271,5 +272,167 @@ def test_testability_clause_is_order_independent():
         cmap = capability_map(*caps)
         check, deferred = high_criticality_testability_blockers(rmap, cmap, ())
         out = check.model_dump_json() + "|" + "|".join(deferred)
+        first = first if first is not None else out
+        assert out == first
+
+
+from sdlc.assessment.gates.checks import composite_threshold, evaluate
+from sdlc.assessment.gates.models import RiskGateVerdict
+from sdlc.assessment.risk.models import Composite, Factor
+
+
+def _scored(bc_id, value) -> CapabilityRisk:
+    from tests.helpers_risk import capability_risk
+
+    return capability_risk(
+        bc_id=bc_id,
+        unified=Composite(
+            value=Measurement.measured(value),
+            factors=(Factor(key="x", value=Measurement.measured(value)),),
+        ),
+    )
+
+
+# --- composite_threshold --------------------------------------------------
+
+
+def test_a_measured_capability_at_or_above_0_8_fires_block():
+    m = UnifiedRiskMap(capabilities=(_scored("BC-001", 0.85),), collected=Measurement.measured(1.0))
+    check, warn, deferred = composite_threshold(m)
+    assert check.passed is False
+    assert warn is None
+    assert deferred == ()
+
+
+def test_one_block_capability_fires_regardless_of_a_second_partial_one():
+    partial = capability_risk("BC-002")  # default unified: not_collected
+    m = UnifiedRiskMap(
+        capabilities=(_scored("BC-001", 0.9), partial), collected=Measurement.measured(1.0)
+    )
+    check, warn, deferred = composite_threshold(m)
+    assert check.passed is False
+    assert "BC-002" in deferred[0]
+
+
+def test_a_measured_capability_in_the_warn_band_with_no_block_warns():
+    m = UnifiedRiskMap(capabilities=(_scored("BC-001", 0.65),), collected=Measurement.measured(1.0))
+    check, warn, deferred = composite_threshold(m)
+    assert check.passed is True
+    assert warn is RiskGateVerdict.WARN
+
+
+def test_all_capabilities_partial_defers_the_whole_clause():
+    """RD3's headline consequence: today's reality until E-56 lands."""
+    m = UnifiedRiskMap(
+        capabilities=(capability_risk("BC-001"), capability_risk("BC-002")),
+        collected=Measurement.measured(1.0),
+    )
+    check, warn, deferred = composite_threshold(m)
+    assert check is None
+    assert warn is None
+    assert len(deferred) == 2
+
+
+# NOTE: composite_threshold has no order-independence test of its own.
+# UnifiedRiskMap._capabilities_are_sorted forces risk_map.capabilities into
+# canonical order at CONSTRUCTION time -- there is no valid way to build an
+# UnifiedRiskMap whose capability order differs, so shuffling a list and
+# re-sorting it before construction (an earlier version of this test) was
+# vacuous: the re-sort silently undid the shuffle. The genuinely free axes
+# for this module -- capability_map's tuple order (CapabilityMap enforces
+# no sort) and the dispositions tuple order -- are permuted below, at the
+# evaluate() level, which is where both axes are actually consumed.
+
+
+# --- evaluate --------------------------------------------------------------
+
+
+def _empty_map() -> CapabilityMap:
+    return CapabilityMap(collected=Measurement.measured(1.0))
+
+
+def test_evaluate_passes_when_nothing_fires():
+    rmap = UnifiedRiskMap(capabilities=(capability_risk(),), collected=Measurement.measured(1.0))
+    report = evaluate(rmap, _empty_map(), ())
+    assert report.verdict is RiskGateVerdict.PASS
+
+
+def test_evaluate_blocks_on_a_confirmed_unaccepted_vulnerability():
+    rmap = UnifiedRiskMap(
+        capabilities=(capability_risk(vulnerabilities=(_vuln(),)),),
+        collected=Measurement.measured(1.0),
+        judgment=MEASURED_JUDGMENT,
+    )
+    report = evaluate(rmap, _empty_map(), ())
+    assert report.verdict is RiskGateVerdict.BLOCK
+    assert "risk_no_unaccepted_confirmed_vuln" in [c.name for c in report.checks]
+
+
+def test_a_block_clause_wins_over_a_warn_band_composite():
+    rmap = UnifiedRiskMap(
+        capabilities=(
+            capability_risk(bc_id="BC-001", vulnerabilities=(_vuln(),)),
+            _scored("BC-002", 0.65),
+        ),
+        collected=Measurement.measured(1.0),
+        judgment=MEASURED_JUDGMENT,
+    )
+    report = evaluate(rmap, _empty_map(), ())
+    assert report.verdict is RiskGateVerdict.BLOCK
+
+
+def test_evaluate_warns_when_only_the_composite_warn_band_fires():
+    rmap = UnifiedRiskMap(
+        capabilities=(_scored("BC-001", 0.65),), collected=Measurement.measured(1.0)
+    )
+    report = evaluate(rmap, _empty_map(), ())
+    assert report.verdict is RiskGateVerdict.WARN
+    # GD5: detail names every contributing bc_id, even on a PASSED check --
+    # a WARN report must not be silent about which capability warned.
+    assert any("BC-001" in r for r in report.reasons)
+
+
+def test_a_pass_with_deferrals_names_them():
+    """FR-915: a PASS that skipped a clause must say so."""
+    rmap = UnifiedRiskMap(capabilities=(capability_risk(),), collected=Measurement.measured(1.0))
+    report = evaluate(rmap, _empty_map(), ())
+    assert report.verdict is RiskGateVerdict.PASS
+    assert any("unified composite" in d for d in report.deferred)
+    assert any("judgment layer" in d for d in report.deferred)
+
+
+def test_no_check_row_is_ever_emitted_for_a_deferred_clause():
+    rmap = UnifiedRiskMap(capabilities=(capability_risk(),), collected=Measurement.measured(1.0))
+    report = evaluate(rmap, _empty_map(), ())
+    # judgment not measured -> vuln check absent; composite fully partial -> absent
+    assert [c.name for c in report.checks] == ["risk_no_high_criticality_testability_blocker"]
+
+
+def test_evaluate_is_order_independent():
+    """NFR-10. risk_map.capabilities is fixed (the type forces canonical
+    order); the genuinely free axes are capability_map's tuple order and
+    the dispositions tuple order, both shuffled here across >= 2 elements
+    each -- a 1-element list cannot exercise a shuffle at all."""
+    rmap = UnifiedRiskMap(
+        capabilities=(
+            capability_risk(bc_id="BC-001", vulnerabilities=(_vuln("SS1:a:x:"),)),
+            _scored("BC-002", 0.7),
+        ),
+        collected=Measurement.measured(1.0),
+        judgment=MEASURED_JUDGMENT,
+    )
+    caps = [
+        capability(bc_id="BC-001", testability=()),
+        capability(bc_id="BC-002", testability=()),
+    ]
+    dispositions = [
+        _disposition("SS1:a:x:", disposition=Disposition.MITIGATED_ELSEWHERE),
+        _disposition("QS3:unrelated:src/z.py:", kind="testability"),
+    ]
+    first = None
+    for _ in range(5):
+        random.shuffle(caps)
+        random.shuffle(dispositions)
+        out = evaluate(rmap, capability_map(*caps), tuple(dispositions)).model_dump_json()
         first = first if first is not None else out
         assert out == first
