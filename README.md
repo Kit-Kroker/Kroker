@@ -105,21 +105,21 @@ not be evaluated is `errored` and never counts as a pass.
   `python -m sdlc.cli eval clarify --case add-login-greenfield --gate`. Results land in `runs/prompt_evals/` and
   join the benchmark record stream by `prompt_sha` **only** — they are never
   merged into the heatmap, matrices, or SC rollup.
-- See [`docs/foundation.md`](docs/foundation.md) for the contracts, activities,
+- See [`docs/reference/foundation.md`](docs/reference/foundation.md) for the contracts, activities,
   and the deterministic gate, and
-  [`docs/architecture-review-2026-07.md`](docs/architecture-review-2026-07.md)
+  [`docs/reference/architecture-review-2026-07.md`](docs/reference/architecture-review-2026-07.md)
   for the design decisions and implementation status.
 - See [`docs/BENCHMARK.md`](docs/BENCHMARK.md) for the benchmark & evaluation design — the four measurement axes (harness / model×role / memory / case), how success criteria SC-1..6 get their numbers, and the E-30…E-37 increments.
 - Self-contained schema docs (no build step, open directly in a browser),
   each checked against actual code:
-  [`docs/roadmap.html`](docs/roadmap.html) (every FR/NFR/SC/US/ADR + the
-  15-stage DAG vs code), [`docs/architecture-schema.html`](docs/architecture-schema.html),
-  [`docs/agents-schema.html`](docs/agents-schema.html) (registry lifecycle,
+  [`docs/schemas/roadmap.html`](docs/schemas/roadmap.html) (every FR/NFR/SC/US/ADR + the
+  15-stage DAG vs code), [`docs/schemas/architecture-schema.html`](docs/schemas/architecture-schema.html),
+  [`docs/schemas/agents-schema.html`](docs/schemas/agents-schema.html) (registry lifecycle,
   every role, ADR-6/adversary model-inequality checks),
-  [`docs/research-stage-schema.html`](docs/research-stage-schema.html) (the
+  [`docs/schemas/research-stage-schema.html`](docs/schemas/research-stage-schema.html) (the
   research fan-out stage, provider seam, ExaSearch wiring),
-  [`docs/benchmark.html`](docs/benchmark.html) /
-  [`docs/benchmark-analysis.html`](docs/benchmark-analysis.html).
+  [`docs/schemas/benchmark.html`](docs/schemas/benchmark.html) /
+  [`docs/schemas/benchmark-analysis.html`](docs/schemas/benchmark-analysis.html).
 
 ## Notes
 - Payloads through Temporal stay small (claim-check for specs/diffs/logs).

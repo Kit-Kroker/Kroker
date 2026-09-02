@@ -1,13 +1,13 @@
 # Feature Coverage Audit — Spec vs. Code
 
-> **⚠️ Superseded (2026-07-15) by [`ROADMAP.md`](../ROADMAP.md).** This is a dated historical snapshot. Its top gaps — the reviewer stage (ADR-6/FR-204) and agent registry (FR-201) — have since landed; consult `ROADMAP.md` for current implementation status.
+> **⚠️ Superseded (2026-07-15) by [`ROADMAP.md`](../../ROADMAP.md).** This is a dated historical snapshot. Its top gaps — the reviewer stage (ADR-6/FR-204) and agent registry (FR-201) — have since landed; consult `ROADMAP.md` for current implementation status.
 
 | | |
 |---|---|
 | Date | 2026-07-05 |
 | Scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec-v2.md` vs. `src/sdlc/`, `interfaces/`, `tests/` |
 | Method | Read every FR/NFR/SC/ADR and the 14-stage DAG; verified each against actual code (file:line) and test presence, not against prior audit docs' claims |
-| Prior audits | `docs/architecture-review-2026-07.md` (2026-07-03, spec-level decisions) and `docs/foundation.md` (2026-07-04, "Plan 1" contract/activity level). This audit checks what has *actually landed in the live workflow* since then — commits through `297ea9b` — including the untracked `docs/superpowers/plans/2026-07-05-*.md` wiring plans, which git history confirms were executed (`ac0d879`…`297ea9b`). |
+| Prior audits | `docs/reference/architecture-review-2026-07.md` (2026-07-03, spec-level decisions) and `docs/reference/foundation.md` (2026-07-04, "Plan 1" contract/activity level). This audit checks what has *actually landed in the live workflow* since then — commits through `297ea9b` — including the untracked `docs/superpowers/plans/2026-07-05-*.md` wiring plans, which git history confirms were executed (`ac0d879`…`297ea9b`). |
 
 ## TL;DR
 

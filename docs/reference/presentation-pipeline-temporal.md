@@ -303,7 +303,7 @@ retries independently.
 ### 6e. What gets written, and what never does
 
 Five kinds (`MemoryKind`): `stage_summary`, `gotcha` (fix-loop end: what
-failed and what fixed it), `gate_feedback` (every human decision), 
+failed and what fixed it), `gate_feedback` (every human decision),
 `research_finding` (verified grounded findings only), `run_summary` (retro).
 
 Two guardrails to state plainly:

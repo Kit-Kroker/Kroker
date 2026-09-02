@@ -13,7 +13,7 @@
 - `[ ]` — not started
 - `—` — not falsifiable from code alone (needs runtime measurement)
 
-> Since the 2026-07-05 audit, the **reviewer stage (ADR-6/FR-204)** and **agent registry (FR-201)** landed (merged `b9455c3`), plus a **coding-harness adapter layer** and **harness observability logging**. Those items are now checked. The audit's `docs/feature-coverage-audit-2026-07-05.md` is superseded by this tracker.
+> Since the 2026-07-05 audit, the **reviewer stage (ADR-6/FR-204)** and **agent registry (FR-201)** landed (merged `b9455c3`), plus a **coding-harness adapter layer** and **harness observability logging**. Those items are now checked. The audit's `docs/reports/feature-coverage-audit-2026-07-05.md` is superseded by this tracker.
 
 > **2026-07-16 — ADR-6 correction.** The anti-collusion check was validating `config/agents.yaml`'s `developer` role, which nothing ever ran; `cfg.roles["dev"]` (a second, hardcoded registry in `models.py`) selected the coding model. The invariant held only while two hardcoded lists agreed. `agents.yaml` is now the single registry, the check compares `reviewer` against `dev`, and `PipelineConfig.roles` is asserted at boot to mirror it. Prior `[x]` marks on ADR-6/US-5 were true of the mechanism, not of the pairing it constrained.
 
@@ -887,7 +887,7 @@ first gives an objective grade, the second closes P3 and three capabilities.
   imported case's oracle must score 1.0 against its own `reference/`
   (`sdlc benchmark verify-case`), which caught four conversion defects the
   synthetic fixture could not — see
-  `docs/deveval-import-report-2026-08-09.md`. **Six of ten repos committed;
+  `docs/reports/deveval-import-report-2026-08-09.md`. **Six of ten repos committed;
   corpus 3 → 9 cases (answers OQ-B1's first data point and OQ-B8).** Spec:
   `docs/superpowers/specs/2026-08-09-benchmark-corpus-and-stage-isolation-design.md`.
 - [ ] **E-80 (new scope)** Stage isolation via pinned reference artifacts —

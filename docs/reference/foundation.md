@@ -4,7 +4,7 @@ Developer companion to the merged **Foundation** change set. It aligned
 `src/sdlc/` with the resolved architecture decisions in
 [`architecture-review-2026-07.md`](./architecture-review-2026-07.md) at the
 **contract and activity** level. The plan that produced it is
-[`superpowers/plans/2026-07-04-foundation-contract-alignment.md`](./superpowers/plans/2026-07-04-foundation-contract-alignment.md).
+[`superpowers/plans/2026-07-04-foundation-contract-alignment.md`](../superpowers/plans/2026-07-04-foundation-contract-alignment.md).
 
 **Scope:** mechanisms only. The workflow control-flow that *uses* these
 mechanisms (revision loop, integration setup/merge orchestration,

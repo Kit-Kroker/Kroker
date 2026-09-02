@@ -6,7 +6,7 @@ HTML report with embedded data + Chart.js visualizations.
 
 Usage:
     python scripts/aggregate_benchmarks.py [--runs runs/benchmarks]
-                                            [--out docs/benchmark-analysis.html]
+                                            [--out docs/schemas/benchmark-analysis.html]
 """
 
 from __future__ import annotations
@@ -587,7 +587,7 @@ def build_html(data: dict) -> str:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", default="runs/benchmarks", type=Path)
-    ap.add_argument("--out", default="docs/benchmark-analysis.html", type=Path)
+    ap.add_argument("--out", default="docs/schemas/benchmark-analysis.html", type=Path)
     args = ap.parse_args()
 
     data = aggregate(args.runs.resolve())

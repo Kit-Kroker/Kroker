@@ -326,7 +326,7 @@ tuning.
 > *design*, written in present tense; read every sentence in it as "will".
 > ROADMAP E-14 (the DAPER timer as a schedule asset) is explicitly blocked on
 > this workflow existing at all, and three external-idea candidates (A4, B2,
-> D1 in `docs/external-ideas-2026-09.md`) land on it and are blocked with it.
+> D1 in `docs/reports/external-ideas-2026-09.md`) land on it and are blocked with it.
 
 Per-project proactive workflow: wake on timer or `nudge` signal →
 **Detect** (deterministic signal collection — CI, deploy health, quarantined
