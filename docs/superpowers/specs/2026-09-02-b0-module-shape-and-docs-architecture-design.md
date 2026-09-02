@@ -233,6 +233,17 @@ We are not inventing a second ID system. We are giving the existing one a level 
 
 `docs/modes/feature-clause-writing.md` carries the method. Whether pytest gains a marker that cites clause IDs is deliberately left to (A), where there will be a real migrated slice to try it on.
 
+**Where clauses sit among the other things this repo writes down.** Four artifacts answer four different questions, and conflating them is how a specification quietly overwrites behaviour that was a contract:
+
+| Artifact | Question |
+|---|---|
+| a design spec under `docs/superpowers/specs/` | what we **intend** |
+| a slice's numbered clauses | what **behaviour** matters |
+| tests and the product's own evals | what we **verify** |
+| telemetry (`src/sdlc/observability/`) | what actually **happened** |
+
+The distinction that earns its place here is the second against the first. A spec describes a system as someone means it to be; a system that already exists is defined by what it does, and some of what it does is load-bearing precisely because nobody designed it. Clauses are written from observed behaviour, not from intent — which is why they live beside the code and a spec does not.
+
 ## 5. Test placement
 
 Tests move to `tests/<stage>/`, mirroring `src/sdlc/stages/<stage>/`. Cross-cutting tests — including the 42 that exercise `FeatureWorkflow` across several stages — live in `tests/integration/`.
@@ -251,7 +262,9 @@ Two alternatives were rejected:
 
 ## 6. The agent layer
 
-**`AGENTS.md` at every level** — root, slice, and infrastructure package. It is the cross-tool convention, the root already uses it (82 lines), and `AGENT.md` in the singular was rejected because no tool discovers it automatically.
+**`AGENTS.md` at every level** — root, slice, and infrastructure package. It is the cross-tool convention, the root already uses it (103 lines), and `AGENT.md` in the singular was rejected because no tool discovers it automatically.
+
+**The root `AGENTS.md` is a router, not an encyclopedia, and carries a 250-line ceiling to keep it one.** It indexes: where things live, which commands to run, which rules bind, where the depth is. It never inlines a stage's contracts, schemas, or business logic — those live in the slice, which is the entire reason the co-located layer exists. The failure this guards against is specific: a root instruction file that grows without bound spends context budget on every session and flattens everything it contains to the same priority, so the one rule that mattered reads like the twenty that did not. The 250-line ceiling is deliberately far below the repo-wide 1000 — a router that needs a thousand lines has stopped being a router. The migration table in §7 is the shape to imitate: paths and statuses, pointing outward.
 
 **Root `CLAUDE.md` becomes a pointer, not a symlink** (symlinks are unreliable on Windows, which is this repo's primary platform), and it must carry one explicit directive:
 
