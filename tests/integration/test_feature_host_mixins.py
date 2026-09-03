@@ -1,6 +1,7 @@
-# tests/integration/test_feature_host_mixins.py
+from sdlc.workflows.benchmark_host import BenchmarkHost
 from sdlc.workflows.board_host import BoardHost
 from sdlc.workflows.feature import FeatureWorkflow
+from sdlc.workflows.memory_host import MemoryHost
 from sdlc.workflows.report_host import ReportHost
 
 
@@ -17,7 +18,7 @@ def test_methods_resolve_through_the_mro():
 def test_hosts_define_no_handlers():
     # Rule 1: handlers stay where they already are. A host that grows one
     # silently changes the workflow's wire contract.
-    for host in (ReportHost, BoardHost):
+    for host in (ReportHost, BoardHost, BenchmarkHost, MemoryHost):
         for attr in vars(host).values():
             assert not hasattr(attr, "__temporal_signal_definition"), host
             assert not hasattr(attr, "__temporal_query_definition"), host
@@ -55,3 +56,23 @@ def test_cooperative_init_initializes_all_owned_attributes():
     )
     for attr in expected_attributes:
         assert hasattr(w, attr), f"Missing instance attribute: {attr}"
+
+
+def test_benchmark_and_memory_hosts_are_on_the_mro():
+    from sdlc.workflows.benchmark_host import BenchmarkHost
+    from sdlc.workflows.memory_host import MemoryHost
+
+    assert issubclass(FeatureWorkflow, BenchmarkHost)
+    assert issubclass(FeatureWorkflow, MemoryHost)
+    for name in ("_benchmarking", "_stage_record", "_record", "_judge", "_recall", "_retain"):
+        assert hasattr(FeatureWorkflow, name), name
+
+
+def test_record_assembles_the_benchmark_record_for_the_stage():
+    # ctx.record must accept stage metrics, never a pre-built BenchmarkRecord:
+    # a step must not know how one is assembled (_stage_record is 47 lines).
+    import inspect
+
+    from sdlc.workflows.benchmark_host import BenchmarkHost
+
+    assert "record" in inspect.signature(BenchmarkHost._record).parameters

@@ -11,7 +11,7 @@ import asyncio
 import os
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timedelta
-from typing import TypeVar, cast
+from typing import TypeVar
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
@@ -71,21 +71,7 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..artifacts.read import LoadSessionInput, load_session
     from ..artifacts.retention import RetentionInput, apply_session_retention, keep_full_transcripts
-    from ..benchmarks.judge import (
-        JudgeInput,
-        _build_judge_input,
-        judge_artifact,
-    )
-    from ..benchmarks.models import (
-        BenchmarkOutcome,
-        BenchmarkRecord,
-        BenchmarkScope,
-        JudgeKind,
-        QualityScore,
-        SpeedBag,
-        WasteBag,
-    )
-    from ..benchmarks.recorder import record_benchmark
+    from ..benchmarks.models import BenchmarkOutcome, WasteBag
     from ..board.models import TaskStatus
     from ..clarify.merge import merge_clarification
     from ..clarify.models import ProbeResult
@@ -138,14 +124,10 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..memoization.cache import content_key
     from ..memory.activities import (
-        RecallInput,
         ReflectInput,
-        RetainInput,
         WatermarkInput,
         capture_watermark,
-        recall_snapshot,
         reflect,
-        retain,
     )
     from ..models import (
         AnalysisReport,
@@ -163,11 +145,8 @@ with workflow.unsafe.imports_passed_through():
         ImplementationPlan,
         MemoryKind,
         MergeVerdict,
-        PlanDrift,
-        RecallSnapshot,
         ResearchBrief,
         ResearchPlan,
-        RetainItem,
         ReviewReport,
         SecurityReport,
         SmokeCheck,
@@ -182,7 +161,6 @@ with workflow.unsafe.imports_passed_through():
     from ..observability.activities import RunExportInput, export_run_artifacts
     from ..observability.summary import build_run_summary
     from ..observability.trace import RunEventKind
-    from ..observability.usage import cost_bag_from_spend
     from ..pending import GateContext, clarify_pending
     from ..pricing import PriceUsageInput, price_usage
     from ..prompts import (
@@ -207,10 +185,12 @@ with workflow.unsafe.imports_passed_through():
         brief_digest,
         verify_brief_activity,
     )
+    from .benchmark_host import BenchmarkHost
     from .board_host import BoardHost
     from .crew import FS_ACT, CrewTaskInput, CrewTaskWorkflow
     from .deployment import DeploymentInput, DeploymentWorkflow
     from .gates import GateHost
+    from .memory_host import MEM_ACT, MemoryHost
     from .models import SeededWork, TaskResult
     from .report_host import ReportHost
     from .scanning import scan_tree
@@ -231,12 +211,6 @@ LONG_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(hours=LONG_ACT_TIMEOUT_HOURS),
     heartbeat_timeout=timedelta(minutes=LONG_ACT_HEARTBEAT_MINUTES),
     retry_policy=RetryPolicy(maximum_attempts=2),
-)
-RECORD_ACT = workflow.ActivityConfig(
-    start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=5)
-)
-MEM_ACT = workflow.ActivityConfig(
-    start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=5)
 )
 # The stage output a _cached_stage producer is trusted to emit: the cache-hit
 # path validates against it, the fresh path returns the producer's own result.
@@ -796,11 +770,10 @@ def _escalation_summary(task_id: str, title: str, deferred: DeferredToolUse) -> 
 
 
 @workflow.defn
-class FeatureWorkflow(GateHost, ReportHost, BoardHost):
+class FeatureWorkflow(GateHost, ReportHost, BoardHost, BenchmarkHost, MemoryHost):
     def __init__(self) -> None:
         super().__init__()
         self._question_answers: dict[str, str] = {}
-        self._memory_watermark: str | None = None
         # E-42: cfg is threaded as a parameter everywhere else; the gate hooks
         # run inside GateHost and cannot receive it, so run() stashes it here.
         self._cfg: PipelineConfig | None = None
@@ -834,148 +807,6 @@ class FeatureWorkflow(GateHost, ReportHost, BoardHost):
         self._escalation_round: int = 0
         # E-84: stage 2 codebase map for brownfield runs (None for greenfield).
         self._codebase_map: CodebaseMap | None = None
-
-    # ----------------------- benchmark recording ------------------------
-
-    @staticmethod
-    def _benchmarking(cfg: PipelineConfig) -> bool:
-        return bool(cfg.benchmark and cfg.benchmark.case_id)
-
-    def _stage_record(
-        self,
-        cfg: PipelineConfig,
-        stage: str,
-        role: str,
-        started: datetime,
-        ended: datetime,
-        quality_score: float | None,
-        judge: str,
-        outcome: BenchmarkOutcome,
-        model: str,
-        harness=None,
-        lead_harness=None,
-        cost_usd: float | None = None,
-        spend: RoleUsage | None = None,
-        fix_attempts: int = 0,
-        task_id: str | None = None,
-        attempt: int | None = None,
-        waste: WasteBag | None = None,
-        plan_drift: PlanDrift | None = None,
-        error: str | None = None,
-    ) -> BenchmarkRecord:
-        scope = BenchmarkScope.TASK_ATTEMPT if task_id is not None else BenchmarkScope.STAGE
-        return BenchmarkRecord(
-            run_id=workflow.info().workflow_id,
-            bench_run_id=cfg.benchmark.bench_run_id or "_unknown",
-            case_id=cfg.benchmark.case_id or "_unknown",
-            scope=scope,
-            stage=stage,
-            task_id=task_id,
-            attempt=attempt,
-            role=role,
-            harness=harness,
-            lead_harness=lead_harness,
-            model=model,
-            prompt_sha="",
-            quality=QualityScore(score=quality_score, judge=cast(JudgeKind, judge)),
-            cost=cost_bag_from_spend(spend, cost_usd),
-            speed=SpeedBag(
-                wall_clock_s=(ended - started).total_seconds(), started_at=started, ended_at=ended
-            ),
-            waste=waste,
-            plan_drift=plan_drift,
-            outcome=outcome,
-            fix_attempts=fix_attempts,
-            error=error,
-        )
-
-    # ----------------------- benchmark recording ------------------------
-
-    async def _record(self, cfg: PipelineConfig, record: BenchmarkRecord) -> None:
-        self._emit(
-            RunEventKind.STAGE_ENDED,
-            stage=record.stage,
-            role=record.role,
-            outcome=record.outcome.value,
-            duration_s=str(record.speed.wall_clock_s),
-            fix_attempts=str(record.fix_attempts),
-            **({"cost_usd": str(record.cost.usd)} if record.cost.usd is not None else {}),
-        )
-        if not self._benchmarking(cfg):
-            return
-        await workflow.execute_activity(record_benchmark, record, **RECORD_ACT)
-
-    async def _judge(
-        self, cfg: PipelineConfig, artifact_json: str, stage: str, author_model: str
-    ) -> QualityScore:
-        """Judge a proposer-stage artifact iff benchmarking is on AND a
-        rubric is registered for the stage.
-
-        Returns a graceful QualityScore(score=None, judge='llm_judge') when
-        judging is skipped — when not benchmarking, or no rubric exists for
-        the stage — so the record still emits without failing the stage.
-        The LLM call lives in the judge_artifact activity, never in workflow
-        code.
-
-        ``stage`` is the rubric-map key carried on cfg.benchmark.rubrics
-        (e.g. 'clarifier', 'architect'), NOT the record's stage field.
-
-        Author model: passed in by the caller, which knows both this rubric key
-        and the stage name STAGE_MODELS is keyed by. The judge_model (e.g.
-        'openai/gpt-5.2') differs from the author → ADR-6 cross-family satisfied.
-        """
-        fallback = QualityScore(score=None, judge="llm_judge")
-        if not self._benchmarking(cfg):
-            return fallback
-        judge_input: JudgeInput | None = _build_judge_input(
-            artifact_json=artifact_json,
-            rubrics=cfg.benchmark.rubrics,
-            stage=stage,
-            author_model=author_model,
-            judge_model=cfg.benchmark.judge_model,
-            vetoes=cfg.benchmark.vetoes,
-        )
-        if judge_input is None:
-            return fallback
-        return await workflow.execute_activity(judge_artifact, judge_input, **RECORD_ACT)
-
-    # ------------------------------ memory -------------------------------
-
-    async def _recall(
-        self, cfg: PipelineConfig, bank: str, query: str, filters: dict[str, str]
-    ) -> RecallSnapshot:
-        if not cfg.memory.enabled:
-            return RecallSnapshot(query_hash="", bank=bank, watermark="unknown", items=[])
-        return await workflow.execute_activity(
-            recall_snapshot,
-            RecallInput(
-                bank=bank,
-                query=query,
-                filters=filters,
-                watermark=self._memory_watermark,
-                backend=cfg.memory.backend,
-                base_url=cfg.memory.base_url,
-            ),
-            **MEM_ACT,
-        )
-
-    async def _retain(
-        self, cfg: PipelineConfig, kind: MemoryKind, bank: str, text: str, metadata: dict[str, str]
-    ) -> None:
-        if not cfg.memory.enabled:
-            return
-        try:
-            await workflow.execute_activity(
-                retain,
-                RetainInput(
-                    item=RetainItem(kind=kind, bank=bank, text=text, metadata=metadata),
-                    backend=cfg.memory.backend,
-                    base_url=cfg.memory.base_url,
-                ),
-                **MEM_ACT,
-            )
-        except Exception:
-            pass
 
     async def _on_gate_awaited(self, name: str, round: int) -> None:
         self._emit(RunEventKind.GATE_AWAITED, stage=name, gate=name, round=str(round))
