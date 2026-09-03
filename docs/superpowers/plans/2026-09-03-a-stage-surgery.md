@@ -1721,10 +1721,11 @@ git commit -m "chore: A complete — all four src monoliths off the file-size ba
 
 ### Follow-up 1: Investigate and fix pre-existing `tests/test_tool_approval_gate.py` deadlock on Windows
 - **Discovered during**: Task 3 review / temporal tier run.
-- **Symptom**: `tests/test_tool_approval_gate.py -m temporal` hangs before first test report under Windows load (worker gets ~49s CPU then stops; exits with timeout/deadlock). Confirmed reproducible on clean pre-surgery main (`95a5a07` in `.worktrees/base-95a5a07`).
+- **Symptom**: `tests/test_tool_approval_gate.py -m temporal` hangs before first test report under Windows load (worker gets ~49s CPU then stops; exits with timeout/deadlock). Confirmed reproducible on clean pre-surgery main (`95a5a07` in `.worktrees/base-95a5a07`) under both Python 3.14 and Python 3.11.
 - **Hypothesis & Diagnostic Findings**:
   1. Test driver structure uses `result = await handle.result()` with background `driver = asyncio.create_task(drive())`. If `drive()` times out or raises in `_wait_for_status`, the workflow execution remains pending waiting for human signals, causing an indefinite stall when `auto_time_skipping_disabled()` is active.
-  2. Harness fix to convert unbounded hang to immediate diagnosable failure:
+  2. In contrast, files initially suspected during Task 5 (`test_board_workflow.py` and `test_budget_gate.py`) were *not* platform deadlocks; they hung because `GateHost.__init__` failed to call `super().__init__()`, breaking attribute initialization (`_trace`). Once `GateHost` cooperative init was fixed in Task 5, both files run 100% green (~20-27s).
+  3. Harness fix to convert unbounded hang to immediate diagnosable failure:
      ```python
      driver = asyncio.create_task(drive())
      done, pending = await asyncio.wait(
@@ -1732,4 +1733,4 @@ git commit -m "chore: A complete — all four src monoliths off the file-size ba
          return_when=asyncio.FIRST_EXCEPTION,
      )
      ```
-  3. Operational tier improvement: consider pytest timeout per test in temporal tier.
+  4. Operational tier note: CI does not run the temporal tier (excluded in `pyproject.toml` addopts), so local runs are the sole execution environment. For local surgery verification, the running command is `pytest -m temporal --ignore=tests/test_tool_approval_gate.py`.
