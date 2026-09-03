@@ -84,8 +84,9 @@ def test_advisory_failure_passes_with_audited_override():
     assert "coverage_gate" in report.overridden
 
 
-from sdlc.models import QAReport, TaskResult
+from sdlc.models import QAReport
 from sdlc.workflows.feature import _merge_evidence_all_green
+from sdlc.workflows.models import TaskResult
 
 
 def test_merge_evidence_treats_missing_qa_as_failure():

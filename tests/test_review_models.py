@@ -5,8 +5,8 @@ from sdlc.core.models import (
 from sdlc.models import (
     ReviewFinding,
     ReviewReport,
-    TaskResult,
 )
+from sdlc.workflows.models import TaskResult
 
 
 def test_blocking_findings_filters_to_critical_and_high():

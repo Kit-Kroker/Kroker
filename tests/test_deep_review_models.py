@@ -5,8 +5,8 @@ from sdlc.models import (
     DeepReviewReport,
     IntegrityFlag,
     ReviewFinding,
-    TaskResult,
 )
+from sdlc.workflows.models import TaskResult
 
 
 def test_cheat_detected_true_iff_flags_present():

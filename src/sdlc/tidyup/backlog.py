@@ -11,7 +11,6 @@ from ..models import (
     ArchitectureSpec,
     DevTask,
     ImplementationPlan,
-    SeededWork,
     ValidationContract,
 )
 from ..triage.admission import admits
@@ -21,6 +20,7 @@ from ..triage.models import (
     TriageFinding,
     finding_identity,
 )
+from ..workflows.models import SeededWork
 
 
 def admitted(triage: RepoTriage) -> bool:

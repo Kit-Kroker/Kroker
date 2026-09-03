@@ -180,11 +180,9 @@ with workflow.unsafe.imports_passed_through():
         RetainItem,
         ReviewReport,
         SecurityReport,
-        SeededWork,
         SmokeCheck,
         SubQuestion,
         SubQuestionFinding,
-        TaskResult,
         ToolDenial,
         ToolEscalation,
         ToolGrant,
@@ -222,6 +220,7 @@ with workflow.unsafe.imports_passed_through():
     from .crew import FS_ACT, CrewTaskInput, CrewTaskWorkflow
     from .deployment import DeploymentInput, DeploymentWorkflow
     from .gates import GateHost
+    from .models import SeededWork, TaskResult
     from .scanning import scan_tree
 
 INTAKE_ACT = workflow.ActivityConfig(

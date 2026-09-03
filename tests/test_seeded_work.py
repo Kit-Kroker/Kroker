@@ -13,10 +13,10 @@ from sdlc.models import (
     ArchitectureSpec,
     DevTask,
     ImplementationPlan,
-    SeededWork,
     ValidationContract,
 )
 from sdlc.workflows.feature import FeatureWorkflow
+from sdlc.workflows.models import SeededWork
 
 
 def _seeded():
