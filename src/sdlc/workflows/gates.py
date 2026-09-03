@@ -56,11 +56,11 @@ class GateHost:
     @workflow.run."""
 
     def __init__(self) -> None:
+        super().__init__()
         self._gate_decisions: dict[str, GateDecision] = {}
         # E-6: structured pending-decision registry, keyed by resolution key
         # (question id, or gate_key(gate, round)). Rendered by sdlc.channels.
         self._pending: dict[str, PendingDecision] = {}
-        self._status: str = "starting"
         # E-88 §6: set by a gate host that is a CHILD workflow, so its
         # pending items render under the run they belong to. None on a
         # top-level host, which is every host but the crew.
@@ -107,11 +107,12 @@ class GateHost:
 
     @workflow.query
     def status(self) -> str:
-        return self._status
+        return getattr(self, "_status", "starting")
 
     @workflow.query
     def pending_gate(self) -> str | None:
-        return self._status if self._status.startswith("awaiting:") else None
+        s = getattr(self, "_status", "starting")
+        return s if s.startswith("awaiting:") else None
 
     @workflow.query
     def pending_decisions(self) -> list[PendingDecision]:

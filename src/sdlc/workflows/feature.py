@@ -86,17 +86,7 @@ with workflow.unsafe.imports_passed_through():
         WasteBag,
     )
     from ..benchmarks.recorder import record_benchmark
-    from ..board.activities import (
-        AttachEvidenceInput,
-        PublishArtifactInput,
-        SetTaskStatusInput,
-        SyncPlanTasksInput,
-        attach_task_evidence,
-        publish_artifact_version,
-        set_task_authoritative,
-        sync_plan_tasks,
-    )
-    from ..board.models import ArtifactStatus, TaskStatus
+    from ..board.models import TaskStatus
     from ..clarify.merge import merge_clarification
     from ..clarify.models import ProbeResult
     from ..clarify.prompts import probe_prompt, probe_prompt_digest
@@ -191,8 +181,8 @@ with workflow.unsafe.imports_passed_through():
     from ..notify.contract import NotifyReason
     from ..observability.activities import RunExportInput, export_run_artifacts
     from ..observability.summary import build_run_summary
-    from ..observability.trace import RunEvent, RunEventKind
-    from ..observability.usage import cost_bag_from_spend, merge_usage
+    from ..observability.trace import RunEventKind
+    from ..observability.usage import cost_bag_from_spend
     from ..pending import GateContext, clarify_pending
     from ..pricing import PriceUsageInput, price_usage
     from ..prompts import (
@@ -217,10 +207,12 @@ with workflow.unsafe.imports_passed_through():
         brief_digest,
         verify_brief_activity,
     )
+    from .board_host import BoardHost
     from .crew import FS_ACT, CrewTaskInput, CrewTaskWorkflow
     from .deployment import DeploymentInput, DeploymentWorkflow
     from .gates import GateHost
     from .models import SeededWork, TaskResult
+    from .report_host import ReportHost
     from .scanning import scan_tree
 
 INTAKE_ACT = workflow.ActivityConfig(
@@ -267,13 +259,6 @@ EXPORT_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=2), retry_policy=RetryPolicy(maximum_attempts=1)
 )
 
-# E-78: the board is NOT best-effort like EXPORT_ACT. Agents read tasks from
-# it, so a lost write is a correctness bug, not a missing report. The store's
-# writes are idempotent (sync uses ON CONFLICT DO NOTHING), so retrying is
-# safe.
-BOARD_ACT = workflow.ActivityConfig(
-    start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=5)
-)
 
 # E-30: run_integration_checks runs a real test suite + lint against the merged
 # integration head. Generous start_to_close (> the activity's internal test
@@ -811,7 +796,7 @@ def _escalation_summary(task_id: str, title: str, deferred: DeferredToolUse) -> 
 
 
 @workflow.defn
-class FeatureWorkflow(GateHost):
+class FeatureWorkflow(GateHost, ReportHost, BoardHost):
     def __init__(self) -> None:
         super().__init__()
         self._question_answers: dict[str, str] = {}
@@ -835,15 +820,10 @@ class FeatureWorkflow(GateHost):
         # exists on this workflow before that point.
         self._integration_head: str = ""
         self._integration_wt: str = ""
-        # E-32: append-only domain trace; source for RunSummary + events.jsonl.
-        self._trace: list[RunEvent] = []
-        self._seq: int = 0
         self._run_summary: RunSummary | None = None
         # E-38: session refs collected per coding attempt; retro applies
         # the OQ-B7 retention policy over them.
         self._session_refs: list[ArtifactRef] = []
-        # E-33: per-role spend accumulated across the run; budget state.
-        self._role_usage: dict[str, RoleUsage] = {}
         self._budget_threshold: float = 0.0
         self._budget_crossings: int = 0
         # E-17: monotonic gate round for tool-approval escalations. ONE
@@ -852,9 +832,6 @@ class FeatureWorkflow(GateHost):
         # counter keeps (gate, round) unique and replay-deterministic where a
         # per-task round would collide.
         self._escalation_round: int = 0
-        # E-78: surrogate artifact_version.id of the current plan, captured
-        # when the plan stage publishes. Task board writes key off it.
-        self._plan_version: int | None = None
         # E-84: stage 2 codebase map for brownfield runs (None for greenfield).
         self._codebase_map: CodebaseMap | None = None
 
@@ -910,90 +887,6 @@ class FeatureWorkflow(GateHost):
             outcome=outcome,
             fix_attempts=fix_attempts,
             error=error,
-        )
-
-    # ----------------------- board (E-78) -------------------------------
-
-    async def _board_publish(
-        self, cfg: PipelineConfig, key: str, content_json: str, *, approved: bool = True
-    ) -> int:
-        """Publish one project artifact version. A rejected gate still writes
-        history — the pointer just does not move."""
-        run_id = workflow.info().workflow_id
-        result = await workflow.execute_activity(
-            publish_artifact_version,
-            PublishArtifactInput(
-                project=cfg.project_key,
-                key=key,
-                run_id=run_id,
-                content_json=content_json,
-                actor=f"workflow:{run_id}",
-                status=(ArtifactStatus.CURRENT if approved else ArtifactStatus.REJECTED),
-            ),
-            **BOARD_ACT,
-        )
-        return result.version_id
-
-    async def _board_sync_tasks(
-        self, cfg: PipelineConfig, plan_version: int, tasks: list[DevTask]
-    ) -> None:
-        run_id = workflow.info().workflow_id
-        await workflow.execute_activity(
-            sync_plan_tasks,
-            SyncPlanTasksInput(
-                project=cfg.project_key,
-                plan_version=plan_version,
-                run_id=run_id,
-                tasks=tasks,
-                actor=f"workflow:{run_id}",
-            ),
-            **BOARD_ACT,
-        )
-
-    async def _board_task_status(
-        self,
-        cfg: PipelineConfig,
-        task_id: str,
-        status: TaskStatus,
-        *,
-        fix_attempts: int | None = None,
-        error: str | None = None,
-        branch: str | None = None,
-    ) -> None:
-        if self._plan_version is None:
-            return  # no plan published (early rejection)
-        run_id = workflow.info().workflow_id
-        await workflow.execute_activity(
-            set_task_authoritative,
-            SetTaskStatusInput(
-                project=cfg.project_key,
-                plan_version=self._plan_version,
-                task_id=task_id,
-                status=status,
-                actor=f"workflow:{run_id}",
-                fix_attempts=fix_attempts,
-                error=error,
-                branch=branch,
-            ),
-            **BOARD_ACT,
-        )
-
-    async def _board_evidence(
-        self, cfg: PipelineConfig, task_id: str, kind: str, content_json: str
-    ) -> None:
-        if self._plan_version is None:
-            return
-        await workflow.execute_activity(
-            attach_task_evidence,
-            AttachEvidenceInput(
-                project=cfg.project_key,
-                plan_version=self._plan_version,
-                task_id=task_id,
-                run_id=workflow.info().workflow_id,
-                kind=kind,
-                content_json=content_json,
-            ),
-            **BOARD_ACT,
         )
 
     # ----------------------- benchmark recording ------------------------
@@ -1211,63 +1104,6 @@ class FeatureWorkflow(GateHost):
         )
 
     # ---------------------------- helpers -------------------------------
-
-    def _emit(self, kind: RunEventKind, stage: str | None = None, **data: str) -> None:
-        """Append a domain event to the run trace. Pure state mutation — safe
-        in workflow code (no I/O, deterministic seq + workflow.now())."""
-        self._trace.append(
-            RunEvent(seq=self._seq, at=workflow.now(), kind=kind, stage=stage, data=data)
-        )
-        self._seq += 1
-
-    def _stage(self, status: str, trace: str | None = None) -> None:
-        """Record stage start: _status keeps the run's status vocabulary
-        (status() query consumers), while the STAGE_STARTED trace event uses
-        the canonical stage nouns -- the same vocabulary STAGE_ENDED,
-        run_summary.terminal_stage, and the dashboard's CANONICAL_STAGES
-        (benchmarks/heatmap.py) already speak. Two vocabularies in one trace
-        is how the fleet view and the benchmarks come to disagree."""
-        self._status = status
-        self._emit(RunEventKind.STAGE_STARTED, stage=trace or status)
-
-    def _track_usage(
-        self,
-        *,
-        role: str,
-        model: str,
-        input_tokens: int = 0,
-        output_tokens: int = 0,
-        cache_read_tokens: int = 0,
-        cache_write_tokens: int = 0,
-        cost_usd: float | None = None,
-        into: RoleUsage | None = None,
-    ) -> None:
-        """Fold one model call into the run's per-role accumulator and emit
-        a MODEL_USAGE event. Pure state mutation — safe in workflow code.
-        `into` additionally folds the same delta into a caller-held bag
-        (per-stage benchmark records)."""
-        bag = self._role_usage.setdefault(role, RoleUsage(role=role, model=model))
-        for target in (bag, into) if into is not None else (bag,):
-            merge_usage(
-                target,
-                model=model,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                cache_read_tokens=cache_read_tokens,
-                cache_write_tokens=cache_write_tokens,
-                cost_usd=cost_usd,
-            )
-        self._emit(
-            RunEventKind.MODEL_USAGE,
-            role=role,
-            model=model,
-            calls="1",
-            input_tokens=str(input_tokens),
-            output_tokens=str(output_tokens),
-            cache_read_tokens=str(cache_read_tokens),
-            cache_write_tokens=str(cache_write_tokens),
-            **({"cost_usd": str(cost_usd)} if cost_usd is not None else {}),
-        )
 
     async def _run_role(
         self,
