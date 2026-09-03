@@ -92,9 +92,12 @@ with workflow.unsafe.imports_passed_through():
     from ..assessment.scan.models import ScanResult, ScanSignalId
     from ..assessment.verification import guard_reason
     from ..capability.models import ProposedCapability
+    from ..core.models import (
+        GateDecision,
+        GateSettings,
+    )
     from ..measurement import CollectionState, Measurement
     from ..memoization.cache import NO_PROPOSER
-    from ..models import GateDecision, GateSettings
     from ..pending import GateContext
     from ..triage.admission import admits
     from ..triage.models import RepoTriage

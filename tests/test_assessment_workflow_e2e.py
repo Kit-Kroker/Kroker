@@ -49,13 +49,13 @@ from sdlc.assessment.models import (
 )
 from sdlc.assessment.scan.models import SCAN_ORDER, ScanSignalId, SignalSource
 from sdlc.capability.store import BoardIdentityStore
-from sdlc.measurement import CollectionState, Measurement
-from sdlc.models import (
+from sdlc.core.models import (
     GateDecision,
     GateOutcome,
     GatePolicy,
     GateSettings,
 )
+from sdlc.measurement import CollectionState, Measurement
 from sdlc.triage.activities import (
     TriageDependencyInput,
     TriagePin,

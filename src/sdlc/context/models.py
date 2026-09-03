@@ -13,8 +13,10 @@ from typing import Literal
 from pydantic import BaseModel, model_validator
 
 from ..assessment.scan.models import Confidence, MemberKind
+from ..core.models import (
+    ProjectMode,
+)
 from ..measurement import CollectionState, Measurement
-from ..models import ProjectMode
 
 
 class RepoObservation(BaseModel):

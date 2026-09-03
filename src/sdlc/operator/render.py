@@ -15,8 +15,11 @@ from collections.abc import Sequence
 
 from ..channels.contract import default_render
 from ..channels.inbox import RunInbox
+from ..core.models import (
+    RunState,
+    RunSummary,
+)
 from ..dashboard.fleet import FleetSnapshot
-from ..models import RunState, RunSummary
 from ..pending import ClarifyPending, PendingDecision
 
 ORIENTATION_CAP = 20

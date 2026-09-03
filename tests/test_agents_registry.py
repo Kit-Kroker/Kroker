@@ -7,7 +7,10 @@ from sdlc.agents.loader import (
     model_family,
     validate_registry,
 )
-from sdlc.models import HarnessKind, RoleConfig
+from sdlc.core.models import (
+    HarnessKind,
+    RoleConfig,
+)
 
 _HARNESS_MODEL = "zai-coding-plan/glm-5.2"
 _PROPOSER_MODEL = "anthropic:glm-5.2"

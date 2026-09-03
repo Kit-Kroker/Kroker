@@ -2,7 +2,10 @@
 never called. We assert this by pointing SDLC_BENCHMARKS_ROOT at a temp
 dir and checking no file appears after a stage-boundary helper runs."""
 
-from sdlc.models import BenchmarkConfig, PipelineConfig
+from sdlc.core.models import (
+    BenchmarkConfig,
+    PipelineConfig,
+)
 from sdlc.workflows.feature import FeatureWorkflow
 
 

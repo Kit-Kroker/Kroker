@@ -10,7 +10,9 @@ from sdlc.benchmarks.models import (
     SpeedBag,
 )
 from sdlc.benchmarks.scoring import compute_summaries
-from sdlc.models import HarnessKind
+from sdlc.core.models import (
+    HarnessKind,
+)
 
 
 def _rec(case, harness, model, q, usd, secs, lead_harness=None):

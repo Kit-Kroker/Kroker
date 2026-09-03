@@ -2,7 +2,9 @@ import pytest
 
 from sdlc.benchmarks.matrix import NetworkRequiredCaseError, SameFamilyJudgeError, expand_matrix
 from sdlc.benchmarks.models import Arm, CaseSpec
-from sdlc.models import HarnessKind
+from sdlc.core.models import (
+    HarnessKind,
+)
 
 
 def _spec(models, judge="openai/gpt-5.2"):

@@ -8,10 +8,12 @@ import pathlib
 
 import pytest
 
-from sdlc.models import (
-    DeployReport,
+from sdlc.core.models import (
     GateDecision,
     GateOutcome,
+)
+from sdlc.models import (
+    DeployReport,
 )
 from sdlc.workflows.feature import _deploy_result, _deploy_verdict, _sanitize_tag
 

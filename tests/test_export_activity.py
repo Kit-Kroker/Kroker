@@ -2,7 +2,9 @@ from datetime import UTC, datetime
 
 import pytest
 
-from sdlc.models import RunSummary
+from sdlc.core.models import (
+    RunSummary,
+)
 from sdlc.observability.activities import RunExportInput, export_run_artifacts
 from sdlc.observability.trace import RunEvent, RunEventKind
 

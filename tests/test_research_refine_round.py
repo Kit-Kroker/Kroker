@@ -4,11 +4,13 @@ Round-1 findings are never discarded, round-2 ids never collide with round-1,
 and exhausting the round budget PROCEEDS with the current brief rather than
 rejecting -- research degrades a run, it never stops it."""
 
+from sdlc.core.models import (
+    ResearchConfig,
+)
 from sdlc.models import (
     Contradiction,
     Gap,
     ResearchBrief,
-    ResearchConfig,
     SubQuestion,
     SubQuestionFinding,
 )

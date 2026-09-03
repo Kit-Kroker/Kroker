@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sdlc.models import (
+from sdlc.core.models import (
     ClarificationOutcome,
     GateOutcomeSummary,
     RoleUsage,

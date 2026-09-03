@@ -17,7 +17,10 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.activities import evaluate_gate  # pure — reused, not faked
-from sdlc.models import GateDecision, GateOutcome
+from sdlc.core.models import (
+    GateDecision,
+    GateOutcome,
+)
 from tests.fakes.canned import (
     AGENT_SPECS,
     QUESTION_IDS,

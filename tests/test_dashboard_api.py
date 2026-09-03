@@ -7,9 +7,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from sdlc.channels.transport import SubmitResult
+from sdlc.core.models import (
+    RunState,
+)
 from sdlc.dashboard.api import create_router
 from sdlc.dashboard.fleet import FleetSnapshot
-from sdlc.models import RunState
 from sdlc.pending import ClarifyPending, StageGatePending
 
 AT = datetime(2026, 8, 18, 9, 0, tzinfo=UTC)

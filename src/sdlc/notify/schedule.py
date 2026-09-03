@@ -11,7 +11,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from ..models import GateConfig, TimeoutAction
+from ..core.models import (
+    GateConfig,
+    TimeoutAction,
+)
 from .contract import NotifyReason
 
 REMIND_FRACTION = 0.5  # of gate_timeout_hours, when not set explicitly

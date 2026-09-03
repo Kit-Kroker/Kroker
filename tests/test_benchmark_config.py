@@ -1,4 +1,7 @@
-from sdlc.models import BenchmarkConfig, PipelineConfig
+from sdlc.core.models import (
+    BenchmarkConfig,
+    PipelineConfig,
+)
 
 
 def test_default_pipeline_config_has_no_benchmark():

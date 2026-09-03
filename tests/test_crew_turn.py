@@ -9,6 +9,9 @@ import tempfile
 import pytest
 from temporalio.exceptions import ApplicationError
 
+from sdlc.core.models import (
+    HarnessKind,
+)
 from sdlc.crew import activities as crew_acts
 from sdlc.crew.activities import (
     AGENT_FAILURE,
@@ -20,7 +23,6 @@ from sdlc.crew.worktree import orchestration_dir, round_dir
 from sdlc.models import (
     ContainmentLayer,
     ContainmentReport,
-    HarnessKind,
     HarnessRunResult,
 )
 

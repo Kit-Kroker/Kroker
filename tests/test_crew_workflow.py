@@ -13,6 +13,10 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
+from sdlc.core.models import (
+    ArtifactRef,
+    HarnessKind,
+)
 from sdlc.crew.activities import (
     CheckpointInput,
     CrewTurnInput,
@@ -23,8 +27,6 @@ from sdlc.crew.activities import (
 )
 from sdlc.crew.models import TurnRecord
 from sdlc.models import (
-    ArtifactRef,
-    HarnessKind,
     HarnessRunResult,
     SessionDigest,
 )

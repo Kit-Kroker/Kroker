@@ -5,6 +5,7 @@ after a retry" keeps full, because HOW the agent recovered is the point.
 Only clean-green non-benchmark runs are downgraded to digest-only. The
 digest file is never deleted. TTL on kept transcripts stays open (OQ-B7).
 """
+
 from __future__ import annotations
 
 import logging
@@ -12,13 +13,14 @@ import logging
 from pydantic import BaseModel, Field
 from temporalio import activity
 
-from ..models import ArtifactRef
+from ..core.models import (
+    ArtifactRef,
+)
 
 _log = logging.getLogger(__name__)
 
 
-def keep_full_transcripts(outcome: str, had_fix_attempts: bool,
-                          is_benchmark: bool) -> bool:
+def keep_full_transcripts(outcome: str, had_fix_attempts: bool, is_benchmark: bool) -> bool:
     """Pure policy — called from workflow code, so: no IO, no env."""
     clean_green = outcome.startswith("deployed") and not had_fix_attempts
     return is_benchmark or not clean_green
@@ -34,7 +36,8 @@ async def apply_session_retention(inp: RetentionInput) -> str:
     if inp.keep_full:
         return f"kept:{len(inp.refs)}"
     from .store import LocalFileStore
+
     store = LocalFileStore()
     for ref in inp.refs:
-        store.delete(ref)          # digests are not in refs — never deleted
+        store.delete(ref)  # digests are not in refs — never deleted
     return f"downgraded:{len(inp.refs)}"

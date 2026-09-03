@@ -5,8 +5,11 @@ from __future__ import annotations
 
 import datetime as dt
 
+from sdlc.core.models import (
+    GateDecision,
+    GateOutcome,
+)
 from sdlc.measurement import Measurement
-from sdlc.models import GateDecision, GateOutcome
 from sdlc.triage.models import (
     FixClass,
     Readiness,

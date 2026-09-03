@@ -5,6 +5,7 @@ S3 becomes a second backend behind the same Protocol when it earns its
 keep. Layout: <root>/<run_id>/<subdir>/<name>; sessions and their digests
 share a subdir so a human can `ls` one run's transcripts.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -14,7 +15,9 @@ from typing import Protocol
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
-from ..models import ArtifactRef
+from ..core.models import (
+    ArtifactRef,
+)
 
 _SUBDIRS = {
     "harness_session": "sessions",
@@ -30,8 +33,7 @@ def ref_to_path(ref: ArtifactRef) -> Path:
 
 
 class ArtifactStore(Protocol):
-    def put(self, kind: str, run_id: str, name: str,
-            data: bytes) -> ArtifactRef: ...
+    def put(self, kind: str, run_id: str, name: str, data: bytes) -> ArtifactRef: ...
     def delete(self, ref: ArtifactRef) -> None: ...
 
 
@@ -40,16 +42,16 @@ class LocalFileStore:
         self.root = Path(
             root
             or os.environ.get("SDLC_ARTIFACT_ROOT")
-            or os.environ.get("SDLC_EXPORT_ROOT", "./runs"))
+            or os.environ.get("SDLC_EXPORT_ROOT", "./runs")
+        )
 
-    def put(self, kind: str, run_id: str, name: str,
-            data: bytes) -> ArtifactRef:
+    def put(self, kind: str, run_id: str, name: str, data: bytes) -> ArtifactRef:
         path = self.root / run_id / _SUBDIRS.get(kind, kind) / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
         return ArtifactRef(
-            kind=kind, uri=path.resolve().as_uri(),
-            sha256=hashlib.sha256(data).hexdigest())
+            kind=kind, uri=path.resolve().as_uri(), sha256=hashlib.sha256(data).hexdigest()
+        )
 
     def delete(self, ref: ArtifactRef) -> None:
         ref_to_path(ref).unlink(missing_ok=True)

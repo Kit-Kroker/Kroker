@@ -17,7 +17,13 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 
-from ..models import ClarificationDimension, ClarifiedRequirements, OpenQuestion
+from ..core.models import (
+    ClarificationDimension,
+)
+from ..models import (
+    ClarifiedRequirements,
+    OpenQuestion,
+)
 from .models import ClarifyRoute, ProbeResult
 from .routing import SUPERVISOR_DIMENSIONS
 

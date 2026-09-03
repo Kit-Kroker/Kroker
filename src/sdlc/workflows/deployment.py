@@ -20,6 +20,9 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
+    from ..core.models import (
+        DeployConfig,
+    )
     from ..deploy.activities import (
         DeployActivityInput,
         RollbackInput,
@@ -30,7 +33,6 @@ with workflow.unsafe.imports_passed_through():
         smoke_check,
     )
     from ..models import (
-        DeployConfig,
         DeployPlan,
         DeployReport,
         SmokeCheckResult,

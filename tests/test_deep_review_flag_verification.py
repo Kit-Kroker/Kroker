@@ -1,9 +1,16 @@
 """E-43: an anti-cheat accusation must be able to point at the transcript line
 it is accusing. A flag whose quote nobody said is worse than no flag."""
 
+from sdlc.core.models import (
+    HarnessKind,
+)
 from sdlc.handoff import verified_integrity_flags
 from sdlc.harness.session import session_text_from_jsonl, session_to_jsonl
-from sdlc.models import HarnessKind, HarnessSession, IntegrityFlag, SessionEvent
+from sdlc.models import (
+    HarnessSession,
+    IntegrityFlag,
+    SessionEvent,
+)
 
 
 def _render(events):

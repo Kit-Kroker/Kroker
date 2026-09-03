@@ -1,7 +1,9 @@
-from sdlc.models import (
+from sdlc.core.models import (
     MemoryConfig,
-    MemoryKind,
     PipelineConfig,
+)
+from sdlc.models import (
+    MemoryKind,
     RecallSnapshot,
     RetainItem,
 )

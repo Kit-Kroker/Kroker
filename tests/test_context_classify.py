@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from sdlc.context.classify import classify
 from sdlc.context.models import RepoObservation
-from sdlc.models import ProjectMode
+from sdlc.core.models import (
+    ProjectMode,
+)
 
 
 def _repo(**over) -> RepoObservation:

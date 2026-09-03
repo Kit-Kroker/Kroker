@@ -18,7 +18,9 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from ..artifacts.store import ref_to_path
-from ..models import ArtifactRef
+from ..core.models import (
+    ArtifactRef,
+)
 from .models import (
     ArtifactVersion,
     BoardArtifact,

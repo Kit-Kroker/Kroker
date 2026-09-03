@@ -8,7 +8,12 @@ from sdlc.benchmarks.models import (
     SpeedBag,
     WasteBag,
 )
-from sdlc.models import HarnessKind, SessionDigest
+from sdlc.core.models import (
+    HarnessKind,
+)
+from sdlc.models import (
+    SessionDigest,
+)
 
 T = datetime(2026, 8, 3, 10)
 

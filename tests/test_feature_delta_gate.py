@@ -34,6 +34,10 @@ from sdlc.assessment.scan.models import (
     family_of,
 )
 from sdlc.context.delta import DELTA_CHECK
+from sdlc.core.models import (
+    IdeaBrief,
+    ProjectMode,
+)
 from sdlc.gate import CheckClass, CheckResult, build_check
 from sdlc.measurement import Measurement
 from sdlc.models import (
@@ -42,10 +46,8 @@ from sdlc.models import (
     ArchitectureSpec,
     BrownfieldDelta,
     ClarifiedRequirements,
-    IdeaBrief,
     ImplementationPlan,
     MergeVerdict,
-    ProjectMode,
     QAReport,
     ReviewReport,
 )

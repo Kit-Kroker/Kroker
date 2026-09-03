@@ -20,7 +20,10 @@ from datetime import UTC, datetime
 from pydantic import BaseModel, Field, TypeAdapter
 
 from ..channels.inbox import InboxError, RunInbox, list_open_run_ids
-from ..models import RunState, RunSummary
+from ..core.models import (
+    RunState,
+    RunSummary,
+)
 from ..pending import PendingDecision
 
 CLOSED_LIMIT = 20

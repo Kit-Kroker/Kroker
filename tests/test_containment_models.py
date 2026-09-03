@@ -1,13 +1,15 @@
 """E-15/E-16: containment model contracts."""
 
+from sdlc.core.models import (
+    HarnessKind,
+    PipelineConfig,
+)
 from sdlc.models import (
     ContainmentLayer,
     ContainmentReport,
     DeferredToolUse,
     EscalationOutcome,
-    HarnessKind,
     HarnessRunResult,
-    PipelineConfig,
     SessionDigest,
     ToolDenial,
     ToolGrant,

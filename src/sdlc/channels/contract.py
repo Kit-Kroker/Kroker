@@ -15,7 +15,10 @@ from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
-from ..models import GateDecision, GateOutcome
+from ..core.models import (
+    GateDecision,
+    GateOutcome,
+)
 from ..pending import (
     ClarifyPending,
     MergeGatePending,

@@ -1,7 +1,9 @@
 """ResearchConfig gains fan-out bounds. The existing per-run caps are
 REINTERPRETED as per-sub-question; max_run_cost_usd is the new run ceiling."""
 
-from sdlc.models import ResearchConfig
+from sdlc.core.models import (
+    ResearchConfig,
+)
 
 
 def test_fan_out_defaults():
@@ -26,7 +28,15 @@ def test_run_ceiling_covers_the_default_fan_out_width():
     assert cfg.max_run_cost_usd >= cfg.max_sub_questions * cfg.max_cost_usd
 
 
-from sdlc.models import ResearchBrief, ResearchPlan, RoleUsage, SubQuestion, SubQuestionFinding
+from sdlc.core.models import (
+    RoleUsage,
+)
+from sdlc.models import (
+    ResearchBrief,
+    ResearchPlan,
+    SubQuestion,
+    SubQuestionFinding,
+)
 
 
 def test_research_plan_carries_usage():

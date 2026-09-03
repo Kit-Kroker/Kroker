@@ -29,7 +29,12 @@ from sdlc.board.activities import (
 )
 from sdlc.board.models import ArtifactStatus, TaskStatus
 from sdlc.board.store import BoardStore
-from sdlc.models import GateConfig, GateDecision, GateOutcome, GatePolicy
+from sdlc.core.models import (
+    GateConfig,
+    GateDecision,
+    GateOutcome,
+    GatePolicy,
+)
 from sdlc.notify.contract import NotifyInput, Results
 from sdlc.observability.activities import export_run_artifacts
 from tests.fakes.canned import AGENT_SPECS, e2e_config, greenfield_idea

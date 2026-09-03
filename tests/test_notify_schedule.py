@@ -5,7 +5,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from sdlc.models import GateConfig, TimeoutAction
+from sdlc.core.models import (
+    GateConfig,
+    TimeoutAction,
+)
 from sdlc.notify.schedule import NotifyReason, build_schedule
 
 T0 = datetime(2026, 7, 26, 12, 0, tzinfo=UTC)

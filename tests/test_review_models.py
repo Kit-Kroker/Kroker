@@ -1,8 +1,10 @@
-from sdlc.models import (
+from sdlc.core.models import (
     PipelineConfig,
+    RoleConfig,
+)
+from sdlc.models import (
     ReviewFinding,
     ReviewReport,
-    RoleConfig,
     TaskResult,
 )
 

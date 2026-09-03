@@ -4,7 +4,14 @@ These exercise the workflow's helpers directly rather than booting Temporal --
 the stage's ORCHESTRATION decisions are what matter here, and the activities
 themselves are covered by Tasks 7-9."""
 
-from sdlc.models import ResearchBrief, RoleUsage, SubQuestion, SubQuestionFinding
+from sdlc.core.models import (
+    RoleUsage,
+)
+from sdlc.models import (
+    ResearchBrief,
+    SubQuestion,
+    SubQuestionFinding,
+)
 from sdlc.workflows.feature import (
     RESEARCH_PLAN_ACT,
     RESEARCH_SQ_ACT,

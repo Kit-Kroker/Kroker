@@ -1,12 +1,14 @@
+from sdlc.core.models import (
+    PipelineConfig,
+    ResearchConfig,
+    RoleConfig,
+)
 from sdlc.models import (
     ConsultedSource,
     GroundedFinding,
     InferredFinding,
     MemoryKind,
-    PipelineConfig,
     ResearchBrief,
-    ResearchConfig,
-    RoleConfig,
 )
 
 # The SGR cascade, in the ONE order the spec commits to. This literal IS the

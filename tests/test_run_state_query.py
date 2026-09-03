@@ -3,7 +3,14 @@ bookkeeping: every field is read from existing workflow state."""
 
 from datetime import UTC, datetime
 
-from sdlc.models import GateDecision, GateOutcome, IdeaBrief, PipelineConfig, ProjectMode, RoleUsage
+from sdlc.core.models import (
+    GateDecision,
+    GateOutcome,
+    IdeaBrief,
+    PipelineConfig,
+    ProjectMode,
+    RoleUsage,
+)
 from sdlc.observability.trace import RunEvent, RunEventKind
 from sdlc.workflows.feature import FeatureWorkflow
 

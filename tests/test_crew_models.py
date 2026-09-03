@@ -7,6 +7,9 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from sdlc.core.models import (
+    HarnessKind,
+)
 from sdlc.crew.models import (
     MAX_NOTE_BYTES,
     NOTE_SCHEMA,
@@ -16,7 +19,9 @@ from sdlc.crew.models import (
     TurnBeat,
     TurnRecord,
 )
-from sdlc.models import HarnessKind, HarnessRunResult
+from sdlc.models import (
+    HarnessRunResult,
+)
 
 
 def _note(**kw):

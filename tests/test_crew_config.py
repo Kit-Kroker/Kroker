@@ -7,8 +7,10 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from sdlc.core.models import (
+    HarnessKind,
+)
 from sdlc.crew.config import CrewLayout, CrewRole
-from sdlc.models import HarnessKind
 
 
 def test_crew_kind_exists():

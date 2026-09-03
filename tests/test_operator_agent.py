@@ -84,8 +84,10 @@ async def test_the_orientation_line_reaches_the_prompt(monkeypatch):
         async def snapshot(self):
             from datetime import datetime
 
+            from sdlc.core.models import (
+                RunState,
+            )
             from sdlc.dashboard.fleet import FleetSnapshot
-            from sdlc.models import RunState
 
             at = datetime(2026, 8, 20, tzinfo=UTC)
             return FleetSnapshot(

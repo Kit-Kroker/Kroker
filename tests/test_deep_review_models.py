@@ -1,7 +1,9 @@
+from sdlc.core.models import (
+    PipelineConfig,
+)
 from sdlc.models import (
     DeepReviewReport,
     IntegrityFlag,
-    PipelineConfig,
     ReviewFinding,
     TaskResult,
 )

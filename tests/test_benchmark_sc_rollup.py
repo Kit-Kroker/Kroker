@@ -14,7 +14,12 @@ from sdlc.benchmarks.sc_rollup import (
     render_sc_rollup_json,
     render_sc_rollup_markdown,
 )
-from sdlc.models import ClarificationOutcome, GateOutcomeSummary, HarnessKind, RunSummary
+from sdlc.core.models import (
+    ClarificationOutcome,
+    GateOutcomeSummary,
+    HarnessKind,
+    RunSummary,
+)
 
 T = datetime(2026, 8, 3, 10, tzinfo=UTC)
 

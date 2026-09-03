@@ -2,7 +2,11 @@
 
 from datetime import UTC
 
-from sdlc.models import PipelineConfig, RoleUsage, RunSummary
+from sdlc.core.models import (
+    PipelineConfig,
+    RoleUsage,
+    RunSummary,
+)
 from sdlc.observability.usage import merge_usage
 
 

@@ -3,7 +3,12 @@ import pytest
 from sdlc.agents.loader import RegistryError
 from sdlc.benchmarks.models import BenchmarkCell, CaseSpec
 from sdlc.benchmarks.workflow import _cell_config
-from sdlc.models import HarnessKind, IdeaBrief, PipelineConfig, ProjectMode
+from sdlc.core.models import (
+    HarnessKind,
+    IdeaBrief,
+    PipelineConfig,
+    ProjectMode,
+)
 
 
 def _spec():

@@ -15,11 +15,13 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.activities import CodingTaskInput, evaluate_gate
+from sdlc.core.models import (
+    GateDecision,
+    GateOutcome,
+)
 from sdlc.models import (
     ContainmentLayer,
     DeferredToolUse,
-    GateDecision,
-    GateOutcome,
     HarnessRunResult,
     ToolDenial,
 )

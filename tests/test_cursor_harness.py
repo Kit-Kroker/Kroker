@@ -1,8 +1,10 @@
 import json
 
+from sdlc.core.models import (
+    HarnessKind,
+)
 from sdlc.harness.adapters import HARNESSES, CursorHarness, HarnessRequest
 from sdlc.harness.session import digest_of
-from sdlc.models import HarnessKind
 
 
 def test_cursor_parse_extracts_tokens_and_cost():

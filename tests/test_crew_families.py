@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import pytest
 
+from sdlc.core.models import (
+    HarnessKind,
+)
 from sdlc.crew.config import CrewRole
 from sdlc.crew.loader import CrewConfigError, check_crew_families
-from sdlc.models import HarnessKind
 
 
 def _role(name, model, writes=False, harness=HarnessKind.OPENCODE):

@@ -10,7 +10,13 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..models import ArtifactRef, HarnessKind, HarnessRunResult
+from ..core.models import (
+    ArtifactRef,
+    HarnessKind,
+)
+from ..models import (
+    HarnessRunResult,
+)
 
 NOTE_SCHEMA = "notes-v1"
 # A note records decisions the diff cannot state. A model that inflates it is

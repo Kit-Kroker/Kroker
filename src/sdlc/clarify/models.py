@@ -8,7 +8,12 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from ..models import ClarificationDimension, OpenQuestion
+from ..core.models import (
+    ClarificationDimension,
+)
+from ..models import (
+    OpenQuestion,
+)
 
 
 class ClarifyRoute(BaseModel):

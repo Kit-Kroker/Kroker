@@ -11,7 +11,9 @@ from sdlc.benchmarks.models import (
     QualityScore,
     SpeedBag,
 )
-from sdlc.models import HarnessKind
+from sdlc.core.models import (
+    HarnessKind,
+)
 
 
 def _rec(

@@ -18,15 +18,17 @@ from temporalio.worker import Worker
 
 from sdlc.activities import evaluate_gate  # pure — reused, not faked
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
-from sdlc.models import (
+from sdlc.core.models import (
     GateConfig,
     GateDecision,
     GateOutcome,
     GatePolicy,
-    GroundedFinding,
     PipelineConfig,
-    ResearchBrief,
     ResearchConfig,
+)
+from sdlc.models import (
+    GroundedFinding,
+    ResearchBrief,
 )
 from sdlc.research.verify import verify_brief_activity
 from tests.fakes.canned import (

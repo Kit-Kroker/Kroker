@@ -27,8 +27,10 @@ from sdlc.assessment.scan.models import (
     SignalSource,
     family_of,
 )
+from sdlc.core.models import (
+    GatePolicy,
+)
 from sdlc.measurement import CollectionState, Measurement
-from sdlc.models import GatePolicy
 from sdlc.triage.models import Readiness, RepoTriage, Verdict
 from sdlc.workflows.assessment import (
     PHASE_OWNER,

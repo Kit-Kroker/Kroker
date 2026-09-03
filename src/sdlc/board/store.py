@@ -24,7 +24,12 @@ import sqlite3
 from datetime import UTC, datetime
 
 from ..artifacts.store import LocalFileStore
-from ..models import ArtifactRef, DevTask
+from ..core.models import (
+    ArtifactRef,
+)
+from ..models import (
+    DevTask,
+)
 from .models import (
     ArtifactStatus,
     ArtifactVersion,

@@ -22,7 +22,10 @@ def test_clarify_prompt_matches_what_the_workflow_sends():
     (benchmarks/workflow.py:157-158)."""
     import yaml
 
-    from sdlc.models import IdeaBrief, ProjectMode
+    from sdlc.core.models import (
+        IdeaBrief,
+        ProjectMode,
+    )
     from sdlc.prompts import clarify_prompt
 
     spec = yaml.safe_load(

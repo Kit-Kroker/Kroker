@@ -15,7 +15,12 @@ from __future__ import annotations
 from pydantic import BaseModel
 from temporalio import activity
 
-from ..models import ArtifactRef, DevTask
+from ..core.models import (
+    ArtifactRef,
+)
+from ..models import (
+    DevTask,
+)
 from .models import ArtifactStatus, TaskStatus
 from .store import BoardStore
 

@@ -16,7 +16,10 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field
 
-from ..models import IdeaBrief, ProjectMode
+from ..core.models import (
+    IdeaBrief,
+    ProjectMode,
+)
 from ..prompts import clarify_prompt, planner_prompt, qa_prompt
 
 # The six pure prompt-in/artifact-out proposers.

@@ -37,11 +37,13 @@ from sdlc.activities import (
     QAInput,
     evaluate_gate,
 )
-from sdlc.models import (
+from sdlc.core.models import (
     GateConfig,
     GateDecision,
     GateOutcome,
     GatePolicy,
+)
+from sdlc.models import (
     QAReport,
 )
 from sdlc.notify.contract import NotifyInput, Results

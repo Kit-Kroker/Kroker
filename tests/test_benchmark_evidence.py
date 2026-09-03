@@ -11,7 +11,10 @@ from sdlc.benchmarks.models import (
     SpeedBag,
 )
 from sdlc.benchmarks.recorder import RecordStore
-from sdlc.models import HarnessKind, RunSummary
+from sdlc.core.models import (
+    HarnessKind,
+    RunSummary,
+)
 
 T = datetime(2026, 8, 3, 10, tzinfo=UTC)
 

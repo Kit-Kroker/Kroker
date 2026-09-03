@@ -17,8 +17,13 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
+from .core.models import (
+    gate_key,
+)
 from .gate import CheckResult
-from .models import OpenQuestion, gate_key
+from .models import (
+    OpenQuestion,
+)
 
 
 class ClarifyPending(BaseModel):

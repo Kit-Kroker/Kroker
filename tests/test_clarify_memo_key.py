@@ -24,9 +24,11 @@ from test_factory_purity import FEATURE_PY, _load_class, _methods
 from sdlc.assessment.scan.models import Confidence
 from sdlc.clarify.prompts import probe_prompt_digest
 from sdlc.context.models import CodebaseMap, MapModule
+from sdlc.core.models import (
+    PipelineConfig,
+)
 from sdlc.measurement import Measurement
 from sdlc.memoization.cache import content_key
-from sdlc.models import PipelineConfig
 from sdlc.workflows.feature import _clarify_memo_extra
 
 

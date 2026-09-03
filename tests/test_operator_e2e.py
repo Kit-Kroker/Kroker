@@ -15,8 +15,13 @@ import pytest
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
+from sdlc.core.models import (
+    IdeaBrief,
+    MemoryConfig,
+    PipelineConfig,
+    ProjectMode,
+)
 from sdlc.dashboard.fleet import FleetPoller
-from sdlc.models import IdeaBrief, MemoryConfig, PipelineConfig, ProjectMode
 from sdlc.operator import tools
 from sdlc.operator.deps import OperatorDeps
 from sdlc.workflows.feature import FeatureWorkflow

@@ -4,7 +4,9 @@ model explicitly named in EVERY arm."""
 
 from __future__ import annotations
 
-from ..models import HarnessKind
+from ..core.models import (
+    HarnessKind,
+)
 from .models import Arm, BenchmarkCell, CaseSpec
 
 

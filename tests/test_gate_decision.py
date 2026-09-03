@@ -1,4 +1,8 @@
-from sdlc.models import GateDecision, GateOutcome, gate_key
+from sdlc.core.models import (
+    GateDecision,
+    GateOutcome,
+    gate_key,
+)
 
 
 def test_approve_outcome_sets_approved_property():

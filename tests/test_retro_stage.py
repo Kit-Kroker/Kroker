@@ -15,7 +15,10 @@ from temporalio.worker import Worker
 
 from sdlc.activities import evaluate_gate
 from sdlc.artifacts.retention import RetentionInput
-from sdlc.models import GateDecision, GateOutcome
+from sdlc.core.models import (
+    GateDecision,
+    GateOutcome,
+)
 from sdlc.observability.activities import RunExportInput, export_run_artifacts
 from tests.fakes.canned import AGENT_SPECS, QUESTION_IDS, e2e_config, greenfield_idea
 from tests.fakes.fake_activities import GIT_FAKES, git_fakes_except

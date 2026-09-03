@@ -7,8 +7,10 @@ from sdlc.channels.contract import (
     default_render,
     default_translate,
 )
+from sdlc.core.models import (
+    GateOutcome,
+)
 from sdlc.gate import CheckClass, CheckResult
-from sdlc.models import GateOutcome
 from sdlc.pending import (
     ClarifyPending,
     MergeGatePending,

@@ -20,7 +20,9 @@ from typing import Literal
 
 from pydantic import BaseModel, TypeAdapter
 
-from ..models import GateOutcome
+from ..core.models import (
+    GateOutcome,
+)
 from ..pending import ClarifyPending, PendingDecision
 from .contract import Channel, ReferenceChannel, Reply
 

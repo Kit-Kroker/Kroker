@@ -12,8 +12,16 @@ import pytest
 from test_factory_purity import FEATURE_PY, _load_class, _methods
 
 from sdlc.clarify.models import ClarifyRoute, ProbeResult
-from sdlc.models import ClarificationDimension as CD
-from sdlc.models import ClarifiedRequirements, OpenQuestion, ProjectMode
+from sdlc.core.models import (
+    ClarificationDimension as CD,
+)
+from sdlc.core.models import (
+    ProjectMode,
+)
+from sdlc.models import (
+    ClarifiedRequirements,
+    OpenQuestion,
+)
 from sdlc.workflows.feature import (
     _clarify_fanout,
     _probe_results_from,

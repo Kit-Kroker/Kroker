@@ -17,6 +17,11 @@ from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError, ApplicationError
 
 with workflow.unsafe.imports_passed_through():
+    from ..core.models import (
+        GatePolicy,
+        GateSettings,
+        HarnessKind,
+    )
     from ..crew.activities import (
         AGENT_FAILURE,
         CREW_CONTAINMENT_REFUSED,
@@ -33,9 +38,6 @@ with workflow.unsafe.imports_passed_through():
     from ..crew.models import CrewRunResult, RoundRecord, TurnRecord
     from ..models import (
         EscalationOutcome,
-        GatePolicy,
-        GateSettings,
-        HarnessKind,
         HarnessRunResult,
         ToolDenial,
         ToolEscalation,

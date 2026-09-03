@@ -29,12 +29,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..core.models import HarnessKind
 from ..memory.scrub import scrub
 from ..models import (
     ContainmentLayer,
     ContainmentReport,
     DeferredToolUse,
-    HarnessKind,
     HarnessRunResult,
     HarnessSession,
     SessionEvent,

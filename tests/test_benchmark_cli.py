@@ -72,7 +72,9 @@ def test_dispatch_score_also_writes_heatmap(tmp_path, monkeypatch):
         SpeedBag,
     )
     from sdlc.benchmarks.recorder import RecordStore
-    from sdlc.models import HarnessKind
+    from sdlc.core.models import (
+        HarnessKind,
+    )
 
     t = datetime(2026, 7, 24, 10)
     rec = BenchmarkRecord(
@@ -168,7 +170,9 @@ def test_dispatch_score_case_writes_all_four_matrices(tmp_path, monkeypatch):
         SpeedBag,
     )
     from sdlc.benchmarks.recorder import RecordStore
-    from sdlc.models import HarnessKind
+    from sdlc.core.models import (
+        HarnessKind,
+    )
 
     cases_dir = tmp_path / "cases"
     (cases_dir / "c1").mkdir(parents=True)

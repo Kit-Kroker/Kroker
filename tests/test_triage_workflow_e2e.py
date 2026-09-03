@@ -10,14 +10,14 @@ from temporalio import activity
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from sdlc.measurement import CollectionState, Measurement
-from sdlc.models import (
+from sdlc.core.models import (
     GateConfig,
     GateDecision,
     GateOutcome,
     GatePolicy,
     GateSettings,
 )
+from sdlc.measurement import CollectionState, Measurement
 from sdlc.triage.activities import (
     TriageDependencyInput,
     TriagePin,

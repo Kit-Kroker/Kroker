@@ -18,12 +18,14 @@ from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.usage import UsageLimits
 from temporalio import activity
 
+from ..core.models import (
+    RoleUsage,
+)
 from ..models import (
     Contradiction,
     Gap,
     ResearchBrief,
     ResearchPlan,
-    RoleUsage,
     SubQuestion,
     SubQuestionFinding,
 )

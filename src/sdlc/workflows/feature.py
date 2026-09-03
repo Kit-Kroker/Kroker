@@ -54,7 +54,7 @@ with workflow.unsafe.imports_passed_through():
     from ..agents.roles import (
         PROMPT_SHAS,
         STAGE_MODELS,
-        STAGE_ROLES,
+        resolve_role_model,
         t_adversary,
         t_analyst,
         t_architect,
@@ -105,6 +105,24 @@ with workflow.unsafe.imports_passed_through():
     from ..context.models import CodebaseMap
     from ..context.project import map_digest, project
     from ..context.render import render_for_prompt
+    from ..core.models import (
+        ArtifactRef,
+        ClarificationDimension,
+        ExecutionMode,
+        GateConfig,
+        GateDecision,
+        GateOutcome,
+        GatePolicy,
+        HarnessKind,
+        IdeaBrief,
+        PipelineConfig,
+        ProjectMode,
+        ResearchConfig,
+        RoleConfig,
+        RoleUsage,
+        RunState,
+        RunSummary,
+    )
     from ..crew.activities import LoadCrewInput, load_crew
     from ..gate import (
         CheckClass,
@@ -142,8 +160,6 @@ with workflow.unsafe.imports_passed_through():
     from ..models import (
         AnalysisReport,
         ArchitectureSpec,
-        ArtifactRef,
-        ClarificationDimension,
         ClarifiedRequirements,
         CoverageReport,
         DeepReviewReport,
@@ -152,31 +168,17 @@ with workflow.unsafe.imports_passed_through():
         DeployReport,
         DevTask,
         EscalationOutcome,
-        ExecutionMode,
         Gap,
-        GateConfig,
-        GateDecision,
-        GateOutcome,
-        GatePolicy,
         HandoffSummary,
-        HarnessKind,
-        IdeaBrief,
         ImplementationPlan,
         MemoryKind,
         MergeVerdict,
-        PipelineConfig,
         PlanDrift,
-        ProjectMode,
         RecallSnapshot,
         ResearchBrief,
-        ResearchConfig,
         ResearchPlan,
         RetainItem,
         ReviewReport,
-        RoleConfig,
-        RoleUsage,
-        RunState,
-        RunSummary,
         SecurityReport,
         SeededWork,
         SmokeCheck,
@@ -311,18 +313,6 @@ RESEARCH_SQ_ACT = workflow.ActivityConfig(
 RESEARCH_SYNTH_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=10), retry_policy=RetryPolicy(maximum_attempts=3)
 )
-
-
-def resolve_role_model(cfg: PipelineConfig, stage: str) -> str:
-    """The model this run uses for `stage`. A per-run override in cfg.roles
-    (keyed by the registry ROLE name) wins; otherwise the registry default
-    (STAGE_MODELS[stage]). Keyed by stage because STAGE_ROLES is the one place
-    stage↔role divergence is reconciled."""
-    role = STAGE_ROLES[stage]
-    rc = cfg.roles.get(role)
-    if rc is not None and rc.model is not None:
-        return rc.model
-    return STAGE_MODELS[stage]
 
 
 def _probe_results_from(

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Literal, cast
 
-from ..models import (
+from ..core.models import (
     ClarificationDimension,
     ClarificationOutcome,
     GateOutcomeSummary,

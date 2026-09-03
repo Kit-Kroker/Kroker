@@ -46,10 +46,13 @@ from sdlc.assessment.risk.models import (
     VulnerabilityClass,
 )
 from sdlc.assessment.scan.models import TestabilityFinding, testability_identity
+from sdlc.core.models import (
+    GateDecision,
+    GateOutcome,
+)
 from sdlc.dispositions.models import Disposition, FindingDisposition
 from sdlc.dispositions.store import BoardFindingDispositionStore
 from sdlc.measurement import CollectionState, Measurement
-from sdlc.models import GateDecision, GateOutcome
 from sdlc.triage.activities import TriagePin, TriagePinInput, TriageProbeInput, TriageSignalInput
 from sdlc.triage.models import SignalResult
 from sdlc.workflows.assessment import AssessmentInput, AssessmentWorkflow, risk_gate_skipped

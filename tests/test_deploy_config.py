@@ -6,7 +6,10 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from sdlc.models import DeployConfig, PipelineConfig
+from sdlc.core.models import (
+    DeployConfig,
+    PipelineConfig,
+)
 
 
 def test_deploy_is_disabled_by_default():

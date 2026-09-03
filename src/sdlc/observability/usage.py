@@ -4,7 +4,9 @@ testable outside the workflow sandbox."""
 
 from __future__ import annotations
 
-from ..models import RoleUsage
+from ..core.models import (
+    RoleUsage,
+)
 
 
 def merge_usage(

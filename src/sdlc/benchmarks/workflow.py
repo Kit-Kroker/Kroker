@@ -21,7 +21,7 @@ from temporalio.common import RetryPolicy
 with workflow.unsafe.imports_passed_through():
     from ..agents.loader import HARNESS_ROLES, validate_run_roles
     from ..agents.roles import STAGE_MODELS
-    from ..models import (
+    from ..core.models import (
         BenchmarkConfig,
         GateConfig,
         HarnessKind,

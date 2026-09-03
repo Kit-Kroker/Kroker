@@ -9,7 +9,9 @@ from sdlc.benchmarks.models import (
 )
 from sdlc.benchmarks.task_matrix import build_task_matrix
 from sdlc.benchmarks.tasks import TaskSpec, TaskSuite
-from sdlc.models import HarnessKind
+from sdlc.core.models import (
+    HarnessKind,
+)
 
 
 def _suite():

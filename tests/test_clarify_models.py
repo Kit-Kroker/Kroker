@@ -5,9 +5,11 @@ off disk and RunSummary.clarifications feeds the SC-4 rollup."""
 import pytest
 from pydantic import ValidationError
 
-from sdlc.models import (
+from sdlc.core.models import (
     ClarificationDimension,
     ClarificationOutcome,
+)
+from sdlc.models import (
     ClarifiedRequirements,
     OpenQuestion,
 )

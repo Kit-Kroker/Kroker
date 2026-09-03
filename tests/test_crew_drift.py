@@ -7,7 +7,9 @@ from __future__ import annotations
 
 from sdlc.benchmarks.drift import CODING_ACTIVITIES, _record_from_event
 from sdlc.benchmarks.models import BenchmarkOutcome
-from sdlc.models import HarnessKind
+from sdlc.core.models import (
+    HarnessKind,
+)
 
 
 def test_the_crew_turn_counts_as_a_coding_activity():

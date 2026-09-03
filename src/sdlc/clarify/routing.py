@@ -9,8 +9,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from ..models import ClarificationDimension as CD
-from ..models import ProjectMode
+from ..core.models import (
+    ClarificationDimension as CD,
+)
+from ..core.models import (
+    ProjectMode,
+)
 
 # The supervisor's two: answerable without reading any code.
 SUPERVISOR_DIMENSIONS: tuple[CD, ...] = (CD.FUNCTIONAL_INTENT, CD.BUSINESS_SEMANTICS)

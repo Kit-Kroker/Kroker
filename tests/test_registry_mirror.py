@@ -16,7 +16,11 @@ from sdlc.agents.loader import (
     _validate_pipeline_mirror,
     validate_registry,
 )
-from sdlc.models import HarnessKind, PipelineConfig, RoleConfig
+from sdlc.core.models import (
+    HarnessKind,
+    PipelineConfig,
+    RoleConfig,
+)
 
 
 def test_pipeline_default_roles_are_exactly_the_harness_roles():
@@ -88,7 +92,7 @@ def test_mirror_accepts_a_matching_crew_configured_pair(monkeypatch):
     """spec §5 layer 1: when a registry role opts into a crew and
     PipelineConfig's default is changed in the same commit, the boot check
     passes — layout and lead_harness mirror too, not just the triple."""
-    monkeypatch.setattr("sdlc.models.PipelineConfig", _CrewDefaultPipelineConfig)
+    monkeypatch.setattr("sdlc.core.models.PipelineConfig", _CrewDefaultPipelineConfig)
     _validate_pipeline_mirror(_crew_registry())  # must not raise
 
 

@@ -14,7 +14,14 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from ..agents.loader import HARNESS_ROLES, PROPOSER_ROLES
-from ..models import GatePolicy, HarnessKind, PlanDrift, SessionDigest
+from ..core.models import (
+    GatePolicy,
+    HarnessKind,
+)
+from ..models import (
+    PlanDrift,
+    SessionDigest,
+)
 
 # Who scored a stage attempt. The set is pinned by tests/test_judge_literal.py;
 # _stage_record threads a plain str and relies on runtime validation, so

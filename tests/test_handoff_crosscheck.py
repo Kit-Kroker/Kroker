@@ -7,11 +7,18 @@ extractor attributing a change to a file the task never opened; the second
 stops it inventing the quote that supports the claim.
 """
 
+from sdlc.core.models import (
+    HarnessKind,
+)
 from sdlc.grounding import Profile, verify_quote
 from sdlc.handoff import claim_survival_score, cross_check_claims
 from sdlc.harness.session import session_text_from_jsonl, session_to_jsonl
 from sdlc.measurement import CollectionState
-from sdlc.models import HandoffClaim, HarnessKind, HarnessSession, SessionEvent
+from sdlc.models import (
+    HandoffClaim,
+    HarnessSession,
+    SessionEvent,
+)
 
 
 def _render(events):

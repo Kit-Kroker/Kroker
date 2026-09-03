@@ -35,7 +35,12 @@ from dotenv import load_dotenv
 from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 
-from .models import GateOutcome, IdeaBrief, PipelineConfig, ProjectMode
+from .core.models import (
+    GateOutcome,
+    IdeaBrief,
+    PipelineConfig,
+    ProjectMode,
+)
 from .naming import slug
 from .worker import TASK_QUEUE
 from .workflows.assessment import AssessmentInput, AssessmentWorkflow

@@ -7,8 +7,10 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from sdlc.channels.inbox import RunInbox
+from sdlc.core.models import (
+    RunState,
+)
 from sdlc.dashboard.fleet import FleetSnapshot
-from sdlc.models import RunState
 from sdlc.operator import tools
 from sdlc.operator.deps import OperatorDeps
 from sdlc.operator.errors import ToolError
@@ -33,7 +35,9 @@ def a_run(run_id="r1", stage="dev", status="running", cost=None):
 def _a_summary(run_id):
     """A closed-run entry, for asserting that closures elsewhere in the fleet
     do not end a run-scoped wait."""
-    from sdlc.models import RunSummary
+    from sdlc.core.models import (
+        RunSummary,
+    )
 
     return RunSummary(
         run_id=run_id,

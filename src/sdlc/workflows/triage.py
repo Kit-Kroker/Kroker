@@ -19,8 +19,12 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
+    from ..core.models import (
+        GateDecision,
+        GateOutcome,
+        GateSettings,
+    )
     from ..measurement import CollectionState, Measurement
-    from ..models import GateDecision, GateOutcome, GateSettings
     from ..pending import GateContext
     from ..triage.activities import (
         TriageDependencyInput,

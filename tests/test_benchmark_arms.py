@@ -1,5 +1,7 @@
 from sdlc.benchmarks.models import Arm, BenchmarkCell, CaseSpec
-from sdlc.models import HarnessKind
+from sdlc.core.models import (
+    HarnessKind,
+)
 
 
 def test_arm_resolve_named_only():

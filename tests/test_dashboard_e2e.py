@@ -15,8 +15,13 @@ import pytest
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
+from sdlc.core.models import (
+    IdeaBrief,
+    PipelineConfig,
+    ProjectMode,
+    RunState,
+)
 from sdlc.dashboard.fleet import fetch_fleet
-from sdlc.models import IdeaBrief, PipelineConfig, ProjectMode, RunState
 from sdlc.workflows.feature import FeatureWorkflow
 
 pytestmark = pytest.mark.temporal

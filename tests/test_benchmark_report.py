@@ -11,7 +11,9 @@ from sdlc.benchmarks.models import (
 )
 from sdlc.benchmarks.recorder import RecordStore
 from sdlc.benchmarks.report import aggregate, render_markdown
-from sdlc.models import HarnessKind
+from sdlc.core.models import (
+    HarnessKind,
+)
 
 
 def _rec(model, q, usd, secs):
@@ -155,7 +157,9 @@ def test_scan_case_records_reads_across_multiple_bench_run_ids(tmp_path):
     )
     from sdlc.benchmarks.recorder import RecordStore
     from sdlc.benchmarks.report import scan_case_records
-    from sdlc.models import HarnessKind
+    from sdlc.core.models import (
+        HarnessKind,
+    )
 
     t = datetime(2026, 7, 20, 10)
 
@@ -194,7 +198,9 @@ def test_scan_case_records_filters_other_cases(tmp_path):
     )
     from sdlc.benchmarks.recorder import RecordStore
     from sdlc.benchmarks.report import scan_case_records
-    from sdlc.models import HarnessKind
+    from sdlc.core.models import (
+        HarnessKind,
+    )
 
     t = datetime(2026, 7, 20, 10)
     rec = BenchmarkRecord(

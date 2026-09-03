@@ -11,7 +11,9 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from ..models import HarnessKind
+from ..core.models import (
+    HarnessKind,
+)
 from .models import (
     BenchmarkOutcome,
     BenchmarkRecord,

@@ -27,7 +27,12 @@ from pydantic import BaseModel
 from ..channels.contract import Reply, default_render
 from ..channels.transport import NoMatch, resolve_key, submit
 from ..cli import slug
-from ..models import GateOutcome, IdeaBrief, PipelineConfig, ProjectMode
+from ..core.models import (
+    GateOutcome,
+    IdeaBrief,
+    PipelineConfig,
+    ProjectMode,
+)
 from .channel import DashboardChannel
 from .fleet import FleetPoller, FleetSnapshot
 

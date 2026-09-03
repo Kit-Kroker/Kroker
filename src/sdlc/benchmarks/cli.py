@@ -14,8 +14,11 @@ from pathlib import Path
 
 import yaml
 
+from ..core.models import (
+    GatePolicy,
+    HarnessKind,
+)
 from ..crew.loader import preflight_crew
-from ..models import GatePolicy, HarnessKind
 from ..worker import TASK_QUEUE
 from .matrix import expand_matrix
 from .models import CaseSpec

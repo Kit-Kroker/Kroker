@@ -8,7 +8,9 @@ one is the empty string, never None."""
 
 from datetime import UTC, datetime
 
-from sdlc.models import ClarificationDimension as CD
+from sdlc.core.models import (
+    ClarificationDimension as CD,
+)
 from sdlc.observability.summary import build_run_summary
 from sdlc.observability.trace import RunEvent, RunEventKind
 

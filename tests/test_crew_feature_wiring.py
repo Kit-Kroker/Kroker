@@ -33,6 +33,13 @@ from temporalio.worker import Worker
 
 from sdlc.activities import evaluate_gate
 from sdlc.benchmarks.models import BenchmarkRecord
+from sdlc.core.models import (
+    BenchmarkConfig,
+    GateConfig,
+    GatePolicy,
+    HarnessKind,
+    RoleConfig,
+)
 from sdlc.crew.activities import (
     CheckpointInput,
     CrewTurnInput,
@@ -44,12 +51,7 @@ from sdlc.crew.activities import (
 )
 from sdlc.crew.models import TurnRecord
 from sdlc.models import (
-    BenchmarkConfig,
-    GateConfig,
-    GatePolicy,
-    HarnessKind,
     HarnessRunResult,
-    RoleConfig,
 )
 from sdlc.notify.contract import NotifyInput, Results
 from sdlc.observability.activities import export_run_artifacts

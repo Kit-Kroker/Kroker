@@ -35,10 +35,12 @@ from sdlc.board.activities import (
 )
 from sdlc.context.delta import DELTA_CHECK
 from sdlc.context.models import RepoObservation
+from sdlc.core.models import (
+    ArtifactRef,
+)
 from sdlc.gate import CheckClass, CheckResult, build_check
 from sdlc.measurement import CollectionState, Measurement
 from sdlc.models import (
-    ArtifactRef,
     CoverageReport,
     HarnessRunResult,
     QAReport,

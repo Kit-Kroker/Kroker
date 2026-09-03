@@ -3,7 +3,12 @@ does not depend on the feature pipeline's PipelineConfig."""
 
 from __future__ import annotations
 
-from sdlc.models import GateConfig, GatePolicy, GateSettings, PipelineConfig
+from sdlc.core.models import (
+    GateConfig,
+    GatePolicy,
+    GateSettings,
+    PipelineConfig,
+)
 
 
 def test_gate_settings_defaults_are_conservative():

@@ -19,7 +19,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from enum import StrEnum
 
-from ..models import DeployConfig, DeployPlan
+from ..core.models import (
+    DeployConfig,
+)
+from ..models import (
+    DeployPlan,
+)
 
 
 class DeployKind(StrEnum):

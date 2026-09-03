@@ -6,6 +6,9 @@ from pathlib import Path
 import pytest
 
 from sdlc.activities import CodingTaskInput, _resolve_containment
+from sdlc.core.models import (
+    HarnessKind,
+)
 from sdlc.harness.adapters import (
     HARNESSES,
     ClaudeCodeHarness,
@@ -14,7 +17,10 @@ from sdlc.harness.adapters import (
     OpenCodeHarness,
 )
 from sdlc.harness.containment import ContainmentError
-from sdlc.models import ContainmentLayer, HarnessKind, ToolGrant
+from sdlc.models import (
+    ContainmentLayer,
+    ToolGrant,
+)
 
 POLICY_YAML = """
 version: 1

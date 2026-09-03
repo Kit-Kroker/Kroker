@@ -7,6 +7,14 @@ contract, and clean QA/review so the run reaches deploy.
 
 from __future__ import annotations
 
+from sdlc.core.models import (
+    GateConfig,
+    GatePolicy,
+    IdeaBrief,
+    MemoryConfig,
+    PipelineConfig,
+    ProjectMode,
+)
 from sdlc.models import (
     AnalysisReport,
     ArchitectureDecision,
@@ -14,15 +22,9 @@ from sdlc.models import (
     ClarifiedRequirements,
     CriterionTrace,
     DevTask,
-    GateConfig,
-    GatePolicy,
-    IdeaBrief,
     ImplementationPlan,
-    MemoryConfig,
     MergeVerdict,
     OpenQuestion,
-    PipelineConfig,
-    ProjectMode,
     QAReport,
     ReviewReport,
     ValidationContract,

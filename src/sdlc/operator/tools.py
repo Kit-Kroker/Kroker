@@ -23,7 +23,12 @@ from ..board.models import TaskStatus
 from ..board.store import NotFoundError
 from ..channels.contract import ActorChannel, Reply, default_render
 from ..channels.transport import resolve_key, submit
-from ..models import GateOutcome, IdeaBrief, PipelineConfig, ProjectMode
+from ..core.models import (
+    GateOutcome,
+    IdeaBrief,
+    PipelineConfig,
+    ProjectMode,
+)
 from ..naming import slug
 from . import render
 from .deps import OperatorDeps

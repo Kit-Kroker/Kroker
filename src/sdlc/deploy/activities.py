@@ -17,8 +17,10 @@ from pydantic import BaseModel
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
-from ..models import (
+from ..core.models import (
     DeployConfig,
+)
+from ..models import (
     DeployPlan,
     SmokeCheckResult,
     SmokeState,

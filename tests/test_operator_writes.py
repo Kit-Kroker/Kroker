@@ -3,7 +3,10 @@
 import pytest
 
 from sdlc.channels.transport import SubmitResult
-from sdlc.models import GateOutcome, ProjectMode
+from sdlc.core.models import (
+    GateOutcome,
+    ProjectMode,
+)
 from sdlc.operator import tools
 from sdlc.operator.deps import OperatorDeps
 from sdlc.operator.errors import ToolError

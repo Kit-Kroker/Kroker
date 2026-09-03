@@ -1,6 +1,9 @@
 import pathlib
 
-from sdlc.models import PipelineConfig, gate_key
+from sdlc.core.models import (
+    PipelineConfig,
+    gate_key,
+)
 
 SRC = pathlib.Path("src/sdlc/workflows/gates.py")
 

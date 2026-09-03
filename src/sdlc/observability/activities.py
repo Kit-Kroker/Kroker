@@ -10,7 +10,9 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from temporalio import activity
 
-from ..models import RunSummary
+from ..core.models import (
+    RunSummary,
+)
 from .export import render_events_jsonl, render_report_html
 from .trace import RunEvent
 

@@ -9,8 +9,11 @@ from .agents.loader import (
     load_registry,
     validate_run_roles,
 )
+from .core.models import (
+    HarnessKind,
+    RoleConfig,
+)
 from .crew.loader import preflight_crew
-from .models import HarnessKind, RoleConfig
 
 
 def parse_role_models(pairs: list[str]) -> dict[str, str]:

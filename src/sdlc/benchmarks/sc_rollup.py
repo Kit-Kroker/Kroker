@@ -14,7 +14,9 @@ from html import escape
 
 from pydantic import BaseModel, Field
 
-from ..models import RunSummary
+from ..core.models import (
+    RunSummary,
+)
 from .models import BenchmarkOutcome, BenchmarkRecord
 
 # Below this many runs a percentage is noise dressed as a result. A single

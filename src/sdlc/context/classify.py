@@ -8,7 +8,9 @@ declaration survives contact with the tree.
 
 from __future__ import annotations
 
-from ..models import ProjectMode
+from ..core.models import (
+    ProjectMode,
+)
 from .models import IntakeVerdict, RepoObservation
 
 

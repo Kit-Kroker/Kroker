@@ -22,7 +22,7 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from ..activities import VerifyBranchInput, build_verification_branch
-    from ..models import (
+    from ..core.models import (
         GateConfig,
         GatePolicy,
         GateSettings,

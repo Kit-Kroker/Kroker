@@ -3,6 +3,9 @@ only, never a subprocess. Same rule and same shape as toolchain/adapters.py."""
 
 from __future__ import annotations
 
+from sdlc.core.models import (
+    DeployConfig,
+)
 from sdlc.deploy.adapters import (
     ADAPTERS,
     ComposeAdapter,
@@ -10,7 +13,10 @@ from sdlc.deploy.adapters import (
     ScriptAdapter,
     resolve,
 )
-from sdlc.models import DeployConfig, DeployPlan, FeatureFlag
+from sdlc.models import (
+    DeployPlan,
+    FeatureFlag,
+)
 
 
 def _plan(**over) -> DeployPlan:

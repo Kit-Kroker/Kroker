@@ -15,11 +15,13 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.activities import evaluate_gate
-from sdlc.models import (
+from sdlc.core.models import (
     GateConfig,
     GateDecision,
     GateOutcome,
     GatePolicy,
+)
+from sdlc.models import (
     SmokeState,
 )
 from sdlc.observability.activities import export_run_artifacts

@@ -20,6 +20,7 @@ from temporalio.workflow import ActivityConfig
 
 from ..clarify.models import ClarifyRoute, ProbeResult
 from ..clarify.prompts import PROBE_SYSTEM, ROUTE_SCOPE
+from ..core.models import PipelineConfig
 from .loader import build_agents, load_registry
 
 AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=10))
@@ -169,6 +170,19 @@ STAGE_ROLES: dict[str, str] = {
 STAGE_MODELS: dict[str, str] = {
     stage: _model(role) for stage, role in STAGE_ROLES.items() if role in REGISTRY
 }
+
+
+def resolve_role_model(cfg: PipelineConfig, stage: str) -> str:
+    """The model this run uses for `stage`. A per-run override in cfg.roles
+    (keyed by the registry ROLE name) wins; otherwise the registry default
+    (STAGE_MODELS[stage]). Keyed by stage because STAGE_ROLES is the one place
+    stage↔role divergence is reconciled."""
+    role = STAGE_ROLES[stage]
+    rc = cfg.roles.get(role)
+    if rc is not None and rc.model is not None:
+        return rc.model
+    return STAGE_MODELS[stage]
+
 
 # Prompt text now lives in agents/<role>/instructions.md (E-2). The hash is
 # over the same bytes it was over when the text was a Python constant --

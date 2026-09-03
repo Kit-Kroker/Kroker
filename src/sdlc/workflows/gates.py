@@ -26,7 +26,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
-    from ..models import (
+    from ..core.models import (
         GateConfig,
         GateDecision,
         GateOutcome,

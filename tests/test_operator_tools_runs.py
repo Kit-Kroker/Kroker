@@ -5,8 +5,10 @@ from datetime import UTC, datetime
 import pytest
 
 from sdlc.channels.inbox import RunInbox
+from sdlc.core.models import (
+    RunState,
+)
 from sdlc.dashboard.fleet import FleetSnapshot
-from sdlc.models import RunState
 from sdlc.operator import tools
 from sdlc.operator.deps import OperatorDeps
 from sdlc.operator.errors import ToolError

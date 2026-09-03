@@ -11,7 +11,9 @@ from sdlc.clarify.prompts import (
     probe_prompt,
     probe_prompt_digest,
 )
-from sdlc.models import ClarificationDimension
+from sdlc.core.models import (
+    ClarificationDimension,
+)
 
 # ~4 chars per token; 512 tokens is the documented cache floor. 2400 chars
 # gives headroom without being precious. Same constant as research's guard.

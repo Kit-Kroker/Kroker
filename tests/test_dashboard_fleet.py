@@ -7,8 +7,11 @@ from types import SimpleNamespace
 
 import pytest
 
+from sdlc.core.models import (
+    RunState,
+    RunSummary,
+)
 from sdlc.dashboard.fleet import FleetSnapshot, fetch_fleet
-from sdlc.models import RunState, RunSummary
 from sdlc.pending import ClarifyPending, StageGatePending
 
 AT = datetime(2026, 8, 18, 9, 0, tzinfo=UTC)

@@ -7,12 +7,15 @@ other artifact. Byte-capped so a large transcript cannot blow the
 proposer's context — the workflow appends the inline SessionDigest when a
 read is truncated so aggregate signals survive.
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel
 from temporalio import activity
 
-from ..models import ArtifactRef
+from ..core.models import (
+    ArtifactRef,
+)
 from .store import ref_to_path
 
 DEEP_REVIEW_MAX_BYTES = 512 * 1024
@@ -30,8 +33,8 @@ class LoadSessionResult(BaseModel):
 @activity.defn
 async def load_session(inp: LoadSessionInput) -> LoadSessionResult:
     assert inp.ref.kind == "harness_session", (
-        f"load_session reads only scrubbed harness sessions, got "
-        f"kind={inp.ref.kind!r}")
+        f"load_session reads only scrubbed harness sessions, got kind={inp.ref.kind!r}"
+    )
     data = ref_to_path(inp.ref).read_bytes()
     truncated = len(data) > DEEP_REVIEW_MAX_BYTES
     text = data[:DEEP_REVIEW_MAX_BYTES].decode("utf-8", errors="replace")

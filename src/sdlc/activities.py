@@ -31,6 +31,7 @@ from .artifacts.capture import capture_session
 from .assessment.scan.sources import SOURCE_EXTENSIONS
 from .context.delta import DELTA_CHECK, check_delta
 from .context.models import RepoObservation
+from .core.models import HarnessKind
 from .gate import (
     CheckClass,
     CheckResult,
@@ -45,7 +46,6 @@ from .measurement import CollectionState, Measurement
 from .models import (
     BrownfieldDelta,
     CoverageReport,
-    HarnessKind,
     HarnessRunResult,
     QAReport,
     SecurityFinding,

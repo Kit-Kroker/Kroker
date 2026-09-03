@@ -3,8 +3,10 @@
 from datetime import UTC, datetime
 
 from sdlc.channels.inbox import RunInbox
+from sdlc.core.models import (
+    RunState,
+)
 from sdlc.dashboard.fleet import FleetSnapshot
-from sdlc.models import RunState
 from sdlc.operator import render
 from sdlc.pending import ClarifyPending, StageGatePending
 

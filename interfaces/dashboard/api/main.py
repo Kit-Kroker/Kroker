@@ -23,9 +23,12 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 
 from sdlc.board.api import create_app
 from sdlc.board.store import BoardStore
+from sdlc.core.models import (
+    IdeaBrief,
+    PipelineConfig,
+)
 from sdlc.dashboard.api import create_router
 from sdlc.dashboard.fleet import FleetPoller
-from sdlc.models import IdeaBrief, PipelineConfig
 from sdlc.observability.logfire_setup import configure as configure_logfire
 from sdlc.operator.agent import ChatConfigError, build_chat_app
 from sdlc.operator.deps import OperatorDeps

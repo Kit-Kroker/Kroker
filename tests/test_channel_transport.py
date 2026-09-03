@@ -93,7 +93,9 @@ def test_describe_gate_and_clarify():
 
 from sdlc.channels.contract import Reply
 from sdlc.channels.transport import resolve, submit
-from sdlc.models import GateOutcome
+from sdlc.core.models import (
+    GateOutcome,
+)
 
 
 class StubHandle:

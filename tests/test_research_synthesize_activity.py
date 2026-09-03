@@ -9,11 +9,13 @@ verifier to catch it."""
 import pytest
 from pydantic_ai.models.test import TestModel
 
+from sdlc.core.models import (
+    RoleUsage,
+)
 from sdlc.models import (
     ConsultedSource,
     GroundedFinding,
     ResearchBrief,
-    RoleUsage,
     SubQuestion,
     SubQuestionFinding,
 )

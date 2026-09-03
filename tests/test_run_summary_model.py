@@ -1,11 +1,13 @@
 from datetime import UTC, datetime
 
-from sdlc.models import (
+from sdlc.core.models import (
     ClarificationOutcome,
     GateOutcomeSummary,
-    MemoryKind,
     RunSummary,
     StageOutcome,
+)
+from sdlc.models import (
+    MemoryKind,
 )
 
 

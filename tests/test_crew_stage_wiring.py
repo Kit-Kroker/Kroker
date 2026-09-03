@@ -7,9 +7,12 @@ from __future__ import annotations
 
 import pytest
 
+from sdlc.core.models import (
+    HarnessKind,
+    RoleConfig,
+)
 from sdlc.crew.config import CrewLayout, CrewRole
 from sdlc.crew.loader import resolve_crew_roles
-from sdlc.models import HarnessKind, RoleConfig
 
 LAYOUT = CrewLayout(
     layout="code",

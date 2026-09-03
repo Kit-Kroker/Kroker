@@ -4,7 +4,9 @@ to pre-E-85, so the benchmark can run both arms."""
 import pytest
 from pydantic import ValidationError
 
-from sdlc.models import PipelineConfig
+from sdlc.core.models import (
+    PipelineConfig,
+)
 
 
 def test_probes_are_off_by_default():

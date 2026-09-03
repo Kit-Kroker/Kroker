@@ -33,8 +33,13 @@ from sdlc.activities import (
     run_coding_task,
     setup_integration_branch,
 )
+from sdlc.core.models import (
+    HarnessKind,
+)
 from sdlc.harness.adapters import CodingHarness
-from sdlc.models import HarnessKind, HarnessRunResult
+from sdlc.models import (
+    HarnessRunResult,
+)
 
 
 class _StubHarness(CodingHarness):

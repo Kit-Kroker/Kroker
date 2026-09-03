@@ -5,8 +5,13 @@ import sys
 
 import pytest
 
+from sdlc.core.models import (
+    HarnessKind,
+)
 from sdlc.harness.adapters import CodingHarness, HarnessRequest, _log_live_event
-from sdlc.models import HarnessKind, HarnessRunResult
+from sdlc.models import (
+    HarnessRunResult,
+)
 from tests.conftest import _wait_for_pidfile_async, _wait_until_dead
 
 

@@ -21,7 +21,9 @@ from sdlc.benchmarks.models import (
     SpeedBag,
     WasteBag,
 )
-from sdlc.models import HarnessKind
+from sdlc.core.models import (
+    HarnessKind,
+)
 
 T = datetime(2026, 8, 3, 10, tzinfo=UTC)
 

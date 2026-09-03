@@ -1,6 +1,9 @@
+from sdlc.agents.roles import resolve_role_model
+from sdlc.core.models import (
+    PipelineConfig,
+    RoleConfig,
+)
 from sdlc.memoization.cache import content_key
-from sdlc.models import PipelineConfig, RoleConfig
-from sdlc.workflows.feature import resolve_role_model
 
 
 def test_resolver_falls_back_to_registry_default():

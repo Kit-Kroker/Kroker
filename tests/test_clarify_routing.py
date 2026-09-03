@@ -12,8 +12,12 @@ from sdlc.clarify.routing import (
     live_dimensions,
     permitted_dimensions,
 )
-from sdlc.models import ClarificationDimension as CD
-from sdlc.models import ProjectMode
+from sdlc.core.models import (
+    ClarificationDimension as CD,
+)
+from sdlc.core.models import (
+    ProjectMode,
+)
 
 ALL = list(CD)
 

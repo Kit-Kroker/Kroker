@@ -14,7 +14,9 @@ from sdlc.benchmarks.models import (
     WasteBag,
 )
 from sdlc.benchmarks.score import default_out_dir, load_config_weights, parse_weights, write_score
-from sdlc.models import HarnessKind
+from sdlc.core.models import (
+    HarnessKind,
+)
 
 T = datetime(2026, 8, 3, 10, tzinfo=UTC)
 

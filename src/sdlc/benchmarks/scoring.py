@@ -10,7 +10,9 @@ from __future__ import annotations
 from collections import defaultdict
 from statistics import mean
 
-from ..models import HarnessKind
+from ..core.models import (
+    HarnessKind,
+)
 from .models import BenchmarkRecord, BenchmarkScope, BenchmarkSummary, CompositeWeights
 
 

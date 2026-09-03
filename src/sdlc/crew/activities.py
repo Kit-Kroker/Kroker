@@ -14,8 +14,14 @@ from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
 from ..artifacts.capture import capture_session
+from ..core.models import (
+    HarnessKind,
+)
 from ..harness.adapters import HARNESSES, HarnessRequest
-from ..models import HarnessKind, HarnessRunResult, ToolGrant
+from ..models import (
+    HarnessRunResult,
+    ToolGrant,
+)
 from .config import CrewLayout, CrewRole
 from .models import (
     MAX_NOTE_BYTES,

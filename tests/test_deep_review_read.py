@@ -9,7 +9,9 @@ from sdlc.artifacts.read import (
     load_session,
 )
 from sdlc.artifacts.store import LocalFileStore
-from sdlc.models import ArtifactRef
+from sdlc.core.models import (
+    ArtifactRef,
+)
 
 
 def test_load_session_round_trips_scrubbed_jsonl(tmp_path):

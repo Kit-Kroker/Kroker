@@ -1,4 +1,9 @@
-from sdlc.models import HarnessKind, HarnessRunResult
+from sdlc.core.models import (
+    HarnessKind,
+)
+from sdlc.models import (
+    HarnessRunResult,
+)
 
 
 def _res(**kw):

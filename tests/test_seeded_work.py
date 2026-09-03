@@ -91,7 +91,10 @@ async def test_seeded_run_skips_clarify_architect_and_planner():
     from temporalio.worker import Worker
 
     from sdlc.activities import evaluate_gate
-    from sdlc.models import GateDecision, GateOutcome
+    from sdlc.core.models import (
+        GateDecision,
+        GateOutcome,
+    )
     from tests.fakes.canned import AGENT_SPECS, ARCH, PLAN, e2e_config, greenfield_idea
     from tests.fakes.fake_activities import GIT_FAKES
     from tests.fakes.fake_agents import fake_agent_activities

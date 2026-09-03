@@ -22,7 +22,9 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from ..models import RoleConfig
+from ..core.models import (
+    RoleConfig,
+)
 
 if TYPE_CHECKING:  # pydantic_ai import is not free
     from pydantic_ai import Agent
@@ -332,7 +334,7 @@ def _validate_pipeline_mirror(roles: dict[str, RoleConfig]) -> None:
     The mirror is DELIBERATE and spans the crew knobs too (layout,
     lead_harness): when a registry role opts into a crew, PipelineConfig.
     roles' default must be changed in the same commit (spec §5 layer 1)."""
-    from ..models import PipelineConfig  # local: avoid an import cycle at
+    from ..core.models import PipelineConfig
 
     # module scope via models -> ...
     default_roles = PipelineConfig().roles

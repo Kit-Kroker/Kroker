@@ -6,6 +6,9 @@ import os
 
 import pytest
 
+from sdlc.core.models import (
+    DeployConfig,
+)
 from sdlc.deploy.activities import (
     RollbackInput,
     SmokeCheckInput,
@@ -13,7 +16,6 @@ from sdlc.deploy.activities import (
     smoke_check,
 )
 from sdlc.models import (
-    DeployConfig,
     DeployPlan,
     SmokeCheck,
     SmokeState,

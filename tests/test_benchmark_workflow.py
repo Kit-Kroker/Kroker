@@ -14,7 +14,13 @@ from sdlc.benchmarks.workflow import (
     _oracle_record,
     _oracle_task_records,
 )
-from sdlc.models import GatePolicy, HarnessKind, IdeaBrief, PipelineConfig, ProjectMode
+from sdlc.core.models import (
+    GatePolicy,
+    HarnessKind,
+    IdeaBrief,
+    PipelineConfig,
+    ProjectMode,
+)
 
 
 def _grade(**kw):

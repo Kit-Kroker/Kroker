@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import hashlib
 
-from ..models import ClarificationDimension
+from ..core.models import (
+    ClarificationDimension,
+)
 
 ROUTE_SCOPE = """\
 You are also the ROUTER for a team of specialist clarifiers, and this part of \

@@ -22,7 +22,9 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from ..models import RunSummary
+from ..core.models import (
+    RunSummary,
+)
 from .models import BenchmarkRecord
 
 DEFAULT_EXPORT_ROOT = "./runs"

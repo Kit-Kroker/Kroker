@@ -12,7 +12,10 @@ from sdlc.benchmarks.models import (
     QualityScore,
     SpeedBag,
 )
-from sdlc.models import BenchmarkConfig, HarnessKind
+from sdlc.core.models import (
+    BenchmarkConfig,
+    HarnessKind,
+)
 
 
 def _record(**kw):

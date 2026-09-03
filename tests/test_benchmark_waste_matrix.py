@@ -15,7 +15,9 @@ from sdlc.benchmarks.waste_matrix import (
     render_waste_matrix_html,
     render_waste_matrix_json,
 )
-from sdlc.models import HarnessKind
+from sdlc.core.models import (
+    HarnessKind,
+)
 
 T = datetime(2026, 8, 3, 10, tzinfo=UTC)
 

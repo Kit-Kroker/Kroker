@@ -13,9 +13,15 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from sdlc.channels.inbox import RunInbox
+from sdlc.core.models import (
+    GateDecision,
+    GateOutcome,
+    RoleUsage,
+    RunState,
+    RunSummary,
+)
 from sdlc.dashboard.fleet import FleetSnapshot
 from sdlc.gate import CheckClass, CheckResult
-from sdlc.models import GateDecision, GateOutcome, RoleUsage, RunState, RunSummary
 from sdlc.pending import ClarifyPending, MergeGatePending, StageGatePending, TaskEscalationPending
 
 OUT = Path("interfaces/dashboard/frontend/src/api/__fixtures__")

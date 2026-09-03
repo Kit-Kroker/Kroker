@@ -1,8 +1,10 @@
 """ActorChannel stamps identity on GateDecision.reviewer, never decided_by."""
 
 from sdlc.channels.contract import ActorChannel, Reply
+from sdlc.core.models import (
+    GateOutcome,
+)
 from sdlc.dashboard.channel import DashboardChannel
-from sdlc.models import GateOutcome
 from sdlc.pending import ClarifyPending, StageGatePending
 
 GATE = StageGatePending(key="architecture#1", gate="architecture", round=1, spec_summary="s")

@@ -1,4 +1,9 @@
-from sdlc.models import GateConfig, GateOutcome, GatePolicy, PipelineConfig
+from sdlc.core.models import (
+    GateConfig,
+    GateOutcome,
+    GatePolicy,
+    PipelineConfig,
+)
 from sdlc.workflows.feature import _auto_decision_for
 
 

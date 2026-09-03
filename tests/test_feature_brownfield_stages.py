@@ -32,6 +32,12 @@ from sdlc.assessment.scan.models import (
     family_of,
 )
 from sdlc.context.models import RepoObservation
+from sdlc.core.models import (
+    GateDecision,
+    GateOutcome,
+    IdeaBrief,
+    ProjectMode,
+)
 from sdlc.measurement import Measurement
 from sdlc.models import (
     AnalysisReport,
@@ -39,12 +45,8 @@ from sdlc.models import (
     ArchitectureSpec,
     BrownfieldDelta,
     ClarifiedRequirements,
-    GateDecision,
-    GateOutcome,
-    IdeaBrief,
     ImplementationPlan,
     MergeVerdict,
-    ProjectMode,
     QAReport,
     ReviewReport,
 )

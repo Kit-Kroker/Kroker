@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from html import escape
 
-from ..models import RunSummary
+from ..core.models import (
+    RunSummary,
+)
 from .trace import RunEvent
 
 

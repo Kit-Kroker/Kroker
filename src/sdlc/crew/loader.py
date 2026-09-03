@@ -13,7 +13,9 @@ from pathlib import Path
 import yaml
 
 from ..agents.loader import model_family
-from ..models import HarnessKind
+from ..core.models import (
+    HarnessKind,
+)
 from .config import CrewLayout, CrewRole
 
 

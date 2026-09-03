@@ -9,7 +9,12 @@ import inspect
 
 import pytest
 
-from sdlc.models import GateDecision, GateOutcome, GatePolicy, GateSettings
+from sdlc.core.models import (
+    GateDecision,
+    GateOutcome,
+    GatePolicy,
+    GateSettings,
+)
 from sdlc.pending import StageGatePending
 from sdlc.workflows.feature import FeatureWorkflow
 from sdlc.workflows.gates import GateHost

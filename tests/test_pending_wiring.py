@@ -43,7 +43,10 @@ def test_gate_surface_wires_pending_population():
 
 import datetime as dt
 
-from sdlc.models import GateDecision, GateOutcome
+from sdlc.core.models import (
+    GateDecision,
+    GateOutcome,
+)
 from sdlc.pending import ClarifyPending
 
 

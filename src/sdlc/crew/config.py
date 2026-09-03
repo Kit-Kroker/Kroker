@@ -10,7 +10,9 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..models import HarnessKind
+from ..core.models import (
+    HarnessKind,
+)
 
 
 class CrewRole(BaseModel):

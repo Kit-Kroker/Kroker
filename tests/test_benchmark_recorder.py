@@ -10,7 +10,9 @@ from sdlc.benchmarks.models import (
     SpeedBag,
 )
 from sdlc.benchmarks.recorder import RecordStore, record_benchmark, records_path
-from sdlc.models import HarnessKind
+from sdlc.core.models import (
+    HarnessKind,
+)
 
 
 def _record(run_id="r1", bench="b1", case="c1"):

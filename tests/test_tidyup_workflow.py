@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import pytest
 
-from sdlc.models import GatePolicy
+from sdlc.core.models import (
+    GatePolicy,
+)
 from sdlc.workflows.tidyup import (
     FixRunResult,
     TidyUpInput,
@@ -90,7 +92,11 @@ def test_report_defaults_are_honest_about_an_unmeasured_after():
 def test_before_triage_inherits_the_operators_gates():
     """The before-triage gates admission, so the operator's HARD readiness
     setting applies unchanged."""
-    from sdlc.models import GateConfig, GatePolicy, GateSettings
+    from sdlc.core.models import (
+        GateConfig,
+        GatePolicy,
+        GateSettings,
+    )
 
     hard = GateSettings(
         default_gate_policy=GatePolicy.HARD, gates={"readiness": GateConfig(policy=GatePolicy.HARD)}
@@ -103,7 +109,11 @@ def test_after_triage_never_parks_on_a_readiness_gate():
     must not open a readiness gate and park 48h. With --no-build-probe the
     after-verdict is INDETERMINATE, which a HARD readiness gate would block
     on. OFF resolves automatically; the verdict is still recorded."""
-    from sdlc.models import GateConfig, GatePolicy, GateSettings
+    from sdlc.core.models import (
+        GateConfig,
+        GatePolicy,
+        GateSettings,
+    )
 
     hard = GateSettings(
         default_gate_policy=GatePolicy.HARD, gates={"readiness": GateConfig(policy=GatePolicy.HARD)}

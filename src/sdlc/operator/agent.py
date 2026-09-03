@@ -46,8 +46,12 @@ else:
 # get_type_hints against THIS module's globals for the functions _bind
 # synthesises here -- so these imports are load-bearing at runtime, not
 # re-export sugar. The redundant aliases keep ruff's F401 from removing them.
-from ..models import GateOutcome as GateOutcome
-from ..models import ProjectMode as ProjectMode
+from ..core.models import (
+    GateOutcome as GateOutcome,
+)
+from ..core.models import (
+    ProjectMode as ProjectMode,
+)
 from . import render, tools
 from .deps import OperatorDeps
 from .errors import ToolError

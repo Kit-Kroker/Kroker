@@ -2,6 +2,9 @@
 
 import json
 
+from sdlc.core.models import (
+    HarnessKind,
+)
 from sdlc.harness.session import (
     SKELETON_MAX,
     digest_of,
@@ -11,7 +14,6 @@ from sdlc.harness.session import (
     session_to_text,
 )
 from sdlc.models import (
-    HarnessKind,
     HarnessRunResult,
     HarnessSession,
     SessionEvent,

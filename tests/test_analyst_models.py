@@ -1,11 +1,13 @@
 """AnalysisReport / CriterionTrace / CoverageReport contracts + config field."""
 
+from sdlc.core.models import (
+    PipelineConfig,
+)
 from sdlc.measurement import Measurement
 from sdlc.models import (
     AnalysisReport,
     CoverageReport,
     CriterionTrace,
-    PipelineConfig,
     ReviewFinding,
 )
 

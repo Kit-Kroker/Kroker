@@ -4,7 +4,13 @@ vocabularies for one concept (spec 4)."""
 
 from datetime import UTC, datetime
 
-from sdlc.models import GateDecision, GateOutcome, RoleUsage, RunState, RunSummary
+from sdlc.core.models import (
+    GateDecision,
+    GateOutcome,
+    RoleUsage,
+    RunState,
+    RunSummary,
+)
 
 AT = datetime(2026, 8, 18, 9, 0, tzinfo=UTC)
 
