@@ -1714,3 +1714,22 @@ Expected: all green; `.file-size-baseline.json` holds one entry.
 git add -A
 git commit -m "chore: A complete — all four src monoliths off the file-size baseline"
 ```
+
+---
+
+## Follow-up Tasks (Post-Surgery / Pre-existing Defects)
+
+### Follow-up 1: Investigate and fix pre-existing `tests/test_tool_approval_gate.py` deadlock on Windows
+- **Discovered during**: Task 3 review / temporal tier run.
+- **Symptom**: `tests/test_tool_approval_gate.py -m temporal` hangs before first test report under Windows load (worker gets ~49s CPU then stops; exits with timeout/deadlock). Confirmed reproducible on clean pre-surgery main (`95a5a07` in `.worktrees/base-95a5a07`).
+- **Hypothesis & Diagnostic Findings**:
+  1. Test driver structure uses `result = await handle.result()` with background `driver = asyncio.create_task(drive())`. If `drive()` times out or raises in `_wait_for_status`, the workflow execution remains pending waiting for human signals, causing an indefinite stall when `auto_time_skipping_disabled()` is active.
+  2. Harness fix to convert unbounded hang to immediate diagnosable failure:
+     ```python
+     driver = asyncio.create_task(drive())
+     done, pending = await asyncio.wait(
+         [driver, asyncio.ensure_future(handle.result())],
+         return_when=asyncio.FIRST_EXCEPTION,
+     )
+     ```
+  3. Operational tier improvement: consider pytest timeout per test in temporal tier.
