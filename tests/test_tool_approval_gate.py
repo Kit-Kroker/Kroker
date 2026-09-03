@@ -25,6 +25,7 @@ from sdlc.models import (
     HarnessRunResult,
     ToolDenial,
 )
+from sdlc.notify.contract import NotifyInput, Results
 from sdlc.observability.activities import export_run_artifacts
 from tests.fakes.canned import (
     AGENT_SPECS,
@@ -78,6 +79,11 @@ async def defer_once(inp: CodingTaskInput) -> HarnessRunResult:
     return HarnessRunResult(summary="implemented", commit_sha="cafe1234", **base)
 
 
+@activity.defn(name="notify")
+async def _noop_notify(inp: NotifyInput) -> Results:
+    return Results()
+
+
 def _activities(coding):
     """Swap the canned harness fake for one that defers. Identity filtering,
     matching how test_budget_gate.py swaps price_usage."""
@@ -86,6 +92,7 @@ def _activities(coding):
         evaluate_gate,
         export_run_artifacts,
         coding,
+        _noop_notify,
         *fakes,
         *DEPLOY_FAKES,
         *fake_agent_activities(AGENT_SPECS),
@@ -99,6 +106,23 @@ async def _wait_for_status(handle, target, timeout_s=10.0):
             return
         await asyncio.sleep(0.05)
     raise AssertionError(f"timed out waiting for {target!r}")
+
+
+async def _run_workflow_with_driver(handle, drive_coro):
+    driver = asyncio.create_task(drive_coro)
+    wf_task = asyncio.ensure_future(handle.result())
+    done, pending = await asyncio.wait(
+        [driver, wf_task],
+        return_when=asyncio.FIRST_EXCEPTION,
+    )
+    for t in done:
+        if t.exception() is not None:
+            for p in pending:
+                p.cancel()
+            raise t.exception()
+    result = await wf_task
+    await driver
+    return result
 
 
 async def _drive_to_tasks(handle):
@@ -170,9 +194,7 @@ async def test_deferral_raises_a_gate_and_the_grant_reaches_the_resume(tmp_path,
                         ),
                     )
 
-                driver = asyncio.create_task(drive())
-                result = await handle.result()
-                await driver
+                result = await _run_workflow_with_driver(handle, drive())
                 summary = await handle.query(FeatureWorkflow.run_summary)
 
     assert result.startswith("deployed:"), result
@@ -245,9 +267,7 @@ async def test_rejection_is_delivered_and_the_task_continues(tmp_path, monkeypat
                         ),
                     )
 
-                driver = asyncio.create_task(drive())
-                result = await handle.result()
-                await driver
+                result = await _run_workflow_with_driver(handle, drive())
 
     # A refusal must be DELIVERED to the harness, not merely recorded.
     assert result.startswith("deployed:"), result
@@ -327,9 +347,7 @@ async def test_the_cap_stops_asking_and_the_loop_terminates(tmp_path, monkeypatc
                         ),
                     )
 
-                driver = asyncio.create_task(drive())
-                await handle.result()
-                await driver
+                await _run_workflow_with_driver(handle, drive())
                 summary = await handle.query(FeatureWorkflow.run_summary)
 
     # Exactly one gate raised, then a refusal delivered, then no more

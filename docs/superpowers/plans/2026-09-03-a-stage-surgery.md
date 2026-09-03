@@ -1723,14 +1723,10 @@ git commit -m "chore: A complete — all four src monoliths off the file-size ba
 - **Discovered during**: Task 3 review / temporal tier run.
 - **Symptom**: `tests/test_tool_approval_gate.py -m temporal` hangs before first test report under Windows load (worker gets ~49s CPU then stops; exits with timeout/deadlock). Confirmed reproducible on clean pre-surgery main (`95a5a07` in `.worktrees/base-95a5a07`) under both Python 3.14 and Python 3.11.
 - **Hypothesis & Diagnostic Findings**:
-  1. Test driver structure uses `result = await handle.result()` with background `driver = asyncio.create_task(drive())`. If `drive()` times out or raises in `_wait_for_status`, the workflow execution remains pending waiting for human signals, causing an indefinite stall when `auto_time_skipping_disabled()` is active.
-  2. In contrast, files initially suspected during Task 5 (`test_board_workflow.py` and `test_budget_gate.py`) were *not* platform deadlocks; they hung because `GateHost.__init__` failed to call `super().__init__()`, breaking attribute initialization (`_trace`). Once `GateHost` cooperative init was fixed in Task 5, both files run 100% green (~20-27s).
-  3. Harness fix to convert unbounded hang to immediate diagnosable failure:
-     ```python
-     driver = asyncio.create_task(drive())
-     done, pending = await asyncio.wait(
-         [driver, asyncio.ensure_future(handle.result())],
-         return_when=asyncio.FIRST_EXCEPTION,
-     )
-     ```
-  4. Operational tier note: CI does not run the temporal tier (excluded in `pyproject.toml` addopts), so local runs are the sole execution environment. For local surgery verification, the running command is `pytest -m temporal --ignore=tests/test_tool_approval_gate.py`.
+  1. Test driver structure previously used `result = await handle.result()` with background `driver = asyncio.create_task(drive())`. When `drive()` timed out in `_wait_for_status`, the exception was swallowed while `handle.result()` waited forever.
+  2. Applied harness fix (`_run_workflow_with_driver` with `asyncio.wait(return_when=FIRST_EXCEPTION)`) across `tests/test_tool_approval_gate.py`, `tests/test_budget_gate.py`, and `tests/test_gate_notifications.py`. Any failure now surfaces in ~10 seconds with full stack traces instead of hanging for hours.
+  3. `test_board_workflow.py` (2/2 passed) and `test_budget_gate.py` (2/2 passed) are confirmed 100% green and healthy; the earlier background sweep hang occurred because it executed prior to Task 5's `GateHost.__init__` cooperative init fix.
+  4. In `tests/test_tool_approval_gate.py`, the driver fails in 10s on `AssertionError: timed out waiting for 'awaiting:merge'` due to fake-harness flow expectations post-escalation.
+  5. **Named Coverage Gap**: `tests/test_tool_approval_gate.py` is the *only* temporal coverage of the tool-approval / escalation path (`ToolEscalation`, `_escalation_round` counter, deferred-tool resume). Because CI never runs `-m temporal`, during P3 (when the code stage task touches this exact path) there is no automated coverage of it until this test is addressed or verified manually.
+  6. **Local Temporal Gate Contract**: For local surgery verification, the running command is:
+     `pytest -m temporal --ignore=tests/test_tool_approval_gate.py`

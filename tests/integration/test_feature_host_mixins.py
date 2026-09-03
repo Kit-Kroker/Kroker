@@ -3,6 +3,7 @@ from sdlc.workflows.board_host import BoardHost
 from sdlc.workflows.feature import FeatureWorkflow
 from sdlc.workflows.memory_host import MemoryHost
 from sdlc.workflows.report_host import ReportHost
+from sdlc.workflows.role_host import RoleHost
 
 
 def test_feature_workflow_inherits_the_hosts():
@@ -18,7 +19,7 @@ def test_methods_resolve_through_the_mro():
 def test_hosts_define_no_handlers():
     # Rule 1: handlers stay where they already are. A host that grows one
     # silently changes the workflow's wire contract.
-    for host in (ReportHost, BoardHost, BenchmarkHost, MemoryHost):
+    for host in (ReportHost, BoardHost, BenchmarkHost, MemoryHost, RoleHost):
         for attr in vars(host).values():
             assert not hasattr(attr, "__temporal_signal_definition"), host
             assert not hasattr(attr, "__temporal_query_definition"), host
@@ -73,6 +74,12 @@ def test_record_assembles_the_benchmark_record_for_the_stage():
     # a step must not know how one is assembled (_stage_record is 47 lines).
     import inspect
 
-    from sdlc.workflows.benchmark_host import BenchmarkHost
-
     assert "record" in inspect.signature(BenchmarkHost._record).parameters
+
+
+def test_role_host_is_on_the_mro():
+    from sdlc.workflows.role_host import RoleHost
+
+    assert issubclass(FeatureWorkflow, RoleHost)
+    for name in ("_run_role", "_cached_stage", "_revisable_stage", "_check_budget"):
+        assert hasattr(FeatureWorkflow, name), name

@@ -68,6 +68,23 @@ async def _wait_for_status(handle, target, timeout_s=10.0):
     raise AssertionError(f"timed out waiting for {target!r}")
 
 
+async def _run_workflow_with_driver(handle, drive_coro):
+    driver = asyncio.create_task(drive_coro)
+    wf_task = asyncio.ensure_future(handle.result())
+    done, pending = await asyncio.wait(
+        [driver, wf_task],
+        return_when=asyncio.FIRST_EXCEPTION,
+    )
+    for t in done:
+        if t.exception() is not None:
+            for p in pending:
+                p.cancel()
+            raise t.exception()
+    result = await wf_task
+    await driver
+    return result
+
+
 async def _signal_gate(handle, gate, round, outcome):
     await handle.signal(
         FeatureWorkflow.submit_gate_decision,
@@ -123,9 +140,7 @@ async def test_budget_crossings_regate_and_approve_extends(tmp_path, monkeypatch
                     await _wait_for_status(handle, "awaiting:deploy")
                     await _signal_gate(handle, "deploy", 1, GateOutcome.APPROVE)
 
-                driver = asyncio.create_task(drive())
-                result = await handle.result()
-                await driver
+                result = await _run_workflow_with_driver(handle, drive())
                 summary = await handle.query(FeatureWorkflow.run_summary)
     assert result.startswith("deployed:"), result
     budget_gates = [g for g in summary.gates if g.gate == "budget"]
@@ -163,9 +178,7 @@ async def test_budget_reject_terminates_with_retro(tmp_path, monkeypatch):
                     await _wait_for_status(handle, "awaiting:budget")
                     await _signal_gate(handle, "budget", 1, GateOutcome.REJECT)
 
-                driver = asyncio.create_task(drive())
-                result = await handle.result()
-                await driver
+                result = await _run_workflow_with_driver(handle, drive())
                 summary = await handle.query(FeatureWorkflow.run_summary)
     assert result == "rejected:budget", result
     assert summary is not None  # retro ran on the budget path

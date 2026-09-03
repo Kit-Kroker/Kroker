@@ -67,6 +67,23 @@ async def _wait_for_status(handle, target, timeout_s=10.0):
     raise AssertionError(f"timed out waiting for {target!r}")
 
 
+async def _run_workflow_with_driver(handle, drive_coro):
+    driver = asyncio.create_task(drive_coro)
+    wf_task = asyncio.ensure_future(handle.result())
+    done, pending = await asyncio.wait(
+        [driver, wf_task],
+        return_when=asyncio.FIRST_EXCEPTION,
+    )
+    for t in done:
+        if t.exception() is not None:
+            for p in pending:
+                p.cancel()
+            raise t.exception()
+    result = await wf_task
+    await driver
+    return result
+
+
 @pytest.mark.asyncio
 async def test_opened_notification_fires_and_signal_stops_the_rest(tmp_path, monkeypatch):
     """A gate decided promptly notifies once (opened) and never reminds."""
@@ -109,9 +126,7 @@ async def test_opened_notification_fires_and_signal_stops_the_rest(tmp_path, mon
                             ),
                         )
 
-                driver = asyncio.create_task(drive())
-                result = await handle.result()
-                await driver
+                result = await _run_workflow_with_driver(handle, drive())
 
     assert result.startswith("deployed:"), result
     reasons = {reason for _, reason in SENT}
@@ -160,9 +175,7 @@ async def test_exploding_notifier_leaves_every_gate_decidable(tmp_path, monkeypa
                             ),
                         )
 
-                driver = asyncio.create_task(drive())
-                result = await handle.result()
-                await driver
+                result = await _run_workflow_with_driver(handle, drive())
                 summary = await handle.query(FeatureWorkflow.run_summary)
 
     assert result.startswith("deployed:"), result

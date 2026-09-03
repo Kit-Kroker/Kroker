@@ -23,6 +23,7 @@ Attributes on `FeatureWorkflow`'s MRO across its service-host mixins.
 | `_plan_version` | `BoardHost` | `BoardHost._board_task_status`, `BoardHost._board_evidence`, `FeatureWorkflow` (plan stage) | `BoardHost._board_publish` returns it; `FeatureWorkflow` stores it (plan stage, `:2972`) | Surrogate version ID of the published plan |
 | `_question_answers` | `QuestionHost` (in P1) / `FeatureWorkflow` | `FeatureWorkflow.answer_question`, `FeatureWorkflow.questions` | `FeatureWorkflow.answer_question` | Clarify Q&A map |
 | `_memory_watermark` | `MemoryHost` | `MemoryHost._recall`, `FeatureWorkflow` | `FeatureWorkflow` | Watermark for memory capture |
+| `_session_refs` | `TaskHost` (in P1) / `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow` | Coding attempt session references |
 | `_cfg` | `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow.run` | Stashed pipeline config for queries/hooks |
 | `_idea` | `FeatureWorkflow` | `FeatureWorkflow.run_state` | `FeatureWorkflow.run` | Stashed initial idea brief |
 | `_started_at` | `FeatureWorkflow` | `FeatureWorkflow.run_state`, `FeatureWorkflow.run_summary` | `FeatureWorkflow.run` | Run start timestamp |
@@ -30,8 +31,7 @@ Attributes on `FeatureWorkflow`'s MRO across its service-host mixins.
 | `_run_summary` | `FeatureWorkflow` | `FeatureWorkflow.run_summary`, `FeatureWorkflow` (retro) | `FeatureWorkflow` | Terminal `RunSummary`, built once at end of run |
 | `_integration_head` | `TaskHost` (in P1) / `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow` | Current commit on integration branch |
 | `_integration_wt` | `TaskHost` (in P1) / `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow` | Path to task integration worktree |
-| `_session_refs` | `TaskHost` (in P1) / `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow` | Coding attempt session references |
-| `_budget_threshold` | `RoleHost` (in P1) / `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow` | Budget threshold dollar amount |
-| `_budget_crossings` | `RoleHost` (in P1) / `FeatureWorkflow` | `FeatureWorkflow.run_state` | `FeatureWorkflow` | Number of budget alert crossings |
+| `_budget_threshold` | `RoleHost` | `RoleHost._check_budget`, `FeatureWorkflow` | `RoleHost._check_budget` | Budget threshold dollar amount |
+| `_budget_crossings` | `RoleHost` | `RoleHost._check_budget`, `FeatureWorkflow.run_state` | `RoleHost._check_budget` | Number of budget alert crossings |
 | `_escalation_round`| `TaskHost` (in P1) / `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow` | Tool-approval escalation counter |
 | `_codebase_map` | `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow` | Brownfield codebase map cache |
