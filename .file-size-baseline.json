@@ -1,6 +1,6 @@
 {
   "src/sdlc/activities.py": 1430,
   "src/sdlc/harness/adapters.py": 1092,
-  "src/sdlc/workflows/feature.py": 3130,
+  "src/sdlc/workflows/feature.py": 3124,
   "tests/test_assessment_workflow_e2e.py": 1177
 }

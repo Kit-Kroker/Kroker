@@ -150,7 +150,7 @@ with workflow.unsafe.imports_passed_through():
     from ..observability.activities import RunExportInput, export_run_artifacts
     from ..observability.summary import build_run_summary
     from ..observability.trace import RunEventKind
-    from ..pending import GateContext, clarify_pending
+    from ..pending import GateContext
     from ..pricing import PriceUsageInput, price_usage
     from ..prompts import (
         analyst_prompt,
@@ -181,6 +181,7 @@ with workflow.unsafe.imports_passed_through():
     from .gates import GateHost
     from .memory_host import MEM_ACT, MemoryHost
     from .models import SeededWork, TaskResult
+    from .question_host import QuestionHost
     from .report_host import ReportHost
     from .role_host import (
         PRICE_ACT,
@@ -719,10 +720,11 @@ def _escalation_summary(task_id: str, title: str, deferred: DeferredToolUse) -> 
 
 
 @workflow.defn
-class FeatureWorkflow(GateHost, ReportHost, BoardHost, BenchmarkHost, MemoryHost, RoleHost):
+class FeatureWorkflow(
+    GateHost, ReportHost, BoardHost, BenchmarkHost, MemoryHost, RoleHost, QuestionHost
+):
     def __init__(self) -> None:
         super().__init__()
-        self._question_answers: dict[str, str] = {}
         # E-42: cfg is threaded as a parameter everywhere else; the gate hooks
         # run inside GateHost and cannot receive it, so run() stashes it here.
         self._cfg: PipelineConfig | None = None
@@ -802,15 +804,7 @@ class FeatureWorkflow(GateHost, ReportHost, BoardHost, BenchmarkHost, MemoryHost
             **({"error": error} if error else {}),
         )
 
-    # ---------------- signals / queries (the HITL surface) --------------
-    # E-42: submit_gate_decision / status / pending_gate / pending_decisions
-    # moved to GateHost. answer_question stays here -- clarify is a
-    # feature-pipeline concept, and the triage workflow has no questions.
-
-    @workflow.signal
-    def answer_question(self, question_id: str, answer: str) -> None:
-        self._question_answers.setdefault(question_id, answer)
-        self._pending.pop(question_id, None)
+    # ---------------- queries (the HITL surface) ------------------------
 
     @workflow.query
     def run_summary(self) -> RunSummary | None:
@@ -2300,48 +2294,48 @@ class FeatureWorkflow(GateHost, ReportHost, BoardHost, BenchmarkHost, MemoryHost
             _run_clarify_fanout if cfg.clarify_probes_enabled else _run_clarify_single,
         )
         if reqs.open_questions:
-            for q in reqs.open_questions:
-                self._emit(
-                    RunEventKind.CLARIFICATION_ASKED,
-                    stage="clarify",
-                    question_id=q.id,
-                    question=q.question,
-                    # data is dict[str, str] -- "" not None, or the
-                    # RunEvent fails validation on the flag-off path.
-                    dimension=q.dimension.value if q.dimension else "",
-                )
             clarify_policy = cfg.gates.get("clarify", GateConfig()).policy
             if clarify_policy == GatePolicy.OFF:
+                for q in reqs.open_questions:
+                    self._emit(
+                        RunEventKind.CLARIFICATION_ASKED,
+                        stage="clarify",
+                        question_id=q.id,
+                        question=q.question,
+                        # data is dict[str, str] -- "" not None, or the
+                        # RunEvent fails validation on the flag-off path.
+                        dimension=q.dimension.value if q.dimension else "",
+                    )
                 # unattended run (e.g. a benchmark cell) — no human is
                 # present to answer; fall back to the clarifier's own
                 # suggested_answer rather than blocking forever.
                 for q in reqs.open_questions:
                     q.answer = q.suggested_answer
+                for q in reqs.open_questions:
+                    # "human" preserves HEAD semantics: a client that signaled
+                    # answer_question before this point wins even on the
+                    # unattended path (cross-host read; see AGENTS.md).
+                    answered = (
+                        "human"
+                        if q.id in self._question_answers
+                        else "suggested"
+                        if q.answer is not None
+                        else "unanswered"
+                    )
+                    self._emit(
+                        RunEventKind.CLARIFICATION_ANSWERED,
+                        stage="clarify",
+                        question_id=q.id,
+                        answered_by=answered,
+                    )
             else:
-                self._status = "awaiting:clarify"
-                for p in clarify_pending(reqs.open_questions, set(), opened_at=workflow.now()):
-                    self._pending[p.key] = p
-                await workflow.wait_condition(
-                    lambda: all(q.id in self._question_answers for q in reqs.open_questions),
-                    timeout=timedelta(hours=cfg.gate_timeout_hours),
+                answers = await self.ask_and_wait(
+                    reqs.open_questions,
+                    stage="clarify",
+                    timeout_hours=cfg.gate_timeout_hours,
                 )
                 for q in reqs.open_questions:
-                    q.answer = self._question_answers.get(q.id)
-                    self._pending.pop(q.id, None)
-            for q in reqs.open_questions:
-                answered = (
-                    "human"
-                    if q.id in self._question_answers
-                    else "suggested"
-                    if q.answer is not None
-                    else "unanswered"
-                )
-                self._emit(
-                    RunEventKind.CLARIFICATION_ANSWERED,
-                    stage="clarify",
-                    question_id=q.id,
-                    answered_by=answered,
-                )
+                    q.answer = answers.get(q.id)
         _ended = workflow.now()
         _quality = await self._judge(
             cfg,

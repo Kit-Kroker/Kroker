@@ -39,8 +39,9 @@ def test_cooperative_init_initializes_all_owned_attributes():
         "_role_usage",
         # BoardHost
         "_plan_version",
-        # FeatureWorkflow
+        # QuestionHost
         "_question_answers",
+        "_pending_questions",
         "_memory_watermark",
         "_cfg",
         "_idea",

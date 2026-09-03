@@ -7,7 +7,7 @@ Attributes on `FeatureWorkflow`'s MRO across its service-host mixins.
 1. **Every attribute has exactly one owning host.** Only the owning host's `__init__` may instantiate it.
 2. **Only the owning host may write an attribute**, unless explicitly documented below as a cross-host mutation.
 3. **Cross-host readers are permitted** through the MRO (`self.<attr>`), but must be recorded here to prevent accidental coupling.
-4. **No handlers on mixins.** Signal and query handlers live on `FeatureWorkflow` or `GateHost` (wire contract stability).
+4. **No handlers on mixins — one blessed exception.** Signal and query handlers live on `FeatureWorkflow` or `GateHost`. `QuestionHost.answer_question` is the sanctioned exception (spec A §3.1's own design: the signal and the wait are one service). Its handler name is a wire contract; never rename it.
 
 ## Attribute Ownership
 
@@ -18,10 +18,11 @@ Attributes on `FeatureWorkflow`'s MRO across its service-host mixins.
 | `_parent_run_id` | `GateHost` | `GateHost._gate` | `GateHost.__init__` | Optional parent run ID for hierarchy |
 | `_trace` | `ReportHost` | `ReportHost`, `FeatureWorkflow.run_state`, `FeatureWorkflow.run_summary` | `ReportHost._emit` | Append-only event trace |
 | `_seq` | `ReportHost` | `ReportHost` | `ReportHost._emit` | Monotonic event sequence counter |
-| `_status` | `ReportHost` | `ReportHost._stage`, `GateHost._gate`, `FeatureWorkflow.status`, `FeatureWorkflow.pending_gate`, `FeatureWorkflow.run_state` | `ReportHost._stage`, `GateHost._gate`, `FeatureWorkflow` (clarify block sets `awaiting:clarify` directly) | High-level status string (`awaiting:*`, etc.). `GateHost` queries read via `getattr(..., "starting")` so GateHost-only hosts (crew, triage, assessment, tidyup) work without ReportHost. |
+| `_status` | `ReportHost` | `ReportHost._stage`, `GateHost._gate`, `QuestionHost.ask_and_wait`, `FeatureWorkflow.status`, `FeatureWorkflow.pending_gate`, `FeatureWorkflow.run_state` | `ReportHost._stage`, `GateHost._gate` | High-level status string (`awaiting:*`, etc.). `GateHost` queries read via `getattr(..., "starting")` so GateHost-only hosts (crew, triage, assessment, tidyup) work without ReportHost. |
 | `_role_usage` | `ReportHost` | `ReportHost`, `RoleHost`, `FeatureWorkflow.run_state`, `FeatureWorkflow.run_summary` | `ReportHost._track_usage` | Per-role accumulated token and cost usage |
 | `_plan_version` | `BoardHost` | `BoardHost._board_task_status`, `BoardHost._board_evidence`, `FeatureWorkflow` (plan stage) | `BoardHost._board_publish` returns it; `FeatureWorkflow` stores it (plan stage, `:2972`) | Surrogate version ID of the published plan |
-| `_question_answers` | `QuestionHost` (in P1) / `FeatureWorkflow` | `FeatureWorkflow.answer_question`, `FeatureWorkflow.questions` | `FeatureWorkflow.answer_question` | Clarify Q&A map |
+| `_question_answers` | `QuestionHost` | `QuestionHost.ask_and_wait`, `QuestionHost.answer_question`, `FeatureWorkflow` (clarify flag-off branch reads it for `answered_by`) | `QuestionHost.answer_question` | Clarify Q&A map |
+| `_pending_questions` | `QuestionHost` | `QuestionHost.ask_and_wait` | `QuestionHost.ask_and_wait` | List of open question IDs currently awaiting answers |
 | `_memory_watermark` | `MemoryHost` | `MemoryHost._recall`, `FeatureWorkflow` | `FeatureWorkflow` | Watermark for memory capture |
 | `_session_refs` | `TaskHost` (in P1) / `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow` | Coding attempt session references |
 | `_cfg` | `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow.run` | Stashed pipeline config for queries/hooks |
