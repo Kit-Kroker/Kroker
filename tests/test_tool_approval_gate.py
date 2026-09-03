@@ -360,7 +360,7 @@ async def test_the_cap_stops_asking_and_the_loop_terminates(tmp_path, monkeypatc
 
 def test_declined_denials_become_batched_escalation_records():
     """A denial the hook could not escalate must be countable (§6)."""
-    from sdlc.workflows.feature import escalations_from_denials
+    from sdlc.workflows.task_host import escalations_from_denials
 
     denials = [
         ToolDenial(

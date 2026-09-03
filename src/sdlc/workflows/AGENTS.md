@@ -24,7 +24,7 @@ Attributes on `FeatureWorkflow`'s MRO across its service-host mixins.
 | `_question_answers` | `QuestionHost` | `QuestionHost.ask_and_wait`, `QuestionHost.answer_question`, `FeatureWorkflow` (clarify flag-off branch reads it for `answered_by`) | `QuestionHost.answer_question` | Clarify Q&A map |
 | `_pending_questions` | `QuestionHost` | `QuestionHost.ask_and_wait` | `QuestionHost.ask_and_wait` | List of open question IDs currently awaiting answers |
 | `_memory_watermark` | `MemoryHost` | `MemoryHost._recall`, `FeatureWorkflow` | `FeatureWorkflow` | Watermark for memory capture |
-| `_session_refs` | `TaskHost` (in P1) / `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow` | Coding attempt session references |
+| `_session_refs` | `TaskHost` | `TaskHost._dev_task`, `FeatureWorkflow` (retro) | `TaskHost._dev_task` | Coding attempt session references |
 | `_cfg` | `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow.run` | Stashed pipeline config for queries/hooks |
 | `_idea` | `FeatureWorkflow` | `FeatureWorkflow.run_state` | `FeatureWorkflow.run` | Stashed initial idea brief |
 | `_started_at` | `FeatureWorkflow` | `FeatureWorkflow.run_state`, `FeatureWorkflow.run_summary` | `FeatureWorkflow.run` | Run start timestamp |
@@ -34,5 +34,5 @@ Attributes on `FeatureWorkflow`'s MRO across its service-host mixins.
 | `_integration_wt` | `TaskHost` (in P1) / `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow` | Path to task integration worktree |
 | `_budget_threshold` | `RoleHost` | `RoleHost._check_budget`, `FeatureWorkflow` | `RoleHost._check_budget` | Budget threshold dollar amount |
 | `_budget_crossings` | `RoleHost` | `RoleHost._check_budget`, `FeatureWorkflow.run_state` | `RoleHost._check_budget` | Number of budget alert crossings |
-| `_escalation_round`| `TaskHost` (in P1) / `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow` | Tool-approval escalation counter |
+| `_escalation_round`| *Eliminated* (Rule 2) | None (per-task local in `TaskHost._dev_task`) | None | Formerly instance counter, now local to prevent wave-mode races |
 | `_codebase_map` | `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow` | Brownfield codebase map cache |

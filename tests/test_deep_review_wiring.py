@@ -1,10 +1,13 @@
 import pathlib
 
-SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+FEATURE_SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+TASK_HOST_SRC = pathlib.Path("src/sdlc/workflows/task_host.py")
 
 
 def _src() -> str:
-    return SRC.read_text(encoding="utf-8")
+    return (
+        FEATURE_SRC.read_text(encoding="utf-8") + "\n" + TASK_HOST_SRC.read_text(encoding="utf-8")
+    )
 
 
 def test_deep_review_helper_exists():

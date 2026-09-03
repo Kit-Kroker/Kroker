@@ -130,7 +130,7 @@ def test_non_pytest_output_still_falls_back_to_the_tail(tmp_path):
 # --- the retry prompt itself -------------------------------------------------
 
 from sdlc.models import QAReport  # noqa: E402
-from sdlc.workflows.feature import _fix_loop_issues  # noqa: E402
+from sdlc.workflows.task_host import _fix_loop_issues  # noqa: E402
 
 
 def test_retry_prompt_says_the_suite_stopped_early():

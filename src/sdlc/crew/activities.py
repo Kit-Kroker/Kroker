@@ -9,7 +9,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
@@ -423,8 +423,7 @@ class LoadCrewInput:
     lead_model: str | None = None
 
 
-@dataclass
-class LoadedCrew:
+class LoadedCrew(BaseModel):
     layout: CrewLayout
     roles: list[CrewRole]
     # The LEAD's SKILL.md (a one-role crew runs one skill): the round

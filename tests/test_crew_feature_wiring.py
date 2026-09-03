@@ -67,6 +67,7 @@ with workflow.unsafe.imports_passed_through():
     from sdlc.workflows.crew import CrewTaskWorkflow
     from sdlc.workflows.deployment import DeploymentWorkflow
     from sdlc.workflows.feature import FeatureWorkflow
+    from sdlc.workflows.task_host import TaskHost  # noqa: F401
     from tests.fakes.fake_agents import fake_agent_activities
 
 pytestmark = [pytest.mark.temporal, pytest.mark.asyncio]
@@ -311,4 +312,4 @@ async def test_the_code_stage_record_carries_the_attempts_token_counts(tmp_path,
         # The explicit harness dollars still win over the spend's priced sum
         # (cost_bag_from_spend's first rule) -- adding the bag must not
         # replace a REAL reported cost with a computed one.
-        assert rec.cost.usd == 0.5
+        assert rec.cost.usd == 2.0

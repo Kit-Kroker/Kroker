@@ -1,6 +1,6 @@
 import pathlib
 
-SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+SRC = pathlib.Path("src/sdlc/workflows/task_host.py")
 
 
 def test_dev_task_consults_near_context_ceiling():

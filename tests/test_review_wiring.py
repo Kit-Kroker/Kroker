@@ -1,6 +1,19 @@
 import pathlib
 
-SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+FEATURE_SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+TASK_HOST_SRC = pathlib.Path("src/sdlc/workflows/task_host.py")
+
+
+class _Source:
+    def read_text(self, encoding="utf-8") -> str:
+        return (
+            FEATURE_SRC.read_text(encoding=encoding)
+            + "\n"
+            + TASK_HOST_SRC.read_text(encoding=encoding)
+        )
+
+
+SRC = _Source()
 
 
 def test_dev_task_runs_reviewer_on_clean_inputs():

@@ -1,7 +1,7 @@
 """Split verdicts merge both reviewers' findings into the retry prompt."""
 
 from sdlc.models import ReviewFinding, ReviewReport
-from sdlc.workflows.feature import _fix_loop_issues
+from sdlc.workflows.task_host import _fix_loop_issues
 
 
 class _QA:
@@ -60,11 +60,14 @@ def test_low_severity_adversary_findings_are_not_blocking():
 
 import pathlib
 
-SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+FEATURE_SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+TASK_HOST_SRC = pathlib.Path("src/sdlc/workflows/task_host.py")
 
 
 def _src() -> str:
-    return SRC.read_text(encoding="utf-8")
+    return (
+        FEATURE_SRC.read_text(encoding="utf-8") + "\n" + TASK_HOST_SRC.read_text(encoding="utf-8")
+    )
 
 
 def test_adversary_helper_exists_and_is_config_gated():

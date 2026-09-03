@@ -1,7 +1,7 @@
 from sdlc.agents.roles import _STAGE_PROMPTS
 from sdlc.models import QAReport, ValidationContract
-from sdlc.workflows.feature import (
-    DEFAULT_LINT_CMD,
+from sdlc.workflows.feature import DEFAULT_LINT_CMD
+from sdlc.workflows.task_host import (
     DEFAULT_TEST_CMD,
     _contract_shell_cmd,
     _contract_stack_directive,

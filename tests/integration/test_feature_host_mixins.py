@@ -18,8 +18,9 @@ def test_methods_resolve_through_the_mro():
 
 def test_hosts_define_no_handlers():
     # Rule 1: handlers stay where they already are. A host that grows one
-    # silently changes the workflow's wire contract.
-    for host in (ReportHost, BoardHost, BenchmarkHost, MemoryHost, RoleHost):
+    from sdlc.workflows.task_host import TaskHost
+
+    for host in (ReportHost, BoardHost, BenchmarkHost, MemoryHost, RoleHost, TaskHost):
         for attr in vars(host).values():
             assert not hasattr(attr, "__temporal_signal_definition"), host
             assert not hasattr(attr, "__temporal_query_definition"), host
@@ -42,7 +43,14 @@ def test_cooperative_init_initializes_all_owned_attributes():
         # QuestionHost
         "_question_answers",
         "_pending_questions",
+        # MemoryHost
         "_memory_watermark",
+        # TaskHost
+        "_session_refs",
+        # RoleHost
+        "_budget_threshold",
+        "_budget_crossings",
+        # FeatureWorkflow
         "_cfg",
         "_idea",
         "_started_at",
@@ -50,10 +58,6 @@ def test_cooperative_init_initializes_all_owned_attributes():
         "_integration_head",
         "_integration_wt",
         "_run_summary",
-        "_session_refs",
-        "_budget_threshold",
-        "_budget_crossings",
-        "_escalation_round",
         "_codebase_map",
     )
     for attr in expected_attributes:

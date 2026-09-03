@@ -98,6 +98,7 @@ def _llm_api_keys(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("EXA_API_KEY", "test-key")
+    monkeypatch.setenv("SDLC_MEMORY_ENABLED", "false")
 
 
 @pytest.fixture
