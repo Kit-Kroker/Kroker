@@ -34,7 +34,6 @@ with workflow.unsafe.imports_passed_through():
     from ..artifacts.retention import RetentionInput, apply_session_retention, keep_full_transcripts
     from ..benchmarks.models import BenchmarkOutcome
     from ..board.models import TaskStatus
-    from ..context.classify import classify
     from ..context.models import CodebaseMap
     from ..context.project import map_digest, project
     from ..context.render import render_for_prompt
@@ -89,16 +88,14 @@ with workflow.unsafe.imports_passed_through():
         synthesize_brief,
     )
     from ..research.verify import brief_digest, verify_brief_activity
-    from ..stages import clarify
+    from ..stages import clarify, intake
     from ..stages.analyze.models import AnalysisReport
     from ..stages.architecture.models import ArchitectureSpec
     from ..stages.clarify.models import ClarifiedRequirements
     from ..stages.code.models import HandoffSummary
     from ..stages.context.activities import (
         DeltaCheckInput,
-        RepoProbeInput,
         check_brownfield_delta,
-        classify_repo,
     )
     from ..stages.deploy.models import DeployPlan, DeployReport, SmokeCheck
     from ..stages.merge.activities import (
@@ -1041,17 +1038,9 @@ class FeatureWorkflow(
         # 0. INTAKE (E-84 D3) -- deterministic, no model call. IdeaBrief.mode
         # is declared by the operator; this verifies the declaration against
         # the tree and fails closed when brownfield has nothing to map.
-        self._stage("intake")
-        observed = await workflow.execute_activity(
-            classify_repo,
-            RepoProbeInput(repo_dir=repo_path, base_branch=idea.base_branch),
-            **INTAKE_ACT,
-        )
-        verdict = classify(observed, idea.mode)
-        if verdict.warning:
-            self._emit(RunEventKind.STAGE_ENDED, stage="intake", warning=verdict.warning)
-        if not verdict.ok:
-            return f"rejected:intake ({verdict.reason})"
+        intake_err = await intake.step(self._ctx, cfg=cfg, idea=idea, repo_path=repo_path)
+        if intake_err is not None:
+            return intake_err
 
         # ADR-14: one sdlc/<run_id>/integration branch accumulates completed
         # task work; dependent tasks branch from its head. The activity hands

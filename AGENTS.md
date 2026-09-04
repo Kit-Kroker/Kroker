@@ -147,7 +147,7 @@ documentation (`src/`, `tests/`, `scripts/`, `interfaces/`, `agents/`,
 
 | Stage | Lives in | Status |
 |---|---|---|
-| intake | `src/sdlc/workflows/feature.py` | types moved, step pending |
+| intake | `src/sdlc/stages/intake/` | migrated |
 | context (brownfield) | `src/sdlc/workflows/feature.py` | types moved, step pending |
 | research | `src/sdlc/workflows/feature.py` | types moved, step pending |
 | clarify | `src/sdlc/stages/clarify/` | migrated |
