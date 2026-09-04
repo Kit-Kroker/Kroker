@@ -10,12 +10,20 @@ from __future__ import annotations
 
 import os
 from datetime import timedelta
+from typing import Any
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
-    from ..agents.roles import STAGE_MODELS, resolve_role_model, t_qa, t_reviewer
+    from ..agents.roles import (
+        STAGE_MODELS,
+        resolve_role_model,
+        t_adversary,
+        t_deep_review,
+        t_qa,
+        t_reviewer,
+    )
     from ..benchmarks.models import BenchmarkOutcome, WasteBag
     from ..core.models import (
         ArtifactRef,
@@ -37,7 +45,6 @@ with workflow.unsafe.imports_passed_through():
     from ..memory.models import MemoryKind
     from ..observability.trace import RunEventKind
     from ..pending import GateContext
-    from ..prompts import reviewer_prompt
     from ..stages.code.activities import CodingTaskInput, run_coding_task
     from ..stages.plan.models import (
         DevTask,
@@ -46,6 +53,16 @@ with workflow.unsafe.imports_passed_through():
     from ..stages.qa import step as qa_step
     from ..stages.qa.activities import QAInput, run_test_suite
     from ..stages.qa.step import _fix_loop_issues
+    from ..stages.review import (
+        run_adversary as review_run_adversary,
+    )
+    from ..stages.review import (
+        run_deep_review as review_run_deep_review,
+    )
+    from ..stages.review import (
+        step as review_step,
+    )
+    from ..stages.review.models import DeepReviewReport, ReviewReport
     from ..vcs import (
         DiffInput,
         MergeInput,
@@ -551,17 +568,19 @@ class TaskHost:
             # Second clean-context judge (FR-204): same inputs as QA — frozen
             # contract + materialized diff + test output. No narrative, no
             # session. A different model family than the developer (ADR-6).
-            review = None
-            if cfg.review_enabled:
-                review = (
-                    await self._run_role(  # type: ignore[attr-defined]
-                        cfg,
-                        "reviewer",
-                        STAGE_MODELS.get("review", "unknown"),
-                        t_reviewer,
-                        reviewer_prompt(assertions, qa_raw.model_dump_json(), diff["patch"]),
-                    )
-                ).output
+            review = await review_step(
+                self._ctx,  # type: ignore[attr-defined]
+                cfg=cfg,
+                task=task,
+                contract=contract,
+                diff=diff,
+                worktree=worktree,
+                reviewer_agent=t_reviewer,
+                qa_raw=qa_raw,
+                reviewer_model=STAGE_MODELS.get("review", "unknown"),
+                attempt=attempt - 1,
+                started=_attempt_started,
+            )
 
             # `qa_raw.tests_passed` is the actual subprocess exit code;
             # `qa.tests_passed` is the LLM QA agent's OWN retyped guess at
@@ -622,30 +641,6 @@ class TaskHost:
             )
 
             review_ok = review is None or review.approve
-            if review is not None:
-                # The primary's verdict has never been recorded, so
-                # review-driven rework showed as fix_attempts on code/qa with
-                # no cause row at all. Disagreement is a RELATION between two
-                # records; the adversary's is meaningless without this one.
-                await self._record(  # type: ignore[attr-defined]
-                    cfg,
-                    self._stage_record(  # type: ignore[attr-defined]
-                        cfg,
-                        stage="review",
-                        role="reviewer",
-                        started=_attempt_started,
-                        ended=workflow.now(),
-                        quality_score=(1.0 if review.approve else 0.0),
-                        judge="contract",
-                        outcome=(
-                            BenchmarkOutcome.PASS if review.approve else BenchmarkOutcome.FAIL
-                        ),
-                        model=STAGE_MODELS.get("review", "unknown"),
-                        task_id=task.id,
-                        attempt=attempt - 1,
-                        fix_attempts=0,
-                    ),
-                )  # cause row; volume lives on code/qa
 
             adversary = None
             if task_passed and review_ok:
@@ -803,3 +798,58 @@ class TaskHost:
                     + f"Unmet contract assertions:\n- {issues}\n"
                     "Contract:\n- " + "\n- ".join(assertions)
                 )
+
+    async def _run_adversary(
+        self,
+        cfg: PipelineConfig,
+        contract: Any,
+        assertions: list[str],
+        diff: dict[str, Any],
+        qa_raw: Any,
+        task: Any,
+    ) -> ReviewReport | None:
+        """Spec 3.2: the decorrelated second opinion, on the APPROVING path only."""
+        if not (cfg.adversarial_review_enabled and t_adversary is not None):
+            return None
+        return await review_run_adversary(
+            self._ctx,  # type: ignore[attr-defined]
+            cfg=cfg,
+            contract=contract,
+            assertions=assertions,
+            diff=diff,
+            qa_raw=qa_raw,
+            task=task,
+            adversary_agent=t_adversary,
+            adversary_model=resolve_role_model(cfg, "adversary"),
+        )
+
+    async def _run_deep_review(
+        self,
+        cfg: PipelineConfig,
+        run: Any,
+        contract: Any,
+        assertions: list[str],
+        diff: dict[str, Any],
+        task: Any,
+    ) -> DeepReviewReport | None:
+        """E-39 advisory lens: read the SCRUBBED harness transcript as data and
+        emit DeepReviewReport.
+        """
+        if not (
+            cfg.deep_review_enabled
+            and t_deep_review is not None
+            and run is not None
+            and run.session_ref is not None
+        ):
+            return None
+        return await review_run_deep_review(
+            self._ctx,  # type: ignore[attr-defined]
+            cfg=cfg,
+            run=run,
+            contract=contract,
+            assertions=assertions,
+            diff=diff,
+            task=task,
+            deep_review_agent=t_deep_review,
+            deep_review_model=resolve_role_model(cfg, "deep_review"),
+        )

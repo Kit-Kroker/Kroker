@@ -18,13 +18,11 @@ with workflow.unsafe.imports_passed_through():
     from ..agents.roles import (
         STAGE_MODELS,
         resolve_role_model,
-        t_adversary,
         t_analyst,
         t_architect,
         t_clarify,
         t_clarify_probe,
         t_clarify_route,
-        t_deep_review,
         t_handoff,
         t_merge_verdict,
         t_planner,
@@ -61,8 +59,6 @@ with workflow.unsafe.imports_passed_through():
     from ..handoff import (
         claim_survival_score,
         cross_check_claims,
-        verified_integrity_flags,
-        verified_plan_deviations,
     )
     from ..harness.session import session_text_from_jsonl
     from ..measurement import CollectionState
@@ -98,7 +94,6 @@ with workflow.unsafe.imports_passed_through():
     from ..stages.qa.activities import LintInput, SecurityScanInput, run_lint, security_scan
     from ..stages.qa.models import SecurityReport
     from ..stages.research.deps import ResearchDeps
-    from ..stages.review.models import DeepReviewReport, ReviewReport
     from ..vcs import (
         DiffInput,
         IntegrationHandle,
@@ -393,177 +388,6 @@ class FeatureWorkflow(
         )
 
     # ---------------------------- helpers -------------------------------
-
-    async def _run_deep_review(
-        self, cfg, run, contract, assertions, diff, task
-    ) -> DeepReviewReport | None:
-        """E-39 advisory lens: read the SCRUBBED harness transcript as data and
-        emit a DeepReviewReport. Recorded + retained for signal ONLY â€” never
-        consulted in the task's success condition. Once per task, over the
-        final HarnessRunResult. Best-effort: any failure returns None so an
-        observability lens can never fail delivery."""
-        if not (
-            cfg.deep_review_enabled
-            and t_deep_review is not None
-            and run is not None
-            and run.session_ref is not None
-        ):
-            return None
-        _started = workflow.now()
-        try:
-            loaded = await workflow.execute_activity(
-                load_session, LoadSessionInput(ref=run.session_ref), **ACT
-            )
-            # Code review #1: render the plain-text view both prompts and the
-            # verifier ground on -- raw JSONL would drop legitimate evidence.
-            transcript = session_text_from_jsonl(loaded.text) + (
-                f"\n[transcript truncated; digest follows]\n{run.session_digest.model_dump_json()}"
-                if loaded.truncated and run.session_digest is not None
-                else ""
-            )
-            spend = RoleUsage(role="deep_review", model=resolve_role_model(cfg, "deep_review"))
-            report = (
-                await self._run_role(
-                    cfg,
-                    "deep_review",
-                    resolve_role_model(cfg, "deep_review"),
-                    t_deep_review,
-                    "Frozen contract assertions:\n- "
-                    + "\n- ".join(assertions)
-                    + f"\nThe task as planned:\n{task.model_dump_json()}"
-                    + f"\nDiff:\n{diff['patch']}"
-                    + "\nScrubbed harness transcript (how the diff was reached):\n"
-                    + transcript,
-                    into=spend,
-                )
-            ).output
-            # E-43: an accusation must point at a line the transcript
-            # contains. Verified against `transcript`, the same bytes the
-            # lens itself read. Dropping, never failing -- this lens must
-            # never fail delivery.
-            kept_flags, dropped_flags = verified_integrity_flags(report.integrity_flags, transcript)
-            if dropped_flags:
-                workflow.logger.warning(
-                    "deep_review: dropped %d integrity flag(s) for task %s "
-                    "whose evidence is not in the transcript",
-                    dropped_flags,
-                    task.id,
-                )
-            kept_devs, dropped_devs = verified_plan_deviations(report.plan_deviations, transcript)
-            if dropped_devs:
-                workflow.logger.warning(
-                    "deep_review: dropped %d plan deviation(s) for task %s "
-                    "whose evidence is not in the transcript",
-                    dropped_devs,
-                    task.id,
-                )
-            report = report.model_copy(
-                update={"integrity_flags": kept_flags, "plan_deviations": kept_devs}
-            )
-            await self._record(
-                cfg,
-                self._stage_record(
-                    cfg,
-                    stage="deep_review",
-                    role="deep_review",
-                    started=_started,
-                    ended=workflow.now(),
-                    quality_score=(0.0 if report.cheat_detected or not report.approve else 1.0),
-                    judge="deep_review",
-                    outcome=(
-                        BenchmarkOutcome.FAIL if report.cheat_detected else BenchmarkOutcome.PASS
-                    ),
-                    model=resolve_role_model(cfg, "deep_review"),
-                    spend=spend,
-                    task_id=task.id,
-                ),
-            )
-            if report.cheat_detected:
-                await self._retain(
-                    cfg,
-                    MemoryKind.GOTCHA,
-                    cfg.memory.project_bank,
-                    text=f"deep_review flagged task {task.id}: "
-                    + "; ".join(f"{f.kind}: {f.detail}" for f in report.integrity_flags),
-                    metadata={"task_id": task.id, "run_id": workflow.info().workflow_id},
-                )
-        except Exception:
-            # A lens must never fail delivery -- but a silent swallow is how
-            # the judge-Literal defect survived unnoticed across every run.
-            workflow.logger.warning(
-                "deep_review lens failed for task %s; continuing without it", task.id, exc_info=True
-            )
-            return None
-        return report
-
-    async def _run_adversary(
-        self, cfg, contract, assertions, diff, qa_raw, task
-    ) -> ReviewReport | None:
-        """Spec 3.2: the decorrelated second opinion, on the APPROVING path
-        only -- a rejection is already headed for the fix loop.
-
-        Clean-context, exactly like the primary: contract + diff + test
-        output, never the session (that is deep_review's job). Identical
-        inputs are what make disagreement interpretable as model variance
-        rather than information asymmetry.
-
-        FAIL-OPEN: any failure returns None, which the caller treats as
-        agreement. The primary reviewer is the sole designated blocking
-        lens; a lens added for safety must not become a new way to fail.
-        (Deliberately asymmetric to the E-38 scrub, which is fail-closed:
-        a leaked credential is unrecoverable, a missed opinion is not.)
-        """
-        if not (cfg.adversarial_review_enabled and t_adversary is not None):
-            return None
-        _started = workflow.now()
-        model = resolve_role_model(cfg, "adversary")
-        try:
-            spend = RoleUsage(role="adversary", model=model)
-            report = (
-                await self._run_role(
-                    cfg,
-                    "adversary",
-                    model,
-                    t_adversary,
-                    "Frozen contract assertions:\n- "
-                    + "\n- ".join(assertions)
-                    + f"\nTest results: {qa_raw.model_dump_json()}"
-                    + f"\nDiff:\n{diff['patch']}",
-                    into=spend,
-                )
-            ).output
-            await self._record(
-                cfg,
-                self._stage_record(
-                    cfg,
-                    stage="adversary",
-                    role="adversary",
-                    started=_started,
-                    ended=workflow.now(),
-                    quality_score=(1.0 if report.approve else 0.0),
-                    judge="adversary",
-                    outcome=(BenchmarkOutcome.PASS if report.approve else BenchmarkOutcome.FAIL),
-                    model=model,
-                    spend=spend,
-                    task_id=task.id,
-                    fix_attempts=0,
-                ),
-            )  # cause row: volume lives on code/qa
-            if not report.approve:
-                await self._retain(
-                    cfg,
-                    MemoryKind.GOTCHA,
-                    cfg.memory.project_bank,
-                    text=f"adversary split from reviewer on task {task.id}: "
-                    + "; ".join(f"{f.assertion}: {f.detail}" for f in report.blocking_findings),
-                    metadata={"task_id": task.id, "run_id": workflow.info().workflow_id},
-                )
-            return report
-        except Exception:
-            workflow.logger.warning(
-                "adversary lens failed for task %s; treating as agreement", task.id, exc_info=True
-            )
-            return None
 
     async def _run_handoff(self, cfg, run, contract, assertions, diff, task) -> HandoffSummary:
         """FR-805: extract task-to-task claims from the scrubbed session.

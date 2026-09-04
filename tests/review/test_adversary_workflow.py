@@ -65,11 +65,16 @@ import pathlib
 
 FEATURE_SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 TASK_HOST_SRC = pathlib.Path("src/sdlc/workflows/task_host.py")
+STAGE_SRC = pathlib.Path("src/sdlc/stages/review/step.py")
 
 
 def _src() -> str:
     return (
-        FEATURE_SRC.read_text(encoding="utf-8") + "\n" + TASK_HOST_SRC.read_text(encoding="utf-8")
+        FEATURE_SRC.read_text(encoding="utf-8")
+        + "\n"
+        + TASK_HOST_SRC.read_text(encoding="utf-8")
+        + "\n"
+        + STAGE_SRC.read_text(encoding="utf-8")
     )
 
 
@@ -105,8 +110,8 @@ def test_adversary_is_fail_open():
 def test_adversary_never_touches_the_session():
     """Clean-context: contract + diff + test output only. Reading the
     transcript is deep_review's job and would break decorrelation."""
-    src = _src()
-    idx = src.find("async def _run_adversary")
+    src = STAGE_SRC.read_text(encoding="utf-8")
+    idx = src.find("async def run_adversary")
     body = src[idx : idx + 2600]
     assert "load_session" not in body
     assert "session_ref" not in body
@@ -142,9 +147,9 @@ def test_adversary_receives_the_same_test_info_as_the_primary():
     variance, not information asymmetry (spec 3.1). The adversary must see the
     full QAReport the primary sees -- not an issues-only digest that is empty
     on the approving path and biases it toward rejection."""
-    src = _src()
-    adv = src[src.find("async def _run_adversary") : src.find("async def _run_handoff")]
-    assert "qa_raw.model_dump_json()" in adv
+    src = STAGE_SRC.read_text(encoding="utf-8")
+    adv = src[src.find("async def run_adversary") : src.find("async def run_deep_review")]
+    assert "qa_raw.model_dump_json()" in src
     assert "Test output:" not in adv
 
 

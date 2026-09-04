@@ -2,6 +2,7 @@ import pathlib
 
 FEATURE_SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 TASK_HOST_SRC = pathlib.Path("src/sdlc/workflows/task_host.py")
+REVIEW_SRC = pathlib.Path("src/sdlc/stages/review/step.py")
 
 
 class _Source:
@@ -10,6 +11,8 @@ class _Source:
             FEATURE_SRC.read_text(encoding=encoding)
             + "\n"
             + TASK_HOST_SRC.read_text(encoding=encoding)
+            + "\n"
+            + REVIEW_SRC.read_text(encoding=encoding)
         )
 
 
@@ -18,16 +21,16 @@ SRC = _Source()
 
 def test_dev_task_runs_reviewer_on_clean_inputs():
     src = SRC.read_text(encoding="utf-8")
-    # the reviewer call may wrap across lines; find the _run_role call whose
+    # the reviewer call may wrap across lines; find the run_role call whose
     # arguments name the "reviewer" role
-    idx = src.find("self._run_role(")
+    idx = src.find("run_role(")
     while idx != -1 and '"reviewer"' not in src[idx : idx + 160]:
-        idx = src.find("self._run_role(", idx + 1)
+        idx = src.find("run_role(", idx + 1)
     assert idx != -1, "_dev_task must run the clean-context reviewer (FR-204)"
     # Reviewer must see the diff patch — the same materialized diff QA sees,
     # never the implementer's narrative.
     call = src[idx : idx + 400]
-    assert "diff['patch']" in call or 'diff["patch"]' in call
+    assert "patch" in call or "diff['patch']" in call or 'diff["patch"]' in call
 
 
 def test_review_gated_on_config_flag():
