@@ -1541,19 +1541,19 @@ git commit -m "chore: P2 complete — three monoliths deleted, baseline 5 -> 2"
 
 The per-stage specifics — which `self._x` each stage touches, which services they map to, which enum-identity sites and child workflows are involved — are **produced by Task 1's report**, not knowable when this plan was written. Fabricating them here would be a plan that lies.
 
-- [ ] **Step 1: Read the migration order from the report**
+- [x] **Step 1: Read the migration order from the report**
 
 `docs/reports/2026-09-03-feature-py-archaeology.md`, Step 5's numbered list.
 
-- [ ] **Step 2: Append one Task 20.N per stage, in that order**
+- [x] **Step 2: Append one Task 20.N per stage, in that order**
 
-Instantiate the template in Task 20 once per stage, filling every bracketed field from the report's row for that stage. Thirteen instances: intake, context, research, architecture, plan, code, review, analyze, merge, deploy, retro, plus any the report splits out.
+Instantiate the template in Task 20 once per stage, filling every bracketed field from the report's row for that stage. Eleven instances: intake, retro, analyze, research, review, context, merge, deploy, code, architecture, plan (appended below).
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add docs/superpowers/plans/2026-09-03-a-stage-surgery.md
-git commit -m "docs(plan): expand P3 into thirteen stage tasks from the archaeology report"
+git commit -m "docs(plan): expand P3 into eleven stage tasks from the archaeology report"
 ```
 
 ### Task 20: The per-stage migration template
@@ -1655,6 +1655,281 @@ Expected: all green; the ratchet reports `feature.py` tightening.
 git add -A
 git commit -m "refactor(<stage>): move the <stage> stage into a vertical slice"
 ```
+
+### Task 20.1: Stage `intake` (Rank 1)
+
+**Files:**
+- Create: `src/sdlc/stages/intake/{__init__,step,activities,prompts}.py`, `intake.md`, `AGENTS.md` (`models.py` already exists from Task 15)
+- Modify: `src/sdlc/workflows/feature.py` (`:2510-2524`), `src/sdlc/stages/__init__.py`, `AGENTS.md`
+- Test: `tests/intake/test_intake_slice_contract.py`
+
+**Interfaces:**
+- Consumes: `StageContext`, `sdlc.core.models.PipelineConfig`, `sdlc.core.models.IdeaBrief`.
+- Produces: `stages.intake.step(ctx, *, cfg, idea) -> None` and `ACTIVITIES = []`.
+- Agents: None (purely mechanical repo probe).
+- Uncovered needs: None.
+- Enum sites: None.
+
+- [ ] **Step 1: Write failing contract test** (`tests/intake/test_intake_slice_contract.py`)
+- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Lift the inline block into `step.py`** (`feature.py:2510-2524`)
+- [ ] **Step 4: Create `prompts.py` with `prompt_digest(cfg)` and empty `activities.py`**
+- [ ] **Step 5: Register in `STAGE_MODULES`**
+- [ ] **Step 6: Move tests** (none assigned in archaeology report)
+- [ ] **Step 7: Write `intake.md` and `AGENTS.md` from templates**
+- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [ ] **Step 9: Run full verification suite**
+- [ ] **Step 10: Commit `refactor(intake): move the intake stage into a vertical slice`**
+
+### Task 20.2: Stage `retro` (Rank 2)
+
+**Files:**
+- Create: `src/sdlc/stages/retro/{__init__,step,activities,prompts}.py`, `retro.md`, `AGENTS.md` (`models.py` already exists from Task 15)
+- Modify: `src/sdlc/workflows/feature.py` (`:2396-2472`), `src/sdlc/stages/__init__.py`, `AGENTS.md`
+- Test: `tests/retro/`
+
+**Interfaces:**
+- Consumes: `StageContext`, `PipelineConfig`, `summary: RunSummary`, `session_refs: list[ArtifactRef]`, `trace: list[RunEvent]`.
+- Produces: `stages.retro.step(ctx, *, cfg, summary, session_refs, trace) -> None` and `ACTIVITIES = []`.
+- Agents: None.
+- Uncovered needs: None (best-effort summary, reflection, and artifact export via `ctx.emit` and `ctx.retain`).
+- Enum sites: None.
+
+- [ ] **Step 1: Write failing contract test** (`tests/retro/test_retro_slice_contract.py`)
+- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Lift the inline block into `step.py`** (`feature.py:2396-2472`)
+- [ ] **Step 4: Create `prompts.py` with `prompt_digest(cfg)` and empty `activities.py`**
+- [ ] **Step 5: Register in `STAGE_MODULES`**
+- [ ] **Step 6: Move tests** (`tests/test_retro_stage.py`, `tests/test_reflect_workflow.py` -> `tests/retro/`)
+- [ ] **Step 7: Write `retro.md` and `AGENTS.md` from templates**
+- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [ ] **Step 9: Run full verification suite**
+- [ ] **Step 10: Commit `refactor(retro): move the retro stage into a vertical slice`**
+
+### Task 20.3: Stage `analyze` (Rank 3)
+
+**Files:**
+- Create: `src/sdlc/stages/analyze/{__init__,step,activities,prompts}.py`, `analyze.md`, `AGENTS.md` (`models.py` already exists from Task 15)
+- Modify: `src/sdlc/workflows/feature.py` (`:3260-3326`), `src/sdlc/stages/__init__.py`, `AGENTS.md`
+- Test: `tests/analyze/`
+
+**Interfaces:**
+- Consumes: `StageContext`, `PipelineConfig`, `contract: ValidationContract`, `diff: str`, `integration_wt: str`.
+- Produces: `stages.analyze.step(ctx, *, cfg, contract, diff, integration_wt, analyst_agent) -> AnalysisReport` and `ACTIVITIES = []`.
+- Agents: `analyst_agent`.
+- Uncovered needs: None (`integration_wt` passed as explicit argument).
+- Enum sites: None.
+
+- [ ] **Step 1: Write failing contract test** (`tests/analyze/test_analyze_slice_contract.py`)
+- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Lift the inline block into `step.py`** (`feature.py:3260-3326`)
+- [ ] **Step 4: Create `prompts.py` with `prompt_digest(cfg)` and empty `activities.py`**
+- [ ] **Step 5: Register in `STAGE_MODULES`**
+- [ ] **Step 6: Move tests** (`tests/test_analyst_models.py`, `tests/test_analyst_stage_wiring.py`, `tests/test_analyst_wiring.py` -> `tests/analyze/`)
+- [ ] **Step 7: Write `analyze.md` and `AGENTS.md` from templates**
+- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [ ] **Step 9: Run full verification suite**
+- [ ] **Step 10: Commit `refactor(analyze): move the analyze stage into a vertical slice`**
+
+### Task 20.4: Stage `research` (Rank 4)
+
+**Files:**
+- Create: `src/sdlc/stages/research/{__init__,step,activities,prompts}.py`, `research.md`, `AGENTS.md` (`models.py` already exists from Task 15)
+- Modify: `src/sdlc/workflows/feature.py` (`:1328-1420`, `:2563-2770`), `src/sdlc/stages/__init__.py`, `src/sdlc/worker.py`, `AGENTS.md`
+- Test: `tests/research/`
+
+**Interfaces:**
+- Consumes: `StageContext`, `PipelineConfig`, `idea: IdeaBrief`.
+- Produces: `stages.research.step(ctx, *, cfg, idea, research_agent, provider_agent, synthesizer_agent) -> ResearchBrief` and `ACTIVITIES = [research_plan, research_subquestion, research_synthesize]`.
+- Agents: `research_agent`, `provider_agent`, `synthesizer_agent`.
+- Uncovered needs: None (orchestrator handles serial budget check; agents passed as parameters).
+- Enum sites: None.
+
+- [ ] **Step 1: Write failing contract test** (`tests/research/test_research_slice_contract.py`)
+- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Lift the inline block into `step.py`** (`feature.py:1328-1420`, `:2563-2770`)
+- [ ] **Step 4: Move research activities to `activities.py` and create `prompts.py` with `prompt_digest(cfg)`**
+- [ ] **Step 5: Register in `STAGE_MODULES` and update `worker.py`**
+- [ ] **Step 6: Move tests** (23 files `tests/test_research_*.py` -> `tests/research/`)
+- [ ] **Step 7: Write `research.md` and `AGENTS.md` from templates**
+- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [ ] **Step 9: Run full verification suite**
+- [ ] **Step 10: Commit `refactor(research): move the research stage into a vertical slice`**
+
+### Task 20.5: Stage `review` (Rank 5)
+
+**Files:**
+- Create: `src/sdlc/stages/review/{__init__,step,activities,prompts}.py`, `review.md`, `AGENTS.md` (`models.py` already exists from Task 15)
+- Modify: `src/sdlc/workflows/task_host.py` / `feature.py` (`:1422-1591`, `:2120-2134`, `:2195-2250`), `src/sdlc/stages/__init__.py`, `AGENTS.md`
+- Test: `tests/review/`
+
+**Interfaces:**
+- Consumes: `StageContext`, `PipelineConfig`, `task: DevTask`, `contract: ValidationContract`, `diff: str`, `worktree: str`.
+- Produces: `stages.review.step(ctx, *, cfg, task, contract, diff, worktree, reviewer_agent, adversary_agent, deep_review_agent) -> ReviewReport` and `ACTIVITIES = []`.
+- Agents: `reviewer_agent`, `adversary_agent`, `deep_review_agent`.
+- Uncovered needs: None (adversary and deep_review run as review lenses; outputs returned).
+- Enum sites: None.
+
+- [ ] **Step 1: Write failing contract test** (`tests/review/test_review_slice_contract.py`)
+- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Lift the inline block into `step.py`** (`:1422-1591`, `:2120-2134`, `:2195-2250`)
+- [ ] **Step 4: Create `prompts.py` with `prompt_digest(cfg)` and empty `activities.py`**
+- [ ] **Step 5: Register in `STAGE_MODULES`**
+- [ ] **Step 6: Move tests** (`tests/test_adversary_registry.py`, `tests/test_adversary_workflow.py`, `tests/test_deep_review_*.py`, `tests/test_review_*.py`, `tests/test_reviewer_agent.py` -> `tests/review/`)
+- [ ] **Step 7: Write `review.md` and `AGENTS.md` from templates**
+- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [ ] **Step 9: Run full verification suite**
+- [ ] **Step 10: Commit `refactor(review): move the review stage into a vertical slice`**
+
+### Task 20.6: Stage `context` (Rank 6)
+
+**Files:**
+- Create: `src/sdlc/stages/context/{__init__,step,prompts}.py`, `context.md`, `AGENTS.md` (`models.py` and `activities.py` already exist)
+- Modify: `src/sdlc/workflows/feature.py` (`:2474-2491`, `:2551-2562`), `src/sdlc/stages/__init__.py`, `AGENTS.md`
+- Test: `tests/context/`
+
+**Interfaces:**
+- Consumes: `StageContext`, `PipelineConfig`, `idea: IdeaBrief`, `repo_path: str`, `commit_sha: str`.
+- Produces: `stages.context.step(ctx, *, cfg, idea, repo_path, commit_sha) -> BrownfieldDelta` and `ACTIVITIES = [classify_repo, check_brownfield_delta]`.
+- Agents: None.
+- Uncovered needs: None (`repo_path`, `commit_sha` passed as parameters).
+- Enum sites: `idea.mode is ProjectMode.BROWNFIELD` (`:2554`), `state is not CollectionState.MEASURED` (`:2557`).
+
+- [ ] **Step 1: Write failing contract test** (`tests/context/test_context_slice_contract.py`)
+- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Lift the inline block into `step.py`** (`feature.py:2474-2491`, `:2551-2562`)
+- [ ] **Step 4: Create `prompts.py` with `prompt_digest(cfg)`**
+- [ ] **Step 5: Register in `STAGE_MODULES`**
+- [ ] **Step 6: Move tests** (`tests/test_context_*.py` -> `tests/context/`)
+- [ ] **Step 7: Write `context.md` and `AGENTS.md` from templates**
+- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [ ] **Step 9: Run full verification suite**
+- [ ] **Step 10: Commit `refactor(context): move the context stage into a vertical slice`**
+
+### Task 20.7: Stage `merge` (Rank 7)
+
+**Files:**
+- Create: `src/sdlc/stages/merge/{__init__,step,prompts}.py`, `merge.md`, `AGENTS.md` (`models.py` and `activities.py` already exist)
+- Modify: `src/sdlc/workflows/feature.py` (`:3327-3574`), `src/sdlc/stages/__init__.py`, `AGENTS.md`
+- Test: `tests/merge/`
+
+**Interfaces:**
+- Consumes: `StageContext`, `PipelineConfig`, `task_results: list[TaskResult]`, `integration_wt: str`, `idea: IdeaBrief`.
+- Produces: `stages.merge.step(ctx, *, cfg, task_results, integration_wt, idea, merge_agent) -> MergeVerdict` and `ACTIVITIES = [measure_coverage, run_integration_checks, open_pull_request, evaluate_gate]`.
+- Agents: `merge_agent`.
+- Uncovered needs: None (`integration_wt` and `task_results` passed as parameters).
+- Enum sites: `c.classification is CheckClass.ABSOLUTE` (`:3445`), `c.classification is CheckClass.ADVISORY` (`:3478`), `cov.coverage.state is CollectionState.MEASURED` (`:3382`, `:3399`).
+
+- [ ] **Step 1: Write failing contract test** (`tests/merge/test_merge_slice_contract.py`)
+- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Lift the inline block into `step.py`** (`feature.py:3327-3574`)
+- [ ] **Step 4: Create `prompts.py` with `prompt_digest(cfg)`**
+- [ ] **Step 5: Register in `STAGE_MODULES`**
+- [ ] **Step 6: Move tests** (`tests/test_merge_gate_wiring.py` -> `tests/merge/`)
+- [ ] **Step 7: Write `merge.md` and `AGENTS.md` from templates**
+- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [ ] **Step 9: Run full verification suite**
+- [ ] **Step 10: Commit `refactor(merge): move the merge stage into a vertical slice`**
+
+### Task 20.8: Stage `deploy` (Rank 8)
+
+**Files:**
+- Create: `src/sdlc/stages/deploy/{__init__,step,activities,prompts}.py`, `deploy.md`, `AGENTS.md` (`models.py` already exists)
+- Modify: `src/sdlc/workflows/feature.py` (`:1744-1771`, `:3575-3673`), `src/sdlc/stages/__init__.py`, `src/sdlc/worker.py`, `AGENTS.md`
+- Test: `tests/deploy/`
+
+**Interfaces:**
+- Consumes: `StageContext`, `PipelineConfig`, `deploy_plan: DeployPlan`.
+- Produces: `stages.deploy.step(ctx, *, cfg, deploy_plan, planner_agent) -> DeployReport` and `ACTIVITIES = [deploy_apply, deploy_rollback, smoke_check, deploy_current_version]`.
+- Agents: `planner_agent`.
+- Uncovered needs: Child workflow `DeploymentWorkflow.run` (`:3601`).
+- Enum sites: `decision.outcome is GateOutcome.REVISE` (`:3654`).
+
+- [ ] **Step 1: Write failing contract test** (`tests/deploy/test_deploy_slice_contract.py`)
+- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Lift the inline block into `step.py`** (`feature.py:1744-1771`, `:3575-3673`)
+- [ ] **Step 4: Move deploy activities from `deploy/activities.py` to `stages/deploy/activities.py` and create `prompts.py` with `prompt_digest(cfg)`**
+- [ ] **Step 5: Register in `STAGE_MODULES` and update `worker.py`**
+- [ ] **Step 6: Move tests** (`tests/test_deploy_*.py`, `tests/test_deployment_workflow.py` -> `tests/deploy/`)
+- [ ] **Step 7: Write `deploy.md` and `AGENTS.md` from templates**
+- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [ ] **Step 9: Run full verification suite**
+- [ ] **Step 10: Commit `refactor(deploy): move the deploy stage into a vertical slice`**
+
+### Task 20.9: Stage `code` (Rank 9)
+
+**Files:**
+- Create: `src/sdlc/stages/code/{__init__,step,prompts}.py`, `code.md`, `AGENTS.md` (`models.py` and `activities.py` already exist)
+- Modify: `src/sdlc/workflows/task_host.py` / `feature.py` (`:1593-1709`, `:1833-2089`), `src/sdlc/stages/__init__.py`, `AGENTS.md`
+- Test: `tests/code/`
+
+**Interfaces:**
+- Consumes: `StageContext`, `PipelineConfig`, `task: DevTask`, `contract: ValidationContract`, `worktree: str`, `notes: list[RoundNote]`.
+- Produces: `stages.code.step(ctx, *, cfg, task, contract, worktree, notes, dev_agent, crew_layout) -> TaskResult` and `ACTIVITIES = [run_coding_task]`.
+- Agents: `dev_agent`.
+- Uncovered needs: Child workflow `CrewTaskWorkflow.run` (`:1938`); `escalation_round` loop local.
+- Enum sites: `role_cfg.harness is HarnessKind.CREW` (`:1891`, `:1927`), `esc.outcome is EscalationOutcome.APPROVED` (`:1703`).
+
+- [ ] **Step 1: Write failing contract test** (`tests/code/test_code_slice_contract.py`)
+- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Lift the inline block into `step.py`** (`:1593-1709`, `:1833-2089`)
+- [ ] **Step 4: Create `prompts.py` with `prompt_digest(cfg)`**
+- [ ] **Step 5: Register in `STAGE_MODULES`**
+- [ ] **Step 6: Move tests** (`tests/test_coding_task_checkpoint.py`, `tests/test_handoff_*.py` -> `tests/code/`)
+- [ ] **Step 7: Write `code.md` and `AGENTS.md` from templates**
+- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [ ] **Step 9: Run full verification suite**
+- [ ] **Step 10: Commit `refactor(code): move the code stage into a vertical slice`**
+
+### Task 20.10: Stage `architecture` (Rank 10)
+
+**Files:**
+- Create: `src/sdlc/stages/architecture/{__init__,step,activities,prompts}.py`, `architecture.md`, `AGENTS.md` (`models.py` already exists)
+- Modify: `src/sdlc/workflows/feature.py` (`:2922-3090`), `src/sdlc/stages/__init__.py`, `AGENTS.md`
+- Test: `tests/architecture/`
+
+**Interfaces:**
+- Consumes: `StageContext`, `PipelineConfig`, `requirements: ClarifiedRequirements`, `codebase_map: CodebaseMap | None`, `memory_watermark: str | None`.
+- Produces: `stages.architecture.step(ctx, *, cfg, requirements, codebase_map, memory_watermark, architect_agent) -> tuple[ArchitectureSpec, GateDecision]` and `ACTIVITIES = []`.
+- Agents: `architect_agent`.
+- Uncovered needs: 1 (`_board_publish` -> returns spec + gate decision; orchestrator publishes).
+- Enum sites: None.
+
+- [ ] **Step 1: Write failing contract test** (`tests/architecture/test_architecture_slice_contract.py`)
+- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Lift the inline block into `step.py`** (`feature.py:2922-3090`)
+- [ ] **Step 4: Create `prompts.py` with `prompt_digest(cfg)` and empty `activities.py`**
+- [ ] **Step 5: Register in `STAGE_MODULES`**
+- [ ] **Step 6: Move tests** (`tests/test_architect_*.py` -> `tests/architecture/`)
+- [ ] **Step 7: Write `architecture.md` and `AGENTS.md` from templates**
+- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [ ] **Step 9: Run full verification suite**
+- [ ] **Step 10: Commit `refactor(architecture): move the architecture stage into a vertical slice`**
+
+### Task 20.11: Stage `plan` (Rank 11)
+
+**Files:**
+- Create: `src/sdlc/stages/plan/{__init__,step,activities,prompts}.py`, `plan.md`, `AGENTS.md` (`models.py` already exists)
+- Modify: `src/sdlc/workflows/feature.py` (`:3091-3159`), `src/sdlc/stages/__init__.py`, `AGENTS.md`
+- Test: `tests/plan/`
+
+**Interfaces:**
+- Consumes: `StageContext`, `PipelineConfig`, `architecture: ArchitectureSpec`, `requirements: ClarifiedRequirements`.
+- Produces: `stages.plan.step(ctx, *, cfg, architecture, requirements, planner_agent) -> tuple[ImplementationPlan, str]` (plan + `version_id`) and `ACTIVITIES = []`.
+- Agents: `planner_agent`.
+- Uncovered needs: 1 (`_board_publish` / `_board_sync_tasks` -> returns envelope with `version_id`; orchestrator publishes).
+- Enum sites: None.
+
+- [ ] **Step 1: Write failing contract test** (`tests/plan/test_plan_slice_contract.py`)
+- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Lift the inline block into `step.py`** (`feature.py:3091-3159`)
+- [ ] **Step 4: Create `prompts.py` with `prompt_digest(cfg)` and empty `activities.py`**
+- [ ] **Step 5: Register in `STAGE_MODULES`**
+- [ ] **Step 6: Move tests** (`tests/test_plan_*.py`, `tests/test_planner_agent_retries.py` -> `tests/plan/`)
+- [ ] **Step 7: Write `plan.md` and `AGENTS.md` from templates**
+- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [ ] **Step 9: Run full verification suite**
+- [ ] **Step 10: Commit `refactor(plan): move the plan stage into a vertical slice`**
 
 ### Task 21: Close out — `feature.py` under the ceiling
 
