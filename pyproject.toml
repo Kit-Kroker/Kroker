@@ -86,4 +86,5 @@ markers = [
     "prompt_eval: A/B-scores a role prompt against a fixture; spends tokens; skipped unless SDLC_PROMPT_EVAL=1",
     "docker: requires a running Docker daemon; builds and runs real containers",
     "crew: needs a real coding CLI on PATH; drives one crew round end to end",
+    "clause: cites a numbered clause from a slice's <stage>.md contract",
 ]
