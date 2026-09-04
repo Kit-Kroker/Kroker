@@ -9,7 +9,7 @@ from sdlc.core.models import (
     ClarificationDimension,
     ClarificationOutcome,
 )
-from sdlc.models import (
+from sdlc.stages.clarify.models import (
     ClarifiedRequirements,
     OpenQuestion,
 )

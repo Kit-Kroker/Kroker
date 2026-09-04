@@ -16,10 +16,8 @@ from ..core.models import (
     ArtifactRef,
 )
 from ..harness.adapters import CodingHarness
+from ..harness.models import SessionDigest
 from ..harness.session import digest_of, scrub_session, session_to_jsonl
-from ..models import (
-    SessionDigest,
-)
 from .store import LocalFileStore
 
 _log = logging.getLogger(__name__)

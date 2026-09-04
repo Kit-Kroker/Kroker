@@ -7,7 +7,7 @@ themselves are covered by Tasks 7-9."""
 from sdlc.core.models import (
     RoleUsage,
 )
-from sdlc.models import (
+from sdlc.stages.research.models import (
     ResearchBrief,
     SubQuestion,
     SubQuestionFinding,

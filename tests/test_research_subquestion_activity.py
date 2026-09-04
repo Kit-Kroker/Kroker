@@ -9,10 +9,13 @@ import pytest
 from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.models.test import TestModel
 
-from sdlc.models import SubQuestion, SubQuestionFinding
 from sdlc.research.deps import BudgetExceeded, ResearchDeps
 from sdlc.research.stage import SubQuestionInput
 from sdlc.research.stage import _research_subquestion_impl as research_subquestion
+from sdlc.stages.research.models import (
+    SubQuestion,
+    SubQuestionFinding,
+)
 
 
 @pytest.fixture(autouse=True)

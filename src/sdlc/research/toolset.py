@@ -6,7 +6,10 @@ from __future__ import annotations
 
 from typing import cast
 
-from ..models import Gap, ResearchBrief
+from ..stages.research.models import (
+    Gap,
+    ResearchBrief,
+)
 from .deps import BudgetExceeded, ResearchDeps
 
 

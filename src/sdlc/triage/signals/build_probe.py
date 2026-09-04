@@ -14,8 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...measurement import Measurement
-from ..models import (
+from sdlc.triage.models import (
     M_BUILDABLE,
     M_RUNNABLE,
     FindingSeverity,
@@ -23,6 +22,8 @@ from ..models import (
     SignalResult,
     TriageFinding,
 )
+
+from ...measurement import Measurement
 
 SIGNAL_ID = "build_probe"
 VERSION = 1

@@ -37,19 +37,21 @@ with workflow.unsafe.imports_passed_through():
         RoleUsage,
     )
     from ..crew.activities import LoadCrewInput, load_crew
-    from ..models import (
+    from ..harness.models import (
         DeferredToolUse,
-        DevTask,
         EscalationOutcome,
-        MemoryKind,
         ToolDenial,
         ToolEscalation,
         ToolGrant,
-        compute_plan_drift,
     )
+    from ..memory.models import MemoryKind
     from ..observability.trace import RunEventKind
     from ..pending import GateContext
     from ..prompts import reviewer_prompt
+    from ..stages.plan.models import (
+        DevTask,
+        compute_plan_drift,
+    )
     from ..stages.qa import step as qa_step
     from ..stages.qa.activities import QAInput, run_test_suite
     from ..stages.qa.step import _fix_loop_issues

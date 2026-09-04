@@ -15,7 +15,7 @@ import pytest
 
 from sdlc.harness.adapters import ClaudeCodeHarness, HarnessRequest
 from sdlc.harness.containment import load_policy
-from sdlc.models import ToolGrant
+from sdlc.harness.models import ToolGrant
 
 pytestmark = [
     pytest.mark.live,

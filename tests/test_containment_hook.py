@@ -6,7 +6,7 @@ import sys
 
 from sdlc.harness.containment import Policy, Rule
 from sdlc.harness.hook import decide, format_reason, main
-from sdlc.models import ContainmentLayer
+from sdlc.harness.models import ContainmentLayer
 
 POLICY = Policy(
     version=1,
@@ -107,7 +107,7 @@ def test_module_is_runnable_as_a_subprocess(tmp_path):
 
 from sdlc.harness.containment import Action, digest_tool_input
 from sdlc.harness.hook import sibling_count
-from sdlc.models import ToolGrant
+from sdlc.harness.models import ToolGrant
 
 ESC_POLICY = Policy(
     version=1,

@@ -10,8 +10,11 @@ from dataclasses import dataclass, field
 
 from temporalio import activity
 
-from ..models import RecallSnapshot, RetainItem
 from .fake import FakeMemory
+from .models import (
+    RecallSnapshot,
+    RetainItem,
+)
 from .protocol import Memory
 from .query_hash import recall_query_hash
 from .scrub import scrub

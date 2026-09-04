@@ -102,7 +102,10 @@ The old tests hand-build one- and two-role registries; a required-roles check wo
 import pytest
 
 from sdlc.agents.loader import (
-    REQUIRED_ROLES, RegistryError, load_registry, model_family,
+    REQUIRED_ROLES,
+    RegistryError,
+    load_registry,
+    model_family,
     validate_registry,
 )
 from sdlc.models import HarnessKind, RoleConfig
@@ -115,15 +118,24 @@ def _complete_registry(**overrides: RoleConfig) -> dict[str, RoleConfig]:
     """A registry that passes every check. Tests perturb ONE role via
     overrides so each assertion fails for the reason under test."""
     roles: dict[str, RoleConfig] = {
-        name: RoleConfig(kind="harness", harness=HarnessKind.OPENCODE,
-                         model=_HARNESS_MODEL)
+        name: RoleConfig(kind="harness", harness=HarnessKind.OPENCODE, model=_HARNESS_MODEL)
         for name in ("dev", "test", "devops")
     }
-    roles.update({
-        name: RoleConfig(kind="proposer", model=_PROPOSER_MODEL)
-        for name in ("clarify", "architect", "planner", "qa", "reviewer",
-                     "analyst", "merge_verdict", "devops_planner")
-    })
+    roles.update(
+        {
+            name: RoleConfig(kind="proposer", model=_PROPOSER_MODEL)
+            for name in (
+                "clarify",
+                "architect",
+                "planner",
+                "qa",
+                "reviewer",
+                "analyst",
+                "merge_verdict",
+                "devops_planner",
+            )
+        }
+    )
     roles.update(overrides)
     return roles
 
@@ -135,13 +147,13 @@ def test_model_family_splits_on_colon_and_slash():
 
 
 def test_complete_registry_helper_is_itself_valid():
-    validate_registry(_complete_registry())      # must not raise
+    validate_registry(_complete_registry())  # must not raise
 
 
 def test_shipped_registry_loads_and_validates():
-    roles = load_registry()                      # default config/agents.yaml
+    roles = load_registry()  # default config/agents.yaml
     assert REQUIRED_ROLES <= set(roles)
-    validate_registry(roles)                     # must not raise
+    validate_registry(roles)  # must not raise
 
 
 @pytest.mark.parametrize("missing", sorted(REQUIRED_ROLES))
@@ -153,8 +165,7 @@ def test_each_required_role_is_required(missing):
 
 
 def test_same_family_dev_and_reviewer_rejected():
-    roles = _complete_registry(
-        reviewer=RoleConfig(kind="proposer", model="zai-coding-plan/other"))
+    roles = _complete_registry(reviewer=RoleConfig(kind="proposer", model="zai-coding-plan/other"))
     with pytest.raises(RegistryError, match="family"):
         validate_registry(roles)
 
@@ -165,21 +176,22 @@ def test_adr6_checks_dev_not_a_bystander_role():
     coding. A registry where the REAL developer collides with the reviewer must
     now fail."""
     roles = _complete_registry(
-        dev=RoleConfig(kind="harness", harness=HarnessKind.OPENCODE,
-                       model="anthropic:some-coder"),   # same family as reviewer
+        dev=RoleConfig(
+            kind="harness", harness=HarnessKind.OPENCODE, model="anthropic:some-coder"
+        ),  # same family as reviewer
     )
     with pytest.raises(RegistryError, match="family"):
         validate_registry(roles)
 
 
 def test_different_family_accepted():
-    validate_registry(_complete_registry())      # no raise
+    validate_registry(_complete_registry())  # no raise
 
 
 def test_deep_review_harness_reviewer_must_differ_from_developer():
     roles = _complete_registry(
-        reviewer=RoleConfig(kind="harness", harness=HarnessKind.OPENCODE,
-                            model=_PROPOSER_MODEL))
+        reviewer=RoleConfig(kind="harness", harness=HarnessKind.OPENCODE, model=_PROPOSER_MODEL)
+    )
     with pytest.raises(RegistryError, match="harness"):
         validate_registry(roles)
 ```
@@ -201,10 +213,18 @@ HARNESS_ROLES = frozenset({"dev", "test", "devops"})
 
 # Proposer roles, one per agent in agents/roles.py. 'devops_planner' PLANS
 # devops tasks; the 'devops' harness role above RUNS them.
-PROPOSER_ROLES = frozenset({
-    "clarify", "architect", "planner", "qa", "reviewer", "analyst",
-    "merge_verdict", "devops_planner",
-})
+PROPOSER_ROLES = frozenset(
+    {
+        "clarify",
+        "architect",
+        "planner",
+        "qa",
+        "reviewer",
+        "analyst",
+        "merge_verdict",
+        "devops_planner",
+    }
+)
 
 REQUIRED_ROLES = HARNESS_ROLES | PROPOSER_ROLES
 ```
@@ -223,8 +243,7 @@ def validate_registry(roles: dict[str, RoleConfig]) -> None:
     """
     missing = sorted(REQUIRED_ROLES - set(roles))
     if missing:
-        raise RegistryError(
-            f"registry is missing required role(s): {', '.join(missing)}")
+        raise RegistryError(f"registry is missing required role(s): {', '.join(missing)}")
     for name in ("dev", "reviewer"):
         if roles[name].model is None:
             raise RegistryError(f"role '{name}' must declare a model")
@@ -233,12 +252,12 @@ def validate_registry(roles: dict[str, RoleConfig]) -> None:
         raise RegistryError(
             f"ADR-6 violation: reviewer family '{model_family(rev.model)}' "
             f"equals the family of 'dev' — anti-collusion review requires a "
-            f"different model family than the developer's authoring model")
-    if rev.kind == "harness" and rev.harness is not None \
-            and rev.harness == dev.harness:
+            f"different model family than the developer's authoring model"
+        )
+    if rev.kind == "harness" and rev.harness is not None and rev.harness == dev.harness:
         raise RegistryError(
-            "deep-review harness reviewer must use a different harness than "
-            "the developer")
+            "deep-review harness reviewer must use a different harness than the developer"
+        )
 ```
 
 - [ ] **Step 5: Run the tests to verify they pass**
@@ -256,8 +275,7 @@ def test_reviewer_model_family_differs_from_dev():
     actually writes code — the ADR-6 invariant. 'dev' (not 'developer') is what
     feature.py:434 resolves for coding tasks."""
     reg = load_registry()
-    assert model_family(reg["reviewer"].model) \
-        != model_family(reg["dev"].model)
+    assert model_family(reg["reviewer"].model) != model_family(reg["dev"].model)
     # the agent actually binds that reviewer model
     assert reg["reviewer"].model in roles.reviewer_agent.model.model_id
 ```
@@ -348,8 +366,7 @@ def _parse(path: str | os.PathLike | None = None) -> dict[str, RoleConfig]:
     """Parse the registry YAML into {role_name: RoleConfig}, UNVALIDATED.
     Resolution order: explicit arg, then $SDLC_AGENTS_CONFIG, then the shipped
     default. Private: callers must go through load_registry, which validates."""
-    resolved = Path(path or os.environ.get(AGENTS_CONFIG_ENV)
-                    or DEFAULT_AGENTS_CONFIG)
+    resolved = Path(path or os.environ.get(AGENTS_CONFIG_ENV) or DEFAULT_AGENTS_CONFIG)
     data = yaml.safe_load(resolved.read_text(encoding="utf-8")) or {}
     roles_raw = data.get("roles") or {}
     return {name: RoleConfig(**cfg) for name, cfg in roles_raw.items()}
@@ -413,6 +430,7 @@ in the Temporal sandbox. The mirror-check makes drift a boot failure instead of
 a silent divergence — which is exactly how ADR-6 came to validate a role that
 never ran.
 """
+
 import pytest
 
 from sdlc.agents.loader import HARNESS_ROLES, RegistryError, validate_registry
@@ -427,23 +445,28 @@ def test_pipeline_default_roles_are_exactly_the_harness_roles():
 
 def test_shipped_registry_and_pipeline_default_agree():
     from sdlc.agents.loader import load_registry
-    validate_registry(load_registry())        # must not raise
+
+    validate_registry(load_registry())  # must not raise
 
 
 def test_registry_drifting_from_pipeline_default_is_rejected():
     """A different-family model keeps ADR-6 satisfied, so this fails on the
     mirror and nothing else."""
     roles = _complete_registry(
-        dev=RoleConfig(kind="harness", harness=HarnessKind.OPENCODE,
-                       model="zai-coding-plan/some-other-coder"))
+        dev=RoleConfig(
+            kind="harness", harness=HarnessKind.OPENCODE, model="zai-coding-plan/some-other-coder"
+        )
+    )
     with pytest.raises(RegistryError, match="mirror"):
         validate_registry(roles)
 
 
 def test_mirror_error_names_the_role_and_both_values():
     roles = _complete_registry(
-        test=RoleConfig(kind="harness", harness=HarnessKind.OPENCODE,
-                        model="zai-coding-plan/drifted"))
+        test=RoleConfig(
+            kind="harness", harness=HarnessKind.OPENCODE, model="zai-coding-plan/drifted"
+        )
+    )
     with pytest.raises(RegistryError) as exc:
         validate_registry(roles)
     assert "test" in str(exc.value)
@@ -461,19 +484,18 @@ Expected: FAIL — `ImportError: cannot import name 'HARNESS_ROLES'` is already 
 Replace `:448-456`. The `reviewer` entry is dead config — the reviewer is a proposer bound from `agents.yaml` at `roles.py` import and never reads `cfg.roles`.
 
 ```python
-    # Harness-execution roles ONLY (keys match DevTask.role). This is a
-    # hardcoded MIRROR of agents.yaml's harness roles, not a second registry:
-    # PipelineConfig is constructed inside the workflow (feature.py:602), so
-    # this default cannot read the file. agents/loader.py asserts the two agree
-    # at boot. Change one, change both, or the worker won't start.
-    roles: dict[str, RoleConfig] = Field(default_factory=lambda: {
-        "dev": RoleConfig(harness=HarnessKind.OPENCODE,
-                          model="zai-coding-plan/glm-5.2"),
-        "test": RoleConfig(harness=HarnessKind.OPENCODE,
-                           model="zai-coding-plan/glm-5.2"),
-        "devops": RoleConfig(harness=HarnessKind.OPENCODE,
-                             model="zai-coding-plan/glm-5.2"),
-    })
+# Harness-execution roles ONLY (keys match DevTask.role). This is a
+# hardcoded MIRROR of agents.yaml's harness roles, not a second registry:
+# PipelineConfig is constructed inside the workflow (feature.py:602), so
+# this default cannot read the file. agents/loader.py asserts the two agree
+# at boot. Change one, change both, or the worker won't start.
+roles: dict[str, RoleConfig] = Field(
+    default_factory=lambda: {
+        "dev": RoleConfig(harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.2"),
+        "test": RoleConfig(harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.2"),
+        "devops": RoleConfig(harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.2"),
+    }
+)
 ```
 
 - [ ] **Step 4: Add the mirror-check to `src/sdlc/agents/loader.py`**
@@ -486,23 +508,25 @@ def _validate_pipeline_mirror(roles: dict[str, RoleConfig]) -> None:
     mirror of its harness roles (see the note on PipelineConfig.roles). Drift
     between them is what let ADR-6 validate a role that never ran, so it fails
     the worker at boot."""
-    from ..models import PipelineConfig      # local: avoid an import cycle at
-                                             # module scope via models -> ...
+    from ..models import PipelineConfig  # local: avoid an import cycle at
+
+    # module scope via models -> ...
     default_roles = PipelineConfig().roles
     if set(default_roles) != HARNESS_ROLES:
         raise RegistryError(
             f"PipelineConfig.roles must mirror exactly the harness roles "
-            f"{sorted(HARNESS_ROLES)}; it has {sorted(default_roles)}")
+            f"{sorted(HARNESS_ROLES)}; it has {sorted(default_roles)}"
+        )
     for name in sorted(HARNESS_ROLES):
         reg, dflt = roles[name], default_roles[name]
-        if (reg.kind, reg.harness, reg.model) != \
-                (dflt.kind, dflt.harness, dflt.model):
+        if (reg.kind, reg.harness, reg.model) != (dflt.kind, dflt.harness, dflt.model):
             raise RegistryError(
                 f"PipelineConfig.roles['{name}'] does not mirror agents.yaml: "
                 f"registry has (kind={reg.kind}, harness={reg.harness}, "
                 f"model={reg.model}); PipelineConfig default has "
                 f"(kind={dflt.kind}, harness={dflt.harness}, "
-                f"model={dflt.model})")
+                f"model={dflt.model})"
+            )
 ```
 
 Append to `validate_registry`, after the harness-reviewer clause:
@@ -557,6 +581,7 @@ Without this, changing one role's model in agents.yaml leaves content_key
 unmoved and that stage serves a cache entry computed by the PREVIOUS model.
 The hardcoded MODEL constant masked this by making every stage share a model.
 """
+
 from sdlc.agents import roles
 from sdlc.memoization.cache import content_key
 
@@ -568,10 +593,18 @@ def test_stage_models_and_prompt_shas_span_the_same_keyspace():
 
 
 def test_prompt_shas_cover_every_stage_including_qa_and_merge_verdict():
-    for stage in ("clarify", "architect", "plan", "devops", "review",
-                  "analyze", "qa", "merge_verdict"):
+    for stage in (
+        "clarify",
+        "architect",
+        "plan",
+        "devops",
+        "review",
+        "analyze",
+        "qa",
+        "merge_verdict",
+    ):
         assert stage in roles.PROMPT_SHAS
-        assert len(roles.PROMPT_SHAS[stage]) == 64      # sha256 hex digest
+        assert len(roles.PROMPT_SHAS[stage]) == 64  # sha256 hex digest
 
 
 def test_model_constant_is_gone():
@@ -594,6 +627,7 @@ def test_agents_bind_their_own_roles_model():
 def test_changing_one_roles_model_moves_only_that_stages_key():
     """The finding-2 regression test: per-role models MUST be per-stage memo
     inputs."""
+
     def key_for(stage: str, model: str) -> str:
         return content_key(stage, "{}", roles.PROMPT_SHAS[stage], model, "none")
 
@@ -693,9 +727,7 @@ STAGE_ROLES: dict[str, str] = {
 
 # Both maps are keyed by stage and looked up together in _cached_stage. Keep
 # their keyspaces identical (tests/test_stage_models.py asserts it).
-STAGE_MODELS: dict[str, str] = {
-    stage: _model(role) for stage, role in STAGE_ROLES.items()
-}
+STAGE_MODELS: dict[str, str] = {stage: _model(role) for stage, role in STAGE_ROLES.items()}
 
 _STAGE_PROMPTS: dict[str, str] = {
     "clarify": CLARIFY_PROMPT,
@@ -709,8 +741,7 @@ _STAGE_PROMPTS: dict[str, str] = {
 }
 
 PROMPT_SHAS: dict[str, str] = {
-    stage: hashlib.sha256(prompt.encode()).hexdigest()
-    for stage, prompt in _STAGE_PROMPTS.items()
+    stage: hashlib.sha256(prompt.encode()).hexdigest() for stage, prompt in _STAGE_PROMPTS.items()
 }
 ```
 
@@ -800,23 +831,23 @@ Replace `MODEL` with `STAGE_MODELS` in the import list:
 - [ ] **Step 4: Drop `model_id` from `_cached_stage` (`:293-303`)**
 
 ```python
-    async def _cached_stage(self, cfg: PipelineConfig, stage: str,
-                            input_json: str,
-                            output_type: type, run_fn) -> tuple[object, bool]:
-        """Skips `run_fn()` (a no-arg async callable invoking the proposer
-        agent) when an identical (stage, input, prompt, model,
-        upstream-recall-watermark) combination was already computed — the
-        ADR-5 dev-loop cache. Returns (output, was_cache_hit).
+async def _cached_stage(
+    self, cfg: PipelineConfig, stage: str, input_json: str, output_type: type, run_fn
+) -> tuple[object, bool]:
+    """Skips `run_fn()` (a no-arg async callable invoking the proposer
+    agent) when an identical (stage, input, prompt, model,
+    upstream-recall-watermark) combination was already computed — the
+    ADR-5 dev-loop cache. Returns (output, was_cache_hit).
 
-        The stage's model is resolved here from STAGE_MODELS rather than passed
-        in: it MUST be the model that role actually binds, or a role's model
-        change would leave the key unmoved and serve a result computed by the
-        previous model."""
-        if not cfg.memoization_enabled:
-            return await run_fn(), False
-        key = content_key(stage, input_json, PROMPT_SHAS[stage],
-                          STAGE_MODELS[stage],
-                          self._memory_watermark or "none")
+    The stage's model is resolved here from STAGE_MODELS rather than passed
+    in: it MUST be the model that role actually binds, or a role's model
+    change would leave the key unmoved and serve a result computed by the
+    previous model."""
+    if not cfg.memoization_enabled:
+        return await run_fn(), False
+    key = content_key(
+        stage, input_json, PROMPT_SHAS[stage], STAGE_MODELS[stage], self._memory_watermark or "none"
+    )
 ```
 
 (The rest of the method body is unchanged.)
@@ -826,27 +857,25 @@ Replace `MODEL` with `STAGE_MODELS` in the import list:
 `:641-643`:
 
 ```python
-        reqs, _ = await self._cached_stage(
-            cfg, "clarify", idea.model_dump_json(),
-            ClarifiedRequirements, _run_clarify)
+reqs, _ = await self._cached_stage(
+    cfg, "clarify", idea.model_dump_json(), ClarifiedRequirements, _run_clarify
+)
 ```
 
 `:690-693`:
 
 ```python
-            arch, _ = await self._cached_stage(
-                cfg, "architect",
-                reqs.model_dump_json() + (guidance or ""),
-                ArchitectureSpec, _produce)
+arch, _ = await self._cached_stage(
+    cfg, "architect", reqs.model_dump_json() + (guidance or ""), ArchitectureSpec, _produce
+)
 ```
 
 `:729-732`:
 
 ```python
-            plan, _ = await self._cached_stage(
-                cfg, "plan",
-                arch.model_dump_json() + (guidance or ""),
-                ImplementationPlan, _produce)
+plan, _ = await self._cached_stage(
+    cfg, "plan", arch.model_dump_json() + (guidance or ""), ImplementationPlan, _produce
+)
 ```
 
 - [ ] **Step 6: Give `_judge` an explicit `author_model` (`:229-262`)**
@@ -871,7 +900,7 @@ Replace that docstring paragraph with:
 And at `:256`:
 
 ```python
-            author_model=author_model,
+author_model = (author_model,)
 ```
 
 - [ ] **Step 7: Update the three `_judge` call sites**
@@ -879,18 +908,21 @@ And at `:256`:
 `:662`, `:699`, `:737` respectively:
 
 ```python
-        _quality = await self._judge(cfg, reqs.model_dump_json(), "clarifier",
-                                     author_model=STAGE_MODELS["clarify"])
+_quality = await self._judge(
+    cfg, reqs.model_dump_json(), "clarifier", author_model=STAGE_MODELS["clarify"]
+)
 ```
 
 ```python
-        _quality = await self._judge(cfg, arch.model_dump_json(), "architect",
-                                     author_model=STAGE_MODELS["architect"])
+_quality = await self._judge(
+    cfg, arch.model_dump_json(), "architect", author_model=STAGE_MODELS["architect"]
+)
 ```
 
 ```python
-        _quality = await self._judge(cfg, plan.model_dump_json(), "planner",
-                                     author_model=STAGE_MODELS["plan"])
+_quality = await self._judge(
+    cfg, plan.model_dump_json(), "planner", author_model=STAGE_MODELS["plan"]
+)
 ```
 
 - [ ] **Step 8: Replace the five hardcoded record literals**
@@ -906,7 +938,7 @@ Each is a `model="anthropic:glm-5.2"` argument to `self._stage_record(...)`. Rep
 Also `:519` — `model=role_cfg.model or "zai-coding-plan/glm-5.2"` — drop the fallback literal. `role_cfg` comes from `cfg.roles`, whose default is now mirror-checked against the registry, so a `None` model there is a boot failure, not something to paper over at runtime:
 
 ```python
-                model=role_cfg.model,
+model = (role_cfg.model,)
 ```
 
 - [ ] **Step 9: Run the tests to verify they pass**

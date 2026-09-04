@@ -6,10 +6,8 @@ from sdlc.core.models import (
     GatePolicy,
     PipelineConfig,
 )
-from sdlc.models import (
-    ArchitectureSpec,
-    ImplementationPlan,
-)
+from sdlc.stages.architecture.models import ArchitectureSpec
+from sdlc.stages.plan.models import ImplementationPlan
 
 
 def test_gate_config_defaults():

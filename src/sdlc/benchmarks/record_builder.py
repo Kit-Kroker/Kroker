@@ -8,8 +8,8 @@ from typing import Any, cast
 from temporalio import workflow
 
 from ..core.models import PipelineConfig, RoleUsage
-from ..models import PlanDrift
 from ..observability.usage import cost_bag_from_spend
+from ..stages.plan.models import PlanDrift
 from .models import (
     BenchmarkOutcome,
     BenchmarkRecord,

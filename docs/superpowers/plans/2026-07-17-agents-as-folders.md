@@ -62,10 +62,14 @@ Create `tests/test_registry_resolution.py`:
 replacement: explicit arg -> $SDLC_AGENTS_DIR -> repo-root discovery -> a
 RegistryError that names all three.
 """
+
 import pytest
 
 from sdlc.agents.loader import (
-    AGENTS_DIR_ENV, LEGACY_AGENTS_ENV, RegistryError, _resolve_agents_dir,
+    AGENTS_DIR_ENV,
+    LEGACY_AGENTS_ENV,
+    RegistryError,
+    _resolve_agents_dir,
 )
 
 
@@ -87,14 +91,13 @@ def test_repo_root_discovered_by_marker_files(tmp_path, monkeypatch):
     nested = root / "src" / "deep"
     nested.mkdir(parents=True)
     monkeypatch.delenv(AGENTS_DIR_ENV, raising=False)
-    monkeypatch.chdir(nested)                      # discovery walks UP from cwd
+    monkeypatch.chdir(nested)  # discovery walks UP from cwd
     assert _resolve_agents_dir(None) == root / "agents"
 
 
-def test_unresolvable_raises_registry_error_naming_all_mechanisms(
-        tmp_path, monkeypatch):
+def test_unresolvable_raises_registry_error_naming_all_mechanisms(tmp_path, monkeypatch):
     monkeypatch.delenv(AGENTS_DIR_ENV, raising=False)
-    monkeypatch.chdir(tmp_path)                    # no markers anywhere above
+    monkeypatch.chdir(tmp_path)  # no markers anywhere above
     with pytest.raises(RegistryError) as exc:
         _resolve_agents_dir(None)
     msg = str(exc.value)
@@ -135,6 +138,7 @@ package lands in site-packages, which is why the old
 parents[3]/config/agents.yaml walk resolved to a path that never existed in
 the image. Order: explicit arg -> $SDLC_AGENTS_DIR -> repo-root discovery.
 """
+
 from __future__ import annotations
 
 import os
@@ -174,7 +178,8 @@ def _resolve_agents_dir(path: str | os.PathLike | None = None) -> Path:
         raise RegistryError(
             f"{LEGACY_AGENTS_ENV} was renamed to {AGENTS_DIR_ENV} and now names "
             f"a DIRECTORY (the registry is agents/<role>/, not one YAML file). "
-            f"Unset {LEGACY_AGENTS_ENV} and set {AGENTS_DIR_ENV}.")
+            f"Unset {LEGACY_AGENTS_ENV} and set {AGENTS_DIR_ENV}."
+        )
     if path is not None:
         return Path(path)
     env = os.environ.get(AGENTS_DIR_ENV)
@@ -186,7 +191,8 @@ def _resolve_agents_dir(path: str | os.PathLike | None = None) -> Path:
     raise RegistryError(
         f"cannot locate the agents registry. Tried: an explicit path argument; "
         f"${AGENTS_DIR_ENV}; and walking up from {Path.cwd()} for a directory "
-        f"containing both pyproject.toml and agents/registry.yaml.")
+        f"containing both pyproject.toml and agents/registry.yaml."
+    )
 ```
 
 - [ ] **Step 4: Run the resolution tests to verify they pass**
@@ -205,13 +211,20 @@ is the established precedent.
 Append to `tests/conftest.py`:
 
 ```python
-_HARNESS_AGENT_YAML = (
-    b"kind: harness\nharness: opencode\nmodel: zai-coding-plan/glm-5.2\n")
+_HARNESS_AGENT_YAML = b"kind: harness\nharness: opencode\nmodel: zai-coding-plan/glm-5.2\n"
 _PROPOSER_AGENT_YAML = b"kind: proposer\nmodel: anthropic:glm-5.2\n"
 
 HARNESS_ROLE_NAMES = ("dev", "test", "devops")
-PROPOSER_ROLE_NAMES = ("clarify", "architect", "planner", "qa", "reviewer",
-                       "analyst", "merge_verdict", "devops_planner")
+PROPOSER_ROLE_NAMES = (
+    "clarify",
+    "architect",
+    "planner",
+    "qa",
+    "reviewer",
+    "analyst",
+    "merge_verdict",
+    "devops_planner",
+)
 
 
 def write_registry_dir(root, version=1):
@@ -274,7 +287,8 @@ def test_agent_yaml_declaring_a_different_role_rejected(tmp_path):
     """The filename is the API; contents disagreeing with it is an error."""
     root = _write_registry_dir(tmp_path / "agents")
     (root / "reviewer" / "agent.yaml").write_bytes(
-        b"role: analyst\nkind: proposer\nmodel: anthropic:glm-5.2\n")
+        b"role: analyst\nkind: proposer\nmodel: anthropic:glm-5.2\n"
+    )
     with pytest.raises(RegistryError, match="reviewer"):
         load_registry(root)
 
@@ -297,7 +311,8 @@ def test_adr6_still_bites_through_the_directory_loader(tmp_path):
     is what proves 'strict refactor' rather than aspiration."""
     root = _write_registry_dir(tmp_path / "agents")
     (root / "reviewer" / "agent.yaml").write_bytes(
-        b"kind: proposer\nmodel: zai-coding-plan/other\n")   # dev's family
+        b"kind: proposer\nmodel: zai-coding-plan/other\n"
+    )  # dev's family
     with pytest.raises(RegistryError, match="family"):
         load_registry(root)
 ```
@@ -336,12 +351,10 @@ def _parse(path: str | os.PathLike | None = None) -> dict[str, RoleConfig]:
 
     reg = root / "registry.yaml"
     if not reg.is_file():
-        raise RegistryError(
-            f"missing {reg}: every registry declares its version")
+        raise RegistryError(f"missing {reg}: every registry declares its version")
     version = (yaml.safe_load(reg.read_text(encoding="utf-8")) or {}).get("version")
     if version != 1:
-        raise RegistryError(
-            f"unsupported registry version {version!r} in {reg}; expected 1")
+        raise RegistryError(f"unsupported registry version {version!r} in {reg}; expected 1")
 
     roles: dict[str, RoleConfig] = {}
     for d in sorted(p for p in root.iterdir() if p.is_dir()):
@@ -354,7 +367,8 @@ def _parse_role(name: str, d: Path) -> RoleConfig:
         raise RegistryError(
             f"unknown role directory '{name}' in {d.parent}: the directory name "
             f"is the role name, so this is a typo, not an extension point. "
-            f"Known roles: {', '.join(sorted(KNOWN_ROLES))}")
+            f"Known roles: {', '.join(sorted(KNOWN_ROLES))}"
+        )
     f = d / "agent.yaml"
     if not f.is_file():
         raise RegistryError(f"role '{name}': missing {f}")
@@ -364,7 +378,8 @@ def _parse_role(name: str, d: Path) -> RoleConfig:
         raise RegistryError(
             f"role directory '{name}' contains an agent.yaml declaring role "
             f"'{declared}': the filename is the API and must agree with its "
-            f"contents")
+            f"contents"
+        )
     return RoleConfig(**data)
 ```
 
@@ -415,9 +430,9 @@ In `tests/test_agents_registry.py:41`, update the comment on `test_shipped_regis
 
 ```python
 def test_shipped_registry_loads_and_validates():
-    roles = load_registry()                      # default: discovered agents/
+    roles = load_registry()  # default: discovered agents/
     assert REQUIRED_ROLES <= set(roles)
-    validate_registry(roles)                     # must not raise
+    validate_registry(roles)  # must not raise
 ```
 
 Delete the two old file-based override tests at `tests/test_agents_registry.py:87` and `:105`/`:117` (they write a tmp `agents.yaml` and set `SDLC_AGENTS_CONFIG`); `tests/test_registry_resolution.py` and the directory tests replace them.
@@ -466,6 +481,7 @@ root by accident. `pip install .` puts the package in site-packages, where
 that accident does not happen — which is why the image could not boot. Slow
 (builds a venv); marked so it can be deselected.
 """
+
 import subprocess
 import sys
 from pathlib import Path
@@ -479,16 +495,17 @@ REPO = Path(__file__).resolve().parents[1]
 def test_non_editable_install_resolves_registry_via_env(tmp_path):
     venv = tmp_path / "venv"
     subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
-    py = venv / ("Scripts/python.exe" if sys.platform == "win32"
-                 else "bin/python")
-    subprocess.run([str(py), "-m", "pip", "install", "-q", str(REPO)],
-                   check=True)
+    py = venv / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    subprocess.run([str(py), "-m", "pip", "install", "-q", str(REPO)], check=True)
 
     probe = "from sdlc.agents.loader import load_registry; load_registry()"
     # cwd=tmp_path: OUTSIDE the repo, so discovery cannot rescue us and only
     # SDLC_AGENTS_DIR can work.
     done = subprocess.run(
-        [str(py), "-c", probe], cwd=tmp_path, capture_output=True, text=True,
+        [str(py), "-c", probe],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
         env={"SDLC_AGENTS_DIR": str(REPO / "agents"), "PATH": ""},
     )
     assert done.returncode == 0, done.stderr
@@ -498,16 +515,15 @@ def test_non_editable_install_resolves_registry_via_env(tmp_path):
 def test_non_editable_install_without_env_fails_closed(tmp_path):
     venv = tmp_path / "venv"
     subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
-    py = venv / ("Scripts/python.exe" if sys.platform == "win32"
-                 else "bin/python")
-    subprocess.run([str(py), "-m", "pip", "install", "-q", str(REPO)],
-                   check=True)
+    py = venv / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    subprocess.run([str(py), "-m", "pip", "install", "-q", str(REPO)], check=True)
 
     probe = "from sdlc.agents.loader import load_registry; load_registry()"
-    done = subprocess.run([str(py), "-c", probe], cwd=tmp_path,
-                          capture_output=True, text=True, env={"PATH": ""})
+    done = subprocess.run(
+        [str(py), "-c", probe], cwd=tmp_path, capture_output=True, text=True, env={"PATH": ""}
+    )
     assert done.returncode != 0
-    assert "SDLC_AGENTS_DIR" in done.stderr        # names the mechanism
+    assert "SDLC_AGENTS_DIR" in done.stderr  # names the mechanism
     assert "FileNotFoundError" not in done.stderr  # fails closed, deliberately
 ```
 
@@ -599,6 +615,7 @@ same bytes -- so the ONLY way this migration can be wrong is if a prompt
 changed while moving. These literals were computed from roles.py before the
 constants were deleted. A diff here is a migration bug, never an improvement.
 """
+
 import hashlib
 
 from sdlc.agents.roles import PROMPT_SHAS, REGISTRY, STAGE_ROLES
@@ -638,8 +655,10 @@ def test_crlf_and_lf_instructions_hash_identically(tmp_path):
     crlf = tmp_path / "crlf.md"
     lf.write_bytes(b"line one\nline two")
     crlf.write_bytes(b"line one\r\nline two")
-    assert (hashlib.sha256(lf.read_text(encoding="utf-8").encode()).hexdigest()
-            == hashlib.sha256(crlf.read_text(encoding="utf-8").encode()).hexdigest())
+    assert (
+        hashlib.sha256(lf.read_text(encoding="utf-8").encode()).hexdigest()
+        == hashlib.sha256(crlf.read_text(encoding="utf-8").encode()).hexdigest()
+    )
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -698,25 +717,27 @@ for p in sorted(Path('agents').glob('*/instructions.md')):
 In `src/sdlc/agents/loader.py`, extend `_parse_role` — replace its final `return RoleConfig(**data)`:
 
 ```python
-    cfg = RoleConfig(**data)
-    instructions_file = d / "instructions.md"
-    needs_prompt = cfg.kind != "harness"
-    if needs_prompt:
-        if not instructions_file.is_file():
-            raise RegistryError(f"role '{name}': missing {instructions_file}")
-        # read_text applies universal newlines, so a CRLF checkout still
-        # hashes as LF (tests/test_prompt_migration.py pins this).
-        text = instructions_file.read_text(encoding="utf-8")
-        if not text.strip():
-            raise RegistryError(
-                f"role '{name}': {instructions_file} is empty — an empty system "
-                f"prompt is a boot-time bug, not a runtime surprise")
-        cfg = cfg.model_copy(update={"instructions": text})
-    elif instructions_file.exists():
+cfg = RoleConfig(**data)
+instructions_file = d / "instructions.md"
+needs_prompt = cfg.kind != "harness"
+if needs_prompt:
+    if not instructions_file.is_file():
+        raise RegistryError(f"role '{name}': missing {instructions_file}")
+    # read_text applies universal newlines, so a CRLF checkout still
+    # hashes as LF (tests/test_prompt_migration.py pins this).
+    text = instructions_file.read_text(encoding="utf-8")
+    if not text.strip():
         raise RegistryError(
-            f"role '{name}' is kind=harness and carries {instructions_file}, "
-            f"which would never be read: silent dead config")
-    return cfg
+            f"role '{name}': {instructions_file} is empty — an empty system "
+            f"prompt is a boot-time bug, not a runtime surprise"
+        )
+    cfg = cfg.model_copy(update={"instructions": text})
+elif instructions_file.exists():
+    raise RegistryError(
+        f"role '{name}' is kind=harness and carries {instructions_file}, "
+        f"which would never be read: silent dead config"
+    )
+return cfg
 ```
 
 - [ ] **Step 6: Switch `PROMPT_SHAS` to the registry and delete the constants**
@@ -753,11 +774,11 @@ with "missing instructions.md" — a reason unrelated to what those tests assert
 `tests/conftest.py` rather than touching the tests:
 
 ```python
-    for name in PROPOSER_ROLE_NAMES:
-        d = root / name
-        d.mkdir(exist_ok=True)
-        (d / "agent.yaml").write_bytes(_PROPOSER_AGENT_YAML)
-        (d / "instructions.md").write_bytes(b"do the thing")   # Task 2
+for name in PROPOSER_ROLE_NAMES:
+    d = root / name
+    d.mkdir(exist_ok=True)
+    (d / "agent.yaml").write_bytes(_PROPOSER_AGENT_YAML)
+    (d / "instructions.md").write_bytes(b"do the thing")  # Task 2
 ```
 
 - [ ] **Step 8: Run the migration tests**
@@ -832,6 +853,7 @@ Two invariants, both easy to break and expensive to notice:
   * dynamic imports must not run before validation, or the registry spec's
     finding 3 comes back through a new door.
 """
+
 import pytest
 
 from sdlc.agents.loader import RegistryError, build_agents, load_registry
@@ -875,7 +897,7 @@ def test_proposer_missing_agent_py_rejected(tmp_path):
 def test_agent_py_without_build_rejected(tmp_path):
     root = write_registry_dir(tmp_path / "agents")
     (root / "reviewer" / "agent.py").write_bytes(b"x = 1\n")
-    roles = load_registry(root)          # structural check is at build time
+    roles = load_registry(root)  # structural check is at build time
     with pytest.raises(RegistryError, match="build"):
         build_agents(roles, MODEL_SETTINGS, agents_dir=root)
 
@@ -884,7 +906,8 @@ def test_duplicate_agent_names_rejected(tmp_path):
     """Only reachable now that construction is distributed across files."""
     root = write_registry_dir(tmp_path / "agents")
     (root / "analyst" / "agent.py").write_bytes(
-        _AGENT_PY.format(name="reviewer_agent").encode())   # steals the name
+        _AGENT_PY.format(name="reviewer_agent").encode()
+    )  # steals the name
     roles = load_registry(root)
     with pytest.raises(RegistryError, match="reviewer_agent"):
         build_agents(roles, MODEL_SETTINGS, agents_dir=root)
@@ -897,10 +920,12 @@ def test_validation_precedes_import(tmp_path):
     inside load_registry, this is what catches it."""
     root = write_registry_dir(tmp_path / "agents")
     (root / "reviewer" / "agent.yaml").write_bytes(
-        b"kind: proposer\nmodel: zai-coding-plan/other\n")     # dev's family
+        b"kind: proposer\nmodel: zai-coding-plan/other\n"
+    )  # dev's family
     for role in ("clarify", "architect"):
         (root / role / "agent.py").write_bytes(
-            b"raise RuntimeError('this module must never be imported')\n")
+            b"raise RuntimeError('this module must never be imported')\n"
+        )
     with pytest.raises(RegistryError, match="family"):
         load_registry(root)
 ```
@@ -928,18 +953,21 @@ _AGENT_PY = (
 # Role -> agent name. Mirrors roles.py; NOT derived — 'qa' builds
 # qa_analyst_agent, 'devops_planner' builds devops_agent.
 _TEST_AGENT_NAMES = {
-    "clarify": "clarify_agent", "architect": "architect_agent",
-    "planner": "planner_agent", "qa": "qa_analyst_agent",
-    "reviewer": "reviewer_agent", "analyst": "analyst_agent",
-    "merge_verdict": "merge_verdict_agent", "devops_planner": "devops_agent",
+    "clarify": "clarify_agent",
+    "architect": "architect_agent",
+    "planner": "planner_agent",
+    "qa": "qa_analyst_agent",
+    "reviewer": "reviewer_agent",
+    "analyst": "analyst_agent",
+    "merge_verdict": "merge_verdict_agent",
+    "devops_planner": "devops_agent",
 }
 ```
 
 and inside the proposer loop:
 
 ```python
-        (d / "agent.py").write_bytes(
-            _AGENT_PY.format(name=_TEST_AGENT_NAMES[name]).encode())  # Task 3
+(d / "agent.py").write_bytes(_AGENT_PY.format(name=_TEST_AGENT_NAMES[name]).encode())  # Task 3
 ```
 
 - [ ] **Step 4: Write the eight `agent.py` files**
@@ -953,11 +981,10 @@ from pydantic_ai.settings import ModelSettings
 from sdlc.models import ClarifiedRequirements
 
 
-def build(model: str, instructions: str,
-          model_settings: ModelSettings) -> Agent:
+def build(model: str, instructions: str, model_settings: ModelSettings) -> Agent:
     return Agent(
         model,
-        name="clarify_agent",       # Temporal activity name — NEVER rename
+        name="clarify_agent",  # Temporal activity name — NEVER rename
         output_type=ClarifiedRequirements,
         model_settings=model_settings,
         system_prompt=instructions,
@@ -998,7 +1025,7 @@ Then append to the module:
 import importlib.util
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:                       # pydantic_ai import is not free
+if TYPE_CHECKING:  # pydantic_ai import is not free
     from pydantic_ai import Agent
 
 
@@ -1018,14 +1045,14 @@ def _load_build(name: str, d: Path):
     build = getattr(module, "build", None)
     if not callable(build):
         raise RegistryError(
-            f"role '{name}': {f} defines no callable build(model, "
-            f"instructions, model_settings)")
+            f"role '{name}': {f} defines no callable build(model, instructions, model_settings)"
+        )
     return build
 
 
-def build_agents(roles: dict[str, RoleConfig], model_settings,
-                 agents_dir: str | os.PathLike | None = None
-                 ) -> dict[str, "Agent"]:
+def build_agents(
+    roles: dict[str, RoleConfig], model_settings, agents_dir: str | os.PathLike | None = None
+) -> dict[str, "Agent"]:
     """Construct every proposer role's Agent from its own agent.py.
 
     MUST be called only AFTER load_registry() has returned: validation precedes
@@ -1041,19 +1068,18 @@ def build_agents(roles: dict[str, RoleConfig], model_settings,
     which tree it loaded, and re-resolving would import agent.py from the
     shipped registry while validating a different one.
     """
-    root = Path(agents_dir) if agents_dir is not None \
-        else _resolve_agents_dir(None)
+    root = Path(agents_dir) if agents_dir is not None else _resolve_agents_dir(None)
     agents: dict[str, "Agent"] = {}
     seen: dict[str, str] = {}
     for name, cfg in roles.items():
         if cfg.kind == "harness":
             continue
-        agent = _load_build(name, root / name)(cfg.model, cfg.instructions,
-                                               model_settings)
+        agent = _load_build(name, root / name)(cfg.model, cfg.instructions, model_settings)
         if agent.name in seen:
             raise RegistryError(
                 f"roles '{seen[agent.name]}' and '{name}' both build an agent "
-                f"named '{agent.name}': colliding Temporal activity names")
+                f"named '{agent.name}': colliding Temporal activity names"
+            )
         seen[agent.name] = name
         agents[name] = agent
     return agents
@@ -1076,11 +1102,11 @@ AGENTS = build_agents(REGISTRY)
 clarify_agent = AGENTS["clarify"]
 architect_agent = AGENTS["architect"]
 planner_agent = AGENTS["planner"]
-qa_analyst_agent = AGENTS["qa"]                 # role 'qa'
+qa_analyst_agent = AGENTS["qa"]  # role 'qa'
 reviewer_agent = AGENTS["reviewer"]
 analyst_agent = AGENTS["analyst"]
 merge_verdict_agent = AGENTS["merge_verdict"]
-devops_agent = AGENTS["devops_planner"]         # role 'devops_planner'
+devops_agent = AGENTS["devops_planner"]  # role 'devops_planner'
 ```
 
 Add `build_agents` to the existing `from .loader import load_registry` import. The `Agent` import from `pydantic_ai` and the `output_type` imports from `..models` become unused in `roles.py` — delete them. `MODEL_SETTINGS`, `STAGE_ROLES`, `STAGE_MODELS`, `PROMPT_SHAS`, every `t_*` and `ALL_TEMPORAL_AGENTS` are unchanged.

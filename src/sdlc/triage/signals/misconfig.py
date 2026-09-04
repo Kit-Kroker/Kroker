@@ -19,8 +19,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 
-from ...measurement import Measurement
-from ..models import (
+from sdlc.triage.models import (
     FindingSeverity,
     FixClass,
     SignalResult,
@@ -28,6 +27,8 @@ from ..models import (
     dedupe_by_identity,
     evidence_key,
 )
+
+from ...measurement import Measurement
 
 SIGNAL_ID = "misconfig"
 VERSION = 2

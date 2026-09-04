@@ -29,10 +29,9 @@ from ...core.models import (
     ProjectMode,
     RoleUsage,
 )
-from ...models import ClarifiedRequirements
 from ...observability.trace import RunEventKind
 from .merge import merge_clarification
-from .models import ProbeResult
+from .models import ClarifiedRequirements, ProbeResult
 from .prompts import (
     _clarify_memo_extra,
     clarify_prompt,

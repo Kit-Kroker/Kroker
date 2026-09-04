@@ -13,7 +13,7 @@ All four variants collapse to just two FR-302 signals on reply:
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -21,9 +21,9 @@ from .core.models import (
     gate_key,
 )
 from .gate import CheckResult
-from .models import (
-    OpenQuestion,
-)
+
+if TYPE_CHECKING:
+    from .stages.clarify.models import OpenQuestion
 
 
 class ClarifyPending(BaseModel):

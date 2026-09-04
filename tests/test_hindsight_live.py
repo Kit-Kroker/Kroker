@@ -18,7 +18,10 @@ import httpx
 import pytest
 
 from sdlc.memory.hindsight_client import HindsightMemory
-from sdlc.models import MemoryKind, RetainItem
+from sdlc.memory.models import (
+    MemoryKind,
+    RetainItem,
+)
 
 BASE_URL = os.environ.get("SDLC_MEMORY_BASE_URL_LIVE", "http://localhost:8888")
 

@@ -18,10 +18,8 @@ from ..core.models import (
     GatePolicy,
     HarnessKind,
 )
-from ..models import (
-    PlanDrift,
-    SessionDigest,
-)
+from ..harness.models import SessionDigest
+from ..stages.plan.models import PlanDrift
 
 # Who scored a stage attempt. The set is pinned by tests/test_judge_literal.py;
 # _stage_record threads a plain str and relies on runtime validation, so

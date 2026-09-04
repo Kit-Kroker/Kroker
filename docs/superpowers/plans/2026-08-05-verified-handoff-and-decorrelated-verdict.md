@@ -69,14 +69,21 @@ so _stage_record raised ValidationError inside _run_deep_review's bare
 `except Exception: return None` — the lens paid for its LLM call and
 recorded nothing, silently, on every run.
 """
+
 import pytest
 
 from sdlc.benchmarks.models import QualityScore
 
 # Every judge value emitted anywhere in workflows/feature.py.
 EMITTED_JUDGES = [
-    "contract", "llm_judge", "human_override", "error", "oracle",
-    "deep_review", "adversary", "handoff",
+    "contract",
+    "llm_judge",
+    "human_override",
+    "error",
+    "oracle",
+    "deep_review",
+    "adversary",
+    "handoff",
 ]
 
 
@@ -106,12 +113,20 @@ In `src/sdlc/benchmarks/models.py`, replace line 53:
 with:
 
 ```python
-    # Non-DAG lenses (deep_review/adversary/handoff) are judges too. Omitting
-    # one here is not a type error at the call site -- _stage_record passes
-    # `judge: str` straight through -- it is a ValidationError swallowed by the
-    # caller's `except Exception`. tests/test_judge_literal.py pins the set.
-    judge: Literal["contract", "llm_judge", "human_override", "error",
-                   "oracle", "deep_review", "adversary", "handoff"]
+# Non-DAG lenses (deep_review/adversary/handoff) are judges too. Omitting
+# one here is not a type error at the call site -- _stage_record passes
+# `judge: str` straight through -- it is a ValidationError swallowed by the
+# caller's `except Exception`. tests/test_judge_literal.py pins the set.
+judge: Literal[
+    "contract",
+    "llm_judge",
+    "human_override",
+    "error",
+    "oracle",
+    "deep_review",
+    "adversary",
+    "handoff",
+]
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -185,21 +200,20 @@ Create `tests/test_handoff_crosscheck.py`:
 A claim may only name files the diff actually touched. This is what stops
 the extractor attributing a change to a file the task never opened.
 """
+
 from sdlc.handoff import claim_survival_score, cross_check_claims
 from sdlc.models import HandoffClaim
 
 
 def test_claim_naming_touched_file_survives():
-    claims = [HandoffClaim(text="rewrote src/app.py routing",
-                           evidence="file_write src/app.py")]
+    claims = [HandoffClaim(text="rewrote src/app.py routing", evidence="file_write src/app.py")]
     kept, dropped = cross_check_claims(claims, ["src/app.py"])
     assert len(kept) == 1
     assert dropped == 0
 
 
 def test_claim_naming_untouched_file_is_dropped():
-    claims = [HandoffClaim(text="patched src/other.py too",
-                           evidence="file_write src/other.py")]
+    claims = [HandoffClaim(text="patched src/other.py too", evidence="file_write src/other.py")]
     kept, dropped = cross_check_claims(claims, ["src/app.py"])
     assert kept == []
     assert dropped == 1
@@ -207,24 +221,21 @@ def test_claim_naming_untouched_file_is_dropped():
 
 def test_claim_naming_no_file_survives():
     """Design decisions legitimately mention no path at all."""
-    claims = [HandoffClaim(text="chose cookie sessions over JWT",
-                           evidence="I'll use cookies here")]
+    claims = [HandoffClaim(text="chose cookie sessions over JWT", evidence="I'll use cookies here")]
     kept, dropped = cross_check_claims(claims, ["src/app.py"])
     assert len(kept) == 1
     assert dropped == 0
 
 
 def test_path_in_evidence_is_checked_not_only_text():
-    claims = [HandoffClaim(text="fixed the parser",
-                           evidence="file_write src/ghost.py")]
+    claims = [HandoffClaim(text="fixed the parser", evidence="file_write src/ghost.py")]
     kept, dropped = cross_check_claims(claims, ["src/app.py"])
     assert kept == []
     assert dropped == 1
 
 
 def test_windows_separators_normalise():
-    claims = [HandoffClaim(text=r"edited src\app.py",
-                           evidence="file_write src/app.py")]
+    claims = [HandoffClaim(text=r"edited src\app.py", evidence="file_write src/app.py")]
     kept, dropped = cross_check_claims(claims, ["src/app.py"])
     assert len(kept) == 1
     assert dropped == 0
@@ -254,8 +265,9 @@ In `src/sdlc/models.py`, replace the `HandoffSummary` class (line 268):
 class HandoffClaim(BaseModel):
     """One assertion about the work, carrying the evidence for it.
     Evidence-first, mirroring IntegrityFlag."""
+
     text: str
-    evidence: str            # quote/reference from the scrubbed HarnessSession
+    evidence: str  # quote/reference from the scrubbed HarnessSession
 
 
 class HandoffSummary(BaseModel):
@@ -266,6 +278,7 @@ class HandoffSummary(BaseModel):
     extracted from the scrubbed session -- the diff cannot state WHY an
     approach was chosen or what was knowingly left undone.
     """
+
     task_id: str
     files_touched: list[str] = Field(default_factory=list)
     what_changed: list[HandoffClaim] = Field(default_factory=list)
@@ -284,6 +297,7 @@ Pure functions -- no I/O, no Temporal, no LLM. A claim may reference only
 files the diff actually touched; anything else is the extractor attributing
 work to a file the task never opened, and is dropped rather than trusted.
 """
+
 from __future__ import annotations
 
 import re
@@ -376,6 +390,7 @@ Create `tests/test_handoff_role.py`:
 
 ```python
 """The handoff extraction role ships and is wired like every other role."""
+
 from sdlc.agents import roles
 from sdlc.agents.loader import KNOWN_ROLES, OPTIONAL_ROLES, load_registry
 from sdlc.models import HandoffSummary
@@ -434,11 +449,10 @@ from pydantic_ai.settings import ModelSettings
 from sdlc.models import HandoffSummary
 
 
-def build(model: str, instructions: str,
-          model_settings: ModelSettings) -> Agent:
+def build(model: str, instructions: str, model_settings: ModelSettings) -> Agent:
     return Agent(
         model,
-        name="handoff_agent",       # Temporal activity name -- NEVER rename
+        name="handoff_agent",  # Temporal activity name -- NEVER rename
         output_type=HandoffSummary,
         model_settings=model_settings,
         system_prompt=instructions,
@@ -470,8 +484,7 @@ Rules:
 In `src/sdlc/agents/loader.py`, extend `OPTIONAL_ROLES` (line 59):
 
 ```python
-OPTIONAL_ROLES: frozenset[str] = frozenset(
-    {"research", "deep_review", "handoff", "adversary"})
+OPTIONAL_ROLES: frozenset[str] = frozenset({"research", "deep_review", "handoff", "adversary"})
 ```
 
 (`adversary` is included now so Task 6 does not have to touch this line again.)
@@ -494,7 +507,9 @@ After the `t_deep_review` assignment:
 ```python
 t_handoff = (
     TemporalAgent(handoff_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-    if handoff_agent is not None else None)
+    if handoff_agent is not None
+    else None
+)
 ```
 
 And after the existing `ALL_TEMPORAL_AGENTS` appends:
@@ -539,6 +554,7 @@ Create `tests/test_handoff_workflow.py`:
 
 ```python
 """Handoff content reaches the NEXT task's prompt -- and no validator."""
+
 from sdlc.models import HandoffClaim, HandoffSummary
 from sdlc.workflows.feature import _handoff_notes
 
@@ -565,8 +581,7 @@ def test_notes_never_leak_evidence_quotes():
     """Evidence is for the cross-check and the record, not the next prompt."""
     h = HandoffSummary(
         task_id="t1",
-        what_changed=[HandoffClaim(text="added /health",
-                                   evidence="SECRET-TRANSCRIPT-QUOTE")],
+        what_changed=[HandoffClaim(text="added /health", evidence="SECRET-TRANSCRIPT-QUOTE")],
     )
     assert "SECRET-TRANSCRIPT-QUOTE" not in "\n".join(_handoff_notes([h]))
 
@@ -576,8 +591,7 @@ def test_empty_handoff_produces_no_notes():
 
 
 def test_only_last_five_handoffs_are_carried():
-    hs = [HandoffSummary(task_id=f"t{i}", what_changed=[_claim(f"c{i}")])
-          for i in range(8)]
+    hs = [HandoffSummary(task_id=f"t{i}", what_changed=[_claim(f"c{i}")]) for i in range(8)]
     notes = "\n".join(_handoff_notes(hs))
     assert "c0" not in notes
     assert "c7" in notes
@@ -608,9 +622,11 @@ def _handoff_notes(prior_handoffs: list) -> list[str]:
     notes: list[str] = []
     for h in prior_handoffs[-_HANDOFF_TAIL:]:
         parts: list[str] = []
-        for label, claims in (("did", h.what_changed),
-                              ("decided", h.decisions_made),
-                              ("concerns", h.open_concerns)):
+        for label, claims in (
+            ("did", h.what_changed),
+            ("decided", h.decisions_made),
+            ("concerns", h.open_concerns),
+        ):
             if claims:
                 parts.append(f"{label}: " + "; ".join(c.text for c in claims))
         if parts:
@@ -628,10 +644,9 @@ Expected: PASS (4 tests)
 In `_dev_task` (line ~1072), replace the inline comprehension:
 
 ```python
-        handoff_notes = [
-            f"- {h.task_id}: {'; '.join(h.open_concerns) or 'no concerns'}"
-            for h in prior_handoffs[-5:]
-        ]
+handoff_notes = [
+    f"- {h.task_id}: {'; '.join(h.open_concerns) or 'no concerns'}" for h in prior_handoffs[-5:]
+]
 ```
 
 with:
@@ -647,58 +662,75 @@ Leave the `("\nHandoffs from preceding tasks:\n" + ...)` block below it unchange
 Add `t_handoff` to the `..agents.roles` import list (line ~29). Then add this method beside `_run_deep_review`:
 
 ```python
-    async def _run_handoff(self, cfg, run, contract, assertions, diff,
-                           task) -> "HandoffSummary":
-        """FR-805: extract task-to-task claims from the scrubbed session.
+async def _run_handoff(self, cfg, run, contract, assertions, diff, task) -> "HandoffSummary":
+    """FR-805: extract task-to-task claims from the scrubbed session.
 
-        files_touched is filled HERE from the diff, never by the model, so
-        the extractor structurally cannot misreport which files changed.
-        Best-effort: any failure returns the mechanical handoff rather than
-        failing a task that already passed.
-        """
-        files = diff["files"]
-        fallback = HandoffSummary(task_id=task.id, files_touched=files)
-        if not (t_handoff is not None and run is not None
-                and run.session_ref is not None):
-            return fallback
-        _started = workflow.now()
-        try:
-            loaded = await workflow.execute_activity(
-                load_session, LoadSessionInput(ref=run.session_ref), **ACT)
-            model = resolve_role_model(cfg, "handoff")
-            spend = RoleUsage(role="handoff", model=model)
-            out = (await self._run_role(
-                cfg, "handoff", model, t_handoff,
-                "Frozen contract assertions:\n- " + "\n- ".join(assertions)
+    files_touched is filled HERE from the diff, never by the model, so
+    the extractor structurally cannot misreport which files changed.
+    Best-effort: any failure returns the mechanical handoff rather than
+    failing a task that already passed.
+    """
+    files = diff["files"]
+    fallback = HandoffSummary(task_id=task.id, files_touched=files)
+    if not (t_handoff is not None and run is not None and run.session_ref is not None):
+        return fallback
+    _started = workflow.now()
+    try:
+        loaded = await workflow.execute_activity(
+            load_session, LoadSessionInput(ref=run.session_ref), **ACT
+        )
+        model = resolve_role_model(cfg, "handoff")
+        spend = RoleUsage(role="handoff", model=model)
+        out = (
+            await self._run_role(
+                cfg,
+                "handoff",
+                model,
+                t_handoff,
+                "Frozen contract assertions:\n- "
+                + "\n- ".join(assertions)
                 + f"\nDiff:\n{diff['patch']}"
-                + "\nScrubbed harness transcript:\n" + loaded.text,
-                into=spend)).output
+                + "\nScrubbed harness transcript:\n"
+                + loaded.text,
+                into=spend,
+            )
+        ).output
 
-            kept_total = 0
-            dropped_total = 0
-            fields = {}
-            for name in ("what_changed", "decisions_made", "open_concerns"):
-                kept, dropped = cross_check_claims(
-                    getattr(out, name), files)
-                fields[name] = kept
-                kept_total += len(kept)
-                dropped_total += dropped
+        kept_total = 0
+        dropped_total = 0
+        fields = {}
+        for name in ("what_changed", "decisions_made", "open_concerns"):
+            kept, dropped = cross_check_claims(getattr(out, name), files)
+            fields[name] = kept
+            kept_total += len(kept)
+            dropped_total += dropped
 
-            handoff = HandoffSummary(task_id=task.id, files_touched=files,
-                                     **fields)
-            await self._record(cfg, self._stage_record(
-                cfg, stage="handoff", role="handoff",
-                started=_started, ended=workflow.now(),
+        handoff = HandoffSummary(task_id=task.id, files_touched=files, **fields)
+        await self._record(
+            cfg,
+            self._stage_record(
+                cfg,
+                stage="handoff",
+                role="handoff",
+                started=_started,
+                ended=workflow.now(),
                 quality_score=claim_survival_score(kept_total, dropped_total),
-                judge="handoff", outcome=BenchmarkOutcome.PASS,
-                model=model, spend=spend, task_id=task.id,
-                fix_attempts=0))
-            return handoff
-        except Exception:
-            workflow.logger.warning(
-                "handoff extraction failed for task %s; using mechanical "
-                "handoff", task.id, exc_info=True)
-            return fallback
+                judge="handoff",
+                outcome=BenchmarkOutcome.PASS,
+                model=model,
+                spend=spend,
+                task_id=task.id,
+                fix_attempts=0,
+            ),
+        )
+        return handoff
+    except Exception:
+        workflow.logger.warning(
+            "handoff extraction failed for task %s; using mechanical handoff",
+            task.id,
+            exc_info=True,
+        )
+        return fallback
 ```
 
 Add to the imports near the top of the workflow module (inside the same `with workflow.unsafe.imports_passed_through():` block that already imports models):
@@ -712,23 +744,20 @@ Add to the imports near the top of the workflow module (inside the same `with wo
 At line ~1252, replace:
 
 ```python
-                deep = await self._run_deep_review(
-                    cfg, run, contract, assertions, diff, task)
-                handoff = HandoffSummary(
-                    task_id=task.id,
-                    what_changed=[task.title],
-                    files_touched=diff["files"],
-                    open_concerns=[],
-                )
+deep = await self._run_deep_review(cfg, run, contract, assertions, diff, task)
+handoff = HandoffSummary(
+    task_id=task.id,
+    what_changed=[task.title],
+    files_touched=diff["files"],
+    open_concerns=[],
+)
 ```
 
 with:
 
 ```python
-                deep = await self._run_deep_review(
-                    cfg, run, contract, assertions, diff, task)
-                handoff = await self._run_handoff(
-                    cfg, run, contract, assertions, diff, task)
+deep = await self._run_deep_review(cfg, run, contract, assertions, diff, task)
+handoff = await self._run_handoff(cfg, run, contract, assertions, diff, task)
 ```
 
 - [ ] **Step 8: Run the workflow suites**
@@ -773,6 +802,7 @@ anthropic:glm-5.2 (same weights, no decorrelation) and would reject
 anthropic:claude-sonnet-4-6 vs anthropic:glm-5.2 (different weights, real
 decorrelation). See spec OQ-A4.
 """
+
 import pytest
 
 from sdlc.agents.loader import RegistryError, check_adversary_model, model_id
@@ -790,35 +820,43 @@ def test_model_id_without_separator_is_the_whole_string():
 
 def test_same_model_behind_different_providers_is_rejected():
     with pytest.raises(RegistryError, match="adversary"):
-        check_adversary_model({
-            "dev": "zai-coding-plan/glm-5.2",
-            "reviewer": "anthropic:glm-5.2",
-            "adversary": "openai/glm-5.2",
-        })
+        check_adversary_model(
+            {
+                "dev": "zai-coding-plan/glm-5.2",
+                "reviewer": "anthropic:glm-5.2",
+                "adversary": "openai/glm-5.2",
+            }
+        )
 
 
 def test_sharing_the_reviewers_model_is_rejected():
     with pytest.raises(RegistryError, match="adversary"):
-        check_adversary_model({
-            "dev": "zai-coding-plan/glm-5.2",
-            "reviewer": "anthropic:glm-5.2",
-            "adversary": "anthropic:glm-5.2",
-        })
+        check_adversary_model(
+            {
+                "dev": "zai-coding-plan/glm-5.2",
+                "reviewer": "anthropic:glm-5.2",
+                "adversary": "anthropic:glm-5.2",
+            }
+        )
 
 
 def test_different_model_sharing_a_provider_is_accepted():
-    check_adversary_model({
-        "dev": "zai-coding-plan/glm-5.2",
-        "reviewer": "anthropic:glm-5.2",
-        "adversary": "anthropic:claude-sonnet-4-6",
-    })
+    check_adversary_model(
+        {
+            "dev": "zai-coding-plan/glm-5.2",
+            "reviewer": "anthropic:glm-5.2",
+            "adversary": "anthropic:claude-sonnet-4-6",
+        }
+    )
 
 
 def test_absent_adversary_is_a_noop():
-    check_adversary_model({
-        "dev": "zai-coding-plan/glm-5.2",
-        "reviewer": "anthropic:glm-5.2",
-    })
+    check_adversary_model(
+        {
+            "dev": "zai-coding-plan/glm-5.2",
+            "reviewer": "anthropic:glm-5.2",
+        }
+    )
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -866,7 +904,8 @@ def check_adversary_model(role_models: dict[str, str]) -> None:
             raise RegistryError(
                 f"ADR-6 violation: adversary model '{adv}' is the same model "
                 f"as '{other}' ('{peer}') -- a second opinion from the same "
-                f"weights is not a second opinion")
+                f"weights is not a second opinion"
+            )
 ```
 
 Then call it from `validate_run_roles` so per-run overrides are covered:
@@ -888,8 +927,7 @@ Expected: PASS (6 tests)
 In `validate_registry`, after the existing `check_adr6_families(...)` call, add:
 
 ```python
-    check_adversary_model({n: c.model for n, c in roles.items()
-                           if c.model is not None})
+check_adversary_model({n: c.model for n, c in roles.items() if c.model is not None})
 ```
 
 - [ ] **Step 6: Run the registry suite**
@@ -940,10 +978,8 @@ def test_shipped_registry_satisfies_the_adversary_check():
     from sdlc.agents.loader import check_adversary_model, load_registry
 
     registry = load_registry()
-    check_adversary_model({n: c.model for n, c in registry.items()
-                           if c.model is not None})
-    assert model_id(registry["adversary"].model) != model_id(
-        registry["reviewer"].model)
+    check_adversary_model({n: c.model for n, c in registry.items() if c.model is not None})
+    assert model_id(registry["adversary"].model) != model_id(registry["reviewer"].model)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -977,11 +1013,10 @@ from pydantic_ai.settings import ModelSettings
 from sdlc.models import ReviewReport
 
 
-def build(model: str, instructions: str,
-          model_settings: ModelSettings) -> Agent:
+def build(model: str, instructions: str, model_settings: ModelSettings) -> Agent:
     return Agent(
         model,
-        name="adversary_agent",     # Temporal activity name -- NEVER rename
+        name="adversary_agent",  # Temporal activity name -- NEVER rename
         output_type=ReviewReport,
         model_settings=model_settings,
         system_prompt=instructions,
@@ -1029,7 +1064,9 @@ After `t_handoff`:
 ```python
 t_adversary = (
     TemporalAgent(adversary_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-    if adversary_agent is not None else None)
+    if adversary_agent is not None
+    else None
+)
 ```
 
 And:
@@ -1078,6 +1115,7 @@ Create `tests/test_adversary_workflow.py`:
 
 ```python
 """Split verdicts merge both reviewers' findings into the retry prompt."""
+
 from sdlc.models import ReviewFinding, ReviewReport
 from sdlc.workflows.feature import _fix_loop_issues
 
@@ -1096,20 +1134,23 @@ class _QARaw:
 def _report(approve, detail):
     return ReviewReport(
         approve=approve,
-        findings=[ReviewFinding(assertion="A1", severity="high",
-                                detail=detail, suggested_fix="fix it")],
+        findings=[
+            ReviewFinding(assertion="A1", severity="high", detail=detail, suggested_fix="fix it")
+        ],
     )
 
 
 def test_adversary_none_reproduces_todays_output():
     review = _report(False, "primary finding")
-    assert (_fix_loop_issues(_QA(), _QARaw(), review, None)
-            == _fix_loop_issues(_QA(), _QARaw(), review))
+    assert _fix_loop_issues(_QA(), _QARaw(), review, None) == _fix_loop_issues(
+        _QA(), _QARaw(), review
+    )
 
 
 def test_both_reviewers_findings_reach_the_retry():
-    issues = _fix_loop_issues(_QA(), _QARaw(), _report(True, "primary finding"),
-                              _report(False, "adversary finding"))
+    issues = _fix_loop_issues(
+        _QA(), _QARaw(), _report(True, "primary finding"), _report(False, "adversary finding")
+    )
     assert "primary finding" in issues
     assert "adversary finding" in issues
 
@@ -1117,8 +1158,9 @@ def test_both_reviewers_findings_reach_the_retry():
 def test_adversary_findings_alone_are_actionable():
     """The primary approved and produced nothing; the retry must still have
     an instruction, or the loop sends a bare dash."""
-    issues = _fix_loop_issues(_QA(), _QARaw(), ReviewReport(approve=True),
-                              _report(False, "adversary finding"))
+    issues = _fix_loop_issues(
+        _QA(), _QARaw(), ReviewReport(approve=True), _report(False, "adversary finding")
+    )
     assert "adversary finding" in issues
     assert issues.strip()
 
@@ -1127,11 +1169,9 @@ def test_low_severity_adversary_findings_are_not_blocking():
     """blocking_findings is critical/high only -- same rule as the primary."""
     adv = ReviewReport(
         approve=False,
-        findings=[ReviewFinding(assertion="A1", severity="low",
-                                detail="nit", suggested_fix="")],
+        findings=[ReviewFinding(assertion="A1", severity="low", detail="nit", suggested_fix="")],
     )
-    assert "nit" not in _fix_loop_issues(_QA(), _QARaw(),
-                                         ReviewReport(approve=True), adv)
+    assert "nit" not in _fix_loop_issues(_QA(), _QARaw(), ReviewReport(approve=True), adv)
 ```
 
 Append the wiring assertions, in the house source-text style of
@@ -1164,15 +1204,14 @@ def test_adversary_runs_only_on_the_approving_path():
     src = _src()
     call = src.find("await self._run_adversary")
     pred = src.find("if task_passed and review_ok:")
-    assert pred != -1 and call > pred, (
-        "the adversary must be invoked inside the approving block")
+    assert pred != -1 and call > pred, "the adversary must be invoked inside the approving block"
 
 
 def test_adversary_is_fail_open():
     """A failed lens counts as agreement -- it must never fail a task."""
     src = _src()
     idx = src.find("async def _run_adversary")
-    body = src[idx: idx + 2600]
+    body = src[idx : idx + 2600]
     assert "return None" in body
     assert "raise" not in body
 
@@ -1182,7 +1221,7 @@ def test_adversary_never_touches_the_session():
     transcript is deep_review's job and would break decorrelation."""
     src = _src()
     idx = src.find("async def _run_adversary")
-    body = src[idx: idx + 2600]
+    body = src[idx : idx + 2600]
     assert "load_session" not in body
     assert "session_ref" not in body
     assert "run_coding_task" not in body
@@ -1194,15 +1233,14 @@ def test_cause_records_carry_no_fix_attempts():
     for stage in ('stage="review"', 'stage="adversary"', 'stage="handoff"'):
         idx = src.find(stage)
         assert idx != -1, f"{stage} record is not emitted"
-        assert "fix_attempts=0" in src[idx: idx + 700], (
-            f"{stage} must pass fix_attempts=0")
+        assert "fix_attempts=0" in src[idx : idx + 700], f"{stage} must pass fix_attempts=0"
 
 
 def test_handoff_is_fail_open_and_never_reaches_a_validator():
     src = _src()
     idx = src.find("async def _run_handoff")
     assert idx != -1
-    body = src[idx: idx + 2600]
+    body = src[idx : idx + 2600]
     assert "return fallback" in body
     # The handoff is passed to TaskResult (consumed by LATER tasks) and to
     # nothing else -- never into a review or QA call.
@@ -1226,11 +1264,12 @@ def _fix_loop_issues(qa, qa_raw, review, adversary=None) -> str:
 Then replace the `review_issues` assignment with:
 
 ```python
-    review_issues = [
-        f"{f.severity}: {f.assertion} — {f.detail}"
-        for r in (review, adversary) if r is not None
-        for f in r.blocking_findings
-    ]
+review_issues = [
+    f"{f.severity}: {f.assertion} — {f.detail}"
+    for r in (review, adversary)
+    if r is not None
+    for f in r.blocking_findings
+]
 ```
 
 Add to the docstring, after the existing text:
@@ -1252,12 +1291,12 @@ Expected: PASS (4 tests)
 In `src/sdlc/models.py`, after `deep_review_enabled` (line ~842):
 
 ```python
-    adversarial_review_enabled: bool = False   # spec part 2: decorrelated
-                                            # second opinion on the APPROVING
-                                            # path only. Off by default -- it
-                                            # changes hot-path outcomes and
-                                            # costs a call per approving
-                                            # attempt. Swept as a benchmark arm.
+adversarial_review_enabled: bool = False  # spec part 2: decorrelated
+# second opinion on the APPROVING
+# path only. Off by default -- it
+# changes hot-path outcomes and
+# costs a call per approving
+# attempt. Swept as a benchmark arm.
 ```
 
 - [ ] **Step 6: Add `_run_adversary`**
@@ -1265,57 +1304,74 @@ In `src/sdlc/models.py`, after `deep_review_enabled` (line ~842):
 Add `t_adversary` to the `..agents.roles` import list. Then, beside `_run_deep_review`:
 
 ```python
-    async def _run_adversary(self, cfg, contract, assertions, diff, qa_raw,
-                             task) -> "ReviewReport | None":
-        """Spec 3.2: the decorrelated second opinion, on the APPROVING path
-        only -- a rejection is already headed for the fix loop.
+async def _run_adversary(
+    self, cfg, contract, assertions, diff, qa_raw, task
+) -> "ReviewReport | None":
+    """Spec 3.2: the decorrelated second opinion, on the APPROVING path
+    only -- a rejection is already headed for the fix loop.
 
-        Clean-context, exactly like the primary: contract + diff + test
-        output, never the session (that is deep_review's job). Identical
-        inputs are what make disagreement interpretable as model variance
-        rather than information asymmetry.
+    Clean-context, exactly like the primary: contract + diff + test
+    output, never the session (that is deep_review's job). Identical
+    inputs are what make disagreement interpretable as model variance
+    rather than information asymmetry.
 
-        FAIL-OPEN: any failure returns None, which the caller treats as
-        agreement. The primary reviewer is the sole designated blocking
-        lens; a lens added for safety must not become a new way to fail.
-        (Deliberately asymmetric to the E-38 scrub, which is fail-closed:
-        a leaked credential is unrecoverable, a missed opinion is not.)
-        """
-        if not (cfg.adversarial_review_enabled and t_adversary is not None):
-            return None
-        _started = workflow.now()
-        model = resolve_role_model(cfg, "adversary")
-        try:
-            spend = RoleUsage(role="adversary", model=model)
-            report = (await self._run_role(
-                cfg, "adversary", model, t_adversary,
-                "Frozen contract assertions:\n- " + "\n- ".join(assertions)
+    FAIL-OPEN: any failure returns None, which the caller treats as
+    agreement. The primary reviewer is the sole designated blocking
+    lens; a lens added for safety must not become a new way to fail.
+    (Deliberately asymmetric to the E-38 scrub, which is fail-closed:
+    a leaked credential is unrecoverable, a missed opinion is not.)
+    """
+    if not (cfg.adversarial_review_enabled and t_adversary is not None):
+        return None
+    _started = workflow.now()
+    model = resolve_role_model(cfg, "adversary")
+    try:
+        spend = RoleUsage(role="adversary", model=model)
+        report = (
+            await self._run_role(
+                cfg,
+                "adversary",
+                model,
+                t_adversary,
+                "Frozen contract assertions:\n- "
+                + "\n- ".join(assertions)
                 + f"\nDiff:\n{diff['patch']}"
                 + f"\nTest output:\n{'; '.join(qa_raw.issues or [])}",
-                into=spend)).output
-            await self._record(cfg, self._stage_record(
-                cfg, stage="adversary", role="adversary",
-                started=_started, ended=workflow.now(),
+                into=spend,
+            )
+        ).output
+        await self._record(
+            cfg,
+            self._stage_record(
+                cfg,
+                stage="adversary",
+                role="adversary",
+                started=_started,
+                ended=workflow.now(),
                 quality_score=(1.0 if report.approve else 0.0),
                 judge="adversary",
-                outcome=(BenchmarkOutcome.PASS if report.approve
-                         else BenchmarkOutcome.FAIL),
-                model=model, spend=spend, task_id=task.id,
-                fix_attempts=0))          # cause row: volume lives on code/qa
-            if not report.approve:
-                await self._retain(
-                    cfg, MemoryKind.GOTCHA, cfg.memory.project_bank,
-                    text=f"adversary split from reviewer on task {task.id}: "
-                         + "; ".join(f"{f.assertion}: {f.detail}"
-                                     for f in report.blocking_findings),
-                    metadata={"task_id": task.id,
-                              "run_id": workflow.info().workflow_id})
-            return report
-        except Exception:
-            workflow.logger.warning(
-                "adversary lens failed for task %s; treating as agreement",
-                task.id, exc_info=True)
-            return None
+                outcome=(BenchmarkOutcome.PASS if report.approve else BenchmarkOutcome.FAIL),
+                model=model,
+                spend=spend,
+                task_id=task.id,
+                fix_attempts=0,
+            ),
+        )  # cause row: volume lives on code/qa
+        if not report.approve:
+            await self._retain(
+                cfg,
+                MemoryKind.GOTCHA,
+                cfg.memory.project_bank,
+                text=f"adversary split from reviewer on task {task.id}: "
+                + "; ".join(f"{f.assertion}: {f.detail}" for f in report.blocking_findings),
+                metadata={"task_id": task.id, "run_id": workflow.info().workflow_id},
+            )
+        return report
+    except Exception:
+        workflow.logger.warning(
+            "adversary lens failed for task %s; treating as agreement", task.id, exc_info=True
+        )
+        return None
 ```
 
 - [ ] **Step 7: Emit the missing `review` record and gate on the split**
@@ -1329,56 +1385,72 @@ through to the retry path, not by widening the predicate.
 At the success path (line ~1250), replace:
 
 ```python
-            review_ok = review is None or review.approve
-            if task_passed and review_ok:
-                deep = await self._run_deep_review(
-                    cfg, run, contract, assertions, diff, task)
-                handoff = await self._run_handoff(
-                    cfg, run, contract, assertions, diff, task)
-                return TaskResult(task_id=task.id, status="done",
-                                  attempts=attempt, branch=handle.branch,
-                                  run=run, handoff=handoff, qa=qa_raw,
-                                  review=review, deep_review=deep)
+review_ok = review is None or review.approve
+if task_passed and review_ok:
+    deep = await self._run_deep_review(cfg, run, contract, assertions, diff, task)
+    handoff = await self._run_handoff(cfg, run, contract, assertions, diff, task)
+    return TaskResult(
+        task_id=task.id,
+        status="done",
+        attempts=attempt,
+        branch=handle.branch,
+        run=run,
+        handoff=handoff,
+        qa=qa_raw,
+        review=review,
+        deep_review=deep,
+    )
 ```
 
 with:
 
 ```python
-            review_ok = review is None or review.approve
-            if review is not None:
-                # The primary's verdict has never been recorded, so
-                # review-driven rework showed as fix_attempts on code/qa with
-                # no cause row at all. Disagreement is a RELATION between two
-                # records; the adversary's is meaningless without this one.
-                await self._record(cfg, self._stage_record(
-                    cfg, stage="review", role="reviewer",
-                    started=_attempt_started, ended=workflow.now(),
-                    quality_score=(1.0 if review.approve else 0.0),
-                    judge="contract",
-                    outcome=(BenchmarkOutcome.PASS if review.approve
-                             else BenchmarkOutcome.FAIL),
-                    model=resolve_role_model(cfg, "review"),
-                    task_id=task.id, attempt=attempt - 1,
-                    fix_attempts=0))      # cause row; volume lives on code/qa
+review_ok = review is None or review.approve
+if review is not None:
+    # The primary's verdict has never been recorded, so
+    # review-driven rework showed as fix_attempts on code/qa with
+    # no cause row at all. Disagreement is a RELATION between two
+    # records; the adversary's is meaningless without this one.
+    await self._record(
+        cfg,
+        self._stage_record(
+            cfg,
+            stage="review",
+            role="reviewer",
+            started=_attempt_started,
+            ended=workflow.now(),
+            quality_score=(1.0 if review.approve else 0.0),
+            judge="contract",
+            outcome=(BenchmarkOutcome.PASS if review.approve else BenchmarkOutcome.FAIL),
+            model=resolve_role_model(cfg, "review"),
+            task_id=task.id,
+            attempt=attempt - 1,
+            fix_attempts=0,
+        ),
+    )  # cause row; volume lives on code/qa
 
-            adversary = None
-            if task_passed and review_ok:
-                # Approving path only: a rejection is already headed for the
-                # fix loop, so the expensive error is a false approve.
-                adversary = await self._run_adversary(
-                    cfg, contract, assertions, diff, qa_raw, task)
-                if adversary is None or adversary.approve:
-                    deep = await self._run_deep_review(
-                        cfg, run, contract, assertions, diff, task)
-                    handoff = await self._run_handoff(
-                        cfg, run, contract, assertions, diff, task)
-                    return TaskResult(task_id=task.id, status="done",
-                                      attempts=attempt, branch=handle.branch,
-                                      run=run, handoff=handoff, qa=qa_raw,
-                                      review=review, deep_review=deep)
-                # Split: fall through to the retry path below. max_fix_attempts
-                # still bounds it, and exhaustion enters the existing
-                # accept / retry-with-guidance / quarantine gate unchanged.
+adversary = None
+if task_passed and review_ok:
+    # Approving path only: a rejection is already headed for the
+    # fix loop, so the expensive error is a false approve.
+    adversary = await self._run_adversary(cfg, contract, assertions, diff, qa_raw, task)
+    if adversary is None or adversary.approve:
+        deep = await self._run_deep_review(cfg, run, contract, assertions, diff, task)
+        handoff = await self._run_handoff(cfg, run, contract, assertions, diff, task)
+        return TaskResult(
+            task_id=task.id,
+            status="done",
+            attempts=attempt,
+            branch=handle.branch,
+            run=run,
+            handoff=handoff,
+            qa=qa_raw,
+            review=review,
+            deep_review=deep,
+        )
+    # Split: fall through to the retry path below. max_fix_attempts
+    # still bounds it, and exhaustion enters the existing
+    # accept / retry-with-guidance / quarantine gate unchanged.
 ```
 
 - [ ] **Step 8: Pass the adversary to the fix loop**
@@ -1433,11 +1505,16 @@ Create `tests/test_benchmark_agreement_matrix.py`:
 
 ```python
 """task x arm split-rate grid (spec 4.4)."""
+
 from datetime import datetime, timezone
 
 from sdlc.benchmarks.agreement_matrix import build_agreement_matrix
 from sdlc.benchmarks.models import (
-    BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, CostBag, QualityScore,
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    CostBag,
+    QualityScore,
     SpeedBag,
 )
 from sdlc.models import HarnessKind
@@ -1447,32 +1524,46 @@ _T = datetime(2026, 8, 5, tzinfo=timezone.utc)
 
 def _rec(stage, outcome, task_id="t1", usd=0.02, run_id="r1", case_id="c1"):
     return BenchmarkRecord(
-        run_id=run_id, bench_run_id="b1", case_id=case_id,
-        scope=BenchmarkScope.TASK_ATTEMPT, stage=stage, task_id=task_id,
-        role=stage, harness=HarnessKind.CLAUDE_CODE, model="anthropic:x",
+        run_id=run_id,
+        bench_run_id="b1",
+        case_id=case_id,
+        scope=BenchmarkScope.TASK_ATTEMPT,
+        stage=stage,
+        task_id=task_id,
+        role=stage,
+        harness=HarnessKind.CLAUDE_CODE,
+        model="anthropic:x",
         quality=QualityScore(score=1.0, judge="adversary"),
         cost=CostBag(usd=usd),
         speed=SpeedBag(wall_clock_s=1.0, started_at=_T, ended_at=_T),
-        outcome=outcome, fix_attempts=0)
+        outcome=outcome,
+        fix_attempts=0,
+    )
 
 
 def test_split_rate_counts_only_adversary_records():
-    am = build_agreement_matrix("c1", [
-        _rec("adversary", BenchmarkOutcome.FAIL),
-        _rec("adversary", BenchmarkOutcome.PASS),
-        _rec("code", BenchmarkOutcome.FAIL),      # must not count
-    ])
+    am = build_agreement_matrix(
+        "c1",
+        [
+            _rec("adversary", BenchmarkOutcome.FAIL),
+            _rec("adversary", BenchmarkOutcome.PASS),
+            _rec("code", BenchmarkOutcome.FAIL),  # must not count
+        ],
+    )
     cell = next(c for c in am.cells if c.metric == "split_rate")
     assert cell.value == 0.5
 
 
 def test_cost_per_split_sums_adversary_spend():
-    am = build_agreement_matrix("c1", [
-        _rec("adversary", BenchmarkOutcome.FAIL, usd=0.02),
-        _rec("adversary", BenchmarkOutcome.PASS, usd=0.02),
-    ])
+    am = build_agreement_matrix(
+        "c1",
+        [
+            _rec("adversary", BenchmarkOutcome.FAIL, usd=0.02),
+            _rec("adversary", BenchmarkOutcome.PASS, usd=0.02),
+        ],
+    )
     cell = next(c for c in am.cells if c.metric == "cost_per_split")
-    assert cell.value == 0.04       # total adversary spend / 1 split
+    assert cell.value == 0.04  # total adversary spend / 1 split
 
 
 def test_no_adversary_records_yields_no_cells():
@@ -1482,19 +1573,25 @@ def test_no_adversary_records_yields_no_cells():
 
 
 def test_zero_splits_yields_a_rate_but_no_cost_per_split():
-    am = build_agreement_matrix("c1", [
-        _rec("adversary", BenchmarkOutcome.PASS),
-    ])
+    am = build_agreement_matrix(
+        "c1",
+        [
+            _rec("adversary", BenchmarkOutcome.PASS),
+        ],
+    )
     metrics = {c.metric for c in am.cells}
     assert "split_rate" in metrics
     assert "cost_per_split" not in metrics
 
 
 def test_other_cases_are_excluded():
-    am = build_agreement_matrix("c1", [
-        _rec("adversary", BenchmarkOutcome.FAIL, case_id="c2"),
-        _rec("adversary", BenchmarkOutcome.PASS, case_id="c1"),
-    ])
+    am = build_agreement_matrix(
+        "c1",
+        [
+            _rec("adversary", BenchmarkOutcome.FAIL, case_id="c2"),
+            _rec("adversary", BenchmarkOutcome.PASS, case_id="c1"),
+        ],
+    )
     cell = next(c for c in am.cells if c.metric == "split_rate")
     assert cell.value == 0.0
 ```
@@ -1524,6 +1621,7 @@ counterfactual, answerable only by running a case with
 adversarial_review_enabled on and off and comparing held-out oracle
 pass-fraction against cost.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -1555,14 +1653,12 @@ class AgreementMatrix(BaseModel):
     max_by_metric: dict[str, float] = Field(default_factory=dict)
 
 
-def build_agreement_matrix(case_id: str, records: list[BenchmarkRecord],
-                           suite: TaskSuite | None = None) -> AgreementMatrix:
-    recs = [r for r in records
-            if r.case_id == case_id and r.task_id
-            and r.stage == ADVERSARY_STAGE]
+def build_agreement_matrix(
+    case_id: str, records: list[BenchmarkRecord], suite: TaskSuite | None = None
+) -> AgreementMatrix:
+    recs = [r for r in records if r.case_id == case_id and r.task_id and r.stage == ADVERSARY_STAGE]
     if not recs:
-        return AgreementMatrix(case_id=case_id,
-                               metrics=list(AGREEMENT_METRICS))
+        return AgreementMatrix(case_id=case_id, metrics=list(AGREEMENT_METRICS))
 
     totals: dict[tuple[str, str], int] = defaultdict(int)
     splits: dict[tuple[str, str], int] = defaultdict(int)
@@ -1579,14 +1675,26 @@ def build_agreement_matrix(case_id: str, records: list[BenchmarkRecord],
     cells: list[AgreementCell] = []
     for key, n in totals.items():
         task_id, arm = key
-        cells.append(AgreementCell(
-            task_id=task_id, arm_key=arm, metric="split_rate",
-            value=splits[key] / n, n_records=n))
+        cells.append(
+            AgreementCell(
+                task_id=task_id,
+                arm_key=arm,
+                metric="split_rate",
+                value=splits[key] / n,
+                n_records=n,
+            )
+        )
         # No split means no cost PER split -- a blank cell, never a 0.0.
         if splits[key]:
-            cells.append(AgreementCell(
-                task_id=task_id, arm_key=arm, metric="cost_per_split",
-                value=spend[key] / splits[key], n_records=n))
+            cells.append(
+                AgreementCell(
+                    task_id=task_id,
+                    arm_key=arm,
+                    metric="cost_per_split",
+                    value=spend[key] / splits[key],
+                    n_records=n,
+                )
+            )
 
     observed = {c.task_id for c in cells}
     if suite is not None:
@@ -1596,12 +1704,16 @@ def build_agreement_matrix(case_id: str, records: list[BenchmarkRecord],
         task_ids = sorted(observed)
 
     max_by_metric = {
-        m: max((c.value for c in cells if c.metric == m), default=0.0)
-        for m in AGREEMENT_METRICS}
+        m: max((c.value for c in cells if c.metric == m), default=0.0) for m in AGREEMENT_METRICS
+    }
     return AgreementMatrix(
-        case_id=case_id, metrics=list(AGREEMENT_METRICS), task_ids=task_ids,
-        arms=sorted({c.arm_key for c in cells}), cells=cells,
-        max_by_metric=max_by_metric)
+        case_id=case_id,
+        metrics=list(AGREEMENT_METRICS),
+        task_ids=task_ids,
+        arms=sorted({c.arm_key for c in cells}),
+        cells=cells,
+        max_by_metric=max_by_metric,
+    )
 
 
 def render_agreement_matrix_json(am: AgreementMatrix) -> str:
@@ -1610,7 +1722,7 @@ def render_agreement_matrix_json(am: AgreementMatrix) -> str:
 
 def _cell_color(value: float, max_value: float) -> str:
     ratio = 0.0 if max_value <= 0 else min(value / max_value, 1.0)
-    g_b = round(255 - 229 * ratio)   # white (low) -> dark red (high)
+    g_b = round(255 - 229 * ratio)  # white (low) -> dark red (high)
     return f"rgb(255,{g_b},{g_b})"
 
 
@@ -1626,28 +1738,33 @@ def _grid(am: AgreementMatrix, metric: str) -> str:
             if c is None:
                 tds.append('<td class="empty"></td>')
                 continue
-            tip = (f"{task_id} / {arm}: {c.value:.2f} {metric} "
-                   f"over {c.n_records} adversary records")
+            tip = f"{task_id} / {arm}: {c.value:.2f} {metric} over {c.n_records} adversary records"
             tds.append(
                 f'<td title="{escape(tip)}" '
                 f'style="background:{_cell_color(c.value, mx)}">'
-                f"{c.value:.2f}</td>")
+                f"{c.value:.2f}</td>"
+            )
         rows.append("<tr>" + "".join(tds) + "</tr>")
-    return (f"<h2>{escape(metric)}</h2>"
-            f"<table><tr><th>task \\ arm</th>{head}</tr>"
-            + "".join(rows) + "</table>")
+    return (
+        f"<h2>{escape(metric)}</h2>"
+        f"<table><tr><th>task \\ arm</th>{head}</tr>" + "".join(rows) + "</table>"
+    )
 
 
 def render_agreement_matrix_html(am: AgreementMatrix) -> str:
     if not am.cells:
-        body = ("<p>No adversary records. The lens runs only when "
-                "adversarial_review_enabled is set AND the primary reviewer "
-                "approved.</p>")
+        body = (
+            "<p>No adversary records. The lens runs only when "
+            "adversarial_review_enabled is set AND the primary reviewer "
+            "approved.</p>"
+        )
     else:
         body = "".join(_grid(am, m) for m in am.metrics)
-        body += ("<p><em>Descriptive only: split rate does not say the "
-                 "adversary was right. That needs an on/off arm comparison "
-                 "against the held-out oracle.</em></p>")
+        body += (
+            "<p><em>Descriptive only: split rate does not say the "
+            "adversary was right. That needs an on/off arm comparison "
+            "against the held-out oracle.</em></p>"
+        )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Reviewer agreement - {escape(am.case_id)}</title>
@@ -1675,9 +1792,23 @@ In `src/sdlc/benchmarks/heatmap.py`, replace the list at line 18:
 
 ```python
 CANONICAL_STAGES: list[str] = [
-    "intake", "constitution", "context", "requirements", "research",
-    "clarify", "architecture", "planning", "code", "review", "adversary",
-    "handoff", "deep_review", "analyze", "qa", "quality_gate", "deploy",
+    "intake",
+    "constitution",
+    "context",
+    "requirements",
+    "research",
+    "clarify",
+    "architecture",
+    "planning",
+    "code",
+    "review",
+    "adversary",
+    "handoff",
+    "deep_review",
+    "analyze",
+    "qa",
+    "quality_gate",
+    "deploy",
     "retro",
 ]
 ```
@@ -1698,9 +1829,11 @@ Add above it:
 In `src/sdlc/benchmarks/score.py`, inside `_write_case_matrices`, add to the import block:
 
 ```python
-    from .agreement_matrix import (build_agreement_matrix,
-                                   render_agreement_matrix_html,
-                                   render_agreement_matrix_json)
+from .agreement_matrix import (
+    build_agreement_matrix,
+    render_agreement_matrix_html,
+    render_agreement_matrix_json,
+)
 ```
 
 Then, directly after the waste-matrix write block (before the `if suite is None:` early-continue, so it runs for every case regardless of `tasks.yaml`):

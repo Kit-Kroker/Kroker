@@ -12,13 +12,13 @@ from sdlc.core.models import (
 )
 from sdlc.grounding import Profile, verify_quote
 from sdlc.handoff import claim_survival_score, cross_check_claims
-from sdlc.harness.session import session_text_from_jsonl, session_to_jsonl
-from sdlc.measurement import CollectionState
-from sdlc.models import (
-    HandoffClaim,
+from sdlc.harness.models import (
     HarnessSession,
     SessionEvent,
 )
+from sdlc.harness.session import session_text_from_jsonl, session_to_jsonl
+from sdlc.measurement import CollectionState
+from sdlc.stages.code.models import HandoffClaim
 
 
 def _render(events):

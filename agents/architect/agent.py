@@ -1,8 +1,9 @@
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.settings import ModelSettings
 
-from sdlc.models import ArchitectureSpec, ResearchBrief
 from sdlc.research.deps import ResearchDeps
+from sdlc.stages.architecture.models import ArchitectureSpec
+from sdlc.stages.research.models import ResearchBrief
 
 
 def build(model: str, instructions: str, model_settings: ModelSettings) -> Agent:

@@ -17,15 +17,16 @@ import hashlib
 import re
 from collections.abc import Mapping
 
-from ...measurement import Measurement
-from ...toolchain.adapters import ToolchainAdapter
-from ..models import (
+from sdlc.triage.models import (
     FindingSeverity,
     FixClass,
     SignalResult,
     TriageFinding,
     dedupe_by_identity,
 )
+
+from ...measurement import Measurement
+from ...toolchain.adapters import ToolchainAdapter
 
 SIGNAL_ID = "outliers"
 VERSION = 2

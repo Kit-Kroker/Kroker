@@ -20,11 +20,12 @@ from collections.abc import Sequence
 from ...core.models import (
     ClarificationDimension,
 )
-from ...models import (
+from .models import (
     ClarifiedRequirements,
+    ClarifyRoute,
     OpenQuestion,
+    ProbeResult,
 )
-from .models import ClarifyRoute, ProbeResult
 from .routing import SUPERVISOR_DIMENSIONS
 
 _CANONICAL = {d: i for i, d in enumerate(ClarificationDimension)}

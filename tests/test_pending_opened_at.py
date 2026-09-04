@@ -4,8 +4,8 @@ exposes it so a surface can render 'waiting 4h'."""
 
 from datetime import UTC, datetime
 
-from sdlc.models import OpenQuestion
 from sdlc.pending import GateContext, clarify_pending, gate_pending
+from sdlc.stages.clarify.models import OpenQuestion
 
 AT = datetime(2026, 8, 18, 9, 0, tzinfo=UTC)
 

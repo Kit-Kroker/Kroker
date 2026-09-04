@@ -14,7 +14,10 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from sdlc.models import ClarifiedRequirements, OpenQuestion
+from sdlc.stages.clarify.models import (
+    ClarifiedRequirements,
+    OpenQuestion,
+)
 
 with workflow.unsafe.imports_passed_through():
     from sdlc.agents.roles import t_clarify

@@ -54,28 +54,34 @@ The message-shape assertion uses REAL pydantic-ai message objects serialized
 to dicts, so extract_user_prompt is pinned to the shape the runtime actually
 produces rather than a guessed one.
 """
+
 import json
 from datetime import datetime
 
 from pydantic_ai.messages import ModelRequest, SystemPromptPart, UserPromptPart
 
 from sdlc.eval.fixtures import (
-    AGENT_TO_ROLE, DEPS_ROLES, SUPPORTED_ROLES, EvalFixture,
-    extract_user_prompt, fixtures_from_events, write_fixtures,
+    AGENT_TO_ROLE,
+    DEPS_ROLES,
+    SUPPORTED_ROLES,
+    EvalFixture,
+    extract_user_prompt,
+    fixtures_from_events,
+    write_fixtures,
 )
 
 
 def _serialized_messages(system: str, user: str) -> list[dict]:
     """One ModelRequest with a system part and a user part, dumped the way the
     Temporal activity payload carries it."""
-    req = ModelRequest(parts=[SystemPromptPart(content=system),
-                              UserPromptPart(content=user)])
+    req = ModelRequest(parts=[SystemPromptPart(content=system), UserPromptPart(content=user)])
     return [req.model_dump(mode="json")]
 
 
 def test_supported_and_deps_role_sets():
     assert SUPPORTED_ROLES == frozenset(
-        {"clarify", "planner", "qa", "reviewer", "analyst", "merge_verdict"})
+        {"clarify", "planner", "qa", "reviewer", "analyst", "merge_verdict"}
+    )
     assert DEPS_ROLES == frozenset({"architect", "research"})
     # the two roles whose agent name is not their role name
     assert AGENT_TO_ROLE["qa_analyst_agent"] == "qa"
@@ -94,16 +100,24 @@ def test_extract_user_prompt_none_when_absent():
 
 def test_fixtures_from_events_builds_one_per_supported_proposer():
     events = [
-        {"activity": "clarify_agent__model_request",
-         "input": {"messages": _serialized_messages("s", "clarify input")}},
-        {"activity": "reviewer_agent__model_request",
-         "input": {"messages": _serialized_messages("s", "review input")}},
-        {"activity": "architect_agent__model_request",       # deps role: skip
-         "input": {"messages": _serialized_messages("s", "arch input")}},
-        {"activity": "run_coding_task", "input": {}},         # not a proposer
+        {
+            "activity": "clarify_agent__model_request",
+            "input": {"messages": _serialized_messages("s", "clarify input")},
+        },
+        {
+            "activity": "reviewer_agent__model_request",
+            "input": {"messages": _serialized_messages("s", "review input")},
+        },
+        {
+            "activity": "architect_agent__model_request",  # deps role: skip
+            "input": {"messages": _serialized_messages("s", "arch input")},
+        },
+        {"activity": "run_coding_task", "input": {}},  # not a proposer
     ]
-    registry = {"clarify": type("R", (), {"model": "anthropic:glm-5.2"})(),
-                "reviewer": type("R", (), {"model": "anthropic:glm-5.2"})()}
+    registry = {
+        "clarify": type("R", (), {"model": "anthropic:glm-5.2"})(),
+        "reviewer": type("R", (), {"model": "anthropic:glm-5.2"})(),
+    }
     fx = fixtures_from_events("feature-1", "add-login-greenfield", events, registry)
     got = {f.role: f for f in fx}
     assert set(got) == {"clarify", "reviewer"}
@@ -115,9 +129,14 @@ def test_fixtures_from_events_builds_one_per_supported_proposer():
 def test_write_fixtures_lands_beside_the_asset(tmp_path):
     agents = tmp_path / "agents"
     (agents / "clarify").mkdir(parents=True)
-    fx = EvalFixture(role="clarify", case="add-login-greenfield",
-                     prompt="p", model="anthropic:glm-5.2",
-                     source_run_id="feature-1", captured_at=datetime(2026, 7, 18))
+    fx = EvalFixture(
+        role="clarify",
+        case="add-login-greenfield",
+        prompt="p",
+        model="anthropic:glm-5.2",
+        source_run_id="feature-1",
+        captured_at=datetime(2026, 7, 18),
+    )
     paths = write_fixtures([fx], agents)
     assert paths == [agents / "clarify" / "fixtures" / "add-login-greenfield.json"]
     loaded = json.loads(paths[0].read_text(encoding="utf-8"))
@@ -150,6 +169,7 @@ capture_cli in cli.py), mirroring drift.py whose real HistoryProvider ships
 unimplemented and fake-tested. A fixture is trivial JSON, so it can also be
 hand-authored when a live run is not available.
 """
+
 from __future__ import annotations
 
 import json
@@ -187,15 +207,14 @@ class EvalFixture(BaseModel):
     prompt: str
     model: str
     source_run_id: str
-    captured_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc))
+    captured_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 def _role_for_activity(activity: str) -> str | None:
     if not activity.endswith(_REQUEST_SUFFIX):
         return None
     agent = activity[: -len(_REQUEST_SUFFIX)]
-    return AGENT_TO_ROLE.get(agent)          # None for deps/unsupported roles
+    return AGENT_TO_ROLE.get(agent)  # None for deps/unsupported roles
 
 
 def extract_user_prompt(messages: list[dict[str, Any]]) -> str | None:
@@ -216,8 +235,9 @@ def extract_user_prompt(messages: list[dict[str, Any]]) -> str | None:
     return None
 
 
-def fixtures_from_events(run_id: str, case: str, events: list[dict[str, Any]],
-                         registry: dict[str, Any]) -> list[EvalFixture]:
+def fixtures_from_events(
+    run_id: str, case: str, events: list[dict[str, Any]], registry: dict[str, Any]
+) -> list[EvalFixture]:
     """Pure: normalized history events -> one fixture per supported proposer.
 
     A normalized event is a dict with "activity" (str) and "input" (dict with
@@ -230,10 +250,10 @@ def fixtures_from_events(run_id: str, case: str, events: list[dict[str, Any]],
         if not isinstance(activity, str):
             continue
         role = _role_for_activity(activity)
-        if role is None or role in out:          # skip unsupported + keep first
+        if role is None or role in out:  # skip unsupported + keep first
             continue
         cfg = registry.get(role)
-        if cfg is None:                          # role not in this registry
+        if cfg is None:  # role not in this registry
             continue
         messages = (ev.get("input") or {}).get("messages")
         if not isinstance(messages, list):
@@ -241,8 +261,9 @@ def fixtures_from_events(run_id: str, case: str, events: list[dict[str, Any]],
         prompt = extract_user_prompt(messages)
         if prompt is None:
             continue
-        out[role] = EvalFixture(role=role, case=case, prompt=prompt,
-                                model=cfg.model, source_run_id=run_id)
+        out[role] = EvalFixture(
+            role=role, case=case, prompt=prompt, model=cfg.model, source_run_id=run_id
+        )
     return list(out.values())
 
 
@@ -309,6 +330,7 @@ Create `tests/test_eval_runner.py`:
 runs it. The critical assertion: the supplied text reaches the system prompt.
 A run_variant that ignored its argument and read the shipped file would score
 both variants identically and silently defeat the whole tool."""
+
 from datetime import datetime, timezone
 
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
@@ -330,16 +352,22 @@ def _fn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
 
 
 def _fixture(role="reviewer"):
-    return EvalFixture(role=role, case="c", prompt="the frozen input",
-                       model="anthropic:glm-5.2", source_run_id="r",
-                       captured_at=datetime(2026, 7, 18, tzinfo=timezone.utc))
+    return EvalFixture(
+        role=role,
+        case="c",
+        prompt="the frozen input",
+        model="anthropic:glm-5.2",
+        source_run_id="r",
+        captured_at=datetime(2026, 7, 18, tzinfo=timezone.utc),
+    )
 
 
 def test_run_variant_puts_supplied_text_in_system_prompt(tmp_path):
     seen_system.clear()
     root = write_registry_dir(tmp_path / "agents")
-    out = run_variant("reviewer", "VARIANT-B INSTRUCTIONS", _fixture(),
-                      root, model_override=FunctionModel(_fn))
+    out = run_variant(
+        "reviewer", "VARIANT-B INSTRUCTIONS", _fixture(), root, model_override=FunctionModel(_fn)
+    )
     assert out == '"canned output"' or "canned output" in out
     assert seen_system == ["VARIANT-B INSTRUCTIONS"]
 ```
@@ -356,6 +384,7 @@ Create `src/sdlc/eval/runner.py`:
 ```python
 """Replay: build a proposer agent from supplied instructions text and run it
 on a fixture prompt. No Temporal — a plain synchronous model call."""
+
 from __future__ import annotations
 
 import json
@@ -376,8 +405,14 @@ def _to_json(output: Any) -> str:
     return json.dumps(output)
 
 
-def run_variant(role: str, instructions_text: str, fixture: EvalFixture,
-                agents_dir: Path, *, model_override: Any | None = None) -> str:
+def run_variant(
+    role: str,
+    instructions_text: str,
+    fixture: EvalFixture,
+    agents_dir: Path,
+    *,
+    model_override: Any | None = None,
+) -> str:
     """Build agents/<role>/agent.py's Agent with instructions_text as its
     system prompt, run it on the fixture prompt, return serialized output.
 
@@ -445,6 +480,7 @@ Create `tests/test_eval_compare.py`:
 ```python
 """compare() orchestration, with a fake judge (no model calls). git-ref and
 rubric IO exercised against tmp dirs."""
+
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -453,23 +489,27 @@ import pytest
 
 from sdlc.benchmarks.judge import _set_judge_fn
 from sdlc.eval.compare import (
-    EvalError, RUBRIC_KEY, compare, load_rubric, read_ref_text,
+    EvalError,
+    RUBRIC_KEY,
+    compare,
+    load_rubric,
+    read_ref_text,
 )
 from sdlc.eval.fixtures import EvalFixture, write_fixtures
 
 
 def _git(root, *args):
-    subprocess.run(["git", *args], cwd=root, check=True,
-                   capture_output=True, text=True)
+    subprocess.run(["git", *args], cwd=root, check=True, capture_output=True, text=True)
 
 
 def _repo_with_instructions(root: Path, role: str, committed: str, working: str):
     role_dir = root / "agents" / role
     role_dir.mkdir(parents=True)
     (role_dir / "instructions.md").write_bytes(committed.encode())
-    _git(root, "init"); _git(root, "add", "-A")
+    _git(root, "init")
+    _git(root, "add", "-A")
     _git(root, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "init")
-    (role_dir / "instructions.md").write_bytes(working.encode())   # dirty tree
+    (role_dir / "instructions.md").write_bytes(working.encode())  # dirty tree
 
 
 def _case_with_rubric(cases_root: Path, case: str, role: str, rubric_body: str):
@@ -478,7 +518,8 @@ def _case_with_rubric(cases_root: Path, case: str, role: str, rubric_body: str):
     key = RUBRIC_KEY[role]
     (cdir / f"rubric-{key}.md").write_bytes(rubric_body.encode())
     (cdir / "case.yaml").write_text(
-        f"case_id: {case}\nrubrics:\n  {key}: rubric-{key}.md\n", encoding="utf-8")
+        f"case_id: {case}\nrubrics:\n  {key}: rubric-{key}.md\n", encoding="utf-8"
+    )
 
 
 def test_read_ref_text_reads_committed_version(tmp_path):
@@ -499,8 +540,7 @@ def test_load_rubric_from_case_yaml(tmp_path):
 
 def test_load_rubric_missing_raises(tmp_path):
     (tmp_path / "c1").mkdir()
-    (tmp_path / "c1" / "case.yaml").write_text("case_id: c1\nrubrics: {}\n",
-                                               encoding="utf-8")
+    (tmp_path / "c1" / "case.yaml").write_text("case_id: c1\nrubrics: {}\n", encoding="utf-8")
     with pytest.raises(EvalError, match="rubric"):
         load_rubric("c1", "reviewer", tmp_path)
 
@@ -508,20 +548,36 @@ def test_load_rubric_missing_raises(tmp_path):
 def test_compare_scores_both_and_reports_delta(tmp_path, monkeypatch):
     _repo_with_instructions(tmp_path, "reviewer", "OLD PROMPT", "NEW PROMPT")
     _case_with_rubric(tmp_path / "cases", "c1", "reviewer", "be good")
-    fx = EvalFixture(role="reviewer", case="c1", prompt="input",
-                     model="anthropic:glm-5.2", source_run_id="r",
-                     captured_at=datetime(2026, 7, 18, tzinfo=timezone.utc))
+    fx = EvalFixture(
+        role="reviewer",
+        case="c1",
+        prompt="input",
+        model="anthropic:glm-5.2",
+        source_run_id="r",
+        captured_at=datetime(2026, 7, 18, tzinfo=timezone.utc),
+    )
     write_fixtures([fx], tmp_path / "agents")
 
     # runner returns the system prompt it saw, so the fake judge can score A!=B
-    monkeypatch.setattr("sdlc.eval.compare.run_variant",
-                        lambda role, text, fixture, agents_dir, **k: text)
-    _set_judge_fn(lambda inp: '{"score": %s, "components": {}}'
-                  % ("0.9" if "NEW" in inp.artifact_json else "0.5"))
+    monkeypatch.setattr(
+        "sdlc.eval.compare.run_variant", lambda role, text, fixture, agents_dir, **k: text
+    )
+    _set_judge_fn(
+        lambda inp: (
+            '{"score": %s, "components": {}}' % ("0.9" if "NEW" in inp.artifact_json else "0.5")
+        )
+    )
     try:
-        rep = compare("reviewer", "c1", against_ref="HEAD", k=1,
-                      agents_dir=tmp_path / "agents", cases_root=tmp_path / "cases",
-                      repo_root=tmp_path, judge_model="openai/gpt-5.2")
+        rep = compare(
+            "reviewer",
+            "c1",
+            against_ref="HEAD",
+            k=1,
+            agents_dir=tmp_path / "agents",
+            cases_root=tmp_path / "cases",
+            repo_root=tmp_path,
+            judge_model="openai/gpt-5.2",
+        )
     finally:
         _set_judge_fn(None)
     assert rep.mean_a == 0.5 and rep.mean_b == 0.9
@@ -532,27 +588,51 @@ def test_compare_scores_both_and_reports_delta(tmp_path, monkeypatch):
 def test_compare_short_circuits_when_unchanged(tmp_path):
     _repo_with_instructions(tmp_path, "reviewer", "SAME", "SAME")
     _case_with_rubric(tmp_path / "cases", "c1", "reviewer", "r")
-    fx = EvalFixture(role="reviewer", case="c1", prompt="i",
-                     model="anthropic:glm-5.2", source_run_id="r",
-                     captured_at=datetime(2026, 7, 18, tzinfo=timezone.utc))
+    fx = EvalFixture(
+        role="reviewer",
+        case="c1",
+        prompt="i",
+        model="anthropic:glm-5.2",
+        source_run_id="r",
+        captured_at=datetime(2026, 7, 18, tzinfo=timezone.utc),
+    )
     write_fixtures([fx], tmp_path / "agents")
-    rep = compare("reviewer", "c1", against_ref="HEAD", k=1,
-                  agents_dir=tmp_path / "agents", cases_root=tmp_path / "cases",
-                  repo_root=tmp_path, judge_model="openai/gpt-5.2")
+    rep = compare(
+        "reviewer",
+        "c1",
+        against_ref="HEAD",
+        k=1,
+        agents_dir=tmp_path / "agents",
+        cases_root=tmp_path / "cases",
+        repo_root=tmp_path,
+        judge_model="openai/gpt-5.2",
+    )
     assert rep.unchanged and rep.runs == []
 
 
 def test_compare_rejects_same_family_judge(tmp_path):
     _repo_with_instructions(tmp_path, "reviewer", "A", "B")
     _case_with_rubric(tmp_path / "cases", "c1", "reviewer", "r")
-    fx = EvalFixture(role="reviewer", case="c1", prompt="i",
-                     model="anthropic:glm-5.2", source_run_id="r",
-                     captured_at=datetime(2026, 7, 18, tzinfo=timezone.utc))
+    fx = EvalFixture(
+        role="reviewer",
+        case="c1",
+        prompt="i",
+        model="anthropic:glm-5.2",
+        source_run_id="r",
+        captured_at=datetime(2026, 7, 18, tzinfo=timezone.utc),
+    )
     write_fixtures([fx], tmp_path / "agents")
     with pytest.raises(EvalError, match="family"):
-        compare("reviewer", "c1", against_ref="HEAD", k=1,
-                agents_dir=tmp_path / "agents", cases_root=tmp_path / "cases",
-                repo_root=tmp_path, judge_model="anthropic:other")  # same family
+        compare(
+            "reviewer",
+            "c1",
+            against_ref="HEAD",
+            k=1,
+            agents_dir=tmp_path / "agents",
+            cases_root=tmp_path / "cases",
+            repo_root=tmp_path,
+            judge_model="anthropic:other",
+        )  # same family
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -567,6 +647,7 @@ Create `src/sdlc/eval/compare.py`:
 ```python
 """Compare a working-tree prompt against a committed one: run each variant on
 the fixture, judge both against the case rubric, return a pure EvalReport."""
+
 from __future__ import annotations
 
 import subprocess
@@ -622,8 +703,9 @@ class EvalReport(BaseModel):
 
 def read_ref_text(ref: str, rel_path: str, repo_root: Path) -> str | None:
     """`git show <ref>:<rel_path>`; None if the path does not exist at ref."""
-    proc = subprocess.run(["git", "show", f"{ref}:{rel_path}"],
-                          cwd=repo_root, capture_output=True, text=True)
+    proc = subprocess.run(
+        ["git", "show", f"{ref}:{rel_path}"], cwd=repo_root, capture_output=True, text=True
+    )
     if proc.returncode != 0:
         return None
     return proc.stdout
@@ -633,15 +715,15 @@ def load_rubric(case: str, role: str, cases_root: Path) -> str:
     case_yaml = cases_root / case / "case.yaml"
     if not case_yaml.is_file():
         raise EvalError(f"no case.yaml at {case_yaml}")
-    rubrics = (yaml.safe_load(case_yaml.read_text(encoding="utf-8")) or {}
-               ).get("rubrics") or {}
+    rubrics = (yaml.safe_load(case_yaml.read_text(encoding="utf-8")) or {}).get("rubrics") or {}
     key = RUBRIC_KEY[role]
     rel = rubrics.get(key)
     if not rel:
         raise EvalError(
             f"no rubric for role '{role}' (key '{key}') in {case_yaml}. "
             f"Author benchmarks/cases/{case}/rubric-{key}.md and add it under "
-            f"`rubrics:` before evaluating this role.")
+            f"`rubrics:` before evaluating this role."
+        )
     return (cases_root / case / rel).read_text(encoding="utf-8")
 
 
@@ -650,30 +732,37 @@ def _mean(vals: list[float | None]) -> float | None:
     return sum(nums) / len(nums) if nums else None
 
 
-def compare(role: str, case: str, *, against_ref: str, k: int,
-            agents_dir: Path, cases_root: Path, repo_root: Path,
-            judge_model: str) -> EvalReport:
+def compare(
+    role: str,
+    case: str,
+    *,
+    against_ref: str,
+    k: int,
+    agents_dir: Path,
+    cases_root: Path,
+    repo_root: Path,
+    judge_model: str,
+) -> EvalReport:
     if role in DEPS_ROLES:
-        raise EvalError(
-            f"role '{role}' carries deps; deps-aware eval is future work")
+        raise EvalError(f"role '{role}' carries deps; deps-aware eval is future work")
     if role not in SUPPORTED_ROLES:
-        raise EvalError(f"unknown role '{role}'; supported: "
-                        f"{', '.join(sorted(SUPPORTED_ROLES))}")
+        raise EvalError(f"unknown role '{role}'; supported: {', '.join(sorted(SUPPORTED_ROLES))}")
 
     fixture_path = agents_dir / role / "fixtures" / f"{case}.json"
     if not fixture_path.is_file():
         raise EvalError(
             f"no fixture at {fixture_path}. Create one with "
-            f"`sdlc eval capture --from <run_id> --case {case}`.")
+            f"`sdlc eval capture --from <run_id> --case {case}`."
+        )
     fixture = load_fixture(fixture_path)
 
     if model_family(judge_model) == model_family(fixture.model):
         raise EvalError(
             f"judge model '{judge_model}' shares a family with the author "
-            f"model '{fixture.model}' (ADR-6); pick a different family.")
+            f"model '{fixture.model}' (ADR-6); pick a different family."
+        )
 
-    report = EvalReport(role=role, case=case, judge_model=judge_model,
-                        against_ref=against_ref)
+    report = EvalReport(role=role, case=case, judge_model=judge_model, against_ref=against_ref)
 
     rel = f"agents/{role}/instructions.md"
     b_text = (agents_dir / role / "instructions.md").read_text(encoding="utf-8")
@@ -687,25 +776,36 @@ def compare(role: str, case: str, *, against_ref: str, k: int,
     rubric = load_rubric(case, role, cases_root)
 
     def _score(artifact_json: str) -> tuple[float | None, dict[str, float]]:
-        qs = judge_artifact.sync(JudgeInput(
-            artifact_json=artifact_json, rubric=rubric,
-            author_model=fixture.model, judge_model=judge_model))
+        qs = judge_artifact.sync(
+            JudgeInput(
+                artifact_json=artifact_json,
+                rubric=rubric,
+                author_model=fixture.model,
+                judge_model=judge_model,
+            )
+        )
         return qs.score, qs.components
 
     for _ in range(k):
         out_b = run_variant(role, b_text, fixture, agents_dir)
         score_b, comp_b = _score(out_b)
         if report.no_baseline:
-            report.runs.append(RunScore(score_a=None, score_b=score_b,
-                                        delta=None, components_b=comp_b))
+            report.runs.append(
+                RunScore(score_a=None, score_b=score_b, delta=None, components_b=comp_b)
+            )
             continue
         out_a = run_variant(role, a_text, fixture, agents_dir)
         score_a, comp_a = _score(out_a)
-        delta = (None if score_a is None or score_b is None
-                 else score_b - score_a)
-        report.runs.append(RunScore(score_a=score_a, score_b=score_b,
-                                    delta=delta, components_a=comp_a,
-                                    components_b=comp_b))
+        delta = None if score_a is None or score_b is None else score_b - score_a
+        report.runs.append(
+            RunScore(
+                score_a=score_a,
+                score_b=score_b,
+                delta=delta,
+                components_a=comp_a,
+                components_b=comp_b,
+            )
+        )
 
     report.mean_a = _mean([r.score_a for r in report.runs])
     report.mean_b = _mean([r.score_b for r in report.runs])
@@ -759,6 +859,7 @@ Create `tests/test_eval_cli.py`:
 
 ```python
 """CLI-level behavior: rendering, role refusal, case resolution, defaults."""
+
 import pytest
 
 from sdlc.eval.cli import default_judge_model, render_report, run_eval
@@ -766,32 +867,52 @@ from sdlc.eval.compare import EvalError, EvalReport, RunScore
 
 
 def test_render_shows_head_working_and_delta():
-    rep = EvalReport(role="reviewer", case="c1", judge_model="openai/gpt-5.2",
-                     against_ref="HEAD", mean_a=0.71, mean_b=0.83,
-                     mean_delta=0.12, runs=[RunScore(score_a=0.71, score_b=0.83,
-                                                     delta=0.12)])
+    rep = EvalReport(
+        role="reviewer",
+        case="c1",
+        judge_model="openai/gpt-5.2",
+        against_ref="HEAD",
+        mean_a=0.71,
+        mean_b=0.83,
+        mean_delta=0.12,
+        runs=[RunScore(score_a=0.71, score_b=0.83, delta=0.12)],
+    )
     text = render_report(rep)
     assert "0.71" in text and "0.83" in text and "+0.12" in text
 
 
 def test_render_unchanged():
-    rep = EvalReport(role="reviewer", case="c1", judge_model="m",
-                     against_ref="HEAD", unchanged=True)
+    rep = EvalReport(
+        role="reviewer", case="c1", judge_model="m", against_ref="HEAD", unchanged=True
+    )
     assert "no change" in render_report(rep).lower()
 
 
 def test_render_no_baseline():
-    rep = EvalReport(role="reviewer", case="c1", judge_model="m",
-                     against_ref="HEAD", no_baseline=True, mean_b=0.8,
-                     runs=[RunScore(score_a=None, score_b=0.8, delta=None)])
+    rep = EvalReport(
+        role="reviewer",
+        case="c1",
+        judge_model="m",
+        against_ref="HEAD",
+        no_baseline=True,
+        mean_b=0.8,
+        runs=[RunScore(score_a=None, score_b=0.8, delta=None)],
+    )
     assert "no committed baseline" in render_report(rep).lower()
 
 
 def test_run_eval_refuses_deps_role(tmp_path):
     with pytest.raises(EvalError, match="deps"):
-        run_eval("architect", against="HEAD", case="c1", k=1,
-                 judge_model="openai/gpt-5.2", agents_dir=tmp_path,
-                 cases_root=tmp_path, repo_root=tmp_path)
+        run_eval(
+            "architect",
+            against="HEAD",
+            case="c1",
+            k=1,
+            judge_model="openai/gpt-5.2",
+            agents_dir=tmp_path,
+            cases_root=tmp_path,
+            repo_root=tmp_path,
+        )
 
 
 def test_default_judge_model_reads_config(tmp_path):
@@ -806,6 +927,7 @@ Create `tests/test_registry_ignores_fixtures.py`:
 """A fixtures/ directory beside instructions.md must not break the loader:
 fixtures live inside the role folder, and the loader only reads agent.yaml /
 instructions.md / agent.py."""
+
 from sdlc.agents.loader import load_registry
 from tests.conftest import write_registry_dir
 
@@ -815,7 +937,7 @@ def test_load_registry_ignores_a_fixtures_dir(tmp_path):
     fx = root / "reviewer" / "fixtures"
     fx.mkdir()
     (fx / "add-login.json").write_text('{"role": "reviewer"}', encoding="utf-8")
-    roles = load_registry(root)          # must not raise
+    roles = load_registry(root)  # must not raise
     assert "reviewer" in roles
 ```
 
@@ -835,6 +957,7 @@ The eval (non-capture) path is synchronous and local-only. capture needs a
 Temporal history source; the live adapter is a documented seam (below),
 mirroring benchmarks/drift.py whose real provider is operator-runtime wiring.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -842,8 +965,7 @@ from pathlib import Path
 import yaml
 
 from .compare import EvalError, EvalReport, compare
-from .fixtures import (DEPS_ROLES, SUPPORTED_ROLES, fixtures_from_events,
-                       write_fixtures)
+from .fixtures import DEPS_ROLES, SUPPORTED_ROLES, fixtures_from_events, write_fixtures
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _AGENTS_DIR = _REPO_ROOT / "agents"
@@ -855,8 +977,7 @@ def default_judge_model(config_path: Path = _BENCH_CONFIG) -> str:
     data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     model = data.get("default_judge_model")
     if not model:
-        raise EvalError(f"no default_judge_model in {config_path}; "
-                        f"pass --judge-model")
+        raise EvalError(f"no default_judge_model in {config_path}; pass --judge-model")
     return model
 
 
@@ -868,21 +989,22 @@ def _resolve_case(role: str, case: str | None, agents_dir: Path) -> str:
     if len(found) == 1:
         return found[0].stem
     if not found:
-        raise EvalError(f"no fixtures for role '{role}' under {fx_dir}; "
-                        f"capture one first.")
-    raise EvalError(f"role '{role}' has multiple fixtures "
-                    f"({', '.join(p.stem for p in found)}); pass --case.")
+        raise EvalError(f"no fixtures for role '{role}' under {fx_dir}; capture one first.")
+    raise EvalError(
+        f"role '{role}' has multiple fixtures ({', '.join(p.stem for p in found)}); pass --case."
+    )
 
 
 def render_report(report: EvalReport) -> str:
-    head = (f"eval {report.role}  (case {report.case}, "
-            f"judge {report.judge_model}, against {report.against_ref})")
+    head = (
+        f"eval {report.role}  (case {report.case}, "
+        f"judge {report.judge_model}, against {report.against_ref})"
+    )
     if report.unchanged:
         return f"{head}\n  no change vs {report.against_ref}"
     lines = [head]
     if report.no_baseline:
-        lines.append(f"  no committed baseline at {report.against_ref}; "
-                     f"working-tree score only")
+        lines.append(f"  no committed baseline at {report.against_ref}; working-tree score only")
         lines.append(f"  working   {_fmt(report.mean_b)}")
         return "\n".join(lines)
     lines.append(f"  {report.against_ref:<8}  {_fmt(report.mean_a)}")
@@ -902,22 +1024,34 @@ def _fmt_delta(v: float | None) -> str:
     return "n/a" if v is None else f"{v:+.2f}"
 
 
-def run_eval(role: str, *, against: str, case: str | None, k: int,
-             judge_model: str, agents_dir: Path = _AGENTS_DIR,
-             cases_root: Path = _CASES_ROOT,
-             repo_root: Path = _REPO_ROOT) -> str:
+def run_eval(
+    role: str,
+    *,
+    against: str,
+    case: str | None,
+    k: int,
+    judge_model: str,
+    agents_dir: Path = _AGENTS_DIR,
+    cases_root: Path = _CASES_ROOT,
+    repo_root: Path = _REPO_ROOT,
+) -> str:
     if role in DEPS_ROLES:
-        raise EvalError(
-            f"role '{role}' carries deps; deps-aware eval is future work")
+        raise EvalError(f"role '{role}' carries deps; deps-aware eval is future work")
     resolved_case = _resolve_case(role, case, agents_dir)
-    report = compare(role, resolved_case, against_ref=against, k=k,
-                     agents_dir=agents_dir, cases_root=cases_root,
-                     repo_root=repo_root, judge_model=judge_model)
+    report = compare(
+        role,
+        resolved_case,
+        against_ref=against,
+        k=k,
+        agents_dir=agents_dir,
+        cases_root=cases_root,
+        repo_root=repo_root,
+        judge_model=judge_model,
+    )
     return render_report(report)
 
 
-async def run_capture(client, run_id: str, case: str,
-                      agents_dir: Path = _AGENTS_DIR) -> list[Path]:
+async def run_capture(client, run_id: str, case: str, agents_dir: Path = _AGENTS_DIR) -> list[Path]:
     """Live capture: fetch a run's history, normalize to events, write fixtures.
 
     SEAM: `_history_to_events` converts a Temporal history into the normalized
@@ -926,6 +1060,7 @@ async def run_capture(client, run_id: str, case: str,
     fixture is trivial JSON, so hand-authoring is the offline fallback.
     """
     from ..agents.roles import REGISTRY
+
     history = await client.get_workflow_handle(run_id).fetch_history()
     events = _history_to_events(history)
     fixtures = fixtures_from_events(run_id, case, events, REGISTRY)
@@ -945,6 +1080,7 @@ def _history_to_events(history) -> list[dict]:
         try:
             inp = attrs.input.payloads[0].data
             import json
+
             messages_payload = json.loads(inp)
         except Exception:
             continue
@@ -974,34 +1110,38 @@ In `src/sdlc/cli.py`, after the `benchmark` subparser block (around line 76), ad
 Extend `_local_only` (line 80) so a non-capture eval needs no client:
 
 ```python
-    _local_only = (args.cmd == "benchmark"
-                   or (args.cmd == "schedules" and args.sched_cmd == "list")
-                   or (args.cmd == "eval" and args.target != "capture"))
+_local_only = (
+    args.cmd == "benchmark"
+    or (args.cmd == "schedules" and args.sched_cmd == "list")
+    or (args.cmd == "eval" and args.target != "capture")
+)
 ```
 
 Add dispatch — place it immediately before the `handle = client.get_workflow_handle_for(...)` line (~138):
 
 ```python
-    if args.cmd == "eval":
-        from .eval.cli import default_judge_model, run_capture, run_eval
-        from .eval.compare import EvalError
-        if args.target == "capture":
-            if not (args.from_run and args.case):
-                print("eval capture requires --from <run_id> and --case <name>")
-                return
-            paths = await run_capture(client, args.from_run, args.case)
-            print(f"captured {len(paths)} fixtures:")
-            for p in paths:
-                print(f"  {p}")
+if args.cmd == "eval":
+    from .eval.cli import default_judge_model, run_capture, run_eval
+    from .eval.compare import EvalError
+
+    if args.target == "capture":
+        if not (args.from_run and args.case):
+            print("eval capture requires --from <run_id> and --case <name>")
             return
-        judge = args.judge_model or default_judge_model()
-        try:
-            print(run_eval(args.target, against=args.against, case=args.case,
-                           k=args.k, judge_model=judge))
-        except EvalError as e:
-            print(f"eval error: {e}")
-            raise SystemExit(1)
+        paths = await run_capture(client, args.from_run, args.case)
+        print(f"captured {len(paths)} fixtures:")
+        for p in paths:
+            print(f"  {p}")
         return
+    judge = args.judge_model or default_judge_model()
+    try:
+        print(
+            run_eval(args.target, against=args.against, case=args.case, k=args.k, judge_model=judge)
+        )
+    except EvalError as e:
+        print(f"eval error: {e}")
+        raise SystemExit(1)
+    return
 ```
 
 Update the module docstring's usage block (lines 1-11) to add:

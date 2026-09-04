@@ -48,20 +48,24 @@ Create `tests/test_triage_gitread.py`:
 
 ```python
 """The batched reader must match read_blob exactly (spec D10)."""
+
 import subprocess
 
 import pytest
 
 from sdlc.triage.activities import read_blob, tracked_paths
 from sdlc.triage.gitread import (
-    MAX_BLOB_BYTES, TreeReader, is_over_size_limit, read_tree,
+    MAX_BLOB_BYTES,
+    TreeReader,
+    is_over_size_limit,
+    read_tree,
 )
 
 
 def _run(args, cwd):
-    return subprocess.run(args, cwd=cwd, capture_output=True,
-                          encoding="utf-8", check=True,
-                          stdin=subprocess.DEVNULL)
+    return subprocess.run(
+        args, cwd=cwd, capture_output=True, encoding="utf-8", check=True, stdin=subprocess.DEVNULL
+    )
 
 
 def _commit_repo(root, files: dict[str, str]) -> str:
@@ -74,26 +78,28 @@ def _commit_repo(root, files: dict[str, str]) -> str:
         p.write_text(text, encoding="utf-8")
     _run(["git", "add", "-A"], root)
     _run(["git", "commit", "-q", "-m", "one"], root)
-    return subprocess.run(["git", "rev-parse", "HEAD"], cwd=root,
-                          capture_output=True, encoding="utf-8",
-                          check=True).stdout.strip()
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, encoding="utf-8", check=True
+    ).stdout.strip()
 
 
 @pytest.fixture
 def repo(tmp_path):
-    sha = _commit_repo(tmp_path, {
-        "pyproject.toml": "[project]\nname = 'x'\n",
-        "src/app.py": "x = 1\n",
-        "empty.txt": "",
-    })
+    sha = _commit_repo(
+        tmp_path,
+        {
+            "pyproject.toml": "[project]\nname = 'x'\n",
+            "src/app.py": "x = 1\n",
+            "empty.txt": "",
+        },
+    )
     return str(tmp_path), sha
 
 
 def test_reader_matches_read_blob_on_blob_tree_and_missing(repo):
     repo_dir, sha = repo
     with TreeReader(repo_dir, sha) as reader:
-        for path in ("pyproject.toml", "src/app.py", "empty.txt",
-                     "src", "nope.py"):
+        for path in ("pyproject.toml", "src/app.py", "empty.txt", "src", "nope.py"):
             assert reader.read(path) == read_blob(repo_dir, sha, path), path
 
 
@@ -126,9 +132,13 @@ def test_read_tree_skips_binary_and_unreadable_paths(tmp_path):
     (tmp_path / "bin.dat").write_bytes(b"\x00\x01\x02")
     _run(["git", "add", "-A"], tmp_path)
     _run(["git", "commit", "-q", "-m", "two"], tmp_path)
-    sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmp_path,
-                         capture_output=True, encoding="utf-8",
-                         check=True).stdout.strip()
+    sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        capture_output=True,
+        encoding="utf-8",
+        check=True,
+    ).stdout.strip()
     paths = tracked_paths(str(tmp_path), sha)
     got = dict(read_tree(str(tmp_path), sha, paths))
     assert got == {"a.py": "x = 1\n", "b.py": "y = 2\n"}
@@ -165,6 +175,7 @@ Pure of temporalio, like the signal modules. The single-blob `read_blob` in
 activities.py survives for the genuinely single-file case (baseline's
 .gitignore).
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -210,8 +221,10 @@ class TreeReader:
         self._proc = subprocess.Popen(
             ["git", "-c", "safe.directory=*", "cat-file", "--batch"],
             cwd=self._repo_dir,
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL)
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
         return self
 
     def __exit__(self, *exc) -> None:
@@ -221,7 +234,7 @@ class TreeReader:
         try:
             proc.stdin.close()
             proc.wait(timeout=30)
-        except Exception:                          # noqa: BLE001
+        except Exception:  # noqa: BLE001
             proc.kill()
             proc.wait()
 
@@ -251,14 +264,13 @@ class TreeReader:
             return None
         size = int(parts[2])
         payload = proc.stdout.read(size)
-        proc.stdout.read(1)                        # the trailing LF
+        proc.stdout.read(1)  # the trailing LF
         if size > MAX_BLOB_BYTES:
             return None
         return payload.decode(errors="replace")
 
 
-def read_tree(repo_dir: str, commit_sha: str,
-              paths: Sequence[str]) -> Iterator[tuple[str, str]]:
+def read_tree(repo_dir: str, commit_sha: str, paths: Sequence[str]) -> Iterator[tuple[str, str]]:
     """(path, text) for every path resolving to a readable text blob.
 
     Skips non-blobs, over-size blobs and binary content -- the three skips
@@ -269,7 +281,7 @@ def read_tree(repo_dir: str, commit_sha: str,
     with TreeReader(repo_dir, commit_sha) as reader:
         for path in paths:
             text = reader.read(path)
-            if text is None or "\x00" in text:     # binary; nothing to quote
+            if text is None or "\x00" in text:  # binary; nothing to quote
                 continue
             yield path, text
 ```
@@ -305,22 +317,22 @@ from .gitread import read_tree
 and replace the body of `triage_secrets`'s `try` block (currently lines 94–113) with:
 
 ```python
-        paths = tracked_paths(inp.repo_dir, inp.commit_sha)
-        findings = list(secrets.env_file_findings(paths))
-        for path, blob in read_tree(inp.repo_dir, inp.commit_sha,
-                                    sorted(paths)):
-            for finding in secrets.scan_text(path, blob):
-                if finding.evidence and not verify_quote(
-                        finding.evidence, blob, Profile.VERBATIM_BYTES):
-                    _log.warning(
-                        "triage secrets: dropping unverifiable evidence for "
-                        "%s at %s", finding.rule, path)
-                    continue
-                findings.append(finding)
-        return SignalResult(
-            signal=secrets.SIGNAL_ID, version=secrets.VERSION,
-            collected=Measurement.measured(float(len(findings))),
-            findings=findings)
+paths = tracked_paths(inp.repo_dir, inp.commit_sha)
+findings = list(secrets.env_file_findings(paths))
+for path, blob in read_tree(inp.repo_dir, inp.commit_sha, sorted(paths)):
+    for finding in secrets.scan_text(path, blob):
+        if finding.evidence and not verify_quote(finding.evidence, blob, Profile.VERBATIM_BYTES):
+            _log.warning(
+                "triage secrets: dropping unverifiable evidence for %s at %s", finding.rule, path
+            )
+            continue
+        findings.append(finding)
+return SignalResult(
+    signal=secrets.SIGNAL_ID,
+    version=secrets.VERSION,
+    collected=Measurement.measured(float(len(findings))),
+    findings=findings,
+)
 ```
 
 In `tests/test_triage_secrets.py`, replace lines 179–186 with:
@@ -330,6 +342,7 @@ def test_is_over_size_limit_counts_bytes_not_characters():
     # Moved to gitread (spec D10): one size bound for every consumer of the
     # reader, not one per signal.
     from sdlc.triage.gitread import MAX_BLOB_BYTES, is_over_size_limit
+
     assert not is_over_size_limit("x" * MAX_BLOB_BYTES)
     assert is_over_size_limit("x" * (MAX_BLOB_BYTES + 1))
     # Three-byte characters exceed the byte limit at a third of the count,
@@ -391,6 +404,7 @@ from sdlc.toolchain.adapters import PythonToolchain, ToolchainAdapter
 class _Bare(ToolchainAdapter):
     """An adapter that has not thought about triage. It must instantiate and
     degrade, not fail (spec §4)."""
+
     kind = None
     markers = ()
 
@@ -409,7 +423,7 @@ def test_a_triage_unaware_adapter_degrades_rather_than_failing():
     assert a.manifests == ()
     assert a.ecosystem is None
     assert a.source_extensions == ()
-    assert a.max_file_loc == 0          # 0 disables the rule
+    assert a.max_file_loc == 0  # 0 disables the rule
     assert a.max_function_loc == 0
     assert a.min_clone_loc == 30
     assert a.function_spans("def f():\n    pass\n") is None
@@ -425,14 +439,7 @@ def test_python_declares_its_triage_facts():
 
 
 def test_function_spans_reports_name_and_line_range():
-    text = ("import os\n"
-            "\n"
-            "def small():\n"
-            "    return 1\n"
-            "\n"
-            "async def big():\n"
-            "    x = 1\n"
-            "    return x\n")
+    text = "import os\n\ndef small():\n    return 1\n\nasync def big():\n    x = 1\n    return x\n"
     spans = PythonToolchain().function_spans(text)
     assert ("small", 3, 4) in spans
     assert ("big", 6, 8) in spans
@@ -471,37 +478,38 @@ In `src/sdlc/toolchain/adapters.py`, replace the existing E-41 block on `Toolcha
 with:
 
 ```python
-    # E-41 (FR-902). Concrete defaults, not abstract: a new adapter that has
-    # not thought about triage yet degrades to "no install command" and the
-    # probe records not_collected, rather than failing to instantiate.
-    test_globs: tuple[str, ...] = ()
-    lockfiles: tuple[str, ...] = ()
+# E-41 (FR-902). Concrete defaults, not abstract: a new adapter that has
+# not thought about triage yet degrades to "no install command" and the
+# probe records not_collected, rather than failing to instantiate.
+test_globs: tuple[str, ...] = ()
+lockfiles: tuple[str, ...] = ()
 
-    # E-41a-d (spec §4). Same degradation rule: empty tuples and disabled
-    # thresholds mean "rule skipped, metric not_collected", never a silent
-    # zero. Language-level facts ONLY -- framework fingerprints and
-    # misconfiguration rules live in their signal modules, because one
-    # language serves many frameworks (spec D15).
-    manifests: tuple[str, ...] = ()          # files declaring direct deps
-    ecosystem: str | None = None             # OSV ecosystem name
-    source_extensions: tuple[str, ...] = ()  # what counts as source
-    max_file_loc: int = 0                    # 0 disables the rule
-    max_function_loc: int = 0                # 0 disables the rule
-    min_clone_loc: int = 30                  # duplication window, in lines
+# E-41a-d (spec §4). Same degradation rule: empty tuples and disabled
+# thresholds mean "rule skipped, metric not_collected", never a silent
+# zero. Language-level facts ONLY -- framework fingerprints and
+# misconfiguration rules live in their signal modules, because one
+# language serves many frameworks (spec D15).
+manifests: tuple[str, ...] = ()  # files declaring direct deps
+ecosystem: str | None = None  # OSV ecosystem name
+source_extensions: tuple[str, ...] = ()  # what counts as source
+max_file_loc: int = 0  # 0 disables the rule
+max_function_loc: int = 0  # 0 disables the rule
+min_clone_loc: int = 30  # duplication window, in lines
 
-    def function_spans(self, text: str) -> list[tuple[str, int, int]] | None:
-        """(name, first line, last line) for every function in `text`, or
-        None when this language has no parser here.
 
-        None is what makes E-41d's `oversized_function` metric
-        not_collected rather than absent: a language we cannot parse is not
-        a language with no long functions.
+def function_spans(self, text: str) -> list[tuple[str, int, int]] | None:
+    """(name, first line, last line) for every function in `text`, or
+    None when this language has no parser here.
 
-        Pure -- text in, spans out, no subprocess and no filesystem. The same
-        kind of member as `classify_test_exit`: a per-language
-        *interpretation*, not a command string (ADR-15, spec D15).
-        """
-        return None
+    None is what makes E-41d's `oversized_function` metric
+    not_collected rather than absent: a language we cannot parse is not
+    a language with no long functions.
+
+    Pure -- text in, spans out, no subprocess and no filesystem. The same
+    kind of member as `classify_test_exit`: a per-language
+    *interpretation*, not a command string (ADR-15, spec D15).
+    """
+    return None
 ```
 
 - [ ] **Step 4: Extend `PythonToolchain`**
@@ -509,27 +517,29 @@ with:
 Add `import ast` to the imports at the top of `src/sdlc/toolchain/adapters.py`, then add to `PythonToolchain`, directly below its existing `lockfiles` line:
 
 ```python
-    manifests = ("pyproject.toml", "requirements.txt")
-    ecosystem = "PyPI"
-    source_extensions = (".py",)
-    # Absolute, not percentile (spec D14): Tier 0 asks what state this
-    # repository is in, not which file is worst inside it, and E-44's
-    # before/after delta needs numbers comparable across repositories.
-    max_file_loc = 800
-    max_function_loc = 100
+manifests = ("pyproject.toml", "requirements.txt")
+ecosystem = "PyPI"
+source_extensions = (".py",)
+# Absolute, not percentile (spec D14): Tier 0 asks what state this
+# repository is in, not which file is worst inside it, and E-44's
+# before/after delta needs numbers comparable across repositories.
+max_file_loc = 800
+max_function_loc = 100
 
-    def function_spans(self, text: str) -> list[tuple[str, int, int]] | None:
-        try:
-            tree = ast.parse(text)
-        except SyntaxError:
-            # We CAN parse Python; this file simply is not valid Python. That
-            # is a measured zero spans, not an unmeasurable language, so it
-            # must not return None.
-            return []
-        return sorted(
-            (node.name, node.lineno, node.end_lineno or node.lineno)
-            for node in ast.walk(tree)
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)))
+
+def function_spans(self, text: str) -> list[tuple[str, int, int]] | None:
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        # We CAN parse Python; this file simply is not valid Python. That
+        # is a measured zero spans, not an unmeasurable language, so it
+        # must not return None.
+        return []
+    return sorted(
+        (node.name, node.lineno, node.end_lineno or node.lineno)
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    )
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -575,6 +585,7 @@ Create `tests/test_triage_advisories.py`:
 ```python
 """Spec D11: the default collects nothing, and every failure path is
 not_collected rather than an empty advisory list."""
+
 import json
 from unittest.mock import patch
 
@@ -582,7 +593,9 @@ import pytest
 
 from sdlc.measurement import CollectionState
 from sdlc.triage.advisories import (
-    NoneAdvisorySource, OsvAdvisorySource, resolve_advisory_source,
+    NoneAdvisorySource,
+    OsvAdvisorySource,
+    resolve_advisory_source,
 )
 
 
@@ -621,16 +634,21 @@ class _FakeResponse:
 
 
 def _osv_payload():
-    return {"vulns": [{
-        "id": "GHSA-1234",
-        "summary": "Request smuggling in requests",
-        "database_specific": {"severity": "HIGH"},
-    }]}
+    return {
+        "vulns": [
+            {
+                "id": "GHSA-1234",
+                "summary": "Request smuggling in requests",
+                "database_specific": {"severity": "HIGH"},
+            }
+        ]
+    }
 
 
 def test_osv_maps_a_hit_to_a_typed_advisory():
-    with patch("sdlc.triage.advisories.urllib.request.urlopen",
-               return_value=_FakeResponse(_osv_payload())):
+    with patch(
+        "sdlc.triage.advisories.urllib.request.urlopen", return_value=_FakeResponse(_osv_payload())
+    ):
         r = OsvAdvisorySource().lookup("PyPI", ["requests"])
     assert r.collected.state is CollectionState.MEASURED
     assert r.collected.value == 1.0
@@ -640,29 +658,33 @@ def test_osv_maps_a_hit_to_a_typed_advisory():
 
 
 def test_osv_no_hits_is_a_measured_zero_not_not_collected():
-    with patch("sdlc.triage.advisories.urllib.request.urlopen",
-               return_value=_FakeResponse({"vulns": []})):
+    with patch(
+        "sdlc.triage.advisories.urllib.request.urlopen", return_value=_FakeResponse({"vulns": []})
+    ):
         r = OsvAdvisorySource().lookup("PyPI", ["requests"])
     assert r.collected.state is CollectionState.MEASURED
     assert r.collected.value == 0.0
 
 
-@pytest.mark.parametrize("boom", [
-    TimeoutError("timed out"),
-    OSError("connection refused"),
-    ValueError("not json"),
-])
+@pytest.mark.parametrize(
+    "boom",
+    [
+        TimeoutError("timed out"),
+        OSError("connection refused"),
+        ValueError("not json"),
+    ],
+)
 def test_every_osv_failure_path_is_not_collected(boom):
-    with patch("sdlc.triage.advisories.urllib.request.urlopen",
-               side_effect=boom):
+    with patch("sdlc.triage.advisories.urllib.request.urlopen", side_effect=boom):
         r = OsvAdvisorySource().lookup("PyPI", ["requests"])
     assert r.collected.state is CollectionState.NOT_COLLECTED
     assert r.advisories == []
 
 
 def test_a_non_200_is_not_collected():
-    with patch("sdlc.triage.advisories.urllib.request.urlopen",
-               return_value=_FakeResponse({}, status=503)):
+    with patch(
+        "sdlc.triage.advisories.urllib.request.urlopen", return_value=_FakeResponse({}, status=503)
+    ):
         r = OsvAdvisorySource().lookup("PyPI", ["requests"])
     assert r.collected.state is CollectionState.NOT_COLLECTED
     assert "503" in r.collected.reason
@@ -717,6 +739,7 @@ recorded as a declared, opt-in, off-by-default egress under FR-703.
 Pure of temporalio, like the signal modules: the HTTP happens inside an
 activity, never in workflow code.
 """
+
 from __future__ import annotations
 
 import json
@@ -730,10 +753,10 @@ from ..measurement import Measurement
 
 
 class Advisory(BaseModel):
-    package: str            # the normalized distribution name queried
-    constraint: str = ""    # the declaration as written, when the caller has it
-    advisory_id: str        # e.g. "GHSA-xxxx-xxxx-xxxx" / "PYSEC-2024-1"
-    severity: str           # critical | high | medium | low
+    package: str  # the normalized distribution name queried
+    constraint: str = ""  # the declaration as written, when the caller has it
+    advisory_id: str  # e.g. "GHSA-xxxx-xxxx-xxxx" / "PYSEC-2024-1"
+    severity: str  # critical | high | medium | low
     summary: str = ""
 
 
@@ -741,6 +764,7 @@ class AdvisoryResult(BaseModel):
     """`collected` is a Measurement, not len(advisories): "we did not look"
     and "we looked and found none" are different facts (D11/D16). When
     MEASURED, its value is the number of advisories returned."""
+
     collected: Measurement
     advisories: list[Advisory] = Field(default_factory=list)
 
@@ -749,8 +773,7 @@ class AdvisorySource(ABC):
     name: str
 
     @abstractmethod
-    def lookup(self, ecosystem: str | None,
-               packages: Sequence[str]) -> AdvisoryResult:
+    def lookup(self, ecosystem: str | None, packages: Sequence[str]) -> AdvisoryResult:
         """Advisories for `packages` in `ecosystem`. MUST NOT raise: an
         unreachable database is a not_collected report, not a failed signal."""
 
@@ -759,15 +782,14 @@ class NoneAdvisorySource(AdvisorySource):
     """The default. Collects nothing, and says so with a reason the report
     carries, so "no vulnerabilities listed" is never mistaken for "none
     exist"."""
+
     name = "none"
 
     def __init__(self, reason: str = "no advisory source configured") -> None:
         self._reason = reason
 
-    def lookup(self, ecosystem: str | None,
-               packages: Sequence[str]) -> AdvisoryResult:
-        return AdvisoryResult(
-            collected=Measurement.not_collected(self._reason))
+    def lookup(self, ecosystem: str | None, packages: Sequence[str]) -> AdvisoryResult:
+        return AdvisoryResult(collected=Measurement.not_collected(self._reason))
 
 
 OSV_URL = "https://api.osv.dev/v1/query"
@@ -776,8 +798,11 @@ OSV_MAX_PACKAGES = 200
 
 # GHSA supplies MODERATE where our TriageFinding vocabulary says medium.
 _SEVERITY_WORDS = {
-    "CRITICAL": "critical", "HIGH": "high",
-    "MODERATE": "medium", "MEDIUM": "medium", "LOW": "low",
+    "CRITICAL": "critical",
+    "HIGH": "high",
+    "MODERATE": "medium",
+    "MEDIUM": "medium",
+    "LOW": "low",
 }
 
 
@@ -807,55 +832,67 @@ class OsvAdvisorySource(AdvisorySource):
     rather than answering for a prefix of the list -- a partial lookup
     presented as a lookup is the D16 error.
     """
+
     name = "osv"
 
-    def __init__(self, url: str = OSV_URL, timeout_s: int = OSV_TIMEOUT_S,
-                 max_packages: int = OSV_MAX_PACKAGES) -> None:
+    def __init__(
+        self,
+        url: str = OSV_URL,
+        timeout_s: int = OSV_TIMEOUT_S,
+        max_packages: int = OSV_MAX_PACKAGES,
+    ) -> None:
         self._url = url
         self._timeout_s = timeout_s
         self._max_packages = max_packages
 
-    def lookup(self, ecosystem: str | None,
-               packages: Sequence[str]) -> AdvisoryResult:
+    def lookup(self, ecosystem: str | None, packages: Sequence[str]) -> AdvisoryResult:
         if not ecosystem:
-            return AdvisoryResult(collected=Measurement.not_collected(
-                "the resolved toolchain declares no OSV ecosystem"))
+            return AdvisoryResult(
+                collected=Measurement.not_collected(
+                    "the resolved toolchain declares no OSV ecosystem"
+                )
+            )
         if len(packages) > self._max_packages:
-            return AdvisoryResult(collected=Measurement.not_collected(
-                f"{len(packages)} packages exceeds the {self._max_packages} "
-                f"query cap; a partial lookup is not a lookup"))
+            return AdvisoryResult(
+                collected=Measurement.not_collected(
+                    f"{len(packages)} packages exceeds the {self._max_packages} "
+                    f"query cap; a partial lookup is not a lookup"
+                )
+            )
         if not packages:
             return AdvisoryResult(collected=Measurement.measured(0.0))
 
         found: list[Advisory] = []
         for name in packages:
-            body = json.dumps(
-                {"package": {"name": name, "ecosystem": ecosystem}}).encode()
+            body = json.dumps({"package": {"name": name, "ecosystem": ecosystem}}).encode()
             try:
                 req = urllib.request.Request(
-                    self._url, data=body,
-                    headers={"Content-Type": "application/json"})
-                with urllib.request.urlopen(
-                        req, timeout=self._timeout_s) as resp:
+                    self._url, data=body, headers={"Content-Type": "application/json"}
+                )
+                with urllib.request.urlopen(req, timeout=self._timeout_s) as resp:
                     if resp.status != 200:
                         return AdvisoryResult(
                             collected=Measurement.not_collected(
-                                f"OSV returned HTTP {resp.status} for "
-                                f"{name!r}"))
+                                f"OSV returned HTTP {resp.status} for {name!r}"
+                            )
+                        )
                     payload = json.loads(resp.read().decode())
-            except Exception as exc:               # noqa: BLE001 -- docstring
-                return AdvisoryResult(collected=Measurement.not_collected(
-                    f"OSV lookup failed for {name!r}: "
-                    f"{type(exc).__name__}: {exc}"))
+            except Exception as exc:  # noqa: BLE001 -- docstring
+                return AdvisoryResult(
+                    collected=Measurement.not_collected(
+                        f"OSV lookup failed for {name!r}: {type(exc).__name__}: {exc}"
+                    )
+                )
             for vuln in payload.get("vulns") or []:
-                found.append(Advisory(
-                    package=name,
-                    advisory_id=str(vuln.get("id", "")),
-                    severity=_severity(vuln),
-                    summary=str(vuln.get("summary", ""))[:300]))
-        return AdvisoryResult(
-            collected=Measurement.measured(float(len(found))),
-            advisories=found)
+                found.append(
+                    Advisory(
+                        package=name,
+                        advisory_id=str(vuln.get("id", "")),
+                        severity=_severity(vuln),
+                        summary=str(vuln.get("summary", ""))[:300],
+                    )
+                )
+        return AdvisoryResult(collected=Measurement.measured(float(len(found))), advisories=found)
 
 
 ADVISORY_SOURCES: dict[str, type[AdvisorySource]] = {
@@ -873,8 +910,7 @@ def resolve_advisory_source(name: str) -> AdvisorySource:
     """
     cls = ADVISORY_SOURCES.get(name)
     if cls is None:
-        return NoneAdvisorySource(
-            f"unknown advisory source {name!r}; no lookup was performed")
+        return NoneAdvisorySource(f"unknown advisory source {name!r}; no lookup was performed")
     return cls()
 ```
 
@@ -926,6 +962,7 @@ Create `tests/test_triage_dependencies.py`:
 
 ```python
 """FR-902 dependency health (E-41a)."""
+
 from sdlc.measurement import CollectionState, Measurement
 from sdlc.triage.advisories import Advisory, AdvisoryResult
 from sdlc.triage.models import FixClass
@@ -954,47 +991,46 @@ def _rules(result):
 
 
 def _no_advisories():
-    return AdvisoryResult(
-        collected=Measurement.not_collected("no advisory source configured"))
+    return AdvisoryResult(collected=Measurement.not_collected("no advisory source configured"))
 
 
 # ---- manifest parsing -------------------------------------------------
 
+
 def test_pyproject_parses_required_and_optional_dependencies():
-    got = {d.name: d.constraint
-           for d in dep.parse_pyproject("pyproject.toml", PYPROJECT)}
-    assert got == {"requests": ">=2.0", "pydantic": "==2.9.0",
-                   "pillow": "", "pytest": ">=8"}
+    got = {d.name: d.constraint for d in dep.parse_pyproject("pyproject.toml", PYPROJECT)}
+    assert got == {"requests": ">=2.0", "pydantic": "==2.9.0", "pillow": "", "pytest": ">=8"}
 
 
 def test_requirements_skips_comments_and_include_directives():
-    got = {d.name: d.constraint
-           for d in dep.parse_requirements("requirements.txt", REQUIREMENTS)}
-    assert got == {"requests": "==2.31.0", "flask": "",
-                   "uvicorn": ">=0.30"}
+    got = {d.name: d.constraint for d in dep.parse_requirements("requirements.txt", REQUIREMENTS)}
+    assert got == {"requests": "==2.31.0", "flask": "", "uvicorn": ">=0.30"}
 
 
 def test_names_are_normalized_pep503():
     text = '[project]\ndependencies = ["Python_Dateutil>=2"]\n'
-    assert dep.parse_pyproject("pyproject.toml", text)[0].name \
-        == "python-dateutil"
+    assert dep.parse_pyproject("pyproject.toml", text)[0].name == "python-dateutil"
 
 
 # ---- rules ------------------------------------------------------------
 
+
 def test_unpinned_fires_for_floating_and_absent_constraints():
     declared = dep.parse_pyproject("pyproject.toml", PYPROJECT)
-    r = dep.evaluate(declared, lockfile_present=False,
-                     imported={"requests", "pydantic", "PIL", "pytest"},
-                     advisories=_no_advisories())
-    unpinned = {f.path + ":" + f.detail.split()[0]
-                for f in r.findings if f.rule == "unpinned_dependency"}
-    assert len(unpinned) == 3        # requests, pillow, pytest; not pydantic
+    r = dep.evaluate(
+        declared,
+        lockfile_present=False,
+        imported={"requests", "pydantic", "PIL", "pytest"},
+        advisories=_no_advisories(),
+    )
+    unpinned = {
+        f.path + ":" + f.detail.split()[0] for f in r.findings if f.rule == "unpinned_dependency"
+    }
+    assert len(unpinned) == 3  # requests, pillow, pytest; not pydantic
 
 
 def test_unpinned_detail_records_whether_a_lockfile_mitigates():
-    declared = dep.parse_pyproject("pyproject.toml",
-                                   '[project]\ndependencies = ["requests"]\n')
+    declared = dep.parse_pyproject("pyproject.toml", '[project]\ndependencies = ["requests"]\n')
     with_lock = dep.evaluate(declared, True, {"requests"}, _no_advisories())
     without = dep.evaluate(declared, False, {"requests"}, _no_advisories())
     assert "lockfile" in with_lock.findings[0].detail
@@ -1002,27 +1038,40 @@ def test_unpinned_detail_records_whether_a_lockfile_mitigates():
 
 
 def test_duplicate_fires_only_on_conflicting_constraints():
-    same = [dep.Declared(name="requests", raw="requests==2.0",
-                         manifest="pyproject.toml", constraint="==2.0"),
-            dep.Declared(name="requests", raw="requests==2.0",
-                         manifest="requirements.txt", constraint="==2.0")]
-    conflicting = [same[0],
-                   dep.Declared(name="requests", raw="requests==3.0",
-                                manifest="requirements.txt",
-                                constraint="==3.0")]
+    same = [
+        dep.Declared(
+            name="requests", raw="requests==2.0", manifest="pyproject.toml", constraint="==2.0"
+        ),
+        dep.Declared(
+            name="requests", raw="requests==2.0", manifest="requirements.txt", constraint="==2.0"
+        ),
+    ]
+    conflicting = [
+        same[0],
+        dep.Declared(
+            name="requests", raw="requests==3.0", manifest="requirements.txt", constraint="==3.0"
+        ),
+    ]
     assert "duplicate_dependency" not in _rules(
-        dep.evaluate(same, True, {"requests"}, _no_advisories()))
+        dep.evaluate(same, True, {"requests"}, _no_advisories())
+    )
     assert "duplicate_dependency" in _rules(
-        dep.evaluate(conflicting, True, {"requests"}, _no_advisories()))
+        dep.evaluate(conflicting, True, {"requests"}, _no_advisories())
+    )
 
 
 def test_known_vulnerable_is_judgement_not_mechanical():
-    declared = [dep.Declared(name="requests", raw="requests==2.0",
-                             manifest="requirements.txt", constraint="==2.0")]
+    declared = [
+        dep.Declared(
+            name="requests", raw="requests==2.0", manifest="requirements.txt", constraint="==2.0"
+        )
+    ]
     adv = AdvisoryResult(
         collected=Measurement.measured(1.0),
-        advisories=[Advisory(package="requests", advisory_id="GHSA-1",
-                             severity="critical", summary="bad")])
+        advisories=[
+            Advisory(package="requests", advisory_id="GHSA-1", severity="critical", summary="bad")
+        ],
+    )
     r = dep.evaluate(declared, True, {"requests"}, adv)
     f = next(f for f in r.findings if f.rule == "known_vulnerable")
     assert f.fix_class is FixClass.JUDGEMENT
@@ -1039,23 +1088,24 @@ def test_known_vulnerable_metric_is_not_collected_under_the_default_source():
 
 # ---- the unused-dependency false-positive guards ----------------------
 
+
 def test_an_aliased_distribution_is_not_reported_unused():
-    declared = [dep.Declared(name="pillow", raw="pillow", manifest="m",
-                             constraint="")]
+    declared = [dep.Declared(name="pillow", raw="pillow", manifest="m", constraint="")]
     r = dep.evaluate(declared, True, {"PIL"}, _no_advisories())
     assert "unused_dependency" not in _rules(r)
 
 
 def test_tooling_is_never_reported_unused():
-    declared = [dep.Declared(name=n, raw=n, manifest="m", constraint="")
-                for n in ("pytest", "ruff", "pytest-asyncio", "types-requests")]
+    declared = [
+        dep.Declared(name=n, raw=n, manifest="m", constraint="")
+        for n in ("pytest", "ruff", "pytest-asyncio", "types-requests")
+    ]
     r = dep.evaluate(declared, True, set(), _no_advisories())
     assert "unused_dependency" not in _rules(r)
 
 
 def test_a_genuinely_unimported_dependency_is_reported_low():
-    declared = [dep.Declared(name="tensorflow", raw="tensorflow",
-                             manifest="m", constraint="")]
+    declared = [dep.Declared(name="tensorflow", raw="tensorflow", manifest="m", constraint="")]
     r = dep.evaluate(declared, True, {"os"}, _no_advisories())
     f = next(f for f in r.findings if f.rule == "unused_dependency")
     assert f.severity == "low"
@@ -1063,21 +1113,24 @@ def test_a_genuinely_unimported_dependency_is_reported_low():
 
 
 def test_underscore_and_dash_forms_both_count_as_imported():
-    declared = [dep.Declared(name="typing-extensions", raw="typing-extensions",
-                             manifest="m", constraint="")]
+    declared = [
+        dep.Declared(name="typing-extensions", raw="typing-extensions", manifest="m", constraint="")
+    ]
     r = dep.evaluate(declared, True, {"typing_extensions"}, _no_advisories())
     assert "unused_dependency" not in _rules(r)
 
 
 # ---- import extraction ------------------------------------------------
 
+
 def test_imported_modules_reads_both_import_forms():
-    src = ("import os, sys\n"
-           "from pathlib import Path\n"
-           "from sdlc.triage import models\n"
-           "    import json\n")
-    assert dep.imported_modules([src]) == {"os", "sys", "pathlib", "sdlc",
-                                           "json"}
+    src = (
+        "import os, sys\n"
+        "from pathlib import Path\n"
+        "from sdlc.triage import models\n"
+        "    import json\n"
+    )
+    assert dep.imported_modules([src]) == {"os", "sys", "pathlib", "sdlc", "json"}
 
 
 def test_direct_dependencies_metric_counts_distinct_names():
@@ -1102,6 +1155,7 @@ The advisory half arrives as an AdvisoryResult the activity fetched: this
 module never performs I/O, so "we did not look" reaches it as a Measurement
 rather than as an empty list (spec D11/D16).
 """
+
 from __future__ import annotations
 
 import posixpath
@@ -1141,21 +1195,40 @@ IMPORT_ALIASES: dict[str, tuple[str, ...]] = {
 
 # Packages that are legitimately never imported: runners, linters, build
 # backends, and plugins loaded through entry points.
-TOOLING_NAMES = frozenset({
-    "pytest", "ruff", "mypy", "coverage", "black", "flake8", "isort", "tox",
-    "hatchling", "setuptools", "wheel", "build", "twine", "pre-commit",
-    "pip", "uv", "poetry", "nox", "bandit", "pylint",
-})
-TOOLING_PREFIXES = ("pytest-", "types-", "flake8-", "sphinx", "mypy-",
-                    "pytest_")
+TOOLING_NAMES = frozenset(
+    {
+        "pytest",
+        "ruff",
+        "mypy",
+        "coverage",
+        "black",
+        "flake8",
+        "isort",
+        "tox",
+        "hatchling",
+        "setuptools",
+        "wheel",
+        "build",
+        "twine",
+        "pre-commit",
+        "pip",
+        "uv",
+        "poetry",
+        "nox",
+        "bandit",
+        "pylint",
+    }
+)
+TOOLING_PREFIXES = ("pytest-", "types-", "flake8-", "sphinx", "mypy-", "pytest_")
 
 
 class Declared(BaseModel):
     """One direct dependency as a manifest declares it."""
-    name: str                 # PEP 503 normalized
-    raw: str                  # the declaration verbatim -- used as evidence
-    manifest: str             # repo-relative path it came from
-    constraint: str = ""      # "" when unconstrained
+
+    name: str  # PEP 503 normalized
+    raw: str  # the declaration verbatim -- used as evidence
+    manifest: str  # repo-relative path it came from
+    constraint: str = ""  # "" when unconstrained
     line: int | None = None
 
 
@@ -1168,13 +1241,14 @@ def normalize(name: str) -> str:
 _REQ = re.compile(
     r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)"
     r"\s*(?:\[[^\]]*\])?"
-    r"\s*(?P<spec>[^;#]*)")
+    r"\s*(?P<spec>[^;#]*)"
+)
 
 
-def _declared(name: str, raw: str, manifest: str, spec: str,
-              line: int | None = None) -> Declared:
-    return Declared(name=normalize(name), raw=raw.strip(), manifest=manifest,
-                    constraint=spec.strip(), line=line)
+def _declared(name: str, raw: str, manifest: str, spec: str, line: int | None = None) -> Declared:
+    return Declared(
+        name=normalize(name), raw=raw.strip(), manifest=manifest, constraint=spec.strip(), line=line
+    )
 
 
 def parse_requirements(manifest: str, text: str) -> list[Declared]:
@@ -1193,8 +1267,7 @@ def parse_requirements(manifest: str, text: str) -> list[Declared]:
             continue
         match = _REQ.match(line)
         if match:
-            out.append(_declared(match.group("name"), line, manifest,
-                                 match.group("spec"), lineno))
+            out.append(_declared(match.group("name"), line, manifest, match.group("spec"), lineno))
     return out
 
 
@@ -1217,8 +1290,7 @@ def parse_pyproject(manifest: str, text: str) -> list[Declared]:
     for spec in specs:
         match = _REQ.match(str(spec))
         if match:
-            out.append(_declared(match.group("name"), str(spec), manifest,
-                                 match.group("spec")))
+            out.append(_declared(match.group("name"), str(spec), manifest, match.group("spec")))
     return out
 
 
@@ -1243,7 +1315,8 @@ _IMPORT = re.compile(
     r"^[ \t]*(?:from[ \t]+(?P<from>[A-Za-z_][\w.]*)"
     r"|import[ \t]+(?P<import>[A-Za-z_][\w.]*"
     r"(?:[ \t]*,[ \t]*[A-Za-z_][\w.]*)*))",
-    re.MULTILINE)
+    re.MULTILINE,
+)
 
 
 def imported_modules(texts: Iterable[str]) -> set[str]:
@@ -1282,17 +1355,33 @@ def _provides(name: str) -> tuple[str, ...]:
     return (name, name.replace("-", "_"))
 
 
-def _finding(rule: str, severity: str, detail: str, fix_class: FixClass,
-             path: str = "", line: int | None = None,
-             evidence: str = "") -> TriageFinding:
-    return TriageFinding(signal=SIGNAL_ID, rule=rule, severity=severity,
-                         detail=detail, fix_class=fix_class, path=path,
-                         line=line, evidence=evidence)
+def _finding(
+    rule: str,
+    severity: str,
+    detail: str,
+    fix_class: FixClass,
+    path: str = "",
+    line: int | None = None,
+    evidence: str = "",
+) -> TriageFinding:
+    return TriageFinding(
+        signal=SIGNAL_ID,
+        rule=rule,
+        severity=severity,
+        detail=detail,
+        fix_class=fix_class,
+        path=path,
+        line=line,
+        evidence=evidence,
+    )
 
 
-def evaluate(declared: Sequence[Declared], lockfile_present: bool,
-             imported: set[str],
-             advisories: AdvisoryResult) -> SignalResult:
+def evaluate(
+    declared: Sequence[Declared],
+    lockfile_present: bool,
+    imported: set[str],
+    advisories: AdvisoryResult,
+) -> SignalResult:
     """Dependency health over parsed declarations.
 
     `imported` is the top-level module set from `imported_modules`.
@@ -1304,15 +1393,22 @@ def evaluate(declared: Sequence[Declared], lockfile_present: bool,
 
     for d in sorted(declared, key=lambda d: (d.manifest, d.name)):
         if not _is_pinned(d.constraint):
-            mitigation = ("a lockfile is tracked, so resolution is still "
-                          "reproducible" if lockfile_present
-                          else "no lockfile is tracked, so two installs can "
-                               "resolve to different versions")
-            findings.append(_finding(
-                "unpinned_dependency", "medium",
-                f"{d.name} is declared without an exact version and "
-                f"{mitigation}.",
-                FixClass.MECHANICAL, d.manifest, d.line, d.raw))
+            mitigation = (
+                "a lockfile is tracked, so resolution is still reproducible"
+                if lockfile_present
+                else "no lockfile is tracked, so two installs can resolve to different versions"
+            )
+            findings.append(
+                _finding(
+                    "unpinned_dependency",
+                    "medium",
+                    f"{d.name} is declared without an exact version and {mitigation}.",
+                    FixClass.MECHANICAL,
+                    d.manifest,
+                    d.line,
+                    d.raw,
+                )
+            )
 
     by_name: dict[str, set[str]] = {}
     origin: dict[str, Declared] = {}
@@ -1321,28 +1417,37 @@ def evaluate(declared: Sequence[Declared], lockfile_present: bool,
         origin.setdefault(d.name, d)
     for name in sorted(by_name):
         if len(by_name[name]) > 1:
-            constraints = ", ".join(sorted(c or "(none)"
-                                           for c in by_name[name]))
-            findings.append(_finding(
-                "duplicate_dependency", "medium",
-                f"{name} is declared more than once with conflicting "
-                f"constraints ({constraints}); which one wins depends on "
-                f"install order.",
-                FixClass.MECHANICAL, origin[name].manifest))
+            constraints = ", ".join(sorted(c or "(none)" for c in by_name[name]))
+            findings.append(
+                _finding(
+                    "duplicate_dependency",
+                    "medium",
+                    f"{name} is declared more than once with conflicting "
+                    f"constraints ({constraints}); which one wins depends on "
+                    f"install order.",
+                    FixClass.MECHANICAL,
+                    origin[name].manifest,
+                )
+            )
 
     for adv in advisories.advisories:
         d = origin.get(normalize(adv.package))
-        findings.append(_finding(
-            "known_vulnerable", adv.severity,
-            f"{adv.package} matches {adv.advisory_id}"
-            f"{': ' + adv.summary if adv.summary else ''}. Upgrading is a "
-            f"one-line edit; deciding the upgrade is safe is not.",
-            # JUDGEMENT per spec D7's shape -- E-44 promises a MECHANICAL
-            # finding can be closed by a PR without judgement, and a version
-            # bump can break the build.
-            FixClass.JUDGEMENT,
-            d.manifest if d else "", d.line if d else None,
-            d.raw if d else ""))
+        findings.append(
+            _finding(
+                "known_vulnerable",
+                adv.severity,
+                f"{adv.package} matches {adv.advisory_id}"
+                f"{': ' + adv.summary if adv.summary else ''}. Upgrading is a "
+                f"one-line edit; deciding the upgrade is safe is not.",
+                # JUDGEMENT per spec D7's shape -- E-44 promises a MECHANICAL
+                # finding can be closed by a PR without judgement, and a version
+                # bump can break the build.
+                FixClass.JUDGEMENT,
+                d.manifest if d else "",
+                d.line if d else None,
+                d.raw if d else "",
+            )
+        )
 
     for name in sorted(by_name):
         if _is_tooling(name):
@@ -1350,14 +1455,22 @@ def evaluate(declared: Sequence[Declared], lockfile_present: bool,
         if any(module in imported for module in _provides(name)):
             continue
         d = origin[name]
-        findings.append(_finding(
-            "unused_dependency", "low",
-            f"{name} is declared but no source file imports it. Distribution "
-            f"names and import names diverge, so confirm before removing.",
-            FixClass.MECHANICAL, d.manifest, d.line, d.raw))
+        findings.append(
+            _finding(
+                "unused_dependency",
+                "low",
+                f"{name} is declared but no source file imports it. Distribution "
+                f"names and import names diverge, so confirm before removing.",
+                FixClass.MECHANICAL,
+                d.manifest,
+                d.line,
+                d.raw,
+            )
+        )
 
     return SignalResult(
-        signal=SIGNAL_ID, version=VERSION,
+        signal=SIGNAL_ID,
+        version=VERSION,
         collected=Measurement.measured(float(len(findings))),
         findings=findings,
         metrics={
@@ -1365,7 +1478,8 @@ def evaluate(declared: Sequence[Declared], lockfile_present: bool,
             # Passed through unchanged: a not_collected lookup stays
             # not_collected here (D16).
             M_VULNERABLE: advisories.collected,
-        })
+        },
+    )
 ```
 
 - [ ] **Step 4: Run the pure-logic tests to verify they pass**
@@ -1407,32 +1521,34 @@ async def triage_dependencies(inp: TriageDependencyInput) -> SignalResult:
         manifest_names = set(adapter.manifests) if adapter else set()
         source_exts = tuple(adapter.source_extensions) if adapter else ()
         wanted = sorted(
-            p for p in paths
-            if posixpath.basename(p) in manifest_names
-            or (source_exts and p.endswith(source_exts)))
+            p
+            for p in paths
+            if posixpath.basename(p) in manifest_names or (source_exts and p.endswith(source_exts))
+        )
 
         blobs = dict(read_tree(inp.repo_dir, inp.commit_sha, wanted))
-        manifests = {p: t for p, t in blobs.items()
-                     if posixpath.basename(p) in manifest_names}
+        manifests = {p: t for p, t in blobs.items() if posixpath.basename(p) in manifest_names}
         sources = [t for p, t in blobs.items() if p not in manifests]
 
         declared = dependencies.parse_manifests(manifests)
-        lockfile_present = bool(adapter) and any(
-            lf in set(paths) for lf in adapter.lockfiles)
+        lockfile_present = bool(adapter) and any(lf in set(paths) for lf in adapter.lockfiles)
         advisories = resolve_advisory_source(inp.advisory_source).lookup(
-            adapter.ecosystem if adapter else None,
-            sorted({d.name for d in declared}))
+            adapter.ecosystem if adapter else None, sorted({d.name for d in declared})
+        )
 
         result = dependencies.evaluate(
-            declared, lockfile_present,
-            dependencies.imported_modules(sources), advisories)
+            declared, lockfile_present, dependencies.imported_modules(sources), advisories
+        )
         return _verified(result, blobs)
-    except Exception as exc:                       # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("triage dependencies signal failed: %s", exc)
         return SignalResult(
-            signal=dependencies.SIGNAL_ID, version=dependencies.VERSION,
+            signal=dependencies.SIGNAL_ID,
+            version=dependencies.VERSION,
             collected=Measurement.not_collected(
-                f"dependencies signal raised: {type(exc).__name__}: {exc}"))
+                f"dependencies signal raised: {type(exc).__name__}: {exc}"
+            ),
+        )
 ```
 
 Add this shared helper above the activities (it is reused by Tasks 5–7):
@@ -1453,12 +1569,15 @@ def _verified(result: SignalResult, blobs: dict[str, str]) -> SignalResult:
             kept.append(finding)
             continue
         blob = blobs.get(finding.path)
-        if blob is not None and verify_quote(
-                finding.evidence, blob, Profile.VERBATIM_BYTES):
+        if blob is not None and verify_quote(finding.evidence, blob, Profile.VERBATIM_BYTES):
             kept.append(finding)
         else:
-            _log.warning("triage %s: dropping unverifiable evidence for %s "
-                         "at %s", result.signal, finding.rule, finding.path)
+            _log.warning(
+                "triage %s: dropping unverifiable evidence for %s at %s",
+                result.signal,
+                finding.rule,
+                finding.path,
+            )
     return result.model_copy(update={"findings": kept})
 ```
 
@@ -1480,13 +1599,20 @@ In `src/sdlc/worker.py`, extend the import (line 57–59) and the activity list 
 
 ```python
 from .triage.activities import (
-    triage_baseline, triage_build_probe, triage_dependencies, triage_secrets,
+    triage_baseline,
+    triage_build_probe,
+    triage_dependencies,
+    triage_secrets,
 )
 ```
 
 ```python
-            triage_baseline, triage_secrets, triage_build_probe,
-            triage_dependencies,
+(
+    triage_baseline,
+    triage_secrets,
+    triage_build_probe,
+)
+(triage_dependencies,)
 ```
 
 - [ ] **Step 7: Write the activity test**
@@ -1504,9 +1630,9 @@ from sdlc.triage.activities import TriageDependencyInput, triage_dependencies
 
 
 def _run(args, cwd):
-    return subprocess.run(args, cwd=cwd, capture_output=True,
-                          encoding="utf-8", check=True,
-                          stdin=subprocess.DEVNULL)
+    return subprocess.run(
+        args, cwd=cwd, capture_output=True, encoding="utf-8", check=True, stdin=subprocess.DEVNULL
+    )
 
 
 def _commit_repo(root, files: dict[str, str]) -> str:
@@ -1519,19 +1645,21 @@ def _commit_repo(root, files: dict[str, str]) -> str:
         p.write_text(text, encoding="utf-8")
     _run(["git", "add", "-A"], root)
     _run(["git", "commit", "-q", "-m", "one"], root)
-    return subprocess.run(["git", "rev-parse", "HEAD"], cwd=root,
-                          capture_output=True, encoding="utf-8",
-                          check=True).stdout.strip()
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, encoding="utf-8", check=True
+    ).stdout.strip()
 
 
 @pytest.mark.asyncio
 async def test_activity_reads_manifests_at_the_pinned_commit(tmp_path):
-    sha = _commit_repo(tmp_path, {
-        "pyproject.toml": PYPROJECT,
-        "src/app.py": "import requests\nimport pydantic\nfrom PIL import Image\n",
-    })
-    r = await triage_dependencies(TriageDependencyInput(
-        repo_dir=str(tmp_path), commit_sha=sha))
+    sha = _commit_repo(
+        tmp_path,
+        {
+            "pyproject.toml": PYPROJECT,
+            "src/app.py": "import requests\nimport pydantic\nfrom PIL import Image\n",
+        },
+    )
+    r = await triage_dependencies(TriageDependencyInput(repo_dir=str(tmp_path), commit_sha=sha))
     assert r.signal == "dependencies"
     assert r.collected.state is CollectionState.MEASURED
     assert "unpinned_dependency" in _rules(r)
@@ -1543,8 +1671,9 @@ async def test_activity_reads_manifests_at_the_pinned_commit(tmp_path):
 @pytest.mark.asyncio
 async def test_activity_reports_not_collected_on_a_bad_sha(tmp_path):
     _commit_repo(tmp_path, {"pyproject.toml": PYPROJECT})
-    r = await triage_dependencies(TriageDependencyInput(
-        repo_dir=str(tmp_path), commit_sha="0" * 40))
+    r = await triage_dependencies(
+        TriageDependencyInput(repo_dir=str(tmp_path), commit_sha="0" * 40)
+    )
     assert r.collected.state is CollectionState.NOT_COLLECTED
     assert r.findings == []
 ```
@@ -1600,20 +1729,23 @@ Create `tests/test_triage_scaffold.py`:
 ```python
 """FR-902 generator scaffolding and dead code (E-41b), and the new owner of
 structure_discernible (spec D12)."""
+
 from sdlc.measurement import CollectionState
 from sdlc.toolchain.adapters import PythonToolchain
 from sdlc.triage.models import (
-    FixClass, M_STRUCTURE, SignalResult, compute_readiness,
+    FixClass,
+    M_STRUCTURE,
+    SignalResult,
+    compute_readiness,
 )
 from sdlc.triage.signals import baseline, scaffold
 
-CRA_APP = ("function App() {\n"
-           "  return <p>Edit <code>src/App.js</code> and save to reload.</p>;\n"
-           "}\n")
-NEXT_README = ("# app\n\nThis is a [Next.js](https://nextjs.org) project "
-               "bootstrapped with [`create-next-app`](https://x).\n")
-DJANGO_MANAGE = ('"""Django\'s command-line utility for administrative '
-                 'tasks."""\nimport os\n')
+CRA_APP = "function App() {\n  return <p>Edit <code>src/App.js</code> and save to reload.</p>;\n}\n"
+NEXT_README = (
+    "# app\n\nThis is a [Next.js](https://nextjs.org) project "
+    "bootstrapped with [`create-next-app`](https://x).\n"
+)
+DJANGO_MANAGE = '"""Django\'s command-line utility for administrative tasks."""\nimport os\n'
 
 
 def _rules(result):
@@ -1622,15 +1754,20 @@ def _rules(result):
 
 # ---- fingerprints -----------------------------------------------------
 
+
 def test_fingerprints_match_known_generator_output():
-    got = scaffold.scaffolded_paths({
-        "src/App.js": CRA_APP,
-        "README.md": NEXT_README,
-        "manage.py": DJANGO_MANAGE,
-    })
-    assert got == {"src/App.js": "create-react-app",
-                   "README.md": "create-next-app",
-                   "manage.py": "django-admin"}
+    got = scaffold.scaffolded_paths(
+        {
+            "src/App.js": CRA_APP,
+            "README.md": NEXT_README,
+            "manage.py": DJANGO_MANAGE,
+        }
+    )
+    assert got == {
+        "src/App.js": "create-react-app",
+        "README.md": "create-next-app",
+        "manage.py": "django-admin",
+    }
 
 
 def test_a_hand_edited_file_is_not_scaffolding():
@@ -1644,11 +1781,10 @@ def test_a_matching_path_with_no_marker_is_not_scaffolding():
 
 # ---- history corroboration (D13) --------------------------------------
 
+
 def test_history_escalates_an_untouched_scaffold_file():
-    touched = scaffold.evaluate(
-        ["src/App.js"], {"src/App.js": CRA_APP}, {"src/App.js": 4}, None)
-    untouched = scaffold.evaluate(
-        ["src/App.js"], {"src/App.js": CRA_APP}, {"src/App.js": 1}, None)
+    touched = scaffold.evaluate(["src/App.js"], {"src/App.js": CRA_APP}, {"src/App.js": 4}, None)
+    untouched = scaffold.evaluate(["src/App.js"], {"src/App.js": CRA_APP}, {"src/App.js": 1}, None)
     assert touched.findings[0].severity == "low"
     assert untouched.findings[0].severity == "medium"
     assert "untouched since import" in untouched.findings[0].detail
@@ -1657,8 +1793,7 @@ def test_history_escalates_an_untouched_scaffold_file():
 def test_no_history_leaves_severity_at_the_fingerprint_level():
     r = scaffold.evaluate(["src/App.js"], {"src/App.js": CRA_APP}, None, None)
     assert r.findings[0].severity == "low"
-    assert r.metrics[scaffold.M_HISTORY_BASIS].state \
-        is CollectionState.NOT_COLLECTED
+    assert r.metrics[scaffold.M_HISTORY_BASIS].state is CollectionState.NOT_COLLECTED
     # The SIGNAL still collected -- the fingerprints ran.
     assert r.collected.state is CollectionState.MEASURED
 
@@ -1670,21 +1805,21 @@ def test_scaffolding_is_judgement_not_mechanical():
 
 # ---- dead code --------------------------------------------------------
 
+
 def test_an_unimported_module_is_reported_unreferenced():
     r = scaffold.evaluate(
         ["src/app.py", "src/orphan.py"],
         {"src/app.py": "import os\n", "src/orphan.py": "x = 1\n"},
-        None, PythonToolchain())
+        None,
+        PythonToolchain(),
+    )
     assert "unreferenced_module" in _rules(r)
-    assert [f.path for f in r.findings
-            if f.rule == "unreferenced_module"] == ["src/orphan.py"]
+    assert [f.path for f in r.findings if f.rule == "unreferenced_module"] == ["src/orphan.py"]
 
 
 def test_entrypoint_conventions_are_never_unreferenced():
-    paths = ["main.py", "__init__.py", "conftest.py", "manage.py",
-             "tests/test_a.py", "__main__.py"]
-    r = scaffold.evaluate(paths, {p: "x = 1\n" for p in paths}, None,
-                          PythonToolchain())
+    paths = ["main.py", "__init__.py", "conftest.py", "manage.py", "tests/test_a.py", "__main__.py"]
+    r = scaffold.evaluate(paths, {p: "x = 1\n" for p in paths}, None, PythonToolchain())
     assert "unreferenced_module" not in _rules(r)
 
 
@@ -1692,11 +1827,14 @@ def test_an_imported_module_is_not_unreferenced():
     r = scaffold.evaluate(
         ["src/app.py", "src/helper.py"],
         {"src/app.py": "from helper import go\n", "src/helper.py": "def go():\n    pass\n"},
-        None, PythonToolchain())
+        None,
+        PythonToolchain(),
+    )
     assert "unreferenced_module" not in _rules(r)
 
 
 # ---- M_STRUCTURE, the migrated dimension (D12) ------------------------
+
 
 def test_structure_is_not_collected_without_a_toolchain():
     r = scaffold.evaluate(["src/a.py"], {"src/a.py": "x = 1\n"}, None, None)
@@ -1706,29 +1844,26 @@ def test_structure_is_not_collected_without_a_toolchain():
 
 
 def test_structure_is_zero_when_a_toolchain_resolves_but_no_source_exists():
-    r = scaffold.evaluate(["README.md"], {"README.md": "x\n"}, None,
-                          PythonToolchain())
+    r = scaffold.evaluate(["README.md"], {"README.md": "x\n"}, None, PythonToolchain())
     assert r.metrics[M_STRUCTURE].value == 0.0
 
 
 def test_structure_is_one_for_real_source():
-    r = scaffold.evaluate(["src/a.py"], {"src/a.py": "x = 1\n"}, None,
-                          PythonToolchain())
+    r = scaffold.evaluate(["src/a.py"], {"src/a.py": "x = 1\n"}, None, PythonToolchain())
     assert r.metrics[M_STRUCTURE].value == 1.0
 
 
 def test_structure_is_zero_when_source_is_almost_all_scaffolding():
     paths = ["manage.py"]
-    r = scaffold.evaluate(paths, {"manage.py": DJANGO_MANAGE}, None,
-                          PythonToolchain())
+    r = scaffold.evaluate(paths, {"manage.py": DJANGO_MANAGE}, None, PythonToolchain())
     assert r.metrics[M_STRUCTURE].value == 0.0
 
 
 # ---- the migration regression guard (D12) -----------------------------
 
+
 def test_baseline_no_longer_reports_structure():
-    r = baseline.evaluate(["pyproject.toml", "src/a.py"], "",
-                          PythonToolchain())
+    r = baseline.evaluate(["pyproject.toml", "src/a.py"], "", PythonToolchain())
     assert M_STRUCTURE not in r.metrics
     assert baseline.VERSION == 2
 
@@ -1739,12 +1874,19 @@ def test_two_signals_reporting_structure_still_raises():
     # fails loudly instead of silently preferring a producer.
     import pytest
     from sdlc.measurement import Measurement
-    a = SignalResult(signal="a", version=1,
-                     collected=Measurement.measured(0.0),
-                     metrics={M_STRUCTURE: Measurement.measured(1.0)})
-    b = SignalResult(signal="b", version=1,
-                     collected=Measurement.measured(0.0),
-                     metrics={M_STRUCTURE: Measurement.measured(0.0)})
+
+    a = SignalResult(
+        signal="a",
+        version=1,
+        collected=Measurement.measured(0.0),
+        metrics={M_STRUCTURE: Measurement.measured(1.0)},
+    )
+    b = SignalResult(
+        signal="b",
+        version=1,
+        collected=Measurement.measured(0.0),
+        metrics={M_STRUCTURE: Measurement.measured(0.0)},
+    )
     with pytest.raises(ValueError, match="more than one signal"):
         compute_readiness([a, b])
 ```
@@ -1775,6 +1917,7 @@ often one enormous initial commit, where "untouched since import" is true of
 every file including the hand-written ones. As corroboration it is additive
 and cannot invent a finding.
 """
+
 from __future__ import annotations
 
 import fnmatch
@@ -1801,41 +1944,65 @@ SCAFFOLD_RATIO_THRESHOLD = 0.9
 
 # Paths that are entrypoints by convention and therefore never "unreferenced"
 # merely because nothing imports them.
-_ENTRYPOINT_STEMS = frozenset({
-    "__init__", "__main__", "main", "manage", "conftest", "setup", "wsgi",
-    "asgi", "app",
-})
+_ENTRYPOINT_STEMS = frozenset(
+    {
+        "__init__",
+        "__main__",
+        "main",
+        "manage",
+        "conftest",
+        "setup",
+        "wsgi",
+        "asgi",
+        "app",
+    }
+)
 
 
 class Fingerprint(BaseModel):
     """A generator's output, identified by a path convention AND a content
     marker that survives only while nobody has edited the file. Both halves
     are required: the path alone would flag every README."""
+
     generator: str
     path_glob: str
     marker: str
 
 
 FINGERPRINTS: tuple[Fingerprint, ...] = (
-    Fingerprint(generator="create-next-app", path_glob="README.md",
-                marker="bootstrapped with [`create-next-app`]"),
-    Fingerprint(generator="create-next-app", path_glob="app/page.tsx",
-                marker="Get started by editing"),
-    Fingerprint(generator="create-next-app", path_glob="app/page.js",
-                marker="Get started by editing"),
-    Fingerprint(generator="create-next-app", path_glob="pages/index.js",
-                marker="Get started by editing"),
-    Fingerprint(generator="create-react-app", path_glob="src/App.js",
-                marker="Edit <code>src/App.js</code> and save to reload."),
-    Fingerprint(generator="create-react-app", path_glob="src/App.tsx",
-                marker="Edit <code>src/App.tsx</code> and save to reload."),
-    Fingerprint(generator="vite", path_glob="index.html",
-                marker="<title>Vite +"),
-    Fingerprint(generator="django-admin", path_glob="manage.py",
-                marker="Django's command-line utility for administrative "
-                       "tasks"),
-    Fingerprint(generator="django-admin", path_glob="*/settings.py",
-                marker="SECRET_KEY = 'django-insecure-"),
+    Fingerprint(
+        generator="create-next-app",
+        path_glob="README.md",
+        marker="bootstrapped with [`create-next-app`]",
+    ),
+    Fingerprint(
+        generator="create-next-app", path_glob="app/page.tsx", marker="Get started by editing"
+    ),
+    Fingerprint(
+        generator="create-next-app", path_glob="app/page.js", marker="Get started by editing"
+    ),
+    Fingerprint(
+        generator="create-next-app", path_glob="pages/index.js", marker="Get started by editing"
+    ),
+    Fingerprint(
+        generator="create-react-app",
+        path_glob="src/App.js",
+        marker="Edit <code>src/App.js</code> and save to reload.",
+    ),
+    Fingerprint(
+        generator="create-react-app",
+        path_glob="src/App.tsx",
+        marker="Edit <code>src/App.tsx</code> and save to reload.",
+    ),
+    Fingerprint(generator="vite", path_glob="index.html", marker="<title>Vite +"),
+    Fingerprint(
+        generator="django-admin",
+        path_glob="manage.py",
+        marker="Django's command-line utility for administrative tasks",
+    ),
+    Fingerprint(
+        generator="django-admin", path_glob="*/settings.py", marker="SECRET_KEY = 'django-insecure-"
+    ),
 )
 
 
@@ -1846,23 +2013,32 @@ def scaffolded_paths(blobs: Mapping[str, str]) -> dict[str, str]:
     out: dict[str, str] = {}
     for path in sorted(blobs):
         for fp in FINGERPRINTS:
-            if fnmatch.fnmatch(path, fp.path_glob) \
-                    and fp.marker in blobs[path]:
+            if fnmatch.fnmatch(path, fp.path_glob) and fp.marker in blobs[path]:
                 out[path] = fp.generator
                 break
     return out
 
 
-def _finding(rule: str, severity: str, detail: str, fix_class: FixClass,
-             path: str = "", evidence: str = "") -> TriageFinding:
-    return TriageFinding(signal=SIGNAL_ID, rule=rule, severity=severity,
-                         detail=detail, fix_class=fix_class, path=path,
-                         evidence=evidence)
+def _finding(
+    rule: str, severity: str, detail: str, fix_class: FixClass, path: str = "", evidence: str = ""
+) -> TriageFinding:
+    return TriageFinding(
+        signal=SIGNAL_ID,
+        rule=rule,
+        severity=severity,
+        detail=detail,
+        fix_class=fix_class,
+        path=path,
+        evidence=evidence,
+    )
 
 
-def evaluate(paths: Sequence[str], blobs: Mapping[str, str],
-             touch_counts: Mapping[str, int] | None,
-             toolchain: ToolchainAdapter | None) -> SignalResult:
+def evaluate(
+    paths: Sequence[str],
+    blobs: Mapping[str, str],
+    touch_counts: Mapping[str, int] | None,
+    toolchain: ToolchainAdapter | None,
+) -> SignalResult:
     """`paths` is every tracked path; `blobs` is text for the readable ones;
     `touch_counts` is path -> commits touching it, or None when the repository
     yields no usable history (D13)."""
@@ -1870,68 +2046,85 @@ def evaluate(paths: Sequence[str], blobs: Mapping[str, str],
     findings: list[TriageFinding] = []
 
     for path, generator in sorted(scaffolded.items()):
-        untouched = touch_counts is not None \
-            and touch_counts.get(path, 0) <= 1
-        findings.append(_finding(
-            "generator_scaffold", "medium" if untouched else "low",
-            f"{path} is unmodified {generator} output"
-            f"{', untouched since import' if untouched else ''}. Removing or "
-            f"replacing generator output is a decision about what the "
-            f"application is.",
-            FixClass.JUDGEMENT, path,
-            # The marker itself is verbatim in the blob by construction, so
-            # it is the natural evidence quote.
-            next(fp.marker for fp in FINGERPRINTS
-                 if fnmatch.fnmatch(path, fp.path_glob)
-                 and fp.marker in blobs[path])))
+        untouched = touch_counts is not None and touch_counts.get(path, 0) <= 1
+        findings.append(
+            _finding(
+                "generator_scaffold",
+                "medium" if untouched else "low",
+                f"{path} is unmodified {generator} output"
+                f"{', untouched since import' if untouched else ''}. Removing or "
+                f"replacing generator output is a decision about what the "
+                f"application is.",
+                FixClass.JUDGEMENT,
+                path,
+                # The marker itself is verbatim in the blob by construction, so
+                # it is the natural evidence quote.
+                next(
+                    fp.marker
+                    for fp in FINGERPRINTS
+                    if fnmatch.fnmatch(path, fp.path_glob) and fp.marker in blobs[path]
+                ),
+            )
+        )
 
     exts = tuple(toolchain.source_extensions) if toolchain else ()
     test_globs = tuple(toolchain.test_globs) if toolchain else ()
     source = [p for p in sorted(paths) if exts and p.endswith(exts)]
 
     if source:
-        imported = imported_modules(
-            blobs[p] for p in source if p in blobs)
+        imported = imported_modules(blobs[p] for p in source if p in blobs)
         for path in source:
             stem = posixpath.splitext(posixpath.basename(path))[0]
             if stem in _ENTRYPOINT_STEMS:
                 continue
-            if any(fnmatch.fnmatch(path, g)
-                   or fnmatch.fnmatch(posixpath.basename(path), g)
-                   for g in test_globs):
+            if any(
+                fnmatch.fnmatch(path, g) or fnmatch.fnmatch(posixpath.basename(path), g)
+                for g in test_globs
+            ):
                 continue
             if stem in imported:
                 continue
-            findings.append(_finding(
-                "unreferenced_module", "low",
-                f"{path} is not imported by any tracked source file. "
-                f"Deleting code is a decision, not a mechanical patch.",
-                FixClass.JUDGEMENT, path))
+            findings.append(
+                _finding(
+                    "unreferenced_module",
+                    "low",
+                    f"{path} is not imported by any tracked source file. "
+                    f"Deleting code is a decision, not a mechanical patch.",
+                    FixClass.JUDGEMENT,
+                    path,
+                )
+            )
 
     if toolchain is None:
         structure = Measurement.not_collected(
-            "no toolchain marker resolved, so structure is not assessable")
+            "no toolchain marker resolved, so structure is not assessable"
+        )
     elif not source:
         structure = Measurement.measured(0.0)
     else:
         ratio = len([p for p in source if p in scaffolded]) / len(source)
-        structure = Measurement.measured(
-            0.0 if ratio >= SCAFFOLD_RATIO_THRESHOLD else 1.0)
+        structure = Measurement.measured(0.0 if ratio >= SCAFFOLD_RATIO_THRESHOLD else 1.0)
 
-    history = (Measurement.measured(1.0) if touch_counts is not None
-               else Measurement.not_collected(
-                   "no usable commit history: a single-commit repository says "
-                   "nothing about what has been touched"))
+    history = (
+        Measurement.measured(1.0)
+        if touch_counts is not None
+        else Measurement.not_collected(
+            "no usable commit history: a single-commit repository says "
+            "nothing about what has been touched"
+        )
+    )
 
     return SignalResult(
-        signal=SIGNAL_ID, version=VERSION,
+        signal=SIGNAL_ID,
+        version=VERSION,
         collected=Measurement.measured(float(len(findings))),
         findings=findings,
         metrics={
             M_STRUCTURE: structure,
             M_HISTORY_BASIS: history,
             M_SCAFFOLD_FILES: Measurement.measured(float(len(scaffolded))),
-        })
+        },
+    )
 ```
 
 - [ ] **Step 4: Migrate `baseline` to version 2**
@@ -1944,12 +2137,13 @@ In `src/sdlc/triage/signals/baseline.py`:
 4. Delete the structure computation (lines 123–128):
 
 ```python
-    if toolchain is None:
-        structure = Measurement.not_collected(
-            "no toolchain marker resolved, so structure is not assessable")
-    else:
-        has_source = any(p.endswith(_SOURCE_EXTENSIONS) for p in tracked)
-        structure = Measurement.measured(1.0 if has_source else 0.0)
+if toolchain is None:
+    structure = Measurement.not_collected(
+        "no toolchain marker resolved, so structure is not assessable"
+    )
+else:
+    has_source = any(p.endswith(_SOURCE_EXTENSIONS) for p in tracked)
+    structure = Measurement.measured(1.0 if has_source else 0.0)
 ```
 
 5. Replace the `metrics=` block in the return with:
@@ -1975,8 +2169,9 @@ Expected: PASS. If `test_two_signals_reporting_structure_still_raises` fails, th
 In `src/sdlc/triage/activities.py`, add `scaffold` to the `.signals` import, then append:
 
 ```python
-def commit_touch_counts(repo_dir: str, commit_sha: str,
-                        max_commits: int = 2000) -> dict[str, int] | None:
+def commit_touch_counts(
+    repo_dir: str, commit_sha: str, max_commits: int = 2000
+) -> dict[str, int] | None:
     """path -> commits touching it, over at most `max_commits` commits ending
     at `commit_sha`. None when history yields no usable signal (spec D13).
 
@@ -1989,8 +2184,10 @@ def commit_touch_counts(repo_dir: str, commit_sha: str,
     re-creations, not reproducibility at a pinned commit -- and since history
     only adjusts severity, a re-import degrades sharpness, never correctness.
     """
-    proc = _git(["log", f"--max-count={max_commits}", "--name-only",
-                 "--format=%x00", commit_sha], cwd=repo_dir)
+    proc = _git(
+        ["log", f"--max-count={max_commits}", "--name-only", "--format=%x00", commit_sha],
+        cwd=repo_dir,
+    )
     if proc.returncode != 0:
         return None
     if proc.stdout.count("\x00") <= 1:
@@ -2015,24 +2212,29 @@ async def triage_scaffold(inp: TriageSignalInput) -> SignalResult:
         # Fingerprints target specific paths; source extensions cover the
         # dead-code half and the structure ratio. Reading their union keeps
         # this to one pass.
-        wanted = sorted({
-            p for p in paths
-            if (exts and p.endswith(exts))
-            or any(fnmatch.fnmatch(p, fp.path_glob)
-                   for fp in scaffold.FINGERPRINTS)})
+        wanted = sorted(
+            {
+                p
+                for p in paths
+                if (exts and p.endswith(exts))
+                or any(fnmatch.fnmatch(p, fp.path_glob) for fp in scaffold.FINGERPRINTS)
+            }
+        )
         blobs = dict(read_tree(inp.repo_dir, inp.commit_sha, wanted))
 
         result = scaffold.evaluate(
-            paths, blobs,
-            commit_touch_counts(inp.repo_dir, inp.commit_sha),
-            adapter)
+            paths, blobs, commit_touch_counts(inp.repo_dir, inp.commit_sha), adapter
+        )
         return _verified(result, blobs)
-    except Exception as exc:                       # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("triage scaffold signal failed: %s", exc)
         return SignalResult(
-            signal=scaffold.SIGNAL_ID, version=scaffold.VERSION,
+            signal=scaffold.SIGNAL_ID,
+            version=scaffold.VERSION,
             collected=Measurement.not_collected(
-                f"scaffold signal raised: {type(exc).__name__}: {exc}"))
+                f"scaffold signal raised: {type(exc).__name__}: {exc}"
+            ),
+        )
 ```
 
 Add `import fnmatch` to the top of `activities.py`.
@@ -2061,14 +2263,16 @@ import subprocess
 import pytest
 
 from sdlc.triage.activities import (
-    TriageSignalInput, commit_touch_counts, triage_scaffold,
+    TriageSignalInput,
+    commit_touch_counts,
+    triage_scaffold,
 )
 
 
 def _run(args, cwd):
-    return subprocess.run(args, cwd=cwd, capture_output=True,
-                          encoding="utf-8", check=True,
-                          stdin=subprocess.DEVNULL)
+    return subprocess.run(
+        args, cwd=cwd, capture_output=True, encoding="utf-8", check=True, stdin=subprocess.DEVNULL
+    )
 
 
 def _init(root):
@@ -2084,9 +2288,9 @@ def _commit(root, files: dict[str, str], message: str) -> str:
         p.write_text(text, encoding="utf-8")
     _run(["git", "add", "-A"], root)
     _run(["git", "commit", "-q", "-m", message], root)
-    return subprocess.run(["git", "rev-parse", "HEAD"], cwd=root,
-                          capture_output=True, encoding="utf-8",
-                          check=True).stdout.strip()
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, encoding="utf-8", check=True
+    ).stdout.strip()
 
 
 def test_touch_counts_is_none_for_a_single_commit_repo(tmp_path):
@@ -2107,25 +2311,24 @@ def test_touch_counts_counts_commits_per_path(tmp_path):
 @pytest.mark.asyncio
 async def test_activity_escalates_untouched_scaffolding(tmp_path):
     _init(tmp_path)
-    _commit(tmp_path, {"pyproject.toml": "[project]\n",
-                       "manage.py": DJANGO_MANAGE,
-                       "src/app.py": "import os\n"}, "one")
+    _commit(
+        tmp_path,
+        {"pyproject.toml": "[project]\n", "manage.py": DJANGO_MANAGE, "src/app.py": "import os\n"},
+        "one",
+    )
     sha = _commit(tmp_path, {"src/app.py": "import os\nimport sys\n"}, "two")
-    r = await triage_scaffold(TriageSignalInput(
-        repo_dir=str(tmp_path), commit_sha=sha))
+    r = await triage_scaffold(TriageSignalInput(repo_dir=str(tmp_path), commit_sha=sha))
     assert r.collected.state is CollectionState.MEASURED
     f = next(f for f in r.findings if f.rule == "generator_scaffold")
     assert f.severity == "medium"
-    assert r.metrics[scaffold.M_HISTORY_BASIS].state \
-        is CollectionState.MEASURED
+    assert r.metrics[scaffold.M_HISTORY_BASIS].state is CollectionState.MEASURED
 
 
 @pytest.mark.asyncio
 async def test_activity_reports_not_collected_on_a_bad_sha(tmp_path):
     _init(tmp_path)
     _commit(tmp_path, {"a.py": "x = 1\n"}, "one")
-    r = await triage_scaffold(TriageSignalInput(
-        repo_dir=str(tmp_path), commit_sha="0" * 40))
+    r = await triage_scaffold(TriageSignalInput(repo_dir=str(tmp_path), commit_sha="0" * 40))
     assert r.collected.state is CollectionState.NOT_COLLECTED
     assert r.findings == []
 ```
@@ -2181,6 +2384,7 @@ Create `tests/test_triage_misconfig.py`:
 
 ```python
 """FR-902 framework-default misconfiguration (E-41c)."""
+
 from sdlc.measurement import CollectionState
 from sdlc.triage.models import FixClass
 from sdlc.triage.signals import misconfig, secrets
@@ -2191,20 +2395,21 @@ def _rules(result):
 
 
 def test_permissive_cors_fires_on_fastapi_and_flask_forms():
-    fastapi = ('from fastapi import FastAPI\n'
-               'app.add_middleware(CORSMiddleware, allow_origins=["*"])\n')
-    flask = ('from flask import Flask\n'
-             'CORS(app, origins="*")\n')
+    fastapi = (
+        'from fastapi import FastAPI\napp.add_middleware(CORSMiddleware, allow_origins=["*"])\n'
+    )
+    flask = 'from flask import Flask\nCORS(app, origins="*")\n'
     assert "permissive_cors" in _rules(misconfig.evaluate({"a.py": fastapi}))
     assert "permissive_cors" in _rules(misconfig.evaluate({"b.py": flask}))
 
 
 def test_credentialed_wildcard_cors_is_critical():
-    text = ('from fastapi import FastAPI\n'
-            'app.add_middleware(CORSMiddleware, allow_origins=["*"], '
-            'allow_credentials=True)\n')
-    f = next(f for f in misconfig.evaluate({"a.py": text}).findings
-             if f.rule == "permissive_cors")
+    text = (
+        "from fastapi import FastAPI\n"
+        'app.add_middleware(CORSMiddleware, allow_origins=["*"], '
+        "allow_credentials=True)\n"
+    )
+    f = next(f for f in misconfig.evaluate({"a.py": text}).findings if f.rule == "permissive_cors")
     assert f.severity == "critical"
 
 
@@ -2217,7 +2422,8 @@ def test_debug_enabled_fires_for_django_and_flask():
 
 def test_debug_false_does_not_fire():
     assert "debug_enabled" not in _rules(
-        misconfig.evaluate({"s.py": "from django.conf import x\nDEBUG = False\n"}))
+        misconfig.evaluate({"s.py": "from django.conf import x\nDEBUG = False\n"})
+    )
 
 
 def test_allowed_hosts_wildcard_fires():
@@ -2226,10 +2432,12 @@ def test_allowed_hosts_wildcard_fires():
 
 
 def test_the_django_placeholder_key_is_misconfig_and_judgement():
-    text = ("from django.conf import x\n"
-            "SECRET_KEY = 'django-insecure-abc123defg456hijk789lmno'\n")
-    f = next(f for f in misconfig.evaluate({"settings.py": text}).findings
-             if f.rule == "django_insecure_secret_key")
+    text = "from django.conf import x\nSECRET_KEY = 'django-insecure-abc123defg456hijk789lmno'\n"
+    f = next(
+        f
+        for f in misconfig.evaluate({"settings.py": text}).findings
+        if f.rule == "django_insecure_secret_key"
+    )
     assert f.severity == "critical"
     assert f.fix_class is FixClass.JUDGEMENT
 
@@ -2251,33 +2459,37 @@ def test_secrets_still_reports_a_real_secret_key_assignment():
 def test_world_readable_storage_fires_on_firebase_and_iac():
     firebase = "service firebase.storage {\n  allow read, write: if true;\n}\n"
     iam = '{"Statement": [{"Principal": "*"}]}\n'
-    assert "world_readable_storage" in _rules(
-        misconfig.evaluate({"storage.rules": firebase}))
-    assert "world_readable_storage" in _rules(
-        misconfig.evaluate({"policy.json": iam}))
+    assert "world_readable_storage" in _rules(misconfig.evaluate({"storage.rules": firebase}))
+    assert "world_readable_storage" in _rules(misconfig.evaluate({"policy.json": iam}))
 
 
 # ---- unauthenticated_app, the whole-app rule --------------------------
 
+
 def test_unauthenticated_app_fires_once_for_the_repository():
-    a = ('from fastapi import FastAPI\napp = FastAPI()\n'
-         '@app.post("/items")\ndef create():\n    return 1\n')
-    b = ('@app.delete("/items/{i}")\ndef remove(i):\n    return 1\n')
+    a = (
+        "from fastapi import FastAPI\napp = FastAPI()\n"
+        '@app.post("/items")\ndef create():\n    return 1\n'
+    )
+    b = '@app.delete("/items/{i}")\ndef remove(i):\n    return 1\n'
     r = misconfig.evaluate({"a.py": a, "b.py": b})
     assert [f.rule for f in r.findings].count("unauthenticated_app") == 1
 
 
 def test_declared_auth_anywhere_suppresses_it():
-    a = ('from fastapi import FastAPI\napp = FastAPI()\n'
-         '@app.post("/items")\ndef create():\n    return 1\n')
-    b = 'from fastapi.security import OAuth2PasswordBearer\n'
-    assert "unauthenticated_app" not in _rules(
-        misconfig.evaluate({"a.py": a, "b.py": b}))
+    a = (
+        "from fastapi import FastAPI\napp = FastAPI()\n"
+        '@app.post("/items")\ndef create():\n    return 1\n'
+    )
+    b = "from fastapi.security import OAuth2PasswordBearer\n"
+    assert "unauthenticated_app" not in _rules(misconfig.evaluate({"a.py": a, "b.py": b}))
 
 
 def test_a_read_only_app_does_not_fire():
-    a = ('from fastapi import FastAPI\napp = FastAPI()\n'
-         '@app.get("/items")\ndef read():\n    return 1\n')
+    a = (
+        "from fastapi import FastAPI\napp = FastAPI()\n"
+        '@app.get("/items")\ndef read():\n    return 1\n'
+    )
     assert "unauthenticated_app" not in _rules(misconfig.evaluate({"a.py": a}))
 
 
@@ -2289,16 +2501,17 @@ def test_no_framework_detected_means_no_whole_app_finding():
 
 
 def test_frameworks_detected_metric_counts_distinct_frameworks():
-    r = misconfig.evaluate({"a.py": "import fastapi\n",
-                            "b.py": "from flask import Flask\n"})
+    r = misconfig.evaluate({"a.py": "import fastapi\n", "b.py": "from flask import Flask\n"})
     assert r.metrics[misconfig.M_FRAMEWORKS].value == 2.0
 
 
 def test_a_clean_app_yields_no_findings():
-    text = ('from fastapi import FastAPI\n'
-            'from fastapi.security import HTTPBearer\n'
-            'app = FastAPI()\n'
-            '@app.get("/health")\ndef health():\n    return "ok"\n')
+    text = (
+        "from fastapi import FastAPI\n"
+        "from fastapi.security import HTTPBearer\n"
+        "app = FastAPI()\n"
+        '@app.get("/health")\ndef health():\n    return "ok"\n'
+    )
     r = misconfig.evaluate({"a.py": text})
     assert r.findings == []
     assert r.collected.state is CollectionState.MEASURED
@@ -2329,6 +2542,7 @@ belongs to E-46/E-49; a per-route rule computed from decorators would be a
 false-positive generator, and a triage report a client cannot trust is worse
 than a shorter one.
 """
+
 from __future__ import annotations
 
 import re
@@ -2350,62 +2564,99 @@ _FRAMEWORKS: dict[str, re.Pattern[str]] = {
 
 # (rule, pattern, severity, fix_class, detail)
 _RULES: tuple[tuple[str, re.Pattern[str], str, FixClass, str], ...] = (
-    ("permissive_cors",
-     re.compile(r"allow_origins\s*=\s*\[\s*[\"']\*[\"']\s*\]"
-                r"|CORS\([^)]*origins\s*=\s*[\"']\*[\"']"),
-     "high", FixClass.MECHANICAL,
-     "CORS is configured to accept every origin."),
-    ("debug_enabled",
-     re.compile(r"^\s*DEBUG\s*=\s*True\b|\.run\([^)]*debug\s*=\s*True",
-                re.MULTILINE),
-     "high", FixClass.MECHANICAL,
-     "Debug mode is enabled in committed configuration. It serves stack "
-     "traces to clients and, in Django, an settings dump."),
-    ("allowed_hosts_wildcard",
-     re.compile(r"ALLOWED_HOSTS\s*=\s*\[\s*[\"']\*[\"']\s*\]"),
-     "medium", FixClass.MECHANICAL,
-     "ALLOWED_HOSTS accepts every host, which defeats Host-header "
-     "validation."),
-    ("django_insecure_secret_key",
-     re.compile(r"SECRET_KEY\s*=\s*[\"']django-insecure-"),
-     "critical", FixClass.JUDGEMENT,
-     "The generator's placeholder SECRET_KEY is still in use and committed. "
-     "Rotate it; deleting the literal does not invalidate already-signed "
-     "cookies."),
-    ("world_readable_storage",
-     re.compile(r"allow\s+read\s*,\s*write\s*:\s*if\s+true"
-                r"|[\"']Principal[\"']\s*:\s*[\"']\*[\"']"),
-     "critical", FixClass.MECHANICAL,
-     "Storage rules grant read and write to everyone."),
+    (
+        "permissive_cors",
+        re.compile(
+            r"allow_origins\s*=\s*\[\s*[\"']\*[\"']\s*\]"
+            r"|CORS\([^)]*origins\s*=\s*[\"']\*[\"']"
+        ),
+        "high",
+        FixClass.MECHANICAL,
+        "CORS is configured to accept every origin.",
+    ),
+    (
+        "debug_enabled",
+        re.compile(r"^\s*DEBUG\s*=\s*True\b|\.run\([^)]*debug\s*=\s*True", re.MULTILINE),
+        "high",
+        FixClass.MECHANICAL,
+        "Debug mode is enabled in committed configuration. It serves stack "
+        "traces to clients and, in Django, an settings dump.",
+    ),
+    (
+        "allowed_hosts_wildcard",
+        re.compile(r"ALLOWED_HOSTS\s*=\s*\[\s*[\"']\*[\"']\s*\]"),
+        "medium",
+        FixClass.MECHANICAL,
+        "ALLOWED_HOSTS accepts every host, which defeats Host-header validation.",
+    ),
+    (
+        "django_insecure_secret_key",
+        re.compile(r"SECRET_KEY\s*=\s*[\"']django-insecure-"),
+        "critical",
+        FixClass.JUDGEMENT,
+        "The generator's placeholder SECRET_KEY is still in use and committed. "
+        "Rotate it; deleting the literal does not invalidate already-signed "
+        "cookies.",
+    ),
+    (
+        "world_readable_storage",
+        re.compile(
+            r"allow\s+read\s*,\s*write\s*:\s*if\s+true"
+            r"|[\"']Principal[\"']\s*:\s*[\"']\*[\"']"
+        ),
+        "critical",
+        FixClass.MECHANICAL,
+        "Storage rules grant read and write to everyone.",
+    ),
 )
 
 # Credentialed wildcard CORS is the one combination worth escalating: it is
 # the configuration people reach for when a wildcard alone stopped working.
-_CREDENTIALED = re.compile(r"allow_credentials\s*=\s*True"
-                           r"|supports_credentials\s*=\s*True")
+_CREDENTIALED = re.compile(
+    r"allow_credentials\s*=\s*True"
+    r"|supports_credentials\s*=\s*True"
+)
 
 _AUTH_MARKERS = re.compile(
     r"login_required|LoginRequiredMixin|IsAuthenticated|permission_classes"
     r"|HTTPBearer|OAuth2PasswordBearer|APIKeyHeader|jwt_required"
-    r"|AuthenticationMiddleware|flask_login|verify_token|current_user")
+    r"|AuthenticationMiddleware|flask_login|verify_token|current_user"
+)
 
 _MUTATING_ROUTE = re.compile(
     r"@\w+\.(?:post|put|patch|delete)\s*\("
-    r"|methods\s*=\s*\[[^\]]*[\"'](?:POST|PUT|PATCH|DELETE)[\"']")
+    r"|methods\s*=\s*\[[^\]]*[\"'](?:POST|PUT|PATCH|DELETE)[\"']"
+)
 
 
 def detect_frameworks(blobs: Mapping[str, str]) -> set[str]:
     """Which web frameworks the repository imports anywhere."""
-    return {name for name, pattern in _FRAMEWORKS.items()
-            if any(pattern.search(text) for text in blobs.values())}
+    return {
+        name
+        for name, pattern in _FRAMEWORKS.items()
+        if any(pattern.search(text) for text in blobs.values())
+    }
 
 
-def _finding(rule: str, severity: str, detail: str, fix_class: FixClass,
-             path: str = "", line: int | None = None,
-             evidence: str = "") -> TriageFinding:
-    return TriageFinding(signal=SIGNAL_ID, rule=rule, severity=severity,
-                         detail=detail, fix_class=fix_class, path=path,
-                         line=line, evidence=evidence)
+def _finding(
+    rule: str,
+    severity: str,
+    detail: str,
+    fix_class: FixClass,
+    path: str = "",
+    line: int | None = None,
+    evidence: str = "",
+) -> TriageFinding:
+    return TriageFinding(
+        signal=SIGNAL_ID,
+        rule=rule,
+        severity=severity,
+        detail=detail,
+        fix_class=fix_class,
+        path=path,
+        line=line,
+        evidence=evidence,
+    )
 
 
 def evaluate(blobs: Mapping[str, str]) -> SignalResult:
@@ -2421,31 +2672,37 @@ def evaluate(blobs: Mapping[str, str]) -> SignalResult:
                     continue
                 if rule == "permissive_cors" and _CREDENTIALED.search(line):
                     severity = "critical"
-                    detail = (detail + " Credentials are allowed alongside "
-                                       "the wildcard.")
-                findings.append(_finding(rule, severity, detail, fix_class,
-                                         path, lineno, line.strip()[:400]))
+                    detail = detail + " Credentials are allowed alongside the wildcard."
+                findings.append(
+                    _finding(rule, severity, detail, fix_class, path, lineno, line.strip()[:400])
+                )
 
     frameworks = detect_frameworks(blobs)
     if frameworks:
         has_auth = any(_AUTH_MARKERS.search(t) for t in blobs.values())
-        mutating = sorted(p for p, t in blobs.items()
-                          if _MUTATING_ROUTE.search(t))
+        mutating = sorted(p for p, t in blobs.items() if _MUTATING_ROUTE.search(t))
         if mutating and not has_auth:
-            findings.append(_finding(
-                "unauthenticated_app", "high",
-                f"The application ({', '.join(sorted(frameworks))}) declares "
-                f"no authentication mechanism anywhere, and defines mutating "
-                f"routes in {', '.join(mutating[:5])}. Reported once for the "
-                f"repository: deciding which individual route needs auth is "
-                f"design work, not a scan.",
-                FixClass.STRUCTURAL, mutating[0]))
+            findings.append(
+                _finding(
+                    "unauthenticated_app",
+                    "high",
+                    f"The application ({', '.join(sorted(frameworks))}) declares "
+                    f"no authentication mechanism anywhere, and defines mutating "
+                    f"routes in {', '.join(mutating[:5])}. Reported once for the "
+                    f"repository: deciding which individual route needs auth is "
+                    f"design work, not a scan.",
+                    FixClass.STRUCTURAL,
+                    mutating[0],
+                )
+            )
 
     return SignalResult(
-        signal=SIGNAL_ID, version=VERSION,
+        signal=SIGNAL_ID,
+        version=VERSION,
         collected=Measurement.measured(float(len(findings))),
         findings=findings,
-        metrics={M_FRAMEWORKS: Measurement.measured(float(len(frameworks)))})
+        metrics={M_FRAMEWORKS: Measurement.measured(float(len(frameworks)))},
+    )
 ```
 
 - [ ] **Step 4: Add the `secrets` exclusion**
@@ -2490,19 +2747,21 @@ async def triage_misconfig(inp: TriageSignalInput) -> SignalResult:
         # Config lives beside source: storage rules and IaC policies are the
         # world_readable_storage rule's whole subject and carry no source
         # extension.
-        config_suffixes = (".rules", ".json", ".yml", ".yaml", ".toml",
-                           ".ini", ".cfg", ".env")
-        wanted = sorted(p for p in paths
-                        if (exts and p.endswith(exts))
-                        or p.endswith(config_suffixes))
+        config_suffixes = (".rules", ".json", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".env")
+        wanted = sorted(
+            p for p in paths if (exts and p.endswith(exts)) or p.endswith(config_suffixes)
+        )
         blobs = dict(read_tree(inp.repo_dir, inp.commit_sha, wanted))
         return _verified(misconfig.evaluate(blobs), blobs)
-    except Exception as exc:                       # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("triage misconfig signal failed: %s", exc)
         return SignalResult(
-            signal=misconfig.SIGNAL_ID, version=misconfig.VERSION,
+            signal=misconfig.SIGNAL_ID,
+            version=misconfig.VERSION,
             collected=Measurement.not_collected(
-                f"misconfig signal raised: {type(exc).__name__}: {exc}"))
+                f"misconfig signal raised: {type(exc).__name__}: {exc}"
+            ),
+        )
 ```
 
 In `src/sdlc/triage/registry.py`, add `misconfig` to the import and add:
@@ -2565,6 +2824,7 @@ Create `tests/test_triage_outliers.py`:
 
 ```python
 """FR-902 size and duplication outliers (E-41d)."""
+
 from sdlc.measurement import CollectionState
 from sdlc.toolchain.adapters import PythonToolchain, ToolchainAdapter
 from sdlc.triage.models import FixClass
@@ -2573,6 +2833,7 @@ from sdlc.triage.signals import outliers
 
 class _NoParser(ToolchainAdapter):
     """A language with thresholds but no function parser."""
+
     kind = None
     markers = ()
     source_extensions = (".xx",)
@@ -2596,6 +2857,7 @@ def _rules(result):
 
 # ---- normalization ----------------------------------------------------
 
+
 def test_normalized_lines_drops_blanks_and_whole_line_comments():
     text = "x = 1\n\n# a comment\n// another\n  y = 2\n"
     assert outliers.normalized_lines(text) == [(1, "x = 1"), (5, "y = 2")]
@@ -2607,6 +2869,7 @@ def test_normalized_lines_keeps_the_original_line_numbers():
 
 
 # ---- size rules -------------------------------------------------------
+
 
 def test_oversized_file_fires_above_the_adapter_threshold():
     big = "".join(f"x{i} = {i}\n" for i in range(900))
@@ -2631,8 +2894,7 @@ def test_oversized_function_fires_and_names_the_function():
 
 def test_function_metric_is_not_collected_when_the_language_has_no_parser():
     r = outliers.evaluate({"a.xx": "line\n" * 3}, _NoParser())
-    assert r.metrics[outliers.M_FUNCTION_LOC].state \
-        is CollectionState.NOT_COLLECTED
+    assert r.metrics[outliers.M_FUNCTION_LOC].state is CollectionState.NOT_COLLECTED
     assert "oversized_function" not in _rules(r)
     # The SIGNAL still collected -- it measured file sizes.
     assert r.collected.state is CollectionState.MEASURED
@@ -2640,19 +2902,17 @@ def test_function_metric_is_not_collected_when_the_language_has_no_parser():
 
 def test_no_toolchain_leaves_both_size_metrics_not_collected():
     r = outliers.evaluate({"a.py": "x = 1\n"}, None)
-    assert r.metrics[outliers.M_MAX_FILE_LOC].state \
-        is CollectionState.NOT_COLLECTED
-    assert r.metrics[outliers.M_FUNCTION_LOC].state \
-        is CollectionState.NOT_COLLECTED
+    assert r.metrics[outliers.M_MAX_FILE_LOC].state is CollectionState.NOT_COLLECTED
+    assert r.metrics[outliers.M_FUNCTION_LOC].state is CollectionState.NOT_COLLECTED
     assert r.findings == []
 
 
 # ---- duplication ------------------------------------------------------
 
+
 def test_a_clone_across_two_files_is_reported_once():
     block = "".join(f"a{i} = {i}\n" for i in range(40))
-    r = outliers.evaluate({"one.py": block, "two.py": block},
-                          PythonToolchain())
+    r = outliers.evaluate({"one.py": block, "two.py": block}, PythonToolchain())
     dups = [f for f in r.findings if f.rule == "duplicated_block"]
     # ONE finding, not eleven: a 40-line clone scanned with a 30-line window
     # produces eleven overlapping hits, and clone_groups merges them.
@@ -2669,24 +2929,21 @@ def test_duplication_within_one_file_is_not_a_clone_group():
 
 def test_a_short_repeated_block_is_below_the_window():
     block = "a = 1\nb = 2\n"
-    r = outliers.evaluate({"one.py": block, "two.py": block},
-                          PythonToolchain())
+    r = outliers.evaluate({"one.py": block, "two.py": block}, PythonToolchain())
     assert "duplicated_block" not in _rules(r)
 
 
 def test_indentation_only_differences_still_count_as_a_clone():
     block = "".join(f"a{i} = {i}\n" for i in range(40))
     indented = "".join(f"    a{i} = {i}\n" for i in range(40))
-    r = outliers.evaluate({"one.py": block, "two.py": indented},
-                          PythonToolchain())
+    r = outliers.evaluate({"one.py": block, "two.py": indented}, PythonToolchain())
     assert "duplicated_block" in _rules(r)
 
 
 def test_exceeding_the_file_cap_makes_the_ratio_not_collected():
     blobs = {f"f{i}.py": "x = 1\n" for i in range(outliers.MAX_FILES + 1)}
     r = outliers.evaluate(blobs, PythonToolchain())
-    assert r.metrics[outliers.M_DUP_RATIO].state \
-        is CollectionState.NOT_COLLECTED
+    assert r.metrics[outliers.M_DUP_RATIO].state is CollectionState.NOT_COLLECTED
     assert "duplicated_block" not in _rules(r)
 
 
@@ -2719,6 +2976,7 @@ delta.
 Both size rules are STRUCTURAL. Splitting a file or a function is design
 work, and E-44 must not pick it up as a mechanical PR.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -2762,8 +3020,7 @@ def normalized_lines(text: str) -> list[tuple[int, str]]:
     return out
 
 
-def clone_groups(blobs: Mapping[str, str],
-                 window: int) -> list[list[tuple[str, int]]]:
+def clone_groups(blobs: Mapping[str, str], window: int) -> list[list[tuple[str, int]]]:
     """Groups of identical `window`-line normalized blocks spanning two or
     more FILES, as [(path, first original line number), ...].
 
@@ -2784,7 +3041,7 @@ def clone_groups(blobs: Mapping[str, str],
     for path in sorted(blobs):
         lines = normalized_lines(blobs[path])
         for i in range(len(lines) - window + 1):
-            chunk = "\n".join(text for _, text in lines[i:i + window])
+            chunk = "\n".join(text for _, text in lines[i : i + window])
             key = hashlib.sha256(chunk.encode("utf-8")).hexdigest()
             # (path, normalized index, original line number): the index drives
             # continuation, the line number is what a human is shown.
@@ -2807,16 +3064,28 @@ def clone_groups(blobs: Mapping[str, str],
     return groups
 
 
-def _finding(rule: str, severity: str, detail: str, fix_class: FixClass,
-             path: str = "", line: int | None = None,
-             evidence: str = "") -> TriageFinding:
-    return TriageFinding(signal=SIGNAL_ID, rule=rule, severity=severity,
-                         detail=detail, fix_class=fix_class, path=path,
-                         line=line, evidence=evidence)
+def _finding(
+    rule: str,
+    severity: str,
+    detail: str,
+    fix_class: FixClass,
+    path: str = "",
+    line: int | None = None,
+    evidence: str = "",
+) -> TriageFinding:
+    return TriageFinding(
+        signal=SIGNAL_ID,
+        rule=rule,
+        severity=severity,
+        detail=detail,
+        fix_class=fix_class,
+        path=path,
+        line=line,
+        evidence=evidence,
+    )
 
 
-def evaluate(blobs: Mapping[str, str],
-             toolchain: ToolchainAdapter | None) -> SignalResult:
+def evaluate(blobs: Mapping[str, str], toolchain: ToolchainAdapter | None) -> SignalResult:
     """Size and duplication over source blobs the caller already filtered to
     the adapter's source extensions."""
     findings: list[TriageFinding] = []
@@ -2831,11 +3100,16 @@ def evaluate(blobs: Mapping[str, str],
             loc = len(blobs[path].splitlines())
             max_seen = max(max_seen, loc)
             if toolchain.max_file_loc and loc > toolchain.max_file_loc:
-                findings.append(_finding(
-                    "oversized_file", "medium",
-                    f"{path} is {loc} lines, above the {toolchain.max_file_loc}"
-                    f"-line limit for this stack. Splitting it is design work.",
-                    FixClass.STRUCTURAL, path))
+                findings.append(
+                    _finding(
+                        "oversized_file",
+                        "medium",
+                        f"{path} is {loc} lines, above the {toolchain.max_file_loc}"
+                        f"-line limit for this stack. Splitting it is design work.",
+                        FixClass.STRUCTURAL,
+                        path,
+                    )
+                )
         file_metric = Measurement.measured(float(max_seen))
 
         max_fn = 0
@@ -2848,19 +3122,26 @@ def evaluate(blobs: Mapping[str, str],
             for name, start, end in spans:
                 loc = end - start + 1
                 max_fn = max(max_fn, loc)
-                if toolchain.max_function_loc \
-                        and loc > toolchain.max_function_loc:
-                    findings.append(_finding(
-                        "oversized_function", "medium",
-                        f"{name}() in {path} is {loc} lines, above the "
-                        f"{toolchain.max_function_loc}-line limit. Splitting "
-                        f"it is design work.",
-                        FixClass.STRUCTURAL, path, start))
+                if toolchain.max_function_loc and loc > toolchain.max_function_loc:
+                    findings.append(
+                        _finding(
+                            "oversized_function",
+                            "medium",
+                            f"{name}() in {path} is {loc} lines, above the "
+                            f"{toolchain.max_function_loc}-line limit. Splitting "
+                            f"it is design work.",
+                            FixClass.STRUCTURAL,
+                            path,
+                            start,
+                        )
+                    )
         fn_metric = (
-            Measurement.measured(float(max_fn)) if parsed_any
+            Measurement.measured(float(max_fn))
+            if parsed_any
             else Measurement.not_collected(
-                "this toolchain declares no function parser, so function "
-                "length was not measured"))
+                "this toolchain declares no function parser, so function length was not measured"
+            )
+        )
 
     total_lines = sum(len(t.splitlines()) for t in blobs.values())
     window = toolchain.min_clone_loc if toolchain else 30
@@ -2868,34 +3149,40 @@ def evaluate(blobs: Mapping[str, str],
         dup_metric = Measurement.not_collected(
             f"{len(blobs)} files / {total_lines} lines exceeds the "
             f"{MAX_FILES}/{MAX_LINES} duplication cap; a partial scan is not "
-            f"a scan")
+            f"a scan"
+        )
     else:
         groups = clone_groups(blobs, window)
         duplicated = len(groups) * window
         for group in groups:
             paths = sorted({path for path, _ in group})
             path, line = group[0]
-            findings.append(_finding(
-                "duplicated_block", "medium",
-                f"A {window}-line block is identical across "
-                f"{', '.join(paths)}. Deduplicating requires deciding where "
-                f"the shared code belongs.",
-                FixClass.JUDGEMENT, path, line))
+            findings.append(
+                _finding(
+                    "duplicated_block",
+                    "medium",
+                    f"A {window}-line block is identical across "
+                    f"{', '.join(paths)}. Deduplicating requires deciding where "
+                    f"the shared code belongs.",
+                    FixClass.JUDGEMENT,
+                    path,
+                    line,
+                )
+            )
         # An approximation, and deliberately the understating one: merged
         # groups are counted at one window each even when the clone is longer,
         # and total_lines counts raw lines including blanks. A duplication
         # ratio that reads low on a bad repo costs a nudge; one that reads
         # high on a clean repo costs the report's credibility.
-        dup_metric = Measurement.measured(
-            duplicated / total_lines if total_lines else 0.0)
+        dup_metric = Measurement.measured(duplicated / total_lines if total_lines else 0.0)
 
     return SignalResult(
-        signal=SIGNAL_ID, version=VERSION,
+        signal=SIGNAL_ID,
+        version=VERSION,
         collected=Measurement.measured(float(len(findings))),
         findings=findings,
-        metrics={M_MAX_FILE_LOC: file_metric,
-                 M_FUNCTION_LOC: fn_metric,
-                 M_DUP_RATIO: dup_metric})
+        metrics={M_MAX_FILE_LOC: file_metric, M_FUNCTION_LOC: fn_metric, M_DUP_RATIO: dup_metric},
+    )
 ```
 
 - [ ] **Step 4: Run the pure-logic tests**
@@ -2921,12 +3208,15 @@ async def triage_outliers(inp: TriageSignalInput) -> SignalResult:
         # No evidence quotes: a size or duplication finding cites a file and
         # a line, not a line's text, so _verified would be a no-op.
         return outliers.evaluate(blobs, adapter)
-    except Exception as exc:                       # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("triage outliers signal failed: %s", exc)
         return SignalResult(
-            signal=outliers.SIGNAL_ID, version=outliers.VERSION,
+            signal=outliers.SIGNAL_ID,
+            version=outliers.VERSION,
             collected=Measurement.not_collected(
-                f"outliers signal raised: {type(exc).__name__}: {exc}"))
+                f"outliers signal raised: {type(exc).__name__}: {exc}"
+            ),
+        )
 ```
 
 In `src/sdlc/triage/registry.py`, add `outliers` to the import and add:
@@ -2947,22 +3237,31 @@ Append to `tests/test_triage_registry.py`:
 def test_all_seven_signal_families_are_registered():
     # FR-902 names seven families. E-41 shipped three; E-41a-d added four.
     from sdlc.triage.registry import SIGNALS
-    assert set(SIGNALS) == {"baseline", "secrets", "build_probe",
-                            "dependencies", "scaffold", "misconfig",
-                            "outliers"}
+
+    assert set(SIGNALS) == {
+        "baseline",
+        "secrets",
+        "build_probe",
+        "dependencies",
+        "scaffold",
+        "misconfig",
+        "outliers",
+    }
 
 
 def test_every_registered_activity_is_registered_on_the_worker():
     import sdlc.triage.activities as acts
     from sdlc.triage.registry import SIGNALS
+
     for spec in SIGNALS.values():
         assert hasattr(acts, spec.activity), spec.activity
 
 
 def test_baseline_and_secrets_carry_their_bumped_versions():
     from sdlc.triage.registry import SIGNALS
-    assert SIGNALS["baseline"].version == 2      # dropped M_STRUCTURE (D12)
-    assert SIGNALS["secrets"].version == 2       # django-insecure- exclusion
+
+    assert SIGNALS["baseline"].version == 2  # dropped M_STRUCTURE (D12)
+    assert SIGNALS["secrets"].version == 2  # django-insecure- exclusion
 ```
 
 - [ ] **Step 7: Run the whole triage suite**

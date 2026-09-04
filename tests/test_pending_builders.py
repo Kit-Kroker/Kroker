@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from sdlc.gate import CheckClass, CheckResult
-from sdlc.models import OpenQuestion
 from sdlc.pending import (
     GateContext,
     MergeGatePending,
@@ -10,6 +9,7 @@ from sdlc.pending import (
     clarify_pending,
     gate_pending,
 )
+from sdlc.stages.clarify.models import OpenQuestion
 
 
 def _q(qid, ans=None):

@@ -31,16 +31,6 @@ from pathlib import Path
 
 from ..core.models import HarnessKind
 from ..memory.scrub import scrub
-from ..models import (
-    ContainmentLayer,
-    ContainmentReport,
-    DeferredToolUse,
-    HarnessRunResult,
-    HarnessSession,
-    SessionEvent,
-    ToolDenial,
-    ToolGrant,
-)
 from ..process import kill_process_tree
 from .containment import (
     Action,
@@ -50,6 +40,16 @@ from .containment import (
     digest_tool_input,
     is_declined_reason,
     target_of,
+)
+from .models import (
+    ContainmentLayer,
+    ContainmentReport,
+    DeferredToolUse,
+    HarnessRunResult,
+    HarnessSession,
+    SessionEvent,
+    ToolDenial,
+    ToolGrant,
 )
 
 SUMMARY_MAX = 4000  # keep Temporal payloads small

@@ -35,14 +35,15 @@ import os
 import pytest
 from agents.research.exa_wrapper import get_page_intercepted
 
+
 @pytest.mark.asyncio
 async def test_get_page_intercepted(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_RUNS_ROOT", str(tmp_path))
-    
+
     # Fake Exa response
     class FakeTextResponse:
         text = "Hello World Exa"
-    
+
     class FakeExaResponse:
         results = [FakeTextResponse()]
 
@@ -51,17 +52,17 @@ async def test_get_page_intercepted(tmp_path, monkeypatch):
             return FakeExaResponse()
 
     # We just need to mock the underlying Exa tool or function
-    # Wait, ExaSearch from pydantic_ai_harness wraps Exa API. 
+    # Wait, ExaSearch from pydantic_ai_harness wraps Exa API.
     # For test purposes, we will mock the exa_client.
     client = FakeExaClient()
-    
+
     # We pretend run_id is injected into context or env
     monkeypatch.setenv("SDLC_RUN_ID", "test-run-123")
-    
+
     url = "https://example.com"
     content = await get_page_intercepted(client, url)
     assert "Hello World Exa" in content
-    
+
     # Verify file is written
     url_hash = hashlib.sha256(url.encode()).hexdigest()
     expected_path = tmp_path / "test-run-123" / "research" / "pages" / f"{url_hash}.txt"
@@ -76,7 +77,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'agents.research.exa_w
 
 - [ ] **Step 3: Delete old tools**
 
-Run: 
+Run:
 ```bash
 rm agents/research/tools/web_search.py
 rm agents/research/tools/fetch_page.py
@@ -91,28 +92,31 @@ import os
 from pathlib import Path
 from pydantic_ai_harness.exa import ExaSearch
 
+
 async def get_page_intercepted(exa_client, url: str) -> str:
     """A standalone function or patched method to fetch via Exa and write to disk."""
     # We use Exa's get_contents directly as a helper to mirror what ExaSearch does
     response = exa_client.get_contents([url], text=True)
     if not response.results:
         return ""
-    
+
     content = response.results[0].text
-    
+
     # Intercept and write to SDLC_RUNS_ROOT
     runs_root = os.environ.get("SDLC_RUNS_ROOT", "/tmp/sdlc_runs")
     run_id = os.environ.get("SDLC_RUN_ID", "default-run")
-    
+
     url_hash = hashlib.sha256(url.encode()).hexdigest()
     out_path = Path(runs_root) / run_id / "research" / "pages" / f"{url_hash}.txt"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(content, encoding="utf-8")
-    
+
     return content
+
 
 class WrappedExaSearch(ExaSearch):
     """Subclass ExaSearch to override the get_page tool."""
+
     # The pydantic-ai-harness ExaSearch provides a `get_page` tool. We'll override it here if possible.
     # We will configure it properly in Task 2.
     pass
@@ -148,12 +152,14 @@ git commit -m "feat(research): implement ExaSearch interceptor and remove manual
 from agents.research.agent import build
 from pydantic_ai.settings import ModelSettings
 
+
 def test_build_agent_provider_fake():
     # When provider is fake, capabilities should NOT include CodeMode
     agent = build("test-model", "sys prompt", ModelSettings(), [], "fake")
     # Pydantic AI Agents have _capabilities or similar, we can check if it's empty or doesn't have CodeMode.
     has_code_mode = any(type(cap).__name__ == "CodeMode" for cap in agent._capabilities)
     assert not has_code_mode
+
 
 def test_build_agent_provider_real():
     agent = build("test-model", "sys prompt", ModelSettings(), [], "openai")
@@ -181,10 +187,16 @@ from pydantic_ai_summarization import ContextManagerCapability
 from pydantic_ai_todo import TodoCapability
 from .exa_wrapper import WrappedExaSearch
 
+
 # Inside build():
-def build(model: str, instructions: str, model_settings: ModelSettings,
-          tool_paths: list[str], provider: str) -> Agent:
-    
+def build(
+    model: str,
+    instructions: str,
+    model_settings: ModelSettings,
+    tool_paths: list[str],
+    provider: str,
+) -> Agent:
+
     # ... setup agent ...
     capabilities = []
     if provider != "fake":
@@ -193,9 +205,9 @@ def build(model: str, instructions: str, model_settings: ModelSettings,
             TodoCapability(),
             ConsoleCapability(),
             ContextManagerCapability(max_tokens=180_000),
-            WrappedExaSearch(include_deep_search=True)
+            WrappedExaSearch(include_deep_search=True),
         ]
-        
+
     agent = Agent(
         model,
         name="research_agent",
@@ -203,7 +215,7 @@ def build(model: str, instructions: str, model_settings: ModelSettings,
         output_type=ResearchBrief,
         model_settings=model_settings,
         system_prompt=instructions,
-        capabilities=capabilities
+        capabilities=capabilities,
     )
     for path in tool_paths:
         # Avoid importing deleted tools
@@ -242,11 +254,12 @@ git commit -m "feat(research): inject ExaSearch and Harness capabilities selecti
 # tests/test_research_instructions.py
 from pathlib import Path
 
+
 def test_instructions_updated():
     instructions = Path("agents/research/instructions.md").read_text()
     assert "CodeMode" in instructions or "run_code" in instructions
     assert "ExaSearch" in instructions or "deep_search" in instructions
-    assert "web_search" not in instructions # Should be replaced by exa search reference
+    assert "web_search" not in instructions  # Should be replaced by exa search reference
 ```
 
 - [ ] **Step 2: Run test to verify it fails**

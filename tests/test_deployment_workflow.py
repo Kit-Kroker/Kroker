@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import pathlib
 
-from sdlc.models import SmokeCheckResult, SmokeState
+from sdlc.stages.deploy.models import (
+    SmokeCheckResult,
+    SmokeState,
+)
 from sdlc.workflows.deployment import DeploymentInput, needs_rollback
 
 

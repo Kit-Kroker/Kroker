@@ -22,7 +22,6 @@ import json
 import sys
 from pathlib import Path
 
-from ..models import ToolGrant
 from .containment import (
     ESCALATION_UNAVAILABLE,
     Action,
@@ -32,6 +31,7 @@ from .containment import (
     load_policy,
     match_grant,
 )
+from .models import ToolGrant
 
 _EVENT = "PreToolUse"
 

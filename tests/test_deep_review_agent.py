@@ -12,9 +12,7 @@ from sdlc.agents.loader import (
 from sdlc.core.models import (
     RoleConfig,
 )
-from sdlc.models import (
-    DeepReviewReport,
-)
+from sdlc.stages.review.models import DeepReviewReport
 from tests.test_agents_registry import _complete_registry
 
 

@@ -31,7 +31,7 @@ def test_run_ceiling_covers_the_default_fan_out_width():
 from sdlc.core.models import (
     RoleUsage,
 )
-from sdlc.models import (
+from sdlc.stages.research.models import (
     ResearchBrief,
     ResearchPlan,
     SubQuestion,

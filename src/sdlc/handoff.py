@@ -13,7 +13,11 @@ from pydantic import BaseModel, Field
 
 from .grounding import Profile, verify_quote
 from .measurement import Measurement
-from .models import HandoffClaim, IntegrityFlag, PlanDeviation
+from .stages.code.models import (
+    HandoffClaim,
+    IntegrityFlag,
+)
+from .stages.plan.models import PlanDeviation
 
 # A path-ish token: at least one separator and a dotted final segment.
 # Deliberately narrow -- prose like "the API" must not read as a path.

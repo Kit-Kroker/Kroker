@@ -22,7 +22,7 @@ GOOD = json.dumps(
 
 
 def test_output_type_for_clarify():
-    from sdlc.models import ClarifiedRequirements
+    from sdlc.stages.clarify.models import ClarifiedRequirements
 
     assert output_type_for("clarify", AGENTS) is ClarifiedRequirements
 

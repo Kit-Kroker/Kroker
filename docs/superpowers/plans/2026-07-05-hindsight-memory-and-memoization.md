@@ -33,7 +33,11 @@
 ```python
 # tests/test_memory_models.py
 from sdlc.models import (
-    MemoryConfig, MemoryKind, PipelineConfig, RecallSnapshot, RetainItem,
+    MemoryConfig,
+    MemoryKind,
+    PipelineConfig,
+    RecallSnapshot,
+    RetainItem,
 )
 
 
@@ -44,8 +48,9 @@ def test_recall_snapshot_defaults_not_degraded():
 
 
 def test_retain_item_requires_kind_bank_text():
-    item = RetainItem(kind=MemoryKind.GOTCHA, bank="org", text="did a thing",
-                      metadata={"run_id": "r1"})
+    item = RetainItem(
+        kind=MemoryKind.GOTCHA, bank="org", text="did a thing", metadata={"run_id": "r1"}
+    )
     assert item.kind is MemoryKind.GOTCHA
     assert item.metadata["run_id"] == "r1"
 
@@ -84,6 +89,7 @@ class RecallSnapshot(BaseModel):
     never a live side-channel. `degraded=True` means the backend was
     unreachable; the pipeline proceeds with an empty snapshot rather than
     blocking on memory."""
+
     query_hash: str
     bank: str
     watermark: str
@@ -102,6 +108,7 @@ class MemoryConfig(BaseModel):
     """FR-400. `watermark=None` means "capture fresh at run start"; setting
     it pins a run to a prior freeze point (ADR-5 explicit "refresh
     memory")."""
+
     enabled: bool = False
     backend: Literal["fake", "hindsight"] = "fake"
     base_url: str = "http://localhost:8088"
@@ -177,6 +184,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'sdlc.memory'`
 # src/sdlc/memory/protocol.py
 """Memory backend abstraction. All access happens in activities
 (memory/activities.py) — workflow code never imports this directly."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -186,8 +194,9 @@ from ..models import RecallSnapshot, RetainItem
 
 class Memory(ABC):
     @abstractmethod
-    async def recall(self, bank: str, query: str, filters: dict[str, str],
-                     watermark: str | None) -> RecallSnapshot: ...
+    async def recall(
+        self, bank: str, query: str, filters: dict[str, str], watermark: str | None
+    ) -> RecallSnapshot: ...
 
     @abstractmethod
     async def retain(self, item: RetainItem) -> None: ...
@@ -264,6 +273,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'sdlc.memory.scrub'`
 security boundary by itself — retained text still lands in an
 operator-controlled Hindsight instance — but keeps obvious secrets out of
 a long-lived memory store by default."""
+
 from __future__ import annotations
 
 import re
@@ -271,10 +281,8 @@ import re
 _PATTERNS = [
     (re.compile(r"sk-[A-Za-z0-9]{20,}"), "[REDACTED_API_KEY]"),
     (re.compile(r"AKIA[0-9A-Z]{16}"), "[REDACTED_AWS_KEY]"),
-    (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
-     "[REDACTED_EMAIL]"),
-    (re.compile(r"(?i)(password|token|secret)\s*[:=]\s*\S+"),
-     r"\1=[REDACTED]"),
+    (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "[REDACTED_EMAIL]"),
+    (re.compile(r"(?i)(password|token|secret)\s*[:=]\s*\S+"), r"\1=[REDACTED]"),
 ]
 
 
@@ -329,8 +337,9 @@ async def test_recall_empty_bank_returns_no_items():
 @pytest.mark.asyncio
 async def test_retain_then_recall_returns_it():
     mem = FakeMemory()
-    await mem.retain(RetainItem(kind=MemoryKind.GOTCHA, bank="project:x",
-                                text="fixed a flaky test", metadata={}))
+    await mem.retain(
+        RetainItem(kind=MemoryKind.GOTCHA, bank="project:x", text="fixed a flaky test", metadata={})
+    )
     snap = await mem.recall("project:x", "query", {}, None)
     assert snap.items == ["fixed a flaky test"]
 
@@ -338,10 +347,22 @@ async def test_retain_then_recall_returns_it():
 @pytest.mark.asyncio
 async def test_recall_filters_by_metadata():
     mem = FakeMemory()
-    await mem.retain(RetainItem(kind=MemoryKind.STAGE_SUMMARY, bank="b",
-                                text="clarify done", metadata={"stage": "clarify"}))
-    await mem.retain(RetainItem(kind=MemoryKind.STAGE_SUMMARY, bank="b",
-                                text="architect done", metadata={"stage": "architect"}))
+    await mem.retain(
+        RetainItem(
+            kind=MemoryKind.STAGE_SUMMARY,
+            bank="b",
+            text="clarify done",
+            metadata={"stage": "clarify"},
+        )
+    )
+    await mem.retain(
+        RetainItem(
+            kind=MemoryKind.STAGE_SUMMARY,
+            bank="b",
+            text="architect done",
+            metadata={"stage": "architect"},
+        )
+    )
     snap = await mem.recall("b", "q", {"stage": "architect"}, None)
     assert snap.items == ["architect done"]
 
@@ -349,11 +370,9 @@ async def test_recall_filters_by_metadata():
 @pytest.mark.asyncio
 async def test_watermark_freezes_recall_against_later_retains():
     mem = FakeMemory()
-    await mem.retain(RetainItem(kind=MemoryKind.GOTCHA, bank="b", text="first",
-                                metadata={}))
+    await mem.retain(RetainItem(kind=MemoryKind.GOTCHA, bank="b", text="first", metadata={}))
     watermark = await mem.current_watermark("b")
-    await mem.retain(RetainItem(kind=MemoryKind.GOTCHA, bank="b", text="second",
-                                metadata={}))
+    await mem.retain(RetainItem(kind=MemoryKind.GOTCHA, bank="b", text="second", metadata={}))
     frozen = await mem.recall("b", "q", {}, watermark)
     live = await mem.recall("b", "q", {}, None)
     assert frozen.items == ["first"]
@@ -379,6 +398,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'sdlc.memory.fake'`
 # src/sdlc/memory/fake.py
 """In-memory Memory implementation — unit-test/CI double, no Hindsight
 container required."""
+
 from __future__ import annotations
 
 import hashlib
@@ -401,31 +421,33 @@ class FakeMemory(Memory):
     """The per-bank entry count IS the watermark: recalling against an
     earlier watermark reproduces an earlier recall even after later
     retains land — the freeze semantics ADR-5 relies on."""
-    _entries: dict[str, list[_Entry]] = field(
-        default_factory=lambda: defaultdict(list))
+
+    _entries: dict[str, list[_Entry]] = field(default_factory=lambda: defaultdict(list))
 
     async def current_watermark(self, bank: str) -> str:
         return str(len(self._entries[bank]))
 
     async def retain(self, item: RetainItem) -> None:
         bank_entries = self._entries[item.bank]
-        bank_entries.append(_Entry(text=item.text, metadata=item.metadata,
-                                   version=len(bank_entries) + 1))
+        bank_entries.append(
+            _Entry(text=item.text, metadata=item.metadata, version=len(bank_entries) + 1)
+        )
 
-    async def recall(self, bank: str, query: str, filters: dict[str, str],
-                     watermark: str | None) -> RecallSnapshot:
-        cutoff = (int(watermark) if watermark is not None
-                 else len(self._entries[bank]))
+    async def recall(
+        self, bank: str, query: str, filters: dict[str, str], watermark: str | None
+    ) -> RecallSnapshot:
+        cutoff = int(watermark) if watermark is not None else len(self._entries[bank])
         matches = [
-            e.text for e in self._entries[bank]
-            if e.version <= cutoff
-            and all(e.metadata.get(k) == v for k, v in filters.items())
+            e.text
+            for e in self._entries[bank]
+            if e.version <= cutoff and all(e.metadata.get(k) == v for k, v in filters.items())
         ]
         query_hash = hashlib.sha256(
             f"{bank}|{query}|{sorted(filters.items())}|{cutoff}".encode()
         ).hexdigest()
-        return RecallSnapshot(query_hash=query_hash, bank=bank,
-                              watermark=str(cutoff), items=matches[-10:])
+        return RecallSnapshot(
+            query_hash=query_hash, bank=bank, watermark=str(cutoff), items=matches[-10:]
+        )
 
     async def reflect(self, bank: str) -> None:
         return None
@@ -462,15 +484,18 @@ git commit -m "feat(memory): add FakeMemory in-process backend"
 import pytest
 
 from sdlc.memory.activities import (
-    RecallInput, RetainInput, WatermarkInput, capture_watermark,
-    recall_snapshot, retain,
+    RecallInput,
+    RetainInput,
+    WatermarkInput,
+    capture_watermark,
+    recall_snapshot,
+    retain,
 )
 from sdlc.models import MemoryKind, RetainItem
 
 
 def test_recall_snapshot_is_a_temporal_activity():
-    assert getattr(recall_snapshot, "__temporal_activity_definition",
-                  None) is not None
+    assert getattr(recall_snapshot, "__temporal_activity_definition", None) is not None
 
 
 def test_retain_is_a_temporal_activity():
@@ -479,25 +504,36 @@ def test_retain_is_a_temporal_activity():
 
 @pytest.mark.asyncio
 async def test_retain_then_recall_round_trips_through_fake_backend():
-    await retain(RetainInput(
-        item=RetainItem(kind=MemoryKind.GOTCHA, bank="project:x",
-                        text="flaky test needed a retry", metadata={}),
-        backend="fake"))
-    snap = await recall_snapshot(RecallInput(bank="project:x", query="q",
-                                             backend="fake"))
+    await retain(
+        RetainInput(
+            item=RetainItem(
+                kind=MemoryKind.GOTCHA,
+                bank="project:x",
+                text="flaky test needed a retry",
+                metadata={},
+            ),
+            backend="fake",
+        )
+    )
+    snap = await recall_snapshot(RecallInput(bank="project:x", query="q", backend="fake"))
     assert snap.items == ["flaky test needed a retry"]
     assert snap.degraded is False
 
 
 @pytest.mark.asyncio
 async def test_retain_scrubs_secrets_before_storing():
-    await retain(RetainInput(
-        item=RetainItem(kind=MemoryKind.GOTCHA, bank="project:scrub-test",
-                        text="used sk-abcdefghijklmnopqrstuvwx to auth",
-                        metadata={}),
-        backend="fake"))
-    snap = await recall_snapshot(RecallInput(bank="project:scrub-test",
-                                             query="q", backend="fake"))
+    await retain(
+        RetainInput(
+            item=RetainItem(
+                kind=MemoryKind.GOTCHA,
+                bank="project:scrub-test",
+                text="used sk-abcdefghijklmnopqrstuvwx to auth",
+                metadata={},
+            ),
+            backend="fake",
+        )
+    )
+    snap = await recall_snapshot(RecallInput(bank="project:scrub-test", query="q", backend="fake"))
     assert "sk-abcdefghijklmnopqrstuvwx" not in snap.items[0]
 
 
@@ -517,13 +553,14 @@ async def test_recall_snapshot_degrades_on_backend_error(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_capture_watermark_reflects_retains():
-    before = await capture_watermark(WatermarkInput(bank="project:wm",
-                                                    backend="fake"))
-    await retain(RetainInput(
-        item=RetainItem(kind=MemoryKind.GOTCHA, bank="project:wm",
-                        text="x", metadata={}), backend="fake"))
-    after = await capture_watermark(WatermarkInput(bank="project:wm",
-                                                   backend="fake"))
+    before = await capture_watermark(WatermarkInput(bank="project:wm", backend="fake"))
+    await retain(
+        RetainInput(
+            item=RetainItem(kind=MemoryKind.GOTCHA, bank="project:wm", text="x", metadata={}),
+            backend="fake",
+        )
+    )
+    after = await capture_watermark(WatermarkInput(bank="project:wm", backend="fake"))
     assert int(after) == int(before) + 1
 ```
 
@@ -539,6 +576,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'sdlc.memory.activitie
 """Temporal activities wrapping the Memory backend. All memory I/O funnels
 through here — workflow code never touches a backend directly
 (ARCHITECTURE.md §2, 'memory is I/O')."""
+
 from __future__ import annotations
 
 import hashlib
@@ -560,6 +598,7 @@ _fake_singleton = FakeMemory()
 def _backend(base_url: str, backend: str) -> Memory:
     if backend == "hindsight":
         from .hindsight_client import HindsightMemory
+
         return HindsightMemory(base_url=base_url)
     return _fake_singleton
 
@@ -580,16 +619,19 @@ async def recall_snapshot(inp: RecallInput) -> RecallSnapshot:
     (logged) rather than blocking the pipeline on memory."""
     try:
         memory = _backend(inp.base_url, inp.backend)
-        return await memory.recall(inp.bank, inp.query, inp.filters,
-                                   inp.watermark)
+        return await memory.recall(inp.bank, inp.query, inp.filters, inp.watermark)
     except Exception:
         logger.warning("recall degraded to empty snapshot", exc_info=True)
         query_hash = hashlib.sha256(
             f"{inp.bank}|{inp.query}|{sorted(inp.filters.items())}".encode()
         ).hexdigest()
-        return RecallSnapshot(query_hash=query_hash, bank=inp.bank,
-                              watermark=inp.watermark or "unknown",
-                              items=[], degraded=True)
+        return RecallSnapshot(
+            query_hash=query_hash,
+            bank=inp.bank,
+            watermark=inp.watermark or "unknown",
+            items=[],
+            degraded=True,
+        )
 
 
 @dataclass
@@ -664,6 +706,7 @@ Append to `tests/test_worker_registration.py`:
 ```python
 def test_worker_module_imports_memory_activities():
     from sdlc import worker
+
     src = __import__("inspect").getsource(worker)
     for name in ("recall_snapshot", "retain", "capture_watermark", "reflect"):
         assert name in src, f"{name} missing from worker registration"
@@ -680,7 +723,10 @@ In `src/sdlc/worker.py`, add an import and extend the activities list:
 
 ```python
 from .memory.activities import (
-    capture_watermark, recall_snapshot, reflect, retain,
+    capture_watermark,
+    recall_snapshot,
+    reflect,
+    retain,
 )
 ```
 
@@ -689,14 +735,28 @@ from .memory.activities import (
 In the `Worker(...)` call, extend the `activities=[...]` list:
 
 ```python
-        activities=[
-            create_worktree, setup_integration_branch, merge_into_integration,
-            run_coding_task, run_test_suite, open_pull_request, deploy,
-            evaluate_gate, get_task_diff, record_benchmark, judge_artifact,
-            load_case_assets, finalize_benchmark_report,
-            recall_snapshot, retain, capture_watermark, reflect,
-            *agent_activities,
-        ],
+activities = (
+    [
+        create_worktree,
+        setup_integration_branch,
+        merge_into_integration,
+        run_coding_task,
+        run_test_suite,
+        open_pull_request,
+        deploy,
+        evaluate_gate,
+        get_task_diff,
+        record_benchmark,
+        judge_artifact,
+        load_case_assets,
+        finalize_benchmark_report,
+        recall_snapshot,
+        retain,
+        capture_watermark,
+        reflect,
+        *agent_activities,
+    ],
+)
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -731,6 +791,7 @@ This test mirrors `tests/test_factory_purity.py`'s AST-based structural check �
 # tests/test_memory_purity.py
 """Structural purity check for memory wiring — same approach as
 test_factory_purity.py's benchmark guard, applied to recall/retain."""
+
 from __future__ import annotations
 
 import ast
@@ -738,7 +799,10 @@ import ast
 import pytest
 
 from test_factory_purity import (
-    FEATURE_PY, _activity_calls_in_method, _load_class, _methods,
+    FEATURE_PY,
+    _activity_calls_in_method,
+    _load_class,
+    _methods,
 )
 
 _MEMORY_ACTIVITIES = {"recall_snapshot", "retain"}
@@ -759,8 +823,11 @@ def _is_memory_enabled_guard(stmt: ast.stmt) -> bool:
     if not (isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not)):
         return False
     src = ast.unparse(test.operand)
-    return src in ("cfg.memory.enabled",) and len(stmt.body) == 1 \
+    return (
+        src in ("cfg.memory.enabled",)
+        and len(stmt.body) == 1
         and isinstance(stmt.body[0], ast.Return)
+    )
 
 
 def test_recall_helper_is_guarded(feature_class):
@@ -789,7 +856,8 @@ def test_memory_activities_only_called_through_gated_helpers(feature_class):
         calls = _activity_calls_in_method(fn) & _MEMORY_ACTIVITIES
         assert not calls, (
             f"method {name!r} calls memory activity/activities {calls} "
-            f"directly — must go through _recall/_retain")
+            f"directly — must go through _recall/_retain"
+        )
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -802,10 +870,14 @@ Expected: FAIL — `_recall`/`_retain` not found in `FeatureWorkflow`.
 In `src/sdlc/workflows/feature.py`, extend the `imports_passed_through()` block:
 
 ```python
-    from ..memory.activities import (
-        RecallInput, RetainInput, WatermarkInput, capture_watermark,
-        recall_snapshot, retain,
-    )
+from ..memory.activities import (
+    RecallInput,
+    RetainInput,
+    WatermarkInput,
+    capture_watermark,
+    recall_snapshot,
+    retain,
+)
 ```
 
 Extend the existing `from ..models import (...)` block to also import `MemoryKind` and `RecallSnapshot` (both alphabetically among the existing names).
@@ -813,8 +885,9 @@ Extend the existing `from ..models import (...)` block to also import `MemoryKin
 Add a `MEM_ACT` config near `RECORD_ACT`:
 
 ```python
-MEM_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
-              retry_policy=RetryPolicy(maximum_attempts=5))
+MEM_ACT = dict(
+    start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=5)
+)
 ```
 
 In `FeatureWorkflow.__init__`, add:
@@ -826,47 +899,62 @@ In `FeatureWorkflow.__init__`, add:
 Add two new methods, placed after `_judge` (before the signals/queries section):
 
 ```python
-    # ------------------------------ memory -------------------------------
+# ------------------------------ memory -------------------------------
 
-    async def _recall(self, cfg: PipelineConfig, bank: str, query: str,
-                      filters: dict[str, str]) -> RecallSnapshot:
-        if not cfg.memory.enabled:
-            return RecallSnapshot(query_hash="", bank=bank,
-                                  watermark="unknown", items=[])
-        return await workflow.execute_activity(
-            recall_snapshot,
-            RecallInput(bank=bank, query=query, filters=filters,
-                       watermark=self._memory_watermark,
-                       backend=cfg.memory.backend, base_url=cfg.memory.base_url),
-            **MEM_ACT)
 
-    async def _retain(self, cfg: PipelineConfig, kind: MemoryKind, bank: str,
-                      text: str, metadata: dict[str, str]) -> None:
-        if not cfg.memory.enabled:
-            return
-        try:
-            await workflow.execute_activity(
-                retain,
-                RetainInput(item=RetainItem(kind=kind, bank=bank, text=text,
-                                            metadata=metadata),
-                           backend=cfg.memory.backend,
-                           base_url=cfg.memory.base_url),
-                **MEM_ACT)
-        except Exception:
-            pass
+async def _recall(
+    self, cfg: PipelineConfig, bank: str, query: str, filters: dict[str, str]
+) -> RecallSnapshot:
+    if not cfg.memory.enabled:
+        return RecallSnapshot(query_hash="", bank=bank, watermark="unknown", items=[])
+    return await workflow.execute_activity(
+        recall_snapshot,
+        RecallInput(
+            bank=bank,
+            query=query,
+            filters=filters,
+            watermark=self._memory_watermark,
+            backend=cfg.memory.backend,
+            base_url=cfg.memory.base_url,
+        ),
+        **MEM_ACT,
+    )
+
+
+async def _retain(
+    self, cfg: PipelineConfig, kind: MemoryKind, bank: str, text: str, metadata: dict[str, str]
+) -> None:
+    if not cfg.memory.enabled:
+        return
+    try:
+        await workflow.execute_activity(
+            retain,
+            RetainInput(
+                item=RetainItem(kind=kind, bank=bank, text=text, metadata=metadata),
+                backend=cfg.memory.backend,
+                base_url=cfg.memory.base_url,
+            ),
+            **MEM_ACT,
+        )
+    except Exception:
+        pass
 ```
 
 At the top of `run()`, right after `cfg = cfg or PipelineConfig()`:
 
 ```python
-        if cfg.memory.enabled:
-            self._memory_watermark = cfg.memory.watermark or (
-                await workflow.execute_activity(
-                    capture_watermark,
-                    WatermarkInput(bank=cfg.memory.project_bank,
-                                  backend=cfg.memory.backend,
-                                  base_url=cfg.memory.base_url),
-                    **MEM_ACT))
+if cfg.memory.enabled:
+    self._memory_watermark = cfg.memory.watermark or (
+        await workflow.execute_activity(
+            capture_watermark,
+            WatermarkInput(
+                bank=cfg.memory.project_bank,
+                backend=cfg.memory.backend,
+                base_url=cfg.memory.base_url,
+            ),
+            **MEM_ACT,
+        )
+    )
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -902,6 +990,7 @@ fix-loop retains a gotcha on failure. AST-based like test_memory_purity.py
 — a full time-skipping run would require faking the TemporalAgent
 activity surface (see test_factory_purity.py's docstring for why that's
 out of scope here)."""
+
 from __future__ import annotations
 
 import ast
@@ -920,11 +1009,13 @@ def feature_class():
 
 def _calls_self_method(fn: ast.AST, method: str) -> bool:
     for node in ast.walk(fn):
-        if (isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr == method
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "self"):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == method
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "self"
+        ):
             return True
     return False
 
@@ -933,7 +1024,8 @@ def test_run_calls_recall_at_least_three_times_source_count(feature_class):
     methods = _methods(feature_class)
     src = ast.unparse(methods["run"])
     assert src.count("self._recall(") >= 3, (
-        "expected recall before clarify/architect/plan at minimum")
+        "expected recall before clarify/architect/plan at minimum"
+    )
 
 
 def test_run_calls_retain_for_stage_summaries(feature_class):
@@ -963,47 +1055,50 @@ Expected: FAIL — `run`, `_gate`, `_dev_task` don't call `self._recall`/`self._
 In `_gate`, retain gate feedback on every path. Replace the method body:
 
 ```python
-    async def _gate(self, name: str, cfg: PipelineConfig,
-                    auto_decision: GateDecision | None = None) -> GateDecision:
-        """Durable HITL gate with policy-based auto-approval."""
-        policy = cfg.gates.get(name, GatePolicy.HARD)
+async def _gate(
+    self, name: str, cfg: PipelineConfig, auto_decision: GateDecision | None = None
+) -> GateDecision:
+    """Durable HITL gate with policy-based auto-approval."""
+    policy = cfg.gates.get(name, GatePolicy.HARD)
 
-        if policy == GatePolicy.OFF:
-            decision = GateDecision(gate=name, outcome=GateOutcome.APPROVE,
-                                    decided_by="policy")
-        elif policy == GatePolicy.SOFT and auto_decision and auto_decision.approved:
-            decision = auto_decision
-        else:
-            self._status = f"awaiting:{name}"
-            try:
-                await workflow.wait_condition(
-                    lambda: name in self._gate_decisions,
-                    timeout=timedelta(hours=cfg.gate_timeout_hours),
-                )
-                decision = self._gate_decisions[name]
-            except TimeoutError:
-                decision = GateDecision(gate=name, outcome=GateOutcome.REJECT,
-                                        decided_by="timeout")
-            finally:
-                self._status = "running"
+    if policy == GatePolicy.OFF:
+        decision = GateDecision(gate=name, outcome=GateOutcome.APPROVE, decided_by="policy")
+    elif policy == GatePolicy.SOFT and auto_decision and auto_decision.approved:
+        decision = auto_decision
+    else:
+        self._status = f"awaiting:{name}"
+        try:
+            await workflow.wait_condition(
+                lambda: name in self._gate_decisions,
+                timeout=timedelta(hours=cfg.gate_timeout_hours),
+            )
+            decision = self._gate_decisions[name]
+        except TimeoutError:
+            decision = GateDecision(gate=name, outcome=GateOutcome.REJECT, decided_by="timeout")
+        finally:
+            self._status = "running"
 
-        await self._retain(
-            cfg, MemoryKind.GATE_FEEDBACK, cfg.memory.project_bank,
-            text=f"gate {name}: {decision.outcome.value}"
-                f"{' — ' + decision.comments if decision.comments else ''}",
-            metadata={"gate": name, "run_id": workflow.info().workflow_id})
-        return decision
+    await self._retain(
+        cfg,
+        MemoryKind.GATE_FEEDBACK,
+        cfg.memory.project_bank,
+        text=f"gate {name}: {decision.outcome.value}"
+        f"{' — ' + decision.comments if decision.comments else ''}",
+        metadata={"gate": name, "run_id": workflow.info().workflow_id},
+    )
+    return decision
 ```
 
 In `_dev_task`, retain a gotcha when QA fails (right after computing `issues`, before the resume/fresh-session branch). Insert after the `issues = "\n- ".join(...)` line:
 
 ```python
-            await self._retain(
-                cfg, MemoryKind.GOTCHA, cfg.memory.project_bank,
-                text=f"task {task.id} ({task.title}) attempt {attempt} failed: "
-                    f"{issues}",
-                metadata={"task_id": task.id,
-                         "run_id": workflow.info().workflow_id})
+await self._retain(
+    cfg,
+    MemoryKind.GOTCHA,
+    cfg.memory.project_bank,
+    text=f"task {task.id} ({task.title}) attempt {attempt} failed: {issues}",
+    metadata={"task_id": task.id, "run_id": workflow.info().workflow_id},
+)
 ```
 
 In `run()`, before the clarify stage call, recall and prepend to the prompt; after, retain a stage summary. Replace:
@@ -1015,50 +1110,59 @@ In `run()`, before the clarify stage call, recall and prepend to the prompt; aft
 with:
 
 ```python
-        snapshot = await self._recall(
-            cfg, cfg.memory.project_bank, query=f"clarify:{idea.title}",
-            filters={"stage": "clarify"})
-        reqs = (await t_clarify.run(
-            idea.model_dump_json()
-            + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
-               if snapshot.items else ""))).output
+snapshot = await self._recall(
+    cfg, cfg.memory.project_bank, query=f"clarify:{idea.title}", filters={"stage": "clarify"}
+)
+reqs = (
+    await t_clarify.run(
+        idea.model_dump_json()
+        + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items) if snapshot.items else "")
+    )
+).output
 ```
 
 and after the clarify benchmark `_record` call, add:
 
 ```python
-        await self._retain(
-            cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
-            text=f"clarify: {reqs.summary}",
-            metadata={"stage": "clarify", "run_id": workflow.info().workflow_id})
+await self._retain(
+    cfg,
+    MemoryKind.STAGE_SUMMARY,
+    cfg.memory.project_bank,
+    text=f"clarify: {reqs.summary}",
+    metadata={"stage": "clarify", "run_id": workflow.info().workflow_id},
+)
 ```
 
 Repeat the same recall-before/retain-after shape for architect and plan. Replace:
 
 ```python
-        arch = (await t_architect.run(
-            f"mode={idea.mode.value}\n{reqs.model_dump_json()}")).output
+arch = (await t_architect.run(f"mode={idea.mode.value}\n{reqs.model_dump_json()}")).output
 ```
 
 with:
 
 ```python
-        snapshot = await self._recall(
-            cfg, cfg.memory.project_bank, query=f"architect:{idea.title}",
-            filters={"stage": "architect"})
-        arch = (await t_architect.run(
-            f"mode={idea.mode.value}\n{reqs.model_dump_json()}"
-            + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
-               if snapshot.items else ""))).output
+snapshot = await self._recall(
+    cfg, cfg.memory.project_bank, query=f"architect:{idea.title}", filters={"stage": "architect"}
+)
+arch = (
+    await t_architect.run(
+        f"mode={idea.mode.value}\n{reqs.model_dump_json()}"
+        + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items) if snapshot.items else "")
+    )
+).output
 ```
 
 and after its `_record` call:
 
 ```python
-        await self._retain(
-            cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
-            text=f"architect: {arch.overview}",
-            metadata={"stage": "architect", "run_id": workflow.info().workflow_id})
+await self._retain(
+    cfg,
+    MemoryKind.STAGE_SUMMARY,
+    cfg.memory.project_bank,
+    text=f"architect: {arch.overview}",
+    metadata={"stage": "architect", "run_id": workflow.info().workflow_id},
+)
 ```
 
 Replace:
@@ -1070,22 +1174,27 @@ Replace:
 with:
 
 ```python
-        snapshot = await self._recall(
-            cfg, cfg.memory.project_bank, query=f"plan:{idea.title}",
-            filters={"stage": "plan"})
-        plan = (await t_planner.run(
-            arch.model_dump_json()
-            + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
-               if snapshot.items else ""))).output
+snapshot = await self._recall(
+    cfg, cfg.memory.project_bank, query=f"plan:{idea.title}", filters={"stage": "plan"}
+)
+plan = (
+    await t_planner.run(
+        arch.model_dump_json()
+        + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items) if snapshot.items else "")
+    )
+).output
 ```
 
 and after its `_record` call:
 
 ```python
-        await self._retain(
-            cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
-            text=f"plan: {len(plan.tasks)} tasks",
-            metadata={"stage": "plan", "run_id": workflow.info().workflow_id})
+await self._retain(
+    cfg,
+    MemoryKind.STAGE_SUMMARY,
+    cfg.memory.project_bank,
+    text=f"plan: {len(plan.tasks)} tasks",
+    metadata={"stage": "plan", "run_id": workflow.info().workflow_id},
+)
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1184,6 +1293,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'sdlc.memoization'`
 """Content-addressed activity cache — the ADR-5 memoization module.
 Local filesystem, hash-named files (no new infra): same content in, same
 content out, regardless of which run asked."""
+
 from __future__ import annotations
 
 import hashlib
@@ -1197,11 +1307,11 @@ def _cache_root() -> Path:
     return Path(os.environ.get("SDLC_MEMOIZATION_CACHE_ROOT", default))
 
 
-def content_key(stage: str, input_json: str, prompt_sha: str, model_id: str,
-                upstream_recall_ref: str) -> str:
+def content_key(
+    stage: str, input_json: str, prompt_sha: str, model_id: str, upstream_recall_ref: str
+) -> str:
     """Pure function of its arguments — safe to call from workflow code."""
-    payload = "|".join([stage, input_json, prompt_sha, model_id,
-                        upstream_recall_ref])
+    payload = "|".join([stage, input_json, prompt_sha, model_id, upstream_recall_ref])
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
@@ -1222,6 +1332,7 @@ def put(key: str, payload_json: str) -> None:
 # src/sdlc/memoization/activities.py
 """Temporal activities wrapping the local cache — filesystem I/O must
 happen in an activity, never workflow code."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -1378,33 +1489,47 @@ DEVOPS_PROMPT = (
 )
 
 clarify_agent = Agent(
-    MODEL, name="clarify_agent", output_type=ClarifiedRequirements,
+    MODEL,
+    name="clarify_agent",
+    output_type=ClarifiedRequirements,
     system_prompt=CLARIFY_PROMPT,
 )
 
 architect_agent = Agent(
-    MODEL, name="architect_agent", output_type=ArchitectureSpec,
+    MODEL,
+    name="architect_agent",
+    output_type=ArchitectureSpec,
     system_prompt=ARCHITECT_PROMPT,
 )
 
 planner_agent = Agent(
-    MODEL, name="planner_agent", output_type=ImplementationPlan,
-    model_settings=PLAN_MODEL_SETTINGS, system_prompt=PLAN_PROMPT,
+    MODEL,
+    name="planner_agent",
+    output_type=ImplementationPlan,
+    model_settings=PLAN_MODEL_SETTINGS,
+    system_prompt=PLAN_PROMPT,
 )
 
 qa_analyst_agent = Agent(
-    MODEL, name="qa_analyst_agent", output_type=QAReport,
+    MODEL,
+    name="qa_analyst_agent",
+    output_type=QAReport,
     system_prompt=QA_PROMPT,
 )
 
 merge_verdict_agent = Agent(
-    MODEL, name="merge_verdict_agent", output_type=MergeVerdict,
+    MODEL,
+    name="merge_verdict_agent",
+    output_type=MergeVerdict,
     system_prompt=MERGE_VERDICT_PROMPT,
 )
 
 devops_agent = Agent(
-    MODEL, name="devops_agent", output_type=ImplementationPlan,
-    model_settings=PLAN_MODEL_SETTINGS, system_prompt=DEVOPS_PROMPT,
+    MODEL,
+    name="devops_agent",
+    output_type=ImplementationPlan,
+    model_settings=PLAN_MODEL_SETTINGS,
+    system_prompt=DEVOPS_PROMPT,
 )
 
 PROMPT_SHAS: dict[str, str] = {
@@ -1428,98 +1553,116 @@ and add `cache_get, cache_put,` to the `activities=[...]` list (next to the memo
 In `src/sdlc/workflows/feature.py`, extend the `imports_passed_through()` block:
 
 ```python
-    from ..agents.roles import PROMPT_SHAS
-    from ..memoization.activities import (
-        CacheGetInput, CachePutInput, cache_get, cache_put,
-    )
-    from ..memoization.cache import content_key
+from ..agents.roles import PROMPT_SHAS
+from ..memoization.activities import (
+    CacheGetInput,
+    CachePutInput,
+    cache_get,
+    cache_put,
+)
+from ..memoization.cache import content_key
 ```
 
 Add `_cached_stage` after `_retain` in the memory section:
 
 ```python
-    async def _cached_stage(self, cfg: PipelineConfig, stage: str,
-                            input_json: str, model_id: str,
-                            output_type: type, run_fn) -> tuple[object, bool]:
-        """Skips `run_fn()` (a no-arg async callable invoking the proposer
-        agent) when an identical (stage, input, prompt, model,
-        upstream-recall-watermark) combination was already computed — the
-        ADR-5 dev-loop cache. Returns (output, was_cache_hit)."""
-        if not cfg.memoization_enabled:
-            return await run_fn(), False
-        key = content_key(stage, input_json, PROMPT_SHAS[stage], model_id,
-                          self._memory_watermark or "none")
-        cached = await workflow.execute_activity(
-            cache_get, CacheGetInput(key=key), **MEM_ACT)
-        if cached is not None:
-            return output_type.model_validate_json(cached), True
-        result = await run_fn()
-        await workflow.execute_activity(
-            cache_put,
-            CachePutInput(key=key, payload_json=result.model_dump_json()),
-            **MEM_ACT)
-        return result, False
+async def _cached_stage(
+    self, cfg: PipelineConfig, stage: str, input_json: str, model_id: str, output_type: type, run_fn
+) -> tuple[object, bool]:
+    """Skips `run_fn()` (a no-arg async callable invoking the proposer
+    agent) when an identical (stage, input, prompt, model,
+    upstream-recall-watermark) combination was already computed — the
+    ADR-5 dev-loop cache. Returns (output, was_cache_hit)."""
+    if not cfg.memoization_enabled:
+        return await run_fn(), False
+    key = content_key(
+        stage, input_json, PROMPT_SHAS[stage], model_id, self._memory_watermark or "none"
+    )
+    cached = await workflow.execute_activity(cache_get, CacheGetInput(key=key), **MEM_ACT)
+    if cached is not None:
+        return output_type.model_validate_json(cached), True
+    result = await run_fn()
+    await workflow.execute_activity(
+        cache_put, CachePutInput(key=key, payload_json=result.model_dump_json()), **MEM_ACT
+    )
+    return result, False
 ```
 
 Wire it into `run()` — replace the clarify call built in Task 8 with:
 
 ```python
-        reqs, _ = await self._cached_stage(
-            cfg, "clarify", idea.model_dump_json(), MODEL,
-            ClarifiedRequirements,
-            lambda: self._run_clarify(idea, cfg, snapshot))
+reqs, _ = await self._cached_stage(
+    cfg,
+    "clarify",
+    idea.model_dump_json(),
+    MODEL,
+    ClarifiedRequirements,
+    lambda: self._run_clarify(idea, cfg, snapshot),
+)
 ```
 
 This requires extracting the actual agent call into a small helper (needed because `_cached_stage`'s `run_fn` must be a no-arg callable, but the clarify call needs `snapshot`/`idea`/`cfg` in scope — a closure over locals already in scope is enough, no new method needed). Simplify instead of adding `_run_clarify`: since `snapshot`, `idea` are already in scope at the call site, define the closure inline:
 
 ```python
-        snapshot = await self._recall(
-            cfg, cfg.memory.project_bank, query=f"clarify:{idea.title}",
-            filters={"stage": "clarify"})
+snapshot = await self._recall(
+    cfg, cfg.memory.project_bank, query=f"clarify:{idea.title}", filters={"stage": "clarify"}
+)
 
-        async def _run_clarify():
-            return (await t_clarify.run(
-                idea.model_dump_json()
-                + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
-                   if snapshot.items else ""))).output
 
-        reqs, _ = await self._cached_stage(
-            cfg, "clarify", idea.model_dump_json(), MODEL,
-            ClarifiedRequirements, _run_clarify)
+async def _run_clarify():
+    return (
+        await t_clarify.run(
+            idea.model_dump_json()
+            + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items) if snapshot.items else "")
+        )
+    ).output
+
+
+reqs, _ = await self._cached_stage(
+    cfg, "clarify", idea.model_dump_json(), MODEL, ClarifiedRequirements, _run_clarify
+)
 ```
 
 Apply the same closure pattern to architect and plan (`_run_architect`/`_run_plan`, output types `ArchitectureSpec`/`ImplementationPlan`, stage names `"architect"`/`"plan"`, model `MODEL`):
 
 ```python
-        snapshot = await self._recall(
-            cfg, cfg.memory.project_bank, query=f"architect:{idea.title}",
-            filters={"stage": "architect"})
+snapshot = await self._recall(
+    cfg, cfg.memory.project_bank, query=f"architect:{idea.title}", filters={"stage": "architect"}
+)
 
-        async def _run_architect():
-            return (await t_architect.run(
-                f"mode={idea.mode.value}\n{reqs.model_dump_json()}"
-                + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
-                   if snapshot.items else ""))).output
 
-        arch, _ = await self._cached_stage(
-            cfg, "architect", reqs.model_dump_json(), MODEL,
-            ArchitectureSpec, _run_architect)
+async def _run_architect():
+    return (
+        await t_architect.run(
+            f"mode={idea.mode.value}\n{reqs.model_dump_json()}"
+            + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items) if snapshot.items else "")
+        )
+    ).output
+
+
+arch, _ = await self._cached_stage(
+    cfg, "architect", reqs.model_dump_json(), MODEL, ArchitectureSpec, _run_architect
+)
 ```
 
 ```python
-        snapshot = await self._recall(
-            cfg, cfg.memory.project_bank, query=f"plan:{idea.title}",
-            filters={"stage": "plan"})
+snapshot = await self._recall(
+    cfg, cfg.memory.project_bank, query=f"plan:{idea.title}", filters={"stage": "plan"}
+)
 
-        async def _run_plan():
-            return (await t_planner.run(
-                arch.model_dump_json()
-                + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
-                   if snapshot.items else ""))).output
 
-        plan, _ = await self._cached_stage(
-            cfg, "plan", arch.model_dump_json(), MODEL,
-            ImplementationPlan, _run_plan)
+async def _run_plan():
+    return (
+        await t_planner.run(
+            arch.model_dump_json()
+            + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items) if snapshot.items else "")
+        )
+    ).output
+
+
+plan, _ = await self._cached_stage(
+    cfg, "plan", arch.model_dump_json(), MODEL, ImplementationPlan, _run_plan
+)
 ```
 
 `devops_agent` is not currently invoked anywhere in `feature.py` (it's defined in `roles.py` but unused by the workflow today) — leave its wiring for whichever future task actually calls it; `PROMPT_SHAS["devops"]` exists now so that task doesn't need to touch `roles.py` again.
@@ -1568,14 +1711,19 @@ def _transport(handler):
 async def test_recall_posts_query_and_parses_snapshot():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/v1/banks/project:x/recall"
-        return httpx.Response(200, json={
-            "query_hash": "abc123", "watermark": "5",
-            "items": ["memory item one"],
-        })
+        return httpx.Response(
+            200,
+            json={
+                "query_hash": "abc123",
+                "watermark": "5",
+                "items": ["memory item one"],
+            },
+        )
 
     client = HindsightMemory(base_url="http://hindsight.local")
-    client._client = httpx.AsyncClient(base_url="http://hindsight.local",
-                                       transport=_transport(handler))
+    client._client = httpx.AsyncClient(
+        base_url="http://hindsight.local", transport=_transport(handler)
+    )
     snap = await client.recall("project:x", "q", {}, None)
     assert snap.query_hash == "abc123"
     assert snap.watermark == "5"
@@ -1591,10 +1739,10 @@ async def test_retain_posts_kind_text_metadata():
         return httpx.Response(200, json={})
 
     client = HindsightMemory(base_url="http://hindsight.local")
-    client._client = httpx.AsyncClient(base_url="http://hindsight.local",
-                                       transport=_transport(handler))
-    await client.retain(RetainItem(kind=MemoryKind.GOTCHA, bank="project:x",
-                                   text="t", metadata={}))
+    client._client = httpx.AsyncClient(
+        base_url="http://hindsight.local", transport=_transport(handler)
+    )
+    await client.retain(RetainItem(kind=MemoryKind.GOTCHA, bank="project:x", text="t", metadata={}))
     assert seen["path"] == "/v1/banks/project:x/retain"
 
 
@@ -1605,8 +1753,9 @@ async def test_current_watermark_parses_response():
         return httpx.Response(200, json={"watermark": "9"})
 
     client = HindsightMemory(base_url="http://hindsight.local")
-    client._client = httpx.AsyncClient(base_url="http://hindsight.local",
-                                       transport=_transport(handler))
+    client._client = httpx.AsyncClient(
+        base_url="http://hindsight.local", transport=_transport(handler)
+    )
     wm = await client.current_watermark("project:x")
     assert wm == "9"
 
@@ -1617,8 +1766,9 @@ async def test_recall_raises_on_http_error_so_the_activity_can_degrade():
         return httpx.Response(503)
 
     client = HindsightMemory(base_url="http://hindsight.local")
-    client._client = httpx.AsyncClient(base_url="http://hindsight.local",
-                                       transport=_transport(handler))
+    client._client = httpx.AsyncClient(
+        base_url="http://hindsight.local", transport=_transport(handler)
+    )
     with pytest.raises(httpx.HTTPStatusError):
         await client.recall("project:x", "q", {}, None)
 ```
@@ -1637,6 +1787,7 @@ Add `"httpx>=0.27",` to `dependencies` in `pyproject.toml`, then run `pip instal
 """Real Hindsight (vectorize-io) HTTP client — the integration seam noted
 in ARCHITECTURE.md §6/§8. Swap this module or `base_url` without touching
 workflow code; callers only ever see the Memory protocol."""
+
 from __future__ import annotations
 
 import httpx
@@ -1648,8 +1799,7 @@ from .protocol import Memory
 class HindsightMemory(Memory):
     def __init__(self, base_url: str, timeout_s: float = 10.0):
         self.base_url = base_url.rstrip("/")
-        self._client = httpx.AsyncClient(base_url=self.base_url,
-                                         timeout=timeout_s)
+        self._client = httpx.AsyncClient(base_url=self.base_url, timeout=timeout_s)
 
     async def current_watermark(self, bank: str) -> str:
         resp = await self._client.get(f"/v1/banks/{bank}/watermark")
@@ -1659,23 +1809,24 @@ class HindsightMemory(Memory):
     async def retain(self, item: RetainItem) -> None:
         resp = await self._client.post(
             f"/v1/banks/{item.bank}/retain",
-            json={"kind": item.kind.value, "text": item.text,
-                 "metadata": item.metadata},
+            json={"kind": item.kind.value, "text": item.text, "metadata": item.metadata},
         )
         resp.raise_for_status()
 
-    async def recall(self, bank: str, query: str, filters: dict[str, str],
-                     watermark: str | None) -> RecallSnapshot:
+    async def recall(
+        self, bank: str, query: str, filters: dict[str, str], watermark: str | None
+    ) -> RecallSnapshot:
         resp = await self._client.post(
             f"/v1/banks/{bank}/recall",
-            json={"query": query, "filters": filters,
-                 "watermark": watermark},
+            json={"query": query, "filters": filters, "watermark": watermark},
         )
         resp.raise_for_status()
         payload = resp.json()
         return RecallSnapshot(
-            query_hash=payload["query_hash"], bank=bank,
-            watermark=payload["watermark"], items=payload.get("items", []),
+            query_hash=payload["query_hash"],
+            bank=bank,
+            watermark=payload["watermark"],
+            items=payload.get("items", []),
         )
 
     async def reflect(self, bank: str) -> None:

@@ -8,9 +8,8 @@ that. `dropped` is what keeps capping distinguishable from incuriosity."""
 from sdlc.core.models import (
     ClarificationDimension as CD,
 )
-from sdlc.models import OpenQuestion
 from sdlc.stages.clarify.merge import MATERIALITY_FLOOR, merge_clarification
-from sdlc.stages.clarify.models import ClarifyRoute, ProbeResult
+from sdlc.stages.clarify.models import ClarifyRoute, OpenQuestion, ProbeResult
 
 GROUNDED = frozenset(
     {CD.TECHNICAL_CONTEXT, CD.INTERFACE_SPEC, CD.CODE_STRUCTURE, CD.DATA_SEMANTICS}

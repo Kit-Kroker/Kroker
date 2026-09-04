@@ -20,9 +20,7 @@ from sdlc.deploy.activities import (
     deploy_apply,
     deploy_current_version,
 )
-from sdlc.models import (
-    DeployPlan,
-)
+from sdlc.stages.deploy.models import DeployPlan
 from tests.conftest import _wait_for_pidfile_async, _wait_until_dead
 
 

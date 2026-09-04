@@ -4,7 +4,7 @@ An accusation must quote a line the transcript actually contains. Dropping,
 never failing -- this lens must never fail delivery."""
 
 from sdlc.handoff import verified_plan_deviations
-from sdlc.models import PlanDeviation
+from sdlc.stages.plan.models import PlanDeviation
 
 _TRANSCRIPT = "file_read src/app.py\nfile_write src/billing.py\ncommand pytest -q exit=0\n"
 
@@ -47,6 +47,6 @@ def test_missing_transcript_skips_verification():
 
 
 def test_report_defaults_to_no_deviations():
-    from sdlc.models import DeepReviewReport
+    from sdlc.stages.review.models import DeepReviewReport
 
     assert DeepReviewReport().plan_deviations == []

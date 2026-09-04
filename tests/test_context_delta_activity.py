@@ -7,7 +7,7 @@ import subprocess
 import pytest
 
 from sdlc.activities import DeltaCheckInput, check_brownfield_delta
-from sdlc.models import BrownfieldDelta
+from sdlc.stages.context.models import BrownfieldDelta
 
 
 def _git(*args, cwd):

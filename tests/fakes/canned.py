@@ -15,20 +15,26 @@ from sdlc.core.models import (
     PipelineConfig,
     ProjectMode,
 )
-from sdlc.models import (
+from sdlc.stages.analyze.models import (
     AnalysisReport,
+    CriterionTrace,
+)
+from sdlc.stages.architecture.models import (
     ArchitectureDecision,
     ArchitectureSpec,
-    ClarifiedRequirements,
-    CriterionTrace,
-    DevTask,
-    ImplementationPlan,
-    MergeVerdict,
-    OpenQuestion,
-    ReviewReport,
     ValidationContract,
 )
+from sdlc.stages.clarify.models import (
+    ClarifiedRequirements,
+    OpenQuestion,
+)
+from sdlc.stages.merge.models import MergeVerdict
+from sdlc.stages.plan.models import (
+    DevTask,
+    ImplementationPlan,
+)
 from sdlc.stages.qa.models import QAReport
+from sdlc.stages.review.models import ReviewReport
 
 QUESTION_IDS = ["q1"]
 

@@ -32,7 +32,7 @@ with workflow.unsafe.imports_passed_through():
         deploy_rollback,
         smoke_check,
     )
-    from ..models import (
+    from ..stages.deploy.models import (
         DeployPlan,
         DeployReport,
         SmokeCheckResult,

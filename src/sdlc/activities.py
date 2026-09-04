@@ -39,15 +39,15 @@ from .gate import (
 )
 from .harness.adapters import HARNESSES, HarnessRequest
 from .harness.containment import ContainmentError, load_policy
-from .measurement import Measurement
-from .models import (
-    BrownfieldDelta,
-    CoverageReport,
+from .harness.models import (
     HarnessRunResult,
     ToolGrant,
 )
+from .measurement import Measurement
 from .observability.logfire_setup import span
 from .process import kill_process_tree
+from .stages.context.models import BrownfieldDelta
+from .stages.merge.models import CoverageReport
 from .stages.qa.activities import (
     _diagnostic_slice,
     _ensure_python_env,

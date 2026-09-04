@@ -1,7 +1,7 @@
 from pydantic_ai import Agent
 from pydantic_ai.settings import ModelSettings
 
-from sdlc.models import MergeVerdict
+from sdlc.stages.merge.models import MergeVerdict
 
 
 def build(model: str, instructions: str, model_settings: ModelSettings) -> Agent:

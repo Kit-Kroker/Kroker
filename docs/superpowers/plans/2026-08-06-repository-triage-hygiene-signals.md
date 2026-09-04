@@ -41,47 +41,59 @@ Create `tests/test_triage_models.py`:
 
 ```python
 """E-41 contracts: a signal that did not run must not carry findings."""
+
 import pytest
 from pydantic import ValidationError
 
 from sdlc.measurement import Measurement
 from sdlc.triage.models import (
-    FixClass, Readiness, RepoTriage, SignalResult, TriageFinding, Verdict,
+    FixClass,
+    Readiness,
+    RepoTriage,
+    SignalResult,
+    TriageFinding,
+    Verdict,
 )
 
 
 def _finding(**kw):
-    base = dict(signal="secrets", rule="r", severity="high", detail="d",
-                fix_class=FixClass.JUDGEMENT)
+    base = dict(
+        signal="secrets", rule="r", severity="high", detail="d", fix_class=FixClass.JUDGEMENT
+    )
     base.update(kw)
     return TriageFinding(**base)
 
 
 def test_not_collected_may_not_carry_findings():
     with pytest.raises(ValidationError) as exc:
-        SignalResult(signal="secrets", version=1,
-                     collected=Measurement.not_collected("crashed"),
-                     findings=[_finding()])
+        SignalResult(
+            signal="secrets",
+            version=1,
+            collected=Measurement.not_collected("crashed"),
+            findings=[_finding()],
+        )
     assert "did not happen" in str(exc.value)
 
 
 def test_unknown_may_carry_partial_findings():
-    r = SignalResult(signal="secrets", version=1,
-                     collected=Measurement.unknown("partial read"),
-                     findings=[_finding()])
+    r = SignalResult(
+        signal="secrets",
+        version=1,
+        collected=Measurement.unknown("partial read"),
+        findings=[_finding()],
+    )
     assert len(r.findings) == 1
 
 
 def test_measured_carries_findings():
-    r = SignalResult(signal="secrets", version=1,
-                     collected=Measurement.measured(1.0),
-                     findings=[_finding()])
+    r = SignalResult(
+        signal="secrets", version=1, collected=Measurement.measured(1.0), findings=[_finding()]
+    )
     assert r.findings[0].fix_class is FixClass.JUDGEMENT
 
 
 def test_signal_result_defaults_are_empty():
-    r = SignalResult(signal="baseline", version=1,
-                     collected=Measurement.measured(0.0))
+    r = SignalResult(signal="baseline", version=1, collected=Measurement.measured(0.0))
     assert r.findings == []
     assert r.metrics == {}
 
@@ -92,9 +104,9 @@ def test_repo_triage_holds_readiness_and_signals():
         runnable=Measurement.measured(1.0),
         tests_present=Measurement.measured(3.0),
         structure_discernible=Measurement.measured(1.0),
-        verdict=Verdict.READY)
-    t = RepoTriage(repo_dir="/r", commit_sha="abc123",
-                   toolchain="python", readiness=readiness)
+        verdict=Verdict.READY,
+    )
+    t = RepoTriage(repo_dir="/r", commit_sha="abc123", toolchain="python", readiness=readiness)
     assert t.readiness.verdict is Verdict.READY
     assert t.signals == []
 ```
@@ -117,6 +129,7 @@ Pure by design -- Pydantic and measurement.py only. This module must never
 import models.py, activities.py, or temporalio, exactly as measurement.py and
 grounding.py must not: a dependency here would appear as a reviewable import.
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -131,6 +144,7 @@ class FixClass(str, Enum):
     """FR-904. MECHANICAL is a promise an E-44 child run can keep with a PR;
     everything it cannot is JUDGEMENT or STRUCTURAL. See spec D7 -- deleting a
     committed .env is mechanical, rotating the exposed credential is not."""
+
     MECHANICAL = "mechanical"
     JUDGEMENT = "judgement"
     STRUCTURAL = "structural"
@@ -143,13 +157,13 @@ class Verdict(str, Enum):
 
 
 class TriageFinding(BaseModel):
-    signal: str                                 # signal id, e.g. "secrets"
-    rule: str                                   # which rule inside it
+    signal: str  # signal id, e.g. "secrets"
+    rule: str  # which rule inside it
     severity: Literal["critical", "high", "medium", "low"]
     detail: str
     path: str = ""
     line: int | None = None
-    evidence: str = ""                          # verbatim quote from path@commit_sha
+    evidence: str = ""  # verbatim quote from path@commit_sha
     fix_class: FixClass
 
 
@@ -157,20 +171,21 @@ class SignalResult(BaseModel):
     """One signal's output. `collected` is a Measurement, not a bool: a signal
     that timed out reports not_collected and contributes nothing, which is
     distinguishable from a signal that ran and found nothing (FR-915)."""
+
     signal: str
-    version: int                                # bump invalidates E-46's memo key
-    collected: Measurement                      # MEASURED value = finding count
+    version: int  # bump invalidates E-46's memo key
+    collected: Measurement  # MEASURED value = finding count
     findings: list[TriageFinding] = Field(default_factory=list)
     metrics: dict[str, Measurement] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _not_collected_has_no_findings(self) -> "SignalResult":
-        if (self.collected.state is CollectionState.NOT_COLLECTED
-                and self.findings):
+        if self.collected.state is CollectionState.NOT_COLLECTED and self.findings:
             raise ValueError(
                 f"{self.signal}: NOT_COLLECTED carries {len(self.findings)} "
                 f"finding(s) -- those are findings from a run that did not "
-                f"happen. Partial output is UNKNOWN.")
+                f"happen. Partial output is UNKNOWN."
+            )
         return self
 
 
@@ -178,6 +193,7 @@ class Readiness(BaseModel):
     """FR-901's four dimensions. Every value is positive-is-good, so the
     verdict rule is uniform: buildable/runnable/structure_discernible are
     1.0 or 0.0, tests_present is a count."""
+
     buildable: Measurement
     runnable: Measurement
     tests_present: Measurement
@@ -187,8 +203,8 @@ class Readiness(BaseModel):
 
 class RepoTriage(BaseModel):
     repo_dir: str
-    commit_sha: str                             # triage is pinned at a commit
-    toolchain: str | None = None                # None is a finding, not an error
+    commit_sha: str  # triage is pinned at a commit
+    toolchain: str | None = None  # None is a finding, not an error
     readiness: Readiness
     signals: list[SignalResult] = Field(default_factory=list)
 ```
@@ -226,26 +242,37 @@ Create `tests/test_triage_readiness.py`:
 
 ```python
 """D4: an unmeasured dimension is never READY. The truth table is the point."""
+
 import pytest
 
 from sdlc.measurement import Measurement
 from sdlc.triage.models import (
-    M_BUILDABLE, M_RUNNABLE, M_STRUCTURE, M_TESTS_PRESENT,
-    SignalResult, Verdict, compute_readiness,
+    M_BUILDABLE,
+    M_RUNNABLE,
+    M_STRUCTURE,
+    M_TESTS_PRESENT,
+    SignalResult,
+    Verdict,
+    compute_readiness,
 )
 
 
 def _sig(name, **metrics):
-    return SignalResult(signal=name, version=1,
-                        collected=Measurement.measured(0.0), metrics=metrics)
+    return SignalResult(
+        signal=name, version=1, collected=Measurement.measured(0.0), metrics=metrics
+    )
 
 
 def _all_good():
     return [
-        _sig("build_probe", **{M_BUILDABLE: Measurement.measured(1.0),
-                               M_RUNNABLE: Measurement.measured(1.0)}),
-        _sig("baseline", **{M_TESTS_PRESENT: Measurement.measured(4.0),
-                            M_STRUCTURE: Measurement.measured(1.0)}),
+        _sig(
+            "build_probe",
+            **{M_BUILDABLE: Measurement.measured(1.0), M_RUNNABLE: Measurement.measured(1.0)},
+        ),
+        _sig(
+            "baseline",
+            **{M_TESTS_PRESENT: Measurement.measured(4.0), M_STRUCTURE: Measurement.measured(1.0)},
+        ),
     ]
 
 
@@ -255,26 +282,33 @@ def test_all_measured_and_positive_is_ready():
 
 def test_a_measured_zero_is_not_ready():
     sigs = [
-        _sig("build_probe", **{M_BUILDABLE: Measurement.measured(0.0),
-                               M_RUNNABLE: Measurement.measured(1.0)}),
-        _sig("baseline", **{M_TESTS_PRESENT: Measurement.measured(4.0),
-                            M_STRUCTURE: Measurement.measured(1.0)}),
+        _sig(
+            "build_probe",
+            **{M_BUILDABLE: Measurement.measured(0.0), M_RUNNABLE: Measurement.measured(1.0)},
+        ),
+        _sig(
+            "baseline",
+            **{M_TESTS_PRESENT: Measurement.measured(4.0), M_STRUCTURE: Measurement.measured(1.0)},
+        ),
     ]
     assert compute_readiness(sigs).verdict is Verdict.NOT_READY
 
 
 def test_zero_tests_is_not_ready_not_indeterminate():
     sigs = [
-        _sig("build_probe", **{M_BUILDABLE: Measurement.measured(1.0),
-                               M_RUNNABLE: Measurement.measured(1.0)}),
-        _sig("baseline", **{M_TESTS_PRESENT: Measurement.measured(0.0),
-                            M_STRUCTURE: Measurement.measured(1.0)}),
+        _sig(
+            "build_probe",
+            **{M_BUILDABLE: Measurement.measured(1.0), M_RUNNABLE: Measurement.measured(1.0)},
+        ),
+        _sig(
+            "baseline",
+            **{M_TESTS_PRESENT: Measurement.measured(0.0), M_STRUCTURE: Measurement.measured(1.0)},
+        ),
     ]
     assert compute_readiness(sigs).verdict is Verdict.NOT_READY
 
 
-@pytest.mark.parametrize("key", [M_BUILDABLE, M_RUNNABLE,
-                                 M_TESTS_PRESENT, M_STRUCTURE])
+@pytest.mark.parametrize("key", [M_BUILDABLE, M_RUNNABLE, M_TESTS_PRESENT, M_STRUCTURE])
 def test_any_not_collected_dimension_forces_indeterminate(key):
     sigs = _all_good()
     for s in sigs:
@@ -283,8 +317,7 @@ def test_any_not_collected_dimension_forces_indeterminate(key):
     assert compute_readiness(sigs).verdict is Verdict.INDETERMINATE
 
 
-@pytest.mark.parametrize("key", [M_BUILDABLE, M_RUNNABLE,
-                                 M_TESTS_PRESENT, M_STRUCTURE])
+@pytest.mark.parametrize("key", [M_BUILDABLE, M_RUNNABLE, M_TESTS_PRESENT, M_STRUCTURE])
 def test_a_dimension_no_signal_reported_forces_indeterminate(key):
     sigs = _all_good()
     for s in sigs:
@@ -335,8 +368,7 @@ M_BUILDABLE = "buildable"
 M_RUNNABLE = "runnable"
 M_TESTS_PRESENT = "tests_present"
 M_STRUCTURE = "structure_discernible"
-READINESS_KEYS: tuple[str, ...] = (
-    M_BUILDABLE, M_RUNNABLE, M_TESTS_PRESENT, M_STRUCTURE)
+READINESS_KEYS: tuple[str, ...] = (M_BUILDABLE, M_RUNNABLE, M_TESTS_PRESENT, M_STRUCTURE)
 
 
 def compute_readiness(signals: list[SignalResult]) -> Readiness:
@@ -353,17 +385,17 @@ def compute_readiness(signals: list[SignalResult]) -> Readiness:
     for sig in sorted(signals, key=lambda s: s.signal):
         for key, m in sig.metrics.items():
             if key not in READINESS_KEYS:
-                continue                      # signals may carry other metrics
+                continue  # signals may carry other metrics
             if key in reported:
                 raise ValueError(
                     f"readiness key {key!r} reported by more than one signal "
                     f"(second was {sig.signal!r}) -- exactly one signal owns "
-                    f"each dimension (FR-902)")
+                    f"each dimension (FR-902)"
+                )
             reported[key] = m
 
     dims = {
-        key: reported.get(key)
-        or Measurement.not_collected(f"no signal reported {key}")
+        key: reported.get(key) or Measurement.not_collected(f"no signal reported {key}")
         for key in READINESS_KEYS
     }
 
@@ -414,16 +446,19 @@ weight: pytest exits 1 for test failures and 2/3/4 for collection errors, and
 "the suite ran and failed" is a different readiness fact from "the suite could
 not run".
 """
+
 import pytest
 
 from sdlc.toolchain.adapters import (
-    PythonToolchain, ToolchainKind, detect, detect_with_marker,
+    PythonToolchain,
+    ToolchainKind,
+    detect,
+    detect_with_marker,
 )
 
 
 def test_install_cmd_for_requirements_uses_the_requirements_file():
-    assert PythonToolchain().install_cmd("requirements.txt") == (
-        "pip install -r requirements.txt")
+    assert PythonToolchain().install_cmd("requirements.txt") == ("pip install -r requirements.txt")
 
 
 @pytest.mark.parametrize("marker", ["pyproject.toml", "setup.py", "setup.cfg"])
@@ -433,14 +468,17 @@ def test_install_cmd_for_packaging_markers_is_non_editable(marker):
     assert PythonToolchain().install_cmd(marker) == "pip install ."
 
 
-@pytest.mark.parametrize("code,expected", [
-    (0, "ran"),            # all passed
-    (1, "ran"),            # tests failed -- the suite still RAN
-    (2, "failed_to_run"),  # interrupted
-    (3, "failed_to_run"),  # internal error
-    (4, "failed_to_run"),  # usage error
-    (5, "no_tests"),       # nothing collected
-])
+@pytest.mark.parametrize(
+    "code,expected",
+    [
+        (0, "ran"),  # all passed
+        (1, "ran"),  # tests failed -- the suite still RAN
+        (2, "failed_to_run"),  # interrupted
+        (3, "failed_to_run"),  # internal error
+        (4, "failed_to_run"),  # usage error
+        (5, "no_tests"),  # nothing collected
+    ],
+)
 def test_classify_test_exit(code, expected):
     assert PythonToolchain().classify_test_exit(code) == expected
 
@@ -486,56 +524,58 @@ from typing import Literal
 Add these members to the `ToolchainAdapter` ABC, after the `markers` declaration and before `test_cmd`. All are concrete defaults, so E-30a/b/c stay unblocked:
 
 ```python
-    # E-41 (FR-902). Concrete defaults, not abstract: a new adapter that has
-    # not thought about triage yet degrades to "no install command" and the
-    # probe records not_collected, rather than failing to instantiate.
-    test_globs: tuple[str, ...] = ()
-    lockfiles: tuple[str, ...] = ()
+# E-41 (FR-902). Concrete defaults, not abstract: a new adapter that has
+# not thought about triage yet degrades to "no install command" and the
+# probe records not_collected, rather than failing to instantiate.
+test_globs: tuple[str, ...] = ()
+lockfiles: tuple[str, ...] = ()
 
-    def install_cmd(self, marker: str) -> str | None:
-        """Dependency-install command for the marker detect_with_marker
-        matched, or None where the language has none. Takes the marker
-        because one adapter can serve several conventions (Python:
-        pyproject.toml vs requirements.txt) and the adapter stays pure --
-        it never looks at the filesystem to decide."""
-        return None
 
-    def classify_test_exit(
-            self, code: int) -> Literal["ran", "failed_to_run", "no_tests"]:
-        """Whether the suite RAN, as distinct from whether it PASSED.
+def install_cmd(self, marker: str) -> str | None:
+    """Dependency-install command for the marker detect_with_marker
+    matched, or None where the language has none. Takes the marker
+    because one adapter can serve several conventions (Python:
+    pyproject.toml vs requirements.txt) and the adapter stays pure --
+    it never looks at the filesystem to decide."""
+    return None
 
-        Load-bearing for the triage `runnable` dimension: "tests ran and some
-        failed" and "the suite could not be collected" are different readiness
-        facts, and the exit-code mapping is per-language. The default is the
-        conservative one for a language whose runner has not been mapped."""
-        return "ran" if code == 0 else "failed_to_run"
+
+def classify_test_exit(self, code: int) -> Literal["ran", "failed_to_run", "no_tests"]:
+    """Whether the suite RAN, as distinct from whether it PASSED.
+
+    Load-bearing for the triage `runnable` dimension: "tests ran and some
+    failed" and "the suite could not be collected" are different readiness
+    facts, and the exit-code mapping is per-language. The default is the
+    conservative one for a language whose runner has not been mapped."""
+    return "ran" if code == 0 else "failed_to_run"
 ```
 
 Add to `PythonToolchain`, after the `markers` declaration:
 
 ```python
-    test_globs = ("test_*.py", "*_test.py", "tests/**/*.py")
-    # requirements.txt is deliberately NOT here: it is a manifest that may or
-    # may not pin. Whether it pins is E-41a's dependency-health question.
-    lockfiles = ("uv.lock", "poetry.lock", "Pipfile.lock")
+test_globs = ("test_*.py", "*_test.py", "tests/**/*.py")
+# requirements.txt is deliberately NOT here: it is a manifest that may or
+# may not pin. Whether it pins is E-41a's dependency-health question.
+lockfiles = ("uv.lock", "poetry.lock", "Pipfile.lock")
 
-    def install_cmd(self, marker: str) -> str | None:
-        if marker == "requirements.txt":
-            return "pip install -r requirements.txt"
-        # Non-editable: `pip install -e .` writes *.egg-info into the tree
-        # under audit, and triage must not mutate what it measures. PEP 517
-        # builds `pip install .` in a temporary directory.
-        return "pip install ."
 
-    def classify_test_exit(
-            self, code: int) -> Literal["ran", "failed_to_run", "no_tests"]:
-        # pytest exit codes: 0 ok, 1 tests failed, 2 interrupted,
-        # 3 internal error, 4 usage error, 5 no tests collected.
-        if code in (0, 1):
-            return "ran"
-        if code == 5:
-            return "no_tests"
-        return "failed_to_run"
+def install_cmd(self, marker: str) -> str | None:
+    if marker == "requirements.txt":
+        return "pip install -r requirements.txt"
+    # Non-editable: `pip install -e .` writes *.egg-info into the tree
+    # under audit, and triage must not mutate what it measures. PEP 517
+    # builds `pip install .` in a temporary directory.
+    return "pip install ."
+
+
+def classify_test_exit(self, code: int) -> Literal["ran", "failed_to_run", "no_tests"]:
+    # pytest exit codes: 0 ok, 1 tests failed, 2 interrupted,
+    # 3 internal error, 4 usage error, 5 no tests collected.
+    if code in (0, 1):
+        return "ran"
+    if code == 5:
+        return "no_tests"
+    return "failed_to_run"
 ```
 
 Replace the module-level `detect` function at the bottom of the file with:
@@ -603,6 +643,7 @@ Create `tests/test_triage_baseline.py`:
 
 ```python
 """Baseline practice over the tracked tree at a pinned commit."""
+
 import subprocess
 
 import pytest
@@ -610,17 +651,21 @@ import pytest
 from sdlc.measurement import CollectionState
 from sdlc.toolchain.adapters import PythonToolchain
 from sdlc.triage.activities import (
-    TriageSignalInput, read_blob, tracked_paths, triage_baseline,
+    TriageSignalInput,
+    read_blob,
+    tracked_paths,
+    triage_baseline,
 )
 from sdlc.triage.models import (
-    FixClass, M_STRUCTURE, M_TESTS_PRESENT,
+    FixClass,
+    M_STRUCTURE,
+    M_TESTS_PRESENT,
 )
 from sdlc.triage.signals import baseline
 
 
 def _run(args, cwd):
-    return subprocess.run(args, cwd=cwd, capture_output=True,
-                          encoding="utf-8", check=True)
+    return subprocess.run(args, cwd=cwd, capture_output=True, encoding="utf-8", check=True)
 
 
 def _commit_repo(root, files: dict[str, str]) -> str:
@@ -633,9 +678,9 @@ def _commit_repo(root, files: dict[str, str]) -> str:
         p.write_text(text, encoding="utf-8")
     _run(["git", "add", "-A"], root)
     _run(["git", "commit", "-q", "-m", "one"], root)
-    return subprocess.run(["git", "rev-parse", "HEAD"], cwd=root,
-                          capture_output=True, encoding="utf-8",
-                          check=True).stdout.strip()
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, encoding="utf-8", check=True
+    ).stdout.strip()
 
 
 def _rules(result):
@@ -644,16 +689,23 @@ def _rules(result):
 
 # ---- pure logic -------------------------------------------------------
 
+
 def test_find_test_files_matches_all_three_python_conventions():
-    paths = ["test_a.py", "b_test.py", "tests/unit/test_c.py",
-             "src/app.py", "docs/test_notes.md"]
+    paths = ["test_a.py", "b_test.py", "tests/unit/test_c.py", "src/app.py", "docs/test_notes.md"]
     found = baseline.find_test_files(paths, PythonToolchain().test_globs)
     assert set(found) == {"test_a.py", "b_test.py", "tests/unit/test_c.py"}
 
 
 def test_clean_repo_yields_no_findings():
-    paths = ["pyproject.toml", "uv.lock", "README.md", "src/app.py",
-             "tests/test_app.py", ".github/workflows/ci.yml", ".gitignore"]
+    paths = [
+        "pyproject.toml",
+        "uv.lock",
+        "README.md",
+        "src/app.py",
+        "tests/test_app.py",
+        ".github/workflows/ci.yml",
+        ".gitignore",
+    ]
     r = baseline.evaluate(paths, ".env\n__pycache__/\n", PythonToolchain())
     assert r.findings == []
     assert r.collected.state is CollectionState.MEASURED
@@ -667,20 +719,32 @@ def test_vibe_repo_yields_the_expected_rule_set():
     # recognize, and inventing one would be a finding we cannot justify.
     paths = ["package.json", "src/App.jsx", ".env"]
     r = baseline.evaluate(paths, "", None)
-    assert _rules(r) == {"no_ci", "gitignore_missing", "no_readme",
-                         "no_tests", "no_env_example"}
+    assert _rules(r) == {"no_ci", "gitignore_missing", "no_readme", "no_tests", "no_env_example"}
 
 
 def test_no_lockfile_fires_only_when_a_toolchain_declares_lockfiles():
-    paths = ["pyproject.toml", "README.md", "src/a.py", "tests/test_a.py",
-             ".github/workflows/ci.yml", ".gitignore"]
+    paths = [
+        "pyproject.toml",
+        "README.md",
+        "src/a.py",
+        "tests/test_a.py",
+        ".github/workflows/ci.yml",
+        ".gitignore",
+    ]
     r = baseline.evaluate(paths, ".env\n", PythonToolchain())
     assert _rules(r) == {"no_lockfile"}
 
 
 def test_gitignore_present_but_not_covering_env():
-    paths = ["pyproject.toml", "uv.lock", "README.md", "src/a.py",
-             "tests/test_a.py", ".github/workflows/ci.yml", ".gitignore"]
+    paths = [
+        "pyproject.toml",
+        "uv.lock",
+        "README.md",
+        "src/a.py",
+        "tests/test_a.py",
+        ".github/workflows/ci.yml",
+        ".gitignore",
+    ]
     r = baseline.evaluate(paths, "__pycache__/\n*.log\n", PythonToolchain())
     assert _rules(r) == {"gitignore_missing_env"}
     assert next(f for f in r.findings).fix_class is FixClass.MECHANICAL
@@ -701,21 +765,25 @@ def test_structure_not_collected_without_a_toolchain():
 
 
 def test_structure_is_zero_when_toolchain_resolves_but_no_source_exists():
-    r = baseline.evaluate(["pyproject.toml", "README.md"], "",
-                          PythonToolchain())
+    r = baseline.evaluate(["pyproject.toml", "README.md"], "", PythonToolchain())
     assert r.metrics[M_STRUCTURE].value == 0.0
 
 
 def test_env_example_present_suppresses_the_finding():
-    r = baseline.evaluate([".env", ".env.example", "pyproject.toml"], "",
-                          PythonToolchain())
+    r = baseline.evaluate([".env", ".env.example", "pyproject.toml"], "", PythonToolchain())
     assert "no_env_example" not in _rules(r)
 
 
-@pytest.mark.parametrize("ci_path", [
-    ".github/workflows/ci.yml", ".github/workflows/ci.yaml",
-    ".gitlab-ci.yml", "Jenkinsfile", ".circleci/config.yml",
-])
+@pytest.mark.parametrize(
+    "ci_path",
+    [
+        ".github/workflows/ci.yml",
+        ".github/workflows/ci.yaml",
+        ".gitlab-ci.yml",
+        "Jenkinsfile",
+        ".circleci/config.yml",
+    ],
+)
 def test_each_ci_convention_is_recognized(ci_path):
     r = baseline.evaluate(["pyproject.toml", ci_path], "", PythonToolchain())
     assert "no_ci" not in _rules(r)
@@ -723,9 +791,9 @@ def test_each_ci_convention_is_recognized(ci_path):
 
 # ---- git seam + activity ---------------------------------------------
 
+
 def test_tracked_paths_excludes_untracked_and_ignored(tmp_path):
-    sha = _commit_repo(tmp_path, {
-        "pyproject.toml": "[project]\n", ".gitignore": ".env\n"})
+    sha = _commit_repo(tmp_path, {"pyproject.toml": "[project]\n", ".gitignore": ".env\n"})
     (tmp_path / ".env").write_text("SECRET=x\n", encoding="utf-8")
     (tmp_path / "scratch.py").write_text("x = 1\n", encoding="utf-8")
     paths = tracked_paths(str(tmp_path), sha)
@@ -740,10 +808,10 @@ def test_read_blob_returns_none_for_a_missing_path(tmp_path):
 
 @pytest.mark.asyncio
 async def test_activity_reports_on_a_vibe_repo(tmp_path):
-    sha = _commit_repo(tmp_path, {
-        "package.json": '{"name":"app"}\n', "src/App.jsx": "export default 1\n"})
-    r = await triage_baseline(
-        TriageSignalInput(repo_dir=str(tmp_path), commit_sha=sha))
+    sha = _commit_repo(
+        tmp_path, {"package.json": '{"name":"app"}\n', "src/App.jsx": "export default 1\n"}
+    )
+    r = await triage_baseline(TriageSignalInput(repo_dir=str(tmp_path), commit_sha=sha))
     assert r.signal == "baseline"
     assert r.collected.state is CollectionState.MEASURED
     assert "no_tests" in _rules(r)
@@ -752,8 +820,7 @@ async def test_activity_reports_on_a_vibe_repo(tmp_path):
 @pytest.mark.asyncio
 async def test_activity_reports_not_collected_on_a_bad_sha(tmp_path):
     _commit_repo(tmp_path, {"pyproject.toml": "[project]\n"})
-    r = await triage_baseline(TriageSignalInput(
-        repo_dir=str(tmp_path), commit_sha="0" * 40))
+    r = await triage_baseline(TriageSignalInput(repo_dir=str(tmp_path), commit_sha="0" * 40))
     assert r.collected.state is CollectionState.NOT_COLLECTED
     assert r.findings == []
 ```
@@ -776,6 +843,7 @@ FR-902's "exactly one implementation per signal" applies to our own code too,
 and a second copy of test discovery inside the probe is the same failure at
 smaller scale.
 """
+
 from __future__ import annotations
 
 import fnmatch
@@ -785,7 +853,11 @@ from collections.abc import Sequence
 from ...measurement import Measurement
 from ...toolchain.adapters import ToolchainAdapter
 from ..models import (
-    FixClass, M_STRUCTURE, M_TESTS_PRESENT, SignalResult, TriageFinding,
+    FixClass,
+    M_STRUCTURE,
+    M_TESTS_PRESENT,
+    SignalResult,
+    TriageFinding,
 )
 
 SIGNAL_ID = "baseline"
@@ -794,18 +866,36 @@ VERSION = 1
 # A deliberate floor, not a judgement about structure quality (spec D8/§8):
 # E-41b's generator-scaffold detection is what sharpens it. Until then a
 # repository that is entirely untouched scaffolding passes this dimension.
-_SOURCE_EXTENSIONS = (".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".rs",
-                      ".java", ".rb", ".php", ".cs", ".kt", ".swift")
+_SOURCE_EXTENSIONS = (
+    ".py",
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".go",
+    ".rs",
+    ".java",
+    ".rb",
+    ".php",
+    ".cs",
+    ".kt",
+    ".swift",
+)
 
-_CI_GLOBS = (".github/workflows/*.yml", ".github/workflows/*.yaml",
-             ".gitlab-ci.yml", "Jenkinsfile", ".circleci/config.yml",
-             "azure-pipelines.yml", ".travis.yml")
+_CI_GLOBS = (
+    ".github/workflows/*.yml",
+    ".github/workflows/*.yaml",
+    ".gitlab-ci.yml",
+    "Jenkinsfile",
+    ".circleci/config.yml",
+    "azure-pipelines.yml",
+    ".travis.yml",
+)
 
 _ENV_EXAMPLES = (".env.example", ".env.sample", ".env.template")
 
 
-def find_test_files(paths: Sequence[str],
-                    test_globs: Sequence[str]) -> list[str]:
+def find_test_files(paths: Sequence[str], test_globs: Sequence[str]) -> list[str]:
     """Every tracked path matching one of the adapter's test conventions.
 
     Matches against the full posix-style repo-relative path AND the basename,
@@ -821,14 +911,22 @@ def find_test_files(paths: Sequence[str],
     return out
 
 
-def _finding(rule: str, severity: str, detail: str, fix_class: FixClass,
-             path: str = "") -> TriageFinding:
-    return TriageFinding(signal=SIGNAL_ID, rule=rule, severity=severity,
-                         detail=detail, fix_class=fix_class, path=path)
+def _finding(
+    rule: str, severity: str, detail: str, fix_class: FixClass, path: str = ""
+) -> TriageFinding:
+    return TriageFinding(
+        signal=SIGNAL_ID,
+        rule=rule,
+        severity=severity,
+        detail=detail,
+        fix_class=fix_class,
+        path=path,
+    )
 
 
-def evaluate(paths: Sequence[str], gitignore_text: str,
-             toolchain: ToolchainAdapter | None) -> SignalResult:
+def evaluate(
+    paths: Sequence[str], gitignore_text: str, toolchain: ToolchainAdapter | None
+) -> SignalResult:
     """Static baseline checks. `paths` are repo-relative posix paths tracked at
     the pinned commit; `gitignore_text` is "" when no .gitignore is tracked."""
     tracked = set(paths)
@@ -836,73 +934,97 @@ def evaluate(paths: Sequence[str], gitignore_text: str,
 
     has_ci = any(fnmatch.fnmatch(p, g) for p in tracked for g in _CI_GLOBS)
     if not has_ci:
-        findings.append(_finding(
-            "no_ci", "medium",
-            "No CI configuration found; nothing runs the suite on push.",
-            FixClass.JUDGEMENT))
+        findings.append(
+            _finding(
+                "no_ci",
+                "medium",
+                "No CI configuration found; nothing runs the suite on push.",
+                FixClass.JUDGEMENT,
+            )
+        )
 
     if ".gitignore" not in tracked:
-        findings.append(_finding(
-            "gitignore_missing", "medium",
-            "No .gitignore; build output and local env files are one "
-            "`git add -A` away from being committed.",
-            FixClass.MECHANICAL, path=".gitignore"))
-    elif not any(line.strip().startswith(".env")
-                 for line in gitignore_text.splitlines()):
-        findings.append(_finding(
-            "gitignore_missing_env", "high",
-            ".gitignore does not cover .env files, which is how credentials "
-            "reach a repository in the first place.",
-            FixClass.MECHANICAL, path=".gitignore"))
+        findings.append(
+            _finding(
+                "gitignore_missing",
+                "medium",
+                "No .gitignore; build output and local env files are one "
+                "`git add -A` away from being committed.",
+                FixClass.MECHANICAL,
+                path=".gitignore",
+            )
+        )
+    elif not any(line.strip().startswith(".env") for line in gitignore_text.splitlines()):
+        findings.append(
+            _finding(
+                "gitignore_missing_env",
+                "high",
+                ".gitignore does not cover .env files, which is how credentials "
+                "reach a repository in the first place.",
+                FixClass.MECHANICAL,
+                path=".gitignore",
+            )
+        )
 
-    if not any(posixpath.basename(p).lower().startswith("readme")
-               for p in tracked if "/" not in p):
-        findings.append(_finding(
-            "no_readme", "low", "No README at the repository root.",
-            FixClass.JUDGEMENT))
+    if not any(posixpath.basename(p).lower().startswith("readme") for p in tracked if "/" not in p):
+        findings.append(
+            _finding("no_readme", "low", "No README at the repository root.", FixClass.JUDGEMENT)
+        )
 
     lockfiles = toolchain.lockfiles if toolchain else ()
     if lockfiles and not any(lf in tracked for lf in lockfiles):
-        findings.append(_finding(
-            "no_lockfile", "medium",
-            f"No lockfile ({', '.join(lockfiles)}); dependency resolution is "
-            f"not reproducible.",
-            FixClass.JUDGEMENT))
+        findings.append(
+            _finding(
+                "no_lockfile",
+                "medium",
+                f"No lockfile ({', '.join(lockfiles)}); dependency resolution is not reproducible.",
+                FixClass.JUDGEMENT,
+            )
+        )
 
-    test_files = find_test_files(
-        sorted(tracked), toolchain.test_globs if toolchain else ())
+    test_files = find_test_files(sorted(tracked), toolchain.test_globs if toolchain else ())
     if not test_files:
-        findings.append(_finding(
-            "no_tests", "high",
-            "No test files found. Writing a suite is design work, not a "
-            "mechanical patch.",
-            FixClass.STRUCTURAL))
+        findings.append(
+            _finding(
+                "no_tests",
+                "high",
+                "No test files found. Writing a suite is design work, not a mechanical patch.",
+                FixClass.STRUCTURAL,
+            )
+        )
 
-    env_referenced = (".env" in tracked
-                      or any(line.strip().startswith(".env")
-                             for line in gitignore_text.splitlines()))
+    env_referenced = ".env" in tracked or any(
+        line.strip().startswith(".env") for line in gitignore_text.splitlines()
+    )
     if env_referenced and not any(e in tracked for e in _ENV_EXAMPLES):
-        findings.append(_finding(
-            "no_env_example", "low",
-            "The project uses a .env but ships no .env.example, so required "
-            "configuration is undiscoverable.",
-            FixClass.MECHANICAL))
+        findings.append(
+            _finding(
+                "no_env_example",
+                "low",
+                "The project uses a .env but ships no .env.example, so required "
+                "configuration is undiscoverable.",
+                FixClass.MECHANICAL,
+            )
+        )
 
     if toolchain is None:
         structure = Measurement.not_collected(
-            "no toolchain marker resolved, so structure is not assessable")
+            "no toolchain marker resolved, so structure is not assessable"
+        )
     else:
         has_source = any(p.endswith(_SOURCE_EXTENSIONS) for p in tracked)
         structure = Measurement.measured(1.0 if has_source else 0.0)
 
     return SignalResult(
-        signal=SIGNAL_ID, version=VERSION,
+        signal=SIGNAL_ID,
+        version=VERSION,
         collected=Measurement.measured(float(len(findings))),
         findings=findings,
         metrics={
             M_TESTS_PRESENT: Measurement.measured(float(len(test_files))),
             M_STRUCTURE: structure,
-        })
+        },
+    )
 ```
 
 - [ ] **Step 4: Write `src/sdlc/triage/activities.py`**
@@ -917,6 +1039,7 @@ checkout (spec D6): a gitignored local .env cannot produce a false positive,
 untracked build output produces no noise, and every evidence citation is true
 against path@sha by construction.
 """
+
 from __future__ import annotations
 
 import logging
@@ -945,8 +1068,7 @@ def tracked_paths(repo_dir: str, commit_sha: str) -> list[str]:
     not_collected, which is the only honest report for a tree we cannot read."""
     proc = _git(["ls-tree", "-r", "--name-only", commit_sha], cwd=repo_dir)
     if proc.returncode != 0:
-        raise RuntimeError(
-            f"git ls-tree failed for {commit_sha}: {proc.stderr.strip()}")
+        raise RuntimeError(f"git ls-tree failed for {commit_sha}: {proc.stderr.strip()}")
     return [line for line in proc.stdout.splitlines() if line]
 
 
@@ -971,17 +1093,18 @@ async def triage_baseline(inp: TriageSignalInput) -> SignalResult:
         paths = tracked_paths(inp.repo_dir, inp.commit_sha)
         gitignore = ""
         if ".gitignore" in paths:
-            gitignore = read_blob(inp.repo_dir, inp.commit_sha,
-                                  ".gitignore") or ""
+            gitignore = read_blob(inp.repo_dir, inp.commit_sha, ".gitignore") or ""
         found = detect_with_marker(inp.repo_dir)
-        return baseline.evaluate(paths, gitignore,
-                                 found[0] if found else None)
-    except Exception as exc:                       # noqa: BLE001 -- see docstring
+        return baseline.evaluate(paths, gitignore, found[0] if found else None)
+    except Exception as exc:  # noqa: BLE001 -- see docstring
         _log.warning("triage baseline signal failed: %s", exc)
         return SignalResult(
-            signal=baseline.SIGNAL_ID, version=baseline.VERSION,
+            signal=baseline.SIGNAL_ID,
+            version=baseline.VERSION,
             collected=Measurement.not_collected(
-                f"baseline signal raised: {type(exc).__name__}: {exc}"))
+                f"baseline signal raised: {type(exc).__name__}: {exc}"
+            ),
+        )
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
@@ -1022,6 +1145,7 @@ Create `tests/test_triage_secrets.py`:
 """The highest-yield vibe-code signal, and the one where a false positive
 costs the most trust.
 """
+
 import subprocess
 
 import pytest
@@ -1034,8 +1158,7 @@ from sdlc.triage.signals import secrets
 
 
 def _run(args, cwd):
-    return subprocess.run(args, cwd=cwd, capture_output=True,
-                          encoding="utf-8", check=True)
+    return subprocess.run(args, cwd=cwd, capture_output=True, encoding="utf-8", check=True)
 
 
 def _commit_repo(root, files: dict[str, str]) -> str:
@@ -1048,9 +1171,9 @@ def _commit_repo(root, files: dict[str, str]) -> str:
         p.write_text(text, encoding="utf-8")
     _run(["git", "add", "-A"], root)
     _run(["git", "commit", "-q", "-m", "one"], root)
-    return subprocess.run(["git", "rev-parse", "HEAD"], cwd=root,
-                          capture_output=True, encoding="utf-8",
-                          check=True).stdout.strip()
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, encoding="utf-8", check=True
+    ).stdout.strip()
 
 
 def _rules(findings):
@@ -1059,31 +1182,35 @@ def _rules(findings):
 
 # ---- provider patterns ------------------------------------------------
 
-@pytest.mark.parametrize("line,rule", [
-    ('AWS_KEY = "AKIAIOSFODNN7EXAMPLE"', "aws_access_key_id"),
-    ('t = "ghp_0123456789abcdefghijklmnopqrstuvwxyz"', "github_token"),
-    ('k = "AIzaSyD-0123456789abcdefghijklmnopqrstu"', "google_api_key"),
-    ('s = "xoxb-123456789012-abcdefghijklmnop"', "slack_token"),
-    ("-----BEGIN RSA PRIVATE KEY-----", "private_key"),
-])
+
+@pytest.mark.parametrize(
+    "line,rule",
+    [
+        ('AWS_KEY = "AKIAIOSFODNN7EXAMPLE"', "aws_access_key_id"),
+        ('t = "ghp_0123456789abcdefghijklmnopqrstuvwxyz"', "github_token"),
+        ('k = "AIzaSyD-0123456789abcdefghijklmnopqrstu"', "google_api_key"),
+        ('s = "xoxb-123456789012-abcdefghijklmnop"', "slack_token"),
+        ("-----BEGIN RSA PRIVATE KEY-----", "private_key"),
+    ],
+)
 def test_provider_patterns_are_critical(line, rule):
     found = secrets.scan_text("src/config.py", line)
     assert rule in _rules(found)
     f = next(f for f in found if f.rule == rule)
     assert f.severity == "critical"
-    assert f.fix_class is FixClass.JUDGEMENT   # rotation is not mechanical
+    assert f.fix_class is FixClass.JUDGEMENT  # rotation is not mechanical
 
 
 def test_finding_carries_the_matched_line_and_number():
-    text = "import os\n\nAWS_KEY = \"AKIAIOSFODNN7EXAMPLE\"\n"
-    f = next(f for f in secrets.scan_text("c.py", text)
-             if f.rule == "aws_access_key_id")
+    text = 'import os\n\nAWS_KEY = "AKIAIOSFODNN7EXAMPLE"\n'
+    f = next(f for f in secrets.scan_text("c.py", text) if f.rule == "aws_access_key_id")
     assert f.line == 3
     assert "AKIAIOSFODNN7EXAMPLE" in f.evidence
     assert f.path == "c.py"
 
 
 # ---- generic rule + entropy gate --------------------------------------
+
 
 def test_generic_rule_ignores_a_low_entropy_placeholder():
     assert secrets.scan_text("s.py", 'password = "changeme"') == []
@@ -1094,21 +1221,24 @@ def test_generic_rule_ignores_a_short_value():
 
 
 def test_generic_rule_flags_a_high_entropy_value_at_low_severity():
-    found = secrets.scan_text(
-        "s.py", 'API_KEY = "f3Kq9Zx2Lm7Rv4Tn8Wb1Yc6Hd5Jg0Ps"')
+    found = secrets.scan_text("s.py", 'API_KEY = "f3Kq9Zx2Lm7Rv4Tn8Wb1Yc6Hd5Jg0Ps"')
     assert _rules(found) == {"generic_secret_assignment"}
     assert found[0].severity == "low"
 
 
 # ---- client-bundle reachability ---------------------------------------
 
-@pytest.mark.parametrize("var", [
-    "NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY",
-    "VITE_STRIPE_SECRET_KEY",
-    "REACT_APP_PRIVATE_KEY",
-    "EXPO_PUBLIC_API_SECRET",
-    "GATSBY_SERVICE_ROLE_TOKEN",
-])
+
+@pytest.mark.parametrize(
+    "var",
+    [
+        "NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY",
+        "VITE_STRIPE_SECRET_KEY",
+        "REACT_APP_PRIVATE_KEY",
+        "EXPO_PUBLIC_API_SECRET",
+        "GATSBY_SERVICE_ROLE_TOKEN",
+    ],
+)
 def test_client_inlined_secret_named_vars_are_critical(var):
     found = secrets.scan_text("src/lib/db.ts", f"const k = process.env.{var};")
     assert "client_bundle_secret" in _rules(found)
@@ -1118,18 +1248,17 @@ def test_client_inlined_secret_named_vars_are_critical(var):
 
 
 def test_public_prefixed_but_not_secret_named_var_is_not_flagged():
-    found = secrets.scan_text(
-        "src/a.ts", "const u = process.env.NEXT_PUBLIC_API_URL;")
+    found = secrets.scan_text("src/a.ts", "const u = process.env.NEXT_PUBLIC_API_URL;")
     assert "client_bundle_secret" not in _rules(found)
 
 
 def test_secret_named_but_not_client_prefixed_var_is_not_client_flagged():
-    found = secrets.scan_text(
-        "server/a.ts", "const k = process.env.SUPABASE_SERVICE_ROLE_KEY;")
+    found = secrets.scan_text("server/a.ts", "const k = process.env.SUPABASE_SERVICE_ROLE_KEY;")
     assert "client_bundle_secret" not in _rules(found)
 
 
 # ---- committed .env ----------------------------------------------------
+
 
 def test_committed_env_splits_into_two_findings():
     found = secrets.env_file_findings([".env", "src/a.py"])
@@ -1144,7 +1273,9 @@ def test_env_rule_names_do_not_collide_with_baseline():
     # .env); secrets owns "env_file_tracked" (a .env is IN the index). Two
     # conditions, two names -- one rule id must mean one thing.
     assert {f.rule for f in secrets.env_file_findings([".env"])} == {
-        "secret_committed", "env_file_tracked"}
+        "secret_committed",
+        "env_file_tracked",
+    }
 
 
 def test_no_env_tracked_means_no_env_findings():
@@ -1153,39 +1284,36 @@ def test_no_env_tracked_means_no_env_findings():
 
 # ---- activity ----------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_activity_finds_the_canonical_vibe_repo_leak(tmp_path):
-    sha = _commit_repo(tmp_path, {
-        ".env": "NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiJ9\n",
-        "src/db.ts": "export const k = "
-                     "process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY;\n",
-    })
-    r = await triage_secrets(
-        TriageSignalInput(repo_dir=str(tmp_path), commit_sha=sha))
+    sha = _commit_repo(
+        tmp_path,
+        {
+            ".env": "NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiJ9\n",
+            "src/db.ts": "export const k = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY;\n",
+        },
+    )
+    r = await triage_secrets(TriageSignalInput(repo_dir=str(tmp_path), commit_sha=sha))
     assert r.collected.state is CollectionState.MEASURED
     assert {"secret_committed", "client_bundle_secret"} <= _rules(r.findings)
-    assert r.metrics == {}          # secrets feeds no readiness dimension
+    assert r.metrics == {}  # secrets feeds no readiness dimension
 
 
 @pytest.mark.asyncio
 async def test_gitignored_local_env_produces_no_finding(tmp_path):
     # D6: enumeration from the tracked tree, not the worktree.
-    sha = _commit_repo(tmp_path, {".gitignore": ".env\n",
-                                  "src/a.py": "x = 1\n"})
-    (tmp_path / ".env").write_text(
-        'AWS_KEY = "AKIAIOSFODNN7EXAMPLE"\n', encoding="utf-8")
-    r = await triage_secrets(
-        TriageSignalInput(repo_dir=str(tmp_path), commit_sha=sha))
+    sha = _commit_repo(tmp_path, {".gitignore": ".env\n", "src/a.py": "x = 1\n"})
+    (tmp_path / ".env").write_text('AWS_KEY = "AKIAIOSFODNN7EXAMPLE"\n', encoding="utf-8")
+    r = await triage_secrets(TriageSignalInput(repo_dir=str(tmp_path), commit_sha=sha))
     assert r.findings == []
 
 
 @pytest.mark.asyncio
 async def test_every_evidence_quote_verifies_against_the_pinned_bytes(tmp_path):
     # D5: the drift guard, and FR-914's first commit-source caller.
-    sha = _commit_repo(tmp_path, {
-        "src/config.py": 'import os\nAWS = "AKIAIOSFODNN7EXAMPLE"\n'})
-    r = await triage_secrets(
-        TriageSignalInput(repo_dir=str(tmp_path), commit_sha=sha))
+    sha = _commit_repo(tmp_path, {"src/config.py": 'import os\nAWS = "AKIAIOSFODNN7EXAMPLE"\n'})
+    r = await triage_secrets(TriageSignalInput(repo_dir=str(tmp_path), commit_sha=sha))
     assert r.findings
     for f in r.findings:
         if not f.evidence or not f.path:
@@ -1198,8 +1326,7 @@ async def test_every_evidence_quote_verifies_against_the_pinned_bytes(tmp_path):
 @pytest.mark.asyncio
 async def test_activity_reports_not_collected_on_a_bad_sha(tmp_path):
     _commit_repo(tmp_path, {"src/a.py": "x = 1\n"})
-    r = await triage_secrets(TriageSignalInput(
-        repo_dir=str(tmp_path), commit_sha="0" * 40))
+    r = await triage_secrets(TriageSignalInput(repo_dir=str(tmp_path), commit_sha="0" * 40))
     assert r.collected.state is CollectionState.NOT_COLLECTED
     assert r.findings == []
 
@@ -1210,11 +1337,14 @@ async def test_binary_blob_is_skipped_not_crashed(tmp_path):
     (tmp_path / "logo.bin").write_bytes(b"\x00\x01\x02AKIAIOSFODNN7EXAMPLE")
     _run(["git", "add", "-A"], tmp_path)
     _run(["git", "commit", "-q", "-m", "two"], tmp_path)
-    sha2 = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmp_path,
-                          capture_output=True, encoding="utf-8",
-                          check=True).stdout.strip()
-    r = await triage_secrets(TriageSignalInput(
-        repo_dir=str(tmp_path), commit_sha=sha2))
+    sha2 = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        capture_output=True,
+        encoding="utf-8",
+        check=True,
+    ).stdout.strip()
+    r = await triage_secrets(TriageSignalInput(repo_dir=str(tmp_path), commit_sha=sha2))
     assert r.collected.state is CollectionState.MEASURED
     assert r.findings == []
 ```
@@ -1241,6 +1371,7 @@ build-time-inlined env prefixes -- not by dataflow. We do no taint tracking, so
 a secret imported into a client component from a non-prefixed source is a false
 negative. Naming that surface is what keeps the finding trustworthy.
 """
+
 from __future__ import annotations
 
 import re
@@ -1260,19 +1391,36 @@ _ENV_EXAMPLES = (".env.example", ".env.sample", ".env.template")
 # (rule, pattern, detail). All critical, all JUDGEMENT: a matched provider
 # credential must be rotated, and rotation is not something a PR can do.
 _PROVIDER_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
-    ("aws_access_key_id", re.compile(r"AKIA[0-9A-Z]{16}"),
-     "AWS access key id committed to the repository."),
-    ("github_token", re.compile(r"gh[pousr]_[A-Za-z0-9]{36}"),
-     "GitHub token committed to the repository."),
-    ("github_pat", re.compile(r"github_pat_[A-Za-z0-9_]{22,}"),
-     "GitHub fine-grained PAT committed to the repository."),
-    ("google_api_key", re.compile(r"AIza[0-9A-Za-z\-_]{35}"),
-     "Google API key committed to the repository."),
-    ("slack_token", re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"),
-     "Slack token committed to the repository."),
-    ("private_key",
-     re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----"),
-     "Private key material committed to the repository."),
+    (
+        "aws_access_key_id",
+        re.compile(r"AKIA[0-9A-Z]{16}"),
+        "AWS access key id committed to the repository.",
+    ),
+    (
+        "github_token",
+        re.compile(r"gh[pousr]_[A-Za-z0-9]{36}"),
+        "GitHub token committed to the repository.",
+    ),
+    (
+        "github_pat",
+        re.compile(r"github_pat_[A-Za-z0-9_]{22,}"),
+        "GitHub fine-grained PAT committed to the repository.",
+    ),
+    (
+        "google_api_key",
+        re.compile(r"AIza[0-9A-Za-z\-_]{35}"),
+        "Google API key committed to the repository.",
+    ),
+    (
+        "slack_token",
+        re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"),
+        "Slack token committed to the repository.",
+    ),
+    (
+        "private_key",
+        re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----"),
+        "Private key material committed to the repository.",
+    ),
 )
 
 # Prefixes whose values frameworks INLINE INTO THE CLIENT BUNDLE at build time.
@@ -1280,11 +1428,13 @@ _PROVIDER_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
 # from any other JWT, so only the variable's name says it must never ship.
 _CLIENT_BUNDLE_VAR = re.compile(
     r"\b((?:NEXT_PUBLIC|VITE|REACT_APP|NUXT_PUBLIC|EXPO_PUBLIC|PUBLIC|GATSBY)"
-    r"_[A-Z0-9_]*(?:SECRET|SERVICE_ROLE|PRIVATE_KEY)[A-Z0-9_]*)\b")
+    r"_[A-Z0-9_]*(?:SECRET|SERVICE_ROLE|PRIVATE_KEY)[A-Z0-9_]*)\b"
+)
 
 _GENERIC_ASSIGNMENT = re.compile(
     r"""(?i)\b(?:secret|token|password|passwd|api[_-]?key)\b\s*[:=]\s*"""
-    r"""["']([^"'\s]{8,})["']""")
+    r"""["']([^"'\s]{8,})["']"""
+)
 
 
 def _looks_random(value: str) -> bool:
@@ -1297,12 +1447,25 @@ def _looks_random(value: str) -> bool:
     return len(value) >= 16 and len(set(value)) >= 10
 
 
-def _finding(rule: str, severity: str, detail: str, fix_class: FixClass,
-             path: str = "", line: int | None = None,
-             evidence: str = "") -> TriageFinding:
-    return TriageFinding(signal=SIGNAL_ID, rule=rule, severity=severity,
-                         detail=detail, fix_class=fix_class, path=path,
-                         line=line, evidence=evidence)
+def _finding(
+    rule: str,
+    severity: str,
+    detail: str,
+    fix_class: FixClass,
+    path: str = "",
+    line: int | None = None,
+    evidence: str = "",
+) -> TriageFinding:
+    return TriageFinding(
+        signal=SIGNAL_ID,
+        rule=rule,
+        severity=severity,
+        detail=detail,
+        fix_class=fix_class,
+        path=path,
+        line=line,
+        evidence=evidence,
+    )
 
 
 def scan_text(path: str, text: str) -> list[TriageFinding]:
@@ -1314,53 +1477,79 @@ def scan_text(path: str, text: str) -> list[TriageFinding]:
         quote = line.strip()[:400]
         for rule, pattern, detail in _PROVIDER_RULES:
             if pattern.search(line):
-                findings.append(_finding(
-                    rule, "critical",
-                    f"{detail} Rotate the credential; deleting the file does "
-                    f"not revoke it.",
-                    FixClass.JUDGEMENT, path, lineno, quote))
+                findings.append(
+                    _finding(
+                        rule,
+                        "critical",
+                        f"{detail} Rotate the credential; deleting the file does not revoke it.",
+                        FixClass.JUDGEMENT,
+                        path,
+                        lineno,
+                        quote,
+                    )
+                )
         for match in _CLIENT_BUNDLE_VAR.finditer(line):
             var = match.group(1)
-            findings.append(_finding(
-                "client_bundle_secret", "critical",
-                f"{var} is a build-time-inlined public variable whose name "
-                f"says it holds a secret. Frameworks embed these in the "
-                f"client bundle, so the value ships to every browser.",
-                FixClass.JUDGEMENT, path, lineno, quote))
+            findings.append(
+                _finding(
+                    "client_bundle_secret",
+                    "critical",
+                    f"{var} is a build-time-inlined public variable whose name "
+                    f"says it holds a secret. Frameworks embed these in the "
+                    f"client bundle, so the value ships to every browser.",
+                    FixClass.JUDGEMENT,
+                    path,
+                    lineno,
+                    quote,
+                )
+            )
         for match in _GENERIC_ASSIGNMENT.finditer(line):
             if _looks_random(match.group(1)):
-                findings.append(_finding(
-                    "generic_secret_assignment", "low",
-                    "A secret-named variable is assigned a high-entropy "
-                    "literal. Verify whether it is a live credential.",
-                    FixClass.JUDGEMENT, path, lineno, quote))
+                findings.append(
+                    _finding(
+                        "generic_secret_assignment",
+                        "low",
+                        "A secret-named variable is assigned a high-entropy "
+                        "literal. Verify whether it is a live credential.",
+                        FixClass.JUDGEMENT,
+                        path,
+                        lineno,
+                        quote,
+                    )
+                )
     return findings
 
 
 def env_file_findings(paths: Sequence[str]) -> list[TriageFinding]:
     """A tracked .env, split into the two halves of spec D7."""
     tracked = set(paths)
-    env_files = sorted(p for p in tracked
-                       if p == ".env" or (p.startswith(".env.")
-                                          and p not in _ENV_EXAMPLES))
+    env_files = sorted(
+        p for p in tracked if p == ".env" or (p.startswith(".env.") and p not in _ENV_EXAMPLES)
+    )
     if not env_files:
         return []
     listed = ", ".join(env_files)
     return [
         _finding(
-            "secret_committed", "critical",
+            "secret_committed",
+            "critical",
             f"{listed} is committed. Every value in it must be treated as "
             f"disclosed and rotated -- removing the file does not revoke "
             f"anything.",
-            FixClass.JUDGEMENT, path=env_files[0]),
+            FixClass.JUDGEMENT,
+            path=env_files[0],
+        ),
         # NOT "gitignore_missing_env" -- baseline owns that name for a
         # different condition (.gitignore exists but does not cover .env).
         # One rule id must mean one thing across the whole tier.
         _finding(
-            "env_file_tracked", "high",
+            "env_file_tracked",
+            "high",
             f"{listed} is tracked; add it to .gitignore and remove it from "
             f"the index so the next secret does not follow it in.",
-            FixClass.MECHANICAL, path=".gitignore"),
+            FixClass.MECHANICAL,
+            path=".gitignore",
+        ),
     ]
 ```
 
@@ -1399,26 +1588,34 @@ async def triage_secrets(inp: TriageSignalInput) -> SignalResult:
             blob = read_blob(inp.repo_dir, inp.commit_sha, path)
             if blob is None or len(blob) > secrets.MAX_BLOB_BYTES:
                 continue
-            if "\x00" in blob:                     # binary; nothing to quote
+            if "\x00" in blob:  # binary; nothing to quote
                 continue
             for finding in secrets.scan_text(path, blob):
                 if finding.evidence and not verify_quote(
-                        finding.evidence, blob, Profile.VERBATIM_BYTES):
+                    finding.evidence, blob, Profile.VERBATIM_BYTES
+                ):
                     _log.warning(
-                        "triage secrets: dropping unverifiable evidence for "
-                        "%s at %s", finding.rule, path)
+                        "triage secrets: dropping unverifiable evidence for %s at %s",
+                        finding.rule,
+                        path,
+                    )
                     continue
                 findings.append(finding)
         return SignalResult(
-            signal=secrets.SIGNAL_ID, version=secrets.VERSION,
+            signal=secrets.SIGNAL_ID,
+            version=secrets.VERSION,
             collected=Measurement.measured(float(len(findings))),
-            findings=findings)
-    except Exception as exc:                       # noqa: BLE001
+            findings=findings,
+        )
+    except Exception as exc:  # noqa: BLE001
         _log.warning("triage secrets signal failed: %s", exc)
         return SignalResult(
-            signal=secrets.SIGNAL_ID, version=secrets.VERSION,
+            signal=secrets.SIGNAL_ID,
+            version=secrets.VERSION,
             collected=Measurement.not_collected(
-                f"secrets signal raised: {type(exc).__name__}: {exc}"))
+                f"secrets signal raised: {type(exc).__name__}: {exc}"
+            ),
+        )
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
@@ -1459,6 +1656,7 @@ Create `tests/test_triage_build_probe.py`:
 """The probe's decision table is pure and tested without a subprocess; the
 one end-to-end test builds a real venv and is marked slow.
 """
+
 import subprocess
 
 import pytest
@@ -1478,8 +1676,7 @@ def _rules(r):
 
 
 def test_no_toolchain_marker_is_a_finding_not_an_error():
-    r = bp.interpret(toolchain_found=False, install=None, build=None,
-                     test=None, test_verdict=None)
+    r = bp.interpret(toolchain_found=False, install=None, build=None, test=None, test_verdict=None)
     assert _rules(r) == {"no_toolchain_marker"}
     assert r.collected.state is CollectionState.MEASURED
     for key in (M_BUILDABLE, M_RUNNABLE):
@@ -1488,8 +1685,7 @@ def test_no_toolchain_marker_is_a_finding_not_an_error():
 
 
 def test_green_install_and_tests_is_measured_one_on_both():
-    r = bp.interpret(True, install=OK, build=None, test=OK,
-                     test_verdict="ran")
+    r = bp.interpret(True, install=OK, build=None, test=OK, test_verdict="ran")
     assert r.metrics[M_BUILDABLE].value == 1.0
     assert r.metrics[M_RUNNABLE].value == 1.0
     assert r.findings == []
@@ -1498,15 +1694,18 @@ def test_green_install_and_tests_is_measured_one_on_both():
 def test_failing_tests_still_count_as_runnable():
     # exit 1 = tests ran and failed. Runnable is about whether the suite
     # executes, not whether it passes.
-    r = bp.interpret(True, install=OK, build=None,
-                     test=StepOutcome(code=1, output="2 failed"),
-                     test_verdict="ran")
+    r = bp.interpret(
+        True,
+        install=OK,
+        build=None,
+        test=StepOutcome(code=1, output="2 failed"),
+        test_verdict="ran",
+    )
     assert r.metrics[M_RUNNABLE].value == 1.0
 
 
 def test_install_failure_is_measured_zero_and_a_finding():
-    r = bp.interpret(True, install=FAIL, build=None, test=None,
-                     test_verdict=None)
+    r = bp.interpret(True, install=FAIL, build=None, test=None, test_verdict=None)
     assert r.metrics[M_BUILDABLE].value == 0.0
     assert "install_failed" in _rules(r)
 
@@ -1514,16 +1713,14 @@ def test_install_failure_is_measured_zero_and_a_finding():
 def test_install_failure_leaves_runnable_not_collected():
     # Running a suite whose deps are absent measures the failed install a
     # second time, not runnability.
-    r = bp.interpret(True, install=FAIL, build=None, test=None,
-                     test_verdict=None)
+    r = bp.interpret(True, install=FAIL, build=None, test=None, test_verdict=None)
     m = r.metrics[M_RUNNABLE]
     assert m.state is CollectionState.NOT_COLLECTED
     assert "install failed" in m.reason
 
 
 def test_install_timeout_is_not_collected_not_a_measured_failure():
-    r = bp.interpret(True, install=TIMEOUT, build=None, test=None,
-                     test_verdict=None)
+    r = bp.interpret(True, install=TIMEOUT, build=None, test=None, test_verdict=None)
     m = r.metrics[M_BUILDABLE]
     assert m.state is CollectionState.NOT_COLLECTED
     assert "timed out" in m.reason
@@ -1531,16 +1728,19 @@ def test_install_timeout_is_not_collected_not_a_measured_failure():
 
 
 def test_build_failure_makes_buildable_zero():
-    r = bp.interpret(True, install=OK, build=FAIL, test=None,
-                     test_verdict=None)
+    r = bp.interpret(True, install=OK, build=FAIL, test=None, test_verdict=None)
     assert r.metrics[M_BUILDABLE].value == 0.0
     assert "build_failed" in _rules(r)
 
 
 def test_no_tests_collected_leaves_runnable_not_collected():
-    r = bp.interpret(True, install=OK, build=None,
-                     test=StepOutcome(code=5, output="no tests ran"),
-                     test_verdict="no_tests")
+    r = bp.interpret(
+        True,
+        install=OK,
+        build=None,
+        test=StepOutcome(code=5, output="no tests ran"),
+        test_verdict="no_tests",
+    )
     m = r.metrics[M_RUNNABLE]
     assert m.state is CollectionState.NOT_COLLECTED
     assert "no tests" in m.reason
@@ -1549,22 +1749,24 @@ def test_no_tests_collected_leaves_runnable_not_collected():
 
 
 def test_suite_that_cannot_be_collected_is_measured_zero():
-    r = bp.interpret(True, install=OK, build=None,
-                     test=StepOutcome(code=3, output="INTERNALERROR"),
-                     test_verdict="failed_to_run")
+    r = bp.interpret(
+        True,
+        install=OK,
+        build=None,
+        test=StepOutcome(code=3, output="INTERNALERROR"),
+        test_verdict="failed_to_run",
+    )
     assert r.metrics[M_RUNNABLE].value == 0.0
     assert "tests_failed_to_run" in _rules(r)
 
 
 def test_test_timeout_is_not_collected():
-    r = bp.interpret(True, install=OK, build=None, test=TIMEOUT,
-                     test_verdict=None)
+    r = bp.interpret(True, install=OK, build=None, test=TIMEOUT, test_verdict=None)
     assert r.metrics[M_RUNNABLE].state is CollectionState.NOT_COLLECTED
 
 
 def test_no_install_command_leaves_buildable_not_collected():
-    r = bp.interpret(True, install=None, build=None, test=OK,
-                     test_verdict="ran")
+    r = bp.interpret(True, install=None, build=None, test=OK, test_verdict="ran")
     m = r.metrics[M_BUILDABLE]
     assert m.state is CollectionState.NOT_COLLECTED
     assert "install command" in m.reason
@@ -1572,13 +1774,13 @@ def test_no_install_command_leaves_buildable_not_collected():
 
 def test_finding_output_is_capped():
     huge = StepOutcome(code=1, output="x" * 100_000)
-    r = bp.interpret(True, install=huge, build=None, test=None,
-                     test_verdict=None)
+    r = bp.interpret(True, install=huge, build=None, test=None, test_verdict=None)
     f = next(f for f in r.findings if f.rule == "install_failed")
     assert len(f.detail) <= bp.MAX_DETAIL_CHARS + 200
 
 
 # ---- end to end --------------------------------------------------------
+
 
 @pytest.mark.slow
 @pytest.mark.asyncio
@@ -1586,28 +1788,30 @@ async def test_probe_runs_a_real_repo_end_to_end(tmp_path):
     from sdlc.triage.activities import TriageProbeInput, triage_build_probe
 
     def _run(args, cwd):
-        return subprocess.run(args, cwd=cwd, capture_output=True,
-                              encoding="utf-8", check=True)
+        return subprocess.run(args, cwd=cwd, capture_output=True, encoding="utf-8", check=True)
 
     (tmp_path / "pyproject.toml").write_text(
-        '[project]\nname = "probe-fixture"\nversion = "0.1.0"\n'
-        'requires-python = ">=3.11"\n', encoding="utf-8")
-    (tmp_path / "app.py").write_text("def add(a, b):\n    return a + b\n",
-                                     encoding="utf-8")
+        '[project]\nname = "probe-fixture"\nversion = "0.1.0"\nrequires-python = ">=3.11"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "app.py").write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
     (tmp_path / "test_app.py").write_text(
-        "from app import add\n\n\ndef test_add():\n    assert add(1, 2) == 3\n",
-        encoding="utf-8")
+        "from app import add\n\n\ndef test_add():\n    assert add(1, 2) == 3\n", encoding="utf-8"
+    )
     _run(["git", "init", "-q"], tmp_path)
     _run(["git", "config", "user.email", "t@example.com"], tmp_path)
     _run(["git", "config", "user.name", "T"], tmp_path)
     _run(["git", "add", "-A"], tmp_path)
     _run(["git", "commit", "-q", "-m", "one"], tmp_path)
-    sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmp_path,
-                         capture_output=True, encoding="utf-8",
-                         check=True).stdout.strip()
+    sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        capture_output=True,
+        encoding="utf-8",
+        check=True,
+    ).stdout.strip()
 
-    r = await triage_build_probe(TriageProbeInput(
-        repo_dir=str(tmp_path), commit_sha=sha))
+    r = await triage_build_probe(TriageProbeInput(repo_dir=str(tmp_path), commit_sha=sha))
 
     assert r.metrics[M_BUILDABLE].value == 1.0
     assert r.metrics[M_RUNNABLE].value == 1.0
@@ -1635,13 +1839,18 @@ Two rules run through every branch (spec §6):
     entirely, because running a suite whose dependencies are missing measures
     the failed install a second time.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from ...measurement import Measurement
 from ..models import (
-    FixClass, M_BUILDABLE, M_RUNNABLE, SignalResult, TriageFinding,
+    FixClass,
+    M_BUILDABLE,
+    M_RUNNABLE,
+    SignalResult,
+    TriageFinding,
 )
 
 SIGNAL_ID = "build_probe"
@@ -1651,7 +1860,7 @@ VERSION = 1
 # `pip install` can emit megabytes, and the artifact is a report, not a log.
 MAX_DETAIL_CHARS = 4000
 
-TIMEOUT_CODE = -1          # _bounded_shell's sentinel
+TIMEOUT_CODE = -1  # _bounded_shell's sentinel
 
 
 @dataclass
@@ -1664,17 +1873,19 @@ def _tail(text: str) -> str:
     return text[-MAX_DETAIL_CHARS:]
 
 
-def _finding(rule: str, severity: str, detail: str,
-             fix_class: FixClass) -> TriageFinding:
-    return TriageFinding(signal=SIGNAL_ID, rule=rule, severity=severity,
-                         detail=detail, fix_class=fix_class)
+def _finding(rule: str, severity: str, detail: str, fix_class: FixClass) -> TriageFinding:
+    return TriageFinding(
+        signal=SIGNAL_ID, rule=rule, severity=severity, detail=detail, fix_class=fix_class
+    )
 
 
-def interpret(toolchain_found: bool,
-              install: StepOutcome | None,
-              build: StepOutcome | None,
-              test: StepOutcome | None,
-              test_verdict: str | None) -> SignalResult:
+def interpret(
+    toolchain_found: bool,
+    install: StepOutcome | None,
+    build: StepOutcome | None,
+    test: StepOutcome | None,
+    test_verdict: str | None,
+) -> SignalResult:
     """The whole decision table, pure.
 
     `install`/`build`/`test` are None when the step did not run: no adapter
@@ -1685,37 +1896,43 @@ def interpret(toolchain_found: bool,
     findings: list[TriageFinding] = []
 
     if not toolchain_found:
-        findings.append(_finding(
-            "no_toolchain_marker", "high",
-            "No recognized toolchain marker file at the repository root, so "
-            "the build and the suite cannot be probed. Establishing a "
-            "recognizable project layout is design work.",
-            FixClass.STRUCTURAL))
+        findings.append(
+            _finding(
+                "no_toolchain_marker",
+                "high",
+                "No recognized toolchain marker file at the repository root, so "
+                "the build and the suite cannot be probed. Establishing a "
+                "recognizable project layout is design work.",
+                FixClass.STRUCTURAL,
+            )
+        )
         return SignalResult(
-            signal=SIGNAL_ID, version=VERSION,
+            signal=SIGNAL_ID,
+            version=VERSION,
             collected=Measurement.measured(float(len(findings))),
             findings=findings,
             metrics={
-                M_BUILDABLE: Measurement.not_collected(
-                    "no toolchain marker resolved"),
-                M_RUNNABLE: Measurement.not_collected(
-                    "no toolchain marker resolved"),
-            })
+                M_BUILDABLE: Measurement.not_collected("no toolchain marker resolved"),
+                M_RUNNABLE: Measurement.not_collected("no toolchain marker resolved"),
+            },
+        )
 
     # --- buildable -----------------------------------------------------
     install_ok = False
     if install is None:
-        buildable = Measurement.not_collected(
-            "adapter declares no install command for this marker")
+        buildable = Measurement.not_collected("adapter declares no install command for this marker")
     elif install.code == TIMEOUT_CODE:
         buildable = Measurement.not_collected(f"install: {install.output}")
     elif install.code != 0:
         buildable = Measurement.measured(0.0)
-        findings.append(_finding(
-            "install_failed", "critical",
-            f"Dependency install failed (exit {install.code}). "
-            f"{_tail(install.output)}",
-            FixClass.JUDGEMENT))
+        findings.append(
+            _finding(
+                "install_failed",
+                "critical",
+                f"Dependency install failed (exit {install.code}). {_tail(install.output)}",
+                FixClass.JUDGEMENT,
+            )
+        )
     else:
         install_ok = True
         buildable = Measurement.measured(1.0)
@@ -1725,42 +1942,52 @@ def interpret(toolchain_found: bool,
             buildable = Measurement.not_collected(f"build: {build.output}")
         elif build.code != 0:
             buildable = Measurement.measured(0.0)
-            findings.append(_finding(
-                "build_failed", "critical",
-                f"Build failed (exit {build.code}). {_tail(build.output)}",
-                FixClass.JUDGEMENT))
+            findings.append(
+                _finding(
+                    "build_failed",
+                    "critical",
+                    f"Build failed (exit {build.code}). {_tail(build.output)}",
+                    FixClass.JUDGEMENT,
+                )
+            )
 
     # --- runnable ------------------------------------------------------
     if install is not None and not install_ok:
         # Deliberate: the test step is skipped, not merely ignored.
         runnable = Measurement.not_collected(
-            "install failed, so a test run would re-measure that rather than "
-            "runnability")
+            "install failed, so a test run would re-measure that rather than runnability"
+        )
     elif test is None:
-        runnable = Measurement.not_collected(
-            "adapter declares no test command")
+        runnable = Measurement.not_collected("adapter declares no test command")
     elif test.code == TIMEOUT_CODE:
         runnable = Measurement.not_collected(f"tests: {test.output}")
     elif test_verdict == "no_tests":
         # baseline owns the no_tests FINDING; reporting it here too would be
         # the two-implementations failure FR-902 forbids.
         runnable = Measurement.not_collected(
-            "no tests were collected, so runnability was not measured")
+            "no tests were collected, so runnability was not measured"
+        )
     elif test_verdict == "failed_to_run":
         runnable = Measurement.measured(0.0)
-        findings.append(_finding(
-            "tests_failed_to_run", "high",
-            f"The test suite could not be collected or crashed the runner "
-            f"(exit {test.code}). {_tail(test.output)}",
-            FixClass.JUDGEMENT))
+        findings.append(
+            _finding(
+                "tests_failed_to_run",
+                "high",
+                f"The test suite could not be collected or crashed the runner "
+                f"(exit {test.code}). {_tail(test.output)}",
+                FixClass.JUDGEMENT,
+            )
+        )
     else:
         runnable = Measurement.measured(1.0)
 
     return SignalResult(
-        signal=SIGNAL_ID, version=VERSION,
+        signal=SIGNAL_ID,
+        version=VERSION,
         collected=Measurement.measured(float(len(findings))),
         findings=findings,
-        metrics={M_BUILDABLE: buildable, M_RUNNABLE: runnable})
+        metrics={M_BUILDABLE: buildable, M_RUNNABLE: runnable},
+    )
 ```
 
 - [ ] **Step 4: Append the activity to `src/sdlc/triage/activities.py`**
@@ -1825,24 +2052,22 @@ async def triage_build_probe(inp: TriageProbeInput) -> SignalResult:
     venv_dir = os.path.join(workdir, "venv")
     try:
         code, out = await _bounded_shell(
-            f'git clone --local --quiet "{inp.repo_dir}" "{clone}"',
-            workdir, 300)
+            f'git clone --local --quiet "{inp.repo_dir}" "{clone}"', workdir, 300
+        )
         if code != 0:
             raise RuntimeError(f"clone failed: {out[-1000:]}")
         code, out = await _bounded_shell(
-            f'git -c advice.detachedHead=false checkout --quiet '
-            f'"{inp.commit_sha}"', clone, 120)
+            f'git -c advice.detachedHead=false checkout --quiet "{inp.commit_sha}"', clone, 120
+        )
         if code != 0:
-            raise RuntimeError(f"checkout of {inp.commit_sha} failed: "
-                               f"{out[-1000:]}")
+            raise RuntimeError(f"checkout of {inp.commit_sha} failed: {out[-1000:]}")
 
         found = detect_with_marker(clone)
         if found is None:
             return build_probe.interpret(False, None, None, None, None)
         adapter, marker = found
 
-        code, out = await _bounded_shell(
-            f'"{sys.executable}" -m venv "{venv_dir}"', workdir, 300)
+        code, out = await _bounded_shell(f'"{sys.executable}" -m venv "{venv_dir}"', workdir, 300)
         if code != 0:
             raise RuntimeError(f"venv creation failed: {out[-1000:]}")
         env = _venv_env(venv_dir)
@@ -1850,16 +2075,13 @@ async def triage_build_probe(inp: TriageProbeInput) -> SignalResult:
         install = None
         install_command = adapter.install_cmd(marker)
         if install_command is not None:
-            code, out = await _bounded_shell(
-                install_command, clone, inp.install_timeout_s, env=env)
+            code, out = await _bounded_shell(install_command, clone, inp.install_timeout_s, env=env)
             install = build_probe.StepOutcome(code=code, output=out)
 
         build = None
         build_command = adapter.build_cmd()
-        if build_command is not None and install is not None \
-                and install.code == 0:
-            code, out = await _bounded_shell(
-                build_command, clone, inp.build_timeout_s, env=env)
+        if build_command is not None and install is not None and install.code == 0:
+            code, out = await _bounded_shell(build_command, clone, inp.build_timeout_s, env=env)
             build = build_probe.StepOutcome(code=code, output=out)
 
         test = None
@@ -1869,22 +2091,22 @@ async def triage_build_probe(inp: TriageProbeInput) -> SignalResult:
             # so its exit code never masks an install failure. A project that
             # does not declare pytest is a dependency-health finding (E-41a),
             # not a reason to leave runnability unmeasured.
-            await _bounded_shell(
-                "pip install -q pytest", clone, inp.install_timeout_s, env=env)
+            await _bounded_shell("pip install -q pytest", clone, inp.install_timeout_s, env=env)
             code, out = await _bounded_shell(
-                adapter.test_cmd(coverage=False), clone, inp.test_timeout_s,
-                env=env)
+                adapter.test_cmd(coverage=False), clone, inp.test_timeout_s, env=env
+            )
             test = build_probe.StepOutcome(code=code, output=out)
             if code != build_probe.TIMEOUT_CODE:
                 verdict = adapter.classify_test_exit(code)
 
         return build_probe.interpret(True, install, build, test, verdict)
-    except Exception as exc:                       # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.warning("triage build probe failed: %s", exc)
         return SignalResult(
-            signal=build_probe.SIGNAL_ID, version=build_probe.VERSION,
-            collected=Measurement.not_collected(
-                f"build probe raised: {type(exc).__name__}: {exc}"))
+            signal=build_probe.SIGNAL_ID,
+            version=build_probe.VERSION,
+            collected=Measurement.not_collected(f"build probe raised: {type(exc).__name__}: {exc}"),
+        )
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 ```
@@ -1927,12 +2149,12 @@ Create `tests/test_triage_registry.py`:
 ```python
 """The registry is the one place that says which signals exist. It must not
 be able to drift from the modules it names."""
+
 from sdlc.triage import activities as triage_activities
 from sdlc.triage.registry import SIGNALS, SignalSpec
 from sdlc.triage.signals import baseline, build_probe, secrets
 
-_MODULES = {"baseline": baseline, "secrets": secrets,
-            "build_probe": build_probe}
+_MODULES = {"baseline": baseline, "secrets": secrets, "build_probe": build_probe}
 
 
 def test_registry_covers_exactly_the_three_signals():
@@ -1958,8 +2180,7 @@ def test_every_registered_signal_is_registered_on_the_worker():
 
     source = inspect.getsource(worker)
     for spec in SIGNALS.values():
-        assert spec.activity in source, (
-            f"{spec.activity} is not registered in worker.py")
+        assert spec.activity in source, f"{spec.activity} is not registered in worker.py"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1976,6 +2197,7 @@ One entry per signal, and `version` is what E-46 will fold into its
 `(tree hash, signal version)` memo key -- bumping a signal's version
 invalidates exactly that signal's cached result and nothing else.
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel
@@ -1986,19 +2208,19 @@ from .signals import baseline, build_probe, secrets
 class SignalSpec(BaseModel):
     id: str
     version: int
-    activity: str          # the @activity.defn name in triage/activities.py
+    activity: str  # the @activity.defn name in triage/activities.py
 
 
 SIGNALS: dict[str, SignalSpec] = {
     baseline.SIGNAL_ID: SignalSpec(
-        id=baseline.SIGNAL_ID, version=baseline.VERSION,
-        activity="triage_baseline"),
+        id=baseline.SIGNAL_ID, version=baseline.VERSION, activity="triage_baseline"
+    ),
     secrets.SIGNAL_ID: SignalSpec(
-        id=secrets.SIGNAL_ID, version=secrets.VERSION,
-        activity="triage_secrets"),
+        id=secrets.SIGNAL_ID, version=secrets.VERSION, activity="triage_secrets"
+    ),
     build_probe.SIGNAL_ID: SignalSpec(
-        id=build_probe.SIGNAL_ID, version=build_probe.VERSION,
-        activity="triage_build_probe"),
+        id=build_probe.SIGNAL_ID, version=build_probe.VERSION, activity="triage_build_probe"
+    ),
 }
 ```
 
@@ -2008,14 +2230,20 @@ Add this import after the `from .research.verify import verify_brief_activity` l
 
 ```python
 from .triage.activities import (
-    triage_baseline, triage_build_probe, triage_secrets,
+    triage_baseline,
+    triage_build_probe,
+    triage_secrets,
 )
 ```
 
 Add to the `activities=[...]` list, after the `synthesize_brief,` line:
 
 ```python
-            triage_baseline, triage_secrets, triage_build_probe,
+(
+    triage_baseline,
+    triage_secrets,
+    triage_build_probe,
+)
 ```
 
 - [ ] **Step 5: Run the registry test and the whole fast suite**

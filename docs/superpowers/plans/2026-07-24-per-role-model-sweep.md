@@ -41,6 +41,7 @@ def test_resolver_falls_back_to_registry_default():
     cfg = PipelineConfig()  # no proposer overrides
     # architect stage default comes from STAGE_MODELS (registry)
     from sdlc.agents.roles import STAGE_MODELS
+
     assert resolve_role_model(cfg, "architect") == STAGE_MODELS["architect"]
 
 
@@ -62,7 +63,9 @@ def test_memo_key_moves_with_per_role_model():
     override = PipelineConfig()
     override.roles["architect"] = RoleConfig(kind="proposer", model="openai/gpt-5.2")
     k_base = content_key("architect", "{}", "sha", resolve_role_model(base, "architect"), "none")
-    k_over = content_key("architect", "{}", "sha", resolve_role_model(override, "architect"), "none")
+    k_over = content_key(
+        "architect", "{}", "sha", resolve_role_model(override, "architect"), "none"
+    )
     assert k_base != k_over
 ```
 
@@ -76,11 +79,20 @@ Expected: FAIL with `ImportError: cannot import name 'resolve_role_model'`.
 In `src/sdlc/workflows/feature.py`, extend the existing import (lines 26-30) to include `STAGE_ROLES`:
 
 ```python
-    from ..agents.roles import (
-        PROMPT_SHAS, STAGE_MODELS, STAGE_ROLES, t_analyst, t_architect,
-        t_clarify, t_deep_review, t_merge_verdict, t_planner, t_qa,
-        t_research, t_reviewer,
-    )
+from ..agents.roles import (
+    PROMPT_SHAS,
+    STAGE_MODELS,
+    STAGE_ROLES,
+    t_analyst,
+    t_architect,
+    t_clarify,
+    t_deep_review,
+    t_merge_verdict,
+    t_planner,
+    t_qa,
+    t_research,
+    t_reviewer,
+)
 ```
 
 Add this module-level function immediately after the imports block (before the workflow class), so it is importable and callable from workflow code:
@@ -103,9 +115,13 @@ def resolve_role_model(cfg: "PipelineConfig", stage: str) -> str:
 In `_cached_stage` (around line 383), replace `STAGE_MODELS[stage]` with the resolver and update the docstring line that claims the model comes from `STAGE_MODELS`:
 
 ```python
-        key = content_key(stage, input_json, PROMPT_SHAS[stage],
-                          resolve_role_model(cfg, stage),
-                          self._memory_watermark or "none")
+key = content_key(
+    stage,
+    input_json,
+    PROMPT_SHAS[stage],
+    resolve_role_model(cfg, stage),
+    self._memory_watermark or "none",
+)
 ```
 
 Update the docstring sentence at lines 377-380 to: `The stage's model is resolved per-run (resolve_role_model): a per-role override MUST move the key, or a stale result computed by a different model would be served.`
@@ -149,8 +165,8 @@ def test_no_raw_stage_models_lookup_in_feature_workflow():
     src = Path("src/sdlc/workflows/feature.py").read_text(encoding="utf-8")
     # strip the resolver body (the one legitimate raw lookup)
     src_wo_resolver = re.sub(
-        r"def resolve_role_model.*?return STAGE_MODELS\[stage\]",
-        "", src, flags=re.DOTALL)
+        r"def resolve_role_model.*?return STAGE_MODELS\[stage\]", "", src, flags=re.DOTALL
+    )
     assert "STAGE_MODELS[" not in src_wo_resolver
 ```
 
@@ -211,26 +227,31 @@ from sdlc.agents.loader import RegistryError, validate_run_roles
 
 
 def test_passes_when_families_differ():
-    validate_run_roles({"dev": "zai-coding-plan/glm-5.2",
-                        "reviewer": "openai/gpt-5.2"})  # no raise
+    validate_run_roles({"dev": "zai-coding-plan/glm-5.2", "reviewer": "openai/gpt-5.2"})  # no raise
 
 
 def test_rejects_dev_reviewer_same_family():
     with pytest.raises(RegistryError, match="ADR-6"):
-        validate_run_roles({"dev": "anthropic:claude-opus-4-8",
-                            "reviewer": "anthropic:claude-haiku-4-5"})
+        validate_run_roles(
+            {"dev": "anthropic:claude-opus-4-8", "reviewer": "anthropic:claude-haiku-4-5"}
+        )
 
 
 def test_rejects_deep_review_sharing_dev_family():
     with pytest.raises(RegistryError, match="deep_review"):
-        validate_run_roles({"dev": "anthropic:claude-opus-4-8",
-                            "reviewer": "openai/gpt-5.2",
-                            "deep_review": "anthropic:claude-haiku-4-5"})
+        validate_run_roles(
+            {
+                "dev": "anthropic:claude-opus-4-8",
+                "reviewer": "openai/gpt-5.2",
+                "deep_review": "anthropic:claude-haiku-4-5",
+            }
+        )
 
 
 def test_deep_review_absent_is_fine():
-    validate_run_roles({"dev": "zai-coding-plan/glm-5.2",
-                        "reviewer": "openai/gpt-5.2"})  # no deep_review key, no raise
+    validate_run_roles(
+        {"dev": "zai-coding-plan/glm-5.2", "reviewer": "openai/gpt-5.2"}
+    )  # no deep_review key, no raise
 
 
 def test_missing_dev_or_reviewer_raises():
@@ -257,19 +278,20 @@ def check_adr6_families(role_models: dict[str, str]) -> None:
     dev = role_models.get("dev")
     rev = role_models.get("reviewer")
     if dev is None or rev is None:
-        raise RegistryError(
-            "ADR-6 check requires both 'dev' and 'reviewer' models")
+        raise RegistryError("ADR-6 check requires both 'dev' and 'reviewer' models")
     if model_family(dev) == model_family(rev):
         raise RegistryError(
             f"ADR-6 violation: reviewer family '{model_family(rev)}' "
             f"equals the family of 'dev' — anti-collusion review requires a "
-            f"different model family than the developer's authoring model")
+            f"different model family than the developer's authoring model"
+        )
     dr = role_models.get("deep_review")
     if dr is not None and model_family(dr) == model_family(dev):
         raise RegistryError(
             f"ADR-6 violation: deep_review family '{model_family(dr)}' "
             f"equals the family of 'dev' — the transcript lens must not "
-            f"correlate with the authoring model")
+            f"correlate with the authoring model"
+        )
 
 
 def validate_run_roles(role_models: dict[str, str]) -> None:
@@ -285,21 +307,20 @@ def validate_run_roles(role_models: dict[str, str]) -> None:
 In `validate_registry`, replace the inline dev/reviewer/deep_review family logic (currently lines ~200-222) with a call to `check_adr6_families`, keeping the model-presence guards and the harness-inequality check (which is registry-structural, not model-family):
 
 ```python
-    for name in ("dev", "reviewer"):
-        if roles[name].model is None:
-            raise RegistryError(f"role '{name}' must declare a model")
-    dev, rev = roles["dev"], roles["reviewer"]
-    role_models = {"dev": dev.model, "reviewer": rev.model}
-    if "deep_review" in roles:
-        if roles["deep_review"].model is None:
-            raise RegistryError("role 'deep_review' must declare a model")
-        role_models["deep_review"] = roles["deep_review"].model
-    check_adr6_families(role_models)
-    if rev.kind == "harness" and rev.harness is not None \
-            and rev.harness == dev.harness:
-        raise RegistryError(
-            "deep-review harness reviewer must use a different harness than "
-            "the developer")
+for name in ("dev", "reviewer"):
+    if roles[name].model is None:
+        raise RegistryError(f"role '{name}' must declare a model")
+dev, rev = roles["dev"], roles["reviewer"]
+role_models = {"dev": dev.model, "reviewer": rev.model}
+if "deep_review" in roles:
+    if roles["deep_review"].model is None:
+        raise RegistryError("role 'deep_review' must declare a model")
+    role_models["deep_review"] = roles["deep_review"].model
+check_adr6_families(role_models)
+if rev.kind == "harness" and rev.harness is not None and rev.harness == dev.harness:
+    raise RegistryError(
+        "deep-review harness reviewer must use a different harness than the developer"
+    )
 ```
 
 - [ ] **Step 5: Run the new test + existing registry tests**
@@ -339,16 +360,22 @@ from sdlc.models import HarnessKind
 
 
 def test_arm_resolve_named_only():
-    arm = Arm(name="frontier-arch",
-              role_models={"architect": "anthropic:claude-opus-4-8",
-                           "dev": "zai-coding-plan/glm-5.2"})
-    assert arm.resolve() == {"architect": "anthropic:claude-opus-4-8",
-                             "dev": "zai-coding-plan/glm-5.2"}
+    arm = Arm(
+        name="frontier-arch",
+        role_models={"architect": "anthropic:claude-opus-4-8", "dev": "zai-coding-plan/glm-5.2"},
+    )
+    assert arm.resolve() == {
+        "architect": "anthropic:claude-opus-4-8",
+        "dev": "zai-coding-plan/glm-5.2",
+    }
 
 
 def test_arm_resolve_default_fills_all_overridable_roles():
-    arm = Arm(name="all-cheap", default="zai-coding-plan/glm-5.2",
-              role_models={"reviewer": "openai/gpt-5.2"})
+    arm = Arm(
+        name="all-cheap",
+        default="zai-coding-plan/glm-5.2",
+        role_models={"reviewer": "openai/gpt-5.2"},
+    )
     resolved = arm.resolve()
     # every harness + proposer role present
     assert resolved["dev"] == "zai-coding-plan/glm-5.2"
@@ -359,16 +386,23 @@ def test_arm_resolve_default_fills_all_overridable_roles():
 
 
 def test_cell_id_uses_arm_name():
-    cell = BenchmarkCell(case_id="c1", harness=HarnessKind.OPENCODE,
-                         arm_name="frontier-arch",
-                         role_models={"dev": "zai-coding-plan/glm-5.2"})
+    cell = BenchmarkCell(
+        case_id="c1",
+        harness=HarnessKind.OPENCODE,
+        arm_name="frontier-arch",
+        role_models={"dev": "zai-coding-plan/glm-5.2"},
+    )
     assert cell.cell_id == "c1#opencode#frontier-arch"
 
 
 def test_casespec_arms_default_empty():
-    spec = CaseSpec(case_id="c1", idea_summary="x",
-                    harnesses=[HarnessKind.OPENCODE], models=["m"],
-                    judge_model="openai/gpt-5.2")
+    spec = CaseSpec(
+        case_id="c1",
+        idea_summary="x",
+        harnesses=[HarnessKind.OPENCODE],
+        models=["m"],
+        judge_model="openai/gpt-5.2",
+    )
     assert spec.arms == []
 ```
 
@@ -390,6 +424,7 @@ class Arm(BaseModel):
     (optional) sets the model for every overridable role; `role_models`
     overrides specific roles and wins over `default`. Roles left unset (with
     `default=None`) keep the registry default at run time."""
+
     name: str
     default: str | None = None
     role_models: dict[str, str] = Field(default_factory=dict)
@@ -416,6 +451,7 @@ Update `BenchmarkCell`:
 ```python
 class BenchmarkCell(BaseModel):
     """One cell of the matrix: a (case, harness, arm) triple to execute."""
+
     case_id: str
     harness: HarnessKind
     arm_name: str
@@ -466,43 +502,63 @@ from sdlc.benchmarks.models import Arm
 
 def _spec_arms(arms, harnesses=None, judge="openai/gpt-5.2"):
     return CaseSpec(
-        case_id="c1", idea_summary="x",
+        case_id="c1",
+        idea_summary="x",
         harnesses=harnesses or [HarnessKind.OPENCODE],
-        models=[], arms=arms, judge_model=judge, rubrics={})
+        models=[],
+        arms=arms,
+        judge_model=judge,
+        rubrics={},
+    )
 
 
 def test_arms_cross_harnesses():
     spec = _spec_arms(
-        [Arm(name="a", role_models={"dev": "zai-coding-plan/glm-5.2"}),
-         Arm(name="b", role_models={"dev": "openai/gpt-5.2"})],
-        harnesses=[HarnessKind.CLAUDE_CODE, HarnessKind.OPENCODE])
+        [
+            Arm(name="a", role_models={"dev": "zai-coding-plan/glm-5.2"}),
+            Arm(name="b", role_models={"dev": "openai/gpt-5.2"}),
+        ],
+        harnesses=[HarnessKind.CLAUDE_CODE, HarnessKind.OPENCODE],
+    )
     cells = expand_matrix(spec)
     assert len(cells) == 2 * 2
     assert {c.arm_name for c in cells} == {"a", "b"}
 
 
 def test_arm_role_models_reach_cell():
-    spec = _spec_arms([Arm(name="a",
-                           role_models={"architect": "anthropic:claude-opus-4-8",
-                                        "dev": "zai-coding-plan/glm-5.2"})])
+    spec = _spec_arms(
+        [
+            Arm(
+                name="a",
+                role_models={
+                    "architect": "anthropic:claude-opus-4-8",
+                    "dev": "zai-coding-plan/glm-5.2",
+                },
+            )
+        ]
+    )
     (cell,) = expand_matrix(spec)
     assert cell.role_models["architect"] == "anthropic:claude-opus-4-8"
 
 
 def test_judge_rejects_family_shared_with_any_arm_model():
     spec = _spec_arms(
-        [Arm(name="a", role_models={"architect": "openai/gpt-5.2"})],
-        judge="openai/gpt-5.2")     # judge shares family with an arm producer
+        [Arm(name="a", role_models={"architect": "openai/gpt-5.2"})], judge="openai/gpt-5.2"
+    )  # judge shares family with an arm producer
     with pytest.raises(SameFamilyJudgeError):
         expand_matrix(spec)
 
 
 def test_backward_compat_models_desugar_to_harness_arms():
     # old-style spec: models set, arms empty → one arm per model, harness-only
-    spec = CaseSpec(case_id="c1", idea_summary="x",
-                    harnesses=[HarnessKind.OPENCODE],
-                    models=["zai-coding-plan/glm-5.2", "openai/gpt-5.2"],
-                    judge_model="google/gemini-2-pro", rubrics={})
+    spec = CaseSpec(
+        case_id="c1",
+        idea_summary="x",
+        harnesses=[HarnessKind.OPENCODE],
+        models=["zai-coding-plan/glm-5.2", "openai/gpt-5.2"],
+        judge_model="google/gemini-2-pro",
+        rubrics={},
+    )
     cells = expand_matrix(spec)
     assert len(cells) == 2
     for c in cells:
@@ -523,6 +579,7 @@ Replace `src/sdlc/benchmarks/matrix.py` with:
 """Expand a CaseSpec into (harness × arm) cells, enforcing the ADR-6
 cross-family judge rule: the judge model's family must differ from EVERY
 model explicitly named in EVERY arm."""
+
 from __future__ import annotations
 
 from .models import Arm, BenchmarkCell, CaseSpec
@@ -544,8 +601,10 @@ def _arms_for(spec: CaseSpec) -> list[Arm]:
     # backward compat: one arm per model, harness roles only (proposers keep
     # the registry default, exactly as the pre-E-37 uniform sweep did).
     return [
-        Arm(name=_family(m) + "-" + m.rsplit("/", 1)[-1].rsplit(":", 1)[-1],
-            role_models={"dev": m, "test": m, "devops": m})
+        Arm(
+            name=_family(m) + "-" + m.rsplit("/", 1)[-1].rsplit(":", 1)[-1],
+            role_models={"dev": m, "test": m, "devops": m},
+        )
         for m in spec.models
     ]
 
@@ -554,19 +613,18 @@ def expand_matrix(spec: CaseSpec) -> list[BenchmarkCell]:
     arms = _arms_for(spec)
     judge_family = _family(spec.judge_model)
     # every model a producer role is explicitly set to, across all arms
-    author_models = {
-        m for arm in arms for m in arm.resolve().values()
-    }
+    author_models = {m for arm in arms for m in arm.resolve().values()}
     author_families = {_family(m) for m in author_models}
     if judge_family in author_families:
         raise SameFamilyJudgeError(
             f"judge model family {judge_family!r} matches a producer model "
             f"family in {sorted(author_families)}; ADR-6 requires the judge "
-            f"to differ from every producer family in the matrix")
+            f"to differ from every producer family in the matrix"
+        )
     return [
-        BenchmarkCell(case_id=spec.case_id, harness=h,
-                      arm_name=arm.name, role_models=arm.resolve())
-        for h in spec.harnesses for arm in arms
+        BenchmarkCell(case_id=spec.case_id, harness=h, arm_name=arm.name, role_models=arm.resolve())
+        for h in spec.harnesses
+        for arm in arms
     ]
 ```
 
@@ -613,9 +671,14 @@ from sdlc.models import HarnessKind, IdeaBrief, PipelineConfig, ProjectMode
 
 
 def _spec():
-    return CaseSpec(case_id="c1", idea_summary="x",
-                    harnesses=[HarnessKind.OPENCODE], models=[],
-                    judge_model="openai/gpt-5.2", rubrics={})
+    return CaseSpec(
+        case_id="c1",
+        idea_summary="x",
+        harnesses=[HarnessKind.OPENCODE],
+        models=[],
+        judge_model="openai/gpt-5.2",
+        rubrics={},
+    )
 
 
 def _idea():
@@ -624,11 +687,12 @@ def _idea():
 
 def test_cell_config_overrides_proposer_and_harness_roles():
     cell = BenchmarkCell(
-        case_id="c1", harness=HarnessKind.OPENCODE, arm_name="a",
-        role_models={"architect": "anthropic:claude-opus-4-8",
-                     "dev": "zai-coding-plan/glm-5.2"})
-    cfg = _cell_config(PipelineConfig(), _idea(), _spec(), cell,
-                       bench_run_id="b1", rubrics={})
+        case_id="c1",
+        harness=HarnessKind.OPENCODE,
+        arm_name="a",
+        role_models={"architect": "anthropic:claude-opus-4-8", "dev": "zai-coding-plan/glm-5.2"},
+    )
+    cfg = _cell_config(PipelineConfig(), _idea(), _spec(), cell, bench_run_id="b1", rubrics={})
     assert cfg.roles["architect"].model == "anthropic:claude-opus-4-8"
     assert cfg.roles["architect"].kind == "proposer"
     assert cfg.roles["dev"].model == "zai-coding-plan/glm-5.2"
@@ -638,12 +702,13 @@ def test_cell_config_overrides_proposer_and_harness_roles():
 def test_cell_config_rejects_adr6_violating_arm():
     # dev opus + reviewer opus (same family) → ADR-6 breach at the boundary
     cell = BenchmarkCell(
-        case_id="c1", harness=HarnessKind.OPENCODE, arm_name="bad",
-        role_models={"dev": "anthropic:claude-opus-4-8",
-                     "reviewer": "anthropic:claude-haiku-4-5"})
+        case_id="c1",
+        harness=HarnessKind.OPENCODE,
+        arm_name="bad",
+        role_models={"dev": "anthropic:claude-opus-4-8", "reviewer": "anthropic:claude-haiku-4-5"},
+    )
     with pytest.raises(RegistryError, match="ADR-6"):
-        _cell_config(PipelineConfig(), _idea(), _spec(), cell,
-                     bench_run_id="b1", rubrics={})
+        _cell_config(PipelineConfig(), _idea(), _spec(), cell, bench_run_id="b1", rubrics={})
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -664,9 +729,14 @@ In `src/sdlc/benchmarks/workflow.py`, add imports inside the existing `workflow.
 Replace `_cell_config` (currently `def _cell_config(base, idea, spec, harness, model, bench_run_id, rubrics=None)`) with:
 
 ```python
-def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
-                 cell: BenchmarkCell, bench_run_id: str,
-                 rubrics: dict[str, str] | None = None) -> PipelineConfig:
+def _cell_config(
+    base: PipelineConfig,
+    idea: IdeaBrief,
+    spec: CaseSpec,
+    cell: BenchmarkCell,
+    bench_run_id: str,
+    rubrics: dict[str, str] | None = None,
+) -> PipelineConfig:
     """Build a per-cell PipelineConfig from the cell's arm: each role in
     role_models is overridden to its model (harness roles carry the cell's
     harness + the base role's context budget / extra args; proposer roles are
@@ -680,10 +750,11 @@ def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
         if role in HARNESS_ROLES:
             rc = base.roles.get(role)
             roles[role] = RoleConfig(
-                harness=cell.harness, model=model,
-                context_budget_tokens=(rc.context_budget_tokens
-                                       if rc else 30_000),
-                extra_args=list(rc.extra_args) if rc else [])
+                harness=cell.harness,
+                model=model,
+                context_budget_tokens=(rc.context_budget_tokens if rc else 30_000),
+                extra_args=list(rc.extra_args) if rc else [],
+            )
         else:
             roles[role] = RoleConfig(kind="proposer", model=model)
     cfg.roles = roles
@@ -691,13 +762,11 @@ def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
     # Per-run ADR-6 (Task 3): resolve the review roles, defaulting any the arm
     # did not override to the registry model (STAGE_MODELS).
     adr6 = {
-        "dev": roles["dev"].model if "dev" in roles
-               else base.roles["dev"].model,
+        "dev": roles["dev"].model if "dev" in roles else base.roles["dev"].model,
         "reviewer": resolved.get("reviewer", STAGE_MODELS["review"]),
     }
     if "deep_review" in STAGE_MODELS:
-        adr6["deep_review"] = resolved.get("deep_review",
-                                           STAGE_MODELS["deep_review"])
+        adr6["deep_review"] = resolved.get("deep_review", STAGE_MODELS["deep_review"])
     validate_run_roles(adr6)
 
     # research provider is a property of the RUN, not the repo (registry keeps
@@ -707,8 +776,11 @@ def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
     if spec.research_enabled:
         cfg.roles["research"] = RoleConfig(kind="research", provider="tavily")
     cfg.benchmark = BenchmarkConfig(
-        case_id=spec.case_id, bench_run_id=bench_run_id,
-        rubrics=dict(rubrics or {}), judge_model=spec.judge_model)
+        case_id=spec.case_id,
+        bench_run_id=bench_run_id,
+        rubrics=dict(rubrics or {}),
+        judge_model=spec.judge_model,
+    )
     cfg.gates = {name: GateConfig(policy=GatePolicy.OFF) for name in cfg.gates}
     cfg.default_gate_policy = GatePolicy.OFF
     return cfg
@@ -721,17 +793,18 @@ Note: `spec.extra_args_by_model` was previously keyed by the single cell model. 
 In `BenchmarkWorkflow.run` (around line 122), the loop currently iterates and calls `_cell_config(base, idea, spec, cell.harness, cell.model, ...)`. Change to pass the cell:
 
 ```python
-        for cell in cells:
-            cfg = _cell_config(base, idea, spec, cell, bench_run_id=bench_run_id,
-                               rubrics=rubrics)
-            child_id = f"{bench_run_id}/{cell.cell_id}"
-            try:
-                await workflow.execute_child_workflow(
-                    FeatureWorkflow.run, args=[idea, cfg],
-                    id=child_id, task_queue=workflow.info().task_queue,
-                )
-            except Exception as e:
-                workflow.logger.warning("cell %s failed: %s", child_id, e)
+for cell in cells:
+    cfg = _cell_config(base, idea, spec, cell, bench_run_id=bench_run_id, rubrics=rubrics)
+    child_id = f"{bench_run_id}/{cell.cell_id}"
+    try:
+        await workflow.execute_child_workflow(
+            FeatureWorkflow.run,
+            args=[idea, cfg],
+            id=child_id,
+            task_queue=workflow.info().task_queue,
+        )
+    except Exception as e:
+        workflow.logger.warning("cell %s failed: %s", child_id, e)
 ```
 
 The `_oracle_record` call uses `cell.harness`/`cell.model`; replace `base_cell.model` references there with `base_cell.arm_name` (the record's `model` field for the oracle can be the arm name, since an oracle grade is per-cell not per-role). Update `_oracle_record` signature usage accordingly: set `model=base_cell.arm_name` in the `BenchmarkRecord(...)` it builds.
@@ -774,15 +847,14 @@ from sdlc.cli_roles import build_role_overrides, parse_role_models
 
 
 def test_parse_valid_pairs():
-    assert parse_role_models(["architect=anthropic:claude-opus-4-8",
-                              "dev=zai-coding-plan/glm-5.2"]) == {
-        "architect": "anthropic:claude-opus-4-8",
-        "dev": "zai-coding-plan/glm-5.2"}
+    assert parse_role_models(
+        ["architect=anthropic:claude-opus-4-8", "dev=zai-coding-plan/glm-5.2"]
+    ) == {"architect": "anthropic:claude-opus-4-8", "dev": "zai-coding-plan/glm-5.2"}
 
 
 def test_parse_rejects_malformed():
     with pytest.raises(ValueError):
-        parse_role_models(["architectopus"])   # no '='
+        parse_role_models(["architectopus"])  # no '='
 
 
 def test_parse_rejects_unknown_role():
@@ -800,6 +872,7 @@ def test_build_overrides_rejects_adr6_violation():
     # force dev into the registry reviewer's family; expect a raise.
     # registry reviewer is a fixed family; dev override sharing it must fail.
     from sdlc.agents.loader import load_registry
+
     reg = load_registry()
     rev_model = reg["reviewer"].model
     with pytest.raises(RegistryError, match="ADR-6"):
@@ -818,10 +891,14 @@ Create `src/sdlc/cli_roles.py`:
 ```python
 """Pure helpers for the CLI --role-model override (E-37, US-4). Kept out of
 cli.py so the parse/validate/build logic is unit-testable without argparse."""
+
 from __future__ import annotations
 
 from .agents.loader import (
-    HARNESS_ROLES, KNOWN_ROLES, load_registry, validate_run_roles,
+    HARNESS_ROLES,
+    KNOWN_ROLES,
+    load_registry,
+    validate_run_roles,
 )
 from .models import RoleConfig
 
@@ -836,8 +913,7 @@ def parse_role_models(pairs: list[str]) -> dict[str, str]:
         role, model = p.split("=", 1)
         role, model = role.strip(), model.strip()
         if role not in KNOWN_ROLES:
-            raise ValueError(
-                f"unknown role {role!r}; known roles: {sorted(KNOWN_ROLES)}")
+            raise ValueError(f"unknown role {role!r}; known roles: {sorted(KNOWN_ROLES)}")
         if not model:
             raise ValueError(f"--role-model {role!r} has an empty model")
         out[role] = model
@@ -851,7 +927,7 @@ def build_role_overrides(overrides: dict[str, str]) -> dict[str, RoleConfig]:
     reg = load_registry()
     resolved = {r: rc.model for r, rc in reg.items() if rc.model is not None}
     resolved.update(overrides)
-    validate_run_roles(resolved)     # raises RegistryError on ADR-6 breach
+    validate_run_roles(resolved)  # raises RegistryError on ADR-6 breach
     roles: dict[str, RoleConfig] = {}
     for role, model in overrides.items():
         if role in HARNESS_ROLES:
@@ -871,37 +947,48 @@ Expected: PASS (5 tests).
 In `src/sdlc/cli.py`, add to the `start` subparser (after line 98):
 
 ```python
-    s.add_argument("--role-model", action="append", default=[],
-                   dest="role_model", metavar="ROLE=MODEL",
-                   help="override a role's model, e.g. --role-model "
-                        "architect=anthropic:claude-opus-4-8 (repeatable)")
+s.add_argument(
+    "--role-model",
+    action="append",
+    default=[],
+    dest="role_model",
+    metavar="ROLE=MODEL",
+    help="override a role's model, e.g. --role-model "
+    "architect=anthropic:claude-opus-4-8 (repeatable)",
+)
 ```
 
 In the `start` handler (line 160-172), build the config with overrides before starting the workflow:
 
 ```python
-    if args.cmd == "start":
-        from .cli_roles import build_role_overrides, parse_role_models
-        cfg = PipelineConfig()
-        if args.role_model:
-            try:
-                overrides = parse_role_models(args.role_model)
-                cfg.roles.update(build_role_overrides(overrides))
-            except Exception as e:      # ValueError / RegistryError
-                print(f"invalid --role-model: {e}")
-                raise SystemExit(1)
-        wf_id = f"feature-{slug(args.title)}"
-        handle = await client.start_workflow(
-            FeatureWorkflow.run,
-            args=[
-                IdeaBrief(title=args.title, description=args.description,
-                          mode=ProjectMode(args.mode), repo_url=args.repo),
-                cfg,
-            ],
-            id=wf_id, task_queue=TASK_QUEUE,
-        )
-        print(f"started {handle.id}")
-        return
+if args.cmd == "start":
+    from .cli_roles import build_role_overrides, parse_role_models
+
+    cfg = PipelineConfig()
+    if args.role_model:
+        try:
+            overrides = parse_role_models(args.role_model)
+            cfg.roles.update(build_role_overrides(overrides))
+        except Exception as e:  # ValueError / RegistryError
+            print(f"invalid --role-model: {e}")
+            raise SystemExit(1)
+    wf_id = f"feature-{slug(args.title)}"
+    handle = await client.start_workflow(
+        FeatureWorkflow.run,
+        args=[
+            IdeaBrief(
+                title=args.title,
+                description=args.description,
+                mode=ProjectMode(args.mode),
+                repo_url=args.repo,
+            ),
+            cfg,
+        ],
+        id=wf_id,
+        task_queue=TASK_QUEUE,
+    )
+    print(f"started {handle.id}")
+    return
 ```
 
 - [ ] **Step 6: Run the full suite**

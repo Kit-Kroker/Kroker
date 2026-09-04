@@ -61,8 +61,7 @@ from sdlc.pending import ClarifyPending
 def test_answer_question_pops_only_that_question():
     wf = FeatureWorkflow()
     for qid in ("Q1", "Q2"):
-        wf._pending[qid] = ClarifyPending(
-            key=qid, question=f"{qid}?", why_it_matters="w")
+        wf._pending[qid] = ClarifyPending(key=qid, question=f"{qid}?", why_it_matters="w")
 
     wf.answer_question("Q1", "Use OIDC")
 
@@ -83,17 +82,19 @@ def test_answer_question_is_still_first_answer_wins():
 
 def test_submit_gate_decision_pops_that_gate(monkeypatch):
     from sdlc.workflows import feature as feat
+
     monkeypatch.setattr(
-        feat.workflow, "now",
-        lambda: dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc))
+        feat.workflow, "now", lambda: dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+    )
 
     wf = FeatureWorkflow()
     wf._pending["architecture#2"] = StageGatePending(
-        key="architecture#2", gate="architecture", round=2, spec_summary="s")
+        key="architecture#2", gate="architecture", round=2, spec_summary="s"
+    )
 
-    wf.submit_gate_decision(GateDecision(
-        gate="architecture", round=2, outcome=GateOutcome.APPROVE,
-        decided_by="human"))
+    wf.submit_gate_decision(
+        GateDecision(gate="architecture", round=2, outcome=GateOutcome.APPROVE, decided_by="human")
+    )
 
     assert wf.pending_decisions() == []
     assert wf._gate_decisions["architecture#2"].outcome is GateOutcome.APPROVE
@@ -111,20 +112,21 @@ Expected: `test_answer_question_pops_only_that_question` FAILS with `assert ['Q1
 In `src/sdlc/workflows/feature.py`, the two signal handlers become:
 
 ```python
-    @workflow.signal
-    def submit_gate_decision(self, decision: GateDecision) -> None:
-        # Idempotent per (gate, round): first decision for a round wins.
-        key = gate_key(decision.gate, decision.round)
-        if key not in self._gate_decisions:
-            decision.decided_at = workflow.now()
-            self._gate_decisions[key] = decision
-        # _pending means "not yet decided" for every variant (E-7).
-        self._pending.pop(key, None)
+@workflow.signal
+def submit_gate_decision(self, decision: GateDecision) -> None:
+    # Idempotent per (gate, round): first decision for a round wins.
+    key = gate_key(decision.gate, decision.round)
+    if key not in self._gate_decisions:
+        decision.decided_at = workflow.now()
+        self._gate_decisions[key] = decision
+    # _pending means "not yet decided" for every variant (E-7).
+    self._pending.pop(key, None)
 
-    @workflow.signal
-    def answer_question(self, question_id: str, answer: str) -> None:
-        self._question_answers.setdefault(question_id, answer)
-        self._pending.pop(question_id, None)
+
+@workflow.signal
+def answer_question(self, question_id: str, answer: str) -> None:
+    self._question_answers.setdefault(question_id, answer)
+    self._pending.pop(question_id, None)
 ```
 
 The pop sits **outside** the `if` in `submit_gate_decision`: a decision that lost the first-wins race still means the item is not pending.
@@ -178,19 +180,26 @@ from __future__ import annotations
 import pytest
 
 from sdlc.channels.transport import (
-    Ambiguous, NoMatch, Selector, describe, match,
+    Ambiguous,
+    NoMatch,
+    Selector,
+    describe,
+    match,
 )
 from sdlc.pending import (
-    ClarifyPending, MergeGatePending, StageGatePending, TaskEscalationPending,
+    ClarifyPending,
+    MergeGatePending,
+    StageGatePending,
+    TaskEscalationPending,
 )
 
-ARCH = StageGatePending(key="architecture#2", gate="architecture", round=2,
-                        spec_summary="s")
+ARCH = StageGatePending(key="architecture#2", gate="architecture", round=2, spec_summary="s")
 MERGE = MergeGatePending(key="merge#1", gate="merge", round=1)
 Q1 = ClarifyPending(key="Q1", question="OIDC or SAML?", why_it_matters="auth")
 Q2 = ClarifyPending(key="Q2", question="Which DB?", why_it_matters="storage")
-TASK = TaskEscalationPending(key="task:T1#1", gate="task:T1", round=1,
-                             task_id="T1", analysis="flaky", attempts=3)
+TASK = TaskEscalationPending(
+    key="task:T1#1", gate="task:T1", round=1, task_id="T1", analysis="flaky", attempts=3
+)
 
 
 def test_match_single_gate_without_name():
@@ -248,7 +257,7 @@ def test_no_match_on_empty_pending():
 def test_messages_are_ascii():
     with pytest.raises(Ambiguous) as e:
         match([ARCH, MERGE], Selector(reply_kind="gate"))
-    e.value.message.encode("ascii")   # raises UnicodeEncodeError if not
+    e.value.message.encode("ascii")  # raises UnicodeEncodeError if not
 
 
 def test_describe_gate_and_clarify():
@@ -279,6 +288,7 @@ module stays workflow- and surface-agnostic.
 All operator-facing strings are ASCII: the Windows console cannot print
 non-ASCII (see the `schedules list` arrow fix).
 """
+
 from __future__ import annotations
 
 from typing import Literal, Sequence
@@ -297,6 +307,7 @@ class Selector(BaseModel):
     ``name`` is a gate name or a question id; ``None`` means "the only pending
     item of this reply_kind", which fails closed when there is more than one.
     """
+
     reply_kind: Literal["text", "gate"]
     name: str | None = None
 
@@ -305,8 +316,7 @@ class SelectorError(Exception):
     """Base for selector resolution failures. ``message`` is a fully formatted
     multi-line ASCII block the surface can print verbatim."""
 
-    def __init__(self, message: str,
-                 candidates: Sequence[PendingDecision] = ()) -> None:
+    def __init__(self, message: str, candidates: Sequence[PendingDecision] = ()) -> None:
         super().__init__(message)
         self.message = message
         self.candidates = list(candidates)
@@ -337,8 +347,9 @@ def _noun(reply_kind: str) -> str:
     return "gate" if reply_kind == "gate" else "question"
 
 
-def match(pendings: Sequence[PendingDecision], selector: Selector,
-          channel: Channel | None = None) -> PendingDecision:
+def match(
+    pendings: Sequence[PendingDecision], selector: Selector, channel: Channel | None = None
+) -> PendingDecision:
     """Resolve a selector to exactly one pending item, or raise.
 
     Candidates are narrowed by ``render(d).reply_kind`` rather than isinstance:
@@ -349,8 +360,7 @@ def match(pendings: Sequence[PendingDecision], selector: Selector,
     ch = channel or ReferenceChannel()
     noun = _noun(selector.reply_kind)
 
-    cands = [d for d in pendings
-             if ch.render(d).reply_kind == selector.reply_kind]
+    cands = [d for d in pendings if ch.render(d).reply_kind == selector.reply_kind]
     if selector.name is not None:
         cands = [d for d in cands if _name_of(d) == selector.name]
 
@@ -365,8 +375,8 @@ def match(pendings: Sequence[PendingDecision], selector: Selector,
 
     if len(cands) > 1:
         raise Ambiguous(
-            f"ambiguous -- {len(cands)} {noun}s pending:\n{_listing(cands)}",
-            candidates=cands)
+            f"ambiguous -- {len(cands)} {noun}s pending:\n{_listing(cands)}", candidates=cands
+        )
 
     return cands[0]
 
@@ -462,7 +472,7 @@ async def test_resolve_validates_the_discriminated_union():
 
 @pytest.mark.asyncio
 async def test_submit_gate_sends_decision_with_the_pending_round():
-    h = StubHandle("run-1", [_raw()])          # nothing left pending
+    h = StubHandle("run-1", [_raw()])  # nothing left pending
     res = await submit(h, ARCH, Reply(outcome=GateOutcome.APPROVE, text="lgtm"))
 
     name, arg, _ = h.signals[0]
@@ -497,19 +507,19 @@ async def test_submit_revise_reports_revision_requested():
 
 @pytest.mark.asyncio
 async def test_submit_not_confirmed_when_item_survives_the_requery():
-    h = StubHandle("run-1", [_raw(ARCH)])      # still pending afterwards
+    h = StubHandle("run-1", [_raw(ARCH)])  # still pending afterwards
     res = await submit(h, ARCH, Reply(outcome=GateOutcome.APPROVE))
 
     assert res.confirmed is False
     assert res.message.startswith("not confirmed:")
     assert "decided it first" in res.message
-    assert "failed" not in res.message         # never claims failure
+    assert "failed" not in res.message  # never claims failure
     res.message.encode("ascii")
 
 
 @pytest.mark.asyncio
 async def test_submit_confirms_when_a_different_item_remains():
-    h = StubHandle("run-1", [_raw(Q1)])        # unrelated item still pending
+    h = StubHandle("run-1", [_raw(Q1)])  # unrelated item still pending
     res = await submit(h, ARCH, Reply(outcome=GateOutcome.APPROVE))
     assert res.confirmed is True
 ```
@@ -525,10 +535,10 @@ Expected: `ImportError: cannot import name 'SubmitResult'`.
 `src/sdlc/channels/transport.py` and add one new line — do not duplicate them:
 
 ```python
-from pydantic import BaseModel, TypeAdapter          # was: BaseModel only
+from pydantic import BaseModel, TypeAdapter  # was: BaseModel only
 from .contract import Channel, ReferenceChannel, Reply  # was: no Reply
 
-from ..models import GateOutcome                     # new
+from ..models import GateOutcome  # new
 ```
 
 Then append to the module:
@@ -546,6 +556,7 @@ _PAST = {
 class SubmitResult(BaseModel):
     """Outcome of one reply. ``confirmed`` is False when the item is still
     pending after the signal -- not an error (see ``message``)."""
+
     confirmed: bool
     message: str
 
@@ -561,14 +572,14 @@ async def _fetch(handle) -> list[PendingDecision]:
     return _PENDING_LIST.validate_python(raw)
 
 
-async def resolve(handle, selector: Selector,
-                  channel: Channel | None = None) -> PendingDecision:
+async def resolve(handle, selector: Selector, channel: Channel | None = None) -> PendingDecision:
     """Fetch what is pending and narrow it to the one item meant."""
     return match(await _fetch(handle), selector, channel)
 
 
-async def submit(handle, pending: PendingDecision, reply: Reply,
-                 channel: Channel | None = None) -> SubmitResult:
+async def submit(
+    handle, pending: PendingDecision, reply: Reply, channel: Channel | None = None
+) -> SubmitResult:
     """Translate a reply to its signal, send it, and verify it landed."""
     ch = channel or ReferenceChannel()
     call = ch.translate(pending, reply)
@@ -580,24 +591,22 @@ async def submit(handle, pending: PendingDecision, reply: Reply,
 
     still = await _fetch(handle)
     confirmed = pending.key not in {d.key for d in still}
-    return SubmitResult(
-        confirmed=confirmed,
-        message=_message(handle.id, pending, reply, confirmed))
+    return SubmitResult(confirmed=confirmed, message=_message(handle.id, pending, reply, confirmed))
 
 
-def _message(run_id: str, pending: PendingDecision, reply: Reply,
-             confirmed: bool) -> str:
+def _message(run_id: str, pending: PendingDecision, reply: Reply, confirmed: bool) -> str:
     if not confirmed:
         # Signal processing is asynchronous, so this is never reported as a
         # failure: the dominant cause is another surface winning the race,
         # which is FR-302 working as designed.
-        return (f"not confirmed: {describe(pending)} still pending -- another "
-                f"surface may have decided it first, or the workflow has not "
-                f"processed the signal yet.")
+        return (
+            f"not confirmed: {describe(pending)} still pending -- another "
+            f"surface may have decided it first, or the workflow has not "
+            f"processed the signal yet."
+        )
     gate = getattr(pending, "gate", None)
     if gate is not None:
-        return (f"{_PAST[reply.outcome]} gate '{gate}' "
-                f"(round {pending.round}) on {run_id}")
+        return f"{_PAST[reply.outcome]} gate '{gate}' (round {pending.round}) on {run_id}"
     return f"answered {pending.key} on {run_id}"
 ```
 
@@ -644,6 +653,7 @@ import sdlc.cli
 def _parse(argv):
     """Build the CLI parser the same way main() does, and parse argv."""
     import argparse
+
     p = argparse.ArgumentParser()
     sub = p.add_subparsers(dest="cmd", required=True)
     sdlc.cli.add_decision_parsers(sub)
@@ -715,15 +725,16 @@ def add_decision_parsers(sub) -> None:
     for name in ("approve", "reject", "revise"):
         g = sub.add_parser(name)
         g.add_argument("--id", required=True)
-        g.add_argument("--gate", default=None,
-                       help="gate name; omit if exactly one gate is pending")
-        g.add_argument("--comment", default=None,
-                       help="comment; required for revise (becomes guidance)")
+        g.add_argument(
+            "--gate", default=None, help="gate name; omit if exactly one gate is pending"
+        )
+        g.add_argument(
+            "--comment", default=None, help="comment; required for revise (becomes guidance)"
+        )
 
     a = sub.add_parser("answer")
     a.add_argument("--id", required=True)
-    a.add_argument("--q", default=None,
-                   help="question id; omit if exactly one is pending")
+    a.add_argument("--q", default=None, help="question id; omit if exactly one is pending")
     a.add_argument("--text", required=True)
 
 
@@ -734,8 +745,10 @@ def selector_for(args):
 
     if args.cmd == "answer":
         return Selector(reply_kind="text", name=args.q), Reply(text=args.text)
-    return (Selector(reply_kind="gate", name=args.gate),
-            Reply(outcome=_OUTCOME[args.cmd], text=args.comment))
+    return (
+        Selector(reply_kind="gate", name=args.gate),
+        Reply(outcome=_OUTCOME[args.cmd], text=args.comment),
+    )
 ```
 
 Replace the existing parser block at `cli.py:47-58` (the `for name in ("approve", "reject")` loop and the `answer` parser) with a single call, keeping the `start` parser above it and `status` below:
@@ -754,22 +767,23 @@ Expected: PASS, 25 passed.
 Replace the dispatch block at `cli.py:175-188` (the `if args.cmd in ("approve", "reject")` / `elif args.cmd == "answer"` branches) with:
 
 ```python
-    if args.cmd in DECISION_CMDS:
-        from .channels.transport import Ambiguous, NoMatch, resolve, submit
-        selector, reply = selector_for(args)
-        try:
-            pending = await resolve(handle, selector)
-        except (NoMatch, Ambiguous) as e:
-            print(e.message)
-            if isinstance(e, Ambiguous):
-                flag = "--q" if args.cmd == "answer" else "--gate"
-                print(f"re-run with {flag} <name>")
-            raise SystemExit(1)
-        print((await submit(handle, pending, reply)).message)
-        return
+if args.cmd in DECISION_CMDS:
+    from .channels.transport import Ambiguous, NoMatch, resolve, submit
 
-    if args.cmd == "status":
-        print(await handle.query(FeatureWorkflow.status))
+    selector, reply = selector_for(args)
+    try:
+        pending = await resolve(handle, selector)
+    except (NoMatch, Ambiguous) as e:
+        print(e.message)
+        if isinstance(e, Ambiguous):
+            flag = "--q" if args.cmd == "answer" else "--gate"
+            print(f"re-run with {flag} <name>")
+        raise SystemExit(1)
+    print((await submit(handle, pending, reply)).message)
+    return
+
+if args.cmd == "status":
+    print(await handle.query(FeatureWorkflow.status))
 ```
 
 The `elif` chain becomes two `if` blocks because the decision branch now returns.

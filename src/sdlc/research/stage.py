@@ -21,7 +21,7 @@ from temporalio import activity
 from ..core.models import (
     RoleUsage,
 )
-from ..models import (
+from ..stages.research.models import (
     Contradiction,
     Gap,
     ResearchBrief,

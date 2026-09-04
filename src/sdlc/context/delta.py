@@ -13,7 +13,7 @@ activities.py, so this stays testable against a frozenset.
 from __future__ import annotations
 
 from ..gate import CheckClass, CheckResult, build_check
-from ..models import BrownfieldDelta
+from ..stages.context.models import BrownfieldDelta
 
 DELTA_CHECK = "brownfield_delta_grounded"
 

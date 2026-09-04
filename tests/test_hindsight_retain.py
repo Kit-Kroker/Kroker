@@ -9,7 +9,10 @@ import pytest
 from sdlc.memory import hindsight_client as hc
 from sdlc.memory.hindsight_api import BANK_PATH, RETAIN_PATH
 from sdlc.memory.hindsight_client import HindsightMemory
-from sdlc.models import MemoryKind, RetainItem
+from sdlc.memory.models import (
+    MemoryKind,
+    RetainItem,
+)
 from tests.fakes.hindsight_contract import ContractTransport
 
 _BANK_RESPONSE = {

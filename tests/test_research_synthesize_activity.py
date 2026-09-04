@@ -12,15 +12,15 @@ from pydantic_ai.models.test import TestModel
 from sdlc.core.models import (
     RoleUsage,
 )
-from sdlc.models import (
+from sdlc.research.stage import SynthesizeInput, _numbered_sources
+from sdlc.research.stage import _synthesize_brief_impl as synthesize_brief
+from sdlc.stages.research.models import (
     ConsultedSource,
     GroundedFinding,
     ResearchBrief,
     SubQuestion,
     SubQuestionFinding,
 )
-from sdlc.research.stage import SynthesizeInput, _numbered_sources
-from sdlc.research.stage import _synthesize_brief_impl as synthesize_brief
 
 
 def _finding(sq_id: str, brief: ResearchBrief) -> SubQuestionFinding:

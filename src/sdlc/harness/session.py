@@ -10,7 +10,11 @@ from collections import Counter
 from pydantic import ValidationError
 
 from ..memory.scrub import scrub
-from ..models import HarnessSession, SessionDigest, SessionEvent
+from .models import (
+    HarnessSession,
+    SessionDigest,
+    SessionEvent,
+)
 
 SKELETON_MAX = 200
 

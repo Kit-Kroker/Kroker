@@ -50,9 +50,7 @@ from sdlc.crew.activities import (
     load_crew,
 )
 from sdlc.crew.models import TurnRecord
-from sdlc.models import (
-    HarnessRunResult,
-)
+from sdlc.harness.models import HarnessRunResult
 from sdlc.notify.contract import NotifyInput, Results
 from sdlc.observability.activities import export_run_artifacts
 from tests.fakes.canned import (

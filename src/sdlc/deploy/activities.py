@@ -20,12 +20,12 @@ from temporalio.exceptions import ApplicationError
 from ..core.models import (
     DeployConfig,
 )
-from ..models import (
+from ..process import kill_process_tree
+from ..stages.deploy.models import (
     DeployPlan,
     SmokeCheckResult,
     SmokeState,
 )
-from ..process import kill_process_tree
 from .adapters import resolve
 
 # A version probe or an apply that hangs must not sit on the activity's

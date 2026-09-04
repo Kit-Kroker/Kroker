@@ -4,7 +4,7 @@ from sdlc.core.models import (
     HarnessKind,
     PipelineConfig,
 )
-from sdlc.models import (
+from sdlc.harness.models import (
     ContainmentLayer,
     ContainmentReport,
     DeferredToolUse,

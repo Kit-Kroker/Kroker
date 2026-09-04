@@ -14,8 +14,7 @@ from __future__ import annotations
 import posixpath
 from collections.abc import Mapping, Sequence
 
-from ....measurement import Measurement
-from ..models import (
+from sdlc.assessment.scan.models import (
     C_PACKAGES,
     CandidateMember,
     Confidence,
@@ -28,6 +27,8 @@ from ..models import (
     SourceCandidate,
     family_of,
 )
+
+from ....measurement import Measurement
 from ..naming import GENERIC_NAMES, LAYER_NAMES
 from ..sources import SOURCE_EXTENSIONS
 

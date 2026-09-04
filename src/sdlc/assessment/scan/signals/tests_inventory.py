@@ -16,8 +16,7 @@ import posixpath
 import re
 from collections.abc import Mapping, Sequence
 
-from ....measurement import Measurement
-from ..models import (
+from sdlc.assessment.scan.models import (
     C_TEST_LEVELS,
     C_TEST_MAPPING,
     C_TESTS_PRESENT,
@@ -31,6 +30,8 @@ from ..models import (
     family_of,
     inherited_pending,
 )
+
+from ....measurement import Measurement
 from ..sources import SOURCE_EXTENSIONS
 from ..testpaths import is_test_path
 

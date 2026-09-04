@@ -147,19 +147,19 @@ documentation (`src/`, `tests/`, `scripts/`, `interfaces/`, `agents/`,
 
 | Stage | Lives in | Status |
 |---|---|---|
-| intake | `src/sdlc/workflows/feature.py` | in `feature.py` |
-| context (brownfield) | `src/sdlc/workflows/feature.py` | in `feature.py` |
-| research | `src/sdlc/workflows/feature.py` | in `feature.py` |
+| intake | `src/sdlc/workflows/feature.py` | types moved, step pending |
+| context (brownfield) | `src/sdlc/workflows/feature.py` | types moved, step pending |
+| research | `src/sdlc/workflows/feature.py` | types moved, step pending |
 | clarify | `src/sdlc/stages/clarify/` | migrated |
-| architecture | `src/sdlc/workflows/feature.py` | in `feature.py` |
-| plan | `src/sdlc/workflows/feature.py` | in `feature.py` |
-| code | `src/sdlc/workflows/feature.py` | in `feature.py` |
-| review | `src/sdlc/workflows/feature.py` | in `feature.py` |
+| architecture | `src/sdlc/workflows/feature.py` | types moved, step pending |
+| plan | `src/sdlc/workflows/feature.py` | types moved, step pending |
+| code | `src/sdlc/workflows/feature.py` | types moved, step pending |
+| review | `src/sdlc/workflows/feature.py` | types moved, step pending |
 | qa | `src/sdlc/stages/qa/` | migrated |
-| analyze | `src/sdlc/workflows/feature.py` | in `feature.py` |
-| merge | `src/sdlc/workflows/feature.py` | in `feature.py` |
-| deploy | `src/sdlc/workflows/feature.py` | in `feature.py` |
-| retro / reflect | `src/sdlc/workflows/feature.py` | in `feature.py` |
+| analyze | `src/sdlc/workflows/feature.py` | types moved, step pending |
+| merge | `src/sdlc/workflows/feature.py` | types moved, step pending |
+| deploy | `src/sdlc/workflows/feature.py` | types moved, step pending |
+| retro / reflect | `src/sdlc/workflows/feature.py` | types moved, step pending |
 
 Rule: **you touched a stage, you move it.**
 

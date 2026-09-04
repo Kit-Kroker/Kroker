@@ -40,18 +40,18 @@ from sdlc.core.models import (
 )
 from sdlc.gate import CheckClass, CheckResult, build_check
 from sdlc.measurement import Measurement
-from sdlc.models import (
-    AnalysisReport,
+from sdlc.observability.activities import export_run_artifacts
+from sdlc.stages.analyze.models import AnalysisReport
+from sdlc.stages.architecture.models import (
     ArchitectureDecision,
     ArchitectureSpec,
-    BrownfieldDelta,
-    ClarifiedRequirements,
-    ImplementationPlan,
-    MergeVerdict,
-    ReviewReport,
 )
-from sdlc.observability.activities import export_run_artifacts
+from sdlc.stages.clarify.models import ClarifiedRequirements
+from sdlc.stages.context.models import BrownfieldDelta
+from sdlc.stages.merge.models import MergeVerdict
+from sdlc.stages.plan.models import ImplementationPlan
 from sdlc.stages.qa.models import QAReport
+from sdlc.stages.review.models import ReviewReport
 from sdlc.workflows.deployment import DeploymentWorkflow
 from sdlc.workflows.feature import FeatureWorkflow
 from tests.fakes.canned import (

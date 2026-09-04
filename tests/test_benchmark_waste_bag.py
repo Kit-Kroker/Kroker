@@ -11,9 +11,7 @@ from sdlc.benchmarks.models import (
 from sdlc.core.models import (
     HarnessKind,
 )
-from sdlc.models import (
-    SessionDigest,
-)
+from sdlc.harness.models import SessionDigest
 
 T = datetime(2026, 8, 3, 10)
 

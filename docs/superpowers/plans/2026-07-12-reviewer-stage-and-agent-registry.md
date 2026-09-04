@@ -48,17 +48,24 @@ Create `tests/test_review_models.py`:
 
 ```python
 from sdlc.models import (
-    PipelineConfig, ReviewFinding, ReviewReport, RoleConfig, TaskResult,
+    PipelineConfig,
+    ReviewFinding,
+    ReviewReport,
+    RoleConfig,
+    TaskResult,
 )
 
 
 def test_blocking_findings_filters_to_critical_and_high():
-    r = ReviewReport(approve=False, findings=[
-        ReviewFinding(assertion="a1", severity="critical", detail="boom"),
-        ReviewFinding(assertion="a2", severity="high", detail="bad"),
-        ReviewFinding(assertion="a3", severity="medium", detail="meh"),
-        ReviewFinding(assertion="a4", severity="low", detail="nit"),
-    ])
+    r = ReviewReport(
+        approve=False,
+        findings=[
+            ReviewFinding(assertion="a1", severity="critical", detail="boom"),
+            ReviewFinding(assertion="a2", severity="high", detail="bad"),
+            ReviewFinding(assertion="a3", severity="medium", detail="meh"),
+            ReviewFinding(assertion="a4", severity="low", detail="nit"),
+        ],
+    )
     sev = [f.severity for f in r.blocking_findings]
     assert sev == ["critical", "high"]
 
@@ -96,7 +103,7 @@ In `src/sdlc/models.py`, add `ReviewFinding` + `ReviewReport` immediately after 
 
 ```python
 class ReviewFinding(BaseModel):
-    assertion: str                          # which contract assertion / concern
+    assertion: str  # which contract assertion / concern
     severity: Literal["critical", "high", "medium", "low"]
     detail: str
     suggested_fix: str = ""
@@ -107,6 +114,7 @@ class ReviewReport(BaseModel):
     orchestrator-assembled inputs only — frozen contract + materialized diff +
     test output. The reviewer holds no tools, no repo, no worker session, and
     never resumes the developer's harness session."""
+
     approve: bool
     findings: list[ReviewFinding] = Field(default_factory=list)
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)  # FR-301
@@ -119,22 +127,22 @@ class ReviewReport(BaseModel):
 In `TaskResult`, add the field after `qa`:
 
 ```python
-    review: ReviewReport | None = None      # FR-204: clean-context review evidence
+review: ReviewReport | None = None  # FR-204: clean-context review evidence
 ```
 
 In `RoleConfig`, change the `harness` line and add `kind` at the top of the class body:
 
 ```python
-    kind: Literal["proposer", "harness"] = "harness"
-    harness: HarnessKind | None = None      # None for proposer roles
+kind: Literal["proposer", "harness"] = "harness"
+harness: HarnessKind | None = None  # None for proposer roles
 ```
 
 In `PipelineConfig`, add after `memoization_enabled`:
 
 ```python
-    review_enabled: bool = True             # FR-204: run the clean-context
-                                            # reviewer per task; disable to trade
-                                            # the anti-collusion check for cost
+review_enabled: bool = True  # FR-204: run the clean-context
+# reviewer per task; disable to trade
+# the anti-collusion check for cost
 ```
 
 Update the default `reviewer` entry in `PipelineConfig.roles` so defaults are self-consistent and family-distinct from `dev` (dev family `zai-coding-plan` ≠ reviewer family `anthropic`):
@@ -183,7 +191,10 @@ Create `tests/test_agents_registry.py`:
 import pytest
 
 from sdlc.agents.loader import (
-    RegistryError, load_registry, model_family, validate_registry,
+    RegistryError,
+    load_registry,
+    model_family,
+    validate_registry,
 )
 from sdlc.models import RoleConfig
 
@@ -195,9 +206,9 @@ def test_model_family_splits_on_colon_and_slash():
 
 
 def test_shipped_registry_loads_and_validates():
-    roles = load_registry()                      # default config/agents.yaml
+    roles = load_registry()  # default config/agents.yaml
     assert "developer" in roles and "reviewer" in roles
-    validate_registry(roles)                     # must not raise
+    validate_registry(roles)  # must not raise
 
 
 def test_same_family_dev_and_reviewer_rejected():
@@ -214,7 +225,7 @@ def test_different_family_accepted():
         "developer": RoleConfig(kind="harness", model="zai-coding-plan/glm-5.2"),
         "reviewer": RoleConfig(kind="proposer", model="anthropic:glm-5.2"),
     }
-    validate_registry(roles)                     # no raise
+    validate_registry(roles)  # no raise
 
 
 def test_missing_role_rejected():
@@ -224,11 +235,14 @@ def test_missing_role_rejected():
 
 def test_deep_review_harness_reviewer_must_differ_from_developer():
     from sdlc.models import HarnessKind
+
     roles = {
-        "developer": RoleConfig(kind="harness", harness=HarnessKind.OPENCODE,
-                                model="zai-coding-plan/glm-5.2"),
-        "reviewer": RoleConfig(kind="harness", harness=HarnessKind.OPENCODE,
-                               model="anthropic:glm-5.2"),
+        "developer": RoleConfig(
+            kind="harness", harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.2"
+        ),
+        "reviewer": RoleConfig(
+            kind="harness", harness=HarnessKind.OPENCODE, model="anthropic:glm-5.2"
+        ),
     }
     with pytest.raises(RegistryError, match="harness"):
         validate_registry(roles)
@@ -241,7 +255,8 @@ def test_load_registry_via_env_override(tmp_path, monkeypatch):
         "  developer:\n    kind: harness\n    harness: opencode\n"
         "    model: zai-coding-plan/glm-5.2\n"
         "  reviewer:\n    kind: proposer\n    model: anthropic:glm-5.2\n",
-        encoding="utf-8")
+        encoding="utf-8",
+    )
     monkeypatch.setenv("SDLC_AGENTS_CONFIG", str(cfg))
     roles = load_registry()
     assert roles["reviewer"].model == "anthropic:glm-5.2"
@@ -285,6 +300,7 @@ running validate_registry() at worker boot is what gives the model-family
 inequality invariant teeth — a same-family developer/reviewer config cannot
 boot a worker.
 """
+
 from __future__ import annotations
 
 import os
@@ -316,8 +332,7 @@ def model_family(model: str) -> str:
 def load_registry(path: str | os.PathLike | None = None) -> dict[str, RoleConfig]:
     """Parse the registry YAML into {role_name: RoleConfig}. Resolution order:
     explicit arg, then $SDLC_AGENTS_CONFIG, then the shipped default."""
-    resolved = Path(path or os.environ.get(AGENTS_CONFIG_ENV)
-                    or DEFAULT_AGENTS_CONFIG)
+    resolved = Path(path or os.environ.get(AGENTS_CONFIG_ENV) or DEFAULT_AGENTS_CONFIG)
     data = yaml.safe_load(resolved.read_text(encoding="utf-8")) or {}
     roles_raw = data.get("roles") or {}
     return {name: RoleConfig(**cfg) for name, cfg in roles_raw.items()}
@@ -330,20 +345,19 @@ def validate_registry(roles: dict[str, RoleConfig]) -> None:
     dev = roles.get("developer")
     rev = roles.get("reviewer")
     if dev is None or rev is None:
-        raise RegistryError(
-            "registry must define both 'developer' and 'reviewer' roles")
+        raise RegistryError("registry must define both 'developer' and 'reviewer' roles")
     if dev.model is None or rev.model is None:
         raise RegistryError("developer and reviewer roles must declare a model")
     if model_family(dev.model) == model_family(rev.model):
         raise RegistryError(
             f"ADR-6 violation: reviewer family '{model_family(rev.model)}' "
             f"equals developer family — anti-collusion review requires a "
-            f"different model family than the developer's authoring model")
-    if rev.kind == "harness" and rev.harness is not None \
-            and rev.harness == dev.harness:
+            f"different model family than the developer's authoring model"
+        )
+    if rev.kind == "harness" and rev.harness is not None and rev.harness == dev.harness:
         raise RegistryError(
-            "deep-review harness reviewer must use a different harness than "
-            "the developer")
+            "deep-review harness reviewer must use a different harness than the developer"
+        )
 ```
 
 - [ ] **Step 5: Reinstall (new module) and run the tests**
@@ -392,7 +406,7 @@ def test_reviewer_registered_for_temporal():
 
 def test_review_prompt_sha_present():
     assert "review" in roles.PROMPT_SHAS
-    assert len(roles.PROMPT_SHAS["review"]) == 64      # sha256 hexdigest
+    assert len(roles.PROMPT_SHAS["review"]) == 64  # sha256 hexdigest
 
 
 def test_reviewer_model_family_differs_from_developer():
@@ -400,8 +414,7 @@ def test_reviewer_model_family_differs_from_developer():
     developer model — the ADR-6 invariant, guarded so the two constants can
     never silently drift into the same family."""
     reg = load_registry()
-    assert model_family(reg["reviewer"].model) \
-        != model_family(reg["developer"].model)
+    assert model_family(reg["reviewer"].model) != model_family(reg["developer"].model)
     # the agent actually binds that reviewer model
     assert reg["reviewer"].model in str(roles.reviewer_agent.model)
 ```
@@ -467,8 +480,15 @@ t_reviewer = TemporalAgent(reviewer_agent, activity_config=AGENT_ACTIVITY_CONFIG
 Append `t_reviewer` to `ALL_TEMPORAL_AGENTS`:
 
 ```python
-ALL_TEMPORAL_AGENTS = [t_clarify, t_architect, t_planner, t_qa,
-                       t_reviewer, t_merge_verdict, t_devops]
+ALL_TEMPORAL_AGENTS = [
+    t_clarify,
+    t_architect,
+    t_planner,
+    t_qa,
+    t_reviewer,
+    t_merge_verdict,
+    t_devops,
+]
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -516,7 +536,8 @@ def test_worker_validates_registry_at_boot():
     src = WORKER_SRC.read_text(encoding="utf-8")
     assert "validate_registry" in src, (
         "worker.main() must validate the agent registry at boot so a "
-        "same-family developer/reviewer config fails closed (FR-204)")
+        "same-family developer/reviewer config fails closed (FR-204)"
+    )
     assert "load_registry(" in src
 
 
@@ -586,31 +607,31 @@ SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 
 def test_dev_task_runs_reviewer_on_clean_inputs():
     src = SRC.read_text(encoding="utf-8")
-    assert "t_reviewer.run(" in src, (
-        "_dev_task must run the clean-context reviewer (FR-204)")
+    assert "t_reviewer.run(" in src, "_dev_task must run the clean-context reviewer (FR-204)"
     # Reviewer must see the diff patch — the same materialized diff QA sees,
     # never the implementer's narrative.
     idx = src.find("t_reviewer.run(")
-    call = src[idx: idx + 400]
+    call = src[idx : idx + 400]
     assert "diff['patch']" in call or 'diff["patch"]' in call
 
 
 def test_review_gated_on_config_flag():
     src = SRC.read_text(encoding="utf-8")
     assert "cfg.review_enabled" in src, (
-        "reviewer must be skippable via PipelineConfig.review_enabled")
+        "reviewer must be skippable via PipelineConfig.review_enabled"
+    )
 
 
 def test_pass_condition_requires_review_approval():
     src = SRC.read_text(encoding="utf-8")
     assert "review is None or review.approve" in src, (
-        "the task success path must require reviewer approval when review ran")
+        "the task success path must require reviewer approval when review ran"
+    )
 
 
 def test_task_result_carries_review():
     src = SRC.read_text(encoding="utf-8")
-    assert "review=review" in src, (
-        "TaskResult must carry the ReviewReport as merge-gate evidence")
+    assert "review=review" in src, "TaskResult must carry the ReviewReport as merge-gate evidence"
 
 
 def test_reviewer_imported():
@@ -628,10 +649,16 @@ Expected: FAIL — `AssertionError: _dev_task must run the clean-context reviewe
 In `src/sdlc/workflows/feature.py`, add `t_reviewer` to the `from ..agents.roles import (...)` block:
 
 ```python
-    from ..agents.roles import (
-        MODEL, PROMPT_SHAS, t_architect, t_clarify, t_merge_verdict,
-        t_planner, t_qa, t_reviewer,
-    )
+from ..agents.roles import (
+    MODEL,
+    PROMPT_SHAS,
+    t_architect,
+    t_clarify,
+    t_merge_verdict,
+    t_planner,
+    t_qa,
+    t_reviewer,
+)
 ```
 
 - [ ] **Step 4: Run the reviewer and fold it into the pass condition**
@@ -641,15 +668,19 @@ In `_dev_task`, locate the block where `qa` is produced from `t_qa.run(...)` (en
 Add right after the `qa = (await t_qa.run(...)).output` assignment:
 
 ```python
-            # Second clean-context judge (FR-204): same inputs as QA — frozen
-            # contract + materialized diff + test output. No narrative, no
-            # session. A different model family than the developer (ADR-6).
-            review = None
-            if cfg.review_enabled:
-                review = (await t_reviewer.run(
-                    "Frozen contract assertions:\n- " + "\n- ".join(assertions)
-                    + f"\nTest results: {qa_raw.model_dump_json()}"
-                    + f"\nDiff:\n{diff['patch']}")).output
+# Second clean-context judge (FR-204): same inputs as QA — frozen
+# contract + materialized diff + test output. No narrative, no
+# session. A different model family than the developer (ADR-6).
+review = None
+if cfg.review_enabled:
+    review = (
+        await t_reviewer.run(
+            "Frozen contract assertions:\n- "
+            + "\n- ".join(assertions)
+            + f"\nTest results: {qa_raw.model_dump_json()}"
+            + f"\nDiff:\n{diff['patch']}"
+        )
+    ).output
 ```
 
 Change the success guard from `if qa.tests_passed and not qa.issues:` to:
@@ -662,10 +693,16 @@ Change the success guard from `if qa.tests_passed and not qa.issues:` to:
 In the `TaskResult(...)` returned inside that success block, add `review=review`:
 
 ```python
-                return TaskResult(task_id=task.id, status="done",
-                                  attempts=attempt, branch=handle.branch,
-                                  run=run, handoff=handoff, qa=qa_raw,
-                                  review=review)
+return TaskResult(
+    task_id=task.id,
+    status="done",
+    attempts=attempt,
+    branch=handle.branch,
+    run=run,
+    handoff=handoff,
+    qa=qa_raw,
+    review=review,
+)
 ```
 
 - [ ] **Step 5: Feed review findings into the fix loop**
@@ -673,11 +710,12 @@ In the `TaskResult(...)` returned inside that success block, add `review=review`
 Locate `issues = "\n- ".join(qa.issues or qa.failing_tests)` (~line 509). Replace it with:
 
 ```python
-            review_issues = (
-                [f"{f.severity}: {f.assertion} — {f.detail}"
-                 for f in review.blocking_findings] if review else [])
-            issues = "\n- ".join(
-                list(qa.issues or qa.failing_tests) + review_issues)
+review_issues = (
+    [f"{f.severity}: {f.assertion} — {f.detail}" for f in review.blocking_findings]
+    if review
+    else []
+)
+issues = "\n- ".join(list(qa.issues or qa.failing_tests) + review_issues)
 ```
 
 - [ ] **Step 6: Carry the review onto the escalation return**
@@ -731,12 +769,14 @@ def test_merge_gate_has_review_severity_check():
     src = SRC.read_text(encoding="utf-8")
     assert '"review_severity"' in src, (
         "the deterministic merge gate must consume ReviewReport evidence as "
-        "an advisory check (FR-106)")
+        "an advisory check (FR-106)"
+    )
     idx = src.find('"review_severity"')
-    block = src[idx: idx + 220]
+    block = src[idx : idx + 220]
     assert "CheckClass.ADVISORY" in block, "review check must be advisory"
     assert "r.review is None or r.review.approve" in block, (
-        "review check passes iff every task was approved or had review off")
+        "review check passes iff every task was approved or had review off"
+    )
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -749,12 +789,14 @@ Expected: FAIL — `AssertionError: the deterministic merge gate must consume Re
 In `feature.py`, locate the `checks = [ ... ]` list built for the merge gate (`build_check("build_integration_green", ...)` and `build_check("lint_clean", ...)`, ~line 790). Append a third element inside that list:
 
 ```python
-            build_check(
-                "review_severity",
-                all(r.review is None or r.review.approve
-                    for r in done.values()),
-                CheckClass.ADVISORY,
-                detail="clean-context reviewer blocking findings (FR-204)"),
+(
+    build_check(
+        "review_severity",
+        all(r.review is None or r.review.approve for r in done.values()),
+        CheckClass.ADVISORY,
+        detail="clean-context reviewer blocking findings (FR-204)",
+    ),
+)
 ```
 
 - [ ] **Step 4: Run test to verify it passes**

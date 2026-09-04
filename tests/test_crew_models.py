@@ -19,9 +19,7 @@ from sdlc.crew.models import (
     TurnBeat,
     TurnRecord,
 )
-from sdlc.models import (
-    HarnessRunResult,
-)
+from sdlc.harness.models import HarnessRunResult
 
 
 def _note(**kw):

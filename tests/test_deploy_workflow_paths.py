@@ -21,10 +21,8 @@ from sdlc.core.models import (
     GateOutcome,
     GatePolicy,
 )
-from sdlc.models import (
-    SmokeState,
-)
 from sdlc.observability.activities import export_run_artifacts
+from sdlc.stages.deploy.models import SmokeState
 from tests.fakes.canned import (
     AGENT_SPECS,
     e2e_config,

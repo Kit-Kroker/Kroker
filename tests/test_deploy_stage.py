@@ -12,9 +12,7 @@ from sdlc.core.models import (
     GateDecision,
     GateOutcome,
 )
-from sdlc.models import (
-    DeployReport,
-)
+from sdlc.stages.deploy.models import DeployReport
 from sdlc.workflows.feature import _deploy_result, _deploy_verdict, _sanitize_tag
 
 SRC = pathlib.Path("src/sdlc/workflows/feature.py")
@@ -139,7 +137,7 @@ def test_deploy_stage_records_the_actual_result_not_the_gate():
 
 
 def _r(**over):
-    from sdlc.models import DeployReport
+    from sdlc.stages.deploy.models import DeployReport
 
     base = dict(
         deployed=False,

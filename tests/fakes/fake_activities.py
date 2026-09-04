@@ -36,12 +36,10 @@ from sdlc.core.models import (
     ArtifactRef,
 )
 from sdlc.gate import CheckClass, CheckResult, build_check
+from sdlc.harness.models import HarnessRunResult
 from sdlc.measurement import CollectionState, Measurement
-from sdlc.models import (
-    CoverageReport,
-    HarnessRunResult,
-)
 from sdlc.pricing import price_usage
+from sdlc.stages.merge.models import CoverageReport
 from sdlc.stages.qa.activities import (
     LintInput,
     QAInput,

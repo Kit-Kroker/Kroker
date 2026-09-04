@@ -25,7 +25,10 @@ from urllib.parse import urlparse
 import yaml
 from pydantic import BaseModel, Field
 
-from ..models import ContainmentLayer, ToolGrant
+from .models import (
+    ContainmentLayer,
+    ToolGrant,
+)
 
 POLICY_PATH_ENV = "SDLC_CONTAINMENT_POLICY"
 

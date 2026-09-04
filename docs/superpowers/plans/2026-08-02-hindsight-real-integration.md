@@ -142,12 +142,12 @@ tests/fixtures/hindsight-openapi.json), not out of the published docs, which
 contradict each other on two of them. tests/test_hindsight_api_constants.py
 asserts each constant still exists in that schema, so a client cannot drift
 back into calling an endpoint nobody serves."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
-SCHEMA_PATH = (Path(__file__).resolve().parents[3]
-               / "tests" / "fixtures" / "hindsight-openapi.json")
+SCHEMA_PATH = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "hindsight-openapi.json"
 
 BANK_PATH = "/v1/{tenant}/banks/{bank}"
 RETAIN_PATH = "/v1/{tenant}/banks/{bank}/memories/retain"
@@ -164,6 +164,7 @@ RECALL_LIMIT_FIELD = "limit"
 ```python
 """Asserts every pinned path exists in the vendored schema. This is what
 stops the client drifting back to an invented API."""
+
 from __future__ import annotations
 
 import json
@@ -172,8 +173,13 @@ import re
 import pytest
 
 from sdlc.memory.hindsight_api import (
-    BANK_PATH, CONSOLIDATE_PATH, OPERATION_PATH, RECALL_LIMIT_FIELD,
-    RECALL_PATH, RETAIN_PATH, SCHEMA_PATH,
+    BANK_PATH,
+    CONSOLIDATE_PATH,
+    OPERATION_PATH,
+    RECALL_LIMIT_FIELD,
+    RECALL_PATH,
+    RETAIN_PATH,
+    SCHEMA_PATH,
 )
 
 
@@ -186,8 +192,7 @@ def _placeholder_agnostic(template: str) -> re.Pattern:
     """Our constants and the schema may name placeholders differently
     ({bank} vs {bank_id}); only the segment structure has to agree."""
     parts = re.split(r"(\{[^}]+\})", template)
-    body = "".join(r"\{[^}]+\}" if p.startswith("{") else re.escape(p)
-                   for p in parts)
+    body = "".join(r"\{[^}]+\}" if p.startswith("{") else re.escape(p) for p in parts)
     return re.compile("^" + body + "$")
 
 
@@ -196,18 +201,22 @@ def _find(schema, template):
     return [p for p in schema["paths"] if pattern.match(p)]
 
 
-@pytest.mark.parametrize("template,method", [
-    (BANK_PATH, "put"),
-    (RETAIN_PATH, "post"),
-    (RECALL_PATH, "post"),
-    (CONSOLIDATE_PATH, "post"),
-    (OPERATION_PATH, "get"),
-])
+@pytest.mark.parametrize(
+    "template,method",
+    [
+        (BANK_PATH, "put"),
+        (RETAIN_PATH, "post"),
+        (RECALL_PATH, "post"),
+        (CONSOLIDATE_PATH, "post"),
+        (OPERATION_PATH, "get"),
+    ],
+)
 def test_pinned_path_exists_in_the_vendored_schema(schema, template, method):
     matches = _find(schema, template)
     assert matches, f"{template} is not a path in the vendored OpenAPI schema"
     assert any(method in schema["paths"][m] for m in matches), (
-        f"{template} exists but serves no {method.upper()}")
+        f"{template} exists but serves no {method.upper()}"
+    )
 
 
 def test_recall_limit_field_is_a_real_request_property(schema):
@@ -217,8 +226,8 @@ def test_recall_limit_field_is_a_real_request_property(schema):
     name = ref.rsplit("/", 1)[-1]
     props = schema["components"]["schemas"][name]["properties"]
     assert RECALL_LIMIT_FIELD in props, (
-        f"{RECALL_LIMIT_FIELD} is not a recall request property; "
-        f"available: {sorted(props)}")
+        f"{RECALL_LIMIT_FIELD} is not a recall request property; available: {sorted(props)}"
+    )
 ```
 
 - [ ] **Step 8: Run it**
@@ -268,6 +277,7 @@ Then: `uv pip install -e ".[dev]"` (or `python -m pip install -e ".[dev]"`).
 """The harness that replaces hand-asserted mock paths. If this test can be
 made to pass by a client calling an endpoint nobody serves, the harness is
 broken and so is every test built on it."""
+
 from __future__ import annotations
 
 import httpx
@@ -282,16 +292,14 @@ async def test_a_path_absent_from_the_schema_is_rejected():
     transport = ContractTransport(responses={})
     client = httpx.AsyncClient(base_url="http://h.local", transport=transport)
     with pytest.raises(ContractViolation, match="no path in the Hindsight"):
-        await client.post("/v1/default/banks/b/recall-memories",
-                          json={"query": "q"})
+        await client.post("/v1/default/banks/b/recall-memories", json={"query": "q"})
 
 
 @pytest.mark.asyncio
 async def test_a_documented_path_is_accepted_and_returns_the_canned_body():
     transport = ContractTransport(responses={("POST", RECALL_PATH): {"results": []}})
     client = httpx.AsyncClient(base_url="http://h.local", transport=transport)
-    resp = await client.post(
-        RECALL_PATH.format(tenant="default", bank="b"), json={"query": "q"})
+    resp = await client.post(RECALL_PATH.format(tenant="default", bank="b"), json={"query": "q"})
     assert resp.status_code == 200
     assert resp.json() == {"results": []}
 
@@ -303,8 +311,7 @@ async def test_a_request_body_violating_the_schema_is_rejected():
     with pytest.raises(ContractViolation, match="request body"):
         # `items` is not a string-keyed object anywhere in the bank schema;
         # a list where an object is required must be caught.
-        await client.put(BANK_PATH.format(tenant="default", bank="b"),
-                         json=[1, 2, 3])
+        await client.put(BANK_PATH.format(tenant="default", bank="b"), json=[1, 2, 3])
 ```
 
 - [ ] **Step 3: Run it to verify it fails**
@@ -324,6 +331,7 @@ only ever confirm the client agreed with itself. Here the schema is the
 authority: an undefined path, an undefined method, a malformed request body,
 or a canned response that does not match the documented response shape all
 fail."""
+
 from __future__ import annotations
 
 import json
@@ -348,8 +356,7 @@ _REGISTRY = Registry().with_resource("", DRAFT202012.create_resource(_DOC))
 
 def _regex(template: str) -> re.Pattern:
     parts = re.split(r"(\{[^}]+\})", template)
-    body = "".join(r"[^/]+" if p.startswith("{") else re.escape(p)
-                   for p in parts)
+    body = "".join(r"[^/]+" if p.startswith("{") else re.escape(p) for p in parts)
     return re.compile("^" + body + "$")
 
 
@@ -359,8 +366,7 @@ def _match_path(path: str) -> str:
     /memories/{id}."""
     candidates = [t for t in _DOC["paths"] if _regex(t).match(path)]
     if not candidates:
-        raise ContractViolation(
-            f"{path} is no path in the Hindsight OpenAPI schema")
+        raise ContractViolation(f"{path} is no path in the Hindsight OpenAPI schema")
     return min(candidates, key=lambda t: t.count("{"))
 
 
@@ -374,14 +380,16 @@ def _json_schema(node: Any) -> Any:
 def _validate(schema: Any, instance: Any, label: str) -> None:
     if schema is None:
         return
-    errors = sorted(Draft202012Validator(schema, registry=_REGISTRY)
-                    .iter_errors(instance), key=lambda e: e.path)
+    errors = sorted(
+        Draft202012Validator(schema, registry=_REGISTRY).iter_errors(instance), key=lambda e: e.path
+    )
     if errors:
         first = errors[0]
         raise ContractViolation(
             f"{label} violates the Hindsight schema at "
             f"{'/'.join(str(p) for p in first.path) or '<root>'}: "
-            f"{first.message}")
+            f"{first.message}"
+        )
 
 
 class ContractTransport(httpx.MockTransport):
@@ -400,28 +408,33 @@ class ContractTransport(httpx.MockTransport):
         if operation is None:
             raise ContractViolation(
                 f"{request.method} is not served on {template}; "
-                f"schema allows {sorted(_DOC['paths'][template])}")
+                f"schema allows {sorted(_DOC['paths'][template])}"
+            )
 
         if request.content:
             try:
                 body = json.loads(request.content)
             except json.JSONDecodeError as exc:
-                raise ContractViolation(
-                    f"request body to {template} is not JSON: {exc}") from exc
-            _validate(_json_schema(operation.get("requestBody")), body,
-                      f"request body to {request.method} {template}")
+                raise ContractViolation(f"request body to {template} is not JSON: {exc}") from exc
+            _validate(
+                _json_schema(operation.get("requestBody")),
+                body,
+                f"request body to {request.method} {template}",
+            )
 
         key = (request.method.upper(), template)
         if key not in self._responses:
             raise ContractViolation(
-                f"test supplied no canned response for {key}; "
-                f"available: {sorted(self._responses)}")
+                f"test supplied no canned response for {key}; available: {sorted(self._responses)}"
+            )
         payload = self._responses[key]
 
-        ok = (operation.get("responses", {}).get("200")
-              or operation.get("responses", {}).get("201") or {})
-        _validate(_json_schema(ok), payload,
-                  f"canned response for {request.method} {template}")
+        ok = (
+            operation.get("responses", {}).get("200")
+            or operation.get("responses", {}).get("201")
+            or {}
+        )
+        _validate(_json_schema(ok), payload, f"canned response for {request.method} {template}")
         return httpx.Response(200, json=payload)
 ```
 
@@ -470,19 +483,16 @@ def test_hash_is_stable_across_filter_ordering():
 
 
 def test_watermark_changes_the_hash():
-    assert (recall_query_hash("b", "q", {}, "5")
-            != recall_query_hash("b", "q", {}, "6"))
+    assert recall_query_hash("b", "q", {}, "5") != recall_query_hash("b", "q", {}, "6")
 
 
 def test_absent_watermark_is_distinct_from_a_literal_none_string():
-    assert (recall_query_hash("b", "q", {}, None)
-            != recall_query_hash("b", "q", {}, "none"))
+    assert recall_query_hash("b", "q", {}, None) != recall_query_hash("b", "q", {}, "none")
 
 
 def test_bank_and_query_are_separated_unambiguously():
     # "a|b" + "c" must not collide with "a" + "b|c".
-    assert (recall_query_hash("a|b", "c", {}, None)
-            != recall_query_hash("a", "b|c", {}, None))
+    assert recall_query_hash("a|b", "c", {}, None) != recall_query_hash("a", "b|c", {}, None)
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -498,19 +508,19 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'sdlc.memory.query_hash
 FakeMemory, HindsightMemory and the degraded path in activities.py all use
 this, so a snapshot taken against the fake and one taken against Hindsight
 are comparable — which is what makes a memory-on/memory-off delta meaningful."""
+
 from __future__ import annotations
 
 import hashlib
 import json
 
 
-def recall_query_hash(bank: str, query: str, filters: dict[str, str],
-                      watermark: str | None) -> str:
+def recall_query_hash(bank: str, query: str, filters: dict[str, str], watermark: str | None) -> str:
     # json.dumps rather than str(): it escapes separators, so a bank
     # containing the delimiter cannot forge another bank's hash.
     payload = json.dumps(
-        [bank, query, sorted(filters.items()), watermark],
-        separators=(",", ":"), ensure_ascii=False)
+        [bank, query, sorted(filters.items()), watermark], separators=(",", ":"), ensure_ascii=False
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 ```
 
@@ -538,8 +548,7 @@ Replace lines 45–47 (the `query_hash = hashlib.sha256(...)` statement) with:
 In `src/sdlc/memory/activities.py`, add `from .query_hash import recall_query_hash`, delete `import hashlib`, and replace the degraded-path hash (lines 49–51) with:
 
 ```python
-        query_hash = recall_query_hash(inp.bank, inp.query, inp.filters,
-                                       inp.watermark)
+query_hash = recall_query_hash(inp.bank, inp.query, inp.filters, inp.watermark)
 ```
 
 - [ ] **Step 7: Run the existing memory suite for regressions**
@@ -575,6 +584,7 @@ watermark, so snapshots from the two backends were not comparable."
 ```python
 """The API key must never reach a `RecallInput`/`RetainInput`: those are
 serialized into Temporal workflow history, which is durable storage."""
+
 from __future__ import annotations
 
 import dataclasses
@@ -610,7 +620,8 @@ def test_tenant_defaults_and_key_is_optional(monkeypatch):
 def test_activity_inputs_carry_no_credential_field(model):
     names = {f.name for f in dataclasses.fields(model)}
     assert not (names & {"api_key", "token", "authorization", "tenant"}), (
-        f"{model.__name__} would write a credential into Temporal history")
+        f"{model.__name__} would write a credential into Temporal history"
+    )
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -628,10 +639,12 @@ def _backend(base_url: str, backend: str) -> Memory:
     input — RecallInput/RetainInput are serialized into Temporal history."""
     if backend == "hindsight":
         from .hindsight_client import HindsightMemory
+
         return HindsightMemory(
             base_url=base_url,
             tenant=os.environ.get("SDLC_MEMORY_TENANT", "default"),
-            api_key=os.environ.get("SDLC_MEMORY_API_KEY") or None)
+            api_key=os.environ.get("SDLC_MEMORY_API_KEY") or None,
+        )
     return _fake_singleton
 ```
 
@@ -700,8 +713,7 @@ def _clean():
 
 def _client(transport) -> HindsightMemory:
     mem = HindsightMemory(base_url="http://h.local", tenant="default")
-    mem._client = httpx.AsyncClient(base_url="http://h.local",
-                                    transport=transport)
+    mem._client = httpx.AsyncClient(base_url="http://h.local", transport=transport)
     return mem
 
 
@@ -773,6 +785,7 @@ ARCHITECTURE.md §6/§8.
 Every path comes from hindsight_api, which is pinned against the container's
 own OpenAPI schema. Callers only ever see the Memory protocol, so swapping
 this module or base_url leaves workflow code untouched."""
+
 from __future__ import annotations
 
 import re
@@ -802,14 +815,14 @@ def _clear_client_cache() -> None:
     _CLIENTS.clear()
 
 
-def _client_for(base_url: str, tenant: str, api_key: str | None,
-                timeout_s: float) -> httpx.AsyncClient:
+def _client_for(
+    base_url: str, tenant: str, api_key: str | None, timeout_s: float
+) -> httpx.AsyncClient:
     key = (base_url, tenant, api_key)
     client = _CLIENTS.get(key)
     if client is None:
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-        client = httpx.AsyncClient(base_url=base_url, timeout=timeout_s,
-                                   headers=headers)
+        client = httpx.AsyncClient(base_url=base_url, timeout=timeout_s, headers=headers)
         _CLIENTS[key] = client
     return client
 
@@ -822,16 +835,20 @@ def _bank_id(bank: str) -> str:
 
 
 class HindsightMemory(Memory):
-    def __init__(self, base_url: str, tenant: str = "default",
-                 api_key: str | None = None, timeout_s: float = 30.0):
+    def __init__(
+        self,
+        base_url: str,
+        tenant: str = "default",
+        api_key: str | None = None,
+        timeout_s: float = 30.0,
+    ):
         self.base_url = base_url.rstrip("/")
         self.tenant = tenant
         self.api_key = api_key
         self._client = _client_for(self.base_url, tenant, api_key, timeout_s)
 
     def _path(self, template: str, bank: str, **extra: str) -> str:
-        return template.format(tenant=self.tenant, bank=_bank_id(bank),
-                               **extra)
+        return template.format(tenant=self.tenant, bank=_bank_id(bank), **extra)
 
     async def ensure_bank(self, bank: str) -> None:
         """Idempotent create-or-update. Without it the first recall against a
@@ -849,8 +866,9 @@ class HindsightMemory(Memory):
     async def retain(self, item: RetainItem) -> None:
         raise NotImplementedError
 
-    async def recall(self, bank: str, query: str, filters: dict[str, str],
-                     watermark: str | None) -> RecallSnapshot:
+    async def recall(
+        self, bank: str, query: str, filters: dict[str, str], watermark: str | None
+    ) -> RecallSnapshot:
         raise NotImplementedError
 
     async def reflect(self, bank: str) -> None:
@@ -919,17 +937,17 @@ def _clean():
 
 
 def _transport():
-    return ContractTransport(responses={
-        ("PUT", BANK_PATH): {},
-        ("POST", RETAIN_PATH): {"success": True, "bank_id": "b",
-                                "items_count": 1},
-    })
+    return ContractTransport(
+        responses={
+            ("PUT", BANK_PATH): {},
+            ("POST", RETAIN_PATH): {"success": True, "bank_id": "b", "items_count": 1},
+        }
+    )
 
 
 def _client(transport) -> HindsightMemory:
     mem = HindsightMemory(base_url="http://h.local")
-    mem._client = httpx.AsyncClient(base_url="http://h.local",
-                                    transport=transport)
+    mem._client = httpx.AsyncClient(base_url="http://h.local", transport=transport)
     return mem
 
 
@@ -939,9 +957,12 @@ def _sent(transport) -> dict:
 
 
 def _item(**over) -> RetainItem:
-    base = dict(kind=MemoryKind.STAGE_SUMMARY, bank="project:default",
-                text="the clarifier settled the scope",
-                metadata={"stage": "clarify", "run_id": "run-1"})
+    base = dict(
+        kind=MemoryKind.STAGE_SUMMARY,
+        bank="project:default",
+        text="the clarifier settled the scope",
+        metadata={"stage": "clarify", "run_id": "run-1"},
+    )
     base.update(over)
     return RetainItem(**base)
 
@@ -989,8 +1010,7 @@ async def test_different_text_gets_a_different_document_id():
     t1, t2 = _transport(), _transport()
     await _client(t1).retain(_item())
     await _client(t2).retain(_item(text="something else entirely"))
-    assert (_sent(t1)["items"][0]["document_id"]
-            != _sent(t2)["items"][0]["document_id"])
+    assert _sent(t1)["items"][0]["document_id"] != _sent(t2)["items"][0]["document_id"]
 
 
 @pytest.mark.asyncio
@@ -1048,16 +1068,13 @@ TAG_PROMOTED_KEYS: tuple[str, ...] = ("stage", "gate")
 
 def _tags(item: RetainItem) -> list[str]:
     tags = [f"kind:{item.kind.value}"]
-    tags += [f"{k}:{item.metadata[k]}"
-             for k in TAG_PROMOTED_KEYS if k in item.metadata]
+    tags += [f"{k}:{item.metadata[k]}" for k in TAG_PROMOTED_KEYS if k in item.metadata]
     return tags
 
 
 def _document_id(item: RetainItem) -> str:
     """Content-addressed, so Temporal's retries upsert rather than duplicate."""
-    return hashlib.sha256(
-        f"{item.bank}|{item.kind.value}|{item.text}".encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(f"{item.bank}|{item.kind.value}|{item.text}".encode("utf-8")).hexdigest()
 
 
 def _now_iso() -> str:
@@ -1067,35 +1084,39 @@ def _now_iso() -> str:
 Replace the two stub methods:
 
 ```python
-    async def current_watermark(self, bank: str) -> str:
-        """Hindsight has no watermark, version or as-of endpoint, so the
-        freeze point is a worker-clock timestamp and recall enforces it
-        client-side. retain stamps the same clock, so the comparison in
-        recall is like-for-like and server skew cannot leak a post-freeze
-        memory into a pinned run."""
-        return _now_iso()
+async def current_watermark(self, bank: str) -> str:
+    """Hindsight has no watermark, version or as-of endpoint, so the
+    freeze point is a worker-clock timestamp and recall enforces it
+    client-side. retain stamps the same clock, so the comparison in
+    recall is like-for-like and server skew cannot leak a post-freeze
+    memory into a pinned run."""
+    return _now_iso()
 
-    async def retain(self, item: RetainItem) -> None:
-        await self.ensure_bank(item.bank)
-        doc_id = _document_id(item)
-        resp = await self._client.post(
-            self._path(RETAIN_PATH, item.bank),
-            json={
-                "items": [{
+
+async def retain(self, item: RetainItem) -> None:
+    await self.ensure_bank(item.bank)
+    doc_id = _document_id(item)
+    resp = await self._client.post(
+        self._path(RETAIN_PATH, item.bank),
+        json={
+            "items": [
+                {
                     "content": item.text,
                     "context": item.kind.value,
                     "tags": _tags(item),
                     "metadata": item.metadata,
                     "timestamp": _now_iso(),
                     "document_id": doc_id,
-                }],
-                # Retain runs LLM fact extraction; synchronously it would
-                # exceed MEM_ACT's 30s ceiling. The operation_id is derived
-                # from content so Temporal's five retries are idempotent.
-                "async": True,
-                "operation_id": str(uuid.UUID(hex=doc_id[:32])),
-            })
-        resp.raise_for_status()
+                }
+            ],
+            # Retain runs LLM fact extraction; synchronously it would
+            # exceed MEM_ACT's 30s ceiling. The operation_id is derived
+            # from content so Temporal's five retries are idempotent.
+            "async": True,
+            "operation_id": str(uuid.UUID(hex=doc_id[:32])),
+        },
+    )
+    resp.raise_for_status()
 ```
 
 - [ ] **Step 4: Run the tests**
@@ -1158,23 +1179,31 @@ def _clean():
 
 
 def _result(text: str, mentioned_at: str) -> dict:
-    return {"id": f"m-{text[:6]}", "text": text, "type": "world",
-            "mentioned_at": mentioned_at, "tags": [], "entities": [],
-            "document_id": "d1", "chunk_id": "c1",
-            "scores": {"final": 0.9}}
+    return {
+        "id": f"m-{text[:6]}",
+        "text": text,
+        "type": "world",
+        "mentioned_at": mentioned_at,
+        "tags": [],
+        "entities": [],
+        "document_id": "d1",
+        "chunk_id": "c1",
+        "scores": {"final": 0.9},
+    }
 
 
 def _transport(results):
-    return ContractTransport(responses={
-        ("PUT", BANK_PATH): {},
-        ("POST", RECALL_PATH): {"results": results},
-    })
+    return ContractTransport(
+        responses={
+            ("PUT", BANK_PATH): {},
+            ("POST", RECALL_PATH): {"results": results},
+        }
+    )
 
 
 def _client(transport) -> HindsightMemory:
     mem = HindsightMemory(base_url="http://h.local")
-    mem._client = httpx.AsyncClient(base_url="http://h.local",
-                                    transport=transport)
+    mem._client = httpx.AsyncClient(base_url="http://h.local", transport=transport)
     return mem
 
 
@@ -1185,8 +1214,7 @@ def _sent(transport) -> dict:
 
 @pytest.mark.asyncio
 async def test_recall_reads_results_not_items():
-    transport = _transport([_result("a gotcha worth knowing",
-                                    "2026-08-01T00:00:00+00:00")])
+    transport = _transport([_result("a gotcha worth knowing", "2026-08-01T00:00:00+00:00")])
     snap = await _client(transport).recall("project:default", "q", {}, None)
     assert snap.items == ["a gotcha worth knowing"]
 
@@ -1194,8 +1222,7 @@ async def test_recall_reads_results_not_items():
 @pytest.mark.asyncio
 async def test_filters_become_strict_tag_matches():
     transport = _transport([])
-    await _client(transport).recall("project:default", "q",
-                                    {"stage": "clarify"}, None)
+    await _client(transport).recall("project:default", "q", {"stage": "clarify"}, None)
     body = _sent(transport)
     assert body["tags"] == ["stage:clarify"]
     assert body["tags_match"] == "all_strict"
@@ -1214,18 +1241,18 @@ async def test_empty_filters_send_no_tag_keys_at_all():
 async def test_an_unfilterable_filter_key_raises_rather_than_returning_everything():
     transport = _transport([])
     with pytest.raises(ValueError, match="run_id"):
-        await _client(transport).recall("project:default", "q",
-                                        {"run_id": "run-1"}, None)
+        await _client(transport).recall("project:default", "q", {"run_id": "run-1"}, None)
 
 
 @pytest.mark.asyncio
 async def test_results_after_the_watermark_are_dropped():
-    transport = _transport([
-        _result("before the freeze", "2026-08-01T00:00:00+00:00"),
-        _result("after the freeze", "2026-08-03T00:00:00+00:00"),
-    ])
-    snap = await _client(transport).recall(
-        "project:default", "q", {}, "2026-08-02T00:00:00+00:00")
+    transport = _transport(
+        [
+            _result("before the freeze", "2026-08-01T00:00:00+00:00"),
+            _result("after the freeze", "2026-08-03T00:00:00+00:00"),
+        ]
+    )
+    snap = await _client(transport).recall("project:default", "q", {}, "2026-08-02T00:00:00+00:00")
     assert snap.items == ["before the freeze"]
 
 
@@ -1234,8 +1261,7 @@ async def test_a_result_without_a_timestamp_is_dropped_when_pinned():
     bad = _result("undateable", "2026-08-01T00:00:00+00:00")
     del bad["mentioned_at"]
     transport = _transport([bad])
-    snap = await _client(transport).recall(
-        "project:default", "q", {}, "2026-08-02T00:00:00+00:00")
+    snap = await _client(transport).recall("project:default", "q", {}, "2026-08-02T00:00:00+00:00")
     assert snap.items == []
 
 
@@ -1243,8 +1269,7 @@ async def test_a_result_without_a_timestamp_is_dropped_when_pinned():
 async def test_a_result_without_a_timestamp_survives_when_unpinned():
     bad = _result("undateable", "2026-08-01T00:00:00+00:00")
     del bad["mentioned_at"]
-    snap = await _client(_transport([bad])).recall(
-        "project:default", "q", {}, None)
+    snap = await _client(_transport([bad])).recall("project:default", "q", {}, None)
     assert snap.items == ["undateable"]
 
 
@@ -1257,17 +1282,16 @@ async def test_recall_over_fetches_so_the_cutoff_does_not_starve_the_snapshot():
 
 @pytest.mark.asyncio
 async def test_snapshot_is_truncated_to_the_keep_size():
-    results = [_result(f"memory {i}", "2026-08-01T00:00:00+00:00")
-               for i in range(RECALL_KEEP + 5)]
-    snap = await _client(_transport(results)).recall(
-        "project:default", "q", {}, None)
+    results = [_result(f"memory {i}", "2026-08-01T00:00:00+00:00") for i in range(RECALL_KEEP + 5)]
+    snap = await _client(_transport(results)).recall("project:default", "q", {}, None)
     assert len(snap.items) == RECALL_KEEP
 
 
 @pytest.mark.asyncio
 async def test_snapshot_carries_the_pinned_watermark_and_a_query_hash():
     snap = await _client(_transport([])).recall(
-        "project:default", "q", {}, "2026-08-02T00:00:00+00:00")
+        "project:default", "q", {}, "2026-08-02T00:00:00+00:00"
+    )
     assert snap.watermark == "2026-08-02T00:00:00+00:00"
     assert snap.bank == "project:default"
     assert len(snap.query_hash) == 64
@@ -1285,7 +1309,10 @@ Extend the imports:
 
 ```python
 from .hindsight_api import (
-    BANK_PATH, RECALL_LIMIT_FIELD, RECALL_PATH, RETAIN_PATH,
+    BANK_PATH,
+    RECALL_LIMIT_FIELD,
+    RECALL_PATH,
+    RETAIN_PATH,
 )
 from .query_hash import recall_query_hash
 ```
@@ -1297,8 +1324,8 @@ Add after `_tags`:
 # kind tag.
 _FILTERABLE = frozenset(TAG_PROMOTED_KEYS) | {"kind"}
 
-RECALL_KEEP = 10          # matches FakeMemory's slice size
-OVER_FETCH = 3            # the cutoff discards, so ask for more than we keep
+RECALL_KEEP = 10  # matches FakeMemory's slice size
+OVER_FETCH = 3  # the cutoff discards, so ask for more than we keep
 
 
 def _filter_tags(filters: dict[str, str]) -> list[str]:
@@ -1310,7 +1337,8 @@ def _filter_tags(filters: dict[str, str]) -> list[str]:
         raise ValueError(
             f"recall filter keys {unfilterable} are not promoted to Hindsight "
             f"tags, and Hindsight cannot filter on metadata; add them to "
-            f"TAG_PROMOTED_KEYS (filterable today: {sorted(_FILTERABLE)})")
+            f"TAG_PROMOTED_KEYS (filterable today: {sorted(_FILTERABLE)})"
+        )
     return [f"{k}:{v}" for k, v in sorted(filters.items())]
 
 
@@ -1335,30 +1363,32 @@ def _within_watermark(result: dict, watermark: str | None) -> bool:
 Replace the `recall` stub:
 
 ```python
-    async def recall(self, bank: str, query: str, filters: dict[str, str],
-                     watermark: str | None) -> RecallSnapshot:
-        await self.ensure_bank(bank)
-        payload: dict[str, object] = {
-            "query": query,
-            RECALL_LIMIT_FIELD: RECALL_KEEP * OVER_FETCH,
-        }
-        tags = _filter_tags(filters)
-        if tags:
-            # all_strict: every tag must match AND untagged memories are
-            # excluded. The permissive default would match everything, which
-            # is the filter-shaped no-op this client exists to remove.
-            payload["tags"] = tags
-            payload["tags_match"] = "all_strict"
+async def recall(
+    self, bank: str, query: str, filters: dict[str, str], watermark: str | None
+) -> RecallSnapshot:
+    await self.ensure_bank(bank)
+    payload: dict[str, object] = {
+        "query": query,
+        RECALL_LIMIT_FIELD: RECALL_KEEP * OVER_FETCH,
+    }
+    tags = _filter_tags(filters)
+    if tags:
+        # all_strict: every tag must match AND untagged memories are
+        # excluded. The permissive default would match everything, which
+        # is the filter-shaped no-op this client exists to remove.
+        payload["tags"] = tags
+        payload["tags_match"] = "all_strict"
 
-        resp = await self._client.post(self._path(RECALL_PATH, bank),
-                                       json=payload)
-        resp.raise_for_status()
-        results = resp.json().get("results", [])
-        kept = [r["text"] for r in results
-                if _within_watermark(r, watermark)][:RECALL_KEEP]
-        return RecallSnapshot(
-            query_hash=recall_query_hash(bank, query, filters, watermark),
-            bank=bank, watermark=watermark or _now_iso(), items=kept)
+    resp = await self._client.post(self._path(RECALL_PATH, bank), json=payload)
+    resp.raise_for_status()
+    results = resp.json().get("results", [])
+    kept = [r["text"] for r in results if _within_watermark(r, watermark)][:RECALL_KEEP]
+    return RecallSnapshot(
+        query_hash=recall_query_hash(bank, query, filters, watermark),
+        bank=bank,
+        watermark=watermark or _now_iso(),
+        items=kept,
+    )
 ```
 
 - [ ] **Step 4: Run the tests**
@@ -1403,7 +1433,9 @@ import pytest
 
 from sdlc.memory import hindsight_client as hc
 from sdlc.memory.hindsight_api import (
-    BANK_PATH, CONSOLIDATE_PATH, OPERATION_PATH,
+    BANK_PATH,
+    CONSOLIDATE_PATH,
+    OPERATION_PATH,
 )
 from sdlc.memory.hindsight_client import ConsolidationFailed, HindsightMemory
 from tests.fakes.hindsight_contract import ContractTransport
@@ -1421,18 +1453,18 @@ def _clean(monkeypatch):
 
 
 def _transport(op_status: str):
-    return ContractTransport(responses={
-        ("PUT", BANK_PATH): {},
-        ("POST", CONSOLIDATE_PATH): {"operation_id": "op-1"},
-        ("GET", OPERATION_PATH): {"id": "op-1", "type": "consolidate",
-                                  "status": op_status},
-    })
+    return ContractTransport(
+        responses={
+            ("PUT", BANK_PATH): {},
+            ("POST", CONSOLIDATE_PATH): {"operation_id": "op-1"},
+            ("GET", OPERATION_PATH): {"id": "op-1", "type": "consolidate", "status": op_status},
+        }
+    )
 
 
 def _client(transport) -> HindsightMemory:
     mem = HindsightMemory(base_url="http://h.local")
-    mem._client = httpx.AsyncClient(base_url="http://h.local",
-                                    transport=transport)
+    mem._client = httpx.AsyncClient(base_url="http://h.local", transport=transport)
     return mem
 
 
@@ -1449,8 +1481,7 @@ async def test_reflect_triggers_consolidation_not_the_qa_endpoint():
 async def test_reflect_polls_the_operation_to_completion():
     transport = _transport("completed")
     await _client(transport).reflect("project:default")
-    assert any(r.method == "GET" and "op-1" in r.url.path
-               for r in transport.requests)
+    assert any(r.method == "GET" and "op-1" in r.url.path for r in transport.requests)
 
 
 @pytest.mark.asyncio
@@ -1466,8 +1497,7 @@ async def test_a_cancelled_consolidation_raises():
 
 
 @pytest.mark.asyncio
-async def test_polling_gives_up_rather_than_hanging_past_the_activity_budget(
-        monkeypatch):
+async def test_polling_gives_up_rather_than_hanging_past_the_activity_budget(monkeypatch):
     monkeypatch.setattr(hc, "POLL_DEADLINE_S", 0.0)
     with pytest.raises(ConsolidationFailed, match="did not finish"):
         await _client(_transport("processing")).reflect("project:default")
@@ -1475,10 +1505,12 @@ async def test_polling_gives_up_rather_than_hanging_past_the_activity_budget(
 
 @pytest.mark.asyncio
 async def test_a_synchronous_consolidation_needs_no_polling():
-    transport = ContractTransport(responses={
-        ("PUT", BANK_PATH): {},
-        ("POST", CONSOLIDATE_PATH): {},
-    })
+    transport = ContractTransport(
+        responses={
+            ("PUT", BANK_PATH): {},
+            ("POST", CONSOLIDATE_PATH): {},
+        }
+    )
     await _client(transport).reflect("project:default")
     assert not any(r.method == "GET" for r in transport.requests)
 ```
@@ -1513,40 +1545,42 @@ class ConsolidationFailed(RuntimeError):
 Replace the `reflect` stub:
 
 ```python
-    async def reflect(self, bank: str) -> None:
-        """Consolidation, not the /reflect question-answering endpoint —
-        that runs an agent loop and returns prose the nightly job discards.
-        Polls to a terminal state: without it ReflectWorkflow reports success
-        for a consolidation that failed, the silent no-op its own docstring
-        names as the failure mode it exists to prevent."""
-        await self.ensure_bank(bank)
-        resp = await self._client.post(self._path(CONSOLIDATE_PATH, bank))
-        resp.raise_for_status()
-        operation_id = (resp.json() or {}).get("operation_id")
-        if not operation_id:
-            return  # consolidation ran synchronously
-        await self._await_operation(bank, operation_id)
+async def reflect(self, bank: str) -> None:
+    """Consolidation, not the /reflect question-answering endpoint —
+    that runs an agent loop and returns prose the nightly job discards.
+    Polls to a terminal state: without it ReflectWorkflow reports success
+    for a consolidation that failed, the silent no-op its own docstring
+    names as the failure mode it exists to prevent."""
+    await self.ensure_bank(bank)
+    resp = await self._client.post(self._path(CONSOLIDATE_PATH, bank))
+    resp.raise_for_status()
+    operation_id = (resp.json() or {}).get("operation_id")
+    if not operation_id:
+        return  # consolidation ran synchronously
+    await self._await_operation(bank, operation_id)
 
-    async def _await_operation(self, bank: str, operation_id: str) -> None:
-        deadline = time.monotonic() + POLL_DEADLINE_S
-        status = "unknown"
-        while True:
-            resp = await self._client.get(
-                self._path(OPERATION_PATH, bank, operation_id=operation_id))
-            resp.raise_for_status()
-            body = resp.json() or {}
-            status = str(body.get("status", "unknown")).lower()
-            if status in _TERMINAL_OK:
-                return
-            if status in _TERMINAL_BAD:
-                raise ConsolidationFailed(
-                    f"consolidation of {bank} ended {status}: "
-                    f"{body.get('error_message') or 'no detail'}")
-            if time.monotonic() >= deadline:
-                raise ConsolidationFailed(
-                    f"consolidation of {bank} did not finish within "
-                    f"{POLL_DEADLINE_S:.0f}s (last status {status})")
-            await asyncio.sleep(POLL_INTERVAL_S)
+
+async def _await_operation(self, bank: str, operation_id: str) -> None:
+    deadline = time.monotonic() + POLL_DEADLINE_S
+    status = "unknown"
+    while True:
+        resp = await self._client.get(self._path(OPERATION_PATH, bank, operation_id=operation_id))
+        resp.raise_for_status()
+        body = resp.json() or {}
+        status = str(body.get("status", "unknown")).lower()
+        if status in _TERMINAL_OK:
+            return
+        if status in _TERMINAL_BAD:
+            raise ConsolidationFailed(
+                f"consolidation of {bank} ended {status}: "
+                f"{body.get('error_message') or 'no detail'}"
+            )
+        if time.monotonic() >= deadline:
+            raise ConsolidationFailed(
+                f"consolidation of {bank} did not finish within "
+                f"{POLL_DEADLINE_S:.0f}s (last status {status})"
+            )
+        await asyncio.sleep(POLL_INTERVAL_S)
 ```
 
 `_path` already accepts `**extra`, so `operation_id` substitutes even though `OPERATION_PATH` carries no `{bank}`. If Task 1 found the operations endpoint is bank-scoped, the same call works unchanged.
@@ -1603,6 +1637,7 @@ Run with:
   docker compose up -d hindsight
   SDLC_LIVE_TESTS=1 python -m pytest tests/test_hindsight_live.py -v -m live
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -1627,10 +1662,10 @@ def _reachable() -> bool:
 
 pytestmark = [
     pytest.mark.live,
-    pytest.mark.skipif(os.environ.get("SDLC_LIVE_TESTS") != "1",
-                       reason="set SDLC_LIVE_TESTS=1 to spend tokens"),
-    pytest.mark.skipif(not _reachable(),
-                       reason=f"no Hindsight answering on {BASE_URL}"),
+    pytest.mark.skipif(
+        os.environ.get("SDLC_LIVE_TESTS") != "1", reason="set SDLC_LIVE_TESTS=1 to spend tokens"
+    ),
+    pytest.mark.skipif(not _reachable(), reason=f"no Hindsight answering on {BASE_URL}"),
 ]
 
 
@@ -1640,7 +1675,8 @@ def memory() -> HindsightMemory:
         base_url=BASE_URL,
         tenant=os.environ.get("SDLC_MEMORY_TENANT", "default"),
         api_key=os.environ.get("SDLC_MEMORY_API_KEY") or None,
-        timeout_s=120.0)
+        timeout_s=120.0,
+    )
 
 
 @pytest.fixture
@@ -1657,14 +1693,17 @@ async def _settle(memory: HindsightMemory, bank: str) -> None:
 
 @pytest.mark.asyncio
 async def test_a_retained_memory_comes_back_from_recall(memory, bank):
-    await memory.retain(RetainItem(
-        kind=MemoryKind.GOTCHA, bank=bank,
-        text="The staging deploy fails when PGBOUNCER_MAX_CLIENT_CONN is unset.",
-        metadata={"stage": "qa"}))
+    await memory.retain(
+        RetainItem(
+            kind=MemoryKind.GOTCHA,
+            bank=bank,
+            text="The staging deploy fails when PGBOUNCER_MAX_CLIENT_CONN is unset.",
+            metadata={"stage": "qa"},
+        )
+    )
     await _settle(memory, bank)
 
-    snap = await memory.recall(bank, "why does the staging deploy fail?", {},
-                               None)
+    snap = await memory.recall(bank, "why does the staging deploy fail?", {}, None)
     assert snap.items, "nothing recalled — retain or consolidation did not land"
     assert any("PGBOUNCER" in item.upper() for item in snap.items)
     assert snap.degraded is False
@@ -1672,54 +1711,68 @@ async def test_a_retained_memory_comes_back_from_recall(memory, bank):
 
 @pytest.mark.asyncio
 async def test_stage_filters_actually_exclude_other_stages(memory, bank):
-    await memory.retain(RetainItem(
-        kind=MemoryKind.STAGE_SUMMARY, bank=bank,
-        text="Clarify settled that the export format is CSV, not XLSX.",
-        metadata={"stage": "clarify"}))
-    await memory.retain(RetainItem(
-        kind=MemoryKind.STAGE_SUMMARY, bank=bank,
-        text="Architecture chose a read-through Redis cache for the catalogue.",
-        metadata={"stage": "architect"}))
+    await memory.retain(
+        RetainItem(
+            kind=MemoryKind.STAGE_SUMMARY,
+            bank=bank,
+            text="Clarify settled that the export format is CSV, not XLSX.",
+            metadata={"stage": "clarify"},
+        )
+    )
+    await memory.retain(
+        RetainItem(
+            kind=MemoryKind.STAGE_SUMMARY,
+            bank=bank,
+            text="Architecture chose a read-through Redis cache for the catalogue.",
+            metadata={"stage": "architect"},
+        )
+    )
     await _settle(memory, bank)
 
-    snap = await memory.recall(bank, "what was decided?",
-                               {"stage": "clarify"}, None)
+    snap = await memory.recall(bank, "what was decided?", {"stage": "clarify"}, None)
     joined = " ".join(snap.items).upper()
     assert "CSV" in joined or "XLSX" in joined, (
-        "the clarify memory did not come back; filter may be over-strict")
+        "the clarify memory did not come back; filter may be over-strict"
+    )
     assert "REDIS" not in joined, (
         "the architect memory leaked through a stage:clarify filter — "
-        "this is the defect the tag mapping exists to fix")
+        "this is the defect the tag mapping exists to fix"
+    )
 
 
 @pytest.mark.asyncio
 async def test_the_watermark_excludes_memories_retained_after_it(memory, bank):
-    await memory.retain(RetainItem(
-        kind=MemoryKind.GOTCHA, bank=bank,
-        text="Postgres 14 rejects the CONCURRENTLY index build in a txn.",
-        metadata={"stage": "qa"}))
+    await memory.retain(
+        RetainItem(
+            kind=MemoryKind.GOTCHA,
+            bank=bank,
+            text="Postgres 14 rejects the CONCURRENTLY index build in a txn.",
+            metadata={"stage": "qa"},
+        )
+    )
     await _settle(memory, bank)
 
     watermark = await memory.current_watermark(bank)
     await asyncio.sleep(2)
 
-    await memory.retain(RetainItem(
-        kind=MemoryKind.GOTCHA, bank=bank,
-        text="Redis 7 changed the default eviction policy to noeviction.",
-        metadata={"stage": "qa"}))
+    await memory.retain(
+        RetainItem(
+            kind=MemoryKind.GOTCHA,
+            bank=bank,
+            text="Redis 7 changed the default eviction policy to noeviction.",
+            metadata={"stage": "qa"},
+        )
+    )
     await _settle(memory, bank)
 
-    pinned = await memory.recall(bank, "what should I watch out for?", {},
-                                 watermark)
+    pinned = await memory.recall(bank, "what should I watch out for?", {}, watermark)
     joined = " ".join(pinned.items).upper()
-    assert "REDIS" not in joined, (
-        "a memory retained after the freeze point entered a pinned recall")
+    assert "REDIS" not in joined, "a memory retained after the freeze point entered a pinned recall"
 
-    unpinned = await memory.recall(bank, "what should I watch out for?", {},
-                                   None)
+    unpinned = await memory.recall(bank, "what should I watch out for?", {}, None)
     assert "REDIS" in " ".join(unpinned.items).upper(), (
-        "the second memory never landed at all — the pinned assertion above "
-        "would then be vacuous")
+        "the second memory never landed at all — the pinned assertion above would then be vacuous"
+    )
 ```
 
 - [ ] **Step 3: Run it against the live container**

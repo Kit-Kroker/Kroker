@@ -3,11 +3,11 @@ from sdlc.core.models import (
     ResearchConfig,
     RoleConfig,
 )
-from sdlc.models import (
+from sdlc.memory.models import MemoryKind
+from sdlc.stages.research.models import (
     ConsultedSource,
     GroundedFinding,
     InferredFinding,
-    MemoryKind,
     ResearchBrief,
 )
 

@@ -10,7 +10,7 @@ os.environ.setdefault("ANTHROPIC_API_KEY", "test-dummy")
 
 
 def test_merge_verdict_model():
-    from sdlc.models import MergeVerdict
+    from sdlc.stages.merge.models import MergeVerdict
 
     v = MergeVerdict(approve=True, confidence=0.9, rationale="clean build")
     assert v.approve is True

@@ -94,27 +94,7 @@ with workflow.unsafe.imports_passed_through():
         capture_watermark,
         reflect,
     )
-    from ..models import (
-        AnalysisReport,
-        ArchitectureSpec,
-        ClarifiedRequirements,
-        CoverageReport,
-        DeepReviewReport,
-        DeployPlan,
-        DeployReport,
-        DevTask,
-        Gap,
-        HandoffSummary,
-        ImplementationPlan,
-        MemoryKind,
-        MergeVerdict,
-        ResearchBrief,
-        ResearchPlan,
-        ReviewReport,
-        SmokeCheck,
-        SubQuestion,
-        SubQuestionFinding,
-    )
+    from ..memory.models import MemoryKind
     from ..notify.contract import NotifyReason
     from ..observability.activities import RunExportInput, export_run_artifacts
     from ..observability.summary import build_run_summary
@@ -141,8 +121,23 @@ with workflow.unsafe.imports_passed_through():
         verify_brief_activity,
     )
     from ..stages import clarify
+    from ..stages.analyze.models import AnalysisReport
+    from ..stages.architecture.models import ArchitectureSpec
+    from ..stages.clarify.models import ClarifiedRequirements
+    from ..stages.code.models import HandoffSummary
+    from ..stages.deploy.models import DeployPlan, DeployReport, SmokeCheck
+    from ..stages.merge.models import CoverageReport, MergeVerdict
+    from ..stages.plan.models import DevTask, ImplementationPlan
     from ..stages.qa.activities import LintInput, SecurityScanInput, run_lint, security_scan
     from ..stages.qa.models import SecurityReport
+    from ..stages.research.models import (
+        Gap,
+        ResearchBrief,
+        ResearchPlan,
+        SubQuestion,
+        SubQuestionFinding,
+    )
+    from ..stages.review.models import DeepReviewReport, ReviewReport
     from .benchmark_host import BenchmarkHost
     from .board_host import BoardHost
     from .deployment import DeploymentInput, DeploymentWorkflow

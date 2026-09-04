@@ -74,23 +74,38 @@
 from datetime import datetime
 
 from sdlc.benchmarks.models import (
-    BenchmarkCell, BenchmarkConfig, BenchmarkOutcome, BenchmarkRecord,
-    BenchmarkScope, BenchmarkSummary, CaseSpec, CompositeWeights, CostBag,
-    QualityScore, SpeedBag,
+    BenchmarkCell,
+    BenchmarkConfig,
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    BenchmarkSummary,
+    CaseSpec,
+    CompositeWeights,
+    CostBag,
+    QualityScore,
+    SpeedBag,
 )
 from sdlc.models import HarnessKind
 
 
 def _record(**kw):
     base = dict(
-        run_id="r1", bench_run_id="b1", case_id="add-login",
-        scope=BenchmarkScope.STAGE, stage="architecture", role="architect",
-        model="anthropic:claude-sonnet-4-6", prompt_sha="abc",
+        run_id="r1",
+        bench_run_id="b1",
+        case_id="add-login",
+        scope=BenchmarkScope.STAGE,
+        stage="architecture",
+        role="architect",
+        model="anthropic:claude-sonnet-4-6",
+        prompt_sha="abc",
         quality=QualityScore(score=0.8, judge="llm_judge"),
         cost=CostBag(usd=0.1, input_tokens=100, output_tokens=50),
-        speed=SpeedBag(wall_clock_s=12.0,
-                       started_at=datetime(2026, 7, 4, 10),
-                       ended_at=datetime(2026, 7, 4, 10, 0, 12)),
+        speed=SpeedBag(
+            wall_clock_s=12.0,
+            started_at=datetime(2026, 7, 4, 10),
+            ended_at=datetime(2026, 7, 4, 10, 0, 12),
+        ),
         outcome=BenchmarkOutcome.PASS,
     )
     base.update(kw)
@@ -111,9 +126,14 @@ def test_harness_optional_for_proposer():
 
 
 def test_task_attempt_record_carries_task_id_and_attempt():
-    r = _record(scope=BenchmarkScope.TASK_ATTEMPT, stage="code",
-                task_id="T1", attempt=0, role="dev",
-                harness=HarnessKind.CLAUDE_CODE)
+    r = _record(
+        scope=BenchmarkScope.TASK_ATTEMPT,
+        stage="code",
+        task_id="T1",
+        attempt=0,
+        role="dev",
+        harness=HarnessKind.CLAUDE_CODE,
+    )
     assert r.task_id == "T1" and r.attempt == 0
 
 
@@ -143,17 +163,24 @@ def test_case_spec_matrix_axes():
 
 
 def test_benchmark_cell_identity():
-    c = BenchmarkCell(case_id="add-login", harness=HarnessKind.OPENCODE,
-                     model="anthropic:claude-sonnet-4-6")
+    c = BenchmarkCell(
+        case_id="add-login", harness=HarnessKind.OPENCODE, model="anthropic:claude-sonnet-4-6"
+    )
     assert c.cell_id == "add-login#opencode#anthropic:claude-sonnet-4-6"
 
 
 def test_benchmark_summary_aggregates_fields():
-    s = BenchmarkSummary(case_id="add-login", stage="code",
-                         harness=HarnessKind.CLAUDE_CODE,
-                         model="anthropic:claude-sonnet-4-6",
-                         n=3, mean_quality=0.9, mean_cost_usd=0.5,
-                         mean_wall_clock_s=120.0, composite=0.88)
+    s = BenchmarkSummary(
+        case_id="add-login",
+        stage="code",
+        harness=HarnessKind.CLAUDE_CODE,
+        model="anthropic:claude-sonnet-4-6",
+        n=3,
+        mean_quality=0.9,
+        mean_cost_usd=0.5,
+        mean_wall_clock_s=120.0,
+        composite=0.88,
+    )
     assert s.n == 3 and s.composite == 0.88
 ```
 
@@ -177,6 +204,7 @@ One BenchmarkRecord per stage boundary and per code-task attempt. The three
 dimensions (quality / cost / speed) are kept RAW — never pre-normalized — so
 the reporter can recompute under different weights without re-running.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -201,7 +229,7 @@ class BenchmarkOutcome(str, Enum):
 
 
 class QualityScore(BaseModel):
-    score: float | None = None              # 0.0..1.0; None when judge errored
+    score: float | None = None  # 0.0..1.0; None when judge errored
     components: dict[str, float] = Field(default_factory=dict)
     judge: Literal["contract", "llm_judge", "human_override", "error"]
 
@@ -221,8 +249,8 @@ class SpeedBag(BaseModel):
 class BenchmarkRecord(BaseModel):
     # identity
     run_id: str
-    bench_run_id: str                       # parent BenchmarkWorkflow id; "_drift/<date>" for drift
-    case_id: str                            # golden case name; "_production" for drift
+    bench_run_id: str  # parent BenchmarkWorkflow id; "_drift/<date>" for drift
+    case_id: str  # golden case name; "_production" for drift
     scope: BenchmarkScope
     stage: str
     task_id: str | None = None
@@ -248,12 +276,14 @@ class CompositeWeights(BaseModel):
 
 class BenchmarkConfig(BaseModel):
     """Carried on PipelineConfig. case_id=None ⇒ not a benchmark run."""
+
     case_id: str | None = None
     bench_run_id: str | None = None
 
 
 class CaseSpec(BaseModel):
     """A golden case: the idea + the (harness, model) matrix to run it on."""
+
     case_id: str
     idea_summary: str
     description: str = ""
@@ -261,12 +291,13 @@ class CaseSpec(BaseModel):
     repo_url: str | None = None
     harnesses: list[HarnessKind]
     models: list[str]
-    judge_model: str                        # cross-family (ADR-6)
+    judge_model: str  # cross-family (ADR-6)
     rubrics: dict[str, str] = Field(default_factory=dict)  # stage → rubric file
 
 
 class BenchmarkCell(BaseModel):
     """One cell of the matrix: a (case, harness, model) triple to execute."""
+
     case_id: str
     harness: HarnessKind
     model: str
@@ -278,6 +309,7 @@ class BenchmarkCell(BaseModel):
 
 class BenchmarkSummary(BaseModel):
     """Aggregate over all records for one (case, stage, harness, model)."""
+
     case_id: str
     stage: str
     harness: HarnessKind | None
@@ -328,8 +360,7 @@ def test_default_pipeline_config_has_no_benchmark():
 
 def test_pipeline_config_accepts_benchmark_fields():
     cfg = PipelineConfig()
-    cfg.benchmark = BenchmarkConfig(case_id="add-login",
-                                    bench_run_id="b1")
+    cfg.benchmark = BenchmarkConfig(case_id="add-login", bench_run_id="b1")
     assert cfg.benchmark.case_id == "add-login"
 
 
@@ -397,8 +428,13 @@ git commit -m "feat(benchmarks): attach BenchmarkConfig to PipelineConfig (addit
 from datetime import datetime
 
 from sdlc.benchmarks.models import (
-    BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, CompositeWeights,
-    CostBag, QualityScore, SpeedBag,
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    CompositeWeights,
+    CostBag,
+    QualityScore,
+    SpeedBag,
 )
 from sdlc.benchmarks.scoring import compute_summaries
 from sdlc.models import HarnessKind
@@ -406,14 +442,22 @@ from sdlc.models import HarnessKind
 
 def _rec(case, harness, model, q, usd, secs):
     return BenchmarkRecord(
-        run_id="r", bench_run_id="b", case_id=case,
-        scope=BenchmarkScope.STAGE, stage="code", role="dev",
-        harness=harness, model=model, prompt_sha="",
+        run_id="r",
+        bench_run_id="b",
+        case_id=case,
+        scope=BenchmarkScope.STAGE,
+        stage="code",
+        role="dev",
+        harness=harness,
+        model=model,
+        prompt_sha="",
         quality=QualityScore(score=q, judge="contract"),
         cost=CostBag(usd=usd, input_tokens=10, output_tokens=5),
-        speed=SpeedBag(wall_clock_s=secs,
-                       started_at=datetime(2026, 7, 4, 10),
-                       ended_at=datetime(2026, 7, 4, 10, 0, int(secs))),
+        speed=SpeedBag(
+            wall_clock_s=secs,
+            started_at=datetime(2026, 7, 4, 10),
+            ended_at=datetime(2026, 7, 4, 10, 0, int(secs)),
+        ),
         outcome=BenchmarkOutcome.PASS,
     )
 
@@ -425,7 +469,7 @@ def _summarize(records, weights=None):
 def test_composite_ranks_better_quality_higher_even_if_pricier():
     recs = [
         _rec("c1", HarnessKind.CLAUDE_CODE, "sonnet", q=0.9, usd=1.0, secs=100),
-        _rec("c1", HarnessKind.CLAUDE_CODE, "opus",   q=0.5, usd=0.5, secs=50),
+        _rec("c1", HarnessKind.CLAUDE_CODE, "opus", q=0.5, usd=0.5, secs=50),
     ]
     s = _summarize(recs)
     assert s["sonnet"].composite > s["opus"].composite
@@ -434,7 +478,7 @@ def test_composite_ranks_better_quality_higher_even_if_pricier():
 def test_cost_axis_dropped_when_fewer_than_two_costed():
     recs = [
         _rec("c1", HarnessKind.CLAUDE_CODE, "sonnet", q=0.9, usd=None, secs=100),
-        _rec("c1", HarnessKind.CLAUDE_CODE, "opus",   q=0.5, usd=None, secs=50),
+        _rec("c1", HarnessKind.CLAUDE_CODE, "opus", q=0.5, usd=None, secs=50),
     ]
     s = _summarize(recs)
     # both composites still produced; quality + speed only (renormalized)
@@ -445,7 +489,7 @@ def test_cost_axis_dropped_when_fewer_than_two_costed():
 def test_judge_error_records_excluded_from_composite():
     recs = [
         _rec("c1", HarnessKind.CLAUDE_CODE, "sonnet", q=0.9, usd=1.0, secs=100),
-        _rec("c1", HarnessKind.CLAUDE_CODE, "opus",   q=None, usd=2.0, secs=200),
+        _rec("c1", HarnessKind.CLAUDE_CODE, "opus", q=None, usd=2.0, secs=200),
     ]
     # The opus record had a judge error (q=None). It still appears as a summary
     # row but its composite is None.
@@ -457,7 +501,7 @@ def test_judge_error_records_excluded_from_composite():
 def test_custom_weights_change_ranking():
     recs = [
         _rec("c1", HarnessKind.CLAUDE_CODE, "sonnet", q=0.9, usd=1.0, secs=100),
-        _rec("c1", HarnessKind.CLAUDE_CODE, "opus",   q=0.5, usd=0.1, secs=10),
+        _rec("c1", HarnessKind.CLAUDE_CODE, "opus", q=0.5, usd=0.1, secs=10),
     ]
     # weight cost heavily → cheap opus wins
     s = _summarize(recs, CompositeWeights(quality=0.1, cost=0.8, speed=0.1))
@@ -468,7 +512,7 @@ def test_multiple_records_averaged_per_cell():
     recs = [
         _rec("c1", HarnessKind.CLAUDE_CODE, "sonnet", q=0.8, usd=1.0, secs=100),
         _rec("c1", HarnessKind.CLAUDE_CODE, "sonnet", q=0.6, usd=2.0, secs=200),
-        _rec("c1", HarnessKind.CLAUDE_CODE, "opus",   q=0.5, usd=0.5, secs=50),
+        _rec("c1", HarnessKind.CLAUDE_CODE, "opus", q=0.5, usd=0.5, secs=50),
     ]
     s = _summarize(recs)
     assert s["sonnet"].n == 2
@@ -490,6 +534,7 @@ Pure functions: given a bag of BenchmarkRecords and weights, produce one
 BenchmarkSummary per (case, stage, harness, model) cell. Quality is the
 dominant axis; cost/speed are normalized within the (case, stage) group.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -508,17 +553,14 @@ def compute_summaries(
 ) -> list[BenchmarkSummary]:
     w = weights or CompositeWeights()
     # group raw records by cell identity
-    by_cell: dict[tuple[str, str, str | None, str], list[BenchmarkRecord]] = (
-        defaultdict(list))
+    by_cell: dict[tuple[str, str, str | None, str], list[BenchmarkRecord]] = defaultdict(list)
     for r in records:
-        by_cell[(r.case_id, r.stage, r.harness.value if r.harness else None,
-                 r.model)].append(r)
+        by_cell[(r.case_id, r.stage, r.harness.value if r.harness else None, r.model)].append(r)
 
     summaries: list[BenchmarkSummary] = []
     # normalization happens within (case_id, stage) across all cells in it
     for (case_id, stage), _ in {(r.case_id, r.stage) for r in records}:
-        group = [r for r in records
-                 if r.case_id == case_id and r.stage == stage]
+        group = [r for r in records if r.case_id == case_id and r.stage == stage]
         costed = [r for r in group if r.cost.usd is not None]
         timed = [r for r in group if r.speed.wall_clock_s is not None]
         max_usd = max((r.cost.usd for r in costed), default=None)
@@ -531,25 +573,34 @@ def compute_summaries(
                 continue
             scored = [r for r in cell_recs if r.quality.score is not None]
             mean_q = _safe_mean([r.quality.score for r in scored])
-            mean_usd = _safe_mean([r.cost.usd for r in cell_recs
-                                   if r.cost.usd is not None])
-            mean_sec = _safe_mean([r.speed.wall_clock_s for r in cell_recs
-                                   if r.speed.wall_clock_s is not None])
+            mean_usd = _safe_mean([r.cost.usd for r in cell_recs if r.cost.usd is not None])
+            mean_sec = _safe_mean(
+                [r.speed.wall_clock_s for r in cell_recs if r.speed.wall_clock_s is not None]
+            )
 
-            composite = _composite(mean_q, mean_usd, mean_sec,
-                                   max_usd, max_sec, use_cost, use_speed, w)
+            composite = _composite(
+                mean_q, mean_usd, mean_sec, max_usd, max_sec, use_cost, use_speed, w
+            )
             from sdlc.models import HarnessKind
-            harness = (HarnessKind(h) if h else None)
-            summaries.append(BenchmarkSummary(
-                case_id=case_id, stage=stage, harness=harness, model=m,
-                n=len(cell_recs), mean_quality=mean_q, mean_cost_usd=mean_usd,
-                mean_wall_clock_s=mean_sec, composite=composite,
-            ))
+
+            harness = HarnessKind(h) if h else None
+            summaries.append(
+                BenchmarkSummary(
+                    case_id=case_id,
+                    stage=stage,
+                    harness=harness,
+                    model=m,
+                    n=len(cell_recs),
+                    mean_quality=mean_q,
+                    mean_cost_usd=mean_usd,
+                    mean_wall_clock_s=mean_sec,
+                    composite=composite,
+                )
+            )
     return summaries
 
 
-def _composite(mean_q, mean_usd, mean_sec, max_usd, max_sec,
-               use_cost, use_speed, w):
+def _composite(mean_q, mean_usd, mean_sec, max_usd, max_sec, use_cost, use_speed, w):
     if mean_q is None:
         return None
     q_norm = mean_q
@@ -599,7 +650,11 @@ git commit -m "feat(benchmarks): composite score with per-cell normalization"
 from datetime import datetime
 
 from sdlc.benchmarks.models import (
-    BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, CostBag, QualityScore,
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    CostBag,
+    QualityScore,
     SpeedBag,
 )
 from sdlc.benchmarks.recorder import RecordStore, records_path
@@ -607,14 +662,20 @@ from sdlc.benchmarks.recorder import RecordStore, records_path
 
 def _record(run_id="r1", bench="b1", case="c1"):
     return BenchmarkRecord(
-        run_id=run_id, bench_run_id=bench, case_id=case,
-        scope=BenchmarkScope.STAGE, stage="architecture", role="architect",
+        run_id=run_id,
+        bench_run_id=bench,
+        case_id=case,
+        scope=BenchmarkScope.STAGE,
+        stage="architecture",
+        role="architect",
         model="anthropic:claude-sonnet-4-6",
         quality=QualityScore(score=0.8, judge="llm_judge"),
         cost=CostBag(usd=0.1),
-        speed=SpeedBag(wall_clock_s=1.0,
-                       started_at=datetime(2026, 7, 4, 10),
-                       ended_at=datetime(2026, 7, 4, 10, 0, 1)),
+        speed=SpeedBag(
+            wall_clock_s=1.0,
+            started_at=datetime(2026, 7, 4, 10),
+            ended_at=datetime(2026, 7, 4, 10, 0, 1),
+        ),
         outcome=BenchmarkOutcome.PASS,
     )
 
@@ -634,14 +695,13 @@ def test_read_all_skips_partial_last_line(tmp_path):
     store.append(_record())
     # corrupt: append a partial line
     with open(store.path, "a") as f:
-        f.write('{"run_id": "broken"')   # no closing brace / newline
+        f.write('{"run_id": "broken"')  # no closing brace / newline
     recs = store.read_all()
-    assert len(recs) == 1   # only the valid one
+    assert len(recs) == 1  # only the valid one
 
 
 def test_records_path_partitions_by_bench_and_cell(tmp_path):
-    p = records_path("bench1", cell_id="c1#claude_code#sonnet",
-                     root=str(tmp_path))
+    p = records_path("bench1", cell_id="c1#claude_code#sonnet", root=str(tmp_path))
     assert "bench1" in str(p)
     assert "c1#claude_code#sonnet" in str(p)
     assert p.suffix == ".jsonl"
@@ -667,6 +727,7 @@ records.jsonl per (bench_run_id, cell_id) under SDLC_BENCHMARKS_ROOT
 (default runs/benchmarks/). One JSON object per line — a partial last line
 is skipped on read so a crashed writer never corrupts the readable history.
 """
+
 from __future__ import annotations
 
 import os
@@ -683,8 +744,7 @@ def _root() -> str:
     return os.environ.get("SDLC_BENCHMARKS_ROOT", DEFAULT_ROOT)
 
 
-def records_path(bench_run_id: str, cell_id: str | None,
-                 root: str | None = None) -> Path:
+def records_path(bench_run_id: str, cell_id: str | None, root: str | None = None) -> Path:
     base = Path(root if root is not None else _root()) / bench_run_id
     if cell_id:
         return base / f"{cell_id}.jsonl"
@@ -692,9 +752,9 @@ def records_path(bench_run_id: str, cell_id: str | None,
 
 
 class RecordStore:
-    def __init__(self, root: str | None = None,
-                 bench_run_id: str = "b1",
-                 cell_id: str | None = None) -> None:
+    def __init__(
+        self, root: str | None = None, bench_run_id: str = "b1", cell_id: str | None = None
+    ) -> None:
         self.path = records_path(bench_run_id, cell_id, root)
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -714,7 +774,7 @@ class RecordStore:
                 try:
                     out.append(BenchmarkRecord.model_validate_json(line))
                 except Exception:
-                    continue     # skip corrupt / partial line
+                    continue  # skip corrupt / partial line
         return out
 
 
@@ -725,8 +785,7 @@ async def record_benchmark(record: BenchmarkRecord) -> None:
     Non-deterministic I/O (filesystem) — must live in an activity, never in
     workflow code. Retries on failure via Temporal RetryPolicy.
     """
-    store = RecordStore(bench_run_id=record.bench_run_id,
-                        cell_id=_cell_id_for(record))
+    store = RecordStore(bench_run_id=record.bench_run_id, cell_id=_cell_id_for(record))
     store.append(record)
 
 
@@ -771,6 +830,7 @@ git commit -m "feat(benchmarks): record_benchmark activity + JSONL store"
 """The purity assertion: when benchmark.case_id is None, the recorder is
 never called. We assert this by pointing SDLC_BENCHMARKS_ROOT at a temp
 dir and checking no file appears after a stage-boundary helper runs."""
+
 from sdlc.benchmarks.models import BenchmarkConfig
 from sdlc.workflows.feature import FeatureWorkflow
 
@@ -781,6 +841,7 @@ def test_record_helper_is_noop_when_case_id_none():
     # without raising). We test the pure predicate directly.
     from sdlc.benchmarks.recorder import records_path
     from sdlc.models import PipelineConfig
+
     cfg = PipelineConfig()
     assert cfg.benchmark.case_id is None
     # the predicate the helper uses:
@@ -789,6 +850,7 @@ def test_record_helper_is_noop_when_case_id_none():
 
 def test_record_helper_is_active_when_case_id_set():
     from sdlc.models import PipelineConfig
+
     cfg = PipelineConfig()
     cfg.benchmark = BenchmarkConfig(case_id="add-login", bench_run_id="b1")
     assert FeatureWorkflow._benchmarking(cfg) is True
@@ -807,92 +869,127 @@ In `src/sdlc/workflows/feature.py`:
 
 (a) Add `record_benchmark` and `BenchmarkRecord`-building types to the `unsafe.imports_passed_through()` block (lines 14-26). Inside that block add:
 ```python
-    from ..benchmarks.models import (
-        BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, CostBag,
-        QualityScore, SpeedBag,
-    )
-    from ..benchmarks.recorder import record_benchmark
+from ..benchmarks.models import (
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    CostBag,
+    QualityScore,
+    SpeedBag,
+)
+from ..benchmarks.recorder import record_benchmark
 ```
 
 (b) Add a module-level `RECORD_ACT` timeout near `ACT`/`LONG_ACT` (after line 32):
 ```python
-RECORD_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
-                  retry_policy=RetryPolicy(maximum_attempts=5))
+RECORD_ACT = dict(
+    start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=5)
+)
 ```
 
 (c) Add the predicate + helper inside the `FeatureWorkflow` class (after `__init__`, before the signals section). The helper takes plain serializable args and builds the record itself so the stage-call sites stay tiny:
 ```python
-    @staticmethod
-    def _benchmarking(cfg: PipelineConfig) -> bool:
-        return bool(cfg.benchmark and cfg.benchmark.case_id)
+@staticmethod
+def _benchmarking(cfg: PipelineConfig) -> bool:
+    return bool(cfg.benchmark and cfg.benchmark.case_id)
 
-    def _stage_record(self, cfg: PipelineConfig, stage: str, role: str,
-                      started: datetime, ended: datetime,
-                      quality_score: float | None, judge: str,
-                      outcome: BenchmarkOutcome, model: str,
-                      harness=None, cost_usd: float | None = None,
-                      fix_attempts: int = 0,
-                      task_id: str | None = None,
-                      attempt: int | None = None) -> BenchmarkRecord:
-        scope = (BenchmarkScope.TASK_ATTEMPT if task_id is not None
-                 else BenchmarkScope.STAGE)
-        return BenchmarkRecord(
-            run_id=workflow.info().workflow_id,
-            bench_run_id=cfg.benchmark.bench_run_id or "_unknown",
-            case_id=cfg.benchmark.case_id or "_unknown",
-            scope=scope, stage=stage, task_id=task_id, attempt=attempt,
-            role=role, harness=harness, model=model, prompt_sha="",
-            quality=QualityScore(score=quality_score, judge=judge),
-            cost=CostBag(usd=cost_usd),
-            speed=SpeedBag(wall_clock_s=(ended - started).total_seconds(),
-                           started_at=started, ended_at=ended),
-            outcome=outcome, fix_attempts=fix_attempts,
-        )
 
-    async def _record(self, cfg: PipelineConfig, record: BenchmarkRecord
-                      ) -> None:
-        if not self._benchmarking(cfg):
-            return
-        await workflow.execute_activity(record_benchmark, record, **RECORD_ACT)
+def _stage_record(
+    self,
+    cfg: PipelineConfig,
+    stage: str,
+    role: str,
+    started: datetime,
+    ended: datetime,
+    quality_score: float | None,
+    judge: str,
+    outcome: BenchmarkOutcome,
+    model: str,
+    harness=None,
+    cost_usd: float | None = None,
+    fix_attempts: int = 0,
+    task_id: str | None = None,
+    attempt: int | None = None,
+) -> BenchmarkRecord:
+    scope = BenchmarkScope.TASK_ATTEMPT if task_id is not None else BenchmarkScope.STAGE
+    return BenchmarkRecord(
+        run_id=workflow.info().workflow_id,
+        bench_run_id=cfg.benchmark.bench_run_id or "_unknown",
+        case_id=cfg.benchmark.case_id or "_unknown",
+        scope=scope,
+        stage=stage,
+        task_id=task_id,
+        attempt=attempt,
+        role=role,
+        harness=harness,
+        model=model,
+        prompt_sha="",
+        quality=QualityScore(score=quality_score, judge=judge),
+        cost=CostBag(usd=cost_usd),
+        speed=SpeedBag(
+            wall_clock_s=(ended - started).total_seconds(), started_at=started, ended_at=ended
+        ),
+        outcome=outcome,
+        fix_attempts=fix_attempts,
+    )
+
+
+async def _record(self, cfg: PipelineConfig, record: BenchmarkRecord) -> None:
+    if not self._benchmarking(cfg):
+        return
+    await workflow.execute_activity(record_benchmark, record, **RECORD_ACT)
 ```
 
 (d) Wire call sites. In `run()`, capture `started` before each stage and emit after. Concretely, wrap the existing stages. Example for the architect stage (around lines 212-217 of the current file):
 ```python
-        # 2. ARCHITECT (+ human approval of the spec)
-        self._status = "architecting"
-        _started = workflow.now()
-        arch = (await t_architect.run(
-            f"mode={idea.mode.value}\n{reqs.model_dump_json()}")).output
-        gate = await self._gate("architecture", cfg)
-        _ended = workflow.now()
-        await self._record(cfg, self._stage_record(
-            cfg, stage="architecture", role="architect",
-            started=_started, ended=_ended,
-            quality_score=None, judge="llm_judge",
-            outcome=(BenchmarkOutcome.PASS if gate.approved
-                     else BenchmarkOutcome.REVISED),
-            model="anthropic:claude-sonnet-4-6"))
-        if not gate.approved:
-            return "rejected:architecture"
+# 2. ARCHITECT (+ human approval of the spec)
+self._status = "architecting"
+_started = workflow.now()
+arch = (await t_architect.run(f"mode={idea.mode.value}\n{reqs.model_dump_json()}")).output
+gate = await self._gate("architecture", cfg)
+_ended = workflow.now()
+await self._record(
+    cfg,
+    self._stage_record(
+        cfg,
+        stage="architecture",
+        role="architect",
+        started=_started,
+        ended=_ended,
+        quality_score=None,
+        judge="llm_judge",
+        outcome=(BenchmarkOutcome.PASS if gate.approved else BenchmarkOutcome.REVISED),
+        model="anthropic:claude-sonnet-4-6",
+    ),
+)
+if not gate.approved:
+    return "rejected:architecture"
 ```
 Repeat the same `started`/`_record` pattern around the `clarify`, `plan`, and `merge`/`deploy` stages — each emitting one stage-scope record. Use `judge="llm_judge"` and `quality_score=None` for proposer stages (the LLM-judge in Task 8 will populate real scores out-of-band; the workflow records the timing/outcome, the judge fills quality later).
 
 (e) For the **per-task attempt** records, in `_dev_task` add a record after each QA check inside the fix loop (around line 150 of the current file, after the `qa = (...)` line and before the `if qa.tests_passed` branch):
 ```python
-            await self._record(cfg, self._stage_record(
-                cfg, stage="code", role=task.role,
-                started=workflow.now(), ended=workflow.now(),
-                quality_score=(1.0 if (qa.tests_passed and not qa.issues)
-                               else 0.0),
-                judge="contract",
-                outcome=(BenchmarkOutcome.PASS
-                         if (qa.tests_passed and not qa.issues)
-                         else BenchmarkOutcome.FAIL),
-                model=role_cfg.model or "anthropic:claude-sonnet-4-6",
-                harness=role_cfg.harness,
-                cost_usd=run.cost_usd,
-                fix_attempts=attempt - 1,
-                task_id=task.id, attempt=attempt - 1))
+await self._record(
+    cfg,
+    self._stage_record(
+        cfg,
+        stage="code",
+        role=task.role,
+        started=workflow.now(),
+        ended=workflow.now(),
+        quality_score=(1.0 if (qa.tests_passed and not qa.issues) else 0.0),
+        judge="contract",
+        outcome=(
+            BenchmarkOutcome.PASS if (qa.tests_passed and not qa.issues) else BenchmarkOutcome.FAIL
+        ),
+        model=role_cfg.model or "anthropic:claude-sonnet-4-6",
+        harness=role_cfg.harness,
+        cost_usd=run.cost_usd,
+        fix_attempts=attempt - 1,
+        task_id=task.id,
+        attempt=attempt - 1,
+    ),
+)
 ```
 > Note: per-attempt timing within `_dev_task` is coarse (one `workflow.now()` delta) for v1 — the wall-clock granularity that matters is at the stage level; per-attempt we mainly care about cost, outcome, and which attempt succeeded. Refining this is OQ-B-adjacent and out of scope for v1.
 
@@ -933,21 +1030,23 @@ from sdlc.benchmarks.recorder import record_benchmark
 
 def test_record_benchmark_is_a_temporal_activity():
     # temporalio marks activities; the attr is set by @activity.defn
-    assert getattr(record_benchmark, "__temporal_activity_definition",
-                   None) is not None
+    assert getattr(record_benchmark, "__temporal_activity_definition", None) is not None
 
 
 def test_worker_module_imports_record_benchmark():
     # the worker registration list must include it; importing succeeds
     from sdlc import worker
+
     assert record_benchmark.__name__ in [
-        getattr(fn, "__name__", None) for fn in _worker_activities(worker)]
+        getattr(fn, "__name__", None) for fn in _worker_activities(worker)
+    ]
 
 
 def _worker_activities(worker):
     # introspect the source for the activities=[...] literal — simplest robust
     # check is that 'record_benchmark' appears in the registered list by name.
     import inspect
+
     src = inspect.getsource(worker)
     assert "record_benchmark" in src
 ```
@@ -965,12 +1064,19 @@ from .benchmarks.recorder import record_benchmark
 ```
 And add `record_benchmark` to the `activities=[...]` list in the `Worker(...)` constructor (currently lines 37-41):
 ```python
-        activities=[
-            create_worktree, setup_integration_branch, merge_into_integration,
-            run_coding_task, run_test_suite, open_pull_request, deploy,
-            record_benchmark,
-            *agent_activities,
-        ],
+activities = (
+    [
+        create_worktree,
+        setup_integration_branch,
+        merge_into_integration,
+        run_coding_task,
+        run_test_suite,
+        open_pull_request,
+        deploy,
+        record_benchmark,
+        *agent_activities,
+    ],
+)
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1004,8 +1110,13 @@ git commit -m "feat(benchmarks): register record_benchmark in worker"
 from datetime import datetime
 
 from sdlc.benchmarks.models import (
-    BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, CompositeWeights,
-    CostBag, QualityScore, SpeedBag,
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    CompositeWeights,
+    CostBag,
+    QualityScore,
+    SpeedBag,
 )
 from sdlc.benchmarks.recorder import RecordStore
 from sdlc.benchmarks.report import aggregate, render_markdown
@@ -1014,15 +1125,24 @@ from sdlc.models import HarnessKind
 
 def _rec(model, q, usd, secs):
     return BenchmarkRecord(
-        run_id="r", bench_run_id="b1", case_id="c1",
-        scope=BenchmarkScope.STAGE, stage="code", role="dev",
-        harness=HarnessKind.CLAUDE_CODE, model=model, prompt_sha="",
+        run_id="r",
+        bench_run_id="b1",
+        case_id="c1",
+        scope=BenchmarkScope.STAGE,
+        stage="code",
+        role="dev",
+        harness=HarnessKind.CLAUDE_CODE,
+        model=model,
+        prompt_sha="",
         quality=QualityScore(score=q, judge="contract"),
         cost=CostBag(usd=usd),
-        speed=SpeedBag(wall_clock_s=secs,
-                       started_at=datetime(2026, 7, 4, 10),
-                       ended_at=datetime(2026, 7, 4, 10, 0, int(secs))),
-        outcome=BenchmarkOutcome.PASS)
+        speed=SpeedBag(
+            wall_clock_s=secs,
+            started_at=datetime(2026, 7, 4, 10),
+            ended_at=datetime(2026, 7, 4, 10, 0, int(secs)),
+        ),
+        outcome=BenchmarkOutcome.PASS,
+    )
 
 
 def test_aggregate_reads_store_and_returns_summaries(tmp_path):
@@ -1036,9 +1156,12 @@ def test_aggregate_reads_store_and_returns_summaries(tmp_path):
 
 
 def test_render_markdown_has_headers_and_rows(tmp_path):
-    sums = aggregate("b1", CompositeWeights(), root=str(tmp_path),
-                     _records=[_rec("sonnet", 0.9, 1.0, 100),
-                               _rec("opus", 0.5, 0.5, 50)])
+    sums = aggregate(
+        "b1",
+        CompositeWeights(),
+        root=str(tmp_path),
+        _records=[_rec("sonnet", 0.9, 1.0, 100), _rec("opus", 0.5, 0.5, 50)],
+    )
     md = render_markdown(sums)
     assert "| case" in md or "case" in md
     assert "sonnet" in md and "opus" in md
@@ -1062,6 +1185,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'sdlc.benchmarks.repor
 `src/sdlc/benchmarks/report.py`:
 ```python
 """Aggregate benchmark records into summaries and render reports."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -1071,16 +1195,21 @@ from .recorder import RecordStore, _root
 from .scoring import compute_summaries
 
 
-def aggregate(bench_run_id: str, weights: CompositeWeights | None = None,
-              root: str | None = None,
-              _records: list[BenchmarkRecord] | None = None
-              ) -> list[BenchmarkSummary]:
+def aggregate(
+    bench_run_id: str,
+    weights: CompositeWeights | None = None,
+    root: str | None = None,
+    _records: list[BenchmarkRecord] | None = None,
+) -> list[BenchmarkSummary]:
     records = _records if _records is not None else _read_all(bench_run_id, root)
     return sorted(
         compute_summaries(records, weights),
-        key=lambda s: (s.case_id, s.stage,
-                       s.harness.value if s.harness else "",
-                       -(s.composite or -1)),
+        key=lambda s: (
+            s.case_id,
+            s.stage,
+            s.harness.value if s.harness else "",
+            -(s.composite or -1),
+        ),
     )
 
 
@@ -1090,8 +1219,9 @@ def _read_all(bench_run_id: str, root: str | None) -> list[BenchmarkRecord]:
         return []
     out: list[BenchmarkRecord] = []
     for p in base.rglob("*.jsonl"):
-        store = RecordStore(root=root, bench_run_id=bench_run_id,
-                            cell_id=p.stem if p.stem != "records" else None)
+        store = RecordStore(
+            root=root, bench_run_id=bench_run_id, cell_id=p.stem if p.stem != "records" else None
+        )
         # if cell file, point store at it directly:
         store.path = p
         out.extend(store.read_all())
@@ -1104,13 +1234,14 @@ def render_markdown(summaries: list[BenchmarkSummary]) -> str:
     lines = [
         "# Benchmark report",
         "",
-        "| case | stage | harness | model | n | quality | cost ($) | "
-        "wall (s) | composite |",
+        "| case | stage | harness | model | n | quality | cost ($) | wall (s) | composite |",
         "|---|---|---|---|---|---|---|---|---|",
     ]
     for s in summaries:
+
         def fmt(x):
             return f"{x:.3f}" if isinstance(x, float) else "—"
+
         lines.append(
             f"| {s.case_id} | {s.stage} | "
             f"{s.harness.value if s.harness else 'proposer'} | {s.model} | "
@@ -1162,34 +1293,36 @@ from sdlc.models import HarnessKind
 
 def _spec(models, judge="openai/gpt-5.2"):
     return CaseSpec(
-        case_id="c1", idea_summary="x",
-        harnesses=[HarnessKind.CLAUDE_CODE, HarnessKind.OPENCODE], models=models,
-        judge_model=judge, rubrics={})
+        case_id="c1",
+        idea_summary="x",
+        harnesses=[HarnessKind.CLAUDE_CODE, HarnessKind.OPENCODE],
+        models=models,
+        judge_model=judge,
+        rubrics={},
+    )
 
 
 def test_full_cross_product():
-    cells = expand_matrix(_spec(["anthropic:claude-sonnet-4-6",
-                                  "anthropic:claude-opus-4-8"]))
-    assert len(cells) == 2 * 2     # 2 harnesses × 2 models
+    cells = expand_matrix(_spec(["anthropic:claude-sonnet-4-6", "anthropic:claude-opus-4-8"]))
+    assert len(cells) == 2 * 2  # 2 harnesses × 2 models
 
 
 def test_rejects_same_family_judge():
     # author family anthropic, judge family anthropic → reject (ADR-6)
-    spec = _spec(["anthropic:claude-sonnet-4-6"],
-                 judge="anthropic:claude-haiku-3-5")
+    spec = _spec(["anthropic:claude-sonnet-4-6"], judge="anthropic:claude-haiku-3-5")
     with pytest.raises(SameFamilyJudgeError):
         expand_matrix(spec)
 
 
 def test_different_family_judge_ok():
-    cells = expand_matrix(_spec(["anthropic:claude-sonnet-4-6"],
-                                judge="openai/gpt-5.2"))
+    cells = expand_matrix(_spec(["anthropic:claude-sonnet-4-6"], judge="openai/gpt-5.2"))
     assert len(cells) == 2
 
 
 def test_cell_ids_unique():
-    cells = expand_matrix(_spec(["anthropic:claude-sonnet-4-6",
-                                  "openai/gpt-5.2"], judge="anthropic:claude-haiku-3-5"))
+    cells = expand_matrix(
+        _spec(["anthropic:claude-sonnet-4-6", "openai/gpt-5.2"], judge="anthropic:claude-haiku-3-5")
+    )
     # author models span anthropic + openai; judge must differ from EACH author
     # family — anthropic judge conflicts with the anthropic author → reject
     with pytest.raises(SameFamilyJudgeError):
@@ -1199,10 +1332,11 @@ def test_cell_ids_unique():
 > Correction: the 4th test's comment is wrong as written — fix it during implementation to a clean assertion. Replace the body of `test_cell_ids_unique` with:
 ```python
 def test_cell_ids_unique():
-    cells = expand_matrix(_spec(["anthropic:claude-sonnet-4-6",
-                                  "openai/gpt-5.2"], judge="google/gemini-2-pro"))
+    cells = expand_matrix(
+        _spec(["anthropic:claude-sonnet-4-6", "openai/gpt-5.2"], judge="google/gemini-2-pro")
+    )
     ids = [c.cell_id for c in cells]
-    assert len(ids) == len(set(ids))   # all unique
+    assert len(ids) == len(set(ids))  # all unique
     assert len(cells) == 4
 ```
 
@@ -1218,6 +1352,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'sdlc.benchmarks.matri
 """Expand a CaseSpec into the (harness × model) cell list, enforcing the
 ADR-6 cross-family judge rule: the judge model's family must differ from
 EVERY author model's family in the matrix."""
+
 from __future__ import annotations
 
 from .models import BenchmarkCell, CaseSpec
@@ -1240,10 +1375,12 @@ def expand_matrix(spec: CaseSpec) -> list[BenchmarkCell]:
         raise SameFamilyJudgeError(
             f"judge model family {judge_family!r} matches an author model "
             f"family in {sorted(author_families)}; ADR-6 requires the judge "
-            f"to differ from every author family")
+            f"to differ from every author family"
+        )
     return [
         BenchmarkCell(case_id=spec.case_id, harness=h, model=m)
-        for h in spec.harnesses for m in spec.models
+        for h in spec.harnesses
+        for m in spec.models
     ]
 ```
 
@@ -1282,10 +1419,15 @@ def test_judge_parses_valid_json():
     def fake(inp: JudgeInput) -> str:
         # rubric expects {"score": 0.0..1.0, "components": {...}}
         return '{"score": 0.82, "components": {"coverage": 0.9, "specificity": 0.74}}'
+
     _set_judge_fn(fake)
-    result = judge_artifact.sync(JudgeInput(
-        artifact_json="{}", rubric="score coverage 0..1",
-        author_model="anthropic:claude-sonnet-4-6"))
+    result = judge_artifact.sync(
+        JudgeInput(
+            artifact_json="{}",
+            rubric="score coverage 0..1",
+            author_model="anthropic:claude-sonnet-4-6",
+        )
+    )
     assert result.score == 0.82
     assert result.judge == "llm_judge"
     assert result.components["coverage"] == 0.9
@@ -1293,19 +1435,19 @@ def test_judge_parses_valid_json():
 
 def test_judge_returns_error_on_unparseable():
     _set_judge_fn(lambda inp: "not json at all")
-    result = judge_artifact.sync(JudgeInput(
-        artifact_json="{}", rubric="r",
-        author_model="anthropic:claude-sonnet-4-6"))
+    result = judge_artifact.sync(
+        JudgeInput(artifact_json="{}", rubric="r", author_model="anthropic:claude-sonnet-4-6")
+    )
     assert result.score is None
     assert result.judge == "error"
 
 
 def test_judge_clamps_out_of_range_score():
     _set_judge_fn(lambda inp: '{"score": 1.5}')
-    result = judge_artifact.sync(JudgeInput(
-        artifact_json="{}", rubric="r",
-        author_model="anthropic:claude-sonnet-4-6"))
-    assert result.score == 1.0     # clamped
+    result = judge_artifact.sync(
+        JudgeInput(artifact_json="{}", rubric="r", author_model="anthropic:claude-sonnet-4-6")
+    )
+    assert result.score == 1.0  # clamped
 ```
 
 > Note: `judge_artifact.sync(...)` is a test convenience — the activity object exposes the wrapped function via `.sync` when using temporalio's `@activity.defn` with `name=`; if `.sync` isn't available in your temporalio version, the implementation exposes a module-level `_judge_sync(inp)` and the test calls that. The implementer should pick whichever the installed temporalio supports and adjust the test's call to `_judge_sync(...)` if needed — the assertions stay identical.
@@ -1327,6 +1469,7 @@ QualityScore(score=None, judge="error") — the judge never raises, so a
 broken judge can never fail a benchmark cell; the record is simply excluded
 from the composite.
 """
+
 from __future__ import annotations
 
 import json
@@ -1340,9 +1483,9 @@ from .models import QualityScore
 
 @dataclass
 class JudgeInput:
-    artifact_json: str          # the stage's emitted artifact, serialized
-    rubric: str                 # rubric markdown/text for this case+stage
-    author_model: str           # to assert cross-family at call time
+    artifact_json: str  # the stage's emitted artifact, serialized
+    rubric: str  # rubric markdown/text for this case+stage
+    author_model: str  # to assert cross-family at call time
 
 
 JudgeFn = Callable[[JudgeInput], str]
@@ -1358,8 +1501,9 @@ def _default_judge(inp: JudgeInput) -> str:
     # Production default: a Pydantic AI Agent call on a cross-family model.
     # Implemented in a later hardening task; for now raise so misconfiguration
     # surfaces as judge="error" rather than a silent wrong answer.
-    raise RuntimeError("no judge configured; set one via _set_judge_fn or "
-                       "wire the production Pydantic AI agent")
+    raise RuntimeError(
+        "no judge configured; set one via _set_judge_fn or wire the production Pydantic AI agent"
+    )
 
 
 def _judge_sync(inp: JudgeInput) -> QualityScore:
@@ -1368,10 +1512,9 @@ def _judge_sync(inp: JudgeInput) -> QualityScore:
         raw = fn(inp)
         payload = json.loads(raw)
         score = float(payload.get("score", 0.0))
-        score = max(0.0, min(1.0, score))      # clamp
+        score = max(0.0, min(1.0, score))  # clamp
         components = payload.get("components") or {}
-        return QualityScore(score=score, components=components,
-                            judge="llm_judge")
+        return QualityScore(score=score, components=components, judge="llm_judge")
     except Exception:
         return QualityScore(score=None, judge="error")
 
@@ -1382,7 +1525,7 @@ async def judge_artifact(inp: JudgeInput) -> QualityScore:
 
 
 # test convenience
-judge_artifact.sync = _judge_sync   # type: ignore[attr-defined]
+judge_artifact.sync = _judge_sync  # type: ignore[attr-defined]
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1426,6 +1569,7 @@ git commit -m "feat(benchmarks): cross-family LLM-judge activity (injectable)"
 the pure config-building helper directly, plus a smoke test that the workflow
 class is registered and runnable-shaped. A full time-skipping integration
 test lives in Task 13's golden-case smoke run."""
+
 from sdlc.benchmarks.models import CaseSpec
 from sdlc.benchmarks.workflow import BenchmarkWorkflow, _cell_config
 from sdlc.models import HarnessKind, PipelineConfig, ProjectMode, IdeaBrief
@@ -1433,20 +1577,22 @@ from sdlc.models import HarnessKind, PipelineConfig, ProjectMode, IdeaBrief
 
 def _spec():
     return CaseSpec(
-        case_id="add-login", idea_summary="add login",
+        case_id="add-login",
+        idea_summary="add login",
         mode="greenfield",
         harnesses=[HarnessKind.CLAUDE_CODE],
         models=["anthropic:claude-sonnet-4-6"],
-        judge_model="openai/gpt-5.2", rubrics={})
+        judge_model="openai/gpt-5.2",
+        rubrics={},
+    )
 
 
 def test_cell_config_overrides_role_and_sets_benchmark():
     base = PipelineConfig()
-    idea = IdeaBrief(title="t", description="d",
-                     mode=ProjectMode.GREENFIELD)
-    cfg = _cell_config(base, idea, _spec(),
-                       HarnessKind.OPENCODE, "openai/gpt-5.2",
-                       bench_run_id="b1")
+    idea = IdeaBrief(title="t", description="d", mode=ProjectMode.GREENFIELD)
+    cfg = _cell_config(
+        base, idea, _spec(), HarnessKind.OPENCODE, "openai/gpt-5.2", bench_run_id="b1"
+    )
     # every role is overridden to the cell's harness+model
     for role, rc in cfg.roles.items():
         assert rc.harness is HarnessKind.OPENCODE
@@ -1459,8 +1605,9 @@ def test_cell_config_is_pure_when_base_unbenchmark():
     base = PipelineConfig()
     assert base.benchmark.case_id is None
     idea = IdeaBrief(title="t", description="d", mode=ProjectMode.GREENFIELD)
-    cfg = _cell_config(base, idea, _spec(), HarnessKind.OPENCODE,
-                       "openai/gpt-5.2", bench_run_id="b1")
+    cfg = _cell_config(
+        base, idea, _spec(), HarnessKind.OPENCODE, "openai/gpt-5.2", bench_run_id="b1"
+    )
     assert cfg.benchmark.case_id == "add-login"
 
 
@@ -1485,6 +1632,7 @@ the cell's roles overridden and benchmark config set. Collect nothing in-
 workflow — the record_benchmark activity writes each record to the file
 store; after all cells complete, aggregate and write the report.
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -1494,31 +1642,38 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from ..workflows.feature import FeatureWorkflow
-    from ..models import (HarnessKind, IdeaBrief, PipelineConfig,
-                          ProjectMode, RoleConfig)
+    from ..models import HarnessKind, IdeaBrief, PipelineConfig, ProjectMode, RoleConfig
     from .matrix import expand_matrix
     from .models import BenchmarkConfig, CaseSpec
     from .report import aggregate, write_report
     from .models import CompositeWeights
 
-CHILD_ACT = dict(start_to_close_timeout=timedelta(hours=4),
-                 retry_policy=RetryPolicy(maximum_attempts=1))
+CHILD_ACT = dict(
+    start_to_close_timeout=timedelta(hours=4), retry_policy=RetryPolicy(maximum_attempts=1)
+)
 
 
-def _cell_config(base: PipelineConfig, idea: IdeaBrief, spec: CaseSpec,
-                 harness: HarnessKind, model: str,
-                 bench_run_id: str) -> PipelineConfig:
+def _cell_config(
+    base: PipelineConfig,
+    idea: IdeaBrief,
+    spec: CaseSpec,
+    harness: HarnessKind,
+    model: str,
+    bench_run_id: str,
+) -> PipelineConfig:
     """Build a per-cell PipelineConfig: every doing-role overridden to
     (harness, model), benchmark fields set so FeatureWorkflow records."""
     cfg = base.model_copy(deep=True)
     cfg.roles = {
-        role: RoleConfig(harness=harness, model=model,
-                         context_budget_tokens=rc.context_budget_tokens,
-                         extra_args=rc.extra_args)
+        role: RoleConfig(
+            harness=harness,
+            model=model,
+            context_budget_tokens=rc.context_budget_tokens,
+            extra_args=rc.extra_args,
+        )
         for role, rc in base.roles.items()
     }
-    cfg.benchmark = BenchmarkConfig(case_id=spec.case_id,
-                                    bench_run_id=bench_run_id)
+    cfg.benchmark = BenchmarkConfig(case_id=spec.case_id, bench_run_id=bench_run_id)
     return cfg
 
 
@@ -1529,18 +1684,26 @@ class BenchmarkWorkflow:
         spec = CaseSpec.model_validate_json(spec_json)
         bench_run_id = workflow.info().workflow_id
         cells = expand_matrix(spec)
-        idea = IdeaBrief(title=spec.case_id, description=spec.description,
-                         mode=ProjectMode(spec.mode), repo_url=spec.repo_url)
+        idea = IdeaBrief(
+            title=spec.case_id,
+            description=spec.description,
+            mode=ProjectMode(spec.mode),
+            repo_url=spec.repo_url,
+        )
         base = PipelineConfig()
         cell_ids: list[str] = []
         for cell in cells:
-            cfg = _cell_config(base, idea, spec, cell.harness, cell.model,
-                               bench_run_id=bench_run_id)
+            cfg = _cell_config(
+                base, idea, spec, cell.harness, cell.model, bench_run_id=bench_run_id
+            )
             child_id = f"{bench_run_id}/{cell.cell_id}"
             try:
                 await workflow.execute_child_workflow(
-                    FeatureWorkflow.run, idea, cfg,
-                    id=child_id, task_queue=workflow.info().task_queue,
+                    FeatureWorkflow.run,
+                    idea,
+                    cfg,
+                    id=child_id,
+                    task_queue=workflow.info().task_queue,
                 )
             except Exception as e:
                 # a failed/escalated cell is a data point, not a crash
@@ -1594,6 +1757,7 @@ from sdlc.benchmarks.drift import DriftHarvester
 
 class FakeHistory:
     """Yields a canned list of (run_id, events) tuples."""
+
     def __init__(self, runs):
         self._runs = runs
 
@@ -1609,24 +1773,30 @@ def _harness_result_event(cost=0.42, exit_code=0):
     return {
         "event_type": "ActivityTaskCompleted",
         "activity": "run_coding_task",
-        "result": {"harness": "claude_code", "exit_code": exit_code,
-                   "cost_usd": cost, "summary": "", "input_tokens": 100,
-                   "output_tokens": 20, "context_window": 200000,
-                   "compacted": False},
+        "result": {
+            "harness": "claude_code",
+            "exit_code": exit_code,
+            "cost_usd": cost,
+            "summary": "",
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "context_window": 200000,
+            "compacted": False,
+        },
         "timestamp": datetime(2026, 7, 4, 10, 0, 30),
     }
 
 
 def test_drift_emits_records_from_history(tmp_path):
     runs = [("feature-1", [_harness_result_event(cost=0.42)])]
-    h = DriftHarvester(FakeHistory(runs), root=str(tmp_path),
-                       bench_run_id="_drift/2026-07-04")
+    h = DriftHarvester(FakeHistory(runs), root=str(tmp_path), bench_run_id="_drift/2026-07-04")
     import asyncio
+
     n = asyncio.run(h.harvest_since(hours=24))
     assert n == 1
     from sdlc.benchmarks.recorder import RecordStore
-    store = RecordStore(root=str(tmp_path),
-                        bench_run_id="_drift/2026-07-04", cell_id=None)
+
+    store = RecordStore(root=str(tmp_path), bench_run_id="_drift/2026-07-04", cell_id=None)
     recs = store.read_all()
     assert len(recs) == 1
     assert recs[0].case_id == "_production"
@@ -1635,21 +1805,30 @@ def test_drift_emits_records_from_history(tmp_path):
 
 def test_drift_skips_run_with_no_relevant_events(tmp_path):
     runs = [("feature-2", [{"event_type": "WorkflowStarted"}])]
-    h = DriftHarvester(FakeHistory(runs), root=str(tmp_path),
-                       bench_run_id="_drift/2026-07-04")
+    h = DriftHarvester(FakeHistory(runs), root=str(tmp_path), bench_run_id="_drift/2026-07-04")
     import asyncio
+
     n = asyncio.run(h.harvest_since(hours=24))
     assert n == 0
 
 
 def test_drift_skips_malformed_event_without_crashing(tmp_path):
-    runs = [("feature-3", [_harness_result_event(),
-                           {"event_type": "ActivityTaskCompleted",
-                            "activity": "run_coding_task",
-                            "result": "not-a-dict"}])]
-    h = DriftHarvester(FakeHistory(runs), root=str(tmp_path),
-                       bench_run_id="_drift/2026-07-04")
+    runs = [
+        (
+            "feature-3",
+            [
+                _harness_result_event(),
+                {
+                    "event_type": "ActivityTaskCompleted",
+                    "activity": "run_coding_task",
+                    "result": "not-a-dict",
+                },
+            ],
+        )
+    ]
+    h = DriftHarvester(FakeHistory(runs), root=str(tmp_path), bench_run_id="_drift/2026-07-04")
     import asyncio
+
     n = asyncio.run(h.harvest_since(hours=24))
     # the malformed one is skipped, the well-formed one is kept
     assert n == 1
@@ -1670,13 +1849,20 @@ Observational only: judge ∈ {"contract", "human_override"} — we never re-jud
 production artifacts with the LLM. The Temporal client is behind an injectable
 history_provider so tests pass a fake.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 
-from .models import (BenchmarkOutcome, BenchmarkRecord, BenchmarkScope,
-                     CostBag, QualityScore, SpeedBag)
+from .models import (
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    CostBag,
+    QualityScore,
+    SpeedBag,
+)
 from .recorder import RecordStore
 from ..models import HarnessKind
 
@@ -1687,11 +1873,11 @@ class HistoryProvider(Protocol):
 
 
 class DriftHarvester:
-    def __init__(self, provider: HistoryProvider, root: str | None = None,
-                 bench_run_id: str = "_drift") -> None:
+    def __init__(
+        self, provider: HistoryProvider, root: str | None = None, bench_run_id: str = "_drift"
+    ) -> None:
         self.provider = provider
-        self.store = RecordStore(root=root, bench_run_id=bench_run_id,
-                                 cell_id=None)
+        self.store = RecordStore(root=root, bench_run_id=bench_run_id, cell_id=None)
 
     async def harvest_since(self, hours: int) -> int:
         runs = await self.provider.list_completed(hours)
@@ -1702,8 +1888,7 @@ class DriftHarvester:
             except Exception:
                 continue
             for ev in _iter_events(history):
-                rec = _record_from_event(run_id, ev,
-                                         self.store.path.parent.name)
+                rec = _record_from_event(run_id, ev, self.store.path.parent.name)
                 if rec is not None:
                     self.store.append(rec)
                     n += 1
@@ -1719,8 +1904,7 @@ def _iter_events(history: Any):
     return []
 
 
-def _record_from_event(run_id: str, event: Any, bench_ns: str
-                       ) -> BenchmarkRecord | None:
+def _record_from_event(run_id: str, event: Any, bench_ns: str) -> BenchmarkRecord | None:
     if not isinstance(event, dict):
         return None
     if event.get("event_type") != "ActivityTaskCompleted":
@@ -1747,19 +1931,23 @@ def _record_from_event(run_id: str, event: Any, bench_ns: str
         run_id=run_id,
         bench_run_id=f"_{bench_ns}" if not bench_ns.startswith("_") else bench_ns,
         case_id="_production",
-        scope=BenchmarkScope.TASK_ATTEMPT, stage="code", task_id=run_id,
-        attempt=0, role="dev", harness=harness,
-        model="unknown",   # drift can't reliably recover the per-run model
-                           # without parsing WorkflowStarted attributes; left
-                           # for a later hardening pass
-        quality=QualityScore(score=None if exit_code != 0 else 1.0,
-                             judge="contract"),
-        cost=CostBag(usd=result.get("cost_usd"),
-                     input_tokens=result.get("input_tokens"),
-                     output_tokens=result.get("output_tokens")),
+        scope=BenchmarkScope.TASK_ATTEMPT,
+        stage="code",
+        task_id=run_id,
+        attempt=0,
+        role="dev",
+        harness=harness,
+        model="unknown",  # drift can't reliably recover the per-run model
+        # without parsing WorkflowStarted attributes; left
+        # for a later hardening pass
+        quality=QualityScore(score=None if exit_code != 0 else 1.0, judge="contract"),
+        cost=CostBag(
+            usd=result.get("cost_usd"),
+            input_tokens=result.get("input_tokens"),
+            output_tokens=result.get("output_tokens"),
+        ),
         speed=SpeedBag(wall_clock_s=0.0, started_at=started, ended_at=ended),
-        outcome=(BenchmarkOutcome.PASS if exit_code == 0
-                 else BenchmarkOutcome.FAIL),
+        outcome=(BenchmarkOutcome.PASS if exit_code == 0 else BenchmarkOutcome.FAIL),
     )
 ```
 
@@ -1806,7 +1994,8 @@ def test_load_case_spec_reads_yaml(tmp_path):
         "models: [anthropic:claude-sonnet-4-6]\n"
         "judge_model: openai/gpt-5.2\n"
         "rubrics:\n  architect: rubric-architect.md\n",
-        encoding="utf-8")
+        encoding="utf-8",
+    )
     spec = load_case_spec(str(case))
     assert spec.case_id == "add-login"
     assert len(spec.harnesses) == 2
@@ -1839,10 +2028,11 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'sdlc.benchmarks.cli'`
 ```python
 """CLI handlers for the `sdlc benchmark` subcommands.
 
-  python -m sdlc.cli benchmark run    --case benchmarks/cases/add-login/case.yaml
-  python -m sdlc.cli benchmark drift  --since 168
-  python -m sdlc.cli benchmark report --bench <id> [--source golden,drift]
+python -m sdlc.cli benchmark run    --case benchmarks/cases/add-login/case.yaml
+python -m sdlc.cli benchmark drift  --since 168
+python -m sdlc.cli benchmark report --bench <id> [--source golden,drift]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -1879,7 +2069,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--case", required=True)
 
     drift = bsub.add_parser("drift")
-    drift.add_argument("--since", type=int, default=168)   # hours
+    drift.add_argument("--since", type=int, default=168)  # hours
 
     rep = bsub.add_parser("report")
     rep.add_argument("--bench", required=True)
@@ -1887,8 +2077,7 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def dispatch_report(bench: str, source: str = "golden",
-                    root: str | None = None) -> str:
+def dispatch_report(bench: str, source: str = "golden", root: str | None = None) -> str:
     summaries = aggregate(bench, CompositeWeights(), root=root)
     md = render_markdown(summaries)
     out_path = Path(root if root is not None else _root()) / bench / "report.md"
@@ -1898,10 +2087,10 @@ def dispatch_report(bench: str, source: str = "golden",
 
 async def _run_matrix(case_path: str) -> str:
     spec = load_case_spec(case_path)
-    client = await Client.connect(
-        "localhost:7233", data_converter=pydantic_data_converter)
+    client = await Client.connect("localhost:7233", data_converter=pydantic_data_converter)
     handle = await client.start_workflow(
-        BenchmarkWorkflow.run, spec.model_dump_json(),
+        BenchmarkWorkflow.run,
+        spec.model_dump_json(),
         id=f"bench-{spec.case_id}-{int(__import__('time').time())}",
         task_queue=TASK_QUEUE,
     )
@@ -1911,9 +2100,11 @@ async def _run_matrix(case_path: str) -> str:
 async def _run_drift(since_hours: int) -> int:
     # production wiring uses a real Temporal client; left to operator runtime
     from .drift import DriftHarvester, HistoryProvider  # noqa: F401
+
     raise NotImplementedError(
         "drift requires a live Temporal client; run via the operator CLI "
-        "with a connected client. See ARCHITECTURE.md §8.")
+        "with a connected client. See ARCHITECTURE.md §8."
+    )
 
 
 def main_async(args: argparse.Namespace) -> None:
@@ -1929,29 +2120,35 @@ def main_async(args: argparse.Namespace) -> None:
 
 In `src/sdlc/cli.py`, add the benchmark subparser to the existing `main()`. Insert after the existing `st = sub.add_parser("status")` block (before `args = p.parse_args()`):
 ```python
-    from .benchmarks.cli import build_parser as _bench_parser
-    # delegate benchmark subcommands to the benchmarks.cli parser
-    bp = sub.add_parser("benchmark")
-    bsub = bp.add_subparsers(dest="bench_cmd", required=True)
-    br = bsub.add_parser("run"); br.add_argument("--case", required=True)
-    bd = bsub.add_parser("drift"); bd.add_argument("--since", type=int, default=168)
-    bf = bsub.add_parser("report"); bf.add_argument("--bench", required=True)
-    bf.add_argument("--source", default="golden")
+from .benchmarks.cli import build_parser as _bench_parser
+
+# delegate benchmark subcommands to the benchmarks.cli parser
+bp = sub.add_parser("benchmark")
+bsub = bp.add_subparsers(dest="bench_cmd", required=True)
+br = bsub.add_parser("run")
+br.add_argument("--case", required=True)
+bd = bsub.add_parser("drift")
+bd.add_argument("--since", type=int, default=168)
+bf = bsub.add_parser("report")
+bf.add_argument("--bench", required=True)
+bf.add_argument("--source", default="golden")
 ```
 And in the dispatch block (after the existing `if args.cmd == "start":` branch), add:
 ```python
-    if args.cmd == "benchmark":
-        from .benchmarks.cli import dispatch_report
-        if args.bench_cmd == "report":
-            print(dispatch_report(args.bench, args.source))
-            return
-        if args.bench_cmd == "run":
-            from .benchmarks.cli import _run_matrix
-            print(asyncio.run(_run_matrix(args.case)))
-            return
-        if args.bench_cmd == "drift":
-            print("drift requires a live Temporal client; see ARCHITECTURE.md §8.")
-            return
+if args.cmd == "benchmark":
+    from .benchmarks.cli import dispatch_report
+
+    if args.bench_cmd == "report":
+        print(dispatch_report(args.bench, args.source))
+        return
+    if args.bench_cmd == "run":
+        from .benchmarks.cli import _run_matrix
+
+        print(asyncio.run(_run_matrix(args.case)))
+        return
+    if args.bench_cmd == "drift":
+        print("drift requires a live Temporal client; see ARCHITECTURE.md §8.")
+        return
 ```
 
 > `pyyaml` is a transitive dependency of `pydantic-ai-slim`; if it's missing, add `pyyaml>=6` to `pyproject.toml` `[project].dependencies`. Verify with `python -c "import yaml"` in Step 4.
@@ -2005,12 +2202,13 @@ def test_default_case_file_exists_and_loads():
     spec = load_case_spec(str(CASE))
     assert spec.case_id == "add-login-greenfield"
     cells = expand_matrix(spec)
-    assert len(cells) >= 2     # at least 2 harnesses × 1 model
+    assert len(cells) >= 2  # at least 2 harnesses × 1 model
 
 
 def test_config_yaml_has_weights():
     assert CONFIG.exists()
     import yaml
+
     cfg = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
     assert "weights" in cfg
     w = cfg["weights"]

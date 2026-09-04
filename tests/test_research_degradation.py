@@ -11,8 +11,8 @@ so verify_brief passes it through the ordinary success path."""
 
 from pydantic_ai.exceptions import UsageLimitExceeded
 
-from sdlc.models import ResearchBrief
 from sdlc.research.deps import BudgetExceeded
+from sdlc.stages.research.models import ResearchBrief
 from sdlc.workflows.feature import _degraded_research_brief
 
 

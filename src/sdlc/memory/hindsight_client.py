@@ -16,7 +16,6 @@ from datetime import UTC, datetime
 
 import httpx
 
-from ..models import RecallSnapshot, RetainItem
 from .hindsight_api import (
     BANK_PATH,
     CONSOLIDATE_PATH,
@@ -24,6 +23,10 @@ from .hindsight_api import (
     RECALL_LIMIT_FIELD,
     RECALL_PATH,
     RETAIN_PATH,
+)
+from .models import (
+    RecallSnapshot,
+    RetainItem,
 )
 from .protocol import Memory
 from .query_hash import recall_query_hash

@@ -4,7 +4,10 @@ A SIGNAL, never a gate. files_hint is named a hint; a planner that guessed
 wrong is a normal outcome, and the drift is interesting precisely because it
 is not an error."""
 
-from sdlc.models import DevTask, compute_plan_drift
+from sdlc.stages.plan.models import (
+    DevTask,
+    compute_plan_drift,
+)
 
 
 def _task(**kw):

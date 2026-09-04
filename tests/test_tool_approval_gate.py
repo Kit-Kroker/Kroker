@@ -19,7 +19,7 @@ from sdlc.core.models import (
     GateDecision,
     GateOutcome,
 )
-from sdlc.models import (
+from sdlc.harness.models import (
     ContainmentLayer,
     DeferredToolUse,
     HarnessRunResult,

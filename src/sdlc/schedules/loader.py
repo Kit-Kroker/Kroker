@@ -12,7 +12,7 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
-from ..models import ScheduleAsset
+from .models import ScheduleAsset
 
 SCHEDULES_DIR_ENV = "SDLC_SCHEDULES_DIR"
 # repo_root/schedules — loader.py is src/sdlc/schedules/loader.py, so three

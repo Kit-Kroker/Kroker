@@ -3,7 +3,7 @@
 import pytest
 
 from sdlc.harness.containment import Action, Policy, Rule, Verdict, evaluate
-from sdlc.models import ContainmentLayer
+from sdlc.harness.models import ContainmentLayer
 
 POLICY = Policy(
     version=1,

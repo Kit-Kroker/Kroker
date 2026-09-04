@@ -53,6 +53,7 @@ Create `tests/test_role_usage.py`:
 
 ```python
 """E-33: RoleUsage accumulation semantics + RunSummary/config fields."""
+
 from sdlc.models import PipelineConfig, RoleUsage, RunSummary
 from sdlc.observability.usage import merge_usage
 
@@ -61,27 +62,28 @@ def test_role_usage_defaults():
     u = RoleUsage(role="architect", model="anthropic:claude-opus-4-8")
     assert u.calls == 0
     assert u.input_tokens == 0
-    assert u.cost_usd is None       # None = no priced call yet
+    assert u.cost_usd is None  # None = no priced call yet
 
 
 def test_merge_usage_accumulates_tokens_and_calls():
     u = RoleUsage(role="qa", model="m1")
     merge_usage(u, model="m1", input_tokens=100, output_tokens=10)
-    merge_usage(u, model="m2", input_tokens=50, output_tokens=5,
-                cache_read_tokens=7, cache_write_tokens=3)
+    merge_usage(
+        u, model="m2", input_tokens=50, output_tokens=5, cache_read_tokens=7, cache_write_tokens=3
+    )
     assert u.calls == 2
     assert u.input_tokens == 150
     assert u.output_tokens == 15
     assert u.cache_read_tokens == 7
     assert u.cache_write_tokens == 3
-    assert u.model == "m2"          # last model seen wins
-    assert u.cost_usd is None       # no priced call → stays None
+    assert u.model == "m2"  # last model seen wins
+    assert u.cost_usd is None  # no priced call → stays None
 
 
 def test_merge_usage_prices_sum_and_none_never_zeroes():
     u = RoleUsage(role="dev", model="m")
     merge_usage(u, model="m", cost_usd=0.5)
-    merge_usage(u, model="m", cost_usd=None)   # unpriced call
+    merge_usage(u, model="m", cost_usd=None)  # unpriced call
     merge_usage(u, model="m", cost_usd=0.25)
     assert u.cost_usd == 0.75
 
@@ -92,10 +94,17 @@ def test_pipeline_config_budget_defaults_off():
 
 def test_run_summary_carries_roles_and_budget():
     from datetime import datetime, timezone
+
     now = datetime.now(timezone.utc)
-    s = RunSummary(run_id="r1", mode="greenfield", outcome="deployed:ok",
-                   terminal_stage="deploy", started_at=now, ended_at=now,
-                   duration_s=0.0)
+    s = RunSummary(
+        run_id="r1",
+        mode="greenfield",
+        outcome="deployed:ok",
+        terminal_stage="deploy",
+        started_at=now,
+        ended_at=now,
+        duration_s=0.0,
+    )
     assert s.roles == []
     assert s.budget_usd is None
     assert s.budget_crossings == 0
@@ -117,8 +126,9 @@ class RoleUsage(BaseModel):
     cost_usd None is load-bearing: tokens are facts from the run; dollars
     are a lookup that can fail. A pricing miss must never discard tokens,
     so the field stays None until the first successfully priced call."""
-    role: str                       # "architect", "dev", "clarify", ...
-    model: str                      # last model seen for the role
+
+    role: str  # "architect", "dev", "clarify", ...
+    model: str  # last model seen for the role
     calls: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
@@ -130,14 +140,14 @@ class RoleUsage(BaseModel):
 In `class RunSummary`, after the `gates:` line add:
 
 ```python
-    roles: list[RoleUsage] = Field(default_factory=list)   # E-33 rollup
+roles: list[RoleUsage] = Field(default_factory=list)  # E-33 rollup
 ```
 
 and after the `cost_usd_total:` line add:
 
 ```python
-    budget_usd: float | None = None     # configured run budget; None = off
-    budget_crossings: int = 0           # budget-gate rounds raised (E-33)
+budget_usd: float | None = None  # configured run budget; None = off
+budget_crossings: int = 0  # budget-gate rounds raised (E-33)
 ```
 
 - [ ] **Step 4: Add the config knob to `PipelineConfig`**
@@ -157,15 +167,22 @@ Directly under the `coverage_threshold` field block (models.py:611-614) add:
 """Pure RoleUsage accumulation (E-33). No I/O, no temporalio: shared by the
 workflow's in-state accumulator and the retro-stage trace rollup, and unit-
 testable outside the workflow sandbox."""
+
 from __future__ import annotations
 
 from ..models import RoleUsage
 
 
-def merge_usage(bag: RoleUsage, *, model: str,
-                input_tokens: int = 0, output_tokens: int = 0,
-                cache_read_tokens: int = 0, cache_write_tokens: int = 0,
-                cost_usd: float | None = None) -> None:
+def merge_usage(
+    bag: RoleUsage,
+    *,
+    model: str,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+    cost_usd: float | None = None,
+) -> None:
     """Fold one model call into a role's bag. cost_usd=None (unpriced call)
     leaves bag.cost_usd untouched — never zeroes an existing sum."""
     bag.model = model or bag.model
@@ -211,13 +228,14 @@ Create `tests/test_price_usage.py`:
 ```python
 """E-33: token->USD pricing. Verified against genai-prices' bundled tables —
 offline, deterministic, no network."""
+
 from sdlc.pricing import PriceUsageInput, compute_price, price_usage
 
 
 def test_known_anthropic_model_prices_positive():
-    usd = compute_price(PriceUsageInput(
-        model="anthropic:claude-opus-4-8",
-        input_tokens=1000, output_tokens=100))
+    usd = compute_price(
+        PriceUsageInput(model="anthropic:claude-opus-4-8", input_tokens=1000, output_tokens=100)
+    )
     assert usd is not None and usd > 0
 
 
@@ -225,25 +243,25 @@ def test_provider_hint_falls_back_unhinted():
     # The registry routes glm through an anthropic-compatible endpoint;
     # genai-prices knows the model only under its real provider. The
     # unhinted retry must find it.
-    usd = compute_price(PriceUsageInput(
-        model="anthropic:glm-5.2", input_tokens=1000, output_tokens=100))
+    usd = compute_price(
+        PriceUsageInput(model="anthropic:glm-5.2", input_tokens=1000, output_tokens=100)
+    )
     assert usd is not None and usd > 0
 
 
 def test_slash_form_model_string_parses():
-    usd = compute_price(PriceUsageInput(
-        model="zai-coding-plan/glm-5.2", input_tokens=1000, output_tokens=100))
+    usd = compute_price(
+        PriceUsageInput(model="zai-coding-plan/glm-5.2", input_tokens=1000, output_tokens=100)
+    )
     assert usd is not None and usd > 0
 
 
 def test_unknown_model_returns_none_never_raises():
-    assert compute_price(PriceUsageInput(
-        model="totally-unknown-xyz", input_tokens=10)) is None
+    assert compute_price(PriceUsageInput(model="totally-unknown-xyz", input_tokens=10)) is None
 
 
 def test_price_usage_is_a_temporal_activity():
-    assert getattr(price_usage, "__temporal_activity_definition",
-                   None) is not None
+    assert getattr(price_usage, "__temporal_activity_definition", None) is not None
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -269,6 +287,7 @@ budget gate, so the conversion must be replay-deterministic — the lookup
 runs in an activity whose result lands in Temporal history, never inline
 in workflow code (a genai-prices data update must not change replayed
 math under an open workflow)."""
+
 from __future__ import annotations
 
 from pydantic import BaseModel
@@ -276,7 +295,7 @@ from temporalio import activity
 
 
 class PriceUsageInput(BaseModel):
-    model: str                      # registry form: "anthropic:claude-opus-4-8"
+    model: str  # registry form: "anthropic:claude-opus-4-8"
     input_tokens: int = 0
     output_tokens: int = 0
     cache_read_tokens: int = 0
@@ -296,17 +315,17 @@ def compute_price(inp: PriceUsageInput) -> float | None:
         input_tokens=inp.input_tokens,
         output_tokens=inp.output_tokens,
         cache_read_tokens=inp.cache_read_tokens,
-        cache_write_tokens=inp.cache_write_tokens)
+        cache_write_tokens=inp.cache_write_tokens,
+    )
     provider: str | None = None
     ref = inp.model
     for sep in (":", "/"):
         if sep in ref:
             provider, ref = ref.split(sep, 1)
             break
-    for prov in dict.fromkeys((provider, None)):   # hinted, then unhinted
+    for prov in dict.fromkeys((provider, None)):  # hinted, then unhinted
         try:
-            calc = genai_prices.calc_price(usage, model_ref=ref,
-                                           provider_id=prov)
+            calc = genai_prices.calc_price(usage, model_ref=ref, provider_id=prov)
             return float(calc.total_price)
         except Exception:
             continue
@@ -329,7 +348,7 @@ from .pricing import price_usage
 and in the `activities=[...]` list, after `export_run_artifacts,` add:
 
 ```python
-            price_usage,
+(price_usage,)
 ```
 
 - [ ] **Step 6: Register in the test fakes**
@@ -345,11 +364,19 @@ deterministic, which is the list's actual contract:
 
 ```python
 GIT_FAKES = [
-    fake_setup_integration_branch, fake_create_worktree, fake_run_coding_task,
-    fake_get_task_diff, fake_run_test_suite, fake_run_lint,
-    fake_merge_into_integration, fake_open_pull_request, fake_deploy,
-    fake_security_scan, fake_measure_coverage, fake_run_integration_checks,
-    price_usage,   # E-33: real activity — pure local table lookup, no network
+    fake_setup_integration_branch,
+    fake_create_worktree,
+    fake_run_coding_task,
+    fake_get_task_diff,
+    fake_run_test_suite,
+    fake_run_lint,
+    fake_merge_into_integration,
+    fake_open_pull_request,
+    fake_deploy,
+    fake_security_scan,
+    fake_measure_coverage,
+    fake_run_integration_checks,
+    price_usage,  # E-33: real activity — pure local table lookup, no network
 ]
 ```
 
@@ -385,6 +412,7 @@ Create `tests/test_model_usage_capture.py` (mirrors the `test_retro_stage.py` id
 ```python
 """E-33: every proposer call and every harness attempt emits a MODEL_USAGE
 event, visible in the exported events.jsonl."""
+
 from __future__ import annotations
 
 import asyncio
@@ -402,7 +430,10 @@ from sdlc.activities import evaluate_gate
 from sdlc.models import GateDecision, GateOutcome
 from sdlc.observability.activities import export_run_artifacts
 from tests.fakes.canned import (
-    AGENT_SPECS, QUESTION_IDS, e2e_config, greenfield_idea,
+    AGENT_SPECS,
+    QUESTION_IDS,
+    e2e_config,
+    greenfield_idea,
 )
 from tests.fakes.fake_activities import GIT_FAKES
 
@@ -428,43 +459,51 @@ async def _drive(handle):
         await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
     for gate in ("architecture", "plan", "deploy"):
         await _wait_for_status(handle, f"awaiting:{gate}")
-        await handle.signal(FeatureWorkflow.submit_gate_decision,
-                            GateDecision(gate=gate, round=1,
-                                         outcome=GateOutcome.APPROVE,
-                                         decided_by="human"))
+        await handle.signal(
+            FeatureWorkflow.submit_gate_decision,
+            GateDecision(gate=gate, round=1, outcome=GateOutcome.APPROVE, decided_by="human"),
+        )
 
 
 @pytest.mark.asyncio
 async def test_model_usage_events_exported(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
-    activities = [evaluate_gate, export_run_artifacts, *GIT_FAKES,
-                  *fake_agent_activities(AGENT_SPECS)]
+    activities = [
+        evaluate_gate,
+        export_run_artifacts,
+        *GIT_FAKES,
+        *fake_agent_activities(AGENT_SPECS),
+    ]
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         with env.auto_time_skipping_disabled():
-            async with Worker(env.client, task_queue=TASK_QUEUE,
-                              workflows=[FeatureWorkflow],
-                              activities=activities,
-                              plugins=[PydanticAIPlugin()]):
+            async with Worker(
+                env.client,
+                task_queue=TASK_QUEUE,
+                workflows=[FeatureWorkflow],
+                activities=activities,
+                plugins=[PydanticAIPlugin()],
+            ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
                     args=[greenfield_idea(), e2e_config()],
-                    id=f"usage-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                    id=f"usage-{uuid.uuid4()}",
+                    task_queue=TASK_QUEUE,
+                )
                 driver = asyncio.create_task(_drive(handle))
                 result = await handle.result()
                 await driver
     assert result.startswith("deployed:"), result
     run_dir = next(tmp_path.iterdir())
-    events = [json.loads(line) for line in
-              (run_dir / "events.jsonl").read_text().splitlines()]
+    events = [json.loads(line) for line in (run_dir / "events.jsonl").read_text().splitlines()]
     usage = [e for e in events if e["kind"] == "model_usage"]
     roles = {e["data"]["role"] for e in usage}
     # every proposer the happy path exercises, plus the harness join
-    assert {"clarify", "architect", "planner", "qa", "reviewer",
-            "analyst", "dev"} <= roles, roles
+    assert {"clarify", "architect", "planner", "qa", "reviewer", "analyst", "dev"} <= roles, roles
     for e in usage:
         assert e["data"]["calls"] == "1"
-        int(e["data"]["input_tokens"])       # stringified ints parse
+        int(e["data"]["input_tokens"])  # stringified ints parse
         int(e["data"]["output_tokens"])
     dev = next(e for e in usage if e["data"]["role"] == "dev")
     # fake_run_coding_task reports 1000/200
@@ -504,8 +543,9 @@ and add `RoleUsage` to the existing `from ..models import (...)` list.
 # E-33: pricing is a deterministic local table lookup — retrying cannot
 # change the outcome (VERIFY_ACT rationale); the caller treats failure as
 # "price unknown", so 1 attempt, short timeout.
-PRICE_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
-                 retry_policy=RetryPolicy(maximum_attempts=1))
+PRICE_ACT = dict(
+    start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=1)
+)
 ```
 
 (c) In `__init__`, next to `self._session_refs` (line ~242) add:
@@ -522,63 +562,90 @@ PRICE_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
 In `feature.py`, directly after `_emit` (line ~421) add:
 
 ```python
-    def _track_usage(self, *, role: str, model: str,
-                     input_tokens: int = 0, output_tokens: int = 0,
-                     cache_read_tokens: int = 0, cache_write_tokens: int = 0,
-                     cost_usd: float | None = None,
-                     into: RoleUsage | None = None) -> None:
-        """Fold one model call into the run's per-role accumulator and emit
-        a MODEL_USAGE event. Pure state mutation — safe in workflow code.
-        `into` additionally folds the same delta into a caller-held bag
-        (per-stage benchmark records)."""
-        bag = self._role_usage.setdefault(
-            role, RoleUsage(role=role, model=model))
-        for target in (bag, into) if into is not None else (bag,):
-            merge_usage(target, model=model,
-                        input_tokens=input_tokens,
-                        output_tokens=output_tokens,
-                        cache_read_tokens=cache_read_tokens,
-                        cache_write_tokens=cache_write_tokens,
-                        cost_usd=cost_usd)
-        self._emit(
-            RunEventKind.MODEL_USAGE, role=role, model=model, calls="1",
-            input_tokens=str(input_tokens), output_tokens=str(output_tokens),
-            cache_read_tokens=str(cache_read_tokens),
-            cache_write_tokens=str(cache_write_tokens),
-            **({"cost_usd": str(cost_usd)} if cost_usd is not None else {}))
+def _track_usage(
+    self,
+    *,
+    role: str,
+    model: str,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+    cost_usd: float | None = None,
+    into: RoleUsage | None = None,
+) -> None:
+    """Fold one model call into the run's per-role accumulator and emit
+    a MODEL_USAGE event. Pure state mutation — safe in workflow code.
+    `into` additionally folds the same delta into a caller-held bag
+    (per-stage benchmark records)."""
+    bag = self._role_usage.setdefault(role, RoleUsage(role=role, model=model))
+    for target in (bag, into) if into is not None else (bag,):
+        merge_usage(
+            target,
+            model=model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_write_tokens=cache_write_tokens,
+            cost_usd=cost_usd,
+        )
+    self._emit(
+        RunEventKind.MODEL_USAGE,
+        role=role,
+        model=model,
+        calls="1",
+        input_tokens=str(input_tokens),
+        output_tokens=str(output_tokens),
+        cache_read_tokens=str(cache_read_tokens),
+        cache_write_tokens=str(cache_write_tokens),
+        **({"cost_usd": str(cost_usd)} if cost_usd is not None else {}),
+    )
 
-    async def _run_role(self, cfg: PipelineConfig, role: str, model: str,
-                        agent, *args, into: RoleUsage | None = None,
-                        **kwargs):
-        """E-33 single model-egress point (folds E-19): run a proposer
-        agent, capture its usage, price it (replay-safe: in an activity),
-        accumulate per role. Returns the AgentRunResult — callers keep
-        taking .output. Pricing failure of ANY kind degrades to usd=None;
-        it must never fail the stage."""
-        result = await agent.run(*args, **kwargs)
-        u = result.usage()
-        usd: float | None = None
-        if u.input_tokens or u.output_tokens:
-            try:
-                usd = await workflow.execute_activity(
-                    price_usage,
-                    PriceUsageInput(
-                        model=model,
-                        input_tokens=u.input_tokens or 0,
-                        output_tokens=u.output_tokens or 0,
-                        cache_read_tokens=u.cache_read_tokens or 0,
-                        cache_write_tokens=u.cache_write_tokens or 0),
-                    **PRICE_ACT)
-            except Exception:
-                usd = None
-        self._track_usage(
-            role=role, model=model,
-            input_tokens=u.input_tokens or 0,
-            output_tokens=u.output_tokens or 0,
-            cache_read_tokens=u.cache_read_tokens or 0,
-            cache_write_tokens=u.cache_write_tokens or 0,
-            cost_usd=usd, into=into)
-        return result
+
+async def _run_role(
+    self,
+    cfg: PipelineConfig,
+    role: str,
+    model: str,
+    agent,
+    *args,
+    into: RoleUsage | None = None,
+    **kwargs,
+):
+    """E-33 single model-egress point (folds E-19): run a proposer
+    agent, capture its usage, price it (replay-safe: in an activity),
+    accumulate per role. Returns the AgentRunResult — callers keep
+    taking .output. Pricing failure of ANY kind degrades to usd=None;
+    it must never fail the stage."""
+    result = await agent.run(*args, **kwargs)
+    u = result.usage()
+    usd: float | None = None
+    if u.input_tokens or u.output_tokens:
+        try:
+            usd = await workflow.execute_activity(
+                price_usage,
+                PriceUsageInput(
+                    model=model,
+                    input_tokens=u.input_tokens or 0,
+                    output_tokens=u.output_tokens or 0,
+                    cache_read_tokens=u.cache_read_tokens or 0,
+                    cache_write_tokens=u.cache_write_tokens or 0,
+                ),
+                **PRICE_ACT,
+            )
+        except Exception:
+            usd = None
+    self._track_usage(
+        role=role,
+        model=model,
+        input_tokens=u.input_tokens or 0,
+        output_tokens=u.output_tokens or 0,
+        cache_read_tokens=u.cache_read_tokens or 0,
+        cache_write_tokens=u.cache_write_tokens or 0,
+        cost_usd=usd,
+        into=into,
+    )
+    return result
 ```
 
 - [ ] **Step 6: Refit the 8 proposer call sites**
@@ -606,14 +673,16 @@ through `**kwargs` unchanged.
 In `_dev_task`, immediately after the `run = await workflow.execute_activity(run_coding_task, ...)` call (after the `session_ref` append, line ~582) add:
 
 ```python
-            # E-33 harness join: the harness reports REAL dollars (CLI
-            # total_cost_usd) — no pricing activity needed. Accumulate
-            # under the executing role.
-            self._track_usage(
-                role="dev", model=role_cfg.model,
-                input_tokens=run.input_tokens or 0,
-                output_tokens=run.output_tokens or 0,
-                cost_usd=run.cost_usd)
+# E-33 harness join: the harness reports REAL dollars (CLI
+# total_cost_usd) — no pricing activity needed. Accumulate
+# under the executing role.
+self._track_usage(
+    role="dev",
+    model=role_cfg.model,
+    input_tokens=run.input_tokens or 0,
+    output_tokens=run.output_tokens or 0,
+    cost_usd=run.cost_usd,
+)
 ```
 
 - [ ] **Step 8: Run tests to verify they pass**
@@ -651,6 +720,7 @@ Create `tests/test_budget_gate.py`:
 """E-33: the run-budget gate — crossings re-gate per increment, approve
 extends, reject terminates with retro intact, default-off changes nothing
 (the whole existing suite is that last proof)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -668,7 +738,10 @@ from sdlc.models import GateDecision, GateOutcome
 from sdlc.observability.activities import export_run_artifacts
 from sdlc.pricing import PriceUsageInput, price_usage as real_price_usage
 from tests.fakes.canned import (
-    AGENT_SPECS, QUESTION_IDS, e2e_config, greenfield_idea,
+    AGENT_SPECS,
+    QUESTION_IDS,
+    e2e_config,
+    greenfield_idea,
 )
 from tests.fakes.fake_activities import GIT_FAKES
 
@@ -681,13 +754,18 @@ TASK_QUEUE = "budget"
 
 @activity.defn(name="price_usage")
 async def fixed_price(inp: PriceUsageInput) -> float | None:
-    return 1.0    # every proposer call costs exactly $1
+    return 1.0  # every proposer call costs exactly $1
 
 
 def _activities():
     fakes = [a for a in GIT_FAKES if a is not real_price_usage]
-    return [evaluate_gate, export_run_artifacts, fixed_price, *fakes,
-            *fake_agent_activities(AGENT_SPECS)]
+    return [
+        evaluate_gate,
+        export_run_artifacts,
+        fixed_price,
+        *fakes,
+        *fake_agent_activities(AGENT_SPECS),
+    ]
 
 
 async def _wait_for_status(handle, target, timeout_s=10.0):
@@ -700,14 +778,14 @@ async def _wait_for_status(handle, target, timeout_s=10.0):
 
 
 async def _signal_gate(handle, gate, round, outcome):
-    await handle.signal(FeatureWorkflow.submit_gate_decision,
-                        GateDecision(gate=gate, round=round, outcome=outcome,
-                                     decided_by="human"))
+    await handle.signal(
+        FeatureWorkflow.submit_gate_decision,
+        GateDecision(gate=gate, round=round, outcome=outcome, decided_by="human"),
+    )
 
 
 @pytest.mark.asyncio
-async def test_budget_crossings_regate_and_approve_extends(tmp_path,
-                                                           monkeypatch):
+async def test_budget_crossings_regate_and_approve_extends(tmp_path, monkeypatch):
     """budget=$1.50, $1/call. Happy-path metered calls in order: clarify,
     architect, planner, qa, reviewer, analyst (merge_verdict skipped —
     merge gate is HARD not SOFT; fake dev harness carries no dollars).
@@ -717,40 +795,40 @@ async def test_budget_crossings_regate_and_approve_extends(tmp_path,
     cfg = e2e_config()
     cfg.run_budget_usd = 1.5
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         with env.auto_time_skipping_disabled():
-            async with Worker(env.client, task_queue=TASK_QUEUE,
-                              workflows=[FeatureWorkflow],
-                              activities=_activities(),
-                              plugins=[PydanticAIPlugin()]):
+            async with Worker(
+                env.client,
+                task_queue=TASK_QUEUE,
+                workflows=[FeatureWorkflow],
+                activities=_activities(),
+                plugins=[PydanticAIPlugin()],
+            ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
                     args=[greenfield_idea(), cfg],
-                    id=f"budget-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                    id=f"budget-{uuid.uuid4()}",
+                    task_queue=TASK_QUEUE,
+                )
 
                 async def drive():
                     await _wait_for_status(handle, "awaiting:clarify")
                     for qid in QUESTION_IDS:
-                        await handle.signal(FeatureWorkflow.answer_question,
-                                            args=[qid, "yes"])
+                        await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
                     await _wait_for_status(handle, "awaiting:architecture")
-                    await _signal_gate(handle, "architecture", 1,
-                                       GateOutcome.APPROVE)
+                    await _signal_gate(handle, "architecture", 1, GateOutcome.APPROVE)
                     for rnd in (1, 2):
                         await _wait_for_status(handle, "awaiting:budget")
-                        await _signal_gate(handle, "budget", rnd,
-                                           GateOutcome.APPROVE)
+                        await _signal_gate(handle, "budget", rnd, GateOutcome.APPROVE)
                         if rnd == 1:
                             await _wait_for_status(handle, "awaiting:plan")
-                            await _signal_gate(handle, "plan", 1,
-                                               GateOutcome.APPROVE)
+                            await _signal_gate(handle, "plan", 1, GateOutcome.APPROVE)
                     for rnd in (3, 4):
                         await _wait_for_status(handle, "awaiting:budget")
-                        await _signal_gate(handle, "budget", rnd,
-                                           GateOutcome.APPROVE)
+                        await _signal_gate(handle, "budget", rnd, GateOutcome.APPROVE)
                     await _wait_for_status(handle, "awaiting:deploy")
-                    await _signal_gate(handle, "deploy", 1,
-                                       GateOutcome.APPROVE)
+                    await _signal_gate(handle, "deploy", 1, GateOutcome.APPROVE)
 
                 driver = asyncio.create_task(drive())
                 result = await handle.result()
@@ -766,34 +844,38 @@ async def test_budget_crossings_regate_and_approve_extends(tmp_path,
 async def test_budget_reject_terminates_with_retro(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
     cfg = e2e_config()
-    cfg.run_budget_usd = 0.5      # first metered call ($1, clarify) crosses
+    cfg.run_budget_usd = 0.5  # first metered call ($1, clarify) crosses
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         with env.auto_time_skipping_disabled():
-            async with Worker(env.client, task_queue=TASK_QUEUE,
-                              workflows=[FeatureWorkflow],
-                              activities=_activities(),
-                              plugins=[PydanticAIPlugin()]):
+            async with Worker(
+                env.client,
+                task_queue=TASK_QUEUE,
+                workflows=[FeatureWorkflow],
+                activities=_activities(),
+                plugins=[PydanticAIPlugin()],
+            ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
                     args=[greenfield_idea(), cfg],
-                    id=f"budget-rej-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                    id=f"budget-rej-{uuid.uuid4()}",
+                    task_queue=TASK_QUEUE,
+                )
 
                 async def drive():
                     await _wait_for_status(handle, "awaiting:clarify")
                     for qid in QUESTION_IDS:
-                        await handle.signal(FeatureWorkflow.answer_question,
-                                            args=[qid, "yes"])
+                        await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
                     await _wait_for_status(handle, "awaiting:budget")
-                    await _signal_gate(handle, "budget", 1,
-                                       GateOutcome.REJECT)
+                    await _signal_gate(handle, "budget", 1, GateOutcome.REJECT)
 
                 driver = asyncio.create_task(drive())
                 result = await handle.result()
                 await driver
                 summary = await handle.query(FeatureWorkflow.run_summary)
     assert result == "rejected:budget", result
-    assert summary is not None            # retro ran on the budget path
+    assert summary is not None  # retro ran on the budget path
     assert summary.outcome == "rejected:budget"
 ```
 
@@ -826,32 +908,38 @@ class _BudgetRejected(Exception):
 On the workflow class, directly after `_run_role` add:
 
 ```python
-    async def _check_budget(self, cfg: PipelineConfig) -> None:
-        """E-33/FR-701 run-budget enforcement. Called at SERIAL points only
-        (stage boundaries + the task loop after merges) — never inside a
-        wave-mode gather, so gate rounds cannot race. Approve grants one
-        more increment; the while-loop re-gates a spend that jumped
-        multiple increments at once."""
-        if cfg.run_budget_usd <= 0:
-            return
-        total = sum(u.cost_usd or 0.0 for u in self._role_usage.values())
-        while total >= self._budget_threshold:
-            self._budget_crossings += 1
-            rows = "\n".join(
-                f"  {u.role} ({u.model}): ${u.cost_usd:.4f}"
-                for u in self._role_usage.values()
-                if u.cost_usd is not None)
-            decision = await self._gate(
-                "budget", cfg, round=self._budget_crossings,
-                context=GateContext(spec_summary=(
-                    f"Run cost ${total:.4f} >= budget "
-                    f"${self._budget_threshold:.2f}\n{rows}")),
-                default_policy=GatePolicy.HARD)
-            if decision.outcome is not GateOutcome.APPROVE:
-                # REVISE has nothing to revise here — any non-approve
-                # terminates (spec §5).
-                raise _BudgetRejected()
-            self._budget_threshold += cfg.run_budget_usd
+async def _check_budget(self, cfg: PipelineConfig) -> None:
+    """E-33/FR-701 run-budget enforcement. Called at SERIAL points only
+    (stage boundaries + the task loop after merges) — never inside a
+    wave-mode gather, so gate rounds cannot race. Approve grants one
+    more increment; the while-loop re-gates a spend that jumped
+    multiple increments at once."""
+    if cfg.run_budget_usd <= 0:
+        return
+    total = sum(u.cost_usd or 0.0 for u in self._role_usage.values())
+    while total >= self._budget_threshold:
+        self._budget_crossings += 1
+        rows = "\n".join(
+            f"  {u.role} ({u.model}): ${u.cost_usd:.4f}"
+            for u in self._role_usage.values()
+            if u.cost_usd is not None
+        )
+        decision = await self._gate(
+            "budget",
+            cfg,
+            round=self._budget_crossings,
+            context=GateContext(
+                spec_summary=(
+                    f"Run cost ${total:.4f} >= budget ${self._budget_threshold:.2f}\n{rows}"
+                )
+            ),
+            default_policy=GatePolicy.HARD,
+        )
+        if decision.outcome is not GateOutcome.APPROVE:
+            # REVISE has nothing to revise here — any non-approve
+            # terminates (spec §5).
+            raise _BudgetRejected()
+        self._budget_threshold += cfg.run_budget_usd
 ```
 
 - [ ] **Step 5: Catch in `run()`, init the threshold**
@@ -859,16 +947,15 @@ On the workflow class, directly after `_run_role` add:
 Replace `run()` (line 727-732) with:
 
 ```python
-    async def run(self, idea: IdeaBrief,
-                  cfg: PipelineConfig | None = None) -> str:
-        cfg = cfg or PipelineConfig()
-        self._budget_threshold = cfg.run_budget_usd    # E-33
-        try:
-            result = await self._pipeline(idea, cfg)
-        except _BudgetRejected:
-            result = "rejected:budget"
-        await self._retro(cfg, idea, result)
-        return result
+async def run(self, idea: IdeaBrief, cfg: PipelineConfig | None = None) -> str:
+    cfg = cfg or PipelineConfig()
+    self._budget_threshold = cfg.run_budget_usd  # E-33
+    try:
+        result = await self._pipeline(idea, cfg)
+    except _BudgetRejected:
+        result = "rejected:budget"
+    await self._retro(cfg, idea, result)
+    return result
 ```
 
 - [ ] **Step 6: Insert the serial check sites**
@@ -919,31 +1006,46 @@ Append to `tests/test_run_summary_build.py`:
 def _usage_event(seq, role, model, in_t, out_t, usd=None):
     from datetime import datetime, timezone
     from sdlc.observability.trace import RunEvent, RunEventKind
-    data = {"role": role, "model": model, "calls": "1",
-            "input_tokens": str(in_t), "output_tokens": str(out_t),
-            "cache_read_tokens": "0", "cache_write_tokens": "0"}
+
+    data = {
+        "role": role,
+        "model": model,
+        "calls": "1",
+        "input_tokens": str(in_t),
+        "output_tokens": str(out_t),
+        "cache_read_tokens": "0",
+        "cache_write_tokens": "0",
+    }
     if usd is not None:
         data["cost_usd"] = str(usd)
-    return RunEvent(seq=seq, at=datetime.now(timezone.utc),
-                    kind=RunEventKind.MODEL_USAGE, data=data)
+    return RunEvent(
+        seq=seq, at=datetime.now(timezone.utc), kind=RunEventKind.MODEL_USAGE, data=data
+    )
 
 
 def test_role_rollup_aggregates_model_usage_events():
     from sdlc.observability.summary import build_run_summary
+
     trace = [
         _usage_event(0, "clarify", "m1", 100, 10, usd=0.5),
-        _usage_event(1, "clarify", "m1", 50, 5),          # unpriced call
+        _usage_event(1, "clarify", "m1", 50, 5),  # unpriced call
         _usage_event(2, "dev", "m2", 1000, 200, usd=2.0),
     ]
-    s = build_run_summary(run_id="r", mode="greenfield", outcome="deployed:x",
-                          trace=trace, memory_enabled=False,
-                          memory_watermark=None, budget_usd=5.0)
+    s = build_run_summary(
+        run_id="r",
+        mode="greenfield",
+        outcome="deployed:x",
+        trace=trace,
+        memory_enabled=False,
+        memory_watermark=None,
+        budget_usd=5.0,
+    )
     roles = {u.role: u for u in s.roles}
     assert roles["clarify"].calls == 2
     assert roles["clarify"].input_tokens == 150
-    assert roles["clarify"].cost_usd == 0.5     # None call didn't zero it
+    assert roles["clarify"].cost_usd == 0.5  # None call didn't zero it
     assert roles["dev"].cost_usd == 2.0
-    assert s.cost_usd_total == 2.5              # rollup sum, not stage sum
+    assert s.cost_usd_total == 2.5  # rollup sum, not stage sum
     assert s.budget_usd == 5.0
 
 
@@ -951,20 +1053,44 @@ def test_budget_crossings_counted_from_gate_events():
     from datetime import datetime, timezone
     from sdlc.observability.summary import build_run_summary
     from sdlc.observability.trace import RunEvent, RunEventKind
+
     now = datetime.now(timezone.utc)
     trace = [
-        RunEvent(seq=0, at=now, kind=RunEventKind.GATE_DECIDED,
-                 data={"gate": "budget", "round": "1", "policy": "hard",
-                       "decided_by": "human", "approved": "true"}),
-        RunEvent(seq=1, at=now, kind=RunEventKind.GATE_DECIDED,
-                 data={"gate": "budget", "round": "2", "policy": "hard",
-                       "decided_by": "human", "approved": "false"}),
+        RunEvent(
+            seq=0,
+            at=now,
+            kind=RunEventKind.GATE_DECIDED,
+            data={
+                "gate": "budget",
+                "round": "1",
+                "policy": "hard",
+                "decided_by": "human",
+                "approved": "true",
+            },
+        ),
+        RunEvent(
+            seq=1,
+            at=now,
+            kind=RunEventKind.GATE_DECIDED,
+            data={
+                "gate": "budget",
+                "round": "2",
+                "policy": "hard",
+                "decided_by": "human",
+                "approved": "false",
+            },
+        ),
     ]
-    s = build_run_summary(run_id="r", mode="greenfield",
-                          outcome="rejected:budget", trace=trace,
-                          memory_enabled=False, memory_watermark=None)
+    s = build_run_summary(
+        run_id="r",
+        mode="greenfield",
+        outcome="rejected:budget",
+        trace=trace,
+        memory_enabled=False,
+        memory_watermark=None,
+    )
     assert s.budget_crossings == 2
-    assert s.budget_usd is None                 # not passed → off
+    assert s.budget_usd is None  # not passed → off
 ```
 
 Append to `tests/test_observability_export.py`:
@@ -974,14 +1100,29 @@ def test_report_html_renders_role_table():
     from datetime import datetime, timezone
     from sdlc.models import RoleUsage, RunSummary
     from sdlc.observability.export import render_report_html
+
     now = datetime.now(timezone.utc)
-    s = RunSummary(run_id="r1", mode="greenfield", outcome="deployed:x",
-                   terminal_stage="deploy", started_at=now, ended_at=now,
-                   duration_s=1.0,
-                   roles=[RoleUsage(role="architect", model="anthropic:o",
-                                    calls=2, input_tokens=1500,
-                                    output_tokens=300, cost_usd=1.25)],
-                   budget_usd=5.0, budget_crossings=1)
+    s = RunSummary(
+        run_id="r1",
+        mode="greenfield",
+        outcome="deployed:x",
+        terminal_stage="deploy",
+        started_at=now,
+        ended_at=now,
+        duration_s=1.0,
+        roles=[
+            RoleUsage(
+                role="architect",
+                model="anthropic:o",
+                calls=2,
+                input_tokens=1500,
+                output_tokens=300,
+                cost_usd=1.25,
+            )
+        ],
+        budget_usd=5.0,
+        budget_crossings=1,
+    )
     html = render_report_html(s)
     assert "architect" in html
     assert "$1.2500" in html
@@ -1009,32 +1150,33 @@ def _role_rollup(trace: list[RunEvent]) -> list[RoleUsage]:
         bag = bags.setdefault(role, RoleUsage(role=role, model=model))
         cost = d.get("cost_usd")
         merge_usage(
-            bag, model=model,
+            bag,
+            model=model,
             input_tokens=int(d.get("input_tokens", "0")),
             output_tokens=int(d.get("output_tokens", "0")),
             cache_read_tokens=int(d.get("cache_read_tokens", "0")),
             cache_write_tokens=int(d.get("cache_write_tokens", "0")),
-            cost_usd=float(cost) if cost is not None else None)
+            cost_usd=float(cost) if cost is not None else None,
+        )
     return list(bags.values())
 ```
 
 Change `build_run_summary`'s signature to add `budget_usd: float | None = None` (keyword-only, after `memory_watermark`). In the body, replace the `costs = ...` line and the `cost_usd_total=` argument:
 
 ```python
-    roles = _role_rollup(trace)
-    role_costs = [u.cost_usd for u in roles if u.cost_usd is not None]
-    budget_crossings = sum(
-        1 for e in trace
-        if e.kind is RunEventKind.GATE_DECIDED
-        and e.data.get("gate") == "budget")
+roles = _role_rollup(trace)
+role_costs = [u.cost_usd for u in roles if u.cost_usd is not None]
+budget_crossings = sum(
+    1 for e in trace if e.kind is RunEventKind.GATE_DECIDED and e.data.get("gate") == "budget"
+)
 ```
 
 and in the returned `RunSummary(...)`:
 
 ```python
-        roles=roles,
-        cost_usd_total=(sum(role_costs) if role_costs else None),
-        budget_usd=budget_usd, budget_crossings=budget_crossings,
+roles = (roles,)
+cost_usd_total = ((sum(role_costs) if role_costs else None),)
+budget_usd = budget_usd, budget_crossings = (budget_crossings,)
 ```
 
 (The old `costs = [s.cost_usd for s in stages ...]` line is deleted — the role rollup is complete by construction and avoids double-counting harness dollars that appear in both a stage record and a MODEL_USAGE event.)
@@ -1048,8 +1190,8 @@ in its trace list, after the two `STAGE_ENDED` events, add matching usage
 events (using the `_usage_event` helper added in Step 1):
 
 ```python
-        _usage_event(6, "clarify", "m", 100, 10, usd=0.10),
-        _usage_event(7, "architect", "m", 200, 20, usd=0.20),
+(_usage_event(6, "clarify", "m", 100, 10, usd=0.10),)
+(_usage_event(7, "architect", "m", 200, 20, usd=0.20),)
 ```
 
 (give them seq values after the existing events and re-number `RUN_FINISHED`
@@ -1064,8 +1206,7 @@ events in its trace).
 In `feature.py` `_retro`, extend the `build_run_summary(...)` call (line ~743) with:
 
 ```python
-                budget_usd=(cfg.run_budget_usd
-                            if cfg.run_budget_usd > 0 else None),
+budget_usd = ((cfg.run_budget_usd if cfg.run_budget_usd > 0 else None),)
 ```
 
 - [ ] **Step 5: Render the role table in `export.py`**
@@ -1073,11 +1214,19 @@ In `feature.py` `_retro`, extend the `build_run_summary(...)` call (line ~743) w
 In `render_report_html`, after the `clar_rows` block add:
 
 ```python
-    role_rows = "".join(
-        _row([u.role, u.model, str(u.calls),
-              str(u.input_tokens), str(u.output_tokens),
-              "-" if u.cost_usd is None else f"${u.cost_usd:.4f}"])
-        for u in s.roles)
+role_rows = "".join(
+    _row(
+        [
+            u.role,
+            u.model,
+            str(u.calls),
+            str(u.input_tokens),
+            str(u.output_tokens),
+            "-" if u.cost_usd is None else f"${u.cost_usd:.4f}",
+        ]
+    )
+    for u in s.roles
+)
 ```
 
 In the HTML template, after the Clarifications table insert:
@@ -1129,8 +1278,10 @@ Append to `tests/test_role_usage.py`:
 ```python
 def test_cost_bag_from_spend():
     from sdlc.observability.usage import cost_bag_from_spend
-    u = RoleUsage(role="clarify", model="m", calls=1,
-                  input_tokens=100, output_tokens=10, cost_usd=0.5)
+
+    u = RoleUsage(
+        role="clarify", model="m", calls=1, input_tokens=100, output_tokens=10, cost_usd=0.5
+    )
     bag = cost_bag_from_spend(u)
     assert bag.usd == 0.5
     assert bag.input_tokens == 100
@@ -1139,12 +1290,13 @@ def test_cost_bag_from_spend():
 
 def test_cost_bag_explicit_usd_wins_and_none_spend_degrades():
     from sdlc.observability.usage import cost_bag_from_spend
+
     u = RoleUsage(role="dev", model="m", input_tokens=100)
-    assert cost_bag_from_spend(u, cost_usd=2.0).usd == 2.0   # harness $ wins
+    assert cost_bag_from_spend(u, cost_usd=2.0).usd == 2.0  # harness $ wins
     empty = cost_bag_from_spend(None, cost_usd=None)
     assert empty.usd is None and empty.input_tokens is None
     zero = cost_bag_from_spend(RoleUsage(role="x", model="m"))
-    assert zero.input_tokens is None       # cache-hit cell: zeros → None
+    assert zero.input_tokens is None  # cache-hit cell: zeros → None
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1155,19 +1307,20 @@ Expected: new tests FAIL — `ImportError: cannot import name 'cost_bag_from_spe
 - [ ] **Step 3: Add `cost_bag_from_spend` to `usage.py`**
 
 ```python
-def cost_bag_from_spend(spend: RoleUsage | None,
-                        cost_usd: float | None = None):
+def cost_bag_from_spend(spend: RoleUsage | None, cost_usd: float | None = None):
     """CostBag for a stage's BenchmarkRecord (E-33, spec §2). Explicit
     cost_usd (harness-reported dollars) wins over the spend's priced sum.
     A zero-token spend (memoization cache hit — the closure never ran)
     degrades to None fields, matching pre-E-33 records."""
     from ..benchmarks.models import CostBag
+
     if spend is None:
         return CostBag(usd=cost_usd)
     return CostBag(
         usd=cost_usd if cost_usd is not None else spend.cost_usd,
         input_tokens=spend.input_tokens or None,
-        output_tokens=spend.output_tokens or None)
+        output_tokens=spend.output_tokens or None,
+    )
 ```
 
 (Local import: `benchmarks.models` must not become an import-time dependency of the observability package — mirrors how `usage.py` stays workflow-sandbox-safe.)
@@ -1177,7 +1330,7 @@ def cost_bag_from_spend(spend: RoleUsage | None,
 In `feature.py`: add `from ..observability.usage import cost_bag_from_spend, merge_usage` (extend the Task 3 import). In `_stage_record` (line 250), add parameter `spend: RoleUsage | None = None` after `cost_usd`, and replace `cost=CostBag(usd=cost_usd),` with:
 
 ```python
-            cost=cost_bag_from_spend(spend, cost_usd),
+cost = (cost_bag_from_spend(spend, cost_usd),)
 ```
 
 - [ ] **Step 5: Create spend cells at the 6 proposer record sites**

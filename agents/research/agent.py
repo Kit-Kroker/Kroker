@@ -5,8 +5,8 @@ from pydantic_ai import Agent
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai_harness import CodeMode
 
-from sdlc.models import ResearchBrief
 from sdlc.research.deps import ResearchDeps
+from sdlc.stages.research.models import ResearchBrief
 
 
 def _import_exa_wrapper():

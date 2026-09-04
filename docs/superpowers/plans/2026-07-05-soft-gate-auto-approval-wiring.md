@@ -50,7 +50,10 @@ import pytest
 from pydantic import ValidationError
 
 from sdlc.models import (
-    ArchitectureSpec, GateConfig, GatePolicy, ImplementationPlan,
+    ArchitectureSpec,
+    GateConfig,
+    GatePolicy,
+    ImplementationPlan,
     PipelineConfig,
 )
 
@@ -107,6 +110,7 @@ In `src/sdlc/models.py`, add after the `GateOutcome` enum (after line 36):
 class GateConfig(BaseModel):
     """Per-gate policy + the confidence bar a SOFT gate must clear to
     auto-approve (FR-301). threshold is read only when policy == SOFT."""
+
     policy: GatePolicy = GatePolicy.HARD
     threshold: float = Field(default=0.8, ge=0.0, le=1.0)
 
@@ -144,13 +148,15 @@ In `src/sdlc/models.py`, change the `PipelineConfig.gates` field (lines 286-292)
 class PipelineConfig(BaseModel):
     execution_mode: ExecutionMode = ExecutionMode.SERIAL
     max_session_resumes: int = 3
-    gates: dict[str, GateConfig] = Field(default_factory=lambda: {
-        "clarify": GateConfig(policy=GatePolicy.HARD),
-        "architecture": GateConfig(policy=GatePolicy.HARD),
-        "plan": GateConfig(policy=GatePolicy.SOFT),
-        "merge": GateConfig(policy=GatePolicy.HARD),
-        "deploy": GateConfig(policy=GatePolicy.HARD),
-    })
+    gates: dict[str, GateConfig] = Field(
+        default_factory=lambda: {
+            "clarify": GateConfig(policy=GatePolicy.HARD),
+            "architecture": GateConfig(policy=GatePolicy.HARD),
+            "plan": GateConfig(policy=GatePolicy.SOFT),
+            "merge": GateConfig(policy=GatePolicy.HARD),
+            "deploy": GateConfig(policy=GatePolicy.HARD),
+        }
+    )
 ```
 
 Add a `field_validator` on `gates` (below the field, still inside `PipelineConfig`) that coerces bare `GatePolicy`/`str` values per-key, so `gates={"architecture": GatePolicy.HARD}` and mixed dicts both work:
@@ -209,8 +215,7 @@ from sdlc.workflows.feature import _auto_decision_for
 
 
 def _cfg(policy: GatePolicy, threshold: float = 0.8) -> PipelineConfig:
-    return PipelineConfig(gates={"architecture": GateConfig(policy=policy,
-                                                            threshold=threshold)})
+    return PipelineConfig(gates={"architecture": GateConfig(policy=policy, threshold=threshold)})
 
 
 def test_soft_high_confidence_auto_approves():
@@ -261,20 +266,35 @@ Expected: FAIL — `_auto_decision_for` not defined in `sdlc.workflows.feature`.
 In `src/sdlc/workflows/feature.py`, add `GateConfig` to the `..models` import (line 47-52 becomes):
 
 ```python
-    from ..models import (
-        ArchitectureSpec, ClarifiedRequirements, DevTask, ExecutionMode,
-        GateConfig, GateDecision, GateOutcome, GatePolicy, HandoffSummary,
-        IdeaBrief, ImplementationPlan, MemoryKind, MergeVerdict,
-        PipelineConfig, RecallSnapshot, RetainItem, RoleConfig, TaskResult,
-        gate_key,
-    )
+from ..models import (
+    ArchitectureSpec,
+    ClarifiedRequirements,
+    DevTask,
+    ExecutionMode,
+    GateConfig,
+    GateDecision,
+    GateOutcome,
+    GatePolicy,
+    HandoffSummary,
+    IdeaBrief,
+    ImplementationPlan,
+    MemoryKind,
+    MergeVerdict,
+    PipelineConfig,
+    RecallSnapshot,
+    RetainItem,
+    RoleConfig,
+    TaskResult,
+    gate_key,
+)
 ```
 
 Add the helper as a module-level function, directly below `_merge_evidence_all_green` (after line 98, before `@workflow.defn`):
 
 ```python
-def _auto_decision_for(name: str, cfg: PipelineConfig,
-                       confidence: float | None) -> GateDecision | None:
+def _auto_decision_for(
+    name: str, cfg: PipelineConfig, confidence: float | None
+) -> GateDecision | None:
     """FR-301: SOFT + confidence >= threshold -> an APPROVE decision _gate()
     can short-circuit on. None confidence (missing/legacy artifact) or below
     threshold -> None, falling through to the human wait -- never a silent
@@ -286,9 +306,13 @@ def _auto_decision_for(name: str, cfg: PipelineConfig,
     if confidence < gate_cfg.threshold:
         return None
     return GateDecision(
-        gate=name, round=1, outcome=GateOutcome.APPROVE, decided_by="policy",
+        gate=name,
+        round=1,
+        outcome=GateOutcome.APPROVE,
+        decided_by="policy",
         comments=f"auto-approved: confidence={confidence:.2f} "
-                f">= threshold={gate_cfg.threshold:.2f}")
+        f">= threshold={gate_cfg.threshold:.2f}",
+    )
 ```
 
 Update `_gate()`'s policy read (`feature.py:263`), replacing:
@@ -346,10 +370,12 @@ def test_revisable_stage_passes_auto_decision():
     src = SRC.read_text(encoding="utf-8")
     assert "_auto_decision_for(" in src, (
         "_revisable_stage must call _auto_decision_for to compute an "
-        "auto_decision from the artifact's confidence (FR-301)")
+        "auto_decision from the artifact's confidence (FR-301)"
+    )
     # The auto_decision must actually reach _gate(), not just be computed.
     assert "auto_decision=auto" in src, (
-        "_revisable_stage must pass auto_decision=auto into self._gate()")
+        "_revisable_stage must pass auto_decision=auto into self._gate()"
+    )
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -373,15 +399,13 @@ In `src/sdlc/workflows/feature.py`, replace the body of `_revisable_stage` (the 
 with:
 
 ```python
-        for round in range(1, cfg.max_gate_rounds + 1):
-            artifact = await run_fn(guidance)
-            auto = _auto_decision_for(
-                name, cfg, getattr(artifact, "confidence", None))
-            decision = await self._gate(name, cfg, auto_decision=auto,
-                                        round=round)
-            if decision.outcome is not GateOutcome.REVISE:
-                return artifact, decision
-            guidance = decision.guidance or decision.comments
+for round in range(1, cfg.max_gate_rounds + 1):
+    artifact = await run_fn(guidance)
+    auto = _auto_decision_for(name, cfg, getattr(artifact, "confidence", None))
+    decision = await self._gate(name, cfg, auto_decision=auto, round=round)
+    if decision.outcome is not GateOutcome.REVISE:
+        return artifact, decision
+    guidance = decision.guidance or decision.comments
 ```
 
 (`getattr(artifact, "confidence", None)` keeps `_revisable_stage` generic across artifact types without a shared base class — it's already duck-typed, `run_fn` returns `object`. The final exhausted-round `_gate()` call below the loop is deliberately left unchanged: it always waits for a human, regardless of policy, matching the existing "one final gate decides accept-anyway vs abandon" comment.)
@@ -427,11 +451,12 @@ def test_merge_soft_path_uses_auto_decision_for():
     # verdict.approve check alone.
     idx = src.find("t_merge_verdict.run(")
     assert idx != -1, "merge stage no longer calls t_merge_verdict"
-    tail = src[idx: idx + 700]
+    tail = src[idx : idx + 700]
     assert "_auto_decision_for(" in tail, (
         "merge gate's soft path must route through _auto_decision_for so "
         "verdict.confidence is checked against cfg.gates['merge'].threshold, "
-        "not just verdict.approve")
+        "not just verdict.approve"
+    )
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -444,35 +469,37 @@ Expected: FAIL — `_auto_decision_for` not present in that window (only `verdic
 In `src/sdlc/workflows/feature.py`, replace the merge stage's soft-path block (currently):
 
 ```python
-            if cfg.gates.get("merge", GatePolicy.HARD) == GatePolicy.SOFT:
-                verdict: MergeVerdict = (await t_merge_verdict.run(
-                    "Advisory only — the deterministic gate already passed. "
-                    f"Task results: {[r.model_dump() for r in done.values()]}"
-                )).output
-                if not verdict.approve:
-                    # Soft policy + negative verdict = escalate to human.
-                    gate = await self._gate("merge", cfg)
-                    if not gate.approved:
-                        return "rejected:merge:soft-verdict"
+if cfg.gates.get("merge", GatePolicy.HARD) == GatePolicy.SOFT:
+    verdict: MergeVerdict = (
+        await t_merge_verdict.run(
+            "Advisory only — the deterministic gate already passed. "
+            f"Task results: {[r.model_dump() for r in done.values()]}"
+        )
+    ).output
+    if not verdict.approve:
+        # Soft policy + negative verdict = escalate to human.
+        gate = await self._gate("merge", cfg)
+        if not gate.approved:
+            return "rejected:merge:soft-verdict"
 ```
 
 with:
 
 ```python
-            if cfg.gates.get("merge", GateConfig()).policy == GatePolicy.SOFT:
-                verdict: MergeVerdict = (await t_merge_verdict.run(
-                    "Advisory only — the deterministic gate already passed. "
-                    f"Task results: {[r.model_dump() for r in done.values()]}"
-                )).output
-                auto = _auto_decision_for(
-                    "merge", cfg,
-                    verdict.confidence if verdict.approve else None)
-                if auto is None:
-                    # Soft policy + (negative verdict OR confidence below
-                    # threshold) = escalate to human.
-                    gate = await self._gate("merge", cfg)
-                    if not gate.approved:
-                        return "rejected:merge:soft-verdict"
+if cfg.gates.get("merge", GateConfig()).policy == GatePolicy.SOFT:
+    verdict: MergeVerdict = (
+        await t_merge_verdict.run(
+            "Advisory only — the deterministic gate already passed. "
+            f"Task results: {[r.model_dump() for r in done.values()]}"
+        )
+    ).output
+    auto = _auto_decision_for("merge", cfg, verdict.confidence if verdict.approve else None)
+    if auto is None:
+        # Soft policy + (negative verdict OR confidence below
+        # threshold) = escalate to human.
+        gate = await self._gate("merge", cfg)
+        if not gate.approved:
+            return "rejected:merge:soft-verdict"
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**

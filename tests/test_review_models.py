@@ -2,7 +2,7 @@ from sdlc.core.models import (
     PipelineConfig,
     RoleConfig,
 )
-from sdlc.models import (
+from sdlc.stages.review.models import (
     ReviewFinding,
     ReviewReport,
 )

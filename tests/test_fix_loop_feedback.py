@@ -7,8 +7,11 @@ the dash, and spent its remaining attempts re-confirming the stack directive
 while the deterministic ModuleNotFoundError that actually failed the gate was
 never shown to it)."""
 
-from sdlc.models import ReviewFinding, ReviewReport
 from sdlc.stages.qa.models import QAReport
+from sdlc.stages.review.models import (
+    ReviewFinding,
+    ReviewReport,
+)
 from sdlc.workflows.task_host import _fix_loop_issues
 
 

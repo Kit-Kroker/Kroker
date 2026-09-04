@@ -6,7 +6,9 @@ survive; exact duplicate triples must NOT, because brief_digest hashes
 (source_url, claim) pairs as a LIST, so a duplicate changes the digest and
 silently degrades clarify's memo hit rate."""
 
-from sdlc.models import (
+from sdlc.research.merge import merge_briefs
+from sdlc.research.verify import brief_digest
+from sdlc.stages.research.models import (
     ConsultedSource,
     Contradiction,
     GroundedFinding,
@@ -15,8 +17,6 @@ from sdlc.models import (
     SubQuestion,
     SubQuestionFinding,
 )
-from sdlc.research.merge import merge_briefs
-from sdlc.research.verify import brief_digest
 
 
 def _finding(sq_id: str, brief: ResearchBrief, **kw) -> SubQuestionFinding:

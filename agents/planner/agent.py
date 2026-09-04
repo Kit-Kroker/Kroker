@@ -1,7 +1,7 @@
 from pydantic_ai import Agent
 from pydantic_ai.settings import ModelSettings
 
-from sdlc.models import ImplementationPlan
+from sdlc.stages.plan.models import ImplementationPlan
 
 
 def build(model: str, instructions: str, model_settings: ModelSettings) -> Agent:

@@ -5,12 +5,12 @@ from sdlc.core.models import (
     HarnessKind,
 )
 from sdlc.handoff import verified_integrity_flags
-from sdlc.harness.session import session_text_from_jsonl, session_to_jsonl
-from sdlc.models import (
+from sdlc.harness.models import (
     HarnessSession,
-    IntegrityFlag,
     SessionEvent,
 )
+from sdlc.harness.session import session_text_from_jsonl, session_to_jsonl
+from sdlc.stages.code.models import IntegrityFlag
 
 
 def _render(events):

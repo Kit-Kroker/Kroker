@@ -5,7 +5,7 @@ bench-todo-api-greenfield-1785868165: a plan-revision round dropped tasks
 T1-T6 while the surviving T7 still depended on them). `_validate_task_graph`
 runs right after the plan gate so a bad graph fails fast and legibly instead."""
 
-from sdlc.models import DevTask
+from sdlc.stages.plan.models import DevTask
 from sdlc.workflows.feature import _validate_task_graph
 
 

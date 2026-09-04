@@ -87,7 +87,11 @@ Create `tests/test_benchmark_waste_bag.py`:
 from datetime import datetime, timedelta
 
 from sdlc.benchmarks.models import (
-    BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag,
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    QualityScore,
+    SpeedBag,
     WasteBag,
 )
 from sdlc.models import HarnessKind, SessionDigest
@@ -96,11 +100,21 @@ T = datetime(2026, 8, 3, 10)
 
 
 def _digest(**kw):
-    base = dict(tool_calls=12, file_reads=8, file_rereads=3, files_written=4,
-                rewrite_churn=2, failed_commands=1, model_turns=6,
-                denials=1, escalations=2, compacted=True,
-                input_tokens=100, output_tokens=20,
-                decision_skeleton=["Read a.py", "Edit a.py"])
+    base = dict(
+        tool_calls=12,
+        file_reads=8,
+        file_rereads=3,
+        files_written=4,
+        rewrite_churn=2,
+        failed_commands=1,
+        model_turns=6,
+        denials=1,
+        escalations=2,
+        compacted=True,
+        input_tokens=100,
+        output_tokens=20,
+        decision_skeleton=["Read a.py", "Edit a.py"],
+    )
     base.update(kw)
     return SessionDigest(**base)
 
@@ -108,9 +122,17 @@ def _digest(**kw):
 def test_from_digest_copies_every_waste_field():
     bag = WasteBag.from_digest(_digest())
     assert bag == WasteBag(
-        tool_calls=12, file_reads=8, file_rereads=3, files_written=4,
-        rewrite_churn=2, failed_commands=1, model_turns=6,
-        denials=1, escalations=2, compacted=True)
+        tool_calls=12,
+        file_reads=8,
+        file_rereads=3,
+        files_written=4,
+        rewrite_churn=2,
+        failed_commands=1,
+        model_turns=6,
+        denials=1,
+        escalations=2,
+        compacted=True,
+    )
 
 
 def test_from_digest_drops_skeleton_and_tokens():
@@ -155,13 +177,18 @@ def test_record_round_trips_waste():
 
 def _record(**kw):
     base = dict(
-        run_id="r1", bench_run_id="b1", case_id="c1",
-        scope=BenchmarkScope.STAGE, stage="code", role="dev",
-        harness=HarnessKind.OPENCODE, model="m",
+        run_id="r1",
+        bench_run_id="b1",
+        case_id="c1",
+        scope=BenchmarkScope.STAGE,
+        stage="code",
+        role="dev",
+        harness=HarnessKind.OPENCODE,
+        model="m",
         quality=QualityScore(score=1.0, judge="contract"),
-        speed=SpeedBag(wall_clock_s=1.0, started_at=T,
-                       ended_at=T + timedelta(seconds=1)),
-        outcome=BenchmarkOutcome.PASS)
+        speed=SpeedBag(wall_clock_s=1.0, started_at=T, ended_at=T + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.PASS,
+    )
     base.update(kw)
     return BenchmarkRecord(**base)
 ```
@@ -193,15 +220,16 @@ class WasteBag(BaseModel):
     must render blank; an all-zero bag would be indistinguishable from a
     genuinely clean run.
     """
+
     tool_calls: int = 0
     file_reads: int = 0
-    file_rereads: int = 0      # same path read more than once
-    files_written: int = 0     # distinct paths written
-    rewrite_churn: int = 0     # paths written more than once
-    failed_commands: int = 0   # command events with non-zero exit
+    file_rereads: int = 0  # same path read more than once
+    files_written: int = 0  # distinct paths written
+    rewrite_churn: int = 0  # paths written more than once
+    failed_commands: int = 0  # command events with non-zero exit
     model_turns: int = 0
-    denials: int = 0           # E-16: blocked tool calls
-    escalations: int = 0       # E-17: tool calls that raised a gate
+    denials: int = 0  # E-16: blocked tool calls
+    escalations: int = 0  # E-17: tool calls that raised a gate
     compacted: bool = False
 
     @classmethod
@@ -209,12 +237,17 @@ class WasteBag(BaseModel):
         if d is None:
             return None
         return cls(
-            tool_calls=d.tool_calls, file_reads=d.file_reads,
-            file_rereads=d.file_rereads, files_written=d.files_written,
+            tool_calls=d.tool_calls,
+            file_reads=d.file_reads,
+            file_rereads=d.file_rereads,
+            files_written=d.files_written,
             rewrite_churn=d.rewrite_churn,
-            failed_commands=d.failed_commands, model_turns=d.model_turns,
-            denials=d.denials, escalations=d.escalations,
-            compacted=d.compacted)
+            failed_commands=d.failed_commands,
+            model_turns=d.model_turns,
+            denials=d.denials,
+            escalations=d.escalations,
+            compacted=d.compacted,
+        )
 ```
 
 - [ ] **Step 4: Add the field to `BenchmarkRecord`**
@@ -222,7 +255,7 @@ class WasteBag(BaseModel):
 In `BenchmarkRecord`, directly after the `speed: SpeedBag` line:
 
 ```python
-    waste: WasteBag | None = None           # None = no session captured
+waste: WasteBag | None = None  # None = no session captured
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -286,6 +319,7 @@ Create `tests/test_waste_population_wiring.py`:
 """_stage_record calls workflow.info(), so it cannot run outside a Temporal
 context. Following tests/test_pending_wiring.py, assert the signature and
 the call-site wiring from source instead of spinning up a server."""
+
 from __future__ import annotations
 
 import inspect
@@ -330,9 +364,14 @@ Expected: FAIL — `assert 'waste' in sig.parameters`
 Find the existing benchmarks-models import (it imports `BenchmarkOutcome`, `BenchmarkRecord`, `BenchmarkScope`, `QualityScore`, `SpeedBag` from `..benchmarks.models`) and add `WasteBag` to it, keeping alphabetical order:
 
 ```python
-    from ..benchmarks.models import (BenchmarkOutcome, BenchmarkRecord,
-                                     BenchmarkScope, QualityScore, SpeedBag,
-                                     WasteBag)
+from ..benchmarks.models import (
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    QualityScore,
+    SpeedBag,
+    WasteBag,
+)
 ```
 
 - [ ] **Step 4: Add the parameter to `_stage_record`**
@@ -349,7 +388,7 @@ At `feature.py:379`, add `waste` to the signature after `attempt`:
 and pass it through in the `BenchmarkRecord(...)` construction, on the line after `speed=SpeedBag(...)`:
 
 ```python
-            waste=waste,
+waste = (waste,)
 ```
 
 - [ ] **Step 5: Pass the digest at the `stage="code"` call site**
@@ -357,19 +396,26 @@ and pass it through in the `BenchmarkRecord(...)` construction, on the line afte
 At `feature.py:1035`, the `stage="code"` record. Add one line after `cost_usd=run.cost_usd,`:
 
 ```python
-            await self._record(cfg, self._stage_record(
-                cfg, stage="code", role=task.role,
-                started=_attempt_started, ended=workflow.now(),
-                quality_score=(1.0 if task_passed else 0.0),
-                judge="contract",
-                outcome=(BenchmarkOutcome.PASS if task_passed
-                         else BenchmarkOutcome.FAIL),
-                model=role_cfg.model,
-                harness=role_cfg.harness,
-                cost_usd=run.cost_usd,
-                waste=WasteBag.from_digest(run.session_digest),
-                fix_attempts=attempt - 1,
-                task_id=task.id, attempt=attempt - 1))
+await self._record(
+    cfg,
+    self._stage_record(
+        cfg,
+        stage="code",
+        role=task.role,
+        started=_attempt_started,
+        ended=workflow.now(),
+        quality_score=(1.0 if task_passed else 0.0),
+        judge="contract",
+        outcome=(BenchmarkOutcome.PASS if task_passed else BenchmarkOutcome.FAIL),
+        model=role_cfg.model,
+        harness=role_cfg.harness,
+        cost_usd=run.cost_usd,
+        waste=WasteBag.from_digest(run.session_digest),
+        fix_attempts=attempt - 1,
+        task_id=task.id,
+        attempt=attempt - 1,
+    ),
+)
 ```
 
 - [ ] **Step 6: Run tests to verify they pass**
@@ -415,13 +461,22 @@ Append to `tests/test_export_activity.py`:
 async def test_export_writes_summary_json_as_data(tmp_path, monkeypatch):
     """report.html is lossy; the SC rollup needs RunSummary as data."""
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
-    summary = RunSummary(run_id="run-abc", mode="greenfield",
-                         outcome="deployed:http://pr/1",
-                         terminal_stage="deploy",
-                         started_at=T0, ended_at=T0, duration_s=0.0)
+    summary = RunSummary(
+        run_id="run-abc",
+        mode="greenfield",
+        outcome="deployed:http://pr/1",
+        terminal_stage="deploy",
+        started_at=T0,
+        ended_at=T0,
+        duration_s=0.0,
+    )
     await export_run_artifacts(
-        RunExportInput(run_id="run-abc", summary=summary, trace=[
-            RunEvent(seq=0, at=T0, kind=RunEventKind.RUN_FINISHED)]))
+        RunExportInput(
+            run_id="run-abc",
+            summary=summary,
+            trace=[RunEvent(seq=0, at=T0, kind=RunEventKind.RUN_FINISHED)],
+        )
+    )
     p = tmp_path / "run-abc" / "summary.json"
     assert p.exists()
     again = RunSummary.model_validate_json(p.read_text(encoding="utf-8"))
@@ -439,10 +494,9 @@ Expected: FAIL — `assert False` on `p.exists()`
 In `src/sdlc/observability/activities.py`, after the `report.html` write (line 30-31):
 
 ```python
-    # summary.json is RunSummary as DATA. report.html above is a lossy
-    # human view of the same object; the SC rollup needs the structure.
-    (run_dir / "summary.json").write_text(
-        inp.summary.model_dump_json(indent=2), encoding="utf-8")
+# summary.json is RunSummary as DATA. report.html above is a lossy
+# human view of the same object; the SC rollup needs the structure.
+(run_dir / "summary.json").write_text(inp.summary.model_dump_json(indent=2), encoding="utf-8")
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -491,7 +545,12 @@ import pytest
 
 from sdlc.benchmarks.evidence import Evidence, load_evidence, load_run_summaries
 from sdlc.benchmarks.models import (
-    BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag)
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    QualityScore,
+    SpeedBag,
+)
 from sdlc.benchmarks.recorder import RecordStore
 from sdlc.models import HarnessKind, RunSummary
 
@@ -500,29 +559,39 @@ T = datetime(2026, 8, 3, 10, tzinfo=timezone.utc)
 
 def _rec(bench="b1", case="c1", run="r1"):
     return BenchmarkRecord(
-        run_id=run, bench_run_id=bench, case_id=case,
-        scope=BenchmarkScope.STAGE, stage="code", role="dev",
-        harness=HarnessKind.OPENCODE, model="m",
+        run_id=run,
+        bench_run_id=bench,
+        case_id=case,
+        scope=BenchmarkScope.STAGE,
+        stage="code",
+        role="dev",
+        harness=HarnessKind.OPENCODE,
+        model="m",
         quality=QualityScore(score=1.0, judge="contract"),
-        speed=SpeedBag(wall_clock_s=1.0, started_at=T,
-                       ended_at=T + timedelta(seconds=1)),
-        outcome=BenchmarkOutcome.PASS)
+        speed=SpeedBag(wall_clock_s=1.0, started_at=T, ended_at=T + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.PASS,
+    )
 
 
 def _write_summary(export_root, run_id, outcome="deployed:pr"):
     d = export_root / run_id
     d.mkdir(parents=True, exist_ok=True)
-    s = RunSummary(run_id=run_id, mode="greenfield", outcome=outcome,
-                   terminal_stage="deploy", started_at=T, ended_at=T,
-                   duration_s=0.0)
+    s = RunSummary(
+        run_id=run_id,
+        mode="greenfield",
+        outcome=outcome,
+        terminal_stage="deploy",
+        started_at=T,
+        ended_at=T,
+        duration_s=0.0,
+    )
     (d / "summary.json").write_text(s.model_dump_json(), encoding="utf-8")
 
 
 def test_bench_selector_reads_only_that_bench_run(tmp_path):
     RecordStore(root=str(tmp_path), bench_run_id="b1").append(_rec("b1"))
     RecordStore(root=str(tmp_path), bench_run_id="b2").append(_rec("b2"))
-    ev = load_evidence(bench="b1", root=str(tmp_path),
-                       export_root_=str(tmp_path / "exports"))
+    ev = load_evidence(bench="b1", root=str(tmp_path), export_root_=str(tmp_path / "exports"))
     assert {r.bench_run_id for r in ev.records} == {"b1"}
     assert ev.selector == "b1"
 
@@ -531,8 +600,7 @@ def test_case_selector_scans_every_bench_run(tmp_path):
     RecordStore(root=str(tmp_path), bench_run_id="b1").append(_rec("b1", "c1"))
     RecordStore(root=str(tmp_path), bench_run_id="b2").append(_rec("b2", "c1"))
     RecordStore(root=str(tmp_path), bench_run_id="b3").append(_rec("b3", "other"))
-    ev = load_evidence(case="c1", root=str(tmp_path),
-                       export_root_=str(tmp_path / "exports"))
+    ev = load_evidence(case="c1", root=str(tmp_path), export_root_=str(tmp_path / "exports"))
     assert {r.bench_run_id for r in ev.records} == {"b1", "b2"}
     assert ev.selector == "_case/c1"
 
@@ -540,8 +608,7 @@ def test_case_selector_scans_every_bench_run(tmp_path):
 def test_all_selector_reads_everything(tmp_path):
     RecordStore(root=str(tmp_path), bench_run_id="b1").append(_rec("b1", "c1"))
     RecordStore(root=str(tmp_path), bench_run_id="b2").append(_rec("b2", "c2"))
-    ev = load_evidence(all_=True, root=str(tmp_path),
-                       export_root_=str(tmp_path / "exports"))
+    ev = load_evidence(all_=True, root=str(tmp_path), export_root_=str(tmp_path / "exports"))
     assert {r.case_id for r in ev.records} == {"c1", "c2"}
     assert ev.selector == "_all"
 
@@ -582,8 +649,7 @@ def test_missing_export_root_yields_no_summaries_and_a_note(tmp_path):
 
 
 def test_empty_corpus_is_a_fact_not_an_error(tmp_path):
-    ev = load_evidence(all_=True, root=str(tmp_path),
-                       export_root_=str(tmp_path / "exports"))
+    ev = load_evidence(all_=True, root=str(tmp_path), export_root_=str(tmp_path / "exports"))
     assert isinstance(ev, Evidence)
     assert ev.records == []
 
@@ -593,8 +659,8 @@ def test_report_is_imported_lazily_not_at_module_scope():
     finalize_benchmark_report. evidence.py must not pay that at import
     time, so the report import lives inside load_evidence."""
     import pathlib
-    src = pathlib.Path("src/sdlc/benchmarks/evidence.py").read_text(
-        encoding="utf-8")
+
+    src = pathlib.Path("src/sdlc/benchmarks/evidence.py").read_text(encoding="utf-8")
     head = src.split("def load_run_summaries")[0]
     assert "from .report import" not in head
 ```
@@ -623,6 +689,7 @@ connection. `report.py` imports `from temporalio import activity` for
 finalize_benchmark_report, so it is imported LAZILY below rather than at
 module scope.
 """
+
 from __future__ import annotations
 
 import os
@@ -640,6 +707,7 @@ class Evidence(BaseModel):
     """Everything a score run reads, plus the notes explaining what was
     missing. `notes` is rendered into report.md so a degraded score is
     visibly degraded rather than quietly partial."""
+
     records: list[BenchmarkRecord] = Field(default_factory=list)
     summaries: list[RunSummary] = Field(default_factory=list)
     selector: str = "_all"
@@ -654,8 +722,7 @@ def export_root(root: str | None = None) -> Path:
     return Path(os.environ.get("SDLC_EXPORT_ROOT", DEFAULT_EXPORT_ROOT))
 
 
-def load_run_summaries(root: str | None = None
-                       ) -> tuple[list[RunSummary], list[str]]:
+def load_run_summaries(root: str | None = None) -> tuple[list[RunSummary], list[str]]:
     """Every runs/*/summary.json under the export root, plus notes for the
     ones that could not be read. A malformed export degrades that one run,
     never the rollup."""
@@ -666,18 +733,22 @@ def load_run_summaries(root: str | None = None
     out: list[RunSummary] = []
     for p in sorted(base.glob("*/summary.json")):
         try:
-            out.append(RunSummary.model_validate_json(
-                p.read_text(encoding="utf-8")))
-        except Exception as e:                              # noqa: BLE001
+            out.append(RunSummary.model_validate_json(p.read_text(encoding="utf-8")))
+        except Exception as e:  # noqa: BLE001
             notes.append(f"unreadable summary {p.parent.name}: {e}")
     if not out and not notes:
         notes.append(f"no summary.json under {base}; no SC rates computed")
     return out, notes
 
 
-def load_evidence(*, bench: str | None = None, case: str | None = None,
-                  all_: bool = False, root: str | None = None,
-                  export_root_: str | None = None) -> Evidence:
+def load_evidence(
+    *,
+    bench: str | None = None,
+    case: str | None = None,
+    all_: bool = False,
+    root: str | None = None,
+    export_root_: str | None = None,
+) -> Evidence:
     """Load records for exactly one selector, plus every run summary.
 
     Selectors are mutually exclusive so a score directory always has one
@@ -685,11 +756,9 @@ def load_evidence(*, bench: str | None = None, case: str | None = None,
     """
     from .report import _read_all, scan_case_records
 
-    chosen = [x for x in (bench, case, True if all_ else None)
-              if x is not None]
+    chosen = [x for x in (bench, case, True if all_ else None) if x is not None]
     if len(chosen) != 1:
-        raise ValueError(
-            "exactly one of bench=, case=, all_= must be given")
+        raise ValueError("exactly one of bench=, case=, all_= must be given")
 
     notes: list[str] = []
     if bench is not None:
@@ -706,8 +775,7 @@ def load_evidence(*, bench: str | None = None, case: str | None = None,
         notes.append(f"no benchmark records for selector {selector}")
 
     summaries, s_notes = load_run_summaries(export_root_)
-    return Evidence(records=records, summaries=summaries, selector=selector,
-                    notes=notes + s_notes)
+    return Evidence(records=records, summaries=summaries, selector=selector, notes=notes + s_notes)
 
 
 def _read_all_benches(root: str | None) -> list[BenchmarkRecord]:
@@ -773,26 +841,38 @@ import pytest
 
 from sdlc.benchmarks.evidence import Evidence
 from sdlc.benchmarks.models import (
-    BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, CompositeWeights,
-    CostBag, QualityScore, SpeedBag, WasteBag)
-from sdlc.benchmarks.score import (
-    default_out_dir, load_config_weights, parse_weights, write_score)
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    CompositeWeights,
+    CostBag,
+    QualityScore,
+    SpeedBag,
+    WasteBag,
+)
+from sdlc.benchmarks.score import default_out_dir, load_config_weights, parse_weights, write_score
 from sdlc.models import HarnessKind
 
 T = datetime(2026, 8, 3, 10, tzinfo=timezone.utc)
 
 
-def _rec(case="c1", task=None, scope=BenchmarkScope.STAGE, stage="code",
-         usd=1.0, waste=None):
+def _rec(case="c1", task=None, scope=BenchmarkScope.STAGE, stage="code", usd=1.0, waste=None):
     return BenchmarkRecord(
-        run_id="r1", bench_run_id="b1", case_id=case, scope=scope,
-        stage=stage, task_id=task, role="dev",
-        harness=HarnessKind.OPENCODE, model="m",
+        run_id="r1",
+        bench_run_id="b1",
+        case_id=case,
+        scope=scope,
+        stage=stage,
+        task_id=task,
+        role="dev",
+        harness=HarnessKind.OPENCODE,
+        model="m",
         quality=QualityScore(score=1.0, judge="contract"),
         cost=CostBag(usd=usd),
-        speed=SpeedBag(wall_clock_s=2.0, started_at=T,
-                       ended_at=T + timedelta(seconds=2)),
-        outcome=BenchmarkOutcome.PASS, waste=waste)
+        speed=SpeedBag(wall_clock_s=2.0, started_at=T, ended_at=T + timedelta(seconds=2)),
+        outcome=BenchmarkOutcome.PASS,
+        waste=waste,
+    )
 
 
 def test_parse_weights_accepts_three_floats():
@@ -813,8 +893,7 @@ def test_parse_weights_need_not_sum_to_one():
 
 def test_load_config_weights_reads_benchmarks_config(tmp_path):
     p = tmp_path / "config.yaml"
-    p.write_text("weights:\n  quality: 0.7\n  cost: 0.2\n  speed: 0.1\n",
-                 encoding="utf-8")
+    p.write_text("weights:\n  quality: 0.7\n  cost: 0.2\n  speed: 0.1\n", encoding="utf-8")
     w = load_config_weights(p)
     assert w.quality == 0.7 and w.speed == 0.1
 
@@ -842,10 +921,10 @@ def test_missing_tasks_yaml_skips_matrices_and_notes_it(tmp_path, monkeypatch):
     """cat-cafe-monitoring has no tasks.yaml; today dispatch_history RAISES.
     Under score it must degrade."""
     monkeypatch.setenv("SDLC_CASES_ROOT", str(tmp_path / "no-cases"))
-    ev = Evidence(records=[_rec(task="t01",
-                                scope=BenchmarkScope.ORACLE_TASK,
-                                stage="oracle")],
-                  selector="_case/c1")
+    ev = Evidence(
+        records=[_rec(task="t01", scope=BenchmarkScope.ORACLE_TASK, stage="oracle")],
+        selector="_case/c1",
+    )
     written = write_score(ev, tmp_path, CompositeWeights())
     assert "task-matrix.html" not in {p.name for p in written}
     md = (tmp_path / "report.md").read_text(encoding="utf-8")
@@ -853,8 +932,7 @@ def test_missing_tasks_yaml_skips_matrices_and_notes_it(tmp_path, monkeypatch):
 
 
 def test_empty_evidence_writes_a_report_and_does_not_raise(tmp_path):
-    ev = Evidence(records=[], selector="_all",
-                  notes=["no benchmark records for selector _all"])
+    ev = Evidence(records=[], selector="_all", notes=["no benchmark records for selector _all"])
     written = write_score(ev, tmp_path, CompositeWeights())
     md = (tmp_path / "report.md").read_text(encoding="utf-8")
     assert "no benchmark records" in md
@@ -862,8 +940,11 @@ def test_empty_evidence_writes_a_report_and_does_not_raise(tmp_path):
 
 
 def test_notes_are_rendered_into_the_report(tmp_path):
-    ev = Evidence(records=[_rec()], selector="b1",
-                  notes=["export root /x does not exist; no SC rates computed"])
+    ev = Evidence(
+        records=[_rec()],
+        selector="b1",
+        notes=["export root /x does not exist; no SC rates computed"],
+    )
     write_score(ev, tmp_path, CompositeWeights())
     md = (tmp_path / "report.md").read_text(encoding="utf-8")
     assert "no SC rates computed" in md
@@ -891,6 +972,7 @@ Every grid module stays pure (build_* + render_*); this module owns the
 filesystem. Missing inputs degrade with a note in report.md and exit 0 --
 a gap in the corpus is not a crash.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -909,14 +991,11 @@ def parse_weights(s: str) -> CompositeWeights:
     renormalises over whichever axes have data in each group."""
     parts = [p.strip() for p in s.split(",")]
     if len(parts) != 3:
-        raise ValueError(
-            f"--weights takes three floats as quality,cost,speed; got {s!r}")
+        raise ValueError(f"--weights takes three floats as quality,cost,speed; got {s!r}")
     try:
         q, c, sp = (float(p) for p in parts)
     except ValueError as e:
-        raise ValueError(
-            f"--weights takes three floats as quality,cost,speed; got {s!r}"
-        ) from e
+        raise ValueError(f"--weights takes three floats as quality,cost,speed; got {s!r}") from e
     return CompositeWeights(quality=q, cost=c, speed=sp)
 
 
@@ -928,27 +1007,27 @@ def load_config_weights(path: Path | None = None) -> CompositeWeights:
         return CompositeWeights()
     try:
         data = yaml.safe_load(Path(p).read_text(encoding="utf-8")) or {}
-    except Exception:                                        # noqa: BLE001
+    except Exception:  # noqa: BLE001
         return CompositeWeights()
     w = data.get("weights") or {}
     return CompositeWeights(
         quality=float(w.get("quality", 0.6)),
         cost=float(w.get("cost", 0.2)),
-        speed=float(w.get("speed", 0.2)))
+        speed=float(w.get("speed", 0.2)),
+    )
 
 
 def default_out_dir(selector: str, root: str | None = None) -> Path:
     from .recorder import _root
+
     base = Path(root if root is not None else _root())
     return base / selector / "score"
 
 
-def write_score(ev: Evidence, out_dir: Path,
-                weights: CompositeWeights) -> list[Path]:
+def write_score(ev: Evidence, out_dir: Path, weights: CompositeWeights) -> list[Path]:
     """Write every grid the evidence supports. Returns the paths written."""
     from .calibration import load_calibration_reports, render_calibration_html
-    from .report import (aggregate, render_markdown, resolve_language_map,
-                         write_heatmap)
+    from .report import aggregate, render_markdown, resolve_language_map, write_heatmap
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -959,8 +1038,7 @@ def write_score(ev: Evidence, out_dir: Path,
     summaries = aggregate("", weights, _records=ev.records)
 
     lang = resolve_language_map(sorted({r.case_id for r in ev.records}))
-    html_p, json_p = write_heatmap(ev.records, out_dir, lang,
-                                   render_calibration_html(calibration))
+    html_p, json_p = write_heatmap(ev.records, out_dir, lang, render_calibration_html(calibration))
     written += [html_p, json_p]
 
     written += _write_case_matrices(ev, out_dir, notes)
@@ -982,15 +1060,12 @@ def _render_notes(notes: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _write_case_matrices(ev: Evidence, out_dir: Path,
-                         notes: list[str]) -> list[Path]:
+def _write_case_matrices(ev: Evidence, out_dir: Path, notes: list[str]) -> list[Path]:
     """Per-case task and error matrices. A case with no tasks.yaml is
     skipped with a note -- today dispatch_history raises here (cli.py:92),
     and only todo-api-greenfield has the file."""
-    from .error_matrix import (build_error_matrix, render_error_matrix_html,
-                               render_error_matrix_json)
-    from .task_matrix import (build_task_matrix, render_task_matrix_html,
-                              render_task_matrix_json)
+    from .error_matrix import build_error_matrix, render_error_matrix_html, render_error_matrix_json
+    from .task_matrix import build_task_matrix, render_task_matrix_html, render_task_matrix_json
     from .tasks import load_task_suite
 
     written: list[Path] = []
@@ -998,13 +1073,13 @@ def _write_case_matrices(ev: Evidence, out_dir: Path,
     for case_id in cases:
         try:
             suite = load_task_suite(case_id)
-        except Exception as e:                               # noqa: BLE001
-            notes.append(f"case {case_id}: malformed tasks.yaml, task and "
-                         f"error matrices skipped ({e})")
+        except Exception as e:  # noqa: BLE001
+            notes.append(
+                f"case {case_id}: malformed tasks.yaml, task and error matrices skipped ({e})"
+            )
             continue
         if suite is None:
-            notes.append(f"case {case_id}: no tasks.yaml, task and error "
-                         f"matrices skipped")
+            notes.append(f"case {case_id}: no tasks.yaml, task and error matrices skipped")
             continue
         d = out_dir if len(cases) == 1 else out_dir / case_id
         d.mkdir(parents=True, exist_ok=True)
@@ -1049,15 +1124,19 @@ async def _run_matrix(case_path: str, gate_policy: str | None = None) -> str:
 Replace `dispatch_report` and `dispatch_history` with one handler:
 
 ```python
-def dispatch_score(*, bench: str | None = None, case: str | None = None,
-                   all_: bool = False, out: str | None = None,
-                   weights: str | None = None,
-                   root: str | None = None) -> str:
+def dispatch_score(
+    *,
+    bench: str | None = None,
+    case: str | None = None,
+    all_: bool = False,
+    out: str | None = None,
+    weights: str | None = None,
+    root: str | None = None,
+) -> str:
     """Read every evidence store for one selector and write the full score
     directory. Seconds, no Temporal client, no worker."""
     from .evidence import load_evidence
-    from .score import (default_out_dir, load_config_weights, parse_weights,
-                        write_score)
+    from .score import default_out_dir, load_config_weights, parse_weights, write_score
 
     ev = load_evidence(bench=bench, case=case, all_=all_, root=root)
     w = parse_weights(weights) if weights else load_config_weights()
@@ -1071,36 +1150,41 @@ def dispatch_score(*, bench: str | None = None, case: str | None = None,
 In `src/sdlc/cli.py`, replace lines 129-130:
 
 ```python
-    bs = bsub.add_parser("score")
-    bsg = bs.add_mutually_exclusive_group(required=True)
-    bsg.add_argument("--bench", help="one bench_run_id")
-    bsg.add_argument("--case", help="every bench run for one case")
-    bsg.add_argument("--all", action="store_true", dest="all_",
-                     help="every bench run for every case")
-    bs.add_argument("--out", default=None,
-                    help="output dir (default: <root>/<selector>/score)")
-    bs.add_argument("--weights", default=None, metavar="Q,C,S",
-                    help="composite weights as quality,cost,speed; "
-                         "defaults to benchmarks/config.yaml")
+bs = bsub.add_parser("score")
+bsg = bs.add_mutually_exclusive_group(required=True)
+bsg.add_argument("--bench", help="one bench_run_id")
+bsg.add_argument("--case", help="every bench run for one case")
+bsg.add_argument("--all", action="store_true", dest="all_", help="every bench run for every case")
+bs.add_argument("--out", default=None, help="output dir (default: <root>/<selector>/score)")
+bs.add_argument(
+    "--weights",
+    default=None,
+    metavar="Q,C,S",
+    help="composite weights as quality,cost,speed; defaults to benchmarks/config.yaml",
+)
 ```
 
 and replace the `report`/`history` branches at lines 191-208 with:
 
 ```python
-    if args.cmd == "benchmark":
-        if args.bench_cmd == "score":
-            from .benchmarks.cli import dispatch_score
-            print(dispatch_score(bench=args.bench, case=args.case,
-                                 all_=args.all_, out=args.out,
-                                 weights=args.weights))
-            return
-        if args.bench_cmd == "run":
-            from .benchmarks.cli import _run_matrix
-            print(await _run_matrix(args.case, args.gate_policy))
-            return
-        if args.bench_cmd == "drift":
-            print("drift requires a live Temporal client; see ARCHITECTURE.md section 8.")
-            return
+if args.cmd == "benchmark":
+    if args.bench_cmd == "score":
+        from .benchmarks.cli import dispatch_score
+
+        print(
+            dispatch_score(
+                bench=args.bench, case=args.case, all_=args.all_, out=args.out, weights=args.weights
+            )
+        )
+        return
+    if args.bench_cmd == "run":
+        from .benchmarks.cli import _run_matrix
+
+        print(await _run_matrix(args.case, args.gate_policy))
+        return
+    if args.bench_cmd == "drift":
+        print("drift requires a live Temporal client; see ARCHITECTURE.md section 8.")
+        return
 ```
 
 Note the `from .benchmarks.cli import dispatch_report` at line 192 is deleted with the block — that unconditional import is what made every benchmark subcommand pay for `temporalio.client`.
@@ -1111,23 +1195,27 @@ Replace the body of `tests/test_e36_imports.py`:
 
 ```python
 def test_benchmark_and_calibration_modules_import():
-    import sdlc.benchmarks.heatmap          # noqa: F401
-    import sdlc.benchmarks.calibration      # noqa: F401
-    from sdlc.benchmarks.report import (    # noqa: F401
-        finalize_benchmark_report, write_heatmap, resolve_language_map)
+    import sdlc.benchmarks.heatmap  # noqa: F401
+    import sdlc.benchmarks.calibration  # noqa: F401
+    from sdlc.benchmarks.report import (  # noqa: F401
+        finalize_benchmark_report,
+        write_heatmap,
+        resolve_language_map,
+    )
     from sdlc.benchmarks.cli import dispatch_calibrate  # noqa: F401
 
 
 def test_scoring_path_modules_import():
-    import sdlc.benchmarks.evidence         # noqa: F401
-    import sdlc.benchmarks.score            # noqa: F401
-    from sdlc.benchmarks.cli import dispatch_score      # noqa: F401
+    import sdlc.benchmarks.evidence  # noqa: F401
+    import sdlc.benchmarks.score  # noqa: F401
+    from sdlc.benchmarks.cli import dispatch_score  # noqa: F401
 
 
 def test_benchmark_cli_has_no_module_level_temporal_client():
     """`sdlc benchmark score` must run with no worker and no server, so the
     Temporal client import belongs inside _run_matrix, not at module scope."""
     import pathlib
+
     src = pathlib.Path("src/sdlc/benchmarks/cli.py").read_text(encoding="utf-8")
     head = src.split("def _run_matrix")[0]
     assert "from temporalio.client import Client" not in head
@@ -1192,63 +1280,92 @@ Create `tests/test_benchmark_waste_matrix.py`:
 from datetime import datetime, timedelta, timezone
 
 from sdlc.benchmarks.models import (
-    BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag,
-    WasteBag)
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    QualityScore,
+    SpeedBag,
+    WasteBag,
+)
 from sdlc.benchmarks.tasks import TaskSpec, TaskSuite
 from sdlc.benchmarks.waste_matrix import (
-    WASTE_METRICS, build_waste_matrix, render_waste_matrix_html,
-    render_waste_matrix_json)
+    WASTE_METRICS,
+    build_waste_matrix,
+    render_waste_matrix_html,
+    render_waste_matrix_json,
+)
 from sdlc.models import HarnessKind
 
 T = datetime(2026, 8, 3, 10, tzinfo=timezone.utc)
 
 
-def _rec(*, task, bench="b1", run="r1", model="m",
-         harness=HarnessKind.OPENCODE, waste=None, stage="code"):
+def _rec(
+    *, task, bench="b1", run="r1", model="m", harness=HarnessKind.OPENCODE, waste=None, stage="code"
+):
     return BenchmarkRecord(
-        run_id=run, bench_run_id=bench, case_id="c1",
-        scope=BenchmarkScope.TASK_ATTEMPT, stage=stage, task_id=task,
-        role="dev", harness=harness, model=model,
+        run_id=run,
+        bench_run_id=bench,
+        case_id="c1",
+        scope=BenchmarkScope.TASK_ATTEMPT,
+        stage=stage,
+        task_id=task,
+        role="dev",
+        harness=harness,
+        model=model,
         quality=QualityScore(score=1.0, judge="contract"),
-        speed=SpeedBag(wall_clock_s=1.0, started_at=T,
-                       ended_at=T + timedelta(seconds=1)),
-        outcome=BenchmarkOutcome.PASS, waste=waste)
+        speed=SpeedBag(wall_clock_s=1.0, started_at=T, ended_at=T + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.PASS,
+        waste=waste,
+    )
 
 
 def _cell(wm, task, arm, metric):
-    return next(c for c in wm.cells if c.task_id == task
-                and c.arm_key == arm and c.metric == metric)
+    return next(
+        c for c in wm.cells if c.task_id == task and c.arm_key == arm and c.metric == metric
+    )
 
 
 def test_six_metrics_are_gridded():
     """Volume metrics (file_reads, files_written, model_turns) and the
     boolean `compacted` ride on the record but are not waste grids."""
-    assert WASTE_METRICS == ["tool_calls", "file_rereads", "rewrite_churn",
-                             "failed_commands", "denials", "escalations"]
+    assert WASTE_METRICS == [
+        "tool_calls",
+        "file_rereads",
+        "rewrite_churn",
+        "failed_commands",
+        "denials",
+        "escalations",
+    ]
 
 
 def test_attempts_sum_within_a_run():
     """Total thrash on a task is the meaningful quantity, not the
     per-attempt average."""
-    recs = [_rec(task="t01", waste=WasteBag(tool_calls=10)),
-            _rec(task="t01", waste=WasteBag(tool_calls=15))]
+    recs = [
+        _rec(task="t01", waste=WasteBag(tool_calls=10)),
+        _rec(task="t01", waste=WasteBag(tool_calls=15)),
+    ]
     wm = build_waste_matrix("c1", recs)
     assert _cell(wm, "t01", "opencode#m", "tool_calls").value == 25.0
 
 
 def test_runs_are_averaged():
-    recs = [_rec(task="t01", bench="b1", waste=WasteBag(tool_calls=10)),
-            _rec(task="t01", bench="b2", waste=WasteBag(tool_calls=20))]
+    recs = [
+        _rec(task="t01", bench="b1", waste=WasteBag(tool_calls=10)),
+        _rec(task="t01", bench="b2", waste=WasteBag(tool_calls=20)),
+    ]
     wm = build_waste_matrix("c1", recs)
     c = _cell(wm, "t01", "opencode#m", "tool_calls")
     assert c.value == 15.0 and c.n_runs == 2
 
 
 def test_arms_separate_by_harness_and_model():
-    recs = [_rec(task="t01", harness=HarnessKind.OPENCODE, model="m1",
-                 waste=WasteBag(tool_calls=10)),
-            _rec(task="t01", harness=HarnessKind.CLAUDE_CODE, model="m1",
-                 waste=WasteBag(tool_calls=40))]
+    recs = [
+        _rec(task="t01", harness=HarnessKind.OPENCODE, model="m1", waste=WasteBag(tool_calls=10)),
+        _rec(
+            task="t01", harness=HarnessKind.CLAUDE_CODE, model="m1", waste=WasteBag(tool_calls=40)
+        ),
+    ]
     wm = build_waste_matrix("c1", recs)
     assert wm.arms == ["claude_code#m1", "opencode#m1"]
     assert _cell(wm, "t01", "claude_code#m1", "tool_calls").value == 40.0
@@ -1264,19 +1381,26 @@ def test_unmeasured_records_produce_no_cell():
 
 def test_rows_come_from_records_without_tasks_yaml():
     """cat-cafe-monitoring has no tasks.yaml and must still get a grid."""
-    recs = [_rec(task="t02", waste=WasteBag(tool_calls=1)),
-            _rec(task="t01", waste=WasteBag(tool_calls=1))]
+    recs = [
+        _rec(task="t02", waste=WasteBag(tool_calls=1)),
+        _rec(task="t01", waste=WasteBag(tool_calls=1)),
+    ]
     wm = build_waste_matrix("c1", recs, suite=None)
     assert wm.task_ids == ["t01", "t02"]
 
 
 def test_suite_order_wins_when_present():
-    suite = TaskSuite(case_id="c1", tasks=[
-        TaskSpec(id="t02", error_class="functional", oracle_tests=["a::b"]),
-        TaskSpec(id="t01", error_class="security", oracle_tests=["a::c"]),
-    ])
-    recs = [_rec(task="t01", waste=WasteBag(tool_calls=1)),
-            _rec(task="t02", waste=WasteBag(tool_calls=1))]
+    suite = TaskSuite(
+        case_id="c1",
+        tasks=[
+            TaskSpec(id="t02", error_class="functional", oracle_tests=["a::b"]),
+            TaskSpec(id="t01", error_class="security", oracle_tests=["a::c"]),
+        ],
+    )
+    recs = [
+        _rec(task="t01", waste=WasteBag(tool_calls=1)),
+        _rec(task="t02", waste=WasteBag(tool_calls=1)),
+    ]
     wm = build_waste_matrix("c1", recs, suite=suite)
     assert wm.task_ids == ["t02", "t01"]
 
@@ -1294,8 +1418,10 @@ def test_max_by_metric_scales_each_grid_independently():
 
 
 def test_html_renders_a_section_per_metric_and_blank_for_absent():
-    recs = [_rec(task="t01", model="m1", waste=WasteBag(tool_calls=7)),
-            _rec(task="t02", model="m2", waste=WasteBag(tool_calls=3))]
+    recs = [
+        _rec(task="t01", model="m1", waste=WasteBag(tool_calls=7)),
+        _rec(task="t02", model="m2", waste=WasteBag(tool_calls=3)),
+    ]
     wm = build_waste_matrix("c1", recs)
     html = render_waste_matrix_html(wm)
     assert "<!doctype html>" in html
@@ -1313,6 +1439,7 @@ def test_html_is_escaped():
 
 def test_json_round_trips():
     import json
+
     recs = [_rec(task="t01", waste=WasteBag(tool_calls=7))]
     data = json.loads(render_waste_matrix_json(build_waste_matrix("c1", recs)))
     assert data["case_id"] == "c1"
@@ -1343,6 +1470,7 @@ WasteBag, so a case with no tasks.yaml still gets a grid. A record with
 waste=None contributes NOTHING: it was not measured, and a zero cell
 would claim it was.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -1359,8 +1487,12 @@ from .tasks import TaskSuite
 # boolean; all four ride on the record and land in the JSON, but none gets
 # a grid.
 WASTE_METRICS: list[str] = [
-    "tool_calls", "file_rereads", "rewrite_churn",
-    "failed_commands", "denials", "escalations",
+    "tool_calls",
+    "file_rereads",
+    "rewrite_churn",
+    "failed_commands",
+    "denials",
+    "escalations",
 ]
 
 
@@ -1368,7 +1500,7 @@ class WasteCell(BaseModel):
     task_id: str
     arm_key: str
     metric: str
-    value: float          # mean over runs of the per-run summed metric
+    value: float  # mean over runs of the per-run summed metric
     n_runs: int
 
 
@@ -1381,10 +1513,10 @@ class WasteMatrix(BaseModel):
     max_by_metric: dict[str, float] = Field(default_factory=dict)
 
 
-def build_waste_matrix(case_id: str, records: list[BenchmarkRecord],
-                       suite: TaskSuite | None = None) -> WasteMatrix:
-    recs = [r for r in records
-            if r.case_id == case_id and r.task_id and r.waste is not None]
+def build_waste_matrix(
+    case_id: str, records: list[BenchmarkRecord], suite: TaskSuite | None = None
+) -> WasteMatrix:
+    recs = [r for r in records if r.case_id == case_id and r.task_id and r.waste is not None]
     if not recs:
         return WasteMatrix(case_id=case_id, metrics=list(WASTE_METRICS))
 
@@ -1394,8 +1526,7 @@ def build_waste_matrix(case_id: str, records: list[BenchmarkRecord],
     for r in recs:
         arm = f"{r.harness.value if r.harness else ''}#{r.model}"
         for metric in WASTE_METRICS:
-            per_run[(r.bench_run_id, r.task_id, arm, metric)] += float(
-                getattr(r.waste, metric))
+            per_run[(r.bench_run_id, r.task_id, arm, metric)] += float(getattr(r.waste, metric))
         runs[(r.task_id, arm, "")].add(r.bench_run_id)
 
     totals: dict[tuple[str, str, str], float] = defaultdict(float)
@@ -1405,8 +1536,9 @@ def build_waste_matrix(case_id: str, records: list[BenchmarkRecord],
     cells: list[WasteCell] = []
     for (task_id, arm, metric), total in totals.items():
         n = len(runs[(task_id, arm, "")]) or 1
-        cells.append(WasteCell(task_id=task_id, arm_key=arm, metric=metric,
-                               value=total / n, n_runs=n))
+        cells.append(
+            WasteCell(task_id=task_id, arm_key=arm, metric=metric, value=total / n, n_runs=n)
+        )
 
     observed = {c.task_id for c in cells}
     if suite is not None:
@@ -1416,12 +1548,16 @@ def build_waste_matrix(case_id: str, records: list[BenchmarkRecord],
         task_ids = sorted(observed)
 
     max_by_metric = {
-        m: max((c.value for c in cells if c.metric == m), default=0.0)
-        for m in WASTE_METRICS}
+        m: max((c.value for c in cells if c.metric == m), default=0.0) for m in WASTE_METRICS
+    }
     return WasteMatrix(
-        case_id=case_id, metrics=list(WASTE_METRICS), task_ids=task_ids,
-        arms=sorted({c.arm_key for c in cells}), cells=cells,
-        max_by_metric=max_by_metric)
+        case_id=case_id,
+        metrics=list(WASTE_METRICS),
+        task_ids=task_ids,
+        arms=sorted({c.arm_key for c in cells}),
+        cells=cells,
+        max_by_metric=max_by_metric,
+    )
 
 
 def render_waste_matrix_json(wm: WasteMatrix) -> str:
@@ -1430,7 +1566,7 @@ def render_waste_matrix_json(wm: WasteMatrix) -> str:
 
 def _cell_color(value: float, max_value: float) -> str:
     ratio = 0.0 if max_value <= 0 else min(value / max_value, 1.0)
-    g_b = round(255 - 229 * ratio)   # white (low) -> dark red (high)
+    g_b = round(255 - 229 * ratio)  # white (low) -> dark red (high)
     return f"rgb(255,{g_b},{g_b})"
 
 
@@ -1447,16 +1583,17 @@ def _grid(wm: WasteMatrix, metric: str) -> str:
                 # not measured on this arm -- blank, never 0
                 tds.append('<td class="empty"></td>')
                 continue
-            tip = (f"{task_id} / {arm}: {c.value:.1f} {metric} per run "
-                   f"over {c.n_runs} runs")
+            tip = f"{task_id} / {arm}: {c.value:.1f} {metric} per run over {c.n_runs} runs"
             tds.append(
                 f'<td title="{escape(tip)}" '
                 f'style="background:{_cell_color(c.value, mx)}">'
-                f"{c.value:.1f}</td>")
+                f"{c.value:.1f}</td>"
+            )
         rows.append("<tr>" + "".join(tds) + "</tr>")
-    return (f"<h2>{escape(metric)}</h2>"
-            f"<table><tr><th>task \\ arm</th>{head}</tr>"
-            + "".join(rows) + "</table>")
+    return (
+        f"<h2>{escape(metric)}</h2>"
+        f"<table><tr><th>task \\ arm</th>{head}</tr>" + "".join(rows) + "</table>"
+    )
 
 
 def render_waste_matrix_html(wm: WasteMatrix) -> str:
@@ -1494,19 +1631,15 @@ Expected: PASS (13 tests)
 In `src/sdlc/benchmarks/score.py::_write_case_matrices`, the waste matrix must be written for **every** case, including cases skipped for missing `tasks.yaml`. Restructure the loop body so the waste write happens before the suite check:
 
 ```python
-def _write_case_matrices(ev: Evidence, out_dir: Path,
-                         notes: list[str]) -> list[Path]:
+def _write_case_matrices(ev: Evidence, out_dir: Path, notes: list[str]) -> list[Path]:
     """Per-case grids. The waste matrix takes no tasks.yaml dependency and
     is written for every case; the task and error matrices need the suite
     and are skipped with a note when it is absent (today dispatch_history
     raises here, cli.py:92)."""
-    from .error_matrix import (build_error_matrix, render_error_matrix_html,
-                               render_error_matrix_json)
-    from .task_matrix import (build_task_matrix, render_task_matrix_html,
-                              render_task_matrix_json)
+    from .error_matrix import build_error_matrix, render_error_matrix_html, render_error_matrix_json
+    from .task_matrix import build_task_matrix, render_task_matrix_html, render_task_matrix_json
     from .tasks import load_task_suite
-    from .waste_matrix import (build_waste_matrix, render_waste_matrix_html,
-                               render_waste_matrix_json)
+    from .waste_matrix import build_waste_matrix, render_waste_matrix_html, render_waste_matrix_json
 
     written: list[Path] = []
     cases = sorted({r.case_id for r in ev.records})
@@ -1516,9 +1649,10 @@ def _write_case_matrices(ev: Evidence, out_dir: Path,
 
         try:
             suite = load_task_suite(case_id)
-        except Exception as e:                               # noqa: BLE001
-            notes.append(f"case {case_id}: malformed tasks.yaml, task and "
-                         f"error matrices skipped ({e})")
+        except Exception as e:  # noqa: BLE001
+            notes.append(
+                f"case {case_id}: malformed tasks.yaml, task and error matrices skipped ({e})"
+            )
             suite = None
 
         wm = build_waste_matrix(case_id, ev.records, suite)
@@ -1530,13 +1664,14 @@ def _write_case_matrices(ev: Evidence, out_dir: Path,
             p.write_text(text, encoding="utf-8")
             written.append(p)
         if not wm.cells:
-            notes.append(f"case {case_id}: no harness waste recorded "
-                         f"(runs predating waste capture, or no coding tasks)")
+            notes.append(
+                f"case {case_id}: no harness waste recorded "
+                f"(runs predating waste capture, or no coding tasks)"
+            )
 
         if suite is None:
             if not any(f"case {case_id}: malformed" in n for n in notes):
-                notes.append(f"case {case_id}: no tasks.yaml, task and error "
-                             f"matrices skipped")
+                notes.append(f"case {case_id}: no tasks.yaml, task and error matrices skipped")
             continue
 
         tm = build_task_matrix(case_id, ev.records, suite)
@@ -1560,8 +1695,7 @@ Append to `tests/test_benchmark_score.py`:
 ```python
 def test_waste_matrix_written_even_without_tasks_yaml(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_CASES_ROOT", str(tmp_path / "no-cases"))
-    ev = Evidence(records=[_rec(task="t01", waste=WasteBag(tool_calls=9))],
-                  selector="b1")
+    ev = Evidence(records=[_rec(task="t01", waste=WasteBag(tool_calls=9))], selector="b1")
     written = write_score(ev, tmp_path, CompositeWeights())
     assert "waste-matrix.html" in {p.name for p in written}
     assert "t01" in (tmp_path / "waste-matrix.html").read_text(encoding="utf-8")
@@ -1577,7 +1711,7 @@ Expected: PASS
 In `tests/test_e36_imports.py::test_scoring_path_modules_import`, add:
 
 ```python
-    import sdlc.benchmarks.waste_matrix     # noqa: F401
+import sdlc.benchmarks.waste_matrix  # noqa: F401
 ```
 
 - [ ] **Step 9: Commit**
@@ -1626,45 +1760,70 @@ Create `tests/test_benchmark_sc_rollup.py`:
 from datetime import datetime, timedelta, timezone
 
 from sdlc.benchmarks.models import (
-    BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag)
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    QualityScore,
+    SpeedBag,
+)
 from sdlc.benchmarks.sc_rollup import (
-    MIN_RUNS, build_sc_rollup, render_sc_rollup_html,
-    render_sc_rollup_json, render_sc_rollup_markdown)
-from sdlc.models import (
-    ClarificationOutcome, GateOutcomeSummary, HarnessKind, RunSummary)
+    MIN_RUNS,
+    build_sc_rollup,
+    render_sc_rollup_html,
+    render_sc_rollup_json,
+    render_sc_rollup_markdown,
+)
+from sdlc.models import ClarificationOutcome, GateOutcomeSummary, HarnessKind, RunSummary
 
 T = datetime(2026, 8, 3, 10, tzinfo=timezone.utc)
 
 
 def _summary(run_id, outcome="deployed:pr", gates=(), clars=(), offset=0):
     return RunSummary(
-        run_id=run_id, mode="greenfield", outcome=outcome,
+        run_id=run_id,
+        mode="greenfield",
+        outcome=outcome,
         terminal_stage="deploy",
         started_at=T + timedelta(hours=offset),
-        ended_at=T + timedelta(hours=offset), duration_s=0.0,
-        gates=list(gates), clarifications=list(clars))
+        ended_at=T + timedelta(hours=offset),
+        duration_s=0.0,
+        gates=list(gates),
+        clarifications=list(clars),
+    )
 
 
 def _gate(name, decided_by="policy", policy="soft", overrides=(), rnd=1):
-    return GateOutcomeSummary(gate=name, round=rnd, policy=policy,
-                              decided_by=decided_by, approved=True,
-                              overrides=list(overrides))
+    return GateOutcomeSummary(
+        gate=name,
+        round=rnd,
+        policy=policy,
+        decided_by=decided_by,
+        approved=True,
+        overrides=list(overrides),
+    )
 
 
 def _clar(qid, answered_by):
-    return ClarificationOutcome(question_id=qid, question="q?",
-                                answered_by=answered_by)
+    return ClarificationOutcome(question_id=qid, question="q?", answered_by=answered_by)
 
 
 def _code(run, task, outcome, fix, bench="b1"):
     return BenchmarkRecord(
-        run_id=run, bench_run_id=bench, case_id="c1",
-        scope=BenchmarkScope.TASK_ATTEMPT, stage="code", task_id=task,
-        attempt=fix, role="dev", harness=HarnessKind.OPENCODE, model="m",
+        run_id=run,
+        bench_run_id=bench,
+        case_id="c1",
+        scope=BenchmarkScope.TASK_ATTEMPT,
+        stage="code",
+        task_id=task,
+        attempt=fix,
+        role="dev",
+        harness=HarnessKind.OPENCODE,
+        model="m",
         quality=QualityScore(score=1.0, judge="contract"),
-        speed=SpeedBag(wall_clock_s=1.0, started_at=T,
-                       ended_at=T + timedelta(seconds=1)),
-        outcome=outcome, fix_attempts=fix)
+        speed=SpeedBag(wall_clock_s=1.0, started_at=T, ended_at=T + timedelta(seconds=1)),
+        outcome=outcome,
+        fix_attempts=fix,
+    )
 
 
 def _rate(rollup, criterion):
@@ -1677,9 +1836,9 @@ def _n_summaries(n, **kw):
 
 # ---------------------------------------------------------------- SC-1
 
+
 def test_sc1_counts_runs_that_reached_merge_unattended():
-    runs = [_summary(f"run-{i}", outcome="deployed:pr", offset=i)
-            for i in range(4)]
+    runs = [_summary(f"run-{i}", outcome="deployed:pr", offset=i) for i in range(4)]
     runs.append(_summary("run-4", outcome="rejected:plan", offset=4))
     r = _rate(build_sc_rollup(runs, []), "SC-1")
     assert r.n == 5 and r.rate == 0.8
@@ -1687,51 +1846,60 @@ def test_sc1_counts_runs_that_reached_merge_unattended():
 
 def test_sc1_rejected_at_merge_still_counts_as_reached():
     """The criterion is REACHING the merge gate, not passing it."""
-    runs = _n_summaries(4) + [
-        _summary("run-4", outcome="rejected:merge:advisory", offset=4)]
+    runs = _n_summaries(4) + [_summary("run-4", outcome="rejected:merge:advisory", offset=4)]
     assert _rate(build_sc_rollup(runs, []), "SC-1").rate == 1.0
 
 
 def test_sc1_merged_not_deployed_counts_as_reached():
-    runs = _n_summaries(4) + [
-        _summary("run-4", outcome="merged-not-deployed:http://pr", offset=4)]
+    runs = _n_summaries(4) + [_summary("run-4", outcome="merged-not-deployed:http://pr", offset=4)]
     assert _rate(build_sc_rollup(runs, []), "SC-1").rate == 1.0
 
 
 def test_sc1_early_terminals_did_not_reach():
-    runs = [_summary(f"run-{i}", offset=i,
-                     outcome=o)
-            for i, o in enumerate(["rejected:research", "rejected:architecture",
-                                   "rejected:plan", "failed:dependency-cycle",
-                                   "failed:quarantined-tasks"])]
+    runs = [
+        _summary(f"run-{i}", offset=i, outcome=o)
+        for i, o in enumerate(
+            [
+                "rejected:research",
+                "rejected:architecture",
+                "rejected:plan",
+                "failed:dependency-cycle",
+                "failed:quarantined-tasks",
+            ]
+        )
+    ]
     assert _rate(build_sc_rollup(runs, []), "SC-1").rate == 0.0
 
 
 def test_sc1_human_gate_before_merge_disqualifies():
-    runs = _n_summaries(4) + [_summary(
-        "run-4", offset=4,
-        gates=[_gate("architecture", decided_by="human"), _gate("merge")])]
+    runs = _n_summaries(4) + [
+        _summary(
+            "run-4", offset=4, gates=[_gate("architecture", decided_by="human"), _gate("merge")]
+        )
+    ]
     assert _rate(build_sc_rollup(runs, []), "SC-1").rate == 0.8
 
 
 def test_sc1_human_at_the_merge_gate_itself_still_counts():
     """By then the run had already reached the gate unattended."""
-    runs = _n_summaries(4) + [_summary(
-        "run-4", offset=4,
-        gates=[_gate("architecture"), _gate("merge", decided_by="human")])]
+    runs = _n_summaries(4) + [
+        _summary(
+            "run-4", offset=4, gates=[_gate("architecture"), _gate("merge", decided_by="human")]
+        )
+    ]
     assert _rate(build_sc_rollup(runs, []), "SC-1").rate == 1.0
 
 
 # ---------------------------------------------------------------- SC-3
 
+
 def _loop(run, task, final):
     """One fix loop: a failed first attempt, then a second ending `final`."""
-    return [_code(run, task, BenchmarkOutcome.FAIL, 0),
-            _code(run, task, final, 1)]
+    return [_code(run, task, BenchmarkOutcome.FAIL, 0), _code(run, task, final, 1)]
 
 
 def test_sc3_counts_only_tasks_that_entered_a_fix_loop():
-    recs = [_code("r1", "t00", BenchmarkOutcome.PASS, 0)]    # no loop
+    recs = [_code("r1", "t00", BenchmarkOutcome.PASS, 0)]  # no loop
     for i in range(3):
         recs += _loop("r1", f"ok{i}", BenchmarkOutcome.PASS)
     for i in range(3):
@@ -1743,28 +1911,36 @@ def test_sc3_counts_only_tasks_that_entered_a_fix_loop():
 def test_sc3_floor_applies_to_loops_not_runs():
     """One floor rule for every rate, applied to that rate's own
     denominator. One loop is not a fix-loop success rate."""
-    r = _rate(build_sc_rollup(_n_summaries(MIN_RUNS),
-                              _loop("r1", "t01", BenchmarkOutcome.PASS)),
-              "SC-3")
+    r = _rate(
+        build_sc_rollup(_n_summaries(MIN_RUNS), _loop("r1", "t01", BenchmarkOutcome.PASS)), "SC-3"
+    )
     assert r.n == 1 and r.rate is None
 
 
 def test_sc3_final_attempt_decides():
     recs = []
     for i in range(MIN_RUNS):
-        recs += [_code("r1", f"t{i}", BenchmarkOutcome.FAIL, 0),
-                 _code("r1", f"t{i}", BenchmarkOutcome.FAIL, 1),
-                 _code("r1", f"t{i}", BenchmarkOutcome.PASS, 2)]
-    assert _rate(build_sc_rollup(_n_summaries(MIN_RUNS), recs),
-                 "SC-3").rate == 1.0
+        recs += [
+            _code("r1", f"t{i}", BenchmarkOutcome.FAIL, 0),
+            _code("r1", f"t{i}", BenchmarkOutcome.FAIL, 1),
+            _code("r1", f"t{i}", BenchmarkOutcome.PASS, 2),
+        ]
+    assert _rate(build_sc_rollup(_n_summaries(MIN_RUNS), recs), "SC-3").rate == 1.0
 
 
 # ---------------------------------------------------------------- SC-4
 
+
 def test_sc4_is_the_human_answered_fraction_and_is_flagged_a_proxy():
     runs = _n_summaries(
-        MIN_RUNS, clars=[_clar("q1", "human"), _clar("q2", "suggested"),
-                         _clar("q3", "suggested"), _clar("q4", "suggested")])
+        MIN_RUNS,
+        clars=[
+            _clar("q1", "human"),
+            _clar("q2", "suggested"),
+            _clar("q3", "suggested"),
+            _clar("q4", "suggested"),
+        ],
+    )
     r = _rate(build_sc_rollup(runs, []), "SC-4")
     assert r.rate == 0.25
     assert r.proxy is True
@@ -1782,33 +1958,28 @@ def test_sc4_series_is_ordered_by_run_start():
 
 
 def test_sc4_skips_runs_with_no_clarifications():
-    runs = [_summary("r1", offset=0),
-            _summary("r2", offset=1, clars=[_clar("q1", "human")])]
+    runs = [_summary("r1", offset=0), _summary("r2", offset=1, clars=[_clar("q1", "human")])]
     assert [p.run_id for p in build_sc_rollup(runs, []).sc4_series] == ["r2"]
 
 
 # ---------------------------------------------------------------- SC-6
 
+
 def test_sc6_counts_human_decisions_on_soft_gates_only():
     """A hard gate decided by a human is not a soft-gate override; it is
     the policy working as configured."""
-    soft = [_gate(f"g{i}", decided_by="human", policy="soft", rnd=i)
-            for i in range(3)]
-    soft += [_gate(f"g{i}", decided_by="policy", policy="soft", rnd=i)
-             for i in range(3, 6)]
+    soft = [_gate(f"g{i}", decided_by="human", policy="soft", rnd=i) for i in range(3)]
+    soft += [_gate(f"g{i}", decided_by="policy", policy="soft", rnd=i) for i in range(3, 6)]
     hard = [_gate("deploy", decided_by="human", policy="hard")]
-    runs = _n_summaries(MIN_RUNS - 1) + [
-        _summary("run-x", offset=9, gates=soft + hard)]
+    runs = _n_summaries(MIN_RUNS - 1) + [_summary("run-x", offset=9, gates=soft + hard)]
     r = _rate(build_sc_rollup(runs, []), "SC-6")
     assert r.n == 6 and r.rate == 0.5
 
 
 def test_sc6_waved_advisories_are_a_separate_number():
-    gates = [_gate(f"g{i}", policy="soft", overrides=["coverage"], rnd=i)
-             for i in range(3)]
+    gates = [_gate(f"g{i}", policy="soft", overrides=["coverage"], rnd=i) for i in range(3)]
     gates += [_gate(f"g{i}", policy="soft", rnd=i) for i in range(3, 6)]
-    runs = _n_summaries(MIN_RUNS - 1) + [
-        _summary("run-x", offset=9, gates=gates)]
+    runs = _n_summaries(MIN_RUNS - 1) + [_summary("run-x", offset=9, gates=gates)]
     rollup = build_sc_rollup(runs, [])
     assert _rate(rollup, "SC-6-advisory").rate == 0.5
     # human decisions and waved advisories are different failures
@@ -1816,14 +1987,17 @@ def test_sc6_waved_advisories_are_a_separate_number():
 
 
 def test_sc6_floor_applies_to_soft_gates():
-    runs = _n_summaries(MIN_RUNS - 1) + [_summary(
-        "run-x", offset=9,
-        gates=[_gate("architecture", decided_by="human", policy="soft")])]
+    runs = _n_summaries(MIN_RUNS - 1) + [
+        _summary(
+            "run-x", offset=9, gates=[_gate("architecture", decided_by="human", policy="soft")]
+        )
+    ]
     r = _rate(build_sc_rollup(runs, []), "SC-6")
     assert r.n == 1 and r.rate is None
 
 
 # ------------------------------------------------------- denominator rule
+
 
 def test_rate_is_na_below_the_floor():
     runs = _n_summaries(MIN_RUNS - 1)
@@ -1842,6 +2016,7 @@ def test_no_evidence_yields_rates_with_zero_n():
 
 # ------------------------------------------------------------- rendering
 
+
 def test_markdown_shows_n_beside_every_rate_and_is_ascii():
     md = render_sc_rollup_markdown(build_sc_rollup(_n_summaries(MIN_RUNS), []))
     assert "n=" in md
@@ -1856,6 +2031,7 @@ def test_markdown_prints_na_not_a_percentage_below_floor():
 
 def test_html_and_json_render():
     import json
+
     rollup = build_sc_rollup(_n_summaries(MIN_RUNS), [])
     assert "<!doctype html>" in render_sc_rollup_html(rollup)
     assert json.loads(render_sc_rollup_json(rollup))["rates"]
@@ -1877,6 +2053,7 @@ definitions here are CHOICES, documented per rate.
 
 Pure aggregation + rendering, no I/O -- mirrors heatmap.py.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -1897,14 +2074,13 @@ MERGE_GATE = "merge"
 # Run outcomes that reached the merge gate. The criterion is REACHING it,
 # not passing it, so a merge-time rejection counts (feature.py:1757, 1791,
 # 1828, 1836).
-REACHED_PREFIXES: tuple[str, ...] = (
-    "deployed:", "merged-not-deployed:", "rejected:merge")
+REACHED_PREFIXES: tuple[str, ...] = ("deployed:", "merged-not-deployed:", "rejected:merge")
 
 
 class SCRate(BaseModel):
     criterion: str
     label: str
-    rate: float | None      # None when n < MIN_RUNS -- renders n/a
+    rate: float | None  # None when n < MIN_RUNS -- renders n/a
     n: int
     target: str
     proxy: bool = False
@@ -1928,12 +2104,12 @@ def _rate(n_hits: int, n: int) -> float | None:
     return n_hits / n
 
 
-def build_sc_rollup(summaries: list[RunSummary],
-                    records: list[BenchmarkRecord]) -> SCRollup:
+def build_sc_rollup(summaries: list[RunSummary], records: list[BenchmarkRecord]) -> SCRollup:
     ordered = sorted(summaries, key=lambda s: (s.started_at, s.run_id))
     return SCRollup(
         rates=[_sc1(ordered), _sc3(records), _sc4(ordered), *_sc6(ordered)],
-        sc4_series=_sc4_series(ordered))
+        sc4_series=_sc4_series(ordered),
+    )
 
 
 def _reached_merge(s: RunSummary) -> bool:
@@ -1953,13 +2129,16 @@ def _unattended_to_merge(s: RunSummary) -> bool:
 
 
 def _sc1(summaries: list[RunSummary]) -> SCRate:
-    hits = sum(1 for s in summaries
-               if _reached_merge(s) and _unattended_to_merge(s))
+    hits = sum(1 for s in summaries if _reached_merge(s) and _unattended_to_merge(s))
     return SCRate(
-        criterion="SC-1", label="runs reaching the merge gate unattended",
-        rate=_rate(hits, len(summaries)), n=len(summaries), target=">=0.80",
+        criterion="SC-1",
+        label="runs reaching the merge gate unattended",
+        rate=_rate(hits, len(summaries)),
+        n=len(summaries),
+        target=">=0.80",
         note="reached = outcome in deployed/merged-not-deployed/rejected:merge; "
-             "unattended = no human-decided gate before the merge gate")
+        "unattended = no human-decided gate before the merge gate",
+    )
 
 
 def _sc3(records: list[BenchmarkRecord]) -> SCRate:
@@ -1981,26 +2160,33 @@ def _sc3(records: list[BenchmarkRecord]) -> SCRate:
     # The denominator is LOOPS, not runs -- but the floor is one rule for
     # every rate: below MIN_RUNS observations, n/a rather than a percentage.
     return SCRate(
-        criterion="SC-3", label="fix loops that resolved",
-        rate=_rate(successes, loops), n=loops, target=">=0.70",
+        criterion="SC-3",
+        label="fix loops that resolved",
+        rate=_rate(successes, loops),
+        n=loops,
+        target=">=0.70",
         note="a loop = a (run, task) with any attempt at fix_attempts>0; "
-             "success = the final attempt passed; denominator is loops, "
-             f"and the n/a floor of {MIN_RUNS} applies to loops")
+        "success = the final attempt passed; denominator is loops, "
+        f"and the n/a floor of {MIN_RUNS} applies to loops",
+    )
 
 
 def _sc4(summaries: list[RunSummary]) -> SCRate:
     total = sum(len(s.clarifications) for s in summaries)
-    human = sum(1 for s in summaries for c in s.clarifications
-                if c.answered_by == "human")
+    human = sum(1 for s in summaries for c in s.clarifications if c.answered_by == "human")
     n_runs = sum(1 for s in summaries if s.clarifications)
     return SCRate(
-        criterion="SC-4", label="clarifications a human had to answer",
+        criterion="SC-4",
+        label="clarifications a human had to answer",
         rate=(human / total) if (total and n_runs >= MIN_RUNS) else None,
-        n=n_runs, target="<0.10 by run 10", proxy=True,
+        n=n_runs,
+        target="<0.10 by run 10",
+        proxy=True,
         note="PROXY: measures questions memory could not answer, which is the "
-             "intent of the criterion, but it is not literal repeat detection "
-             "-- ClarificationOutcome.question_id is not established as stable "
-             "across runs")
+        "intent of the criterion, but it is not literal repeat detection "
+        "-- ClarificationOutcome.question_id is not established as stable "
+        "across runs",
+    )
 
 
 def _sc4_series(summaries: list[RunSummary]) -> list[SC4Point]:
@@ -2009,8 +2195,9 @@ def _sc4_series(summaries: list[RunSummary]) -> list[SC4Point]:
         if not s.clarifications:
             continue
         human = sum(1 for c in s.clarifications if c.answered_by == "human")
-        out.append(SC4Point(index=len(out), run_id=s.run_id,
-                            human_rate=human / len(s.clarifications)))
+        out.append(
+            SC4Point(index=len(out), run_id=s.run_id, human_rate=human / len(s.clarifications))
+        )
     return out
 
 
@@ -2020,19 +2207,29 @@ def _sc6(summaries: list[RunSummary]) -> list[SCRate]:
     waved = sum(1 for g in soft if g.overrides)
     n = len(soft)
     return [
-        SCRate(criterion="SC-6", label="soft gates a human decided",
-               rate=_rate(human, n), n=n, target="<0.05",
-               note=f"denominator is soft gates, not runs; the n/a floor of "
-                    f"{MIN_RUNS} applies to soft gates"),
-        SCRate(criterion="SC-6-advisory",
-               label="soft gates with waved advisory checks",
-               rate=_rate(waved, n), n=n, target="<0.05",
-               note="reported separately from human decisions: different "
-                    "failures, and one average would hide both"),
+        SCRate(
+            criterion="SC-6",
+            label="soft gates a human decided",
+            rate=_rate(human, n),
+            n=n,
+            target="<0.05",
+            note=f"denominator is soft gates, not runs; the n/a floor of "
+            f"{MIN_RUNS} applies to soft gates",
+        ),
+        SCRate(
+            criterion="SC-6-advisory",
+            label="soft gates with waved advisory checks",
+            rate=_rate(waved, n),
+            n=n,
+            target="<0.05",
+            note="reported separately from human decisions: different "
+            "failures, and one average would hide both",
+        ),
     ]
 
 
 # ------------------------------------------------------------- rendering
+
 
 def render_sc_rollup_json(r: SCRollup) -> str:
     return r.model_dump_json(indent=2)
@@ -2044,20 +2241,23 @@ def _fmt(rate: float | None) -> str:
 
 def render_sc_rollup_markdown(r: SCRollup) -> str:
     """ASCII only (report.py:70-74)."""
-    lines = ["", "## Success criteria", "",
-             f"Rates below n={MIN_RUNS} render n/a rather than a percentage.",
-             "",
-             "| criterion | measure | rate | n | target | |",
-             "|---|---|---|---|---|---|"]
+    lines = [
+        "",
+        "## Success criteria",
+        "",
+        f"Rates below n={MIN_RUNS} render n/a rather than a percentage.",
+        "",
+        "| criterion | measure | rate | n | target | |",
+        "|---|---|---|---|---|---|",
+    ]
     for x in r.rates:
         flag = "PROXY" if x.proxy else ""
-        lines.append(f"| {x.criterion} | {x.label} | {_fmt(x.rate)} | "
-                     f"n={x.n} | {x.target} | {flag} |")
+        lines.append(
+            f"| {x.criterion} | {x.label} | {_fmt(x.rate)} | n={x.n} | {x.target} | {flag} |"
+        )
     if r.sc4_series:
-        lines += ["", "SC-4 series (human-answered fraction, by run order):",
-                  ""]
-        lines += [f"- {p.index}: {p.run_id} {p.human_rate:.2f}"
-                  for p in r.sc4_series]
+        lines += ["", "SC-4 series (human-answered fraction, by run order):", ""]
+        lines += [f"- {p.index}: {p.run_id} {p.human_rate:.2f}" for p in r.sc4_series]
     lines += ["", "Definitions:", ""]
     lines += [f"- **{x.criterion}**: {x.note}" for x in r.rates if x.note]
     return "\n".join(lines) + "\n"
@@ -2069,10 +2269,11 @@ def render_sc_rollup_html(r: SCRollup) -> str:
         f"<td>{_fmt(x.rate)}</td><td>{x.n}</td>"
         f"<td>{escape(x.target)}</td>"
         f"<td>{'PROXY' if x.proxy else ''}</td></tr>"
-        for x in r.rates)
+        for x in r.rates
+    )
     notes = "".join(
-        f"<li><b>{escape(x.criterion)}</b>: {escape(x.note)}</li>"
-        for x in r.rates if x.note)
+        f"<li><b>{escape(x.criterion)}</b>: {escape(x.note)}</li>" for x in r.rates if x.note
+    )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Success criteria</title>
 <style>
@@ -2101,19 +2302,25 @@ Expected: PASS (every test in the file)
 In `src/sdlc/benchmarks/score.py`, add to the imports inside `write_score`:
 
 ```python
-    from .sc_rollup import (build_sc_rollup, render_sc_rollup_html,
-                            render_sc_rollup_json, render_sc_rollup_markdown)
+from .sc_rollup import (
+    build_sc_rollup,
+    render_sc_rollup_html,
+    render_sc_rollup_json,
+    render_sc_rollup_markdown,
+)
 ```
 
 and, after the `_write_case_matrices` call and before the `render_markdown` call:
 
 ```python
-    rollup = build_sc_rollup(ev.summaries, ev.records)
-    for name, text in (("sc-rollup.html", render_sc_rollup_html(rollup)),
-                       ("sc-rollup.json", render_sc_rollup_json(rollup))):
-        p = out_dir / name
-        p.write_text(text, encoding="utf-8")
-        written.append(p)
+rollup = build_sc_rollup(ev.summaries, ev.records)
+for name, text in (
+    ("sc-rollup.html", render_sc_rollup_html(rollup)),
+    ("sc-rollup.json", render_sc_rollup_json(rollup)),
+):
+    p = out_dir / name
+    p.write_text(text, encoding="utf-8")
+    written.append(p)
 ```
 
 then append the rollup to the Markdown, changing the `md` assembly to:
@@ -2198,11 +2405,24 @@ import pytest
 
 from sdlc.benchmarks.evidence import Evidence
 from sdlc.benchmarks.experiments import (
-    NOISE_FLOOR, Experiment, compute_deltas, load_experiment,
-    new_experiment, render_deltas_markdown, save_experiment)
+    NOISE_FLOOR,
+    Experiment,
+    compute_deltas,
+    load_experiment,
+    new_experiment,
+    render_deltas_markdown,
+    save_experiment,
+)
 from sdlc.benchmarks.models import (
-    BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, CompositeWeights,
-    CostBag, QualityScore, SpeedBag, WasteBag)
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    CompositeWeights,
+    CostBag,
+    QualityScore,
+    SpeedBag,
+    WasteBag,
+)
 from sdlc.models import HarnessKind
 
 T = datetime(2026, 8, 3, 10, tzinfo=timezone.utc)
@@ -2210,14 +2430,21 @@ T = datetime(2026, 8, 3, 10, tzinfo=timezone.utc)
 
 def _rec(*, q=1.0, usd=1.0, secs=10.0, waste=None, bench="b1", run="r1"):
     return BenchmarkRecord(
-        run_id=run, bench_run_id=bench, case_id="c1",
-        scope=BenchmarkScope.STAGE, stage="code", task_id="t01", role="dev",
-        harness=HarnessKind.OPENCODE, model="m",
+        run_id=run,
+        bench_run_id=bench,
+        case_id="c1",
+        scope=BenchmarkScope.STAGE,
+        stage="code",
+        task_id="t01",
+        role="dev",
+        harness=HarnessKind.OPENCODE,
+        model="m",
         quality=QualityScore(score=q, judge="contract"),
         cost=CostBag(usd=usd),
-        speed=SpeedBag(wall_clock_s=secs, started_at=T,
-                       ended_at=T + timedelta(seconds=secs)),
-        outcome=BenchmarkOutcome.PASS, waste=waste)
+        speed=SpeedBag(wall_clock_s=secs, started_at=T, ended_at=T + timedelta(seconds=secs)),
+        outcome=BenchmarkOutcome.PASS,
+        waste=waste,
+    )
 
 
 def _ev(records, selector="b1"):
@@ -2226,9 +2453,12 @@ def _ev(records, selector="b1"):
 
 def test_new_experiment_scaffolds_with_empty_verdict():
     """The tool computes deltas; the human writes the verdict (ADR-11)."""
-    exp = new_experiment(name="planner-decompose-prompt", axis="prompt",
-                         change="require inter-task contracts",
-                         baseline="bench-1")
+    exp = new_experiment(
+        name="planner-decompose-prompt",
+        axis="prompt",
+        change="require inter-task contracts",
+        baseline="bench-1",
+    )
     assert exp.verdict == ""
     assert exp.baseline == "bench-1"
     assert exp.candidate == ""
@@ -2254,8 +2484,7 @@ def test_compute_deltas_reports_quality_cost_and_wall():
 
 def test_compute_deltas_includes_every_waste_metric():
     base = _ev([_rec(waste=WasteBag(tool_calls=10, file_rereads=2))])
-    cand = _ev([_rec(waste=WasteBag(tool_calls=48, file_rereads=6),
-                     bench="b2")], selector="b2")
+    cand = _ev([_rec(waste=WasteBag(tool_calls=48, file_rereads=6), bench="b2")], selector="b2")
     row = compute_deltas(base, cand, CompositeWeights())[0]
     assert row.waste["tool_calls"] == pytest.approx(38.0)
     assert row.waste["file_rereads"] == pytest.approx(4.0)
@@ -2269,8 +2498,7 @@ def test_low_n_cells_are_marked_within_noise():
 
 def test_sufficient_n_is_not_marked_noise():
     base = _ev([_rec(q=0.5, run=f"r{i}") for i in range(NOISE_FLOOR)])
-    cand = _ev([_rec(q=0.9, run=f"r{i}", bench="b2")
-                for i in range(NOISE_FLOOR)], selector="b2")
+    cand = _ev([_rec(q=0.9, run=f"r{i}", bench="b2") for i in range(NOISE_FLOOR)], selector="b2")
     assert compute_deltas(base, cand, CompositeWeights())[0].note == ""
 
 
@@ -2286,11 +2514,10 @@ def test_cell_only_in_candidate_is_reported_with_none_baseline():
 
 
 def test_save_and_load_round_trip(tmp_path):
-    exp = new_experiment(name="x", axis="model", change="swap dev model",
-                         baseline="b1")
-    exp.deltas = compute_deltas(_ev([_rec(q=0.5)]),
-                                _ev([_rec(q=0.9, bench="b2")], "b2"),
-                                CompositeWeights())
+    exp = new_experiment(name="x", axis="model", change="swap dev model", baseline="b1")
+    exp.deltas = compute_deltas(
+        _ev([_rec(q=0.5)]), _ev([_rec(q=0.9, bench="b2")], "b2"), CompositeWeights()
+    )
     p = save_experiment(exp, tmp_path / f"{exp.id}.yaml")
     again = load_experiment(p)
     assert again.id == exp.id
@@ -2310,14 +2537,15 @@ def test_load_preserves_a_human_written_verdict(tmp_path):
     p.write_text(
         "id: 2026-08-04-x\naxis: prompt\nchange: c\nbaseline: b1\n"
         "candidate: b2\nverdict: rollback\nnotes: not worth the tokens\n",
-        encoding="utf-8")
+        encoding="utf-8",
+    )
     assert load_experiment(p).verdict == "rollback"
 
 
 def test_render_deltas_markdown_shows_n_and_is_ascii():
-    rows = compute_deltas(_ev([_rec(q=0.5)]),
-                          _ev([_rec(q=0.9, bench="b2")], "b2"),
-                          CompositeWeights())
+    rows = compute_deltas(
+        _ev([_rec(q=0.5)]), _ev([_rec(q=0.9, bench="b2")], "b2"), CompositeWeights()
+    )
     md = render_deltas_markdown(rows)
     assert "n" in md and "within-noise" in md
     md.encode("ascii")
@@ -2350,6 +2578,7 @@ promote it to decision-maker.
 
 Pure: no I/O beyond explicit load/save on a caller-supplied path.
 """
+
 from __future__ import annotations
 
 import datetime as _dt
@@ -2369,8 +2598,7 @@ from .waste_matrix import WASTE_METRICS
 # n=2 -- statistical theatre over a three-case corpus is worse than no claim.
 NOISE_FLOOR = 3
 
-EXPERIMENT_AXES: tuple[str, ...] = (
-    "prompt", "model", "harness", "schema", "tool_org", "memory")
+EXPERIMENT_AXES: tuple[str, ...] = ("prompt", "model", "harness", "schema", "tool_org", "memory")
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -2378,6 +2606,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 class DeltaRow(BaseModel):
     """candidate minus baseline for one (case, stage, arm) cell. None where
     the cell exists on only one side."""
+
     case: str
     stage: str
     arm: str
@@ -2387,7 +2616,7 @@ class DeltaRow(BaseModel):
     composite: float | None = None
     waste: dict[str, float] = Field(default_factory=dict)
     n: int = 0
-    note: str = ""          # "within-noise" when n < NOISE_FLOOR
+    note: str = ""  # "within-noise" when n < NOISE_FLOOR
 
 
 class Experiment(BaseModel):
@@ -2404,20 +2633,33 @@ class Experiment(BaseModel):
 
 
 def experiments_dir() -> Path:
-    return Path(os.environ.get(
-        "SDLC_EXPERIMENTS_ROOT", str(_REPO_ROOT / "benchmarks" / "experiments")))
+    return Path(
+        os.environ.get("SDLC_EXPERIMENTS_ROOT", str(_REPO_ROOT / "benchmarks" / "experiments"))
+    )
 
 
-def new_experiment(*, name: str, axis: str, change: str, baseline: str,
-                   commit: str = "", hypothesis: str = "",
-                   today: _dt.date | None = None) -> Experiment:
+def new_experiment(
+    *,
+    name: str,
+    axis: str,
+    change: str,
+    baseline: str,
+    commit: str = "",
+    hypothesis: str = "",
+    today: _dt.date | None = None,
+) -> Experiment:
     if axis not in EXPERIMENT_AXES:
-        raise ValueError(
-            f"unknown axis {axis!r}; must be one of {list(EXPERIMENT_AXES)}")
+        raise ValueError(f"unknown axis {axis!r}; must be one of {list(EXPERIMENT_AXES)}")
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
     day = (today or _dt.date.today()).isoformat()
-    return Experiment(id=f"{day}-{slug}", axis=axis, change=change,
-                      commit=commit, hypothesis=hypothesis, baseline=baseline)
+    return Experiment(
+        id=f"{day}-{slug}",
+        axis=axis,
+        change=change,
+        commit=commit,
+        hypothesis=hypothesis,
+        baseline=baseline,
+    )
 
 
 def _cells(ev: Evidence, weights: CompositeWeights):
@@ -2427,30 +2669,29 @@ def _cells(ev: Evidence, weights: CompositeWeights):
     from .report import aggregate
 
     waste_sum: dict[tuple[str, str, str], dict[str, float]] = defaultdict(
-        lambda: {m: 0.0 for m in WASTE_METRICS})
+        lambda: {m: 0.0 for m in WASTE_METRICS}
+    )
     waste_n: dict[tuple[str, str, str], int] = defaultdict(int)
     for r in ev.records:
         if r.waste is None:
             continue
-        key = (r.case_id, r.stage,
-               f"{r.harness.value if r.harness else ''}#{r.model}")
+        key = (r.case_id, r.stage, f"{r.harness.value if r.harness else ''}#{r.model}")
         waste_n[key] += 1
         for m in WASTE_METRICS:
             waste_sum[key][m] += float(getattr(r.waste, m))
 
     out = {}
     for s in aggregate("", weights, _records=ev.records):
-        key = (s.case_id, s.stage,
-               f"{s.harness.value if s.harness else ''}#{s.model}")
+        key = (s.case_id, s.stage, f"{s.harness.value if s.harness else ''}#{s.model}")
         n = waste_n.get(key, 0)
-        waste = ({m: waste_sum[key][m] / n for m in WASTE_METRICS}
-                 if n else {})
+        waste = {m: waste_sum[key][m] / n for m in WASTE_METRICS} if n else {}
         out[key] = (s, n, waste)
     return out
 
 
-def compute_deltas(baseline: Evidence, candidate: Evidence,
-                   weights: CompositeWeights) -> list[DeltaRow]:
+def compute_deltas(
+    baseline: Evidence, candidate: Evidence, weights: CompositeWeights
+) -> list[DeltaRow]:
     """candidate minus baseline, per cell. A cell present on only one side
     is still reported, with None deltas -- an appearing or vanishing cell is
     itself a result."""
@@ -2470,14 +2711,21 @@ def compute_deltas(baseline: Evidence, candidate: Evidence,
             bv, cv = getattr(bs, attr), getattr(cs, attr)
             return None if bv is None or cv is None else cv - bv
 
-        waste = {m: cw[m] - bw[m] for m in WASTE_METRICS
-                 if m in bw and m in cw}
-        rows.append(DeltaRow(
-            case=case, stage=stage, arm=arm,
-            quality=d("mean_quality"), cost_usd=d("mean_cost_usd"),
-            wall_s=d("mean_wall_clock_s"), composite=d("composite"),
-            waste=waste, n=n,
-            note="within-noise" if n < NOISE_FLOOR else ""))
+        waste = {m: cw[m] - bw[m] for m in WASTE_METRICS if m in bw and m in cw}
+        rows.append(
+            DeltaRow(
+                case=case,
+                stage=stage,
+                arm=arm,
+                quality=d("mean_quality"),
+                cost_usd=d("mean_cost_usd"),
+                wall_s=d("mean_wall_clock_s"),
+                composite=d("composite"),
+                waste=waste,
+                n=n,
+                note="within-noise" if n < NOISE_FLOOR else "",
+            )
+        )
     return rows
 
 
@@ -2489,14 +2737,16 @@ def render_deltas_markdown(rows: list[DeltaRow]) -> str:
     def f(x: float | None) -> str:
         return "n/a" if x is None else f"{x:+.3f}"
 
-    lines = ["| case | stage | arm | quality | cost | wall | composite | "
-             "tool_calls | n | |",
-             "|---|---|---|---|---|---|---|---|---|---|"]
+    lines = [
+        "| case | stage | arm | quality | cost | wall | composite | tool_calls | n | |",
+        "|---|---|---|---|---|---|---|---|---|---|",
+    ]
     for r in rows:
         lines.append(
             f"| {r.case} | {r.stage} | {r.arm} | {f(r.quality)} | "
             f"{f(r.cost_usd)} | {f(r.wall_s)} | {f(r.composite)} | "
-            f"{f(r.waste.get('tool_calls'))} | {r.n} | {r.note} |")
+            f"{f(r.waste.get('tool_calls'))} | {r.n} | {r.note} |"
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -2504,9 +2754,7 @@ def save_experiment(exp: Experiment, path: Path) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     data = exp.model_dump()
-    path.write_text(
-        yaml.safe_dump(data, sort_keys=False, allow_unicode=False),
-        encoding="utf-8")
+    path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=False), encoding="utf-8")
     return path
 
 
@@ -2525,32 +2773,45 @@ Expected: PASS (13 tests)
 In `src/sdlc/benchmarks/cli.py`:
 
 ```python
-def dispatch_experiment_new(*, name: str, axis: str, change: str,
-                            baseline: str, commit: str = "",
-                            hypothesis: str = "",
-                            exp_dir: str | None = None) -> str:
+def dispatch_experiment_new(
+    *,
+    name: str,
+    axis: str,
+    change: str,
+    baseline: str,
+    commit: str = "",
+    hypothesis: str = "",
+    exp_dir: str | None = None,
+) -> str:
     from .experiments import experiments_dir, new_experiment, save_experiment
-    exp = new_experiment(name=name, axis=axis, change=change,
-                         baseline=baseline, commit=commit,
-                         hypothesis=hypothesis)
+
+    exp = new_experiment(
+        name=name, axis=axis, change=change, baseline=baseline, commit=commit, hypothesis=hypothesis
+    )
     base = Path(exp_dir) if exp_dir else experiments_dir()
     p = save_experiment(exp, base / f"{exp.id}.yaml")
-    return (f"{p}\n\nRun the candidate matrix, then:\n"
-            f"  sdlc benchmark experiment compare --experiment {exp.id} "
-            f"--candidate <bench_id>\n"
-            f"Then write `verdict: keep` or `verdict: rollback` yourself "
-            f"and commit the file.")
+    return (
+        f"{p}\n\nRun the candidate matrix, then:\n"
+        f"  sdlc benchmark experiment compare --experiment {exp.id} "
+        f"--candidate <bench_id>\n"
+        f"Then write `verdict: keep` or `verdict: rollback` yourself "
+        f"and commit the file."
+    )
 
 
-def dispatch_experiment_compare(*, experiment: str, candidate: str,
-                                exp_dir: str | None = None,
-                                root: str | None = None) -> str:
+def dispatch_experiment_compare(
+    *, experiment: str, candidate: str, exp_dir: str | None = None, root: str | None = None
+) -> str:
     """Hard-errors on a missing bench_id. Reporting degrades; comparison
     does not -- a silent half-comparison produces a verdict on partial data."""
     from .evidence import load_evidence
-    from .experiments import (compute_deltas, experiments_dir,
-                              load_experiment, render_deltas_markdown,
-                              save_experiment)
+    from .experiments import (
+        compute_deltas,
+        experiments_dir,
+        load_experiment,
+        render_deltas_markdown,
+        save_experiment,
+    )
     from .score import load_config_weights
 
     base = Path(exp_dir) if exp_dir else experiments_dir()
@@ -2564,15 +2825,13 @@ def dispatch_experiment_compare(*, experiment: str, candidate: str,
     for label, ev in (("baseline", baseline_ev), ("candidate", candidate_ev)):
         if not ev.records:
             raise SystemExit(
-                f"{label} bench {ev.selector!r} has no records; refusing to "
-                f"compare against nothing")
+                f"{label} bench {ev.selector!r} has no records; refusing to compare against nothing"
+            )
 
     exp.candidate = candidate
-    exp.deltas = compute_deltas(baseline_ev, candidate_ev,
-                                load_config_weights())
+    exp.deltas = compute_deltas(baseline_ev, candidate_ev, load_config_weights())
     save_experiment(exp, path)
-    return (render_deltas_markdown(exp.deltas)
-            + f"\nWritten to {path}. Verdict is yours to write.\n")
+    return render_deltas_markdown(exp.deltas) + f"\nWritten to {path}. Verdict is yours to write.\n"
 ```
 
 - [ ] **Step 6: Wire the CLI parser and dispatch**
@@ -2580,38 +2839,42 @@ def dispatch_experiment_compare(*, experiment: str, candidate: str,
 In `src/sdlc/cli.py`, after the `score` parser block:
 
 ```python
-    bx = bsub.add_parser("experiment")
-    bxsub = bx.add_subparsers(dest="exp_cmd", required=True)
-    bxn = bxsub.add_parser("new")
-    bxn.add_argument("--name", required=True)
-    bxn.add_argument("--axis", required=True,
-                     choices=["prompt", "model", "harness", "schema",
-                              "tool_org", "memory"])
-    bxn.add_argument("--change", required=True,
-                     help="one line: what is under test")
-    bxn.add_argument("--baseline", required=True, help="a bench_run_id")
-    bxn.add_argument("--commit", default="")
-    bxn.add_argument("--hypothesis", default="")
-    bxc = bxsub.add_parser("compare")
-    bxc.add_argument("--experiment", required=True)
-    bxc.add_argument("--candidate", required=True, help="a bench_run_id")
+bx = bsub.add_parser("experiment")
+bxsub = bx.add_subparsers(dest="exp_cmd", required=True)
+bxn = bxsub.add_parser("new")
+bxn.add_argument("--name", required=True)
+bxn.add_argument(
+    "--axis", required=True, choices=["prompt", "model", "harness", "schema", "tool_org", "memory"]
+)
+bxn.add_argument("--change", required=True, help="one line: what is under test")
+bxn.add_argument("--baseline", required=True, help="a bench_run_id")
+bxn.add_argument("--commit", default="")
+bxn.add_argument("--hypothesis", default="")
+bxc = bxsub.add_parser("compare")
+bxc.add_argument("--experiment", required=True)
+bxc.add_argument("--candidate", required=True, help="a bench_run_id")
 ```
 
 and in the `benchmark` dispatch block, after the `score` branch:
 
 ```python
-        if args.bench_cmd == "experiment":
-            from .benchmarks.cli import (dispatch_experiment_compare,
-                                         dispatch_experiment_new)
-            if args.exp_cmd == "new":
-                print(dispatch_experiment_new(
-                    name=args.name, axis=args.axis, change=args.change,
-                    baseline=args.baseline, commit=args.commit,
-                    hypothesis=args.hypothesis))
-            else:
-                print(dispatch_experiment_compare(
-                    experiment=args.experiment, candidate=args.candidate))
-            return
+if args.bench_cmd == "experiment":
+    from .benchmarks.cli import dispatch_experiment_compare, dispatch_experiment_new
+
+    if args.exp_cmd == "new":
+        print(
+            dispatch_experiment_new(
+                name=args.name,
+                axis=args.axis,
+                change=args.change,
+                baseline=args.baseline,
+                commit=args.commit,
+                hypothesis=args.hypothesis,
+            )
+        )
+    else:
+        print(dispatch_experiment_compare(experiment=args.experiment, candidate=args.candidate))
+    return
 ```
 
 - [ ] **Step 7: Create the committed log directory**
@@ -2628,21 +2891,25 @@ Append to `tests/test_benchmark_experiments.py`:
 ```python
 def test_compare_hard_errors_on_a_missing_experiment(tmp_path):
     from sdlc.benchmarks.cli import dispatch_experiment_compare
+
     with pytest.raises(SystemExit, match="no experiment"):
-        dispatch_experiment_compare(experiment="nope", candidate="b2",
-                                    exp_dir=str(tmp_path))
+        dispatch_experiment_compare(experiment="nope", candidate="b2", exp_dir=str(tmp_path))
 
 
 def test_compare_hard_errors_on_an_empty_bench(tmp_path):
     """Reporting degrades; comparison does not."""
     from sdlc.benchmarks.cli import dispatch_experiment_compare
     from sdlc.benchmarks.experiments import new_experiment, save_experiment
+
     exp = new_experiment(name="x", axis="prompt", change="c", baseline="b1")
     save_experiment(exp, tmp_path / f"{exp.id}.yaml")
     with pytest.raises(SystemExit, match="refusing to compare"):
         dispatch_experiment_compare(
-            experiment=exp.id, candidate="b2", exp_dir=str(tmp_path),
-            root=str(tmp_path / "empty-records"))
+            experiment=exp.id,
+            candidate="b2",
+            exp_dir=str(tmp_path),
+            root=str(tmp_path / "empty-records"),
+        )
 ```
 
 - [ ] **Step 9: Run the full fast suite and add the purity guard**

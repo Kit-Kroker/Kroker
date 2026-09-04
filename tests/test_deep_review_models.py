@@ -1,9 +1,9 @@
 from sdlc.core.models import (
     PipelineConfig,
 )
-from sdlc.models import (
+from sdlc.stages.code.models import IntegrityFlag
+from sdlc.stages.review.models import (
     DeepReviewReport,
-    IntegrityFlag,
     ReviewFinding,
 )
 from sdlc.workflows.models import TaskResult

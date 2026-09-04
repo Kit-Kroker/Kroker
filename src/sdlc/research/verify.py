@@ -20,7 +20,7 @@ from pathlib import Path
 from temporalio import activity
 
 from ..grounding import Profile, Violation, quote_violation
-from ..models import ResearchBrief
+from ..stages.research.models import ResearchBrief
 
 _TMP_COUNTER = itertools.count()
 

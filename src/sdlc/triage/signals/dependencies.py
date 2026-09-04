@@ -14,15 +14,16 @@ from collections.abc import Iterable, Mapping, Sequence
 
 from pydantic import BaseModel
 
-from ...measurement import Measurement
-from ..advisories import AdvisoryResult
-from ..models import (
+from sdlc.triage.models import (
     FindingSeverity,
     FixClass,
     SignalResult,
     TriageFinding,
     dedupe_by_identity,
 )
+
+from ...measurement import Measurement
+from ..advisories import AdvisoryResult
 
 SIGNAL_ID = "dependencies"
 VERSION = 2

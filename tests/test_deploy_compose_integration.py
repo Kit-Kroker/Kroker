@@ -23,7 +23,7 @@ from sdlc.deploy.activities import (
     deploy_rollback,
     smoke_check,
 )
-from sdlc.models import (
+from sdlc.stages.deploy.models import (
     DeployPlan,
     SmokeCheck,
     SmokeState,

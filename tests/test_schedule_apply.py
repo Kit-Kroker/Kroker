@@ -7,12 +7,16 @@ from __future__ import annotations
 import pytest
 from temporalio.client import ScheduleActionStartWorkflow
 
-from sdlc.models import ScheduleAction, ScheduleAsset, ScheduleSpecAsset
 from sdlc.schedules.apply import (
     apply_changes,
     format_plan,
     from_temporal,
     to_temporal,
+)
+from sdlc.schedules.models import (
+    ScheduleAction,
+    ScheduleAsset,
+    ScheduleSpecAsset,
 )
 from sdlc.schedules.reconcile import Change
 

@@ -18,7 +18,10 @@ from sdlc.deploy.activities import (
     SmokeCheckInput,
     SmokeCheckOutput,
 )
-from sdlc.models import SmokeCheckResult, SmokeState
+from sdlc.stages.deploy.models import (
+    SmokeCheckResult,
+    SmokeState,
+)
 
 
 @dataclass

@@ -20,8 +20,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 
-from ....measurement import Measurement
-from ..models import (
+from sdlc.assessment.scan.models import (
     C_DATA_SENSITIVITY,
     C_ENTITY_ACCESS,
     Confidence,
@@ -36,6 +35,8 @@ from ..models import (
     SignalSource,
     family_of,
 )
+
+from ....measurement import Measurement
 from ..naming import normalize
 from .schema import TableDecl, declarations
 

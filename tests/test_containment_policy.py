@@ -10,7 +10,7 @@ from sdlc.harness.containment import (
     Predicate,
     load_policy,
 )
-from sdlc.models import ContainmentLayer
+from sdlc.harness.models import ContainmentLayer
 
 GOOD = """
 version: 1

@@ -7,7 +7,7 @@ rejecting -- research degrades a run, it never stops it."""
 from sdlc.core.models import (
     ResearchConfig,
 )
-from sdlc.models import (
+from sdlc.stages.research.models import (
     Contradiction,
     Gap,
     ResearchBrief,

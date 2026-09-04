@@ -79,19 +79,23 @@ import ast, pathlib, pytest
 
 SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 
+
 def _fn(tree, name):
     for n in ast.walk(tree):
         if isinstance(n, ast.AsyncFunctionDef) and n.name == name:
             return n
     raise AssertionError(f"function {name} not found")
 
+
 @pytest.fixture(scope="module")
 def feature_src():
     return SRC.read_text(encoding="utf-8")
 
+
 @pytest.fixture(scope="module")
 def feature_tree(feature_src):
     return ast.parse(feature_src)
+
 
 def test_merge_stage_calls_evaluate_gate_before_merge_verdict(feature_tree):
     """SC-5: the deterministic gate is a hard precondition. Its activity
@@ -107,13 +111,15 @@ def test_merge_stage_calls_evaluate_gate_before_merge_verdict(feature_tree):
     if v != -1:
         assert g < v, "MergeVerdict consulted before DeterministicQualityGate"
 
+
 def test_merge_stage_terminates_on_absolute_failure(feature_src):
     """An absolute gate failure is terminal — the workflow must return
     before any human-gate wait or MergeVerdict consult."""
     needle = "absolute-gate-failed"
     assert needle in feature_src, (
         "merge stage must short-circuit on absolute gate failure "
-        f"(looked for return marker containing {needle!r})")
+        f"(looked for return marker containing {needle!r})"
+    )
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -138,8 +144,10 @@ async def run_lint(inp: LintInput) -> tuple[bool, str]:
     linter; non-zero exit = not clean. `detail` is the tail of stdout for
     the gate's CheckResult.detail."""
     proc = await asyncio.create_subprocess_shell(
-        inp.lint_cmd, cwd=inp.worktree,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+        inp.lint_cmd,
+        cwd=inp.worktree,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
     )
     out_b, _ = await proc.communicate()
     out = out_b.decode(errors="replace")
@@ -157,8 +165,8 @@ class TaskResult(BaseModel):
     attempts: int
     branch: str
     run: HarnessRunResult | None = None
-    handoff: HandoffSummary | None = None   # FR-805
-    qa: QAReport | None = None              # NEW: evidence for the merge gate
+    handoff: HandoffSummary | None = None  # FR-805
+    qa: QAReport | None = None  # NEW: evidence for the merge gate
     notes: str = ""
 ```
 
@@ -169,112 +177,146 @@ In `feature.py:_dev_task`, set `qa=qa_raw` on the returned `TaskResult` (both th
 Replace the body of `run()` from the `# 5. MERGE gate` comment (line ~548) through the `open_pull_request` call (line ~577) with:
 
 ```python
-        # 5. MERGE — DeterministicQualityGate first (SC-5), then the human
-        # gate (which doubles as the advisory-override mechanism), then
-        # MergeVerdict advisory only under SOFT policy.
-        _started = workflow.now()
+# 5. MERGE — DeterministicQualityGate first (SC-5), then the human
+# gate (which doubles as the advisory-override mechanism), then
+# MergeVerdict advisory only under SOFT policy.
+_started = workflow.now()
 
-        # 5a. Collect typed evidence from the run.
-        integration_worktree = repo_path  # Task 3 will make this the integration wt
-        lint_clean, lint_detail = await workflow.execute_activity(
-            run_lint, LintInput(worktree=integration_worktree), **ACT)
-        all_tests_green = all(
-            r.qa.tests_passed for r in done.values() if r.qa is not None)
+# 5a. Collect typed evidence from the run.
+integration_worktree = repo_path  # Task 3 will make this the integration wt
+lint_clean, lint_detail = await workflow.execute_activity(
+    run_lint, LintInput(worktree=integration_worktree), **ACT
+)
+all_tests_green = all(r.qa.tests_passed for r in done.values() if r.qa is not None)
 
-        checks = [
-            build_check("build_integration_green", all_tests_green,
-                        CheckClass.ABSOLUTE,
-                        detail="aggregate of per-task pytest runs"),
-            build_check("lint_clean", lint_clean, CheckClass.ABSOLUTE,
-                        detail=lint_detail),
-        ]
-        gate_report: GateReport = await workflow.execute_activity(
-            evaluate_gate, QualityGateInput(checks=checks), **ACT)
+checks = [
+    build_check(
+        "build_integration_green",
+        all_tests_green,
+        CheckClass.ABSOLUTE,
+        detail="aggregate of per-task pytest runs",
+    ),
+    build_check("lint_clean", lint_clean, CheckClass.ABSOLUTE, detail=lint_detail),
+]
+gate_report: GateReport = await workflow.execute_activity(
+    evaluate_gate, QualityGateInput(checks=checks), **ACT
+)
 
-        # 5b. Absolute failure = terminal. No override path exists.
-        absolute_blocking = [
-            c.name for c in gate_report.checks
-            if c.name in gate_report.blocking
-            and c.classification is CheckClass.ABSOLUTE]
-        if absolute_blocking:
-            await self._retain(
-                cfg, MemoryKind.GATE_FEEDBACK, cfg.memory.project_bank,
-                text=f"merge blocked (absolute): {absolute_blocking}",
-                metadata={"gate": "merge", "run_id": workflow.info().workflow_id})
-            return f"rejected:merge:absolute-gate-failed:{','.join(absolute_blocking)}"
+# 5b. Absolute failure = terminal. No override path exists.
+absolute_blocking = [
+    c.name
+    for c in gate_report.checks
+    if c.name in gate_report.blocking and c.classification is CheckClass.ABSOLUTE
+]
+if absolute_blocking:
+    await self._retain(
+        cfg,
+        MemoryKind.GATE_FEEDBACK,
+        cfg.memory.project_bank,
+        text=f"merge blocked (absolute): {absolute_blocking}",
+        metadata={"gate": "merge", "run_id": workflow.info().workflow_id},
+    )
+    return f"rejected:merge:absolute-gate-failed:{','.join(absolute_blocking)}"
 
-        # 5c. Advisory failure: the human merge gate IS the override. A
-        # human APPROVE records audited GateOverrides; REJECT terminates.
-        overrides: list[GateOverride] = []
-        if not gate_report.passed:
-            advisory_blocking = [
-                c.name for c in gate_report.checks
-                if c.name in gate_report.blocking
-                and c.classification is CheckClass.ADVISORY]
+# 5c. Advisory failure: the human merge gate IS the override. A
+# human APPROVE records audited GateOverrides; REJECT terminates.
+overrides: list[GateOverride] = []
+if not gate_report.passed:
+    advisory_blocking = [
+        c.name
+        for c in gate_report.checks
+        if c.name in gate_report.blocking and c.classification is CheckClass.ADVISORY
+    ]
+    gate = await self._gate("merge", cfg)
+    if not gate.approved:
+        return "rejected:merge:advisory"
+    # Human waved the advisory checks through — record each waiver.
+    reviewer = gate.reviewer or "human"
+    reason = gate.comments or "advisory override"
+    overrides = [
+        GateOverride(check=n, approved_by=reviewer, reason=reason) for n in advisory_blocking
+    ]
+    gate_report = await workflow.execute_activity(
+        evaluate_gate, QualityGateInput(checks=checks, overrides=overrides), **ACT
+    )
+else:
+    # 5d. Gate passed clean. MergeVerdict is advisory and ONLY
+    # consulted under SOFT policy — it can approve an already-clean
+    # build; it can never reach this branch otherwise.
+    if cfg.gates.get("merge", GatePolicy.HARD) == GatePolicy.SOFT:
+        verdict: MergeVerdict = (
+            await t_merge_verdict.run(
+                "Advisory only — the deterministic gate already passed. "
+                f"Task results: {[r.model_dump() for r in done.values()]}"
+            )
+        ).output
+        if not verdict.approve:
+            # Soft policy + negative verdict = escalate to human.
             gate = await self._gate("merge", cfg)
             if not gate.approved:
-                return "rejected:merge:advisory"
-            # Human waved the advisory checks through — record each waiver.
-            reviewer = gate.reviewer or "human"
-            reason = gate.comments or "advisory override"
-            overrides = [
-                GateOverride(check=n, approved_by=reviewer, reason=reason)
-                for n in advisory_blocking]
-            gate_report = await workflow.execute_activity(
-                evaluate_gate,
-                QualityGateInput(checks=checks, overrides=overrides), **ACT)
-        else:
-            # 5d. Gate passed clean. MergeVerdict is advisory and ONLY
-            # consulted under SOFT policy — it can approve an already-clean
-            # build; it can never reach this branch otherwise.
-            if cfg.gates.get("merge", GatePolicy.HARD) == GatePolicy.SOFT:
-                verdict: MergeVerdict = (await t_merge_verdict.run(
-                    "Advisory only — the deterministic gate already passed. "
-                    f"Task results: {[r.model_dump() for r in done.values()]}"
-                )).output
-                if not verdict.approve:
-                    # Soft policy + negative verdict = escalate to human.
-                    gate = await self._gate("merge", cfg)
-                    if not gate.approved:
-                        return "rejected:merge:soft-verdict"
-            gate = GateDecision(gate="merge", outcome=GateOutcome.APPROVE,
-                                decided_by="policy")
+                return "rejected:merge:soft-verdict"
+    gate = GateDecision(gate="merge", outcome=GateOutcome.APPROVE, decided_by="policy")
 
-        _ended = workflow.now()
-        await self._record(cfg, self._stage_record(
-            cfg, stage="merge", role="reviewer",
-            started=_started, ended=_ended,
-            quality_score=(1.0 if gate_report.passed else 0.0),
-            judge="deterministic_gate",
-            outcome=BenchmarkOutcome.PASS,
-            model="deterministic"))
-        await self._retain(
-            cfg, MemoryKind.GATE_FEEDBACK, cfg.memory.project_bank,
-            text=(f"merge gate: passed={gate_report.passed} "
-                  f"overridden={[o.check for o in overrides]}"),
-            metadata={"gate": "merge", "run_id": workflow.info().workflow_id})
+_ended = workflow.now()
+await self._record(
+    cfg,
+    self._stage_record(
+        cfg,
+        stage="merge",
+        role="reviewer",
+        started=_started,
+        ended=_ended,
+        quality_score=(1.0 if gate_report.passed else 0.0),
+        judge="deterministic_gate",
+        outcome=BenchmarkOutcome.PASS,
+        model="deterministic",
+    ),
+)
+await self._retain(
+    cfg,
+    MemoryKind.GATE_FEEDBACK,
+    cfg.memory.project_bank,
+    text=(f"merge gate: passed={gate_report.passed} overridden={[o.check for o in overrides]}"),
+    metadata={"gate": "merge", "run_id": workflow.info().workflow_id},
+)
 
-        pr_url = await workflow.execute_activity(
-            open_pull_request,
-            PROpenInput(worktree=repo_path, title=idea.title,
-                        body=arch.overview, base_branch=idea.base_branch),
-            **ACT,
-        )
+pr_url = await workflow.execute_activity(
+    open_pull_request,
+    PROpenInput(
+        worktree=repo_path, title=idea.title, body=arch.overview, base_branch=idea.base_branch
+    ),
+    **ACT,
+)
 ```
 
 Add the new imports inside the `with workflow.unsafe.imports_passed_through():` block at the top of `feature.py`:
 
 ```python
-    from ..activities import (
-        CodingTaskInput, DeployInput, DiffInput, LintInput, PROpenInput,
-        QAInput, WorktreeInput, create_worktree, deploy, evaluate_gate,
-        get_task_diff, open_pull_request, run_coding_task, run_lint,
-        run_test_suite,
-    )
-    from ..gate import (
-        CheckClass, CheckResult, GateOverride, GateReport, QualityGateInput,
-        build_check,
-    )
+from ..activities import (
+    CodingTaskInput,
+    DeployInput,
+    DiffInput,
+    LintInput,
+    PROpenInput,
+    QAInput,
+    WorktreeInput,
+    create_worktree,
+    deploy,
+    evaluate_gate,
+    get_task_diff,
+    open_pull_request,
+    run_coding_task,
+    run_lint,
+    run_test_suite,
+)
+from ..gate import (
+    CheckClass,
+    CheckResult,
+    GateOverride,
+    GateReport,
+    QualityGateInput,
+    build_check,
+)
 ```
 
 (Note: `QualityGateInput` currently lives in `activities.py:263` — import it from there, or move it to `gate.py` and import from both. Prefer moving it to `gate.py` next to the types it references, then re-export from `activities.py` for the activity. Pick one home; do not duplicate.)
@@ -290,25 +332,35 @@ Append to `tests/test_merge_gate_wiring.py`:
 
 ```python
 from sdlc.gate import (
-    CheckClass, GateOverride, build_check, evaluate_quality_gate,
+    CheckClass,
+    GateOverride,
+    build_check,
+    evaluate_quality_gate,
 )
+
 
 def test_absolute_failure_blocks_despite_override():
     """SC-5: an absolute check failure cannot be waived by a human override."""
-    checks = [build_check("build_integration_green", False,
-                          CheckClass.ABSOLUTE, detail="tests red")]
+    checks = [
+        build_check("build_integration_green", False, CheckClass.ABSOLUTE, detail="tests red")
+    ]
     report = evaluate_quality_gate(
-        checks, overrides=[GateOverride(check="build_integration_green",
-                                        approved_by="human", reason="ship it")])
+        checks,
+        overrides=[
+            GateOverride(check="build_integration_green", approved_by="human", reason="ship it")
+        ],
+    )
     assert not report.passed
     assert "build_integration_green" in report.blocking
     assert report.overridden == []
 
+
 def test_advisory_failure_passes_with_audited_override():
     checks = [build_check("coverage_gate", False, CheckClass.ADVISORY)]
     report = evaluate_quality_gate(
-        checks, overrides=[GateOverride(check="coverage_gate",
-                                        approved_by="human", reason="accepted")])
+        checks,
+        overrides=[GateOverride(check="coverage_gate", approved_by="human", reason="accepted")],
+    )
     assert report.passed
     assert "coverage_gate" in report.overridden
 ```
@@ -352,16 +404,20 @@ from sdlc.models import PipelineConfig, gate_key
 
 SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 
+
 def test_gate_decisions_keyed_by_round():
     src = SRC.read_text(encoding="utf-8")
     # Signal handler must use gate_key(...) when storing the decision.
     assert "gate_key(" in src, (
         "submit_gate_decision must key by gate_key(gate, round), "
-        "not by bare gate name — REVISE needs round-scoped identity")
+        "not by bare gate name — REVISE needs round-scoped identity"
+    )
+
 
 def test_pipeline_config_has_max_gate_rounds():
     cfg = PipelineConfig()
     assert cfg.max_gate_rounds >= 1, "FR-301: MAX_GATE_ROUNDS default ≥ 1"
+
 
 def test_gate_key_is_round_scoped():
     assert gate_key("architecture", 1) == "architecture#1"
@@ -378,9 +434,9 @@ Expected: FAIL — `gate_key(` not yet used in `feature.py`; `max_gate_rounds` a
 In `src/sdlc/models.py`, inside `PipelineConfig` (after `max_fix_attempts`, line ~303):
 
 ```python
-    max_gate_rounds: int = 2                # FR-301: bounded revision loop;
-                                            # exhaustion escalates to a hard
-                                            # human gate
+max_gate_rounds: int = 2  # FR-301: bounded revision loop;
+# exhaustion escalates to a hard
+# human gate
 ```
 
 - [ ] **Step 4: Make the signal handler round-aware**
@@ -404,57 +460,62 @@ Add `gate_key` to the `..models` import block.
 Extend `_gate`'s signature to take `round: int = 1` and wait on `gate_key(name, round)`:
 
 ```python
-    async def _gate(self, name: str, cfg: PipelineConfig,
-                    auto_decision: GateDecision | None = None,
-                    round: int = 1) -> GateDecision:
-        policy = cfg.gates.get(name, GatePolicy.HARD)
-        key = gate_key(name, round)
-        if policy == GatePolicy.OFF:
-            decision = GateDecision(gate=name, round=round,
-                                    outcome=GateOutcome.APPROVE, decided_by="policy")
-        elif policy == GatePolicy.SOFT and auto_decision and auto_decision.approved:
-            decision = auto_decision
-        else:
-            self._status = f"awaiting:{name}"
-            try:
-                await workflow.wait_condition(
-                    lambda: key in self._gate_decisions,
-                    timeout=timedelta(hours=cfg.gate_timeout_hours))
-                decision = self._gate_decisions[key]
-            except TimeoutError:
-                decision = GateDecision(gate=name, round=round,
-                                        outcome=GateOutcome.REJECT, decided_by="timeout")
-            finally:
-                self._status = "running"
-        await self._retain(
-            cfg, MemoryKind.GATE_FEEDBACK, cfg.memory.project_bank,
-            text=f"gate {name}#{round}: {decision.outcome.value}"
-                 f"{' — ' + decision.comments if decision.comments else ''}",
-            metadata={"gate": name, "round": str(round),
-                      "run_id": workflow.info().workflow_id})
-        return decision
+async def _gate(
+    self, name: str, cfg: PipelineConfig, auto_decision: GateDecision | None = None, round: int = 1
+) -> GateDecision:
+    policy = cfg.gates.get(name, GatePolicy.HARD)
+    key = gate_key(name, round)
+    if policy == GatePolicy.OFF:
+        decision = GateDecision(
+            gate=name, round=round, outcome=GateOutcome.APPROVE, decided_by="policy"
+        )
+    elif policy == GatePolicy.SOFT and auto_decision and auto_decision.approved:
+        decision = auto_decision
+    else:
+        self._status = f"awaiting:{name}"
+        try:
+            await workflow.wait_condition(
+                lambda: key in self._gate_decisions, timeout=timedelta(hours=cfg.gate_timeout_hours)
+            )
+            decision = self._gate_decisions[key]
+        except TimeoutError:
+            decision = GateDecision(
+                gate=name, round=round, outcome=GateOutcome.REJECT, decided_by="timeout"
+            )
+        finally:
+            self._status = "running"
+    await self._retain(
+        cfg,
+        MemoryKind.GATE_FEEDBACK,
+        cfg.memory.project_bank,
+        text=f"gate {name}#{round}: {decision.outcome.value}"
+        f"{' — ' + decision.comments if decision.comments else ''}",
+        metadata={"gate": name, "round": str(round), "run_id": workflow.info().workflow_id},
+    )
+    return decision
 ```
 
 Add the revision helper near `_gate`:
 
 ```python
-    async def _revisable_stage(self, name: str, cfg: PipelineConfig,
-                               run_fn) -> tuple[object, GateDecision]:
-        """Run a proposer stage, gate it, and on REVISE re-run with the
-        human's guidance at round+1, up to cfg.max_gate_rounds. Past that,
-        escalate to a HARD human gate (FR-301). `run_fn(guidance: str | None)`
-        must re-execute the producer with the guidance injected."""
-        guidance: str | None = None
-        for round in range(1, cfg.max_gate_rounds + 1):
-            artifact = await run_fn(guidance)
-            decision = await self._gate(name, cfg, round=round)
-            if decision.outcome is not GateOutcome.REVISE:
-                return artifact, decision
-            guidance = decision.guidance or decision.comments
-        # Exhausted: one final HARD gate decides accept-anyway vs abandon.
+async def _revisable_stage(
+    self, name: str, cfg: PipelineConfig, run_fn
+) -> tuple[object, GateDecision]:
+    """Run a proposer stage, gate it, and on REVISE re-run with the
+    human's guidance at round+1, up to cfg.max_gate_rounds. Past that,
+    escalate to a HARD human gate (FR-301). `run_fn(guidance: str | None)`
+    must re-execute the producer with the guidance injected."""
+    guidance: str | None = None
+    for round in range(1, cfg.max_gate_rounds + 1):
         artifact = await run_fn(guidance)
-        decision = await self._gate(name, cfg, round=cfg.max_gate_rounds + 1)
-        return artifact, decision
+        decision = await self._gate(name, cfg, round=round)
+        if decision.outcome is not GateOutcome.REVISE:
+            return artifact, decision
+        guidance = decision.guidance or decision.comments
+    # Exhausted: one final HARD gate decides accept-anyway vs abandon.
+    artifact = await run_fn(guidance)
+    decision = await self._gate(name, cfg, round=cfg.max_gate_rounds + 1)
+    return artifact, decision
 ```
 
 - [ ] **Step 6: Route the architecture + plan stages through `_revisable_stage`**
@@ -501,16 +562,21 @@ import ast, pathlib, pytest
 
 SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 
+
 def test_workflow_calls_setup_integration_branch():
     src = SRC.read_text(encoding="utf-8")
     assert "setup_integration_branch" in src, (
-        "FeatureWorkflow.run must call setup_integration_branch at run start")
+        "FeatureWorkflow.run must call setup_integration_branch at run start"
+    )
+
 
 def test_workflow_calls_merge_into_integration():
     src = SRC.read_text(encoding="utf-8")
     assert "merge_into_integration" in src, (
         "on task completion, run_one must merge the task branch back into "
-        "the integration branch (ADR-14)")
+        "the integration branch (ADR-14)"
+    )
+
 
 def test_dev_task_branches_from_integration_head():
     """`from_ref` passed to create_worktree must not be idea.base_branch."""
@@ -530,14 +596,15 @@ Expected: FAIL — neither symbol referenced in `feature.py`.
 In `src/sdlc/workflows/feature.py`, after the memory-watermark capture (line ~405) and before the CLARIFY stage, add:
 
 ```python
-        # ADR-14: one sdlc/<run_id>/integration branch accumulates completed
-        # task work; dependent tasks branch from its head.
-        self._integration_head: str = await workflow.execute_activity(
-            setup_integration_branch,
-            IntegrationInput(repo_path=repo_path, run_id=workflow.info().workflow_id,
-                             base_branch=idea.base_branch),
-            **ACT,
-        )
+# ADR-14: one sdlc/<run_id>/integration branch accumulates completed
+# task work; dependent tasks branch from its head.
+self._integration_head: str = await workflow.execute_activity(
+    setup_integration_branch,
+    IntegrationInput(
+        repo_path=repo_path, run_id=workflow.info().workflow_id, base_branch=idea.base_branch
+    ),
+    **ACT,
+)
 ```
 
 Add `self._integration_head: str | None = None` to `__init__`.
@@ -547,27 +614,26 @@ Add `self._integration_head: str | None = None` to `__init__`.
 Update `run_one` (line ~519) to pass `self._integration_head` as the `from_ref`, and merge the task branch back when it finishes clean:
 
 ```python
-        async def run_one(t: DevTask) -> None:
-            r = await self._dev_task(t, repo_path, self._integration_head,
-                                     cfg, handoffs)
-            done[r.task_id] = r
-            if r.handoff:
-                handoffs.append(r.handoff)
-            remaining.pop(r.task_id)
-            if r.status == "done":
-                merge_res = await workflow.execute_activity(
-                    merge_into_integration,
-                    MergeInput(repo_path=repo_path,
-                               run_id=workflow.info().workflow_id,
-                               task_branch=r.branch),
-                    **ACT,
-                )
-                if merge_res.conflict:
-                    # Falsified `overlaps` declaration → serialize/escalate.
-                    raise RuntimeError(
-                        f"integration conflict on task {r.task_id}: "
-                        "declared overlaps were incomplete")
-                self._integration_head = merge_res.integration_head
+async def run_one(t: DevTask) -> None:
+    r = await self._dev_task(t, repo_path, self._integration_head, cfg, handoffs)
+    done[r.task_id] = r
+    if r.handoff:
+        handoffs.append(r.handoff)
+    remaining.pop(r.task_id)
+    if r.status == "done":
+        merge_res = await workflow.execute_activity(
+            merge_into_integration,
+            MergeInput(
+                repo_path=repo_path, run_id=workflow.info().workflow_id, task_branch=r.branch
+            ),
+            **ACT,
+        )
+        if merge_res.conflict:
+            # Falsified `overlaps` declaration → serialize/escalate.
+            raise RuntimeError(
+                f"integration conflict on task {r.task_id}: declared overlaps were incomplete"
+            )
+        self._integration_head = merge_res.integration_head
 ```
 
 Update `_dev_task`'s signature: rename the `base_branch: str` parameter to `from_ref: str` and pass it through as `WorktreeInput.from_ref` (it already threads into `create_worktree` correctly — only the call-site argument name changes).
@@ -612,11 +678,13 @@ import pathlib, pytest
 
 SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 
+
 def test_dev_task_consults_near_context_ceiling():
     src = SRC.read_text(encoding="utf-8")
     assert "near_context_ceiling" in src, (
         "_dev_task must call run.near_context_ceiling() to force a fresh "
-        "session when the harness is at/over its context budget (ADR-13)")
+        "session when the harness is at/over its context budget (ADR-13)"
+    )
 ```
 
 - [ ] **Step 2: Run it to verify failure**
@@ -629,23 +697,23 @@ Expected: FAIL.
 In `feature.py:_dev_task`, replace the resume decision (line ~367):
 
 ```python
-            if resumes < cfg.max_session_resumes and not run.near_context_ceiling():
-                session_id = run.session_id       # resume: context intact
-                resumes += 1
-                prompt = f"Previous attempt has issues. Fix them:\n- {issues}"
-            else:
-                # Either past the resume bound OR at/over the context
-                # ceiling (compaction = failure) → fresh session seeded
-                # with a structured handoff (FR-802, ADR-13).
-                session_id = None
-                prompt = (
-                    f"Task: {task.title}\n{task.description}\n"
-                    "A previous session implemented part of this in the same "
-                    f"worktree (files: {', '.join(diff['files'][:20])}). "
-                    "Review the current state, then fix these unmet contract "
-                    f"assertions:\n- {issues}\n"
-                    "Contract:\n- " + "\n- ".join(assertions)
-                )
+if resumes < cfg.max_session_resumes and not run.near_context_ceiling():
+    session_id = run.session_id  # resume: context intact
+    resumes += 1
+    prompt = f"Previous attempt has issues. Fix them:\n- {issues}"
+else:
+    # Either past the resume bound OR at/over the context
+    # ceiling (compaction = failure) → fresh session seeded
+    # with a structured handoff (FR-802, ADR-13).
+    session_id = None
+    prompt = (
+        f"Task: {task.title}\n{task.description}\n"
+        "A previous session implemented part of this in the same "
+        f"worktree (files: {', '.join(diff['files'][:20])}). "
+        "Review the current state, then fix these unmet contract "
+        f"assertions:\n- {issues}\n"
+        "Contract:\n- " + "\n- ".join(assertions)
+    )
 ```
 
 - [ ] **Step 4: Run the suite**

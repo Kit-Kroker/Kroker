@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import pytest
 
-from sdlc.models import ScheduleAsset
 from sdlc.schedules.loader import ScheduleError, load_schedules
+from sdlc.schedules.models import ScheduleAsset
 
 VALID = """\
 spec:

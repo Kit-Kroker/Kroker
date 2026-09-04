@@ -11,15 +11,12 @@ from typing import Literal
 
 from pydantic import BaseModel, model_validator
 
-from ..models import (
-    ArchitectureSpec,
-    DeepReviewReport,
-    HandoffSummary,
-    HarnessRunResult,
-    ImplementationPlan,
-    ReviewReport,
-)
+from ..harness.models import HarnessRunResult
+from ..stages.architecture.models import ArchitectureSpec
+from ..stages.code.models import HandoffSummary
+from ..stages.plan.models import ImplementationPlan
 from ..stages.qa.models import QAReport
+from ..stages.review.models import DeepReviewReport, ReviewReport
 
 
 class SeededWork(BaseModel):

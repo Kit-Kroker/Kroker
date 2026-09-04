@@ -14,9 +14,9 @@ from datetime import timedelta
 from temporalio import workflow
 
 with workflow.unsafe.imports_passed_through():
-    from ..models import OpenQuestion
     from ..observability.trace import RunEventKind
     from ..pending import clarify_pending
+    from ..stages.clarify.models import OpenQuestion
 
 
 class QuestionHost:

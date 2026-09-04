@@ -154,7 +154,7 @@ def test_shipped_veto_files_parse_and_match_their_output_types():
     against the real ClarifiedRequirements and QAReport."""
     from pathlib import Path
 
-    from sdlc.models import ClarifiedRequirements
+    from sdlc.stages.clarify.models import ClarifiedRequirements
     from sdlc.stages.qa.models import QAReport
 
     case = Path(__file__).resolve().parents[1] / "benchmarks" / "cases" / "cat-cafe-monitoring"

@@ -49,6 +49,7 @@ Create `tests/test_schedule_loader.py`:
 ```python
 """schedules/*.yaml loader (E-12). Mirrors agents/loader.py's fail-closed
 idiom: a malformed asset must never reach the Temporal client."""
+
 from __future__ import annotations
 
 import pytest
@@ -79,7 +80,7 @@ def test_loads_valid_asset_and_takes_id_from_filename(tmp_path):
     assert len(assets) == 1
     a = assets[0]
     assert isinstance(a, ScheduleAsset)
-    assert a.id == "nightly-reflect"          # filename is the API
+    assert a.id == "nightly-reflect"  # filename is the API
     assert a.spec.cron == "0 3 * * *"
     assert a.spec.timezone == "UTC"
     assert a.action.workflow == "ReflectWorkflow"
@@ -88,13 +89,17 @@ def test_loads_valid_asset_and_takes_id_from_filename(tmp_path):
 
 
 def test_timezone_defaults_to_utc(tmp_path):
-    _write(tmp_path, "s.yaml", """\
+    _write(
+        tmp_path,
+        "s.yaml",
+        """\
 spec:
   cron: "0 3 * * *"
 action:
   workflow: ReflectWorkflow
   banks: ["project:default"]
-""")
+""",
+    )
     assert load_schedules(tmp_path)[0].spec.timezone == "UTC"
 
 
@@ -117,12 +122,16 @@ def test_empty_banks_raises(tmp_path):
 
 
 def test_missing_banks_raises(tmp_path):
-    _write(tmp_path, "bad.yaml", """\
+    _write(
+        tmp_path,
+        "bad.yaml",
+        """\
 spec:
   cron: "0 3 * * *"
 action:
   workflow: ReflectWorkflow
-""")
+""",
+    )
     with pytest.raises(ScheduleError):
         load_schedules(tmp_path)
 
@@ -169,6 +178,7 @@ KNOWN_SCHEDULE_WORKFLOWS = {"ReflectWorkflow"}
 class ScheduleAction(BaseModel):
     """The start-workflow action of a schedule asset. Temporal Schedules can
     only start workflows, never activities — hence ReflectWorkflow."""
+
     workflow: str
     banks: list[str] = Field(min_length=1)
     backend: Literal["fake", "hindsight"] = "fake"
@@ -178,9 +188,7 @@ class ScheduleAction(BaseModel):
     @classmethod
     def _known_workflow(cls, v: str) -> str:
         if v not in KNOWN_SCHEDULE_WORKFLOWS:
-            raise ValueError(
-                f"unknown workflow {v!r}; known: "
-                f"{sorted(KNOWN_SCHEDULE_WORKFLOWS)}")
+            raise ValueError(f"unknown workflow {v!r}; known: {sorted(KNOWN_SCHEDULE_WORKFLOWS)}")
         return v
 
 
@@ -193,14 +201,15 @@ class ScheduleSpecAsset(BaseModel):
     def _cron_shape(cls, v: str) -> str:
         if len(v.split()) != 5:
             raise ValueError(
-                f"cron must have 5 whitespace-separated fields, got "
-                f"{len(v.split())}: {v!r}")
+                f"cron must have 5 whitespace-separated fields, got {len(v.split())}: {v!r}"
+            )
         return v
 
 
 class ScheduleAsset(BaseModel):
     """One schedules/<id>.yaml. `id` comes from the filename, not the body —
     the filename is the API."""
+
     id: str
     spec: ScheduleSpecAsset
     action: ScheduleAction
@@ -230,6 +239,7 @@ filename is the schedule id. Deliberately mirrors agents/loader.py's
 fail-closed shape — a malformed asset raises here, during `schedules apply`,
 rather than silently at 3am.
 """
+
 from __future__ import annotations
 
 import os
@@ -256,8 +266,7 @@ def load_schedules(path: str | os.PathLike | None = None) -> list[ScheduleAsset]
     id. Resolution order: explicit arg, then $SDLC_SCHEDULES_DIR, then the
     shipped default. A missing or empty directory yields []; a malformed asset
     raises ScheduleError."""
-    resolved = Path(path or os.environ.get(SCHEDULES_DIR_ENV)
-                    or DEFAULT_SCHEDULES_DIR)
+    resolved = Path(path or os.environ.get(SCHEDULES_DIR_ENV) or DEFAULT_SCHEDULES_DIR)
     if not resolved.is_dir():
         return []
     assets: list[ScheduleAsset] = []
@@ -313,6 +322,7 @@ Create `tests/test_reflect_workflow.py`:
 """ReflectWorkflow (E-13) — the wrapper that lets a Temporal Schedule reach
 the reflect activity. Runs the REAL workflow on a time-skipping worker with a
 faked reflect activity, following tests/test_e2e_greenfield.py's pattern."""
+
 from __future__ import annotations
 
 import uuid
@@ -350,20 +360,20 @@ def _reset():
 
 
 async def _run(env: WorkflowEnvironment, inp: ReflectScheduleInput) -> int:
-    async with Worker(env.client, task_queue=TASK_QUEUE,
-                      workflows=[ReflectWorkflow],
-                      activities=[fake_reflect]):
+    async with Worker(
+        env.client, task_queue=TASK_QUEUE, workflows=[ReflectWorkflow], activities=[fake_reflect]
+    ):
         return await env.client.execute_workflow(
-            ReflectWorkflow.run, inp,
-            id=f"reflect-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+            ReflectWorkflow.run, inp, id=f"reflect-{uuid.uuid4()}", task_queue=TASK_QUEUE
+        )
 
 
 @pytest.mark.asyncio
 async def test_each_bank_gets_its_own_reflect_execution():
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
-        count = await _run(env, ReflectScheduleInput(
-            banks=["project:a", "project:b", "project:c"]))
+        data_converter=pydantic_data_converter
+    ) as env:
+        count = await _run(env, ReflectScheduleInput(banks=["project:a", "project:b", "project:c"]))
     assert count == 3
     assert REFLECTED == ["project:a", "project:b", "project:c"]
 
@@ -372,10 +382,10 @@ async def test_each_bank_gets_its_own_reflect_execution():
 async def test_one_failing_bank_does_not_skip_the_rest():
     FAIL_BANKS.add("project:b")
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         with pytest.raises(Exception):
-            await _run(env, ReflectScheduleInput(
-                banks=["project:a", "project:b", "project:c"]))
+            await _run(env, ReflectScheduleInput(banks=["project:a", "project:b", "project:c"]))
     # b failed, but a and c still ran — the loop does not abort
     assert REFLECTED == ["project:a", "project:c"]
 
@@ -386,7 +396,8 @@ async def test_a_failing_bank_fails_the_workflow_visibly():
     # failed workflow, never a silent no-op (spec: eve's failure mode).
     FAIL_BANKS.add("project:only")
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         with pytest.raises(Exception) as ei:
             await _run(env, ReflectScheduleInput(banks=["project:only"]))
     assert "project:only" in str(ei.value)
@@ -395,7 +406,8 @@ async def test_a_failing_bank_fails_the_workflow_visibly():
 @pytest.mark.asyncio
 async def test_all_banks_succeeding_returns_full_count():
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         count = await _run(env, ReflectScheduleInput(banks=["project:default"]))
     assert count == 1
     assert REFLECTED == ["project:default"]
@@ -410,16 +422,19 @@ async def test_backend_and_base_url_reach_the_activity():
         seen.append(inp)
 
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
-        async with Worker(env.client, task_queue=TASK_QUEUE,
-                          workflows=[ReflectWorkflow],
-                          activities=[capturing]):
+        data_converter=pydantic_data_converter
+    ) as env:
+        async with Worker(
+            env.client, task_queue=TASK_QUEUE, workflows=[ReflectWorkflow], activities=[capturing]
+        ):
             await env.client.execute_workflow(
                 ReflectWorkflow.run,
-                ReflectScheduleInput(banks=["project:default"],
-                                     backend="hindsight",
-                                     base_url="http://mem:9000"),
-                id=f"reflect-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                ReflectScheduleInput(
+                    banks=["project:default"], backend="hindsight", base_url="http://mem:9000"
+                ),
+                id=f"reflect-{uuid.uuid4()}",
+                task_queue=TASK_QUEUE,
+            )
     assert seen[0].backend == "hindsight"
     assert seen[0].base_url == "http://mem:9000"
 ```
@@ -441,6 +456,7 @@ Exists only because Temporal Schedules start workflows, never activities:
 bank list. Each bank is its own activity execution so one bank's backend
 failure retries independently without re-reflecting the others.
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -455,8 +471,9 @@ with workflow.unsafe.imports_passed_through():
 
 # Reflect consolidates a whole bank — slower than the 30s recall/retain ops
 # in feature.py's MEM_ACT, hence the longer ceiling.
-REFLECT_ACT = dict(start_to_close_timeout=timedelta(minutes=10),
-                   retry_policy=RetryPolicy(maximum_attempts=3))
+REFLECT_ACT = dict(
+    start_to_close_timeout=timedelta(minutes=10), retry_policy=RetryPolicy(maximum_attempts=3)
+)
 
 
 class ReflectScheduleInput(BaseModel):
@@ -477,9 +494,9 @@ class ReflectWorkflow:
             try:
                 await workflow.execute_activity(
                     reflect,
-                    ReflectInput(bank=bank, backend=inp.backend,
-                                 base_url=inp.base_url),
-                    **REFLECT_ACT)
+                    ReflectInput(bank=bank, backend=inp.backend, base_url=inp.base_url),
+                    **REFLECT_ACT,
+                )
             except Exception:
                 # One unreachable bank must not skip the others, but the run
                 # still fails below — a silent no-op is the failure mode this
@@ -487,8 +504,8 @@ class ReflectWorkflow:
                 failed.append(bank)
         if failed:
             raise ApplicationError(
-                f"reflect failed for banks: {', '.join(failed)}",
-                non_retryable=True)
+                f"reflect failed for banks: {', '.join(failed)}", non_retryable=True
+            )
         return len(inp.banks)
 ```
 
@@ -509,7 +526,7 @@ from .workflows.reflect import ReflectWorkflow
 And extend the `workflows=` list (line 65):
 
 ```python
-        workflows=[FeatureWorkflow, BenchmarkWorkflow, ReflectWorkflow],
+workflows = ([FeatureWorkflow, BenchmarkWorkflow, ReflectWorkflow],)
 ```
 
 - [ ] **Step 6: Add the registration regression guard**
@@ -521,6 +538,7 @@ def test_worker_module_registers_reflect_workflow():
     # FR-404's original bug was a registered activity that nothing ever
     # called. reflect is only reachable if ReflectWorkflow is registered too.
     from sdlc import worker
+
     src = __import__("inspect").getsource(worker)
     assert "ReflectWorkflow" in src, "ReflectWorkflow missing from worker"
 
@@ -530,6 +548,7 @@ def test_reflect_workflow_is_reachable_from_the_reflect_activity():
     import inspect
 
     from sdlc.workflows import reflect as mod
+
     src = inspect.getsource(mod)
     assert "execute_activity" in src
     assert "reflect" in src
@@ -570,19 +589,21 @@ Create `tests/test_schedule_reconcile.py`:
 ```python
 """Pure yaml→server diff (E-12). No Temporal client involved: plan_changes is
 a function of desired vs existing, so every reconcile rule is testable here."""
+
 from __future__ import annotations
 
 from sdlc.models import ScheduleAction, ScheduleAsset, ScheduleSpecAsset
 from sdlc.schedules.reconcile import plan_changes
 
 
-def asset(sid: str = "nightly-reflect", cron: str = "0 3 * * *",
-          banks: list[str] | None = None) -> ScheduleAsset:
+def asset(
+    sid: str = "nightly-reflect", cron: str = "0 3 * * *", banks: list[str] | None = None
+) -> ScheduleAsset:
     return ScheduleAsset(
         id=sid,
         spec=ScheduleSpecAsset(cron=cron),
-        action=ScheduleAction(workflow="ReflectWorkflow",
-                              banks=banks or ["project:default"]))
+        action=ScheduleAction(workflow="ReflectWorkflow", banks=banks or ["project:default"]),
+    )
 
 
 def _by_id(changes):
@@ -618,13 +639,18 @@ def test_server_schedule_with_no_yaml_is_drift_not_delete():
 
 
 def test_mixed_plan_covers_every_case():
-    desired = [asset(sid="keep"), asset(sid="change", cron="0 5 * * *"),
-               asset(sid="new")]
-    existing = {"keep": asset(sid="keep"),
-                "change": asset(sid="change", cron="0 9 * * *"),
-                "gone": asset(sid="gone")}
+    desired = [asset(sid="keep"), asset(sid="change", cron="0 5 * * *"), asset(sid="new")]
+    existing = {
+        "keep": asset(sid="keep"),
+        "change": asset(sid="change", cron="0 9 * * *"),
+        "gone": asset(sid="gone"),
+    }
     assert _by_id(plan_changes(desired, existing)) == {
-        "keep": "noop", "change": "update", "new": "create", "gone": "drift"}
+        "keep": "noop",
+        "change": "update",
+        "new": "create",
+        "gone": "drift",
+    }
 
 
 def test_empty_both_sides_is_empty_plan():
@@ -657,6 +683,7 @@ Create `src/sdlc/schedules/reconcile.py`:
 every reconcile rule is unit-testable; apply.py supplies `existing` and turns
 Changes into API calls.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -666,13 +693,12 @@ from ..models import ScheduleAsset
 
 @dataclass(frozen=True)
 class Change:
-    action: str          # create | update | noop | drift
+    action: str  # create | update | noop | drift
     id: str
     reason: str = ""
 
 
-def plan_changes(desired: list[ScheduleAsset],
-                 existing: dict[str, ScheduleAsset]) -> list[Change]:
+def plan_changes(desired: list[ScheduleAsset], existing: dict[str, ScheduleAsset]) -> list[Change]:
     """Diff yaml assets against server state. Never emits a delete: a server
     schedule with no yaml is reported as drift, and only apply's explicit
     --prune turns that into a deletion."""
@@ -732,6 +758,7 @@ Create `tests/test_schedule_apply.py`:
 """Asset↔Temporal translation and plan formatting (E-12). The round-trip test
 covers both directions at once; fetch_existing/apply_changes are thin I/O and
 are exercised against a live server only in manual runs."""
+
 from __future__ import annotations
 
 from temporalio.client import ScheduleActionStartWorkflow
@@ -745,10 +772,13 @@ def asset(sid: str = "nightly-reflect") -> ScheduleAsset:
     return ScheduleAsset(
         id=sid,
         spec=ScheduleSpecAsset(cron="0 3 * * *", timezone="UTC"),
-        action=ScheduleAction(workflow="ReflectWorkflow",
-                              banks=["project:default"],
-                              backend="hindsight",
-                              base_url="http://mem:9000"))
+        action=ScheduleAction(
+            workflow="ReflectWorkflow",
+            banks=["project:default"],
+            backend="hindsight",
+            base_url="http://mem:9000",
+        ),
+    )
 
 
 def test_round_trip_preserves_the_asset():
@@ -778,8 +808,9 @@ def test_from_temporal_ignores_schedules_we_do_not_manage():
 
 
 def test_format_plan_lists_every_change():
-    out = format_plan([Change("create", "a", "not on server"),
-                       Change("drift", "b", "on server, no yaml asset")])
+    out = format_plan(
+        [Change("create", "a", "not on server"), Change("drift", "b", "on server, no yaml asset")]
+    )
     assert "create" in out and "a" in out
     assert "drift" in out and "b" in out
 
@@ -804,10 +835,15 @@ Files are the source of truth, but Schedules are server-side mutable state —
 so applying is an explicit act with a visible diff (`--dry-run`), never a side
 effect of a worker restart. See the spec's "explicit CLI apply" decision.
 """
+
 from __future__ import annotations
 
 from temporalio.client import (
-    Client, Schedule, ScheduleActionStartWorkflow, ScheduleSpec, ScheduleUpdate,
+    Client,
+    Schedule,
+    ScheduleActionStartWorkflow,
+    ScheduleSpec,
+    ScheduleUpdate,
 )
 
 from ..models import KNOWN_SCHEDULE_WORKFLOWS, ScheduleAsset
@@ -821,16 +857,20 @@ def _workflow_id(sid: str) -> str:
 
 def to_temporal(a: ScheduleAsset) -> Schedule:
     from ..worker import TASK_QUEUE
+
     return Schedule(
         action=ScheduleActionStartWorkflow(
             a.action.workflow,
-            args=[ReflectScheduleInput(banks=a.action.banks,
-                                       backend=a.action.backend,
-                                       base_url=a.action.base_url)],
+            args=[
+                ReflectScheduleInput(
+                    banks=a.action.banks, backend=a.action.backend, base_url=a.action.base_url
+                )
+            ],
             id=_workflow_id(a.id),
-            task_queue=TASK_QUEUE),
-        spec=ScheduleSpec(cron_expressions=[a.spec.cron],
-                          time_zone_name=a.spec.timezone))
+            task_queue=TASK_QUEUE,
+        ),
+        spec=ScheduleSpec(cron_expressions=[a.spec.cron], time_zone_name=a.spec.timezone),
+    )
 
 
 def from_temporal(sid: str, sched: Schedule) -> ScheduleAsset | None:
@@ -846,10 +886,17 @@ def from_temporal(sid: str, sched: Schedule) -> ScheduleAsset | None:
     inp = action.args[0]
     return ScheduleAsset(
         id=sid,
-        spec={"cron": sched.spec.cron_expressions[0],
-              "timezone": sched.spec.time_zone_name or "UTC"},
-        action={"workflow": action.workflow, "banks": inp.banks,
-                "backend": inp.backend, "base_url": inp.base_url})
+        spec={
+            "cron": sched.spec.cron_expressions[0],
+            "timezone": sched.spec.time_zone_name or "UTC",
+        },
+        action={
+            "workflow": action.workflow,
+            "banks": inp.banks,
+            "backend": inp.backend,
+            "base_url": inp.base_url,
+        },
+    )
 
 
 async def fetch_existing(client: Client) -> dict[str, ScheduleAsset]:
@@ -865,13 +912,12 @@ async def fetch_existing(client: Client) -> dict[str, ScheduleAsset]:
 def format_plan(changes: list[Change]) -> str:
     if not changes:
         return "no schedules to reconcile"
-    return "\n".join(f"  {c.action:<7} {c.id:<24} ({c.reason})"
-                     for c in changes)
+    return "\n".join(f"  {c.action:<7} {c.id:<24} ({c.reason})" for c in changes)
 
 
-async def apply_changes(client: Client, desired: list[ScheduleAsset],
-                        changes: list[Change],
-                        prune: bool = False) -> list[str]:
+async def apply_changes(
+    client: Client, desired: list[ScheduleAsset], changes: list[Change], prune: bool = False
+) -> list[str]:
     """Execute a plan. Drift is only deleted when prune is True."""
     by_id = {a.id: a for a in desired}
     results: list[str] = []
@@ -884,17 +930,14 @@ async def apply_changes(client: Client, desired: list[ScheduleAsset],
             asset = by_id[c.id]
             # update() takes an updater that returns a ScheduleUpdate, never a
             # bare Schedule. The default-arg bind avoids the late-binding trap.
-            await handle.update(
-                lambda _inp, a=asset: ScheduleUpdate(schedule=to_temporal(a)))
+            await handle.update(lambda _inp, a=asset: ScheduleUpdate(schedule=to_temporal(a)))
             results.append(f"updated {c.id}")
         elif c.action == "drift":
             if prune:
                 await client.get_schedule_handle(c.id).delete()
                 results.append(f"deleted {c.id}")
             else:
-                results.append(
-                    f"DRIFT {c.id} on server with no yaml asset "
-                    f"(use --prune to delete)")
+                results.append(f"DRIFT {c.id} on server with no yaml asset (use --prune to delete)")
     return results
 ```
 
@@ -916,14 +959,14 @@ In `src/sdlc/cli.py`, extend the module docstring (after the `reject` line, ~lin
 Add the subparsers after the `status` parser block (~line 56, before the benchmark block):
 
 ```python
-    sc = sub.add_parser("schedules")
-    scsub = sc.add_subparsers(dest="sched_cmd", required=True)
-    scsub.add_parser("list")
-    sa = scsub.add_parser("apply")
-    sa.add_argument("--dry-run", action="store_true",
-                    help="print the plan without touching Temporal")
-    sa.add_argument("--prune", action="store_true",
-                    help="delete server schedules that have no yaml asset")
+sc = sub.add_parser("schedules")
+scsub = sc.add_subparsers(dest="sched_cmd", required=True)
+scsub.add_parser("list")
+sa = scsub.add_parser("apply")
+sa.add_argument("--dry-run", action="store_true", help="print the plan without touching Temporal")
+sa.add_argument(
+    "--prune", action="store_true", help="delete server schedules that have no yaml asset"
+)
 ```
 
 `schedules list` reads local yaml only, so it must not require a Temporal connection. Change the client-connect guard (line 68) from:
@@ -943,29 +986,30 @@ to:
 Add the dispatch immediately before `handle = client.get_workflow_handle_for(...)` (~line 100):
 
 ```python
-    if args.cmd == "schedules":
-        from .schedules.apply import apply_changes, fetch_existing, format_plan
-        from .schedules.loader import load_schedules
-        from .schedules.reconcile import plan_changes
+if args.cmd == "schedules":
+    from .schedules.apply import apply_changes, fetch_existing, format_plan
+    from .schedules.loader import load_schedules
+    from .schedules.reconcile import plan_changes
 
-        desired = load_schedules()
-        if args.sched_cmd == "list":
-            if not desired:
-                print("no schedule assets found")
-                return
-            for a in desired:
-                print(f"{a.id:<24} {a.spec.cron!r} {a.spec.timezone} "
-                      f"→ {a.action.workflow} banks={a.action.banks}")
+    desired = load_schedules()
+    if args.sched_cmd == "list":
+        if not desired:
+            print("no schedule assets found")
             return
-        existing = await fetch_existing(client)
-        changes = plan_changes(desired, existing)
-        if args.dry_run:
-            print(format_plan(changes))
-            return
-        for line in await apply_changes(client, desired, changes,
-                                        prune=args.prune):
-            print(line)
+        for a in desired:
+            print(
+                f"{a.id:<24} {a.spec.cron!r} {a.spec.timezone} "
+                f"→ {a.action.workflow} banks={a.action.banks}"
+            )
         return
+    existing = await fetch_existing(client)
+    changes = plan_changes(desired, existing)
+    if args.dry_run:
+        print(format_plan(changes))
+        return
+    for line in await apply_changes(client, desired, changes, prune=args.prune):
+        print(line)
+    return
 ```
 
 - [ ] **Step 6: Verify the CLI parses**
@@ -1011,6 +1055,7 @@ Create `tests/test_nightly_reflect_asset.py`:
 """The shipped nightly-reflect asset (E-13, FR-404). Guards the scope
 boundary: project banks only — org_bank has no writers, so an org schedule
 would be a permanent no-op behind a checked box."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -1045,7 +1090,8 @@ def test_nightly_reflect_is_project_scoped_only():
     for bank in a.action.banks:
         assert bank.startswith("project:"), (
             f"{bank!r} is not project-scoped; org reflect is out of scope "
-            f"until something retains to org_bank")
+            f"until something retains to org_bank"
+        )
 
 
 def test_shipped_asset_translates_to_a_temporal_schedule():

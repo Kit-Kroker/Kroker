@@ -94,9 +94,12 @@ async def test_charge_scoped_with_run_scope_enforces_count_at_full_allowance():
 async def test_research_subquestion_charges_its_own_scope():
     # The per-sub-question allowance is only real if the toolset charges the
     # sub-question's scope rather than the shared run counter.
-    from sdlc.models import ResearchBrief, SubQuestion
     from sdlc.research.stage import SubQuestionInput
     from sdlc.research.stage import _research_subquestion_impl as research_subquestion
+    from sdlc.stages.research.models import (
+        ResearchBrief,
+        SubQuestion,
+    )
 
     inp = SubQuestionInput(
         sub_question=SubQuestion(id="sq-7", question="q"),

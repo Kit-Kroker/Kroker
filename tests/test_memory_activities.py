@@ -8,7 +8,10 @@ from sdlc.memory.activities import (
     recall_snapshot,
     retain,
 )
-from sdlc.models import MemoryKind, RetainItem
+from sdlc.memory.models import (
+    MemoryKind,
+    RetainItem,
+)
 
 
 def test_recall_snapshot_is_a_temporal_activity():

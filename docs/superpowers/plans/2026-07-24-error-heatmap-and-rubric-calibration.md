@@ -41,23 +41,45 @@
 from datetime import datetime, timedelta
 
 from sdlc.benchmarks.heatmap import (
-    ORACLE_STAGE, Heatmap, HeatmapCell, build_heatmap,
+    ORACLE_STAGE,
+    Heatmap,
+    HeatmapCell,
+    build_heatmap,
 )
 from sdlc.benchmarks.models import (
-    BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag,
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    QualityScore,
+    SpeedBag,
 )
 from sdlc.models import HarnessKind
 
 
-def _rec(*, case="c1", run="r1", stage="code", scope=BenchmarkScope.STAGE,
-         outcome=BenchmarkOutcome.PASS, fix=0):
+def _rec(
+    *,
+    case="c1",
+    run="r1",
+    stage="code",
+    scope=BenchmarkScope.STAGE,
+    outcome=BenchmarkOutcome.PASS,
+    fix=0,
+):
     t = datetime(2026, 7, 24, 10)
     return BenchmarkRecord(
-        run_id=run, bench_run_id="b1", case_id=case, scope=scope, stage=stage,
-        role="dev", harness=HarnessKind.CLAUDE_CODE, model="m",
+        run_id=run,
+        bench_run_id="b1",
+        case_id=case,
+        scope=scope,
+        stage=stage,
+        role="dev",
+        harness=HarnessKind.CLAUDE_CODE,
+        model="m",
         quality=QualityScore(score=None, judge="contract"),
         speed=SpeedBag(wall_clock_s=1.0, started_at=t, ended_at=t + timedelta(seconds=1)),
-        outcome=outcome, fix_attempts=fix)
+        outcome=outcome,
+        fix_attempts=fix,
+    )
 
 
 def test_density_blends_rejects_fixes_and_oracle_over_runs():
@@ -65,8 +87,7 @@ def test_density_blends_rejects_fixes_and_oracle_over_runs():
         _rec(run="r1", stage="code", outcome=BenchmarkOutcome.REVISED, fix=2),
         _rec(run="r2", stage="code", outcome=BenchmarkOutcome.FAIL, fix=3),
         # oracle failure for the same case, distinct synthetic column
-        _rec(run="r1", stage="oracle", scope=BenchmarkScope.ORACLE,
-             outcome=BenchmarkOutcome.FAIL),
+        _rec(run="r1", stage="oracle", scope=BenchmarkScope.ORACLE, outcome=BenchmarkOutcome.FAIL),
     ]
     hm = build_heatmap(recs)
     by = {(c.case, c.stage): c for c in hm.cells}
@@ -79,28 +100,33 @@ def test_density_blends_rejects_fixes_and_oracle_over_runs():
     oracle = by[("c1", ORACLE_STAGE)]
     assert oracle.oracle_fails == 1
     assert oracle.gate_rejects == 0
-    assert oracle.density == 0.5   # 1 oracle fail / 2 runs
+    assert oracle.density == 0.5  # 1 oracle fail / 2 runs
 
 
 def test_n_runs_dedups_distinct_run_ids_per_case():
-    recs = [_rec(run="r1", stage="qa", outcome=BenchmarkOutcome.FAIL),
-            _rec(run="r1", stage="code", outcome=BenchmarkOutcome.FAIL)]
+    recs = [
+        _rec(run="r1", stage="qa", outcome=BenchmarkOutcome.FAIL),
+        _rec(run="r1", stage="code", outcome=BenchmarkOutcome.FAIL),
+    ]
     hm = build_heatmap(recs)
     assert all(c.n_runs == 1 for c in hm.cells)
 
 
 def test_unknown_stage_appended_before_oracle_not_dropped():
-    recs = [_rec(stage="clarify", outcome=BenchmarkOutcome.FAIL),
-            _rec(stage="mystery", outcome=BenchmarkOutcome.FAIL),
-            _rec(stage="oracle", scope=BenchmarkScope.ORACLE,
-                 outcome=BenchmarkOutcome.FAIL)]
+    recs = [
+        _rec(stage="clarify", outcome=BenchmarkOutcome.FAIL),
+        _rec(stage="mystery", outcome=BenchmarkOutcome.FAIL),
+        _rec(stage="oracle", scope=BenchmarkScope.ORACLE, outcome=BenchmarkOutcome.FAIL),
+    ]
     hm = build_heatmap(recs)
     assert hm.stages == ["clarify", "mystery", "oracle"]
 
 
 def test_language_map_recorded_per_case():
-    recs = [_rec(case="py", stage="code", outcome=BenchmarkOutcome.FAIL),
-            _rec(case="go", stage="code", outcome=BenchmarkOutcome.FAIL)]
+    recs = [
+        _rec(case="py", stage="code", outcome=BenchmarkOutcome.FAIL),
+        _rec(case="go", stage="code", outcome=BenchmarkOutcome.FAIL),
+    ]
     hm = build_heatmap(recs, language_by_case={"py": "python"})
     assert hm.language_by_case == {"py": "python", "go": ""}
 
@@ -126,6 +152,7 @@ Pure aggregation + rendering over BenchmarkRecords already on disk. No I/O,
 no temporalio -- mirrors observability/export.py. The finalize activity
 (report.py) owns the file writes.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -137,15 +164,29 @@ from .models import BenchmarkOutcome, BenchmarkRecord, BenchmarkScope
 # Record-vocabulary stage order (SDLC-spec 15-stage DAG); the synthetic
 # ``oracle`` column trails. Only columns with an observed cell are rendered.
 CANONICAL_STAGES: list[str] = [
-    "intake", "constitution", "context", "requirements", "research",
-    "clarify", "architecture", "planning", "code", "review", "analyze",
-    "qa", "quality_gate", "deploy", "retro",
+    "intake",
+    "constitution",
+    "context",
+    "requirements",
+    "research",
+    "clarify",
+    "architecture",
+    "planning",
+    "code",
+    "review",
+    "analyze",
+    "qa",
+    "quality_gate",
+    "deploy",
+    "retro",
 ]
 ORACLE_STAGE = "oracle"
 
 # A revise round re-enters a stage, so REVISED is rework alongside FAIL/ESCALATED.
 REWORK_OUTCOMES: set[BenchmarkOutcome] = {
-    BenchmarkOutcome.FAIL, BenchmarkOutcome.ESCALATED, BenchmarkOutcome.REVISED,
+    BenchmarkOutcome.FAIL,
+    BenchmarkOutcome.ESCALATED,
+    BenchmarkOutcome.REVISED,
 }
 
 
@@ -167,8 +208,9 @@ class Heatmap(BaseModel):
     language_by_case: dict[str, str] = Field(default_factory=dict)
 
 
-def build_heatmap(records: list[BenchmarkRecord],
-                  language_by_case: dict[str, str] | None = None) -> Heatmap:
+def build_heatmap(
+    records: list[BenchmarkRecord], language_by_case: dict[str, str] | None = None
+) -> Heatmap:
     language_by_case = language_by_case or {}
 
     runs_by_case: dict[str, set[str]] = defaultdict(set)
@@ -176,7 +218,8 @@ def build_heatmap(records: list[BenchmarkRecord],
         runs_by_case[r.case_id].add(r.run_id)
 
     acc: dict[tuple[str, str], dict[str, int]] = defaultdict(
-        lambda: {"gate": 0, "fix": 0, "oracle": 0})
+        lambda: {"gate": 0, "fix": 0, "oracle": 0}
+    )
     for r in records:
         is_oracle = r.scope is BenchmarkScope.ORACLE
         stage = ORACLE_STAGE if is_oracle else r.stage
@@ -189,10 +232,17 @@ def build_heatmap(records: list[BenchmarkRecord],
     for (case, stage), a in acc.items():
         n_runs = max(len(runs_by_case[case]), 1)
         total = a["gate"] + a["fix"] + a["oracle"]
-        cells.append(HeatmapCell(
-            case=case, stage=stage, gate_rejects=a["gate"],
-            fix_attempts=a["fix"], oracle_fails=a["oracle"],
-            n_runs=n_runs, density=total / n_runs))
+        cells.append(
+            HeatmapCell(
+                case=case,
+                stage=stage,
+                gate_rejects=a["gate"],
+                fix_attempts=a["fix"],
+                oracle_fails=a["oracle"],
+                n_runs=n_runs,
+                density=total / n_runs,
+            )
+        )
 
     cases = sorted({c.case for c in cells})
     present = {c.stage for c in cells}
@@ -201,8 +251,9 @@ def build_heatmap(records: list[BenchmarkRecord],
     stages = ordered + unknown + ([ORACLE_STAGE] if ORACLE_STAGE in present else [])
     max_density = max((c.density for c in cells), default=0.0)
     lang = {c: language_by_case.get(c, "") for c in cases}
-    return Heatmap(cells=cells, cases=cases, stages=stages,
-                   max_density=max_density, language_by_case=lang)
+    return Heatmap(
+        cells=cells, cases=cases, stages=stages, max_density=max_density, language_by_case=lang
+    )
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -238,20 +289,40 @@ git commit -m "feat(benchmarks): case x stage heatmap aggregation (E-36)"
 import json
 
 from sdlc.benchmarks.heatmap import (
-    Heatmap, HeatmapCell, render_heatmap_html, render_heatmap_json,
+    Heatmap,
+    HeatmapCell,
+    render_heatmap_html,
+    render_heatmap_json,
 )
 
 
 def _hm():
     return Heatmap(
-        cells=[HeatmapCell(case="c1", stage="code", gate_rejects=2,
-                           fix_attempts=5, oracle_fails=0, n_runs=2,
-                           density=3.5),
-               HeatmapCell(case="c2", stage="code", gate_rejects=0,
-                           fix_attempts=0, oracle_fails=0, n_runs=1,
-                           density=0.0)],
-        cases=["c1", "c2"], stages=["code"], max_density=3.5,
-        language_by_case={"c1": "python", "c2": "go"})
+        cells=[
+            HeatmapCell(
+                case="c1",
+                stage="code",
+                gate_rejects=2,
+                fix_attempts=5,
+                oracle_fails=0,
+                n_runs=2,
+                density=3.5,
+            ),
+            HeatmapCell(
+                case="c2",
+                stage="code",
+                gate_rejects=0,
+                fix_attempts=0,
+                oracle_fails=0,
+                n_runs=1,
+                density=0.0,
+            ),
+        ],
+        cases=["c1", "c2"],
+        stages=["code"],
+        max_density=3.5,
+        language_by_case={"c1": "python", "c2": "go"},
+    )
 
 
 def test_json_round_trips_and_keeps_breakdown():
@@ -264,16 +335,28 @@ def test_json_round_trips_and_keeps_breakdown():
 def test_html_is_wellformed_and_escapes_and_has_language_grids():
     html = render_heatmap_html(_hm())
     assert html.startswith("<!doctype html>") and html.rstrip().endswith("</html>")
-    assert "python" in html and "go" in html      # per-language grids
-    assert "3.5" in html                            # density shown/tooltip
+    assert "python" in html and "go" in html  # per-language grids
+    assert "3.5" in html  # density shown/tooltip
 
 
 def test_html_escapes_case_names():
-    hm = Heatmap(cells=[HeatmapCell(case="<x>", stage="code", gate_rejects=1,
-                                    fix_attempts=0, oracle_fails=0, n_runs=1,
-                                    density=1.0)],
-                 cases=["<x>"], stages=["code"], max_density=1.0,
-                 language_by_case={"<x>": ""})
+    hm = Heatmap(
+        cells=[
+            HeatmapCell(
+                case="<x>",
+                stage="code",
+                gate_rejects=1,
+                fix_attempts=0,
+                oracle_fails=0,
+                n_runs=1,
+                density=1.0,
+            )
+        ],
+        cases=["<x>"],
+        stages=["code"],
+        max_density=1.0,
+        language_by_case={"<x>": ""},
+    )
     assert "<x>" not in render_heatmap_html(hm)
     assert "&lt;x&gt;" in render_heatmap_html(hm)
 
@@ -307,7 +390,7 @@ def render_heatmap_json(hm: Heatmap) -> str:
 
 def _cell_color(density: float, max_density: float) -> str:
     ratio = 0.0 if max_density <= 0 else min(density / max_density, 1.0)
-    hue = 120 * (1 - ratio)          # 120=green (low) -> 0=red (high)
+    hue = 120 * (1 - ratio)  # 120=green (low) -> 0=red (high)
     return f"hsl({hue:.0f},70%,{85 - 25 * ratio:.0f}%)"
 
 
@@ -322,16 +405,18 @@ def _grid(hm: Heatmap, cases: list[str]) -> str:
             if c is None:
                 tds.append('<td class="empty"></td>')
                 continue
-            tip = (f"{case}/{stage}: {c.gate_rejects} rejects, "
-                   f"{c.fix_attempts} fix-attempts, {c.oracle_fails} "
-                   f"oracle-fails over {c.n_runs} runs = {c.density:.2f}/run")
+            tip = (
+                f"{case}/{stage}: {c.gate_rejects} rejects, "
+                f"{c.fix_attempts} fix-attempts, {c.oracle_fails} "
+                f"oracle-fails over {c.n_runs} runs = {c.density:.2f}/run"
+            )
             tds.append(
                 f'<td title="{escape(tip)}" '
                 f'style="background:{_cell_color(c.density, hm.max_density)}">'
-                f"{c.density:.2f}</td>")
+                f"{c.density:.2f}</td>"
+            )
         rows.append("<tr>" + "".join(tds) + "</tr>")
-    return (f"<table><tr><th>case \\ stage</th>{head}</tr>"
-            + "".join(rows) + "</table>")
+    return f"<table><tr><th>case \\ stage</th>{head}</tr>" + "".join(rows) + "</table>"
 
 
 def render_heatmap_html(hm: Heatmap, calibration_html: str = "") -> str:
@@ -395,16 +480,17 @@ Add to `tests/test_benchmark_report.py`:
 ```python
 def test_resolve_language_map_reads_case_manifests(tmp_path):
     from sdlc.benchmarks.report import resolve_language_map
+
     (tmp_path / "c1").mkdir()
-    (tmp_path / "c1" / "case.yaml").write_text(
-        "case_id: c1\nlanguage: python\n", encoding="utf-8")
-    (tmp_path / "c2").mkdir()          # no case.yaml
+    (tmp_path / "c1" / "case.yaml").write_text("case_id: c1\nlanguage: python\n", encoding="utf-8")
+    (tmp_path / "c2").mkdir()  # no case.yaml
     m = resolve_language_map(["c1", "c2"], cases_dir=tmp_path)
     assert m == {"c1": "python", "c2": ""}
 
 
 def test_write_heatmap_emits_both_files(tmp_path):
     from sdlc.benchmarks.report import write_heatmap
+
     recs = [_rec("sonnet", 0.9, 1.0, 100)]
     recs[0].outcome  # BenchmarkOutcome.PASS; density 0 is fine
     html_p, json_p = write_heatmap(recs, tmp_path, {"c1": "python"})
@@ -432,8 +518,7 @@ from .judge import _CASES_DIR
 Add these functions (before `finalize_benchmark_report`):
 
 ```python
-def resolve_language_map(case_ids: list[str],
-                         cases_dir: Path | None = None) -> dict[str, str]:
+def resolve_language_map(case_ids: list[str], cases_dir: Path | None = None) -> dict[str, str]:
     """Best-effort {case_id: language} from each case's case.yaml. A missing
     manifest or language contributes ""; never raises (a broken manifest just
     means that case is language-unknown)."""
@@ -452,8 +537,7 @@ def resolve_language_map(case_ids: list[str],
     return out
 
 
-def write_heatmap(records, out_dir: Path,
-                  language_by_case: dict[str, str]) -> tuple[Path, Path]:
+def write_heatmap(records, out_dir: Path, language_by_case: dict[str, str]) -> tuple[Path, Path]:
     hm = build_heatmap(records, language_by_case)
     out_dir.mkdir(parents=True, exist_ok=True)
     html_p = out_dir / "heatmap.html"
@@ -512,17 +596,30 @@ def test_dispatch_report_also_writes_heatmap(tmp_path):
     from datetime import datetime, timedelta
     from sdlc.benchmarks.cli import dispatch_report
     from sdlc.benchmarks.models import (
-        BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag)
+        BenchmarkOutcome,
+        BenchmarkRecord,
+        BenchmarkScope,
+        QualityScore,
+        SpeedBag,
+    )
     from sdlc.benchmarks.recorder import RecordStore
     from sdlc.models import HarnessKind
+
     t = datetime(2026, 7, 24, 10)
     rec = BenchmarkRecord(
-        run_id="r1", bench_run_id="b1", case_id="c1",
-        scope=BenchmarkScope.STAGE, stage="code", role="dev",
-        harness=HarnessKind.CLAUDE_CODE, model="m",
+        run_id="r1",
+        bench_run_id="b1",
+        case_id="c1",
+        scope=BenchmarkScope.STAGE,
+        stage="code",
+        role="dev",
+        harness=HarnessKind.CLAUDE_CODE,
+        model="m",
         quality=QualityScore(score=0.9, judge="contract"),
         speed=SpeedBag(wall_clock_s=1.0, started_at=t, ended_at=t + timedelta(seconds=1)),
-        outcome=BenchmarkOutcome.FAIL, fix_attempts=1)
+        outcome=BenchmarkOutcome.FAIL,
+        fix_attempts=1,
+    )
     RecordStore(root=str(tmp_path), bench_run_id="b1").append(rec)
     dispatch_report("b1", root=str(tmp_path))
     assert (tmp_path / "b1" / "heatmap.html").exists()
@@ -543,10 +640,9 @@ from `.report` (cli.py top) and `_root` from `.recorder`. Add
 `_read_all, resolve_language_map, write_heatmap` to the `.report` import, then:
 
 ```python
-def dispatch_report(bench: str,
-                    root: str | None = None) -> str:
-    from .report import (
-        _read_all, resolve_language_map, write_heatmap)
+def dispatch_report(bench: str, root: str | None = None) -> str:
+    from .report import _read_all, resolve_language_map, write_heatmap
+
     records = _read_all(bench, root)
     summaries = aggregate(bench, CompositeWeights(), root=root, _records=records)
     md = render_markdown(summaries)
@@ -594,14 +690,18 @@ git commit -m "feat(benchmarks): offline report CLI emits heatmap (E-36)"
 from pathlib import Path
 
 from sdlc.benchmarks.calibration import (
-    CalibrationFixture, load_scored_fixtures, make_capture_fixture,
-    rubric_sha_of, write_fixture,
+    CalibrationFixture,
+    load_scored_fixtures,
+    make_capture_fixture,
+    rubric_sha_of,
+    write_fixture,
 )
 
 
 def test_make_capture_fixture_pins_sha_and_nulls_score():
-    fx = make_capture_fixture('{"a":1}', "zai/glm-5.2",
-                              "cat-cafe/architect", "score soundness 0..1")
+    fx = make_capture_fixture(
+        '{"a":1}', "zai/glm-5.2", "cat-cafe/architect", "score soundness 0..1"
+    )
     assert fx.human_score is None
     assert fx.rubric_sha == rubric_sha_of("score soundness 0..1")
     assert fx.author_model == "zai/glm-5.2"
@@ -609,9 +709,14 @@ def test_make_capture_fixture_pins_sha_and_nulls_score():
 
 def test_load_skips_unscored_and_malformed(tmp_path):
     d = tmp_path / "architect"
-    scored = CalibrationFixture(artifact_json="{}", rubric_ref="c/architect",
-                                rubric_text="r", rubric_sha=rubric_sha_of("r"),
-                                author_model="m", human_score=0.8)
+    scored = CalibrationFixture(
+        artifact_json="{}",
+        rubric_ref="c/architect",
+        rubric_text="r",
+        rubric_sha=rubric_sha_of("r"),
+        author_model="m",
+        human_score=0.8,
+    )
     unscored = make_capture_fixture("{}", "m", "c/architect", "r")
     write_fixture(scored, d, "fixt-0001")
     write_fixture(unscored, d, "fixt-0002")
@@ -641,6 +746,7 @@ Advisory only -- never modifies a composite score or a gate outcome.
 
 Pure compute here; the CLI (cli.py) owns file I/O and the live-history seam.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -651,11 +757,11 @@ from pydantic import BaseModel, Field
 
 class CalibrationFixture(BaseModel):
     artifact_json: str
-    rubric_ref: str                       # e.g. "cat-cafe-monitoring/architect"
-    rubric_text: str                      # pinned at capture -> reproducible
+    rubric_ref: str  # e.g. "cat-cafe-monitoring/architect"
+    rubric_text: str  # pinned at capture -> reproducible
     rubric_sha: str
     author_model: str
-    human_score: float | None = None      # None => unscored, skipped
+    human_score: float | None = None  # None => unscored, skipped
     human_components: dict[str, float] = Field(default_factory=dict)
     scored_by: str | None = None
     notes: str | None = None
@@ -665,12 +771,17 @@ def rubric_sha_of(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def make_capture_fixture(artifact_json: str, author_model: str,
-                         rubric_ref: str, rubric_text: str) -> CalibrationFixture:
+def make_capture_fixture(
+    artifact_json: str, author_model: str, rubric_ref: str, rubric_text: str
+) -> CalibrationFixture:
     return CalibrationFixture(
-        artifact_json=artifact_json, rubric_ref=rubric_ref,
-        rubric_text=rubric_text, rubric_sha=rubric_sha_of(rubric_text),
-        author_model=author_model, human_score=None)
+        artifact_json=artifact_json,
+        rubric_ref=rubric_ref,
+        rubric_text=rubric_text,
+        rubric_sha=rubric_sha_of(rubric_text),
+        author_model=author_model,
+        human_score=None,
+    )
 
 
 def write_fixture(fx: CalibrationFixture, rubric_dir: Path, name: str) -> Path:
@@ -688,8 +799,7 @@ def load_scored_fixtures(rubric_dir: Path) -> list[CalibrationFixture]:
         if p.name == "calibration.json":
             continue
         try:
-            fx = CalibrationFixture.model_validate_json(
-                p.read_text(encoding="utf-8"))
+            fx = CalibrationFixture.model_validate_json(p.read_text(encoding="utf-8"))
         except Exception:
             continue
         if fx.human_score is not None:
@@ -757,7 +867,7 @@ def test_anti_correlation_spearman_negative():
 
 def test_tied_human_scores_do_not_crash_spearman():
     s = compute_agreement([(0.5, 0.4), (0.5, 0.6), (0.5, 0.5)])
-    assert s.spearman == 0.0     # zero variance in human ranks -> defined as 0
+    assert s.spearman == 0.0  # zero variance in human ranks -> defined as 0
 
 
 def test_empty_pairs_safe():
@@ -767,7 +877,7 @@ def test_empty_pairs_safe():
 
 def test_single_pair_spearman_zero():
     s = compute_agreement([(0.5, 0.5)])
-    assert s.spearman == 0.0     # n<2 undefined -> 0.0
+    assert s.spearman == 0.0  # n<2 undefined -> 0.0
     assert s.agreement_rate == 1.0
 ```
 
@@ -806,9 +916,9 @@ def _spearman(xs: list[float], ys: list[float]) -> float:
     num = sum((a - mx) * (b - my) for a, b in zip(rx, ry))
     denx = sum((a - mx) ** 2 for a in rx)
     deny = sum((b - my) ** 2 for b in ry)
-    if denx == 0 or deny == 0:      # zero variance -> correlation undefined
+    if denx == 0 or deny == 0:  # zero variance -> correlation undefined
         return 0.0
-    return num / (denx ** 0.5 * deny ** 0.5)
+    return num / (denx**0.5 * deny**0.5)
 
 
 class AgreementStats(BaseModel):
@@ -821,24 +931,36 @@ class AgreementStats(BaseModel):
     verdict: Literal["calibrated", "uncalibrated"]
 
 
-def compute_agreement(pairs: list[tuple[float, float]],
-                      epsilon: float = 0.15,
-                      threshold: float = 0.75) -> AgreementStats:
+def compute_agreement(
+    pairs: list[tuple[float, float]], epsilon: float = 0.15, threshold: float = 0.75
+) -> AgreementStats:
     """pairs are (human, judge). Verdict is 'calibrated' iff the within-epsilon
     agreement rate meets the threshold."""
     n = len(pairs)
     if n == 0:
-        return AgreementStats(n=0, epsilon=epsilon, threshold=threshold,
-                              agreement_rate=0.0, mae=0.0, spearman=0.0,
-                              verdict="uncalibrated")
+        return AgreementStats(
+            n=0,
+            epsilon=epsilon,
+            threshold=threshold,
+            agreement_rate=0.0,
+            mae=0.0,
+            spearman=0.0,
+            verdict="uncalibrated",
+        )
     diffs = [abs(j - h) for h, j in pairs]
     agree = sum(1 for d in diffs if d <= epsilon) / n
     mae = sum(diffs) / n
     sp = _spearman([h for h, _ in pairs], [j for _, j in pairs])
     verdict = "calibrated" if agree >= threshold else "uncalibrated"
-    return AgreementStats(n=n, epsilon=epsilon, threshold=threshold,
-                          agreement_rate=agree, mae=mae, spearman=sp,
-                          verdict=verdict)
+    return AgreementStats(
+        n=n,
+        epsilon=epsilon,
+        threshold=threshold,
+        agreement_rate=agree,
+        mae=mae,
+        spearman=sp,
+        verdict=verdict,
+    )
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -877,26 +999,40 @@ from datetime import datetime, timezone
 import pytest
 
 from sdlc.benchmarks.calibration import (
-    CalibrationFixture, CalibrationReport, run_calibration, rubric_sha_of,
+    CalibrationFixture,
+    CalibrationReport,
+    run_calibration,
+    rubric_sha_of,
 )
 from sdlc.benchmarks.models import QualityScore
 
 
 def _fx(human, author="zai-coding-plan/glm-5.2"):
     return CalibrationFixture(
-        artifact_json="{}", rubric_ref="c/architect", rubric_text="r",
-        rubric_sha=rubric_sha_of("r"), author_model=author, human_score=human)
+        artifact_json="{}",
+        rubric_ref="c/architect",
+        rubric_text="r",
+        rubric_sha=rubric_sha_of("r"),
+        author_model=author,
+        human_score=human,
+    )
 
 
 def test_run_calibration_scores_and_reports():
     fixtures = [_fx(0.8), _fx(0.6), _fx(0.4)]
+
     # judge always returns human+0.05 -> all within epsilon
     def judge(inp):
         # the fixture order is preserved; map by identity of rubric not needed
         return QualityScore(score=0.85, judge="llm_judge")
-    rep = run_calibration("architect", fixtures, "openai/gpt-5.2",
-                          now=datetime(2026, 7, 24, tzinfo=timezone.utc),
-                          judge=judge)
+
+    rep = run_calibration(
+        "architect",
+        fixtures,
+        "openai/gpt-5.2",
+        now=datetime(2026, 7, 24, tzinfo=timezone.utc),
+        judge=judge,
+    )
     assert isinstance(rep, CalibrationReport)
     assert rep.rubric == "architect"
     assert rep.n_fixtures == 3
@@ -906,22 +1042,26 @@ def test_run_calibration_scores_and_reports():
 def test_run_calibration_skips_same_family_fixture():
     # judge shares family with this fixture's author -> skipped (ADR-6)
     fixtures = [_fx(0.8, author="openai/gpt-4.9"), _fx(0.5, author="zai/glm-5.2")]
+
     def judge(inp):
         return QualityScore(score=0.5, judge="llm_judge")
+
     rep = run_calibration("architect", fixtures, "openai/gpt-5.2", judge=judge)
-    assert rep.n_fixtures == 1     # the openai-authored fixture was skipped
+    assert rep.n_fixtures == 1  # the openai-authored fixture was skipped
 
 
 def test_run_calibration_excludes_judge_errors_from_pairs():
     fixtures = [_fx(0.8), _fx(0.5)]
     calls = {"n": 0}
+
     def judge(inp):
         calls["n"] += 1
         if calls["n"] == 1:
-            return QualityScore(score=None, judge="error")   # judge failed
+            return QualityScore(score=None, judge="error")  # judge failed
         return QualityScore(score=0.5, judge="llm_judge")
+
     rep = run_calibration("architect", fixtures, "openai/gpt-5.2", judge=judge)
-    assert rep.n_fixtures == 1     # only the successfully-judged pair counts
+    assert rep.n_fixtures == 1  # only the successfully-judged pair counts
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -955,13 +1095,20 @@ class CalibrationReport(BaseModel):
 def _default_judge(inp: JudgeInput) -> QualityScore:
     # judge_artifact.sync is attached in judge.py as a test/sync convenience.
     from .judge import judge_artifact
+
     return judge_artifact.sync(inp)
 
 
-def run_calibration(rubric: str, fixtures: list[CalibrationFixture],
-                    judge_model: str, *, epsilon: float = 0.15,
-                    threshold: float = 0.75, now: datetime | None = None,
-                    judge: JudgeScoreFn | None = None) -> CalibrationReport:
+def run_calibration(
+    rubric: str,
+    fixtures: list[CalibrationFixture],
+    judge_model: str,
+    *,
+    epsilon: float = 0.15,
+    threshold: float = 0.75,
+    now: datetime | None = None,
+    judge: JudgeScoreFn | None = None,
+) -> CalibrationReport:
     judge = judge or _default_judge
     now = now or datetime.now(timezone.utc)
     pairs: list[tuple[float, float]] = []
@@ -970,23 +1117,36 @@ def run_calibration(rubric: str, fixtures: list[CalibrationFixture],
             continue
         if model_family(judge_model) == model_family(fx.author_model):
             _log.warning(
-                "calibration: skipping fixture (judge %s shares family with "
-                "author %s; ADR-6)", judge_model, fx.author_model)
+                "calibration: skipping fixture (judge %s shares family with author %s; ADR-6)",
+                judge_model,
+                fx.author_model,
+            )
             continue
-        qs = judge(JudgeInput(artifact_json=fx.artifact_json,
-                              rubric=fx.rubric_text,
-                              author_model=fx.author_model,
-                              judge_model=judge_model))
-        if qs.score is None:            # judge errored -> exclude, never crash
+        qs = judge(
+            JudgeInput(
+                artifact_json=fx.artifact_json,
+                rubric=fx.rubric_text,
+                author_model=fx.author_model,
+                judge_model=judge_model,
+            )
+        )
+        if qs.score is None:  # judge errored -> exclude, never crash
             continue
         pairs.append((fx.human_score, qs.score))
 
     stats = compute_agreement(pairs, epsilon=epsilon, threshold=threshold)
     return CalibrationReport(
-        rubric=rubric, judge_model=judge_model, n_fixtures=stats.n,
-        epsilon=stats.epsilon, threshold=stats.threshold,
-        agreement_rate=stats.agreement_rate, mae=stats.mae,
-        spearman=stats.spearman, verdict=stats.verdict, computed_at=now)
+        rubric=rubric,
+        judge_model=judge_model,
+        n_fixtures=stats.n,
+        epsilon=stats.epsilon,
+        threshold=stats.threshold,
+        agreement_rate=stats.agreement_rate,
+        mae=stats.mae,
+        spearman=stats.spearman,
+        verdict=stats.verdict,
+        computed_at=now,
+    )
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1028,17 +1188,28 @@ git commit -m "feat(benchmarks): run_calibration judges fixtures, ADR-6 guard (E
 from datetime import datetime, timezone
 
 from sdlc.benchmarks.calibration import (
-    CalibrationReport, load_calibration_reports, render_calibration_html,
-    render_calibration_markdown, trust_for_stage, write_calibration_report,
+    CalibrationReport,
+    load_calibration_reports,
+    render_calibration_html,
+    render_calibration_markdown,
+    trust_for_stage,
+    write_calibration_report,
 )
 
 
 def _rep(rubric, rate=0.83, verdict="calibrated"):
     return CalibrationReport(
-        rubric=rubric, judge_model="openai/gpt-5.2", n_fixtures=24,
-        epsilon=0.15, threshold=0.75, agreement_rate=rate, mae=0.09,
-        spearman=0.71, verdict=verdict,
-        computed_at=datetime(2026, 7, 24, tzinfo=timezone.utc))
+        rubric=rubric,
+        judge_model="openai/gpt-5.2",
+        n_fixtures=24,
+        epsilon=0.15,
+        threshold=0.75,
+        agreement_rate=rate,
+        mae=0.09,
+        spearman=0.71,
+        verdict=verdict,
+        computed_at=datetime(2026, 7, 24, tzinfo=timezone.utc),
+    )
 
 
 def test_write_then_load_round_trips(tmp_path):
@@ -1063,7 +1234,7 @@ def test_trust_for_stage_maps_record_stage_to_rubric():
     reports = {"architect": _rep("architect", rate=0.83)}
     assert "0.83" in trust_for_stage("architecture", reports)
     assert trust_for_stage("planning", reports) == "uncalibrated"
-    assert trust_for_stage("code", reports) == "-"     # no rubric for code
+    assert trust_for_stage("code", reports) == "-"  # no rubric for code
 ```
 
 Add to `tests/test_benchmark_report.py`:
@@ -1074,12 +1245,20 @@ def test_render_markdown_appends_calibration_when_provided():
     from sdlc.benchmarks.calibration import CalibrationReport
     from sdlc.benchmarks.report import aggregate, render_markdown
     from sdlc.benchmarks.models import CompositeWeights
-    sums = aggregate("b1", CompositeWeights(),
-                     _records=[_rec("sonnet", 0.9, 1.0, 100)])
+
+    sums = aggregate("b1", CompositeWeights(), _records=[_rec("sonnet", 0.9, 1.0, 100)])
     rep = CalibrationReport(
-        rubric="architect", judge_model="j", n_fixtures=10, epsilon=0.15,
-        threshold=0.75, agreement_rate=0.8, mae=0.1, spearman=0.7,
-        verdict="calibrated", computed_at=datetime(2026, 7, 24, tzinfo=timezone.utc))
+        rubric="architect",
+        judge_model="j",
+        n_fixtures=10,
+        epsilon=0.15,
+        threshold=0.75,
+        agreement_rate=0.8,
+        mae=0.1,
+        spearman=0.7,
+        verdict="calibrated",
+        computed_at=datetime(2026, 7, 24, tzinfo=timezone.utc),
+    )
     md = render_markdown(sums, calibration={"architect": rep})
     assert "Rubric calibration" in md
 ```
@@ -1115,60 +1294,64 @@ def write_calibration_report(rep: CalibrationReport, rubric_dir: Path) -> Path:
     return p
 
 
-def load_calibration_reports(
-        calib_root: Path | None = None) -> dict[str, CalibrationReport]:
+def load_calibration_reports(calib_root: Path | None = None) -> dict[str, CalibrationReport]:
     root = calib_root if calib_root is not None else _CALIB_DIR
     out: dict[str, CalibrationReport] = {}
     if not Path(root).is_dir():
         return out
     for cj in sorted(Path(root).glob("*/calibration.json")):
         try:
-            rep = CalibrationReport.model_validate_json(
-                cj.read_text(encoding="utf-8"))
+            rep = CalibrationReport.model_validate_json(cj.read_text(encoding="utf-8"))
         except Exception:
             continue
         out[rep.rubric] = rep
     return out
 
 
-def trust_for_stage(stage: str,
-                    reports: dict[str, CalibrationReport]) -> str:
+def trust_for_stage(stage: str, reports: dict[str, CalibrationReport]) -> str:
     rubric = STAGE_TO_RUBRIC.get(stage)
     if rubric is None:
-        return "-"                       # stage has no rubric (e.g. code)
+        return "-"  # stage has no rubric (e.g. code)
     rep = reports.get(rubric)
     return f"{rep.agreement_rate:.2f}" if rep else "uncalibrated"
 
 
-def render_calibration_markdown(
-        reports: dict[str, CalibrationReport]) -> str:
+def render_calibration_markdown(reports: dict[str, CalibrationReport]) -> str:
     if not reports:
         return ""
-    lines = ["", "## Rubric calibration", "",
-             "| rubric | n | agreement | MAE | spearman | verdict |",
-             "|---|---|---|---|---|---|"]
+    lines = [
+        "",
+        "## Rubric calibration",
+        "",
+        "| rubric | n | agreement | MAE | spearman | verdict |",
+        "|---|---|---|---|---|---|",
+    ]
     for rubric in sorted(reports):
         r = reports[rubric]
-        lines.append(f"| {rubric} | {r.n_fixtures} | {r.agreement_rate:.2f} | "
-                     f"{r.mae:.3f} | {r.spearman:.2f} | {r.verdict} |")
+        lines.append(
+            f"| {rubric} | {r.n_fixtures} | {r.agreement_rate:.2f} | "
+            f"{r.mae:.3f} | {r.spearman:.2f} | {r.verdict} |"
+        )
     return "\n".join(lines) + "\n"
 
 
-def render_calibration_html(
-        reports: dict[str, CalibrationReport]) -> str:
+def render_calibration_html(reports: dict[str, CalibrationReport]) -> str:
     if not reports:
         return ""
     from html import escape
+
     rows = "".join(
         f"<tr><td>{escape(rubric)}</td><td>{reports[rubric].n_fixtures}</td>"
         f"<td>{reports[rubric].agreement_rate:.2f}</td>"
         f"<td>{reports[rubric].mae:.3f}</td>"
         f"<td>{reports[rubric].spearman:.2f}</td>"
         f"<td>{escape(reports[rubric].verdict)}</td></tr>"
-        for rubric in sorted(reports))
-    return ("<h2>Rubric calibration</h2><table><tr><th>rubric</th><th>n</th>"
-            "<th>agreement</th><th>MAE</th><th>spearman</th><th>verdict</th></tr>"
-            + rows + "</table>")
+        for rubric in sorted(reports)
+    )
+    return (
+        "<h2>Rubric calibration</h2><table><tr><th>rubric</th><th>n</th>"
+        "<th>agreement</th><th>MAE</th><th>spearman</th><th>verdict</th></tr>" + rows + "</table>"
+    )
 ```
 
 Now update `render_markdown` in `src/sdlc/benchmarks/report.py` to take calibration and add a trust column + append the section:
@@ -1176,6 +1359,7 @@ Now update `render_markdown` in `src/sdlc/benchmarks/report.py` to take calibrat
 ```python
 def render_markdown(summaries: list[BenchmarkSummary], calibration=None) -> str:
     from .calibration import render_calibration_markdown, trust_for_stage
+
     calibration = calibration or {}
     if not summaries:
         return "# Benchmark report\n\nNo records found.\n"
@@ -1187,8 +1371,10 @@ def render_markdown(summaries: list[BenchmarkSummary], calibration=None) -> str:
         "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for s in summaries:
+
         def fmt(x):
             return f"{x:.3f}" if isinstance(x, float) else "n/a"
+
         lines.append(
             f"| {s.case_id} | {s.stage} | "
             f"{s.harness.value if s.harness else 'proposer'} | {s.model} | "
@@ -1210,9 +1396,10 @@ Wire the calibration reports into the two report emitters so they load them:
 In `finalize_benchmark_report` (report.py) — after computing `summaries`, before `write_report`:
 
 ```python
-    from .calibration import load_calibration_reports
-    calibration = load_calibration_reports()
-    write_report_with_calibration(summaries, str(out_dir / "report.md"), calibration)
+from .calibration import load_calibration_reports
+
+calibration = load_calibration_reports()
+write_report_with_calibration(summaries, str(out_dir / "report.md"), calibration)
 ```
 
 Replace the plain `write_report(...)` calls (in both `finalize_benchmark_report` and `dispatch_report`) with a helper added to report.py:
@@ -1220,15 +1407,15 @@ Replace the plain `write_report(...)` calls (in both `finalize_benchmark_report`
 ```python
 def write_report_with_calibration(summaries, out_path: str, calibration) -> None:
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(out_path).write_text(render_markdown(summaries, calibration),
-                              encoding="utf-8")
+    Path(out_path).write_text(render_markdown(summaries, calibration), encoding="utf-8")
 ```
 
 And pass `calibration_html=render_calibration_html(calibration)` into the heatmap write. Update `write_heatmap` signature to accept it:
 
 ```python
-def write_heatmap(records, out_dir: Path, language_by_case: dict[str, str],
-                  calibration_html: str = "") -> tuple[Path, Path]:
+def write_heatmap(
+    records, out_dir: Path, language_by_case: dict[str, str], calibration_html: str = ""
+) -> tuple[Path, Path]:
     hm = build_heatmap(records, language_by_case)
     out_dir.mkdir(parents=True, exist_ok=True)
     html_p = out_dir / "heatmap.html"
@@ -1286,16 +1473,19 @@ from sdlc.benchmarks.calibration import calibration_fixtures_from_events
 
 def test_capture_normalizer_reads_target_role_artifact():
     events = [
-        {"activity": "architect_agent__model_request",
-         "output": '{"stack": "fastapi"}'},
-        {"activity": "planner_agent__model_request",
-         "output": '{"tasks": []}'},
+        {"activity": "architect_agent__model_request", "output": '{"stack": "fastapi"}'},
+        {"activity": "planner_agent__model_request", "output": '{"tasks": []}'},
     ]
     role_to_agent = {"architect": "architect_agent", "planner": "planner_agent"}
     fx = calibration_fixtures_from_events(
-        "run-1", events, role_to_agent, rubric_ref="cat-cafe/architect",
-        rubric_text="score soundness 0..1", author_model="zai/glm-5.2",
-        role="architect")
+        "run-1",
+        events,
+        role_to_agent,
+        rubric_ref="cat-cafe/architect",
+        rubric_text="score soundness 0..1",
+        author_model="zai/glm-5.2",
+        role="architect",
+    )
     assert len(fx) == 1
     assert fx[0].artifact_json == '{"stack": "fastapi"}'
     assert fx[0].human_score is None
@@ -1305,8 +1495,14 @@ def test_capture_normalizer_reads_target_role_artifact():
 def test_capture_normalizer_empty_when_role_absent():
     events = [{"activity": "planner_agent__model_request", "output": "{}"}]
     fx = calibration_fixtures_from_events(
-        "run-1", events, {"architect": "architect_agent"}, rubric_ref="r",
-        rubric_text="r", author_model="m", role="architect")
+        "run-1",
+        events,
+        {"architect": "architect_agent"},
+        rubric_ref="r",
+        rubric_text="r",
+        author_model="m",
+        role="architect",
+    )
     assert fx == []
 ```
 
@@ -1314,8 +1510,7 @@ def test_capture_normalizer_empty_when_role_absent():
 # tests/test_calibration_cli.py
 from datetime import datetime, timezone
 
-from sdlc.benchmarks.calibration import (
-    CalibrationFixture, rubric_sha_of, write_fixture)
+from sdlc.benchmarks.calibration import CalibrationFixture, rubric_sha_of, write_fixture
 from sdlc.benchmarks.cli import dispatch_calibrate
 import sdlc.benchmarks.calibration as calib
 
@@ -1324,17 +1519,23 @@ def test_dispatch_calibrate_writes_calibration_json(tmp_path, monkeypatch):
     rubric_dir = tmp_path / "architect"
     for i, human in enumerate([0.8, 0.6, 0.4]):
         fx = CalibrationFixture(
-            artifact_json="{}", rubric_ref="c/architect", rubric_text="r",
-            rubric_sha=rubric_sha_of("r"), author_model="zai/glm-5.2",
-            human_score=human)
+            artifact_json="{}",
+            rubric_ref="c/architect",
+            rubric_text="r",
+            rubric_sha=rubric_sha_of("r"),
+            author_model="zai/glm-5.2",
+            human_score=human,
+        )
         write_fixture(fx, rubric_dir, f"fixt-{i:04d}")
     # stub the judge so no model call happens
     from sdlc.benchmarks.models import QualityScore
+
     monkeypatch.setattr(
-        calib, "_default_judge",
-        lambda inp: QualityScore(score=0.7, judge="llm_judge"))
-    out = dispatch_calibrate("architect", judge_model="openai/gpt-5.2",
-                             epsilon=0.15, threshold=0.75, calib_root=tmp_path)
+        calib, "_default_judge", lambda inp: QualityScore(score=0.7, judge="llm_judge")
+    )
+    out = dispatch_calibrate(
+        "architect", judge_model="openai/gpt-5.2", epsilon=0.15, threshold=0.75, calib_root=tmp_path
+    )
     assert (rubric_dir / "calibration.json").exists()
     assert "architect" in out and "agreement" in out.lower()
 ```
@@ -1350,9 +1551,15 @@ Append to `src/sdlc/benchmarks/calibration.py`:
 
 ```python
 def calibration_fixtures_from_events(
-        run_id: str, events: list[dict], role_to_agent: dict[str, str],
-        *, rubric_ref: str, rubric_text: str, author_model: str,
-        role: str) -> list[CalibrationFixture]:
+    run_id: str,
+    events: list[dict],
+    role_to_agent: dict[str, str],
+    *,
+    rubric_ref: str,
+    rubric_text: str,
+    author_model: str,
+    role: str,
+) -> list[CalibrationFixture]:
     """Pure: normalized history events -> capture fixtures (human_score None)
     for one role. A normalized event is {"activity": str, "output": str}
     where output is the produced artifact JSON. Keeps the FIRST matching
@@ -1365,37 +1572,44 @@ def calibration_fixtures_from_events(
         if ev.get("activity") == wanted:
             out = ev.get("output")
             if isinstance(out, str) and out:
-                return [make_capture_fixture(out, author_model,
-                                             rubric_ref, rubric_text)]
+                return [make_capture_fixture(out, author_model, rubric_ref, rubric_text)]
     return []
 ```
 
 Add to `src/sdlc/benchmarks/cli.py`:
 
 ```python
-def dispatch_calibrate(rubric: str, *, judge_model: str | None,
-                       epsilon: float, threshold: float,
-                       calib_root=None) -> str:
+def dispatch_calibrate(
+    rubric: str, *, judge_model: str | None, epsilon: float, threshold: float, calib_root=None
+) -> str:
     from pathlib import Path
     from .calibration import (
-        _CALIB_DIR, load_scored_fixtures, run_calibration,
-        write_calibration_report)
+        _CALIB_DIR,
+        load_scored_fixtures,
+        run_calibration,
+        write_calibration_report,
+    )
+
     root = Path(calib_root) if calib_root is not None else _CALIB_DIR
     rubric_dir = root / rubric
     fixtures = load_scored_fixtures(rubric_dir)
     if not fixtures:
-        return (f"no scored fixtures under {rubric_dir}; capture some with "
-                f"`sdlc calibrate capture --case <c> --rubric {rubric}` and "
-                f"fill in human_score.")
+        return (
+            f"no scored fixtures under {rubric_dir}; capture some with "
+            f"`sdlc calibrate capture --case <c> --rubric {rubric}` and "
+            f"fill in human_score."
+        )
     if judge_model is None:
         from ..eval.cli import default_judge_model
+
         judge_model = default_judge_model()
-    rep = run_calibration(rubric, fixtures, judge_model,
-                          epsilon=epsilon, threshold=threshold)
+    rep = run_calibration(rubric, fixtures, judge_model, epsilon=epsilon, threshold=threshold)
     write_calibration_report(rep, rubric_dir)
-    return (f"calibrate {rubric}: n={rep.n_fixtures} "
-            f"agreement={rep.agreement_rate:.2f} mae={rep.mae:.3f} "
-            f"spearman={rep.spearman:.2f} -> {rep.verdict}")
+    return (
+        f"calibrate {rubric}: n={rep.n_fixtures} "
+        f"agreement={rep.agreement_rate:.2f} mae={rep.mae:.3f} "
+        f"spearman={rep.spearman:.2f} -> {rep.verdict}"
+    )
 ```
 
 Extend the benchmarks `build_parser` in `cli.py` with a `calibrate` sibling (used when the benchmarks CLI is invoked standalone):
@@ -1411,43 +1625,52 @@ Extend the benchmarks `build_parser` in `cli.py` with a `calibrate` sibling (use
 Wire the top-level operator CLI (`src/sdlc/cli.py`), which re-declares subparsers. Add after the `eval` parser block (~line 117):
 
 ```python
-    cal = sub.add_parser("calibrate")
-    cal.add_argument("target", help="a rubric/role name, or 'capture'")
-    cal.add_argument("--rubric", default=None,
-                     help="rubric/role (capture only)")
-    cal.add_argument("--case", default=None, help="case id (capture only)")
-    cal.add_argument("--from", dest="from_run", default=None,
-                     help="run id (capture only)")
-    cal.add_argument("--judge-model", default=None, dest="judge_model")
-    cal.add_argument("--epsilon", type=float, default=0.15)
-    cal.add_argument("--threshold", type=float, default=0.75)
+cal = sub.add_parser("calibrate")
+cal.add_argument("target", help="a rubric/role name, or 'capture'")
+cal.add_argument("--rubric", default=None, help="rubric/role (capture only)")
+cal.add_argument("--case", default=None, help="case id (capture only)")
+cal.add_argument("--from", dest="from_run", default=None, help="run id (capture only)")
+cal.add_argument("--judge-model", default=None, dest="judge_model")
+cal.add_argument("--epsilon", type=float, default=0.15)
+cal.add_argument("--threshold", type=float, default=0.75)
 ```
 
 Add `"calibrate"` (non-capture) to the `_local_only` predicate (it makes no
 Temporal call in this task's scope):
 
 ```python
-    _local_only = (args.cmd == "benchmark"
-                   or (args.cmd == "schedules" and args.sched_cmd == "list")
-                   or (args.cmd == "eval" and args.target != "capture")
-                   or (args.cmd == "calibrate" and args.target != "capture"))
+_local_only = (
+    args.cmd == "benchmark"
+    or (args.cmd == "schedules" and args.sched_cmd == "list")
+    or (args.cmd == "eval" and args.target != "capture")
+    or (args.cmd == "calibrate" and args.target != "capture")
+)
 ```
 
 Add the dispatch branch (near the `eval` branch):
 
 ```python
-    if args.cmd == "calibrate":
-        if args.target == "capture":
-            print("calibrate capture requires a live Temporal client and a "
-                  "run id; run via the operator CLI. See the E-36 spec: the "
-                  "pure normalizer is tested, the live artifact-history adapter "
-                  "is operator-runtime. Hand-authoring fixtures under "
-                  "benchmarks/calibration/<rubric>/ is the offline path.")
-            return
-        from .benchmarks.cli import dispatch_calibrate
-        print(dispatch_calibrate(args.target, judge_model=args.judge_model,
-                                 epsilon=args.epsilon, threshold=args.threshold))
+if args.cmd == "calibrate":
+    if args.target == "capture":
+        print(
+            "calibrate capture requires a live Temporal client and a "
+            "run id; run via the operator CLI. See the E-36 spec: the "
+            "pure normalizer is tested, the live artifact-history adapter "
+            "is operator-runtime. Hand-authoring fixtures under "
+            "benchmarks/calibration/<rubric>/ is the offline path."
+        )
         return
+    from .benchmarks.cli import dispatch_calibrate
+
+    print(
+        dispatch_calibrate(
+            args.target,
+            judge_model=args.judge_model,
+            epsilon=args.epsilon,
+            threshold=args.threshold,
+        )
+    )
+    return
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1481,10 +1704,13 @@ git commit -m "feat(benchmarks): sdlc calibrate CLI + capture normalizer (E-36)"
 ```python
 # tests/test_e36_imports.py
 def test_benchmark_and_calibration_modules_import():
-    import sdlc.benchmarks.heatmap          # noqa: F401
-    import sdlc.benchmarks.calibration      # noqa: F401
-    from sdlc.benchmarks.report import (    # noqa: F401
-        finalize_benchmark_report, write_heatmap, resolve_language_map)
+    import sdlc.benchmarks.heatmap  # noqa: F401
+    import sdlc.benchmarks.calibration  # noqa: F401
+    from sdlc.benchmarks.report import (  # noqa: F401
+        finalize_benchmark_report,
+        write_heatmap,
+        resolve_language_map,
+    )
     from sdlc.benchmarks.cli import dispatch_calibrate  # noqa: F401
 ```
 

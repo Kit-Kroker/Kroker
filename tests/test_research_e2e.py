@@ -26,11 +26,11 @@ from sdlc.core.models import (
     PipelineConfig,
     ResearchConfig,
 )
-from sdlc.models import (
+from sdlc.research.verify import verify_brief_activity
+from sdlc.stages.research.models import (
     GroundedFinding,
     ResearchBrief,
 )
-from sdlc.research.verify import verify_brief_activity
 from tests.fakes.canned import (
     AGENT_SPECS,
     QUESTION_IDS,

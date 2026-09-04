@@ -6,7 +6,7 @@ import random
 
 from sdlc.context.delta import DELTA_CHECK, check_delta, normalize_path
 from sdlc.gate import CheckClass
-from sdlc.models import BrownfieldDelta
+from sdlc.stages.context.models import BrownfieldDelta
 
 TREE = frozenset({"src/payments/api.py", "src/payments/store.py", "tests/test_api.py", "README.md"})
 

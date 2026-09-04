@@ -6,7 +6,7 @@ from sdlc.agents.roles import (
     analyst_agent,
     t_analyst,
 )
-from sdlc.models import AnalysisReport
+from sdlc.stages.analyze.models import AnalysisReport
 
 
 def test_analyst_agent_named_and_typed():

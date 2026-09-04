@@ -8,7 +8,7 @@ import pytest
 from sdlc.artifacts.store import LocalFileStore
 from sdlc.board.models import TaskStatus
 from sdlc.board.store import BoardStore, ConflictError, InvalidTransition, NotFoundError
-from sdlc.models import DevTask
+from sdlc.stages.plan.models import DevTask
 
 
 def _tasks() -> list[DevTask]:

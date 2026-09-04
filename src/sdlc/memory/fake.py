@@ -6,7 +6,10 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from ..models import RecallSnapshot, RetainItem
+from .models import (
+    RecallSnapshot,
+    RetainItem,
+)
 from .protocol import Memory
 from .query_hash import recall_query_hash
 

@@ -37,9 +37,9 @@ In `src/sdlc/models.py`, extend `HarnessKind` (currently lines 22-24):
 
 ```python
 class HarnessKind(str, Enum):
-    CLAUDE_CODE = "claude_code"   # claude -p
-    OPENCODE = "opencode"         # opencode run
-    CURSOR = "cursor"             # cursor-agent -p (E-35)
+    CLAUDE_CODE = "claude_code"  # claude -p
+    OPENCODE = "opencode"  # opencode run
+    CURSOR = "cursor"  # cursor-agent -p (E-35)
 ```
 
 - [ ] **Step 2: Write the failing adapter tests**
@@ -55,9 +55,13 @@ from sdlc.models import HarnessKind
 
 
 def test_cursor_parse_extracts_tokens_and_cost():
-    payload = {"type": "result", "session_id": "cur1",
-               "total_cost_usd": 0.07, "result": "done",
-               "usage": {"input_tokens": 900, "output_tokens": 42}}
+    payload = {
+        "type": "result",
+        "session_id": "cur1",
+        "total_cost_usd": 0.07,
+        "result": "done",
+        "usage": {"input_tokens": 900, "output_tokens": 42},
+    }
     res = CursorHarness().parse(json.dumps(payload), 0)
     assert res.session_id == "cur1"
     assert res.cost_usd == 0.07
@@ -72,20 +76,36 @@ def test_cursor_parse_raw_fallback_on_non_json():
 
 
 def test_cursor_normalise_session_yields_canonical_events():
-    stream = "\n".join([
-        json.dumps({"type": "system", "session_id": "cur1",
-                    "model": "sonnet-4.5"}),
-        json.dumps({"type": "assistant", "session_id": "cur1", "message": {
-            "content": [
-                {"type": "text", "text": "let me edit"},
-                {"type": "tool_use", "name": "edit_file",
-                 "input": {"path": "app.py"}},
-                {"type": "tool_use", "name": "run_terminal_cmd",
-                 "input": {"command": "pytest"}},
-            ]}}),
-        json.dumps({"type": "result", "session_id": "cur1", "result": "ok",
-                    "usage": {"input_tokens": 5, "output_tokens": 1}}),
-    ])
+    stream = "\n".join(
+        [
+            json.dumps({"type": "system", "session_id": "cur1", "model": "sonnet-4.5"}),
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "session_id": "cur1",
+                    "message": {
+                        "content": [
+                            {"type": "text", "text": "let me edit"},
+                            {"type": "tool_use", "name": "edit_file", "input": {"path": "app.py"}},
+                            {
+                                "type": "tool_use",
+                                "name": "run_terminal_cmd",
+                                "input": {"command": "pytest"},
+                            },
+                        ]
+                    },
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "result",
+                    "session_id": "cur1",
+                    "result": "ok",
+                    "usage": {"input_tokens": 5, "output_tokens": 1},
+                }
+            ),
+        ]
+    )
     sess = CursorHarness().normalise_session(stream)
     assert sess.model == "sonnet-4.5"
     kinds = [e.kind for e in sess.events]
@@ -98,9 +118,15 @@ def test_cursor_normalise_session_yields_canonical_events():
 
 
 def test_cursor_build_cmd_headless_flags():
-    cmd = CursorHarness().build_cmd(HarnessRequest(
-        prompt="do stuff", cwd="/tmp/wt", model="sonnet-4.5",
-        session_id="cur1", extra_args=["--x"]))
+    cmd = CursorHarness().build_cmd(
+        HarnessRequest(
+            prompt="do stuff",
+            cwd="/tmp/wt",
+            model="sonnet-4.5",
+            session_id="cur1",
+            extra_args=["--x"],
+        )
+    )
     assert cmd[0] == "cursor-agent"
     assert "-p" in cmd and "do stuff" in cmd
     assert "--output-format" in cmd and "stream-json" in cmd
@@ -140,8 +166,7 @@ class CursorHarness(CodingHarness):
 
     def build_cmd(self, req: HarnessRequest) -> list[str]:
         # cursor-agent mirrors Claude Code's Agent-SDK stream-json output.
-        cmd = ["cursor-agent", "-p", req.prompt,
-               "--output-format", "stream-json"]
+        cmd = ["cursor-agent", "-p", req.prompt, "--output-format", "stream-json"]
         if req.model:
             cmd += ["--model", req.model]
         if req.session_id:
@@ -166,21 +191,26 @@ class CursorHarness(CodingHarness):
                 payload = ev
         if payload is not None:
             session_id = payload.get("session_id")
-            cost = payload.get("total_cost_usd")   # ASSUMPTION: may be absent
-                                                    # -> cursor cells are
-                                                    # quality-only (spec §5)
+            cost = payload.get("total_cost_usd")  # ASSUMPTION: may be absent
+            # -> cursor cells are
+            # quality-only (spec §5)
             summary = payload.get("result") or payload.get("content")
             usage = payload.get("usage") or {}
             input_tokens = usage.get("input_tokens")
             output_tokens = usage.get("output_tokens")
         else:
-            _log.warning("cursor parse: no result event in stream, falling "
-                         "back to raw stdout as summary")
+            _log.warning(
+                "cursor parse: no result event in stream, falling back to raw stdout as summary"
+            )
             summary = stdout
         return HarnessRunResult(
-            harness=self.kind, session_id=session_id, exit_code=exit_code,
-            summary=(summary or "")[:SUMMARY_MAX], cost_usd=cost,
-            input_tokens=input_tokens, output_tokens=output_tokens,
+            harness=self.kind,
+            session_id=session_id,
+            exit_code=exit_code,
+            summary=(summary or "")[:SUMMARY_MAX],
+            cost_usd=cost,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
         )
 
     # Cursor tool name -> canonical event kind + which input field is the
@@ -217,35 +247,41 @@ class CursorHarness(CodingHarness):
                         continue
                     btype = block.get("type")
                     if btype == "text" and block.get("text"):
-                        events.append(SessionEvent(kind="model_turn",
-                                                   text=block["text"]))
+                        events.append(SessionEvent(kind="model_turn", text=block["text"]))
                     elif btype == "tool_use":
                         name = block.get("name") or "tool"
                         kind, field = self._TOOL_MAP.get(name, ("tool_call", ""))
                         inp = block.get("input") or {}
                         target = inp.get(field) if field else json.dumps(inp)[:500]
-                        events.append(SessionEvent(kind=kind, tool=name,
-                                                   target=target))
+                        events.append(SessionEvent(kind=kind, tool=name, target=target))
                     elif btype == "tool_result":
                         content = block.get("content")
                         if isinstance(content, list):
                             content = " ".join(
-                                c.get("text", "") for c in content
-                                if isinstance(c, dict))
-                        events.append(SessionEvent(
-                            kind="tool_result",
-                            exit_code=1 if block.get("is_error") else None,
-                            text=(content or "")[:2000] or None))
+                                c.get("text", "") for c in content if isinstance(c, dict)
+                            )
+                        events.append(
+                            SessionEvent(
+                                kind="tool_result",
+                                exit_code=1 if block.get("is_error") else None,
+                                text=(content or "")[:2000] or None,
+                            )
+                        )
             elif etype == "result":
                 usage = ev.get("usage") or {}
                 cost = ev.get("total_cost_usd")
                 in_tok = usage.get("input_tokens")
                 out_tok = usage.get("output_tokens")
-                events.append(SessionEvent(kind="result",
-                                           text=(ev.get("result") or "")[:2000]))
-        return HarnessSession(harness=self.kind, session_id=session_id,
-                              model=model, events=events, cost_usd=cost,
-                              input_tokens=in_tok, output_tokens=out_tok)
+                events.append(SessionEvent(kind="result", text=(ev.get("result") or "")[:2000]))
+        return HarnessSession(
+            harness=self.kind,
+            session_id=session_id,
+            model=model,
+            events=events,
+            cost_usd=cost,
+            input_tokens=in_tok,
+            output_tokens=out_tok,
+        )
 ```
 
 Then extend the `HARNESSES` registry (currently lines 489-492):
@@ -295,18 +331,21 @@ from sdlc.harness.adapters import check_harness_versions
 
 def test_version_check_warns_on_drift(monkeypatch, caplog):
     from sdlc.harness import adapters
+
     monkeypatch.setattr(adapters.shutil, "which", lambda c: "/usr/bin/" + c)
 
     class _Res:
         stdout = "9.9.9 (drifted)"
+
     monkeypatch.setattr(adapters.subprocess, "run", lambda *a, **k: _Res())
     caplog.set_level(logging.WARNING, logger="sdlc.harness.adapters")
-    check_harness_versions()   # claude pinned 2.1.218 vs 9.9.9 -> drift
+    check_harness_versions()  # claude pinned 2.1.218 vs 9.9.9 -> drift
     assert any("version drift" in r.message for r in caplog.records)
 
 
 def test_version_check_skips_when_cli_absent(monkeypatch, caplog):
     from sdlc.harness import adapters
+
     monkeypatch.setattr(adapters.shutil, "which", lambda c: None)
     caplog.set_level(logging.WARNING, logger="sdlc.harness.adapters")
     check_harness_versions()
@@ -315,17 +354,19 @@ def test_version_check_skips_when_cli_absent(monkeypatch, caplog):
 
 def test_version_check_silent_on_match(monkeypatch, caplog):
     from sdlc.harness import adapters
+
     monkeypatch.setattr(adapters.shutil, "which", lambda c: "/usr/bin/" + c)
-    versions = {"claude": "2.1.218 (Claude Code)", "opencode": "1.18.4",
-                "cursor-agent": "0.0.0"}
+    versions = {"claude": "2.1.218 (Claude Code)", "opencode": "1.18.4", "cursor-agent": "0.0.0"}
 
     def _run(cmd, *a, **k):
         class _R:
             stdout = versions.get(cmd[0], "0.0.0")
+
         return _R()
+
     monkeypatch.setattr(adapters.subprocess, "run", _run)
     caplog.set_level(logging.WARNING, logger="sdlc.harness.adapters")
-    check_harness_versions()   # claude+opencode match pins; cursor unpinned
+    check_harness_versions()  # claude+opencode match pins; cursor unpinned
     assert not any("version drift" in r.message for r in caplog.records)
 ```
 
@@ -348,8 +389,8 @@ Extend the `CodingHarness` ABC (currently starts line 121) with class-level vers
 ```python
 class CodingHarness(ABC):
     kind: HarnessKind
-    cli: str = ""                          # executable name on PATH
-    expected_version: str | None = None    # E-24 pin; None = declared-unpinned
+    cli: str = ""  # executable name on PATH
+    expected_version: str | None = None  # E-24 pin; None = declared-unpinned
 
     def version_cmd(self) -> list[str]:
         return [self.cli, "--version"]
@@ -379,8 +420,7 @@ Add the helper immediately **after** the `HARNESSES` dict (end of file):
 _VERSION_RE = re.compile(r"(\d+\.\d+(?:\.\d+)?)")
 
 
-def check_harness_versions(
-        harnesses: dict[HarnessKind, CodingHarness] | None = None) -> None:
+def check_harness_versions(harnesses: dict[HarnessKind, CodingHarness] | None = None) -> None:
     """E-24 (folded into E-35): warn when an installed harness CLI has drifted
     from its pinned version — the failure mode where a silent CLI upgrade
     breaks an adapter's parse. Never raises (a patch bump must not brick the
@@ -392,18 +432,21 @@ def check_harness_versions(
             _log.debug("harness version check: %s not on PATH, skipping", h.cli)
             continue
         try:
-            out = subprocess.run(h.version_cmd(), capture_output=True,
-                                 text=True, timeout=10)
+            out = subprocess.run(h.version_cmd(), capture_output=True, text=True, timeout=10)
         except (OSError, subprocess.SubprocessError) as e:
-            _log.debug("harness version check: %s --version failed: %s",
-                       h.cli, e)
+            _log.debug("harness version check: %s --version failed: %s", h.cli, e)
             continue
         m = _VERSION_RE.search(out.stdout or "")
         found = m.group(1) if m else None
         if found != h.expected_version:
-            _log.warning("harness version drift: %s is %s, pinned %s "
-                         "(adapter parse may break; capture a fresh transcript "
-                         "and update the pin)", h.cli, found, h.expected_version)
+            _log.warning(
+                "harness version drift: %s is %s, pinned %s "
+                "(adapter parse may break; capture a fresh transcript "
+                "and update the pin)",
+                h.cli,
+                found,
+                h.expected_version,
+            )
         else:
             _log.debug("harness version ok: %s %s", h.cli, found)
 ```

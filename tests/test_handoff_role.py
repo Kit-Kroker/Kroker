@@ -2,7 +2,7 @@
 
 from sdlc.agents import roles
 from sdlc.agents.loader import KNOWN_ROLES, OPTIONAL_ROLES, load_registry
-from sdlc.models import HandoffSummary
+from sdlc.stages.code.models import HandoffSummary
 
 
 def test_handoff_is_a_known_optional_role():

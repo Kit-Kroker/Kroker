@@ -25,10 +25,7 @@ import posixpath
 import re
 from collections.abc import Mapping, Sequence
 
-from ....measurement import Measurement
-from ....triage.models import evidence_key
-from ..configpaths import is_config_path
-from ..models import (
+from sdlc.assessment.scan.models import (
     C_DB_SECURITY,
     C_ENV_DIVERGENCE,
     C_EXPOSED_PORTS,
@@ -44,6 +41,10 @@ from ..models import (
     family_of,
     inherited_pending,
 )
+
+from ....measurement import Measurement
+from ....triage.models import evidence_key
+from ..configpaths import is_config_path
 from ..testpaths import is_test_path
 
 SIGNAL_ID = "SS3"

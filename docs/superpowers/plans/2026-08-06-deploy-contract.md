@@ -43,21 +43,29 @@ Create `tests/test_deploy_contracts.py`:
 """E-67/FR-1104: the deploy contract. A smoke result that was never
 observed must not be representable as a pass, and a failed deploy must
 account for what happened to the rollback."""
+
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
 from sdlc.models import (
-    DeployPlan, DeployReport, FeatureFlag, RollbackPolicy, SmokeCheck,
-    SmokeCheckResult, SmokeState,
+    DeployPlan,
+    DeployReport,
+    FeatureFlag,
+    RollbackPolicy,
+    SmokeCheck,
+    SmokeCheckResult,
+    SmokeState,
 )
 
 
 def _plan(**over) -> DeployPlan:
-    base = dict(environment="staging", version="v1",
-                smoke_checks=[SmokeCheck(name="health", kind="http",
-                                         path="/health")])
+    base = dict(
+        environment="staging",
+        version="v1",
+        smoke_checks=[SmokeCheck(name="health", kind="http", path="/health")],
+    )
     base.update(over)
     return DeployPlan(**base)
 
@@ -99,14 +107,12 @@ def test_non_passing_result_must_explain_itself(state):
 
 def test_errored_is_not_passed():
     """D-3: 'we could not reach it' is not 'it works'."""
-    r = SmokeCheckResult(name="health", state=SmokeState.ERRORED,
-                         detail="connection refused")
+    r = SmokeCheckResult(name="health", state=SmokeState.ERRORED, detail="connection refused")
     assert r.passed is False
 
 
 def _report(**over) -> DeployReport:
-    base = dict(deployed=True, environment="staging", version="v1",
-                adapter="compose")
+    base = dict(deployed=True, environment="staging", version="v1", adapter="compose")
     base.update(over)
     return DeployReport(**base)
 
@@ -123,8 +129,7 @@ def test_failed_deploy_without_rollback_must_say_why():
 
 def test_failed_deploy_with_no_previous_version_is_representable():
     """First-ever deploy: nothing to restore, and the report says so."""
-    r = _report(deployed=False, rolled_back=False,
-                rollback_reason="no previous version to restore")
+    r = _report(deployed=False, rolled_back=False, rollback_reason="no previous version to restore")
     assert r.rolled_back is False
 
 
@@ -144,7 +149,11 @@ In `src/sdlc/models.py`, extend the pydantic import at the top:
 
 ```python
 from pydantic import (
-    BaseModel, Field, PrivateAttr, field_validator, model_validator,
+    BaseModel,
+    Field,
+    PrivateAttr,
+    field_validator,
+    model_validator,
 )
 ```
 
@@ -155,6 +164,7 @@ class FeatureFlag(BaseModel):
     """NG7: recorded and exported to the adapter, never managed. The factory
     does not build feature flagging -- it names the flag the customer's own
     system owns."""
+
     name: str
     cohort: str = "all"
 
@@ -164,11 +174,12 @@ class SmokeCheck(BaseModel):
     exists (D-2), so it tests the requirement rather than the implementation.
     It may not reference an implementation detail the planner could not know
     at plan time -- ports and base URLs come from adapter config."""
+
     name: str
     kind: Literal["http", "command"]
-    path: str = ""                  # http: resolved against adapter.endpoint()
-    expect_status: int = 200        # http
-    command: str = ""               # command: expects exit 0
+    path: str = ""  # http: resolved against adapter.endpoint()
+    expect_status: int = 200  # http
+    command: str = ""  # command: expects exit 0
     timeout_s: int = Field(default=10, ge=1)
 
     @model_validator(mode="after")
@@ -182,8 +193,8 @@ class SmokeCheck(BaseModel):
 
 class SmokeState(str, Enum):
     PASSED = "passed"
-    FAILED = "failed"      # the assertion was evaluated and did not hold
-    ERRORED = "errored"    # we could not evaluate it at all
+    FAILED = "failed"  # the assertion was evaluated and did not hold
+    ERRORED = "errored"  # we could not evaluate it at all
 
 
 class SmokeCheckResult(BaseModel):
@@ -191,6 +202,7 @@ class SmokeCheckResult(BaseModel):
     is not a pass and is not a failed assertion -- collapsing the two is
     E-40's malformed-SARIF-reads-as-clean hole in a new location. Both
     non-passing states carry a reason, exactly as Measurement does."""
+
     name: str
     state: SmokeState
     detail: str = ""
@@ -218,6 +230,7 @@ class DeployPlan(BaseModel):
     Carries intent, never mechanics, and deliberately has NO adapter field:
     FR-1105 resolves the adapter from PipelineConfig.deploy.
     """
+
     environment: str
     version: str
     flag: FeatureFlag | None = None
@@ -229,6 +242,7 @@ class DeployPlan(BaseModel):
 class DeployReport(BaseModel):
     """FR-1104 outcome artifact. `deployed` is earned by passing smoke checks,
     never by a zero exit code."""
+
     deployed: bool
     environment: str
     version: str
@@ -244,10 +258,8 @@ class DeployReport(BaseModel):
     def _failure_accounts_for_the_rollback(self) -> "DeployReport":
         if self.rolled_back and not self.rolled_back_to:
             raise ValueError("rolled_back requires rolled_back_to")
-        if (not self.deployed and not self.rolled_back
-                and not self.rollback_reason.strip()):
-            raise ValueError(
-                "a failed deploy must say why it was not rolled back")
+        if not self.deployed and not self.rolled_back and not self.rollback_reason.strip():
+            raise ValueError("a failed deploy must say why it was not rolled back")
         return self
 ```
 
@@ -287,6 +299,7 @@ Create `tests/test_deploy_config.py`:
 ```python
 """D-9: the deploy stage is opt-in. Nothing that exists today may start
 shelling out to Docker when E-67 lands."""
+
 from __future__ import annotations
 
 import pytest
@@ -321,8 +334,9 @@ def test_readiness_timeout_must_be_positive():
 
 def test_config_round_trips_through_dicts():
     """PipelineConfig is constructed from dicts in benchmark cell config."""
-    cfg = PipelineConfig(deploy={"enabled": True, "adapter": "script",
-                                 "commands": {"deploy": "make ship"}})
+    cfg = PipelineConfig(
+        deploy={"enabled": True, "adapter": "script", "commands": {"deploy": "make ship"}}
+    )
     assert cfg.deploy.enabled is True
     assert cfg.deploy.commands["deploy"] == "make ship"
 ```
@@ -340,6 +354,7 @@ In `src/sdlc/models.py`, above `class PipelineConfig`:
 class DeployConfig(BaseModel):
     """FR-1105: the hosting target is an adapter resolved from configuration,
     not a choice an agent makes. Off by default (D-9)."""
+
     enabled: bool = False
     adapter: Literal["compose", "script"] = "compose"
     # compose: base URL http smoke checks resolve against. The port is a
@@ -389,12 +404,17 @@ Create `tests/test_deploy_adapters.py`:
 ```python
 """FR-1105/ADR-19. The adapter object is PURE -- command strings and identity
 only, never a subprocess. Same rule and same shape as toolchain/adapters.py."""
+
 from __future__ import annotations
 
 import pytest
 
 from sdlc.deploy.adapters import (
-    ADAPTERS, ComposeAdapter, DeployKind, ScriptAdapter, resolve,
+    ADAPTERS,
+    ComposeAdapter,
+    DeployKind,
+    ScriptAdapter,
+    resolve,
 )
 from sdlc.models import DeployConfig, DeployPlan, FeatureFlag
 
@@ -429,8 +449,7 @@ def test_env_omits_flag_keys_when_there_is_no_flag():
 
 def test_env_exports_the_flag_when_present():
     """NG7: exported for the customer's own flag system to read."""
-    env = resolve(DeployConfig()).env(
-        _plan(flag=FeatureFlag(name="sso", cohort="beta")))
+    env = resolve(DeployConfig()).env(_plan(flag=FeatureFlag(name="sso", cohort="beta")))
     assert env["DEPLOY_FLAG"] == "sso"
     assert env["DEPLOY_COHORT"] == "beta"
 
@@ -465,8 +484,7 @@ def test_compose_endpoint_prefers_configured_base_url():
 
 
 def test_compose_endpoint_falls_back_to_a_local_default():
-    assert ComposeAdapter(DeployConfig()).endpoint(_plan()).startswith(
-        "http://localhost")
+    assert ComposeAdapter(DeployConfig()).endpoint(_plan()).startswith("http://localhost")
 
 
 def test_script_uses_make_targets_by_default():
@@ -477,8 +495,7 @@ def test_script_uses_make_targets_by_default():
 
 
 def test_script_targets_are_overridable():
-    a = ScriptAdapter(DeployConfig(adapter="script",
-                                   commands={"deploy": "./ship.sh"}))
+    a = ScriptAdapter(DeployConfig(adapter="script", commands={"deploy": "./ship.sh"}))
     assert a.apply_cmd(_plan()) == "./ship.sh"
     assert a.rollback_cmd(_plan(), "v1") == "make rollback"
 
@@ -486,8 +503,8 @@ def test_script_targets_are_overridable():
 def test_adapters_never_shell_out():
     """The purity rule, asserted as a reviewable import check."""
     import pathlib
-    src = pathlib.Path("src/sdlc/deploy/adapters.py").read_text(
-        encoding="utf-8")
+
+    src = pathlib.Path("src/sdlc/deploy/adapters.py").read_text(encoding="utf-8")
     for forbidden in ("subprocess", "asyncio", "os.system", "requests"):
         assert forbidden not in src, forbidden
 ```
@@ -522,6 +539,7 @@ Two adapters ship. FR-1105 requires one reference (compose); script is the
 second because a seam with a single implementation quietly becomes a
 substrate -- and it preserves any target repo that already has `make deploy`.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -575,6 +593,7 @@ class DeployAdapter(ABC):
 class ComposeAdapter(DeployAdapter):
     """FR-1105 reference adapter. Assumes the target repo's compose file
     reads ${IMAGE_TAG} for the image it builds/runs."""
+
     kind = DeployKind.COMPOSE
     DEFAULT_BASE_URL = "http://localhost:8000"
 
@@ -604,10 +623,9 @@ class ComposeAdapter(DeployAdapter):
 class ScriptAdapter(DeployAdapter):
     """The generalization of the pre-E-67 `make deploy ENV=staging` shell-out.
     Delegates semantics to a convention the target repo already owns."""
+
     kind = DeployKind.SCRIPT
-    DEFAULTS = {"deploy": "make deploy",
-                "rollback": "make rollback",
-                "version": "make version"}
+    DEFAULTS = {"deploy": "make deploy", "rollback": "make rollback", "version": "make version"}
 
     def _cmd(self, key: str) -> str:
         return self.cfg.commands.get(key, self.DEFAULTS[key])
@@ -683,12 +701,16 @@ Create `tests/test_deploy_activities.py`:
 ```python
 """E-67 activities. These execute the pure adapters' command strings; the
 adapters themselves stay subprocess-free."""
+
 from __future__ import annotations
 
 import pytest
 
 from sdlc.deploy.activities import (
-    ApplyResult, CurrentVersionResult, DeployActivityInput, deploy_apply,
+    ApplyResult,
+    CurrentVersionResult,
+    DeployActivityInput,
+    deploy_apply,
     deploy_current_version,
 )
 from sdlc.models import DeployConfig, DeployPlan
@@ -697,15 +719,14 @@ from sdlc.models import DeployConfig, DeployPlan
 def _inp(tmp_path, **cfg_over) -> DeployActivityInput:
     cfg = DeployConfig(adapter="script", **cfg_over)
     return DeployActivityInput(
-        plan=DeployPlan(environment="staging", version="v2"),
-        cfg=cfg, repo_path=str(tmp_path))
+        plan=DeployPlan(environment="staging", version="v2"), cfg=cfg, repo_path=str(tmp_path)
+    )
 
 
 @pytest.mark.asyncio
 async def test_current_version_returns_trimmed_stdout(tmp_path):
     inp = _inp(tmp_path, commands={"version": "echo   v1  "})
-    assert (await deploy_current_version(inp)) == CurrentVersionResult(
-        version="v1")
+    assert (await deploy_current_version(inp)) == CurrentVersionResult(version="v1")
 
 
 @pytest.mark.asyncio
@@ -725,8 +746,7 @@ async def test_failing_version_probe_is_not_fatal(tmp_path):
 
 @pytest.mark.asyncio
 async def test_apply_returns_the_endpoint_on_success(tmp_path):
-    inp = _inp(tmp_path, commands={"deploy": "echo shipped"},
-               base_url="http://localhost:1234")
+    inp = _inp(tmp_path, commands={"deploy": "echo shipped"}, base_url="http://localhost:1234")
     result = await deploy_apply(inp)
     assert isinstance(result, ApplyResult)
     assert result.endpoint == "http://localhost:1234"
@@ -751,8 +771,7 @@ async def test_apply_refuses_an_unfrozen_plan(tmp_path):
 @pytest.mark.asyncio
 async def test_apply_exports_the_plan_environment(tmp_path):
     out = tmp_path / "env.txt"
-    inp = _inp(tmp_path, commands={
-        "deploy": f'printf "%s" "$DEPLOY_VERSION" > "{out.as_posix()}"'})
+    inp = _inp(tmp_path, commands={"deploy": f'printf "%s" "$DEPLOY_VERSION" > "{out.as_posix()}"'})
     await deploy_apply(inp)
     assert out.read_text().strip() == "v2"
 ```
@@ -774,6 +793,7 @@ Split note: reading the current version is its OWN activity rather than a
 step inside deploy_apply. If apply raises, the workflow must still hold the
 prior version -- that is exactly the path where a rollback is needed.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -807,14 +827,16 @@ class ApplyResult(BaseModel):
     detail: str = ""
 
 
-async def _run(cmd: str, cwd: str, env: dict[str, str],
-               timeout_s: int) -> tuple[int, str]:
+async def _run(cmd: str, cwd: str, env: dict[str, str], timeout_s: int) -> tuple[int, str]:
     """Run `cmd` in `cwd` with `env` layered over the worker's own. Returns
     (returncode, combined output). Never raises on a nonzero exit -- callers
     decide what a failure means."""
     proc = await asyncio.create_subprocess_shell(
-        cmd, cwd=cwd, env={**os.environ, **env},
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+        cmd,
+        cwd=cwd,
+        env={**os.environ, **env},
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
     )
     try:
         out_b, _ = await asyncio.wait_for(proc.communicate(), timeout_s)
@@ -826,17 +848,19 @@ async def _run(cmd: str, cwd: str, env: dict[str, str],
 
 
 @activity.defn
-async def deploy_current_version(
-        inp: DeployActivityInput) -> CurrentVersionResult:
+async def deploy_current_version(inp: DeployActivityInput) -> CurrentVersionResult:
     """Best-effort read of what is running now, BEFORE anything changes.
 
     A failed or empty probe is not an error: it means we have no rollback
     target, which the DeployReport states plainly rather than pretending a
     rollback is available."""
     adapter = resolve(inp.cfg)
-    code, out = await _run(adapter.current_version_cmd(inp.plan),
-                           inp.repo_path, adapter.env(inp.plan),
-                           VERSION_TIMEOUT_S)
+    code, out = await _run(
+        adapter.current_version_cmd(inp.plan),
+        inp.repo_path,
+        adapter.env(inp.plan),
+        VERSION_TIMEOUT_S,
+    )
     if code != 0:
         activity.logger.info("version probe failed (%s): %s", code, out[-200:])
         return CurrentVersionResult(version=None)
@@ -850,11 +874,12 @@ async def deploy_apply(inp: DeployActivityInput) -> ApplyResult:
     if not inp.plan.frozen:
         # Non-retryable by construction: retrying cannot make it frozen.
         raise ValueError(
-            "refusing to apply a DeployPlan that is not frozen "
-            "(it must be frozen at the plan gate)")
+            "refusing to apply a DeployPlan that is not frozen (it must be frozen at the plan gate)"
+        )
     adapter = resolve(inp.cfg)
-    code, out = await _run(adapter.apply_cmd(inp.plan), inp.repo_path,
-                           adapter.env(inp.plan), APPLY_TIMEOUT_S)
+    code, out = await _run(
+        adapter.apply_cmd(inp.plan), inp.repo_path, adapter.env(inp.plan), APPLY_TIMEOUT_S
+    )
     if code != 0:
         raise RuntimeError(f"deploy failed ({code}): {out[-2000:]}")
     return ApplyResult(endpoint=adapter.endpoint(inp.plan), detail=out[-2000:])
@@ -914,24 +939,33 @@ Create `tests/test_smoke_check.py`:
 
 ```python
 """D-3 made executable: an unreachable service is `errored`, never a pass."""
+
 from __future__ import annotations
 
 import pytest
 
 from sdlc.deploy.activities import (
-    RollbackInput, SmokeCheckInput, deploy_rollback, smoke_check,
+    RollbackInput,
+    SmokeCheckInput,
+    deploy_rollback,
+    smoke_check,
 )
 from sdlc.models import (
-    DeployConfig, DeployPlan, SmokeCheck, SmokeState,
+    DeployConfig,
+    DeployPlan,
+    SmokeCheck,
+    SmokeState,
 )
 
 
 def _inp(tmp_path, checks, endpoint="http://127.0.0.1:1", **cfg_over):
     cfg = DeployConfig(adapter="script", readiness_timeout_s=1, **cfg_over)
     return SmokeCheckInput(
-        plan=DeployPlan(environment="staging", version="v2",
-                        smoke_checks=checks),
-        cfg=cfg, repo_path=str(tmp_path), endpoint=endpoint)
+        plan=DeployPlan(environment="staging", version="v2", smoke_checks=checks),
+        cfg=cfg,
+        repo_path=str(tmp_path),
+        endpoint=endpoint,
+    )
 
 
 @pytest.mark.asyncio
@@ -942,16 +976,18 @@ async def test_no_checks_yields_no_results(tmp_path):
 
 @pytest.mark.asyncio
 async def test_passing_command_check(tmp_path):
-    out = await smoke_check(_inp(tmp_path, [
-        SmokeCheck(name="ok", kind="command", command="exit 0")]))
+    out = await smoke_check(
+        _inp(tmp_path, [SmokeCheck(name="ok", kind="command", command="exit 0")])
+    )
     assert out.results[0].state is SmokeState.PASSED
 
 
 @pytest.mark.asyncio
 async def test_failing_command_check_is_failed_not_errored(tmp_path):
     """The assertion was evaluated and did not hold."""
-    out = await smoke_check(_inp(tmp_path, [
-        SmokeCheck(name="nope", kind="command", command="exit 1")]))
+    out = await smoke_check(
+        _inp(tmp_path, [SmokeCheck(name="nope", kind="command", command="exit 1")])
+    )
     assert out.results[0].state is SmokeState.FAILED
     assert out.results[0].detail
 
@@ -960,8 +996,9 @@ async def test_failing_command_check_is_failed_not_errored(tmp_path):
 async def test_unreachable_http_check_is_errored_not_failed(tmp_path):
     """The load-bearing case. Port 1 refuses instantly -- we could not
     evaluate the assertion at all, and that must not read as a pass."""
-    out = await smoke_check(_inp(tmp_path, [
-        SmokeCheck(name="health", kind="http", path="/health")]))
+    out = await smoke_check(
+        _inp(tmp_path, [SmokeCheck(name="health", kind="http", path="/health")])
+    )
     r = out.results[0]
     assert r.state is SmokeState.ERRORED
     assert r.passed is False
@@ -972,21 +1009,32 @@ async def test_unreachable_http_check_is_errored_not_failed(tmp_path):
 async def test_every_check_gets_a_result(tmp_path):
     """A failure early must not swallow the checks after it -- the human
     reading the report needs the whole picture."""
-    out = await smoke_check(_inp(tmp_path, [
-        SmokeCheck(name="a", kind="command", command="exit 1"),
-        SmokeCheck(name="b", kind="command", command="exit 0"),
-        SmokeCheck(name="c", kind="http", path="/x"),
-    ]))
+    out = await smoke_check(
+        _inp(
+            tmp_path,
+            [
+                SmokeCheck(name="a", kind="command", command="exit 1"),
+                SmokeCheck(name="b", kind="command", command="exit 0"),
+                SmokeCheck(name="c", kind="http", path="/x"),
+            ],
+        )
+    )
     assert [r.name for r in out.results] == ["a", "b", "c"]
     assert [r.state for r in out.results] == [
-        SmokeState.FAILED, SmokeState.PASSED, SmokeState.ERRORED]
+        SmokeState.FAILED,
+        SmokeState.PASSED,
+        SmokeState.ERRORED,
+    ]
 
 
 @pytest.mark.asyncio
 async def test_command_checks_see_the_deploy_environment(tmp_path):
-    out = await smoke_check(_inp(tmp_path, [
-        SmokeCheck(name="env", kind="command",
-                   command='test "$DEPLOY_VERSION" = "v2"')]))
+    out = await smoke_check(
+        _inp(
+            tmp_path,
+            [SmokeCheck(name="env", kind="command", command='test "$DEPLOY_VERSION" = "v2"')],
+        )
+    )
     assert out.results[0].state is SmokeState.PASSED
 
 
@@ -996,7 +1044,9 @@ async def test_rollback_raises_so_temporal_retries_it(tmp_path):
     inp = RollbackInput(
         plan=DeployPlan(environment="staging", version="v2"),
         cfg=DeployConfig(adapter="script", commands={"rollback": "exit 1"}),
-        repo_path=str(tmp_path), to_version="v1")
+        repo_path=str(tmp_path),
+        to_version="v1",
+    )
     with pytest.raises(RuntimeError, match="rollback failed"):
         await deploy_rollback(inp)
 
@@ -1006,9 +1056,13 @@ async def test_rollback_runs_with_the_prior_version_in_scope(tmp_path):
     out = tmp_path / "v.txt"
     inp = RollbackInput(
         plan=DeployPlan(environment="staging", version="v2"),
-        cfg=DeployConfig(adapter="script", commands={
-            "rollback": f'printf "%s" "$DEPLOY_VERSION" > "{out.as_posix()}"'}),
-        repo_path=str(tmp_path), to_version="v1")
+        cfg=DeployConfig(
+            adapter="script",
+            commands={"rollback": f'printf "%s" "$DEPLOY_VERSION" > "{out.as_posix()}"'},
+        ),
+        repo_path=str(tmp_path),
+        to_version="v1",
+    )
     await deploy_rollback(inp)
     assert out.read_text().strip() == "v1"
 ```
@@ -1050,14 +1104,14 @@ def _http_once(url: str, expect_status: int, timeout_s: int) -> SmokeCheckResult
         with urllib.request.urlopen(url, timeout=timeout_s) as resp:
             status = resp.status
     except urllib.error.HTTPError as e:
-        status = e.code           # a response IS an evaluation
+        status = e.code  # a response IS an evaluation
     except Exception:
-        return None               # no response: we learned nothing
+        return None  # no response: we learned nothing
     return SmokeCheckResult(
-        name="", state=(SmokeState.PASSED if status == expect_status
-                        else SmokeState.FAILED),
-        detail=("" if status == expect_status
-                else f"expected {expect_status}, got {status}"))
+        name="",
+        state=(SmokeState.PASSED if status == expect_status else SmokeState.FAILED),
+        detail=("" if status == expect_status else f"expected {expect_status}, got {status}"),
+    )
 
 
 async def _await_readiness(url: str, timeout_s: int) -> None:
@@ -1086,36 +1140,38 @@ async def smoke_check(inp: SmokeCheckInput) -> SmokeCheckOutput:
     if http_checks and inp.endpoint:
         await _await_readiness(
             inp.endpoint.rstrip("/") + "/" + http_checks[0].path.lstrip("/"),
-            inp.cfg.readiness_timeout_s)
+            inp.cfg.readiness_timeout_s,
+        )
 
     results: list[SmokeCheckResult] = []
     for check in inp.plan.smoke_checks:
         activity.heartbeat(check.name)
         if check.kind == "http":
             url = inp.endpoint.rstrip("/") + "/" + check.path.lstrip("/")
-            outcome = await asyncio.to_thread(
-                _http_once, url, check.expect_status, check.timeout_s)
+            outcome = await asyncio.to_thread(_http_once, url, check.expect_status, check.timeout_s)
             if outcome is None:
-                results.append(SmokeCheckResult(
-                    name=check.name, state=SmokeState.ERRORED,
-                    detail=f"no response from {url} within "
-                           f"{check.timeout_s}s"))
+                results.append(
+                    SmokeCheckResult(
+                        name=check.name,
+                        state=SmokeState.ERRORED,
+                        detail=f"no response from {url} within {check.timeout_s}s",
+                    )
+                )
             else:
                 results.append(outcome.model_copy(update={"name": check.name}))
             continue
 
-        code, out = await _run(check.command, inp.repo_path, env,
-                               check.timeout_s)
+        code, out = await _run(check.command, inp.repo_path, env, check.timeout_s)
         if code == 124:
-            results.append(SmokeCheckResult(
-                name=check.name, state=SmokeState.ERRORED, detail=out))
+            results.append(SmokeCheckResult(name=check.name, state=SmokeState.ERRORED, detail=out))
         elif code != 0:
-            results.append(SmokeCheckResult(
-                name=check.name, state=SmokeState.FAILED,
-                detail=f"exit {code}: {out[-500:]}"))
+            results.append(
+                SmokeCheckResult(
+                    name=check.name, state=SmokeState.FAILED, detail=f"exit {code}: {out[-500:]}"
+                )
+            )
         else:
-            results.append(SmokeCheckResult(
-                name=check.name, state=SmokeState.PASSED))
+            results.append(SmokeCheckResult(name=check.name, state=SmokeState.PASSED))
     return SmokeCheckOutput(results=results)
 
 
@@ -1126,8 +1182,11 @@ async def deploy_rollback(inp: RollbackInput) -> None:
     the worst outcome in the system."""
     adapter = resolve(inp.cfg)
     code, out = await _run(
-        adapter.rollback_cmd(inp.plan, inp.to_version), inp.repo_path,
-        adapter.env(inp.plan, version=inp.to_version), APPLY_TIMEOUT_S)
+        adapter.rollback_cmd(inp.plan, inp.to_version),
+        inp.repo_path,
+        adapter.env(inp.plan, version=inp.to_version),
+        APPLY_TIMEOUT_S,
+    )
     if code != 0:
         raise RuntimeError(f"rollback failed ({code}): {out[-2000:]}")
 ```
@@ -1170,6 +1229,7 @@ Create `tests/test_deployment_workflow.py`:
 ```python
 """The child workflow's decision logic. The pure helper is tested directly;
 the sequencing is tested through the parent in Task 7."""
+
 from __future__ import annotations
 
 import pathlib
@@ -1180,8 +1240,8 @@ from sdlc.workflows.deployment import DeploymentInput, needs_rollback
 
 def _r(state, name="c"):
     return SmokeCheckResult(
-        name=name, state=state,
-        detail="" if state is SmokeState.PASSED else "why")
+        name=name, state=state, detail="" if state is SmokeState.PASSED else "why"
+    )
 
 
 def test_all_passed_needs_no_rollback():
@@ -1247,6 +1307,7 @@ This is also the seam E-70 attaches to: an ObservationWorkflow starts here
 with ParentClosePolicy.ABANDON, so a multi-day observation window outlives
 the feature run instead of pinning it open.
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -1257,31 +1318,44 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from ..deploy.activities import (
-        DeployActivityInput, RollbackInput, SmokeCheckInput, deploy_apply,
-        deploy_current_version, deploy_rollback, smoke_check,
+        DeployActivityInput,
+        RollbackInput,
+        SmokeCheckInput,
+        deploy_apply,
+        deploy_current_version,
+        deploy_rollback,
+        smoke_check,
     )
     from ..models import (
-        DeployConfig, DeployPlan, DeployReport, SmokeCheckResult,
+        DeployConfig,
+        DeployPlan,
+        DeployReport,
+        SmokeCheckResult,
     )
 
 # Read-only and idempotent -- retrying is free.
-VERSION_ACT = dict(start_to_close_timeout=timedelta(minutes=2),
-                   retry_policy=RetryPolicy(maximum_attempts=3))
+VERSION_ACT = dict(
+    start_to_close_timeout=timedelta(minutes=2), retry_policy=RetryPolicy(maximum_attempts=3)
+)
 # Build failures are deterministic and will not improve; the second attempt
 # exists for registry/network blips.
-APPLY_ACT = dict(start_to_close_timeout=timedelta(hours=1),
-                 heartbeat_timeout=timedelta(minutes=10),
-                 retry_policy=RetryPolicy(maximum_attempts=2))
+APPLY_ACT = dict(
+    start_to_close_timeout=timedelta(hours=1),
+    heartbeat_timeout=timedelta(minutes=10),
+    retry_policy=RetryPolicy(maximum_attempts=2),
+)
 # ONE attempt on purpose: retrying a smoke check would mask the signal being
 # collected. Readiness polling is the activity's own job.
-SMOKE_ACT = dict(start_to_close_timeout=timedelta(minutes=15),
-                 heartbeat_timeout=timedelta(minutes=2),
-                 retry_policy=RetryPolicy(maximum_attempts=1))
+SMOKE_ACT = dict(
+    start_to_close_timeout=timedelta(minutes=15),
+    heartbeat_timeout=timedelta(minutes=2),
+    retry_policy=RetryPolicy(maximum_attempts=1),
+)
 # The safety operation, retried hardest.
-ROLLBACK_ACT = dict(start_to_close_timeout=timedelta(hours=1),
-                    retry_policy=RetryPolicy(
-                        maximum_attempts=5,
-                        initial_interval=timedelta(seconds=2)))
+ROLLBACK_ACT = dict(
+    start_to_close_timeout=timedelta(hours=1),
+    retry_policy=RetryPolicy(maximum_attempts=5, initial_interval=timedelta(seconds=2)),
+)
 
 
 class DeploymentInput(BaseModel):
@@ -1301,17 +1375,21 @@ def needs_rollback(results: list[SmokeCheckResult]) -> bool:
 class DeploymentWorkflow:
     @workflow.run
     async def run(self, inp: DeploymentInput) -> DeployReport:
-        act_in = DeployActivityInput(plan=inp.plan, cfg=inp.cfg,
-                                     repo_path=inp.repo_path)
+        act_in = DeployActivityInput(plan=inp.plan, cfg=inp.cfg, repo_path=inp.repo_path)
 
         # BEFORE anything changes, so a rollback target exists even if apply
         # blows up. None means first-ever deploy: nothing to restore.
-        previous = (await workflow.execute_activity(
-            deploy_current_version, act_in, **VERSION_ACT)).version
+        previous = (
+            await workflow.execute_activity(deploy_current_version, act_in, **VERSION_ACT)
+        ).version
 
         def _report(**over) -> DeployReport:
-            base = dict(deployed=False, environment=inp.plan.environment,
-                        version=inp.plan.version, adapter=inp.cfg.adapter)
+            base = dict(
+                deployed=False,
+                environment=inp.plan.environment,
+                version=inp.plan.version,
+                adapter=inp.cfg.adapter,
+            )
             base.update(over)
             return DeployReport(**base)
 
@@ -1319,50 +1397,58 @@ class DeploymentWorkflow:
             if previous is None:
                 # A first deploy that fails smoke leaves a broken service up.
                 # Saying so beats pretending a rollback happened.
-                return _report(rolled_back=False,
-                               rollback_reason="no previous version to "
-                                               f"restore; {reason}",
-                               checks=checks)
+                return _report(
+                    rolled_back=False,
+                    rollback_reason=f"no previous version to restore; {reason}",
+                    checks=checks,
+                )
             if not inp.plan.rollback.auto:
-                return _report(rolled_back=False,
-                               rollback_reason=f"auto-rollback disabled; "
-                                               f"{reason}", checks=checks)
+                return _report(
+                    rolled_back=False,
+                    rollback_reason=f"auto-rollback disabled; {reason}",
+                    checks=checks,
+                )
             try:
                 await workflow.execute_activity(
                     deploy_rollback,
-                    RollbackInput(plan=inp.plan, cfg=inp.cfg,
-                                  repo_path=inp.repo_path,
-                                  to_version=previous),
-                    **ROLLBACK_ACT)
+                    RollbackInput(
+                        plan=inp.plan, cfg=inp.cfg, repo_path=inp.repo_path, to_version=previous
+                    ),
+                    **ROLLBACK_ACT,
+                )
             except Exception as e:
                 # The worst outcome in the system: the environment is now in
                 # an unknown state. The parent turns this into deploy-broken:.
-                return _report(rolled_back=False,
-                               rollback_reason=f"rollback exhausted: {e}; "
-                                               f"{reason}", checks=checks)
-            return _report(rolled_back=True, rolled_back_to=previous,
-                           rollback_reason=reason, checks=checks)
+                return _report(
+                    rolled_back=False,
+                    rollback_reason=f"rollback exhausted: {e}; {reason}",
+                    checks=checks,
+                )
+            return _report(
+                rolled_back=True, rolled_back_to=previous, rollback_reason=reason, checks=checks
+            )
 
         checks: list[SmokeCheckResult] = []
 
         try:
-            applied = await workflow.execute_activity(
-                deploy_apply, act_in, **APPLY_ACT)
+            applied = await workflow.execute_activity(deploy_apply, act_in, **APPLY_ACT)
         except Exception as e:
             # A partially-applied stack is exactly why rollback runs on apply
             # failure too, not only on smoke failure.
             return await _rollback(f"apply failed: {e}")
 
-        checks = (await workflow.execute_activity(
-            smoke_check,
-            SmokeCheckInput(plan=inp.plan, cfg=inp.cfg,
-                            repo_path=inp.repo_path,
-                            endpoint=applied.endpoint),
-            **SMOKE_ACT)).results
+        checks = (
+            await workflow.execute_activity(
+                smoke_check,
+                SmokeCheckInput(
+                    plan=inp.plan, cfg=inp.cfg, repo_path=inp.repo_path, endpoint=applied.endpoint
+                ),
+                **SMOKE_ACT,
+            )
+        ).results
 
         if needs_rollback(checks):
-            failed = ", ".join(f"{r.name}={r.state.value}"
-                               for r in checks if not r.passed)
+            failed = ", ".join(f"{r.name}={r.state.value}" for r in checks if not r.passed)
             return await _rollback(f"smoke checks not passed: {failed}")
 
         return _report(deployed=True, endpoint=applied.endpoint, checks=checks)
@@ -1374,7 +1460,10 @@ In `src/sdlc/worker.py`, add to the imports (near `from .workflows.feature impor
 
 ```python
 from .deploy.activities import (
-    deploy_apply, deploy_current_version, deploy_rollback, smoke_check,
+    deploy_apply,
+    deploy_current_version,
+    deploy_rollback,
+    smoke_check,
 )
 from .workflows.deployment import DeploymentWorkflow
 ```
@@ -1382,14 +1471,18 @@ from .workflows.deployment import DeploymentWorkflow
 Change `workflows=` (`worker.py:82`):
 
 ```python
-        workflows=[FeatureWorkflow, BenchmarkWorkflow, ReflectWorkflow,
-                   DeploymentWorkflow],
+workflows = ([FeatureWorkflow, BenchmarkWorkflow, ReflectWorkflow, DeploymentWorkflow],)
 ```
 
 And add to the `activities=[...]` list (`worker.py:83`):
 
 ```python
-            deploy_current_version, deploy_apply, smoke_check, deploy_rollback,
+(
+    deploy_current_version,
+    deploy_apply,
+    smoke_check,
+    deploy_rollback,
+)
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -1431,6 +1524,7 @@ Create `tests/test_deploy_stage.py`:
 """Stage 13 wiring. The rollback SEQUENCING is proven here with mocked
 activities (D-8); the compose adapter's mechanics are proven by the
 docker-marked test in Task 9."""
+
 from __future__ import annotations
 
 import pathlib
@@ -1438,7 +1532,11 @@ import pathlib
 import pytest
 
 from sdlc.models import (
-    DeployReport, GateDecision, GateOutcome, SmokeCheckResult, SmokeState,
+    DeployReport,
+    GateDecision,
+    GateOutcome,
+    SmokeCheckResult,
+    SmokeState,
 )
 from sdlc.workflows.feature import _deploy_result
 
@@ -1446,53 +1544,55 @@ SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 
 
 def _report(**over) -> DeployReport:
-    base = dict(deployed=False, environment="staging", version="v1",
-                adapter="compose", rolled_back=True, rolled_back_to="v0",
-                rollback_reason="smoke checks not passed: health=failed")
+    base = dict(
+        deployed=False,
+        environment="staging",
+        version="v1",
+        adapter="compose",
+        rolled_back=True,
+        rolled_back_to="v0",
+        rollback_reason="smoke checks not passed: health=failed",
+    )
     base.update(over)
     return DeployReport(**base)
 
 
 def _decision(outcome) -> GateDecision:
-    return GateDecision(gate="deploy_failed", round=1, outcome=outcome,
-                        decided_by="human")
+    return GateDecision(gate="deploy_failed", round=1, outcome=outcome, decided_by="human")
 
 
 def test_success_returns_deployed():
-    r = DeployReport(deployed=True, environment="staging", version="v1",
-                     adapter="compose")
+    r = DeployReport(deployed=True, environment="staging", version="v1", adapter="compose")
     assert _deploy_result(r, None, "PR") == "deployed:PR"
 
 
 def test_acknowledged_rollback_returns_rolled_back():
-    assert _deploy_result(_report(), _decision(GateOutcome.APPROVE),
-                          "PR") == "rolled-back:PR"
+    assert _deploy_result(_report(), _decision(GateOutcome.APPROVE), "PR") == "rolled-back:PR"
 
 
 def test_rejection_is_terminal_and_distinct():
-    assert _deploy_result(_report(), _decision(GateOutcome.REJECT),
-                          "PR") == "deploy-rejected:PR"
+    assert _deploy_result(_report(), _decision(GateOutcome.REJECT), "PR") == "deploy-rejected:PR"
 
 
 def test_a_failed_rollback_is_never_reported_as_rolled_back():
     """The load-bearing assertion. Claiming a rollback that did not happen
     is the worst lie this system could tell: the environment is live and in
     an unknown state."""
-    broken = _report(rolled_back=False, rolled_back_to=None,
-                     rollback_reason="rollback exhausted: timeout")
-    assert _deploy_result(broken, _decision(GateOutcome.APPROVE),
-                          "PR") == "deploy-broken:PR"
-    assert _deploy_result(broken, _decision(GateOutcome.REJECT),
-                          "PR") == "deploy-broken:PR"
+    broken = _report(
+        rolled_back=False, rolled_back_to=None, rollback_reason="rollback exhausted: timeout"
+    )
+    assert _deploy_result(broken, _decision(GateOutcome.APPROVE), "PR") == "deploy-broken:PR"
+    assert _deploy_result(broken, _decision(GateOutcome.REJECT), "PR") == "deploy-broken:PR"
 
 
 def test_no_previous_version_is_also_broken_not_rolled_back():
     """First-ever deploy that failed smoke: nothing was restored."""
-    first = _report(rolled_back=False, rolled_back_to=None,
-                    rollback_reason="no previous version to restore; "
-                                    "smoke checks not passed: health=failed")
-    assert _deploy_result(first, _decision(GateOutcome.APPROVE),
-                          "PR") == "deploy-broken:PR"
+    first = _report(
+        rolled_back=False,
+        rolled_back_to=None,
+        rollback_reason="no previous version to restore; smoke checks not passed: health=failed",
+    )
+    assert _deploy_result(first, _decision(GateOutcome.APPROVE), "PR") == "deploy-broken:PR"
 
 
 def test_the_old_hardcoded_deploy_is_gone():
@@ -1529,8 +1629,7 @@ Expected: FAIL — `ImportError: cannot import name '_deploy_result'`
 In `src/sdlc/workflows/feature.py`, near the other module-level helpers (after `_long_act`, around line 200):
 
 ```python
-def _deploy_result(report: DeployReport, decision: GateDecision | None,
-                   pr_url: str) -> str:
+def _deploy_result(report: DeployReport, decision: GateDecision | None, pr_url: str) -> str:
     """Map a DeployReport plus the deploy_failed gate decision onto the run's
     terminal string. Pure, so the mapping is testable without Temporal.
 
@@ -1560,56 +1659,70 @@ Add `DeployReport` to the `..models` import block and `DeploymentInput, Deployme
 In `src/sdlc/workflows/feature.py`, replace lines 2309-2329 (from `# 6. DEPLOY gate → deploy` to `return f"deployed:{pr_url}"`) with:
 
 ```python
-        # 6. DEPLOY gate → DeploymentWorkflow child (E-67/FR-1104)
-        _started = workflow.now()
-        gate = await self._gate("deploy", cfg)
-        _ended = workflow.now()
-        await self._record(cfg, self._stage_record(
-            cfg, stage="deploy", role="devops",
-            started=_started, ended=_ended,
-            quality_score=None, judge="llm_judge",
-            outcome=(BenchmarkOutcome.PASS if gate.approved
-                     else BenchmarkOutcome.REVISED),
-            model=resolve_role_model(cfg, "devops")))
-        if not gate.approved or not cfg.deploy.enabled:
-            return f"merged-not-deployed:{pr_url}"
+# 6. DEPLOY gate → DeploymentWorkflow child (E-67/FR-1104)
+_started = workflow.now()
+gate = await self._gate("deploy", cfg)
+_ended = workflow.now()
+await self._record(
+    cfg,
+    self._stage_record(
+        cfg,
+        stage="deploy",
+        role="devops",
+        started=_started,
+        ended=_ended,
+        quality_score=None,
+        judge="llm_judge",
+        outcome=(BenchmarkOutcome.PASS if gate.approved else BenchmarkOutcome.REVISED),
+        model=resolve_role_model(cfg, "devops"),
+    ),
+)
+if not gate.approved or not cfg.deploy.enabled:
+    return f"merged-not-deployed:{pr_url}"
 
-        plan = self._deploy_plan(idea, arch)
-        attempt = 1
-        while True:
-            report = await workflow.execute_child_workflow(
-                DeploymentWorkflow.run,
-                DeploymentInput(plan=plan, cfg=cfg.deploy,
-                                repo_path=repo_path, attempt=attempt),
-                # Derived, never generated: replay must produce the same id,
-                # and a retry round stays identifiable in the Temporal UI.
-                id=f"{workflow.info().workflow_id}-deploy-{attempt}",
-                task_queue=workflow.info().task_queue,
-            )
-            if report.deployed:
-                self._status = "deployed"
-                return _deploy_result(report, None, pr_url)
+plan = self._deploy_plan(idea, arch)
+attempt = 1
+while True:
+    report = await workflow.execute_child_workflow(
+        DeploymentWorkflow.run,
+        DeploymentInput(plan=plan, cfg=cfg.deploy, repo_path=repo_path, attempt=attempt),
+        # Derived, never generated: replay must produce the same id,
+        # and a retry round stays identifiable in the Temporal UI.
+        id=f"{workflow.info().workflow_id}-deploy-{attempt}",
+        task_queue=workflow.info().task_queue,
+    )
+    if report.deployed:
+        self._status = "deployed"
+        return _deploy_result(report, None, pr_url)
 
-            # The gate opens even when the rollback itself failed -- that is
-            # the case a human most needs to see.
-            decision = await self._gate(
-                "deploy_failed", cfg, round=attempt,
-                context=GateContext(
-                    # ABSOLUTE: the human is not waving a check through --
-                    # the rollback already happened. They are deciding what
-                    # to do next.
-                    checks=[CheckResult(name=c.name, passed=c.passed,
-                                        classification=CheckClass.ABSOLUTE,
-                                        detail=c.detail)
-                            for c in report.checks],
-                    verdict=report.rollback_reason),
-                default_policy=GatePolicy.HARD)
-            if (decision.outcome is GateOutcome.REVISE
-                    and attempt < cfg.max_gate_rounds):
-                attempt += 1
-                continue
-            self._status = "deploy_failed"
-            return _deploy_result(report, decision, pr_url)
+    # The gate opens even when the rollback itself failed -- that is
+    # the case a human most needs to see.
+    decision = await self._gate(
+        "deploy_failed",
+        cfg,
+        round=attempt,
+        context=GateContext(
+            # ABSOLUTE: the human is not waving a check through --
+            # the rollback already happened. They are deciding what
+            # to do next.
+            checks=[
+                CheckResult(
+                    name=c.name,
+                    passed=c.passed,
+                    classification=CheckClass.ABSOLUTE,
+                    detail=c.detail,
+                )
+                for c in report.checks
+            ],
+            verdict=report.rollback_reason,
+        ),
+        default_policy=GatePolicy.HARD,
+    )
+    if decision.outcome is GateOutcome.REVISE and attempt < cfg.max_gate_rounds:
+        attempt += 1
+        continue
+    self._status = "deploy_failed"
+    return _deploy_result(report, decision, pr_url)
 ```
 
 - [ ] **Step 5: Add the plan builder**
@@ -1617,21 +1730,20 @@ In `src/sdlc/workflows/feature.py`, replace lines 2309-2329 (from `# 6. DEPLOY g
 Still in `feature.py`, as a method on `FeatureWorkflow` near the other stage helpers:
 
 ```python
-    def _deploy_plan(self, idea, arch) -> DeployPlan:
-        """The frozen DeployPlan for this run.
+def _deploy_plan(self, idea, arch) -> DeployPlan:
+    """The frozen DeployPlan for this run.
 
-        TRANSITIONAL: devops_planner authoring this at the planning stage and
-        the plan gate freezing it (spec D-2) is the next increment. Until
-        then the run deploys with a single liveness check, which is weak but
-        honest -- and `frozen=True` keeps the contract's shape intact so the
-        planner can start filling it without a second code path.
-        """
-        return DeployPlan(
-            environment="staging",
-            version=workflow.info().workflow_id,
-            smoke_checks=[SmokeCheck(name="liveness", kind="http",
-                                     path="/health")],
-        )
+    TRANSITIONAL: devops_planner authoring this at the planning stage and
+    the plan gate freezing it (spec D-2) is the next increment. Until
+    then the run deploys with a single liveness check, which is weak but
+    honest -- and `frozen=True` keeps the contract's shape intact so the
+    planner can start filling it without a second code path.
+    """
+    return DeployPlan(
+        environment="staging",
+        version=workflow.info().workflow_id,
+        smoke_checks=[SmokeCheck(name="liveness", kind="http", path="/health")],
+    )
 ```
 
 Add `DeployPlan, SmokeCheck` to the `..models` import block. `CheckResult`, `CheckClass`, `GateContext` and `GatePolicy` are already imported in `feature.py` (lines 41, 70, 81) — no import change needed for those.
@@ -1657,6 +1769,7 @@ the real adapter mechanics are proven by the docker-marked integration test.
 
 Behaviour is driven by module-level state so a test can script a run without
 threading config through FeatureWorkflow's whole call chain."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -1664,8 +1777,12 @@ from dataclasses import dataclass, field
 from temporalio import activity
 
 from sdlc.deploy.activities import (
-    ApplyResult, CurrentVersionResult, DeployActivityInput, RollbackInput,
-    SmokeCheckInput, SmokeCheckOutput,
+    ApplyResult,
+    CurrentVersionResult,
+    DeployActivityInput,
+    RollbackInput,
+    SmokeCheckInput,
+    SmokeCheckOutput,
 )
 from sdlc.models import SmokeCheckResult, SmokeState
 
@@ -1674,11 +1791,11 @@ from sdlc.models import SmokeCheckResult, SmokeState
 class DeployScript:
     """What the fakes should do. `smoke_states` is consumed one entry per
     apply, so a REVISE retry can succeed where attempt 1 failed."""
+
     previous_version: str | None = "v0"
     apply_fails: bool = False
     rollback_fails: bool = False
-    smoke_states: list[SmokeState] = field(
-        default_factory=lambda: [SmokeState.PASSED])
+    smoke_states: list[SmokeState] = field(default_factory=lambda: [SmokeState.PASSED])
     applies: int = 0
     rollbacks: int = 0
 
@@ -1709,9 +1826,15 @@ async def fake_apply(inp: DeployActivityInput) -> ApplyResult:
 async def fake_smoke(inp: SmokeCheckInput) -> SmokeCheckOutput:
     idx = min(SCRIPT.applies - 1, len(SCRIPT.smoke_states) - 1)
     state = SCRIPT.smoke_states[idx]
-    return SmokeCheckOutput(results=[SmokeCheckResult(
-        name="liveness", state=state,
-        detail="" if state is SmokeState.PASSED else f"fake {state.value}")])
+    return SmokeCheckOutput(
+        results=[
+            SmokeCheckResult(
+                name="liveness",
+                state=state,
+                detail="" if state is SmokeState.PASSED else f"fake {state.value}",
+            )
+        ]
+    )
 
 
 @activity.defn(name="deploy_rollback")
@@ -1780,6 +1903,7 @@ Create `tests/test_deploy_workflow_paths.py`:
 """Spec section 8: the six stage-13 paths, driven through the real
 FeatureWorkflow with mocked deploy activities. No Docker, no fake adapter --
 the adapters themselves are never involved."""
+
 from __future__ import annotations
 
 import asyncio
@@ -1794,11 +1918,18 @@ from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 
 from sdlc.activities import evaluate_gate
 from sdlc.models import (
-    GateConfig, GateDecision, GateOutcome, GatePolicy, SmokeState,
+    GateConfig,
+    GateDecision,
+    GateOutcome,
+    GatePolicy,
+    SmokeState,
 )
 from sdlc.observability.activities import export_run_artifacts
 from tests.fakes.canned import (
-    AGENT_SPECS, QUESTION_IDS, e2e_config, greenfield_idea,
+    AGENT_SPECS,
+    QUESTION_IDS,
+    e2e_config,
+    greenfield_idea,
 )
 from tests.fakes.fake_activities import GIT_FAKES
 from tests.fakes.fake_deploy import DEPLOY_FAKES, reset
@@ -1835,16 +1966,27 @@ def _cfg(**deploy_over):
 async def _run(cfg, tmp_path, monkeypatch, tag, driver=None) -> str:
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
-        async with Worker(env.client, task_queue=tag,
-                          workflows=[FeatureWorkflow, DeploymentWorkflow],
-                          activities=[evaluate_gate, export_run_artifacts,
-                                      *GIT_FAKES, *DEPLOY_FAKES,
-                                      *fake_agent_activities(AGENT_SPECS)],
-                          plugins=[PydanticAIPlugin()]):
+        data_converter=pydantic_data_converter
+    ) as env:
+        async with Worker(
+            env.client,
+            task_queue=tag,
+            workflows=[FeatureWorkflow, DeploymentWorkflow],
+            activities=[
+                evaluate_gate,
+                export_run_artifacts,
+                *GIT_FAKES,
+                *DEPLOY_FAKES,
+                *fake_agent_activities(AGENT_SPECS),
+            ],
+            plugins=[PydanticAIPlugin()],
+        ):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run, args=[greenfield_idea(), cfg],
-                id=f"{tag}-{uuid.uuid4()}", task_queue=tag)
+                FeatureWorkflow.run,
+                args=[greenfield_idea(), cfg],
+                id=f"{tag}-{uuid.uuid4()}",
+                task_queue=tag,
+            )
             if driver is not None:
                 with env.auto_time_skipping_disabled():
                     await driver(handle)
@@ -1887,9 +2029,14 @@ async def test_4_revise_retries_with_a_second_child(tmp_path, monkeypatch):
         await _wait_for_status(handle, "awaiting:deploy_failed")
         await handle.signal(
             FeatureWorkflow.submit_gate_decision,
-            GateDecision(gate="deploy_failed", round=1,
-                         outcome=GateOutcome.REVISE, decided_by="human",
-                         guidance="retry it"))
+            GateDecision(
+                gate="deploy_failed",
+                round=1,
+                outcome=GateOutcome.REVISE,
+                decided_by="human",
+                guidance="retry it",
+            ),
+        )
 
     result = await _run(cfg, tmp_path, monkeypatch, "d4", driver)
     assert result.startswith("deployed:"), result
@@ -1991,6 +2138,7 @@ markers = [
 image tag, so a rollback is observable from outside: the endpoint reports
 which version is serving. HEALTHY=0 makes a version that fails its smoke
 check without failing its build."""
+
 import os
 
 from fastapi import FastAPI, Response
@@ -2042,6 +2190,7 @@ Create `tests/test_deploy_compose_integration.py`:
 ```python
 """The only test proving the compose adapter's ROLLBACK MECHANICS. Everything
 else proves the sequencing around them (D-8)."""
+
 from __future__ import annotations
 
 import json
@@ -2053,11 +2202,19 @@ import urllib.request
 import pytest
 
 from sdlc.deploy.activities import (
-    DeployActivityInput, RollbackInput, SmokeCheckInput, deploy_apply,
-    deploy_current_version, deploy_rollback, smoke_check,
+    DeployActivityInput,
+    RollbackInput,
+    SmokeCheckInput,
+    deploy_apply,
+    deploy_current_version,
+    deploy_rollback,
+    smoke_check,
 )
 from sdlc.models import (
-    DeployConfig, DeployPlan, SmokeCheck, SmokeState,
+    DeployConfig,
+    DeployPlan,
+    SmokeCheck,
+    SmokeState,
 )
 
 TARGET = pathlib.Path(__file__).parent / "fixtures" / "deploy_target"
@@ -2066,21 +2223,22 @@ BASE_URL = "http://localhost:18080"
 pytestmark = [
     pytest.mark.docker,
     pytest.mark.asyncio,
-    pytest.mark.skipif(shutil.which("docker") is None,
-                       reason="docker not on PATH"),
+    pytest.mark.skipif(shutil.which("docker") is None, reason="docker not on PATH"),
 ]
 
 
 def _cfg() -> DeployConfig:
-    return DeployConfig(adapter="compose", base_url=BASE_URL,
-                        readiness_timeout_s=90)
+    return DeployConfig(adapter="compose", base_url=BASE_URL, readiness_timeout_s=90)
 
 
 def _plan(version: str) -> DeployPlan:
     return DeployPlan(
-        environment="staging", version=version,
-        smoke_checks=[SmokeCheck(name="health", kind="http", path="/health",
-                                 expect_status=200, timeout_s=10)])
+        environment="staging",
+        version=version,
+        smoke_checks=[
+            SmokeCheck(name="health", kind="http", path="/health", expect_status=200, timeout_s=10)
+        ],
+    )
 
 
 def _serving_version() -> str:
@@ -2091,8 +2249,12 @@ def _serving_version() -> str:
 @pytest.fixture
 def compose_down():
     yield
-    subprocess.run(["docker", "compose", "down", "-v", "--remove-orphans"],
-                   cwd=TARGET, check=False, capture_output=True)
+    subprocess.run(
+        ["docker", "compose", "down", "-v", "--remove-orphans"],
+        cwd=TARGET,
+        check=False,
+        capture_output=True,
+    )
 
 
 async def test_deploy_smoke_and_real_rollback(compose_down, monkeypatch):
@@ -2100,40 +2262,41 @@ async def test_deploy_smoke_and_real_rollback(compose_down, monkeypatch):
     cfg, repo = _cfg(), str(TARGET)
 
     # --- v1: a good deploy passes its smoke check -------------------------
-    await deploy_apply(DeployActivityInput(plan=_plan("v1"), cfg=cfg,
-                                           repo_path=repo))
-    out = await smoke_check(SmokeCheckInput(plan=_plan("v1"), cfg=cfg,
-                                            repo_path=repo, endpoint=BASE_URL))
+    await deploy_apply(DeployActivityInput(plan=_plan("v1"), cfg=cfg, repo_path=repo))
+    out = await smoke_check(
+        SmokeCheckInput(plan=_plan("v1"), cfg=cfg, repo_path=repo, endpoint=BASE_URL)
+    )
     assert [r.state for r in out.results] == [SmokeState.PASSED]
     assert _serving_version() == "v1"
 
     # --- the adapter can now see what is running --------------------------
     current = await deploy_current_version(
-        DeployActivityInput(plan=_plan("v2"), cfg=cfg, repo_path=repo))
+        DeployActivityInput(plan=_plan("v2"), cfg=cfg, repo_path=repo)
+    )
     assert current.version is not None
 
     # --- v2: builds fine, fails its smoke check ---------------------------
     monkeypatch.setenv("HEALTHY", "0")
-    await deploy_apply(DeployActivityInput(plan=_plan("v2"), cfg=cfg,
-                                           repo_path=repo))
-    out = await smoke_check(SmokeCheckInput(plan=_plan("v2"), cfg=cfg,
-                                            repo_path=repo, endpoint=BASE_URL))
+    await deploy_apply(DeployActivityInput(plan=_plan("v2"), cfg=cfg, repo_path=repo))
+    out = await smoke_check(
+        SmokeCheckInput(plan=_plan("v2"), cfg=cfg, repo_path=repo, endpoint=BASE_URL)
+    )
     assert out.results[0].state is SmokeState.FAILED
 
     # --- rollback restores the prior version, observably ------------------
     monkeypatch.setenv("HEALTHY", "1")
-    await deploy_rollback(RollbackInput(plan=_plan("v2"), cfg=cfg,
-                                        repo_path=repo, to_version="v1"))
+    await deploy_rollback(RollbackInput(plan=_plan("v2"), cfg=cfg, repo_path=repo, to_version="v1"))
     assert _serving_version() == "v1"
 
 
 async def test_unreachable_service_errors_rather_than_passing(compose_down):
     """Nothing is running: every http check must be ERRORED, never PASSED."""
-    cfg = DeployConfig(adapter="compose", base_url="http://localhost:18081",
-                       readiness_timeout_s=2)
-    out = await smoke_check(SmokeCheckInput(
-        plan=_plan("v1"), cfg=cfg, repo_path=str(TARGET),
-        endpoint="http://localhost:18081"))
+    cfg = DeployConfig(adapter="compose", base_url="http://localhost:18081", readiness_timeout_s=2)
+    out = await smoke_check(
+        SmokeCheckInput(
+            plan=_plan("v1"), cfg=cfg, repo_path=str(TARGET), endpoint="http://localhost:18081"
+        )
+    )
     assert out.results[0].state is SmokeState.ERRORED
 ```
 
@@ -2178,6 +2341,7 @@ Create `tests/test_deploy_benchmark_optin.py`:
 ```python
 """Per-case config, no fake adapter. A case opts into stage 13 explicitly --
 today no benchmark case reaches it at all."""
+
 from __future__ import annotations
 
 from sdlc.benchmarks.models import CaseSpec

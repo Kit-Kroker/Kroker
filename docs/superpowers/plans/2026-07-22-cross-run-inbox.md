@@ -66,15 +66,15 @@ async def fetch_pending(handle) -> list[PendingDecision]:
 Then update the two call sites in the same file:
 
 ```python
-async def resolve(handle, selector: Selector,
-                  channel: Channel | None = None) -> PendingDecision:
+async def resolve(handle, selector: Selector, channel: Channel | None = None) -> PendingDecision:
     """Fetch what is pending and narrow it to the one item meant."""
     return match(await fetch_pending(handle), selector, channel)
 ```
 
 ```python
-async def submit(handle, pending: PendingDecision, reply: Reply,
-                 channel: Channel | None = None) -> SubmitResult:
+async def submit(
+    handle, pending: PendingDecision, reply: Reply, channel: Channel | None = None
+) -> SubmitResult:
     """Translate a reply to its signal, send it, and verify it landed."""
     ch = channel or ReferenceChannel()
     call = ch.translate(pending, reply)
@@ -86,9 +86,7 @@ async def submit(handle, pending: PendingDecision, reply: Reply,
 
     still = await fetch_pending(handle)
     confirmed = pending.key not in {d.key for d in still}
-    return SubmitResult(
-        confirmed=confirmed,
-        message=_message(handle.id, pending, reply, confirmed))
+    return SubmitResult(confirmed=confirmed, message=_message(handle.id, pending, reply, confirmed))
 ```
 
 - [ ] **Step 2: Verify no other reference to the old private name survives**
@@ -136,11 +134,9 @@ from __future__ import annotations
 from sdlc.channels.inbox import Inbox, InboxError, RunInbox, render_inbox
 from sdlc.pending import ClarifyPending, MergeGatePending, StageGatePending
 
-ARCH = StageGatePending(key="architecture#1", gate="architecture", round=1,
-                        spec_summary="s")
+ARCH = StageGatePending(key="architecture#1", gate="architecture", round=1, spec_summary="s")
 MERGE = MergeGatePending(key="merge#2", gate="merge", round=2)
-Q1 = ClarifyPending(key="Q1", question="Use OIDC or SAML?",
-                    why_it_matters="auth")
+Q1 = ClarifyPending(key="Q1", question="Use OIDC or SAML?", why_it_matters="auth")
 
 
 def test_render_inbox_reports_no_open_runs():
@@ -148,20 +144,21 @@ def test_render_inbox_reports_no_open_runs():
 
 
 def test_render_inbox_reports_nothing_pending_plural():
-    assert render_inbox(Inbox(total_open_runs=3)) == \
-        "nothing pending across 3 open runs"
+    assert render_inbox(Inbox(total_open_runs=3)) == "nothing pending across 3 open runs"
 
 
 def test_render_inbox_reports_nothing_pending_singular():
-    assert render_inbox(Inbox(total_open_runs=1)) == \
-        "nothing pending across 1 open run"
+    assert render_inbox(Inbox(total_open_runs=1)) == "nothing pending across 1 open run"
 
 
 def test_render_inbox_lists_runs_grouped_with_pending_items():
-    inbox = Inbox(total_open_runs=2, runs=[
-        RunInbox(run_id="feature-add-sso", pending=[ARCH]),
-        RunInbox(run_id="feature-fix-bug", pending=[Q1, MERGE]),
-    ])
+    inbox = Inbox(
+        total_open_runs=2,
+        runs=[
+            RunInbox(run_id="feature-add-sso", pending=[ARCH]),
+            RunInbox(run_id="feature-fix-bug", pending=[Q1, MERGE]),
+        ],
+    )
     text = render_inbox(inbox)
     assert text == (
         "feature-add-sso:\n"
@@ -173,11 +170,15 @@ def test_render_inbox_lists_runs_grouped_with_pending_items():
 
 
 def test_render_inbox_appends_error_block_after_a_blank_line():
-    inbox = Inbox(total_open_runs=2, runs=[
-        RunInbox(run_id="feature-add-sso", pending=[ARCH]),
-    ], errors=[
-        InboxError(run_id="feature-stale-run", error="workflow not found"),
-    ])
+    inbox = Inbox(
+        total_open_runs=2,
+        runs=[
+            RunInbox(run_id="feature-add-sso", pending=[ARCH]),
+        ],
+        errors=[
+            InboxError(run_id="feature-stale-run", error="workflow not found"),
+        ],
+    )
     text = render_inbox(inbox)
     assert text == (
         "feature-add-sso:\n"
@@ -189,31 +190,36 @@ def test_render_inbox_appends_error_block_after_a_blank_line():
 
 
 def test_render_inbox_pluralizes_the_error_count():
-    inbox = Inbox(total_open_runs=2, errors=[
-        InboxError(run_id="a", error="e1"),
-        InboxError(run_id="b", error="e2"),
-    ])
-    text = render_inbox(inbox)
-    assert text == (
-        "2 runs could not be queried:\n"
-        "  a: e1\n"
-        "  b: e2"
+    inbox = Inbox(
+        total_open_runs=2,
+        errors=[
+            InboxError(run_id="a", error="e1"),
+            InboxError(run_id="b", error="e2"),
+        ],
     )
+    text = render_inbox(inbox)
+    assert text == ("2 runs could not be queried:\n  a: e1\n  b: e2")
 
 
 def test_render_inbox_shows_only_errors_when_nothing_confirmed_pending():
     """No 'nothing pending' line when some runs are in an unknown state --
     we genuinely don't know whether the errored runs had pending items."""
-    inbox = Inbox(total_open_runs=1, errors=[
-        InboxError(run_id="a", error="e1"),
-    ])
+    inbox = Inbox(
+        total_open_runs=1,
+        errors=[
+            InboxError(run_id="a", error="e1"),
+        ],
+    )
     assert "nothing pending" not in render_inbox(inbox)
 
 
 def test_render_inbox_output_is_ascii():
-    inbox = Inbox(total_open_runs=1, runs=[
-        RunInbox(run_id="r", pending=[Q1]),
-    ])
+    inbox = Inbox(
+        total_open_runs=1,
+        runs=[
+            RunInbox(run_id="r", pending=[Q1]),
+        ],
+    )
     render_inbox(inbox).encode("ascii")
 ```
 
@@ -230,6 +236,7 @@ FeatureWorkflow run. resolve()'s sibling -- the same query/validate path
 (``transport.fetch_pending``) applied to many handles instead of one the
 caller already named.
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
@@ -240,12 +247,14 @@ from .transport import describe
 
 class RunInbox(BaseModel):
     """One open run with at least one pending decision."""
+
     run_id: str
     pending: list[PendingDecision] = Field(default_factory=list)
 
 
 class InboxError(BaseModel):
     """An open run whose pending_decisions() query raised."""
+
     run_id: str
     error: str
 
@@ -258,6 +267,7 @@ class Inbox(BaseModel):
     count, "no runs listed" and "checked 3 runs, none had anything pending"
     would be indistinguishable.
     """
+
     total_open_runs: int = 0
     runs: list[RunInbox] = Field(default_factory=list)
     errors: list[InboxError] = Field(default_factory=list)
@@ -370,11 +380,13 @@ async def test_list_open_run_ids_returns_ids_from_the_visibility_query():
 
 @pytest.mark.asyncio
 async def test_fetch_inbox_aggregates_pending_across_runs_and_drops_empty_ones():
-    client = _StubClient({
-        "run-a": _StubHandle(response=_raw(ARCH)),
-        "run-b": _StubHandle(response=[]),          # nothing pending -> dropped
-        "run-c": _StubHandle(response=_raw(Q1, MERGE)),
-    })
+    client = _StubClient(
+        {
+            "run-a": _StubHandle(response=_raw(ARCH)),
+            "run-b": _StubHandle(response=[]),  # nothing pending -> dropped
+            "run-c": _StubHandle(response=_raw(Q1, MERGE)),
+        }
+    )
     inbox = await fetch_inbox(client)
     assert inbox.total_open_runs == 3
     assert {r.run_id for r in inbox.runs} == {"run-a", "run-c"}
@@ -385,10 +397,12 @@ async def test_fetch_inbox_aggregates_pending_across_runs_and_drops_empty_ones()
 
 @pytest.mark.asyncio
 async def test_fetch_inbox_isolates_a_failing_run_from_the_rest():
-    client = _StubClient({
-        "run-a": _StubHandle(response=_raw(ARCH)),
-        "run-b": _StubHandle(error=RuntimeError("workflow not found")),
-    })
+    client = _StubClient(
+        {
+            "run-a": _StubHandle(response=_raw(ARCH)),
+            "run-b": _StubHandle(error=RuntimeError("workflow not found")),
+        }
+    )
     inbox = await fetch_inbox(client)
     assert inbox.total_open_runs == 2
     assert [r.run_id for r in inbox.runs] == ["run-a"]
@@ -532,30 +546,33 @@ In `src/sdlc/cli.py`, add the subparser registration right after the `status` su
 Add the dispatch branch **before** the generic `handle = client.get_workflow_handle_for(...)` line (that line assumes `args.id` exists, which `inbox` does not have) -- place it directly after the existing `eval` block and before that line:
 
 ```python
-    if args.cmd == "eval":
-        from .eval.cli import default_judge_model, run_capture, run_eval
-        from .eval.compare import EvalError
-        if args.target == "capture":
-            paths = await run_capture(client, args.from_run, args.case)
-            print(f"captured {len(paths)} fixtures:")
-            for p in paths:
-                print(f"  {p}")
-            return
-        try:
-            judge = args.judge_model or default_judge_model()
-            print(run_eval(args.target, against=args.against, case=args.case,
-                           k=args.k, judge_model=judge))
-        except EvalError as e:
-            print(f"eval error: {e}")
-            raise SystemExit(1)
-        return
+if args.cmd == "eval":
+    from .eval.cli import default_judge_model, run_capture, run_eval
+    from .eval.compare import EvalError
 
-    if args.cmd == "inbox":
-        from .channels.inbox import fetch_inbox, render_inbox
-        print(render_inbox(await fetch_inbox(client)))
+    if args.target == "capture":
+        paths = await run_capture(client, args.from_run, args.case)
+        print(f"captured {len(paths)} fixtures:")
+        for p in paths:
+            print(f"  {p}")
         return
+    try:
+        judge = args.judge_model or default_judge_model()
+        print(
+            run_eval(args.target, against=args.against, case=args.case, k=args.k, judge_model=judge)
+        )
+    except EvalError as e:
+        print(f"eval error: {e}")
+        raise SystemExit(1)
+    return
 
-    handle = client.get_workflow_handle_for(FeatureWorkflow.run, args.id)
+if args.cmd == "inbox":
+    from .channels.inbox import fetch_inbox, render_inbox
+
+    print(render_inbox(await fetch_inbox(client)))
+    return
+
+handle = client.get_workflow_handle_for(FeatureWorkflow.run, args.id)
 ```
 
 Also add `inbox` to the module docstring's usage examples at the top of `cli.py`, next to `status`:

@@ -1,7 +1,10 @@
 import pytest
 
 from sdlc.memory.fake import FakeMemory
-from sdlc.models import MemoryKind, RetainItem
+from sdlc.memory.models import (
+    MemoryKind,
+    RetainItem,
+)
 
 
 @pytest.mark.asyncio

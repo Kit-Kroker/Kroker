@@ -3,7 +3,11 @@ a function of desired vs existing, so every reconcile rule is testable here."""
 
 from __future__ import annotations
 
-from sdlc.models import ScheduleAction, ScheduleAsset, ScheduleSpecAsset
+from sdlc.schedules.models import (
+    ScheduleAction,
+    ScheduleAsset,
+    ScheduleSpecAsset,
+)
 from sdlc.schedules.reconcile import plan_changes
 
 

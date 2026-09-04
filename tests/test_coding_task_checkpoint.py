@@ -37,9 +37,7 @@ from sdlc.core.models import (
     HarnessKind,
 )
 from sdlc.harness.adapters import CodingHarness
-from sdlc.models import (
-    HarnessRunResult,
-)
+from sdlc.harness.models import HarnessRunResult
 
 
 class _StubHarness(CodingHarness):

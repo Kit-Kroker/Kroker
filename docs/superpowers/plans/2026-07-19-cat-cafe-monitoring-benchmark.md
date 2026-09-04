@@ -39,12 +39,15 @@ Append to `tests/test_benchmark_workflow.py`:
 ```python
 def _research_spec():
     return CaseSpec(
-        case_id="cat-cafe", idea_summary="cats",
+        case_id="cat-cafe",
+        idea_summary="cats",
         mode="greenfield",
         harnesses=[HarnessKind.OPENCODE],
         models=["zai-coding-plan/glm-5.2"],
-        judge_model="openai/gpt-5.2", rubrics={},
-        research_enabled=True)
+        judge_model="openai/gpt-5.2",
+        rubrics={},
+        research_enabled=True,
+    )
 
 
 def test_case_spec_research_disabled_by_default():
@@ -54,8 +57,9 @@ def test_case_spec_research_disabled_by_default():
 def test_cell_config_leaves_research_off_by_default():
     base = PipelineConfig()
     idea = IdeaBrief(title="t", description="d", mode=ProjectMode.GREENFIELD)
-    cfg = _cell_config(base, idea, _spec(), HarnessKind.OPENCODE,
-                       "openai/gpt-5.2", bench_run_id="b1")
+    cfg = _cell_config(
+        base, idea, _spec(), HarnessKind.OPENCODE, "openai/gpt-5.2", bench_run_id="b1"
+    )
     assert cfg.research_enabled is False
     assert "research" not in cfg.roles
 
@@ -63,8 +67,14 @@ def test_cell_config_leaves_research_off_by_default():
 def test_cell_config_enables_research_and_injects_provider():
     base = PipelineConfig()
     idea = IdeaBrief(title="t", description="d", mode=ProjectMode.GREENFIELD)
-    cfg = _cell_config(base, idea, _research_spec(), HarnessKind.OPENCODE,
-                       "zai-coding-plan/glm-5.2", bench_run_id="b1")
+    cfg = _cell_config(
+        base,
+        idea,
+        _research_spec(),
+        HarnessKind.OPENCODE,
+        "zai-coding-plan/glm-5.2",
+        bench_run_id="b1",
+    )
     assert cfg.research_enabled is True
     rc = cfg.roles["research"]
     assert rc.kind == "research"
@@ -77,8 +87,14 @@ def test_cell_config_research_role_is_not_harness_overridden():
     keep kind='research' and carry no harness."""
     base = PipelineConfig()
     idea = IdeaBrief(title="t", description="d", mode=ProjectMode.GREENFIELD)
-    cfg = _cell_config(base, idea, _research_spec(), HarnessKind.OPENCODE,
-                       "zai-coding-plan/glm-5.2", bench_run_id="b1")
+    cfg = _cell_config(
+        base,
+        idea,
+        _research_spec(),
+        HarnessKind.OPENCODE,
+        "zai-coding-plan/glm-5.2",
+        bench_run_id="b1",
+    )
     assert cfg.roles["research"].harness is None
 ```
 
@@ -194,6 +210,7 @@ see `tests/test_analyst_stage_wiring.py`. Create
 ```python
 """The research stage is judged against a rubric, not hardcoded to a
 contract score."""
+
 import inspect
 
 from sdlc.workflows import feature
@@ -211,7 +228,7 @@ def test_research_record_no_longer_hardcodes_contract_judge():
     be gone from the research block, or the rubric can never affect a score."""
     src = inspect.getsource(feature.FeatureWorkflow.run)
     start = src.index('stage="research"')
-    block = src[start:start + 400]
+    block = src[start : start + 400]
     assert "quality_score=None" not in block
     assert 'judge="contract"' not in block
 ```
@@ -226,26 +243,42 @@ Expected: FAIL — the research block still reads `quality_score=None, judge="co
 In `src/sdlc/workflows/feature.py`, the research stage currently records:
 
 ```python
-            await self._record(cfg, self._stage_record(
-                cfg, stage="research", role="research",
-                started=_r_started, ended=workflow.now(),
-                quality_score=None, judge="contract",
-                outcome=BenchmarkOutcome.PASS,
-                model=STAGE_MODELS.get("research", "unknown")))
+await self._record(
+    cfg,
+    self._stage_record(
+        cfg,
+        stage="research",
+        role="research",
+        started=_r_started,
+        ended=workflow.now(),
+        quality_score=None,
+        judge="contract",
+        outcome=BenchmarkOutcome.PASS,
+        model=STAGE_MODELS.get("research", "unknown"),
+    ),
+)
 ```
 
 Replace with:
 
 ```python
-            _r_quality = await self._judge(
-                cfg, brief.model_dump_json(), "research",
-                author_model=STAGE_MODELS.get("research", "unknown"))
-            await self._record(cfg, self._stage_record(
-                cfg, stage="research", role="research",
-                started=_r_started, ended=workflow.now(),
-                quality_score=_r_quality.score, judge=_r_quality.judge,
-                outcome=BenchmarkOutcome.PASS,
-                model=STAGE_MODELS.get("research", "unknown")))
+_r_quality = await self._judge(
+    cfg, brief.model_dump_json(), "research", author_model=STAGE_MODELS.get("research", "unknown")
+)
+await self._record(
+    cfg,
+    self._stage_record(
+        cfg,
+        stage="research",
+        role="research",
+        started=_r_started,
+        ended=workflow.now(),
+        quality_score=_r_quality.score,
+        judge=_r_quality.judge,
+        outcome=BenchmarkOutcome.PASS,
+        model=STAGE_MODELS.get("research", "unknown"),
+    ),
+)
 ```
 
 `brief` is the `ResearchBrief` already in scope (it is passed to
@@ -310,6 +343,7 @@ Create `tests/test_qa_stage_judging.py`:
 ```python
 """The QA report is judged against a rubric in its OWN record, leaving the
 deterministic stage="code" record's contract score untouched."""
+
 import inspect
 
 from sdlc.workflows import feature
@@ -328,7 +362,7 @@ def test_code_record_keeps_its_deterministic_contract_score():
     signal -- the exact regression this task must not cause."""
     src = inspect.getsource(feature.FeatureWorkflow._dev_task)
     start = src.index('stage="code"')
-    block = src[start:start + 400]
+    block = src[start : start + 400]
     assert 'judge="contract"' in block
 
 
@@ -351,23 +385,30 @@ In `src/sdlc/workflows/feature.py`, immediately **after** the existing
 inside the task loop, add:
 
 ```python
-            # The QA report gets its OWN record. The stage="code" record above
-            # keeps its deterministic contract score (1.0 iff tests passed and
-            # no issues) -- an LLM opinion must never overwrite a deterministic
-            # signal. Cardinality is per-task-attempt, not once-per-run like
-            # clarifier/architect/planner; scoring.py means over them natively.
-            _qa_quality = await self._judge(
-                cfg, qa.model_dump_json(), "qa",
-                author_model=STAGE_MODELS["qa"])
-            await self._record(cfg, self._stage_record(
-                cfg, stage="qa", role="qa",
-                started=_attempt_started, ended=workflow.now(),
-                quality_score=_qa_quality.score, judge=_qa_quality.judge,
-                outcome=(BenchmarkOutcome.PASS
-                         if (qa.tests_passed and not qa.issues)
-                         else BenchmarkOutcome.FAIL),
-                model=STAGE_MODELS["qa"],
-                task_id=task.id, attempt=attempt - 1))
+# The QA report gets its OWN record. The stage="code" record above
+# keeps its deterministic contract score (1.0 iff tests passed and
+# no issues) -- an LLM opinion must never overwrite a deterministic
+# signal. Cardinality is per-task-attempt, not once-per-run like
+# clarifier/architect/planner; scoring.py means over them natively.
+_qa_quality = await self._judge(cfg, qa.model_dump_json(), "qa", author_model=STAGE_MODELS["qa"])
+await self._record(
+    cfg,
+    self._stage_record(
+        cfg,
+        stage="qa",
+        role="qa",
+        started=_attempt_started,
+        ended=workflow.now(),
+        quality_score=_qa_quality.score,
+        judge=_qa_quality.judge,
+        outcome=(
+            BenchmarkOutcome.PASS if (qa.tests_passed and not qa.issues) else BenchmarkOutcome.FAIL
+        ),
+        model=STAGE_MODELS["qa"],
+        task_id=task.id,
+        attempt=attempt - 1,
+    ),
+)
 ```
 
 `qa` is the `QAReport` already in scope from `t_qa.run(...)`. `STAGE_MODELS["qa"]`
@@ -419,8 +460,7 @@ git commit -m "feat(benchmarks): judge the QA report alongside the code record (
 Append to `tests/test_golden_case_loads.py`:
 
 ```python
-CAT_CASE = (REPO_ROOT / "benchmarks" / "cases" / "cat-cafe-monitoring"
-            / "case.yaml")
+CAT_CASE = REPO_ROOT / "benchmarks" / "cases" / "cat-cafe-monitoring" / "case.yaml"
 
 
 def test_cat_cafe_case_loads_as_one_cell():
@@ -441,8 +481,7 @@ def test_cat_cafe_rubrics_are_all_registered():
     """A rubric file on disk that case.yaml does not name is dead weight;
     a named rubric with no file is silently skipped by load_case_assets."""
     spec = load_case_spec(str(CAT_CASE))
-    assert set(spec.rubrics) == {
-        "clarifier", "architect", "planner", "qa", "research"}
+    assert set(spec.rubrics) == {"clarifier", "architect", "planner", "qa", "research"}
     for rel in spec.rubrics.values():
         assert (CAT_CASE.parent / rel).exists()
 
@@ -452,8 +491,7 @@ def test_cat_cafe_description_preserves_every_activity():
     activities must survive into the case description."""
     spec = load_case_spec(str(CAT_CASE))
     body = spec.description.lower()
-    for activity in ("sleeping", "eating", "drinking", "litter",
-                     "playing", "fighting"):
+    for activity in ("sleeping", "eating", "drinking", "litter", "playing", "fighting"):
         assert activity in body, f"description dropped '{activity}'"
 ```
 

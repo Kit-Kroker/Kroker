@@ -46,8 +46,13 @@ def test_cat_cafe_description_freezes_the_interface_contract():
     """The oracle grades through this contract; if a marker vanishes the
     oracle is asserting against an interface the case no longer freezes."""
     body = load_case_spec(str(CAT_CASE)).description
-    for marker in ("app:app", "POST /telemetry", "GET /floorplan",
-                   "GET /cats", "must not auto-start"):
+    for marker in (
+        "app:app",
+        "POST /telemetry",
+        "GET /floorplan",
+        "GET /cats",
+        "must not auto-start",
+    ):
         assert marker in body, f"contract marker {marker!r} missing"
 ```
 
@@ -125,16 +130,15 @@ Create `tests/test_cat_cafe_oracle.py`:
 
 ```python
 """The cat-cafe held-out oracle exists and discriminates (E-34, spec §6)."""
+
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-ORACLE = (REPO_ROOT / "benchmarks" / "cases" / "cat-cafe-monitoring"
-          / "oracle")
+ORACLE = REPO_ROOT / "benchmarks" / "cases" / "cat-cafe-monitoring" / "oracle"
 
 
 def test_oracle_suite_files_exist():
-    for name in ("conftest.py", "test_activity.py", "test_risk.py",
-                 "test_monitoring.py"):
+    for name in ("conftest.py", "test_activity.py", "test_risk.py", "test_monitoring.py"):
         assert (ORACLE / name).is_file(), f"missing oracle/{name}"
 ```
 
@@ -153,6 +157,7 @@ the app's OWN /floorplan coordinates, so no coordinate or threshold is
 pinned and the kata's "rules are up to you" freedom survives (fairness
 rule, spec §4). Deterministic: no sleeps, no randomness, no wall clock —
 all timestamps derive from a fixed BASE."""
+
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -170,10 +175,10 @@ BASE = datetime(2026, 7, 23, 12, 0, 0, tzinfo=timezone.utc)
 
 @pytest_asyncio.fixture
 async def client():
-    import app as produced          # contract: module app.py exposes `app`
+    import app as produced  # contract: module app.py exposes `app`
+
     transport = httpx.ASGITransport(app=produced.app)
-    async with httpx.AsyncClient(transport=transport,
-                                 base_url="http://testserver") as c:
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as c:
         yield c
 
 
@@ -191,8 +196,7 @@ async def far_from_zones(client):
     """A spot unambiguously outside every zone the app declared."""
     r = await client.get("/floorplan")
     zs = r.json()["zones"]
-    m = max([abs(float(z["x"])) for z in zs]
-            + [abs(float(z["y"])) for z in zs])
+    m = max([abs(float(z["x"])) for z in zs] + [abs(float(z["y"])) for z in zs])
     return m + 100.0, m + 100.0
 
 
@@ -200,9 +204,10 @@ async def feed(client, cat_id, readings):
     """POST a timestamped sequence; readings = [(offset_s, x, y, bpm)]."""
     for off, x, y, bpm in readings:
         ts = (BASE + timedelta(seconds=off)).isoformat()
-        r = await client.post("/telemetry", json={
-            "cat_id": cat_id, "x": x, "y": y,
-            "breathing_rate": bpm, "timestamp": ts})
+        r = await client.post(
+            "/telemetry",
+            json={"cat_id": cat_id, "x": x, "y": y, "breathing_rate": bpm, "timestamp": ts},
+        )
         assert 200 <= r.status_code < 300
 
 
@@ -225,6 +230,7 @@ def stationary(x, y, bpm, n=5, step=5):
 ```python
 """Task 1 oracle: activity detection at the app's own zone coordinates.
 Extremes only — any reasonable ruleset passes (fairness rule, spec §4)."""
+
 import pytest
 
 from conftest import cat, far_from_zones, feed, stationary, zone
@@ -264,12 +270,10 @@ async def test_colocated_fast_high_bpm_is_playing_or_fighting(client):
     playing vs fighting is genuinely ambiguous — either passes."""
     fx, fy = await far_from_zones(client)
     a = [(i * 5, fx + (1.5 if i % 2 else -1.5), fy, 90) for i in range(6)]
-    b = [(i * 5, fx + (-1.5 if i % 2 else 1.5), fy + 0.5, 90)
-         for i in range(6)]
+    b = [(i * 5, fx + (-1.5 if i % 2 else 1.5), fy + 0.5, 90) for i in range(6)]
     await feed(client, "c-rough1", a)
     await feed(client, "c-rough2", b)
-    assert (await cat(client, "c-rough1"))["activity"] in (
-        "playing", "fighting")
+    assert (await cat(client, "c-rough1"))["activity"] in ("playing", "fighting")
 ```
 
 - [ ] **Step 5: Write `oracle/test_risk.py`**
@@ -278,6 +282,7 @@ async def test_colocated_fast_high_bpm_is_playing_or_fighting(client):
 """Task 2 oracle: life/health risk flag. Extremes only — the research-
 grounded floor was >35 bpm at rest, so sustained 180 is unambiguous risk,
 ~5 bpm is unambiguous risk, and 25 bpm resting is unambiguously normal."""
+
 import pytest
 
 from conftest import cat, feed, stationary, zone
@@ -309,6 +314,7 @@ async def test_calm_resting_cat_is_not_risk(client):
 ```python
 """Task 2 oracle: movement reflection, per-cat history, the 24h window
 relative to the cat's newest reading, and 404 on unknown ids."""
+
 import pytest
 
 from conftest import cat, feed
@@ -336,11 +342,15 @@ async def test_history_contains_injected_readings(client):
 
 @pytest.mark.asyncio
 async def test_history_window_is_24h_from_newest_reading(client):
-    await feed(client, "c-old", [
-        (0, 1.0, 1.0, 30),           # 25h before newest -> outside window
-        (25 * H, 2.0, 2.0, 44),      # newest reading
-        (2 * H, 1.5, 1.5, 33),       # 23h before newest -> inside window
-    ])
+    await feed(
+        client,
+        "c-old",
+        [
+            (0, 1.0, 1.0, 30),  # 25h before newest -> outside window
+            (25 * H, 2.0, 2.0, 44),  # newest reading
+            (2 * H, 1.5, 1.5, 33),  # 23h before newest -> inside window
+        ],
+    )
     r = await client.get("/cats/c-old")
     assert r.status_code == 200
     rates = [float(h["breathing_rate"]) for h in r.json()["history"]]
@@ -404,9 +414,12 @@ def _run_oracle(tmp_path, break_risk=False):
         app_text += "\nRISK_ENABLED = False\n"
     (wt / "app.py").write_text(app_text, encoding="utf-8")
     return subprocess.run(
-        [sys.executable, "-m", "pytest", "oracle", "-q",
-         "-p", "no:cacheprovider"],
-        cwd=wt, capture_output=True, text=True, timeout=300)
+        [sys.executable, "-m", "pytest", "oracle", "-q", "-p", "no:cacheprovider"],
+        cwd=wt,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
 
 
 @pytest.mark.slow
@@ -443,20 +456,21 @@ by any run — it validates the oracle, it is not an answer key. Pure ASGI,
 no framework, and no simulator at all (the contract forbids auto-starting
 one on import; this module simply has none).
 """
+
 from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
 
-RISK_ENABLED = True          # the broken-variant self-test flips this
+RISK_ENABLED = True  # the broken-variant self-test flips this
 ZONES = [
     {"kind": "rest_area", "x": 0.0, "y": 0.0},
     {"kind": "litter_box", "x": 10.0, "y": 0.0},
     {"kind": "water_bowl", "x": 0.0, "y": 10.0},
     {"kind": "food_bowl", "x": 10.0, "y": 10.0},
 ]
-ZONE_RADIUS = 1.0            # "at" a zone = within this distance
-NEAR_CAT = 5.0               # co-located cats = within this distance
+ZONE_RADIUS = 1.0  # "at" a zone = within this distance
+NEAR_CAT = 5.0  # co-located cats = within this distance
 
 _readings: dict[str, list[dict]] = {}
 
@@ -502,13 +516,12 @@ def _activity(cid: str) -> str | None:
                 return "drinking"
             if z["kind"] == "litter_box":
                 return "litter_box"
-            return "sleeping" if bpm <= 30 else None   # rest_area
+            return "sleeping" if bpm <= 30 else None  # rest_area
     for other in _readings:
         if other == cid:
             continue
         o = _latest(other)
-        if (_dist(x, y, o["x"], o["y"]) <= NEAR_CAT
-                and _speed(cid) > 0.2 and bpm >= 50):
+        if _dist(x, y, o["x"], o["y"]) <= NEAR_CAT and _speed(cid) > 0.2 and bpm >= 50:
             return "playing"
     return None
 
@@ -531,10 +544,14 @@ async def _read_json(receive) -> dict:
 
 
 async def _send_json(send, status: int, payload) -> None:
-    await send({"type": "http.response.start", "status": status,
-                "headers": [(b"content-type", b"application/json")]})
-    await send({"type": "http.response.body",
-                "body": json.dumps(payload).encode()})
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status,
+            "headers": [(b"content-type", b"application/json")],
+        }
+    )
+    await send({"type": "http.response.body", "body": json.dumps(payload).encode()})
 
 
 async def app(scope, receive, send):
@@ -542,24 +559,39 @@ async def app(scope, receive, send):
     method, path = scope["method"], scope["path"]
     if method == "POST" and path == "/telemetry":
         r = await _read_json(receive)
-        _readings.setdefault(str(r["cat_id"]), []).append({
-            "timestamp": r["timestamp"], "x": float(r["x"]),
-            "y": float(r["y"]),
-            "breathing_rate": float(r["breathing_rate"])})
+        _readings.setdefault(str(r["cat_id"]), []).append(
+            {
+                "timestamp": r["timestamp"],
+                "x": float(r["x"]),
+                "y": float(r["y"]),
+                "breathing_rate": float(r["breathing_rate"]),
+            }
+        )
         return await _send_json(send, 202, {"ok": True})
     if method == "GET" and path == "/floorplan":
         return await _send_json(send, 200, {"zones": ZONES})
     if method == "GET" and path == "/cats":
-        return await _send_json(send, 200, [
-            {"id": cid, "x": _latest(cid)["x"], "y": _latest(cid)["y"],
-             "activity": _activity(cid), "at_risk": _at_risk(cid)}
-            for cid in _readings])
+        return await _send_json(
+            send,
+            200,
+            [
+                {
+                    "id": cid,
+                    "x": _latest(cid)["x"],
+                    "y": _latest(cid)["y"],
+                    "activity": _activity(cid),
+                    "at_risk": _at_risk(cid),
+                }
+                for cid in _readings
+            ],
+        )
     if method == "GET" and path.startswith("/cats/"):
-        cid = path[len("/cats/"):]
+        cid = path[len("/cats/") :]
         if cid not in _readings:
             return await _send_json(send, 404, {"error": "unknown cat"})
-        return await _send_json(send, 200, {
-            "id": cid, "latest": _latest(cid), "history": _history(cid)})
+        return await _send_json(
+            send, 200, {"id": cid, "latest": _latest(cid), "history": _history(cid)}
+        )
     return await _send_json(send, 404, {"error": "not found"})
 ```
 

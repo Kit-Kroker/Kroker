@@ -24,8 +24,7 @@ from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel
 
-from ....measurement import Measurement
-from ..models import (
+from sdlc.assessment.scan.models import (
     C_TESTABILITY,
     ScanSignalId,
     ScanSignalResult,
@@ -35,6 +34,8 @@ from ..models import (
     TestabilitySeverity,
     family_of,
 )
+
+from ....measurement import Measurement
 from ..testpaths import is_test_path
 
 SIGNAL_ID = "QS3"

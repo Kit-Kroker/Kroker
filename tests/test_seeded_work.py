@@ -8,12 +8,14 @@ import inspect
 
 import pytest
 
-from sdlc.models import (
+from sdlc.stages.architecture.models import (
     ArchitectureDecision,
     ArchitectureSpec,
+    ValidationContract,
+)
+from sdlc.stages.plan.models import (
     DevTask,
     ImplementationPlan,
-    ValidationContract,
 )
 from sdlc.workflows.feature import FeatureWorkflow
 from sdlc.workflows.models import SeededWork

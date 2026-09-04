@@ -26,8 +26,7 @@ from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel
 
-from ....measurement import Measurement
-from ..models import (
+from sdlc.assessment.scan.models import (
     C_FRONTEND_ENTRY,
     CandidateMember,
     Confidence,
@@ -40,6 +39,8 @@ from ..models import (
     SourceCandidate,
     family_of,
 )
+
+from ....measurement import Measurement
 from ..naming import head_token, normalize
 
 SIGNAL_ID = "S4"

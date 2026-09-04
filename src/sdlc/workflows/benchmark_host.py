@@ -27,8 +27,8 @@ with workflow.unsafe.imports_passed_through():
     from ..benchmarks.record_builder import stage_record
     from ..benchmarks.recorder import record_benchmark
     from ..core.models import PipelineConfig, RoleUsage
-    from ..models import PlanDrift
     from ..observability.trace import RunEventKind
+    from ..stages.plan.models import PlanDrift
 
 RECORD_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=5)

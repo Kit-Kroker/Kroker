@@ -6,9 +6,7 @@ from sdlc.core.models import (
     RunSummary,
     StageOutcome,
 )
-from sdlc.models import (
-    MemoryKind,
-)
+from sdlc.memory.models import MemoryKind
 
 
 def test_run_summary_round_trips():

@@ -37,29 +37,34 @@
 ```python
 # tests/test_session_models.py
 """E-38: canonical HarnessSession / SessionDigest models + pure helpers."""
+
 import json
 
-from sdlc.models import (ArtifactRef, HarnessKind, HarnessRunResult,
-                         HarnessSession, SessionDigest, SessionEvent)
-from sdlc.harness.session import (SKELETON_MAX, digest_of, scrub_session,
-                                  session_to_jsonl)
+from sdlc.models import (
+    ArtifactRef,
+    HarnessKind,
+    HarnessRunResult,
+    HarnessSession,
+    SessionDigest,
+    SessionEvent,
+)
+from sdlc.harness.session import SKELETON_MAX, digest_of, scrub_session, session_to_jsonl
 
 
 def _session(events):
-    return HarnessSession(harness=HarnessKind.CLAUDE_CODE, session_id="s1",
-                          model="opus", events=events)
+    return HarnessSession(
+        harness=HarnessKind.CLAUDE_CODE, session_id="s1", model="opus", events=events
+    )
 
 
 def test_run_result_gains_session_fields_defaulting_none():
-    r = HarnessRunResult(harness=HarnessKind.CLAUDE_CODE, exit_code=0,
-                         summary="ok")
+    r = HarnessRunResult(harness=HarnessKind.CLAUDE_CODE, exit_code=0, summary="ok")
     assert r.session_ref is None
     assert r.session_digest is None
 
 
 def test_raw_stdout_private_attr_never_serialized():
-    r = HarnessRunResult(harness=HarnessKind.CLAUDE_CODE, exit_code=0,
-                         summary="ok")
+    r = HarnessRunResult(harness=HarnessKind.CLAUDE_CODE, exit_code=0, summary="ok")
     r._raw_stdout = "SECRET STREAM"
     assert "_raw_stdout" not in r.model_dump()
     assert "SECRET STREAM" not in r.model_dump_json()
@@ -69,7 +74,7 @@ def test_digest_counts_waste_aggregates():
     ev = [
         SessionEvent(kind="model_turn", text="thinking"),
         SessionEvent(kind="file_read", tool="Read", target="a.py"),
-        SessionEvent(kind="file_read", tool="Read", target="a.py"),   # re-read
+        SessionEvent(kind="file_read", tool="Read", target="a.py"),  # re-read
         SessionEvent(kind="file_write", tool="Write", target="b.py"),
         SessionEvent(kind="file_write", tool="Edit", target="b.py"),  # churn
         SessionEvent(kind="command", tool="Bash", target="pytest", exit_code=1),
@@ -77,37 +82,46 @@ def test_digest_counts_waste_aggregates():
         SessionEvent(kind="compaction"),
     ]
     d = digest_of(_session(ev))
-    assert d.tool_calls == 6          # every tool-bearing event
+    assert d.tool_calls == 6  # every tool-bearing event
     assert d.file_reads == 2
-    assert d.file_rereads == 1        # a.py read twice -> 1 extra read
-    assert d.files_written == 1       # distinct paths written
-    assert d.rewrite_churn == 1       # b.py written twice
+    assert d.file_rereads == 1  # a.py read twice -> 1 extra read
+    assert d.files_written == 1  # distinct paths written
+    assert d.rewrite_churn == 1  # b.py written twice
     assert d.failed_commands == 1
     assert d.model_turns == 1
     assert d.compacted is True
     assert d.decision_skeleton[0] == "Read a.py"
-    assert len(d.decision_skeleton) == 6   # only tool-bearing events, in order
+    assert len(d.decision_skeleton) == 6  # only tool-bearing events, in order
 
 
 def test_digest_skeleton_capped():
-    ev = [SessionEvent(kind="file_read", tool="Read", target=f"f{i}.py")
-          for i in range(SKELETON_MAX + 50)]
+    ev = [
+        SessionEvent(kind="file_read", tool="Read", target=f"f{i}.py")
+        for i in range(SKELETON_MAX + 50)
+    ]
     d = digest_of(_session(ev))
     assert len(d.decision_skeleton) == SKELETON_MAX
 
 
 def test_scrub_session_redacts_text_and_target():
-    ev = [SessionEvent(kind="command", tool="Bash",
-                       target="export KEY=sk-abcdefghijklmnopqrstuv",
-                       text="password: hunter2hunter2")]
+    ev = [
+        SessionEvent(
+            kind="command",
+            tool="Bash",
+            target="export KEY=sk-abcdefghijklmnopqrstuv",
+            text="password: hunter2hunter2",
+        )
+    ]
     s = scrub_session(_session(ev))
     assert "sk-abcdefghijklmnop" not in (s.events[0].target or "")
     assert "hunter2" not in (s.events[0].text or "")
 
 
 def test_session_to_jsonl_header_plus_one_line_per_event():
-    ev = [SessionEvent(kind="model_turn", text="hi"),
-          SessionEvent(kind="file_read", tool="Read", target="a.py")]
+    ev = [
+        SessionEvent(kind="model_turn", text="hi"),
+        SessionEvent(kind="file_read", tool="Read", target="a.py"),
+    ]
     lines = session_to_jsonl(_session(ev)).strip().splitlines()
     assert len(lines) == 3
     head = json.loads(lines[0])
@@ -128,19 +142,21 @@ Insert after `ArtifactRef` (keep comment style of the file):
 class SessionEvent(BaseModel):
     """One normalised harness-transcript event (ADR-16). Harness-agnostic;
     adapters map their native streams onto this schema."""
-    kind: str          # model_turn | tool_call | tool_result | file_read
-                       # | file_write | command | compaction | result
+
+    kind: str  # model_turn | tool_call | tool_result | file_read
+    # | file_write | command | compaction | result
     tool: str | None = None
-    target: str | None = None      # file path or command line (scrubbed)
+    target: str | None = None  # file path or command line (scrubbed)
     exit_code: int | None = None
     tokens_in: int | None = None
     tokens_out: int | None = None
-    text: str | None = None        # payload (scrubbed)
+    text: str | None = None  # payload (scrubbed)
 
 
 class HarnessSession(BaseModel):
     """Canonical transcript of one harness run (ADR-16). NEVER enters
     workflow state — serialized to JSONL and claim-checked (E-38)."""
+
     harness: HarnessKind
     session_id: str | None = None
     model: str | None = None
@@ -154,12 +170,13 @@ class SessionDigest(BaseModel):
     """BENCHMARK §4.3 waste aggregates + decision-skeleton. Small and
     bounded — travels inline on HarnessRunResult; always kept, even when
     the full transcript is downgraded at retro (OQ-B7)."""
+
     tool_calls: int = 0
     file_reads: int = 0
-    file_rereads: int = 0          # same path read more than once
-    files_written: int = 0         # distinct paths written
-    rewrite_churn: int = 0         # paths written more than once
-    failed_commands: int = 0       # command events with exit_code not in (0, None)
+    file_rereads: int = 0  # same path read more than once
+    files_written: int = 0  # distinct paths written
+    rewrite_churn: int = 0  # paths written more than once
+    failed_commands: int = 0  # command events with exit_code not in (0, None)
     model_turns: int = 0
     compacted: bool = False
     input_tokens: int | None = None
@@ -172,13 +189,13 @@ class SessionDigest(BaseModel):
 In `HarnessRunResult`, add fields + private attr (import `PrivateAttr` from pydantic at top of file):
 
 ```python
-    compacted: bool = False                 # harness signalled a mid-run compaction
-    # E-38 (ADR-16): full scrubbed transcript as a claim-checked ref; waste
-    # digest inline. The raw stdout rides a PrivateAttr so it can never
-    # serialize into workflow state.
-    session_ref: ArtifactRef | None = None
-    session_digest: SessionDigest | None = None
-    _raw_stdout: str = PrivateAttr(default="")
+compacted: bool = False  # harness signalled a mid-run compaction
+# E-38 (ADR-16): full scrubbed transcript as a claim-checked ref; waste
+# digest inline. The raw stdout rides a PrivateAttr so it can never
+# serialize into workflow state.
+session_ref: ArtifactRef | None = None
+session_digest: SessionDigest | None = None
+_raw_stdout: str = PrivateAttr(default="")
 ```
 
 - [ ] **Step 4: Create `src/sdlc/harness/session.py`**
@@ -188,6 +205,7 @@ In `HarnessRunResult`, add fields + private attr (import `PrivateAttr` from pyda
 
 No IO, no Temporal — activity code composes these; tests hit them directly.
 """
+
 from __future__ import annotations
 
 from collections import Counter
@@ -206,8 +224,7 @@ def digest_of(session: HarnessSession) -> SessionDigest:
     downgraded (OQ-B7)."""
     reads: Counter[str] = Counter()
     writes: Counter[str] = Counter()
-    d = SessionDigest(input_tokens=session.input_tokens,
-                      output_tokens=session.output_tokens)
+    d = SessionDigest(input_tokens=session.input_tokens, output_tokens=session.output_tokens)
     skeleton: list[str] = []
     for ev in session.events:
         if ev.kind in _TOOL_KINDS:
@@ -237,10 +254,12 @@ def scrub_session(session: HarnessSession) -> HarnessSession:
     internal failure — the caller (capture) is fail-closed and stores
     nothing in that case."""
     events = [
-        ev.model_copy(update={
-            "text": scrub(ev.text) if ev.text else ev.text,
-            "target": scrub(ev.target) if ev.target else ev.target,
-        })
+        ev.model_copy(
+            update={
+                "text": scrub(ev.text) if ev.text else ev.text,
+                "target": scrub(ev.target) if ev.target else ev.target,
+            }
+        )
         for ev in session.events
     ]
     return session.model_copy(update={"events": events})
@@ -284,6 +303,7 @@ git commit -m "feat(session): canonical HarnessSession/SessionDigest + pure help
 ```python
 # tests/test_artifact_store.py
 """E-38: first real claim-check store (file:// backend behind a seam)."""
+
 import hashlib
 
 from sdlc.artifacts.store import LocalFileStore, ref_to_path
@@ -336,6 +356,7 @@ S3 becomes a second backend behind the same Protocol when it earns its
 keep. Layout: <root>/<run_id>/<subdir>/<name>; sessions and their digests
 share a subdir so a human can `ls` one run's transcripts.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -359,8 +380,7 @@ def ref_to_path(ref: ArtifactRef) -> Path:
 
 
 class ArtifactStore(Protocol):
-    def put(self, kind: str, run_id: str, name: str,
-            data: bytes) -> ArtifactRef: ...
+    def put(self, kind: str, run_id: str, name: str, data: bytes) -> ArtifactRef: ...
     def delete(self, ref: ArtifactRef) -> None: ...
 
 
@@ -369,16 +389,16 @@ class LocalFileStore:
         self.root = Path(
             root
             or os.environ.get("SDLC_ARTIFACT_ROOT")
-            or os.environ.get("SDLC_EXPORT_ROOT", "./runs"))
+            or os.environ.get("SDLC_EXPORT_ROOT", "./runs")
+        )
 
-    def put(self, kind: str, run_id: str, name: str,
-            data: bytes) -> ArtifactRef:
+    def put(self, kind: str, run_id: str, name: str, data: bytes) -> ArtifactRef:
         path = self.root / run_id / _SUBDIRS.get(kind, kind) / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
         return ArtifactRef(
-            kind=kind, uri=path.resolve().as_uri(),
-            sha256=hashlib.sha256(data).hexdigest())
+            kind=kind, uri=path.resolve().as_uri(), sha256=hashlib.sha256(data).hexdigest()
+        )
 
     def delete(self, ref: ArtifactRef) -> None:
         ref_to_path(ref).unlink(missing_ok=True)
@@ -414,38 +434,88 @@ git commit -m "feat(artifacts): ArtifactStore seam + LocalFileStore file:// back
 ```python
 # tests/test_claude_stream_normalise.py
 """E-38: claude stream-json -> canonical HarnessSession."""
+
 import json
 
 from sdlc.harness.adapters import ClaudeCodeHarness, HarnessRequest
 
-STREAM = "\n".join([
-    json.dumps({"type": "system", "subtype": "init", "session_id": "abc",
-                "model": "claude-opus-4-8"}),
-    json.dumps({"type": "assistant", "session_id": "abc", "message": {
-        "content": [{"type": "text", "text": "I'll read the file."}]}}),
-    json.dumps({"type": "assistant", "session_id": "abc", "message": {
-        "content": [{"type": "tool_use", "name": "Read",
-                     "input": {"file_path": "src/app.py"}}]}}),
-    json.dumps({"type": "user", "session_id": "abc", "message": {
-        "content": [{"type": "tool_result", "content": "def app(): ..."}]}}),
-    json.dumps({"type": "assistant", "session_id": "abc", "message": {
-        "content": [{"type": "tool_use", "name": "Write",
-                     "input": {"file_path": "src/out.py"}}]}}),
-    json.dumps({"type": "assistant", "session_id": "abc", "message": {
-        "content": [{"type": "tool_use", "name": "Bash",
-                     "input": {"command": "pytest -q"}}]}}),
-    json.dumps({"type": "user", "session_id": "abc", "message": {
-        "content": [{"type": "tool_result", "content": "1 failed",
-                     "is_error": True}]}}),
-    json.dumps({"type": "result", "subtype": "success", "session_id": "abc",
-                "total_cost_usd": 0.12, "result": "done",
-                "usage": {"input_tokens": 100, "output_tokens": 50}}),
-])
+STREAM = "\n".join(
+    [
+        json.dumps(
+            {"type": "system", "subtype": "init", "session_id": "abc", "model": "claude-opus-4-8"}
+        ),
+        json.dumps(
+            {
+                "type": "assistant",
+                "session_id": "abc",
+                "message": {"content": [{"type": "text", "text": "I'll read the file."}]},
+            }
+        ),
+        json.dumps(
+            {
+                "type": "assistant",
+                "session_id": "abc",
+                "message": {
+                    "content": [
+                        {"type": "tool_use", "name": "Read", "input": {"file_path": "src/app.py"}}
+                    ]
+                },
+            }
+        ),
+        json.dumps(
+            {
+                "type": "user",
+                "session_id": "abc",
+                "message": {"content": [{"type": "tool_result", "content": "def app(): ..."}]},
+            }
+        ),
+        json.dumps(
+            {
+                "type": "assistant",
+                "session_id": "abc",
+                "message": {
+                    "content": [
+                        {"type": "tool_use", "name": "Write", "input": {"file_path": "src/out.py"}}
+                    ]
+                },
+            }
+        ),
+        json.dumps(
+            {
+                "type": "assistant",
+                "session_id": "abc",
+                "message": {
+                    "content": [
+                        {"type": "tool_use", "name": "Bash", "input": {"command": "pytest -q"}}
+                    ]
+                },
+            }
+        ),
+        json.dumps(
+            {
+                "type": "user",
+                "session_id": "abc",
+                "message": {
+                    "content": [{"type": "tool_result", "content": "1 failed", "is_error": True}]
+                },
+            }
+        ),
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "session_id": "abc",
+                "total_cost_usd": 0.12,
+                "result": "done",
+                "usage": {"input_tokens": 100, "output_tokens": 50},
+            }
+        ),
+    ]
+)
 
 
 def test_build_cmd_uses_stream_json_with_verbose():
-    cmd = ClaudeCodeHarness().build_cmd(
-        HarnessRequest(prompt="p", cwd="."))
+    cmd = ClaudeCodeHarness().build_cmd(HarnessRequest(prompt="p", cwd="."))
     assert "stream-json" in cmd
     assert "--verbose" in cmd
     assert "json" not in [a for a in cmd if a == "json"]  # plain json gone
@@ -463,14 +533,21 @@ def test_normalise_maps_tools_onto_canonical_kinds():
     s = ClaudeCodeHarness().normalise_session(STREAM)
     kinds = [e.kind for e in s.events]
     assert s.session_id == "abc" and s.model == "claude-opus-4-8"
-    assert kinds == ["model_turn", "file_read", "tool_result", "file_write",
-                     "command", "tool_result", "result"]
+    assert kinds == [
+        "model_turn",
+        "file_read",
+        "tool_result",
+        "file_write",
+        "command",
+        "tool_result",
+        "result",
+    ]
     read = s.events[1]
     assert read.tool == "Read" and read.target == "src/app.py"
     bash = s.events[4]
     assert bash.tool == "Bash" and bash.target == "pytest -q"
     err = s.events[5]
-    assert err.exit_code == 1        # is_error -> exit_code 1
+    assert err.exit_code == 1  # is_error -> exit_code 1
     assert s.cost_usd == 0.12
 
 
@@ -498,11 +575,10 @@ Base class — add default normaliser and keep raw stdout (in `run()`, right aft
 ```
 
 ```python
-        result = self.parse(stdout_b.decode(errors="replace"),
-                            proc.returncode or 0)
-        # E-38: keep the raw stream for activity-side capture. PrivateAttr —
-        # never serialized, never enters workflow state.
-        result._raw_stdout = stdout_b.decode(errors="replace")
+result = self.parse(stdout_b.decode(errors="replace"), proc.returncode or 0)
+# E-38: keep the raw stream for activity-side capture. PrivateAttr —
+# never serialized, never enters workflow state.
+result._raw_stdout = stdout_b.decode(errors="replace")
 ```
 
 (Import `HarnessSession`, `SessionEvent` from `..models` at top.)
@@ -510,115 +586,133 @@ Base class — add default normaliser and keep raw stdout (in `run()`, right aft
 `ClaudeCodeHarness.build_cmd` — replace the output-format pair:
 
 ```python
-        cmd = [
-            "claude", "-p", req.prompt,
-            # E-38: stream-json emits the full event stream (transcript
-            # source) AND a final `result` event with the same fields the
-            # old plain-json payload carried. --verbose is required by the
-            # CLI for stream-json in print mode.
-            "--output-format", "stream-json", "--verbose",
-            "--allowedTools", self.allowed_tools,
-            "--permission-mode", self.permission_mode,
-        ]
+cmd = [
+    "claude",
+    "-p",
+    req.prompt,
+    # E-38: stream-json emits the full event stream (transcript
+    # source) AND a final `result` event with the same fields the
+    # old plain-json payload carried. --verbose is required by the
+    # CLI for stream-json in print mode.
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--allowedTools",
+    self.allowed_tools,
+    "--permission-mode",
+    self.permission_mode,
+]
 ```
 
 `ClaudeCodeHarness.parse` — walk lines, find the `result` event (fall back to raw stdout as summary exactly as today):
 
 ```python
-    def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
-        session_id = cost = summary = None
-        input_tokens = output_tokens = None
-        payload = None
-        for ln in stdout.strip().splitlines():
-            ln = ln.strip()
-            if not ln:
-                continue
-            try:
-                ev = json.loads(ln)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(ev, dict) and ev.get("type") == "result":
-                payload = ev
-        if payload is not None:
-            session_id = payload.get("session_id")
-            cost = payload.get("total_cost_usd")
-            summary = payload.get("result") or payload.get("content")
-            usage = payload.get("usage") or {}
-            input_tokens = usage.get("input_tokens")
-            output_tokens = usage.get("output_tokens")
-        else:
-            _log.warning("claude parse: no result event in stream, falling "
-                         "back to raw stdout as summary")
-            summary = stdout
-        return HarnessRunResult(
-            harness=self.kind, session_id=session_id, exit_code=exit_code,
-            summary=(summary or "")[:SUMMARY_MAX], cost_usd=cost,
-            input_tokens=input_tokens, output_tokens=output_tokens,
+def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
+    session_id = cost = summary = None
+    input_tokens = output_tokens = None
+    payload = None
+    for ln in stdout.strip().splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            ev = json.loads(ln)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(ev, dict) and ev.get("type") == "result":
+            payload = ev
+    if payload is not None:
+        session_id = payload.get("session_id")
+        cost = payload.get("total_cost_usd")
+        summary = payload.get("result") or payload.get("content")
+        usage = payload.get("usage") or {}
+        input_tokens = usage.get("input_tokens")
+        output_tokens = usage.get("output_tokens")
+    else:
+        _log.warning(
+            "claude parse: no result event in stream, falling back to raw stdout as summary"
         )
+        summary = stdout
+    return HarnessRunResult(
+        harness=self.kind,
+        session_id=session_id,
+        exit_code=exit_code,
+        summary=(summary or "")[:SUMMARY_MAX],
+        cost_usd=cost,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+    )
 ```
 
 `ClaudeCodeHarness.normalise_session`:
 
 ```python
-    # tool name -> canonical event kind + which input field is the target
-    _TOOL_MAP = {
-        "Read": ("file_read", "file_path"),
-        "Write": ("file_write", "file_path"),
-        "Edit": ("file_write", "file_path"),
-        "Bash": ("command", "command"),
-    }
+# tool name -> canonical event kind + which input field is the target
+_TOOL_MAP = {
+    "Read": ("file_read", "file_path"),
+    "Write": ("file_write", "file_path"),
+    "Edit": ("file_write", "file_path"),
+    "Bash": ("command", "command"),
+}
 
-    def normalise_session(self, stdout: str) -> HarnessSession:
-        events: list[SessionEvent] = []
-        session_id = model = None
-        cost = in_tok = out_tok = None
-        for ln in stdout.strip().splitlines():
-            try:
-                ev = json.loads(ln.strip())
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(ev, dict):
-                continue
-            session_id = session_id or ev.get("session_id")
-            etype = ev.get("type")
-            if etype == "system":
-                model = model or ev.get("model")
-            elif etype in ("assistant", "user"):
-                msg = ev.get("message") or {}
-                for block in msg.get("content") or []:
-                    if not isinstance(block, dict):
-                        continue
-                    btype = block.get("type")
-                    if btype == "text" and block.get("text"):
-                        events.append(SessionEvent(kind="model_turn",
-                                                   text=block["text"]))
-                    elif btype == "tool_use":
-                        name = block.get("name") or "tool"
-                        kind, field = self._TOOL_MAP.get(name, ("tool_call", ""))
-                        inp = block.get("input") or {}
-                        target = inp.get(field) if field else json.dumps(inp)[:500]
-                        events.append(SessionEvent(kind=kind, tool=name,
-                                                   target=target))
-                    elif btype == "tool_result":
-                        content = block.get("content")
-                        if isinstance(content, list):
-                            content = " ".join(
-                                c.get("text", "") for c in content
-                                if isinstance(c, dict))
-                        events.append(SessionEvent(
+
+def normalise_session(self, stdout: str) -> HarnessSession:
+    events: list[SessionEvent] = []
+    session_id = model = None
+    cost = in_tok = out_tok = None
+    for ln in stdout.strip().splitlines():
+        try:
+            ev = json.loads(ln.strip())
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(ev, dict):
+            continue
+        session_id = session_id or ev.get("session_id")
+        etype = ev.get("type")
+        if etype == "system":
+            model = model or ev.get("model")
+        elif etype in ("assistant", "user"):
+            msg = ev.get("message") or {}
+            for block in msg.get("content") or []:
+                if not isinstance(block, dict):
+                    continue
+                btype = block.get("type")
+                if btype == "text" and block.get("text"):
+                    events.append(SessionEvent(kind="model_turn", text=block["text"]))
+                elif btype == "tool_use":
+                    name = block.get("name") or "tool"
+                    kind, field = self._TOOL_MAP.get(name, ("tool_call", ""))
+                    inp = block.get("input") or {}
+                    target = inp.get(field) if field else json.dumps(inp)[:500]
+                    events.append(SessionEvent(kind=kind, tool=name, target=target))
+                elif btype == "tool_result":
+                    content = block.get("content")
+                    if isinstance(content, list):
+                        content = " ".join(
+                            c.get("text", "") for c in content if isinstance(c, dict)
+                        )
+                    events.append(
+                        SessionEvent(
                             kind="tool_result",
                             exit_code=1 if block.get("is_error") else None,
-                            text=(content or "")[:2000] or None))
-            elif etype == "result":
-                usage = ev.get("usage") or {}
-                cost = ev.get("total_cost_usd")
-                in_tok = usage.get("input_tokens")
-                out_tok = usage.get("output_tokens")
-                events.append(SessionEvent(kind="result",
-                                           text=(ev.get("result") or "")[:2000]))
-        return HarnessSession(harness=self.kind, session_id=session_id,
-                              model=model, events=events, cost_usd=cost,
-                              input_tokens=in_tok, output_tokens=out_tok)
+                            text=(content or "")[:2000] or None,
+                        )
+                    )
+        elif etype == "result":
+            usage = ev.get("usage") or {}
+            cost = ev.get("total_cost_usd")
+            in_tok = usage.get("input_tokens")
+            out_tok = usage.get("output_tokens")
+            events.append(SessionEvent(kind="result", text=(ev.get("result") or "")[:2000]))
+    return HarnessSession(
+        harness=self.kind,
+        session_id=session_id,
+        model=model,
+        events=events,
+        cost_usd=cost,
+        input_tokens=in_tok,
+        output_tokens=out_tok,
+    )
 ```
 
 - [ ] **Step 4: Update `tests/test_harness_parse.py` claude fixtures**
@@ -656,23 +750,44 @@ git commit -m "feat(harness): claude stream-json capture + canonical normaliser 
 ```python
 # tests/test_opencode_normalise.py
 """E-38: opencode --format json event stream -> canonical HarnessSession."""
+
 import json
 
 from sdlc.harness.adapters import OpenCodeHarness
 
-STREAM = "\n".join([
-    json.dumps({"type": "step_start", "sessionID": "oc1"}),
-    json.dumps({"type": "text", "sessionID": "oc1",
-                "part": {"text": "Working on it."}}),
-    json.dumps({"type": "tool", "sessionID": "oc1",
-                "part": {"tool": "read", "state": {
-                    "input": {"filePath": "src/app.py"}, "status": "completed"}}}),
-    json.dumps({"type": "tool", "sessionID": "oc1",
-                "part": {"tool": "bash", "state": {
-                    "input": {"command": "pytest -q"}, "status": "error"}}}),
-    json.dumps({"type": "step_finish", "sessionID": "oc1",
-                "part": {"tokens": {"input": 10, "output": 5}, "cost": 0.01}}),
-])
+STREAM = "\n".join(
+    [
+        json.dumps({"type": "step_start", "sessionID": "oc1"}),
+        json.dumps({"type": "text", "sessionID": "oc1", "part": {"text": "Working on it."}}),
+        json.dumps(
+            {
+                "type": "tool",
+                "sessionID": "oc1",
+                "part": {
+                    "tool": "read",
+                    "state": {"input": {"filePath": "src/app.py"}, "status": "completed"},
+                },
+            }
+        ),
+        json.dumps(
+            {
+                "type": "tool",
+                "sessionID": "oc1",
+                "part": {
+                    "tool": "bash",
+                    "state": {"input": {"command": "pytest -q"}, "status": "error"},
+                },
+            }
+        ),
+        json.dumps(
+            {
+                "type": "step_finish",
+                "sessionID": "oc1",
+                "part": {"tokens": {"input": 10, "output": 5}, "cost": 0.01},
+            }
+        ),
+    ]
+)
 
 
 def test_normalise_maps_stream_onto_canonical_kinds():
@@ -682,7 +797,7 @@ def test_normalise_maps_stream_onto_canonical_kinds():
     assert kinds == ["model_turn", "file_read", "command"]
     assert s.events[1].target == "src/app.py"
     assert s.events[2].target == "pytest -q"
-    assert s.events[2].exit_code == 1     # status: error -> failed command
+    assert s.events[2].exit_code == 1  # status: error -> failed command
     assert s.input_tokens == 10 and s.output_tokens == 5
     assert s.cost_usd == 0.01
 
@@ -700,58 +815,69 @@ Expected: FAIL — base default returns empty events for the populated stream
 - [ ] **Step 3: Implement `OpenCodeHarness.normalise_session`**
 
 ```python
-    # opencode tool name -> canonical kind + target field in state.input
-    _TOOL_MAP = {
-        "read": ("file_read", "filePath"),
-        "write": ("file_write", "filePath"),
-        "edit": ("file_write", "filePath"),
-        "bash": ("command", "command"),
-    }
+# opencode tool name -> canonical kind + target field in state.input
+_TOOL_MAP = {
+    "read": ("file_read", "filePath"),
+    "write": ("file_write", "filePath"),
+    "edit": ("file_write", "filePath"),
+    "bash": ("command", "command"),
+}
 
-    def normalise_session(self, stdout: str) -> HarnessSession:
-        events: list[SessionEvent] = []
-        session_id = None
-        in_tok = out_tok = 0
-        cost = 0.0
-        saw_tokens = saw_cost = False
-        for ln in stdout.splitlines():
-            ln = ln.strip()
-            if not ln:
-                continue
-            try:
-                ev = json.loads(ln)
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(ev, dict):
-                continue
-            session_id = session_id or ev.get("sessionID") or ev.get("session_id")
-            part = ev.get("part") or {}
-            etype = ev.get("type")
-            if etype == "text" and part.get("text"):
-                events.append(SessionEvent(kind="model_turn",
-                                           text=part["text"][:2000]))
-            elif etype == "tool":
-                name = (part.get("tool") or "tool").lower()
-                kind, field = self._TOOL_MAP.get(name, ("tool_call", ""))
-                state = part.get("state") or {}
-                inp = state.get("input") or {}
-                target = inp.get(field) if field else json.dumps(inp)[:500]
-                events.append(SessionEvent(
-                    kind=kind, tool=name, target=target,
-                    exit_code=1 if state.get("status") == "error" else None))
-            elif etype == "step_finish":
-                tokens = part.get("tokens") or {}
-                if isinstance(tokens.get("input"), (int, float)):
-                    in_tok += tokens["input"]; saw_tokens = True
-                if isinstance(tokens.get("output"), (int, float)):
-                    out_tok += tokens["output"]; saw_tokens = True
-                if isinstance(part.get("cost"), (int, float)):
-                    cost += part["cost"]; saw_cost = True
-        return HarnessSession(
-            harness=self.kind, session_id=session_id, events=events,
-            input_tokens=in_tok if saw_tokens else None,
-            output_tokens=out_tok if saw_tokens else None,
-            cost_usd=cost if saw_cost else None)
+
+def normalise_session(self, stdout: str) -> HarnessSession:
+    events: list[SessionEvent] = []
+    session_id = None
+    in_tok = out_tok = 0
+    cost = 0.0
+    saw_tokens = saw_cost = False
+    for ln in stdout.splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            ev = json.loads(ln)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(ev, dict):
+            continue
+        session_id = session_id or ev.get("sessionID") or ev.get("session_id")
+        part = ev.get("part") or {}
+        etype = ev.get("type")
+        if etype == "text" and part.get("text"):
+            events.append(SessionEvent(kind="model_turn", text=part["text"][:2000]))
+        elif etype == "tool":
+            name = (part.get("tool") or "tool").lower()
+            kind, field = self._TOOL_MAP.get(name, ("tool_call", ""))
+            state = part.get("state") or {}
+            inp = state.get("input") or {}
+            target = inp.get(field) if field else json.dumps(inp)[:500]
+            events.append(
+                SessionEvent(
+                    kind=kind,
+                    tool=name,
+                    target=target,
+                    exit_code=1 if state.get("status") == "error" else None,
+                )
+            )
+        elif etype == "step_finish":
+            tokens = part.get("tokens") or {}
+            if isinstance(tokens.get("input"), (int, float)):
+                in_tok += tokens["input"]
+                saw_tokens = True
+            if isinstance(tokens.get("output"), (int, float)):
+                out_tok += tokens["output"]
+                saw_tokens = True
+            if isinstance(part.get("cost"), (int, float)):
+                cost += part["cost"]
+                saw_cost = True
+    return HarnessSession(
+        harness=self.kind,
+        session_id=session_id,
+        events=events,
+        input_tokens=in_tok if saw_tokens else None,
+        output_tokens=out_tok if saw_tokens else None,
+        cost_usd=cost if saw_cost else None,
+    )
 ```
 
 Note the digest counts a `command` event with `exit_code=1` as failed — the opencode `status: "error"` maps onto the same signal claude's `is_error` does.
@@ -787,6 +913,7 @@ git commit -m "feat(harness): opencode normaliser onto canonical session schema 
 ```python
 # tests/test_session_capture.py
 """E-38: capture -> scrub (fail-closed) -> digest -> store."""
+
 import json
 
 import pytest
@@ -795,23 +922,41 @@ from sdlc.artifacts.capture import capture_session
 from sdlc.artifacts.store import ref_to_path
 from sdlc.harness.adapters import ClaudeCodeHarness
 
-STREAM = "\n".join([
-    json.dumps({"type": "assistant", "session_id": "abc", "message": {
-        "content": [{"type": "tool_use", "name": "Bash",
-                     "input": {"command":
-                               "export K=sk-abcdefghijklmnopqrstuv"}}]}}),
-    json.dumps({"type": "result", "session_id": "abc", "result": "done",
-                "usage": {"input_tokens": 1, "output_tokens": 1}}),
-])
+STREAM = "\n".join(
+    [
+        json.dumps(
+            {
+                "type": "assistant",
+                "session_id": "abc",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "name": "Bash",
+                            "input": {"command": "export K=sk-abcdefghijklmnopqrstuv"},
+                        }
+                    ]
+                },
+            }
+        ),
+        json.dumps(
+            {
+                "type": "result",
+                "session_id": "abc",
+                "result": "done",
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            }
+        ),
+    ]
+)
 
 
 def test_capture_stores_scrubbed_jsonl_and_digest(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_ARTIFACT_ROOT", str(tmp_path))
-    ref, dig = capture_session(ClaudeCodeHarness(), STREAM,
-                               run_id="r1", task_id="t1", attempt=1)
+    ref, dig = capture_session(ClaudeCodeHarness(), STREAM, run_id="r1", task_id="t1", attempt=1)
     assert ref is not None and ref.kind == "harness_session"
     stored = ref_to_path(ref).read_text(encoding="utf-8")
-    assert "sk-abcdefghijklmnop" not in stored          # scrub effectiveness
+    assert "sk-abcdefghijklmnop" not in stored  # scrub effectiveness
     assert "[REDACTED_API_KEY]" in stored
     assert dig.tool_calls == 1
     assert (tmp_path / "r1" / "sessions" / "t1-a1.digest.json").exists()
@@ -819,18 +964,20 @@ def test_capture_stores_scrubbed_jsonl_and_digest(tmp_path, monkeypatch):
 
 def test_capture_fail_closed_stores_nothing(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_ARTIFACT_ROOT", str(tmp_path))
-    monkeypatch.setattr("sdlc.artifacts.capture.scrub_session",
-                        lambda s: (_ for _ in ()).throw(RuntimeError("boom")))
-    ref, dig = capture_session(ClaudeCodeHarness(), STREAM,
-                               run_id="r1", task_id="t1", attempt=1)
+    monkeypatch.setattr(
+        "sdlc.artifacts.capture.scrub_session",
+        lambda s: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    ref, dig = capture_session(ClaudeCodeHarness(), STREAM, run_id="r1", task_id="t1", attempt=1)
     assert ref is None and dig is None
-    assert not (tmp_path / "r1").exists()               # nothing on disk
+    assert not (tmp_path / "r1").exists()  # nothing on disk
 
 
 def test_capture_sanitizes_task_id(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_ARTIFACT_ROOT", str(tmp_path))
-    ref, _ = capture_session(ClaudeCodeHarness(), STREAM,
-                             run_id="r1", task_id="T/1: setup", attempt=2)
+    ref, _ = capture_session(
+        ClaudeCodeHarness(), STREAM, run_id="r1", task_id="T/1: setup", attempt=2
+    )
     assert ref_to_path(ref).name == "T_1__setup-a2.jsonl"
 ```
 
@@ -850,6 +997,7 @@ Fail-closed w.r.t. STORAGE: any failure here stores nothing and returns
 bug must not block delivery; SC-5-style strictness applies to what gets
 stored). Ordering is strict: scrub runs before any byte touches disk.
 """
+
 from __future__ import annotations
 
 import logging
@@ -867,23 +1015,31 @@ def _safe(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]", "_", name)
 
 
-def capture_session(harness: CodingHarness, raw_stdout: str, run_id: str,
-                    task_id: str, attempt: int,
-                    ) -> tuple[ArtifactRef | None, SessionDigest | None]:
+def capture_session(
+    harness: CodingHarness,
+    raw_stdout: str,
+    run_id: str,
+    task_id: str,
+    attempt: int,
+) -> tuple[ArtifactRef | None, SessionDigest | None]:
     try:
         session = harness.normalise_session(raw_stdout)
-        session = scrub_session(session)          # fail-closed: before any put
-        digest = digest_of(session)               # pre-truncation (OQ-B7)
+        session = scrub_session(session)  # fail-closed: before any put
+        digest = digest_of(session)  # pre-truncation (OQ-B7)
         store = LocalFileStore()
         name = f"{_safe(task_id)}-a{attempt}"
-        ref = store.put("harness_session", run_id, f"{name}.jsonl",
-                        session_to_jsonl(session).encode("utf-8"))
-        store.put("harness_session_digest", run_id, f"{name}.digest.json",
-                  digest.model_dump_json(indent=2).encode("utf-8"))
+        ref = store.put(
+            "harness_session", run_id, f"{name}.jsonl", session_to_jsonl(session).encode("utf-8")
+        )
+        store.put(
+            "harness_session_digest",
+            run_id,
+            f"{name}.digest.json",
+            digest.model_dump_json(indent=2).encode("utf-8"),
+        )
         return ref, digest
     except Exception:
-        _log.warning("session capture failed — nothing stored (fail-closed)",
-                     exc_info=True)
+        _log.warning("session capture failed — nothing stored (fail-closed)", exc_info=True)
         return None, None
 ```
 
@@ -900,21 +1056,24 @@ class CodingTaskInput:
     model: str | None = None
     session_id: str | None = None
     timeout_s: int = 3600
-    task_id: str = "task"       # E-38: session artifact naming
+    task_id: str = "task"  # E-38: session artifact naming
     attempt: int = 1
 ```
 
 After `result = await harness.run(...)` (before the checkpoint-commit block), add:
 
 ```python
-    # E-38: capture the transcript. Raw stdout rides a PrivateAttr — it
-    # exists only inside this activity and is never written unscrubbed.
-    ref, digest = capture_session(
-        harness, result._raw_stdout,
-        run_id=activity.info().workflow_run_id,
-        task_id=inp.task_id, attempt=inp.attempt)
-    result.session_ref = ref
-    result.session_digest = digest
+# E-38: capture the transcript. Raw stdout rides a PrivateAttr — it
+# exists only inside this activity and is never written unscrubbed.
+ref, digest = capture_session(
+    harness,
+    result._raw_stdout,
+    run_id=activity.info().workflow_run_id,
+    task_id=inp.task_id,
+    attempt=inp.attempt,
+)
+result.session_ref = ref
+result.session_digest = digest
 ```
 
 Import `capture_session` from `.artifacts.capture` at the top of `activities.py`.
@@ -922,10 +1081,17 @@ Import `capture_session` from `.artifacts.capture` at the top of `activities.py`
 In `feature.py:570`, pass the new fields:
 
 ```python
-                CodingTaskInput(harness=role_cfg.harness, prompt=prompt,
-                                worktree=worktree, model=role_cfg.model,
-                                session_id=session_id,
-                                task_id=task.id, attempt=attempt),
+(
+    CodingTaskInput(
+        harness=role_cfg.harness,
+        prompt=prompt,
+        worktree=worktree,
+        model=role_cfg.model,
+        session_id=session_id,
+        task_id=task.id,
+        attempt=attempt,
+    ),
+)
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -959,20 +1125,23 @@ git commit -m "feat(activities): capture-always session pipeline in run_coding_t
 ```python
 # tests/test_session_retention.py
 """E-38/OQ-B7: full transcript deleted only on clean-green non-benchmark."""
+
 import pytest
 
-from sdlc.artifacts.retention import (RetentionInput, apply_session_retention,
-                                      keep_full_transcripts)
+from sdlc.artifacts.retention import RetentionInput, apply_session_retention, keep_full_transcripts
 from sdlc.artifacts.store import LocalFileStore, ref_to_path
 
 
-@pytest.mark.parametrize("outcome,had_fix,is_bench,expected", [
-    ("deployed:staging", False, False, False),  # clean-green -> downgrade
-    ("deployed:staging", True,  False, True),   # green after retry -> keep
-    ("deployed:staging", False, True,  True),   # benchmark -> keep
-    ("rejected:merge",   False, False, True),   # failed -> keep
-    ("rejected:merge",   True,  True,  True),
-])
+@pytest.mark.parametrize(
+    "outcome,had_fix,is_bench,expected",
+    [
+        ("deployed:staging", False, False, False),  # clean-green -> downgrade
+        ("deployed:staging", True, False, True),  # green after retry -> keep
+        ("deployed:staging", False, True, True),  # benchmark -> keep
+        ("rejected:merge", False, False, True),  # failed -> keep
+        ("rejected:merge", True, True, True),
+    ],
+)
 def test_keep_full_transcripts_matrix(outcome, had_fix, is_bench, expected):
     assert keep_full_transcripts(outcome, had_fix, is_bench) is expected
 
@@ -983,8 +1152,7 @@ async def test_retention_deletes_full_keeps_digest(tmp_path, monkeypatch):
     store = LocalFileStore()
     ref = store.put("harness_session", "r1", "t1-a1.jsonl", b"full")
     store.put("harness_session_digest", "r1", "t1-a1.digest.json", b"{}")
-    out = await apply_session_retention(
-        RetentionInput(refs=[ref], keep_full=False))
+    out = await apply_session_retention(RetentionInput(refs=[ref], keep_full=False))
     assert not ref_to_path(ref).exists()
     assert (tmp_path / "r1" / "sessions" / "t1-a1.digest.json").exists()
     assert out == "downgraded:1"
@@ -995,8 +1163,7 @@ async def test_retention_keep_full_is_noop(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_ARTIFACT_ROOT", str(tmp_path))
     store = LocalFileStore()
     ref = store.put("harness_session", "r1", "t1-a1.jsonl", b"full")
-    out = await apply_session_retention(
-        RetentionInput(refs=[ref], keep_full=True))
+    out = await apply_session_retention(RetentionInput(refs=[ref], keep_full=True))
     assert ref_to_path(ref).exists()
     assert out == "kept:1"
 ```
@@ -1018,6 +1185,7 @@ after a retry" keeps full, because HOW the agent recovered is the point.
 Only clean-green non-benchmark runs are downgraded to digest-only. The
 digest file is never deleted. TTL on kept transcripts stays open (OQ-B7).
 """
+
 from __future__ import annotations
 
 import logging
@@ -1030,8 +1198,7 @@ from ..models import ArtifactRef
 _log = logging.getLogger(__name__)
 
 
-def keep_full_transcripts(outcome: str, had_fix_attempts: bool,
-                          is_benchmark: bool) -> bool:
+def keep_full_transcripts(outcome: str, had_fix_attempts: bool, is_benchmark: bool) -> bool:
     """Pure policy — called from workflow code, so: no IO, no env."""
     clean_green = outcome.startswith("deployed") and not had_fix_attempts
     return is_benchmark or not clean_green
@@ -1047,9 +1214,10 @@ async def apply_session_retention(inp: RetentionInput) -> str:
     if inp.keep_full:
         return f"kept:{len(inp.refs)}"
     from .store import LocalFileStore
+
     store = LocalFileStore()
     for ref in inp.refs:
-        store.delete(ref)          # digests are not in refs — never deleted
+        store.delete(ref)  # digests are not in refs — never deleted
     return f"downgraded:{len(inp.refs)}"
 ```
 
@@ -1058,8 +1226,7 @@ async def apply_session_retention(inp: RetentionInput) -> str:
 Imports (inside the existing `workflow.unsafe.imports_passed_through()` block near line 50):
 
 ```python
-    from ..artifacts.retention import (RetentionInput, apply_session_retention,
-                                       keep_full_transcripts)
+from ..artifacts.retention import RetentionInput, apply_session_retention, keep_full_transcripts
 ```
 
 State init — beside the E-32 trace comment (~line 234):
@@ -1082,24 +1249,27 @@ In `_dev_task`, right after the `run_coding_task` activity call returns `run` (~
 Retro terminal block — after the `export_run_artifacts` try/except (~line 766), still inside the outer retro `try`:
 
 ```python
-            # E-38: OQ-B7 retention — downgrade clean-green non-benchmark
-            # runs to digest-only. Best-effort like the export above.
-            try:
-                had_fix = any(
-                    ev.kind == RunEventKind.FIX_ATTEMPT
-                    and ev.data.get("attempt") not in (None, "1")
-                    for ev in self._trace)
-                await workflow.execute_activity(
-                    apply_session_retention,
-                    RetentionInput(
-                        refs=self._session_refs,
-                        keep_full=keep_full_transcripts(
-                            outcome=result,
-                            had_fix_attempts=had_fix,
-                            is_benchmark=cfg.benchmark.case_id is not None)),
-                    **EXPORT_ACT)
-            except Exception:
-                pass
+# E-38: OQ-B7 retention — downgrade clean-green non-benchmark
+# runs to digest-only. Best-effort like the export above.
+try:
+    had_fix = any(
+        ev.kind == RunEventKind.FIX_ATTEMPT and ev.data.get("attempt") not in (None, "1")
+        for ev in self._trace
+    )
+    await workflow.execute_activity(
+        apply_session_retention,
+        RetentionInput(
+            refs=self._session_refs,
+            keep_full=keep_full_transcripts(
+                outcome=result,
+                had_fix_attempts=had_fix,
+                is_benchmark=cfg.benchmark.case_id is not None,
+            ),
+        ),
+        **EXPORT_ACT,
+    )
+except Exception:
+    pass
 ```
 
 (`RunEventKind` is already imported for `_emit`; `result` is the terminal outcome string in that scope — verify both names against the surrounding code before editing.)
@@ -1147,6 +1317,7 @@ git commit -m "feat(retro): OQ-B7 session retention — downgrade clean-green to
 ```python
 # tests/test_logfire_setup.py
 """E-38: Logfire slice is env-gated and a strict no-op without a token."""
+
 import importlib
 
 import sdlc.observability.logfire_setup as lf
@@ -1163,7 +1334,7 @@ def _reload(monkeypatch, token):
 def test_disabled_without_token(monkeypatch):
     mod = _reload(monkeypatch, None)
     assert mod.configure() is False
-    with mod.span("x", n=1):        # nullcontext — must not raise, no import
+    with mod.span("x", n=1):  # nullcontext — must not raise, no import
         pass
 
 
@@ -1191,6 +1362,7 @@ is a no-op (nullcontext), and logfire is never imported. Span attributes
 must be metadata only — counts, durations, sizes, ids. NEVER transcript
 payloads: the scrub-before-store invariant applies to telemetry too.
 """
+
 from __future__ import annotations
 
 import os
@@ -1204,6 +1376,7 @@ def configure() -> bool:
     if not _ENABLED:
         return False
     import logfire  # lazy: optional dependency, only needed when gated on
+
     logfire.configure(send_to_logfire="if-token-present", console=False)
     logfire.instrument_pydantic_ai()
     return True
@@ -1214,6 +1387,7 @@ def span(name: str, **attrs):
     if not _ENABLED:
         return nullcontext()
     import logfire
+
     return logfire.span(name, **attrs)
 ```
 
@@ -1222,32 +1396,37 @@ def span(name: str, **attrs):
 `worker.py`, in `main()` after `validate_registry(...)`:
 
 ```python
-    from .observability.logfire_setup import configure as configure_logfire
-    if configure_logfire():
-        logging.getLogger(__name__).info("logfire instrumentation enabled")
+from .observability.logfire_setup import configure as configure_logfire
+
+if configure_logfire():
+    logging.getLogger(__name__).info("logfire instrumentation enabled")
 ```
 
 `activities.py`, in `run_coding_task` — wrap the harness run and capture (import `span` from `.observability.logfire_setup`):
 
 ```python
-    harness = HARNESSES[inp.harness]
-    with span("harness.run", harness=inp.harness.value,
-              task_id=inp.task_id, attempt=inp.attempt):
-        result = await harness.run(
-            HarnessRequest(
-                prompt=inp.prompt, cwd=inp.worktree, model=inp.model,
-                session_id=inp.session_id, timeout_s=inp.timeout_s,
-            ),
-            heartbeat=activity.heartbeat,
-        )
-    with span("session.capture", task_id=inp.task_id,
-              stdout_bytes=len(result._raw_stdout)):
-        ref, digest = capture_session(
-            harness, result._raw_stdout,
-            run_id=activity.info().workflow_run_id,
-            task_id=inp.task_id, attempt=inp.attempt)
-        result.session_ref = ref
-        result.session_digest = digest
+harness = HARNESSES[inp.harness]
+with span("harness.run", harness=inp.harness.value, task_id=inp.task_id, attempt=inp.attempt):
+    result = await harness.run(
+        HarnessRequest(
+            prompt=inp.prompt,
+            cwd=inp.worktree,
+            model=inp.model,
+            session_id=inp.session_id,
+            timeout_s=inp.timeout_s,
+        ),
+        heartbeat=activity.heartbeat,
+    )
+with span("session.capture", task_id=inp.task_id, stdout_bytes=len(result._raw_stdout)):
+    ref, digest = capture_session(
+        harness,
+        result._raw_stdout,
+        run_id=activity.info().workflow_run_id,
+        task_id=inp.task_id,
+        attempt=inp.attempt,
+    )
+    result.session_ref = ref
+    result.session_digest = digest
 ```
 
 (These are the exact calls Task 5 wrote — only the `with` wrappers are new.)

@@ -46,6 +46,7 @@ from sdlc.models import HarnessKind, HarnessRunResult
 class _PyHarness(CodingHarness):
     """Runs a short Python script as the subprocess so these tests don't
     depend on the real claude/opencode CLIs being installed."""
+
     kind = HarnessKind.OPENCODE
 
     def __init__(self, script: str):
@@ -55,8 +56,7 @@ class _PyHarness(CodingHarness):
         return [sys.executable, "-c", self.script]
 
     def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
-        return HarnessRunResult(harness=self.kind, exit_code=exit_code,
-                                 summary=stdout[:4000])
+        return HarnessRunResult(harness=self.kind, exit_code=exit_code, summary=stdout[:4000])
 
 
 @pytest.mark.asyncio
@@ -64,12 +64,7 @@ async def test_large_stderr_does_not_deadlock(tmp_path):
     # Writes well past the OS pipe buffer (64KB) to stderr while also
     # writing to stdout. Before the fix, nothing read stderr, so the child
     # blocks once its stderr pipe fills, and the run never finishes.
-    script = (
-        "import sys\n"
-        "sys.stderr.write('e' * 200_000)\n"
-        "sys.stderr.flush()\n"
-        "print('done')\n"
-    )
+    script = "import sys\nsys.stderr.write('e' * 200_000)\nsys.stderr.flush()\nprint('done')\n"
     harness = _PyHarness(script)
     result = await asyncio.wait_for(
         harness.run(HarnessRequest(prompt="x", cwd=str(tmp_path), timeout_s=10)),
@@ -91,11 +86,7 @@ async def test_lifecycle_summary_logged(tmp_path, caplog):
 @pytest.mark.asyncio
 async def test_stderr_logged_as_warning_on_failure(tmp_path, caplog):
     caplog.set_level(logging.WARNING, logger="sdlc.harness.adapters")
-    script = (
-        "import sys\n"
-        "sys.stderr.write('boom detail')\n"
-        "sys.exit(1)\n"
-    )
+    script = "import sys\nsys.stderr.write('boom detail')\nsys.exit(1)\n"
     harness = _PyHarness(script)
     result = await harness.run(HarnessRequest(prompt="x", cwd=str(tmp_path)))
     assert result.exit_code == 1
@@ -137,80 +128,92 @@ _log = logging.getLogger(__name__)
 Replace the entire `run()` method (currently lines 90–130) with:
 
 ```python
-    async def run(self, req: HarnessRequest,
-                  heartbeat=None) -> HarnessRunResult:
-        cmd = self.build_cmd(req)
-        # Resolve via PATH — Windows npm shims are .cmd files that
-        # CreateProcess can't find without an explicit extension.
-        resolved = shutil.which(cmd[0])
-        if resolved:
-            cmd[0] = resolved
-        _log.debug("harness start kind=%s model=%s session_id=%s cwd=%s",
-                   self.kind.value, req.model, req.session_id, req.cwd)
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            cwd=req.cwd,
-            env=build_env(req.env),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            limit=10_000_000,  # opencode text events can exceed the 64KB
-                               # default StreamReader line limit
-        )
+async def run(self, req: HarnessRequest, heartbeat=None) -> HarnessRunResult:
+    cmd = self.build_cmd(req)
+    # Resolve via PATH — Windows npm shims are .cmd files that
+    # CreateProcess can't find without an explicit extension.
+    resolved = shutil.which(cmd[0])
+    if resolved:
+        cmd[0] = resolved
+    _log.debug(
+        "harness start kind=%s model=%s session_id=%s cwd=%s",
+        self.kind.value,
+        req.model,
+        req.session_id,
+        req.cwd,
+    )
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        cwd=req.cwd,
+        env=build_env(req.env),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        limit=10_000_000,  # opencode text events can exceed the 64KB
+        # default StreamReader line limit
+    )
 
-        async def _pump() -> bytes:
-            chunks: list[bytes] = []
-            assert proc.stdout is not None
-            while True:
-                chunk = await proc.stdout.read(65536)
-                if not chunk:
-                    break
+    async def _pump() -> bytes:
+        chunks: list[bytes] = []
+        assert proc.stdout is not None
+        while True:
+            chunk = await proc.stdout.read(65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            if heartbeat:
+                heartbeat()  # keep the Temporal activity alive
+        return b"".join(chunks)
+
+    async def _pump_stderr() -> str:
+        # Drained concurrently with stdout — an unread stderr pipe can
+        # fill its OS buffer and deadlock the child if it writes enough.
+        chunks: list[bytes] = []
+        size = 0
+        assert proc.stderr is not None
+        while True:
+            chunk = await proc.stderr.read(65536)
+            if not chunk:
+                break
+            if size < SUMMARY_MAX:
                 chunks.append(chunk)
-                if heartbeat:
-                    heartbeat()          # keep the Temporal activity alive
-            return b"".join(chunks)
+                size += len(chunk)
+        return b"".join(chunks).decode(errors="replace")[:SUMMARY_MAX]
 
-        async def _pump_stderr() -> str:
-            # Drained concurrently with stdout — an unread stderr pipe can
-            # fill its OS buffer and deadlock the child if it writes enough.
-            chunks: list[bytes] = []
-            size = 0
-            assert proc.stderr is not None
-            while True:
-                chunk = await proc.stderr.read(65536)
-                if not chunk:
-                    break
-                if size < SUMMARY_MAX:
-                    chunks.append(chunk)
-                    size += len(chunk)
-            return b"".join(chunks).decode(errors="replace")[:SUMMARY_MAX]
+    start = time.monotonic()
+    try:
+        stdout_b, stderr_s, _ = await asyncio.wait_for(
+            asyncio.gather(_pump(), _pump_stderr(), proc.wait()),
+            timeout=req.timeout_s,
+        )
+    except asyncio.TimeoutError:
+        proc.kill()
+        _log.warning("harness timeout kind=%s cwd=%s cmd=%s", self.kind.value, req.cwd, cmd)
+        raise
+    duration_s = time.monotonic() - start
 
-        start = time.monotonic()
-        try:
-            stdout_b, stderr_s, _ = await asyncio.wait_for(
-                asyncio.gather(_pump(), _pump_stderr(), proc.wait()),
-                timeout=req.timeout_s,
-            )
-        except asyncio.TimeoutError:
-            proc.kill()
-            _log.warning("harness timeout kind=%s cwd=%s cmd=%s",
-                        self.kind.value, req.cwd, cmd)
-            raise
-        duration_s = time.monotonic() - start
+    result = self.parse(stdout_b.decode(errors="replace"), proc.returncode or 0)
+    if result.context_window is None:
+        result.context_window = context_window_for(req.model)
 
-        result = self.parse(stdout_b.decode(errors="replace"),
-                            proc.returncode or 0)
-        if result.context_window is None:
-            result.context_window = context_window_for(req.model)
-
-        _log.info("harness done kind=%s exit_code=%s session_id=%s "
-                  "duration_s=%.1f input_tokens=%s output_tokens=%s cost_usd=%s",
-                  self.kind.value, result.exit_code, result.session_id,
-                  duration_s, result.input_tokens, result.output_tokens,
-                  result.cost_usd)
-        if result.exit_code != 0 or stderr_s:
-            _log.warning("harness stderr kind=%s exit_code=%s stderr=%s",
-                        self.kind.value, result.exit_code, stderr_s)
-        return result
+    _log.info(
+        "harness done kind=%s exit_code=%s session_id=%s "
+        "duration_s=%.1f input_tokens=%s output_tokens=%s cost_usd=%s",
+        self.kind.value,
+        result.exit_code,
+        result.session_id,
+        duration_s,
+        result.input_tokens,
+        result.output_tokens,
+        result.cost_usd,
+    )
+    if result.exit_code != 0 or stderr_s:
+        _log.warning(
+            "harness stderr kind=%s exit_code=%s stderr=%s",
+            self.kind.value,
+            result.exit_code,
+            stderr_s,
+        )
+    return result
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -255,26 +258,36 @@ from sdlc.harness.adapters import _log_live_event
 def test_log_live_event_step_start_logged_at_info(caplog):
     caplog.set_level(logging.INFO, logger="sdlc.harness.adapters")
     _log_live_event(json.dumps({"type": "step_start", "sessionID": "abc"}))
-    assert any("step_start" in r.message and "abc" in r.message
-               for r in caplog.records)
+    assert any("step_start" in r.message and "abc" in r.message for r in caplog.records)
 
 
 def test_log_live_event_step_finish_logs_tokens_and_cost(caplog):
     caplog.set_level(logging.INFO, logger="sdlc.harness.adapters")
-    _log_live_event(json.dumps({
-        "type": "step_finish", "sessionID": "abc",
-        "part": {"tokens": {"input": 10, "output": 2}, "cost": 0.01},
-    }))
-    assert any("step_finish" in r.message and "input_tokens=10" in r.message
-               for r in caplog.records)
+    _log_live_event(
+        json.dumps(
+            {
+                "type": "step_finish",
+                "sessionID": "abc",
+                "part": {"tokens": {"input": 10, "output": 2}, "cost": 0.01},
+            }
+        )
+    )
+    assert any(
+        "step_finish" in r.message and "input_tokens=10" in r.message for r in caplog.records
+    )
 
 
 def test_log_live_event_text_logged_at_debug_with_length_not_content(caplog):
     caplog.set_level(logging.DEBUG, logger="sdlc.harness.adapters")
-    _log_live_event(json.dumps({
-        "type": "text", "sessionID": "abc",
-        "part": {"text": "some repo content that should not be logged verbatim"},
-    }))
+    _log_live_event(
+        json.dumps(
+            {
+                "type": "text",
+                "sessionID": "abc",
+                "part": {"text": "some repo content that should not be logged verbatim"},
+            }
+        )
+    )
     messages = [r.message for r in caplog.records]
     assert any("chars=" in m for m in messages)
     assert not any("some repo content" in m for m in messages)
@@ -282,7 +295,7 @@ def test_log_live_event_text_logged_at_debug_with_length_not_content(caplog):
 
 def test_log_live_event_ignores_non_json_and_unknown_type(caplog):
     caplog.set_level(logging.DEBUG, logger="sdlc.harness.adapters")
-    _log_live_event("not json at all")             # must not raise
+    _log_live_event("not json at all")  # must not raise
     _log_live_event(json.dumps({"type": "something_else"}))
     assert caplog.records == []
 
@@ -332,30 +345,33 @@ def _log_live_event(line: str) -> None:
     elif ev_type == "step_finish":
         part = ev.get("part") or {}
         tokens = part.get("tokens") or {}
-        _log.info("harness step_finish session_id=%s input_tokens=%s "
-                  "output_tokens=%s cost_usd=%s", session_id,
-                  tokens.get("input"), tokens.get("output"), part.get("cost"))
+        _log.info(
+            "harness step_finish session_id=%s input_tokens=%s output_tokens=%s cost_usd=%s",
+            session_id,
+            tokens.get("input"),
+            tokens.get("output"),
+            part.get("cost"),
+        )
     elif ev_type == "text":
         part = ev.get("part") or {}
-        _log.debug("harness text session_id=%s chars=%d", session_id,
-                   len(part.get("text") or ""))
+        _log.debug("harness text session_id=%s chars=%d", session_id, len(part.get("text") or ""))
 ```
 
 Then, inside `run()`, replace the `_pump()` function body (added in Task 1) with a line-based read that calls it:
 
 ```python
-        async def _pump() -> bytes:
-            chunks: list[bytes] = []
-            assert proc.stdout is not None
-            while True:
-                line = await proc.stdout.readline()
-                if not line:
-                    break
-                chunks.append(line)
-                _log_live_event(line.decode(errors="replace"))
-                if heartbeat:
-                    heartbeat()          # keep the Temporal activity alive
-            return b"".join(chunks)
+async def _pump() -> bytes:
+    chunks: list[bytes] = []
+    assert proc.stdout is not None
+    while True:
+        line = await proc.stdout.readline()
+        if not line:
+            break
+        chunks.append(line)
+        _log_live_event(line.decode(errors="replace"))
+        if heartbeat:
+            heartbeat()  # keep the Temporal activity alive
+    return b"".join(chunks)
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -396,11 +412,14 @@ import logging
 
 def test_opencode_parse_logs_debug_on_malformed_line(caplog):
     caplog.set_level(logging.DEBUG, logger="sdlc.harness.adapters")
-    events = "\n".join([
-        "not valid json",
-        json.dumps({"type": "step_finish", "sessionID": "s",
-                    "part": {"tokens": {}, "cost": 0.0}}),
-    ])
+    events = "\n".join(
+        [
+            "not valid json",
+            json.dumps(
+                {"type": "step_finish", "sessionID": "s", "part": {"tokens": {}, "cost": 0.0}}
+            ),
+        ]
+    )
     OpenCodeHarness().parse(events, 0)
     assert any("not valid json" in r.message for r in caplog.records)
 
@@ -408,15 +427,15 @@ def test_opencode_parse_logs_debug_on_malformed_line(caplog):
 def test_opencode_parse_logs_warning_when_nothing_parses(caplog):
     caplog.set_level(logging.WARNING, logger="sdlc.harness.adapters")
     OpenCodeHarness().parse("not json at all", 1)
-    assert any("parsed_any" in r.message or "no events parsed" in r.message
-               for r in caplog.records)
+    assert any("parsed_any" in r.message or "no events parsed" in r.message for r in caplog.records)
 
 
 def test_claude_parse_logs_warning_on_decode_failure(caplog):
     caplog.set_level(logging.WARNING, logger="sdlc.harness.adapters")
     ClaudeCodeHarness().parse("not json at all", 1)
-    assert any("decode" in r.message.lower() or "fallback" in r.message.lower()
-               for r in caplog.records)
+    assert any(
+        "decode" in r.message.lower() or "fallback" in r.message.lower() for r in caplog.records
+    )
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -456,10 +475,12 @@ and change:
 to:
 
 ```python
-        if not parsed_any:
-            _log.warning("opencode parse: no events parsed from stdout "
-                         "(parsed_any=False); falling back to raw stdout")
-        summary = "\n".join(text_parts) if parsed_any else stdout
+if not parsed_any:
+    _log.warning(
+        "opencode parse: no events parsed from stdout "
+        "(parsed_any=False); falling back to raw stdout"
+    )
+summary = "\n".join(text_parts) if parsed_any else stdout
 ```
 
 - [ ] **Step 4: Add logging to `ClaudeCodeHarness.parse()`**

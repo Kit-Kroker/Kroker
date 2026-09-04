@@ -64,6 +64,7 @@ Create `tests/test_measurement.py`:
 """FR-915: a measured value and a never-measured value must not be the same
 object. The validator is the mechanism -- the illegal state is unconstructible,
 not merely discouraged."""
+
 import pytest
 from pydantic import ValidationError
 
@@ -84,8 +85,7 @@ def test_measured_without_a_value_is_unconstructible():
 def test_not_collected_with_a_value_is_unconstructible():
     """The whole point: a not-collected measurement cannot smuggle a zero."""
     with pytest.raises(ValidationError):
-        Measurement(state=CollectionState.NOT_COLLECTED, value=0.0,
-                    reason="no artifact")
+        Measurement(state=CollectionState.NOT_COLLECTED, value=0.0, reason="no artifact")
 
 
 def test_unknown_with_a_value_is_unconstructible():
@@ -107,9 +107,11 @@ def test_measured_zero_is_not_equal_to_not_collected():
 def test_the_distinction_survives_a_json_round_trip():
     """These travel through Temporal history as JSON; the distinction has to
     survive serialization or it is decorative."""
-    for m in (Measurement.measured(0.0),
-              Measurement.not_collected("no artifact"),
-              Measurement.unknown("non-finite rate")):
+    for m in (
+        Measurement.measured(0.0),
+        Measurement.not_collected("no artifact"),
+        Measurement.unknown("non-finite rate"),
+    ):
         assert Measurement.model_validate_json(m.model_dump_json()) == m
 
 
@@ -141,6 +143,7 @@ Pure by design -- Pydantic only. This module must never import models.py,
 activities.py, or temporalio; a dependency here would appear as a reviewable
 import.
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -150,8 +153,8 @@ from pydantic import BaseModel, model_validator
 
 class CollectionState(str, Enum):
     MEASURED = "measured"
-    NOT_COLLECTED = "not_collected"   # we did not or could not measure
-    UNKNOWN = "unknown"               # we tried; the result is uninterpretable
+    NOT_COLLECTED = "not_collected"  # we did not or could not measure
+    UNKNOWN = "unknown"  # we tried; the result is uninterpretable
 
 
 class Measurement(BaseModel):
@@ -161,6 +164,7 @@ class Measurement(BaseModel):
     that parses but yields a non-finite rate is unknown. The distinction is
     whether an attempt produced output. Both require a reason.
     """
+
     state: CollectionState
     value: float | None = None
     reason: str = ""
@@ -175,7 +179,8 @@ class Measurement(BaseModel):
                 raise ValueError(
                     f"{self.state.value} must not carry a value "
                     f"(got {self.value!r}) -- that is the conflation this "
-                    f"type exists to prevent")
+                    f"type exists to prevent"
+                )
             if not self.reason.strip():
                 raise ValueError(f"{self.state.value} requires a reason")
         return self
@@ -230,8 +235,13 @@ The profile split is the load-bearing part. EXTRACTED_TEXT's loosenings are
 justified by specific Tavily extraction bugs; applying them to code or
 transcripts would weaken the check SC-7 rests on.
 """
+
 from sdlc.grounding import (
-    Profile, Violation, normalize, quote_violation, verify_quote,
+    Profile,
+    Violation,
+    normalize,
+    quote_violation,
+    verify_quote,
 )
 
 EXTRACTED = Profile.EXTRACTED_TEXT
@@ -305,14 +315,12 @@ def test_empty_quote_never_grounds():
 
 
 def test_quote_violation_returns_none_when_grounded():
-    assert quote_violation("retries", "handles retries", VERBATIM,
-                           source="src/a.py@abc") is None
+    assert quote_violation("retries", "handles retries", VERBATIM, source="src/a.py@abc") is None
 
 
 def test_quote_violation_kinds():
     absent = quote_violation("missing", "haystack", VERBATIM, source="s")
-    assert absent == Violation(kind="quote_not_found", source="s",
-                               quote="missing")
+    assert absent == Violation(kind="quote_not_found", source="s", quote="missing")
     empty = quote_violation("  ", "haystack", VERBATIM, source="s")
     assert empty.kind == "quote_empty"
 
@@ -355,6 +363,7 @@ caller chooses between failing a stage, dropping a claim, or failing closed.
 Pure by design -- stdlib and Pydantic only. Must never import models.py or
 temporalio.
 """
+
 from __future__ import annotations
 
 import re
@@ -365,8 +374,8 @@ from pydantic import BaseModel
 
 
 class Profile(str, Enum):
-    EXTRACTED_TEXT = "extracted_text"    # third-party extractor output
-    VERBATIM_BYTES = "verbatim_bytes"    # committed code, stored transcripts
+    EXTRACTED_TEXT = "extracted_text"  # third-party extractor output
+    VERBATIM_BYTES = "verbatim_bytes"  # committed code, stored transcripts
 
 
 _WS = re.compile(r"\s+")
@@ -407,6 +416,7 @@ def normalize(text: str, profile: Profile) -> str:
 class Violation(BaseModel):
     """One unverifiable claim. `source` is whatever identifies the bytes:
     a url, a "path@sha", or a session ref."""
+
     kind: Literal["quote_not_found", "source_unavailable", "quote_empty"]
     source: str
     quote: str
@@ -426,8 +436,7 @@ def verify_quote(quote: str, haystack: str, profile: Profile) -> bool:
     return needle in normalize(haystack, profile)
 
 
-def quote_violation(quote: str, haystack: str, profile: Profile,
-                    source: str) -> Violation | None:
+def quote_violation(quote: str, haystack: str, profile: Profile, source: str) -> Violation | None:
     """The kind-aware form of verify_quote: None when grounded, otherwise the
     typed Violation. For callers that report why, rather than only whether."""
     if not normalize(quote, profile):
@@ -471,8 +480,11 @@ In `tests/test_research_verify.py`, replace the `test_source_never_fetched_is_a_
 ```python
 def test_source_unavailable_is_a_violation(runs_root):
     # No page file written for this url -> recalled-lead demotion (finding 5).
-    brief = ResearchBrief(grounded_findings=[GroundedFinding(
-        source_url="https://x/never", quote="anything", claim="c")])
+    brief = ResearchBrief(
+        grounded_findings=[
+            GroundedFinding(source_url="https://x/never", quote="anything", claim="c")
+        ]
+    )
     vios = verify.verify_brief(brief, "r1")
     assert [v.kind for v in vios] == ["source_unavailable"]
     assert vios[0].source == "https://x/never"
@@ -485,8 +497,9 @@ def test_empty_quote_is_a_violation_not_a_free_pass(runs_root):
     """`"" in haystack` is True, so before the shared verifier an empty quote
     grounded trivially against any fetched page."""
     _write_page("r1", "https://x/1", "some content")
-    brief = ResearchBrief(grounded_findings=[GroundedFinding(
-        source_url="https://x/1", quote="   ", claim="c")])
+    brief = ResearchBrief(
+        grounded_findings=[GroundedFinding(source_url="https://x/1", quote="   ", claim="c")]
+    )
     assert [v.kind for v in verify.verify_brief(brief, "r1")] == ["quote_empty"]
 ```
 
@@ -519,11 +532,13 @@ def verify_brief(brief: ResearchBrief, run_id: str) -> list[Violation]:
     for f in brief.grounded_findings:
         page = d / page_filename(f.source_url)
         if not page.is_file():
-            violations.append(Violation(kind="source_unavailable",
-                                        source=f.source_url, quote=f.quote))
+            violations.append(
+                Violation(kind="source_unavailable", source=f.source_url, quote=f.quote)
+            )
             continue
-        v = quote_violation(f.quote, page.read_text(encoding="utf-8"),
-                            Profile.EXTRACTED_TEXT, source=f.source_url)
+        v = quote_violation(
+            f.quote, page.read_text(encoding="utf-8"), Profile.EXTRACTED_TEXT, source=f.source_url
+        )
         if v is not None:
             violations.append(v)
     return violations
@@ -532,8 +547,7 @@ def verify_brief(brief: ResearchBrief, run_id: str) -> list[Violation]:
 In `GroundingViolation.__init__` (line 144), change the message line to use the renamed field:
 
 ```python
-        lines = "\n".join(
-            f"- {v.kind}: {v.source}: {v.quote!r}" for v in violations)
+lines = "\n".join(f"- {v.kind}: {v.source}: {v.quote!r}" for v in violations)
 ```
 
 Update the module docstring's first paragraph to say the match itself lives in `sdlc/grounding.py` and this module owns the page lookup.
@@ -543,9 +557,7 @@ Update the module docstring's first paragraph to say the match itself lives in `
 In `src/sdlc/workflows/feature.py:1706`, change `v.source_url` to `v.source`:
 
 ```python
-                err = "; ".join(
-                    f"{v.kind}: {v.source}: {v.quote[:80]!r}"
-                    for v in violations)
+err = "; ".join(f"{v.kind}: {v.source}: {v.quote[:80]!r}" for v in violations)
 ```
 
 - [ ] **Step 5: Run the full research suite**
@@ -585,8 +597,7 @@ from sdlc.measurement import CollectionState
 ```python
 @pytest.mark.asyncio
 async def test_no_artifact_means_not_collected(tmp_path):
-    r = await measure_coverage(CoverageInput(worktree=str(tmp_path),
-                                             changed_files=["app/main.py"]))
+    r = await measure_coverage(CoverageInput(worktree=str(tmp_path), changed_files=["app/main.py"]))
     assert r.coverage.state is CollectionState.NOT_COLLECTED
     assert r.coverage.value is None
     assert "coverage.xml" in r.coverage.reason
@@ -595,8 +606,7 @@ async def test_no_artifact_means_not_collected(tmp_path):
 @pytest.mark.asyncio
 async def test_diff_scoped_percentage_over_changed_files(tmp_path):
     (tmp_path / "coverage.xml").write_text(COBERTURA, encoding="utf-8")
-    r = await measure_coverage(CoverageInput(worktree=str(tmp_path),
-                                             changed_files=["app/main.py"]))
+    r = await measure_coverage(CoverageInput(worktree=str(tmp_path), changed_files=["app/main.py"]))
     assert r.coverage.state is CollectionState.MEASURED
     assert r.coverage.value == pytest.approx(80.0)
 ```
@@ -628,8 +638,7 @@ async def test_a_measured_zero_is_distinguishable_from_no_measurement(tmp_path):
 </classes></package></packages></coverage>
 """
     (tmp_path / "coverage.xml").write_text(zero, encoding="utf-8")
-    r = await measure_coverage(CoverageInput(worktree=str(tmp_path),
-                                             changed_files=["app/main.py"]))
+    r = await measure_coverage(CoverageInput(worktree=str(tmp_path), changed_files=["app/main.py"]))
     assert r.coverage.state is CollectionState.MEASURED
     assert r.coverage.value == pytest.approx(0.0)
 ```
@@ -661,6 +670,7 @@ class CoverageReport(BaseModel):
     advisory check passes as a no-op rather than forcing a spurious human
     override every run. A MEASURED 0.0 is a real zero and is graded as one.
     """
+
     coverage: Measurement
 ```
 
@@ -669,17 +679,15 @@ class CoverageReport(BaseModel):
 In `src/sdlc/activities.py`, replace the four `CoverageReport(...)` returns in `measure_coverage` and add the non-finite tracking. The relevant edits:
 
 ```python
-    path = os.path.join(inp.worktree, "coverage.xml")
-    if not os.path.isfile(path):
-        return CoverageReport(coverage=Measurement.not_collected(
-            "no coverage.xml (seam not measured)"))
-    try:
-        root = DET.parse(path).getroot()
-    except (DefusedXmlException, DET.ParseError, OSError):
-        return CoverageReport(coverage=Measurement.not_collected(
-            "coverage.xml unparseable or unsafe"))
-    rates: list[float] = []
-    skipped_non_finite = 0
+path = os.path.join(inp.worktree, "coverage.xml")
+if not os.path.isfile(path):
+    return CoverageReport(coverage=Measurement.not_collected("no coverage.xml (seam not measured)"))
+try:
+    root = DET.parse(path).getroot()
+except (DefusedXmlException, DET.ParseError, OSError):
+    return CoverageReport(coverage=Measurement.not_collected("coverage.xml unparseable or unsafe"))
+rates: list[float] = []
+skipped_non_finite = 0
 ```
 
 Inside the class loop, the `isfinite` guard increments the counter instead of silently continuing:
@@ -698,15 +706,21 @@ Inside the class loop, the `isfinite` guard increments the counter instead of si
 and the two terminal returns become:
 
 ```python
-    if not rates:
-        if skipped_non_finite:
-            return CoverageReport(coverage=Measurement.unknown(
-                f"{skipped_non_finite} changed-file line-rate(s) non-finite"))
-        return CoverageReport(coverage=Measurement.not_collected(
-            "no changed file found in coverage.xml (seam not measured)"))
-    ...
-    pct = sum(rates) / len(rates)
-    return CoverageReport(coverage=Measurement.measured(pct))
+if not rates:
+    if skipped_non_finite:
+        return CoverageReport(
+            coverage=Measurement.unknown(
+                f"{skipped_non_finite} changed-file line-rate(s) non-finite"
+            )
+        )
+    return CoverageReport(
+        coverage=Measurement.not_collected(
+            "no changed file found in coverage.xml (seam not measured)"
+        )
+    )
+...
+pct = sum(rates) / len(rates)
+return CoverageReport(coverage=Measurement.measured(pct))
 ```
 
 Add `from .measurement import Measurement` to `activities.py`'s imports.
@@ -716,15 +730,23 @@ Add `from .measurement import Measurement` to `activities.py`'s imports.
 In `src/sdlc/workflows/feature.py`, replace the `coverage` check (lines 2152-2161):
 
 ```python
-            build_check(
-                "coverage",
-                (True if cov.coverage.state is not CollectionState.MEASURED
-                 else cov.coverage.value >= cfg.coverage_threshold),
-                CheckClass.ADVISORY,
-                detail=(cov.coverage.reason
-                        if cov.coverage.state is not CollectionState.MEASURED
-                        else f"diff coverage {cov.coverage.value:.1f}% vs "
-                             f"threshold {cfg.coverage_threshold:.1f}%")),
+(
+    build_check(
+        "coverage",
+        (
+            True
+            if cov.coverage.state is not CollectionState.MEASURED
+            else cov.coverage.value >= cfg.coverage_threshold
+        ),
+        CheckClass.ADVISORY,
+        detail=(
+            cov.coverage.reason
+            if cov.coverage.state is not CollectionState.MEASURED
+            else f"diff coverage {cov.coverage.value:.1f}% vs "
+            f"threshold {cfg.coverage_threshold:.1f}%"
+        ),
+    ),
+)
 ```
 
 Add a dedicated line to the workflow's `unsafe.imports_passed_through()` import block (beside `from ..gate import ...` at `feature.py:39`), importing from the pure module rather than relying on a re-export through `models.py`:
@@ -786,6 +808,7 @@ def test_security_report_requires_a_collection_state():
     """A report cannot be built without saying whether a scan happened."""
     import pytest as _pytest
     from pydantic import ValidationError
+
     with _pytest.raises(ValidationError):
         SecurityReport(critical=0)
 
@@ -813,6 +836,7 @@ def test_report_from_malformed_is_not_collected_not_clean():
     """The defect: critical=0 from a broken document was byte-identical to a
     clean scan, and security_no_critical is an ABSOLUTE check."""
     from sdlc.measurement import CollectionState
+
     r = report_from_sarif({"runs": [{"results": "x"}]})
     assert r.state is CollectionState.NOT_COLLECTED
     assert r.critical == 0 and r.findings == []
@@ -820,6 +844,7 @@ def test_report_from_malformed_is_not_collected_not_clean():
 
 def test_report_from_well_formed_is_measured():
     from sdlc.measurement import CollectionState
+
     assert report_from_sarif(WELL_FORMED).state is CollectionState.MEASURED
 ```
 
@@ -828,8 +853,12 @@ Create `tests/test_security_collection_gate.py`:
 ```python
 """SC-5's sibling: an absolute floor that could not be measured must not be
 silently satisfied."""
+
 from sdlc.gate import (
-    ABSOLUTE_FLOOR, CheckClass, build_check, evaluate_quality_gate,
+    ABSOLUTE_FLOOR,
+    CheckClass,
+    build_check,
+    evaluate_quality_gate,
 )
 from sdlc.measurement import CollectionState
 from sdlc.models import SecurityReport
@@ -837,12 +866,18 @@ from sdlc.models import SecurityReport
 
 def _checks(report: SecurityReport):
     return [
-        build_check("security_scan_collected",
-                    report.state is CollectionState.MEASURED,
-                    CheckClass.ABSOLUTE, detail=report.reason or "scan ran"),
-        build_check("security_no_critical", report.critical == 0,
-                    CheckClass.ABSOLUTE,
-                    detail=f"{report.critical} critical finding(s)"),
+        build_check(
+            "security_scan_collected",
+            report.state is CollectionState.MEASURED,
+            CheckClass.ABSOLUTE,
+            detail=report.reason or "scan ran",
+        ),
+        build_check(
+            "security_no_critical",
+            report.critical == 0,
+            CheckClass.ABSOLUTE,
+            detail=f"{report.critical} critical finding(s)",
+        ),
     ]
 
 
@@ -859,8 +894,9 @@ def test_a_caller_cannot_downgrade_the_collection_check():
 
 
 def test_not_collected_scan_blocks_on_its_own_check():
-    report = SecurityReport(critical=0, state=CollectionState.NOT_COLLECTED,
-                            reason="sarif unparseable")
+    report = SecurityReport(
+        critical=0, state=CollectionState.NOT_COLLECTED, reason="sarif unparseable"
+    )
     result = evaluate_quality_gate(_checks(report))
     assert "security_scan_collected" in result.blocking
     assert "security_no_critical" not in result.blocking
@@ -881,13 +917,15 @@ Expected: FAIL — `SecurityReport` has no `state` field, and `security_scan_col
 In `src/sdlc/gate.py:57`:
 
 ```python
-ABSOLUTE_FLOOR: frozenset[str] = frozenset({
-    "security_no_critical",
-    # FR-915: "the scan could not run" is as absolute as "the scan found a
-    # critical". Outside the floor, a call site could request ADVISORY and
-    # reopen the bypass this check exists to close.
-    "security_scan_collected",
-})
+ABSOLUTE_FLOOR: frozenset[str] = frozenset(
+    {
+        "security_no_critical",
+        # FR-915: "the scan could not run" is as absolute as "the scan found a
+        # critical". Outside the floor, a call site could request ADVISORY and
+        # reopen the bypass this check exists to close.
+        "security_scan_collected",
+    }
+)
 ```
 
 - [ ] **Step 4: Add the state to the model**
@@ -904,6 +942,7 @@ class SecurityReport(BaseModel):
     is byte-identical to `critical=0` from a clean repository -- and the check
     reading this is absolute.
     """
+
     critical: int
     findings: list[SecurityFinding] = Field(default_factory=list)
     state: CollectionState
@@ -915,8 +954,7 @@ class SecurityReport(BaseModel):
 `src/sdlc/activities.py:741` — the regex scan always collects:
 
 ```python
-    return SecurityReport(critical=critical, findings=findings,
-                          state=CollectionState.MEASURED)
+return SecurityReport(critical=critical, findings=findings, state=CollectionState.MEASURED)
 ```
 
 `src/sdlc/toolchain/sarif.py` — replace `report_from_sarif` and add the import `from ..measurement import CollectionState`:
@@ -928,12 +966,14 @@ def report_from_sarif(doc: dict) -> SecurityReport:
     a broken scan must not fabricate a blocking finding OR crash the gate --
     but it must also not read as a passing absolute floor."""
     if not _is_well_formed(doc):
-        return SecurityReport(critical=0, state=CollectionState.NOT_COLLECTED,
-                              reason="SARIF document malformed or partial")
+        return SecurityReport(
+            critical=0,
+            state=CollectionState.NOT_COLLECTED,
+            reason="SARIF document malformed or partial",
+        )
     findings = findings_from_sarif(doc)
     critical = sum(1 for f in findings if f.severity == "critical")
-    return SecurityReport(critical=critical, findings=findings,
-                          state=CollectionState.MEASURED)
+    return SecurityReport(critical=critical, findings=findings, state=CollectionState.MEASURED)
 
 
 def _is_well_formed(doc: dict) -> bool:
@@ -956,8 +996,7 @@ Update the fake in `tests/fakes/fake_activities.py`:
 ```python
 @activity.defn(name="security_scan")
 async def fake_security_scan(inp: SecurityScanInput) -> SecurityReport:
-    return SecurityReport(critical=0, findings=[],
-                          state=CollectionState.MEASURED)
+    return SecurityReport(critical=0, findings=[], state=CollectionState.MEASURED)
 ```
 
 with `from sdlc.measurement import CollectionState` added to that file's imports.
@@ -967,19 +1006,26 @@ with `from sdlc.measurement import CollectionState` added to that file's imports
 In `src/sdlc/workflows/feature.py`, replace the single `security_no_critical` check (lines 2135-2139) with two:
 
 ```python
-            # FR-915: "the scan found nothing" and "no scan happened" are
-            # different facts and get different check names. Conflating them
-            # into one compound condition is the exact defect this split
-            # exists to prevent, reproduced inside the gate that prevents it.
-            build_check(
-                "security_scan_collected",
-                security.state is CollectionState.MEASURED,
-                CheckClass.ABSOLUTE,
-                detail=(security.reason or "security scan ran")),
-            build_check(
-                "security_no_critical", security.critical == 0,
-                CheckClass.ABSOLUTE,
-                detail=f"{security.critical} critical finding(s)"),
+# FR-915: "the scan found nothing" and "no scan happened" are
+# different facts and get different check names. Conflating them
+# into one compound condition is the exact defect this split
+# exists to prevent, reproduced inside the gate that prevents it.
+(
+    build_check(
+        "security_scan_collected",
+        security.state is CollectionState.MEASURED,
+        CheckClass.ABSOLUTE,
+        detail=(security.reason or "security scan ran"),
+    ),
+)
+(
+    build_check(
+        "security_no_critical",
+        security.critical == 0,
+        CheckClass.ABSOLUTE,
+        detail=f"{security.critical} critical finding(s)",
+    ),
+)
 ```
 
 - [ ] **Step 7: Run the tests**
@@ -1079,6 +1125,7 @@ must actually appear in the transcript it was drawn from. The first stops the
 extractor attributing a change to a file the task never opened; the second
 stops it inventing the quote that supports the claim.
 """
+
 from sdlc.grounding import Profile, verify_quote
 from sdlc.handoff import claim_survival_score, cross_check_claims
 from sdlc.measurement import CollectionState
@@ -1088,16 +1135,14 @@ SESSION = "file_write src/app.py\nI'll use cookies here\nfile_write src/app.py"
 
 
 def test_claim_naming_touched_file_survives():
-    claims = [HandoffClaim(text="rewrote src/app.py routing",
-                           evidence="file_write src/app.py")]
+    claims = [HandoffClaim(text="rewrote src/app.py routing", evidence="file_write src/app.py")]
     r = cross_check_claims(claims, ["src/app.py"])
     assert len(r.kept) == 1
     assert r.dropped_paths == 0 and r.dropped_quotes == 0
 
 
 def test_claim_naming_untouched_file_is_dropped():
-    claims = [HandoffClaim(text="patched src/other.py too",
-                           evidence="file_write src/other.py")]
+    claims = [HandoffClaim(text="patched src/other.py too", evidence="file_write src/other.py")]
     r = cross_check_claims(claims, ["src/app.py"])
     assert r.kept == []
     assert r.dropped_paths == 1
@@ -1105,29 +1150,25 @@ def test_claim_naming_untouched_file_is_dropped():
 
 def test_claim_naming_no_file_survives():
     """Design decisions legitimately mention no path at all."""
-    claims = [HandoffClaim(text="chose cookie sessions over JWT",
-                           evidence="I'll use cookies here")]
+    claims = [HandoffClaim(text="chose cookie sessions over JWT", evidence="I'll use cookies here")]
     r = cross_check_claims(claims, ["src/app.py"])
     assert len(r.kept) == 1
 
 
 def test_path_in_evidence_is_checked_not_only_text():
-    claims = [HandoffClaim(text="fixed the parser",
-                           evidence="file_write src/ghost.py")]
+    claims = [HandoffClaim(text="fixed the parser", evidence="file_write src/ghost.py")]
     r = cross_check_claims(claims, ["src/app.py"])
     assert r.kept == [] and r.dropped_paths == 1
 
 
 def test_windows_separators_normalise():
-    claims = [HandoffClaim(text=r"edited src\app.py",
-                           evidence="file_write src/app.py")]
+    claims = [HandoffClaim(text=r"edited src\app.py", evidence="file_write src/app.py")]
     r = cross_check_claims(claims, ["src/app.py"])
     assert len(r.kept) == 1
 
 
 def test_evidence_present_in_the_session_survives():
-    claims = [HandoffClaim(text="chose cookie sessions over JWT",
-                           evidence="I'll use cookies here")]
+    claims = [HandoffClaim(text="chose cookie sessions over JWT", evidence="I'll use cookies here")]
     r = cross_check_claims(claims, ["src/app.py"], session_text=SESSION)
     assert len(r.kept) == 1
     assert r.dropped_quotes == 0
@@ -1136,8 +1177,12 @@ def test_evidence_present_in_the_session_survives():
 def test_fabricated_evidence_is_dropped():
     """E-43: today this claim survives and is injected into the next task's
     prompt, carrying a quote nobody said."""
-    claims = [HandoffClaim(text="chose cookie sessions over JWT",
-                           evidence="I decided to use JWTs after benchmarking")]
+    claims = [
+        HandoffClaim(
+            text="chose cookie sessions over JWT",
+            evidence="I decided to use JWTs after benchmarking",
+        )
+    ]
     r = cross_check_claims(claims, ["src/app.py"], session_text=SESSION)
     assert r.kept == []
     assert r.dropped_quotes == 1 and r.dropped_paths == 0
@@ -1155,24 +1200,21 @@ def test_missing_session_text_skips_quote_verification():
     """Absence of the haystack is not evidence against the quote. If session
     capture failed, dropping every quoted claim would silently empty the
     handoff over an infrastructure failure."""
-    claims = [HandoffClaim(text="chose cookies",
-                           evidence="nothing like this was ever said")]
+    claims = [HandoffClaim(text="chose cookies", evidence="nothing like this was ever said")]
     r = cross_check_claims(claims, ["src/app.py"], session_text=None)
     assert len(r.kept) == 1
     assert r.dropped_quotes == 0
 
 
 def test_path_check_still_applies_when_the_quote_verifies():
-    claims = [HandoffClaim(text="patched src/other.py",
-                           evidence="file_write src/app.py")]
+    claims = [HandoffClaim(text="patched src/other.py", evidence="file_write src/app.py")]
     r = cross_check_claims(claims, ["src/app.py"], session_text=SESSION)
     assert r.kept == [] and r.dropped_paths == 1
 
 
 def test_evidence_is_verified_verbatim_not_as_extracted_text():
     """VERBATIM_BYTES: a transcript is bytes we stored, not extractor output."""
-    assert not verify_quote("def f(kwargs):", "def f(**kwargs):",
-                            Profile.VERBATIM_BYTES)
+    assert not verify_quote("def f(kwargs):", "def f(**kwargs):", Profile.VERBATIM_BYTES)
 
 
 def test_survival_score():
@@ -1204,6 +1246,7 @@ class CrossCheckResult(BaseModel):
     naming a file the diff never touched and a claim quoting something nobody
     said are different extractor failures, and the waste metrics should not
     average them together."""
+
     kept: list[HandoffClaim] = []
     dropped_paths: int = 0
     dropped_quotes: int = 0
@@ -1239,9 +1282,11 @@ def cross_check_claims(
         if not referenced <= allowed:
             result.dropped_paths += 1
             continue
-        if (session_text is not None and c.evidence.strip()
-                and not verify_quote(c.evidence, session_text,
-                                     Profile.VERBATIM_BYTES)):
+        if (
+            session_text is not None
+            and c.evidence.strip()
+            and not verify_quote(c.evidence, session_text, Profile.VERBATIM_BYTES)
+        ):
             result.dropped_quotes += 1
             continue
         result.kept.append(c)
@@ -1321,6 +1366,7 @@ Create `tests/test_deep_review_flag_verification.py`:
 ```python
 """E-43: an anti-cheat accusation must be able to point at the transcript line
 it is accusing. A flag whose quote nobody said is worse than no flag."""
+
 from sdlc.handoff import verified_integrity_flags
 from sdlc.models import IntegrityFlag
 
@@ -1328,19 +1374,18 @@ SESSION = "bash cat oracle/test_app.py\nfile_write src/app.py\n"
 
 
 def _flag(evidence: str) -> IntegrityFlag:
-    return IntegrityFlag(kind="oracle_peeking", detail="read the oracle",
-                         evidence=evidence)
+    return IntegrityFlag(kind="oracle_peeking", detail="read the oracle", evidence=evidence)
 
 
 def test_flag_quoting_the_session_survives():
-    kept, dropped = verified_integrity_flags(
-        [_flag("bash cat oracle/test_app.py")], SESSION)
+    kept, dropped = verified_integrity_flags([_flag("bash cat oracle/test_app.py")], SESSION)
     assert len(kept) == 1 and dropped == 0
 
 
 def test_flag_quoting_nothing_in_the_session_is_dropped():
     kept, dropped = verified_integrity_flags(
-        [_flag("bash curl https://answers.example.com")], SESSION)
+        [_flag("bash curl https://answers.example.com")], SESSION
+    )
     assert kept == [] and dropped == 1
 
 
@@ -1390,7 +1435,8 @@ def verified_integrity_flags(
     dropped = 0
     for f in flags:
         if f.evidence.strip() and not verify_quote(
-                f.evidence, session_text, Profile.VERBATIM_BYTES):
+            f.evidence, session_text, Profile.VERBATIM_BYTES
+        ):
             dropped += 1
             continue
         kept.append(f)
@@ -1402,18 +1448,19 @@ def verified_integrity_flags(
 In `src/sdlc/workflows/feature.py`, immediately after the `report = (await self._run_role(...)).output` assignment in `_run_deep_review` (line 896), insert:
 
 ```python
-            # E-43: an accusation must point at a line the transcript
-            # contains. Verified against `transcript`, the same bytes the
-            # lens itself read. Dropping, never failing -- this lens must
-            # never fail delivery.
-            kept_flags, dropped_flags = verified_integrity_flags(
-                report.integrity_flags, transcript)
-            if dropped_flags:
-                workflow.logger.warning(
-                    "deep_review: dropped %d integrity flag(s) for task %s "
-                    "whose evidence is not in the transcript",
-                    dropped_flags, task.id)
-            report = report.model_copy(update={"integrity_flags": kept_flags})
+# E-43: an accusation must point at a line the transcript
+# contains. Verified against `transcript`, the same bytes the
+# lens itself read. Dropping, never failing -- this lens must
+# never fail delivery.
+kept_flags, dropped_flags = verified_integrity_flags(report.integrity_flags, transcript)
+if dropped_flags:
+    workflow.logger.warning(
+        "deep_review: dropped %d integrity flag(s) for task %s "
+        "whose evidence is not in the transcript",
+        dropped_flags,
+        task.id,
+    )
+report = report.model_copy(update={"integrity_flags": kept_flags})
 ```
 
 Because `cheat_detected` is a property over `integrity_flags`, the existing `quality_score`, `outcome` and `_retain` lines below it now read the verified list without further change. Add `verified_integrity_flags` to the existing `from ..handoff import ...` line in the workflow's import block.
@@ -1456,6 +1503,7 @@ Ships with no caller -- the assessment stage (E-41) is its consumer. Tested
 against real git, because `git show` behaviour on a deleted path is exactly
 the case the fail-closed rule depends on.
 """
+
 import subprocess
 
 import pytest
@@ -1465,8 +1513,7 @@ from sdlc.grounding import Profile, verify_quote
 
 
 def _run(args, cwd):
-    return subprocess.run(args, cwd=cwd, capture_output=True,
-                          encoding="utf-8", check=True)
+    return subprocess.run(args, cwd=cwd, capture_output=True, encoding="utf-8", check=True)
 
 
 @pytest.fixture
@@ -1474,27 +1521,35 @@ def repo(tmp_path):
     _run(["git", "init", "-q"], tmp_path)
     _run(["git", "config", "user.email", "t@example.com"], tmp_path)
     _run(["git", "config", "user.name", "T"], tmp_path)
-    (tmp_path / "app.py").write_text("def f(**kwargs):\n    return kwargs\n",
-                                     encoding="utf-8")
+    (tmp_path / "app.py").write_text("def f(**kwargs):\n    return kwargs\n", encoding="utf-8")
     _run(["git", "add", "-A"], tmp_path)
     _run(["git", "commit", "-q", "-m", "one"], tmp_path)
-    first = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmp_path,
-                           capture_output=True, encoding="utf-8",
-                           check=True).stdout.strip()
+    first = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        capture_output=True,
+        encoding="utf-8",
+        check=True,
+    ).stdout.strip()
     (tmp_path / "app.py").unlink()
     _run(["git", "add", "-A"], tmp_path)
     _run(["git", "commit", "-q", "-m", "two"], tmp_path)
-    second = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmp_path,
-                            capture_output=True, encoding="utf-8",
-                            check=True).stdout.strip()
+    second = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        capture_output=True,
+        encoding="utf-8",
+        check=True,
+    ).stdout.strip()
     return tmp_path, first, second
 
 
 @pytest.mark.asyncio
 async def test_existing_path_at_a_real_sha_returns_bytes(repo):
     d, first, _ = repo
-    text = await read_committed_bytes(CommittedBytesInput(
-        repo_dir=str(d), path="app.py", commit_sha=first))
+    text = await read_committed_bytes(
+        CommittedBytesInput(repo_dir=str(d), path="app.py", commit_sha=first)
+    )
     assert "def f(**kwargs):" in text
 
 
@@ -1502,31 +1557,42 @@ async def test_existing_path_at_a_real_sha_returns_bytes(repo):
 async def test_the_returned_bytes_verify_under_verbatim_profile(repo):
     """The whole point of the source: a quote is checked against these bytes."""
     d, first, _ = repo
-    text = await read_committed_bytes(CommittedBytesInput(
-        repo_dir=str(d), path="app.py", commit_sha=first))
+    text = await read_committed_bytes(
+        CommittedBytesInput(repo_dir=str(d), path="app.py", commit_sha=first)
+    )
     assert verify_quote("def f(**kwargs):", text, Profile.VERBATIM_BYTES)
 
 
 @pytest.mark.asyncio
 async def test_deleted_path_at_a_later_sha_returns_none(repo):
     d, _, second = repo
-    assert await read_committed_bytes(CommittedBytesInput(
-        repo_dir=str(d), path="app.py", commit_sha=second)) is None
+    assert (
+        await read_committed_bytes(
+            CommittedBytesInput(repo_dir=str(d), path="app.py", commit_sha=second)
+        )
+        is None
+    )
 
 
 @pytest.mark.asyncio
 async def test_nonexistent_sha_returns_none(repo):
     d, _, _ = repo
-    assert await read_committed_bytes(CommittedBytesInput(
-        repo_dir=str(d), path="app.py",
-        commit_sha="0" * 40)) is None
+    assert (
+        await read_committed_bytes(
+            CommittedBytesInput(repo_dir=str(d), path="app.py", commit_sha="0" * 40)
+        )
+        is None
+    )
 
 
 @pytest.mark.asyncio
 async def test_nonexistent_repo_returns_none_rather_than_raising(tmp_path):
-    assert await read_committed_bytes(CommittedBytesInput(
-        repo_dir=str(tmp_path / "nope"), path="a.py",
-        commit_sha="HEAD")) is None
+    assert (
+        await read_committed_bytes(
+            CommittedBytesInput(repo_dir=str(tmp_path / "nope"), path="a.py", commit_sha="HEAD")
+        )
+        is None
+    )
 ```
 
 - [ ] **Step 2: Run test to verify it fails**

@@ -26,7 +26,7 @@ Upgrade the existing `research` agent to leverage `ExaSearch` for deeper retriev
 
 ## Testing & Integration
 1. **The Temporal/TestModel Issue**:
-   The rollback of `CodeMode` documented in `agent.py` was caused by `TestModel` serialization and execution issues within `TemporalAgent`. 
+   The rollback of `CodeMode` documented in `agent.py` was caused by `TestModel` serialization and execution issues within `TemporalAgent`.
 2. **Provider-Aware Capability Loading**:
    - `agent.py`'s `build` function receives a `provider` argument.
    - When `provider == "fake"` (which is the case in `test_research_e2e.py` due to `agent.yaml`), we will omit `CodeMode` and other complex harness capabilities to avoid serialization and test environment crashes.

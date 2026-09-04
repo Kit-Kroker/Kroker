@@ -35,7 +35,7 @@ def test_step_takes_a_stage_context_and_never_the_workflow():
 
 @pytest.mark.clause("CLARIFY-1.2")
 def test_step_returns_clarified_requirements():
-    from sdlc.models import ClarifiedRequirements
+    from sdlc.stages.clarify.models import ClarifiedRequirements
 
     ret = inspect.signature(clarify.step).return_annotation
     assert ret is ClarifiedRequirements or ret == "ClarifiedRequirements"
@@ -46,7 +46,10 @@ def test_step_returns_clarified_requirements():
 async def test_step_resolves_questions_via_ask_and_wait_or_suggested():
     from sdlc.benchmarks.models import QualityScore
     from sdlc.core.models import GateConfig, GatePolicy, IdeaBrief, PipelineConfig, ProjectMode
-    from sdlc.models import ClarifiedRequirements, OpenQuestion
+    from sdlc.stages.clarify.models import (
+        ClarifiedRequirements,
+        OpenQuestion,
+    )
 
     class _StubCtx:
         def __init__(self) -> None:
@@ -59,7 +62,7 @@ async def test_step_resolves_questions_via_ask_and_wait_or_suggested():
             pass
 
         async def recall(self, *a: Any, **k: Any) -> Any:
-            from sdlc.models import RecallSnapshot
+            from sdlc.memory.models import RecallSnapshot
 
             return RecallSnapshot(query_hash="q", bank="b", watermark="w", items=[])
 

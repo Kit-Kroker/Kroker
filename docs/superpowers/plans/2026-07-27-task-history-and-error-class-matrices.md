@@ -39,14 +39,19 @@ from sdlc.benchmarks.tasks import ERROR_CLASSES, TaskSpec, TaskSuite, load_task_
 
 def test_error_classes_are_the_fixed_oracle_outcome_taxonomy():
     assert ERROR_CLASSES == [
-        "functional", "security", "performance",
-        "data_integrity", "error_handling", "api_contract",
+        "functional",
+        "security",
+        "performance",
+        "data_integrity",
+        "error_handling",
+        "api_contract",
     ]
 
 
 def test_task_spec_accepts_oracle_tests_mode():
-    t = TaskSpec(id="t01", error_class="functional",
-                oracle_tests=["test_crud.py::test_create_todo"])
+    t = TaskSpec(
+        id="t01", error_class="functional", oracle_tests=["test_crud.py::test_create_todo"]
+    )
     assert t.oracle_tests == ["test_crud.py::test_create_todo"]
     assert t.rubric is None
 
@@ -59,14 +64,14 @@ def test_task_spec_accepts_rubric_mode():
 
 def test_task_spec_rejects_unknown_error_class():
     with pytest.raises(ValidationError):
-        TaskSpec(id="t01", error_class="not_a_class",
-                oracle_tests=["x::y"])
+        TaskSpec(id="t01", error_class="not_a_class", oracle_tests=["x::y"])
 
 
 def test_task_spec_rejects_both_modes_set():
     with pytest.raises(ValidationError):
-        TaskSpec(id="t01", error_class="functional",
-                oracle_tests=["x::y"], rubric="also has a rubric")
+        TaskSpec(
+            id="t01", error_class="functional", oracle_tests=["x::y"], rubric="also has a rubric"
+        )
 
 
 def test_task_spec_rejects_neither_mode_set():
@@ -76,10 +81,13 @@ def test_task_spec_rejects_neither_mode_set():
 
 def test_task_suite_rejects_duplicate_ids():
     with pytest.raises(ValidationError):
-        TaskSuite(case_id="c", tasks=[
-            TaskSpec(id="t01", error_class="functional", oracle_tests=["x::y"]),
-            TaskSpec(id="t01", error_class="security", rubric="r"),
-        ])
+        TaskSuite(
+            case_id="c",
+            tasks=[
+                TaskSpec(id="t01", error_class="functional", oracle_tests=["x::y"]),
+                TaskSpec(id="t01", error_class="security", rubric="r"),
+            ],
+        )
 
 
 def test_load_task_suite_returns_none_when_file_absent(tmp_path):
@@ -93,11 +101,12 @@ def test_load_task_suite_reads_valid_yaml(tmp_path):
         "tasks:\n"
         "  - id: t01\n"
         "    error_class: functional\n"
-        "    oracle_tests: [\"test_crud.py::test_create_todo\"]\n"
+        '    oracle_tests: ["test_crud.py::test_create_todo"]\n'
         "  - id: t02\n"
         "    error_class: security\n"
-        "    rubric: \"Rejects with 401.\"\n",
-        encoding="utf-8")
+        '    rubric: "Rejects with 401."\n',
+        encoding="utf-8",
+    )
     suite = load_task_suite("c1", cases_dir=tmp_path)
     assert suite is not None
     assert suite.case_id == "c1"
@@ -110,8 +119,8 @@ def test_load_task_suite_raises_on_malformed_file(tmp_path):
     d = tmp_path / "c1"
     d.mkdir()
     (d / "tasks.yaml").write_text(
-        "tasks:\n  - id: t01\n    error_class: bogus\n    oracle_tests: [x]\n",
-        encoding="utf-8")
+        "tasks:\n  - id: t01\n    error_class: bogus\n    oracle_tests: [x]\n", encoding="utf-8"
+    )
     with pytest.raises(ValidationError):
         load_task_suite("c1", cases_dir=tmp_path)
 ```
@@ -133,6 +142,7 @@ by the cross-family LLM judge against a rubric. Loading is pure (one YAML
 read, no other I/O); a case with no file simply has no task-level records —
 existing case-level oracle grading is unaffected.
 """
+
 from __future__ import annotations
 
 import os
@@ -143,8 +153,12 @@ import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 ERROR_CLASSES: list[str] = [
-    "functional", "security", "performance",
-    "data_integrity", "error_handling", "api_contract",
+    "functional",
+    "security",
+    "performance",
+    "data_integrity",
+    "error_handling",
+    "api_contract",
 ]
 
 
@@ -158,8 +172,7 @@ class TaskSpec(BaseModel):
     @classmethod
     def _known_class(cls, v: str) -> str:
         if v not in ERROR_CLASSES:
-            raise ValueError(
-                f"unknown error_class {v!r}; must be one of {ERROR_CLASSES}")
+            raise ValueError(f"unknown error_class {v!r}; must be one of {ERROR_CLASSES}")
         return v
 
     @model_validator(mode="after")
@@ -169,7 +182,8 @@ class TaskSpec(BaseModel):
         if has_tests == has_rubric:
             raise ValueError(
                 f"task {self.id!r} must set exactly one of oracle_tests or "
-                f"rubric (has_tests={has_tests}, has_rubric={has_rubric})")
+                f"rubric (has_tests={has_tests}, has_rubric={has_rubric})"
+            )
         return self
 
 
@@ -195,9 +209,11 @@ class TaskGrade(BaseModel):
 
 
 def _cases_dir() -> Path:
-    return Path(os.environ.get(
-        "SDLC_CASES_ROOT",
-        str(Path(__file__).resolve().parents[3] / "benchmarks" / "cases")))
+    return Path(
+        os.environ.get(
+            "SDLC_CASES_ROOT", str(Path(__file__).resolve().parents[3] / "benchmarks" / "cases")
+        )
+    )
 
 
 def load_task_suite(case_id: str, cases_dir: Path | None = None) -> TaskSuite | None:
@@ -250,25 +266,30 @@ def _suite(*tasks: TaskSpec) -> TaskSuite:
 
 
 def test_grade_tasks_oracle_mapped_all_pass():
-    suite = _suite(TaskSpec(id="t01", error_class="functional",
-                           oracle_tests=["a.py::test_x"]))
+    suite = _suite(TaskSpec(id="t01", error_class="functional", oracle_tests=["a.py::test_x"]))
     grades = grade_tasks(suite, {"a.py::test_x": True}, {})
-    assert grades == [TaskGrade(task_id="t01", error_class="functional",
-                               score=1.0, judge="oracle",
-                               detail="1/1 mapped oracle tests passed")]
+    assert grades == [
+        TaskGrade(
+            task_id="t01",
+            error_class="functional",
+            score=1.0,
+            judge="oracle",
+            detail="1/1 mapped oracle tests passed",
+        )
+    ]
 
 
 def test_grade_tasks_oracle_mapped_multi_test_partial():
-    suite = _suite(TaskSpec(id="t01", error_class="functional",
-                           oracle_tests=["a.py::x", "a.py::y"]))
+    suite = _suite(
+        TaskSpec(id="t01", error_class="functional", oracle_tests=["a.py::x", "a.py::y"])
+    )
     grades = grade_tasks(suite, {"a.py::x": True, "a.py::y": False}, {})
     assert grades[0].score == 0.5
     assert grades[0].judge == "oracle"
 
 
 def test_grade_tasks_oracle_mapped_none_found_is_error():
-    suite = _suite(TaskSpec(id="t01", error_class="functional",
-                           oracle_tests=["missing::test"]))
+    suite = _suite(TaskSpec(id="t01", error_class="functional", oracle_tests=["missing::test"]))
     grades = grade_tasks(suite, {"other::test": True}, {})
     assert grades[0].score is None
     assert grades[0].judge == "error"
@@ -292,7 +313,8 @@ def test_grade_tasks_rubric_mapped_missing_score_is_error():
 def test_grade_tasks_preserves_task_order():
     suite = _suite(
         TaskSpec(id="t02", error_class="security", rubric="r"),
-        TaskSpec(id="t01", error_class="functional", oracle_tests=["a::b"]))
+        TaskSpec(id="t01", error_class="functional", oracle_tests=["a::b"]),
+    )
     grades = grade_tasks(suite, {"a::b": True}, {"t02": 1.0})
     assert [g.task_id for g in grades] == ["t02", "t01"]
 ```
@@ -307,8 +329,9 @@ Expected: FAIL — `ImportError: cannot import name 'grade_tasks'`
 Append to `src/sdlc/benchmarks/tasks.py`:
 
 ```python
-def grade_tasks(suite: TaskSuite, testcase_results: dict[str, bool],
-                judge_scores: dict[str, float]) -> list[TaskGrade]:
+def grade_tasks(
+    suite: TaskSuite, testcase_results: dict[str, bool], judge_scores: dict[str, float]
+) -> list[TaskGrade]:
     """Combine already-computed JUnit + judge results into per-task grades.
 
     Pure -- no I/O. testcase_results is {"file::name": passed} from
@@ -317,29 +340,50 @@ def grade_tasks(suite: TaskSuite, testcase_results: dict[str, bool],
     out: list[TaskGrade] = []
     for t in suite.tasks:
         if t.oracle_tests:
-            found = [testcase_results[nid] for nid in t.oracle_tests
-                    if nid in testcase_results]
+            found = [testcase_results[nid] for nid in t.oracle_tests if nid in testcase_results]
             if not found:
-                out.append(TaskGrade(
-                    task_id=t.id, error_class=t.error_class, score=None,
-                    judge="error",
-                    detail=f"none of {t.oracle_tests} found in oracle report"))
+                out.append(
+                    TaskGrade(
+                        task_id=t.id,
+                        error_class=t.error_class,
+                        score=None,
+                        judge="error",
+                        detail=f"none of {t.oracle_tests} found in oracle report",
+                    )
+                )
                 continue
             passed_n = sum(1 for ok in found if ok)
-            out.append(TaskGrade(
-                task_id=t.id, error_class=t.error_class,
-                score=passed_n / len(found), judge="oracle",
-                detail=f"{passed_n}/{len(found)} mapped oracle tests passed"))
+            out.append(
+                TaskGrade(
+                    task_id=t.id,
+                    error_class=t.error_class,
+                    score=passed_n / len(found),
+                    judge="oracle",
+                    detail=f"{passed_n}/{len(found)} mapped oracle tests passed",
+                )
+            )
         else:
             score = judge_scores.get(t.id)
             if score is None:
-                out.append(TaskGrade(
-                    task_id=t.id, error_class=t.error_class, score=None,
-                    judge="error", detail="judge did not return a score"))
+                out.append(
+                    TaskGrade(
+                        task_id=t.id,
+                        error_class=t.error_class,
+                        score=None,
+                        judge="error",
+                        detail="judge did not return a score",
+                    )
+                )
             else:
-                out.append(TaskGrade(
-                    task_id=t.id, error_class=t.error_class, score=score,
-                    judge="llm_judge", detail="rubric-graded"))
+                out.append(
+                    TaskGrade(
+                        task_id=t.id,
+                        error_class=t.error_class,
+                        score=score,
+                        judge="llm_judge",
+                        detail="rubric-graded",
+                    )
+                )
     return out
 ```
 
@@ -380,7 +424,7 @@ JUNIT_WITH_FILE_ATTR = (
     'file="test_crud.py"><failure/></testcase>'
     '<testcase classname="test_crud" name="test_skipped" '
     'file="test_crud.py"><skipped/></testcase>'
-    '</testsuite></testsuites>'
+    "</testsuite></testsuites>"
 )
 
 JUNIT_NO_FILE_ATTR = (
@@ -389,8 +433,7 @@ JUNIT_NO_FILE_ATTR = (
 )
 
 JUNIT_NO_CLASSNAME = (
-    '<testsuite tests="1" failures="0" errors="0" skipped="0">'
-    '<testcase name="test_x"/></testsuite>'
+    '<testsuite tests="1" failures="0" errors="0" skipped="0"><testcase name="test_x"/></testsuite>'
 )
 
 
@@ -415,8 +458,10 @@ def test_grade_testcases_falls_back_to_name_when_neither_present():
 
 
 def test_grade_testcases_error_child_is_failure():
-    xml = ('<testsuite tests="1" failures="0" errors="1" skipped="0">'
-          '<testcase name="a"><error/></testcase></testsuite>')
+    xml = (
+        '<testsuite tests="1" failures="0" errors="1" skipped="0">'
+        '<testcase name="a"><error/></testcase></testsuite>'
+    )
     assert grade_testcases_from_junit(xml) == {"a": False}
 
 
@@ -589,19 +634,27 @@ async def test_grade_oracle_populates_oracle_mapped_task_grades(tmp_path):
         "tasks:\n"
         "  - id: t01\n"
         "    error_class: functional\n"
-        "    oracle_tests: [\"test_crud.py::test_ok\"]\n"
+        '    oracle_tests: ["test_crud.py::test_ok"]\n'
         "  - id: t02\n"
         "    error_class: functional\n"
-        "    oracle_tests: [\"test_crud.py::test_fail\"]\n",
-        encoding="utf-8")
+        '    oracle_tests: ["test_crud.py::test_fail"]\n',
+        encoding="utf-8",
+    )
 
     import os
+
     old = os.environ.get("SDLC_CASES_ROOT")
     os.environ["SDLC_CASES_ROOT"] = str(cases)
     try:
-        grade = await grade_oracle(OracleInput(
-            case_id="case", repo_url=str(repo), run_id=run_id,
-            language="python", base_branch="main"))
+        grade = await grade_oracle(
+            OracleInput(
+                case_id="case",
+                repo_url=str(repo),
+                run_id=run_id,
+                language="python",
+                base_branch="main",
+            )
+        )
     finally:
         if old is None:
             os.environ.pop("SDLC_CASES_ROOT", None)
@@ -638,23 +691,28 @@ async def test_grade_oracle_populates_rubric_mapped_task_grades(tmp_path, monkey
     (odir / "conftest.py").write_text(ORACLE_CONFTEST)
     (odir / "test_crud.py").write_text(ORACLE_TEST)
     (cases / "case" / "tasks.yaml").write_text(
-        "tasks:\n"
-        "  - id: t01\n"
-        "    error_class: security\n"
-        "    rubric: \"Uses a secure default.\"\n",
-        encoding="utf-8")
+        'tasks:\n  - id: t01\n    error_class: security\n    rubric: "Uses a secure default."\n',
+        encoding="utf-8",
+    )
 
     judge_mod._set_judge_fn(lambda inp: '{"score": 0.75, "components": {}}')
 
     import os
+
     old = os.environ.get("SDLC_CASES_ROOT")
     os.environ["SDLC_CASES_ROOT"] = str(cases)
     try:
-        grade = await grade_oracle(OracleInput(
-            case_id="case", repo_url=str(repo), run_id=run_id,
-            language="python", base_branch="main",
-            author_model="anthropic:claude-sonnet-4-6",
-            judge_model="openai/gpt-5.2"))
+        grade = await grade_oracle(
+            OracleInput(
+                case_id="case",
+                repo_url=str(repo),
+                run_id=run_id,
+                language="python",
+                base_branch="main",
+                author_model="anthropic:claude-sonnet-4-6",
+                judge_model="openai/gpt-5.2",
+            )
+        )
     finally:
         if old is None:
             os.environ.pop("SDLC_CASES_ROOT", None)
@@ -682,15 +740,17 @@ async def test_grade_oracle_no_tasks_yaml_gives_empty_task_grades(tmp_path):
 
     cases = tmp_path / "cases"
     (cases / "case" / "oracle").mkdir(parents=True)
-    (cases / "case" / "oracle" / "test_x.py").write_text(
-        "def test_x():\n    assert True\n")
+    (cases / "case" / "oracle" / "test_x.py").write_text("def test_x():\n    assert True\n")
 
     import os
+
     os.environ["SDLC_CASES_ROOT"] = str(cases)
     try:
-        grade = await grade_oracle(OracleInput(
-            case_id="case", repo_url=str(repo),
-            run_id="never/ran#h#m", language="python"))
+        grade = await grade_oracle(
+            OracleInput(
+                case_id="case", repo_url=str(repo), run_id="never/ran#h#m", language="python"
+            )
+        )
     finally:
         os.environ.pop("SDLC_CASES_ROOT", None)
     assert grade.task_grades == []
@@ -724,16 +784,24 @@ async def test_grade_oracle_malformed_tasks_yaml_never_fails_case_grade(tmp_path
     (odir / "test_crud.py").write_text(ORACLE_TEST)
     # malformed: unknown error_class
     (cases / "case" / "tasks.yaml").write_text(
-        "tasks:\n  - id: t01\n    error_class: bogus\n"
-        "    oracle_tests: [\"x::y\"]\n", encoding="utf-8")
+        'tasks:\n  - id: t01\n    error_class: bogus\n    oracle_tests: ["x::y"]\n',
+        encoding="utf-8",
+    )
 
     import os
+
     old = os.environ.get("SDLC_CASES_ROOT")
     os.environ["SDLC_CASES_ROOT"] = str(cases)
     try:
-        grade = await grade_oracle(OracleInput(
-            case_id="case", repo_url=str(repo), run_id=run_id,
-            language="python", base_branch="main"))
+        grade = await grade_oracle(
+            OracleInput(
+                case_id="case",
+                repo_url=str(repo),
+                run_id=run_id,
+                language="python",
+                base_branch="main",
+            )
+        )
     finally:
         if old is None:
             os.environ.pop("SDLC_CASES_ROOT", None)
@@ -780,11 +848,11 @@ from .tasks import TaskGrade, grade_tasks, load_task_suite
 class OracleInput:
     case_id: str
     repo_url: str
-    run_id: str            # child workflow id -> sdlc/<run_id>/integration
-    language: str          # manifest-declared (CaseSpec.language)
+    run_id: str  # child workflow id -> sdlc/<run_id>/integration
+    language: str  # manifest-declared (CaseSpec.language)
     base_branch: str = "main"
     test_timeout_s: int = 600
-    author_model: str = ""          # cell's dev model; only rubric tasks need it
+    author_model: str = ""  # cell's dev model; only rubric tasks need it
     judge_model: str | None = None  # spec.judge_model; only rubric tasks need it
 ```
 
@@ -807,12 +875,20 @@ class OracleGrade:
 3e. Extend the `_grade` helper (currently lines 101–105) to accept and pass through `task_grades`:
 
 ```python
-def _grade(score, passed, total, lang, detected, held, detail,
-          task_grades: list[TaskGrade] | None = None) -> OracleGrade:
+def _grade(
+    score, passed, total, lang, detected, held, detail, task_grades: list[TaskGrade] | None = None
+) -> OracleGrade:
     return OracleGrade(
-        score=score, passed=passed, total=total, language_manifest=lang,
-        language_detected=detected, language_match=language_match(lang, detected),
-        held_out_ok=held, detail=detail, task_grades=task_grades or [])
+        score=score,
+        passed=passed,
+        total=total,
+        language_manifest=lang,
+        language_detected=detected,
+        language_match=language_match(lang, detected),
+        held_out_ok=held,
+        detail=detail,
+        task_grades=task_grades or [],
+    )
 ```
 
 (Every existing early-return call site — `_grade(None, 0, 0, lang, None, True, "no oracle dir for case")` etc. — keeps working unchanged: the new parameter defaults to `None` → `[]`.)
@@ -827,34 +903,36 @@ def _grade(score, passed, total, lang, detected, held, detail,
 with:
 
 ```python
-        score, passed, total, detail = grade_from_junit(xml_text)
-        task_grades: list[TaskGrade] = []
-        try:
-            suite = load_task_suite(inp.case_id)
-            if suite is not None:
-                testcase_results = grade_testcases_from_junit(xml_text)
-                judge_scores: dict[str, float] = {}
-                needs_diff = any(t.rubric for t in suite.tasks)
-                full_diff = ""
-                if needs_diff:
-                    diff_res = _git(
-                        ["diff", f"{inp.base_branch}...HEAD"], wt)
-                    full_diff = diff_res.stdout
-                for t in suite.tasks:
-                    if t.rubric:
-                        qs = _judge_sync(JudgeInput(
-                            artifact_json=full_diff, rubric=t.rubric,
-                            author_model=inp.author_model,
-                            judge_model=inp.judge_model))
-                        if qs.score is not None:
-                            judge_scores[t.id] = qs.score
-                task_grades = grade_tasks(suite, testcase_results, judge_scores)
-        except Exception:
-            # a broken tasks.yaml or judge call never fails the case-level
-            # oracle grade -- it just contributes no task grades.
-            task_grades = []
-        return _grade(score, passed, total, lang, detected, held, detail,
-                     task_grades=task_grades)
+score, passed, total, detail = grade_from_junit(xml_text)
+task_grades: list[TaskGrade] = []
+try:
+    suite = load_task_suite(inp.case_id)
+    if suite is not None:
+        testcase_results = grade_testcases_from_junit(xml_text)
+        judge_scores: dict[str, float] = {}
+        needs_diff = any(t.rubric for t in suite.tasks)
+        full_diff = ""
+        if needs_diff:
+            diff_res = _git(["diff", f"{inp.base_branch}...HEAD"], wt)
+            full_diff = diff_res.stdout
+        for t in suite.tasks:
+            if t.rubric:
+                qs = _judge_sync(
+                    JudgeInput(
+                        artifact_json=full_diff,
+                        rubric=t.rubric,
+                        author_model=inp.author_model,
+                        judge_model=inp.judge_model,
+                    )
+                )
+                if qs.score is not None:
+                    judge_scores[t.id] = qs.score
+        task_grades = grade_tasks(suite, testcase_results, judge_scores)
+except Exception:
+    # a broken tasks.yaml or judge call never fails the case-level
+    # oracle grade -- it just contributes no task grades.
+    task_grades = []
+return _grade(score, passed, total, lang, detected, held, detail, task_grades=task_grades)
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -893,21 +971,32 @@ from sdlc.benchmarks.workflow import _oracle_task_records
 
 def _grade_with_tasks(*task_grades):
     return OracleGrade(
-        score=0.5, passed=1, total=2, language_manifest="python",
-        language_detected="python", language_match=True,
-        held_out_ok=True, detail="1/2", task_grades=list(task_grades))
+        score=0.5,
+        passed=1,
+        total=2,
+        language_manifest="python",
+        language_detected="python",
+        language_match=True,
+        held_out_ok=True,
+        detail="1/2",
+        task_grades=list(task_grades),
+    )
 
 
 def test_oracle_task_records_one_per_task_grade():
     t0 = datetime(2026, 7, 23, tzinfo=timezone.utc)
     t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=timezone.utc)
     grade = _grade_with_tasks(
-        TaskGrade(task_id="t01", error_class="functional", score=1.0,
-                  judge="oracle", detail="1/1"),
-        TaskGrade(task_id="t02", error_class="security", score=0.0,
-                  judge="llm_judge", detail="rubric-graded"))
-    recs = _oracle_task_records(_cell(), grade, "b1",
-                                "b1/todo-api#opencode#m", t0, t1)
+        TaskGrade(task_id="t01", error_class="functional", score=1.0, judge="oracle", detail="1/1"),
+        TaskGrade(
+            task_id="t02",
+            error_class="security",
+            score=0.0,
+            judge="llm_judge",
+            detail="rubric-graded",
+        ),
+    )
+    recs = _oracle_task_records(_cell(), grade, "b1", "b1/todo-api#opencode#m", t0, t1)
     assert len(recs) == 2
     assert {r.task_id for r in recs} == {"t01", "t02"}
     r01 = next(r for r in recs if r.task_id == "t01")
@@ -921,11 +1010,12 @@ def test_oracle_task_records_one_per_task_grade():
 
 def test_oracle_task_records_none_score_is_fail():
     from sdlc.benchmarks.models import BenchmarkOutcome as BO
+
     t0 = datetime(2026, 7, 23, tzinfo=timezone.utc)
     t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=timezone.utc)
     grade = _grade_with_tasks(
-        TaskGrade(task_id="t01", error_class="functional", score=None,
-                  judge="error", detail="oops"))
+        TaskGrade(task_id="t01", error_class="functional", score=None, judge="error", detail="oops")
+    )
     recs = _oracle_task_records(_cell(), grade, "b1", "run1", t0, t1)
     assert recs[0].outcome is BO.FAIL
     assert recs[0].quality.score is None
@@ -942,8 +1032,7 @@ Add `BenchmarkOutcome` to the existing import line at the top of the file
 (currently `from sdlc.benchmarks.models import BenchmarkCell, BenchmarkScope, CaseSpec`):
 
 ```python
-from sdlc.benchmarks.models import (
-    BenchmarkCell, BenchmarkOutcome, BenchmarkScope, CaseSpec)
+from sdlc.benchmarks.models import BenchmarkCell, BenchmarkOutcome, BenchmarkScope, CaseSpec
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -956,26 +1045,41 @@ Expected: FAIL — `ImportError: cannot import name '_oracle_task_records'`
 In `src/sdlc/benchmarks/workflow.py`, insert immediately after the existing `_oracle_record` function (after its closing line, currently line 122):
 
 ```python
-def _oracle_task_records(base_cell: BenchmarkCell, grade: OracleGrade,
-                         bench_run_id: str, run_id: str,
-                         started: datetime, ended: datetime
-                         ) -> list[BenchmarkRecord]:
+def _oracle_task_records(
+    base_cell: BenchmarkCell,
+    grade: OracleGrade,
+    bench_run_id: str,
+    run_id: str,
+    started: datetime,
+    ended: datetime,
+) -> list[BenchmarkRecord]:
     """One record per TaskGrade in grade.task_grades. error_class is not
     stored on the record -- task_matrix.py / error_matrix.py join it from
     tasks.yaml by (case_id, task_id) at aggregation time, so the write path
     only needs the scope + the already-existing task_id field."""
     out: list[BenchmarkRecord] = []
     for t in grade.task_grades:
-        outcome = (BenchmarkOutcome.PASS if (t.score or 0.0) >= 1.0
-                  else BenchmarkOutcome.FAIL)
-        out.append(BenchmarkRecord(
-            run_id=run_id, bench_run_id=bench_run_id, case_id=base_cell.case_id,
-            scope=BenchmarkScope.ORACLE_TASK, stage="oracle", task_id=t.task_id,
-            role="oracle", harness=base_cell.harness, model=base_cell.arm_name,
-            quality=QualityScore(score=t.score, judge=t.judge),
-            speed=SpeedBag(wall_clock_s=(ended - started).total_seconds(),
-                          started_at=started, ended_at=ended),
-            outcome=outcome))
+        outcome = BenchmarkOutcome.PASS if (t.score or 0.0) >= 1.0 else BenchmarkOutcome.FAIL
+        out.append(
+            BenchmarkRecord(
+                run_id=run_id,
+                bench_run_id=bench_run_id,
+                case_id=base_cell.case_id,
+                scope=BenchmarkScope.ORACLE_TASK,
+                stage="oracle",
+                task_id=t.task_id,
+                role="oracle",
+                harness=base_cell.harness,
+                model=base_cell.arm_name,
+                quality=QualityScore(score=t.score, judge=t.judge),
+                speed=SpeedBag(
+                    wall_clock_s=(ended - started).total_seconds(),
+                    started_at=started,
+                    ended_at=ended,
+                ),
+                outcome=outcome,
+            )
+        )
     return out
 ```
 
@@ -983,46 +1087,52 @@ Then wire it into `BenchmarkWorkflow.run` — replace the current oracle block
 (currently lines 159–172):
 
 ```python
-            if spec.language:
-                started = workflow.now()
-                grade = await workflow.execute_activity(
-                    grade_oracle,
-                    OracleInput(case_id=spec.case_id,
-                                repo_url=spec.repo_url or "",
-                                run_id=child_id, language=spec.language,
-                                base_branch=idea.base_branch),
-                    **ORACLE_ACT)
-                await workflow.execute_activity(
-                    record_benchmark,
-                    _oracle_record(cell, grade, bench_run_id, child_id,
-                                   started, workflow.now()),
-                    **RECORD_ACT)
+if spec.language:
+    started = workflow.now()
+    grade = await workflow.execute_activity(
+        grade_oracle,
+        OracleInput(
+            case_id=spec.case_id,
+            repo_url=spec.repo_url or "",
+            run_id=child_id,
+            language=spec.language,
+            base_branch=idea.base_branch,
+        ),
+        **ORACLE_ACT,
+    )
+    await workflow.execute_activity(
+        record_benchmark,
+        _oracle_record(cell, grade, bench_run_id, child_id, started, workflow.now()),
+        **RECORD_ACT,
+    )
 ```
 
 with:
 
 ```python
-            if spec.language:
-                started = workflow.now()
-                grade = await workflow.execute_activity(
-                    grade_oracle,
-                    OracleInput(case_id=spec.case_id,
-                                repo_url=spec.repo_url or "",
-                                run_id=child_id, language=spec.language,
-                                base_branch=idea.base_branch,
-                                author_model=cell.role_models.get("dev", ""),
-                                judge_model=spec.judge_model),
-                    **ORACLE_ACT)
-                ended = workflow.now()
-                await workflow.execute_activity(
-                    record_benchmark,
-                    _oracle_record(cell, grade, bench_run_id, child_id,
-                                   started, ended),
-                    **RECORD_ACT)
-                for rec in _oracle_task_records(cell, grade, bench_run_id,
-                                                child_id, started, ended):
-                    await workflow.execute_activity(
-                        record_benchmark, rec, **RECORD_ACT)
+if spec.language:
+    started = workflow.now()
+    grade = await workflow.execute_activity(
+        grade_oracle,
+        OracleInput(
+            case_id=spec.case_id,
+            repo_url=spec.repo_url or "",
+            run_id=child_id,
+            language=spec.language,
+            base_branch=idea.base_branch,
+            author_model=cell.role_models.get("dev", ""),
+            judge_model=spec.judge_model,
+        ),
+        **ORACLE_ACT,
+    )
+    ended = workflow.now()
+    await workflow.execute_activity(
+        record_benchmark,
+        _oracle_record(cell, grade, bench_run_id, child_id, started, ended),
+        **RECORD_ACT,
+    )
+    for rec in _oracle_task_records(cell, grade, bench_run_id, child_id, started, ended):
+        await workflow.execute_activity(record_benchmark, rec, **RECORD_ACT)
 ```
 
 (This also fixes the pre-existing double `workflow.now()` call — `started`/`ended` are now each captured exactly once and shared by both the case-level and per-task records.)
@@ -1059,29 +1169,44 @@ git commit -m "feat(benchmarks): record ORACLE_TASK grades from BenchmarkWorkflo
 from datetime import datetime, timedelta
 
 from sdlc.benchmarks.models import (
-    BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag)
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    QualityScore,
+    SpeedBag,
+)
 from sdlc.benchmarks.task_matrix import build_task_matrix
 from sdlc.benchmarks.tasks import TaskSpec, TaskSuite
 from sdlc.models import HarnessKind
 
 
 def _suite():
-    return TaskSuite(case_id="c1", tasks=[
-        TaskSpec(id="t01", error_class="functional", oracle_tests=["x::y"]),
-        TaskSpec(id="t02", error_class="security", rubric="r"),
-    ])
+    return TaskSuite(
+        case_id="c1",
+        tasks=[
+            TaskSpec(id="t01", error_class="functional", oracle_tests=["x::y"]),
+            TaskSpec(id="t02", error_class="security", rubric="r"),
+        ],
+    )
 
 
 def _rec(*, run="b1", cell_model="m1", task_id, score, started):
     return BenchmarkRecord(
-        run_id=f"{run}/c1#opencode#{cell_model}", bench_run_id=run,
-        case_id="c1", scope=BenchmarkScope.ORACLE_TASK, stage="oracle",
-        task_id=task_id, role="oracle", harness=HarnessKind.OPENCODE,
-        model=cell_model, quality=QualityScore(score=score, judge="oracle"),
-        speed=SpeedBag(wall_clock_s=1.0, started_at=started,
-                      ended_at=started + timedelta(seconds=1)),
-        outcome=BenchmarkOutcome.PASS if (score or 0) >= 1.0
-        else BenchmarkOutcome.FAIL)
+        run_id=f"{run}/c1#opencode#{cell_model}",
+        bench_run_id=run,
+        case_id="c1",
+        scope=BenchmarkScope.ORACLE_TASK,
+        stage="oracle",
+        task_id=task_id,
+        role="oracle",
+        harness=HarnessKind.OPENCODE,
+        model=cell_model,
+        quality=QualityScore(score=score, judge="oracle"),
+        speed=SpeedBag(
+            wall_clock_s=1.0, started_at=started, ended_at=started + timedelta(seconds=1)
+        ),
+        outcome=BenchmarkOutcome.PASS if (score or 0) >= 1.0 else BenchmarkOutcome.FAIL,
+    )
 
 
 def test_build_task_matrix_one_column_per_run_cell():
@@ -1120,13 +1245,18 @@ def test_build_task_matrix_filters_other_case_and_scope():
     other_case = _rec(run="b1", task_id="t01", score=1.0, started=t0)
     other_case.case_id = "other"
     stage_rec = BenchmarkRecord(
-        run_id="b1/x", bench_run_id="b1", case_id="c1",
-        scope=BenchmarkScope.STAGE, stage="code", role="dev",
-        harness=HarnessKind.OPENCODE, model="m1",
+        run_id="b1/x",
+        bench_run_id="b1",
+        case_id="c1",
+        scope=BenchmarkScope.STAGE,
+        stage="code",
+        role="dev",
+        harness=HarnessKind.OPENCODE,
+        model="m1",
         quality=QualityScore(score=1.0, judge="contract"),
-        speed=SpeedBag(wall_clock_s=1.0, started_at=t0,
-                      ended_at=t0 + timedelta(seconds=1)),
-        outcome=BenchmarkOutcome.PASS)
+        speed=SpeedBag(wall_clock_s=1.0, started_at=t0, ended_at=t0 + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.PASS,
+    )
     tm = build_task_matrix("c1", [other_case, stage_rec], _suite())
     assert tm.columns == []
 
@@ -1142,18 +1272,29 @@ def test_build_task_matrix_empty_records_gives_empty_columns():
 import json
 
 from sdlc.benchmarks.task_matrix import (
-    TaskMatrix, TaskMatrixColumn, render_task_matrix_html, render_task_matrix_json)
+    TaskMatrix,
+    TaskMatrixColumn,
+    render_task_matrix_html,
+    render_task_matrix_json,
+)
 from datetime import datetime
 
 
 def _tm():
     col = TaskMatrixColumn(
-        bench_run_id="b1", cell_id="c1#opencode#m1", harness="opencode",
-        model="m1", started_at=datetime(2026, 7, 20, 10), mean_score=0.5)
+        bench_run_id="b1",
+        cell_id="c1#opencode#m1",
+        harness="opencode",
+        model="m1",
+        started_at=datetime(2026, 7, 20, 10),
+        mean_score=0.5,
+    )
     return TaskMatrix(
-        case_id="c1", task_ids=["t01", "t02"], columns=[col],
-        scores={"t01": {"b1#c1#opencode#m1": 1.0},
-               "t02": {"b1#c1#opencode#m1": None}})
+        case_id="c1",
+        task_ids=["t01", "t02"],
+        columns=[col],
+        scores={"t01": {"b1#c1#opencode#m1": 1.0}, "t02": {"b1#c1#opencode#m1": None}},
+    )
 
 
 def test_json_round_trips():
@@ -1202,6 +1343,7 @@ ORACLE_TASK records for one case (report.py::scan_case_records feeds this)
 and renders a persistent, cross-run pass/fail grid. Pure aggregation +
 rendering -- no I/O, mirrors heatmap.py.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -1234,11 +1376,9 @@ def _column_key(col: TaskMatrixColumn) -> str:
     return f"{col.bench_run_id}#{col.cell_id}"
 
 
-def build_task_matrix(case_id: str, records: list[BenchmarkRecord],
-                      suite: TaskSuite) -> TaskMatrix:
+def build_task_matrix(case_id: str, records: list[BenchmarkRecord], suite: TaskSuite) -> TaskMatrix:
     task_ids = [t.id for t in suite.tasks]
-    recs = [r for r in records
-           if r.scope is BenchmarkScope.ORACLE_TASK and r.case_id == case_id]
+    recs = [r for r in records if r.scope is BenchmarkScope.ORACLE_TASK and r.case_id == case_id]
 
     by_col: dict[tuple[str, str], list[BenchmarkRecord]] = defaultdict(list)
     for r in recs:
@@ -1254,17 +1394,21 @@ def build_task_matrix(case_id: str, records: list[BenchmarkRecord],
         mean_score = sum(present) / len(present) if present else None
         harness = next((r.harness.value for r in col_recs if r.harness), "")
         model = col_recs[0].model
-        col = TaskMatrixColumn(bench_run_id=bench_run_id, cell_id=cell_id,
-                               harness=harness, model=model,
-                               started_at=started, mean_score=mean_score)
+        col = TaskMatrixColumn(
+            bench_run_id=bench_run_id,
+            cell_id=cell_id,
+            harness=harness,
+            model=model,
+            started_at=started,
+            mean_score=mean_score,
+        )
         columns.append(col)
         key = _column_key(col)
         for tid in task_ids:
             scores[tid][key] = by_task.get(tid)
 
     columns.sort(key=lambda c: c.started_at)
-    return TaskMatrix(case_id=case_id, task_ids=task_ids, columns=columns,
-                      scores=scores)
+    return TaskMatrix(case_id=case_id, task_ids=task_ids, columns=columns, scores=scores)
 
 
 def render_task_matrix_json(tm: TaskMatrix) -> str:
@@ -1291,14 +1435,13 @@ def render_task_matrix_html(tm: TaskMatrix) -> str:
         for col in tm.columns:
             key = _column_key(col)
             ts = col.started_at.strftime("%m-%d %H:%M")
-            score_label = (f"{col.mean_score:.2f}" if col.mean_score is not None
-                          else "n/a")
+            score_label = f"{col.mean_score:.2f}" if col.mean_score is not None else "n/a"
             head_cells.append(
-                f"<th>{escape(ts)}<br>score {score_label}<br>"
-                f"{escape(col.model)}</th>")
-            total = sum(v for v in
-                       (tm.scores[tid].get(key) for tid in tm.task_ids)
-                       if v is not None)
+                f"<th>{escape(ts)}<br>score {score_label}<br>{escape(col.model)}</th>"
+            )
+            total = sum(
+                v for v in (tm.scores[tid].get(key) for tid in tm.task_ids) if v is not None
+            )
             sum_cells.append(f"<th>{total:.2f}</th>")
         rows = []
         for tid in tm.task_ids:
@@ -1311,8 +1454,8 @@ def render_task_matrix_html(tm: TaskMatrix) -> str:
             rows.append("<tr>" + "".join(tds) + "</tr>")
         body = (
             "<table><tr><th>task</th>" + "".join(head_cells) + "</tr>"
-            "<tr><th>sum</th>" + "".join(sum_cells) + "</tr>"
-            + "".join(rows) + "</table>")
+            "<tr><th>sum</th>" + "".join(sum_cells) + "</tr>" + "".join(rows) + "</table>"
+        )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Task history - {escape(tm.case_id)}</title>
@@ -1361,29 +1504,42 @@ from datetime import datetime, timedelta
 
 from sdlc.benchmarks.error_matrix import build_error_matrix
 from sdlc.benchmarks.models import (
-    BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag)
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    QualityScore,
+    SpeedBag,
+)
 from sdlc.benchmarks.tasks import TaskSpec, TaskSuite
 from sdlc.models import HarnessKind
 
 
 def _suite():
-    return TaskSuite(case_id="c1", tasks=[
-        TaskSpec(id="t01", error_class="functional", oracle_tests=["x::y"]),
-        TaskSpec(id="t02", error_class="security", rubric="r"),
-    ])
+    return TaskSuite(
+        case_id="c1",
+        tasks=[
+            TaskSpec(id="t01", error_class="functional", oracle_tests=["x::y"]),
+            TaskSpec(id="t02", error_class="security", rubric="r"),
+        ],
+    )
 
 
 def _rec(*, run, model, task_id, score):
     t = datetime(2026, 7, 20, 10)
     return BenchmarkRecord(
-        run_id=f"{run}/c1#opencode#{model}", bench_run_id=run, case_id="c1",
-        scope=BenchmarkScope.ORACLE_TASK, stage="oracle", task_id=task_id,
-        role="oracle", harness=HarnessKind.OPENCODE, model=model,
+        run_id=f"{run}/c1#opencode#{model}",
+        bench_run_id=run,
+        case_id="c1",
+        scope=BenchmarkScope.ORACLE_TASK,
+        stage="oracle",
+        task_id=task_id,
+        role="oracle",
+        harness=HarnessKind.OPENCODE,
+        model=model,
         quality=QualityScore(score=score, judge="oracle"),
-        speed=SpeedBag(wall_clock_s=1.0, started_at=t,
-                      ended_at=t + timedelta(seconds=1)),
-        outcome=BenchmarkOutcome.PASS if (score or 0) >= 1.0
-        else BenchmarkOutcome.FAIL)
+        speed=SpeedBag(wall_clock_s=1.0, started_at=t, ended_at=t + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.PASS if (score or 0) >= 1.0 else BenchmarkOutcome.FAIL,
+    )
 
 
 def test_build_error_matrix_averages_failure_mass_over_runs_for_same_arm():
@@ -1392,9 +1548,8 @@ def test_build_error_matrix_averages_failure_mass_over_runs_for_same_arm():
         _rec(run="b2", model="m1", task_id="t01", score=1.0),  # 0.0 failure mass
     ]
     em = build_error_matrix("c1", recs, _suite())
-    cell = next(c for c in em.cells if c.arm_key == "opencode#m1"
-               and c.error_class == "functional")
-    assert cell.avg_failure_mass == 0.5   # (1.0 + 0.0) / 2 runs
+    cell = next(c for c in em.cells if c.arm_key == "opencode#m1" and c.error_class == "functional")
+    assert cell.avg_failure_mass == 0.5  # (1.0 + 0.0) / 2 runs
     assert cell.n_runs == 2
 
 
@@ -1443,16 +1598,25 @@ def test_build_error_matrix_empty_records():
 import json
 
 from sdlc.benchmarks.error_matrix import (
-    ErrorMatrix, ErrorMatrixCell, render_error_matrix_html, render_error_matrix_json)
+    ErrorMatrix,
+    ErrorMatrixCell,
+    render_error_matrix_html,
+    render_error_matrix_json,
+)
 
 
 def _em():
     return ErrorMatrix(
-        case_id="c1", error_classes=["functional", "security"],
+        case_id="c1",
+        error_classes=["functional", "security"],
         arms=["opencode#m1"],
-        cells=[ErrorMatrixCell(error_class="functional", arm_key="opencode#m1",
-                              avg_failure_mass=0.5, n_runs=2)],
-        max_value=0.5)
+        cells=[
+            ErrorMatrixCell(
+                error_class="functional", arm_key="opencode#m1", avg_failure_mass=0.5, n_runs=2
+            )
+        ],
+        max_value=0.5,
+    )
 
 
 def test_json_round_trips():
@@ -1475,10 +1639,15 @@ def test_html_handles_empty():
 
 
 def test_html_escapes_arm_key():
-    em = ErrorMatrix(case_id="c1", error_classes=["functional"], arms=["<x>"],
-                    cells=[ErrorMatrixCell(error_class="functional", arm_key="<x>",
-                                          avg_failure_mass=1.0, n_runs=1)],
-                    max_value=1.0)
+    em = ErrorMatrix(
+        case_id="c1",
+        error_classes=["functional"],
+        arms=["<x>"],
+        cells=[
+            ErrorMatrixCell(error_class="functional", arm_key="<x>", avg_failure_mass=1.0, n_runs=1)
+        ],
+        max_value=1.0,
+    )
     html = render_error_matrix_html(em)
     assert "<x>" not in html.split("<body>")[1]
     assert "&lt;x&gt;" in html
@@ -1499,6 +1668,7 @@ Scans every bench_run_id's ORACLE_TASK records for that case
 class an arm (harness#model) fails most, averaged per run. Pure
 aggregation + rendering -- no I/O, mirrors heatmap.py / task_matrix.py.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -1525,12 +1695,18 @@ class ErrorMatrix(BaseModel):
     max_value: float = 0.0
 
 
-def build_error_matrix(case_id: str, records: list[BenchmarkRecord],
-                       suite: TaskSuite) -> ErrorMatrix:
+def build_error_matrix(
+    case_id: str, records: list[BenchmarkRecord], suite: TaskSuite
+) -> ErrorMatrix:
     class_by_task = {t.id: t.error_class for t in suite.tasks}
-    recs = [r for r in records
-           if r.scope is BenchmarkScope.ORACLE_TASK and r.case_id == case_id
-           and r.task_id in class_by_task and r.quality.score is not None]
+    recs = [
+        r
+        for r in records
+        if r.scope is BenchmarkScope.ORACLE_TASK
+        and r.case_id == case_id
+        and r.task_id in class_by_task
+        and r.quality.score is not None
+    ]
 
     # failure mass per (bench_run_id, arm_key, error_class) run-instance
     mass: dict[tuple[str, str, str], float] = defaultdict(float)
@@ -1538,7 +1714,7 @@ def build_error_matrix(case_id: str, records: list[BenchmarkRecord],
     for r in recs:
         arm_key = f"{r.harness.value if r.harness else ''}#{r.model}"
         cls = class_by_task[r.task_id]
-        mass[(r.bench_run_id, arm_key, cls)] += (1.0 - r.quality.score)
+        mass[(r.bench_run_id, arm_key, cls)] += 1.0 - r.quality.score
         runs_by_arm[arm_key].add(r.bench_run_id)
 
     totals: dict[tuple[str, str], float] = defaultdict(float)
@@ -1548,16 +1724,19 @@ def build_error_matrix(case_id: str, records: list[BenchmarkRecord],
     cells: list[ErrorMatrixCell] = []
     for (arm_key, cls), total in totals.items():
         n_runs = max(len(runs_by_arm[arm_key]), 1)
-        cells.append(ErrorMatrixCell(
-            error_class=cls, arm_key=arm_key,
-            avg_failure_mass=total / n_runs, n_runs=n_runs))
+        cells.append(
+            ErrorMatrixCell(
+                error_class=cls, arm_key=arm_key, avg_failure_mass=total / n_runs, n_runs=n_runs
+            )
+        )
 
     arms = sorted({c.arm_key for c in cells})
     present = {c.error_class for c in cells}
     classes = [c for c in ERROR_CLASSES if c in present]
     max_value = max((c.avg_failure_mass for c in cells), default=0.0)
-    return ErrorMatrix(case_id=case_id, error_classes=classes, arms=arms,
-                       cells=cells, max_value=max_value)
+    return ErrorMatrix(
+        case_id=case_id, error_classes=classes, arms=arms, cells=cells, max_value=max_value
+    )
 
 
 def render_error_matrix_json(em: ErrorMatrix) -> str:
@@ -1566,7 +1745,7 @@ def render_error_matrix_json(em: ErrorMatrix) -> str:
 
 def _cell_color(value: float, max_value: float) -> str:
     ratio = 0.0 if max_value <= 0 else min(value / max_value, 1.0)
-    g_b = round(255 - 229 * ratio)   # white (low) -> dark red (high)
+    g_b = round(255 - 229 * ratio)  # white (low) -> dark red (high)
     return f"rgb(255,{g_b},{g_b})"
 
 
@@ -1584,15 +1763,17 @@ def render_error_matrix_html(em: ErrorMatrix) -> str:
                 if c is None:
                     tds.append('<td class="empty"></td>')
                     continue
-                tip = (f"{cls} / {arm}: {c.avg_failure_mass:.2f} avg failure "
-                      f"mass/run over {c.n_runs} runs")
+                tip = (
+                    f"{cls} / {arm}: {c.avg_failure_mass:.2f} avg failure "
+                    f"mass/run over {c.n_runs} runs"
+                )
                 tds.append(
                     f'<td title="{escape(tip)}" '
                     f'style="background:{_cell_color(c.avg_failure_mass, em.max_value)}">'
-                    f"{c.avg_failure_mass:.2f}</td>")
+                    f"{c.avg_failure_mass:.2f}</td>"
+                )
             rows.append("<tr>" + "".join(tds) + "</tr>")
-        body = (f"<table><tr><th>error class \\ arm</th>{head}</tr>"
-               + "".join(rows) + "</table>")
+        body = f"<table><tr><th>error class \\ arm</th>{head}</tr>" + "".join(rows) + "</table>"
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Error-class matrix - {escape(em.case_id)}</title>
@@ -1645,21 +1826,33 @@ Append to `tests/test_benchmark_report.py` (check its existing imports first —
 def test_scan_case_records_reads_across_multiple_bench_run_ids(tmp_path):
     from datetime import datetime, timedelta
     from sdlc.benchmarks.models import (
-        BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag)
+        BenchmarkOutcome,
+        BenchmarkRecord,
+        BenchmarkScope,
+        QualityScore,
+        SpeedBag,
+    )
     from sdlc.benchmarks.recorder import RecordStore
     from sdlc.benchmarks.report import scan_case_records
     from sdlc.models import HarnessKind
+
     t = datetime(2026, 7, 20, 10)
 
     def rec(run, task_id):
         return BenchmarkRecord(
-            run_id=f"{run}/c1#opencode#m1", bench_run_id=run, case_id="c1",
-            scope=BenchmarkScope.ORACLE_TASK, stage="oracle", task_id=task_id,
-            role="oracle", harness=HarnessKind.OPENCODE, model="m1",
+            run_id=f"{run}/c1#opencode#m1",
+            bench_run_id=run,
+            case_id="c1",
+            scope=BenchmarkScope.ORACLE_TASK,
+            stage="oracle",
+            task_id=task_id,
+            role="oracle",
+            harness=HarnessKind.OPENCODE,
+            model="m1",
             quality=QualityScore(score=1.0, judge="oracle"),
-            speed=SpeedBag(wall_clock_s=1.0, started_at=t,
-                          ended_at=t + timedelta(seconds=1)),
-            outcome=BenchmarkOutcome.PASS)
+            speed=SpeedBag(wall_clock_s=1.0, started_at=t, ended_at=t + timedelta(seconds=1)),
+            outcome=BenchmarkOutcome.PASS,
+        )
 
     RecordStore(root=str(tmp_path), bench_run_id="b1").append(rec("b1", "t01"))
     RecordStore(root=str(tmp_path), bench_run_id="b2").append(rec("b2", "t01"))
@@ -1671,25 +1864,38 @@ def test_scan_case_records_reads_across_multiple_bench_run_ids(tmp_path):
 def test_scan_case_records_filters_other_cases(tmp_path):
     from datetime import datetime, timedelta
     from sdlc.benchmarks.models import (
-        BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag)
+        BenchmarkOutcome,
+        BenchmarkRecord,
+        BenchmarkScope,
+        QualityScore,
+        SpeedBag,
+    )
     from sdlc.benchmarks.recorder import RecordStore
     from sdlc.benchmarks.report import scan_case_records
     from sdlc.models import HarnessKind
+
     t = datetime(2026, 7, 20, 10)
     rec = BenchmarkRecord(
-        run_id="b1/other#opencode#m1", bench_run_id="b1", case_id="other-case",
-        scope=BenchmarkScope.ORACLE_TASK, stage="oracle", task_id="t01",
-        role="oracle", harness=HarnessKind.OPENCODE, model="m1",
+        run_id="b1/other#opencode#m1",
+        bench_run_id="b1",
+        case_id="other-case",
+        scope=BenchmarkScope.ORACLE_TASK,
+        stage="oracle",
+        task_id="t01",
+        role="oracle",
+        harness=HarnessKind.OPENCODE,
+        model="m1",
         quality=QualityScore(score=1.0, judge="oracle"),
-        speed=SpeedBag(wall_clock_s=1.0, started_at=t,
-                      ended_at=t + timedelta(seconds=1)),
-        outcome=BenchmarkOutcome.PASS)
+        speed=SpeedBag(wall_clock_s=1.0, started_at=t, ended_at=t + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.PASS,
+    )
     RecordStore(root=str(tmp_path), bench_run_id="b1").append(rec)
     assert scan_case_records("c1", root=str(tmp_path)) == []
 
 
 def test_scan_case_records_empty_root_returns_empty(tmp_path):
     from sdlc.benchmarks.report import scan_case_records
+
     assert scan_case_records("c1", root=str(tmp_path / "does-not-exist")) == []
 ```
 
@@ -1698,6 +1904,7 @@ Append to `tests/test_benchmark_cli.py`:
 ```python
 def test_parser_accepts_history_subcommand():
     from sdlc.benchmarks.cli import build_parser
+
     p = build_parser()
     args = p.parse_args(["benchmark", "history", "--case", "c1"])
     assert args.cmd == "benchmark"
@@ -1708,6 +1915,7 @@ def test_parser_accepts_history_subcommand():
 def test_dispatch_history_raises_without_tasks_yaml(tmp_path):
     from sdlc.benchmarks.cli import dispatch_history
     import pytest as _pytest
+
     with _pytest.raises(ValueError, match="no tasks.yaml"):
         dispatch_history("no-such-case", root=str(tmp_path))
 
@@ -1716,27 +1924,39 @@ def test_dispatch_history_writes_all_four_files(tmp_path, monkeypatch):
     from datetime import datetime, timedelta
     from sdlc.benchmarks.cli import dispatch_history
     from sdlc.benchmarks.models import (
-        BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, QualityScore, SpeedBag)
+        BenchmarkOutcome,
+        BenchmarkRecord,
+        BenchmarkScope,
+        QualityScore,
+        SpeedBag,
+    )
     from sdlc.benchmarks.recorder import RecordStore
     from sdlc.models import HarnessKind
 
     cases_dir = tmp_path / "cases"
     (cases_dir / "c1").mkdir(parents=True)
     (cases_dir / "c1" / "tasks.yaml").write_text(
-        "tasks:\n  - id: t01\n    error_class: functional\n"
-        "    oracle_tests: [\"x::y\"]\n", encoding="utf-8")
+        'tasks:\n  - id: t01\n    error_class: functional\n    oracle_tests: ["x::y"]\n',
+        encoding="utf-8",
+    )
     monkeypatch.setenv("SDLC_CASES_ROOT", str(cases_dir))
 
     runs_root = tmp_path / "runs"
     t = datetime(2026, 7, 20, 10)
     rec = BenchmarkRecord(
-        run_id="b1/c1#opencode#m1", bench_run_id="b1", case_id="c1",
-        scope=BenchmarkScope.ORACLE_TASK, stage="oracle", task_id="t01",
-        role="oracle", harness=HarnessKind.OPENCODE, model="m1",
+        run_id="b1/c1#opencode#m1",
+        bench_run_id="b1",
+        case_id="c1",
+        scope=BenchmarkScope.ORACLE_TASK,
+        stage="oracle",
+        task_id="t01",
+        role="oracle",
+        harness=HarnessKind.OPENCODE,
+        model="m1",
         quality=QualityScore(score=1.0, judge="oracle"),
-        speed=SpeedBag(wall_clock_s=1.0, started_at=t,
-                      ended_at=t + timedelta(seconds=1)),
-        outcome=BenchmarkOutcome.PASS)
+        speed=SpeedBag(wall_clock_s=1.0, started_at=t, ended_at=t + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.PASS,
+    )
     RecordStore(root=str(runs_root), bench_run_id="b1").append(rec)
 
     tm_path, em_path = dispatch_history("c1", root=str(runs_root))
@@ -1768,8 +1988,7 @@ def scan_case_records(case_id: str, root: str | None = None) -> list[BenchmarkRe
         return []
     out: list[BenchmarkRecord] = []
     for bench_dir in sorted(p for p in base.iterdir() if p.is_dir()):
-        out.extend(r for r in _read_all(bench_dir.name, root)
-                   if r.case_id == case_id)
+        out.extend(r for r in _read_all(bench_dir.name, root) if r.case_id == case_id)
     return out
 ```
 
@@ -1786,11 +2005,9 @@ In `src/sdlc/benchmarks/cli.py`:
 
 ```python
 def dispatch_history(case_id: str, root: str | None = None) -> tuple[str, str]:
-    from .error_matrix import (
-        build_error_matrix, render_error_matrix_html, render_error_matrix_json)
+    from .error_matrix import build_error_matrix, render_error_matrix_html, render_error_matrix_json
     from .report import scan_case_records
-    from .task_matrix import (
-        build_task_matrix, render_task_matrix_html, render_task_matrix_json)
+    from .task_matrix import build_task_matrix, render_task_matrix_html, render_task_matrix_json
     from .tasks import load_task_suite
 
     suite = load_task_suite(case_id)
@@ -1802,14 +2019,10 @@ def dispatch_history(case_id: str, root: str | None = None) -> tuple[str, str]:
 
     out_dir = Path(root if root is not None else _root()) / "_history" / case_id
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "task-matrix.html").write_text(
-        render_task_matrix_html(tm), encoding="utf-8")
-    (out_dir / "task-matrix.json").write_text(
-        render_task_matrix_json(tm), encoding="utf-8")
-    (out_dir / "error-matrix.html").write_text(
-        render_error_matrix_html(em), encoding="utf-8")
-    (out_dir / "error-matrix.json").write_text(
-        render_error_matrix_json(em), encoding="utf-8")
+    (out_dir / "task-matrix.html").write_text(render_task_matrix_html(tm), encoding="utf-8")
+    (out_dir / "task-matrix.json").write_text(render_task_matrix_json(tm), encoding="utf-8")
+    (out_dir / "error-matrix.html").write_text(render_error_matrix_html(em), encoding="utf-8")
+    (out_dir / "error-matrix.json").write_text(render_error_matrix_json(em), encoding="utf-8")
     return str(out_dir / "task-matrix.html"), str(out_dir / "error-matrix.html")
 ```
 

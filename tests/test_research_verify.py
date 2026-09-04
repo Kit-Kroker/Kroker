@@ -2,8 +2,11 @@ import hashlib
 
 import pytest
 
-from sdlc.models import GroundedFinding, ResearchBrief
 from sdlc.research import verify
+from sdlc.stages.research.models import (
+    GroundedFinding,
+    ResearchBrief,
+)
 
 
 @pytest.fixture

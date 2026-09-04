@@ -13,15 +13,16 @@ import fnmatch
 import posixpath
 from collections.abc import Sequence
 
-from ...measurement import Measurement
-from ...toolchain.adapters import ToolchainAdapter
-from ..models import (
+from sdlc.triage.models import (
     M_TESTS_PRESENT,
     FindingSeverity,
     FixClass,
     SignalResult,
     TriageFinding,
 )
+
+from ...measurement import Measurement
+from ...toolchain.adapters import ToolchainAdapter
 
 SIGNAL_ID = "baseline"
 VERSION = 2

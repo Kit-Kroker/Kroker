@@ -61,8 +61,13 @@ Create `tests/test_analyst_models.py`:
 
 ```python
 """AnalysisReport / CriterionTrace / CoverageReport contracts + config field."""
+
 from sdlc.models import (
-    AnalysisReport, CoverageReport, CriterionTrace, PipelineConfig, ReviewFinding,
+    AnalysisReport,
+    CoverageReport,
+    CriterionTrace,
+    PipelineConfig,
+    ReviewFinding,
 )
 
 
@@ -83,7 +88,9 @@ def test_analysis_report_carries_findings_and_traces():
     r = AnalysisReport(
         traceability=[CriterionTrace(task_id="t1", criterion="c1", tests=["test_c1"])],
         findings=[ReviewFinding(assertion="c1", severity="low", detail="nit")],
-        summary="ok", confidence=0.9)
+        summary="ok",
+        confidence=0.9,
+    )
     assert r.traceability[0].tests == ["test_c1"]
     assert r.findings[0].severity == "low"
 
@@ -109,6 +116,7 @@ In `src/sdlc/models.py`, immediately after the `ReviewReport` class (after its `
 ```python
 class CriterionTrace(BaseModel):
     """One acceptance criterion and the test(s) the Analyst says verify it."""
+
     task_id: str
     criterion: str
     tests: list[str] = Field(default_factory=list)
@@ -125,6 +133,7 @@ class AnalysisReport(BaseModel):
     pass/fail verdict. `findings` ride along for memory/observability and are
     NOT wired as a blocking gate check.
     """
+
     traceability: list[CriterionTrace] = Field(default_factory=list)
     findings: list[ReviewFinding] = Field(default_factory=list)
     summary: str = ""
@@ -136,8 +145,9 @@ class CoverageReport(BaseModel):
     `measured=False` means no coverage artifact was emitted by the run's test
     commands — the seam could not measure, so the check passes rather than
     forcing a spurious human override every run."""
+
     measured: bool
-    diff_pct: float | None = None       # 0..100 over changed files
+    diff_pct: float | None = None  # 0..100 over changed files
     detail: str = ""
 ```
 
@@ -182,40 +192,44 @@ Create `tests/test_untraced_criteria.py`:
 
 ```python
 """Pure FR-106 enforcement: the workflow, not the LLM, decides traceability."""
+
 from sdlc.models import AnalysisReport, CriterionTrace
 from sdlc.workflows.feature import untraced_criteria
 
 
 def test_full_mapping_leaves_nothing_untraced():
     auth = [("t1", "GET /hello returns 200"), ("t1", "returns json")]
-    report = AnalysisReport(traceability=[
-        CriterionTrace(task_id="t1", criterion="GET /hello returns 200",
-                       tests=["test_hello_200"]),
-        CriterionTrace(task_id="t1", criterion="returns json",
-                       tests=["test_hello_json"]),
-    ])
+    report = AnalysisReport(
+        traceability=[
+            CriterionTrace(
+                task_id="t1", criterion="GET /hello returns 200", tests=["test_hello_200"]
+            ),
+            CriterionTrace(task_id="t1", criterion="returns json", tests=["test_hello_json"]),
+        ]
+    )
     assert untraced_criteria(auth, report) == []
 
 
 def test_criterion_mapped_to_zero_tests_is_untraced():
     auth = [("t1", "c1")]
-    report = AnalysisReport(traceability=[
-        CriterionTrace(task_id="t1", criterion="c1", tests=[])])
+    report = AnalysisReport(traceability=[CriterionTrace(task_id="t1", criterion="c1", tests=[])])
     assert untraced_criteria(auth, report) == ["t1: c1"]
 
 
 def test_omitted_criterion_is_untraced_even_if_report_looks_clean():
     # Analyst "forgets" c2 entirely — enforcement must still flag it.
     auth = [("t1", "c1"), ("t1", "c2")]
-    report = AnalysisReport(traceability=[
-        CriterionTrace(task_id="t1", criterion="c1", tests=["test_c1"])])
+    report = AnalysisReport(
+        traceability=[CriterionTrace(task_id="t1", criterion="c1", tests=["test_c1"])]
+    )
     assert untraced_criteria(auth, report) == ["t1: c2"]
 
 
 def test_mapping_for_wrong_task_does_not_count():
     auth = [("t2", "c1")]
-    report = AnalysisReport(traceability=[
-        CriterionTrace(task_id="t1", criterion="c1", tests=["test_c1"])])
+    report = AnalysisReport(
+        traceability=[CriterionTrace(task_id="t1", criterion="c1", tests=["test_c1"])]
+    )
     assert untraced_criteria(auth, report) == ["t2: c1"]
 ```
 
@@ -229,8 +243,7 @@ Expected: FAIL — `ImportError: cannot import name 'untraced_criteria'`.
 In `src/sdlc/workflows/feature.py`, after `_merge_evidence_all_green` (~line 104), add. Note: `AnalysisReport` must be added to the models import block (~line 48-54) — add `AnalysisReport,` there.
 
 ```python
-def untraced_criteria(authoritative: list[tuple[str, str]],
-                      report: "AnalysisReport") -> list[str]:
+def untraced_criteria(authoritative: list[tuple[str, str]], report: "AnalysisReport") -> list[str]:
     """FR-106 enforcement (workflow-side, NOT the LLM's verdict).
 
     A criterion is traced iff the Analyst's report contains a CriterionTrace
@@ -239,11 +252,12 @@ def untraced_criteria(authoritative: list[tuple[str, str]],
     Enforced against the plan's authoritative set so an Analyst cannot hide a
     gap by forgetting to list a criterion. Returns "task_id: criterion" labels
     in authoritative order."""
-    traced = {(t.task_id, t.criterion)
-              for t in report.traceability if t.tests}
-    return [f"{task_id}: {criterion}"
-            for (task_id, criterion) in authoritative
-            if (task_id, criterion) not in traced]
+    traced = {(t.task_id, t.criterion) for t in report.traceability if t.tests}
+    return [
+        f"{task_id}: {criterion}"
+        for (task_id, criterion) in authoritative
+        if (task_id, criterion) not in traced
+    ]
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -288,6 +302,7 @@ Create `tests/test_measure_coverage.py`:
 
 ```python
 """measure_coverage: deterministic diff-scoped Cobertura seam."""
+
 import pathlib
 
 import pytest
@@ -310,8 +325,7 @@ COBERTURA = """<?xml version="1.0" ?>
 
 @pytest.mark.asyncio
 async def test_no_artifact_means_unmeasured(tmp_path):
-    r = await measure_coverage(CoverageInput(worktree=str(tmp_path),
-                                             changed_files=["app/main.py"]))
+    r = await measure_coverage(CoverageInput(worktree=str(tmp_path), changed_files=["app/main.py"]))
     assert r.measured is False
     assert r.diff_pct is None
 
@@ -320,8 +334,7 @@ async def test_no_artifact_means_unmeasured(tmp_path):
 async def test_diff_scoped_percentage_over_changed_files(tmp_path):
     (tmp_path / "coverage.xml").write_text(COBERTURA, encoding="utf-8")
     # Only app/main.py changed -> 80%, ignoring app/util.py's 40%.
-    r = await measure_coverage(CoverageInput(worktree=str(tmp_path),
-                                             changed_files=["app/main.py"]))
+    r = await measure_coverage(CoverageInput(worktree=str(tmp_path), changed_files=["app/main.py"]))
     assert r.measured is True
     assert r.diff_pct == pytest.approx(80.0)
 
@@ -329,8 +342,9 @@ async def test_diff_scoped_percentage_over_changed_files(tmp_path):
 @pytest.mark.asyncio
 async def test_no_changed_file_in_report_means_unmeasured(tmp_path):
     (tmp_path / "coverage.xml").write_text(COBERTURA, encoding="utf-8")
-    r = await measure_coverage(CoverageInput(worktree=str(tmp_path),
-                                             changed_files=["other/thing.py"]))
+    r = await measure_coverage(
+        CoverageInput(worktree=str(tmp_path), changed_files=["other/thing.py"])
+    )
     assert r.measured is False
 
 
@@ -352,8 +366,7 @@ BILLION_LAUGHS = """<?xml version="1.0"?>
 @pytest.mark.asyncio
 async def test_malicious_xml_degrades_to_unmeasured(tmp_path):
     (tmp_path / "coverage.xml").write_text(BILLION_LAUGHS, encoding="utf-8")
-    r = await measure_coverage(CoverageInput(worktree=str(tmp_path),
-                                             changed_files=["app/main.py"]))
+    r = await measure_coverage(CoverageInput(worktree=str(tmp_path), changed_files=["app/main.py"]))
     assert r.measured is False
 ```
 
@@ -405,30 +418,35 @@ async def measure_coverage(inp: CoverageInput) -> CoverageReport:
     unbuilt measurement must never force a human override."""
     path = os.path.join(inp.worktree, "coverage.xml")
     if not os.path.isfile(path):
-        return CoverageReport(measured=False,
-                              detail="no coverage.xml (seam not measured)")
+        return CoverageReport(measured=False, detail="no coverage.xml (seam not measured)")
     try:
         root = DET.parse(path).getroot()
     except (DefusedXmlException, DET.ParseError, OSError):
-        return CoverageReport(measured=False,
-                              detail="coverage.xml unparseable or unsafe")
+        return CoverageReport(measured=False, detail="coverage.xml unparseable or unsafe")
     rates: list[float] = []
     for cls in root.iter("class"):
         fname = cls.get("filename") or ""
-        if any(fname == cf or fname.endswith("/" + cf) or cf.endswith("/" + fname)
-               or cf.endswith(fname) for cf in inp.changed_files):
+        if any(
+            fname == cf
+            or fname.endswith("/" + cf)
+            or cf.endswith("/" + fname)
+            or cf.endswith(fname)
+            for cf in inp.changed_files
+        ):
             try:
                 rates.append(float(cls.get("line-rate", "0")) * 100.0)
             except ValueError:
                 continue
     if not rates:
         return CoverageReport(
-            measured=False,
-            detail="no changed file found in coverage.xml (seam not measured)")
+            measured=False, detail="no changed file found in coverage.xml (seam not measured)"
+        )
     pct = sum(rates) / len(rates)
-    return CoverageReport(measured=True, diff_pct=pct,
-                          detail=f"diff-scoped coverage {pct:.1f}% "
-                                 f"over {len(rates)} changed file(s)")
+    return CoverageReport(
+        measured=True,
+        diff_pct=pct,
+        detail=f"diff-scoped coverage {pct:.1f}% over {len(rates)} changed file(s)",
+    )
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
@@ -462,8 +480,12 @@ Create `tests/test_analyst_wiring.py`:
 
 ```python
 """Analyst agent is defined, prompt-hashed, and in the temporal-agent list."""
+
 from sdlc.agents.roles import (
-    ALL_TEMPORAL_AGENTS, PROMPT_SHAS, analyst_agent, t_analyst,
+    ALL_TEMPORAL_AGENTS,
+    PROMPT_SHAS,
+    analyst_agent,
+    t_analyst,
 )
 from sdlc.models import AnalysisReport
 
@@ -547,8 +569,16 @@ t_analyst = TemporalAgent(analyst_agent, activity_config=AGENT_ACTIVITY_CONFIG)
 ```
 
 ```python
-ALL_TEMPORAL_AGENTS = [t_clarify, t_architect, t_planner, t_qa,
-                       t_reviewer, t_analyst, t_merge_verdict, t_devops]
+ALL_TEMPORAL_AGENTS = [
+    t_clarify,
+    t_architect,
+    t_planner,
+    t_qa,
+    t_reviewer,
+    t_analyst,
+    t_merge_verdict,
+    t_devops,
+]
 ```
 
 - [ ] **Step 4: Register in the versioned registry (FR-201)**
@@ -617,9 +647,17 @@ In `src/sdlc/worker.py`, add `measure_coverage` to the activities import (~line 
 
 ```python
 from .activities import (
-    create_worktree, deploy, evaluate_gate, get_task_diff,
-    measure_coverage, merge_into_integration, open_pull_request,
-    run_coding_task, run_lint, run_test_suite, security_scan,
+    create_worktree,
+    deploy,
+    evaluate_gate,
+    get_task_diff,
+    measure_coverage,
+    merge_into_integration,
+    open_pull_request,
+    run_coding_task,
+    run_lint,
+    run_test_suite,
+    security_scan,
     setup_integration_branch,
 )
 ```
@@ -627,9 +665,17 @@ from .activities import (
 And into the `activities=[...]` list in `main()` (~line 66-68), next to `security_scan`:
 
 ```python
-            run_coding_task, run_lint, run_test_suite, security_scan,
-            measure_coverage,
-            open_pull_request, deploy,
+(
+    run_coding_task,
+    run_lint,
+    run_test_suite,
+    security_scan,
+)
+(measure_coverage,)
+(
+    open_pull_request,
+    deploy,
+)
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -670,6 +716,7 @@ Create `tests/test_analyst_stage_wiring.py` — a source-level assertion that th
 ```python
 """The analyze stage is wired into FeatureWorkflow before the merge gate,
 and both advisory checks are built from its output."""
+
 import inspect
 
 from sdlc.workflows import feature
@@ -682,8 +729,9 @@ def test_analyze_stage_calls_analyst_and_builds_both_checks():
     # Enforcement helper used (not an LLM verdict)
     assert "untraced_criteria(" in src
     # Both advisory checks appended
-    assert 'build_check(\n                "traceability"' in src or \
-           'build_check("traceability"' in src
+    assert (
+        'build_check(\n                "traceability"' in src or 'build_check("traceability"' in src
+    )
     assert '"coverage"' in src
     assert "measure_coverage" in src
 
@@ -715,16 +763,29 @@ In `src/sdlc/workflows/feature.py`:
   and `CoverageInput` where the input dataclasses are imported (same block — add `CoverageInput,` to the first line):
 
 ```python
-        CodingTaskInput, CoverageInput, DeployInput, DiffInput, IntegrationHandle,
+(
+    CodingTaskInput,
+    CoverageInput,
+    DeployInput,
+    DiffInput,
+    IntegrationHandle,
+)
 ```
 
 - Add `t_analyst` to the roles import (~line 24-27):
 
 ```python
-    from ..agents.roles import (
-        MODEL, PROMPT_SHAS, t_analyst, t_architect, t_clarify,
-        t_merge_verdict, t_planner, t_qa, t_reviewer,
-    )
+from ..agents.roles import (
+    MODEL,
+    PROMPT_SHAS,
+    t_analyst,
+    t_architect,
+    t_clarify,
+    t_merge_verdict,
+    t_planner,
+    t_qa,
+    t_reviewer,
+)
 ```
 
 - Add `AnalysisReport, CoverageReport` to the models import (~line 48-54): `AnalysisReport,` (added in Task 2) and `CoverageReport,`.
@@ -734,55 +795,68 @@ In `src/sdlc/workflows/feature.py`:
 In `src/sdlc/workflows/feature.py`, immediately **before** the `# 5. MERGE ...` comment (~line 787), insert the stage. `done` and `plan` are already in scope here.
 
 ```python
-        # 4b. ANALYZE (stage 9) — clean-context Analyst proposes the
-        # criterion->test mapping; the workflow enforces it (FR-106). Runs on
-        # the integrated whole, before the merge gate.
-        self._status = "analyzing"
-        _an_started = workflow.now()
-        integration_diff = await workflow.execute_activity(
-            get_task_diff,
-            DiffInput(worktree=self._integration_wt,
-                      branch_point=idea.base_branch),
-            **ACT)
-        authoritative: list[tuple[str, str]] = [
-            (t.id, c) for t in plan.tasks for c in t.acceptance_criteria]
-        _criteria_lines = "\n".join(f"- [{tid}] {crit}"
-                                    for tid, crit in authoritative)
-        _qa_lines = "\n".join(
-            f"- {r.task_id}: tests_passed={r.qa.tests_passed if r.qa else 'n/a'}"
-            f" failing={r.qa.failing_tests if r.qa else []}"
-            for r in done.values())
-        analysis: AnalysisReport = (await t_analyst.run(
-            "Acceptance criteria (task_id in brackets):\n" + _criteria_lines
-            + "\nAggregate test output:\n" + _qa_lines
-            + f"\nIntegration diff stat:\n{integration_diff['stat']}"
-            + f"\nIntegration diff:\n{integration_diff['patch']}")).output
-        untraced = untraced_criteria(authoritative, analysis)
-        cov: CoverageReport = await workflow.execute_activity(
-            measure_coverage,
-            CoverageInput(worktree=self._integration_wt,
-                          changed_files=integration_diff["files"]),
-            **ACT)
-        await self._record(cfg, self._stage_record(
-            cfg, stage="analyze", role="analyst",
-            started=_an_started, ended=workflow.now(),
-            quality_score=(1.0 if not untraced else 0.0),
-            judge="contract",
-            outcome=(BenchmarkOutcome.PASS if not untraced
-                     else BenchmarkOutcome.FAIL),
-            model="anthropic:glm-5.2"))
-        await self._retain(
-            cfg, MemoryKind.STAGE_SUMMARY, cfg.memory.project_bank,
-            text=f"analyze: {len(authoritative)} criteria, "
-                 f"{len(untraced)} untraced. {analysis.summary}",
-            metadata={"stage": "analyze",
-                      "run_id": workflow.info().workflow_id})
-        if untraced:
-            await self._retain(
-                cfg, MemoryKind.GOTCHA, cfg.memory.project_bank,
-                text=f"untraced acceptance criteria at merge: {untraced}",
-                metadata={"stage": "analyze",
-                          "run_id": workflow.info().workflow_id})
+# 4b. ANALYZE (stage 9) — clean-context Analyst proposes the
+# criterion->test mapping; the workflow enforces it (FR-106). Runs on
+# the integrated whole, before the merge gate.
+self._status = "analyzing"
+_an_started = workflow.now()
+integration_diff = await workflow.execute_activity(
+    get_task_diff, DiffInput(worktree=self._integration_wt, branch_point=idea.base_branch), **ACT
+)
+authoritative: list[tuple[str, str]] = [
+    (t.id, c) for t in plan.tasks for c in t.acceptance_criteria
+]
+_criteria_lines = "\n".join(f"- [{tid}] {crit}" for tid, crit in authoritative)
+_qa_lines = "\n".join(
+    f"- {r.task_id}: tests_passed={r.qa.tests_passed if r.qa else 'n/a'}"
+    f" failing={r.qa.failing_tests if r.qa else []}"
+    for r in done.values()
+)
+analysis: AnalysisReport = (
+    await t_analyst.run(
+        "Acceptance criteria (task_id in brackets):\n"
+        + _criteria_lines
+        + "\nAggregate test output:\n"
+        + _qa_lines
+        + f"\nIntegration diff stat:\n{integration_diff['stat']}"
+        + f"\nIntegration diff:\n{integration_diff['patch']}"
+    )
+).output
+untraced = untraced_criteria(authoritative, analysis)
+cov: CoverageReport = await workflow.execute_activity(
+    measure_coverage,
+    CoverageInput(worktree=self._integration_wt, changed_files=integration_diff["files"]),
+    **ACT,
+)
+await self._record(
+    cfg,
+    self._stage_record(
+        cfg,
+        stage="analyze",
+        role="analyst",
+        started=_an_started,
+        ended=workflow.now(),
+        quality_score=(1.0 if not untraced else 0.0),
+        judge="contract",
+        outcome=(BenchmarkOutcome.PASS if not untraced else BenchmarkOutcome.FAIL),
+        model="anthropic:glm-5.2",
+    ),
+)
+await self._retain(
+    cfg,
+    MemoryKind.STAGE_SUMMARY,
+    cfg.memory.project_bank,
+    text=f"analyze: {len(authoritative)} criteria, {len(untraced)} untraced. {analysis.summary}",
+    metadata={"stage": "analyze", "run_id": workflow.info().workflow_id},
+)
+if untraced:
+    await self._retain(
+        cfg,
+        MemoryKind.GOTCHA,
+        cfg.memory.project_bank,
+        text=f"untraced acceptance criteria at merge: {untraced}",
+        metadata={"stage": "analyze", "run_id": workflow.info().workflow_id},
+    )
 ```
 
 - [ ] **Step 5: Append the two advisory checks**
@@ -790,19 +864,30 @@ In `src/sdlc/workflows/feature.py`, immediately **before** the `# 5. MERGE ...` 
 In the `checks = [ ... ]` list (~line 811-827), after the `review_severity` `build_check(...)` and before the closing `]`, add:
 
 ```python
-            build_check(
-                "traceability", not untraced, CheckClass.ADVISORY,
-                detail=(f"{len(untraced)} criterion(s) without a test: "
-                        f"{untraced[:10]}" if untraced
-                        else "every acceptance criterion traces to >=1 test")),
-            build_check(
-                "coverage",
-                (True if not cov.measured
-                 else (cov.diff_pct or 0.0) >= cfg.coverage_threshold),
-                CheckClass.ADVISORY,
-                detail=(cov.detail if not cov.measured
-                        else f"diff coverage {cov.diff_pct:.1f}% vs threshold "
-                             f"{cfg.coverage_threshold:.1f}%")),
+(
+    build_check(
+        "traceability",
+        not untraced,
+        CheckClass.ADVISORY,
+        detail=(
+            f"{len(untraced)} criterion(s) without a test: {untraced[:10]}"
+            if untraced
+            else "every acceptance criterion traces to >=1 test"
+        ),
+    ),
+)
+(
+    build_check(
+        "coverage",
+        (True if not cov.measured else (cov.diff_pct or 0.0) >= cfg.coverage_threshold),
+        CheckClass.ADVISORY,
+        detail=(
+            cov.detail
+            if not cov.measured
+            else f"diff coverage {cov.diff_pct:.1f}% vs threshold {cfg.coverage_threshold:.1f}%"
+        ),
+    ),
+)
 ```
 
 - [ ] **Step 6: Run the wiring test + confirm the module still imports cleanly**
@@ -838,16 +923,20 @@ In `tests/fakes/canned.py`, add to the models import (~line 9-14): `AnalysisRepo
 
 ```python
 ANALYSIS_OK = AnalysisReport(
-    traceability=[CriterionTrace(
-        task_id="t1", criterion="GET /hello returns 200",
-        tests=["test_hello_returns_200"])],
-    summary="all criteria traced", confidence=0.95)
+    traceability=[
+        CriterionTrace(
+            task_id="t1", criterion="GET /hello returns 200", tests=["test_hello_returns_200"]
+        )
+    ],
+    summary="all criteria traced",
+    confidence=0.95,
+)
 ```
 
 Add to `AGENT_SPECS` (~line 55-62), after the `reviewer_agent` entry:
 
 ```python
-    ("analyst_agent", AnalysisReport, ANALYSIS_OK),
+(("analyst_agent", AnalysisReport, ANALYSIS_OK),)
 ```
 
 - [ ] **Step 2: Add the fake coverage activity**
@@ -885,16 +974,22 @@ async def test_untraced_criterion_is_advisory_not_blocking(monkeypatch):
     specs = [s for s in AGENT_SPECS if s[0] != "analyst_agent"] + [empty]
     activities = [evaluate_gate, *GIT_FAKES, *fake_agent_activities(specs)]
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(
-                    env.client, task_queue=TASK_QUEUE,
-                    workflows=[FeatureWorkflow], activities=activities,
-                    plugins=[PydanticAIPlugin()]):
+                env.client,
+                task_queue=TASK_QUEUE,
+                workflows=[FeatureWorkflow],
+                activities=activities,
+                plugins=[PydanticAIPlugin()],
+            ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
                     args=[greenfield_idea(), e2e_config()],
-                    id=f"e2e-untraced-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                    id=f"e2e-untraced-{uuid.uuid4()}",
+                    task_queue=TASK_QUEUE,
+                )
                 driver = asyncio.create_task(_drive_with_merge(handle))
                 result = await handle.result()
                 await driver
@@ -912,8 +1007,8 @@ async def _drive_with_merge(handle):
         await _wait_for_status(handle, f"awaiting:{gate}")
         await handle.signal(
             FeatureWorkflow.submit_gate_decision,
-            GateDecision(gate=gate, round=1, outcome=GateOutcome.APPROVE,
-                         decided_by="human"))
+            GateDecision(gate=gate, round=1, outcome=GateOutcome.APPROVE, decided_by="human"),
+        )
 ```
 
 - [ ] **Step 5: Run the full e2e file**

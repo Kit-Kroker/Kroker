@@ -30,8 +30,8 @@ from sdlc.core.models import (
 )
 from sdlc.measurement import Measurement
 from sdlc.memoization.cache import content_key
-from sdlc.models import ClarifiedRequirements
 from sdlc.stages import clarify
+from sdlc.stages.clarify.models import ClarifiedRequirements
 from sdlc.stages.clarify.prompts import (
     _clarify_memo_extra,
     probe_prompt_digest,
@@ -144,7 +144,7 @@ class _StubContext:
         self.stage_calls.append((status, trace))
 
     async def recall(self, cfg: Any, bank: str, *, query: str, filters: dict[str, str]) -> Any:
-        from sdlc.models import RecallSnapshot
+        from sdlc.memory.models import RecallSnapshot
 
         return RecallSnapshot(query_hash="qh", bank=bank, watermark="wm", items=[])
 

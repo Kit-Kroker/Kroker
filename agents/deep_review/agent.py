@@ -1,7 +1,7 @@
 from pydantic_ai import Agent
 from pydantic_ai.settings import ModelSettings
 
-from sdlc.models import DeepReviewReport
+from sdlc.stages.review.models import DeepReviewReport
 
 
 def build(model: str, instructions: str, model_settings: ModelSettings) -> Agent:

@@ -1,6 +1,9 @@
 """Handoff content reaches the NEXT task's prompt -- and no validator."""
 
-from sdlc.models import HandoffClaim, HandoffSummary
+from sdlc.stages.code.models import (
+    HandoffClaim,
+    HandoffSummary,
+)
 from sdlc.workflows.task_host import _handoff_notes
 
 

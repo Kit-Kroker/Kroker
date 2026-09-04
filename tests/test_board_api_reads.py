@@ -8,7 +8,7 @@ from sdlc.artifacts.store import LocalFileStore, ref_to_path
 from sdlc.board.api import create_app
 from sdlc.board.models import TaskStatus
 from sdlc.board.store import BoardStore
-from sdlc.models import DevTask
+from sdlc.stages.plan.models import DevTask
 
 
 @pytest.fixture

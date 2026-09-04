@@ -25,8 +25,7 @@ from collections.abc import Mapping
 
 from pydantic import BaseModel
 
-from ....measurement import Measurement
-from ..models import (
+from sdlc.assessment.scan.models import (
     C_BACKEND_ENTRY,
     CandidateMember,
     Confidence,
@@ -39,6 +38,8 @@ from ..models import (
     SourceCandidate,
     family_of,
 )
+
+from ....measurement import Measurement
 from ..naming import (
     GENERIC_NAMES,
     LAYER_NAMES,

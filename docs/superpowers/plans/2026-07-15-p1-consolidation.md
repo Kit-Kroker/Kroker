@@ -71,6 +71,7 @@ activity names match — the workflow's `t_<role>.run(...)` then dispatches
 to the fake when only these activities are registered on the test worker.
 The model is Pydantic AI's TestModel forced to emit a canned typed output.
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel
@@ -81,8 +82,7 @@ from pydantic_ai.models.test import TestModel
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
 
 
-def fake_temporal_agent(name: str, output_type: type,
-                        value: BaseModel) -> TemporalAgent:
+def fake_temporal_agent(name: str, output_type: type, value: BaseModel) -> TemporalAgent:
     """A TemporalAgent whose model always returns `value` as `output_type`."""
     agent = Agent(
         TestModel(custom_output_args=value.model_dump(mode="json")),
@@ -92,8 +92,7 @@ def fake_temporal_agent(name: str, output_type: type,
     return TemporalAgent(agent, activity_config=AGENT_ACTIVITY_CONFIG)
 
 
-def fake_agent_activities(
-        specs: list[tuple[str, type, BaseModel]]) -> list:
+def fake_agent_activities(specs: list[tuple[str, type, BaseModel]]) -> list:
     """Flatten the Temporal activities for a list of (name, type, value)."""
     activities: list = []
     for name, output_type, value in specs:
@@ -111,6 +110,7 @@ Create `tests/test_spike_agent_stub.py`:
 through a time-skipping Temporal worker and returns the canned typed output.
 If this fails, the e2e agent seam (Task 5) cannot work — see the plan's
 Task 1 fallback note."""
+
 from __future__ import annotations
 
 import uuid
@@ -134,8 +134,9 @@ CANNED = ClarifiedRequirements(
     functional_requirements=["fr1"],
     non_functional_requirements=[],
     out_of_scope=[],
-    open_questions=[OpenQuestion(id="q1", question="?", why_it_matters="x",
-                                 suggested_answer="yes")],
+    open_questions=[
+        OpenQuestion(id="q1", question="?", why_it_matters="x", suggested_answer="yes")
+    ],
 )
 
 
@@ -150,17 +151,23 @@ class _OneShotWorkflow:
 @pytest.mark.asyncio
 async def test_fake_agent_dispatches_canned_output():
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
-        acts = fake_agent_activities([
-            ("clarify_agent", ClarifiedRequirements, CANNED),
-        ])
+        data_converter=pydantic_data_converter
+    ) as env:
+        acts = fake_agent_activities(
+            [
+                ("clarify_agent", ClarifiedRequirements, CANNED),
+            ]
+        )
         async with Worker(
-                env.client, task_queue="spike",
-                workflows=[_OneShotWorkflow], activities=acts,
-                plugins=[PydanticAIPlugin()]):
+            env.client,
+            task_queue="spike",
+            workflows=[_OneShotWorkflow],
+            activities=acts,
+            plugins=[PydanticAIPlugin()],
+        ):
             result = await env.client.execute_workflow(
-                _OneShotWorkflow.run, id=f"spike-{uuid.uuid4()}",
-                task_queue="spike")
+                _OneShotWorkflow.run, id=f"spike-{uuid.uuid4()}", task_queue="spike"
+            )
     assert result == "CANNED-SUMMARY"
 ```
 
@@ -217,8 +224,7 @@ def test_security_report_defaults_clean():
 
 @pytest.mark.asyncio
 async def test_security_scan_clean_worktree(tmp_path: pathlib.Path):
-    (tmp_path / "app.py").write_text("def add(a, b):\n    return a + b\n",
-                                     encoding="utf-8")
+    (tmp_path / "app.py").write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
     report = await security_scan(SecurityScanInput(worktree=str(tmp_path)))
     assert report.critical == 0
 
@@ -226,8 +232,8 @@ async def test_security_scan_clean_worktree(tmp_path: pathlib.Path):
 @pytest.mark.asyncio
 async def test_security_scan_flags_hardcoded_secret(tmp_path: pathlib.Path):
     (tmp_path / "cfg.py").write_text(
-        'AWS_SECRET_ACCESS_KEY = "AKIAIOSFODNN7EXAMPLEKEY1234567890abcd"\n',
-        encoding="utf-8")
+        'AWS_SECRET_ACCESS_KEY = "AKIAIOSFODNN7EXAMPLEKEY1234567890abcd"\n', encoding="utf-8"
+    )
     report = await security_scan(SecurityScanInput(worktree=str(tmp_path)))
     assert report.critical >= 1
     assert any(f.severity == "critical" for f in report.findings)
@@ -235,8 +241,7 @@ async def test_security_scan_flags_hardcoded_secret(tmp_path: pathlib.Path):
 
 @pytest.mark.asyncio
 async def test_security_scan_flags_eval_of_input(tmp_path: pathlib.Path):
-    (tmp_path / "danger.py").write_text(
-        "def run(s):\n    return eval(s)\n", encoding="utf-8")
+    (tmp_path / "danger.py").write_text("def run(s):\n    return eval(s)\n", encoding="utf-8")
     report = await security_scan(SecurityScanInput(worktree=str(tmp_path)))
     assert report.critical >= 1
 ```
@@ -253,7 +258,7 @@ In `src/sdlc/models.py`, immediately after the `QAReport` class add:
 ```python
 class SecurityFinding(BaseModel):
     severity: Literal["critical", "high", "medium", "low"]
-    rule: str                               # which scanner rule matched
+    rule: str  # which scanner rule matched
     detail: str
     path: str = ""
 
@@ -263,6 +268,7 @@ class SecurityReport(BaseModel):
     (FR-106/NFR-5/SC-5). `critical` is the count feeding the
     `security_no_critical` absolute check; a minimal ruleset now, seam to a
     real SAST later."""
+
     critical: int
     findings: list[SecurityFinding] = Field(default_factory=list)
 ```
@@ -278,12 +284,19 @@ In `src/sdlc/activities.py`, after the `run_lint` activity add:
 # is (compiled_regex, severity, rule_name, human_detail). Intentionally small
 # and offline; the seam for a real SAST is this function's return type.
 _SECURITY_RULES: list[tuple[re.Pattern, str, str, str]] = [
-    (re.compile(r"(?i)(aws_secret_access_key|secret_key)\s*=\s*['\"][A-Za-z0-9/+]{20,}['\"]"),
-     "critical", "hardcoded-secret", "hardcoded credential/secret literal"),
-    (re.compile(r"\beval\s*\("),
-     "critical", "dangerous-eval", "use of eval() on untrusted input"),
-    (re.compile(r"subprocess\.[a-z_]+\([^)]*shell\s*=\s*True"),
-     "high", "shell-injection", "subprocess call with shell=True"),
+    (
+        re.compile(r"(?i)(aws_secret_access_key|secret_key)\s*=\s*['\"][A-Za-z0-9/+]{20,}['\"]"),
+        "critical",
+        "hardcoded-secret",
+        "hardcoded credential/secret literal",
+    ),
+    (re.compile(r"\beval\s*\("), "critical", "dangerous-eval", "use of eval() on untrusted input"),
+    (
+        re.compile(r"subprocess\.[a-z_]+\([^)]*shell\s*=\s*True"),
+        "high",
+        "shell-injection",
+        "subprocess call with shell=True",
+    ),
 ]
 
 _SECURITY_SCAN_EXTENSIONS = (".py", ".js", ".ts", ".go", ".rb", ".java")
@@ -309,15 +322,15 @@ async def security_scan(inp: SecurityScanInput) -> SecurityReport:
                 continue
             fpath = os.path.join(dirpath, fname)
             try:
-                text = pathlib.Path(fpath).read_text(
-                    encoding="utf-8", errors="replace")
+                text = pathlib.Path(fpath).read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
             rel = os.path.relpath(fpath, root)
             for pattern, severity, rule, detail in _SECURITY_RULES:
                 if pattern.search(text):
-                    findings.append(SecurityFinding(
-                        severity=severity, rule=rule, detail=detail, path=rel))
+                    findings.append(
+                        SecurityFinding(severity=severity, rule=rule, detail=detail, path=rel)
+                    )
     critical = sum(1 for f in findings if f.severity == "critical")
     return SecurityReport(critical=critical, findings=findings)
 ```
@@ -360,8 +373,9 @@ from sdlc.gate import CheckClass, build_check, evaluate_quality_gate
 def test_security_check_blocks_when_critical_present():
     checks = [
         build_check("build_integration_green", True, CheckClass.ABSOLUTE),
-        build_check("security_no_critical", False, CheckClass.ABSOLUTE,
-                    detail="1 critical finding"),
+        build_check(
+            "security_no_critical", False, CheckClass.ABSOLUTE, detail="1 critical finding"
+        ),
     ]
     report = evaluate_quality_gate(checks)
     assert report.passed is False
@@ -371,23 +385,25 @@ def test_security_check_blocks_when_critical_present():
 def test_security_check_absolute_even_if_requested_advisory():
     # ABSOLUTE_FLOOR promotion: an override cannot wave it through.
     from sdlc.gate import GateOverride
+
     checks = [build_check("security_no_critical", False, CheckClass.ADVISORY)]
     report = evaluate_quality_gate(
-        checks, overrides=[GateOverride(check="security_no_critical",
-                                        approved_by="human", reason="yolo")])
+        checks,
+        overrides=[GateOverride(check="security_no_critical", approved_by="human", reason="yolo")],
+    )
     assert report.passed is False
     assert "security_no_critical" in report.blocking
 
 
 def test_feature_workflow_builds_security_check():
     import pathlib
-    src = pathlib.Path("src/sdlc/workflows/feature.py").read_text(
-        encoding="utf-8")
-    assert 'build_check(\n                "security_no_critical"' in src \
-        or '"security_no_critical"' in src, \
-        "merge gate must build the security_no_critical check"
-    assert "security_scan" in src, \
-        "merge gate must run the security_scan activity"
+
+    src = pathlib.Path("src/sdlc/workflows/feature.py").read_text(encoding="utf-8")
+    assert (
+        'build_check(\n                "security_no_critical"' in src
+        or '"security_no_critical"' in src
+    ), "merge gate must build the security_no_critical check"
+    assert "security_scan" in src, "merge gate must run the security_scan activity"
 ```
 
 - [ ] **Step 2: Run tests to verify the wiring ones fail**
@@ -401,17 +417,33 @@ In `src/sdlc/worker.py`, add `security_scan` to the activity import from `.activ
 
 ```python
 from .activities import (
-    create_worktree, deploy, evaluate_gate, get_task_diff,
-    merge_into_integration, open_pull_request, run_coding_task,
-    run_lint, run_test_suite, security_scan, setup_integration_branch,
+    create_worktree,
+    deploy,
+    evaluate_gate,
+    get_task_diff,
+    merge_into_integration,
+    open_pull_request,
+    run_coding_task,
+    run_lint,
+    run_test_suite,
+    security_scan,
+    setup_integration_branch,
 )
 ```
 
 And add `security_scan` to the `activities=[...]` list passed to `Worker` (next to `run_lint, run_test_suite`):
 
 ```python
-            run_coding_task, run_lint, run_test_suite, security_scan,
-            open_pull_request, deploy,
+(
+    run_coding_task,
+    run_lint,
+    run_test_suite,
+    security_scan,
+)
+(
+    open_pull_request,
+    deploy,
+)
 ```
 
 - [ ] **Step 4: Run the scanner and append the check in the merge gate**
@@ -421,18 +453,22 @@ In `src/sdlc/workflows/feature.py`, add `security_scan` and `SecurityScanInput` 
 In `run()`, in the merge-evidence assembly (section 5a, right after the `lint_clean, lint_detail = await workflow.execute_activity(run_lint, ...)` call, ~line 804), add:
 
 ```python
-        security: SecurityReport = await workflow.execute_activity(
-            security_scan,
-            SecurityScanInput(worktree=integration_worktree), **ACT)
+security: SecurityReport = await workflow.execute_activity(
+    security_scan, SecurityScanInput(worktree=integration_worktree), **ACT
+)
 ```
 
 Then append a third entry to the `checks = [...]` list (after the `lint_clean` check, before `review_severity`):
 
 ```python
-            build_check(
-                "security_no_critical", security.critical == 0,
-                CheckClass.ABSOLUTE,
-                detail=f"{security.critical} critical finding(s)"),
+(
+    build_check(
+        "security_no_critical",
+        security.critical == 0,
+        CheckClass.ABSOLUTE,
+        detail=f"{security.critical} critical finding(s)",
+    ),
+)
 ```
 
 Add `SecurityReport` to the `from ..models import (...)` block in `feature.py` if not already present.
@@ -478,13 +514,26 @@ Every value is self-consistent with the next stage's needs: one open
 question (exercises answer_question), a single dev task with a frozen
 contract, and clean QA/review so the run reaches deploy.
 """
+
 from __future__ import annotations
 
 from sdlc.models import (
-    ArchitectureDecision, ArchitectureSpec, ClarifiedRequirements, DevTask,
-    GateConfig, GatePolicy, IdeaBrief, ImplementationPlan, MemoryConfig,
-    MergeVerdict, OpenQuestion, PipelineConfig, ProjectMode, QAReport,
-    ReviewReport, ValidationContract,
+    ArchitectureDecision,
+    ArchitectureSpec,
+    ClarifiedRequirements,
+    DevTask,
+    GateConfig,
+    GatePolicy,
+    IdeaBrief,
+    ImplementationPlan,
+    MemoryConfig,
+    MergeVerdict,
+    OpenQuestion,
+    PipelineConfig,
+    ProjectMode,
+    QAReport,
+    ReviewReport,
+    ValidationContract,
 )
 
 QUESTION_IDS = ["q1"]
@@ -494,33 +543,43 @@ CLARIFIED = ClarifiedRequirements(
     functional_requirements=["GET /hello returns 200"],
     non_functional_requirements=["p95 < 100ms"],
     out_of_scope=["auth"],
-    open_questions=[OpenQuestion(
-        id="q1", question="Anonymous access ok?",
-        why_it_matters="scopes auth work", suggested_answer="yes")],
+    open_questions=[
+        OpenQuestion(
+            id="q1",
+            question="Anonymous access ok?",
+            why_it_matters="scopes auth work",
+            suggested_answer="yes",
+        )
+    ],
 )
 
 ARCH = ArchitectureSpec(
     overview="Single FastAPI service with one route.",
-    decisions=[ArchitectureDecision(
-        title="Framework", choice="FastAPI",
-        rationale="matches team stack")
-        if "title" in ArchitectureDecision.model_fields else
-        ArchitectureDecision.model_construct()],
+    decisions=[
+        ArchitectureDecision(title="Framework", choice="FastAPI", rationale="matches team stack")
+        if "title" in ArchitectureDecision.model_fields
+        else ArchitectureDecision.model_construct()
+    ],
     new_components=["app/main.py"],
     confidence=0.95,
 )
 
 PLAN = ImplementationPlan(
-    tasks=[DevTask(
-        id="t1", title="Implement /hello",
-        description="Add GET /hello route returning 200.",
-        acceptance_criteria=["GET /hello returns 200"],
-        contract=ValidationContract(
-            task_id="t1",
-            assertions=["GET /hello returns 200"],
-            test_commands=["pytest -q"],
-            lint_commands=["ruff check ."],
-            stack="Python/FastAPI"))],
+    tasks=[
+        DevTask(
+            id="t1",
+            title="Implement /hello",
+            description="Add GET /hello route returning 200.",
+            acceptance_criteria=["GET /hello returns 200"],
+            contract=ValidationContract(
+                task_id="t1",
+                assertions=["GET /hello returns 200"],
+                test_commands=["pytest -q"],
+                lint_commands=["ruff check ."],
+                stack="Python/FastAPI",
+            ),
+        )
+    ],
     confidence=0.95,
 )
 
@@ -539,9 +598,13 @@ AGENT_SPECS = [
 
 
 def greenfield_idea() -> IdeaBrief:
-    return IdeaBrief(title="Hello service", description="Add /hello",
-                     mode=ProjectMode.GREENFIELD, repo_url="/fake/repo",
-                     base_branch="main")
+    return IdeaBrief(
+        title="Hello service",
+        description="Add /hello",
+        mode=ProjectMode.GREENFIELD,
+        repo_url="/fake/repo",
+        base_branch="main",
+    )
 
 
 def e2e_config() -> PipelineConfig:
@@ -549,8 +612,7 @@ def e2e_config() -> PipelineConfig:
     scheduled), every gate HARD (driver approves each explicitly)."""
     hard = GateConfig(policy=GatePolicy.HARD)
     return PipelineConfig(
-        gates={"clarify": hard, "architecture": hard, "plan": hard,
-               "merge": hard, "deploy": hard},
+        gates={"clarify": hard, "architecture": hard, "plan": hard, "merge": hard, "deploy": hard},
         memory=MemoryConfig(enabled=False),
         memoization_enabled=False,
         review_enabled=True,
@@ -568,44 +630,64 @@ Create `tests/fakes/fake_activities.py`:
 calls. Registered on the e2e worker INSTEAD of the production activities, so
 the run touches no real git, subprocess, or network. Names must match the
 production activity names for Temporal dispatch."""
+
 from __future__ import annotations
 
 from temporalio import activity
 
 from sdlc.activities import (
-    CodingTaskInput, DeployInput, DiffInput, IntegrationHandle,
-    IntegrationInput, LintInput, MergeInput, MergeResult, PROpenInput,
-    QAInput, SecurityScanInput, WorktreeHandle, WorktreeInput,
+    CodingTaskInput,
+    DeployInput,
+    DiffInput,
+    IntegrationHandle,
+    IntegrationInput,
+    LintInput,
+    MergeInput,
+    MergeResult,
+    PROpenInput,
+    QAInput,
+    SecurityScanInput,
+    WorktreeHandle,
+    WorktreeInput,
 )
 from sdlc.models import HarnessRunResult, QAReport, SecurityReport
 
 
 @activity.defn(name="setup_integration_branch")
-async def fake_setup_integration_branch(
-        inp: IntegrationInput) -> IntegrationHandle:
+async def fake_setup_integration_branch(inp: IntegrationInput) -> IntegrationHandle:
     return IntegrationHandle(head_sha="deadbeef", worktree_path="/fake/integ")
 
 
 @activity.defn(name="create_worktree")
 async def fake_create_worktree(inp: WorktreeInput) -> WorktreeHandle:
-    return WorktreeHandle(path=f"/fake/wt/{inp.task_id}",
-                          branch=f"sdlc/{inp.run_id}/{inp.task_id}",
-                          branch_point="deadbeef")
+    return WorktreeHandle(
+        path=f"/fake/wt/{inp.task_id}",
+        branch=f"sdlc/{inp.run_id}/{inp.task_id}",
+        branch_point="deadbeef",
+    )
 
 
 @activity.defn(name="run_coding_task")
 async def fake_run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
     return HarnessRunResult(
-        harness=inp.harness, session_id="s1", exit_code=0,
-        summary="implemented", commit_sha="cafe1234",
-        input_tokens=1000, output_tokens=200, context_window=200000)
+        harness=inp.harness,
+        session_id="s1",
+        exit_code=0,
+        summary="implemented",
+        commit_sha="cafe1234",
+        input_tokens=1000,
+        output_tokens=200,
+        context_window=200000,
+    )
 
 
 @activity.defn(name="get_task_diff")
 async def fake_get_task_diff(inp: DiffInput) -> dict:
-    return {"stat": " app/main.py | 3 +++",
-            "patch": "diff --git a/app/main.py b/app/main.py\n+ok\n",
-            "files": ["app/main.py"]}
+    return {
+        "stat": " app/main.py | 3 +++",
+        "patch": "diff --git a/app/main.py b/app/main.py\n+ok\n",
+        "files": ["app/main.py"],
+    }
 
 
 @activity.defn(name="run_test_suite")
@@ -639,9 +721,15 @@ async def fake_security_scan(inp: SecurityScanInput) -> SecurityReport:
 
 
 GIT_FAKES = [
-    fake_setup_integration_branch, fake_create_worktree, fake_run_coding_task,
-    fake_get_task_diff, fake_run_test_suite, fake_run_lint,
-    fake_merge_into_integration, fake_open_pull_request, fake_deploy,
+    fake_setup_integration_branch,
+    fake_create_worktree,
+    fake_run_coding_task,
+    fake_get_task_diff,
+    fake_run_test_suite,
+    fake_run_lint,
+    fake_merge_into_integration,
+    fake_open_pull_request,
+    fake_deploy,
     fake_security_scan,
 ]
 ```
@@ -683,6 +771,7 @@ Create `tests/test_e2e_greenfield.py`:
 Runs the REAL FeatureWorkflow on a time-skipping worker with faked model +
 activity seams, drives it through every gate via signals, and asserts it
 reaches `deployed:`."""
+
 from __future__ import annotations
 
 import asyncio
@@ -699,7 +788,10 @@ from sdlc.activities import evaluate_gate  # pure — reused, not faked
 from sdlc.gate import CheckClass
 from sdlc.models import GateDecision, GateOutcome
 from tests.fakes.canned import (
-    AGENT_SPECS, QUESTION_IDS, e2e_config, greenfield_idea,
+    AGENT_SPECS,
+    QUESTION_IDS,
+    e2e_config,
+    greenfield_idea,
 )
 from tests.fakes.fake_activities import GIT_FAKES
 from tests.fakes.fake_agents import fake_agent_activities
@@ -732,24 +824,29 @@ async def _drive(handle):
         await _wait_for_status(handle, f"awaiting:{gate}")
         await handle.signal(
             FeatureWorkflow.submit_gate_decision,
-            GateDecision(gate=gate, round=1, outcome=GateOutcome.APPROVE,
-                         decided_by="human"))
+            GateDecision(gate=gate, round=1, outcome=GateOutcome.APPROVE, decided_by="human"),
+        )
 
 
 @pytest.mark.asyncio
 async def test_greenfield_run_ships_end_to_end():
-    activities = [evaluate_gate, *GIT_FAKES,
-                  *fake_agent_activities(AGENT_SPECS)]
+    activities = [evaluate_gate, *GIT_FAKES, *fake_agent_activities(AGENT_SPECS)]
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         async with Worker(
-                env.client, task_queue=TASK_QUEUE,
-                workflows=[FeatureWorkflow], activities=activities,
-                plugins=[PydanticAIPlugin()]):
+            env.client,
+            task_queue=TASK_QUEUE,
+            workflows=[FeatureWorkflow],
+            activities=activities,
+            plugins=[PydanticAIPlugin()],
+        ):
             handle = await env.client.start_workflow(
                 FeatureWorkflow.run,
                 args=[greenfield_idea(), e2e_config()],
-                id=f"e2e-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                id=f"e2e-{uuid.uuid4()}",
+                task_queue=TASK_QUEUE,
+            )
             driver = asyncio.create_task(_drive(handle))
             result = await handle.result()
             await driver

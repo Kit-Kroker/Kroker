@@ -35,7 +35,10 @@
 Create `tests/test_deep_review_models.py`:
 ```python
 from sdlc.models import (
-    DeepReviewReport, IntegrityFlag, PipelineConfig, ReviewFinding,
+    DeepReviewReport,
+    IntegrityFlag,
+    PipelineConfig,
+    ReviewFinding,
     TaskResult,
 )
 
@@ -44,22 +47,26 @@ def test_cheat_detected_true_iff_flags_present():
     clean = DeepReviewReport()
     assert clean.approve is True
     assert clean.cheat_detected is False
-    flagged = DeepReviewReport(integrity_flags=[
-        IntegrityFlag(kind="oracle_peeking", detail="read oracle/",
-                      evidence="file_read oracle/test_app.py")])
+    flagged = DeepReviewReport(
+        integrity_flags=[
+            IntegrityFlag(
+                kind="oracle_peeking",
+                detail="read oracle/",
+                evidence="file_read oracle/test_app.py",
+            )
+        ]
+    )
     assert flagged.cheat_detected is True
 
 
 def test_report_is_evidence_first():
     # Field order is the SGR contract: evidence before verdict.
     fields = list(DeepReviewReport.model_fields)
-    assert fields == ["findings", "integrity_flags", "summary",
-                      "approve", "confidence"]
+    assert fields == ["findings", "integrity_flags", "summary", "approve", "confidence"]
 
 
 def test_report_reuses_review_finding():
-    r = DeepReviewReport(findings=[
-        ReviewFinding(assertion="a1", severity="low", detail="nit")])
+    r = DeepReviewReport(findings=[ReviewFinding(assertion="a1", severity="low", detail="nit")])
     assert r.findings[0].severity == "low"
 
 
@@ -83,10 +90,10 @@ In `src/sdlc/models.py`, immediately after the `ReviewReport` class (after its `
 ```python
 class IntegrityFlag(BaseModel):
     """One anti-cheat observation drawn from the scrubbed transcript (E-39)."""
-    kind: Literal["oracle_peeking", "hardcoded_answer",
-                  "test_gaming", "excessive_backtracking"]
+
+    kind: Literal["oracle_peeking", "hardcoded_answer", "test_gaming", "excessive_backtracking"]
     detail: str
-    evidence: str            # a quote/reference from the scrubbed transcript
+    evidence: str  # a quote/reference from the scrubbed transcript
 
 
 class DeepReviewReport(BaseModel):
@@ -95,10 +102,11 @@ class DeepReviewReport(BaseModel):
     ADR-6-independent of dev. NEVER blocks: the clean-context reviewer
     (ReviewReport) is the sole blocking lens; this report is recorded and
     retained for signal only. Fields are evidence-first."""
+
     findings: list[ReviewFinding] = Field(default_factory=list)
     integrity_flags: list[IntegrityFlag] = Field(default_factory=list)
     summary: str = ""
-    approve: bool = True          # advisory opinion only
+    approve: bool = True  # advisory opinion only
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
     @property
@@ -108,13 +116,13 @@ class DeepReviewReport(BaseModel):
 
 In `TaskResult` (~line 238), after the `review:` field, add:
 ```python
-    deep_review: "DeepReviewReport | None" = None   # E-39: advisory lens
+deep_review: "DeepReviewReport | None" = None  # E-39: advisory lens
 ```
 
 In `PipelineConfig` (~line 609), after the `review_enabled` field, add:
 ```python
-    deep_review_enabled: bool = False       # FR-111/E-39: opt-in transcript
-                                            # lens; advisory, off by default
+deep_review_enabled: bool = False  # FR-111/E-39: opt-in transcript
+# lens; advisory, off by default
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -154,7 +162,11 @@ Create `tests/test_deep_review_agent.py`:
 import pytest
 
 from sdlc.agents.loader import (
-    KNOWN_ROLES, OPTIONAL_ROLES, RegistryError, load_registry, model_family,
+    KNOWN_ROLES,
+    OPTIONAL_ROLES,
+    RegistryError,
+    load_registry,
+    model_family,
     validate_registry,
 )
 from sdlc.agents import roles
@@ -177,13 +189,11 @@ def test_shipped_deep_review_builds_a_report_agent():
 
 def test_shipped_deep_review_family_differs_from_dev():
     reg = load_registry()
-    assert model_family(reg["deep_review"].model) \
-        != model_family(reg["dev"].model)
+    assert model_family(reg["deep_review"].model) != model_family(reg["dev"].model)
 
 
 def test_same_family_deep_review_and_dev_rejected():
-    roles_ = _complete_registry(
-        deep_review=RoleConfig(kind="proposer", model="zai-coding-plan/x"))
+    roles_ = _complete_registry(deep_review=RoleConfig(kind="proposer", model="zai-coding-plan/x"))
     with pytest.raises(RegistryError, match="deep_review"):
         validate_registry(roles_)
 
@@ -240,11 +250,10 @@ from pydantic_ai.settings import ModelSettings
 from sdlc.models import DeepReviewReport
 
 
-def build(model: str, instructions: str,
-          model_settings: ModelSettings) -> Agent:
+def build(model: str, instructions: str, model_settings: ModelSettings) -> Agent:
     return Agent(
         model,
-        name="deep_review_agent",   # Temporal activity name -- NEVER rename
+        name="deep_review_agent",  # Temporal activity name -- NEVER rename
         output_type=DeepReviewReport,
         model_settings=model_settings,
         system_prompt=instructions,
@@ -260,15 +269,16 @@ OPTIONAL_ROLES: frozenset[str] = frozenset({"research", "deep_review"})
 
 In `validate_registry`, immediately before the `for name, cfg in roles.items():` research loop (~line 214), add the deep_review family clause:
 ```python
-    if "deep_review" in roles:
-        dr = roles["deep_review"]
-        if dr.model is None:
-            raise RegistryError("role 'deep_review' must declare a model")
-        if model_family(dr.model) == model_family(dev.model):
-            raise RegistryError(
-                f"ADR-6 violation: deep_review family "
-                f"'{model_family(dr.model)}' equals the family of 'dev' — the "
-                f"transcript lens must not correlate with the authoring model")
+if "deep_review" in roles:
+    dr = roles["deep_review"]
+    if dr.model is None:
+        raise RegistryError("role 'deep_review' must declare a model")
+    if model_family(dr.model) == model_family(dev.model):
+        raise RegistryError(
+            f"ADR-6 violation: deep_review family "
+            f"'{model_family(dr.model)}' equals the family of 'dev' — the "
+            f"transcript lens must not correlate with the authoring model"
+        )
 ```
 (`dev` is already bound above at `dev, rev = roles["dev"], roles["reviewer"]`.)
 
@@ -292,7 +302,9 @@ After the `t_research = ...` block (~line 113) add:
 ```python
 t_deep_review = (
     TemporalAgent(deep_review_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-    if deep_review_agent is not None else None)
+    if deep_review_agent is not None
+    else None
+)
 ```
 
 After the `if t_research is not None:` append block (~line 118) add:
@@ -305,17 +317,17 @@ if t_deep_review is not None:
 
 In `tests/conftest.py`, inside `write_registry_dir`, after the optional-research block (after the `(r / "tools" / "web_search.py").write_bytes(...)` lines, ~line 111), add a valid optional deep_review folder:
 ```python
-    # Optional deep_review role (E-39): a plain proposer, non-dev family.
-    dr = root / "deep_review"
-    dr.mkdir(exist_ok=True)
-    (dr / "agent.yaml").write_bytes(
-        b"kind: proposer\nmodel: anthropic:glm-5.2\n")
-    (dr / "instructions.md").write_bytes(b"deep review the transcript")
-    (dr / "agent.py").write_bytes(
-        b"from pydantic_ai import Agent\n"
-        b"def build(model, instructions, model_settings):\n"
-        b"    return Agent(model, name='deep_review_agent',\n"
-        b"                 system_prompt=instructions)\n")
+# Optional deep_review role (E-39): a plain proposer, non-dev family.
+dr = root / "deep_review"
+dr.mkdir(exist_ok=True)
+(dr / "agent.yaml").write_bytes(b"kind: proposer\nmodel: anthropic:glm-5.2\n")
+(dr / "instructions.md").write_bytes(b"deep review the transcript")
+(dr / "agent.py").write_bytes(
+    b"from pydantic_ai import Agent\n"
+    b"def build(model, instructions, model_settings):\n"
+    b"    return Agent(model, name='deep_review_agent',\n"
+    b"                 system_prompt=instructions)\n"
+)
 ```
 
 - [ ] **Step 7: Run tests to verify they pass**
@@ -357,7 +369,10 @@ import asyncio
 import pytest
 
 from sdlc.artifacts.read import (
-    DEEP_REVIEW_MAX_BYTES, LoadSessionInput, LoadSessionResult, load_session,
+    DEEP_REVIEW_MAX_BYTES,
+    LoadSessionInput,
+    LoadSessionResult,
+    load_session,
 )
 from sdlc.artifacts.store import LocalFileStore
 from sdlc.models import ArtifactRef
@@ -365,8 +380,9 @@ from sdlc.models import ArtifactRef
 
 def test_load_session_round_trips_scrubbed_jsonl(tmp_path):
     store = LocalFileStore(tmp_path)
-    ref = store.put("harness_session", "run1", "t1-a1.jsonl",
-                    b'{"kind":"file_read","target":"app.py"}\n')
+    ref = store.put(
+        "harness_session", "run1", "t1-a1.jsonl", b'{"kind":"file_read","target":"app.py"}\n'
+    )
     out = asyncio.run(load_session(LoadSessionInput(ref=ref)))
     assert isinstance(out, LoadSessionResult)
     assert out.truncated is False
@@ -406,6 +422,7 @@ other artifact. Byte-capped so a large transcript cannot blow the
 proposer's context — the workflow appends the inline SessionDigest when a
 read is truncated so aggregate signals survive.
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel
@@ -429,8 +446,8 @@ class LoadSessionResult(BaseModel):
 @activity.defn
 async def load_session(inp: LoadSessionInput) -> LoadSessionResult:
     assert inp.ref.kind == "harness_session", (
-        f"load_session reads only scrubbed harness sessions, got "
-        f"kind={inp.ref.kind!r}")
+        f"load_session reads only scrubbed harness sessions, got kind={inp.ref.kind!r}"
+    )
     data = ref_to_path(inp.ref).read_bytes()
     truncated = len(data) > DEEP_REVIEW_MAX_BYTES
     text = data[:DEEP_REVIEW_MAX_BYTES].decode("utf-8", errors="replace")
@@ -450,8 +467,8 @@ from .artifacts.read import load_session
 ```
 In the `activities=[` list, beside `apply_session_retention` (~line 92) add `load_session,`:
 ```python
-            apply_session_retention,
-            load_session,
+(apply_session_retention,)
+(load_session,)
 ```
 
 - [ ] **Step 6: Verify the worker still imports**
@@ -515,8 +532,9 @@ def test_deep_review_is_advisory_not_in_success_condition():
     src = _src()
     assert "if qa.tests_passed and not qa.issues and review_ok:" in src
     idx = src.find("if qa.tests_passed and not qa.issues and review_ok:")
-    assert "deep_review" not in src[idx: idx + 200], (
-        "deep_review must never gate the task success path")
+    assert "deep_review" not in src[idx : idx + 200], (
+        "deep_review must never gate the task success path"
+    )
 
 
 def test_both_returns_carry_deep_review():
@@ -533,7 +551,7 @@ def test_deep_review_never_resumes_a_session():
     # deep_review is a proposer: it must not pass a session_id to any harness.
     src = _src()
     idx = src.find("async def _run_deep_review")
-    body = src[idx: idx + 1600]
+    body = src[idx : idx + 1600]
     assert "run_coding_task" not in body
     assert "session_id" not in body
 ```
@@ -547,10 +565,19 @@ Expected: FAIL (`_run_deep_review` absent, `deep_review=` count 0).
 
 In `src/sdlc/workflows/feature.py`, in the `from ..agents.roles import (...)` block (~line 28), add `t_deep_review` to the imported names:
 ```python
-    from ..agents.roles import (
-        PROMPT_SHAS, STAGE_MODELS, t_analyst, t_architect, t_clarify,
-        t_deep_review, t_merge_verdict, t_planner, t_qa, t_research, t_reviewer,
-    )
+from ..agents.roles import (
+    PROMPT_SHAS,
+    STAGE_MODELS,
+    t_analyst,
+    t_architect,
+    t_clarify,
+    t_deep_review,
+    t_merge_verdict,
+    t_planner,
+    t_qa,
+    t_research,
+    t_reviewer,
+)
 ```
 Immediately after the retention import at line 56 (`from ..artifacts.retention import (RetentionInput, apply_session_retention, keep_full_transcripts)`), add a dedicated import — `load_session` lives in `artifacts.read`:
 ```python
@@ -562,95 +589,123 @@ In the `from ..models import (...)` block (lines 57-64), add `DeepReviewReport` 
 
 In `src/sdlc/workflows/feature.py`, add this method to the workflow class immediately after `_run_role` (after its `return result`, ~line 496):
 ```python
-    async def _run_deep_review(self, cfg, run, contract, assertions, diff,
-                               task) -> "DeepReviewReport | None":
-        """E-39 advisory lens: read the SCRUBBED harness transcript as data and
-        emit a DeepReviewReport. Recorded + retained for signal ONLY — never
-        consulted in the task's success condition. Once per task, over the
-        final HarnessRunResult. Best-effort: any failure returns None so an
-        observability lens can never fail delivery."""
-        if not (cfg.deep_review_enabled and t_deep_review is not None
-                and run is not None and run.session_ref is not None):
-            return None
-        _started = workflow.now()
-        try:
-            loaded = await workflow.execute_activity(
-                load_session, LoadSessionInput(ref=run.session_ref), **ACT)
-        except Exception:
-            return None
-        transcript = loaded.text + (
-            f"\n[transcript truncated; digest follows]\n"
-            f"{run.session_digest.model_dump_json()}"
-            if loaded.truncated and run.session_digest is not None else "")
-        spend = RoleUsage(role="deep_review", model=STAGE_MODELS["deep_review"])
-        report = (await self._run_role(
-            cfg, "deep_review", STAGE_MODELS["deep_review"], t_deep_review,
-            "Frozen contract assertions:\n- " + "\n- ".join(assertions)
+async def _run_deep_review(
+    self, cfg, run, contract, assertions, diff, task
+) -> "DeepReviewReport | None":
+    """E-39 advisory lens: read the SCRUBBED harness transcript as data and
+    emit a DeepReviewReport. Recorded + retained for signal ONLY — never
+    consulted in the task's success condition. Once per task, over the
+    final HarnessRunResult. Best-effort: any failure returns None so an
+    observability lens can never fail delivery."""
+    if not (
+        cfg.deep_review_enabled
+        and t_deep_review is not None
+        and run is not None
+        and run.session_ref is not None
+    ):
+        return None
+    _started = workflow.now()
+    try:
+        loaded = await workflow.execute_activity(
+            load_session, LoadSessionInput(ref=run.session_ref), **ACT
+        )
+    except Exception:
+        return None
+    transcript = loaded.text + (
+        f"\n[transcript truncated; digest follows]\n{run.session_digest.model_dump_json()}"
+        if loaded.truncated and run.session_digest is not None
+        else ""
+    )
+    spend = RoleUsage(role="deep_review", model=STAGE_MODELS["deep_review"])
+    report = (
+        await self._run_role(
+            cfg,
+            "deep_review",
+            STAGE_MODELS["deep_review"],
+            t_deep_review,
+            "Frozen contract assertions:\n- "
+            + "\n- ".join(assertions)
             + f"\nDiff:\n{diff['patch']}"
             + "\nScrubbed harness transcript (how the diff was reached):\n"
-            + transcript, into=spend)).output
-        await self._record(cfg, self._stage_record(
-            cfg, stage="deep_review", role="deep_review",
-            started=_started, ended=workflow.now(),
-            quality_score=(0.0 if report.cheat_detected or not report.approve
-                           else 1.0),
+            + transcript,
+            into=spend,
+        )
+    ).output
+    await self._record(
+        cfg,
+        self._stage_record(
+            cfg,
+            stage="deep_review",
+            role="deep_review",
+            started=_started,
+            ended=workflow.now(),
+            quality_score=(0.0 if report.cheat_detected or not report.approve else 1.0),
             judge="deep_review",
-            outcome=(BenchmarkOutcome.FAIL if report.cheat_detected
-                     else BenchmarkOutcome.PASS),
-            model=STAGE_MODELS["deep_review"], spend=spend,
-            task_id=task.id))
-        if report.cheat_detected:
-            await self._retain(
-                cfg, MemoryKind.GOTCHA, cfg.memory.project_bank,
-                text=f"deep_review flagged task {task.id}: "
-                     + "; ".join(f"{f.kind}: {f.detail}"
-                                 for f in report.integrity_flags),
-                metadata={"task_id": task.id,
-                          "run_id": workflow.info().workflow_id})
-        return report
+            outcome=(BenchmarkOutcome.FAIL if report.cheat_detected else BenchmarkOutcome.PASS),
+            model=STAGE_MODELS["deep_review"],
+            spend=spend,
+            task_id=task.id,
+        ),
+    )
+    if report.cheat_detected:
+        await self._retain(
+            cfg,
+            MemoryKind.GOTCHA,
+            cfg.memory.project_bank,
+            text=f"deep_review flagged task {task.id}: "
+            + "; ".join(f"{f.kind}: {f.detail}" for f in report.integrity_flags),
+            metadata={"task_id": task.id, "run_id": workflow.info().workflow_id},
+        )
+    return report
 ```
 
 - [ ] **Step 5: Call it at the done-return**
 
 In `_dev_task`, inside the success block `if qa.tests_passed and not qa.issues and review_ok:` (~line 764), compute the report BEFORE constructing `TaskResult`, and attach it. Replace the `return TaskResult(...)` there with:
 ```python
-            if qa.tests_passed and not qa.issues and review_ok:
-                deep = await self._run_deep_review(
-                    cfg, run, contract, assertions, diff, task)
-                handoff = HandoffSummary(
-                    task_id=task.id,
-                    what_changed=[task.title],
-                    files_touched=diff["files"],
-                    open_concerns=[],
-                )
-                return TaskResult(task_id=task.id, status="done",
-                                  attempts=attempt, branch=handle.branch,
-                                  run=run, handoff=handoff, qa=qa_raw,
-                                  review=review, deep_review=deep)
+if qa.tests_passed and not qa.issues and review_ok:
+    deep = await self._run_deep_review(cfg, run, contract, assertions, diff, task)
+    handoff = HandoffSummary(
+        task_id=task.id,
+        what_changed=[task.title],
+        files_touched=diff["files"],
+        open_concerns=[],
+    )
+    return TaskResult(
+        task_id=task.id,
+        status="done",
+        attempts=attempt,
+        branch=handle.branch,
+        run=run,
+        handoff=handoff,
+        qa=qa_raw,
+        review=review,
+        deep_review=deep,
+    )
 ```
 
 - [ ] **Step 6: Call it at the escalation-return**
 
 At the escalation return (~line 823-837, after the `for` loop), compute the report over the last `run`/`diff` and attach it. Replace that `return TaskResult(...)` with:
 ```python
-        # Escalate: human decides whether to accept, retry, or quarantine.
-        analysis = "\n- ".join(qa.issues or qa.failing_tests) if qa else ""
-        decision = await self._gate(
-            f"task:{task.id}", cfg,
-            context=GateContext(task_id=task.id, analysis=analysis,
-                                attempts=cfg.max_fix_attempts + 1))
-        deep = await self._run_deep_review(
-            cfg, run, contract, assertions, diff, task)
-        return TaskResult(
-            task_id=task.id,
-            status="done" if decision.approved else "quarantined",
-            attempts=cfg.max_fix_attempts + 1,
-            branch=handle.branch,
-            qa=qa_raw,
-            review=review,
-            deep_review=deep,
-            notes=decision.comments or "",
-        )
+# Escalate: human decides whether to accept, retry, or quarantine.
+analysis = "\n- ".join(qa.issues or qa.failing_tests) if qa else ""
+decision = await self._gate(
+    f"task:{task.id}",
+    cfg,
+    context=GateContext(task_id=task.id, analysis=analysis, attempts=cfg.max_fix_attempts + 1),
+)
+deep = await self._run_deep_review(cfg, run, contract, assertions, diff, task)
+return TaskResult(
+    task_id=task.id,
+    status="done" if decision.approved else "quarantined",
+    attempts=cfg.max_fix_attempts + 1,
+    branch=handle.branch,
+    qa=qa_raw,
+    review=review,
+    deep_review=deep,
+    notes=decision.comments or "",
+)
 ```
 
 - [ ] **Step 7: Run the wiring test to verify it passes**

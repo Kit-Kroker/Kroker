@@ -20,7 +20,7 @@ from sdlc.crew.activities import (
     run_crew_turn,
 )
 from sdlc.crew.worktree import orchestration_dir, round_dir
-from sdlc.models import (
+from sdlc.harness.models import (
     ContainmentLayer,
     ContainmentReport,
     HarnessRunResult,

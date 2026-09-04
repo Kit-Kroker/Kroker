@@ -1,6 +1,9 @@
 """Pure FR-106 enforcement: the workflow, not the LLM, decides traceability."""
 
-from sdlc.models import AnalysisReport, CriterionTrace
+from sdlc.stages.analyze.models import (
+    AnalysisReport,
+    CriterionTrace,
+)
 from sdlc.workflows.feature import untraced_criteria
 
 

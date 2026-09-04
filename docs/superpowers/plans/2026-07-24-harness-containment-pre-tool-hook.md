@@ -38,9 +38,16 @@ Create `tests/test_containment_models.py`:
 
 ```python
 """E-15/E-16: containment model contracts."""
+
 from sdlc.models import (
-    ContainmentConfig, ContainmentLayer, ContainmentReport,
-    HarnessKind, HarnessRunResult, PipelineConfig, SessionDigest, ToolDenial,
+    ContainmentConfig,
+    ContainmentLayer,
+    ContainmentReport,
+    HarnessKind,
+    HarnessRunResult,
+    PipelineConfig,
+    SessionDigest,
+    ToolDenial,
 )
 
 
@@ -51,9 +58,13 @@ def test_layer_is_str_enum_with_two_members():
 
 
 def test_tool_denial_round_trips():
-    d = ToolDenial(tool="Write", rule_id="no-out-of-worktree-write",
-                   layer=ContainmentLayer.HOOK, reason="scoped to worktree",
-                   target="/etc/passwd")
+    d = ToolDenial(
+        tool="Write",
+        rule_id="no-out-of-worktree-write",
+        layer=ContainmentLayer.HOOK,
+        reason="scoped to worktree",
+        target="/etc/passwd",
+    )
     assert ToolDenial.model_validate_json(d.model_dump_json()) == d
 
 
@@ -66,8 +77,7 @@ def test_containment_report_defaults_to_disabled():
 
 
 def test_harness_run_result_defaults_have_no_denials():
-    r = HarnessRunResult(harness=HarnessKind.CLAUDE_CODE, exit_code=0,
-                         summary="ok")
+    r = HarnessRunResult(harness=HarnessKind.CLAUDE_CODE, exit_code=0, summary="ok")
     assert r.denials == []
     assert r.containment is None
 
@@ -95,24 +105,27 @@ In `src/sdlc/models.py`, immediately after the `SessionDigest` class (which ends
 ```python
 class ContainmentLayer(str, Enum):
     """Where a containment rule is enforced (E-15/E-16, ADR-17)."""
-    NATIVE = "native"   # declarative deny inside the harness CLI's own config
-    HOOK = "hook"       # per-call inspection callback
+
+    NATIVE = "native"  # declarative deny inside the harness CLI's own config
+    HOOK = "hook"  # per-call inspection callback
 
 
 class ToolDenial(BaseModel):
     """One blocked tool call. Small and bounded — travels inline on
     HarnessRunResult, same discipline as SessionDigest."""
+
     tool: str
     rule_id: str
     layer: ContainmentLayer
     reason: str
-    target: str | None = None     # path or command line (scrubbed)
+    target: str | None = None  # path or command line (scrubbed)
 
 
 class ContainmentReport(BaseModel):
     """What containment was ACTUALLY in force for a run. Partial coverage
     is recorded rather than refused, so a harness with fewer layers is
     visibly less contained instead of silently so (spec §5)."""
+
     enabled: bool = False
     layers_active: list[ContainmentLayer] = Field(default_factory=list)
     rules_enforced: list[str] = Field(default_factory=list)
@@ -122,7 +135,8 @@ class ContainmentReport(BaseModel):
 class ContainmentConfig(BaseModel):
     """FR-703 containment knobs. `strict` promotes partial layer coverage
     from 'recorded' to 'refuse to start'."""
-    policy_path: str | None = None      # None -> $SDLC_CONTAINMENT_POLICY -> discovery
+
+    policy_path: str | None = None  # None -> $SDLC_CONTAINMENT_POLICY -> discovery
     strict: bool = False
 ```
 
@@ -139,17 +153,17 @@ In the same file, add two fields to `HarnessRunResult` directly after
 Add one field to `SessionDigest`, after `compacted` (line 98):
 
 ```python
-    denials: int = 0               # E-16: blocked tool calls
+denials: int = 0  # E-16: blocked tool calls
 ```
 
 Add two fields to `PipelineConfig`, directly after `research_enabled`
 (line 632):
 
 ```python
-    containment_enabled: bool = False       # FR-703: off by default; the
-                                            # policy is a fence, not a
-                                            # sandbox — see ADR-17
-    containment: ContainmentConfig = Field(default_factory=ContainmentConfig)
+containment_enabled: bool = False  # FR-703: off by default; the
+# policy is a fence, not a
+# sandbox — see ADR-17
+containment: ContainmentConfig = Field(default_factory=ContainmentConfig)
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -188,10 +202,13 @@ Create `tests/test_containment_policy.py`:
 
 ```python
 """E-15/E-16: policy asset parsing and resolution."""
+
 import pytest
 
 from sdlc.harness.containment import (
-    ContainmentError, Predicate, load_policy,
+    ContainmentError,
+    Predicate,
+    load_policy,
 )
 from sdlc.models import ContainmentLayer
 
@@ -220,8 +237,7 @@ def _write(tmp_path, text):
 
 def test_loads_rules_in_declared_order(tmp_path):
     pol = load_policy(_write(tmp_path, GOOD))
-    assert [r.id for r in pol.rules] == [
-        "no-out-of-worktree-write", "no-recursive-force-delete"]
+    assert [r.id for r in pol.rules] == ["no-out-of-worktree-write", "no-recursive-force-delete"]
     assert pol.rules[0].layer is ContainmentLayer.HOOK
     assert pol.rules[0].predicate is Predicate.PATH_OUTSIDE_WORKTREE
     assert pol.rules[1].patterns == ["rm -rf *"]
@@ -239,13 +255,16 @@ def test_rejects_unknown_predicate(tmp_path):
 
 
 def test_rejects_duplicate_rule_id(tmp_path):
-    dup = GOOD + """
+    dup = (
+        GOOD
+        + """
   - id: no-out-of-worktree-write
     layer: hook
     tools: [Write]
     predicate: path_outside_worktree
     reason: "dup"
 """
+    )
     with pytest.raises(ContainmentError, match="duplicate"):
         load_policy(_write(tmp_path, dup))
 
@@ -293,6 +312,7 @@ agents/loader.py does not: under `pip install .` the package lives in
 site-packages, which has no relationship to where the policy asset lives.
 Order: explicit arg -> $SDLC_CONTAINMENT_POLICY -> repo-root discovery.
 """
+
 from __future__ import annotations
 
 import os
@@ -318,6 +338,7 @@ class ContainmentError(ValueError):
 class Predicate(str, Enum):
     """The complete predicate vocabulary. Adding a fifth is a code change
     plus a schema version bump — deliberately not an expression language."""
+
     PATH_OUTSIDE_WORKTREE = "path_outside_worktree"
     PATH_MATCHES = "path_matches"
     COMMAND_MATCHES = "command_matches"
@@ -326,7 +347,7 @@ class Predicate(str, Enum):
 
 class Rule(BaseModel):
     id: str
-    layer: ContainmentLayer      # MINIMUM capability required (spec §4a)
+    layer: ContainmentLayer  # MINIMUM capability required (spec §4a)
     tools: list[str]
     predicate: Predicate
     reason: str
@@ -360,7 +381,8 @@ def _resolve_policy_path(path: str | os.PathLike | None = None) -> Path:
     raise ContainmentError(
         f"cannot locate the containment policy. Tried: an explicit path "
         f"argument; ${POLICY_PATH_ENV}; and walking up from {Path.cwd()} for "
-        f"a directory containing both pyproject.toml and agents/registry.yaml.")
+        f"a directory containing both pyproject.toml and agents/registry.yaml."
+    )
 
 
 def load_policy(path: str | os.PathLike | None = None) -> Policy:
@@ -374,8 +396,8 @@ def load_policy(path: str | os.PathLike | None = None) -> Policy:
     version = raw.get("version")
     if version != 1:
         raise ContainmentError(
-            f"unsupported containment policy version {version!r} in {p}; "
-            f"expected 1")
+            f"unsupported containment policy version {version!r} in {p}; expected 1"
+        )
 
     rules: list[Rule] = []
     seen: set[str] = set()
@@ -386,9 +408,8 @@ def load_policy(path: str | os.PathLike | None = None) -> Policy:
         seen.add(rid)
         try:
             rules.append(Rule.model_validate(entry))
-        except Exception as e:                    # noqa: BLE001 - re-typed
-            raise ContainmentError(
-                f"invalid rule {rid!r} in {p}: {e}") from e
+        except Exception as e:  # noqa: BLE001 - re-typed
+            raise ContainmentError(f"invalid rule {rid!r} in {p}: {e}") from e
     return Policy(version=version, rules=rules)
 ```
 
@@ -481,27 +502,48 @@ Create `tests/test_containment_evaluate.py`:
 
 ```python
 """E-16: the rule matrix. Pure — no subprocess, no CLI."""
+
 import pytest
 
 from sdlc.harness.containment import Policy, Rule, Verdict, evaluate
 from sdlc.models import ContainmentLayer
 
-POLICY = Policy(version=1, rules=[
-    Rule(id="no-out-of-worktree-write", layer=ContainmentLayer.HOOK,
-         tools=["Write", "Edit"], predicate="path_outside_worktree",
-         reason="Writes are scoped to the task worktree."),
-    Rule(id="no-recursive-force-delete", layer=ContainmentLayer.NATIVE,
-         tools=["Bash"], predicate="command_matches",
-         patterns=["rm -rf *"], reason="Destructive recursive delete."),
-    Rule(id="no-agent-config-write", layer=ContainmentLayer.NATIVE,
-         tools=["Write", "Edit"], predicate="path_matches",
-         patterns=["**/.claude/**"],
-         reason="The agent may not rewrite its own permission config."),
-    Rule(id="egress-allowlist", layer=ContainmentLayer.HOOK,
-         tools=["WebFetch", "Bash"], predicate="host_not_allowlisted",
-         allow_hosts=["github.com"],
-         reason="Egress is restricted."),
-])
+POLICY = Policy(
+    version=1,
+    rules=[
+        Rule(
+            id="no-out-of-worktree-write",
+            layer=ContainmentLayer.HOOK,
+            tools=["Write", "Edit"],
+            predicate="path_outside_worktree",
+            reason="Writes are scoped to the task worktree.",
+        ),
+        Rule(
+            id="no-recursive-force-delete",
+            layer=ContainmentLayer.NATIVE,
+            tools=["Bash"],
+            predicate="command_matches",
+            patterns=["rm -rf *"],
+            reason="Destructive recursive delete.",
+        ),
+        Rule(
+            id="no-agent-config-write",
+            layer=ContainmentLayer.NATIVE,
+            tools=["Write", "Edit"],
+            predicate="path_matches",
+            patterns=["**/.claude/**"],
+            reason="The agent may not rewrite its own permission config.",
+        ),
+        Rule(
+            id="egress-allowlist",
+            layer=ContainmentLayer.HOOK,
+            tools=["WebFetch", "Bash"],
+            predicate="host_not_allowlisted",
+            allow_hosts=["github.com"],
+            reason="Egress is restricted.",
+        ),
+    ],
+)
 
 
 @pytest.fixture
@@ -512,8 +554,7 @@ def worktree(tmp_path):
 
 
 def test_allows_a_write_inside_the_worktree(worktree):
-    v = evaluate(POLICY, "Write", {"file_path": f"{worktree}/src/app.py"},
-                 worktree)
+    v = evaluate(POLICY, "Write", {"file_path": f"{worktree}/src/app.py"}, worktree)
     assert v == Verdict(allow=True)
 
 
@@ -532,8 +573,7 @@ def test_denies_a_sibling_worktree_write(worktree, tmp_path):
 
 
 def test_denies_a_relative_path_escape(worktree):
-    v = evaluate(POLICY, "Write", {"file_path": "../../../etc/hosts"},
-                 worktree)
+    v = evaluate(POLICY, "Write", {"file_path": "../../../etc/hosts"}, worktree)
     assert v.allow is False
 
 
@@ -547,6 +587,7 @@ def test_denies_a_symlink_escape(worktree, tmp_path):
 
 def os_symlink_or_skip(tmp_path, worktree, outside):
     import os
+
     link = f"{worktree}/escape"
     try:
         os.symlink(str(outside), link, target_is_directory=True)
@@ -562,40 +603,33 @@ def test_denies_recursive_force_delete(worktree):
 
 
 def test_allows_a_benign_command(worktree):
-    assert evaluate(POLICY, "Bash", {"command": "pytest -q"},
-                    worktree).allow is True
+    assert evaluate(POLICY, "Bash", {"command": "pytest -q"}, worktree).allow is True
 
 
 def test_denies_agent_config_write_even_inside_the_worktree(worktree):
-    v = evaluate(POLICY, "Write",
-                 {"file_path": f"{worktree}/.claude/settings.json"}, worktree)
+    v = evaluate(POLICY, "Write", {"file_path": f"{worktree}/.claude/settings.json"}, worktree)
     assert v.allow is False
     assert v.rule_id == "no-agent-config-write"
 
 
 def test_denies_non_allowlisted_fetch(worktree):
-    v = evaluate(POLICY, "WebFetch", {"url": "https://evil.example.com/x"},
-                 worktree)
+    v = evaluate(POLICY, "WebFetch", {"url": "https://evil.example.com/x"}, worktree)
     assert v.allow is False
     assert v.rule_id == "egress-allowlist"
 
 
 def test_allows_allowlisted_fetch(worktree):
-    assert evaluate(POLICY, "WebFetch", {"url": "https://github.com/a/b"},
-                    worktree).allow is True
+    assert evaluate(POLICY, "WebFetch", {"url": "https://github.com/a/b"}, worktree).allow is True
 
 
 def test_denies_curl_to_non_allowlisted_host(worktree):
-    v = evaluate(POLICY, "Bash",
-                 {"command": "curl https://evil.example.com/x -o /tmp/y"},
-                 worktree)
+    v = evaluate(POLICY, "Bash", {"command": "curl https://evil.example.com/x -o /tmp/y"}, worktree)
     assert v.allow is False
     assert v.rule_id == "egress-allowlist"
 
 
 def test_allows_a_command_with_no_url(worktree):
-    assert evaluate(POLICY, "Bash", {"command": "git status"},
-                    worktree).allow is True
+    assert evaluate(POLICY, "Bash", {"command": "git status"}, worktree).allow is True
 
 
 def test_unknown_tool_is_allowed(worktree):
@@ -651,7 +685,7 @@ def _abs_under(path: str, worktree: str) -> bool:
             p = root / p
         p = p.resolve()
     except (OSError, ValueError):
-        return False        # unresolvable -> treat as outside (fail closed)
+        return False  # unresolvable -> treat as outside (fail closed)
     return p == root or root in p.parents
 
 
@@ -676,12 +710,10 @@ def _hosts_in(tool: str, tool_input: dict) -> list[str]:
 def _host_allowed(host: str, allow_hosts: list[str]) -> bool:
     """Exact match or subdomain of an allowlisted host."""
     h = host.lower()
-    return any(h == a.lower() or h.endswith("." + a.lower())
-               for a in allow_hosts)
+    return any(h == a.lower() or h.endswith("." + a.lower()) for a in allow_hosts)
 
 
-def _rule_denies(rule: Rule, tool: str, tool_input: dict,
-                 worktree: str) -> bool:
+def _rule_denies(rule: Rule, tool: str, tool_input: dict, worktree: str) -> bool:
     if tool not in rule.tools:
         return False
 
@@ -710,8 +742,7 @@ def _rule_denies(rule: Rule, tool: str, tool_input: dict,
     return False
 
 
-def evaluate(policy: Policy, tool: str, tool_input: dict,
-             worktree: str) -> Verdict:
+def evaluate(policy: Policy, tool: str, tool_input: dict, worktree: str) -> Verdict:
     """First matching rule wins. `worktree` is a PARAMETER, never computed:
     create_worktree may return <task>.N after a Windows lock fallback and its
     returned path is authoritative (activities.py:260-274)."""
@@ -755,6 +786,7 @@ Create `tests/test_containment_hook.py`:
 
 ```python
 """E-15: the PreToolUse hook process contract (verified against 2.1.219)."""
+
 import json
 import subprocess
 import sys
@@ -765,30 +797,38 @@ from sdlc.harness.containment import Policy, Rule
 from sdlc.harness.hook import decide, format_reason, main
 from sdlc.models import ContainmentLayer
 
-POLICY = Policy(version=1, rules=[
-    Rule(id="no-out-of-worktree-write", layer=ContainmentLayer.HOOK,
-         tools=["Write"], predicate="path_outside_worktree",
-         reason="Writes are scoped to the task worktree."),
-])
+POLICY = Policy(
+    version=1,
+    rules=[
+        Rule(
+            id="no-out-of-worktree-write",
+            layer=ContainmentLayer.HOOK,
+            tools=["Write"],
+            predicate="path_outside_worktree",
+            reason="Writes are scoped to the task worktree.",
+        ),
+    ],
+)
 
 
 def test_allow_emits_an_allow_decision(tmp_path):
-    out = decide({"tool_name": "Write",
-                  "tool_input": {"file_path": f"{tmp_path}/a.py"}},
-                 POLICY, str(tmp_path))
+    out = decide(
+        {"tool_name": "Write", "tool_input": {"file_path": f"{tmp_path}/a.py"}},
+        POLICY,
+        str(tmp_path),
+    )
     assert out["hookSpecificOutput"]["permissionDecision"] == "allow"
     assert out["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
 
 
 def test_deny_carries_the_rule_id_in_the_reason(tmp_path):
-    out = decide({"tool_name": "Write",
-                  "tool_input": {"file_path": "/etc/passwd"}},
-                 POLICY, str(tmp_path))
+    out = decide(
+        {"tool_name": "Write", "tool_input": {"file_path": "/etc/passwd"}}, POLICY, str(tmp_path)
+    )
     hso = out["hookSpecificOutput"]
     assert hso["permissionDecision"] == "deny"
     # permission_denials carries no rule id, so it rides the reason string.
-    assert hso["permissionDecisionReason"].startswith(
-        "[no-out-of-worktree-write]")
+    assert hso["permissionDecisionReason"].startswith("[no-out-of-worktree-write]")
 
 
 def test_format_reason_round_trips():
@@ -800,16 +840,15 @@ def test_missing_tool_name_allows_rather_than_crashing(tmp_path):
     assert out["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
-def test_main_writes_json_to_stdout_and_exits_zero(tmp_path, capsys,
-                                                   monkeypatch):
+def test_main_writes_json_to_stdout_and_exits_zero(tmp_path, capsys, monkeypatch):
     pol = tmp_path / "p.yaml"
     pol.write_text(
         "version: 1\nrules:\n"
         "  - id: r\n    layer: hook\n    tools: [Write]\n"
         "    predicate: path_outside_worktree\n    reason: nope\n",
-        encoding="utf-8")
-    payload = json.dumps({"tool_name": "Write",
-                          "tool_input": {"file_path": "/etc/passwd"}})
+        encoding="utf-8",
+    )
+    payload = json.dumps({"tool_name": "Write", "tool_input": {"file_path": "/etc/passwd"}})
     monkeypatch.setattr("sys.stdin", __import__("io").StringIO(payload))
     rc = main(["--worktree", str(tmp_path), "--policy", str(pol)])
     assert rc == 0
@@ -821,7 +860,7 @@ def test_internal_failure_denies_never_allows(tmp_path, capsys, monkeypatch):
     """A hook that crashes open is worse than no hook at all."""
     monkeypatch.setattr("sys.stdin", __import__("io").StringIO("not json"))
     rc = main(["--worktree", str(tmp_path), "--policy", "/nonexistent.yaml"])
-    assert rc == 0                      # exit 0: the JSON carries the verdict
+    assert rc == 0  # exit 0: the JSON carries the verdict
     out = json.loads(capsys.readouterr().out)
     assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
 
@@ -834,16 +873,25 @@ def test_module_is_runnable_as_a_subprocess(tmp_path):
         "version: 1\nrules:\n"
         "  - id: r\n    layer: hook\n    tools: [Write]\n"
         "    predicate: path_outside_worktree\n    reason: nope\n",
-        encoding="utf-8")
+        encoding="utf-8",
+    )
     proc = subprocess.run(
-        [sys.executable, "-m", "sdlc.harness.hook",
-         "--worktree", str(tmp_path), "--policy", str(pol)],
-        input=json.dumps({"tool_name": "Write",
-                          "tool_input": {"file_path": "/etc/passwd"}}),
-        capture_output=True, text=True, timeout=60)
+        [
+            sys.executable,
+            "-m",
+            "sdlc.harness.hook",
+            "--worktree",
+            str(tmp_path),
+            "--policy",
+            str(pol),
+        ],
+        input=json.dumps({"tool_name": "Write", "tool_input": {"file_path": "/etc/passwd"}}),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
     assert proc.returncode == 0, proc.stderr
-    assert json.loads(proc.stdout)["hookSpecificOutput"][
-        "permissionDecision"] == "deny"
+    assert json.loads(proc.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -867,6 +915,7 @@ Contract, verified live against claude 2.1.219: read the hook payload as
 JSON on stdin, write one JSON object to stdout, exit 0. The
 permissionDecisionReason reaches the model verbatim.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -901,8 +950,11 @@ def decide(payload: dict, policy: Policy, worktree: str) -> dict:
     if verdict.allow:
         return _decision("allow")
     return _decision(
-        "deny", format_reason(verdict.rule_id or "unknown",
-                              verdict.reason or "denied by containment policy"))
+        "deny",
+        format_reason(
+            verdict.rule_id or "unknown", verdict.reason or "denied by containment policy"
+        ),
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -915,11 +967,10 @@ def main(argv: list[str] | None = None) -> int:
         payload = json.loads(sys.stdin.read() or "{}")
         policy = load_policy(args.policy)
         out = decide(payload, policy, args.worktree)
-    except Exception as e:                        # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
         # Fail CLOSED. A hook that crashes open is worse than no hook: the
         # run would look contained while enforcing nothing.
-        out = _decision(
-            "deny", f"[containment-error] containment hook failed: {e}")
+        out = _decision("deny", f"[containment-error] containment hook failed: {e}")
 
     sys.stdout.write(json.dumps(out))
     sys.stdout.flush()
@@ -960,28 +1011,43 @@ Create `tests/test_containment_adapters.py`:
 
 ```python
 """E-15/E-16: adapter-side containment compilation and denial normalisation."""
+
 import json
 from pathlib import Path
 
 from sdlc.harness.adapters import (
-    ClaudeCodeHarness, HarnessRequest,
+    ClaudeCodeHarness,
+    HarnessRequest,
 )
 from sdlc.harness.containment import Policy, Rule
 from sdlc.models import ContainmentLayer
 
-POLICY = Policy(version=1, rules=[
-    Rule(id="no-out-of-worktree-write", layer=ContainmentLayer.HOOK,
-         tools=["Write", "Edit"], predicate="path_outside_worktree",
-         reason="Writes are scoped to the task worktree."),
-    Rule(id="no-recursive-force-delete", layer=ContainmentLayer.NATIVE,
-         tools=["Bash"], predicate="command_matches",
-         patterns=["rm -rf *"], reason="Destructive recursive delete."),
-])
+POLICY = Policy(
+    version=1,
+    rules=[
+        Rule(
+            id="no-out-of-worktree-write",
+            layer=ContainmentLayer.HOOK,
+            tools=["Write", "Edit"],
+            predicate="path_outside_worktree",
+            reason="Writes are scoped to the task worktree.",
+        ),
+        Rule(
+            id="no-recursive-force-delete",
+            layer=ContainmentLayer.NATIVE,
+            tools=["Bash"],
+            predicate="command_matches",
+            patterns=["rm -rf *"],
+            reason="Destructive recursive delete.",
+        ),
+    ],
+)
 
 
 def test_claude_declares_both_layers():
     assert ClaudeCodeHarness().containment == frozenset(
-        {ContainmentLayer.NATIVE, ContainmentLayer.HOOK})
+        {ContainmentLayer.NATIVE, ContainmentLayer.HOOK}
+    )
 
 
 def test_apply_writes_settings_outside_the_worktree(tmp_path):
@@ -1015,8 +1081,8 @@ def test_native_layer_rule_also_runs_through_the_hook(tmp_path):
     doc = json.loads(Path(_settings_path(req)).read_text(encoding="utf-8"))
 
     matchers = "|".join(e["matcher"] for e in doc["hooks"]["PreToolUse"])
-    assert "Bash" in matchers          # the native-layer rule's tool
-    assert "Write" in matchers         # the hook-layer rule's tool
+    assert "Bash" in matchers  # the native-layer rule's tool
+    assert "Write" in matchers  # the hook-layer rule's tool
 
 
 def test_apply_reports_full_coverage_for_claude(tmp_path):
@@ -1024,20 +1090,25 @@ def test_apply_reports_full_coverage_for_claude(tmp_path):
     report = ClaudeCodeHarness().apply_containment(POLICY, req)
     assert report.enabled is True
     assert report.rules_unenforceable == []
-    assert set(report.rules_enforced) == {
-        "no-out-of-worktree-write", "no-recursive-force-delete"}
+    assert set(report.rules_enforced) == {"no-out-of-worktree-write", "no-recursive-force-delete"}
 
 
 def test_normalise_denials_reads_permission_denials():
     """Shape captured from a live 2.1.219 run."""
-    stream = json.dumps({
-        "type": "result", "subtype": "success", "session_id": "s",
-        "permission_denials": [{
-            "tool_name": "Write",
-            "tool_use_id": "toolu_01",
-            "tool_input": {"file_path": "C:\\\\etc\\\\passwd"},
-        }],
-    })
+    stream = json.dumps(
+        {
+            "type": "result",
+            "subtype": "success",
+            "session_id": "s",
+            "permission_denials": [
+                {
+                    "tool_name": "Write",
+                    "tool_use_id": "toolu_01",
+                    "tool_input": {"file_path": "C:\\\\etc\\\\passwd"},
+                }
+            ],
+        }
+    )
     denials = ClaudeCodeHarness().normalise_denials(stream)
     assert len(denials) == 1
     assert denials[0].tool == "Write"
@@ -1046,33 +1117,52 @@ def test_normalise_denials_reads_permission_denials():
 
 
 def test_normalise_denials_recovers_rule_id_from_the_hook_reason():
-    stream = "\n".join([
-        json.dumps({
-            "type": "system", "subtype": "hook_response",
-            "hook_event": "PreToolUse", "hook_name": "PreToolUse:Write",
-            "exit_code": 0, "outcome": "success",
-            "output": json.dumps({"hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason":
-                    "[no-out-of-worktree-write] Writes are scoped.",
-            }}),
-        }),
-        json.dumps({
-            "type": "result", "subtype": "success", "session_id": "s",
-            "permission_denials": [{
-                "tool_name": "Write", "tool_use_id": "t1",
-                "tool_input": {"file_path": "/etc/passwd"}}],
-        }),
-    ])
+    stream = "\n".join(
+        [
+            json.dumps(
+                {
+                    "type": "system",
+                    "subtype": "hook_response",
+                    "hook_event": "PreToolUse",
+                    "hook_name": "PreToolUse:Write",
+                    "exit_code": 0,
+                    "outcome": "success",
+                    "output": json.dumps(
+                        {
+                            "hookSpecificOutput": {
+                                "hookEventName": "PreToolUse",
+                                "permissionDecision": "deny",
+                                "permissionDecisionReason": "[no-out-of-worktree-write] Writes are scoped.",
+                            }
+                        }
+                    ),
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "session_id": "s",
+                    "permission_denials": [
+                        {
+                            "tool_name": "Write",
+                            "tool_use_id": "t1",
+                            "tool_input": {"file_path": "/etc/passwd"},
+                        }
+                    ],
+                }
+            ),
+        ]
+    )
     d = ClaudeCodeHarness().normalise_denials(stream)[0]
     assert d.rule_id == "no-out-of-worktree-write"
     assert d.reason == "Writes are scoped."
 
 
 def test_no_denials_on_a_clean_stream():
-    stream = json.dumps({"type": "result", "subtype": "success",
-                         "session_id": "s", "permission_denials": []})
+    stream = json.dumps(
+        {"type": "result", "subtype": "success", "session_id": "s", "permission_denials": []}
+    )
     assert ClaudeCodeHarness().normalise_denials(stream) == []
 
 
@@ -1108,23 +1198,24 @@ Then, inside `class CodingHarness`, directly after `normalise_session`
 (line 137-142), add:
 
 ```python
-    # ADR-17: what this CLI can actually enforce. A harness declaring an
-    # empty set fails closed when containment is enabled, rather than
-    # running unpoliced and looking contained.
-    containment: frozenset[ContainmentLayer] = frozenset()
+# ADR-17: what this CLI can actually enforce. A harness declaring an
+# empty set fails closed when containment is enabled, rather than
+# running unpoliced and looking contained.
+containment: frozenset[ContainmentLayer] = frozenset()
 
-    def apply_containment(self, policy: Policy,
-                          req: HarnessRequest) -> ContainmentReport:
-        """Compile `policy` into this CLI's own mechanisms, mutating `req`.
-        Base default: enforce nothing and say so."""
-        return ContainmentReport(
-            enabled=True, layers_active=[],
-            rules_unenforceable=[r.id for r in policy.rules])
 
-    def normalise_denials(self, stdout: str) -> list[ToolDenial]:
-        """Blocked tool calls from this harness's stream (ADR-17, mirroring
-        normalise_session). Base default: none reported."""
-        return []
+def apply_containment(self, policy: Policy, req: HarnessRequest) -> ContainmentReport:
+    """Compile `policy` into this CLI's own mechanisms, mutating `req`.
+    Base default: enforce nothing and say so."""
+    return ContainmentReport(
+        enabled=True, layers_active=[], rules_unenforceable=[r.id for r in policy.rules]
+    )
+
+
+def normalise_denials(self, stdout: str) -> list[ToolDenial]:
+    """Blocked tool calls from this harness's stream (ADR-17, mirroring
+    normalise_session). Base default: none reported."""
+    return []
 ```
 
 - [ ] **Step 4: Implement the claude adapter**
@@ -1132,99 +1223,111 @@ Then, inside `class CodingHarness`, directly after `normalise_session`
 Inside `class ClaudeCodeHarness`, add after `build_cmd`:
 
 ```python
-    containment = frozenset({ContainmentLayer.NATIVE, ContainmentLayer.HOOK})
+containment = frozenset({ContainmentLayer.NATIVE, ContainmentLayer.HOOK})
 
-    def apply_containment(self, policy: Policy,
-                          req: HarnessRequest) -> ContainmentReport:
-        """Both layers, deliberately overlapping (spec §4a).
 
-        `permissions.deny` is the floor a buggy hook cannot weaken (verified:
-        a hook's `allow` cannot bypass a deny rule). The hook is the layer
-        that is OBSERVABLE — a native deny blocks correctly but reports
-        `permission_denials: []`, so every rule is ALSO hooked here.
-        """
-        hooks = [{
-            "matcher": "|".join(sorted({t for r in policy.rules
-                                        for t in r.tools})),
-            "hooks": [{"type": "command", "command": self._hook_command(req)}],
-        }] if policy.rules else []
+def apply_containment(self, policy: Policy, req: HarnessRequest) -> ContainmentReport:
+    """Both layers, deliberately overlapping (spec §4a).
 
-        deny = [p for r in policy.rules if ContainmentLayer.NATIVE is r.layer
-                for p in self._native_patterns(r)]
+    `permissions.deny` is the floor a buggy hook cannot weaken (verified:
+    a hook's `allow` cannot bypass a deny rule). The hook is the layer
+    that is OBSERVABLE — a native deny blocks correctly but reports
+    `permission_denials: []`, so every rule is ALSO hooked here.
+    """
+    hooks = (
+        [
+            {
+                "matcher": "|".join(sorted({t for r in policy.rules for t in r.tools})),
+                "hooks": [{"type": "command", "command": self._hook_command(req)}],
+            }
+        ]
+        if policy.rules
+        else []
+    )
 
-        doc = {"hooks": {"PreToolUse": hooks}, "permissions": {"deny": deny}}
+    deny = [
+        p
+        for r in policy.rules
+        if ContainmentLayer.NATIVE is r.layer
+        for p in self._native_patterns(r)
+    ]
 
-        # OUTSIDE the worktree, always: writes inside the worktree are
-        # permitted by design, so a settings file placed there is a file the
-        # agent may rewrite — it could edit its own policy.
-        fd, path = tempfile.mkstemp(prefix="sdlc-containment-",
-                                    suffix=".json")
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(doc, fh)
+    doc = {"hooks": {"PreToolUse": hooks}, "permissions": {"deny": deny}}
 
-        req.extra_args = [*req.extra_args, "--settings", path,
-                          "--include-hook-events"]
-        return ContainmentReport(
-            enabled=True,
-            layers_active=[ContainmentLayer.NATIVE, ContainmentLayer.HOOK],
-            rules_enforced=[r.id for r in policy.rules],
-            rules_unenforceable=[])
+    # OUTSIDE the worktree, always: writes inside the worktree are
+    # permitted by design, so a settings file placed there is a file the
+    # agent may rewrite — it could edit its own policy.
+    fd, path = tempfile.mkstemp(prefix="sdlc-containment-", suffix=".json")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump(doc, fh)
 
-    @staticmethod
-    def _hook_command(req: HarnessRequest) -> str:
-        """Absolute interpreter path: the child's PATH is allowlisted and may
-        resolve a different `python` than the worker's venv. Forward slashes
-        because claude runs hooks through Git Bash on Windows."""
-        exe = Path(sys.executable).as_posix()
-        wt = Path(req.cwd).as_posix()
-        return (f'"{exe}" -m sdlc.harness.hook --worktree "{wt}"')
+    req.extra_args = [*req.extra_args, "--settings", path, "--include-hook-events"]
+    return ContainmentReport(
+        enabled=True,
+        layers_active=[ContainmentLayer.NATIVE, ContainmentLayer.HOOK],
+        rules_enforced=[r.id for r in policy.rules],
+        rules_unenforceable=[],
+    )
 
-    @staticmethod
-    def _native_patterns(rule: Rule) -> list[str]:
-        """Translate OUR pattern syntax into claude's `Tool(arg)` deny form.
-        The policy author never writes CLI-specific syntax."""
-        out: list[str] = []
-        for tool in rule.tools:
-            for pat in rule.patterns:
-                out.append(f"{tool}({pat})")
-        return out
 
-    def normalise_denials(self, stdout: str) -> list[ToolDenial]:
-        """`result.permission_denials` is the structured spine (tool_name /
-        tool_use_id / tool_input). It carries no rule id, so the rule id is
-        recovered from the `[rule-id] ` prefix the hook writes into the
-        reason, surfaced in `hook_response.output`."""
-        reasons: list[str] = []
-        denials: list[ToolDenial] = []
-        for ln in stdout.strip().splitlines():
-            ln = ln.strip()
-            if not ln:
-                continue
+@staticmethod
+def _hook_command(req: HarnessRequest) -> str:
+    """Absolute interpreter path: the child's PATH is allowlisted and may
+    resolve a different `python` than the worker's venv. Forward slashes
+    because claude runs hooks through Git Bash on Windows."""
+    exe = Path(sys.executable).as_posix()
+    wt = Path(req.cwd).as_posix()
+    return f'"{exe}" -m sdlc.harness.hook --worktree "{wt}"'
+
+
+@staticmethod
+def _native_patterns(rule: Rule) -> list[str]:
+    """Translate OUR pattern syntax into claude's `Tool(arg)` deny form.
+    The policy author never writes CLI-specific syntax."""
+    out: list[str] = []
+    for tool in rule.tools:
+        for pat in rule.patterns:
+            out.append(f"{tool}({pat})")
+    return out
+
+
+def normalise_denials(self, stdout: str) -> list[ToolDenial]:
+    """`result.permission_denials` is the structured spine (tool_name /
+    tool_use_id / tool_input). It carries no rule id, so the rule id is
+    recovered from the `[rule-id] ` prefix the hook writes into the
+    reason, surfaced in `hook_response.output`."""
+    reasons: list[str] = []
+    denials: list[ToolDenial] = []
+    for ln in stdout.strip().splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            ev = json.loads(ln)
+        except json.JSONDecodeError:
+            continue
+        if ev.get("subtype") == "hook_response" and ev.get("hook_event") == "PreToolUse":
             try:
-                ev = json.loads(ln)
+                hso = json.loads(ev.get("output") or "{}")
+                hso = hso.get("hookSpecificOutput") or {}
             except json.JSONDecodeError:
                 continue
-            if (ev.get("subtype") == "hook_response"
-                    and ev.get("hook_event") == "PreToolUse"):
-                try:
-                    hso = json.loads(ev.get("output") or "{}")
-                    hso = hso.get("hookSpecificOutput") or {}
-                except json.JSONDecodeError:
-                    continue
-                if hso.get("permissionDecision") == "deny":
-                    reasons.append(hso.get("permissionDecisionReason") or "")
-            elif ev.get("type") == "result":
-                for i, pd in enumerate(ev.get("permission_denials") or []):
-                    rule_id, reason = _split_reason(
-                        reasons[i] if i < len(reasons) else "")
-                    tool_input = pd.get("tool_input") or {}
-                    denials.append(ToolDenial(
+            if hso.get("permissionDecision") == "deny":
+                reasons.append(hso.get("permissionDecisionReason") or "")
+        elif ev.get("type") == "result":
+            for i, pd in enumerate(ev.get("permission_denials") or []):
+                rule_id, reason = _split_reason(reasons[i] if i < len(reasons) else "")
+                tool_input = pd.get("tool_input") or {}
+                denials.append(
+                    ToolDenial(
                         tool=pd.get("tool_name") or "unknown",
-                        rule_id=rule_id, layer=ContainmentLayer.HOOK,
+                        rule_id=rule_id,
+                        layer=ContainmentLayer.HOOK,
                         reason=reason,
-                        target=target_of(pd.get("tool_name") or "",
-                                         tool_input)))
-        return denials
+                        target=target_of(pd.get("tool_name") or "", tool_input),
+                    )
+                )
+    return denials
 ```
 
 Add this module-level helper to `adapters.py`, beside `context_window_for`:
@@ -1247,12 +1350,11 @@ In `ClaudeCodeHarness.normalise_session`, before returning the session,
 append one event per denial:
 
 ```python
-        # E-16: denials are part of the transcript, so the digest counts
-        # them on clean-green runs too (the same reasoning as OQ-B7's
-        # keep-aggregates-pre-truncation rule).
-        for d in self.normalise_denials(stdout):
-            session.events.append(SessionEvent(
-                kind="tool_denied", tool=d.tool, target=d.target))
+# E-16: denials are part of the transcript, so the digest counts
+# them on clean-green runs too (the same reasoning as OQ-B7's
+# keep-aggregates-pre-truncation rule).
+for d in self.normalise_denials(stdout):
+    session.events.append(SessionEvent(kind="tool_denied", tool=d.tool, target=d.target))
 ```
 
 In `src/sdlc/models.py`, add `tool_denied` to the `SessionEvent.kind`
@@ -1275,19 +1377,33 @@ Add to `tests/test_containment_adapters.py`:
 ```python
 def test_denials_become_session_events_and_are_counted():
     from sdlc.harness.session import digest_of
-    stream = "\n".join([
-        json.dumps({"type": "system", "subtype": "init", "session_id": "s",
-                    "model": "claude-opus-4-8"}),
-        json.dumps({"type": "result", "subtype": "success", "session_id": "s",
-                    "permission_denials": [{
-                        "tool_name": "Write", "tool_use_id": "t1",
-                        "tool_input": {"file_path": "/etc/passwd"}}]}),
-    ])
+
+    stream = "\n".join(
+        [
+            json.dumps(
+                {"type": "system", "subtype": "init", "session_id": "s", "model": "claude-opus-4-8"}
+            ),
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "session_id": "s",
+                    "permission_denials": [
+                        {
+                            "tool_name": "Write",
+                            "tool_use_id": "t1",
+                            "tool_input": {"file_path": "/etc/passwd"},
+                        }
+                    ],
+                }
+            ),
+        ]
+    )
     session = ClaudeCodeHarness().normalise_session(stream)
     assert [e.kind for e in session.events].count("tool_denied") == 1
     digest = digest_of(session)
     assert digest.denials == 1
-    assert digest.tool_calls == 0      # a blocked call is not a tool call
+    assert digest.tool_calls == 0  # a blocked call is not a tool call
 ```
 
 - [ ] **Step 6: Run tests to verify they pass**
@@ -1327,6 +1443,7 @@ Create `tests/test_containment_adapters_other.py`:
 
 ```python
 """E-15: the other two harnesses. Unequal capability, reported not hidden."""
+
 import json
 from pathlib import Path
 
@@ -1334,14 +1451,26 @@ from sdlc.harness.adapters import CursorHarness, HarnessRequest, OpenCodeHarness
 from sdlc.harness.containment import Policy, Rule
 from sdlc.models import ContainmentLayer
 
-POLICY = Policy(version=1, rules=[
-    Rule(id="hook-only", layer=ContainmentLayer.HOOK,
-         tools=["Write"], predicate="path_outside_worktree",
-         reason="Writes are scoped to the task worktree."),
-    Rule(id="native-ok", layer=ContainmentLayer.NATIVE,
-         tools=["Bash"], predicate="command_matches",
-         patterns=["rm -rf *"], reason="Destructive recursive delete."),
-])
+POLICY = Policy(
+    version=1,
+    rules=[
+        Rule(
+            id="hook-only",
+            layer=ContainmentLayer.HOOK,
+            tools=["Write"],
+            predicate="path_outside_worktree",
+            reason="Writes are scoped to the task worktree.",
+        ),
+        Rule(
+            id="native-ok",
+            layer=ContainmentLayer.NATIVE,
+            tools=["Bash"],
+            predicate="command_matches",
+            patterns=["rm -rf *"],
+            reason="Destructive recursive delete.",
+        ),
+    ],
+)
 
 
 def test_opencode_declares_native_only():
@@ -1387,32 +1516,34 @@ Expected: FAIL — `assert frozenset() == frozenset({<ContainmentLayer.NATIVE>})
 Inside `class OpenCodeHarness`, after `build_cmd`, add:
 
 ```python
-    # `--pure` (build_cmd) disables external plugins, which are opencode's
-    # only hook mechanism. The native permission block is what remains.
-    containment = frozenset({ContainmentLayer.NATIVE})
+# `--pure` (build_cmd) disables external plugins, which are opencode's
+# only hook mechanism. The native permission block is what remains.
+containment = frozenset({ContainmentLayer.NATIVE})
 
-    def apply_containment(self, policy: Policy,
-                          req: HarnessRequest) -> ContainmentReport:
-        perms: dict[str, dict[str, str]] = {"bash": {}}
-        enforced: list[str] = []
-        unenforceable: list[str] = []
-        for rule in policy.rules:
-            if ContainmentLayer.HOOK is rule.layer:
-                unenforceable.append(rule.id)   # needs a hook we do not have
-                continue
-            for pat in rule.patterns:
-                perms["bash"][pat] = "deny"
-            enforced.append(rule.id)
 
-        fd, path = tempfile.mkstemp(prefix="sdlc-containment-",
-                                    suffix=".json")
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump({"permission": perms}, fh)
+def apply_containment(self, policy: Policy, req: HarnessRequest) -> ContainmentReport:
+    perms: dict[str, dict[str, str]] = {"bash": {}}
+    enforced: list[str] = []
+    unenforceable: list[str] = []
+    for rule in policy.rules:
+        if ContainmentLayer.HOOK is rule.layer:
+            unenforceable.append(rule.id)  # needs a hook we do not have
+            continue
+        for pat in rule.patterns:
+            perms["bash"][pat] = "deny"
+        enforced.append(rule.id)
 
-        req.extra_args = [*req.extra_args, "--config", path]
-        return ContainmentReport(
-            enabled=True, layers_active=[ContainmentLayer.NATIVE],
-            rules_enforced=enforced, rules_unenforceable=unenforceable)
+    fd, path = tempfile.mkstemp(prefix="sdlc-containment-", suffix=".json")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump({"permission": perms}, fh)
+
+    req.extra_args = [*req.extra_args, "--config", path]
+    return ContainmentReport(
+        enabled=True,
+        layers_active=[ContainmentLayer.NATIVE],
+        rules_enforced=enforced,
+        rules_unenforceable=unenforceable,
+    )
 ```
 
 Cursor needs no override — the `CodingHarness` base already declares an
@@ -1465,6 +1596,7 @@ Create `tests/test_containment_activity.py`:
 
 ```python
 """E-15: fail-closed wiring in run_coding_task."""
+
 import pytest
 
 from sdlc.activities import CodingTaskInput, _resolve_containment
@@ -1497,43 +1629,63 @@ def test_disabled_returns_no_policy_and_no_report(tmp_path):
 
 
 def test_enabled_loads_the_policy(tmp_path):
-    inp = CodingTaskInput(harness=None, prompt="p", worktree=str(tmp_path),
-                          containment_enabled=True,
-                          containment_policy_path=_policy(tmp_path))
+    inp = CodingTaskInput(
+        harness=None,
+        prompt="p",
+        worktree=str(tmp_path),
+        containment_enabled=True,
+        containment_policy_path=_policy(tmp_path),
+    )
     policy, report = _resolve_containment(ClaudeCodeHarness(), inp)
     assert [r.id for r in policy.rules] == ["hook-only"]
-    assert report.layers_active == [ContainmentLayer.NATIVE,
-                                    ContainmentLayer.HOOK]
+    assert report.layers_active == [ContainmentLayer.NATIVE, ContainmentLayer.HOOK]
 
 
 def test_zero_layer_harness_refuses_to_start(tmp_path):
-    inp = CodingTaskInput(harness=None, prompt="p", worktree=str(tmp_path),
-                          containment_enabled=True,
-                          containment_policy_path=_policy(tmp_path))
+    inp = CodingTaskInput(
+        harness=None,
+        prompt="p",
+        worktree=str(tmp_path),
+        containment_enabled=True,
+        containment_policy_path=_policy(tmp_path),
+    )
     with pytest.raises(ContainmentError, match="cannot enforce"):
         _resolve_containment(CursorHarness(), inp)
 
 
 def test_partial_coverage_runs_but_records_the_gap(tmp_path):
-    inp = CodingTaskInput(harness=None, prompt="p", worktree=str(tmp_path),
-                          containment_enabled=True,
-                          containment_policy_path=_policy(tmp_path))
+    inp = CodingTaskInput(
+        harness=None,
+        prompt="p",
+        worktree=str(tmp_path),
+        containment_enabled=True,
+        containment_policy_path=_policy(tmp_path),
+    )
     _, report = _resolve_containment(OpenCodeHarness(), inp)
     assert report.rules_unenforceable == ["hook-only"]
 
 
 def test_strict_promotes_partial_coverage_to_a_refusal(tmp_path):
-    inp = CodingTaskInput(harness=None, prompt="p", worktree=str(tmp_path),
-                          containment_enabled=True, containment_strict=True,
-                          containment_policy_path=_policy(tmp_path))
+    inp = CodingTaskInput(
+        harness=None,
+        prompt="p",
+        worktree=str(tmp_path),
+        containment_enabled=True,
+        containment_strict=True,
+        containment_policy_path=_policy(tmp_path),
+    )
     with pytest.raises(ContainmentError, match="unenforceable"):
         _resolve_containment(OpenCodeHarness(), inp)
 
 
 def test_missing_policy_fails_closed(tmp_path):
-    inp = CodingTaskInput(harness=None, prompt="p", worktree=str(tmp_path),
-                          containment_enabled=True,
-                          containment_policy_path=str(tmp_path / "absent.yaml"))
+    inp = CodingTaskInput(
+        harness=None,
+        prompt="p",
+        worktree=str(tmp_path),
+        containment_enabled=True,
+        containment_policy_path=str(tmp_path / "absent.yaml"),
+    )
     with pytest.raises(ContainmentError):
         _resolve_containment(ClaudeCodeHarness(), inp)
 ```
@@ -1561,8 +1713,7 @@ Add this helper above `run_coding_task`. It takes the **same**
 once and the request that gets compiled is the request that gets executed:
 
 ```python
-def _resolve_containment(harness, inp: CodingTaskInput,
-                         req: HarnessRequest | None = None):
+def _resolve_containment(harness, inp: CodingTaskInput, req: HarnessRequest | None = None):
     """Load the policy and compile it into `req`, or fail closed.
 
     Returns (policy, report) — both None when containment is disabled.
@@ -1572,15 +1723,16 @@ def _resolve_containment(harness, inp: CodingTaskInput,
     if not inp.containment_enabled:
         return None, None
 
-    policy = load_policy(inp.containment_policy_path)   # raises: fail closed
+    policy = load_policy(inp.containment_policy_path)  # raises: fail closed
 
     if not harness.containment:
         raise ContainmentError(
             f"containment is enabled but the {harness.kind.value} harness "
             f"cannot enforce any layer; refusing to start an unpoliced run "
-            f"(ADR-17). Disable containment or choose another harness.")
+            f"(ADR-17). Disable containment or choose another harness."
+        )
 
-    if req is None:                     # unit-test path: compile a probe
+    if req is None:  # unit-test path: compile a probe
         req = HarnessRequest(prompt=inp.prompt, cwd=inp.worktree)
     report = harness.apply_containment(policy, req)
 
@@ -1588,7 +1740,8 @@ def _resolve_containment(harness, inp: CodingTaskInput,
         raise ContainmentError(
             f"containment_strict is set and the {harness.kind.value} harness "
             f"leaves these rules unenforceable: "
-            f"{', '.join(report.rules_unenforceable)}")
+            f"{', '.join(report.rules_unenforceable)}"
+        )
     return policy, report
 ```
 
@@ -1596,22 +1749,24 @@ Then in `run_coding_task`, replace the `harness = HARNESSES[inp.harness]`
 line and the `harness.run(...)` block with:
 
 ```python
-    harness = HARNESSES[inp.harness]
-    req = HarnessRequest(
-        prompt=inp.prompt, cwd=inp.worktree, model=inp.model,
-        session_id=inp.session_id, timeout_s=inp.timeout_s,
-    )
-    _, report = _resolve_containment(harness, inp, req)
-    with span("harness.run", harness=inp.harness.value,
-              task_id=inp.task_id, attempt=inp.attempt):
-        result = await harness.run(req, heartbeat=activity.heartbeat)
-    result.containment = report
-    try:
-        result.denials = harness.normalise_denials(result._raw_stdout)
-    except Exception:                     # noqa: BLE001
-        # Best-effort, exactly like capture_session: losing the RECORD of a
-        # denial must never fail a task whose denial was already enforced.
-        _log.warning("denial normalisation failed", exc_info=True)
+harness = HARNESSES[inp.harness]
+req = HarnessRequest(
+    prompt=inp.prompt,
+    cwd=inp.worktree,
+    model=inp.model,
+    session_id=inp.session_id,
+    timeout_s=inp.timeout_s,
+)
+_, report = _resolve_containment(harness, inp, req)
+with span("harness.run", harness=inp.harness.value, task_id=inp.task_id, attempt=inp.attempt):
+    result = await harness.run(req, heartbeat=activity.heartbeat)
+result.containment = report
+try:
+    result.denials = harness.normalise_denials(result._raw_stdout)
+except Exception:  # noqa: BLE001
+    # Best-effort, exactly like capture_session: losing the RECORD of a
+    # denial must never fail a task whose denial was already enforced.
+    _log.warning("denial normalisation failed", exc_info=True)
 ```
 
 Add the imports at the top of `activities.py`:
@@ -1627,9 +1782,9 @@ In `src/sdlc/workflows/feature.py`, at the `run_coding_task` call site
 (~line 740), add the three fields to the `CodingTaskInput(...)` construction:
 
 ```python
-                    containment_enabled=cfg.containment_enabled,
-                    containment_policy_path=cfg.containment.policy_path,
-                    containment_strict=cfg.containment.strict,
+containment_enabled = (cfg.containment_enabled,)
+containment_policy_path = (cfg.containment.policy_path,)
+containment_strict = (cfg.containment.strict,)
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -1687,6 +1842,7 @@ this pins it so a CLI upgrade cannot silently un-contain the factory.
 
 Run with:  SDLC_LIVE_TESTS=1 python -m pytest tests/test_containment_live.py -v
 """
+
 import asyncio
 import os
 import shutil
@@ -1698,10 +1854,10 @@ from sdlc.harness.containment import load_policy
 
 pytestmark = [
     pytest.mark.live,
-    pytest.mark.skipif(os.environ.get("SDLC_LIVE_TESTS") != "1",
-                       reason="set SDLC_LIVE_TESTS=1 to spend tokens"),
-    pytest.mark.skipif(shutil.which("claude") is None,
-                       reason="claude CLI not on PATH"),
+    pytest.mark.skipif(
+        os.environ.get("SDLC_LIVE_TESTS") != "1", reason="set SDLC_LIVE_TESTS=1 to spend tokens"
+    ),
+    pytest.mark.skipif(shutil.which("claude") is None, reason="claude CLI not on PATH"),
 ]
 
 
@@ -1713,8 +1869,10 @@ def test_a_write_outside_the_worktree_is_denied_and_reported(tmp_path):
     harness = ClaudeCodeHarness()
     req = HarnessRequest(
         prompt=f"Write the single word HELLO into the file {outside}. "
-               f"If a tool call is blocked, stop and say BLOCKED.",
-        cwd=str(worktree), timeout_s=300)
+        f"If a tool call is blocked, stop and say BLOCKED.",
+        cwd=str(worktree),
+        timeout_s=300,
+    )
     harness.apply_containment(load_policy(), req)
 
     result = asyncio.run(harness.run(req))

@@ -4,12 +4,12 @@ from sdlc.core.models import (
     PipelineConfig,
 )
 from sdlc.measurement import Measurement
-from sdlc.models import (
+from sdlc.stages.analyze.models import (
     AnalysisReport,
-    CoverageReport,
     CriterionTrace,
-    ReviewFinding,
 )
+from sdlc.stages.merge.models import CoverageReport
+from sdlc.stages.review.models import ReviewFinding
 
 
 def test_criterion_trace_defaults_to_no_tests():

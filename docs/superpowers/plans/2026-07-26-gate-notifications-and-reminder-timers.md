@@ -61,6 +61,7 @@ Create `tests/test_gate_timeout_action.py`:
 ```python
 """E-9 Task 1: per-gate timeout semantics. Only `merge` changes default
 behaviour; every other gate keeps today's reject."""
+
 from __future__ import annotations
 
 from sdlc.models import GateConfig, GatePolicy, PipelineConfig, TimeoutAction
@@ -93,10 +94,16 @@ def test_bare_policy_string_still_coerces():
 
 
 def test_overrides_round_trip_through_dict_coercion():
-    cfg = PipelineConfig(gates={
-        "merge": {"policy": "hard", "on_timeout": "approve",
-                  "remind_after_hours": 4, "escalate_after_hours": 8},
-    })
+    cfg = PipelineConfig(
+        gates={
+            "merge": {
+                "policy": "hard",
+                "on_timeout": "approve",
+                "remind_after_hours": 4,
+                "escalate_after_hours": 8,
+            },
+        }
+    )
     g = cfg.gates["merge"]
     assert g.on_timeout is TimeoutAction.APPROVE
     assert (g.remind_after_hours, g.escalate_after_hours) == (4, 8)
@@ -115,9 +122,10 @@ In `src/sdlc/models.py`, after the `GateOutcome` enum (around line 38), add:
 class TimeoutAction(str, Enum):
     """What an expired gate does (FR-303). REJECT is today's behaviour and
     the default everywhere except `merge` -- see PipelineConfig.gates."""
-    REJECT = "reject"      # terminal, decided_by="timeout"
+
+    REJECT = "reject"  # terminal, decided_by="timeout"
     APPROVE = "approve"
-    HOLD = "hold"          # no final deadline; stays pending and visible
+    HOLD = "hold"  # no final deadline; stays pending and visible
 ```
 
 Extend `GateConfig` (line 40):
@@ -129,6 +137,7 @@ class GateConfig(BaseModel):
     only when policy == SOFT; the *_after_hours fields fall back to a
     fraction of PipelineConfig.gate_timeout_hours when None (see
     sdlc.notify.schedule.build_schedule)."""
+
     policy: GatePolicy = GatePolicy.HARD
     threshold: float = Field(default=0.8, ge=0.0, le=1.0)
     on_timeout: TimeoutAction = TimeoutAction.REJECT
@@ -184,6 +193,7 @@ Create `tests/test_notify_schedule.py`:
 ```python
 """E-9 Task 2: schedule construction is pure and total -- no configuration
 may make it raise, hang, or emit an out-of-order deadline."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -202,7 +212,7 @@ def test_default_schedule_is_opened_remind_50pct_escalate_80pct_expire():
     schedule, expires = build_schedule(GateConfig(), 48, T0)
     assert schedule == [
         (T0, NotifyReason.OPENED),
-        (_at(24), NotifyReason.REMIND),      # 50% of 48
+        (_at(24), NotifyReason.REMIND),  # 50% of 48
         (_at(38.4), NotifyReason.ESCALATE),  # 80% of 48
         (_at(48), NotifyReason.EXPIRE),
     ]
@@ -213,8 +223,10 @@ def test_explicit_overrides_win():
     cfg = GateConfig(remind_after_hours=2, escalate_after_hours=6)
     schedule, expires = build_schedule(cfg, 48, T0)
     assert [r for _, r in schedule] == [
-        NotifyReason.OPENED, NotifyReason.REMIND,
-        NotifyReason.ESCALATE, NotifyReason.EXPIRE,
+        NotifyReason.OPENED,
+        NotifyReason.REMIND,
+        NotifyReason.ESCALATE,
+        NotifyReason.EXPIRE,
     ]
     assert [t for t, _ in schedule] == [T0, _at(2), _at(6), _at(48)]
     assert expires == _at(48)
@@ -224,7 +236,9 @@ def test_hold_omits_expire_and_returns_no_final_deadline():
     cfg = GateConfig(on_timeout=TimeoutAction.HOLD)
     schedule, expires = build_schedule(cfg, 48, T0)
     assert [r for _, r in schedule] == [
-        NotifyReason.OPENED, NotifyReason.REMIND, NotifyReason.ESCALATE,
+        NotifyReason.OPENED,
+        NotifyReason.REMIND,
+        NotifyReason.ESCALATE,
     ]
     assert expires is None
 
@@ -233,8 +247,7 @@ def test_deadlines_at_or_past_expiry_are_dropped():
     """A reminder that would fire after the gate is already dead is noise."""
     cfg = GateConfig(remind_after_hours=48, escalate_after_hours=100)
     schedule, _ = build_schedule(cfg, 48, T0)
-    assert [r for _, r in schedule] == [
-        NotifyReason.OPENED, NotifyReason.EXPIRE]
+    assert [r for _, r in schedule] == [NotifyReason.OPENED, NotifyReason.EXPIRE]
 
 
 def test_out_of_order_overrides_are_sorted_not_rejected():
@@ -246,8 +259,7 @@ def test_out_of_order_overrides_are_sorted_not_rejected():
 
 def test_zero_timeout_hours_yields_opened_then_immediate_expire():
     schedule, expires = build_schedule(GateConfig(), 0, T0)
-    assert [r for _, r in schedule] == [
-        NotifyReason.OPENED, NotifyReason.EXPIRE]
+    assert [r for _, r in schedule] == [NotifyReason.OPENED, NotifyReason.EXPIRE]
     assert expires == T0
 
 
@@ -260,11 +272,12 @@ def test_hold_with_zero_timeout_still_notifies_open_and_never_expires():
 
 def test_schedule_is_always_sorted_and_starts_at_opened():
     for timeout in (0, 1, 5, 48, 720):
-        for cfg in (GateConfig(),
-                    GateConfig(remind_after_hours=1),
-                    GateConfig(on_timeout=TimeoutAction.HOLD),
-                    GateConfig(remind_after_hours=99,
-                               escalate_after_hours=1)):
+        for cfg in (
+            GateConfig(),
+            GateConfig(remind_after_hours=1),
+            GateConfig(on_timeout=TimeoutAction.HOLD),
+            GateConfig(remind_after_hours=99, escalate_after_hours=1),
+        ):
             schedule, _ = build_schedule(cfg, timeout, T0)
             times = [t for t, _ in schedule]
             assert times == sorted(times), (cfg, timeout)
@@ -288,11 +301,15 @@ notification says, where it goes, and how it is delivered. All file I/O lives
 in `activities.py`, because the workflow sandbox cannot read files (the same
 split as harness containment).
 """
+
 from .contract import DeliveryResult, NotifyInput, Notifier, NotifyReason
 from .schedule import build_schedule
 
 __all__ = [
-    "DeliveryResult", "NotifyInput", "Notifier", "NotifyReason",
+    "DeliveryResult",
+    "NotifyInput",
+    "Notifier",
+    "NotifyReason",
     "build_schedule",
 ]
 ```
@@ -301,6 +318,7 @@ Create `src/sdlc/notify/contract.py`:
 
 ```python
 """What a notification is, independent of how it is delivered."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -315,6 +333,7 @@ from ..pending import PendingDecision
 class NotifyReason(str, Enum):
     """Why this notification is being sent. Also selects the recipient tier:
     ESCALATE goes to primary AND fallback; everything else to primary."""
+
     OPENED = "opened"
     REMIND = "remind"
     ESCALATE = "escalate"
@@ -325,17 +344,19 @@ class NotifyInput(BaseModel):
     """Workflow -> notify activity. Carries the pending decision itself so
     the activity can render it with E-6's default_render; no route is passed
     because route resolution reads a file the workflow cannot."""
+
     run_id: str
     pending: PendingDecision
     reason: NotifyReason
     opened_at: datetime
-    now: datetime            # workflow.now() -- the activity reads no clock
+    now: datetime  # workflow.now() -- the activity reads no clock
     deadline: datetime | None = None
 
 
 class DeliveryResult(BaseModel):
     """One delivery attempt. `notifier` is the adapter NAME only -- never the
     resolved target, which for a webhook is a bearer credential."""
+
     notifier: str
     delivered: bool
     error: str | None = None
@@ -344,6 +365,7 @@ class DeliveryResult(BaseModel):
 class Results(BaseModel):
     """The notify activity's return value. A list is not used directly so the
     payload stays a named type across the Temporal boundary."""
+
     results: list[DeliveryResult] = Field(default_factory=list)
 
 
@@ -352,6 +374,7 @@ class Notifier(Protocol):
     """A delivery transport. `target` is the route's suffix (a URL for
     webhook, None for log). Raising is allowed -- the activity catches and
     reports it as a failed delivery."""
+
     async def deliver(self, text: str, target: str | None) -> None: ...
 ```
 
@@ -366,6 +389,7 @@ Totality is the design property that matters: no GateConfig may make this
 raise, emit an unsorted schedule, or omit the OPENED entry. A misconfigured
 schedule must never be able to hang or crash a gate.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -373,14 +397,15 @@ from datetime import datetime, timedelta
 from ..models import GateConfig, TimeoutAction
 from .contract import NotifyReason
 
-REMIND_FRACTION = 0.5     # of gate_timeout_hours, when not set explicitly
+REMIND_FRACTION = 0.5  # of gate_timeout_hours, when not set explicitly
 ESCALATE_FRACTION = 0.8
 
 Schedule = list[tuple[datetime, NotifyReason]]
 
 
-def build_schedule(gate_cfg: GateConfig, timeout_hours: int,
-                   opened_at: datetime) -> tuple[Schedule, datetime | None]:
+def build_schedule(
+    gate_cfg: GateConfig, timeout_hours: int, opened_at: datetime
+) -> tuple[Schedule, datetime | None]:
     """Return (sorted notification deadlines, final deadline).
 
     The final deadline is None under HOLD, which is what tells the caller
@@ -389,22 +414,23 @@ def build_schedule(gate_cfg: GateConfig, timeout_hours: int,
     same instant, so the two cannot disagree.
     """
     expires: datetime | None = (
-        None if gate_cfg.on_timeout is TimeoutAction.HOLD
-        else opened_at + timedelta(hours=timeout_hours))
+        None
+        if gate_cfg.on_timeout is TimeoutAction.HOLD
+        else opened_at + timedelta(hours=timeout_hours)
+    )
 
     schedule: Schedule = [(opened_at, NotifyReason.OPENED)]
 
     for reason, explicit, fraction in (
         (NotifyReason.REMIND, gate_cfg.remind_after_hours, REMIND_FRACTION),
-        (NotifyReason.ESCALATE, gate_cfg.escalate_after_hours,
-         ESCALATE_FRACTION),
+        (NotifyReason.ESCALATE, gate_cfg.escalate_after_hours, ESCALATE_FRACTION),
     ):
         hours = explicit if explicit is not None else timeout_hours * fraction
         at = opened_at + timedelta(hours=hours)
         if at <= opened_at:
-            continue                      # collapses into OPENED
+            continue  # collapses into OPENED
         if expires is not None and at >= expires:
-            continue                      # would fire after the gate is dead
+            continue  # would fire after the gate is dead
         schedule.append((at, reason))
 
     schedule.sort(key=lambda e: e[0])
@@ -444,6 +470,7 @@ Create `tests/test_notify_render.py`:
 ```python
 """E-9 Task 3: notification text. Reuses E-6's default_render -- this module
 adds the envelope (why you are being told, when it expires, how to reply)."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -458,22 +485,37 @@ T0 = datetime(2026, 7, 26, 12, 0, tzinfo=timezone.utc)
 
 def _merge_pending() -> MergeGatePending:
     return MergeGatePending(
-        key="merge#1", gate="merge", round=1, verdict="ready to merge",
+        key="merge#1",
+        gate="merge",
+        round=1,
+        verdict="ready to merge",
         checks=[
-            CheckResult(name="security_no_critical", passed=True,
-                        classification=GateClassification.ABSOLUTE,
-                        detail=""),
-            CheckResult(name="coverage", passed=False,
-                        classification=GateClassification.ADVISORY,
-                        detail="61%"),
-        ])
+            CheckResult(
+                name="security_no_critical",
+                passed=True,
+                classification=GateClassification.ABSOLUTE,
+                detail="",
+            ),
+            CheckResult(
+                name="coverage",
+                passed=False,
+                classification=GateClassification.ADVISORY,
+                detail="61%",
+            ),
+        ],
+    )
 
 
 def test_merge_notification_carries_check_table_and_cli_commands():
     text = render_notification(
-        _merge_pending(), NotifyReason.OPENED, run_id="abc123",
-        opened_at=T0, now=T0, deadline=T0 + timedelta(hours=48),
-        base_url=None)
+        _merge_pending(),
+        NotifyReason.OPENED,
+        run_id="abc123",
+        opened_at=T0,
+        now=T0,
+        deadline=T0 + timedelta(hours=48),
+        base_url=None,
+    )
     assert "run abc123" in text
     assert "security_no_critical" in text
     assert "coverage" in text and "61%" in text
@@ -482,12 +524,21 @@ def test_merge_notification_carries_check_table_and_cli_commands():
 
 
 def test_clarify_notification_offers_the_answer_verb_not_gate_verbs():
-    pending = ClarifyPending(key="q1", question="Which datastore?",
-                             why_it_matters="Drives the schema.",
-                             suggested_answer="postgres")
-    text = render_notification(pending, NotifyReason.OPENED, run_id="abc123",
-                               opened_at=T0, now=T0, deadline=None,
-                               base_url=None)
+    pending = ClarifyPending(
+        key="q1",
+        question="Which datastore?",
+        why_it_matters="Drives the schema.",
+        suggested_answer="postgres",
+    )
+    text = render_notification(
+        pending,
+        NotifyReason.OPENED,
+        run_id="abc123",
+        opened_at=T0,
+        now=T0,
+        deadline=None,
+        base_url=None,
+    )
     assert "sdlc answer abc123" in text
     assert "--gate" not in text
     assert "postgres" in text
@@ -495,9 +546,14 @@ def test_clarify_notification_offers_the_answer_verb_not_gate_verbs():
 
 def test_reason_is_stated_and_expiry_is_relative():
     text = render_notification(
-        _merge_pending(), NotifyReason.REMIND, run_id="abc123", opened_at=T0,
-        now=T0 + timedelta(hours=24), deadline=T0 + timedelta(hours=48),
-        base_url=None)
+        _merge_pending(),
+        NotifyReason.REMIND,
+        run_id="abc123",
+        opened_at=T0,
+        now=T0 + timedelta(hours=24),
+        deadline=T0 + timedelta(hours=48),
+        base_url=None,
+    )
     assert "reminder" in text.lower()
     assert "opened 24h ago" in text
     assert "expires in 24h" in text
@@ -505,24 +561,41 @@ def test_reason_is_stated_and_expiry_is_relative():
 
 def test_hold_gate_says_it_will_not_expire():
     text = render_notification(
-        _merge_pending(), NotifyReason.OPENED, run_id="abc123", opened_at=T0,
-        now=T0, deadline=None, base_url=None)
+        _merge_pending(),
+        NotifyReason.OPENED,
+        run_id="abc123",
+        opened_at=T0,
+        now=T0,
+        deadline=None,
+        base_url=None,
+    )
     assert "does not expire" in text
     assert "expires in" not in text
 
 
 def test_expire_reason_reads_as_terminal():
     text = render_notification(
-        _merge_pending(), NotifyReason.EXPIRE, run_id="abc123", opened_at=T0,
-        now=T0 + timedelta(hours=48), deadline=T0 + timedelta(hours=48),
-        base_url=None)
+        _merge_pending(),
+        NotifyReason.EXPIRE,
+        run_id="abc123",
+        opened_at=T0,
+        now=T0 + timedelta(hours=48),
+        deadline=T0 + timedelta(hours=48),
+        base_url=None,
+    )
     assert "expired" in text.lower()
 
 
 def test_base_url_adds_a_link_without_removing_the_commands():
     text = render_notification(
-        _merge_pending(), NotifyReason.OPENED, run_id="abc123", opened_at=T0,
-        now=T0, deadline=None, base_url="https://sdlc.example.com")
+        _merge_pending(),
+        NotifyReason.OPENED,
+        run_id="abc123",
+        opened_at=T0,
+        now=T0,
+        deadline=None,
+        base_url="https://sdlc.example.com",
+    )
     assert "https://sdlc.example.com/runs/abc123" in text
     assert "sdlc approve abc123 --gate merge" in text
 
@@ -530,10 +603,15 @@ def test_base_url_adds_a_link_without_removing_the_commands():
 def test_text_is_ascii_only():
     """The Windows console cannot print non-ASCII (transport.py:11)."""
     text = render_notification(
-        _merge_pending(), NotifyReason.ESCALATE, run_id="abc123",
-        opened_at=T0, now=T0 + timedelta(hours=38),
-        deadline=T0 + timedelta(hours=48), base_url=None)
-    text.encode("ascii")     # raises UnicodeEncodeError on failure
+        _merge_pending(),
+        NotifyReason.ESCALATE,
+        run_id="abc123",
+        opened_at=T0,
+        now=T0 + timedelta(hours=38),
+        deadline=T0 + timedelta(hours=48),
+        base_url=None,
+    )
+    text.encode("ascii")  # raises UnicodeEncodeError on failure
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -552,6 +630,7 @@ told now, when it dies, and the exact command that decides it.
 
 ASCII-only, like every other operator-facing string in the project.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -572,10 +651,15 @@ def _hours(delta) -> str:
     return f"{int(delta.total_seconds() // 3600)}h"
 
 
-def render_notification(pending: PendingDecision, reason: NotifyReason,
-                        run_id: str, opened_at: datetime, now: datetime,
-                        deadline: datetime | None,
-                        base_url: str | None) -> str:
+def render_notification(
+    pending: PendingDecision,
+    reason: NotifyReason,
+    run_id: str,
+    opened_at: datetime,
+    now: datetime,
+    deadline: datetime | None,
+    base_url: str | None,
+) -> str:
     r = default_render(pending)
     gate = getattr(pending, "gate", None)
     subject = f"Gate '{gate}'" if gate else "A question"
@@ -602,8 +686,10 @@ def render_notification(pending: PendingDecision, reason: NotifyReason,
     lines.append("")
     if reason is not NotifyReason.EXPIRE:
         if gate:
-            lines += [f"  sdlc approve {run_id} --gate {gate}",
-                      f"  sdlc reject {run_id} --gate {gate}"]
+            lines += [
+                f"  sdlc approve {run_id} --gate {gate}",
+                f"  sdlc reject {run_id} --gate {gate}",
+            ]
         else:
             lines.append(f"  sdlc answer {run_id} --question {pending.key}")
         if base_url:
@@ -651,6 +737,7 @@ Create `tests/test_notify_routes.py`:
 """E-9 Task 4: routes as a versioned asset, mirroring policy/containment.yaml.
 Unknown notifier names fail at LOAD, not at send -- a typo must not surface
 for the first time during an expiring gate."""
+
 from __future__ import annotations
 
 import pytest
@@ -682,8 +769,7 @@ def test_non_escalate_reasons_go_to_primary_only(tmp_path, monkeypatch):
     monkeypatch.setenv("MERGE_HOOK", "https://hooks.slack.com/a")
     monkeypatch.setenv("ONCALL_HOOK", "https://hooks.slack.com/b")
     routes = load_routes(_write(tmp_path))
-    for reason in (NotifyReason.OPENED, NotifyReason.REMIND,
-                   NotifyReason.EXPIRE):
+    for reason in (NotifyReason.OPENED, NotifyReason.REMIND, NotifyReason.EXPIRE):
         got = routes.routes_for("merge", reason)
         assert [r.target for r in got] == ["https://hooks.slack.com/a"]
 
@@ -693,8 +779,7 @@ def test_escalate_adds_the_fallback_route(tmp_path, monkeypatch):
     monkeypatch.setenv("ONCALL_HOOK", "https://hooks.slack.com/b")
     routes = load_routes(_write(tmp_path))
     got = routes.routes_for("merge", NotifyReason.ESCALATE)
-    assert [r.target for r in got] == ["https://hooks.slack.com/a",
-                                       "https://hooks.slack.com/b"]
+    assert [r.target for r in got] == ["https://hooks.slack.com/a", "https://hooks.slack.com/b"]
 
 
 def test_unlisted_gate_falls_back_to_default(tmp_path):
@@ -703,8 +788,7 @@ def test_unlisted_gate_falls_back_to_default(tmp_path):
     assert [(r.notifier, r.target) for r in got] == [("log", None)]
 
 
-def test_unset_env_var_drops_the_route_rather_than_sending_a_literal(
-        tmp_path, monkeypatch):
+def test_unset_env_var_drops_the_route_rather_than_sending_a_literal(tmp_path, monkeypatch):
     """A literal '$MERGE_HOOK' POSTed to nowhere is worse than no route."""
     monkeypatch.delenv("MERGE_HOOK", raising=False)
     monkeypatch.setenv("ONCALL_HOOK", "https://hooks.slack.com/b")
@@ -737,6 +821,7 @@ def test_env_var_overrides_discovery(tmp_path, monkeypatch):
 def test_shipped_asset_parses():
     """policy/notifications.yaml must always load -- it is the default."""
     from pathlib import Path
+
     root = Path(__file__).resolve().parents[1]
     assert load_routes(root / "policy" / "notifications.yaml").version == 1
 ```
@@ -800,6 +885,7 @@ fail-closed stance, same "a structural problem raises at load" rule. A typo in
 a notifier name must surface at boot, not for the first time while a gate is
 expiring.
 """
+
 from __future__ import annotations
 
 import os
@@ -834,8 +920,7 @@ class NotifyRoutes(BaseModel):
         """Primary always; fallback additionally on ESCALATE. A tier whose
         route is absent (unset env var, not configured) is skipped."""
         table = self.gates.get(gate) or self.default
-        tiers = (["primary", "fallback"]
-                 if reason is NotifyReason.ESCALATE else ["primary"])
+        tiers = ["primary", "fallback"] if reason is NotifyReason.ESCALATE else ["primary"]
         return [table[t] for t in tiers if t in table]
 
 
@@ -858,21 +943,22 @@ def _resolve_path(path: str | os.PathLike | None) -> Path:
     raise NotifyConfigError(
         f"cannot locate the notification routes asset. Tried: an explicit "
         f"path; ${ROUTES_PATH_ENV}; and walking up from {Path.cwd()} for a "
-        f"directory containing {' and '.join(_ROOT_MARKERS)}.")
+        f"directory containing {' and '.join(_ROOT_MARKERS)}."
+    )
 
 
 def _parse_route(raw: str, where: str) -> Route | None:
     """'log' -> Route(log); 'webhook:$X' -> Route(webhook, os.environ[X]).
     Returns None when an env-var target is unset: dropping the route beats
     POSTing to the literal string."""
-    from .notifiers import NOTIFIERS       # local: avoids an import cycle
+    from .notifiers import NOTIFIERS  # local: avoids an import cycle
 
     notifier, _, target = raw.partition(":")
     notifier = notifier.strip()
     if notifier not in NOTIFIERS:
         raise NotifyConfigError(
-            f"unknown notifier {notifier!r} at {where}; "
-            f"known: {', '.join(sorted(NOTIFIERS))}")
+            f"unknown notifier {notifier!r} at {where}; known: {', '.join(sorted(NOTIFIERS))}"
+        )
     target = target.strip() or None
     if target and target.startswith("$"):
         target = os.environ.get(target[1:])
@@ -888,8 +974,7 @@ def _parse_table(raw: dict, where: str) -> dict[str, Route]:
         if value is None:
             continue
         if not isinstance(value, str):
-            raise NotifyConfigError(
-                f"{where}.{tier} must be a route string, got {type(value)}")
+            raise NotifyConfigError(f"{where}.{tier} must be a route string, got {type(value)}")
         route = _parse_route(value, f"{where}.{tier}")
         if route is not None:
             table[tier] = route
@@ -904,16 +989,15 @@ def load_routes(path: str | os.PathLike | None = None) -> NotifyRoutes:
     raw = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     if raw.get("version") != 1:
         raise NotifyConfigError(
-            f"unsupported notifications version {raw.get('version')!r} in {p}; "
-            f"expected 1")
+            f"unsupported notifications version {raw.get('version')!r} in {p}; expected 1"
+        )
 
     return NotifyRoutes(
         version=1,
         base_url=raw.get("base_url"),
         allow_hosts=list(raw.get("allow_hosts") or []),
         default=_parse_table(raw.get("default") or {}, "default"),
-        gates={g: _parse_table(t or {}, f"gates.{g}")
-               for g, t in (raw.get("gates") or {}).items()},
+        gates={g: _parse_table(t or {}, f"gates.{g}") for g, t in (raw.get("gates") or {}).items()},
     )
 ```
 
@@ -950,6 +1034,7 @@ Create `tests/test_notify_notifiers.py`:
 """E-9 Task 5: the two reference transports. The webhook is the pipeline's
 second outbound egress after research (FR-703), so it fails closed on any
 host not explicitly allowlisted."""
+
 from __future__ import annotations
 
 import logging
@@ -957,7 +1042,10 @@ import logging
 import pytest
 
 from sdlc.notify.notifiers import (
-    NOTIFIERS, EgressDenied, LogNotifier, WebhookNotifier,
+    NOTIFIERS,
+    EgressDenied,
+    LogNotifier,
+    WebhookNotifier,
 )
 
 
@@ -1009,15 +1097,13 @@ async def test_webhook_denies_a_non_allowlisted_host(monkeypatch):
 async def test_webhook_denies_when_the_allowlist_is_empty():
     """Fail closed: no allowlist means no egress, not unrestricted egress."""
     with pytest.raises(EgressDenied):
-        await WebhookNotifier(allow_hosts=[]).deliver(
-            "hello", "https://hooks.slack.com/x")
+        await WebhookNotifier(allow_hosts=[]).deliver("hello", "https://hooks.slack.com/x")
 
 
 @pytest.mark.asyncio
 async def test_webhook_without_a_target_is_a_config_error():
     with pytest.raises(EgressDenied):
-        await WebhookNotifier(allow_hosts=["hooks.slack.com"]).deliver(
-            "hello", None)
+        await WebhookNotifier(allow_hosts=["hooks.slack.com"]).deliver("hello", None)
 
 
 def test_containment_host_matching_is_reused_not_reimplemented():
@@ -1025,6 +1111,7 @@ def test_containment_host_matching_is_reused_not_reimplemented():
     hook -- two would drift and a host would be allowed in one and denied
     in the other."""
     from sdlc.harness.containment import host_allowed
+
     assert host_allowed("hooks.slack.com", ["slack.com"])
     assert not host_allowed("notslack.com", ["slack.com"])
 ```
@@ -1062,6 +1149,7 @@ the same shape as HARNESSES (ADR-2) and TOOLCHAINS (ADR-15).
 `webhook` is a generic JSON POST that Slack and Discord accept as-is; anything
 else is a receiving shim, not our substrate (NG7).
 """
+
 from __future__ import annotations
 
 import json
@@ -1103,8 +1191,8 @@ class WebhookNotifier:
         host = urlparse(target).hostname or ""
         if not host_allowed(host, self.allow_hosts):
             raise EgressDenied(
-                f"host {host!r} is not in the notification allow_hosts "
-                f"(policy/notifications.yaml)")
+                f"host {host!r} is not in the notification allow_hosts (policy/notifications.yaml)"
+            )
         await self._post(target, {"text": text})
 
     async def _post(self, url: str, payload: dict) -> None:
@@ -1112,8 +1200,11 @@ class WebhookNotifier:
 
         def _send() -> None:
             req = urllib.request.Request(
-                url, data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"}, method="POST")
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
             with urllib.request.urlopen(req, timeout=POST_TIMEOUT_S):
                 pass
 
@@ -1122,7 +1213,7 @@ class WebhookNotifier:
 
 NOTIFIERS: dict[str, object] = {
     "log": LogNotifier(),
-    "webhook": WebhookNotifier(),      # allow_hosts injected per-run (Task 6)
+    "webhook": WebhookNotifier(),  # allow_hosts injected per-run (Task 6)
 }
 ```
 
@@ -1163,6 +1254,7 @@ Create `tests/test_notify_activity.py`:
 ```python
 """E-9 Task 6: the activity. Every route is attempted; a raising transport
 becomes a reported failure, never an exception that reaches the workflow."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -1197,10 +1289,14 @@ def routes(tmp_path, monkeypatch):
 def _input(reason=NotifyReason.OPENED) -> NotifyInput:
     return NotifyInput(
         run_id="abc123",
-        pending=ClarifyPending(key="q1", question="Which datastore?",
-                               why_it_matters="Drives the schema."),
-        reason=reason, opened_at=T0, now=T0,
-        deadline=T0 + timedelta(hours=48))
+        pending=ClarifyPending(
+            key="q1", question="Which datastore?", why_it_matters="Drives the schema."
+        ),
+        reason=reason,
+        opened_at=T0,
+        now=T0,
+        deadline=T0 + timedelta(hours=48),
+    )
 
 
 @pytest.mark.asyncio
@@ -1217,8 +1313,7 @@ async def test_escalate_delivers_to_primary_and_fallback(routes):
 
 
 @pytest.mark.asyncio
-async def test_a_raising_transport_is_reported_not_propagated(routes,
-                                                              monkeypatch):
+async def test_a_raising_transport_is_reported_not_propagated(routes, monkeypatch):
     class Boom:
         async def deliver(self, text, target):
             raise RuntimeError("slack is down")
@@ -1230,8 +1325,7 @@ async def test_a_raising_transport_is_reported_not_propagated(routes,
 
 
 @pytest.mark.asyncio
-async def test_a_broken_routes_asset_is_reported_not_propagated(monkeypatch,
-                                                                tmp_path):
+async def test_a_broken_routes_asset_is_reported_not_propagated(monkeypatch, tmp_path):
     bad = tmp_path / "notifications.yaml"
     bad.write_text("version: 99\n", encoding="utf-8")
     monkeypatch.setenv("SDLC_NOTIFY_ROUTES", str(bad))
@@ -1241,14 +1335,14 @@ async def test_a_broken_routes_asset_is_reported_not_propagated(monkeypatch,
 
 @pytest.mark.asyncio
 async def test_no_configured_route_yields_no_results(routes, monkeypatch):
-    monkeypatch.setattr(act, "load_routes",
-                        lambda: _routes_with_no_primary())
+    monkeypatch.setattr(act, "load_routes", lambda: _routes_with_no_primary())
     out = await act.notify(_input())
     assert out.results == []
 
 
 def _routes_with_no_primary():
     from sdlc.notify.routes import NotifyRoutes
+
     return NotifyRoutes(version=1, default={}, gates={})
 
 
@@ -1273,11 +1367,13 @@ async def test_webhook_gets_the_allowlist_injected(routes, monkeypatch):
 
 def _webhook_routes():
     from sdlc.notify.routes import NotifyRoutes, Route
+
     return NotifyRoutes(
-        version=1, allow_hosts=["hooks.slack.com"],
-        default={"primary": Route(notifier="webhook",
-                                  target="https://hooks.slack.com/x")},
-        gates={})
+        version=1,
+        allow_hosts=["hooks.slack.com"],
+        default={"primary": Route(notifier="webhook", target="https://hooks.slack.com/x")},
+        gates={},
+    )
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1300,6 +1396,7 @@ This activity NEVER raises. A gate must remain decidable no matter what the
 notification path does, so every failure becomes a DeliveryResult the
 workflow can trace (spec 6) rather than an exception it must swallow blind.
 """
+
 from __future__ import annotations
 
 from temporalio import activity
@@ -1322,28 +1419,31 @@ def _build(notifier_name: str, allow_hosts: list[str]):
 async def notify(inp: NotifyInput) -> Results:
     try:
         routes = load_routes()
-    except Exception as e:                # noqa: BLE001 - reported, not raised
+    except Exception as e:  # noqa: BLE001 - reported, not raised
         activity.logger.warning("notification routes unavailable: %s", e)
-        return Results(results=[
-            DeliveryResult(notifier="unresolved", delivered=False,
-                           error=str(e)[:500])])
+        return Results(
+            results=[DeliveryResult(notifier="unresolved", delivered=False, error=str(e)[:500])]
+        )
 
     gate = getattr(inp.pending, "gate", None) or ""
     text = render_notification(
-        pending=inp.pending, reason=inp.reason, run_id=inp.run_id,
-        opened_at=inp.opened_at, now=inp.now,
-        deadline=inp.deadline, base_url=routes.base_url)
+        pending=inp.pending,
+        reason=inp.reason,
+        run_id=inp.run_id,
+        opened_at=inp.opened_at,
+        now=inp.now,
+        deadline=inp.deadline,
+        base_url=routes.base_url,
+    )
 
     out: list[DeliveryResult] = []
     for route in routes.routes_for(gate, inp.reason):
         try:
             transport = _build(route.notifier, routes.allow_hosts)
             await transport.deliver(text, route.target)
-            out.append(DeliveryResult(notifier=route.notifier,
-                                      delivered=True))
-        except Exception as e:            # noqa: BLE001 - reported, not raised
-            out.append(DeliveryResult(notifier=route.notifier,
-                                      delivered=False, error=str(e)[:500]))
+            out.append(DeliveryResult(notifier=route.notifier, delivered=True))
+        except Exception as e:  # noqa: BLE001 - reported, not raised
+            out.append(DeliveryResult(notifier=route.notifier, delivered=False, error=str(e)[:500]))
     return Results(results=out)
 ```
 
@@ -1391,6 +1491,7 @@ Create `tests/test_gate_notifications.py`:
 ```python
 """E-9 Task 7: the timers fire in order, stop on the signal, and cannot
 break the gate. Time-skipping so a 48h schedule runs in milliseconds."""
+
 from __future__ import annotations
 
 import asyncio
@@ -1417,13 +1518,12 @@ with workflow.unsafe.imports_passed_through():
 pytestmark = pytest.mark.temporal
 
 TASK_QUEUE = "notify"
-SENT: list[tuple[str, str]] = []       # (gate, reason)
+SENT: list[tuple[str, str]] = []  # (gate, reason)
 
 
 @activity.defn(name="notify")
 async def recording_notify(inp: NotifyInput) -> Results:
-    SENT.append((getattr(inp.pending, "gate", None) or inp.pending.key,
-                 inp.reason.value))
+    SENT.append((getattr(inp.pending, "gate", None) or inp.pending.key, inp.reason.value))
     return Results(results=[DeliveryResult(notifier="log", delivered=True)])
 
 
@@ -1433,8 +1533,13 @@ async def exploding_notify(inp: NotifyInput) -> Results:
 
 
 def _activities(notify_act):
-    return [evaluate_gate, export_run_artifacts, notify_act, *GIT_FAKES,
-            *fake_agent_activities(AGENT_SPECS)]
+    return [
+        evaluate_gate,
+        export_run_artifacts,
+        notify_act,
+        *GIT_FAKES,
+        *fake_agent_activities(AGENT_SPECS),
+    ]
 
 
 async def _wait_for_status(handle, target, timeout_s=10.0):
@@ -1447,28 +1552,33 @@ async def _wait_for_status(handle, target, timeout_s=10.0):
 
 
 @pytest.mark.asyncio
-async def test_opened_notification_fires_and_signal_stops_the_rest(
-        tmp_path, monkeypatch):
+async def test_opened_notification_fires_and_signal_stops_the_rest(tmp_path, monkeypatch):
     """A gate decided promptly notifies once (opened) and never reminds."""
     SENT.clear()
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
     cfg = e2e_config()
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         with env.auto_time_skipping_disabled():
-            async with Worker(env.client, task_queue=TASK_QUEUE,
-                              workflows=[FeatureWorkflow],
-                              activities=_activities(recording_notify),
-                              plugins=[PydanticAIPlugin()]):
+            async with Worker(
+                env.client,
+                task_queue=TASK_QUEUE,
+                workflows=[FeatureWorkflow],
+                activities=_activities(recording_notify),
+                plugins=[PydanticAIPlugin()],
+            ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run, args=[greenfield_idea(), cfg],
-                    id=f"notify-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                    FeatureWorkflow.run,
+                    args=[greenfield_idea(), cfg],
+                    id=f"notify-{uuid.uuid4()}",
+                    task_queue=TASK_QUEUE,
+                )
 
                 async def drive():
                     await _wait_for_status(handle, "awaiting:clarify")
                     for qid in QUESTION_IDS:
-                        await handle.signal(FeatureWorkflow.answer_question,
-                                            args=[qid, "yes"])
+                        await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
                     for gate in ("architecture", "plan", "merge", "deploy"):
                         try:
                             await _wait_for_status(handle, f"awaiting:{gate}")
@@ -1476,9 +1586,10 @@ async def test_opened_notification_fires_and_signal_stops_the_rest(
                             continue
                         await handle.signal(
                             FeatureWorkflow.submit_gate_decision,
-                            GateDecision(gate=gate, round=1,
-                                         outcome=GateOutcome.APPROVE,
-                                         decided_by="human"))
+                            GateDecision(
+                                gate=gate, round=1, outcome=GateOutcome.APPROVE, decided_by="human"
+                            ),
+                        )
 
                 driver = asyncio.create_task(drive())
                 result = await handle.result()
@@ -1491,27 +1602,32 @@ async def test_opened_notification_fires_and_signal_stops_the_rest(
 
 
 @pytest.mark.asyncio
-async def test_exploding_notifier_leaves_every_gate_decidable(
-        tmp_path, monkeypatch):
+async def test_exploding_notifier_leaves_every_gate_decidable(tmp_path, monkeypatch):
     """The load-bearing invariant: delivery cannot break a gate."""
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
     cfg = e2e_config()
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         with env.auto_time_skipping_disabled():
-            async with Worker(env.client, task_queue=TASK_QUEUE,
-                              workflows=[FeatureWorkflow],
-                              activities=_activities(exploding_notify),
-                              plugins=[PydanticAIPlugin()]):
+            async with Worker(
+                env.client,
+                task_queue=TASK_QUEUE,
+                workflows=[FeatureWorkflow],
+                activities=_activities(exploding_notify),
+                plugins=[PydanticAIPlugin()],
+            ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run, args=[greenfield_idea(), cfg],
-                    id=f"notify-boom-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                    FeatureWorkflow.run,
+                    args=[greenfield_idea(), cfg],
+                    id=f"notify-boom-{uuid.uuid4()}",
+                    task_queue=TASK_QUEUE,
+                )
 
                 async def drive():
                     await _wait_for_status(handle, "awaiting:clarify")
                     for qid in QUESTION_IDS:
-                        await handle.signal(FeatureWorkflow.answer_question,
-                                            args=[qid, "yes"])
+                        await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
                     for gate in ("architecture", "plan", "merge", "deploy"):
                         try:
                             await _wait_for_status(handle, f"awaiting:{gate}")
@@ -1519,9 +1635,10 @@ async def test_exploding_notifier_leaves_every_gate_decidable(
                             continue
                         await handle.signal(
                             FeatureWorkflow.submit_gate_decision,
-                            GateDecision(gate=gate, round=1,
-                                         outcome=GateOutcome.APPROVE,
-                                         decided_by="human"))
+                            GateDecision(
+                                gate=gate, round=1, outcome=GateOutcome.APPROVE, decided_by="human"
+                            ),
+                        )
 
                 driver = asyncio.create_task(drive())
                 result = await handle.result()
@@ -1552,83 +1669,96 @@ Add the activity options beside `MEM_ACT` (line 94):
 ```python
 # E-9: delivery is best-effort and must never delay a gate. Same retry shape
 # as MEM_ACT -- both are fire-and-forget side effects of a decision.
-NOTIFY_ACT = dict(start_to_close_timeout=timedelta(seconds=30),
-                  retry_policy=RetryPolicy(maximum_attempts=5))
+NOTIFY_ACT = dict(
+    start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=5)
+)
 ```
 
 Add the two methods to `FeatureWorkflow`, next to `_retain`:
 
 ```python
-    async def _notify(self, pending, reason, opened_at, deadline) -> None:
-        """Fire-and-forget delivery. Mirrors _retain: a transport failure can
-        never block, fail, or delay a gate. Unlike _retain it does not swallow
-        silently -- the outcome is traced, because a notification that failed
-        to deliver must be visible (spec 6, ROADMAP 9.6)."""
-        gate = getattr(pending, "gate", None) or pending.key
-        try:
-            out: Results = await workflow.execute_activity(
-                notify,
-                NotifyInput(run_id=workflow.info().workflow_id,
-                            pending=pending, reason=reason,
-                            opened_at=opened_at, now=workflow.now(),
-                            deadline=deadline),
-                **NOTIFY_ACT)
-        except Exception as e:                # noqa: BLE001
-            self._emit(RunEventKind.GATE_NOTIFIED, stage=gate, gate=gate,
-                       reason=reason.value, notifier="unresolved",
-                       delivered="false", error=str(e)[:200])
-            return
-        for r in out.results:
-            self._emit(RunEventKind.GATE_NOTIFIED, stage=gate, gate=gate,
-                       reason=reason.value, notifier=r.notifier,
-                       delivered="true" if r.delivered else "false",
-                       **({"error": r.error[:200]} if r.error else {}))
+async def _notify(self, pending, reason, opened_at, deadline) -> None:
+    """Fire-and-forget delivery. Mirrors _retain: a transport failure can
+    never block, fail, or delay a gate. Unlike _retain it does not swallow
+    silently -- the outcome is traced, because a notification that failed
+    to deliver must be visible (spec 6, ROADMAP 9.6)."""
+    gate = getattr(pending, "gate", None) or pending.key
+    try:
+        out: Results = await workflow.execute_activity(
+            notify,
+            NotifyInput(
+                run_id=workflow.info().workflow_id,
+                pending=pending,
+                reason=reason,
+                opened_at=opened_at,
+                now=workflow.now(),
+                deadline=deadline,
+            ),
+            **NOTIFY_ACT,
+        )
+    except Exception as e:  # noqa: BLE001
+        self._emit(
+            RunEventKind.GATE_NOTIFIED,
+            stage=gate,
+            gate=gate,
+            reason=reason.value,
+            notifier="unresolved",
+            delivered="false",
+            error=str(e)[:200],
+        )
+        return
+    for r in out.results:
+        self._emit(
+            RunEventKind.GATE_NOTIFIED,
+            stage=gate,
+            gate=gate,
+            reason=reason.value,
+            notifier=r.notifier,
+            delivered="true" if r.delivered else "false",
+            **({"error": r.error[:200]} if r.error else {}),
+        )
 
-    async def _wait_for_decision(self, key, pending, schedule, expires):
-        """Wait for the gate's signal, firing each notification as its
-        deadline passes. Returns the decision, or None when the gate expired
-        undecided. Exits the instant the signal lands, so there is nothing to
-        cancel -- the reason this is a loop rather than a detached
-        coroutine."""
-        opened_at = schedule[0][0]
-        decided = lambda: key in self._gate_decisions      # noqa: E731
-        for at, reason in schedule:
-            try:
-                await workflow.wait_condition(
-                    decided, timeout=at - workflow.now())
-                return self._gate_decisions[key]
-            except TimeoutError:
-                await self._notify(pending, reason, opened_at, expires)
-        if expires is None:                    # HOLD: wait without a deadline
-            await workflow.wait_condition(decided)
+
+async def _wait_for_decision(self, key, pending, schedule, expires):
+    """Wait for the gate's signal, firing each notification as its
+    deadline passes. Returns the decision, or None when the gate expired
+    undecided. Exits the instant the signal lands, so there is nothing to
+    cancel -- the reason this is a loop rather than a detached
+    coroutine."""
+    opened_at = schedule[0][0]
+    decided = lambda: key in self._gate_decisions  # noqa: E731
+    for at, reason in schedule:
+        try:
+            await workflow.wait_condition(decided, timeout=at - workflow.now())
             return self._gate_decisions[key]
-        return None
+        except TimeoutError:
+            await self._notify(pending, reason, opened_at, expires)
+    if expires is None:  # HOLD: wait without a deadline
+        await workflow.wait_condition(decided)
+        return self._gate_decisions[key]
+    return None
 ```
 
 Replace the wait inside `_gate` (lines 659-675). The timeout branch is unchanged in this task — Task 8 makes it honour `on_timeout`:
 
 ```python
-            gate_cfg = cfg.gates.get(
-                name, GateConfig(policy=default_policy or cfg.default_gate_policy))
-            pending = gate_pending(name, round, context)
-            self._pending[key] = pending
-            self._status = f"awaiting:{name}"
-            self._emit(RunEventKind.GATE_AWAITED, stage=name,
-                       gate=name, round=str(round))
-            schedule, expires = build_schedule(
-                gate_cfg, cfg.gate_timeout_hours, workflow.now())
-            try:
-                decided = await self._wait_for_decision(
-                    key, pending, schedule, expires)
-                if decided is not None:
-                    decision = decided
-                else:
-                    decision = GateDecision(gate=name, round=round,
-                                            outcome=GateOutcome.REJECT,
-                                            decided_by="timeout")
-            finally:
-                self._status = "running"
-                self._pending.pop(key, None)
+gate_cfg = cfg.gates.get(name, GateConfig(policy=default_policy or cfg.default_gate_policy))
+pending = gate_pending(name, round, context)
+self._pending[key] = pending
+self._status = f"awaiting:{name}"
+self._emit(RunEventKind.GATE_AWAITED, stage=name, gate=name, round=str(round))
+schedule, expires = build_schedule(gate_cfg, cfg.gate_timeout_hours, workflow.now())
+try:
+    decided = await self._wait_for_decision(key, pending, schedule, expires)
+    if decided is not None:
+        decision = decided
+    else:
+        decision = GateDecision(
+            gate=name, round=round, outcome=GateOutcome.REJECT, decided_by="timeout"
+        )
+finally:
+    self._status = "running"
+    self._pending.pop(key, None)
 ```
 
 Note `policy` is already computed at line 646 from the same lookup; reuse `gate_cfg.policy` for it rather than looking the config up twice.
@@ -1704,21 +1834,30 @@ async def test_architecture_gate_timeout_still_rejects(tmp_path, monkeypatch):
     cfg = e2e_config()
     cfg.gate_timeout_hours = 1
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
-        async with Worker(env.client, task_queue="timeout",
-                          workflows=[FeatureWorkflow],
-                          activities=[evaluate_gate, export_run_artifacts,
-                                      *GIT_FAKES,
-                                      *fake_agent_activities(AGENT_SPECS)],
-                          plugins=[PydanticAIPlugin()]):
+        data_converter=pydantic_data_converter
+    ) as env:
+        async with Worker(
+            env.client,
+            task_queue="timeout",
+            workflows=[FeatureWorkflow],
+            activities=[
+                evaluate_gate,
+                export_run_artifacts,
+                *GIT_FAKES,
+                *fake_agent_activities(AGENT_SPECS),
+            ],
+            plugins=[PydanticAIPlugin()],
+        ):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run, args=[greenfield_idea(), cfg],
-                id=f"timeout-{uuid.uuid4()}", task_queue="timeout")
+                FeatureWorkflow.run,
+                args=[greenfield_idea(), cfg],
+                id=f"timeout-{uuid.uuid4()}",
+                task_queue="timeout",
+            )
             with env.auto_time_skipping_disabled():
                 await _wait_for_status(handle, "awaiting:clarify")
                 for qid in QUESTION_IDS:
-                    await handle.signal(FeatureWorkflow.answer_question,
-                                        args=[qid, "yes"])
+                    await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
                 await _wait_for_status(handle, "awaiting:architecture")
             result = await handle.result()
     assert "architecture" in result and result.startswith("rejected:"), result
@@ -1726,42 +1865,49 @@ async def test_architecture_gate_timeout_still_rejects(tmp_path, monkeypatch):
 
 @pytest.mark.temporal
 @pytest.mark.asyncio
-async def test_hold_keeps_the_gate_pending_past_its_nominal_deadline(
-        tmp_path, monkeypatch):
+async def test_hold_keeps_the_gate_pending_past_its_nominal_deadline(tmp_path, monkeypatch):
     """A HOLD gate outlives gate_timeout_hours and stays decidable."""
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
     cfg = e2e_config()
     cfg.gate_timeout_hours = 1
-    cfg.gates["architecture"] = GateConfig(policy=GatePolicy.HARD,
-                                           on_timeout=TimeoutAction.HOLD)
+    cfg.gates["architecture"] = GateConfig(policy=GatePolicy.HARD, on_timeout=TimeoutAction.HOLD)
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
-        async with Worker(env.client, task_queue="hold",
-                          workflows=[FeatureWorkflow],
-                          activities=[evaluate_gate, export_run_artifacts,
-                                      *GIT_FAKES,
-                                      *fake_agent_activities(AGENT_SPECS)],
-                          plugins=[PydanticAIPlugin()]):
-                handle = await env.client.start_workflow(
-                    FeatureWorkflow.run, args=[greenfield_idea(), cfg],
-                    id=f"hold-{uuid.uuid4()}", task_queue="hold")
-                with env.auto_time_skipping_disabled():
-                    await _wait_for_status(handle, "awaiting:clarify")
-                    for qid in QUESTION_IDS:
-                        await handle.signal(FeatureWorkflow.answer_question,
-                                            args=[qid, "yes"])
-                    await _wait_for_status(handle, "awaiting:architecture")
-                await env.sleep(7200)      # 2h -- twice the nominal timeout
-                assert await handle.query(
-                    FeatureWorkflow.pending_gate) == "awaiting:architecture"
-                pending = await handle.query(FeatureWorkflow.pending_decisions)
-                assert any(p["gate"] == "architecture" for p in pending)
-                await handle.signal(
-                    FeatureWorkflow.submit_gate_decision,
-                    GateDecision(gate="architecture", round=1,
-                                 outcome=GateOutcome.REJECT,
-                                 decided_by="human"))
-                result = await handle.result()
+        data_converter=pydantic_data_converter
+    ) as env:
+        async with Worker(
+            env.client,
+            task_queue="hold",
+            workflows=[FeatureWorkflow],
+            activities=[
+                evaluate_gate,
+                export_run_artifacts,
+                *GIT_FAKES,
+                *fake_agent_activities(AGENT_SPECS),
+            ],
+            plugins=[PydanticAIPlugin()],
+        ):
+            handle = await env.client.start_workflow(
+                FeatureWorkflow.run,
+                args=[greenfield_idea(), cfg],
+                id=f"hold-{uuid.uuid4()}",
+                task_queue="hold",
+            )
+            with env.auto_time_skipping_disabled():
+                await _wait_for_status(handle, "awaiting:clarify")
+                for qid in QUESTION_IDS:
+                    await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
+                await _wait_for_status(handle, "awaiting:architecture")
+            await env.sleep(7200)  # 2h -- twice the nominal timeout
+            assert await handle.query(FeatureWorkflow.pending_gate) == "awaiting:architecture"
+            pending = await handle.query(FeatureWorkflow.pending_decisions)
+            assert any(p["gate"] == "architecture" for p in pending)
+            await handle.signal(
+                FeatureWorkflow.submit_gate_decision,
+                GateDecision(
+                    gate="architecture", round=1, outcome=GateOutcome.REJECT, decided_by="human"
+                ),
+            )
+            result = await handle.result()
     assert result.startswith("rejected:"), result
 ```
 
@@ -1777,21 +1923,24 @@ Expected: the HOLD test FAILS — the gate rejects at 1h instead of staying pend
 Replace the timeout branch written in Task 7 with:
 
 ```python
-                decided = await self._wait_for_decision(
-                    key, pending, schedule, expires)
-                if decided is not None:
-                    decision = decided
-                else:
-                    # Expired undecided. HOLD never reaches here -- its
-                    # schedule has no final deadline, so _wait_for_decision
-                    # waits without one.
-                    decision = GateDecision(
-                        gate=name, round=round, decided_by="timeout",
-                        outcome=(GateOutcome.APPROVE
-                                 if gate_cfg.on_timeout is TimeoutAction.APPROVE
-                                 else GateOutcome.REJECT),
-                        comments=f"no decision within "
-                                 f"{cfg.gate_timeout_hours}h")
+decided = await self._wait_for_decision(key, pending, schedule, expires)
+if decided is not None:
+    decision = decided
+else:
+    # Expired undecided. HOLD never reaches here -- its
+    # schedule has no final deadline, so _wait_for_decision
+    # waits without one.
+    decision = GateDecision(
+        gate=name,
+        round=round,
+        decided_by="timeout",
+        outcome=(
+            GateOutcome.APPROVE
+            if gate_cfg.on_timeout is TimeoutAction.APPROVE
+            else GateOutcome.REJECT
+        ),
+        comments=f"no decision within {cfg.gate_timeout_hours}h",
+    )
 ```
 
 Add `TimeoutAction` to the sandboxed model imports at line 62.
@@ -1832,8 +1981,7 @@ Append to `tests/test_gate_notifications.py`:
 
 ```python
 @pytest.mark.asyncio
-async def test_full_timer_sequence_fires_in_order_then_expires(
-        tmp_path, monkeypatch):
+async def test_full_timer_sequence_fires_in_order_then_expires(tmp_path, monkeypatch):
     """With no decision ever sent: opened -> remind (50%) -> escalate (80%)
     -> expire, in order, and the gate then rejects."""
     SENT.clear()
@@ -1841,19 +1989,25 @@ async def test_full_timer_sequence_fires_in_order_then_expires(
     cfg = e2e_config()
     cfg.gate_timeout_hours = 10
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
-        async with Worker(env.client, task_queue=TASK_QUEUE,
-                          workflows=[FeatureWorkflow],
-                          activities=_activities(recording_notify),
-                          plugins=[PydanticAIPlugin()]):
+        data_converter=pydantic_data_converter
+    ) as env:
+        async with Worker(
+            env.client,
+            task_queue=TASK_QUEUE,
+            workflows=[FeatureWorkflow],
+            activities=_activities(recording_notify),
+            plugins=[PydanticAIPlugin()],
+        ):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run, args=[greenfield_idea(), cfg],
-                id=f"seq-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                FeatureWorkflow.run,
+                args=[greenfield_idea(), cfg],
+                id=f"seq-{uuid.uuid4()}",
+                task_queue=TASK_QUEUE,
+            )
             with env.auto_time_skipping_disabled():
                 await _wait_for_status(handle, "awaiting:clarify")
                 for qid in QUESTION_IDS:
-                    await handle.signal(FeatureWorkflow.answer_question,
-                                        args=[qid, "yes"])
+                    await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
                 await _wait_for_status(handle, "awaiting:architecture")
             result = await handle.result()
 

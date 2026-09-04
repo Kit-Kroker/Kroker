@@ -19,7 +19,7 @@ import posixpath
 import re
 from collections.abc import Sequence
 
-from ..models import (
+from sdlc.triage.models import (
     FindingSeverity,
     FixClass,
     TriageFinding,

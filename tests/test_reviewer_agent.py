@@ -1,6 +1,6 @@
 from sdlc.agents import roles
 from sdlc.agents.loader import load_registry, model_family
-from sdlc.models import ReviewReport
+from sdlc.stages.review.models import ReviewReport
 
 
 def test_reviewer_agent_emits_review_report():

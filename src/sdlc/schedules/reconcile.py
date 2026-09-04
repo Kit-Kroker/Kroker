@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..models import ScheduleAsset
+from .models import ScheduleAsset
 
 
 @dataclass(frozen=True)

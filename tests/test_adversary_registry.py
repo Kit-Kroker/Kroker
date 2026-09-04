@@ -65,7 +65,7 @@ def test_absent_adversary_is_a_noop():
 
 def test_adversary_role_ships_and_is_wired():
     from sdlc.agents import roles
-    from sdlc.models import ReviewReport
+    from sdlc.stages.review.models import ReviewReport
 
     assert roles.adversary_agent is not None
     assert roles.adversary_agent.output_type is ReviewReport

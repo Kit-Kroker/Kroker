@@ -17,11 +17,12 @@ from sdlc.core.models import (
 from sdlc.core.models import (
     ProjectMode,
 )
-from sdlc.models import (
+from sdlc.stages.clarify.models import (
     ClarifiedRequirements,
+    ClarifyRoute,
     OpenQuestion,
+    ProbeResult,
 )
-from sdlc.stages.clarify.models import ClarifyRoute, ProbeResult
 from sdlc.stages.clarify.step import (
     _clarify_fanout,
     _probe_results_from,

@@ -26,9 +26,7 @@ from sdlc.crew.activities import (
     RoundReading,
 )
 from sdlc.crew.models import TurnRecord
-from sdlc.models import (
-    HarnessRunResult,
-)
+from sdlc.harness.models import HarnessRunResult
 from sdlc.workflows.crew import CrewTaskInput, CrewTaskWorkflow
 
 pytestmark = [pytest.mark.temporal, pytest.mark.asyncio]

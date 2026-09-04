@@ -13,7 +13,7 @@ from sdlc.deploy.adapters import (
     ScriptAdapter,
     resolve,
 )
-from sdlc.models import (
+from sdlc.stages.deploy.models import (
     DeployPlan,
     FeatureFlag,
 )

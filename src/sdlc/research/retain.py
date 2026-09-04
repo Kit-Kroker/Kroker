@@ -5,7 +5,11 @@ must re-fetch to re-ground (spec §6)."""
 
 from __future__ import annotations
 
-from ..models import MemoryKind, ResearchBrief, RetainItem
+from ..memory.models import (
+    MemoryKind,
+    RetainItem,
+)
+from ..stages.research.models import ResearchBrief
 from .verify import verify_brief
 
 

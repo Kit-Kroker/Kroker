@@ -68,12 +68,11 @@ In `src/sdlc/toolchain/adapters.py`, add the abstractmethod to `ToolchainAdapter
 And to `PythonToolchain` (after `lint_cmd`):
 
 ```python
-    def oracle_test_cmd(self, oracle_path: str, report_out: str) -> str:
-        # -p no:cacheprovider: never write .pytest_cache into the produced
-        # repo (keeps the throwaway worktree clean). --junitxml lands the
-        # canonical report the grader parses.
-        return (f"pytest {oracle_path} -q "
-                f"--junitxml={report_out} -p no:cacheprovider")
+def oracle_test_cmd(self, oracle_path: str, report_out: str) -> str:
+    # -p no:cacheprovider: never write .pytest_cache into the produced
+    # repo (keeps the throwaway worktree clean). --junitxml lands the
+    # canonical report the grader parses.
+    return f"pytest {oracle_path} -q --junitxml={report_out} -p no:cacheprovider"
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -114,10 +113,13 @@ def test_quality_score_accepts_oracle_judge():
 
 
 def test_case_spec_language_defaults_none_and_accepts_value():
-    base = dict(case_id="c", idea_summary="s",
-                harnesses=[HarnessKind.OPENCODE],
-                models=["zai-coding-plan/glm-5.2"],
-                judge_model="openai/gpt-5.2")
+    base = dict(
+        case_id="c",
+        idea_summary="s",
+        harnesses=[HarnessKind.OPENCODE],
+        models=["zai-coding-plan/glm-5.2"],
+        judge_model="openai/gpt-5.2",
+    )
     assert CaseSpec(**base).language is None
     assert CaseSpec(**base, language="python").language == "python"
 ```
@@ -189,15 +191,18 @@ Create `tests/test_oracle.py`:
 
 ```python
 """Pure grading logic for the held-out oracle (E-31)."""
+
 from sdlc.benchmarks.oracle import (
-    grade_from_junit, held_out_ok, language_match,
+    grade_from_junit,
+    held_out_ok,
+    language_match,
 )
 
 JUNIT_MIXED = (
     '<testsuites><testsuite tests="4" failures="1" errors="1" skipped="0">'
     '<testcase name="a"/><testcase name="b"><failure/></testcase>'
     '<testcase name="c"><error/></testcase><testcase name="d"/>'
-    '</testsuite></testsuites>'
+    "</testsuite></testsuites>"
 )
 JUNIT_ROOT_SUITE = (
     '<testsuite tests="2" failures="0" errors="0" skipped="0">'
@@ -223,7 +228,7 @@ def test_grade_all_pass_is_one():
 
 def test_grade_excludes_skipped_from_denominator():
     score, passed, total, _ = grade_from_junit(JUNIT_WITH_SKIP)
-    assert (passed, total) == (2, 2)   # skipped test dropped from both
+    assert (passed, total) == (2, 2)  # skipped test dropped from both
     assert score == 1.0
 
 
@@ -276,6 +281,7 @@ language_match) and the grade_oracle Temporal activity (Task 4). The pure
 functions never do I/O so they unit-test without a Temporal environment or a
 git repo; the activity confines all git/shell/FS work.
 """
+
 from __future__ import annotations
 
 import defusedxml.ElementTree as DET
@@ -318,8 +324,7 @@ def held_out_ok(changed_files: list[str], oracle_dirname: str = "oracle") -> boo
     the produced diff means the model itself wrote there -- a held-out breach
     the record must surface loudly."""
     prefix = oracle_dirname + "/"
-    return not any(f == oracle_dirname or f.startswith(prefix)
-                   for f in changed_files)
+    return not any(f == oracle_dirname or f.startswith(prefix) for f in changed_files)
 
 
 def language_match(manifest: str, detected: str | None) -> bool:
@@ -362,6 +367,7 @@ Create `tests/test_grade_oracle.py`:
 ```python
 """grade_oracle end-to-end: a hidden suite grades produced code through the
 adapter (E-31). This is the proof the increment exists to deliver."""
+
 import subprocess
 import textwrap
 from pathlib import Path
@@ -373,15 +379,15 @@ from sdlc.benchmarks.oracle import OracleInput, grade_oracle
 # A pure-stdlib ASGI app: importable with zero extra deps, drivable by
 # httpx.ASGITransport. Returns 200 for any GET -- enough for a 1-pass/1-fail
 # oracle.
-FIXTURE_APP = textwrap.dedent('''
+FIXTURE_APP = textwrap.dedent("""
     async def app(scope, receive, send):
         assert scope["type"] == "http"
         await send({"type": "http.response.start", "status": 200,
                     "headers": [(b"content-type", b"text/plain")]})
         await send({"type": "http.response.body", "body": b"ok"})
-''')
+""")
 
-ORACLE_CONFTEST = textwrap.dedent('''
+ORACLE_CONFTEST = textwrap.dedent("""
     import os, sys
     import httpx, pytest_asyncio
     ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -395,9 +401,9 @@ ORACLE_CONFTEST = textwrap.dedent('''
         async with httpx.AsyncClient(transport=transport,
                                      base_url="http://testserver") as c:
             yield c
-''')
+""")
 
-ORACLE_TEST = textwrap.dedent('''
+ORACLE_TEST = textwrap.dedent("""
     import pytest
 
     @pytest.mark.asyncio
@@ -409,12 +415,13 @@ ORACLE_TEST = textwrap.dedent('''
     async def test_fail(client):
         r = await client.get("/")
         assert r.status_code == 404   # deliberately wrong -> one failure
-''')
+""")
 
 
 def _git(args, cwd):
-    subprocess.run(["git", "-c", "safe.directory=*", *args], cwd=cwd,
-                   check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-c", "safe.directory=*", *args], cwd=cwd, check=True, capture_output=True
+    )
 
 
 @pytest.mark.asyncio
@@ -447,12 +454,19 @@ async def test_grade_oracle_grades_produced_code(tmp_path):
     monkeypatch_env = {"SDLC_CASES_ROOT": str(cases)}
 
     import os
+
     old = os.environ.get("SDLC_CASES_ROOT")
     os.environ.update(monkeypatch_env)
     try:
-        grade = await grade_oracle(OracleInput(
-            case_id="case", repo_url=str(repo), run_id=run_id,
-            language="python", base_branch="main"))
+        grade = await grade_oracle(
+            OracleInput(
+                case_id="case",
+                repo_url=str(repo),
+                run_id=run_id,
+                language="python",
+                base_branch="main",
+            )
+        )
     finally:
         if old is None:
             os.environ.pop("SDLC_CASES_ROOT", None)
@@ -466,8 +480,9 @@ async def test_grade_oracle_grades_produced_code(tmp_path):
     assert grade.language_match is True
     assert grade.language_detected == "python"
     # throwaway worktree cleaned up: only the original repo worktree remains
-    wt = subprocess.run(["git", "worktree", "list"], cwd=repo,
-                        capture_output=True, text=True).stdout
+    wt = subprocess.run(
+        ["git", "worktree", "list"], cwd=repo, capture_output=True, text=True
+    ).stdout
     assert "oracle-" not in wt
 
 
@@ -487,11 +502,14 @@ async def test_grade_oracle_missing_branch_returns_none(tmp_path):
     (cases / "case" / "oracle" / "test_x.py").write_text("def test_x():\n    assert True\n")
 
     import os
+
     os.environ["SDLC_CASES_ROOT"] = str(cases)
     try:
-        grade = await grade_oracle(OracleInput(
-            case_id="case", repo_url=str(repo),
-            run_id="never/ran#h#m", language="python"))
+        grade = await grade_oracle(
+            OracleInput(
+                case_id="case", repo_url=str(repo), run_id="never/ran#h#m", language="python"
+            )
+        )
     finally:
         os.environ.pop("SDLC_CASES_ROOT", None)
     assert grade.score is None
@@ -503,11 +521,12 @@ async def test_grade_oracle_unknown_language_returns_none(tmp_path):
     cases = tmp_path / "cases"
     (cases / "case" / "oracle").mkdir(parents=True)
     import os
+
     os.environ["SDLC_CASES_ROOT"] = str(cases)
     try:
-        grade = await grade_oracle(OracleInput(
-            case_id="case", repo_url=str(tmp_path), run_id="r#h#m",
-            language="cobol"))
+        grade = await grade_oracle(
+            OracleInput(case_id="case", repo_url=str(tmp_path), run_id="r#h#m", language="cobol")
+        )
     finally:
         os.environ.pop("SDLC_CASES_ROOT", None)
     assert grade.score is None
@@ -540,8 +559,8 @@ from ..toolchain.adapters import TOOLCHAINS, ToolchainKind, detect
 class OracleInput:
     case_id: str
     repo_url: str
-    run_id: str            # child workflow id -> sdlc/<run_id>/integration
-    language: str          # manifest-declared (CaseSpec.language)
+    run_id: str  # child workflow id -> sdlc/<run_id>/integration
+    language: str  # manifest-declared (CaseSpec.language)
     base_branch: str = "main"
     test_timeout_s: int = 600
 
@@ -562,16 +581,24 @@ def _cases_dir() -> Path:
     """Root holding benchmarks/cases/<case>/oracle/. Honors SDLC_CASES_ROOT
     (read at call time) so tests point it at a temp dir, mirroring
     recorder._root / activities._worktrees_root."""
-    return Path(os.environ.get(
-        "SDLC_CASES_ROOT",
-        str(Path(__file__).resolve().parents[3] / "benchmarks" / "cases")))
+    return Path(
+        os.environ.get(
+            "SDLC_CASES_ROOT", str(Path(__file__).resolve().parents[3] / "benchmarks" / "cases")
+        )
+    )
 
 
 def _grade(score, passed, total, lang, detected, held, detail) -> OracleGrade:
     return OracleGrade(
-        score=score, passed=passed, total=total, language_manifest=lang,
-        language_detected=detected, language_match=language_match(lang, detected),
-        held_out_ok=held, detail=detail)
+        score=score,
+        passed=passed,
+        total=total,
+        language_manifest=lang,
+        language_detected=detected,
+        language_match=language_match(lang, detected),
+        held_out_ok=held,
+        detail=detail,
+    )
 
 
 @activity.defn
@@ -587,8 +614,7 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
     try:
         adapter = TOOLCHAINS[ToolchainKind(lang)]
     except (ValueError, KeyError):
-        return _grade(None, 0, 0, lang, None, True,
-                      f"no toolchain adapter for {lang!r}")
+        return _grade(None, 0, 0, lang, None, True, f"no toolchain adapter for {lang!r}")
 
     parent = tempfile.mkdtemp(prefix="oracle-")
     wt = os.path.join(parent, "wt")
@@ -598,8 +624,9 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
         # "already checked out" if the run's integration worktree still exists.
         add = _git(["worktree", "add", "--detach", wt, branch], inp.repo_url)
         if add.returncode != 0:
-            return _grade(None, 0, 0, lang, None, True,
-                          "no produced code (integration branch absent)")
+            return _grade(
+                None, 0, 0, lang, None, True, "no produced code (integration branch absent)"
+            )
 
         det = detect(wt)
         detected = det.kind.value if det else None
@@ -610,8 +637,7 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
 
         shutil.copytree(oracle_src, os.path.join(wt, "oracle"))
         report = os.path.join(wt, "oracle-report.xml")
-        await _bounded_shell(adapter.oracle_test_cmd("oracle", report),
-                             wt, inp.test_timeout_s)
+        await _bounded_shell(adapter.oracle_test_cmd("oracle", report), wt, inp.test_timeout_s)
         try:
             xml_text = Path(report).read_text(encoding="utf-8")
         except OSError:
@@ -670,16 +696,24 @@ from sdlc.benchmarks.workflow import _oracle_record
 
 
 def _grade(**kw):
-    base = dict(score=0.5, passed=1, total=2, language_manifest="python",
-                language_detected="python", language_match=True,
-                held_out_ok=True, detail="1/2")
+    base = dict(
+        score=0.5,
+        passed=1,
+        total=2,
+        language_manifest="python",
+        language_detected="python",
+        language_match=True,
+        held_out_ok=True,
+        detail="1/2",
+    )
     base.update(kw)
     return OracleGrade(**base)
 
 
 def _cell():
-    return BenchmarkCell(case_id="todo-api", harness=HarnessKind.OPENCODE,
-                         model="zai-coding-plan/glm-5.2")
+    return BenchmarkCell(
+        case_id="todo-api", harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.2"
+    )
 
 
 def _rec(grade):
@@ -711,6 +745,7 @@ def test_oracle_record_flags_language_mismatch():
 
 def test_oracle_record_none_score_is_fail():
     from sdlc.benchmarks.models import BenchmarkOutcome
+
     r = _rec(_grade(score=None, passed=0))
     assert r.outcome is BenchmarkOutcome.FAIL
     assert r.quality.score is None
@@ -726,10 +761,17 @@ Expected: FAIL — `ImportError: cannot import name '_oracle_record'`.
 In `src/sdlc/benchmarks/workflow.py`, extend the imports inside the existing `with workflow.unsafe.imports_passed_through():` block:
 
 ```python
-    from .models import (BenchmarkCell, BenchmarkOutcome, BenchmarkRecord,
-                         BenchmarkScope, CaseSpec, QualityScore, SpeedBag)
-    from .oracle import OracleGrade, OracleInput, grade_oracle
-    from .recorder import record_benchmark
+from .models import (
+    BenchmarkCell,
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    CaseSpec,
+    QualityScore,
+    SpeedBag,
+)
+from .oracle import OracleGrade, OracleInput, grade_oracle
+from .recorder import record_benchmark
 ```
 
 (Keep the existing `from .models import CaseSpec` — merge it into the line above rather than duplicating; also keep `judge`, `matrix`, `report` imports as they are. Add `from datetime import datetime` at the top with the existing `from datetime import timedelta` — combine into `from datetime import datetime, timedelta`.)
@@ -737,16 +779,22 @@ In `src/sdlc/benchmarks/workflow.py`, extend the imports inside the existing `wi
 Add the timing config beside `CHILD_ACT`/`RECORD_ACT`:
 
 ```python
-ORACLE_ACT = dict(start_to_close_timeout=timedelta(minutes=20),
-                  retry_policy=RetryPolicy(maximum_attempts=1))
+ORACLE_ACT = dict(
+    start_to_close_timeout=timedelta(minutes=20), retry_policy=RetryPolicy(maximum_attempts=1)
+)
 ```
 
 Add the module-level pure helper (below `_cell_config`):
 
 ```python
-def _oracle_record(base_cell: BenchmarkCell, grade: OracleGrade,
-                   bench_run_id: str, run_id: str,
-                   started: datetime, ended: datetime) -> BenchmarkRecord:
+def _oracle_record(
+    base_cell: BenchmarkCell,
+    grade: OracleGrade,
+    bench_run_id: str,
+    run_id: str,
+    started: datetime,
+    ended: datetime,
+) -> BenchmarkRecord:
     """Build the stage='oracle' record from a grade. An integrity breach
     (held-out or language mismatch) sets .error so it surfaces in the report's
     failure section -- loud, never silent."""
@@ -754,42 +802,59 @@ def _oracle_record(base_cell: BenchmarkCell, grade: OracleGrade,
     if not grade.held_out_ok:
         err = "held-out breach: oracle path in produced diff"
     elif not grade.language_match:
-        err = (f"language mismatch: manifest={grade.language_manifest} "
-               f"detected={grade.language_detected}")
-    outcome = (BenchmarkOutcome.PASS if (grade.score or 0.0) >= 1.0
-               else BenchmarkOutcome.FAIL)
+        err = (
+            f"language mismatch: manifest={grade.language_manifest} "
+            f"detected={grade.language_detected}"
+        )
+    outcome = BenchmarkOutcome.PASS if (grade.score or 0.0) >= 1.0 else BenchmarkOutcome.FAIL
     return BenchmarkRecord(
-        run_id=run_id, bench_run_id=bench_run_id, case_id=base_cell.case_id,
-        scope=BenchmarkScope.ORACLE, stage="oracle", role="oracle",
-        harness=base_cell.harness, model=base_cell.model,
+        run_id=run_id,
+        bench_run_id=bench_run_id,
+        case_id=base_cell.case_id,
+        scope=BenchmarkScope.ORACLE,
+        stage="oracle",
+        role="oracle",
+        harness=base_cell.harness,
+        model=base_cell.model,
         quality=QualityScore(
-            score=grade.score, judge="oracle",
-            components={"passed": float(grade.passed),
-                        "total": float(grade.total),
-                        "held_out_ok": float(grade.held_out_ok),
-                        "language_match": float(grade.language_match)}),
-        speed=SpeedBag(wall_clock_s=(ended - started).total_seconds(),
-                       started_at=started, ended_at=ended),
-        outcome=outcome, error=err)
+            score=grade.score,
+            judge="oracle",
+            components={
+                "passed": float(grade.passed),
+                "total": float(grade.total),
+                "held_out_ok": float(grade.held_out_ok),
+                "language_match": float(grade.language_match),
+            },
+        ),
+        speed=SpeedBag(
+            wall_clock_s=(ended - started).total_seconds(), started_at=started, ended_at=ended
+        ),
+        outcome=outcome,
+        error=err,
+    )
 ```
 
 In `BenchmarkWorkflow.run`, inside `for cell in cells:`, AFTER the `try/except` child block (so grading runs whether the child passed OR was rejected), add:
 
 ```python
-            if spec.language:
-                started = workflow.now()
-                grade = await workflow.execute_activity(
-                    grade_oracle,
-                    OracleInput(case_id=spec.case_id,
-                                repo_url=spec.repo_url or "",
-                                run_id=child_id, language=spec.language,
-                                base_branch=idea.base_branch),
-                    **ORACLE_ACT)
-                await workflow.execute_activity(
-                    record_benchmark,
-                    _oracle_record(cell, grade, bench_run_id, child_id,
-                                   started, workflow.now()),
-                    **RECORD_ACT)
+if spec.language:
+    started = workflow.now()
+    grade = await workflow.execute_activity(
+        grade_oracle,
+        OracleInput(
+            case_id=spec.case_id,
+            repo_url=spec.repo_url or "",
+            run_id=child_id,
+            language=spec.language,
+            base_branch=idea.base_branch,
+        ),
+        **ORACLE_ACT,
+    )
+    await workflow.execute_activity(
+        record_benchmark,
+        _oracle_record(cell, grade, bench_run_id, child_id, started, workflow.now()),
+        **RECORD_ACT,
+    )
 ```
 
 In `src/sdlc/worker.py`, import and register the activity:
@@ -864,6 +929,7 @@ Create `benchmarks/cases/todo-api-greenfield/oracle/conftest.py`:
 """Held-out oracle fixtures for todo-api-greenfield (E-31). Never seen by the
 run: copied into the produced worktree only at grade time. Drives the frozen
 ASGI contract (app:app) via httpx, so it stays framework-agnostic within ASGI."""
+
 import os
 import sys
 
@@ -878,10 +944,10 @@ if ROOT not in sys.path:
 
 @pytest_asyncio.fixture
 async def client():
-    import app as produced          # contract: module app.py exposes `app`
+    import app as produced  # contract: module app.py exposes `app`
+
     transport = httpx.ASGITransport(app=produced.app)
-    async with httpx.AsyncClient(transport=transport,
-                                 base_url="http://testserver") as c:
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as c:
         yield c
 ```
 
@@ -892,6 +958,7 @@ Create `benchmarks/cases/todo-api-greenfield/oracle/test_crud.py`:
 ```python
 """Black-box CRUD oracle: exercises the frozen HTTP contract, not internals.
 Fraction passing is the objective (Tier-A) grade."""
+
 import pytest
 
 
@@ -921,8 +988,7 @@ async def test_get_by_id_roundtrips(client):
 @pytest.mark.asyncio
 async def test_update_reflects_changes(client):
     created = (await client.post("/todos", json={"title": "x"})).json()
-    r = await client.put(f"/todos/{created['id']}",
-                         json={"title": "y", "done": True})
+    r = await client.put(f"/todos/{created['id']}", json={"title": "y", "done": True})
     assert r.status_code == 200
     body = r.json()
     assert body["title"] == "y" and body["done"] is True
@@ -947,6 +1013,7 @@ Create `tests/test_reference_oracle.py`:
 
 ```python
 """The todo-api reference oracle is authored and wired (E-31)."""
+
 from pathlib import Path
 
 from sdlc.benchmarks.cli import load_case_spec

@@ -18,7 +18,7 @@ from ..core.models import (
     HarnessKind,
 )
 from ..harness.adapters import HARNESSES, HarnessRequest
-from ..models import (
+from ..harness.models import (
     HarnessRunResult,
     ToolGrant,
 )

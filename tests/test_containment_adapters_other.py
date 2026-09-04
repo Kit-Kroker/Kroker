@@ -4,7 +4,7 @@ import json
 
 from sdlc.harness.adapters import CursorHarness, HarnessRequest, OpenCodeHarness
 from sdlc.harness.containment import Policy, Rule
-from sdlc.models import ContainmentLayer
+from sdlc.harness.models import ContainmentLayer
 
 POLICY = Policy(
     version=1,

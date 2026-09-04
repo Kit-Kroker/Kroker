@@ -26,7 +26,7 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..board.models import ArtifactStatus, TaskStatus
     from ..core.models import PipelineConfig
-    from ..models import DevTask
+    from ..stages.plan.models import DevTask
 
 # E-78: the board is NOT best-effort like EXPORT_ACT. Agents read tasks from
 # it, so a lost write is a correctness bug, not a missing report. The store's

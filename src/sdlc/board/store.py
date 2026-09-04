@@ -27,9 +27,7 @@ from ..artifacts.store import LocalFileStore
 from ..core.models import (
     ArtifactRef,
 )
-from ..models import (
-    DevTask,
-)
+from ..stages.plan.models import DevTask
 from .models import (
     ArtifactStatus,
     ArtifactVersion,

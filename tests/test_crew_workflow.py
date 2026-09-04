@@ -26,7 +26,7 @@ from sdlc.crew.activities import (
     RoundReading,
 )
 from sdlc.crew.models import TurnRecord
-from sdlc.models import (
+from sdlc.harness.models import (
     HarnessRunResult,
     SessionDigest,
 )

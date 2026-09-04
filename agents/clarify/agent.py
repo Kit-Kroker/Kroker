@@ -1,7 +1,7 @@
 from pydantic_ai import Agent
 from pydantic_ai.settings import ModelSettings
 
-from sdlc.models import ClarifiedRequirements
+from sdlc.stages.clarify.models import ClarifiedRequirements
 
 
 def build(model: str, instructions: str, model_settings: ModelSettings) -> Agent:

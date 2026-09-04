@@ -28,8 +28,7 @@ from collections.abc import Mapping, Sequence
 import defusedxml.ElementTree as DET
 from defusedxml.common import DefusedXmlException
 
-from ....measurement import Measurement
-from ..models import (
+from sdlc.assessment.scan.models import (
     C_COVERAGE,
     Confidence,
     CoverageRecord,
@@ -40,6 +39,8 @@ from ..models import (
     SignalSource,
     family_of,
 )
+
+from ....measurement import Measurement
 from ..sources import SOURCE_EXTENSIONS
 from ..testpaths import is_test_path
 

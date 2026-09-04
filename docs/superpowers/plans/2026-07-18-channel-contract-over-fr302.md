@@ -66,8 +66,12 @@ from pydantic import TypeAdapter
 
 from sdlc.gate import CheckClass, CheckResult
 from sdlc.pending import (
-    ClarifyPending, GateContext, MergeGatePending, PendingDecision,
-    StageGatePending, TaskEscalationPending,
+    ClarifyPending,
+    GateContext,
+    MergeGatePending,
+    PendingDecision,
+    StageGatePending,
+    TaskEscalationPending,
 )
 
 _ADAPTER = TypeAdapter(list[PendingDecision])
@@ -82,17 +86,22 @@ def test_variants_construct_with_defaults():
 
 def test_discriminated_union_round_trip_preserves_subclass_fields():
     items: list[PendingDecision] = [
-        ClarifyPending(key="Q1", question="q", why_it_matters="w",
-                       suggested_answer="s"),
-        StageGatePending(key="architecture#1", gate="architecture", round=1,
-                         spec_summary="the spec"),
-        TaskEscalationPending(key="task:t1#1", gate="task:t1", round=1,
-                              task_id="t1", analysis="unmet", attempts=3),
+        ClarifyPending(key="Q1", question="q", why_it_matters="w", suggested_answer="s"),
+        StageGatePending(
+            key="architecture#1", gate="architecture", round=1, spec_summary="the spec"
+        ),
+        TaskEscalationPending(
+            key="task:t1#1", gate="task:t1", round=1, task_id="t1", analysis="unmet", attempts=3
+        ),
         MergeGatePending(
-            key="merge#1", gate="merge", round=1,
-            checks=[CheckResult(name="lint_clean", passed=False,
-                                classification=CheckClass.ABSOLUTE)],
-            verdict="advisory"),
+            key="merge#1",
+            gate="merge",
+            round=1,
+            checks=[
+                CheckResult(name="lint_clean", passed=False, classification=CheckClass.ABSOLUTE)
+            ],
+            verdict="advisory",
+        ),
     ]
     wire = _ADAPTER.dump_json(items)
     back = _ADAPTER.validate_json(wire)
@@ -128,6 +137,7 @@ it never reaches into workflow internals.
 All four variants collapse to just two FR-302 signals on reply:
 ``clarify`` -> ``answer_question``; every gate variant -> ``submit_gate_decision``.
 """
+
 from __future__ import annotations
 
 from typing import Annotated, Literal, Union
@@ -140,8 +150,9 @@ from .models import OpenQuestion, gate_key
 
 class ClarifyPending(BaseModel):
     """An open clarify question awaiting a human answer -> answer_question."""
+
     kind: Literal["clarify"] = "clarify"
-    key: str                       # the question id
+    key: str  # the question id
     question: str
     why_it_matters: str
     suggested_answer: str | None = None
@@ -149,8 +160,9 @@ class ClarifyPending(BaseModel):
 
 class StageGatePending(BaseModel):
     """An architecture/planning gate awaiting a decision -> submit_gate_decision."""
+
     kind: Literal["stage_gate"] = "stage_gate"
-    key: str                       # gate_key(gate, round)
+    key: str  # gate_key(gate, round)
     gate: str
     round: int
     spec_summary: str
@@ -158,6 +170,7 @@ class StageGatePending(BaseModel):
 
 class TaskEscalationPending(BaseModel):
     """A task the fix loop could not close, escalated to a human."""
+
     kind: Literal["task_escalation"] = "task_escalation"
     key: str
     gate: str
@@ -169,6 +182,7 @@ class TaskEscalationPending(BaseModel):
 
 class MergeGatePending(BaseModel):
     """The merge gate awaiting a decision, carrying the quality-check table."""
+
     kind: Literal["merge_gate"] = "merge_gate"
     key: str
     gate: str
@@ -178,8 +192,7 @@ class MergeGatePending(BaseModel):
 
 
 PendingDecision = Annotated[
-    Union[ClarifyPending, StageGatePending,
-          TaskEscalationPending, MergeGatePending],
+    Union[ClarifyPending, StageGatePending, TaskEscalationPending, MergeGatePending],
     Field(discriminator="kind"),
 ]
 
@@ -187,12 +200,13 @@ PendingDecision = Annotated[
 class GateContext(BaseModel):
     """Optional render context a caller hands to ``_gate``; the gate name
     selects which variant is built from it."""
-    spec_summary: str | None = None      # stage gates
+
+    spec_summary: str | None = None  # stage gates
     checks: list[CheckResult] = Field(default_factory=list)  # merge gate
-    verdict: str | None = None           # merge gate
-    analysis: str | None = None          # task escalation
-    attempts: int | None = None          # task escalation
-    task_id: str | None = None           # task escalation
+    verdict: str | None = None  # merge gate
+    analysis: str | None = None  # task escalation
+    attempts: int | None = None  # task escalation
+    task_id: str | None = None  # task escalation
 ```
 
 Note: `OpenQuestion` and `gate_key` are imported now because Task 2's builders live in this same file and use them; importing them here keeps the module's dependency surface visible from the top.
@@ -233,14 +247,17 @@ from __future__ import annotations
 from sdlc.gate import CheckClass, CheckResult
 from sdlc.models import OpenQuestion
 from sdlc.pending import (
-    GateContext, MergeGatePending, StageGatePending, TaskEscalationPending,
-    clarify_pending, gate_pending,
+    GateContext,
+    MergeGatePending,
+    StageGatePending,
+    TaskEscalationPending,
+    clarify_pending,
+    gate_pending,
 )
 
 
 def _q(qid, ans=None):
-    return OpenQuestion(id=qid, question=f"{qid}?", why_it_matters="w",
-                        suggested_answer="sugg")
+    return OpenQuestion(id=qid, question=f"{qid}?", why_it_matters="w", suggested_answer="sugg")
 
 
 def test_clarify_pending_skips_answered():
@@ -252,9 +269,9 @@ def test_clarify_pending_skips_answered():
 
 def test_gate_pending_merge_variant_carries_checks():
     ctx = GateContext(
-        checks=[CheckResult(name="coverage", passed=False,
-                            classification=CheckClass.ADVISORY)],
-        verdict="v")
+        checks=[CheckResult(name="coverage", passed=False, classification=CheckClass.ADVISORY)],
+        verdict="v",
+    )
     p = gate_pending("merge", 1, ctx)
     assert isinstance(p, MergeGatePending)
     assert p.key == "merge#1" and p.checks[0].name == "coverage" and p.verdict == "v"
@@ -289,19 +306,26 @@ Append to `src/sdlc/pending.py`:
 
 ```python
 def clarify_pending(
-    open_questions: list[OpenQuestion], answered_ids: set[str],
+    open_questions: list[OpenQuestion],
+    answered_ids: set[str],
 ) -> list[ClarifyPending]:
     """One ClarifyPending per still-unanswered open question."""
     return [
-        ClarifyPending(key=q.id, question=q.question,
-                       why_it_matters=q.why_it_matters,
-                       suggested_answer=q.suggested_answer)
-        for q in open_questions if q.id not in answered_ids
+        ClarifyPending(
+            key=q.id,
+            question=q.question,
+            why_it_matters=q.why_it_matters,
+            suggested_answer=q.suggested_answer,
+        )
+        for q in open_questions
+        if q.id not in answered_ids
     ]
 
 
 def gate_pending(
-    name: str, round: int, context: GateContext | None,
+    name: str,
+    round: int,
+    context: GateContext | None,
 ) -> PendingDecision:
     """Build the render variant a gate wait should surface. The gate name is
     the discriminator: 'merge' -> MergeGatePending, 'task:<id>' ->
@@ -309,15 +333,19 @@ def gate_pending(
     key = gate_key(name, round)
     ctx = context or GateContext()
     if name == "merge":
-        return MergeGatePending(key=key, gate=name, round=round,
-                                checks=ctx.checks, verdict=ctx.verdict)
+        return MergeGatePending(
+            key=key, gate=name, round=round, checks=ctx.checks, verdict=ctx.verdict
+        )
     if name.startswith("task:"):
         return TaskEscalationPending(
-            key=key, gate=name, round=round,
+            key=key,
+            gate=name,
+            round=round,
             task_id=ctx.task_id or name.removeprefix("task:"),
-            analysis=ctx.analysis or "", attempts=ctx.attempts or 0)
-    return StageGatePending(key=key, gate=name, round=round,
-                            spec_summary=ctx.spec_summary or "")
+            analysis=ctx.analysis or "",
+            attempts=ctx.attempts or 0,
+        )
+    return StageGatePending(key=key, gate=name, round=round, spec_summary=ctx.spec_summary or "")
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -369,14 +397,14 @@ def test_new_workflow_has_empty_pending_registry():
 
 def test_pending_decisions_query_returns_registry_values():
     wf = FeatureWorkflow()
-    p = StageGatePending(key="architecture#1", gate="architecture", round=1,
-                         spec_summary="x")
+    p = StageGatePending(key="architecture#1", gate="architecture", round=1, spec_summary="x")
     wf._pending[p.key] = p
     assert wf.pending_decisions() == [p]
 
 
 def test_gate_accepts_context_param():
     import inspect
+
     sig = inspect.signature(FeatureWorkflow._gate)
     assert "context" in sig.parameters
 
@@ -403,9 +431,12 @@ Expected: FAIL — `AttributeError: 'FeatureWorkflow' object has no attribute 'p
 In `src/sdlc/workflows/feature.py`, inside the `with workflow.unsafe.imports_passed_through():` block, after the `from ..models import (...)` group (ends `feature.py:56`), add:
 
 ```python
-    from ..pending import (
-        GateContext, PendingDecision, clarify_pending, gate_pending,
-    )
+from ..pending import (
+    GateContext,
+    PendingDecision,
+    clarify_pending,
+    gate_pending,
+)
 ```
 
 - [ ] **Step 3b: Add the registry attr + query**
@@ -484,23 +515,29 @@ Replace the clarify wait block (`feature.py:726-734`, the `else:` under `if clar
 In `_revisable_stage` (`feature.py:399-412`), add a summary helper and pass context. Replace the loop body's `_gate` call and the final `_gate` call:
 
 ```python
-        guidance: str | None = None
-        for round in range(1, cfg.max_gate_rounds + 1):
-            artifact = await run_fn(guidance)
-            auto = _auto_decision_for(
-                name, cfg, getattr(artifact, "confidence", None))
-            decision = await self._gate(
-                name, cfg, auto_decision=auto, round=round,
-                context=GateContext(spec_summary=_spec_summary(artifact)))
-            if decision.outcome is not GateOutcome.REVISE:
-                return artifact, decision
-            guidance = decision.guidance or decision.comments
-        # Exhausted: one final HARD gate decides accept-anyway vs abandon.
-        artifact = await run_fn(guidance)
-        decision = await self._gate(
-            name, cfg, round=cfg.max_gate_rounds + 1,
-            context=GateContext(spec_summary=_spec_summary(artifact)))
+guidance: str | None = None
+for round in range(1, cfg.max_gate_rounds + 1):
+    artifact = await run_fn(guidance)
+    auto = _auto_decision_for(name, cfg, getattr(artifact, "confidence", None))
+    decision = await self._gate(
+        name,
+        cfg,
+        auto_decision=auto,
+        round=round,
+        context=GateContext(spec_summary=_spec_summary(artifact)),
+    )
+    if decision.outcome is not GateOutcome.REVISE:
         return artifact, decision
+    guidance = decision.guidance or decision.comments
+# Exhausted: one final HARD gate decides accept-anyway vs abandon.
+artifact = await run_fn(guidance)
+decision = await self._gate(
+    name,
+    cfg,
+    round=cfg.max_gate_rounds + 1,
+    context=GateContext(spec_summary=_spec_summary(artifact)),
+)
+return artifact, decision
 ```
 
 Add this module-level helper next to `_auto_decision_for` (near `feature.py:180`, module scope, not a method):
@@ -510,9 +547,11 @@ def _spec_summary(artifact: object) -> str:
     """Best-effort one-field summary of a proposer artifact for gate render.
     ClarifiedRequirements has `summary`; ArchitectureSpec has `overview`;
     fall back to the type name so the field is never empty."""
-    return (getattr(artifact, "summary", None)
-            or getattr(artifact, "overview", None)
-            or type(artifact).__name__)
+    return (
+        getattr(artifact, "summary", None)
+        or getattr(artifact, "overview", None)
+        or type(artifact).__name__
+    )
 ```
 
 - [ ] **Step 3f: Pass context at the task-escalation call site**
@@ -520,12 +559,13 @@ def _spec_summary(artifact: object) -> str:
 Replace the escalation gate call (`feature.py:600-601`):
 
 ```python
-        # Escalate: human decides whether to accept, retry, or quarantine.
-        analysis = "\n- ".join(qa.issues or qa.failing_tests) if qa else ""
-        decision = await self._gate(
-            f"task:{task.id}", cfg,
-            context=GateContext(task_id=task.id, analysis=analysis,
-                                attempts=cfg.max_fix_attempts + 1))
+# Escalate: human decides whether to accept, retry, or quarantine.
+analysis = "\n- ".join(qa.issues or qa.failing_tests) if qa else ""
+decision = await self._gate(
+    f"task:{task.id}",
+    cfg,
+    context=GateContext(task_id=task.id, analysis=analysis, attempts=cfg.max_fix_attempts + 1),
+)
 ```
 
 - [ ] **Step 3g: Pass context at the two merge-gate call sites**
@@ -533,17 +573,13 @@ Replace the escalation gate call (`feature.py:600-601`):
 Replace the advisory merge gate call (`feature.py:1047`):
 
 ```python
-            gate = await self._gate(
-                "merge", cfg,
-                context=GateContext(checks=gate_report.checks))
+gate = await self._gate("merge", cfg, context=GateContext(checks=gate_report.checks))
 ```
 
 Replace the soft-verdict merge gate call (`feature.py:1074`):
 
 ```python
-                    gate = await self._gate(
-                        "merge", cfg,
-                        context=GateContext(checks=gate_report.checks))
+gate = await self._gate("merge", cfg, context=GateContext(checks=gate_report.checks))
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -589,27 +625,46 @@ Create `tests/test_channel_contract.py`:
 from __future__ import annotations
 
 from sdlc.channels.contract import (
-    Channel, ReferenceChannel, Reply, default_render, default_translate,
+    Channel,
+    ReferenceChannel,
+    Reply,
+    default_render,
+    default_translate,
 )
 from sdlc.gate import CheckClass, CheckResult
 from sdlc.models import GateOutcome
 from sdlc.pending import (
-    ClarifyPending, MergeGatePending, StageGatePending, TaskEscalationPending,
+    ClarifyPending,
+    MergeGatePending,
+    StageGatePending,
+    TaskEscalationPending,
 )
 
 
 def test_render_clarify_is_text_reply_with_suggestion():
-    r = default_render(ClarifyPending(key="Q1", question="OIDC?",
-                                      why_it_matters="auth", suggested_answer="yes"))
+    r = default_render(
+        ClarifyPending(key="Q1", question="OIDC?", why_it_matters="auth", suggested_answer="yes")
+    )
     assert r.reply_kind == "text" and r.key == "Q1"
     assert "OIDC?" in r.title and r.body == "auth" and r.suggested == "yes"
 
 
 def test_render_merge_gate_tabulates_checks():
-    r = default_render(MergeGatePending(
-        key="merge#1", gate="merge", round=1,
-        checks=[CheckResult(name="lint_clean", passed=False,
-                            classification=CheckClass.ABSOLUTE, detail="3 errs")]))
+    r = default_render(
+        MergeGatePending(
+            key="merge#1",
+            gate="merge",
+            round=1,
+            checks=[
+                CheckResult(
+                    name="lint_clean",
+                    passed=False,
+                    classification=CheckClass.ABSOLUTE,
+                    detail="3 errs",
+                )
+            ],
+        )
+    )
     assert r.reply_kind == "gate"
     assert r.rows and r.rows[0][0] == "lint_clean" and "FAIL" in r.rows[0][1]
 
@@ -623,8 +678,7 @@ def test_translate_clarify_maps_to_answer_question():
 
 
 def test_translate_stage_gate_approve_maps_to_gate_decision():
-    d = StageGatePending(key="architecture#2", gate="architecture", round=2,
-                         spec_summary="s")
+    d = StageGatePending(key="architecture#2", gate="architecture", round=2, spec_summary="s")
     call = default_translate(d, Reply(outcome=GateOutcome.APPROVE, text="lgtm"))
     assert call.signal == "submit_gate_decision"
     dec = call.decision
@@ -634,8 +688,9 @@ def test_translate_stage_gate_approve_maps_to_gate_decision():
 
 
 def test_translate_revise_carries_guidance():
-    d = TaskEscalationPending(key="task:t1#1", gate="task:t1", round=1,
-                              task_id="t1", analysis="a", attempts=2)
+    d = TaskEscalationPending(
+        key="task:t1#1", gate="task:t1", round=1, task_id="t1", analysis="a", attempts=2
+    )
     call = default_translate(d, Reply(outcome=GateOutcome.REVISE, text="try X"))
     assert call.decision.outcome is GateOutcome.REVISE
     assert call.decision.guidance == "try X"
@@ -644,11 +699,9 @@ def test_translate_revise_carries_guidance():
 def test_reference_channel_satisfies_protocol_and_round_trips():
     ch = ReferenceChannel()
     assert isinstance(ch, Channel)
-    d = StageGatePending(key="planning#1", gate="planning", round=1,
-                         spec_summary="p")
+    d = StageGatePending(key="planning#1", gate="planning", round=1, spec_summary="p")
     assert ch.render(d).reply_kind == "gate"
-    assert ch.translate(d, Reply(outcome=GateOutcome.REJECT)).signal \
-        == "submit_gate_decision"
+    assert ch.translate(d, Reply(outcome=GateOutcome.REJECT)).signal == "submit_gate_decision"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -668,16 +721,29 @@ Not imported by the workflow: keeping delivery/render code out of the
 sandbox preserves ADR-13 purity. Surfaces import from here; the workflow
 imports only sdlc.pending.
 """
+
 from __future__ import annotations
 
 from .contract import (
-    Channel, PushChannel, ReferenceChannel, RenderedDecision, Reply,
-    SignalCall, default_render, default_translate,
+    Channel,
+    PushChannel,
+    ReferenceChannel,
+    RenderedDecision,
+    Reply,
+    SignalCall,
+    default_render,
+    default_translate,
 )
 
 __all__ = [
-    "Channel", "PushChannel", "ReferenceChannel", "RenderedDecision",
-    "Reply", "SignalCall", "default_render", "default_translate",
+    "Channel",
+    "PushChannel",
+    "ReferenceChannel",
+    "RenderedDecision",
+    "Reply",
+    "SignalCall",
+    "default_render",
+    "default_translate",
 ]
 ```
 
@@ -696,6 +762,7 @@ No I/O. Delivery is a separate opt-in PushChannel capability. The module-level
 default_render/default_translate are the reference behavior every surface
 reuses; a surface MAY override render for richer presentation.
 """
+
 from __future__ import annotations
 
 from typing import Literal, Protocol, runtime_checkable
@@ -704,7 +771,10 @@ from pydantic import BaseModel, Field
 
 from ..models import GateDecision, GateOutcome
 from ..pending import (
-    ClarifyPending, MergeGatePending, PendingDecision, StageGatePending,
+    ClarifyPending,
+    MergeGatePending,
+    PendingDecision,
+    StageGatePending,
     TaskEscalationPending,
 )
 
@@ -712,6 +782,7 @@ from ..pending import (
 class RenderedDecision(BaseModel):
     """What a surface displays. reply_kind tells the surface which affordance
     to offer: 'text' = free-text answer; 'gate' = approve/revise/reject."""
+
     key: str
     title: str
     body: str
@@ -722,63 +793,86 @@ class RenderedDecision(BaseModel):
 
 class Reply(BaseModel):
     """What a surface collects from the operator, surface-neutral."""
-    outcome: GateOutcome | None = None    # gate replies
-    text: str | None = None               # answer text, or comment/guidance
+
+    outcome: GateOutcome | None = None  # gate replies
+    text: str | None = None  # answer text, or comment/guidance
 
 
 class SignalCall(BaseModel):
     """translate's output. Transport code invokes the named signal with these
     args on the workflow handle. Only ever one of the two FR-302 signals."""
+
     signal: Literal["answer_question", "submit_gate_decision"]
-    question_id: str | None = None        # answer_question
-    answer: str | None = None             # answer_question
+    question_id: str | None = None  # answer_question
+    answer: str | None = None  # answer_question
     decision: GateDecision | None = None  # submit_gate_decision
 
 
 def default_render(d: PendingDecision) -> RenderedDecision:
     if isinstance(d, ClarifyPending):
         return RenderedDecision(
-            key=d.key, title=f"Clarify: {d.question}", body=d.why_it_matters,
-            reply_kind="text", suggested=d.suggested_answer)
+            key=d.key,
+            title=f"Clarify: {d.question}",
+            body=d.why_it_matters,
+            reply_kind="text",
+            suggested=d.suggested_answer,
+        )
     if isinstance(d, StageGatePending):
         return RenderedDecision(
-            key=d.key, title=f"Gate: {d.gate} (round {d.round})",
-            body=d.spec_summary, reply_kind="gate")
+            key=d.key,
+            title=f"Gate: {d.gate} (round {d.round})",
+            body=d.spec_summary,
+            reply_kind="gate",
+        )
     if isinstance(d, TaskEscalationPending):
         return RenderedDecision(
             key=d.key,
             title=f"Task escalation: {d.task_id} (attempt {d.attempts})",
-            body=d.analysis, reply_kind="gate")
+            body=d.analysis,
+            reply_kind="gate",
+        )
     if isinstance(d, MergeGatePending):
         return RenderedDecision(
-            key=d.key, title=f"Merge gate (round {d.round})",
+            key=d.key,
+            title=f"Merge gate (round {d.round})",
             body=d.verdict or "Deterministic quality gate result",
             reply_kind="gate",
-            rows=[(c.name,
-                   f"{'ok' if c.passed else 'FAIL'} "
-                   f"[{c.classification.value}] {c.detail}".rstrip())
-                  for c in d.checks])
+            rows=[
+                (
+                    c.name,
+                    f"{'ok' if c.passed else 'FAIL'} "
+                    f"[{c.classification.value}] {c.detail}".rstrip(),
+                )
+                for c in d.checks
+            ],
+        )
     raise TypeError(f"unhandled pending decision: {type(d)!r}")
 
 
 def default_translate(d: PendingDecision, reply: Reply) -> SignalCall:
     if isinstance(d, ClarifyPending):
-        return SignalCall(signal="answer_question",
-                          question_id=d.key, answer=reply.text)
+        return SignalCall(signal="answer_question", question_id=d.key, answer=reply.text)
     # every gate variant -> submit_gate_decision; gate/round come from the
     # pending item, so a reply can never land on the wrong round.
     guidance = reply.text if reply.outcome is GateOutcome.REVISE else None
     return SignalCall(
         signal="submit_gate_decision",
         decision=GateDecision(
-            gate=d.gate, round=d.round, outcome=reply.outcome,
-            decided_by="human", comments=reply.text, guidance=guidance))
+            gate=d.gate,
+            round=d.round,
+            outcome=reply.outcome,
+            decided_by="human",
+            comments=reply.text,
+            guidance=guidance,
+        ),
+    )
 
 
 @runtime_checkable
 class Channel(Protocol):
     """Every surface adapter: present a pending decision, map a reply to a
     signal. Both pure; delivery is a separate concern (see PushChannel)."""
+
     def render(self, d: PendingDecision) -> RenderedDecision: ...
     def translate(self, d: PendingDecision, reply: Reply) -> SignalCall: ...
 
@@ -787,12 +881,14 @@ class Channel(Protocol):
 class PushChannel(Channel, Protocol):
     """A surface that actively delivers (Slack notify, dashboard push).
     Pull surfaces (CLI, MCP) implement only Channel."""
+
     async def deliver(self, r: RenderedDecision) -> None: ...
 
 
 class ReferenceChannel:
     """Minimal Channel — the test double and the pattern E-7's CLI refit
     follows. Delegates to the module defaults."""
+
     def render(self, d: PendingDecision) -> RenderedDecision:
         return default_render(d)
 

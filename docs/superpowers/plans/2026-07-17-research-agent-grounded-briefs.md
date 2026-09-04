@@ -77,6 +77,7 @@ A. An @agent.output_validator that raises ModelRetry survives TemporalAgent
 B. pydantic-ai-harness[codemode] imports and a trivial run_code executes
    through a TemporalAgent on a time-skipping worker.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -137,21 +138,25 @@ class _SpikeWorkflow:
 async def test_output_validator_survives_temporalization_and_runs_activity_side():
     _VALIDATOR_RAN_IN.clear()
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         async with Worker(
-                env.client, task_queue="spike-ov",
-                workflows=[_SpikeWorkflow],
-                activities=list(t_spike.temporal_activities),
-                plugins=[PydanticAIPlugin()]):
+            env.client,
+            task_queue="spike-ov",
+            workflows=[_SpikeWorkflow],
+            activities=list(t_spike.temporal_activities),
+            plugins=[PydanticAIPlugin()],
+        ):
             out = await env.client.execute_workflow(
-                _SpikeWorkflow.run, id=f"spike-ov-{uuid.uuid4()}",
-                task_queue="spike-ov")
+                _SpikeWorkflow.run, id=f"spike-ov-{uuid.uuid4()}", task_queue="spike-ov"
+            )
     assert out == "hello"
     # THE finding: the validator ran, and it ran activity-side.
     assert _VALIDATOR_RAN_IN, "output_validator did not run at all"
     assert _VALIDATOR_RAN_IN[-1] == "activity", (
         f"output_validator ran in {_VALIDATOR_RAN_IN[-1]} context — "
-        "verification must move to a post-run activity (see FINDING)")
+        "verification must move to a post-run activity (see FINDING)"
+    )
 
 
 @pytest.mark.asyncio
@@ -177,15 +182,18 @@ async def test_codemode_run_code_executes_through_temporal_agent():
             return str((await ta.run("use the tool")).output)
 
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         async with Worker(
-                env.client, task_queue="spike-cm",
-                workflows=[_CodeModeWorkflow],
-                activities=list(ta.temporal_activities),
-                plugins=[PydanticAIPlugin()]):
+            env.client,
+            task_queue="spike-cm",
+            workflows=[_CodeModeWorkflow],
+            activities=list(ta.temporal_activities),
+            plugins=[PydanticAIPlugin()],
+        ):
             await env.client.execute_workflow(
-                _CodeModeWorkflow.run, id=f"spike-cm-{uuid.uuid4()}",
-                task_queue="spike-cm")
+                _CodeModeWorkflow.run, id=f"spike-cm-{uuid.uuid4()}", task_queue="spike-cm"
+            )
     # Reaching here without an exception proves run_code executed through the
     # temporalized agent. (TestModel's tool-call shape may vary; assert only
     # that dispatch did not raise.)
@@ -307,17 +315,31 @@ Create `tests/test_research_models.py`:
 
 ```python
 from sdlc.models import (
-    ConsultedSource, Contradiction, Gap, GroundedFinding, InferredFinding,
-    MemoryKind, PipelineConfig, ResearchBrief, ResearchConfig, RoleConfig,
+    ConsultedSource,
+    Contradiction,
+    Gap,
+    GroundedFinding,
+    InferredFinding,
+    MemoryKind,
+    PipelineConfig,
+    ResearchBrief,
+    ResearchConfig,
+    RoleConfig,
     SubQuestion,
 )
 
 # The SGR cascade, in the ONE order the spec commits to. This literal IS the
 # design (spec §4); a reorder is a silent regression, so it gets a guard.
 _BRIEF_ORDER = [
-    "sub_questions", "sources_consulted", "grounded_findings",
-    "inferred_findings", "contradictions", "gaps", "summary",
-    "brief_ref", "confidence",
+    "sub_questions",
+    "sources_consulted",
+    "grounded_findings",
+    "inferred_findings",
+    "contradictions",
+    "gaps",
+    "summary",
+    "brief_ref",
+    "confidence",
 ]
 
 
@@ -386,18 +408,20 @@ class SubQuestion(BaseModel):
 
 class ConsultedSource(BaseModel):
     """Judgment before label: assess the source, THEN attach a relevance tag."""
+
     url: str
     title: str = ""
-    assessment: str = ""            # what this source is / is worth
-    relevance: str = ""             # e.g. "high" / "peripheral"
+    assessment: str = ""  # what this source is / is worth
+    relevance: str = ""  # e.g. "high" / "peripheral"
 
 
 class GroundedFinding(BaseModel):
     """quote BEFORE claim (spec §4): commit to a verbatim span actually in the
     fetched bytes, then state what it supports. The verifier (research/verify.py)
     asserts `quote` is a substring of the page fetched THIS run for `source_url`."""
+
     source_url: str
-    quote: str                      # verbatim span from bytes fetched this run
+    quote: str  # verbatim span from bytes fetched this run
     claim: str
     sub_question_ids: list[str] = Field(default_factory=list)
 
@@ -405,9 +429,10 @@ class GroundedFinding(BaseModel):
 class InferredFinding(BaseModel):
     """reasoning BEFORE claim. `fetched_at` is set only when the lead came from
     the corpus (a recalled lead honestly belongs here, never in grounded)."""
+
     reasoning: str
     claim: str
-    based_on: list[str] = Field(default_factory=list)   # source urls / lead ids
+    based_on: list[str] = Field(default_factory=list)  # source urls / lead ids
     fetched_at: str | None = None
 
 
@@ -429,6 +454,7 @@ class ResearchBrief(BaseModel):
     decompose -> gather -> what the bytes say -> what I concluded -> where
     sources disagree -> what I could not answer -> summary -> ref -> confidence.
     tests/test_research_models.py pins the order; a reorder is a regression."""
+
     sub_questions: list[SubQuestion] = Field(default_factory=list)
     sources_consulted: list[ConsultedSource] = Field(default_factory=list)
     grounded_findings: list[GroundedFinding] = Field(default_factory=list)
@@ -445,13 +471,13 @@ class ResearchBrief(BaseModel):
 Change the `kind` annotation and add `provider`:
 
 ```python
-    kind: Literal["proposer", "harness", "research"] = "harness"
-    harness: HarnessKind | None = None      # None for proposer/research roles
-    model: str | None = None                # e.g. "zai-coding-plan/glm-5.2"
-    # Which search provider a kind=research role uses. None for every other
-    # kind. 'tavily' requires a reachable TAVILY_API_KEY at boot (validated in
-    # agents/loader.py); 'fake' is the CI/default opt-out.
-    provider: Literal["tavily", "fake"] | None = None
+kind: Literal["proposer", "harness", "research"] = "harness"
+harness: HarnessKind | None = None  # None for proposer/research roles
+model: str | None = None  # e.g. "zai-coding-plan/glm-5.2"
+# Which search provider a kind=research role uses. None for every other
+# kind. 'tavily' requires a reachable TAVILY_API_KEY at boot (validated in
+# agents/loader.py); 'fake' is the CI/default opt-out.
+provider: Literal["tavily", "fake"] | None = None
 ```
 
 - [ ] **Step 5: Add `RESEARCH_FINDING` to `MemoryKind` (`models.py:350-353`)**
@@ -461,7 +487,7 @@ class MemoryKind(str, Enum):
     STAGE_SUMMARY = "stage_summary"
     GOTCHA = "gotcha"
     GATE_FEEDBACK = "gate_feedback"
-    RESEARCH_FINDING = "research_finding"    # verified grounded findings only
+    RESEARCH_FINDING = "research_finding"  # verified grounded findings only
 ```
 
 - [ ] **Step 6: Add `ResearchConfig` and wire it into `PipelineConfig`**
@@ -474,6 +500,7 @@ class ResearchConfig(BaseModel):
     tool functions, not the prompt. Exceeding one raises an ordinary error and
     the shortfall lands in the brief's `gaps`. The first run-level counters in
     the codebase — E-19 remains the general version."""
+
     max_searches: int = 5
     max_fetches: int = 10
     max_cost_usd: float = 1.0
@@ -482,10 +509,10 @@ class ResearchConfig(BaseModel):
 Add these two fields to `PipelineConfig` (alongside `memoization_enabled`, near `models.py:473`):
 
 ```python
-    research: ResearchConfig = Field(default_factory=ResearchConfig)
-    research_enabled: bool = False          # FR-107: off by default; the
-                                            # default pipeline is unchanged
-                                            # until a project opts in
+research: ResearchConfig = Field(default_factory=ResearchConfig)
+research_enabled: bool = False  # FR-107: off by default; the
+# default pipeline is unchanged
+# until a project opts in
 ```
 
 - [ ] **Step 7: Run the test to verify it passes**
@@ -560,31 +587,41 @@ def _write_page(run_id: str, url: str, body: str):
 
 def test_page_filename_is_sha256_of_url():
     url = "https://example.com/a"
-    assert verify.page_filename(url) == hashlib.sha256(
-        url.encode()).hexdigest() + ".txt"
+    assert verify.page_filename(url) == hashlib.sha256(url.encode()).hexdigest() + ".txt"
 
 
 def test_grounded_quote_present_in_fetched_page_passes(runs_root):
     _write_page("r1", "https://x/1", "The library handles retries natively.")
-    brief = ResearchBrief(grounded_findings=[GroundedFinding(
-        source_url="https://x/1", quote="handles retries natively",
-        claim="it retries")])
+    brief = ResearchBrief(
+        grounded_findings=[
+            GroundedFinding(
+                source_url="https://x/1", quote="handles retries natively", claim="it retries"
+            )
+        ]
+    )
     assert verify.verify_brief(brief, "r1") == []
 
 
 def test_quote_not_found_is_a_violation(runs_root):
     _write_page("r1", "https://x/1", "Nothing about retries here.")
-    brief = ResearchBrief(grounded_findings=[GroundedFinding(
-        source_url="https://x/1", quote="handles retries natively",
-        claim="it retries")])
+    brief = ResearchBrief(
+        grounded_findings=[
+            GroundedFinding(
+                source_url="https://x/1", quote="handles retries natively", claim="it retries"
+            )
+        ]
+    )
     vios = verify.verify_brief(brief, "r1")
     assert [v.kind for v in vios] == ["quote_not_found"]
 
 
 def test_source_never_fetched_is_a_violation(runs_root):
     # No page file written for this url -> recalled-lead demotion (finding 5).
-    brief = ResearchBrief(grounded_findings=[GroundedFinding(
-        source_url="https://x/never", quote="anything", claim="c")])
+    brief = ResearchBrief(
+        grounded_findings=[
+            GroundedFinding(source_url="https://x/never", quote="anything", claim="c")
+        ]
+    )
     vios = verify.verify_brief(brief, "r1")
     assert [v.kind for v in vios] == ["source_never_fetched"]
 
@@ -592,14 +629,19 @@ def test_source_never_fetched_is_a_violation(runs_root):
 def test_whitespace_runs_collapse_but_case_is_preserved(runs_root):
     # HTML extraction mangles whitespace and nothing else (spec §5).
     _write_page("r1", "https://x/1", "handles    retries\n\tnatively")
-    brief = ResearchBrief(grounded_findings=[GroundedFinding(
-        source_url="https://x/1", quote="handles retries natively", claim="c")])
+    brief = ResearchBrief(
+        grounded_findings=[
+            GroundedFinding(source_url="https://x/1", quote="handles retries natively", claim="c")
+        ]
+    )
     assert verify.verify_brief(brief, "r1") == []
     # Case is NOT normalized: a case-only mismatch still fails.
-    brief_case = ResearchBrief(grounded_findings=[GroundedFinding(
-        source_url="https://x/1", quote="HANDLES RETRIES NATIVELY", claim="c")])
-    assert [v.kind for v in verify.verify_brief(brief_case, "r1")] == \
-        ["quote_not_found"]
+    brief_case = ResearchBrief(
+        grounded_findings=[
+            GroundedFinding(source_url="https://x/1", quote="HANDLES RETRIES NATIVELY", claim="c")
+        ]
+    )
+    assert [v.kind for v in verify.verify_brief(brief_case, "r1")] == ["quote_not_found"]
 
 
 def test_brief_digest_ignores_prose_ordering_and_confidence():
@@ -608,21 +650,25 @@ def test_brief_digest_ignores_prose_ordering_and_confidence():
     a = ResearchBrief(
         grounded_findings=[
             GroundedFinding(source_url="u1", quote="q1", claim="c1"),
-            GroundedFinding(source_url="u2", quote="q2", claim="c2")],
-        summary="one wording", confidence=0.9)
+            GroundedFinding(source_url="u2", quote="q2", claim="c2"),
+        ],
+        summary="one wording",
+        confidence=0.9,
+    )
     b = ResearchBrief(
         grounded_findings=[
             GroundedFinding(source_url="u2", quote="DIFFERENT", claim="c2"),
-            GroundedFinding(source_url="u1", quote="also different", claim="c1")],
-        summary="another wording", confidence=0.1)
+            GroundedFinding(source_url="u1", quote="also different", claim="c1"),
+        ],
+        summary="another wording",
+        confidence=0.1,
+    )
     assert verify.brief_digest(a) == verify.brief_digest(b)
 
 
 def test_brief_digest_moves_when_a_fact_changes():
-    a = ResearchBrief(grounded_findings=[
-        GroundedFinding(source_url="u1", quote="q", claim="c1")])
-    b = ResearchBrief(grounded_findings=[
-        GroundedFinding(source_url="u1", quote="q", claim="c2")])
+    a = ResearchBrief(grounded_findings=[GroundedFinding(source_url="u1", quote="q", claim="c1")])
+    b = ResearchBrief(grounded_findings=[GroundedFinding(source_url="u1", quote="q", claim="c2")])
     assert verify.brief_digest(a) != verify.brief_digest(b)
 ```
 
@@ -637,6 +683,7 @@ from sdlc.research.protocol import SearchProvider, make_provider
 @pytest.fixture(autouse=True)
 def _corpus(monkeypatch):
     from pathlib import Path
+
     corpus = Path(__file__).resolve().parent / "fakes" / "research_corpus"
     monkeypatch.setenv("SDLC_RESEARCH_FAKE_CORPUS", str(corpus))
 
@@ -680,6 +727,7 @@ Create `src/sdlc/research/protocol.py`:
 """Search backend abstraction — mirrors memory/protocol.py's protocol + real +
 fake shape. Providers are constructed and called INSIDE tool functions (which
 run activity-side), never in workflow code."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -710,9 +758,11 @@ class SearchProvider(ABC):
 def make_provider(name: Literal["tavily", "fake"]) -> SearchProvider:
     if name == "tavily":
         from .tavily import TavilyProvider
+
         return TavilyProvider()
     if name == "fake":
         from .fake import FakeProvider
+
         return FakeProvider()
     raise ValueError(f"unknown research provider {name!r}; known: tavily, fake")
 ```
@@ -729,6 +779,7 @@ require TAVILY_API_KEY. The corpus is a directory with an index.json:
      "pages":    {"<url>": "<relative filename>.txt"}}
 
 `search` returns hits whose key is a case-insensitive substring of the query."""
+
 from __future__ import annotations
 
 import json
@@ -743,14 +794,14 @@ def _corpus_dir() -> Path:
     if not root:
         raise RuntimeError(
             "FakeProvider needs $SDLC_RESEARCH_FAKE_CORPUS pointing at a "
-            "corpus directory (index.json + page files)")
+            "corpus directory (index.json + page files)"
+        )
     return Path(root)
 
 
 class FakeProvider(SearchProvider):
     def _index(self) -> dict:
-        return json.loads(
-            (_corpus_dir() / "index.json").read_text(encoding="utf-8"))
+        return json.loads((_corpus_dir() / "index.json").read_text(encoding="utf-8"))
 
     async def search(self, query: str, max_results: int) -> list[SearchHit]:
         idx = self._index()
@@ -809,6 +860,7 @@ Create `src/sdlc/research/tavily.py`:
 """Real SearchProvider over the Tavily HTTP API. Constructed only when a
 kind=research role declares provider: tavily; validate_registry fails closed at
 boot if TAVILY_API_KEY is unreachable, so this never runs without a key."""
+
 from __future__ import annotations
 
 import os
@@ -822,26 +874,26 @@ _EXTRACT_URL = "https://api.tavily.com/extract"
 
 
 class TavilyProvider(SearchProvider):
-    def __init__(self, api_key: str | None = None,
-                 timeout_s: float = 30.0) -> None:
+    def __init__(self, api_key: str | None = None, timeout_s: float = 30.0) -> None:
         self._key = api_key or os.environ.get("TAVILY_API_KEY", "")
         self._timeout = timeout_s
 
     async def search(self, query: str, max_results: int) -> list[SearchHit]:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
-            resp = await client.post(_SEARCH_URL, json={
-                "api_key": self._key, "query": query,
-                "max_results": max_results})
+            resp = await client.post(
+                _SEARCH_URL, json={"api_key": self._key, "query": query, "max_results": max_results}
+            )
             resp.raise_for_status()
             data = resp.json()
-        return [SearchHit(url=r.get("url", ""), title=r.get("title", ""),
-                          snippet=r.get("content", ""))
-                for r in data.get("results", []) if r.get("url")]
+        return [
+            SearchHit(url=r.get("url", ""), title=r.get("title", ""), snippet=r.get("content", ""))
+            for r in data.get("results", [])
+            if r.get("url")
+        ]
 
     async def fetch(self, url: str) -> FetchedPage:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
-            resp = await client.post(_EXTRACT_URL, json={
-                "api_key": self._key, "urls": [url]})
+            resp = await client.post(_EXTRACT_URL, json={"api_key": self._key, "urls": [url]})
             resp.raise_for_status()
             data = resp.json()
         results = data.get("results") or []
@@ -861,6 +913,7 @@ The rule (spec §5): `grounded` means the quote is a substring of the page fetch
 THIS run for its source_url. Whitespace runs collapse to a single space before
 comparison; case is preserved. Every further loosening is a hole in the check —
 add none without a test proving the specific false-failure it fixes."""
+
 from __future__ import annotations
 
 import hashlib
@@ -905,13 +958,15 @@ def verify_brief(brief: ResearchBrief, run_id: str) -> list[Violation]:
     for f in brief.grounded_findings:
         page = d / page_filename(f.source_url)
         if not page.is_file():
-            violations.append(Violation(kind="source_never_fetched",
-                                        source_url=f.source_url, quote=f.quote))
+            violations.append(
+                Violation(kind="source_never_fetched", source_url=f.source_url, quote=f.quote)
+            )
             continue
         haystack = normalize(page.read_text(encoding="utf-8"))
         if normalize(f.quote) not in haystack:
-            violations.append(Violation(kind="quote_not_found",
-                                        source_url=f.source_url, quote=f.quote))
+            violations.append(
+                Violation(kind="quote_not_found", source_url=f.source_url, quote=f.quote)
+            )
     return violations
 
 
@@ -963,25 +1018,25 @@ Research is the first `OPTIONAL_ROLES` entry (the seam agents-as-folders shipped
 Add, after the proposer loop in `write_registry_dir` (before `return root`):
 
 ```python
-    # Optional research role (2026-07-17-research-agent-grounded-briefs).
-    # A VALID research tree: agent.yaml (kind=research, provider=fake),
-    # instructions.md, agent.py, and one tool file. Tests perturb one thing.
-    r = root / "research"
-    r.mkdir(exist_ok=True)
-    (r / "agent.yaml").write_bytes(
-        b"kind: research\nmodel: anthropic:glm-5.2\nprovider: fake\n")
-    (r / "instructions.md").write_bytes(b"research the question")
-    (r / "agent.py").write_bytes(
-        b"from pydantic_ai import Agent\n"
-        b"def build(model, instructions, model_settings, tool_paths, provider):\n"
-        b"    return Agent(model, name='research_agent',\n"
-        b"                 model_settings=model_settings,\n"
-        b"                 system_prompt=instructions)\n")
-    (r / "tools").mkdir(exist_ok=True)
-    (r / "tools" / "web_search.py").write_bytes(
-        b"async def web_search(query: str, max_results: int = 5) -> list:\n"
-        b"    return []\n")
-    return root
+# Optional research role (2026-07-17-research-agent-grounded-briefs).
+# A VALID research tree: agent.yaml (kind=research, provider=fake),
+# instructions.md, agent.py, and one tool file. Tests perturb one thing.
+r = root / "research"
+r.mkdir(exist_ok=True)
+(r / "agent.yaml").write_bytes(b"kind: research\nmodel: anthropic:glm-5.2\nprovider: fake\n")
+(r / "instructions.md").write_bytes(b"research the question")
+(r / "agent.py").write_bytes(
+    b"from pydantic_ai import Agent\n"
+    b"def build(model, instructions, model_settings, tool_paths, provider):\n"
+    b"    return Agent(model, name='research_agent',\n"
+    b"                 model_settings=model_settings,\n"
+    b"                 system_prompt=instructions)\n"
+)
+(r / "tools").mkdir(exist_ok=True)
+(r / "tools" / "web_search.py").write_bytes(
+    b"async def web_search(query: str, max_results: int = 5) -> list:\n    return []\n"
+)
+return root
 ```
 
 > This makes every existing loader test that calls `write_registry_dir` also exercise a valid research directory. That is intended: the seam is now populated and must stay valid.
@@ -994,7 +1049,11 @@ Create `tests/test_research_registry.py`:
 import pytest
 
 from sdlc.agents.loader import (
-    KNOWN_ROLES, OPTIONAL_ROLES, REQUIRED_ROLES, RegistryError, load_registry,
+    KNOWN_ROLES,
+    OPTIONAL_ROLES,
+    REQUIRED_ROLES,
+    RegistryError,
+    load_registry,
 )
 from tests.conftest import write_registry_dir
 
@@ -1007,7 +1066,7 @@ def test_research_is_optional_not_required():
 
 def test_shipped_registry_loads_with_research(monkeypatch, tmp_path):
     """The repo's own agents/ tree loads and includes a research role."""
-    roles = load_registry()               # shipped agents/
+    roles = load_registry()  # shipped agents/
     assert roles["research"].kind == "research"
     assert roles["research"].provider in ("fake", "tavily")
 
@@ -1025,7 +1084,8 @@ def test_research_tree_loads_and_carries_tool_paths(tmp_path, monkeypatch):
 def test_research_without_provider_fails_closed(tmp_path):
     root = write_registry_dir(tmp_path / "agents")
     (root / "research" / "agent.yaml").write_bytes(
-        b"kind: research\nmodel: anthropic:glm-5.2\n")   # no provider
+        b"kind: research\nmodel: anthropic:glm-5.2\n"
+    )  # no provider
     with pytest.raises(RegistryError, match="provider"):
         load_registry(root)
 
@@ -1034,7 +1094,8 @@ def test_research_tavily_without_key_fails_closed(tmp_path, monkeypatch):
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)
     root = write_registry_dir(tmp_path / "agents")
     (root / "research" / "agent.yaml").write_bytes(
-        b"kind: research\nmodel: anthropic:glm-5.2\nprovider: tavily\n")
+        b"kind: research\nmodel: anthropic:glm-5.2\nprovider: tavily\n"
+    )
     with pytest.raises(RegistryError, match="TAVILY_API_KEY"):
         load_registry(root)
 
@@ -1042,6 +1103,7 @@ def test_research_tavily_without_key_fails_closed(tmp_path, monkeypatch):
 def test_research_missing_tools_dir_fails_closed(tmp_path):
     root = write_registry_dir(tmp_path / "agents")
     import shutil
+
     shutil.rmtree(root / "research" / "tools")
     with pytest.raises(RegistryError, match="tools"):
         load_registry(root)
@@ -1050,7 +1112,8 @@ def test_research_missing_tools_dir_fails_closed(tmp_path):
 def test_tool_file_with_unannotated_signature_fails_closed(tmp_path):
     root = write_registry_dir(tmp_path / "agents")
     (root / "research" / "tools" / "bad.py").write_bytes(
-        b"def bad(query):\n    return []\n")   # no annotations, name==file ok
+        b"def bad(query):\n    return []\n"
+    )  # no annotations, name==file ok
     with pytest.raises(RegistryError, match="annotat"):
         load_registry(root)
 
@@ -1058,7 +1121,8 @@ def test_tool_file_with_unannotated_signature_fails_closed(tmp_path):
 def test_tool_filename_function_mismatch_fails_closed(tmp_path):
     root = write_registry_dir(tmp_path / "agents")
     (root / "research" / "tools" / "mismatch.py").write_bytes(
-        b"def other(query: str) -> list:\n    return []\n")
+        b"def other(query: str) -> list:\n    return []\n"
+    )
     with pytest.raises(RegistryError, match="mismatch"):
         load_registry(root)
 ```
@@ -1098,17 +1162,19 @@ OPTIONAL_ROLES: frozenset[str] = frozenset({"research"})
 In `validate_registry`, append after the harness-reviewer clause and BEFORE `_validate_pipeline_mirror(roles)`:
 
 ```python
-    for name, cfg in roles.items():
-        if cfg.kind != "research":
-            continue
-        if cfg.provider is None:
-            raise RegistryError(
-                f"role '{name}' is kind=research and must name a provider "
-                f"(tavily or fake); ADR-6 does not apply — it reviews nothing")
-        if cfg.provider == "tavily" and not os.environ.get("TAVILY_API_KEY"):
-            raise RegistryError(
-                f"role '{name}' declares provider: tavily but TAVILY_API_KEY is "
-                f"not set — fail closed. Use provider: fake for CI/offline.")
+for name, cfg in roles.items():
+    if cfg.kind != "research":
+        continue
+    if cfg.provider is None:
+        raise RegistryError(
+            f"role '{name}' is kind=research and must name a provider "
+            f"(tavily or fake); ADR-6 does not apply — it reviews nothing"
+        )
+    if cfg.provider == "tavily" and not os.environ.get("TAVILY_API_KEY"):
+        raise RegistryError(
+            f"role '{name}' declares provider: tavily but TAVILY_API_KEY is "
+            f"not set — fail closed. Use provider: fake for CI/offline."
+        )
 ```
 
 - [ ] **Step 7: Discover and validate `tools/` in `_parse_role`**
@@ -1116,14 +1182,15 @@ In `validate_registry`, append after the harness-reviewer clause and BEFORE `_va
 In `_parse_role`, inside the `if needs_prompt:` block (research has `kind != "harness"` so `needs_prompt` is True), after the `agent.py` existence check, add:
 
 ```python
-        if cfg.kind == "research":
-            tools_dir = d / "tools"
-            if not tools_dir.is_dir():
-                raise RegistryError(
-                    f"role '{name}' is kind=research and must carry a tools/ "
-                    f"directory (it is the only role that may): {tools_dir}")
-            tool_files = _validate_tool_files(name, tools_dir)
-            cfg = cfg.model_copy(update={"tool_files": tool_files})
+if cfg.kind == "research":
+    tools_dir = d / "tools"
+    if not tools_dir.is_dir():
+        raise RegistryError(
+            f"role '{name}' is kind=research and must carry a tools/ "
+            f"directory (it is the only role that may): {tools_dir}"
+        )
+    tool_files = _validate_tool_files(name, tools_dir)
+    cfg = cfg.model_copy(update={"tool_files": tool_files})
 ```
 
 Add the validator helper near `_load_build` (it uses `ast` for a source-only check — no import, per finding 3):
@@ -1142,12 +1209,12 @@ def _validate_tool_files(role: str, tools_dir: Path) -> list[str]:
             continue
         stem = f.stem
         tree = ast.parse(f.read_text(encoding="utf-8"), filename=str(f))
-        funcs = [n for n in tree.body
-                 if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        funcs = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
         if not any(fn.name == stem for fn in funcs):
             raise RegistryError(
                 f"role '{role}': tool file {f.name} defines no function named "
-                f"'{stem}' — the filename is the API (mismatch)")
+                f"'{stem}' — the filename is the API (mismatch)"
+            )
         fn = next(fn for fn in funcs if fn.name == stem)
         args = fn.args
         params = [*args.posonlyargs, *args.args, *args.kwonlyargs]
@@ -1156,12 +1223,13 @@ def _validate_tool_files(role: str, tools_dir: Path) -> list[str]:
             raise RegistryError(
                 f"role '{role}': tool '{stem}' has an unannotated signature "
                 f"(params={unannotated}, return_annotated={fn.returns is not None})"
-                f" — tool signatures must be fully typed")
+                f" — tool signatures must be fully typed"
+            )
         paths.append(str(f.resolve()))
     if not paths:
         raise RegistryError(
-            f"role '{role}': tools/ is empty — a research role with no tools "
-            f"cannot fetch anything")
+            f"role '{role}': tools/ is empty — a research role with no tools cannot fetch anything"
+        )
     return paths
 ```
 
@@ -1170,28 +1238,26 @@ def _validate_tool_files(role: str, tools_dir: Path) -> list[str]:
 In `build_agents`, replace the loop body's proposer construction so a research role is built through its extended `build` signature. Change:
 
 ```python
-    for name, cfg in roles.items():
-        if cfg.kind == "harness":
-            continue
-        agent = _load_build(name, root / name)(cfg.model, cfg.instructions,
-                                               model_settings)
+for name, cfg in roles.items():
+    if cfg.kind == "harness":
+        continue
+    agent = _load_build(name, root / name)(cfg.model, cfg.instructions, model_settings)
 ```
 
 to:
 
 ```python
-    for name, cfg in roles.items():
-        if cfg.kind == "harness":
-            continue
-        build = _load_build(name, root / name)
-        if cfg.kind == "research":
-            # Research build takes its tool paths and provider name too. Tool
-            # modules are imported HERE — after the whole registry validated
-            # (validation precedes import; registry spec finding 3).
-            agent = build(cfg.model, cfg.instructions, model_settings,
-                          cfg.tool_files, cfg.provider)
-        else:
-            agent = build(cfg.model, cfg.instructions, model_settings)
+for name, cfg in roles.items():
+    if cfg.kind == "harness":
+        continue
+    build = _load_build(name, root / name)
+    if cfg.kind == "research":
+        # Research build takes its tool paths and provider name too. Tool
+        # modules are imported HERE — after the whole registry validated
+        # (validation precedes import; registry spec finding 3).
+        agent = build(cfg.model, cfg.instructions, model_settings, cfg.tool_files, cfg.provider)
+    else:
+        agent = build(cfg.model, cfg.instructions, model_settings)
 ```
 
 - [ ] **Step 9: Run the registry tests to verify they pass**
@@ -1264,8 +1330,7 @@ AGENTS_TOOLS = Path(__file__).resolve().parents[1] / "agents" / "research" / "to
 
 
 def _load_tool(name: str):
-    spec = importlib.util.spec_from_file_location(
-        f"_tool_{name}", AGENTS_TOOLS / f"{name}.py")
+    spec = importlib.util.spec_from_file_location(f"_tool_{name}", AGENTS_TOOLS / f"{name}.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return getattr(mod, name)
@@ -1282,8 +1347,9 @@ def deps(monkeypatch, tmp_path):
     corpus = Path(__file__).resolve().parent / "fakes" / "research_corpus"
     monkeypatch.setenv("SDLC_RESEARCH_FAKE_CORPUS", str(corpus))
     monkeypatch.setenv("SDLC_RUNS_ROOT", str(tmp_path))
-    return ResearchDeps(run_id="r1", provider="fake", max_searches=2,
-                        max_fetches=2, max_cost_usd=1.0)
+    return ResearchDeps(
+        run_id="r1", provider="fake", max_searches=2, max_fetches=2, max_cost_usd=1.0
+    )
 
 
 @pytest.mark.asyncio
@@ -1297,6 +1363,7 @@ async def test_web_search_returns_hits_and_charges_budget(deps):
 @pytest.mark.asyncio
 async def test_fetch_page_writes_the_page_and_charges_budget(deps):
     from sdlc.research.verify import page_filename, pages_dir
+
     fetch_page = _load_tool("fetch_page")
     url = "https://docs.example.com/retrylib"
     page = await fetch_page(_ctx(deps), url)
@@ -1338,6 +1405,7 @@ and COUNTERS — never a live provider handle or a filesystem path. The budget
 counter is shared in-process across every tool call inside the single run_code
 activity CodeMode collapses the fan-out into; that shared-process property is
 why CodeMode is required, not optional."""
+
 from __future__ import annotations
 
 from typing import Literal
@@ -1379,15 +1447,12 @@ def charge(deps: ResearchDeps, *, search: int = 0, fetch: int = 0) -> None:
     BudgetExceeded if a cap (count or cost) would be crossed."""
     b = deps.budget
     if search and b.searches + search > deps.max_searches:
-        raise BudgetExceeded(
-            f"search budget exhausted ({deps.max_searches} searches)")
+        raise BudgetExceeded(f"search budget exhausted ({deps.max_searches} searches)")
     if fetch and b.fetches + fetch > deps.max_fetches:
-        raise BudgetExceeded(
-            f"fetch budget exhausted ({deps.max_fetches} fetches)")
+        raise BudgetExceeded(f"fetch budget exhausted ({deps.max_fetches} fetches)")
     projected = b.cost_usd + search * SEARCH_COST_USD + fetch * FETCH_COST_USD
     if projected > deps.max_cost_usd:
-        raise BudgetExceeded(
-            f"cost budget exhausted (${deps.max_cost_usd:.2f})")
+        raise BudgetExceeded(f"cost budget exhausted (${deps.max_cost_usd:.2f})")
     b.searches += search
     b.fetches += fetch
     b.cost_usd = projected
@@ -1404,8 +1469,7 @@ from sdlc.research.deps import ResearchDeps, charge
 from sdlc.research.protocol import make_provider
 
 
-async def web_search(ctx: RunContext[ResearchDeps], query: str,
-                     max_results: int = 5) -> list[dict]:
+async def web_search(ctx: RunContext[ResearchDeps], query: str, max_results: int = 5) -> list[dict]:
     """Search the web for `query`. Charges one search against the per-run
     budget (raises when exhausted). Returns [{url, title, snippet}]."""
     charge(ctx.deps, search=1)
@@ -1471,16 +1535,17 @@ from sdlc.memory.activities import _backend
 from sdlc.research.deps import ResearchDeps
 
 
-async def recall_leads(ctx: RunContext[ResearchDeps], query: str,
-                       max_results: int = 5) -> list[str]:
+async def recall_leads(
+    ctx: RunContext[ResearchDeps], query: str, max_results: int = 5
+) -> list[str]:
     """Recall prior research findings from the corpus as LEADS — never as truth.
     Watermark-pinned, filtered to stage=research. A recalled lead placed in
     grounded_findings fails the verifier's source-never-fetched check by
     construction (spec finding 5); to promote a lead, re-fetch it."""
     backend = _backend(ctx.deps.memory_base_url, ctx.deps.memory_backend)
     snap = await backend.recall(
-        ctx.deps.memory_bank, query, {"stage": "research"},
-        ctx.deps.memory_watermark)
+        ctx.deps.memory_bank, query, {"stage": "research"}, ctx.deps.memory_watermark
+    )
     return snap.items[:max_results]
 ```
 
@@ -1501,6 +1566,7 @@ def _import_tool(path: str):
     """Import one agents/research/tools/<name>.py by PATH under a private
     module name and return its <name> function (== the file stem)."""
     from pathlib import Path
+
     stem = Path(path).stem
     spec = importlib.util.spec_from_file_location(f"_sdlc_tool_{stem}", path)
     mod = importlib.util.module_from_spec(spec)
@@ -1508,14 +1574,19 @@ def _import_tool(path: str):
     return getattr(mod, stem)
 
 
-def build(model: str, instructions: str, model_settings: ModelSettings,
-          tool_paths: list[str], provider: str) -> Agent:
+def build(
+    model: str,
+    instructions: str,
+    model_settings: ModelSettings,
+    tool_paths: list[str],
+    provider: str,
+) -> Agent:
     """The research role: a proposer with four tools and Code Mode. Uniquely
     among roles it receives tool_paths and provider — supplied by build_agents
     AFTER the whole registry validated (validation precedes import)."""
     agent = Agent(
         model,
-        name="research_agent",              # Temporal activity name — NEVER rename
+        name="research_agent",  # Temporal activity name — NEVER rename
         deps_type=ResearchDeps,
         output_type=ResearchBrief,
         model_settings=model_settings,
@@ -1523,7 +1594,7 @@ def build(model: str, instructions: str, model_settings: ModelSettings,
         capabilities=[CodeMode(tools="all")],
     )
     for path in tool_paths:
-        agent.tool(_import_tool(path))      # @agent.tool: each takes RunContext
+        agent.tool(_import_tool(path))  # @agent.tool: each takes RunContext
     return agent
 ```
 
@@ -1640,12 +1711,12 @@ def _write_page(run_id, url, body):
 def test_only_verified_findings_are_retained(runs_root):
     _write_page("r1", "https://x/1", "quote one is here")
     # url /2 is NEVER fetched -> a recalled lead masquerading as grounded.
-    brief = ResearchBrief(grounded_findings=[
-        GroundedFinding(source_url="https://x/1", quote="quote one is here",
-                        claim="c1"),
-        GroundedFinding(source_url="https://x/2", quote="never fetched",
-                        claim="c2"),
-    ])
+    brief = ResearchBrief(
+        grounded_findings=[
+            GroundedFinding(source_url="https://x/1", quote="quote one is here", claim="c1"),
+            GroundedFinding(source_url="https://x/2", quote="never fetched", claim="c2"),
+        ]
+    )
     items = verified_findings_to_retain(brief, "r1")
     assert len(items) == 1
     assert items[0].kind is MemoryKind.RESEARCH_FINDING
@@ -1656,29 +1727,33 @@ def test_only_verified_findings_are_retained(runs_root):
 def test_recalled_lead_in_grounded_fails_verification(runs_root):
     """Demotion needs no mechanism (finding 5): a lead that was never fetched
     this run has no page file, so it fails source-never-fetched."""
-    brief = ResearchBrief(grounded_findings=[
-        GroundedFinding(source_url="https://x/recalled", quote="from memory",
-                        claim="c")])
+    brief = ResearchBrief(
+        grounded_findings=[
+            GroundedFinding(source_url="https://x/recalled", quote="from memory", claim="c")
+        ]
+    )
     vios = verify.verify_brief(brief, "r1")
     assert [v.kind for v in vios] == ["source_never_fetched"]
     assert verified_findings_to_retain(brief, "r1") == []
 
 
 @pytest.mark.asyncio
-async def test_output_validator_raises_model_retry_on_violation(runs_root,
-                                                                monkeypatch):
+async def test_output_validator_raises_model_retry_on_violation(runs_root, monkeypatch):
     """The agent's validator turns a violation into a ModelRetry so the model
     corrects the quote or moves the claim to inferred."""
     from pydantic_ai import ModelRetry
+
     # Import the shipped agent's validator via its module.
     import importlib.util
+
     agent_py = Path(__file__).resolve().parents[1] / "agents" / "research" / "agent.py"
     spec = importlib.util.spec_from_file_location("_research_agent_mod", agent_py)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
 
-    brief = ResearchBrief(grounded_findings=[
-        GroundedFinding(source_url="https://x/none", quote="x", claim="c")])
+    brief = ResearchBrief(
+        grounded_findings=[GroundedFinding(source_url="https://x/none", quote="x", claim="c")]
+    )
     with pytest.raises(ModelRetry):
         await mod._verify_grounding(_ctx_with_run_id("r1"), brief)
 
@@ -1686,8 +1761,10 @@ async def test_output_validator_raises_model_retry_on_violation(runs_root,
 def _ctx_with_run_id(run_id):
     from pydantic_ai import RunContext
     from sdlc.research.deps import ResearchDeps
-    deps = ResearchDeps(run_id=run_id, provider="fake", max_searches=1,
-                        max_fetches=1, max_cost_usd=1.0)
+
+    deps = ResearchDeps(
+        run_id=run_id, provider="fake", max_searches=1, max_fetches=1, max_cost_usd=1.0
+    )
     return RunContext(deps=deps, model=None, usage=None, prompt=None)  # type: ignore[arg-type]
 ```
 
@@ -1703,24 +1780,29 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'sdlc.research.retain'`
 only. Nothing unverified enters memory, so recall can never launder a false
 claim into ground truth. Findings become leads, not grounded claims — recall
 must re-fetch to re-ground (spec §6)."""
+
 from __future__ import annotations
 
 from ..models import MemoryKind, ResearchBrief, RetainItem
 from .verify import verify_brief
 
 
-def verified_findings_to_retain(brief: ResearchBrief, run_id: str,
-                                bank: str = "project:default"
-                                ) -> list[RetainItem]:
+def verified_findings_to_retain(
+    brief: ResearchBrief, run_id: str, bank: str = "project:default"
+) -> list[RetainItem]:
     bad = {(v.source_url, v.quote) for v in verify_brief(brief, run_id)}
     items: list[RetainItem] = []
     for f in brief.grounded_findings:
         if (f.source_url, f.quote) in bad:
             continue
-        items.append(RetainItem(
-            kind=MemoryKind.RESEARCH_FINDING, bank=bank,
-            text=f"{f.claim} — {f.source_url}",
-            metadata={"stage": "research", "source_url": f.source_url}))
+        items.append(
+            RetainItem(
+                kind=MemoryKind.RESEARCH_FINDING,
+                bank=bank,
+                text=f"{f.claim} — {f.source_url}",
+                metadata={"stage": "research", "source_url": f.source_url},
+            )
+        )
     return items
 ```
 
@@ -1729,22 +1811,23 @@ def verified_findings_to_retain(brief: ResearchBrief, run_id: str,
 In `build`, after the tool-registration loop and before `return agent`, add:
 
 ```python
-    @agent.output_validator
-    async def _verify_grounding(ctx, brief: ResearchBrief) -> ResearchBrief:
-        # Runs activity-side under TemporalAgent (Task 1 finding A), where
-        # reading the page files is legal I/O. A violation becomes a ModelRetry:
-        # the model corrects the quote or moves the claim to inferred_findings.
-        # After retries are exhausted the stage fails closed (spec §5).
-        from sdlc.research.verify import verify_brief
-        violations = verify_brief(brief, ctx.deps.run_id)
-        if violations:
-            lines = "\n".join(
-                f"- {v.kind}: {v.source_url}: {v.quote!r}" for v in violations)
-            raise ModelRetry(
-                "These grounded_findings are not verified against bytes you "
-                "fetched this run. Fix the quote to a verbatim span from the "
-                "fetched page, or move the claim to inferred_findings:\n" + lines)
-        return brief
+@agent.output_validator
+async def _verify_grounding(ctx, brief: ResearchBrief) -> ResearchBrief:
+    # Runs activity-side under TemporalAgent (Task 1 finding A), where
+    # reading the page files is legal I/O. A violation becomes a ModelRetry:
+    # the model corrects the quote or moves the claim to inferred_findings.
+    # After retries are exhausted the stage fails closed (spec §5).
+    from sdlc.research.verify import verify_brief
+
+    violations = verify_brief(brief, ctx.deps.run_id)
+    if violations:
+        lines = "\n".join(f"- {v.kind}: {v.source_url}: {v.quote!r}" for v in violations)
+        raise ModelRetry(
+            "These grounded_findings are not verified against bytes you "
+            "fetched this run. Fix the quote to a verbatim span from the "
+            "fetched page, or move the claim to inferred_findings:\n" + lines
+        )
+    return brief
 ```
 
 Add the import at the top of `agents/research/agent.py`:
@@ -1760,14 +1843,15 @@ Refactor: define `_verify_grounding` at module scope (taking `ctx, brief`) and r
 ```python
 async def _verify_grounding(ctx, brief: ResearchBrief) -> ResearchBrief:
     from sdlc.research.verify import verify_brief
+
     violations = verify_brief(brief, ctx.deps.run_id)
     if violations:
-        lines = "\n".join(
-            f"- {v.kind}: {v.source_url}: {v.quote!r}" for v in violations)
+        lines = "\n".join(f"- {v.kind}: {v.source_url}: {v.quote!r}" for v in violations)
         raise ModelRetry(
             "These grounded_findings are not verified against bytes you fetched "
             "this run. Fix the quote to a verbatim span from the fetched page, "
-            "or move the claim to inferred_findings:\n" + lines)
+            "or move the claim to inferred_findings:\n" + lines
+        )
     return brief
 ```
 
@@ -1826,6 +1910,7 @@ Append:
 ```python
 def test_research_is_a_stage_but_optional():
     from sdlc.agents import roles
+
     assert roles.STAGE_ROLES["research"] == "research"
     # Present in the shipped tree, so it resolves a model + prompt sha.
     assert "research" in roles.STAGE_MODELS
@@ -1840,8 +1925,7 @@ Create `tests/test_research_stage_wiring.py`:
 import ast
 from pathlib import Path
 
-FEATURE_PY = (Path(__file__).resolve().parents[1]
-              / "src" / "sdlc" / "workflows" / "feature.py")
+FEATURE_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "feature.py"
 
 
 def _run_method_src() -> str:
@@ -1864,7 +1948,7 @@ def test_research_feeds_brief_digest_into_clarify_key():
     src = _run_method_src()
     assert "brief_digest" in src
     # clarify's cached-stage input is idea + the digest, not idea alone.
-    assert 'idea.model_dump_json() + ' in src
+    assert "idea.model_dump_json() + " in src
 
 
 def test_research_stage_is_not_memoized():
@@ -1872,9 +1956,8 @@ def test_research_stage_is_not_memoized():
     research producer must not be wrapped in _cached_stage."""
     src = _run_method_src()
     # crude but effective: no _cached_stage call names "research".
-    assert '_cached_stage(\n' not in src or '"research"' not in src
-    assert '"research"' not in src.split("_cached_stage")[1] \
-        if "_cached_stage" in src else True
+    assert "_cached_stage(\n" not in src or '"research"' not in src
+    assert '"research"' not in src.split("_cached_stage")[1] if "_cached_stage" in src else True
 
 
 def test_research_retains_verified_findings():
@@ -1900,12 +1983,12 @@ Make the two derived maps tolerant of an absent optional role (replace the `STAG
 
 ```python
 STAGE_MODELS: dict[str, str] = {
-    stage: _model(role) for stage, role in STAGE_ROLES.items()
-    if role in REGISTRY
+    stage: _model(role) for stage, role in STAGE_ROLES.items() if role in REGISTRY
 }
 
 _STAGE_PROMPTS: dict[str, str] = {
-    stage: REGISTRY[role].instructions for stage, role in STAGE_ROLES.items()
+    stage: REGISTRY[role].instructions
+    for stage, role in STAGE_ROLES.items()
     if role in REGISTRY and REGISTRY[role].instructions is not None
 }
 ```
@@ -1921,15 +2004,26 @@ research_agent = AGENTS.get("research")
 And after the `t_devops` line (~`roles.py:97`):
 
 ```python
-t_research = (TemporalAgent(research_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-              if research_agent is not None else None)
+t_research = (
+    TemporalAgent(research_agent, activity_config=AGENT_ACTIVITY_CONFIG)
+    if research_agent is not None
+    else None
+)
 ```
 
 Append the research activities to `ALL_TEMPORAL_AGENTS` conditionally (replace the list literal):
 
 ```python
-ALL_TEMPORAL_AGENTS = [t_clarify, t_architect, t_planner, t_qa,
-                       t_reviewer, t_analyst, t_merge_verdict, t_devops]
+ALL_TEMPORAL_AGENTS = [
+    t_clarify,
+    t_architect,
+    t_planner,
+    t_qa,
+    t_reviewer,
+    t_analyst,
+    t_merge_verdict,
+    t_devops,
+]
 if t_research is not None:
     ALL_TEMPORAL_AGENTS.append(t_research)
 ```
@@ -1939,10 +2033,18 @@ if t_research is not None:
 Extend the `..agents.roles` import (`feature.py:25-28`) to add `t_research`:
 
 ```python
-    from ..agents.roles import (
-        PROMPT_SHAS, STAGE_MODELS, t_analyst, t_architect, t_clarify,
-        t_merge_verdict, t_planner, t_qa, t_research, t_reviewer,
-    )
+from ..agents.roles import (
+    PROMPT_SHAS,
+    STAGE_MODELS,
+    t_analyst,
+    t_architect,
+    t_clarify,
+    t_merge_verdict,
+    t_planner,
+    t_qa,
+    t_research,
+    t_reviewer,
+)
 ```
 
 Add two imports inside the `imports_passed_through()` block: `brief_digest` and `verified_findings_to_retain` and `ResearchDeps`, and `ResearchBrief`:
@@ -1960,42 +2062,48 @@ Add `ResearchBrief` to the `..models` import list.
 Immediately before the `# 1. CLARIFY` block (`feature.py:632`), insert:
 
 ```python
-        # 0. RESEARCH (FR-107) — optional, human-gated, NOT memoized. A served
-        # memo means pages were not fetched this run, so a brief cannot be
-        # cached (spec finding 4). The brief contributes only its canonical
-        # digest to downstream keys (finding 3), never its prose.
-        brief_digest_val = ""
-        if cfg.research_enabled and t_research is not None:
-            self._status = "researching"
-            _r_started = workflow.now()
-            deps = ResearchDeps(
-                run_id=workflow.info().workflow_id,
-                provider=cfg.roles.get("research").provider
-                    if cfg.roles.get("research") else "fake",
-                max_searches=cfg.research.max_searches,
-                max_fetches=cfg.research.max_fetches,
-                max_cost_usd=cfg.research.max_cost_usd,
-                memory_backend=cfg.memory.backend,
-                memory_base_url=cfg.memory.base_url,
-                memory_bank=cfg.memory.project_bank,
-                memory_watermark=self._memory_watermark)
-            brief: ResearchBrief = (await t_research.run(
-                idea.model_dump_json(), deps=deps)).output
-            brief_digest_val = brief_digest(brief)
-            gate = await self._gate("research", cfg)
-            if not gate.approved:
-                return "rejected:research"
-            for item in verified_findings_to_retain(
-                    brief, workflow.info().workflow_id,
-                    bank=cfg.memory.project_bank):
-                await self._retain(cfg, item.kind, item.bank, item.text,
-                                   item.metadata)
-            await self._record(cfg, self._stage_record(
-                cfg, stage="research", role="research",
-                started=_r_started, ended=workflow.now(),
-                quality_score=None, judge="grounding",
-                outcome=BenchmarkOutcome.PASS,
-                model=STAGE_MODELS.get("research", "unknown")))
+# 0. RESEARCH (FR-107) — optional, human-gated, NOT memoized. A served
+# memo means pages were not fetched this run, so a brief cannot be
+# cached (spec finding 4). The brief contributes only its canonical
+# digest to downstream keys (finding 3), never its prose.
+brief_digest_val = ""
+if cfg.research_enabled and t_research is not None:
+    self._status = "researching"
+    _r_started = workflow.now()
+    deps = ResearchDeps(
+        run_id=workflow.info().workflow_id,
+        provider=cfg.roles.get("research").provider if cfg.roles.get("research") else "fake",
+        max_searches=cfg.research.max_searches,
+        max_fetches=cfg.research.max_fetches,
+        max_cost_usd=cfg.research.max_cost_usd,
+        memory_backend=cfg.memory.backend,
+        memory_base_url=cfg.memory.base_url,
+        memory_bank=cfg.memory.project_bank,
+        memory_watermark=self._memory_watermark,
+    )
+    brief: ResearchBrief = (await t_research.run(idea.model_dump_json(), deps=deps)).output
+    brief_digest_val = brief_digest(brief)
+    gate = await self._gate("research", cfg)
+    if not gate.approved:
+        return "rejected:research"
+    for item in verified_findings_to_retain(
+        brief, workflow.info().workflow_id, bank=cfg.memory.project_bank
+    ):
+        await self._retain(cfg, item.kind, item.bank, item.text, item.metadata)
+    await self._record(
+        cfg,
+        self._stage_record(
+            cfg,
+            stage="research",
+            role="research",
+            started=_r_started,
+            ended=workflow.now(),
+            quality_score=None,
+            judge="grounding",
+            outcome=BenchmarkOutcome.PASS,
+            model=STAGE_MODELS.get("research", "unknown"),
+        ),
+    )
 ```
 
 > `provider` on `cfg.roles["research"]` — the workflow's `PipelineConfig.roles` mirrors only harness roles, so `cfg.roles.get("research")` is normally `None` and the provider defaults to `"fake"`. A project that wants Tavily sets it on its own `PipelineConfig`. The registry's `agents/research/agent.yaml` provider governs the *agent*; this deps.provider governs the *tool calls* — keep them the same in production.
@@ -2005,9 +2113,9 @@ Immediately before the `# 1. CLARIFY` block (`feature.py:632`), insert:
 Change clarify's `_cached_stage` input (`feature.py:645-647`) from `idea.model_dump_json()` to include the digest:
 
 ```python
-        reqs, _ = await self._cached_stage(
-            cfg, "clarify", idea.model_dump_json() + brief_digest_val,
-            ClarifiedRequirements, _run_clarify)
+reqs, _ = await self._cached_stage(
+    cfg, "clarify", idea.model_dump_json() + brief_digest_val, ClarifiedRequirements, _run_clarify
+)
 ```
 
 (`brief_digest_val` is `""` when research is disabled, so the key is byte-identical to today for non-research runs — no cache invalidation for existing pipelines.)
@@ -2029,6 +2137,7 @@ Create `tests/test_research_e2e.py`:
 ```python
 """research -> clarify through a time-skipping worker with fake agents. Proves
 the stage runs, gates, and hands off to clarify without a live provider."""
+
 from __future__ import annotations
 
 import uuid
@@ -2042,8 +2151,15 @@ from temporalio.worker import Worker
 from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 
 from sdlc.models import (
-    ClarifiedRequirements, GateDecision, GateOutcome, IdeaBrief, GatePolicy,
-    GateConfig, PipelineConfig, ProjectMode, ResearchBrief,
+    ClarifiedRequirements,
+    GateDecision,
+    GateOutcome,
+    IdeaBrief,
+    GatePolicy,
+    GateConfig,
+    PipelineConfig,
+    ProjectMode,
+    ResearchBrief,
 )
 
 with workflow.unsafe.imports_passed_through():
@@ -2053,17 +2169,24 @@ with workflow.unsafe.imports_passed_through():
 
 _RESEARCH = ResearchBrief(summary="found nothing external", confidence=0.5)
 _REQS = ClarifiedRequirements(
-    summary="clear", functional_requirements=["fr"],
-    non_functional_requirements=[], out_of_scope=[], open_questions=[])
+    summary="clear",
+    functional_requirements=["fr"],
+    non_functional_requirements=[],
+    out_of_scope=[],
+    open_questions=[],
+)
 
 
 @pytest.mark.asyncio
 async def test_research_stage_runs_and_hands_off(monkeypatch):
     cfg = PipelineConfig(
         research_enabled=True,
-        gates={"research": GateConfig(policy=GatePolicy.OFF),
-               "architecture": GateConfig(policy=GatePolicy.OFF),
-               "plan": GateConfig(policy=GatePolicy.OFF)})
+        gates={
+            "research": GateConfig(policy=GatePolicy.OFF),
+            "architecture": GateConfig(policy=GatePolicy.OFF),
+            "plan": GateConfig(policy=GatePolicy.OFF),
+        },
+    )
     # (Stop after clarify by giving a plan with no tasks via a fake planner, or
     # assert on status; keep the assertion minimal — the point is the research
     # stage does not crash and clarify receives control.)
@@ -2110,8 +2233,7 @@ Create `tests/test_architect_research_tool.py`:
 import ast
 from pathlib import Path
 
-ARCHITECT_PY = (Path(__file__).resolve().parents[1]
-                / "agents" / "architect" / "agent.py")
+ARCHITECT_PY = Path(__file__).resolve().parents[1] / "agents" / "architect" / "agent.py"
 
 
 def test_architect_agent_registers_a_research_tool():
@@ -2119,8 +2241,9 @@ def test_architect_agent_registers_a_research_tool():
     assert "research" in src
     # A tool named research is registered on the agent.
     tree = ast.parse(src)
-    names = {n.name for n in ast.walk(tree)
-             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    names = {
+        n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
     assert "research" in names
 
 
@@ -2131,8 +2254,9 @@ def test_research_subquery_shares_the_budget_object():
     import inspect
 
     from sdlc.research import toolset
+
     sig = inspect.signature(toolset.research_subquery)
-    assert list(sig.parameters)[0] == "deps"     # the shared ResearchDeps
+    assert list(sig.parameters)[0] == "deps"  # the shared ResearchDeps
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -2146,6 +2270,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'sdlc.research.toolset'
 """Second research entry point (spec §8): the architect consults research
 mid-run via a tool, drawing down the SAME per-run budget as the stage would.
 One core (the research agent), two callers (the stage and this tool)."""
+
 from __future__ import annotations
 
 from ..models import ResearchBrief
@@ -2157,9 +2282,12 @@ async def research_subquery(deps: ResearchDeps, question: str) -> ResearchBrief:
     lazily so architect/agent.py stays importable without constructing the
     research agent at its own import time."""
     from sdlc.agents.roles import t_research
+
     if t_research is None:
-        raise RuntimeError("research agent is not available (agents/research/ "
-                           "missing) — cannot service an architect research call")
+        raise RuntimeError(
+            "research agent is not available (agents/research/ "
+            "missing) — cannot service an architect research call"
+        )
     return (await t_research.run(question, deps=deps)).output
 ```
 

@@ -10,7 +10,7 @@ from sdlc.harness.containment import (
     load_grants,
     match_grant,
 )
-from sdlc.models import ToolGrant
+from sdlc.harness.models import ToolGrant
 
 INPUT = {"file_path": "/etc/passwd", "content": "x"}
 

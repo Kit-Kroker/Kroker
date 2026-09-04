@@ -6,12 +6,14 @@ models.py: building pipeline contracts from triage findings is its whole job.
 
 from __future__ import annotations
 
-from ..models import (
+from ..stages.architecture.models import (
     ArchitectureDecision,
     ArchitectureSpec,
+    ValidationContract,
+)
+from ..stages.plan.models import (
     DevTask,
     ImplementationPlan,
-    ValidationContract,
 )
 from ..triage.admission import admits
 from ..triage.models import (

@@ -23,9 +23,10 @@ from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel
 
+from sdlc.triage.models import M_STRUCTURE, FindingSeverity, FixClass, SignalResult, TriageFinding
+
 from ...measurement import Measurement
 from ...toolchain.adapters import ToolchainAdapter
-from ..models import M_STRUCTURE, FindingSeverity, FixClass, SignalResult, TriageFinding
 from .dependencies import imported_modules
 
 SIGNAL_ID = "scaffold"

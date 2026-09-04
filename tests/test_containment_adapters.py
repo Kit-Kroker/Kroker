@@ -8,7 +8,7 @@ from sdlc.harness.adapters import (
     HarnessRequest,
 )
 from sdlc.harness.containment import Policy, Rule
-from sdlc.models import ContainmentLayer
+from sdlc.harness.models import ContainmentLayer
 
 SCOPED_WRITES_REASON = "[no-out-of-worktree-write] Writes are scoped."
 DESTRUCTIVE_REASON = "[no-recursive-force-delete] Destructive."
@@ -195,7 +195,7 @@ def _settings_path(req: HarnessRequest) -> str:
 
 from sdlc.harness.adapters import OpenCodeHarness
 from sdlc.harness.containment import Action, digest_tool_input
-from sdlc.models import ToolGrant
+from sdlc.harness.models import ToolGrant
 
 ESC_RULE = Rule(
     id="no-out-of-worktree-write",

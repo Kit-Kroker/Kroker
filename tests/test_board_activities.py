@@ -16,7 +16,7 @@ from sdlc.board.activities import (
     sync_plan_tasks,
 )
 from sdlc.board.models import TaskStatus
-from sdlc.models import DevTask
+from sdlc.stages.plan.models import DevTask
 
 ACTIVITIES = [
     publish_artifact_version,

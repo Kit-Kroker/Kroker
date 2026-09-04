@@ -1,8 +1,12 @@
 import pytest
 
-from sdlc.models import GroundedFinding, MemoryKind, ResearchBrief
+from sdlc.memory.models import MemoryKind
 from sdlc.research import verify
 from sdlc.research.retain import verified_findings_to_retain
+from sdlc.stages.research.models import (
+    GroundedFinding,
+    ResearchBrief,
+)
 
 
 @pytest.fixture

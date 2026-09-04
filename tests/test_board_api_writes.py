@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sdlc.artifacts.store import LocalFileStore
 from sdlc.board.api import create_app
 from sdlc.board.store import BoardStore
-from sdlc.models import DevTask
+from sdlc.stages.plan.models import DevTask
 
 
 @pytest.fixture

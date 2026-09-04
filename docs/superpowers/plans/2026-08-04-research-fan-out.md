@@ -72,6 +72,7 @@ Two sub-questions fetching the same URL write the same path concurrently. Conten
 previous content or the complete new content, never a partial write --
 verify_brief reads these files and a truncated read is a spurious
 quote_not_found that fails the research stage closed."""
+
 import asyncio
 
 import pytest
@@ -98,8 +99,7 @@ def test_write_page_creates_parent_directories():
 
 def test_write_page_leaves_no_temp_files_behind():
     write_page("r1", "https://example.com/a", "x")
-    assert [p.name for p in pages_dir("r1").iterdir()] == [
-        page_filename("https://example.com/a")]
+    assert [p.name for p in pages_dir("r1").iterdir()] == [page_filename("https://example.com/a")]
 
 
 def test_write_page_overwrites_atomically_never_exposing_a_partial_read():
@@ -231,19 +231,19 @@ Per-sub-question budgets need their own on-disk counters, while the run ceiling 
 ```python
 """Scoped budgets: each sub-question gets its own counter so one cannot drain
 the run, while a shared 'run' counter still caps the total."""
+
 import json
 
 import pytest
 
-from sdlc.research.budget_store import (budget_path, charge_persisted,
-                                        charge_scoped)
+from sdlc.research.budget_store import budget_path, charge_persisted, charge_scoped
 from sdlc.research.deps import BudgetExceeded, ResearchDeps
 
 
 def _deps(run_id: str = "r1", max_fetches: int = 2) -> ResearchDeps:
-    return ResearchDeps(run_id=run_id, provider="fake",
-                        max_searches=2, max_fetches=max_fetches,
-                        max_cost_usd=1.0)
+    return ResearchDeps(
+        run_id=run_id, provider="fake", max_searches=2, max_fetches=max_fetches, max_cost_usd=1.0
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -285,22 +285,18 @@ async def test_charge_scoped_trips_on_the_run_ceiling_even_when_the_scope_is_fin
     # FETCH_COST_USD is 0.02, so 4 fetches = $0.08. A run ceiling of $0.05
     # trips on the third even though each sub-question scope allows more.
     for i in range(2):
-        await charge_scoped(_deps(max_fetches=10), fetch=1,
-                            scope=f"sq-{i}", run_max_cost_usd=0.05)
+        await charge_scoped(_deps(max_fetches=10), fetch=1, scope=f"sq-{i}", run_max_cost_usd=0.05)
     with pytest.raises(BudgetExceeded):
-        await charge_scoped(_deps(max_fetches=10), fetch=1,
-                            scope="sq-2", run_max_cost_usd=0.05)
+        await charge_scoped(_deps(max_fetches=10), fetch=1, scope="sq-2", run_max_cost_usd=0.05)
 
 
 @pytest.mark.asyncio
 async def test_charge_scoped_does_not_charge_the_scope_when_the_run_ceiling_trips():
     # The run check runs FIRST. A sub-question must not be billed for work
     # the run ceiling refused.
-    await charge_scoped(_deps(max_fetches=10), fetch=1,
-                        scope="sq-0", run_max_cost_usd=0.03)
+    await charge_scoped(_deps(max_fetches=10), fetch=1, scope="sq-0", run_max_cost_usd=0.03)
     with pytest.raises(BudgetExceeded):
-        await charge_scoped(_deps(max_fetches=10), fetch=1,
-                            scope="sq-1", run_max_cost_usd=0.03)
+        await charge_scoped(_deps(max_fetches=10), fetch=1, scope="sq-1", run_max_cost_usd=0.03)
     assert not budget_path("r1", "sq-1").exists()
 ```
 
@@ -327,9 +323,9 @@ def budget_path(run_id: str, scope: str = "run") -> Path:
     return root / run_id / "research" / f"budget-{scope}.json"
 
 
-async def charge_persisted(deps: ResearchDeps, *,
-                           search: int = 0, fetch: int = 0,
-                           scope: str = "run") -> None:
+async def charge_persisted(
+    deps: ResearchDeps, *, search: int = 0, fetch: int = 0, scope: str = "run"
+) -> None:
     """Same contract as deps.charge(): enforces the bound BEFORE accounting
     for it, raising BudgetExceeded (and leaving the on-disk count untouched)
     if `search`/`fetch` would cross deps.max_searches/max_fetches/max_cost_usd
@@ -342,8 +338,7 @@ async def charge_persisted(deps: ResearchDeps, *,
     await _acquire_lock(lock_path)
     try:
         if path.exists():
-            budget = Budget.model_validate_json(
-                path.read_text(encoding="utf-8"))
+            budget = Budget.model_validate_json(path.read_text(encoding="utf-8"))
         else:
             budget = Budget()
         scratch = deps.model_copy(update={"budget": budget})
@@ -353,9 +348,9 @@ async def charge_persisted(deps: ResearchDeps, *,
         lock_path.unlink(missing_ok=True)
 
 
-async def charge_scoped(deps: ResearchDeps, *,
-                        search: int = 0, fetch: int = 0,
-                        scope: str, run_max_cost_usd: float) -> None:
+async def charge_scoped(
+    deps: ResearchDeps, *, search: int = 0, fetch: int = 0, scope: str, run_max_cost_usd: float
+) -> None:
     """Charge BOTH the sub-question scope and the shared run ceiling.
 
     The run counter is charged FIRST, so a sub-question is never billed for
@@ -363,11 +358,13 @@ async def charge_scoped(deps: ResearchDeps, *,
     (search/fetch counts are per-sub-question concerns), so it is charged
     against a deps copy whose count caps are effectively unbounded.
     """
-    run_deps = deps.model_copy(update={
-        "max_cost_usd": run_max_cost_usd,
-        "max_searches": 10**9,
-        "max_fetches": 10**9,
-    })
+    run_deps = deps.model_copy(
+        update={
+            "max_cost_usd": run_max_cost_usd,
+            "max_searches": 10**9,
+            "max_fetches": 10**9,
+        }
+    )
     await charge_persisted(run_deps, search=search, fetch=fetch, scope="run")
     await charge_persisted(deps, search=search, fetch=fetch, scope=scope)
 ```
@@ -407,6 +404,7 @@ git commit -m "feat(research): scoped budget counters for per-sub-question allow
 ```python
 """ResearchConfig gains fan-out bounds. The existing per-run caps are
 REINTERPRETED as per-sub-question; max_run_cost_usd is the new run ceiling."""
+
 from sdlc.models import ResearchConfig
 
 
@@ -453,6 +451,7 @@ class ResearchConfig(BaseModel):
     the single-agent stage it replaces, which defeats the point. The run-level
     bound is max_run_cost_usd, enforced on the shared "run" budget scope.
     """
+
     max_sub_questions: int = 4
     """Fan-out width. A HARD SLICE applied to the planner's output, never a
     request the model is trusted to honour: measured behaviour is that a
@@ -460,9 +459,9 @@ class ResearchConfig(BaseModel):
     yes/no lookup. Also the practical concurrency bound, since each
     sub-question runs an agent with its own CodeMode sandbox."""
 
-    max_searches: int = 5               # per sub-question
-    max_fetches: int = 10               # per sub-question
-    max_cost_usd: float = 1.0           # per sub-question
+    max_searches: int = 5  # per sub-question
+    max_fetches: int = 10  # per sub-question
+    max_cost_usd: float = 1.0  # per sub-question
 
     max_run_cost_usd: float = 4.0
     """Hard whole-run ceiling across every sub-question and every refine
@@ -518,8 +517,7 @@ Fan-out moves the model call activity-side, so `_run_role` can no longer wrap it
 Append to `tests/test_research_stage_types.py`:
 
 ```python
-from sdlc.models import (ResearchBrief, ResearchPlan, RoleUsage, SubQuestion,
-                         SubQuestionFinding)
+from sdlc.models import ResearchBrief, ResearchPlan, RoleUsage, SubQuestion, SubQuestionFinding
 
 
 def test_research_plan_carries_usage():
@@ -532,8 +530,8 @@ def test_research_plan_carries_usage():
 
 def test_sub_question_finding_carries_usage_and_a_brief():
     f = SubQuestionFinding(
-        sub_question=SubQuestion(id="sq-0", question="what?"),
-        brief=ResearchBrief(summary="s"))
+        sub_question=SubQuestion(id="sq-0", question="what?"), brief=ResearchBrief(summary="s")
+    )
     assert isinstance(f.usage, RoleUsage)
     assert f.failed is False
     assert f.error == ""
@@ -542,7 +540,10 @@ def test_sub_question_finding_carries_usage_and_a_brief():
 def test_sub_question_finding_can_represent_a_permanent_failure():
     f = SubQuestionFinding(
         sub_question=SubQuestion(id="sq-1", question="what?"),
-        brief=ResearchBrief(), failed=True, error="RefusalError: declined")
+        brief=ResearchBrief(),
+        failed=True,
+        error="RefusalError: declined",
+    )
     assert f.failed
     assert "declined" in f.error
 ```
@@ -564,9 +565,9 @@ class ResearchPlan(BaseModel):
     list[SubQuestion]: fan-out moves the model call activity-side, out of
     _run_role's reach, so an activity that calls a model must hand its usage
     back or the spend is silently lost (E-33 amendment, fan-out design §7)."""
+
     sub_questions: list[SubQuestion] = Field(default_factory=list)
-    usage: RoleUsage = Field(
-        default_factory=lambda: RoleUsage(role="research", model="unknown"))
+    usage: RoleUsage = Field(default_factory=lambda: RoleUsage(role="research", model="unknown"))
 
 
 class SubQuestionFinding(BaseModel):
@@ -577,10 +578,10 @@ class SubQuestionFinding(BaseModel):
     of four sub-questions is worth far more than nothing -- and the merge
     turns this into a Gap so a short brief is explained rather than just
     short."""
+
     sub_question: SubQuestion
     brief: ResearchBrief = Field(default_factory=ResearchBrief)
-    usage: RoleUsage = Field(
-        default_factory=lambda: RoleUsage(role="research", model="unknown"))
+    usage: RoleUsage = Field(default_factory=lambda: RoleUsage(role="research", model="unknown"))
     failed: bool = False
     error: str = ""
 ```
@@ -628,17 +629,24 @@ different sources) is the most valuable thing fan-out produces and must
 survive; exact duplicate triples must NOT, because brief_digest hashes
 (source_url, claim) pairs as a LIST, so a duplicate changes the digest and
 silently degrades clarify's memo hit rate."""
-from sdlc.models import (ConsultedSource, Contradiction, GroundedFinding,
-                         InferredFinding, ResearchBrief, SubQuestion,
-                         SubQuestionFinding)
+
+from sdlc.models import (
+    ConsultedSource,
+    Contradiction,
+    GroundedFinding,
+    InferredFinding,
+    ResearchBrief,
+    SubQuestion,
+    SubQuestionFinding,
+)
 from sdlc.research.merge import merge_briefs
 from sdlc.research.verify import brief_digest
 
 
 def _finding(sq_id: str, brief: ResearchBrief, **kw) -> SubQuestionFinding:
     return SubQuestionFinding(
-        sub_question=SubQuestion(id=sq_id, question=f"q for {sq_id}"),
-        brief=brief, **kw)
+        sub_question=SubQuestion(id=sq_id, question=f"q for {sq_id}"), brief=brief, **kw
+    )
 
 
 def test_merge_of_nothing_is_an_empty_brief():
@@ -646,85 +654,104 @@ def test_merge_of_nothing_is_an_empty_brief():
 
 
 def test_sub_questions_are_unioned_in_order():
-    merged = merge_briefs([
-        _finding("sq-0", ResearchBrief()),
-        _finding("sq-1", ResearchBrief()),
-    ])
+    merged = merge_briefs(
+        [
+            _finding("sq-0", ResearchBrief()),
+            _finding("sq-1", ResearchBrief()),
+        ]
+    )
     assert [s.id for s in merged.sub_questions] == ["sq-0", "sq-1"]
 
 
 def test_corroboration_is_preserved_same_claim_different_sources():
-    a = ResearchBrief(grounded_findings=[GroundedFinding(
-        source_url="https://a.example", quote="q1", claim="X is true")])
-    b = ResearchBrief(grounded_findings=[GroundedFinding(
-        source_url="https://b.example", quote="q2", claim="X is true")])
+    a = ResearchBrief(
+        grounded_findings=[
+            GroundedFinding(source_url="https://a.example", quote="q1", claim="X is true")
+        ]
+    )
+    b = ResearchBrief(
+        grounded_findings=[
+            GroundedFinding(source_url="https://b.example", quote="q2", claim="X is true")
+        ]
+    )
     merged = merge_briefs([_finding("sq-0", a), _finding("sq-1", b)])
     assert len(merged.grounded_findings) == 2, "corroboration was collapsed"
 
 
 def test_exact_duplicate_triples_are_deduped():
     g = GroundedFinding(source_url="https://a.example", quote="q", claim="X")
-    merged = merge_briefs([
-        _finding("sq-0", ResearchBrief(grounded_findings=[g])),
-        _finding("sq-1", ResearchBrief(grounded_findings=[g.model_copy()])),
-    ])
+    merged = merge_briefs(
+        [
+            _finding("sq-0", ResearchBrief(grounded_findings=[g])),
+            _finding("sq-1", ResearchBrief(grounded_findings=[g.model_copy()])),
+        ]
+    )
     assert len(merged.grounded_findings) == 1
 
 
 def test_digest_is_stable_when_two_sub_questions_report_the_same_triple():
     g = GroundedFinding(source_url="https://a.example", quote="q", claim="X")
     one = merge_briefs([_finding("sq-0", ResearchBrief(grounded_findings=[g]))])
-    two = merge_briefs([
-        _finding("sq-0", ResearchBrief(grounded_findings=[g])),
-        _finding("sq-1", ResearchBrief(grounded_findings=[g.model_copy()])),
-    ])
+    two = merge_briefs(
+        [
+            _finding("sq-0", ResearchBrief(grounded_findings=[g])),
+            _finding("sq-1", ResearchBrief(grounded_findings=[g.model_copy()])),
+        ]
+    )
     assert brief_digest(one) == brief_digest(two)
 
 
 def test_sources_are_deduped_by_url_first_seen_wins():
-    a = ResearchBrief(sources_consulted=[ConsultedSource(
-        url="https://a.example", title="A", relevance="high")])
-    b = ResearchBrief(sources_consulted=[ConsultedSource(
-        url="https://a.example", title="A again", relevance="peripheral")])
+    a = ResearchBrief(
+        sources_consulted=[ConsultedSource(url="https://a.example", title="A", relevance="high")]
+    )
+    b = ResearchBrief(
+        sources_consulted=[
+            ConsultedSource(url="https://a.example", title="A again", relevance="peripheral")
+        ]
+    )
     merged = merge_briefs([_finding("sq-0", a), _finding("sq-1", b)])
     assert len(merged.sources_consulted) == 1
     assert merged.sources_consulted[0].relevance == "high"
 
 
 def test_inferred_findings_and_gaps_concatenate():
-    a = ResearchBrief(inferred_findings=[InferredFinding(
-        reasoning="r1", claim="c1")])
-    b = ResearchBrief(inferred_findings=[InferredFinding(
-        reasoning="r2", claim="c2")])
+    a = ResearchBrief(inferred_findings=[InferredFinding(reasoning="r1", claim="c1")])
+    b = ResearchBrief(inferred_findings=[InferredFinding(reasoning="r2", claim="c2")])
     merged = merge_briefs([_finding("sq-0", a), _finding("sq-1", b)])
     assert len(merged.inferred_findings) == 2
 
 
 def test_within_sub_question_contradictions_carry_through():
-    a = ResearchBrief(contradictions=[Contradiction(
-        topic="t", positions=["p1", "p2"], unresolved=True)])
+    a = ResearchBrief(
+        contradictions=[Contradiction(topic="t", positions=["p1", "p2"], unresolved=True)]
+    )
     merged = merge_briefs([_finding("sq-0", a)])
     assert len(merged.contradictions) == 1
     assert merged.contradictions[0].topic == "t"
 
 
 def test_a_failed_sub_question_becomes_a_gap():
-    merged = merge_briefs([
-        _finding("sq-0", ResearchBrief(), failed=True,
-                 error="RefusalError: declined"),
-    ])
+    merged = merge_briefs(
+        [
+            _finding("sq-0", ResearchBrief(), failed=True, error="RefusalError: declined"),
+        ]
+    )
     assert len(merged.gaps) == 1
     assert merged.gaps[0].sub_question_id == "sq-0"
     assert "declined" in merged.gaps[0].why_it_matters
 
 
 def test_a_failed_sub_question_does_not_stop_its_siblings():
-    ok = ResearchBrief(grounded_findings=[GroundedFinding(
-        source_url="https://a.example", quote="q", claim="X")])
-    merged = merge_briefs([
-        _finding("sq-0", ResearchBrief(), failed=True, error="boom"),
-        _finding("sq-1", ok),
-    ])
+    ok = ResearchBrief(
+        grounded_findings=[GroundedFinding(source_url="https://a.example", quote="q", claim="X")]
+    )
+    merged = merge_briefs(
+        [
+            _finding("sq-0", ResearchBrief(), failed=True, error="boom"),
+            _finding("sq-1", ok),
+        ]
+    )
     assert len(merged.grounded_findings) == 1
     assert len(merged.gaps) == 1
 
@@ -753,11 +780,19 @@ reader, which is the point -- the model's judgment is confined to summary,
 confidence, and cross-cutting contradictions (research/stage.py's
 synthesize_brief), and it may never author a grounded finding.
 """
+
 from __future__ import annotations
 
-from ..models import (ConsultedSource, Contradiction, Gap, GroundedFinding,
-                      InferredFinding, ResearchBrief, SubQuestion,
-                      SubQuestionFinding)
+from ..models import (
+    ConsultedSource,
+    Contradiction,
+    Gap,
+    GroundedFinding,
+    InferredFinding,
+    ResearchBrief,
+    SubQuestion,
+    SubQuestionFinding,
+)
 
 
 def merge_briefs(findings: list[SubQuestionFinding]) -> ResearchBrief:
@@ -781,10 +816,13 @@ def merge_briefs(findings: list[SubQuestionFinding]) -> ResearchBrief:
         if f.failed:
             # A permanently failed sub-question is not silence: it becomes a
             # gap so a short brief is EXPLAINED rather than merely short.
-            gaps.append(Gap(
-                sub_question_id=f.sub_question.id,
-                what_is_missing=f.sub_question.question,
-                why_it_matters=f"this sub-question did not complete: {f.error}"))
+            gaps.append(
+                Gap(
+                    sub_question_id=f.sub_question.id,
+                    what_is_missing=f.sub_question.question,
+                    why_it_matters=f"this sub-question did not complete: {f.error}",
+                )
+            )
             continue
 
         for s in f.brief.sources_consulted:
@@ -854,8 +892,13 @@ Fan-out multiplies input cost by N. A shared cached prefix is the largest cost l
 enough to cache. Under ~512 tokens a prefix is silently NOT cached -- no
 error, the counter just stays at zero -- so this is guarded by a test rather
 than a comment."""
-from sdlc.research.prompts import (PLAN_SYSTEM, SUB_QUESTION_PREFIX,
-                                   SYNTHESIS_SYSTEM, sub_question_prompt)
+
+from sdlc.research.prompts import (
+    PLAN_SYSTEM,
+    SUB_QUESTION_PREFIX,
+    SYNTHESIS_SYSTEM,
+    sub_question_prompt,
+)
 
 # ~4 chars per token is the standard rough conversion. 512 tokens is the
 # documented cache floor; 2400 chars gives headroom without being precious.
@@ -865,7 +908,8 @@ MIN_CACHEABLE_CHARS = 2400
 def test_prefix_is_long_enough_to_be_cacheable():
     assert len(SUB_QUESTION_PREFIX) >= MIN_CACHEABLE_CHARS, (
         "prefix is below the cache floor -- it will silently not be cached "
-        "and every parallel sub-question pays full input price")
+        "and every parallel sub-question pays full input price"
+    )
 
 
 def test_prefix_is_byte_identical_across_different_questions():
@@ -907,6 +951,7 @@ cache_creation_input_tokens simply stays 0, with no error and no warning.
 Guarded by tests/test_research_prompt_cacheable.py. Do not trim for tidiness,
 and NEVER interpolate the question into the prefix.
 """
+
 from __future__ import annotations
 
 SUB_QUESTION_PREFIX = """\
@@ -1057,6 +1102,7 @@ One activity handles both the first plan and refine replans. Width is a hard sli
 The planner runs against TestModel -- no network, no live model. Width is a
 HARD SLICE: measured behaviour is that planners return the top of any range
 they are given, so the config value decides the width, not the question."""
+
 import pytest
 from pydantic_ai.models.test import TestModel
 
@@ -1065,8 +1111,7 @@ from sdlc.research.stage import PlanInput, _plan_prompt, plan_research
 
 
 def _inp(**kw) -> PlanInput:
-    base = dict(idea_json='{"title": "add rate limiting"}',
-                max_sub_questions=4, model="test-model")
+    base = dict(idea_json='{"title": "add rate limiting"}', max_sub_questions=4, model="test-model")
     base.update(kw)
     return PlanInput(**base)
 
@@ -1085,13 +1130,21 @@ def test_plan_prompt_without_a_refine_seed_mentions_no_guidance():
 
 
 def test_plan_prompt_with_a_refine_seed_carries_guidance_gaps_and_conflicts():
-    prompt = _plan_prompt(_inp(
-        guidance="dig into the enforcement timeline",
-        gaps=[Gap(sub_question_id="sq-0", what_is_missing="penalty amounts",
-                  why_it_matters="drives the design")],
-        contradictions=[Contradiction(topic="effective date",
-                                      positions=["2026", "2027"],
-                                      unresolved=True)]))
+    prompt = _plan_prompt(
+        _inp(
+            guidance="dig into the enforcement timeline",
+            gaps=[
+                Gap(
+                    sub_question_id="sq-0",
+                    what_is_missing="penalty amounts",
+                    why_it_matters="drives the design",
+                )
+            ],
+            contradictions=[
+                Contradiction(topic="effective date", positions=["2026", "2027"], unresolved=True)
+            ],
+        )
+    )
     assert "Focus specifically on" in prompt
     assert "enforcement timeline" in prompt
     assert "penalty amounts" in prompt
@@ -1100,8 +1153,9 @@ def test_plan_prompt_with_a_refine_seed_carries_guidance_gaps_and_conflicts():
 
 @pytest.mark.asyncio
 async def test_plan_research_returns_sub_questions_with_stable_ids():
-    plan = await plan_research(_inp(), _model=TestModel(
-        custom_output_args={"sub_questions": ["a?", "b?", "c?"]}))
+    plan = await plan_research(
+        _inp(), _model=TestModel(custom_output_args={"sub_questions": ["a?", "b?", "c?"]})
+    )
     assert isinstance(plan, ResearchPlan)
     assert [s.id for s in plan.sub_questions] == ["sq-0", "sq-1", "sq-2"]
     assert [s.question for s in plan.sub_questions] == ["a?", "b?", "c?"]
@@ -1113,8 +1167,8 @@ async def test_plan_research_slices_to_max_sub_questions():
     # prompt -- trusting the model here is how a 4-wide stage becomes 9-wide.
     plan = await plan_research(
         _inp(max_sub_questions=2),
-        _model=TestModel(custom_output_args={
-            "sub_questions": ["a?", "b?", "c?", "d?", "e?"]}))
+        _model=TestModel(custom_output_args={"sub_questions": ["a?", "b?", "c?", "d?", "e?"]}),
+    )
     assert len(plan.sub_questions) == 2
 
 
@@ -1122,15 +1176,17 @@ async def test_plan_research_slices_to_max_sub_questions():
 async def test_plan_research_applies_the_id_offset_for_refine_rounds():
     # Round-2 ids must never collide with round-1 ids, or findings from the
     # two rounds overwrite each other in the merge.
-    plan = await plan_research(_inp(id_offset=4), _model=TestModel(
-        custom_output_args={"sub_questions": ["a?", "b?"]}))
+    plan = await plan_research(
+        _inp(id_offset=4), _model=TestModel(custom_output_args={"sub_questions": ["a?", "b?"]})
+    )
     assert [s.id for s in plan.sub_questions] == ["sq-4", "sq-5"]
 
 
 @pytest.mark.asyncio
 async def test_plan_research_drops_blank_sub_questions():
-    plan = await plan_research(_inp(), _model=TestModel(
-        custom_output_args={"sub_questions": ["a?", "   ", "", "b?"]}))
+    plan = await plan_research(
+        _inp(), _model=TestModel(custom_output_args={"sub_questions": ["a?", "   ", "", "b?"]})
+    )
     assert [s.question for s in plan.sub_questions] == ["a?", "b?"]
 
 
@@ -1138,16 +1194,16 @@ async def test_plan_research_drops_blank_sub_questions():
 async def test_plan_research_falls_back_to_the_whole_idea_when_empty():
     # A planner that returns nothing must degrade to today's behaviour -- one
     # sub-question covering the whole idea -- never to an empty fan-out.
-    plan = await plan_research(_inp(), _model=TestModel(
-        custom_output_args={"sub_questions": []}))
+    plan = await plan_research(_inp(), _model=TestModel(custom_output_args={"sub_questions": []}))
     assert len(plan.sub_questions) == 1
     assert plan.sub_questions[0].id == "sq-0"
 
 
 @pytest.mark.asyncio
 async def test_plan_research_carries_usage():
-    plan = await plan_research(_inp(), _model=TestModel(
-        custom_output_args={"sub_questions": ["a?"]}))
+    plan = await plan_research(
+        _inp(), _model=TestModel(custom_output_args={"sub_questions": ["a?"]})
+    )
     assert plan.usage.role == "research"
     assert plan.usage.calls == 1
 ```
@@ -1169,20 +1225,21 @@ why each return type carries a RoleUsage: fan-out moves the call out of
 _run_role's reach, and an activity that calls a model must hand its usage back
 or the spend is silently lost (E-33 amendment, fan-out design §7).
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 from temporalio import activity
 
-from ..models import (Contradiction, Gap, ResearchPlan, RoleUsage,
-                      SubQuestion)
+from ..models import Contradiction, Gap, ResearchPlan, RoleUsage, SubQuestion
 from .prompts import PLAN_SYSTEM
 
 
 class _PlannerOutput(BaseModel):
     """Structured-output shape for the planner. A flat list of strings: ids
     are assigned by us, not the model, so they stay stable and offsettable."""
+
     sub_questions: list[str] = Field(default_factory=list)
 
 
@@ -1190,6 +1247,7 @@ class PlanInput(BaseModel):
     """Serves BOTH the first plan and a refine replan. A replan is just a plan
     with a seed: the human's guidance plus the machine-readable gaps and
     contradictions round one could not resolve."""
+
     idea_json: str
     max_sub_questions: int
     model: str
@@ -1205,12 +1263,15 @@ def _usage_of(result, model: str) -> RoleUsage:
     pricing must stay replay-safe and must never fail a stage."""
     u = result.usage()
     return RoleUsage(
-        role="research", model=model, calls=1,
+        role="research",
+        model=model,
+        calls=1,
         input_tokens=u.input_tokens or 0,
         output_tokens=u.output_tokens or 0,
         cache_read_tokens=u.cache_read_tokens or 0,
         cache_write_tokens=u.cache_write_tokens or 0,
-        cost_usd=None)
+        cost_usd=None,
+    )
 
 
 def _plan_prompt(inp: PlanInput) -> str:
@@ -1222,16 +1283,13 @@ def _plan_prompt(inp: PlanInput) -> str:
     if inp.guidance:
         parts.append(f"\nFocus specifically on: {inp.guidance}\n")
     if inp.gaps:
-        parts.append("\nA previous round left these questions unanswered — "
-                     "target them:\n")
-        parts.extend(f"- {g.what_is_missing} ({g.why_it_matters})\n"
-                     for g in inp.gaps)
+        parts.append("\nA previous round left these questions unanswered — target them:\n")
+        parts.extend(f"- {g.what_is_missing} ({g.why_it_matters})\n" for g in inp.gaps)
     if inp.contradictions:
-        parts.append("\nA previous round found these unresolved conflicts — "
-                     "target them:\n")
-        parts.extend(f"- {c.topic}: {' vs '.join(c.positions)}\n"
-                     for c in inp.contradictions
-                     if c.unresolved)
+        parts.append("\nA previous round found these unresolved conflicts — target them:\n")
+        parts.extend(
+            f"- {c.topic}: {' vs '.join(c.positions)}\n" for c in inp.contradictions if c.unresolved
+        )
     return "".join(parts)
 
 
@@ -1246,11 +1304,10 @@ async def plan_research(inp: PlanInput, _model=None) -> ResearchPlan:
     that planners return the top of whatever range they are given, even for a
     yes/no lookup -- so the config value, not the question, decides the width.
     """
-    agent = Agent(_model or inp.model, output_type=_PlannerOutput,
-                  system_prompt=PLAN_SYSTEM)
+    agent = Agent(_model or inp.model, output_type=_PlannerOutput, system_prompt=PLAN_SYSTEM)
     result = await agent.run(_plan_prompt(inp))
     texts = [t.strip() for t in result.output.sub_questions if t and t.strip()]
-    texts = texts[:inp.max_sub_questions]
+    texts = texts[: inp.max_sub_questions]
 
     if not texts:
         # Degrade to exactly today's behaviour: one investigation covering the
@@ -1259,9 +1316,11 @@ async def plan_research(inp: PlanInput, _model=None) -> ResearchPlan:
 
     activity.logger.info("planned %d sub-questions", len(texts))
     return ResearchPlan(
-        sub_questions=[SubQuestion(id=f"sq-{inp.id_offset + i}", question=t)
-                       for i, t in enumerate(texts)],
-        usage=_usage_of(result, inp.model))
+        sub_questions=[
+            SubQuestion(id=f"sq-{inp.id_offset + i}", question=t) for i, t in enumerate(texts)
+        ],
+        usage=_usage_of(result, inp.model),
+    )
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1317,6 +1376,7 @@ Budget exhaustion DEGRADES (a partial brief with the shortfall as a gap); it
 never crashes the stage. The counter is persisted, so an escaping
 BudgetExceeded would retry against a cap that stays exhausted -- six
 guaranteed failures with backoff."""
+
 import pytest
 from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.models.test import TestModel
@@ -1335,13 +1395,18 @@ def _runs_root(monkeypatch, tmp_path):
 def _inp(sq_id: str = "sq-0") -> SubQuestionInput:
     return SubQuestionInput(
         sub_question=SubQuestion(id=sq_id, question="what is the timeline?"),
-        deps=ResearchDeps(run_id="r1", provider="fake", max_searches=5,
-                          max_fetches=10, max_cost_usd=1.0),
-        model="test-model", max_requests=40, max_run_cost_usd=4.0)
+        deps=ResearchDeps(
+            run_id="r1", provider="fake", max_searches=5, max_fetches=10, max_cost_usd=1.0
+        ),
+        model="test-model",
+        max_requests=40,
+        max_run_cost_usd=4.0,
+    )
 
 
 class _Boom:
     """Stands in for the research agent when we need run() to raise."""
+
     def __init__(self, exc: Exception) -> None:
         self._exc = exc
 
@@ -1351,8 +1416,9 @@ class _Boom:
 
 @pytest.mark.asyncio
 async def test_returns_a_finding_carrying_the_brief_and_usage():
-    out = await research_subquestion(_inp(), _model=TestModel(
-        custom_output_args={"summary": "the timeline is 2027"}))
+    out = await research_subquestion(
+        _inp(), _model=TestModel(custom_output_args={"summary": "the timeline is 2027"})
+    )
     assert isinstance(out, SubQuestionFinding)
     assert out.sub_question.id == "sq-0"
     assert out.brief.summary == "the timeline is 2027"
@@ -1363,7 +1429,8 @@ async def test_returns_a_finding_carrying_the_brief_and_usage():
 @pytest.mark.asyncio
 async def test_budget_exceeded_degrades_to_a_gap_not_a_raise():
     out = await research_subquestion(
-        _inp(), _agent=_Boom(BudgetExceeded("search budget exhausted")))
+        _inp(), _agent=_Boom(BudgetExceeded("search budget exhausted"))
+    )
     assert out.failed is False, "budget exhaustion is a degradation, not a failure"
     assert out.brief.grounded_findings == []
     assert len(out.brief.gaps) == 1
@@ -1373,15 +1440,15 @@ async def test_budget_exceeded_degrades_to_a_gap_not_a_raise():
 @pytest.mark.asyncio
 async def test_usage_limit_exceeded_also_degrades():
     out = await research_subquestion(
-        _inp(), _agent=_Boom(UsageLimitExceeded("request_limit of 40 exceeded")))
+        _inp(), _agent=_Boom(UsageLimitExceeded("request_limit of 40 exceeded"))
+    )
     assert out.failed is False
     assert "request_limit" in out.brief.gaps[0].why_it_matters
 
 
 @pytest.mark.asyncio
 async def test_the_gap_is_attributed_to_this_sub_question():
-    out = await research_subquestion(
-        _inp("sq-3"), _agent=_Boom(BudgetExceeded("x")))
+    out = await research_subquestion(_inp("sq-3"), _agent=_Boom(BudgetExceeded("x")))
     assert out.brief.gaps[0].sub_question_id == "sq-3"
 
 
@@ -1390,8 +1457,7 @@ async def test_a_degraded_brief_is_never_grounded():
     # verify_brief only inspects grounded_findings, so an empty list means the
     # degraded brief flows through the SAME success path as a normal brief
     # instead of tripping the grounding gate too.
-    out = await research_subquestion(
-        _inp(), _agent=_Boom(BudgetExceeded("x")))
+    out = await research_subquestion(_inp(), _agent=_Boom(BudgetExceeded("x")))
     assert out.brief.grounded_findings == []
 
 
@@ -1470,15 +1536,21 @@ def _degraded(sub: SubQuestion, exc: Exception) -> ResearchBrief:
     a gap -- ResearchConfig's documented contract. Never grounded, so
     verify_brief passes it through the ordinary success path."""
     return ResearchBrief(
-        gaps=[Gap(sub_question_id=sub.id,
-                  what_is_missing=sub.question,
-                  why_it_matters=f"research stopped early: {exc}")],
-        summary=f"Research stopped early: {exc}")
+        gaps=[
+            Gap(
+                sub_question_id=sub.id,
+                what_is_missing=sub.question,
+                why_it_matters=f"research stopped early: {exc}",
+            )
+        ],
+        summary=f"Research stopped early: {exc}",
+    )
 
 
 @activity.defn
-async def research_subquestion(inp: SubQuestionInput,
-                               _model=None, _agent=None) -> SubQuestionFinding:
+async def research_subquestion(
+    inp: SubQuestionInput, _model=None, _agent=None
+) -> SubQuestionFinding:
     """Research ONE sub-question. The fan-out unit.
 
     Runs the PLAIN research_agent, not the TemporalAgent: inside an activity
@@ -1492,9 +1564,9 @@ async def research_subquestion(inp: SubQuestionInput,
     sub = inp.sub_question
     if _agent is None:
         from sdlc.agents.roles import research_agent
+
         if research_agent is None:
-            raise RuntimeError(
-                "research agent is not available (agents/research/ missing)")
+            raise RuntimeError("research agent is not available (agents/research/ missing)")
         agent = research_agent
     else:
         agent = _agent
@@ -1505,20 +1577,16 @@ async def research_subquestion(inp: SubQuestionInput,
     usage = RoleUsage(role="research", model=inp.model)
     try:
         async with _heartbeating():
-            kwargs = dict(deps=deps,
-                          usage_limits=UsageLimits(
-                              request_limit=inp.max_requests))
+            kwargs = dict(deps=deps, usage_limits=UsageLimits(request_limit=inp.max_requests))
             if _model is not None:
                 kwargs["model"] = _model
-            result = await agent.run(sub_question_prompt(sub.question),
-                                     **kwargs)
+            result = await agent.run(sub_question_prompt(sub.question), **kwargs)
     except (BudgetExceeded, UsageLimitExceeded) as exc:
         # Expected exhaustion: degrade. NEVER re-raise -- the counter is
         # persisted, so a retry hits the same exhausted cap and burns six
         # attempts with backoff for a guaranteed failure.
         activity.logger.info("sub-question %s degraded: %s", sub.id, exc)
-        return SubQuestionFinding(sub_question=sub,
-                                  brief=_degraded(sub, exc), usage=usage)
+        return SubQuestionFinding(sub_question=sub, brief=_degraded(sub, exc), usage=usage)
     except asyncio.CancelledError:
         # Graceful shutdown cancels in-flight activities. Heartbeat on the way
         # out so the server learns immediately rather than waiting out
@@ -1527,8 +1595,9 @@ async def research_subquestion(inp: SubQuestionInput,
         activity.logger.warning("sub-question %s cancelled mid-flight", sub.id)
         raise
 
-    return SubQuestionFinding(sub_question=sub, brief=result.output,
-                              usage=_usage_of(result, inp.model))
+    return SubQuestionFinding(
+        sub_question=sub, brief=result.output, usage=_usage_of(result, inp.model)
+    )
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1591,8 +1660,11 @@ async def test_research_subquestion_charges_its_own_scope():
 
     inp = SubQuestionInput(
         sub_question=SubQuestion(id="sq-7", question="q"),
-        deps=_deps(), model="test-model", max_requests=40,
-        max_run_cost_usd=4.0)
+        deps=_deps(),
+        model="test-model",
+        max_requests=40,
+        max_run_cost_usd=4.0,
+    )
 
     captured = {}
 
@@ -1610,10 +1682,13 @@ async def test_research_subquestion_charges_its_own_scope():
                     class _U:
                         input_tokens = output_tokens = 0
                         cache_read_tokens = cache_write_tokens = 0
+
                     return _U()
+
             return _R()
 
     from sdlc.research.stage import research_subquestion
+
     await research_subquestion(inp, _agent=_Agent())
     assert captured["scope"] == "sq-7"
     assert captured["run_max"] == 4.0
@@ -1650,12 +1725,14 @@ In `src/sdlc/research/deps.py`, add to `ResearchDeps` after `memory_watermark`:
 In `src/sdlc/research/stage.py`, replace the `deps = inp.deps.model_copy(...)` line in `research_subquestion` with:
 
 ```python
-    # Each sub-question charges its OWN scope so one cannot drain the run.
-    deps = inp.deps.model_copy(update={
+# Each sub-question charges its OWN scope so one cannot drain the run.
+deps = inp.deps.model_copy(
+    update={
         "budget": inp.deps.budget.model_copy(),
         "scope": sub.id,
         "max_run_cost_usd": inp.max_run_cost_usd,
-    })
+    }
+)
 ```
 
 - [ ] **Step 5: Route the toolset through `charge_scoped`**
@@ -1669,17 +1746,17 @@ from sdlc.research.budget_store import charge_scoped
 and replace each of the three `await charge_persisted(ctx.deps, ...)` calls:
 
 ```python
-                await charge_scoped(
-                    ctx.deps, search=1, scope=ctx.deps.scope,
-                    run_max_cost_usd=ctx.deps.max_run_cost_usd)
+await charge_scoped(
+    ctx.deps, search=1, scope=ctx.deps.scope, run_max_cost_usd=ctx.deps.max_run_cost_usd
+)
 ```
 
 for `web_search` and `deep_search`, and for `get_page`:
 
 ```python
-                await charge_scoped(
-                    ctx.deps, fetch=1, scope=ctx.deps.scope,
-                    run_max_cost_usd=ctx.deps.max_run_cost_usd)
+await charge_scoped(
+    ctx.deps, fetch=1, scope=ctx.deps.scope, run_max_cost_usd=ctx.deps.max_run_cost_usd
+)
 ```
 
 - [ ] **Step 6: Run the tests**
@@ -1722,41 +1799,53 @@ The model MUST NOT author grounded findings. It would be caught by
 verify_brief, but only by turning a normal run into a fail-closed stage
 failure -- so the activity refuses the material rather than relying on the
 verifier to catch it."""
+
 import pytest
 from pydantic_ai.models.test import TestModel
 
-from sdlc.models import (ConsultedSource, GroundedFinding, ResearchBrief,
-                         SubQuestion, SubQuestionFinding)
-from sdlc.research.stage import (SynthesizeInput, _numbered_sources,
-                                 synthesize_brief)
+from sdlc.models import (
+    ConsultedSource,
+    GroundedFinding,
+    ResearchBrief,
+    SubQuestion,
+    SubQuestionFinding,
+)
+from sdlc.research.stage import SynthesizeInput, _numbered_sources, synthesize_brief
 
 
 def _finding(sq_id: str, brief: ResearchBrief) -> SubQuestionFinding:
     return SubQuestionFinding(
-        sub_question=SubQuestion(id=sq_id, question=f"q {sq_id}"), brief=brief)
+        sub_question=SubQuestion(id=sq_id, question=f"q {sq_id}"), brief=brief
+    )
 
 
 def _two_findings() -> list[SubQuestionFinding]:
     a = ResearchBrief(
         sources_consulted=[ConsultedSource(url="https://a.example", title="A")],
-        grounded_findings=[GroundedFinding(
-            source_url="https://a.example", quote="qa", claim="claim A")])
+        grounded_findings=[
+            GroundedFinding(source_url="https://a.example", quote="qa", claim="claim A")
+        ],
+    )
     b = ResearchBrief(
         sources_consulted=[ConsultedSource(url="https://b.example", title="B")],
-        grounded_findings=[GroundedFinding(
-            source_url="https://b.example", quote="qb", claim="claim B")])
+        grounded_findings=[
+            GroundedFinding(source_url="https://b.example", quote="qb", claim="claim B")
+        ],
+    )
     return [_finding("sq-0", a), _finding("sq-1", b)]
 
 
 def _inp() -> SynthesizeInput:
-    return SynthesizeInput(idea_json='{"title": "x"}',
-                           findings=_two_findings(), model="test-model")
+    return SynthesizeInput(idea_json='{"title": "x"}', findings=_two_findings(), model="test-model")
 
 
 def test_numbered_sources_are_one_based_and_stable():
-    brief = ResearchBrief(sources_consulted=[
-        ConsultedSource(url="https://a.example", title="A"),
-        ConsultedSource(url="https://b.example", title="B")])
+    brief = ResearchBrief(
+        sources_consulted=[
+            ConsultedSource(url="https://a.example", title="A"),
+            ConsultedSource(url="https://b.example", title="B"),
+        ]
+    )
     text = _numbered_sources(brief)
     assert "[1]" in text and "https://a.example" in text
     assert "[2]" in text and "https://b.example" in text
@@ -1764,28 +1853,51 @@ def test_numbered_sources_are_one_based_and_stable():
 
 @pytest.mark.asyncio
 async def test_findings_and_sources_come_from_the_merge_not_the_model():
-    out = await synthesize_brief(_inp(), _model=TestModel(custom_output_args={
-        "summary": "combined", "confidence": 0.7, "contradictions": []}))
+    out = await synthesize_brief(
+        _inp(),
+        _model=TestModel(
+            custom_output_args={"summary": "combined", "confidence": 0.7, "contradictions": []}
+        ),
+    )
     assert {f.claim for f in out.grounded_findings} == {"claim A", "claim B"}
     assert len(out.sources_consulted) == 2
 
 
 @pytest.mark.asyncio
 async def test_the_model_writes_summary_and_confidence():
-    out = await synthesize_brief(_inp(), _model=TestModel(custom_output_args={
-        "summary": "combined answer", "confidence": 0.7,
-        "contradictions": []}))
+    out = await synthesize_brief(
+        _inp(),
+        _model=TestModel(
+            custom_output_args={
+                "summary": "combined answer",
+                "confidence": 0.7,
+                "contradictions": [],
+            }
+        ),
+    )
     assert out.summary == "combined answer"
     assert out.confidence == 0.7
 
 
 @pytest.mark.asyncio
 async def test_the_model_can_add_cross_sub_question_contradictions():
-    out = await synthesize_brief(_inp(), _model=TestModel(custom_output_args={
-        "summary": "s", "confidence": 0.5,
-        "contradictions": [{"topic": "date", "positions": ["2026", "2027"],
-                            "assessment": "A is better sourced",
-                            "unresolved": True}]}))
+    out = await synthesize_brief(
+        _inp(),
+        _model=TestModel(
+            custom_output_args={
+                "summary": "s",
+                "confidence": 0.5,
+                "contradictions": [
+                    {
+                        "topic": "date",
+                        "positions": ["2026", "2027"],
+                        "assessment": "A is better sourced",
+                        "unresolved": True,
+                    }
+                ],
+            }
+        ),
+    )
     assert len(out.contradictions) == 1
     assert out.contradictions[0].topic == "date"
 
@@ -1794,9 +1906,14 @@ async def test_the_model_can_add_cross_sub_question_contradictions():
 async def test_synthesis_of_no_findings_is_an_empty_brief_without_a_model_call():
     out = await synthesize_brief(
         SynthesizeInput(idea_json="{}", findings=[], model="test-model"),
-        _model=TestModel(custom_output_args={
-            "summary": "should not be used", "confidence": 1.0,
-            "contradictions": []}))
+        _model=TestModel(
+            custom_output_args={
+                "summary": "should not be used",
+                "confidence": 1.0,
+                "contradictions": [],
+            }
+        ),
+    )
     assert out.summary == ""
     assert out.grounded_findings == []
 
@@ -1805,10 +1922,13 @@ async def test_synthesis_of_no_findings_is_an_empty_brief_without_a_model_call()
 async def test_field_order_is_preserved():
     # tests/test_research_models.py pins SGR reasoning order; a merge that
     # rebuilt the model with reordered fields would be a regression.
-    out = await synthesize_brief(_inp(), _model=TestModel(custom_output_args={
-        "summary": "s", "confidence": 0.5, "contradictions": []}))
-    assert list(out.model_dump().keys()) == list(
-        ResearchBrief().model_dump().keys())
+    out = await synthesize_brief(
+        _inp(),
+        _model=TestModel(
+            custom_output_args={"summary": "s", "confidence": 0.5, "contradictions": []}
+        ),
+    )
+    assert list(out.model_dump().keys()) == list(ResearchBrief().model_dump().keys())
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1829,6 +1949,7 @@ class _SynthesisOutput(BaseModel):
     """EXACTLY the three fields the model is allowed to write. Making this a
     closed type is the enforcement of "synthesis may not author grounded
     findings" -- there is simply nowhere for it to put one."""
+
     summary: str = ""
     contradictions: list[Contradiction] = Field(default_factory=list)
     confidence: float = 0.0
@@ -1850,12 +1971,15 @@ def _numbered_sources(brief: ResearchBrief) -> str:
     cannot drift."""
     return "".join(
         f"[{n}] {s.title or s.url} — {s.url}\n"
-        for n, s in enumerate(brief.sources_consulted, start=1))
+        for n, s in enumerate(brief.sources_consulted, start=1)
+    )
 
 
 def _synthesis_prompt(inp: SynthesizeInput, merged: ResearchBrief) -> str:
-    parts = [f"Original question / feature idea:\n\n{inp.idea_json}\n",
-             "\nWhat the analysts found:\n"]
+    parts = [
+        f"Original question / feature idea:\n\n{inp.idea_json}\n",
+        "\nWhat the analysts found:\n",
+    ]
     for f in inp.findings:
         parts.append(f"\n--- On: {f.sub_question.question}\n")
         if f.failed:
@@ -1884,20 +2008,21 @@ async def synthesize_brief(inp: SynthesizeInput, _model=None) -> ResearchBrief:
     if not inp.findings:
         return merged
 
-    agent = Agent(_model or inp.model, output_type=_SynthesisOutput,
-                  system_prompt=SYNTHESIS_SYSTEM)
+    agent = Agent(_model or inp.model, output_type=_SynthesisOutput, system_prompt=SYNTHESIS_SYSTEM)
     result = await agent.run(_synthesis_prompt(inp, merged))
     out = result.output
 
-    return merged.model_copy(update={
-        "summary": out.summary,
-        # Within-sub-question conflicts (already in `merged`) PLUS the
-        # cross-sub-question ones only visible now that independent
-        # investigations sit side by side. The second kind is unreachable in a
-        # single agent turn and is the depth payoff of fanning out.
-        "contradictions": merged.contradictions + out.contradictions,
-        "confidence": out.confidence,
-    })
+    return merged.model_copy(
+        update={
+            "summary": out.summary,
+            # Within-sub-question conflicts (already in `merged`) PLUS the
+            # cross-sub-question ones only visible now that independent
+            # investigations sit side by side. The second kind is unreachable in a
+            # single agent turn and is the depth payoff of fanning out.
+            "contradictions": merged.contradictions + out.contradictions,
+            "confidence": out.confidence,
+        }
+    )
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1910,8 +2035,7 @@ Expected: PASS (6 tests)
 In `src/sdlc/worker.py`:
 
 ```python
-from .research.stage import (plan_research, research_subquestion,
-                             synthesize_brief)
+from .research.stage import plan_research, research_subquestion, synthesize_brief
 ```
 
 and add `synthesize_brief,` to the `activities=[...]` list.
@@ -1945,21 +2069,24 @@ Replace the single-agent stage with the fan-out. Failure tiers, usage folding, a
 These exercise the workflow's helpers directly rather than booting Temporal --
 the stage's ORCHESTRATION decisions are what matter here, and the activities
 themselves are covered by Tasks 7-9."""
+
 import pytest
 
-from sdlc.models import (ResearchBrief, RoleUsage, SubQuestion,
-                         SubQuestionFinding)
-from sdlc.workflows.feature import (RESEARCH_PLAN_ACT, RESEARCH_SQ_ACT,
-                                    RESEARCH_SYNTH_ACT,
-                                    _findings_from_results)
+from sdlc.models import ResearchBrief, RoleUsage, SubQuestion, SubQuestionFinding
+from sdlc.workflows.feature import (
+    RESEARCH_PLAN_ACT,
+    RESEARCH_SQ_ACT,
+    RESEARCH_SYNTH_ACT,
+    _findings_from_results,
+)
 
 
 def _ok(sq_id: str) -> SubQuestionFinding:
     return SubQuestionFinding(
         sub_question=SubQuestion(id=sq_id, question="q"),
         brief=ResearchBrief(summary="s"),
-        usage=RoleUsage(role="research", model="m", calls=1,
-                        input_tokens=10, output_tokens=5))
+        usage=RoleUsage(role="research", model="m", calls=1, input_tokens=10, output_tokens=5),
+    )
 
 
 def test_all_successful_results_pass_through():
@@ -1979,8 +2106,7 @@ def test_an_exception_becomes_a_failed_finding_not_a_raise():
 
 
 def test_one_failure_does_not_discard_its_siblings():
-    subs = [SubQuestion(id="sq-0", question="q0"),
-            SubQuestion(id="sq-1", question="q1")]
+    subs = [SubQuestion(id="sq-0", question="q0"), SubQuestion(id="sq-1", question="q1")]
     out = _findings_from_results(subs, [RuntimeError("boom"), _ok("sq-1")])
     assert [f.failed for f in out] == [True, False]
 
@@ -1990,6 +2116,7 @@ def test_sub_question_activity_config_satisfies_the_heartbeat_invariant():
     # out a healthy activity or leaves a dead worker undetected until
     # start_to_close.
     from sdlc.research.stage import HEARTBEAT_INTERVAL_SECONDS
+
     hb = RESEARCH_SQ_ACT["heartbeat_timeout"].total_seconds()
     stc = RESEARCH_SQ_ACT["start_to_close_timeout"].total_seconds()
     assert HEARTBEAT_INTERVAL_SECONDS < hb < stc
@@ -2022,8 +2149,8 @@ In `src/sdlc/workflows/feature.py`, after `INTEG_ACT` (line ~135):
 # planning is short and schema-constrained; a sub-question runs a full agent
 # with search and page fetches and legitimately takes minutes.
 RESEARCH_PLAN_ACT = dict(
-    start_to_close_timeout=timedelta(minutes=5),
-    retry_policy=RetryPolicy(maximum_attempts=3))
+    start_to_close_timeout=timedelta(minutes=5), retry_policy=RetryPolicy(maximum_attempts=3)
+)
 # The heartbeat is the important knob. A sub-question can run for many
 # minutes, so without heartbeating the server waits out the full
 # start_to_close before rescheduling a lost worker; with it, ~60s.
@@ -2041,10 +2168,12 @@ RESEARCH_SQ_ACT = dict(
         # exhausted cap: six guaranteed failures with backoff. The activity
         # already degrades these internally; this is the belt-and-braces for
         # any path that lets one escape.
-        non_retryable_error_types=["BudgetExceeded", "UsageLimitExceeded"]))
+        non_retryable_error_types=["BudgetExceeded", "UsageLimitExceeded"],
+    ),
+)
 RESEARCH_SYNTH_ACT = dict(
-    start_to_close_timeout=timedelta(minutes=10),
-    retry_policy=RetryPolicy(maximum_attempts=3))
+    start_to_close_timeout=timedelta(minutes=10), retry_policy=RetryPolicy(maximum_attempts=3)
+)
 ```
 
 - [ ] **Step 4: Add the result-collector helper**
@@ -2052,8 +2181,7 @@ RESEARCH_SYNTH_ACT = dict(
 In `src/sdlc/workflows/feature.py`, near `_degraded_research_brief` (line ~227):
 
 ```python
-def _findings_from_results(subs: list["SubQuestion"],
-                           results: list) -> list["SubQuestionFinding"]:
+def _findings_from_results(subs: list["SubQuestion"], results: list) -> list["SubQuestionFinding"]:
     """Turn gather(..., return_exceptions=True) output into findings.
 
     Sub-questions are INDEPENDENT -- that is the premise of the fan-out. Letting
@@ -2064,8 +2192,7 @@ def _findings_from_results(subs: list["SubQuestion"],
     out: list[SubQuestionFinding] = []
     for sub, result in zip(subs, results):
         if isinstance(result, BaseException):
-            out.append(SubQuestionFinding(
-                sub_question=sub, failed=True, error=str(result)))
+            out.append(SubQuestionFinding(sub_question=sub, failed=True, error=str(result)))
         else:
             out.append(result)
     return out
@@ -2074,9 +2201,14 @@ def _findings_from_results(subs: list["SubQuestion"],
 Add `SubQuestionFinding`, `ResearchPlan` to the model imports in the `workflow.unsafe.imports_passed_through()` block (near line 69), and the stage activities + input types near line 76:
 
 ```python
-    from ..research.stage import (PlanInput, SubQuestionInput, SynthesizeInput,
-                                  plan_research, research_subquestion,
-                                  synthesize_brief)
+from ..research.stage import (
+    PlanInput,
+    SubQuestionInput,
+    SynthesizeInput,
+    plan_research,
+    research_subquestion,
+    synthesize_brief,
+)
 ```
 
 - [ ] **Step 5: Replace the stage body**
@@ -2084,95 +2216,118 @@ Add `SubQuestionFinding`, `ResearchPlan` to the model imports in the `workflow.u
 In `src/sdlc/workflows/feature.py`, replace the `try:` / `except (BudgetExceeded, UsageLimitExceeded)` block that produces `brief` (lines 1342-1354) with a call to a new method, and add the method to the class:
 
 ```python
-    async def _fan_out_research(self, cfg: PipelineConfig, idea,
-                                deps: "ResearchDeps",
-                                spend: RoleUsage,
-                                id_offset: int = 0,
-                                guidance: str = "",
-                                gaps: list | None = None,
-                                contradictions: list | None = None
-                                ) -> tuple["ResearchBrief", list]:
-        """One wave: plan -> N parallel sub-questions -> synthesize.
+async def _fan_out_research(
+    self,
+    cfg: PipelineConfig,
+    idea,
+    deps: "ResearchDeps",
+    spend: RoleUsage,
+    id_offset: int = 0,
+    guidance: str = "",
+    gaps: list | None = None,
+    contradictions: list | None = None,
+) -> tuple["ResearchBrief", list]:
+    """One wave: plan -> N parallel sub-questions -> synthesize.
 
-        Returns the merged brief and the raw findings, so a refine round can
-        extend the finding list rather than discarding round one."""
-        model = STAGE_MODELS.get("research", "unknown")
+    Returns the merged brief and the raw findings, so a refine round can
+    extend the finding list rather than discarding round one."""
+    model = STAGE_MODELS.get("research", "unknown")
 
-        plan: ResearchPlan = await workflow.execute_activity(
-            plan_research,
-            PlanInput(idea_json=idea.model_dump_json(),
-                      max_sub_questions=cfg.research.max_sub_questions,
-                      model=model, id_offset=id_offset, guidance=guidance,
-                      gaps=gaps or [], contradictions=contradictions or []),
-            **RESEARCH_PLAN_ACT)
-        await self._fold_research_usage(cfg, plan.usage, spend)
+    plan: ResearchPlan = await workflow.execute_activity(
+        plan_research,
+        PlanInput(
+            idea_json=idea.model_dump_json(),
+            max_sub_questions=cfg.research.max_sub_questions,
+            model=model,
+            id_offset=id_offset,
+            guidance=guidance,
+            gaps=gaps or [],
+            contradictions=contradictions or [],
+        ),
+        **RESEARCH_PLAN_ACT,
+    )
+    await self._fold_research_usage(cfg, plan.usage, spend)
 
-        # THE fan-out. return_exceptions=True because the sub-questions are
-        # independent: one failure must not cancel the gather and throw away
-        # siblings already paid for.
-        results = await asyncio.gather(*[
+    # THE fan-out. return_exceptions=True because the sub-questions are
+    # independent: one failure must not cancel the gather and throw away
+    # siblings already paid for.
+    results = await asyncio.gather(
+        *[
             workflow.execute_activity(
                 research_subquestion,
                 SubQuestionInput(
-                    sub_question=sq, deps=deps, model=model,
+                    sub_question=sq,
+                    deps=deps,
+                    model=model,
                     max_requests=cfg.research.max_requests,
-                    max_run_cost_usd=cfg.research.max_run_cost_usd),
-                **RESEARCH_SQ_ACT)
+                    max_run_cost_usd=cfg.research.max_run_cost_usd,
+                ),
+                **RESEARCH_SQ_ACT,
+            )
             for sq in plan.sub_questions
-        ], return_exceptions=True)
+        ],
+        return_exceptions=True,
+    )
 
-        findings = _findings_from_results(plan.sub_questions, results)
-        for f in findings:
-            await self._fold_research_usage(cfg, f.usage, spend)
-        return findings
+    findings = _findings_from_results(plan.sub_questions, results)
+    for f in findings:
+        await self._fold_research_usage(cfg, f.usage, spend)
+    return findings
 
-    async def _fold_research_usage(self, cfg: PipelineConfig,
-                                   usage: RoleUsage,
-                                   into: RoleUsage) -> None:
-        """E-33 amendment: fan-out moved the model call activity-side, so
-        _run_role cannot wrap it. The activity hands usage back and the
-        workflow prices it here -- one accounting path preserved, only the
-        call site moved."""
-        if not (usage.input_tokens or usage.output_tokens):
-            return
-        usd: float | None = None
-        try:
-            usd = await workflow.execute_activity(
-                price_usage,
-                PriceUsageInput(
-                    model=usage.model,
-                    input_tokens=usage.input_tokens,
-                    output_tokens=usage.output_tokens,
-                    cache_read_tokens=usage.cache_read_tokens,
-                    cache_write_tokens=usage.cache_write_tokens),
-                **PRICE_ACT)
-        except Exception:
-            usd = None
-        self._track_usage(
-            role="research", model=usage.model,
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
-            cache_read_tokens=usage.cache_read_tokens,
-            cache_write_tokens=usage.cache_write_tokens,
-            cost_usd=usd, into=into)
+
+async def _fold_research_usage(
+    self, cfg: PipelineConfig, usage: RoleUsage, into: RoleUsage
+) -> None:
+    """E-33 amendment: fan-out moved the model call activity-side, so
+    _run_role cannot wrap it. The activity hands usage back and the
+    workflow prices it here -- one accounting path preserved, only the
+    call site moved."""
+    if not (usage.input_tokens or usage.output_tokens):
+        return
+    usd: float | None = None
+    try:
+        usd = await workflow.execute_activity(
+            price_usage,
+            PriceUsageInput(
+                model=usage.model,
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
+                cache_read_tokens=usage.cache_read_tokens,
+                cache_write_tokens=usage.cache_write_tokens,
+            ),
+            **PRICE_ACT,
+        )
+    except Exception:
+        usd = None
+    self._track_usage(
+        role="research",
+        model=usage.model,
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        cache_read_tokens=usage.cache_read_tokens,
+        cache_write_tokens=usage.cache_write_tokens,
+        cost_usd=usd,
+        into=into,
+    )
 ```
 
 Then in the stage body, replace the single `_run_role` call with:
 
 ```python
-            findings = await self._fan_out_research(cfg, idea, deps,
-                                                    research_spend)
-            brief: ResearchBrief = await workflow.execute_activity(
-                synthesize_brief,
-                SynthesizeInput(idea_json=idea.model_dump_json(),
-                                findings=findings,
-                                model=STAGE_MODELS.get("research", "unknown")),
-                **RESEARCH_SYNTH_ACT)
-            if all(f.failed for f in findings):
-                # Every sub-question failed: nothing to build a brief from.
-                # Degrade the STAGE, never the run (2026-07-20 decision).
-                brief = _degraded_research_brief(
-                    RuntimeError("every sub-question failed"))
+findings = await self._fan_out_research(cfg, idea, deps, research_spend)
+brief: ResearchBrief = await workflow.execute_activity(
+    synthesize_brief,
+    SynthesizeInput(
+        idea_json=idea.model_dump_json(),
+        findings=findings,
+        model=STAGE_MODELS.get("research", "unknown"),
+    ),
+    **RESEARCH_SYNTH_ACT,
+)
+if all(f.failed for f in findings):
+    # Every sub-question failed: nothing to build a brief from.
+    # Degrade the STAGE, never the run (2026-07-20 decision).
+    brief = _degraded_research_brief(RuntimeError("every sub-question failed"))
 ```
 
 Add `import asyncio` at the top of `feature.py` if it is not already imported.
@@ -2216,21 +2371,34 @@ git commit -m "feat(research): fan out the research stage across parallel sub-qu
 Round-1 findings are never discarded, round-2 ids never collide with round-1,
 and exhausting the round budget PROCEEDS with the current brief rather than
 rejecting -- research degrades a run, it never stops it."""
+
 import pytest
 
-from sdlc.models import (Contradiction, Gap, ResearchBrief, ResearchConfig,
-                         SubQuestion, SubQuestionFinding)
+from sdlc.models import (
+    Contradiction,
+    Gap,
+    ResearchBrief,
+    ResearchConfig,
+    SubQuestion,
+    SubQuestionFinding,
+)
 from sdlc.workflows.feature import _refine_seed, _should_refine
 
 
 def _brief() -> ResearchBrief:
     return ResearchBrief(
-        gaps=[Gap(sub_question_id="sq-0", what_is_missing="penalties",
-                  why_it_matters="drives the design")],
-        contradictions=[Contradiction(topic="date", positions=["a", "b"],
-                                      unresolved=True),
-                        Contradiction(topic="scope", positions=["c", "d"],
-                                      unresolved=False)])
+        gaps=[
+            Gap(
+                sub_question_id="sq-0",
+                what_is_missing="penalties",
+                why_it_matters="drives the design",
+            )
+        ],
+        contradictions=[
+            Contradiction(topic="date", positions=["a", "b"], unresolved=True),
+            Contradiction(topic="scope", positions=["c", "d"], unresolved=False),
+        ],
+    )
 
 
 def test_refine_is_allowed_on_the_first_revise():
@@ -2242,8 +2410,7 @@ def test_refine_is_exhausted_after_max_rounds():
 
 
 def test_refine_can_be_disabled_entirely():
-    assert _should_refine(round_n=1,
-                          cfg=ResearchConfig(max_refine_rounds=0)) is False
+    assert _should_refine(round_n=1, cfg=ResearchConfig(max_refine_rounds=0)) is False
 
 
 def test_the_seed_carries_gaps_and_only_UNRESOLVED_contradictions():
@@ -2293,43 +2460,49 @@ def _refine_seed(brief: "ResearchBrief") -> tuple[list, list]:
 Replace the gate block in the research stage (currently `gate = await self._gate("research", cfg)` / `if not gate.approved: return "rejected:research"`) with:
 
 ```python
-                round_n = 1
-                while True:
-                    gate = await self._gate("research", cfg, round=round_n)
-                    if gate.outcome == GateOutcome.APPROVE:
-                        break
-                    if gate.outcome == GateOutcome.REJECT:
-                        return "rejected:research"
-                    # REVISE
-                    if not _should_refine(round_n, cfg.research):
-                        # Exhausted: proceed with what we have. Research
-                        # degrades a run; it never stops one.
-                        break
-                    gaps, conflicts = _refine_seed(brief)
-                    findings += await self._fan_out_research(
-                        cfg, idea, deps, research_spend,
-                        id_offset=len(findings),
-                        guidance=gate.guidance or "",
-                        gaps=gaps, contradictions=conflicts)
-                    # Re-merge over ALL findings: round one is never discarded.
-                    brief = await workflow.execute_activity(
-                        synthesize_brief,
-                        SynthesizeInput(
-                            idea_json=idea.model_dump_json(),
-                            findings=findings,
-                            model=STAGE_MODELS.get("research", "unknown")),
-                        **RESEARCH_SYNTH_ACT)
-                    # Round-2 findings must be verified too.
-                    violations = await workflow.execute_activity(
-                        verify_brief_activity,
-                        args=[brief, workflow.info().workflow_id],
-                        **VERIFY_ACT)
-                    if violations:
-                        self._status = "research_failed"
-                        brief_digest_val = ""
-                        break
-                    brief_digest_val = brief_digest(brief)
-                    round_n += 1
+round_n = 1
+while True:
+    gate = await self._gate("research", cfg, round=round_n)
+    if gate.outcome == GateOutcome.APPROVE:
+        break
+    if gate.outcome == GateOutcome.REJECT:
+        return "rejected:research"
+    # REVISE
+    if not _should_refine(round_n, cfg.research):
+        # Exhausted: proceed with what we have. Research
+        # degrades a run; it never stops one.
+        break
+    gaps, conflicts = _refine_seed(brief)
+    findings += await self._fan_out_research(
+        cfg,
+        idea,
+        deps,
+        research_spend,
+        id_offset=len(findings),
+        guidance=gate.guidance or "",
+        gaps=gaps,
+        contradictions=conflicts,
+    )
+    # Re-merge over ALL findings: round one is never discarded.
+    brief = await workflow.execute_activity(
+        synthesize_brief,
+        SynthesizeInput(
+            idea_json=idea.model_dump_json(),
+            findings=findings,
+            model=STAGE_MODELS.get("research", "unknown"),
+        ),
+        **RESEARCH_SYNTH_ACT,
+    )
+    # Round-2 findings must be verified too.
+    violations = await workflow.execute_activity(
+        verify_brief_activity, args=[brief, workflow.info().workflow_id], **VERIFY_ACT
+    )
+    if violations:
+        self._status = "research_failed"
+        brief_digest_val = ""
+        break
+    brief_digest_val = brief_digest(brief)
+    round_n += 1
 ```
 
 - [ ] **Step 5: Run the refine tests**

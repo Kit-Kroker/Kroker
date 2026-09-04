@@ -10,8 +10,21 @@ are one edit, never two.
 
 from __future__ import annotations
 
-from types import ModuleType
+from typing import TYPE_CHECKING, Any
 
-from . import clarify, qa
+if TYPE_CHECKING:
+    from types import ModuleType
 
-STAGE_MODULES: tuple[ModuleType, ...] = (clarify, qa)
+    STAGE_MODULES: tuple[ModuleType, ...]
+
+
+def __getattr__(name: str) -> Any:
+    if name == "STAGE_MODULES":
+        from . import clarify, qa
+
+        return (clarify, qa)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return ["STAGE_MODULES"]

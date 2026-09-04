@@ -17,13 +17,13 @@ from temporalio.client import (
     ScheduleUpdate,
 )
 
-from ..models import (
+from ..workflows.reflect import ReflectScheduleInput
+from .models import (
     KNOWN_SCHEDULE_WORKFLOWS,
     ScheduleAction,
     ScheduleAsset,
     ScheduleSpecAsset,
 )
-from ..workflows.reflect import ReflectScheduleInput
 from .reconcile import Change
 
 

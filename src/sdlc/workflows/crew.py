@@ -36,7 +36,7 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..crew.config import CrewRole
     from ..crew.models import CrewRunResult, RoundRecord, TurnRecord
-    from ..models import (
+    from ..harness.models import (
         EscalationOutcome,
         HarnessRunResult,
         ToolDenial,

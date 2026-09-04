@@ -95,6 +95,7 @@ Pure pydantic, sandbox-safe: no temporalio, no I/O. The workflow accumulates
 a list[RunEvent] in state (already durable in Temporal history); events.jsonl
 is a rendering of it, not a second source of truth.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -118,6 +119,7 @@ class RunEventKind(str, Enum):
 class RunEvent(BaseModel):
     """One domain event. `data` is a flat str->str map so events.jsonl stays a
     stable, greppable line format; numeric values are stringified at emit."""
+
     seq: int
     at: datetime
     kind: RunEventKind
@@ -161,27 +163,41 @@ git commit -m "feat(observability): RunEvent domain trace model (E-32)"
 from datetime import datetime, timezone
 
 from sdlc.models import (
-    ClarificationOutcome, GateOutcomeSummary, MemoryKind, RunSummary,
+    ClarificationOutcome,
+    GateOutcomeSummary,
+    MemoryKind,
+    RunSummary,
     StageOutcome,
 )
 
 
 def test_run_summary_round_trips():
     s = RunSummary(
-        run_id="r1", mode="greenfield", outcome="deployed:http://pr",
+        run_id="r1",
+        mode="greenfield",
+        outcome="deployed:http://pr",
         terminal_stage="deploy",
         started_at=datetime(2026, 7, 22, 12, 0, tzinfo=timezone.utc),
         ended_at=datetime(2026, 7, 22, 12, 30, tzinfo=timezone.utc),
         duration_s=1800.0,
-        stages=[StageOutcome(stage="clarify", role="clarify",
-                             outcome="pass", duration_s=5.0)],
-        clarifications=[ClarificationOutcome(
-            question_id="q1", question="scope?", answered_by="human")],
-        gates=[GateOutcomeSummary(gate="architecture", round=1, policy="hard",
-                                  decided_by="human", approved=True,
-                                  confidence=0.9, overrides=[])],
+        stages=[StageOutcome(stage="clarify", role="clarify", outcome="pass", duration_s=5.0)],
+        clarifications=[
+            ClarificationOutcome(question_id="q1", question="scope?", answered_by="human")
+        ],
+        gates=[
+            GateOutcomeSummary(
+                gate="architecture",
+                round=1,
+                policy="hard",
+                decided_by="human",
+                approved=True,
+                confidence=0.9,
+                overrides=[],
+            )
+        ],
         cost_usd_total=1.23,
-        memory_enabled=True, memory_watermark="7",
+        memory_enabled=True,
+        memory_watermark="7",
         memory_retains=4,
     )
     assert RunSummary.model_validate_json(s.model_dump_json()) == s
@@ -206,8 +222,8 @@ class MemoryKind(str, Enum):
     STAGE_SUMMARY = "stage_summary"
     GOTCHA = "gotcha"
     GATE_FEEDBACK = "gate_feedback"
-    RESEARCH_FINDING = "research_finding"    # verified grounded findings only
-    RUN_SUMMARY = "run_summary"              # retro-stage per-run summary (E-32)
+    RESEARCH_FINDING = "research_finding"  # verified grounded findings only
+    RUN_SUMMARY = "run_summary"  # retro-stage per-run summary (E-32)
 ```
 
 - [ ] **Step 4: Add the RunSummary models**
@@ -218,9 +234,10 @@ Append to `src/sdlc/models.py` (after `RetainItem` / near the memory models;
 ```python
 class StageOutcome(BaseModel):
     """One stage's line in a RunSummary, projected from its BenchmarkRecord."""
+
     stage: str
     role: str
-    outcome: str            # BenchmarkOutcome value
+    outcome: str  # BenchmarkOutcome value
     duration_s: float
     cost_usd: float | None = None
     fix_attempts: int = 0
@@ -229,6 +246,7 @@ class StageOutcome(BaseModel):
 class ClarificationOutcome(BaseModel):
     """SC-4 signal: was a surfaced question answered by a human (operator time),
     auto-filled from the clarifier's suggested_answer, or left unanswered."""
+
     question_id: str
     question: str
     answered_by: Literal["human", "suggested", "unanswered"]
@@ -237,10 +255,11 @@ class ClarificationOutcome(BaseModel):
 class GateOutcomeSummary(BaseModel):
     """SC-6 + ARCHITECTURE §10 calibration signal: policy, who decided, the
     confidence available at decision time, and any advisory checks waved."""
+
     gate: str
     round: int
-    policy: str             # GatePolicy value
-    decided_by: str         # "human" | "policy" | "timeout"
+    policy: str  # GatePolicy value
+    decided_by: str  # "human" | "policy" | "timeout"
     approved: bool
     confidence: float | None = None
     overrides: list[str] = Field(default_factory=list)
@@ -249,9 +268,10 @@ class GateOutcomeSummary(BaseModel):
 class RunSummary(BaseModel):
     """Retro-stage (14) aggregate of one run (E-32). Retained to memory,
     exported to report.html, and exposed via the run_summary() query."""
+
     run_id: str
     mode: str
-    outcome: str            # the run() return string
+    outcome: str  # the run() return string
     terminal_stage: str
     started_at: datetime
     ended_at: datetime
@@ -290,9 +310,13 @@ git commit -m "feat(models): RunSummary + StageOutcome/ClarificationOutcome/Gate
 - Produces:
   ```python
   def build_run_summary(
-      *, run_id: str, mode: str, outcome: str,
+      *,
+      run_id: str,
+      mode: str,
+      outcome: str,
       trace: list[RunEvent],
-      memory_enabled: bool, memory_watermark: str | None,
+      memory_enabled: bool,
+      memory_watermark: str | None,
   ) -> RunSummary: ...
   ```
   Aggregation rules (all derived from `trace`):
@@ -331,27 +355,57 @@ T0 = datetime(2026, 7, 22, 12, 0, tzinfo=timezone.utc)
 
 
 def _ev(seq, kind, stage=None, **data):
-    return RunEvent(seq=seq, at=T0 + timedelta(seconds=seq), kind=kind,
-                    stage=stage, data={k: str(v) for k, v in data.items()})
+    return RunEvent(
+        seq=seq,
+        at=T0 + timedelta(seconds=seq),
+        kind=kind,
+        stage=stage,
+        data={k: str(v) for k, v in data.items()},
+    )
 
 
 def test_clean_deploy_aggregates_stages_and_gate():
     trace = [
-        _ev(0, RunEventKind.CLARIFICATION_ASKED, question_id="q1",
-            question="scope?"),
-        _ev(1, RunEventKind.CLARIFICATION_ANSWERED, question_id="q1",
-            answered_by="human"),
-        _ev(2, RunEventKind.STAGE_ENDED, stage="clarify", role="clarify",
-            outcome="pass", duration_s=2.0, cost_usd=0.10),
-        _ev(3, RunEventKind.GATE_DECIDED, gate="architecture", round=1,
-            policy="hard", decided_by="human", approved="true", confidence=0.9),
-        _ev(4, RunEventKind.STAGE_ENDED, stage="architecture", role="architect",
-            outcome="pass", duration_s=3.0, cost_usd=0.20),
+        _ev(0, RunEventKind.CLARIFICATION_ASKED, question_id="q1", question="scope?"),
+        _ev(1, RunEventKind.CLARIFICATION_ANSWERED, question_id="q1", answered_by="human"),
+        _ev(
+            2,
+            RunEventKind.STAGE_ENDED,
+            stage="clarify",
+            role="clarify",
+            outcome="pass",
+            duration_s=2.0,
+            cost_usd=0.10,
+        ),
+        _ev(
+            3,
+            RunEventKind.GATE_DECIDED,
+            gate="architecture",
+            round=1,
+            policy="hard",
+            decided_by="human",
+            approved="true",
+            confidence=0.9,
+        ),
+        _ev(
+            4,
+            RunEventKind.STAGE_ENDED,
+            stage="architecture",
+            role="architect",
+            outcome="pass",
+            duration_s=3.0,
+            cost_usd=0.20,
+        ),
         _ev(5, RunEventKind.RUN_FINISHED),
     ]
-    s = build_run_summary(run_id="r1", mode="greenfield",
-                          outcome="deployed:http://pr", trace=trace,
-                          memory_enabled=False, memory_watermark=None)
+    s = build_run_summary(
+        run_id="r1",
+        mode="greenfield",
+        outcome="deployed:http://pr",
+        trace=trace,
+        memory_enabled=False,
+        memory_watermark=None,
+    )
     assert s.terminal_stage == "architecture"
     assert [x.stage for x in s.stages] == ["clarify", "architecture"]
     assert s.clarifications[0].answered_by == "human"
@@ -362,15 +416,27 @@ def test_clean_deploy_aggregates_stages_and_gate():
 
 def test_unanswered_clarification_and_override_gate():
     trace = [
-        _ev(0, RunEventKind.CLARIFICATION_ASKED, question_id="q9",
-            question="deadline?"),
-        _ev(1, RunEventKind.GATE_DECIDED, gate="merge", round=1, policy="soft",
-            decided_by="human", approved="true", overrides="coverage,traceability"),
+        _ev(0, RunEventKind.CLARIFICATION_ASKED, question_id="q9", question="deadline?"),
+        _ev(
+            1,
+            RunEventKind.GATE_DECIDED,
+            gate="merge",
+            round=1,
+            policy="soft",
+            decided_by="human",
+            approved="true",
+            overrides="coverage,traceability",
+        ),
         _ev(2, RunEventKind.RUN_FINISHED),
     ]
-    s = build_run_summary(run_id="r2", mode="greenfield",
-                          outcome="rejected:merge:advisory", trace=trace,
-                          memory_enabled=True, memory_watermark="4")
+    s = build_run_summary(
+        run_id="r2",
+        mode="greenfield",
+        outcome="rejected:merge:advisory",
+        trace=trace,
+        memory_enabled=True,
+        memory_watermark="4",
+    )
     assert s.clarifications[0].answered_by == "unanswered"
     assert s.gates[0].overrides == ["coverage", "traceability"]
     assert s.cost_usd_total is None
@@ -388,10 +454,14 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'sdlc.observability.su
 # src/sdlc/observability/summary.py
 """Pure trace -> RunSummary aggregation (E-32). No I/O, no temporalio: unit-
 testable outside the workflow, called once from the retro stage."""
+
 from __future__ import annotations
 
 from ..models import (
-    ClarificationOutcome, GateOutcomeSummary, RunSummary, StageOutcome,
+    ClarificationOutcome,
+    GateOutcomeSummary,
+    RunSummary,
+    StageOutcome,
 )
 from .trace import RunEvent, RunEventKind
 
@@ -425,12 +495,15 @@ def _gate_outcome(ev: RunEvent) -> GateOutcomeSummary:
 
 
 def build_run_summary(
-    *, run_id: str, mode: str, outcome: str,
+    *,
+    run_id: str,
+    mode: str,
+    outcome: str,
     trace: list[RunEvent],
-    memory_enabled: bool, memory_watermark: str | None,
+    memory_enabled: bool,
+    memory_watermark: str | None,
 ) -> RunSummary:
-    stages = [_stage_outcome(e) for e in trace
-              if e.kind is RunEventKind.STAGE_ENDED]
+    stages = [_stage_outcome(e) for e in trace if e.kind is RunEventKind.STAGE_ENDED]
 
     # Dedup gates by (gate, round), last-wins: the merge stage emits a bare
     # GATE_DECIDED from _gate and then an enriched one carrying overrides;
@@ -442,32 +515,44 @@ def build_run_summary(
             gate_by_key[(g.gate, g.round)] = g
     gates = list(gate_by_key.values())
 
-    answered = {e.data.get("question_id"): e.data.get("answered_by", "unanswered")
-                for e in trace if e.kind is RunEventKind.CLARIFICATION_ANSWERED}
+    answered = {
+        e.data.get("question_id"): e.data.get("answered_by", "unanswered")
+        for e in trace
+        if e.kind is RunEventKind.CLARIFICATION_ANSWERED
+    }
     clarifications = [
         ClarificationOutcome(
             question_id=e.data.get("question_id", "?"),
             question=e.data.get("question", ""),
             answered_by=answered.get(e.data.get("question_id"), "unanswered"),
         )
-        for e in trace if e.kind is RunEventKind.CLARIFICATION_ASKED
+        for e in trace
+        if e.kind is RunEventKind.CLARIFICATION_ASKED
     ]
 
-    terminal = next((e.stage for e in reversed(trace)
-                     if e.kind is RunEventKind.STAGE_ENDED and e.stage),
-                    "intake")
+    terminal = next(
+        (e.stage for e in reversed(trace) if e.kind is RunEventKind.STAGE_ENDED and e.stage),
+        "intake",
+    )
     costs = [s.cost_usd for s in stages if s.cost_usd is not None]
     started = trace[0].at
     ended = trace[-1].at
     retains = sum(1 for e in trace if e.kind is RunEventKind.MEMORY_RETAINED)
 
     return RunSummary(
-        run_id=run_id, mode=mode, outcome=outcome, terminal_stage=terminal,
-        started_at=started, ended_at=ended,
+        run_id=run_id,
+        mode=mode,
+        outcome=outcome,
+        terminal_stage=terminal,
+        started_at=started,
+        ended_at=ended,
         duration_s=(ended - started).total_seconds(),
-        stages=stages, clarifications=clarifications, gates=gates,
+        stages=stages,
+        clarifications=clarifications,
+        gates=gates,
         cost_usd_total=(sum(costs) if costs else None),
-        memory_enabled=memory_enabled, memory_watermark=memory_watermark,
+        memory_enabled=memory_enabled,
+        memory_watermark=memory_watermark,
         memory_retains=retains,
     )
 ```
@@ -505,7 +590,10 @@ git commit -m "feat(observability): pure build_run_summary trace aggregation (E-
 from datetime import datetime, timezone
 
 from sdlc.models import (
-    ClarificationOutcome, GateOutcomeSummary, RunSummary, StageOutcome,
+    ClarificationOutcome,
+    GateOutcomeSummary,
+    RunSummary,
+    StageOutcome,
 )
 from sdlc.observability.export import render_events_jsonl, render_report_html
 from sdlc.observability.trace import RunEvent, RunEventKind
@@ -515,16 +603,34 @@ T0 = datetime(2026, 7, 22, 12, 0, tzinfo=timezone.utc)
 
 def _summary():
     return RunSummary(
-        run_id="r1", mode="greenfield", outcome="deployed:http://pr",
-        terminal_stage="deploy", started_at=T0, ended_at=T0, duration_s=0.0,
-        stages=[StageOutcome(stage="clarify", role="clarify", outcome="pass",
-                             duration_s=2.0, cost_usd=0.1)],
-        clarifications=[ClarificationOutcome(question_id="q1", question="scope?",
-                                             answered_by="human")],
-        gates=[GateOutcomeSummary(gate="merge", round=1, policy="soft",
-                                  decided_by="human", approved=True,
-                                  overrides=["coverage"])],
-        cost_usd_total=0.1, memory_enabled=True, memory_watermark="3",
+        run_id="r1",
+        mode="greenfield",
+        outcome="deployed:http://pr",
+        terminal_stage="deploy",
+        started_at=T0,
+        ended_at=T0,
+        duration_s=0.0,
+        stages=[
+            StageOutcome(
+                stage="clarify", role="clarify", outcome="pass", duration_s=2.0, cost_usd=0.1
+            )
+        ],
+        clarifications=[
+            ClarificationOutcome(question_id="q1", question="scope?", answered_by="human")
+        ],
+        gates=[
+            GateOutcomeSummary(
+                gate="merge",
+                round=1,
+                policy="soft",
+                decided_by="human",
+                approved=True,
+                overrides=["coverage"],
+            )
+        ],
+        cost_usd_total=0.1,
+        memory_enabled=True,
+        memory_watermark="3",
         memory_retains=2,
     )
 
@@ -566,6 +672,7 @@ activities.py owns the file writes; these turn state into strings.
 
 report.html is deliberately a deterministic, dependency-free template — the
 retro stage is `(deterministic + reflect)`, no LLM (SDLC-spec §58)."""
+
 from __future__ import annotations
 
 from html import escape
@@ -575,8 +682,7 @@ from .trace import RunEvent
 
 
 def render_events_jsonl(trace: list[RunEvent]) -> str:
-    lines = [e.model_dump_json()
-             for e in sorted(trace, key=lambda e: e.seq)]
+    lines = [e.model_dump_json() for e in sorted(trace, key=lambda e: e.seq)]
     return "\n".join(lines) + ("\n" if lines else "")
 
 
@@ -586,19 +692,33 @@ def _row(cells: list[str]) -> str:
 
 def render_report_html(s: RunSummary) -> str:
     stage_rows = "".join(
-        _row([st.stage, st.role, st.outcome, f"{st.duration_s:.1f}s",
-              "-" if st.cost_usd is None else f"${st.cost_usd:.4f}",
-              str(st.fix_attempts)])
-        for st in s.stages)
+        _row(
+            [
+                st.stage,
+                st.role,
+                st.outcome,
+                f"{st.duration_s:.1f}s",
+                "-" if st.cost_usd is None else f"${st.cost_usd:.4f}",
+                str(st.fix_attempts),
+            ]
+        )
+        for st in s.stages
+    )
     gate_rows = "".join(
-        _row([g.gate, str(g.round), g.policy, g.decided_by,
-              "yes" if g.approved else "no",
-              "-" if g.confidence is None else f"{g.confidence:.2f}",
-              ", ".join(g.overrides) or "-"])
-        for g in s.gates)
-    clar_rows = "".join(
-        _row([c.question_id, c.question, c.answered_by])
-        for c in s.clarifications)
+        _row(
+            [
+                g.gate,
+                str(g.round),
+                g.policy,
+                g.decided_by,
+                "yes" if g.approved else "no",
+                "-" if g.confidence is None else f"{g.confidence:.2f}",
+                ", ".join(g.overrides) or "-",
+            ]
+        )
+        for g in s.gates
+    )
+    clar_rows = "".join(_row([c.question_id, c.question, c.answered_by]) for c in s.clarifications)
     cost = "-" if s.cost_usd_total is None else f"${s.cost_usd_total:.4f}"
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -671,12 +791,17 @@ T0 = datetime(2026, 7, 22, 12, 0, tzinfo=timezone.utc)
 @pytest.mark.asyncio
 async def test_export_writes_both_files_under_export_root(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
-    summary = RunSummary(run_id="run-xyz", mode="greenfield",
-                         outcome="deployed:pr", terminal_stage="deploy",
-                         started_at=T0, ended_at=T0, duration_s=0.0)
+    summary = RunSummary(
+        run_id="run-xyz",
+        mode="greenfield",
+        outcome="deployed:pr",
+        terminal_stage="deploy",
+        started_at=T0,
+        ended_at=T0,
+        duration_s=0.0,
+    )
     trace = [RunEvent(seq=0, at=T0, kind=RunEventKind.RUN_FINISHED)]
-    out = await export_run_artifacts(
-        RunExportInput(run_id="run-xyz", summary=summary, trace=trace))
+    out = await export_run_artifacts(RunExportInput(run_id="run-xyz", summary=summary, trace=trace))
     run_dir = tmp_path / "run-xyz"
     assert (run_dir / "events.jsonl").exists()
     assert (run_dir / "report.html").exists()
@@ -696,6 +821,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'sdlc.observability.ac
 """Retro export activity (E-32). Owns the filesystem + env reads the workflow
 must not do. Path resolution here (SDLC_EXPORT_ROOT) mirrors how
 setup_integration_branch resolves the worktree root inside an activity."""
+
 from __future__ import annotations
 
 import os
@@ -720,10 +846,8 @@ async def export_run_artifacts(inp: RunExportInput) -> str:
     root = Path(os.environ.get("SDLC_EXPORT_ROOT", "./runs"))
     run_dir = root / inp.run_id
     run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "events.jsonl").write_text(
-        render_events_jsonl(inp.trace), encoding="utf-8")
-    (run_dir / "report.html").write_text(
-        render_report_html(inp.summary), encoding="utf-8")
+    (run_dir / "events.jsonl").write_text(render_events_jsonl(inp.trace), encoding="utf-8")
+    (run_dir / "report.html").write_text(render_report_html(inp.summary), encoding="utf-8")
     return str(run_dir)
 ```
 
@@ -760,12 +884,11 @@ Expected: PASS (2 passed) — this is the regression baseline for the refactor.
 In `src/sdlc/workflows/feature.py`, the current method is:
 
 ```python
-    @workflow.run
-    async def run(self, idea: IdeaBrief,
-                  cfg: PipelineConfig | None = None) -> str:
-        cfg = cfg or PipelineConfig()
-        if cfg.memory.enabled:
-            ...  # (entire existing body through every `return "..."`)
+@workflow.run
+async def run(self, idea: IdeaBrief, cfg: PipelineConfig | None = None) -> str:
+    cfg = cfg or PipelineConfig()
+    if cfg.memory.enabled:
+        ...  # (entire existing body through every `return "..."`)
 ```
 
 Change it to move the body into `_pipeline` and add the wrapper. Keep the
@@ -773,17 +896,16 @@ Change it to move the body into `_pipeline` and add the wrapper. Keep the
 into `_pipeline` (so `_pipeline` receives a non-None `cfg`):
 
 ```python
-    @workflow.run
-    async def run(self, idea: IdeaBrief,
-                  cfg: PipelineConfig | None = None) -> str:
-        cfg = cfg or PipelineConfig()
-        return await self._pipeline(idea, cfg)
+@workflow.run
+async def run(self, idea: IdeaBrief, cfg: PipelineConfig | None = None) -> str:
+    cfg = cfg or PipelineConfig()
+    return await self._pipeline(idea, cfg)
 
-    async def _pipeline(self, idea: IdeaBrief, cfg: PipelineConfig) -> str:
-        if cfg.memory.enabled:
-            self._memory_watermark = cfg.memory.watermark or (
-                ...)
-        # ... the rest of the existing body verbatim, unchanged ...
+
+async def _pipeline(self, idea: IdeaBrief, cfg: PipelineConfig) -> str:
+    if cfg.memory.enabled:
+        self._memory_watermark = cfg.memory.watermark or (...)
+    # ... the rest of the existing body verbatim, unchanged ...
 ```
 
 Concretely: delete the old `cfg = cfg or PipelineConfig()` line from the
@@ -828,6 +950,7 @@ git commit -m "refactor(feature): extract _pipeline from run (E-32 prep, no beha
 # tests/test_retro_stage.py
 """E-32 retro stage: fires on every terminal path, populates run_summary(),
 and never lets an export failure change the run's outcome."""
+
 from __future__ import annotations
 
 import asyncio
@@ -868,27 +991,38 @@ async def _drive(handle):
         await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
     for gate in ("architecture", "plan", "deploy"):
         await _wait_for_status(handle, f"awaiting:{gate}")
-        await handle.signal(FeatureWorkflow.submit_gate_decision,
-                            GateDecision(gate=gate, round=1,
-                                         outcome=GateOutcome.APPROVE,
-                                         decided_by="human"))
+        await handle.signal(
+            FeatureWorkflow.submit_gate_decision,
+            GateDecision(gate=gate, round=1, outcome=GateOutcome.APPROVE, decided_by="human"),
+        )
 
 
 @pytest.mark.asyncio
 async def test_retro_populates_run_summary_on_deploy(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
-    activities = [evaluate_gate, export_run_artifacts, *GIT_FAKES,
-                  *fake_agent_activities(AGENT_SPECS)]
+    activities = [
+        evaluate_gate,
+        export_run_artifacts,
+        *GIT_FAKES,
+        *fake_agent_activities(AGENT_SPECS),
+    ]
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         with env.auto_time_skipping_disabled():
-            async with Worker(env.client, task_queue=TASK_QUEUE,
-                              workflows=[FeatureWorkflow], activities=activities,
-                              plugins=[PydanticAIPlugin()]):
+            async with Worker(
+                env.client,
+                task_queue=TASK_QUEUE,
+                workflows=[FeatureWorkflow],
+                activities=activities,
+                plugins=[PydanticAIPlugin()],
+            ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
                     args=[greenfield_idea(), e2e_config()],
-                    id=f"retro-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                    id=f"retro-{uuid.uuid4()}",
+                    task_queue=TASK_QUEUE,
+                )
                 driver = asyncio.create_task(_drive(handle))
                 result = await handle.result()
                 await driver
@@ -917,13 +1051,19 @@ import to the existing `..memory.activities` import and add the observability
 imports:
 
 ```python
-    from ..memory.activities import (
-        RecallInput, ReflectInput, RetainInput, WatermarkInput,
-        capture_watermark, recall_snapshot, reflect, retain,
-    )
-    from ..observability.activities import RunExportInput, export_run_artifacts
-    from ..observability.summary import build_run_summary
-    from ..observability.trace import RunEvent, RunEventKind
+from ..memory.activities import (
+    RecallInput,
+    ReflectInput,
+    RetainInput,
+    WatermarkInput,
+    capture_watermark,
+    recall_snapshot,
+    reflect,
+    retain,
+)
+from ..observability.activities import RunExportInput, export_run_artifacts
+from ..observability.summary import build_run_summary
+from ..observability.trace import RunEvent, RunEventKind
 ```
 
 Also add `RunSummary` to the existing `..models` import list.
@@ -951,13 +1091,13 @@ Add near the other queries (after `pending_decisions` at `feature.py:375`):
 Add a helper near the memory helpers:
 
 ```python
-    def _emit(self, kind: RunEventKind, stage: str | None = None,
-              **data: str) -> None:
-        """Append a domain event to the run trace. Pure state mutation — safe
-        in workflow code (no I/O, deterministic seq + workflow.now())."""
-        self._trace.append(RunEvent(seq=self._seq, at=workflow.now(),
-                                    kind=kind, stage=stage, data=data))
-        self._seq += 1
+def _emit(self, kind: RunEventKind, stage: str | None = None, **data: str) -> None:
+    """Append a domain event to the run trace. Pure state mutation — safe
+    in workflow code (no I/O, deterministic seq + workflow.now())."""
+    self._trace.append(
+        RunEvent(seq=self._seq, at=workflow.now(), kind=kind, stage=stage, data=data)
+    )
+    self._seq += 1
 ```
 
 - [ ] **Step 5: Wire the four chokepoints**
@@ -966,18 +1106,19 @@ Add a helper near the memory helpers:
 (`feature.py:250`), emit before the benchmarking early-return:
 
 ```python
-    async def _record(self, cfg: PipelineConfig, record: BenchmarkRecord
-                      ) -> None:
-        self._emit(
-            RunEventKind.STAGE_ENDED, stage=record.stage,
-            role=record.role, outcome=record.outcome.value,
-            duration_s=str(record.speed.wall_clock_s),
-            fix_attempts=str(record.fix_attempts),
-            **({"cost_usd": str(record.cost.usd)}
-               if record.cost.usd is not None else {}))
-        if not self._benchmarking(cfg):
-            return
-        await workflow.execute_activity(record_benchmark, record, **RECORD_ACT)
+async def _record(self, cfg: PipelineConfig, record: BenchmarkRecord) -> None:
+    self._emit(
+        RunEventKind.STAGE_ENDED,
+        stage=record.stage,
+        role=record.role,
+        outcome=record.outcome.value,
+        duration_s=str(record.speed.wall_clock_s),
+        fix_attempts=str(record.fix_attempts),
+        **({"cost_usd": str(record.cost.usd)} if record.cost.usd is not None else {}),
+    )
+    if not self._benchmarking(cfg):
+        return
+    await workflow.execute_activity(record_benchmark, record, **RECORD_ACT)
 ```
 
 **(b) `_gate` — gate_awaited + gate_decided.** Thread an optional `confidence`
@@ -997,19 +1138,22 @@ in the human-wait branch, and `GATE_DECIDED` just before the existing
 paths since they converge there). Insert before that retain:
 
 ```python
-        self._emit(
-            RunEventKind.GATE_DECIDED, stage=name,
-            gate=name, round=str(round), policy=policy.value,
-            decided_by=decision.decided_by,
-            approved=("true" if decision.approved else "false"),
-            **({"confidence": str(confidence)} if confidence is not None else {}))
+self._emit(
+    RunEventKind.GATE_DECIDED,
+    stage=name,
+    gate=name,
+    round=str(round),
+    policy=policy.value,
+    decided_by=decision.decided_by,
+    approved=("true" if decision.approved else "false"),
+    **({"confidence": str(confidence)} if confidence is not None else {}),
+)
 ```
 
 And in the human-wait branch, right before `await workflow.wait_condition(`:
 
 ```python
-            self._emit(RunEventKind.GATE_AWAITED, stage=name,
-                       gate=name, round=str(round))
+self._emit(RunEventKind.GATE_AWAITED, stage=name, gate=name, round=str(round))
 ```
 
 Pass `confidence` from `_revisable_stage` (`feature.py:432`): change that
@@ -1021,11 +1165,16 @@ Pass `confidence` from `_revisable_stage` (`feature.py:432`): change that
 the `overrides = [...]` assignment, add:
 
 ```python
-            self._emit(
-                RunEventKind.GATE_DECIDED, stage="merge", gate="merge",
-                round="1", policy="soft", decided_by=(gate.reviewer or "human"),
-                approved="true",
-                overrides=",".join(o.check for o in overrides))
+self._emit(
+    RunEventKind.GATE_DECIDED,
+    stage="merge",
+    gate="merge",
+    round="1",
+    policy="soft",
+    decided_by=(gate.reviewer or "human"),
+    approved="true",
+    overrides=",".join(o.check for o in overrides),
+)
 ```
 
 **(d) clarify — asked/answered.** In the clarify stage (`feature.py:791`),
@@ -1034,40 +1183,47 @@ after resolution emit `CLARIFICATION_ANSWERED` with `answered_by`. Replace the
 `if reqs.open_questions:` block's internals so emits bracket the wait:
 
 ```python
-        if reqs.open_questions:
-            for q in reqs.open_questions:
-                self._emit(RunEventKind.CLARIFICATION_ASKED, stage="clarify",
-                           question_id=q.id, question=q.question)
-            clarify_policy = cfg.gates.get("clarify", GateConfig()).policy
-            if clarify_policy == GatePolicy.OFF:
-                for q in reqs.open_questions:
-                    q.answer = q.suggested_answer
-            else:
-                self._status = "awaiting:clarify"
-                for p in clarify_pending(reqs.open_questions, set()):
-                    self._pending[p.key] = p
-                await workflow.wait_condition(
-                    lambda: all(q.id in self._question_answers
-                                for q in reqs.open_questions),
-                    timeout=timedelta(hours=cfg.gate_timeout_hours),
-                )
-                for q in reqs.open_questions:
-                    q.answer = self._question_answers.get(q.id)
-                    self._pending.pop(q.id, None)
-            for q in reqs.open_questions:
-                answered = ("human" if q.id in self._question_answers
-                            else "suggested" if q.answer is not None
-                            else "unanswered")
-                self._emit(RunEventKind.CLARIFICATION_ANSWERED, stage="clarify",
-                           question_id=q.id, answered_by=answered)
+if reqs.open_questions:
+    for q in reqs.open_questions:
+        self._emit(
+            RunEventKind.CLARIFICATION_ASKED, stage="clarify", question_id=q.id, question=q.question
+        )
+    clarify_policy = cfg.gates.get("clarify", GateConfig()).policy
+    if clarify_policy == GatePolicy.OFF:
+        for q in reqs.open_questions:
+            q.answer = q.suggested_answer
+    else:
+        self._status = "awaiting:clarify"
+        for p in clarify_pending(reqs.open_questions, set()):
+            self._pending[p.key] = p
+        await workflow.wait_condition(
+            lambda: all(q.id in self._question_answers for q in reqs.open_questions),
+            timeout=timedelta(hours=cfg.gate_timeout_hours),
+        )
+        for q in reqs.open_questions:
+            q.answer = self._question_answers.get(q.id)
+            self._pending.pop(q.id, None)
+    for q in reqs.open_questions:
+        answered = (
+            "human"
+            if q.id in self._question_answers
+            else "suggested"
+            if q.answer is not None
+            else "unanswered"
+        )
+        self._emit(
+            RunEventKind.CLARIFICATION_ANSWERED,
+            stage="clarify",
+            question_id=q.id,
+            answered_by=answered,
+        )
 ```
 
 **(e) `_dev_task` — fix_attempt.** In the attempt loop (`feature.py:515`), at
 the top of each attempt after `_attempt_started = workflow.now()`, add:
 
 ```python
-            self._emit(RunEventKind.FIX_ATTEMPT, stage="code",
-                       task_id=task.id, attempt=str(attempt))
+self._emit(RunEventKind.FIX_ATTEMPT, stage="code", task_id=task.id, attempt=str(attempt))
 ```
 
 - [ ] **Step 6: Add `_retro` and call it from `run`**
@@ -1079,50 +1235,57 @@ count includes retro's own retain; `RUN_FINISHED` is emitted last so it is the
 final trace event:
 
 ```python
-    async def _retro(self, cfg: PipelineConfig, idea: IdeaBrief,
-                     result: str) -> None:
-        """Stage 14 (E-32). Best-effort: any failure is swallowed so the run's
-        return string is never changed."""
-        try:
-            if cfg.memory.enabled:
-                self._emit(RunEventKind.MEMORY_RETAINED, stage="retro",
-                           item="run_summary")
-            self._emit(RunEventKind.RUN_FINISHED, stage="retro", outcome=result)
-            summary = build_run_summary(
-                run_id=workflow.info().workflow_id,
-                mode=idea.mode.value,
-                outcome=result, trace=self._trace,
-                memory_enabled=cfg.memory.enabled,
-                memory_watermark=self._memory_watermark)
-            self._run_summary = summary
+async def _retro(self, cfg: PipelineConfig, idea: IdeaBrief, result: str) -> None:
+    """Stage 14 (E-32). Best-effort: any failure is swallowed so the run's
+    return string is never changed."""
+    try:
+        if cfg.memory.enabled:
+            self._emit(RunEventKind.MEMORY_RETAINED, stage="retro", item="run_summary")
+        self._emit(RunEventKind.RUN_FINISHED, stage="retro", outcome=result)
+        summary = build_run_summary(
+            run_id=workflow.info().workflow_id,
+            mode=idea.mode.value,
+            outcome=result,
+            trace=self._trace,
+            memory_enabled=cfg.memory.enabled,
+            memory_watermark=self._memory_watermark,
+        )
+        self._run_summary = summary
 
-            if cfg.memory.enabled:
-                await self._retain(
-                    cfg, MemoryKind.RUN_SUMMARY, cfg.memory.project_bank,
-                    text=summary.model_dump_json(),
-                    metadata={"run_id": workflow.info().workflow_id,
-                              "stage": "retro"})
-                try:
-                    await workflow.execute_activity(
-                        reflect,
-                        ReflectInput(bank=cfg.memory.project_bank,
-                                     backend=cfg.memory.backend,
-                                     base_url=cfg.memory.base_url),
-                        **MEM_ACT)
-                except Exception:
-                    pass
-
+        if cfg.memory.enabled:
+            await self._retain(
+                cfg,
+                MemoryKind.RUN_SUMMARY,
+                cfg.memory.project_bank,
+                text=summary.model_dump_json(),
+                metadata={"run_id": workflow.info().workflow_id, "stage": "retro"},
+            )
             try:
                 await workflow.execute_activity(
-                    export_run_artifacts,
-                    RunExportInput(run_id=workflow.info().workflow_id,
-                                   summary=summary, trace=self._trace),
-                    **EXPORT_ACT)
+                    reflect,
+                    ReflectInput(
+                        bank=cfg.memory.project_bank,
+                        backend=cfg.memory.backend,
+                        base_url=cfg.memory.base_url,
+                    ),
+                    **MEM_ACT,
+                )
             except Exception:
                 pass
+
+        try:
+            await workflow.execute_activity(
+                export_run_artifacts,
+                RunExportInput(
+                    run_id=workflow.info().workflow_id, summary=summary, trace=self._trace
+                ),
+                **EXPORT_ACT,
+            )
         except Exception:
-            # Retro must never change the run outcome (best-effort stage).
             pass
+    except Exception:
+        # Retro must never change the run outcome (best-effort stage).
+        pass
 ```
 
 Define `EXPORT_ACT` alongside the other activity-option constants near
@@ -1130,8 +1293,9 @@ Define `EXPORT_ACT` alongside the other activity-option constants near
 no retry hammering:
 
 ```python
-EXPORT_ACT = dict(start_to_close_timeout=timedelta(minutes=2),
-                  retry_policy=RetryPolicy(maximum_attempts=1))
+EXPORT_ACT = dict(
+    start_to_close_timeout=timedelta(minutes=2), retry_policy=RetryPolicy(maximum_attempts=1)
+)
 ```
 
 Note: the `MEMORY_RETAINED` emit is placed before `build_run_summary` so the
@@ -1141,13 +1305,12 @@ two `_emit` calls so `RUN_FINISHED` is last in the trace.
 Update `run` to call retro:
 
 ```python
-    @workflow.run
-    async def run(self, idea: IdeaBrief,
-                  cfg: PipelineConfig | None = None) -> str:
-        cfg = cfg or PipelineConfig()
-        result = await self._pipeline(idea, cfg)
-        await self._retro(cfg, idea, result)
-        return result
+@workflow.run
+async def run(self, idea: IdeaBrief, cfg: PipelineConfig | None = None) -> str:
+    cfg = cfg or PipelineConfig()
+    result = await self._pipeline(idea, cfg)
+    await self._retro(cfg, idea, result)
+    return result
 ```
 
 - [ ] **Step 7: Register the export activity on the worker**
@@ -1205,27 +1368,38 @@ async def _drive_reject_arch(handle):
     for qid in QUESTION_IDS:
         await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
     await _wait_for_status(handle, "awaiting:architecture")
-    await handle.signal(FeatureWorkflow.submit_gate_decision,
-                        GateDecision(gate="architecture", round=1,
-                                     outcome=GateOutcome.REJECT,
-                                     decided_by="human"))
+    await handle.signal(
+        FeatureWorkflow.submit_gate_decision,
+        GateDecision(gate="architecture", round=1, outcome=GateOutcome.REJECT, decided_by="human"),
+    )
 
 
 @pytest.mark.asyncio
 async def test_retro_fires_on_rejected_path(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
-    activities = [evaluate_gate, export_run_artifacts, *GIT_FAKES,
-                  *fake_agent_activities(AGENT_SPECS)]
+    activities = [
+        evaluate_gate,
+        export_run_artifacts,
+        *GIT_FAKES,
+        *fake_agent_activities(AGENT_SPECS),
+    ]
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         with env.auto_time_skipping_disabled():
-            async with Worker(env.client, task_queue=TASK_QUEUE,
-                              workflows=[FeatureWorkflow], activities=activities,
-                              plugins=[PydanticAIPlugin()]):
+            async with Worker(
+                env.client,
+                task_queue=TASK_QUEUE,
+                workflows=[FeatureWorkflow],
+                activities=activities,
+                plugins=[PydanticAIPlugin()],
+            ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
                     args=[greenfield_idea(), e2e_config()],
-                    id=f"retro-rej-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                    id=f"retro-rej-{uuid.uuid4()}",
+                    task_queue=TASK_QUEUE,
+                )
                 driver = asyncio.create_task(_drive_reject_arch(handle))
                 result = await handle.result()
                 await driver
@@ -1263,24 +1437,30 @@ async def _boom_export(inp: RunExportInput) -> str:  # same name, always fails
 @pytest.mark.asyncio
 async def test_export_failure_does_not_change_outcome(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
-    activities = [evaluate_gate, _boom_export, *GIT_FAKES,
-                  *fake_agent_activities(AGENT_SPECS)]
+    activities = [evaluate_gate, _boom_export, *GIT_FAKES, *fake_agent_activities(AGENT_SPECS)]
     async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter) as env:
+        data_converter=pydantic_data_converter
+    ) as env:
         with env.auto_time_skipping_disabled():
-            async with Worker(env.client, task_queue=TASK_QUEUE,
-                              workflows=[FeatureWorkflow], activities=activities,
-                              plugins=[PydanticAIPlugin()]):
+            async with Worker(
+                env.client,
+                task_queue=TASK_QUEUE,
+                workflows=[FeatureWorkflow],
+                activities=activities,
+                plugins=[PydanticAIPlugin()],
+            ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
                     args=[greenfield_idea(), e2e_config()],
-                    id=f"retro-boom-{uuid.uuid4()}", task_queue=TASK_QUEUE)
+                    id=f"retro-boom-{uuid.uuid4()}",
+                    task_queue=TASK_QUEUE,
+                )
                 driver = asyncio.create_task(_drive(handle))
                 result = await handle.result()
                 await driver
                 summary = await handle.query(FeatureWorkflow.run_summary)
-    assert result.startswith("deployed:"), result   # export failed, run didn't
-    assert summary is not None                       # summary still built
+    assert result.startswith("deployed:"), result  # export failed, run didn't
+    assert summary is not None  # summary still built
 ```
 
 Note: `_retro` calls export with `**EXPORT_ACT` (single attempt, Task 7), so the

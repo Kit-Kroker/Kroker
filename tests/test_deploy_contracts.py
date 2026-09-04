@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from sdlc.models import (
+from sdlc.stages.deploy.models import (
     DeployPlan,
     DeployReport,
     FeatureFlag,

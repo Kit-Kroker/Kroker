@@ -47,14 +47,17 @@ Create `tests/test_toolchain_adapters.py`:
 
 ```python
 """ToolchainAdapter: pure command/identity resolution (ADR-15, FR-108)."""
+
 from sdlc.toolchain.adapters import (
-    PythonToolchain, TOOLCHAINS, ToolchainKind, detect,
+    PythonToolchain,
+    TOOLCHAINS,
+    ToolchainKind,
+    detect,
 )
 
 
 def test_detect_python_by_pyproject(tmp_path):
-    (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n",
-                                             encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
     a = detect(str(tmp_path))
     assert a is not None and a.kind is ToolchainKind.PYTHON
 
@@ -112,6 +115,7 @@ The adapter object is PURE — it produces command strings and identity only,
 never runs a subprocess. Execution lives in Temporal activities
 (activities.py), exactly as CodingHarness never runs in workflow code.
 """
+
 from __future__ import annotations
 
 import os
@@ -127,7 +131,7 @@ class ToolchainKind(str, Enum):
 
 class ToolchainAdapter(ABC):
     kind: ToolchainKind
-    marker: str          # marker filename at the repo root detect() resolves by
+    marker: str  # marker filename at the repo root detect() resolves by
 
     @abstractmethod
     def test_cmd(self, coverage: bool = True) -> str:
@@ -137,8 +141,7 @@ class ToolchainAdapter(ABC):
         tooling is unavailable (see run_integration_checks)."""
 
     @abstractmethod
-    def lint_cmd(self) -> str:
-        ...
+    def lint_cmd(self) -> str: ...
 
     def build_cmd(self) -> str | None:
         """Separate build step, or None where the language has none (Python)."""
@@ -218,21 +221,25 @@ Create `tests/test_sarif.py`:
 
 ```python
 """SARIF -> SecurityReport normalizer seam (ADR-15 security, FR-108)."""
+
 import pytest
 
 from sdlc.toolchain.sarif import findings_from_sarif, report_from_sarif
 
 WELL_FORMED = {
-    "runs": [{
-        "results": [
-            {"level": "error", "ruleId": "py.eval",
-             "message": {"text": "use of eval"},
-             "locations": [{"physicalLocation": {
-                 "artifactLocation": {"uri": "app/x.py"}}}]},
-            {"level": "warning", "ruleId": "py.shell",
-             "message": {"text": "shell=True"}},
-        ]
-    }]
+    "runs": [
+        {
+            "results": [
+                {
+                    "level": "error",
+                    "ruleId": "py.eval",
+                    "message": {"text": "use of eval"},
+                    "locations": [{"physicalLocation": {"artifactLocation": {"uri": "app/x.py"}}}],
+                },
+                {"level": "warning", "ruleId": "py.shell", "message": {"text": "shell=True"}},
+            ]
+        }
+    ]
 }
 
 
@@ -249,10 +256,18 @@ def test_report_counts_critical():
     assert r.critical == 1 and len(r.findings) == 2
 
 
-@pytest.mark.parametrize("bad", [
-    {}, None, "nope", {"runs": "x"}, {"runs": [1, 2]},
-    {"runs": [{"results": "x"}]}, {"runs": [{"results": [42]}]},
-])
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {},
+        None,
+        "nope",
+        {"runs": "x"},
+        {"runs": [1, 2]},
+        {"runs": [{"results": "x"}]},
+        {"runs": [{"results": [42]}]},
+    ],
+)
 def test_malformed_sarif_is_failsafe_empty(bad):
     assert findings_from_sarif(bad) == []
 
@@ -284,6 +299,7 @@ Fail-safe: a malformed/partial SARIF yields [] (never raises), mirroring
 measure_coverage's measured=False discipline — a broken scan must never
 fabricate a blocking finding OR crash the gate.
 """
+
 from __future__ import annotations
 
 from ..models import SecurityFinding, SecurityReport
@@ -334,11 +350,14 @@ def findings_from_sarif(doc: dict) -> list[SecurityFinding]:
             severity = _LEVEL_TO_SEVERITY.get(res.get("level", "warning"), "high")
             message = res.get("message")
             detail = message.get("text", "") if isinstance(message, dict) else ""
-            findings.append(SecurityFinding(
-                severity=severity,
-                rule=str(res.get("ruleId") or "sarif"),
-                detail=str(detail or ""),
-                path=_first_location_path(res)))
+            findings.append(
+                SecurityFinding(
+                    severity=severity,
+                    rule=str(res.get("ruleId") or "sarif"),
+                    detail=str(detail or ""),
+                    path=_first_location_path(res),
+                )
+            )
     return findings
 
 
@@ -399,10 +418,13 @@ Create `tests/test_integration_checks.py`:
 """run_integration_checks: the end-to-end coverage seam (E-30, FR-106/FR-108).
 
 Proves the artifact now crosses into the worktree measure_coverage reads."""
+
 import pytest
 
 from sdlc.activities import (
-    CoverageInput, IntegrationChecksInput, measure_coverage,
+    CoverageInput,
+    IntegrationChecksInput,
+    measure_coverage,
     run_integration_checks,
 )
 
@@ -418,16 +440,16 @@ async def test_integration_checks_produces_real_coverage(tmp_path):
     (tmp_path / "mod.py").write_text(MODULE, encoding="utf-8")
     (tmp_path / "test_mod.py").write_text(TESTFILE, encoding="utf-8")
 
-    checks = await run_integration_checks(IntegrationChecksInput(
-        worktree=str(tmp_path), changed_files=["mod.py"]))
+    checks = await run_integration_checks(
+        IntegrationChecksInput(worktree=str(tmp_path), changed_files=["mod.py"])
+    )
 
     assert checks.toolchain == "python"
     assert checks.qa.tests_passed is True
     assert (tmp_path / "coverage.xml").is_file(), "coverage.xml must be emitted"
 
     # The gate reader now finds the artifact and measures a diff-scoped %.
-    cov = await measure_coverage(CoverageInput(
-        worktree=str(tmp_path), changed_files=["mod.py"]))
+    cov = await measure_coverage(CoverageInput(worktree=str(tmp_path), changed_files=["mod.py"]))
     assert cov.measured is True
     assert 0.0 < (cov.diff_pct or 0.0) < 100.0  # covered + uncovered => partial
 
@@ -435,11 +457,12 @@ async def test_integration_checks_produces_real_coverage(tmp_path):
 @pytest.mark.asyncio
 async def test_integration_checks_degrades_without_adapter(tmp_path):
     # No marker file -> no adapter -> caller falls back to the pre-E-30 path.
-    checks = await run_integration_checks(IntegrationChecksInput(
-        worktree=str(tmp_path), changed_files=[]))
+    checks = await run_integration_checks(
+        IntegrationChecksInput(worktree=str(tmp_path), changed_files=[])
+    )
     assert checks.toolchain is None
-    assert checks.lint_clean is True          # not linted => never blocking
-    assert checks.qa.tests_passed is False    # signals "no integration run here"
+    assert checks.lint_clean is True  # not linted => never blocking
+    assert checks.qa.tests_passed is False  # signals "no integration run here"
 ```
 
 - [ ] **Step 3: Run tests to verify they fail**
@@ -465,8 +488,8 @@ async def _bounded_shell(cmd: str, cwd: str, timeout_s: int) -> tuple[int, str]:
     On timeout: kill and return (-1, message). See run_test_suite's docstring
     for why an unbounded shell command is dangerous in an activity."""
     proc = await asyncio.create_subprocess_shell(
-        cmd, cwd=cwd,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        cmd, cwd=cwd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
+    )
     try:
         out_b, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
     except asyncio.TimeoutError:
@@ -486,7 +509,7 @@ class IntegrationChecksInput:
 
 @dataclass
 class IntegrationChecks:
-    toolchain: str | None          # ToolchainKind value, or None if undetected
+    toolchain: str | None  # ToolchainKind value, or None if undetected
     qa: QAReport
     lint_clean: bool
     lint_detail: str
@@ -501,8 +524,7 @@ _PYTEST_USAGE_ERROR = 4
 
 
 @activity.defn
-async def run_integration_checks(
-        inp: IntegrationChecksInput) -> IntegrationChecks:
+async def run_integration_checks(inp: IntegrationChecksInput) -> IntegrationChecks:
     """FR-108/ADR-15: resolve the toolchain by marker file and run
     coverage-instrumented tests + lint against the merged integration head.
     Emits coverage.xml into inp.worktree, where measure_coverage reads — the
@@ -515,29 +537,34 @@ async def run_integration_checks(
     if adapter is None:
         return IntegrationChecks(
             toolchain=None,
-            qa=QAReport(tests_passed=False,
-                        issues=["no toolchain adapter for this worktree"]),
-            lint_clean=True, lint_detail="no toolchain adapter (not linted)")
+            qa=QAReport(tests_passed=False, issues=["no toolchain adapter for this worktree"]),
+            lint_clean=True,
+            lint_detail="no toolchain adapter (not linted)",
+        )
 
     code, out = await _bounded_shell(
-        adapter.test_cmd(coverage=True), inp.worktree, inp.test_timeout_s)
+        adapter.test_cmd(coverage=True), inp.worktree, inp.test_timeout_s
+    )
     if code == _PYTEST_USAGE_ERROR:
         # Coverage tooling unavailable — get the honest green signal without it.
-        prefix = ("coverage instrumentation unavailable (pytest usage error); "
-                  "coverage left unmeasured\n")
+        prefix = (
+            "coverage instrumentation unavailable (pytest usage error); coverage left unmeasured\n"
+        )
         code, out = await _bounded_shell(
-            adapter.test_cmd(coverage=False), inp.worktree, inp.test_timeout_s)
+            adapter.test_cmd(coverage=False), inp.worktree, inp.test_timeout_s
+        )
         out = prefix + out
-    failing = [ln.split(" ")[0] for ln in out.splitlines()
-               if ln.startswith("FAILED")]
-    qa = QAReport(tests_passed=code == 0, failing_tests=failing[:50],
-                  issues=[] if code == 0 else [out[-2000:]])
+    failing = [ln.split(" ")[0] for ln in out.splitlines() if ln.startswith("FAILED")]
+    qa = QAReport(
+        tests_passed=code == 0,
+        failing_tests=failing[:50],
+        issues=[] if code == 0 else [out[-2000:]],
+    )
 
-    lcode, ldetail = await _bounded_shell(
-        adapter.lint_cmd(), inp.worktree, inp.lint_timeout_s)
+    lcode, ldetail = await _bounded_shell(adapter.lint_cmd(), inp.worktree, inp.lint_timeout_s)
     return IntegrationChecks(
-        toolchain=adapter.kind.value, qa=qa,
-        lint_clean=lcode == 0, lint_detail=ldetail[-2000:])
+        toolchain=adapter.kind.value, qa=qa, lint_clean=lcode == 0, lint_detail=ldetail[-2000:]
+    )
 ```
 
 - [ ] **Step 6: Run tests to verify they pass**
@@ -577,12 +604,12 @@ Create `tests/test_integration_checks_wiring.py`:
 
 ```python
 """E-30: stage-12 wires the toolchain adapter and the worker registers it."""
+
 import ast
 import inspect
 import pathlib
 
-FEATURE = pathlib.Path(
-    "src/sdlc/workflows/feature.py").read_text(encoding="utf-8")
+FEATURE = pathlib.Path("src/sdlc/workflows/feature.py").read_text(encoding="utf-8")
 
 
 def _pipeline_src() -> str:
@@ -613,6 +640,7 @@ def test_measure_coverage_called_exactly_once_in_pipeline():
 
 def test_worker_registers_run_integration_checks():
     from sdlc import worker
+
     assert "run_integration_checks" in inspect.getsource(worker)
 
 
@@ -630,16 +658,35 @@ Expected: FAIL — `run_integration_checks` not found in `_pipeline`/worker.
 In `src/sdlc/workflows/feature.py`, replace the activity import block (`:16-24`):
 
 ```python
-    from ..activities import (
-        CodingTaskInput, CoverageInput, DeployInput, DiffInput,
-        IntegrationChecks, IntegrationChecksInput,
-        IntegrationHandle, IntegrationInput, LintInput, MergeInput,
-        PROpenInput, QAInput, SecurityScanInput, WorktreeInput,
-        create_worktree, deploy, evaluate_gate, get_task_diff,
-        measure_coverage, merge_into_integration, open_pull_request,
-        run_coding_task, run_integration_checks, run_lint, run_test_suite,
-        security_scan, setup_integration_branch,
-    )
+from ..activities import (
+    CodingTaskInput,
+    CoverageInput,
+    DeployInput,
+    DiffInput,
+    IntegrationChecks,
+    IntegrationChecksInput,
+    IntegrationHandle,
+    IntegrationInput,
+    LintInput,
+    MergeInput,
+    PROpenInput,
+    QAInput,
+    SecurityScanInput,
+    WorktreeInput,
+    create_worktree,
+    deploy,
+    evaluate_gate,
+    get_task_diff,
+    measure_coverage,
+    merge_into_integration,
+    open_pull_request,
+    run_coding_task,
+    run_integration_checks,
+    run_lint,
+    run_test_suite,
+    security_scan,
+    setup_integration_branch,
+)
 ```
 
 - [ ] **Step 4: Add the `INTEG_ACT` timeout constant**
@@ -651,8 +698,9 @@ In `src/sdlc/workflows/feature.py`, after the `EXPORT_ACT = ...` block (`:95-96`
 # integration head. Generous start_to_close (> the activity's internal test
 # 600s + fallback 600s + lint 300s worst case); 2 attempts like the per-task
 # test run. It does not heartbeat, so no heartbeat_timeout.
-INTEG_ACT = dict(start_to_close_timeout=timedelta(minutes=30),
-                 retry_policy=RetryPolicy(maximum_attempts=2))
+INTEG_ACT = dict(
+    start_to_close_timeout=timedelta(minutes=30), retry_policy=RetryPolicy(maximum_attempts=2)
+)
 ```
 
 - [ ] **Step 5: Remove `measure_coverage` from the analyze block**
@@ -660,11 +708,11 @@ INTEG_ACT = dict(start_to_close_timeout=timedelta(minutes=30),
 In `src/sdlc/workflows/feature.py`, delete these lines from the analyze stage (currently `:1114-1118`):
 
 ```python
-        cov: CoverageReport = await workflow.execute_activity(
-            measure_coverage,
-            CoverageInput(worktree=self._integration_wt,
-                          changed_files=integration_diff["files"]),
-            **ACT)
+cov: CoverageReport = await workflow.execute_activity(
+    measure_coverage,
+    CoverageInput(worktree=self._integration_wt, changed_files=integration_diff["files"]),
+    **ACT,
+)
 ```
 
 (The analyze-stage record and retains below use only `untraced`, not `cov`, so nothing else in that block breaks.)
@@ -674,62 +722,63 @@ In `src/sdlc/workflows/feature.py`, delete these lines from the analyze stage (c
 In `src/sdlc/workflows/feature.py`, replace the block that currently reads (`:1148-1162`):
 
 ```python
-        integration_worktree = self._integration_wt
-        # Same stack-awareness as the per-task QA command: use the plan's
-        # own lint_commands rather than assuming a Python toolchain against
-        # whatever stack the architecture actually chose.
-        lint_commands = next(
-            (t.contract.lint_commands for t in plan.tasks
-             if t.contract and t.contract.lint_commands), None)
-        lint_cmd = _contract_shell_cmd(lint_commands, DEFAULT_LINT_CMD)
-        lint_clean, lint_detail = await workflow.execute_activity(
-            run_lint, LintInput(worktree=integration_worktree,
-                                lint_cmd=lint_cmd), **ACT)
-        security: SecurityReport = await workflow.execute_activity(
-            security_scan,
-            SecurityScanInput(worktree=integration_worktree), **ACT)
-        all_tests_green = _merge_evidence_all_green(list(done.values()))
+integration_worktree = self._integration_wt
+# Same stack-awareness as the per-task QA command: use the plan's
+# own lint_commands rather than assuming a Python toolchain against
+# whatever stack the architecture actually chose.
+lint_commands = next(
+    (t.contract.lint_commands for t in plan.tasks if t.contract and t.contract.lint_commands), None
+)
+lint_cmd = _contract_shell_cmd(lint_commands, DEFAULT_LINT_CMD)
+lint_clean, lint_detail = await workflow.execute_activity(
+    run_lint, LintInput(worktree=integration_worktree, lint_cmd=lint_cmd), **ACT
+)
+security: SecurityReport = await workflow.execute_activity(
+    security_scan, SecurityScanInput(worktree=integration_worktree), **ACT
+)
+all_tests_green = _merge_evidence_all_green(list(done.values()))
 ```
 
 with:
 
 ```python
-        integration_worktree = self._integration_wt
-        # E-30/FR-108/ADR-14: run the toolchain adapter (coverage-instrumented
-        # tests + lint) against the merged integration head — a REAL
-        # integration-green signal, and the coverage.xml measure_coverage reads.
-        # No adapter for the built language => degrade to the pre-E-30 path
-        # (per-task aggregate green + the plan's own lint command).
-        ichecks: IntegrationChecks = await workflow.execute_activity(
-            run_integration_checks,
-            IntegrationChecksInput(worktree=integration_worktree,
-                                   changed_files=integration_diff["files"]),
-            **INTEG_ACT)
-        if ichecks.toolchain is not None:
-            all_tests_green = ichecks.qa.tests_passed
-            lint_clean, lint_detail = ichecks.lint_clean, ichecks.lint_detail
-        else:
-            lint_commands = next(
-                (t.contract.lint_commands for t in plan.tasks
-                 if t.contract and t.contract.lint_commands), None)
-            lint_cmd = _contract_shell_cmd(lint_commands, DEFAULT_LINT_CMD)
-            lint_clean, lint_detail = await workflow.execute_activity(
-                run_lint, LintInput(worktree=integration_worktree,
-                                    lint_cmd=lint_cmd), **ACT)
-            all_tests_green = _merge_evidence_all_green(list(done.values()))
+integration_worktree = self._integration_wt
+# E-30/FR-108/ADR-14: run the toolchain adapter (coverage-instrumented
+# tests + lint) against the merged integration head — a REAL
+# integration-green signal, and the coverage.xml measure_coverage reads.
+# No adapter for the built language => degrade to the pre-E-30 path
+# (per-task aggregate green + the plan's own lint command).
+ichecks: IntegrationChecks = await workflow.execute_activity(
+    run_integration_checks,
+    IntegrationChecksInput(worktree=integration_worktree, changed_files=integration_diff["files"]),
+    **INTEG_ACT,
+)
+if ichecks.toolchain is not None:
+    all_tests_green = ichecks.qa.tests_passed
+    lint_clean, lint_detail = ichecks.lint_clean, ichecks.lint_detail
+else:
+    lint_commands = next(
+        (t.contract.lint_commands for t in plan.tasks if t.contract and t.contract.lint_commands),
+        None,
+    )
+    lint_cmd = _contract_shell_cmd(lint_commands, DEFAULT_LINT_CMD)
+    lint_clean, lint_detail = await workflow.execute_activity(
+        run_lint, LintInput(worktree=integration_worktree, lint_cmd=lint_cmd), **ACT
+    )
+    all_tests_green = _merge_evidence_all_green(list(done.values()))
 
-        # Coverage is read AFTER the integration test run that emits
-        # coverage.xml (E-30 closes the FR-106 gap: the artifact now lands where
-        # the seam reads). measured=False stays a no-op advisory pass.
-        cov: CoverageReport = await workflow.execute_activity(
-            measure_coverage,
-            CoverageInput(worktree=integration_worktree,
-                          changed_files=integration_diff["files"]),
-            **ACT)
+# Coverage is read AFTER the integration test run that emits
+# coverage.xml (E-30 closes the FR-106 gap: the artifact now lands where
+# the seam reads). measured=False stays a no-op advisory pass.
+cov: CoverageReport = await workflow.execute_activity(
+    measure_coverage,
+    CoverageInput(worktree=integration_worktree, changed_files=integration_diff["files"]),
+    **ACT,
+)
 
-        security: SecurityReport = await workflow.execute_activity(
-            security_scan,
-            SecurityScanInput(worktree=integration_worktree), **ACT)
+security: SecurityReport = await workflow.execute_activity(
+    security_scan, SecurityScanInput(worktree=integration_worktree), **ACT
+)
 ```
 
 - [ ] **Step 7: Register the activity in the worker**
@@ -737,15 +786,25 @@ with:
 In `src/sdlc/worker.py`, update the `from .activities import (...)` block (`:28-33`) to include `run_integration_checks` in the imported names, e.g. change the line `run_coding_task, run_lint, run_test_suite, security_scan,` (`:31`) to:
 
 ```python
-    run_coding_task, run_integration_checks, run_lint, run_test_suite,
-    security_scan,
+(
+    run_coding_task,
+    run_integration_checks,
+    run_lint,
+    run_test_suite,
+)
+(security_scan,)
 ```
 
 Then in the `activities=[...]` list, change the line `run_coding_task, run_lint, run_test_suite, security_scan,` (`:71`) to:
 
 ```python
-            run_coding_task, run_integration_checks, run_lint, run_test_suite,
-            security_scan,
+(
+    run_coding_task,
+    run_integration_checks,
+    run_lint,
+    run_test_suite,
+)
+(security_scan,)
 ```
 
 - [ ] **Step 8: Run the wiring tests + full suite**

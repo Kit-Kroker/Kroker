@@ -14,9 +14,7 @@ from ..core.models import (
     ArtifactRef,
     HarnessKind,
 )
-from ..models import (
-    HarnessRunResult,
-)
+from ..harness.models import HarnessRunResult
 
 NOTE_SCHEMA = "notes-v1"
 # A note records decisions the diff cannot state. A model that inflates it is

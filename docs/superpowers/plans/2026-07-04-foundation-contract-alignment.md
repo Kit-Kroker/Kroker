@@ -77,6 +77,7 @@ Expected: completes; `pytest --version` prints a version. If the build fails on 
 
 ```python
 """Shared test fixtures."""
+
 from __future__ import annotations
 
 import subprocess
@@ -87,8 +88,11 @@ import pytest
 
 def run_git(args: list[str], cwd: str | Path) -> str:
     return subprocess.run(
-        ["git", *args], cwd=str(cwd), check=True,
-        capture_output=True, text=True,
+        ["git", *args],
+        cwd=str(cwd),
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout
 
 
@@ -120,6 +124,7 @@ def test_light_modules_import():
 
 def test_git_repo_fixture(git_repo):
     from pathlib import Path
+
     assert (Path(git_repo) / "README.md").read_text() == "seed\n"
 ```
 
@@ -157,17 +162,19 @@ from sdlc.models import GateDecision, GateOutcome, gate_key
 
 
 def test_approve_outcome_sets_approved_property():
-    d = GateDecision(gate="architecture", outcome=GateOutcome.APPROVE,
-                     decided_by="human")
+    d = GateDecision(gate="architecture", outcome=GateOutcome.APPROVE, decided_by="human")
     assert d.approved is True
     assert d.round == 1
 
 
 def test_revise_and_reject_are_not_approved():
-    revise = GateDecision(gate="architecture", outcome=GateOutcome.REVISE,
-                          decided_by="human", guidance="tighten scope")
-    reject = GateDecision(gate="architecture", outcome=GateOutcome.REJECT,
-                          decided_by="human")
+    revise = GateDecision(
+        gate="architecture",
+        outcome=GateOutcome.REVISE,
+        decided_by="human",
+        guidance="tighten scope",
+    )
+    reject = GateDecision(gate="architecture", outcome=GateOutcome.REJECT, decided_by="human")
     assert revise.approved is False
     assert reject.approved is False
     assert revise.guidance == "tighten scope"
@@ -189,22 +196,22 @@ Add a `GateOutcome` enum near the other enums (after `GatePolicy`, around line 3
 
 ```python
 class GateOutcome(str, Enum):
-    APPROVE = "approve"    # proceed
-    REJECT = "reject"      # terminal
-    REVISE = "revise"      # loop back with guidance (Finding #6)
+    APPROVE = "approve"  # proceed
+    REJECT = "reject"  # terminal
+    REVISE = "revise"  # loop back with guidance (Finding #6)
 ```
 
 Replace the `GateDecision` class (currently lines 153-160) with:
 
 ```python
 class GateDecision(BaseModel):
-    gate: str                               # "architecture", "merge", ...
-    round: int = 1                          # revision round (Finding #6)
+    gate: str  # "architecture", "merge", ...
+    round: int = 1  # revision round (Finding #6)
     outcome: GateOutcome
     decided_by: Literal["human", "policy", "timeout"]
     reviewer: str | None = None
     comments: str | None = None
-    guidance: str | None = None             # fed back into the agent on 'revise'
+    guidance: str | None = None  # fed back into the agent on 'revise'
     decided_at: datetime | None = None
 
     @property
@@ -236,10 +243,14 @@ from .models import GateDecision, GateOutcome, IdeaBrief, ProjectMode
 Replace the `GateDecision(...)` construction (lines 72-74) with:
 
 ```python
-            GateDecision(gate=args.gate,
-                         outcome=(GateOutcome.APPROVE if args.cmd == "approve"
-                                  else GateOutcome.REJECT),
-                         decided_by="human", comments=args.comment),
+(
+    GateDecision(
+        gate=args.gate,
+        outcome=(GateOutcome.APPROVE if args.cmd == "approve" else GateOutcome.REJECT),
+        decided_by="human",
+        comments=args.comment,
+    ),
+)
 ```
 
 - [ ] **Step 6: Verify `cli.py` still imports**
@@ -312,18 +323,19 @@ Replace the `HarnessRunResult` class (currently lines 124-133) with:
 ```python
 class HarnessRunResult(BaseModel):
     """Normalized result from any coding harness invocation."""
+
     harness: HarnessKind
     session_id: str | None = None
     exit_code: int
-    summary: str                            # harness's final text (truncated)
+    summary: str  # harness's final text (truncated)
     cost_usd: float | None = None
-    commit_sha: str | None = None           # checkpoint commit after the run
+    commit_sha: str | None = None  # checkpoint commit after the run
     diff_ref: ArtifactRef | None = None
     # Observability for the context-ceiling trigger (Finding #7):
     input_tokens: int | None = None
     output_tokens: int | None = None
     context_window: int | None = None
-    compacted: bool = False                 # harness signalled a mid-run compaction
+    compacted: bool = False  # harness signalled a mid-run compaction
 
     def near_context_ceiling(self, fraction: float = 0.75) -> bool:
         """True when the run is at/over the usable context budget. A
@@ -349,13 +361,19 @@ Expected: 4 passed.
 import json
 
 from sdlc.harness.adapters import (
-    ClaudeCodeHarness, OpenCodeHarness, context_window_for,
+    ClaudeCodeHarness,
+    OpenCodeHarness,
+    context_window_for,
 )
 
 
 def test_claude_parse_extracts_tokens_and_cost():
-    payload = {"session_id": "abc", "total_cost_usd": 0.12, "result": "done",
-               "usage": {"input_tokens": 1234, "output_tokens": 56}}
+    payload = {
+        "session_id": "abc",
+        "total_cost_usd": 0.12,
+        "result": "done",
+        "usage": {"input_tokens": 1234, "output_tokens": 56},
+    }
     res = ClaudeCodeHarness().parse(json.dumps(payload), 0)
     assert res.session_id == "abc"
     assert res.cost_usd == 0.12
@@ -364,8 +382,7 @@ def test_claude_parse_extracts_tokens_and_cost():
 
 
 def test_opencode_parse_extracts_tokens():
-    payload = {"sessionID": "xyz", "text": "ok",
-               "usage": {"input_tokens": 10, "output_tokens": 2}}
+    payload = {"sessionID": "xyz", "text": "ok", "usage": {"input_tokens": 10, "output_tokens": 2}}
     res = OpenCodeHarness().parse(json.dumps(payload), 0)
     assert res.session_id == "xyz"
     assert res.input_tokens == 10
@@ -412,56 +429,62 @@ def context_window_for(model: str | None) -> int | None:
 In `ClaudeCodeHarness.parse` (lines 104-116), extract usage. Replace the body with:
 
 ```python
-    def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
-        session_id = cost = summary = None
-        input_tokens = output_tokens = None
-        try:
-            payload = json.loads(stdout.strip().splitlines()[-1])
-            session_id = payload.get("session_id")
-            cost = payload.get("total_cost_usd")
-            summary = payload.get("result") or payload.get("content")
-            usage = payload.get("usage") or {}
-            input_tokens = usage.get("input_tokens")
-            output_tokens = usage.get("output_tokens")
-        except (json.JSONDecodeError, IndexError):
-            summary = stdout
-        return HarnessRunResult(
-            harness=self.kind, session_id=session_id, exit_code=exit_code,
-            summary=(summary or "")[:SUMMARY_MAX], cost_usd=cost,
-            input_tokens=input_tokens, output_tokens=output_tokens,
-        )
+def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
+    session_id = cost = summary = None
+    input_tokens = output_tokens = None
+    try:
+        payload = json.loads(stdout.strip().splitlines()[-1])
+        session_id = payload.get("session_id")
+        cost = payload.get("total_cost_usd")
+        summary = payload.get("result") or payload.get("content")
+        usage = payload.get("usage") or {}
+        input_tokens = usage.get("input_tokens")
+        output_tokens = usage.get("output_tokens")
+    except (json.JSONDecodeError, IndexError):
+        summary = stdout
+    return HarnessRunResult(
+        harness=self.kind,
+        session_id=session_id,
+        exit_code=exit_code,
+        summary=(summary or "")[:SUMMARY_MAX],
+        cost_usd=cost,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+    )
 ```
 
 In `OpenCodeHarness.parse` (lines 139-150), do the same. Replace the body with:
 
 ```python
-    def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
-        session_id = summary = None
-        input_tokens = output_tokens = None
-        try:
-            payload = json.loads(stdout.strip().splitlines()[-1])
-            session_id = payload.get("sessionID") or payload.get("session_id")
-            summary = payload.get("text") or payload.get("result")
-            usage = payload.get("usage") or {}
-            input_tokens = usage.get("input_tokens")
-            output_tokens = usage.get("output_tokens")
-        except (json.JSONDecodeError, IndexError):
-            summary = stdout
-        return HarnessRunResult(
-            harness=self.kind, session_id=session_id, exit_code=exit_code,
-            summary=(summary or "")[:SUMMARY_MAX],
-            input_tokens=input_tokens, output_tokens=output_tokens,
-        )
+def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
+    session_id = summary = None
+    input_tokens = output_tokens = None
+    try:
+        payload = json.loads(stdout.strip().splitlines()[-1])
+        session_id = payload.get("sessionID") or payload.get("session_id")
+        summary = payload.get("text") or payload.get("result")
+        usage = payload.get("usage") or {}
+        input_tokens = usage.get("input_tokens")
+        output_tokens = usage.get("output_tokens")
+    except (json.JSONDecodeError, IndexError):
+        summary = stdout
+    return HarnessRunResult(
+        harness=self.kind,
+        session_id=session_id,
+        exit_code=exit_code,
+        summary=(summary or "")[:SUMMARY_MAX],
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+    )
 ```
 
 Fill `context_window` centrally in the base `run` method so both harnesses benefit. In `CodingHarness.run` (lines 48-80), change the final `return` (line 79-80) to:
 
 ```python
-        result = self.parse(stdout_b.decode(errors="replace"),
-                            proc.returncode or 0)
-        if result.context_window is None:
-            result.context_window = context_window_for(req.model)
-        return result
+result = self.parse(stdout_b.decode(errors="replace"), proc.returncode or 0)
+if result.context_window is None:
+    result.context_window = context_window_for(req.model)
+return result
 ```
 
 > Note: opencode's exact usage JSON keys are not verified against a live run; the `usage.input_tokens` shape mirrors Claude's and is what the test fixture asserts. Confirm against real `opencode run --format json` output when Plan 2 integrates the live harness; adjust `.get(...)` keys if they differ.
@@ -532,14 +555,27 @@ After the `CONTEXT_WINDOWS`/`context_window_for` block from Task 3, add:
 # Never the worker's full os.environ (that is a bigger secret channel than
 # the prompt). Covers POSIX + Windows toolchain essentials.
 ENV_ALLOWLIST: tuple[str, ...] = (
-    "PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "TMP", "TEMP",
-    "SYSTEMROOT", "SYSTEMDRIVE", "USERPROFILE", "PATHEXT", "COMSPEC",
-    "GIT_EXEC_PATH", "GIT_SSH", "SSH_AUTH_SOCK",
+    "PATH",
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "TMPDIR",
+    "TMP",
+    "TEMP",
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
+    "USERPROFILE",
+    "PATHEXT",
+    "COMSPEC",
+    "GIT_EXEC_PATH",
+    "GIT_SSH",
+    "SSH_AUTH_SOCK",
 )
 
 
-def build_env(req_env: dict[str, str],
-              allowlist: tuple[str, ...] = ENV_ALLOWLIST) -> dict[str, str]:
+def build_env(
+    req_env: dict[str, str], allowlist: tuple[str, ...] = ENV_ALLOWLIST
+) -> dict[str, str]:
     """Curated child environment: allowlisted worker vars, then the
     request's injected (repo-scoped, short-TTL) credentials."""
     env = {k: os.environ[k] for k in allowlist if k in os.environ}
@@ -552,13 +588,13 @@ def build_env(req_env: dict[str, str],
 In `src/sdlc/harness/adapters.py`, change the subprocess env (line 54) from:
 
 ```python
-            env={**os.environ, **req.env},
+env = ({**os.environ, **req.env},)
 ```
 
 to:
 
 ```python
-            env=build_env(req.env),
+env = (build_env(req.env),)
 ```
 
 - [ ] **Step 5: Run the tests to verify they pass**
@@ -599,8 +635,13 @@ import asyncio
 from pathlib import Path
 
 from sdlc.activities import (
-    DiffInput, IntegrationInput, MergeInput, WorktreeInput,
-    create_worktree, get_task_diff, merge_into_integration,
+    DiffInput,
+    IntegrationInput,
+    MergeInput,
+    WorktreeInput,
+    create_worktree,
+    get_task_diff,
+    merge_into_integration,
     setup_integration_branch,
 )
 from tests.conftest import run_git
@@ -615,58 +656,82 @@ def _add_commit(path: str, name: str, content: str, msg: str) -> None:
 
 
 def test_dependent_task_sees_prior_task_code(git_repo):
-    head = asyncio.run(setup_integration_branch(
-        IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")))
+    head = asyncio.run(
+        setup_integration_branch(
+            IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")
+        )
+    )
 
-    a = asyncio.run(create_worktree(
-        WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="A", from_ref=head)))
+    a = asyncio.run(
+        create_worktree(WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="A", from_ref=head))
+    )
     _add_commit(a.path, "a.txt", "from A\n", "A work")
-    res = asyncio.run(merge_into_integration(
-        MergeInput(repo_path=git_repo, run_id=RUN, task_branch=a.branch)))
+    res = asyncio.run(
+        merge_into_integration(MergeInput(repo_path=git_repo, run_id=RUN, task_branch=a.branch))
+    )
     assert res.merged and not res.conflict
 
     # B branches from the UPDATED integration head → must see A's file.
-    b = asyncio.run(create_worktree(
-        WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="B",
-                      from_ref=res.integration_head)))
+    b = asyncio.run(
+        create_worktree(
+            WorktreeInput(
+                repo_path=git_repo, run_id=RUN, task_id="B", from_ref=res.integration_head
+            )
+        )
+    )
     assert (Path(b.path) / "a.txt").read_text() == "from A\n"
 
 
 def test_diff_anchors_to_branch_point_not_base(git_repo):
-    head = asyncio.run(setup_integration_branch(
-        IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")))
-    a = asyncio.run(create_worktree(
-        WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="A", from_ref=head)))
+    head = asyncio.run(
+        setup_integration_branch(
+            IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")
+        )
+    )
+    a = asyncio.run(
+        create_worktree(WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="A", from_ref=head))
+    )
     _add_commit(a.path, "a.txt", "from A\n", "A work")
-    res = asyncio.run(merge_into_integration(
-        MergeInput(repo_path=git_repo, run_id=RUN, task_branch=a.branch)))
+    res = asyncio.run(
+        merge_into_integration(MergeInput(repo_path=git_repo, run_id=RUN, task_branch=a.branch))
+    )
 
-    b = asyncio.run(create_worktree(
-        WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="B",
-                      from_ref=res.integration_head)))
+    b = asyncio.run(
+        create_worktree(
+            WorktreeInput(
+                repo_path=git_repo, run_id=RUN, task_id="B", from_ref=res.integration_head
+            )
+        )
+    )
     _add_commit(b.path, "b.txt", "from B\n", "B work")
-    diff = asyncio.run(get_task_diff(
-        DiffInput(worktree=b.path, branch_point=b.branch_point)))
+    diff = asyncio.run(get_task_diff(DiffInput(worktree=b.path, branch_point=b.branch_point)))
     assert "b.txt" in diff["files"]
     assert "a.txt" not in diff["files"]  # A's change is upstream, not B's diff
 
 
 def test_merge_conflict_is_detected_and_aborted(git_repo):
-    head = asyncio.run(setup_integration_branch(
-        IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")))
+    head = asyncio.run(
+        setup_integration_branch(
+            IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")
+        )
+    )
     # A and B branch from the same head and edit the SAME file.
-    a = asyncio.run(create_worktree(
-        WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="A", from_ref=head)))
+    a = asyncio.run(
+        create_worktree(WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="A", from_ref=head))
+    )
     _add_commit(a.path, "shared.txt", "A version\n", "A edits shared")
-    b = asyncio.run(create_worktree(
-        WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="B", from_ref=head)))
+    b = asyncio.run(
+        create_worktree(WorktreeInput(repo_path=git_repo, run_id=RUN, task_id="B", from_ref=head))
+    )
     _add_commit(b.path, "shared.txt", "B version\n", "B edits shared")
 
-    ra = asyncio.run(merge_into_integration(
-        MergeInput(repo_path=git_repo, run_id=RUN, task_branch=a.branch)))
+    ra = asyncio.run(
+        merge_into_integration(MergeInput(repo_path=git_repo, run_id=RUN, task_branch=a.branch))
+    )
     assert ra.merged is True
-    rb = asyncio.run(merge_into_integration(
-        MergeInput(repo_path=git_repo, run_id=RUN, task_branch=b.branch)))
+    rb = asyncio.run(
+        merge_into_integration(MergeInput(repo_path=git_repo, run_id=RUN, task_branch=b.branch))
+    )
     assert rb.conflict is True and rb.merged is False
     # Integration head unchanged after the aborted merge → equals A's merge head.
     assert rb.integration_head == ra.integration_head
@@ -702,14 +767,14 @@ class WorktreeInput:
     repo_path: str
     run_id: str
     task_id: str
-    from_ref: str          # integration head SHA (ADR-14) — NOT base_branch
+    from_ref: str  # integration head SHA (ADR-14) — NOT base_branch
 
 
 @dataclass
 class WorktreeHandle:
     path: str
     branch: str
-    branch_point: str      # SHA the task branched from (diff anchor)
+    branch_point: str  # SHA the task branched from (diff anchor)
 
 
 @activity.defn
@@ -719,11 +784,13 @@ async def create_worktree(inp: WorktreeInput) -> WorktreeHandle:
     branch = f"sdlc/{inp.run_id}/{inp.task_id}"
     subprocess.run(
         ["git", "worktree", "add", "-b", branch, path, inp.from_ref],
-        cwd=inp.repo_path, check=True, capture_output=True,
+        cwd=inp.repo_path,
+        check=True,
+        capture_output=True,
     )
     point = subprocess.run(
-        ["git", "rev-parse", inp.from_ref], cwd=inp.repo_path,
-        capture_output=True, text=True).stdout.strip()
+        ["git", "rev-parse", inp.from_ref], cwd=inp.repo_path, capture_output=True, text=True
+    ).stdout.strip()
     return WorktreeHandle(path=path, branch=branch, branch_point=point)
 
 
@@ -742,11 +809,13 @@ async def setup_integration_branch(inp: IntegrationInput) -> str:
     path = f"{_worktrees_root()}/{inp.run_id}/integration"
     subprocess.run(
         ["git", "worktree", "add", "-b", branch, path, inp.base_branch],
-        cwd=inp.repo_path, check=True, capture_output=True,
+        cwd=inp.repo_path,
+        check=True,
+        capture_output=True,
     )
     return subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=path,
-        capture_output=True, text=True).stdout.strip()
+        ["git", "rev-parse", "HEAD"], cwd=path, capture_output=True, text=True
+    ).stdout.strip()
 
 
 @dataclass
@@ -770,17 +839,20 @@ async def merge_into_integration(inp: MergeInput) -> MergeResult:
     abort cleanly and report it so the caller serializes/escalates."""
     ipath = f"{_worktrees_root()}/{inp.run_id}/integration"
     merge = subprocess.run(
-        ["git", "merge", "--no-ff", "-m", f"merge {inp.task_branch}",
-         inp.task_branch],
-        cwd=ipath, capture_output=True, text=True)
+        ["git", "merge", "--no-ff", "-m", f"merge {inp.task_branch}", inp.task_branch],
+        cwd=ipath,
+        capture_output=True,
+        text=True,
+    )
     if merge.returncode != 0:
-        subprocess.run(["git", "merge", "--abort"], cwd=ipath,
-                       capture_output=True)
-        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ipath,
-                              capture_output=True, text=True).stdout.strip()
+        subprocess.run(["git", "merge", "--abort"], cwd=ipath, capture_output=True)
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ipath, capture_output=True, text=True
+        ).stdout.strip()
         return MergeResult(merged=False, conflict=True, integration_head=head)
-    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ipath,
-                          capture_output=True, text=True).stdout.strip()
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=ipath, capture_output=True, text=True
+    ).stdout.strip()
     return MergeResult(merged=True, conflict=False, integration_head=head)
 ```
 
@@ -792,7 +864,7 @@ Replace the `DiffInput` dataclass and `get_task_diff` (lines 78-102) with:
 @dataclass
 class DiffInput:
     worktree: str
-    branch_point: str      # SHA the task branched from — NOT base_branch
+    branch_point: str  # SHA the task branched from — NOT base_branch
     max_chars: int = 60_000
 
 
@@ -803,15 +875,15 @@ async def get_task_diff(inp: DiffInput) -> dict:
     change — upstream work is invisible (Finding #1)."""
     rng = f"{inp.branch_point}...HEAD"
     stat = subprocess.run(
-        ["git", "diff", "--stat", rng],
-        cwd=inp.worktree, capture_output=True, text=True).stdout
+        ["git", "diff", "--stat", rng], cwd=inp.worktree, capture_output=True, text=True
+    ).stdout
     patch = subprocess.run(
-        ["git", "diff", rng],
-        cwd=inp.worktree, capture_output=True, text=True).stdout
+        ["git", "diff", rng], cwd=inp.worktree, capture_output=True, text=True
+    ).stdout
     files = subprocess.run(
-        ["git", "diff", "--name-only", rng],
-        cwd=inp.worktree, capture_output=True, text=True).stdout.splitlines()
-    return {"stat": stat, "patch": patch[:inp.max_chars], "files": files}
+        ["git", "diff", "--name-only", rng], cwd=inp.worktree, capture_output=True, text=True
+    ).stdout.splitlines()
+    return {"stat": stat, "patch": patch[: inp.max_chars], "files": files}
 ```
 
 - [ ] **Step 6: Register the new activities on the worker**
@@ -822,19 +894,31 @@ Import block becomes:
 
 ```python
 from .activities import (
-    create_worktree, deploy, merge_into_integration, open_pull_request,
-    run_coding_task, run_test_suite, setup_integration_branch,
+    create_worktree,
+    deploy,
+    merge_into_integration,
+    open_pull_request,
+    run_coding_task,
+    run_test_suite,
+    setup_integration_branch,
 )
 ```
 
 Activities list becomes:
 
 ```python
-        activities=[
-            create_worktree, setup_integration_branch, merge_into_integration,
-            run_coding_task, run_test_suite, open_pull_request, deploy,
-            *agent_activities,
-        ],
+activities = (
+    [
+        create_worktree,
+        setup_integration_branch,
+        merge_into_integration,
+        run_coding_task,
+        run_test_suite,
+        open_pull_request,
+        deploy,
+        *agent_activities,
+    ],
+)
 ```
 
 - [ ] **Step 7: Run the integration tests to verify they pass**
@@ -880,16 +964,20 @@ Add the pure, deterministic gate the specs describe (and the skeleton lacks). It
 
 ```python
 from sdlc.gate import (
-    CheckClass, GateOverride, build_check, evaluate_quality_gate,
+    CheckClass,
+    GateOverride,
+    build_check,
+    evaluate_quality_gate,
 )
 
 
 def test_absolute_failure_blocks_unconditionally():
     checks = [build_check("lint", False, CheckClass.ABSOLUTE)]
-    rep = evaluate_quality_gate(checks, overrides=[
-        GateOverride(check="lint", approved_by="alice", reason="whatever")])
+    rep = evaluate_quality_gate(
+        checks, overrides=[GateOverride(check="lint", approved_by="alice", reason="whatever")]
+    )
     assert rep.passed is False
-    assert "lint" in rep.blocking          # override ignored for absolute
+    assert "lint" in rep.blocking  # override ignored for absolute
     assert rep.overridden == []
 
 
@@ -901,8 +989,9 @@ def test_advisory_failure_blocks_without_override():
 
 def test_advisory_failure_passes_with_override():
     checks = [build_check("coverage", False, CheckClass.ADVISORY)]
-    rep = evaluate_quality_gate(checks, overrides=[
-        GateOverride(check="coverage", approved_by="alice", reason="legacy gap")])
+    rep = evaluate_quality_gate(
+        checks, overrides=[GateOverride(check="coverage", approved_by="alice", reason="legacy gap")]
+    )
     assert rep.passed is True
     assert rep.overridden == ["coverage"]
     assert rep.blocking == []
@@ -911,15 +1000,18 @@ def test_advisory_failure_passes_with_override():
 def test_security_floor_cannot_be_demoted():
     c = build_check("security_no_critical", False, CheckClass.ADVISORY)
     assert c.classification is CheckClass.ABSOLUTE
-    rep = evaluate_quality_gate([c], overrides=[
-        GateOverride(check="security_no_critical", approved_by="alice",
-                     reason="yolo")])
+    rep = evaluate_quality_gate(
+        [c],
+        overrides=[GateOverride(check="security_no_critical", approved_by="alice", reason="yolo")],
+    )
     assert rep.passed is False
 
 
 def test_all_pass_is_clean():
-    checks = [build_check("lint", True, CheckClass.ABSOLUTE),
-              build_check("coverage", True, CheckClass.ADVISORY)]
+    checks = [
+        build_check("lint", True, CheckClass.ABSOLUTE),
+        build_check("coverage", True, CheckClass.ADVISORY),
+    ]
     rep = evaluate_quality_gate(checks)
     assert rep.passed is True
     assert rep.blocking == []
@@ -947,6 +1039,7 @@ project's config marks it advisory. The advisory LLM `MergeVerdict` is NOT
 consulted here — it is only ever an advisory input to a SOFT merge gate,
 after this gate has already passed.
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -955,8 +1048,8 @@ from pydantic import BaseModel, Field
 
 
 class CheckClass(str, Enum):
-    ABSOLUTE = "absolute"    # never overridable (lint, build, critical security)
-    ADVISORY = "advisory"    # overridable by an audited human decision
+    ABSOLUTE = "absolute"  # never overridable (lint, build, critical security)
+    ADVISORY = "advisory"  # overridable by an audited human decision
 
 
 class CheckResult(BaseModel):
@@ -968,15 +1061,16 @@ class CheckResult(BaseModel):
 
 class GateOverride(BaseModel):
     """An audited human override of a failed advisory check."""
+
     check: str
-    approved_by: str          # human identity (retained as calibration signal)
+    approved_by: str  # human identity (retained as calibration signal)
     reason: str
 
 
 class GateReport(BaseModel):
     passed: bool
-    blocking: list[str] = Field(default_factory=list)     # check names still blocking
-    overridden: list[str] = Field(default_factory=list)   # advisory checks waved through
+    blocking: list[str] = Field(default_factory=list)  # check names still blocking
+    overridden: list[str] = Field(default_factory=list)  # advisory checks waved through
     checks: list[CheckResult]
 
 
@@ -984,13 +1078,10 @@ class GateReport(BaseModel):
 ABSOLUTE_FLOOR: frozenset[str] = frozenset({"security_no_critical"})
 
 
-def build_check(name: str, passed: bool, requested: CheckClass,
-                detail: str = "") -> CheckResult:
+def build_check(name: str, passed: bool, requested: CheckClass, detail: str = "") -> CheckResult:
     """Construct a CheckResult, forcing floor checks to ABSOLUTE."""
-    classification = (CheckClass.ABSOLUTE if name in ABSOLUTE_FLOOR
-                      else requested)
-    return CheckResult(name=name, passed=passed,
-                       classification=classification, detail=detail)
+    classification = CheckClass.ABSOLUTE if name in ABSOLUTE_FLOOR else requested
+    return CheckResult(name=name, passed=passed, classification=classification, detail=detail)
 
 
 def evaluate_quality_gate(
@@ -1004,13 +1095,12 @@ def evaluate_quality_gate(
         if c.passed:
             continue
         if c.classification is CheckClass.ABSOLUTE:
-            blocking.append(c.name)                 # absolute: override ignored
+            blocking.append(c.name)  # absolute: override ignored
         elif c.name in override_names:
-            overridden.append(c.name)               # advisory: audited waiver
+            overridden.append(c.name)  # advisory: audited waiver
         else:
             blocking.append(c.name)
-    return GateReport(passed=not blocking, blocking=blocking,
-                      overridden=overridden, checks=checks)
+    return GateReport(passed=not blocking, blocking=blocking, overridden=overridden, checks=checks)
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -1070,6 +1160,7 @@ Split the *LLM* release-judgment out of `GateDecision` into an advisory `MergeVe
 ```python
 def test_merge_verdict_model():
     from sdlc.models import MergeVerdict
+
     v = MergeVerdict(approve=True, confidence=0.9, rationale="clean build")
     assert v.approve is True
     assert v.confidence == 0.9
@@ -1078,9 +1169,10 @@ def test_merge_verdict_model():
 
 def test_roles_and_workflow_import_cleanly():
     import importlib
+
     roles = importlib.import_module("sdlc.agents.roles")
     assert hasattr(roles, "t_merge_verdict")
-    assert not hasattr(roles, "t_gate")          # renamed away
+    assert not hasattr(roles, "t_gate")  # renamed away
     importlib.import_module("sdlc.workflows.feature")
 ```
 
@@ -1098,6 +1190,7 @@ class MergeVerdict(BaseModel):
     """Advisory LLM proposer output (Finding #5). Consulted only under a
     SOFT merge policy, and only AFTER the DeterministicQualityGate passes.
     It can approve an already-clean build; it can never bypass the gate."""
+
     approve: bool
     confidence: float = Field(ge=0.0, le=1.0)
     rationale: str
@@ -1131,8 +1224,7 @@ Update the Temporal-wrapping block (lines 108-116). Replace `t_gate = TemporalAg
 ```python
 t_merge_verdict = TemporalAgent(merge_verdict_agent)
 ...
-ALL_TEMPORAL_AGENTS = [t_clarify, t_architect, t_planner, t_qa,
-                       t_merge_verdict, t_devops]
+ALL_TEMPORAL_AGENTS = [t_clarify, t_architect, t_planner, t_qa, t_merge_verdict, t_devops]
 ```
 
 - [ ] **Step 5: Update `feature.py` imports and gate constructors**
@@ -1142,29 +1234,50 @@ In `src/sdlc/workflows/feature.py`:
 Change the activities import (lines 15-19) to the new names:
 
 ```python
-    from .activities import (
-        CodingTaskInput, DeployInput, DiffInput, PROpenInput, QAInput,
-        WorktreeInput, create_worktree, deploy, get_task_diff,
-        open_pull_request, run_coding_task, run_test_suite,
-    )
+from .activities import (
+    CodingTaskInput,
+    DeployInput,
+    DiffInput,
+    PROpenInput,
+    QAInput,
+    WorktreeInput,
+    create_worktree,
+    deploy,
+    get_task_diff,
+    open_pull_request,
+    run_coding_task,
+    run_test_suite,
+)
 ```
 (unchanged — `WorktreeInput`/`DiffInput`/`create_worktree`/`get_task_diff` still exist; only their fields changed.)
 
 Change the roles import (lines 20-22) from `t_gate` to `t_merge_verdict`:
 
 ```python
-    from .agents.roles import (
-        t_architect, t_clarify, t_merge_verdict, t_planner, t_qa,
-    )
+from .agents.roles import (
+    t_architect,
+    t_clarify,
+    t_merge_verdict,
+    t_planner,
+    t_qa,
+)
 ```
 
 Change the models import (lines 23-26) to add `GateOutcome` and `MergeVerdict`:
 
 ```python
-    from .models import (
-        DevTask, ExecutionMode, GateDecision, GateOutcome, GatePolicy,
-        HandoffSummary, IdeaBrief, MergeVerdict, PipelineConfig, TaskResult,
-    )
+from .models import (
+    DevTask,
+    ExecutionMode,
+    GateDecision,
+    GateOutcome,
+    GatePolicy,
+    HandoffSummary,
+    IdeaBrief,
+    MergeVerdict,
+    PipelineConfig,
+    TaskResult,
+)
 ```
 
 In `_gate` (lines 65-87), update the two `GateDecision(...)` constructors:
@@ -1178,14 +1291,18 @@ In `_gate` (lines 65-87), update the two `GateDecision(...)` constructors:
 In `_dev_task` (lines 89-188), update the worktree creation (lines 100-105) to the new signature and capture the handle:
 
 ```python
-        role_cfg = cfg.roles.get(task.role, cfg.roles["dev"])
-        handle = await workflow.execute_activity(
-            create_worktree,
-            WorktreeInput(repo_path=repo_path, run_id=workflow.info().workflow_id,
-                          task_id=task.id, from_ref=base_branch),
-            **ACT,
-        )
-        worktree = handle.path
+role_cfg = cfg.roles.get(task.role, cfg.roles["dev"])
+handle = await workflow.execute_activity(
+    create_worktree,
+    WorktreeInput(
+        repo_path=repo_path,
+        run_id=workflow.info().workflow_id,
+        task_id=task.id,
+        from_ref=base_branch,
+    ),
+    **ACT,
+)
+worktree = handle.path
 ```
 
 > Plan 2 note: `from_ref=base_branch` is transitional — every task still branches from base until Plan 2 adds `setup_integration_branch` at run start and threads the integration head + `merge_into_integration` between tasks. The activities are ready; the orchestration is not wired here.
@@ -1209,19 +1326,23 @@ Replace the three `branch=f"sdlc/{task.id}"` literals (lines 158, 186) with `han
 In `run` (lines 262-268), replace the `t_gate` consultation with the advisory `MergeVerdict` converted into an auto `GateDecision`:
 
 ```python
-        # 5. MERGE gate — advisory MergeVerdict only informs the SOFT path.
-        # (Plan 2 runs the DeterministicQualityGate before this consult.)
-        verdict: MergeVerdict = (await t_merge_verdict.run(
-            "Advisory only. Given these task results, should the merge "
-            f"proceed? Task results: {[r.model_dump() for r in done.values()]}"
-        )).output
-        auto = GateDecision(
-            gate="merge", outcome=(GateOutcome.APPROVE if verdict.approve
-                                   else GateOutcome.REJECT),
-            decided_by="policy", comments=verdict.rationale)
-        gate = await self._gate("merge", cfg, auto_decision=auto)
-        if not gate.approved:
-            return "rejected:merge"
+# 5. MERGE gate — advisory MergeVerdict only informs the SOFT path.
+# (Plan 2 runs the DeterministicQualityGate before this consult.)
+verdict: MergeVerdict = (
+    await t_merge_verdict.run(
+        "Advisory only. Given these task results, should the merge "
+        f"proceed? Task results: {[r.model_dump() for r in done.values()]}"
+    )
+).output
+auto = GateDecision(
+    gate="merge",
+    outcome=(GateOutcome.APPROVE if verdict.approve else GateOutcome.REJECT),
+    decided_by="policy",
+    comments=verdict.rationale,
+)
+gate = await self._gate("merge", cfg, auto_decision=auto)
+if not gate.approved:
+    return "rejected:merge"
 ```
 
 - [ ] **Step 8: Run the import-smoke test to verify it passes**

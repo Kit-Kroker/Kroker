@@ -17,7 +17,7 @@ from sdlc.harness.adapters import (
     OpenCodeHarness,
 )
 from sdlc.harness.containment import ContainmentError
-from sdlc.models import (
+from sdlc.harness.models import (
     ContainmentLayer,
     ToolGrant,
 )

@@ -22,9 +22,7 @@ from enum import StrEnum
 from ..core.models import (
     DeployConfig,
 )
-from ..models import (
-    DeployPlan,
-)
+from ..stages.deploy.models import DeployPlan
 
 
 class DeployKind(StrEnum):
