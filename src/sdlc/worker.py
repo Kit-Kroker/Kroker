@@ -96,7 +96,6 @@ from .observability.activities import export_run_artifacts
 from .pricing import price_usage
 from .stages import STAGE_MODULES
 from .stages.code.activities import run_coding_task
-from .stages.context.activities import check_brownfield_delta, classify_repo
 from .stages.merge.activities import (
     evaluate_gate,
     measure_coverage,
@@ -144,8 +143,6 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
         *stage_activities,
         create_worktree,
         setup_integration_branch,
-        classify_repo,
-        check_brownfield_delta,
         merge_into_integration,
         build_verification_branch,
         prepare_crew,

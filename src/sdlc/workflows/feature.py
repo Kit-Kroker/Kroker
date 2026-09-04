@@ -32,7 +32,7 @@ with workflow.unsafe.imports_passed_through():
     from ..benchmarks.models import BenchmarkOutcome
     from ..board.models import TaskStatus
     from ..context.models import CodebaseMap
-    from ..context.project import map_digest, project
+    from ..context.project import map_digest
     from ..context.render import render_for_prompt
     from ..core.context import StageContext, StageServices
     from ..core.models import (
@@ -69,7 +69,7 @@ with workflow.unsafe.imports_passed_through():
     from ..observability.trace import RunEventKind
     from ..pending import GateContext
     from ..prompts import merge_verdict_prompt, planner_prompt
-    from ..stages import analyze, clarify, intake, research, retro
+    from ..stages import analyze, clarify, context, intake, research, retro
     from ..stages.analyze.models import untraced_criteria
     from ..stages.architecture.models import ArchitectureSpec
     from ..stages.clarify.models import ClarifiedRequirements
@@ -114,7 +114,6 @@ with workflow.unsafe.imports_passed_through():
         _auto_decision_for,
         _BudgetRejected,
     )
-    from .scanning import scan_tree
     from .task_host import TaskHost, _contract_shell_cmd
 
 INTAKE_ACT = workflow.ActivityConfig(
@@ -548,24 +547,23 @@ class FeatureWorkflow(
             # Retro must never change the run outcome (best-effort stage).
             pass
 
-    async def _context(self, repo_path: str, commit_sha: str) -> CodebaseMap:
-        """Stage 2 (E-84). The same thirteen signals the audit tier runs, over
-        the same memo, with no triage (D1/D5).
-
-        Nothing here executes the repository's code: every signal reads blob
-        bytes at the pinned commit (NFR-9).
-        """
-        out = await scan_tree(repo_path, commit_sha, None)
-        if out.scan is None:
-            return CodebaseMap(
-                tree_hash=out.tree_hash or "",
-                commit_sha=commit_sha,
-                modules_collected=out.result.collected,
-                contracts_collected=out.result.collected,
-                hot_spots_collected=out.result.collected,
-                collected=out.result.collected,
-            )
-        return project(out.scan, out.tree_hash, commit_sha)
+    async def _context(
+        self,
+        repo_path: str,
+        commit_sha: str,
+        idea: IdeaBrief | None = None,
+        cfg: PipelineConfig | None = None,
+    ) -> CodebaseMap | str | None:
+        """Stage 2 context mapping for brownfield projects (E-84). Delegates to context.step."""
+        if idea is None:
+            return await context.build_map(repo_path, commit_sha)
+        return await context.step(
+            self._ctx,
+            cfg=cfg or self._cfg or PipelineConfig(),
+            idea=idea,
+            repo_path=repo_path,
+            commit_sha=commit_sha,
+        )
 
     async def _pipeline(
         self, idea: IdeaBrief, cfg: PipelineConfig, seeded: SeededWork | None = None
@@ -621,13 +619,10 @@ class FeatureWorkflow(
         # integration head, which is the branch point the work is based on.
         self._codebase_map = None
         if idea.mode is ProjectMode.BROWNFIELD:
-            self._stage("mapping", "context")
-            self._codebase_map = await self._context(repo_path, self._integration_head)
-            if self._codebase_map.collected.state is not CollectionState.MEASURED:
-                # D6: proceeding would silently drop the delta check exactly
-                # when the ground is weakest -- the shape of the
-                # malformed-SARIF-reads-as-clean hole (FR-915).
-                return f"rejected:context ({self._codebase_map.collected.reason})"
+            context_res = await self._context(repo_path, self._integration_head, idea=idea, cfg=cfg)
+            if isinstance(context_res, str):
+                return context_res
+            self._codebase_map = context_res
 
         # 0. RESEARCH (FR-107) â€” optional, human-gated, NOT memoized. A served
         # memo means pages were not fetched this run, so a brief cannot be
