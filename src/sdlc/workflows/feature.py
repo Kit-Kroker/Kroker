@@ -31,7 +31,6 @@ with workflow.unsafe.imports_passed_through():
         t_research,
     )
     from ..artifacts.read import LoadSessionInput, load_session
-    from ..artifacts.retention import RetentionInput, apply_session_retention, keep_full_transcripts
     from ..benchmarks.models import BenchmarkOutcome
     from ..board.models import TaskStatus
     from ..context.models import CodebaseMap
@@ -68,10 +67,9 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..harness.session import session_text_from_jsonl
     from ..measurement import CollectionState
-    from ..memory.activities import ReflectInput, WatermarkInput, capture_watermark, reflect
+    from ..memory.activities import WatermarkInput, capture_watermark
     from ..memory.models import MemoryKind
     from ..notify.contract import NotifyReason
-    from ..observability.activities import RunExportInput, export_run_artifacts
     from ..observability.summary import build_run_summary
     from ..observability.trace import RunEventKind
     from ..pending import GateContext
@@ -88,7 +86,7 @@ with workflow.unsafe.imports_passed_through():
         synthesize_brief,
     )
     from ..research.verify import brief_digest, verify_brief_activity
-    from ..stages import clarify, intake
+    from ..stages import clarify, intake, retro
     from ..stages.analyze.models import AnalysisReport
     from ..stages.architecture.models import ArchitectureSpec
     from ..stages.clarify.models import ClarifiedRequirements
@@ -154,11 +152,6 @@ ACT = workflow.ActivityConfig(
 VERIFY_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=1),
     retry_policy=RetryPolicy(maximum_attempts=1),
-)
-# E-32: export is best-effort — a single attempt, no retry hammering (a failing
-# export must never change the run's return string).
-EXPORT_ACT = workflow.ActivityConfig(
-    start_to_close_timeout=timedelta(minutes=2), retry_policy=RetryPolicy(maximum_attempts=1)
 )
 
 
@@ -925,9 +918,6 @@ class FeatureWorkflow(
         """Stage 14 (E-32). Best-effort: any failure is swallowed so the run's
         return string is never changed."""
         try:
-            if cfg.memory.enabled:
-                self._emit(RunEventKind.MEMORY_RETAINED, stage="retro", item="run_summary")
-            self._emit(RunEventKind.RUN_FINISHED, stage="retro", outcome=result)
             summary = build_run_summary(
                 run_id=workflow.info().workflow_id,
                 mode=idea.mode.value,
@@ -940,61 +930,13 @@ class FeatureWorkflow(
                 repo_url=idea.repo_url,
             )
             self._run_summary = summary
-
-            if cfg.memory.enabled:
-                await self._retain(
-                    cfg,
-                    MemoryKind.RUN_SUMMARY,
-                    cfg.memory.project_bank,
-                    text=summary.model_dump_json(),
-                    metadata={"run_id": workflow.info().workflow_id, "stage": "retro"},
-                )
-                try:
-                    await workflow.execute_activity(
-                        reflect,
-                        ReflectInput(
-                            bank=cfg.memory.project_bank,
-                            backend=cfg.memory.backend,
-                            base_url=cfg.memory.base_url,
-                        ),
-                        **MEM_ACT,
-                    )
-                except Exception:
-                    pass
-
-            try:
-                await workflow.execute_activity(
-                    export_run_artifacts,
-                    RunExportInput(
-                        run_id=workflow.info().workflow_id, summary=summary, trace=self._trace
-                    ),
-                    **EXPORT_ACT,
-                )
-            except Exception:
-                pass
-
-            # E-38: OQ-B7 retention — downgrade clean-green non-benchmark
-            # runs to digest-only. Best-effort like the export above.
-            try:
-                had_fix = any(
-                    ev.kind == RunEventKind.FIX_ATTEMPT
-                    and ev.data.get("attempt") not in (None, "1")
-                    for ev in self._trace
-                )
-                await workflow.execute_activity(
-                    apply_session_retention,
-                    RetentionInput(
-                        refs=self._session_refs,
-                        keep_full=keep_full_transcripts(
-                            outcome=result,
-                            had_fix_attempts=had_fix,
-                            is_benchmark=cfg.benchmark.case_id is not None,
-                        ),
-                    ),
-                    **EXPORT_ACT,
-                )
-            except Exception:
-                pass
+            await retro.step(
+                self._ctx,
+                cfg=cfg,
+                summary=summary,
+                session_refs=self._session_refs,
+                trace=self._trace,
+            )
         except Exception:
             # Retro must never change the run outcome (best-effort stage).
             pass

@@ -159,7 +159,7 @@ documentation (`src/`, `tests/`, `scripts/`, `interfaces/`, `agents/`,
 | analyze | `src/sdlc/workflows/feature.py` | types moved, step pending |
 | merge | `src/sdlc/workflows/feature.py` | types moved, step pending |
 | deploy | `src/sdlc/workflows/feature.py` | types moved, step pending |
-| retro / reflect | `src/sdlc/workflows/feature.py` | types moved, step pending |
+| retro / reflect | `src/sdlc/stages/retro/` | migrated |
 
 Rule: **you touched a stage, you move it.**
 

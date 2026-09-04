@@ -1678,8 +1678,8 @@ git commit -m "refactor(<stage>): move the <stage> stage into a vertical slice"
 - [x] **Step 6: Move tests** (none assigned in archaeology report)
 - [x] **Step 7: Write `intake.md` and `AGENTS.md` from templates**
 - [x] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
-- [ ] **Step 9: Run full verification suite**
-- [ ] **Step 10: Commit `refactor(intake): move the intake stage into a vertical slice`**
+- [x] **Step 9: Run full verification suite**
+- [x] **Step 10: Commit `refactor(intake): move the intake stage into a vertical slice`**
 
 ### Task 20.2: Stage `retro` (Rank 2)
 
@@ -1695,14 +1695,14 @@ git commit -m "refactor(<stage>): move the <stage> stage into a vertical slice"
 - Uncovered needs: None (best-effort summary, reflection, and artifact export via `ctx.emit` and `ctx.retain`).
 - Enum sites: None.
 
-- [ ] **Step 1: Write failing contract test** (`tests/retro/test_retro_slice_contract.py`)
-- [ ] **Step 2: Run test to verify it fails**
-- [ ] **Step 3: Lift the inline block into `step.py`** (`feature.py:2396-2472`)
-- [ ] **Step 4: Create `prompts.py` with `prompt_digest(cfg)` and empty `activities.py`**
-- [ ] **Step 5: Register in `STAGE_MODULES`**
-- [ ] **Step 6: Move tests** (`tests/test_retro_stage.py`, `tests/test_reflect_workflow.py` -> `tests/retro/`)
-- [ ] **Step 7: Write `retro.md` and `AGENTS.md` from templates**
-- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [x] **Step 1: Write failing contract test** (`tests/retro/test_retro_slice_contract.py`)
+- [x] **Step 2: Run test to verify it fails**
+- [x] **Step 3: Lift the inline block into `step.py`** (`feature.py:2396-2472`)
+- [x] **Step 4: Create `prompts.py` with `prompt_digest(cfg)` and empty `activities.py`**
+- [x] **Step 5: Register in `STAGE_MODULES`**
+- [x] **Step 6: Move tests** (`tests/test_retro_stage.py`, `tests/test_reflect_workflow.py` -> `tests/retro/`)
+- [x] **Step 7: Write `retro.md` and `AGENTS.md` from templates**
+- [x] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
 - [ ] **Step 9: Run full verification suite**
 - [ ] **Step 10: Commit `refactor(retro): move the retro stage into a vertical slice`**
 
