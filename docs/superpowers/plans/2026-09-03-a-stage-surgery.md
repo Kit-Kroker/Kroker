@@ -1754,7 +1754,7 @@ git commit -m "refactor(<stage>): move the <stage> stage into a vertical slice"
 - [x] **Step 7: Write `research.md` and `AGENTS.md` from templates**
 - [x] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
 - [x] **Step 9: Run full verification suite**
-- [ ] **Step 10: Commit `refactor(research): move the research stage into a vertical slice`**
+- [x] **Step 10: Commit `refactor(research): move the research stage into a vertical slice`**
 
 ### Task 20.5: Stage `review` (Rank 5)
 
