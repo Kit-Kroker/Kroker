@@ -2,7 +2,7 @@
 
 import json
 
-from sdlc.harness.adapters import OpenCodeHarness
+from sdlc.harness.opencode import OpenCodeHarness
 
 STREAM = "\n".join(
     [

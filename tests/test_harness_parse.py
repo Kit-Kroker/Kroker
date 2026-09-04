@@ -1,12 +1,12 @@
 import json
 import logging
 
-from sdlc.harness.adapters import (
-    ClaudeCodeHarness,
+from sdlc.harness.base import (
     HarnessRequest,
-    OpenCodeHarness,
     context_window_for,
 )
+from sdlc.harness.claude_code import ClaudeCodeHarness
+from sdlc.harness.opencode import OpenCodeHarness
 
 
 def test_claude_parse_extracts_tokens_and_cost():
@@ -153,7 +153,7 @@ def test_claude_build_cmd_accept_edits():
 
 
 def test_opencode_parse_logs_debug_on_malformed_line(caplog):
-    caplog.set_level(logging.DEBUG, logger="sdlc.harness.adapters")
+    caplog.set_level(logging.DEBUG, logger="sdlc.harness.opencode")
     events = "\n".join(
         [
             "not valid json",
@@ -167,13 +167,13 @@ def test_opencode_parse_logs_debug_on_malformed_line(caplog):
 
 
 def test_opencode_parse_logs_warning_when_nothing_parses(caplog):
-    caplog.set_level(logging.WARNING, logger="sdlc.harness.adapters")
+    caplog.set_level(logging.WARNING, logger="sdlc.harness.opencode")
     OpenCodeHarness().parse("not json at all", 1)
     assert any("parsed_any" in r.message or "no events parsed" in r.message for r in caplog.records)
 
 
 def test_claude_parse_logs_warning_on_decode_failure(caplog):
-    caplog.set_level(logging.WARNING, logger="sdlc.harness.adapters")
+    caplog.set_level(logging.WARNING, logger="sdlc.harness.claude_code")
     ClaudeCodeHarness().parse("not json at all", 1)
     assert any(
         "result event" in r.message.lower() or "fallback" in r.message.lower()

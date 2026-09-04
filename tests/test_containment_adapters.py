@@ -3,10 +3,8 @@
 import json
 from pathlib import Path
 
-from sdlc.harness.adapters import (
-    ClaudeCodeHarness,
-    HarnessRequest,
-)
+from sdlc.harness.base import HarnessRequest
+from sdlc.harness.claude_code import ClaudeCodeHarness
 from sdlc.harness.containment import Policy, Rule
 from sdlc.harness.models import ContainmentLayer
 
@@ -193,9 +191,9 @@ def _settings_path(req: HarnessRequest) -> str:
     return req.extra_args[idx + 1]
 
 
-from sdlc.harness.adapters import OpenCodeHarness
 from sdlc.harness.containment import Action, digest_tool_input
 from sdlc.harness.models import ToolGrant
+from sdlc.harness.opencode import OpenCodeHarness
 
 ESC_RULE = Rule(
     id="no-out-of-worktree-write",
@@ -209,7 +207,7 @@ OUTSIDE = {"file_path": "/etc/passwd"}
 
 
 def _req(tmp_path):
-    from sdlc.harness.adapters import HarnessRequest
+    from sdlc.harness.base import HarnessRequest
 
     return HarnessRequest(prompt="go", cwd=str(tmp_path))
 
@@ -463,7 +461,7 @@ def test_a_deferral_target_is_scrubbed():
     # is that the value passed THROUGH scrub, asserted by patching it.
     from unittest.mock import patch
 
-    with patch("sdlc.harness.adapters.scrub", side_effect=lambda s: f"SCRUBBED:{s}") as m:
+    with patch("sdlc.harness.claude_code.scrub", side_effect=lambda s: f"SCRUBBED:{s}") as m:
         d2 = ClaudeCodeHarness().normalise_deferral(stdout)
     assert m.called
     assert d2.target.startswith("SCRUBBED:")

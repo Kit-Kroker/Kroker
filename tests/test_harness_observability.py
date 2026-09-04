@@ -8,7 +8,7 @@ import pytest
 from sdlc.core.models import (
     HarnessKind,
 )
-from sdlc.harness.adapters import CodingHarness, HarnessRequest, _log_live_event
+from sdlc.harness.base import CodingHarness, HarnessRequest, _log_live_event
 from sdlc.harness.models import HarnessRunResult
 from tests.conftest import _wait_for_pidfile_async, _wait_until_dead
 
@@ -49,7 +49,7 @@ async def test_large_stderr_does_not_deadlock(tmp_path):
 
 @pytest.mark.asyncio
 async def test_lifecycle_summary_logged(tmp_path, caplog):
-    caplog.set_level(logging.INFO, logger="sdlc.harness.adapters")
+    caplog.set_level(logging.INFO, logger="sdlc.harness.base")
     harness = _PyHarness("print('hi')")
     await harness.run(HarnessRequest(prompt="x", cwd=str(tmp_path)))
     assert any("harness done" in r.message for r in caplog.records)
@@ -58,7 +58,7 @@ async def test_lifecycle_summary_logged(tmp_path, caplog):
 
 @pytest.mark.asyncio
 async def test_stderr_logged_as_warning_on_failure(tmp_path, caplog):
-    caplog.set_level(logging.WARNING, logger="sdlc.harness.adapters")
+    caplog.set_level(logging.WARNING, logger="sdlc.harness.base")
     script = "import sys\nsys.stderr.write('boom detail')\nsys.exit(1)\n"
     harness = _PyHarness(script)
     result = await harness.run(HarnessRequest(prompt="x", cwd=str(tmp_path)))
@@ -68,7 +68,7 @@ async def test_stderr_logged_as_warning_on_failure(tmp_path, caplog):
 
 @pytest.mark.asyncio
 async def test_timeout_logs_warning(tmp_path, caplog):
-    caplog.set_level(logging.WARNING, logger="sdlc.harness.adapters")
+    caplog.set_level(logging.WARNING, logger="sdlc.harness.base")
     script = "import time\ntime.sleep(5)\n"
     harness = _PyHarness(script)
     with pytest.raises(asyncio.TimeoutError):
@@ -100,13 +100,13 @@ async def test_timeout_kills_grandchild(tmp_path):
 
 
 def test_log_live_event_step_start_logged_at_info(caplog):
-    caplog.set_level(logging.INFO, logger="sdlc.harness.adapters")
+    caplog.set_level(logging.INFO, logger="sdlc.harness.base")
     _log_live_event(json.dumps({"type": "step_start", "sessionID": "abc"}))
     assert any("step_start" in r.message and "abc" in r.message for r in caplog.records)
 
 
 def test_log_live_event_step_finish_logs_tokens_and_cost(caplog):
-    caplog.set_level(logging.INFO, logger="sdlc.harness.adapters")
+    caplog.set_level(logging.INFO, logger="sdlc.harness.base")
     _log_live_event(
         json.dumps(
             {
@@ -122,7 +122,7 @@ def test_log_live_event_step_finish_logs_tokens_and_cost(caplog):
 
 
 def test_log_live_event_text_logged_at_debug_with_length_not_content(caplog):
-    caplog.set_level(logging.DEBUG, logger="sdlc.harness.adapters")
+    caplog.set_level(logging.DEBUG, logger="sdlc.harness.base")
     _log_live_event(
         json.dumps(
             {
@@ -138,14 +138,14 @@ def test_log_live_event_text_logged_at_debug_with_length_not_content(caplog):
 
 
 def test_log_live_event_ignores_non_json_and_unknown_type(caplog):
-    caplog.set_level(logging.DEBUG, logger="sdlc.harness.adapters")
+    caplog.set_level(logging.DEBUG, logger="sdlc.harness.base")
     _log_live_event("not json at all")  # must not raise
     _log_live_event(json.dumps({"type": "something_else"}))
     assert caplog.records == []
 
 
 def test_log_live_event_ignores_non_dict_json(caplog):
-    caplog.set_level(logging.DEBUG, logger="sdlc.harness.adapters")
+    caplog.set_level(logging.DEBUG, logger="sdlc.harness.base")
     for line in ("42", "[1,2,3]", "true", "null"):
         _log_live_event(line)  # must not raise
     assert caplog.records == []
@@ -153,7 +153,7 @@ def test_log_live_event_ignores_non_dict_json(caplog):
 
 @pytest.mark.asyncio
 async def test_run_logs_events_as_they_stream(tmp_path, caplog):
-    caplog.set_level(logging.INFO, logger="sdlc.harness.adapters")
+    caplog.set_level(logging.INFO, logger="sdlc.harness.base")
     script = (
         "import json\n"
         "print(json.dumps({'type': 'step_start', 'sessionID': 's1'}))\n"
@@ -168,7 +168,7 @@ async def test_run_logs_events_as_they_stream(tmp_path, caplog):
 
 
 def test_log_live_event_survives_non_dict_part(caplog):
-    caplog.set_level(logging.DEBUG, logger="sdlc.harness.adapters")
+    caplog.set_level(logging.DEBUG, logger="sdlc.harness.base")
     _log_live_event(
         json.dumps(
             {

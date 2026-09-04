@@ -17,11 +17,12 @@ from ..artifacts.capture import capture_session
 from ..core.models import (
     HarnessKind,
 )
-from ..harness.adapters import HARNESSES, HarnessRequest
+from ..harness.base import HarnessRequest
 from ..harness.models import (
     HarnessRunResult,
     ToolGrant,
 )
+from ..harness.registry import HARNESSES
 from .config import CrewLayout, CrewRole
 from .models import (
     MAX_NOTE_BYTES,

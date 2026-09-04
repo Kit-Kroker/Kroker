@@ -1,4 +1,4 @@
-import sdlc.harness.adapters as ad
+import sdlc.harness.base as ad
 
 
 def test_build_env_excludes_non_allowlisted_secrets(monkeypatch):

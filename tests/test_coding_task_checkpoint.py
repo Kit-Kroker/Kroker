@@ -28,7 +28,7 @@ import sdlc.stages.code.activities
 from sdlc.core.models import (
     HarnessKind,
 )
-from sdlc.harness.adapters import CodingHarness
+from sdlc.harness.base import CodingHarness
 from sdlc.harness.models import HarnessRunResult
 from sdlc.stages.code.activities import (
     CodingTaskInput,

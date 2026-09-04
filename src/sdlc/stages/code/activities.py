@@ -10,9 +10,10 @@ from temporalio import activity
 
 from ...artifacts.capture import capture_session
 from ...core.models import HarnessKind
-from ...harness.adapters import HARNESSES, HarnessRequest
+from ...harness.base import HarnessRequest
 from ...harness.containment import ContainmentError, load_policy
 from ...harness.models import HarnessRunResult, ToolGrant
+from ...harness.registry import HARNESSES
 from ...observability.logfire_setup import span
 from ...vcs.git import _git
 

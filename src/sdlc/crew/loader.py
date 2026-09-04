@@ -209,7 +209,7 @@ def validate_crew_clis(root: Path | None = None) -> None:
     root = root or crew_dir()
     if root is None or not (root / "layouts").is_dir():
         return  # no crew assets here; not a defect
-    from ..harness.adapters import HARNESSES
+    from ..harness.registry import HARNESSES
 
     missing: list[str] = []
     for path in sorted((root / "layouts").glob("*.yaml")):

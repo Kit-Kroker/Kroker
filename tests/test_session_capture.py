@@ -4,7 +4,7 @@ import json
 
 from sdlc.artifacts.capture import capture_session
 from sdlc.artifacts.store import ref_to_path
-from sdlc.harness.adapters import ClaudeCodeHarness
+from sdlc.harness.claude_code import ClaudeCodeHarness
 
 STREAM = "\n".join(
     [

@@ -13,7 +13,8 @@ import shutil
 
 import pytest
 
-from sdlc.harness.adapters import ClaudeCodeHarness, HarnessRequest
+from sdlc.harness.base import HarnessRequest
+from sdlc.harness.claude_code import ClaudeCodeHarness
 from sdlc.harness.containment import load_policy
 from sdlc.harness.models import ToolGrant
 

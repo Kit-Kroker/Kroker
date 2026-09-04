@@ -8,18 +8,16 @@ import pytest
 from sdlc.core.models import (
     HarnessKind,
 )
-from sdlc.harness.adapters import (
-    HARNESSES,
-    ClaudeCodeHarness,
-    CursorHarness,
-    HarnessRequest,
-    OpenCodeHarness,
-)
+from sdlc.harness.base import HarnessRequest
+from sdlc.harness.claude_code import ClaudeCodeHarness
 from sdlc.harness.containment import ContainmentError
+from sdlc.harness.cursor import CursorHarness
 from sdlc.harness.models import (
     ContainmentLayer,
     ToolGrant,
 )
+from sdlc.harness.opencode import OpenCodeHarness
+from sdlc.harness.registry import HARNESSES
 from sdlc.stages.code.activities import CodingTaskInput, _resolve_containment
 
 POLICY_YAML = """

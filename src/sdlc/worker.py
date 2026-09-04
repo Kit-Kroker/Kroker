@@ -83,7 +83,7 @@ from .deploy.activities import (
     deploy_rollback,
     smoke_check,
 )
-from .harness.adapters import check_harness_versions
+from .harness.registry import check_harness_versions
 from .memoization.activities import cache_get, cache_put
 from .memory.activities import (
     capture_watermark,

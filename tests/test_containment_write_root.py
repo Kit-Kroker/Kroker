@@ -11,7 +11,8 @@ the alternative, and Predicate's own docstring says a fifth member is
 
 from __future__ import annotations
 
-from sdlc.harness.adapters import ClaudeCodeHarness, HarnessRequest
+from sdlc.harness.base import HarnessRequest
+from sdlc.harness.claude_code import ClaudeCodeHarness
 
 
 def test_hook_confines_to_cwd_when_no_write_root_is_given():

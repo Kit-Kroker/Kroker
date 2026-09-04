@@ -2,9 +2,11 @@
 
 import json
 
-from sdlc.harness.adapters import CursorHarness, HarnessRequest, OpenCodeHarness
+from sdlc.harness.base import HarnessRequest
 from sdlc.harness.containment import Policy, Rule
+from sdlc.harness.cursor import CursorHarness
 from sdlc.harness.models import ContainmentLayer
+from sdlc.harness.opencode import OpenCodeHarness
 
 POLICY = Policy(
     version=1,

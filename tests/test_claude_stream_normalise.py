@@ -2,7 +2,8 @@
 
 import json
 
-from sdlc.harness.adapters import ClaudeCodeHarness, HarnessRequest
+from sdlc.harness.base import HarnessRequest
+from sdlc.harness.claude_code import ClaudeCodeHarness
 
 STREAM = "\n".join(
     [
