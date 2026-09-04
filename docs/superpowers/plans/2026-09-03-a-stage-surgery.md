@@ -1770,16 +1770,16 @@ git commit -m "refactor(<stage>): move the <stage> stage into a vertical slice"
 - Uncovered needs: None (adversary and deep_review run as review lenses; outputs returned).
 - Enum sites: None.
 
-- [ ] **Step 1: Write failing contract test** (`tests/review/test_review_slice_contract.py`)
-- [ ] **Step 2: Run test to verify it fails**
-- [ ] **Step 3: Lift the inline block into `step.py`** (`:1422-1591`, `:2120-2134`, `:2195-2250`)
-- [ ] **Step 4: Create `prompts.py` with `prompt_digest(cfg)` and empty `activities.py`**
-- [ ] **Step 5: Register in `STAGE_MODULES`**
-- [ ] **Step 6: Move tests** (`tests/test_adversary_registry.py`, `tests/test_adversary_workflow.py`, `tests/test_deep_review_*.py`, `tests/test_review_*.py`, `tests/test_reviewer_agent.py` -> `tests/review/`)
-- [ ] **Step 7: Write `review.md` and `AGENTS.md` from templates**
-- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
-- [ ] **Step 9: Run full verification suite**
-- [ ] **Step 10: Commit `refactor(review): move the review stage into a vertical slice`**
+- [x] **Step 1: Write failing contract test** (`tests/review/test_review_slice_contract.py`)
+- [x] **Step 2: Run test to verify it fails**
+- [x] **Step 3: Lift the inline block into `step.py`** (`:1422-1591`, `:2120-2134`, `:2195-2250`)
+- [x] **Step 4: Create `prompts.py` with `prompt_digest(cfg)` and empty `activities.py`**
+- [x] **Step 5: Register in `STAGE_MODULES`**
+- [x] **Step 6: Move tests** (`tests/test_adversary_registry.py`, `tests/test_adversary_workflow.py`, `tests/test_deep_review_*.py`, `tests/test_review_*.py`, `tests/test_reviewer_agent.py` -> `tests/review/`)
+- [x] **Step 7: Write `review.md` and `AGENTS.md` from templates**
+- [x] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [x] **Step 9: Run full verification suite**
+- [x] **Step 10: Commit `refactor(review): move the review stage into a vertical slice`**
 
 ### Task 20.6: Stage `context` (Rank 6)
 
