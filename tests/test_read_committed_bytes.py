@@ -9,8 +9,8 @@ import subprocess
 
 import pytest
 
-from sdlc.activities import CommittedBytesInput, read_committed_bytes
 from sdlc.grounding import Profile, verify_quote
+from sdlc.vcs import CommittedBytesInput, read_committed_bytes
 
 
 def _run(args, cwd):

@@ -16,7 +16,6 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from sdlc.activities import evaluate_gate  # pure — reused, not faked
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
 from sdlc.core.models import (
     GateConfig,
@@ -27,6 +26,7 @@ from sdlc.core.models import (
     ResearchConfig,
 )
 from sdlc.research.verify import verify_brief_activity
+from sdlc.stages.merge.activities import evaluate_gate  # pure — reused, not faked
 from sdlc.stages.research.models import (
     GroundedFinding,
     ResearchBrief,

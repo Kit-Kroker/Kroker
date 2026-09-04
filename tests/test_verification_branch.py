@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from sdlc.activities import (
+from sdlc.vcs import (
     VerifyBranchInput,
     build_verification_branch,
 )

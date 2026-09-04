@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 from temporalio.exceptions import ApplicationError
 
-from sdlc.activities import PROpenInput, open_pull_request
+from sdlc.stages.merge.activities import PROpenInput, open_pull_request
 from tests.conftest import run_git
 
 PR_URL = "https://github.com/acme/widgets/pull/7"

@@ -15,16 +15,6 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
-    from ..activities import (
-        CodingTaskInput,
-        DiffInput,
-        MergeInput,
-        WorktreeInput,
-        create_worktree,
-        get_task_diff,
-        merge_into_integration,
-        run_coding_task,
-    )
     from ..agents.roles import STAGE_MODELS, resolve_role_model, t_qa, t_reviewer
     from ..benchmarks.models import BenchmarkOutcome, WasteBag
     from ..core.models import (
@@ -48,6 +38,7 @@ with workflow.unsafe.imports_passed_through():
     from ..observability.trace import RunEventKind
     from ..pending import GateContext
     from ..prompts import reviewer_prompt
+    from ..stages.code.activities import CodingTaskInput, run_coding_task
     from ..stages.plan.models import (
         DevTask,
         compute_plan_drift,
@@ -55,6 +46,14 @@ with workflow.unsafe.imports_passed_through():
     from ..stages.qa import step as qa_step
     from ..stages.qa.activities import QAInput, run_test_suite
     from ..stages.qa.step import _fix_loop_issues
+    from ..vcs import (
+        DiffInput,
+        MergeInput,
+        WorktreeInput,
+        create_worktree,
+        get_task_diff,
+        merge_into_integration,
+    )
     from .crew import FS_ACT, CrewTaskInput, CrewTaskWorkflow
     from .models import TaskResult
 

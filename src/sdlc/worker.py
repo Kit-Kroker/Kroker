@@ -28,21 +28,6 @@ from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker
 
-from .activities import (
-    build_verification_branch,
-    check_brownfield_delta,
-    classify_repo,
-    create_worktree,
-    evaluate_gate,
-    get_task_diff,
-    measure_coverage,
-    merge_into_integration,
-    open_pull_request,
-    read_committed_bytes,
-    run_coding_task,
-    run_integration_checks,
-    setup_integration_branch,
-)
 from .agents.loader import load_registry, validate_registry
 from .agents.roles import ALL_TEMPORAL_AGENTS
 from .artifacts.read import load_session
@@ -112,6 +97,14 @@ from .pricing import price_usage
 from .research.stage import plan_research, research_subquestion, synthesize_brief
 from .research.verify import verify_brief_activity
 from .stages import STAGE_MODULES
+from .stages.code.activities import run_coding_task
+from .stages.context.activities import check_brownfield_delta, classify_repo
+from .stages.merge.activities import (
+    evaluate_gate,
+    measure_coverage,
+    open_pull_request,
+    run_integration_checks,
+)
 from .triage.activities import (
     triage_baseline,
     triage_build_probe,
@@ -121,6 +114,14 @@ from .triage.activities import (
     triage_resolve_commit,
     triage_scaffold,
     triage_secrets,
+)
+from .vcs import (
+    build_verification_branch,
+    create_worktree,
+    get_task_diff,
+    merge_into_integration,
+    read_committed_bytes,
+    setup_integration_branch,
 )
 from .workflows.assessment import AssessmentWorkflow
 from .workflows.crew import CrewTaskWorkflow

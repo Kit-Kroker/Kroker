@@ -15,7 +15,6 @@ from collections.abc import Sequence
 from pydantic import BaseModel, Field
 from temporalio import activity
 
-from ..activities import _git
 from ..capability.matcher import resolve
 from ..capability.models import (
     Advisory,
@@ -29,6 +28,7 @@ from ..dispositions.store import BoardFindingDispositionStore
 from ..measurement import Measurement
 from ..triage.activities import tracked_paths
 from ..triage.gitread import is_over_size_limit, read_tree
+from ..vcs import _git
 from .discover import memo as discover_memo
 from .discover.attribution import attribute
 from .discover.blueprint import DEFAULT_BLUEPRINT, compare, load, not_compared

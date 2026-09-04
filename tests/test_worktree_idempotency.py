@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from sdlc.activities import (
+from sdlc.vcs import (
     IntegrationInput,
     WorktreeInput,
     create_worktree,

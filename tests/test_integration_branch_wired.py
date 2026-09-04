@@ -10,9 +10,8 @@ import pytest
 
 SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 # Spec A "stage surgery": _merge_task and its merge_into_integration call
-# moved off feature.py onto the TaskHost mixin (in the workflow's MRO).
 TASK_HOST = pathlib.Path("src/sdlc/workflows/task_host.py")
-ACT = pathlib.Path("src/sdlc/activities.py")
+ACT = pathlib.Path("src/sdlc/vcs/integration.py")
 
 
 @pytest.fixture(scope="module")

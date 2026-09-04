@@ -15,7 +15,6 @@ from temporalio.exceptions import ApplicationError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from sdlc.activities import DeltaCheckInput, evaluate_gate
 from sdlc.assessment.activities import (
     AssessmentTree,
     AssessmentTreeInput,
@@ -47,7 +46,9 @@ from sdlc.stages.architecture.models import (
     ArchitectureSpec,
 )
 from sdlc.stages.clarify.models import ClarifiedRequirements
+from sdlc.stages.context.activities import DeltaCheckInput
 from sdlc.stages.context.models import BrownfieldDelta
+from sdlc.stages.merge.activities import evaluate_gate
 from sdlc.stages.merge.models import MergeVerdict
 from sdlc.stages.plan.models import ImplementationPlan
 from sdlc.stages.qa.models import QAReport

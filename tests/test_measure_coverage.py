@@ -2,8 +2,8 @@
 
 import pytest
 
-from sdlc.activities import CoverageInput, measure_coverage
 from sdlc.measurement import CollectionState
+from sdlc.stages.merge.activities import CoverageInput, measure_coverage
 
 COBERTURA = """<?xml version="1.0" ?>
 <coverage>

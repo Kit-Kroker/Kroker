@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from sdlc.activities import DeltaCheckInput, check_brownfield_delta
+from sdlc.stages.context.activities import DeltaCheckInput, check_brownfield_delta
 from sdlc.stages.context.models import BrownfieldDelta
 
 

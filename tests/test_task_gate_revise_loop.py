@@ -31,19 +31,17 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from sdlc.activities import (
-    CodingTaskInput,
-    HarnessRunResult,
-    evaluate_gate,
-)
 from sdlc.core.models import (
     GateConfig,
     GateDecision,
     GateOutcome,
     GatePolicy,
 )
+from sdlc.harness.models import HarnessRunResult
 from sdlc.notify.contract import NotifyInput, Results
 from sdlc.observability.activities import export_run_artifacts
+from sdlc.stages.code.activities import CodingTaskInput
+from sdlc.stages.merge.activities import evaluate_gate
 from sdlc.stages.qa.activities import QAInput
 from sdlc.stages.qa.models import QAReport
 from tests.fakes.canned import (

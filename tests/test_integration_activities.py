@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from sdlc.activities import (
+from sdlc.vcs import (
     DiffInput,
     IntegrationInput,
     MergeInput,

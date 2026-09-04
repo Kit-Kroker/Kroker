@@ -21,7 +21,6 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
-    from ..activities import VerifyBranchInput, build_verification_branch
     from ..core.models import (
         GateConfig,
         GatePolicy,
@@ -38,6 +37,7 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..triage.delta import FindingDelta, compute_delta
     from ..triage.models import RepoTriage, Verdict
+    from ..vcs import VerifyBranchInput, build_verification_branch
     from .feature import FeatureWorkflow
     from .gates import GateHost
     from .triage import TriageInput, TriageWorkflow

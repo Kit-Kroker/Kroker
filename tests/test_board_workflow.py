@@ -20,7 +20,6 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from sdlc.activities import evaluate_gate
 from sdlc.board.activities import (
     attach_task_evidence,
     publish_artifact_version,
@@ -37,6 +36,7 @@ from sdlc.core.models import (
 )
 from sdlc.notify.contract import NotifyInput, Results
 from sdlc.observability.activities import export_run_artifacts
+from sdlc.stages.merge.activities import evaluate_gate
 from tests.fakes.canned import AGENT_SPECS, e2e_config, greenfield_idea
 from tests.fakes.fake_activities import BOARD_FAKES, GIT_FAKES
 from tests.fakes.fake_deploy import DEPLOY_FAKES

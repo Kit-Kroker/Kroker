@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from sdlc.activities import CodingTaskInput, _resolve_containment
 from sdlc.core.models import (
     HarnessKind,
 )
@@ -21,6 +20,7 @@ from sdlc.harness.models import (
     ContainmentLayer,
     ToolGrant,
 )
+from sdlc.stages.code.activities import CodingTaskInput, _resolve_containment
 
 POLICY_YAML = """
 version: 1

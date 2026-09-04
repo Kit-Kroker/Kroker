@@ -16,11 +16,11 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from sdlc.activities import evaluate_gate  # pure — reused, not faked
 from sdlc.core.models import (
     GateDecision,
     GateOutcome,
 )
+from sdlc.stages.merge.activities import evaluate_gate  # pure — reused, not faked
 from tests.fakes.canned import (
     AGENT_SPECS,
     QUESTION_IDS,

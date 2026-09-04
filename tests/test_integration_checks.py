@@ -4,13 +4,13 @@ Proves the artifact now crosses into the worktree measure_coverage reads."""
 
 import pytest
 
-from sdlc.activities import (
+from sdlc.measurement import CollectionState
+from sdlc.stages.merge.activities import (
     CoverageInput,
     IntegrationChecksInput,
     measure_coverage,
     run_integration_checks,
 )
-from sdlc.measurement import CollectionState
 
 PYPROJECT = "[project]\nname = 'fixture'\nversion = '0.0.0'\n"
 MODULE = "def covered():\n    return 1\n\n\ndef uncovered():\n    return 2\n"

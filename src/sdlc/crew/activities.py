@@ -251,13 +251,12 @@ def _resume_target(inp: CrewTurnInput) -> str | None:
 
 @activity.defn
 async def run_crew_turn(inp: CrewTurnInput) -> CrewTurnOutput:
-    # Imported inside the function, following load_crew below: sdlc.activities
-    # pulls in the whole activity surface, and crew.activities is imported by
-    # feature.py under workflow.unsafe.imports_passed_through. Shared rather
-    # than duplicated because ADR-17's fail-closed ladder must have exactly
-    # one implementation.
-    from ..activities import _resolve_containment
+    # Imported inside the function, following load_crew below: code activities
+    # are imported by feature.py under workflow.unsafe.imports_passed_through.
+    # Shared rather than duplicated because ADR-17's fail-closed ladder must
+    # have exactly one implementation.
     from ..harness.containment import ContainmentError
+    from ..stages.code.activities import _resolve_containment
 
     harness = HARNESSES[inp.harness]
     # The activity is the only actor that knows the round, so it owns the
@@ -369,11 +368,11 @@ async def checkpoint_round(inp: CheckpointInput) -> str | None:
     the resume point a restart resets to, and it is why a turn timeout no
     longer discards the work already in the worktree (spec §2/§4).
 
-    `_git` is imported from sdlc.activities rather than reimplemented: it
+    `_git` is imported from sdlc.vcs rather than reimplemented: it
     carries the safe.directory bypass that mounted volumes and container
     users need, and two copies of that would drift.
     """
-    from ..activities import _git
+    from ..vcs import _git
 
     # Pathspec-scoped add: the exclusion is LOCAL to this one command -- no
     # common-dir state, no races between parallel tasks, nothing written

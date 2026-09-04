@@ -18,8 +18,9 @@ from pathlib import Path
 import defusedxml.ElementTree as DET
 from temporalio import activity
 
-from ..activities import _bounded_shell, _git
+from ..process import _bounded_shell
 from ..toolchain.adapters import TOOLCHAINS, ToolchainKind, detect
+from ..vcs import _git
 from .judge import JudgeInput, _judge_sync
 from .tasks import TaskGrade, grade_tasks, load_task_suite
 

@@ -15,25 +15,6 @@ from temporalio.common import RetryPolicy
 from temporalio.exceptions import ApplicationError
 
 with workflow.unsafe.imports_passed_through():
-    from ..activities import (
-        CoverageInput,
-        DeltaCheckInput,
-        DiffInput,
-        IntegrationChecks,
-        IntegrationChecksInput,
-        IntegrationHandle,
-        IntegrationInput,
-        PROpenInput,
-        RepoProbeInput,
-        check_brownfield_delta,
-        classify_repo,
-        evaluate_gate,
-        get_task_diff,
-        measure_coverage,
-        open_pull_request,
-        run_integration_checks,
-        setup_integration_branch,
-    )
     from ..agents.roles import (
         STAGE_MODELS,
         resolve_role_model,
@@ -88,12 +69,7 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..harness.session import session_text_from_jsonl
     from ..measurement import CollectionState
-    from ..memory.activities import (
-        ReflectInput,
-        WatermarkInput,
-        capture_watermark,
-        reflect,
-    )
+    from ..memory.activities import ReflectInput, WatermarkInput, capture_watermark, reflect
     from ..memory.models import MemoryKind
     from ..notify.contract import NotifyReason
     from ..observability.activities import RunExportInput, export_run_artifacts
@@ -101,11 +77,7 @@ with workflow.unsafe.imports_passed_through():
     from ..observability.trace import RunEventKind
     from ..pending import GateContext
     from ..pricing import PriceUsageInput, price_usage
-    from ..prompts import (
-        analyst_prompt,
-        merge_verdict_prompt,
-        planner_prompt,
-    )
+    from ..prompts import analyst_prompt, merge_verdict_prompt, planner_prompt
     from ..research.deps import ResearchDeps
     from ..research.retain import verified_findings_to_retain
     from ..research.stage import (
@@ -116,16 +88,29 @@ with workflow.unsafe.imports_passed_through():
         research_subquestion,
         synthesize_brief,
     )
-    from ..research.verify import (
-        brief_digest,
-        verify_brief_activity,
-    )
+    from ..research.verify import brief_digest, verify_brief_activity
     from ..stages import clarify
     from ..stages.analyze.models import AnalysisReport
     from ..stages.architecture.models import ArchitectureSpec
     from ..stages.clarify.models import ClarifiedRequirements
     from ..stages.code.models import HandoffSummary
+    from ..stages.context.activities import (
+        DeltaCheckInput,
+        RepoProbeInput,
+        check_brownfield_delta,
+        classify_repo,
+    )
     from ..stages.deploy.models import DeployPlan, DeployReport, SmokeCheck
+    from ..stages.merge.activities import (
+        CoverageInput,
+        IntegrationChecks,
+        IntegrationChecksInput,
+        PROpenInput,
+        evaluate_gate,
+        measure_coverage,
+        open_pull_request,
+        run_integration_checks,
+    )
     from ..stages.merge.models import CoverageReport, MergeVerdict
     from ..stages.plan.models import DevTask, ImplementationPlan
     from ..stages.qa.activities import LintInput, SecurityScanInput, run_lint, security_scan
@@ -138,6 +123,13 @@ with workflow.unsafe.imports_passed_through():
         SubQuestionFinding,
     )
     from ..stages.review.models import DeepReviewReport, ReviewReport
+    from ..vcs import (
+        DiffInput,
+        IntegrationHandle,
+        IntegrationInput,
+        get_task_diff,
+        setup_integration_branch,
+    )
     from .benchmark_host import BenchmarkHost
     from .board_host import BoardHost
     from .deployment import DeploymentInput, DeploymentWorkflow

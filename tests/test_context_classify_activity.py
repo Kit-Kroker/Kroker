@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from sdlc.activities import RepoProbeInput, classify_repo
+from sdlc.stages.context.activities import RepoProbeInput, classify_repo
 
 
 def _git(*args, cwd):

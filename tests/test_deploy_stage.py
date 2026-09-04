@@ -89,7 +89,10 @@ def test_the_child_id_is_derived_not_generated():
 
 
 def test_deploy_activity_is_deleted_from_activities():
-    src = pathlib.Path("src/sdlc/activities.py").read_text(encoding="utf-8")
+    act = pathlib.Path("src/sdlc/activities.py")
+    if not act.exists():
+        return
+    src = act.read_text(encoding="utf-8")
     assert "async def deploy(" not in src
     assert "class DeployInput" not in src
 

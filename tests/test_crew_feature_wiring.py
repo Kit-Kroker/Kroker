@@ -31,7 +31,6 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from sdlc.activities import evaluate_gate
 from sdlc.benchmarks.models import BenchmarkRecord
 from sdlc.core.models import (
     BenchmarkConfig,
@@ -53,6 +52,7 @@ from sdlc.crew.models import TurnRecord
 from sdlc.harness.models import HarnessRunResult
 from sdlc.notify.contract import NotifyInput, Results
 from sdlc.observability.activities import export_run_artifacts
+from sdlc.stages.merge.activities import evaluate_gate
 from tests.fakes.canned import (
     AGENT_SPECS,
     QUESTION_IDS,

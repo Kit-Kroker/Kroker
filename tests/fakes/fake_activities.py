@@ -7,22 +7,6 @@ from __future__ import annotations
 
 from temporalio import activity
 
-from sdlc.activities import (
-    CodingTaskInput,
-    CoverageInput,
-    DeltaCheckInput,
-    DiffInput,
-    IntegrationChecks,
-    IntegrationChecksInput,
-    IntegrationHandle,
-    IntegrationInput,
-    MergeInput,
-    MergeResult,
-    PROpenInput,
-    RepoProbeInput,
-    WorktreeHandle,
-    WorktreeInput,
-)
 from sdlc.board.activities import (
     AttachEvidenceInput,
     PublishArtifactInput,
@@ -39,6 +23,14 @@ from sdlc.gate import CheckClass, CheckResult, build_check
 from sdlc.harness.models import HarnessRunResult
 from sdlc.measurement import CollectionState, Measurement
 from sdlc.pricing import price_usage
+from sdlc.stages.code.activities import CodingTaskInput
+from sdlc.stages.context.activities import DeltaCheckInput, RepoProbeInput
+from sdlc.stages.merge.activities import (
+    CoverageInput,
+    IntegrationChecks,
+    IntegrationChecksInput,
+    PROpenInput,
+)
 from sdlc.stages.merge.models import CoverageReport
 from sdlc.stages.qa.activities import (
     LintInput,
@@ -48,6 +40,15 @@ from sdlc.stages.qa.activities import (
 from sdlc.stages.qa.models import (
     QAReport,
     SecurityReport,
+)
+from sdlc.vcs import (
+    DiffInput,
+    IntegrationHandle,
+    IntegrationInput,
+    MergeInput,
+    MergeResult,
+    WorktreeHandle,
+    WorktreeInput,
 )
 
 

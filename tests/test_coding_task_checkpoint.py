@@ -24,20 +24,22 @@ under the dubious condition.
 
 import asyncio
 
-import sdlc.activities
-from sdlc.activities import (
-    CodingTaskInput,
-    IntegrationInput,
-    WorktreeInput,
-    create_worktree,
-    run_coding_task,
-    setup_integration_branch,
-)
+import sdlc.stages.code.activities
 from sdlc.core.models import (
     HarnessKind,
 )
 from sdlc.harness.adapters import CodingHarness
 from sdlc.harness.models import HarnessRunResult
+from sdlc.stages.code.activities import (
+    CodingTaskInput,
+    run_coding_task,
+)
+from sdlc.vcs import (
+    IntegrationInput,
+    WorktreeInput,
+    create_worktree,
+    setup_integration_branch,
+)
 
 
 class _StubHarness(CodingHarness):
@@ -71,7 +73,9 @@ def test_checkpoint_survives_dubious_ownership(git_repo, monkeypatch):
     # Flip on git's dubious-ownership check — the production trigger is a
     # different SID; this flag forces the same code path deterministically.
     monkeypatch.setenv("GIT_TEST_ASSUME_DIFFERENT_OWNER", "1")
-    monkeypatch.setitem(sdlc.activities.HARNESSES, HarnessKind.CLAUDE_CODE, _StubHarness())
+    monkeypatch.setitem(
+        sdlc.stages.code.activities.HARNESSES, HarnessKind.CLAUDE_CODE, _StubHarness()
+    )
 
     result = asyncio.run(
         run_coding_task(  # raises before the fix
@@ -89,7 +93,9 @@ def test_checkpoint_surfaces_git_stderr_on_failure(git_repo, monkeypatch):
     deleting the worktree's .git pointer so ``git add`` cannot find a
     repository, then assert git's diagnostic text is in the raised error.
     """
-    monkeypatch.setitem(sdlc.activities.HARNESSES, HarnessKind.CLAUDE_CODE, _StubHarness())
+    monkeypatch.setitem(
+        sdlc.stages.code.activities.HARNESSES, HarnessKind.CLAUDE_CODE, _StubHarness()
+    )
     setup = asyncio.run(
         setup_integration_branch(
             IntegrationInput(repo_path=git_repo, run_id="run-stderr", base_branch="main")

@@ -22,10 +22,11 @@ from dataclasses import dataclass
 
 from temporalio import activity
 
-from ..activities import _bounded_shell, _git
 from ..grounding import Profile, verify_quote
 from ..measurement import CollectionState, Measurement
+from ..process import _bounded_shell
 from ..toolchain.adapters import detect_with_marker, detect_with_marker_from_paths
+from ..vcs import _git
 from .advisories import resolve_advisory_source
 from .gitread import is_over_size_limit, read_tree
 from .models import SignalResult

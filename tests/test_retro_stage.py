@@ -13,13 +13,13 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from sdlc.activities import evaluate_gate
 from sdlc.artifacts.retention import RetentionInput
 from sdlc.core.models import (
     GateDecision,
     GateOutcome,
 )
 from sdlc.observability.activities import RunExportInput, export_run_artifacts
+from sdlc.stages.merge.activities import evaluate_gate
 from tests.fakes.canned import AGENT_SPECS, QUESTION_IDS, e2e_config, greenfield_idea
 from tests.fakes.fake_activities import GIT_FAKES, git_fakes_except
 from tests.fakes.fake_deploy import DEPLOY_FAKES
