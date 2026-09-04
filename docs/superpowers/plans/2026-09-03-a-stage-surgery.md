@@ -1730,3 +1730,9 @@ git commit -m "chore: A complete — all four src monoliths off the file-size ba
   5. **Named Coverage Gap**: `tests/test_tool_approval_gate.py` is the *only* temporal coverage of the tool-approval / escalation path (`ToolEscalation`, `_escalation_round` counter, deferred-tool resume). Because CI never runs `-m temporal`, during P3 (when the code stage task touches this exact path) there is no automated coverage of it until this test is addressed or verified manually.
   6. **Local Temporal Gate Contract**: For local surgery verification, the running command is:
      `pytest -m temporal --ignore=tests/test_tool_approval_gate.py`
+
+### Follow-up 2: `LoadedCrew` dataclass to BaseModel conversion (In-passing defect 4)
+- **Discovered during**: Task 9 verification (`tests/test_crew_feature_wiring.py`).
+- **Symptom**: Activity return deserialization inside Temporal workflow sandbox raised `PydanticUserError: TypeAdapter[LoadedCrew] is not fully defined`.
+- **Root cause**: Standard library `@dataclass` under `from __future__ import annotations` stores annotations as strings. When `temporalio.contrib.pydantic.pydantic_data_converter` constructs `TypeAdapter(LoadedCrew)` inside the sandboxed workflow instance namespace, resolving forward references to nested Pydantic models (`CrewLayout`, `CrewRole` from `sdlc.crew.config`) fails because `TypeAdapter` on a stdlib dataclass compiles validators on-the-fly against the sandbox's restricted globals.
+- **Fix**: Changed `LoadedCrew` in `src/sdlc/crew/activities.py` from `@dataclass class LoadedCrew:` to `class LoadedCrew(BaseModel):`. Pydantic models compile their validators at module definition time, eliminating runtime sandbox resolution failures without altering validation semantics or runtime shapes.
