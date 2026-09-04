@@ -74,7 +74,7 @@ with workflow.unsafe.imports_passed_through():
     from ..observability.trace import RunEventKind
     from ..pending import GateContext
     from ..pricing import PriceUsageInput, price_usage
-    from ..prompts import analyst_prompt, merge_verdict_prompt, planner_prompt
+    from ..prompts import merge_verdict_prompt, planner_prompt
     from ..research.deps import ResearchDeps
     from ..research.retain import verified_findings_to_retain
     from ..research.stage import (
@@ -86,8 +86,8 @@ with workflow.unsafe.imports_passed_through():
         synthesize_brief,
     )
     from ..research.verify import brief_digest, verify_brief_activity
-    from ..stages import clarify, intake, retro
-    from ..stages.analyze.models import AnalysisReport
+    from ..stages import analyze, clarify, intake, retro
+    from ..stages.analyze.models import untraced_criteria
     from ..stages.architecture.models import ArchitectureSpec
     from ..stages.clarify.models import ClarifiedRequirements
     from ..stages.code.models import HandoffSummary
@@ -271,23 +271,6 @@ def _merge_evidence_all_green(results: list) -> bool:
     whose fix loop exhausted) is treated as FAILURE — never a vacuous
     `all([])` pass. The merge absolute check must see real green evidence."""
     return bool(results) and all(r.qa is not None and r.qa.tests_passed for r in results)
-
-
-def untraced_criteria(authoritative: list[tuple[str, str]], report: AnalysisReport) -> list[str]:
-    """FR-106 enforcement (workflow-side, NOT the LLM's verdict).
-
-    A criterion is traced iff the Analyst's report contains a CriterionTrace
-    for that exact (task_id, criterion) with a non-empty `tests` list. Any
-    authoritative criterion the report omits OR maps to zero tests is untraced.
-    Enforced against the plan's authoritative set so an Analyst cannot hide a
-    gap by forgetting to list a criterion. Returns "task_id: criterion" labels
-    in authoritative order."""
-    traced = {(t.task_id, t.criterion) for t in report.traceability if t.tests}
-    return [
-        f"{task_id}: {criterion}"
-        for (task_id, criterion) in authoritative
-        if (task_id, criterion) not in traced
-    ]
 
 
 # Fallbacks only for contracts predating test_commands/lint_commands
@@ -1595,8 +1578,10 @@ class FeatureWorkflow(
         # 4b. ANALYZE (stage 9) — clean-context Analyst proposes the
         # criterion->test mapping; the workflow enforces it (FR-106). Runs on
         # the integrated whole, before the merge gate.
-        self._stage("analyzing", "analyze")
-        _an_started = workflow.now()
+        # The integration diff is run context shared by analyze AND the merge
+        # gate below (changed_files); the orchestrator fetches it once, before
+        # the step call. Consequence, accepted: analyze's STAGE_STARTED event
+        # now lands after the diff fetch instead of before it.
         integration_diff = await workflow.execute_activity(
             get_task_diff,
             DiffInput(worktree=self._integration_wt, branch_point=idea.base_branch),
@@ -1605,57 +1590,18 @@ class FeatureWorkflow(
         authoritative: list[tuple[str, str]] = [
             (t.id, c) for t in plan.tasks for c in t.acceptance_criteria
         ]
-        _criteria_lines = "\n".join(f"- [{tid}] {crit}" for tid, crit in authoritative)
-        _qa_lines = "\n".join(
-            f"- {r.task_id}: tests_passed={r.qa.tests_passed if r.qa else 'n/a'}"
-            f" failing={r.qa.failing_tests if r.qa else []}"
-            for r in done.values()
+        analysis = await analyze.step(
+            self._ctx,
+            cfg=cfg,
+            plan=plan,
+            task_results=done,
+            diff=integration_diff,
+            integration_wt=self._integration_wt,
+            base_branch=idea.base_branch,
+            analyst_agent=t_analyst,
+            analyst_model=resolve_role_model(cfg, "analyze"),
         )
-        analyst_spend = RoleUsage(role="analyst", model=resolve_role_model(cfg, "analyze"))
-        analysis: AnalysisReport = (
-            await self._run_role(
-                cfg,
-                "analyst",
-                resolve_role_model(cfg, "analyze"),
-                t_analyst,
-                analyst_prompt(
-                    _criteria_lines, _qa_lines, integration_diff["stat"], integration_diff["patch"]
-                ),
-                into=analyst_spend,
-            )
-        ).output
         untraced = untraced_criteria(authoritative, analysis)
-        await self._record(
-            cfg,
-            self._stage_record(
-                cfg,
-                stage="analyze",
-                role="analyst",
-                started=_an_started,
-                ended=workflow.now(),
-                quality_score=(1.0 if not untraced else 0.0),
-                judge="contract",
-                outcome=(BenchmarkOutcome.PASS if not untraced else BenchmarkOutcome.FAIL),
-                model=resolve_role_model(cfg, "analyze"),
-                spend=analyst_spend,
-            ),
-        )
-        await self._retain(
-            cfg,
-            MemoryKind.STAGE_SUMMARY,
-            cfg.memory.project_bank,
-            text=f"analyze: {len(authoritative)} criteria, "
-            f"{len(untraced)} untraced. {analysis.summary}",
-            metadata={"stage": "analyze", "run_id": workflow.info().workflow_id},
-        )
-        if untraced:
-            await self._retain(
-                cfg,
-                MemoryKind.GOTCHA,
-                cfg.memory.project_bank,
-                text=f"untraced acceptance criteria at merge: {untraced}",
-                metadata={"stage": "analyze", "run_id": workflow.info().workflow_id},
-            )
 
         await self._check_budget(cfg)  # E-33: serial boundary after analyst
 

@@ -50,18 +50,6 @@ def reviewer_prompt(assertions: Sequence[str], qa_raw_json: str, diff_patch: str
     )
 
 
-def analyst_prompt(criteria_lines: str, qa_lines: str, diff_stat: str, diff_patch: str) -> str:
-    """feature.py:2192-2195."""
-    return (
-        "Acceptance criteria (task_id in brackets):\n"
-        + criteria_lines
-        + "\nAggregate test output:\n"
-        + qa_lines
-        + f"\nIntegration diff stat:\n{diff_stat}"
-        + f"\nIntegration diff:\n{diff_patch}"
-    )
-
-
 def merge_verdict_prompt(task_results: Sequence[dict]) -> str:
     """feature.py:2361-2362. The f-string interpolates the LIST, so Python's
     repr of list-of-dicts is what reaches the model. Do not "fix" this to

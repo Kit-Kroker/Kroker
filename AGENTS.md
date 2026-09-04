@@ -156,7 +156,7 @@ documentation (`src/`, `tests/`, `scripts/`, `interfaces/`, `agents/`,
 | code | `src/sdlc/workflows/feature.py` | types moved, step pending |
 | review | `src/sdlc/workflows/feature.py` | types moved, step pending |
 | qa | `src/sdlc/stages/qa/` | migrated |
-| analyze | `src/sdlc/workflows/feature.py` | types moved, step pending |
+| analyze | `src/sdlc/stages/analyze/` | migrated |
 | merge | `src/sdlc/workflows/feature.py` | types moved, step pending |
 | deploy | `src/sdlc/workflows/feature.py` | types moved, step pending |
 | retro / reflect | `src/sdlc/stages/retro/` | migrated |

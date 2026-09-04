@@ -1703,8 +1703,8 @@ git commit -m "refactor(<stage>): move the <stage> stage into a vertical slice"
 - [x] **Step 6: Move tests** (`tests/test_retro_stage.py`, `tests/test_reflect_workflow.py` -> `tests/retro/`)
 - [x] **Step 7: Write `retro.md` and `AGENTS.md` from templates**
 - [x] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
-- [ ] **Step 9: Run full verification suite**
-- [ ] **Step 10: Commit `refactor(retro): move the retro stage into a vertical slice`**
+- [x] **Step 9: Run full verification suite**
+- [x] **Step 10: Commit `refactor(retro): move the retro stage into a vertical slice`**
 
 ### Task 20.3: Stage `analyze` (Rank 3)
 
@@ -1720,15 +1720,15 @@ git commit -m "refactor(<stage>): move the <stage> stage into a vertical slice"
 - Uncovered needs: None (`integration_wt` passed as explicit argument).
 - Enum sites: None.
 
-- [ ] **Step 1: Write failing contract test** (`tests/analyze/test_analyze_slice_contract.py`)
-- [ ] **Step 2: Run test to verify it fails**
-- [ ] **Step 3: Lift the inline block into `step.py`** (`feature.py:3260-3326`)
-- [ ] **Step 4: Create `prompts.py` with `prompt_digest(cfg)` and empty `activities.py`**
-- [ ] **Step 5: Register in `STAGE_MODULES`**
-- [ ] **Step 6: Move tests** (`tests/test_analyst_models.py`, `tests/test_analyst_stage_wiring.py`, `tests/test_analyst_wiring.py` -> `tests/analyze/`)
-- [ ] **Step 7: Write `analyze.md` and `AGENTS.md` from templates**
-- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
-- [ ] **Step 9: Run full verification suite**
+- [x] **Step 1: Write failing contract test** (`tests/analyze/test_analyze_slice_contract.py`)
+- [x] **Step 2: Run test to verify it fails**
+- [x] **Step 3: Lift the inline block into `step.py`** (`feature.py:3260-3326`)
+- [x] **Step 4: Create `prompts.py` with `prompt_digest(cfg)` and empty `activities.py`**
+- [x] **Step 5: Register in `STAGE_MODULES`**
+- [x] **Step 6: Move tests** (`tests/test_analyst_models.py`, `tests/test_analyst_stage_wiring.py`, `tests/test_analyst_wiring.py` -> `tests/analyze/`)
+- [x] **Step 7: Write `analyze.md` and `AGENTS.md` from templates**
+- [x] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [x] **Step 9: Run full verification suite**
 - [ ] **Step 10: Commit `refactor(analyze): move the analyze stage into a vertical slice`**
 
 ### Task 20.4: Stage `research` (Rank 4)

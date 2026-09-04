@@ -6,11 +6,11 @@ current source, NOT re-derived. See feature.py:1893, :2040, :1403,
 from __future__ import annotations
 
 from sdlc.prompts import (
-    analyst_prompt,
     merge_verdict_prompt,
     planner_prompt,
     reviewer_prompt,
 )
+from sdlc.stages.analyze.prompts import analyst_prompt
 from sdlc.stages.clarify.prompts import clarify_prompt
 from sdlc.stages.qa.prompts import qa_prompt
 
