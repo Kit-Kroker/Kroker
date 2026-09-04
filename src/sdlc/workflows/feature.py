@@ -66,6 +66,7 @@ with workflow.unsafe.imports_passed_through():
     from ..context.models import CodebaseMap
     from ..context.project import map_digest, project
     from ..context.render import render_for_prompt
+    from ..core.context import StageContext, StageServices
     from ..core.models import (
         ClarificationDimension,
         ExecutionMode,
@@ -174,10 +175,7 @@ INTAKE_ACT = workflow.ActivityConfig(
 ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=10), retry_policy=RetryPolicy(maximum_attempts=3)
 )
-# The stage output a _cached_stage producer is trusted to emit: the cache-hit
-# path validates against it, the fresh path returns the producer's own result.
-# Code-review C2: deterministic substring check — retrying cannot change the
-# outcome, so maximum_attempts=1 (no retries). Matches the *_ACT convention.
+# Deterministic substring check -- retrying cannot change outcome (Code-review C2).
 VERIFY_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=1),
     retry_policy=RetryPolicy(maximum_attempts=1),
@@ -189,10 +187,10 @@ EXPORT_ACT = workflow.ActivityConfig(
 )
 
 
-# E-30: run_integration_checks runs a real test suite + lint against the merged
-# integration head. Generous start_to_close (> the activity's internal test
-# 600s + fallback 600s + lint 300s worst case); 2 attempts like the per-task
-# test run. It does not heartbeat, so no heartbeat_timeout.
+# E-30: run_integration_checks runs a real test suite + lint against the
+# merged integration head. Generous start_to_close (> the activity's
+# internal test 600s + fallback 600s + lint 300s worst case); 2 attempts like
+# the per-task test run. It does not heartbeat, so no heartbeat_timeout.
 INTEG_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=30), retry_policy=RetryPolicy(maximum_attempts=2)
 )
@@ -538,28 +536,29 @@ class FeatureWorkflow(
 ):
     def __init__(self) -> None:
         super().__init__()
-        # E-42: cfg is threaded as a parameter everywhere else; the gate hooks
-        # run inside GateHost and cannot receive it, so run() stashes it here.
+        # Stashed state for hooks/queries (E-42, E-10, ADR-14, E-84). _run_id: run_state()
+        # is unit-tested on bare instances (no event loop); "" sentinels: no reader before setup.
         self._cfg: PipelineConfig | None = None
-        # E-10: run_state() needs the brief and the start time, which are
-        # run() parameters/locals everywhere else -- same reason _cfg is
-        # stashed here rather than threaded.
         self._idea: IdeaBrief | None = None
         self._started_at: datetime | None = None
-        # run_state() is unit-tested on bare instances (no workflow event
-        # loop, where workflow.info() raises), so run() stashes the id --
-        # the run_summary query likewise reads only stashed state.
         self._run_id: str = ""
-        # ADR-14: one sdlc/<run_id>/integration branch accumulates completed
-        # task work. _integration_head advances after each successful merge;
-        # _integration_wt is the worktree path (set once at run start, stable).
-        # Both are "" only before setup_integration_branch runs; no reader
-        # exists on this workflow before that point.
         self._integration_head: str = ""
         self._integration_wt: str = ""
         self._run_summary: RunSummary | None = None
-        # E-84: stage 2 codebase map for brownfield runs (None for greenfield).
         self._codebase_map: CodebaseMap | None = None
+        self._ctx: StageContext = StageServices(
+            emit=self._emit,
+            stage=self._stage,
+            run_role=self._run_role,
+            cached_stage=self._cached_stage,
+            revisable_stage=self._revisable_stage,
+            record=self._record,
+            judge=self._judge,
+            recall=self._recall,
+            retain=self._retain,
+            gate=self._gate,
+            ask_and_wait=self.ask_and_wait,
+        )
 
     async def _on_gate_awaited(self, name: str, round: int) -> None:
         self._emit(RunEventKind.GATE_AWAITED, stage=name, gate=name, round=str(round))
