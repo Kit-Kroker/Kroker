@@ -11,6 +11,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -112,6 +114,7 @@ from .observability.activities import export_run_artifacts
 from .pricing import price_usage
 from .research.stage import plan_research, research_subquestion, synthesize_brief
 from .research.verify import verify_brief_activity
+from .stages import STAGE_MODULES
 from .triage.activities import (
     triage_baseline,
     triage_build_probe,
@@ -131,6 +134,101 @@ from .workflows.tidyup import TidyUpWorkflow
 from .workflows.triage import TriageWorkflow
 
 TASK_QUEUE = "ai-sdlc"
+
+
+def get_worker_activities() -> Sequence[Callable[..., Any]]:
+    """Compose all activities registered on the Temporal worker.
+
+    Combines vertical slice activities from STAGE_MODULES, horizontal domain
+    activities, and TemporalAgent-generated activities.
+    """
+    stage_activities = [act for mod in STAGE_MODULES for act in mod.ACTIVITIES]
+    agent_activities = [act for ta in ALL_TEMPORAL_AGENTS for act in ta.temporal_activities]
+    return [
+        *stage_activities,
+        create_worktree,
+        setup_integration_branch,
+        classify_repo,
+        check_brownfield_delta,
+        merge_into_integration,
+        build_verification_branch,
+        prepare_crew,
+        run_crew_turn,
+        read_round,
+        checkpoint_round,
+        load_crew,
+        run_coding_task,
+        run_integration_checks,
+        run_lint,
+        run_test_suite,
+        security_scan,
+        measure_coverage,
+        open_pull_request,
+        deploy_current_version,
+        deploy_apply,
+        smoke_check,
+        deploy_rollback,
+        read_committed_bytes,
+        evaluate_gate,
+        get_task_diff,
+        record_benchmark,
+        judge_artifact,
+        load_case_assets,
+        finalize_benchmark_report,
+        grade_oracle,
+        recall_snapshot,
+        retain,
+        capture_watermark,
+        reflect,
+        cache_get,
+        cache_put,
+        export_run_artifacts,
+        notify,
+        price_usage,
+        apply_session_retention,
+        load_session,
+        publish_artifact_version,
+        sync_plan_tasks,
+        set_task_authoritative,
+        attach_task_evidence,
+        verify_brief_activity,
+        plan_research,
+        research_subquestion,
+        synthesize_brief,
+        triage_baseline,
+        triage_secrets,
+        triage_build_probe,
+        triage_dependencies,
+        triage_scaffold,
+        triage_misconfig,
+        triage_outliers,
+        triage_resolve_commit,
+        assessment_resolve_tree,
+        discover_context,
+        discover_finalize,
+        discover_lock,
+        discover_memo_load,
+        discover_memo_store,
+        load_blueprint,
+        scan_packages,
+        scan_schema,
+        scan_entrypoints,
+        scan_frontend,
+        scan_security_static,
+        scan_config_infra,
+        scan_sensitivity,
+        scan_tests_inventory,
+        scan_coverage,
+        scan_testability,
+        scan_ci,
+        verify_discover_refs,
+        assess_risk,
+        load_dispositions,
+        risk_memo_load,
+        risk_memo_store,
+        verify_risk_refs,
+        *agent_activities,
+    ]
 
 
 async def main() -> None:
@@ -155,7 +253,6 @@ async def main() -> None:
         plugins=[PydanticAIPlugin()],
     )
 
-    agent_activities = [act for ta in ALL_TEMPORAL_AGENTS for act in ta.temporal_activities]
     worker = Worker(
         client,
         task_queue=TASK_QUEUE,
@@ -169,90 +266,7 @@ async def main() -> None:
             AssessmentWorkflow,
             CrewTaskWorkflow,
         ],
-        activities=[
-            create_worktree,
-            setup_integration_branch,
-            classify_repo,
-            check_brownfield_delta,
-            merge_into_integration,
-            build_verification_branch,
-            prepare_crew,
-            run_crew_turn,
-            read_round,
-            checkpoint_round,
-            load_crew,
-            run_coding_task,
-            run_integration_checks,
-            run_lint,
-            run_test_suite,
-            security_scan,
-            measure_coverage,
-            open_pull_request,
-            deploy_current_version,
-            deploy_apply,
-            smoke_check,
-            deploy_rollback,
-            read_committed_bytes,
-            evaluate_gate,
-            get_task_diff,
-            record_benchmark,
-            judge_artifact,
-            load_case_assets,
-            finalize_benchmark_report,
-            grade_oracle,
-            recall_snapshot,
-            retain,
-            capture_watermark,
-            reflect,
-            cache_get,
-            cache_put,
-            export_run_artifacts,
-            notify,
-            price_usage,
-            apply_session_retention,
-            load_session,
-            publish_artifact_version,
-            sync_plan_tasks,
-            set_task_authoritative,
-            attach_task_evidence,
-            verify_brief_activity,
-            plan_research,
-            research_subquestion,
-            synthesize_brief,
-            triage_baseline,
-            triage_secrets,
-            triage_build_probe,
-            triage_dependencies,
-            triage_scaffold,
-            triage_misconfig,
-            triage_outliers,
-            triage_resolve_commit,
-            assessment_resolve_tree,
-            discover_context,
-            discover_finalize,
-            discover_lock,
-            discover_memo_load,
-            discover_memo_store,
-            load_blueprint,
-            scan_packages,
-            scan_schema,
-            scan_entrypoints,
-            scan_frontend,
-            scan_security_static,
-            scan_config_infra,
-            scan_sensitivity,
-            scan_tests_inventory,
-            scan_coverage,
-            scan_testability,
-            scan_ci,
-            verify_discover_refs,
-            assess_risk,
-            load_dispositions,
-            risk_memo_load,
-            risk_memo_store,
-            verify_risk_refs,
-            *agent_activities,
-        ],
+        activities=get_worker_activities(),
     )
     print(f"worker running on task queue {TASK_QUEUE!r}")
     await worker.run()
