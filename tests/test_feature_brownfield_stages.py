@@ -47,10 +47,10 @@ from sdlc.models import (
     ClarifiedRequirements,
     ImplementationPlan,
     MergeVerdict,
-    QAReport,
     ReviewReport,
 )
 from sdlc.observability.activities import export_run_artifacts
+from sdlc.stages.qa.models import QAReport
 from sdlc.workflows.deployment import DeploymentWorkflow
 from sdlc.workflows.feature import FeatureWorkflow
 from tests.fakes.canned import (

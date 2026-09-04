@@ -9,8 +9,8 @@ auto-provisioning any missing version first."""
 import asyncio
 import sys
 
-import sdlc.activities as activities
-from sdlc.activities import (
+import sdlc.stages.qa.activities as activities
+from sdlc.stages.qa.activities import (
     _PY_LAUNCHER_VERSION_RE,
     LintInput,
     QAInput,

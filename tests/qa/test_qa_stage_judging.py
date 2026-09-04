@@ -4,6 +4,8 @@ deterministic stage="code" record's contract score untouched."""
 import inspect
 import re
 
+import pytest
+
 from sdlc.workflows import feature
 
 
@@ -32,6 +34,7 @@ def test_qa_record_is_separate_from_the_code_record():
     assert src.count("self._record(") >= 2
 
 
+@pytest.mark.clause("QA-1.3")
 def test_pass_gate_uses_qa_raw_not_the_llm_qa_report():
     """The label judge="contract" is a lie unless the boolean it's attached
     to is actually ground truth: qa_raw.tests_passed comes straight from the

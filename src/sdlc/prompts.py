@@ -40,16 +40,6 @@ def planner_prompt(arch_json: str, memory: Sequence[str], guidance: str | None) 
     )
 
 
-def qa_prompt(assertions: Sequence[str], qa_raw_json: str, diff_stat: str, diff_patch: str) -> str:
-    """feature.py:1404-1407."""
-    return (
-        _frozen_contract_block(assertions)
-        + f"\nTest results: {qa_raw_json}"
-        + f"\nDiff stat:\n{diff_stat}"
-        + f"\nDiff:\n{diff_patch}"
-    )
-
-
 def reviewer_prompt(assertions: Sequence[str], qa_raw_json: str, diff_patch: str) -> str:
     """feature.py:1415-1417. NOTE: no `Diff stat:` block -- qa gets one and
     reviewer does not. Preserved from the original; see design doc 4.1."""

@@ -34,7 +34,6 @@ from temporalio.worker import Worker
 from sdlc.activities import (
     CodingTaskInput,
     HarnessRunResult,
-    QAInput,
     evaluate_gate,
 )
 from sdlc.core.models import (
@@ -43,11 +42,10 @@ from sdlc.core.models import (
     GateOutcome,
     GatePolicy,
 )
-from sdlc.models import (
-    QAReport,
-)
 from sdlc.notify.contract import NotifyInput, Results
 from sdlc.observability.activities import export_run_artifacts
+from sdlc.stages.qa.activities import QAInput
+from sdlc.stages.qa.models import QAReport
 from tests.fakes.canned import (
     AGENT_SPECS,
     QUESTION_IDS,

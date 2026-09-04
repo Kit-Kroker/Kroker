@@ -8,7 +8,7 @@ from sdlc.gate import (
     evaluate_quality_gate,
 )
 from sdlc.measurement import CollectionState
-from sdlc.models import SecurityReport
+from sdlc.stages.qa.models import SecurityReport
 
 
 def _checks(report: SecurityReport):

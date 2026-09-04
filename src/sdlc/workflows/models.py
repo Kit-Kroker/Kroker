@@ -17,9 +17,9 @@ from ..models import (
     HandoffSummary,
     HarnessRunResult,
     ImplementationPlan,
-    QAReport,
     ReviewReport,
 )
+from ..stages.qa.models import QAReport
 
 
 class SeededWork(BaseModel):

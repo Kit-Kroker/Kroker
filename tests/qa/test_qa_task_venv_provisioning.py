@@ -9,7 +9,7 @@ once re-run against a real venv)."""
 
 import pytest
 
-from sdlc.activities import QAInput, run_test_suite
+from sdlc.stages.qa.activities import QAInput, run_test_suite
 
 PYPROJECT_WITH_DEP = (
     "[build-system]\nrequires = ['setuptools>=68']\n"

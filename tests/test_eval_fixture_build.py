@@ -78,7 +78,7 @@ def test_planner_fixture_uses_the_frozen_architecture_seed():
 def test_qa_fixture_uses_the_frozen_seeds():
     import json
 
-    from sdlc.prompts import qa_prompt
+    from sdlc.stages.qa.prompts import qa_prompt
 
     seeds = CASES / "cat-cafe-monitoring" / "seeds"
     assertions = json.loads((seeds / "assertions.json").read_text(encoding="utf-8"))["assertions"]

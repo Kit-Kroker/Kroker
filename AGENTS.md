@@ -155,7 +155,7 @@ documentation (`src/`, `tests/`, `scripts/`, `interfaces/`, `agents/`,
 | plan | `src/sdlc/workflows/feature.py` | in `feature.py` |
 | code | `src/sdlc/workflows/feature.py` | in `feature.py` |
 | review | `src/sdlc/workflows/feature.py` | in `feature.py` |
-| qa | `src/sdlc/workflows/feature.py` | **pilot — moves first (spec A)** |
+| qa | `src/sdlc/stages/qa/` | migrated |
 | analyze | `src/sdlc/workflows/feature.py` | in `feature.py` |
 | merge | `src/sdlc/workflows/feature.py` | in `feature.py` |
 | deploy | `src/sdlc/workflows/feature.py` | in `feature.py` |

@@ -4,9 +4,9 @@ import pathlib
 
 import pytest
 
-from sdlc.activities import SecurityScanInput, security_scan
 from sdlc.measurement import CollectionState
-from sdlc.models import SecurityReport
+from sdlc.stages.qa.activities import SecurityScanInput, security_scan
+from sdlc.stages.qa.models import SecurityReport
 
 
 def test_security_report_requires_a_collection_state():

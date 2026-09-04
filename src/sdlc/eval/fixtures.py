@@ -20,8 +20,9 @@ from ..core.models import (
     IdeaBrief,
     ProjectMode,
 )
-from ..prompts import planner_prompt, qa_prompt
+from ..prompts import planner_prompt
 from ..stages.clarify.prompts import clarify_prompt
+from ..stages.qa.prompts import qa_prompt
 
 # The six pure prompt-in/artifact-out proposers.
 SUPPORTED_ROLES: frozenset[str] = frozenset(

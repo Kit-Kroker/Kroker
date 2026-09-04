@@ -10,7 +10,7 @@ test)."""
 import asyncio
 import sys
 
-from sdlc.activities import QAInput, run_test_suite
+from sdlc.stages.qa.activities import QAInput, run_test_suite
 
 
 def _pytest_cmd(extra: str = "") -> str:

@@ -23,10 +23,8 @@ with workflow.unsafe.imports_passed_through():
         IntegrationChecksInput,
         IntegrationHandle,
         IntegrationInput,
-        LintInput,
         PROpenInput,
         RepoProbeInput,
-        SecurityScanInput,
         check_brownfield_delta,
         classify_repo,
         evaluate_gate,
@@ -34,8 +32,6 @@ with workflow.unsafe.imports_passed_through():
         measure_coverage,
         open_pull_request,
         run_integration_checks,
-        run_lint,
-        security_scan,
         setup_integration_branch,
     )
     from ..agents.roles import (
@@ -115,7 +111,6 @@ with workflow.unsafe.imports_passed_through():
         ResearchBrief,
         ResearchPlan,
         ReviewReport,
-        SecurityReport,
         SmokeCheck,
         SubQuestion,
         SubQuestionFinding,
@@ -146,6 +141,8 @@ with workflow.unsafe.imports_passed_through():
         verify_brief_activity,
     )
     from ..stages import clarify
+    from ..stages.qa.activities import LintInput, SecurityScanInput, run_lint, security_scan
+    from ..stages.qa.models import SecurityReport
     from .benchmark_host import BenchmarkHost
     from .board_host import BoardHost
     from .deployment import DeploymentInput, DeploymentWorkflow

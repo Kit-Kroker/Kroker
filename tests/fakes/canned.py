@@ -25,10 +25,10 @@ from sdlc.models import (
     ImplementationPlan,
     MergeVerdict,
     OpenQuestion,
-    QAReport,
     ReviewReport,
     ValidationContract,
 )
+from sdlc.stages.qa.models import QAReport
 
 QUESTION_IDS = ["q1"]
 

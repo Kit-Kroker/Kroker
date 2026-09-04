@@ -12,6 +12,6 @@ from __future__ import annotations
 
 from types import ModuleType
 
-from . import clarify
+from . import clarify, qa
 
-STAGE_MODULES: tuple[ModuleType, ...] = (clarify,)
+STAGE_MODULES: tuple[ModuleType, ...] = (clarify, qa)

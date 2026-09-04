@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from sdlc.activities import LintInput, QAInput, run_lint, run_test_suite
+from sdlc.stages.qa.activities import LintInput, QAInput, run_lint, run_test_suite
 from tests.conftest import _wait_for_pidfile_async, _wait_until_dead
 
 

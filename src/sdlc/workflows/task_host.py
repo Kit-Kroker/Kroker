@@ -19,13 +19,11 @@ with workflow.unsafe.imports_passed_through():
         CodingTaskInput,
         DiffInput,
         MergeInput,
-        QAInput,
         WorktreeInput,
         create_worktree,
         get_task_diff,
         merge_into_integration,
         run_coding_task,
-        run_test_suite,
     )
     from ..agents.roles import STAGE_MODELS, resolve_role_model, t_qa, t_reviewer
     from ..benchmarks.models import BenchmarkOutcome, WasteBag
@@ -51,7 +49,10 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..observability.trace import RunEventKind
     from ..pending import GateContext
-    from ..prompts import qa_prompt, reviewer_prompt
+    from ..prompts import reviewer_prompt
+    from ..stages.qa import step as qa_step
+    from ..stages.qa.activities import QAInput, run_test_suite
+    from ..stages.qa.step import _fix_loop_issues
     from .crew import FS_ACT, CrewTaskInput, CrewTaskWorkflow
     from .models import TaskResult
 
@@ -138,55 +139,6 @@ def _handoff_notes(prior_handoffs: list) -> list[str]:
         if parts:
             notes.append(f"- {h.task_id}: " + " | ".join(parts))
     return notes
-
-
-def _fix_loop_issues(qa, qa_raw, review, adversary=None) -> str:
-    """Assemble the retry prompt's issue list from BOTH judges.
-
-    The task gate anchors on `qa_raw.tests_passed` — the subprocess exit code
-    — because an LLM opinion must never overwrite a deterministic signal. The
-    retry prompt has to carry that same evidence, or the agent is asked to fix
-    something it cannot see: a clean-context QA that judges the diff
-    contract-compliant while pytest is red leaves the LLM-side issue list
-    empty, and the fix loop then sends `Fix them:\\n- ` with nothing after the
-    dash (bench-todo-api-greenfield-1785444047: 8 of 12 attempts burned
-    re-confirming the stack directive while the real ModuleNotFoundError was
-    never shown). Returns "" when neither judge has anything actionable —
-    callers must treat that as a harness fault, not another attempt.
-
-    `adversary` is the optional decorrelated second opinion (spec part 2).
-    Its blocking findings join the primary's, because on a split the primary
-    approved and contributed nothing -- without the union the retry prompt
-    would carry no instruction at all."""
-    deterministic: list[str] = []
-    if not qa_raw.tests_passed:
-        if qa_raw.issues:
-            deterministic.append(
-                "test command failed:\n" + "\n".join(qa_raw.issues)[-_TEST_OUTPUT_MAX:]
-            )
-        if qa_raw.failing_tests:
-            deterministic.append("failing tests: " + ", ".join(qa_raw.failing_tests[:25]))
-        if qa_raw.stopped_early:
-            # Without this the agent reads a truncated run as the whole
-            # story and starts fixing the one test it was shown. In the P2
-            # demonstration that test was unrelated to every task that
-            # attacked it, and the tasks' own tests -- sorting after it --
-            # never ran at all.
-            deterministic.append(
-                "NOTE: the test run STOPPED EARLY (-x / --maxfail), so tests "
-                "ordered after the failure above did not run. This is a "
-                "partial result, not a verdict on your work: the failure "
-                "shown may be unrelated to your task, and your own tests may "
-                "not have executed. Check whether it is yours before "
-                "changing it."
-            )
-    review_issues = [
-        f"{f.severity}: {f.assertion} — {f.detail}"
-        for r in (review, adversary)
-        if r is not None
-        for f in r.blocking_findings
-    ]
-    return "\n- ".join(list(qa.issues or qa.failing_tests) + deterministic + review_issues)
 
 
 def _should_resume_session(qa, resumes: int, max_resumes: int, near_ceiling: bool) -> bool:
@@ -583,16 +535,17 @@ class TaskHost:
                 **ACT,
             )
             qa_spend = RoleUsage(role="qa", model=resolve_role_model(cfg, "qa"))
-            qa = (
-                await self._run_role(  # type: ignore[attr-defined]
-                    cfg,
-                    "qa",
-                    resolve_role_model(cfg, "qa"),
-                    t_qa,
-                    qa_prompt(assertions, qa_raw.model_dump_json(), diff["stat"], diff["patch"]),
-                    into=qa_spend,
-                )
-            ).output
+            qa = await qa_step(
+                self._ctx,  # type: ignore[attr-defined]
+                cfg=cfg,
+                task=task,
+                contract=contract,
+                diff=diff,
+                worktree=worktree,
+                qa_agent=t_qa,
+                qa_raw=qa_raw,
+                qa_spend=qa_spend,
+            )
 
             # Second clean-context judge (FR-204): same inputs as QA — frozen
             # contract + materialized diff + test output. No narrative, no

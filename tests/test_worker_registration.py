@@ -33,8 +33,8 @@ def test_worker_module_imports_memory_activities():
 def test_worker_module_imports_run_lint():
     from sdlc import worker
 
-    src = __import__("inspect").getsource(worker)
-    assert "run_lint" in src, "run_lint missing from worker registration"
+    names = [getattr(a, "__name__", str(a)) for a in worker.get_worker_activities()]
+    assert "run_lint" in names, "run_lint missing from worker registration"
 
 
 def test_worker_module_registers_reflect_workflow():

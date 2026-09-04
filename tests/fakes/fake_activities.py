@@ -16,13 +16,10 @@ from sdlc.activities import (
     IntegrationChecksInput,
     IntegrationHandle,
     IntegrationInput,
-    LintInput,
     MergeInput,
     MergeResult,
     PROpenInput,
-    QAInput,
     RepoProbeInput,
-    SecurityScanInput,
     WorktreeHandle,
     WorktreeInput,
 )
@@ -43,10 +40,17 @@ from sdlc.measurement import CollectionState, Measurement
 from sdlc.models import (
     CoverageReport,
     HarnessRunResult,
+)
+from sdlc.pricing import price_usage
+from sdlc.stages.qa.activities import (
+    LintInput,
+    QAInput,
+    SecurityScanInput,
+)
+from sdlc.stages.qa.models import (
     QAReport,
     SecurityReport,
 )
-from sdlc.pricing import price_usage
 
 
 @activity.defn(name="setup_integration_branch")

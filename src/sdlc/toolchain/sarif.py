@@ -15,7 +15,7 @@ absolute floor.
 from __future__ import annotations
 
 from ..measurement import CollectionState
-from ..models import SecurityFinding, SecurityReport, SecuritySeverity
+from ..stages.qa.models import SecurityFinding, SecurityReport, SecuritySeverity
 
 # SARIF result.level -> our severity scale (SecurityFinding.severity Literal).
 # semgrep emits "error" for its blocking rules, so error -> critical keeps the

@@ -41,9 +41,6 @@ from .activities import (
     read_committed_bytes,
     run_coding_task,
     run_integration_checks,
-    run_lint,
-    run_test_suite,
-    security_scan,
     setup_integration_branch,
 )
 from .agents.loader import load_registry, validate_registry
@@ -159,9 +156,6 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
         load_crew,
         run_coding_task,
         run_integration_checks,
-        run_lint,
-        run_test_suite,
-        security_scan,
         measure_coverage,
         open_pull_request,
         deploy_current_version,

@@ -31,7 +31,9 @@ from __future__ import annotations
 import asyncio
 import sys
 
-from sdlc.activities import QAInput, run_test_suite
+import pytest
+
+from sdlc.stages.qa.activities import QAInput, run_test_suite
 
 # Appears in the traceback's source listing but NOT in pytest's one-line
 # short-summary entry, so it discriminates "we kept the traceback" from
@@ -129,10 +131,11 @@ def test_non_pytest_output_still_falls_back_to_the_tail(tmp_path):
 
 # --- the retry prompt itself -------------------------------------------------
 
-from sdlc.models import QAReport  # noqa: E402
-from sdlc.workflows.task_host import _fix_loop_issues  # noqa: E402
+from sdlc.stages.qa.models import QAReport  # noqa: E402
+from sdlc.stages.qa.step import _fix_loop_issues  # noqa: E402
 
 
+@pytest.mark.clause("QA-1.4")
 def test_retry_prompt_says_the_suite_stopped_early():
     """The agent must be told the run was truncated. Otherwise it reads
     'these tests failed' as the whole story and starts fixing the one test it
