@@ -1795,16 +1795,16 @@ git commit -m "refactor(<stage>): move the <stage> stage into a vertical slice"
 - Uncovered needs: None (`repo_path`, `commit_sha` passed as parameters).
 - Enum sites: `idea.mode is ProjectMode.BROWNFIELD` (`:2554`), `state is not CollectionState.MEASURED` (`:2557`).
 
-- [ ] **Step 1: Write failing contract test** (`tests/context/test_context_slice_contract.py`)
-- [ ] **Step 2: Run test to verify it fails**
-- [ ] **Step 3: Lift the inline block into `step.py`** (`feature.py:2474-2491`, `:2551-2562`)
-- [ ] **Step 4: Create `prompts.py` with `prompt_digest(cfg)`**
-- [ ] **Step 5: Register in `STAGE_MODULES`**
-- [ ] **Step 6: Move tests** (`tests/test_context_*.py` -> `tests/context/`)
-- [ ] **Step 7: Write `context.md` and `AGENTS.md` from templates**
-- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
-- [ ] **Step 9: Run full verification suite**
-- [ ] **Step 10: Commit `refactor(context): move the context stage into a vertical slice`**
+- [x] **Step 1: Write failing contract test** (`tests/context/test_context_slice_contract.py`)
+- [x] **Step 2: Run test to verify it fails**
+- [x] **Step 3: Lift the inline block into `step.py`** (`feature.py:2474-2491`, `:2551-2562`)
+- [x] **Step 4: Create `prompts.py` with `prompt_digest(cfg)`**
+- [x] **Step 5: Register in `STAGE_MODULES`**
+- [x] **Step 6: Move tests** (`tests/test_context_*.py` -> `tests/context/`)
+- [x] **Step 7: Write `context.md` and `AGENTS.md` from templates**
+- [x] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [x] **Step 9: Run full verification suite**
+- [x] **Step 10: Commit `refactor(context): move the context stage into a vertical slice`**
 
 ### Task 20.7: Stage `merge` (Rank 7)
 
