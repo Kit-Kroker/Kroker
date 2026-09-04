@@ -7,13 +7,13 @@ they are given, so the config value decides the width, not the question."""
 import pytest
 from pydantic_ai.models.test import TestModel
 
-from sdlc.research.stage import PlanInput, _plan_prompt
-from sdlc.research.stage import _plan_research_impl as plan_research
 from sdlc.stages.research.models import (
     Contradiction,
     Gap,
     ResearchPlan,
 )
+from sdlc.stages.research.stage import PlanInput, _plan_prompt
+from sdlc.stages.research.stage import _plan_research_impl as plan_research
 
 
 def _inp(**kw) -> PlanInput:

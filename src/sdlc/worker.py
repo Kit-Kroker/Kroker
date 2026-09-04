@@ -94,8 +94,6 @@ from .memory.activities import (
 from .notify.activities import notify
 from .observability.activities import export_run_artifacts
 from .pricing import price_usage
-from .research.stage import plan_research, research_subquestion, synthesize_brief
-from .research.verify import verify_brief_activity
 from .stages import STAGE_MODULES
 from .stages.code.activities import run_coding_task
 from .stages.context.activities import check_brownfield_delta, classify_repo
@@ -186,10 +184,6 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
         sync_plan_tasks,
         set_task_authoritative,
         attach_task_evidence,
-        verify_brief_activity,
-        plan_research,
-        research_subquestion,
-        synthesize_brief,
         triage_baseline,
         triage_secrets,
         triage_build_probe,

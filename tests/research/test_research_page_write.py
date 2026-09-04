@@ -7,7 +7,7 @@ import asyncio
 
 import pytest
 
-from sdlc.research.verify import page_filename, pages_dir, write_page
+from sdlc.stages.research.verify import page_filename, pages_dir, write_page
 
 
 @pytest.fixture(autouse=True)

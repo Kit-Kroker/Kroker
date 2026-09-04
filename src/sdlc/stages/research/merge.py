@@ -8,7 +8,7 @@ synthesize_brief), and it may never author a grounded finding.
 
 from __future__ import annotations
 
-from ..stages.research.models import (
+from .models import (
     ConsultedSource,
     Contradiction,
     Gap,

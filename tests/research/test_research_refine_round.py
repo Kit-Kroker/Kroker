@@ -14,7 +14,7 @@ from sdlc.stages.research.models import (
     SubQuestion,
     SubQuestionFinding,
 )
-from sdlc.workflows.feature import _refine_seed, _should_refine
+from sdlc.stages.research.step import _refine_seed, _should_refine
 
 
 def _brief() -> ResearchBrief:

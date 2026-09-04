@@ -2,7 +2,7 @@ import hashlib
 
 import pytest
 
-from sdlc.research import verify
+from sdlc.stages.research import verify
 from sdlc.stages.research.models import (
     GroundedFinding,
     ResearchBrief,

@@ -1,12 +1,12 @@
 import pytest
 
 from sdlc.memory.models import MemoryKind
-from sdlc.research import verify
-from sdlc.research.retain import verified_findings_to_retain
+from sdlc.stages.research import verify
 from sdlc.stages.research.models import (
     GroundedFinding,
     ResearchBrief,
 )
+from sdlc.stages.research.retain import verified_findings_to_retain
 
 
 @pytest.fixture
@@ -58,7 +58,7 @@ async def test_verify_brief_activity_returns_violations(runs_root):
     `if violations:` and fails the stage closed. (Task 1 finding A fallback.)
     Code-review C1: the previous raise-based form was unwrappable on the
     workflow side; this pins the return-shape contract."""
-    from sdlc.research.verify import verify_brief_activity
+    from sdlc.stages.research.verify import verify_brief_activity
 
     brief = ResearchBrief(
         grounded_findings=[GroundedFinding(source_url="https://x/none", quote="x", claim="c")]
@@ -73,7 +73,7 @@ async def test_verify_brief_activity_returns_violations(runs_root):
 async def test_verify_brief_activity_passes_clean_brief(runs_root):
     """A brief whose grounded quotes are all substrings of fetched pages
     verifies cleanly — returns an empty violations list."""
-    from sdlc.research.verify import verify_brief_activity
+    from sdlc.stages.research.verify import verify_brief_activity
 
     _write_page("r1", "https://x/1", "the verbatim quote is here")
     brief = ResearchBrief(

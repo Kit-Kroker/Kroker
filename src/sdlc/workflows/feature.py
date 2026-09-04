@@ -1,4 +1,4 @@
-"""FeatureWorkflow — idea → deployed feature.
+"""FeatureWorkflow â€” idea â†’ deployed feature.
 
 Deterministic orchestration only. All I/O happens in activities or inside
 TemporalAgent-managed activities. Human-in-the-loop gates are durable
@@ -46,7 +46,6 @@ with workflow.unsafe.imports_passed_through():
         IdeaBrief,
         PipelineConfig,
         ProjectMode,
-        ResearchConfig,
         RoleUsage,
         RunState,
         RunSummary,
@@ -73,20 +72,8 @@ with workflow.unsafe.imports_passed_through():
     from ..observability.summary import build_run_summary
     from ..observability.trace import RunEventKind
     from ..pending import GateContext
-    from ..pricing import PriceUsageInput, price_usage
     from ..prompts import merge_verdict_prompt, planner_prompt
-    from ..research.deps import ResearchDeps
-    from ..research.retain import verified_findings_to_retain
-    from ..research.stage import (
-        PlanInput,
-        SubQuestionInput,
-        SynthesizeInput,
-        plan_research,
-        research_subquestion,
-        synthesize_brief,
-    )
-    from ..research.verify import brief_digest, verify_brief_activity
-    from ..stages import analyze, clarify, intake, retro
+    from ..stages import analyze, clarify, intake, research, retro
     from ..stages.analyze.models import untraced_criteria
     from ..stages.architecture.models import ArchitectureSpec
     from ..stages.clarify.models import ClarifiedRequirements
@@ -110,13 +97,7 @@ with workflow.unsafe.imports_passed_through():
     from ..stages.plan.models import DevTask, ImplementationPlan
     from ..stages.qa.activities import LintInput, SecurityScanInput, run_lint, security_scan
     from ..stages.qa.models import SecurityReport
-    from ..stages.research.models import (
-        Gap,
-        ResearchBrief,
-        ResearchPlan,
-        SubQuestion,
-        SubQuestionFinding,
-    )
+    from ..stages.research.deps import ResearchDeps
     from ..stages.review.models import DeepReviewReport, ReviewReport
     from ..vcs import (
         DiffInput,
@@ -134,7 +115,6 @@ with workflow.unsafe.imports_passed_through():
     from .question_host import QuestionHost
     from .report_host import ReportHost
     from .role_host import (
-        PRICE_ACT,
         RoleHost,
         _auto_decision_for,
         _BudgetRejected,
@@ -163,54 +143,24 @@ INTEG_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=30), retry_policy=RetryPolicy(maximum_attempts=2)
 )
 
-# Fan-out research. Durations follow the shape measured by the prior art:
-# planning is short and schema-constrained; a sub-question runs a full agent
-# with search and page fetches and legitimately takes minutes.
-RESEARCH_PLAN_ACT = workflow.ActivityConfig(
-    start_to_close_timeout=timedelta(minutes=5), retry_policy=RetryPolicy(maximum_attempts=3)
-)
-# The heartbeat is the important knob. A sub-question can run for many
-# minutes, so without heartbeating the server waits out the full
-# start_to_close before rescheduling a lost worker; with it, ~60s.
-# Invariant: stage.HEARTBEAT_INTERVAL_SECONDS < heartbeat_timeout <
-# start_to_close_timeout.
-RESEARCH_SQ_ACT = workflow.ActivityConfig(
-    start_to_close_timeout=timedelta(minutes=20),
-    heartbeat_timeout=timedelta(seconds=60),
-    retry_policy=RetryPolicy(
-        initial_interval=timedelta(seconds=2),
-        backoff_coefficient=2.0,
-        maximum_interval=timedelta(seconds=60),
-        maximum_attempts=6,
-        # The budget counter is PERSISTED to disk, so a retry meets the same
-        # exhausted cap: six guaranteed failures with backoff. The activity
-        # already degrades these internally; this is the belt-and-braces for
-        # any path that lets one escape.
-        non_retryable_error_types=["BudgetExceeded", "UsageLimitExceeded"],
-    ),
-)
-RESEARCH_SYNTH_ACT = workflow.ActivityConfig(
-    start_to_close_timeout=timedelta(minutes=10), retry_policy=RetryPolicy(maximum_attempts=3)
-)
-
 
 def _requirements_for_downstream(reqs: ClarifiedRequirements) -> str:
     """The clarify artifact as every DOWNSTREAM role sees it.
 
-    E-85's scope guard is "no change to downstream roles" (spec §2), and two
+    E-85's scope guard is "no change to downstream roles" (spec Â§2), and two
     of `ClarifiedRequirements`' E-85 fields are measurement rather than
     requirement:
 
       - `dropped` is the record of what the cap CUT, carrying each lost
         question's `why_it_matters`, `suggested_answer` and `evidence`.
         Feeding it to the architect would hand the architect the UNCAPPED
-        set and undo the very protection §9's cap exists to provide -- and
+        set and undo the very protection Â§9's cap exists to provide -- and
         it is unbounded, since merge keeps every candidate past the cap.
       - `dimensions_probed` is stage telemetry: which probes ran. It says
         nothing about the requirement.
 
     Both stay on the persisted and emitted artifact -- they are the
-    benchmark's measurement record (§5, §10) and must survive. They simply
+    benchmark's measurement record (Â§5, Â§10) and must survive. They simply
     never reach a downstream prompt or a downstream memo key.
 
     Excluding them also restores byte-identity for the flag-off path: before
@@ -268,70 +218,14 @@ def _merge_evidence_all_green(results: list) -> bool:
     """True only when every task has positive, passing QA evidence.
 
     SC-5: a done task with missing QA (e.g. an escalation-approved task
-    whose fix loop exhausted) is treated as FAILURE — never a vacuous
+    whose fix loop exhausted) is treated as FAILURE â€” never a vacuous
     `all([])` pass. The merge absolute check must see real green evidence."""
     return bool(results) and all(r.qa is not None and r.qa.tests_passed for r in results)
 
 
 # Fallbacks only for contracts predating test_commands/lint_commands
-# (legacy cached artifacts) — every fresh plan populates both per-stack.
+# (legacy cached artifacts) â€” every fresh plan populates both per-stack.
 DEFAULT_LINT_CMD = "ruff check ."
-
-
-def _degraded_research_brief(exc: Exception) -> ResearchBrief:
-    """Substitute for the research stage's output when t_research.run() is
-    cut off by BudgetExceeded (the persisted search/fetch/cost cap) or
-    UsageLimitExceeded (pydantic-ai's request_limit) — mirrors
-    research_subquery's mid-run fallback (research/toolset.py) so the
-    primary stage degrades the same way: no findings, the shortfall
-    recorded as a gap, never a crash that takes the whole run down with it
-    (bench-todo-api-greenfield-1785485669: an uncaught UsageLimitExceeded
-    here killed the entire FeatureWorkflow, losing every other stage's
-    records along with it). Empty grounded_findings means
-    verify_brief_activity always returns zero violations, so this flows
-    through the normal post-research code unchanged."""
-    return ResearchBrief(
-        gaps=[
-            Gap(
-                sub_question_id="research-stage",
-                what_is_missing="the research stage did not complete",
-                why_it_matters=str(exc),
-            )
-        ],
-        summary=f"Research stopped early: {exc}",
-    )
-
-
-def _findings_from_results(subs: list[SubQuestion], results: list) -> list[SubQuestionFinding]:
-    """Turn gather(..., return_exceptions=True) output into findings.
-
-    Sub-questions are INDEPENDENT -- that is the premise of the fan-out. Letting
-    one exception propagate would cancel the gather and discard every sibling
-    finding already paid for. A partial brief from three of four sub-questions
-    is worth far more than nothing, so a failure becomes a failed finding that
-    the merge turns into a Gap."""
-    out: list[SubQuestionFinding] = []
-    for sub, result in zip(subs, results, strict=False):
-        if isinstance(result, BaseException):
-            out.append(SubQuestionFinding(sub_question=sub, failed=True, error=str(result)))
-        else:
-            out.append(result)
-    return out
-
-
-def _should_refine(round_n: int, cfg: ResearchConfig) -> bool:
-    """Whether a REVISE at `round_n` gets another wave. Exhaustion is NOT a
-    rejection -- the stage proceeds with the brief it has."""
-    return round_n <= cfg.max_refine_rounds
-
-
-def _refine_seed(brief: ResearchBrief) -> tuple[list, list]:
-    """What round two should target: everything round one could not resolve.
-
-    Richer than a free-text note, because the SGR brief already carries the
-    machine-readable version. Resolved contradictions are excluded -- they are
-    answered, and re-researching them spends the run ceiling on finished work."""
-    return list(brief.gaps), [c for c in brief.contradictions if c.unresolved]
 
 
 def _validate_task_graph(tasks: list[DevTask]) -> str | None:
@@ -444,7 +338,7 @@ class FeatureWorkflow(
             MemoryKind.GATE_FEEDBACK,
             cfg.memory.project_bank,
             text=f"gate {name}#{round}: {decision.outcome.value}"
-            f"{' — ' + decision.comments if decision.comments else ''}",
+            f"{' â€” ' + decision.comments if decision.comments else ''}",
             metadata={"gate": name, "round": str(round), "run_id": workflow.info().workflow_id},
         )
 
@@ -500,105 +394,11 @@ class FeatureWorkflow(
 
     # ---------------------------- helpers -------------------------------
 
-    async def _fan_out_research(
-        self,
-        cfg: PipelineConfig,
-        idea,
-        deps: ResearchDeps,
-        spend: RoleUsage,
-        id_offset: int = 0,
-        guidance: str = "",
-        gaps: list | None = None,
-        contradictions: list | None = None,
-    ) -> list[SubQuestionFinding]:
-        """One wave: plan -> N parallel sub-questions. The caller synthesizes
-        a brief over the returned findings.
-
-        Returns the raw per-sub-question findings so a refine round can
-        EXTEND the finding list rather than discarding round one."""
-        model = STAGE_MODELS.get("research", "unknown")
-
-        plan: ResearchPlan = await workflow.execute_activity(
-            plan_research,
-            PlanInput(
-                idea_json=idea.model_dump_json(),
-                max_sub_questions=cfg.research.max_sub_questions,
-                model=model,
-                id_offset=id_offset,
-                guidance=guidance,
-                gaps=gaps or [],
-                contradictions=contradictions or [],
-            ),
-            **RESEARCH_PLAN_ACT,
-        )
-        await self._fold_research_usage(cfg, plan.usage, spend)
-
-        # THE fan-out. return_exceptions=True because the sub-questions are
-        # independent: one failure must not cancel the gather and throw away
-        # siblings already paid for.
-        results = await asyncio.gather(
-            *[
-                workflow.execute_activity(
-                    research_subquestion,
-                    SubQuestionInput(
-                        sub_question=sq,
-                        deps=deps,
-                        model=model,
-                        max_requests=cfg.research.max_requests,
-                        max_run_cost_usd=cfg.research.max_run_cost_usd,
-                    ),
-                    **RESEARCH_SQ_ACT,
-                )
-                for sq in plan.sub_questions
-            ],
-            return_exceptions=True,
-        )
-
-        findings = _findings_from_results(plan.sub_questions, results)
-        for f in findings:
-            await self._fold_research_usage(cfg, f.usage, spend)
-        return findings
-
-    async def _fold_research_usage(
-        self, cfg: PipelineConfig, usage: RoleUsage, into: RoleUsage
-    ) -> None:
-        """E-33 amendment: fan-out moved the model call activity-side, so
-        _run_role cannot wrap it. The activity hands usage back and the
-        workflow prices it here -- one accounting path preserved, only the
-        call site moved."""
-        if not (usage.input_tokens or usage.output_tokens):
-            return
-        usd: float | None = None
-        try:
-            usd = await workflow.execute_activity(
-                price_usage,
-                PriceUsageInput(
-                    model=usage.model,
-                    input_tokens=usage.input_tokens,
-                    output_tokens=usage.output_tokens,
-                    cache_read_tokens=usage.cache_read_tokens,
-                    cache_write_tokens=usage.cache_write_tokens,
-                ),
-                **PRICE_ACT,
-            )
-        except Exception:
-            usd = None
-        self._track_usage(
-            role="research",
-            model=usage.model,
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
-            cache_read_tokens=usage.cache_read_tokens,
-            cache_write_tokens=usage.cache_write_tokens,
-            cost_usd=usd,
-            into=into,
-        )
-
     async def _run_deep_review(
         self, cfg, run, contract, assertions, diff, task
     ) -> DeepReviewReport | None:
         """E-39 advisory lens: read the SCRUBBED harness transcript as data and
-        emit a DeepReviewReport. Recorded + retained for signal ONLY — never
+        emit a DeepReviewReport. Recorded + retained for signal ONLY â€” never
         consulted in the task's success condition. Once per task, over the
         final HarnessRunResult. Best-effort: any failure returns None so an
         observability lens can never fail delivery."""
@@ -969,7 +769,7 @@ class FeatureWorkflow(
 
         # ADR-14: one sdlc/<run_id>/integration branch accumulates completed
         # task work; dependent tasks branch from its head. The activity hands
-        # back both the head SHA and the worktree path — the workflow never
+        # back both the head SHA and the worktree path â€” the workflow never
         # computes the path itself (that would read SDLC_WORKTREES_ROOT from
         # the env, a determinism violation).
         integration: IntegrationHandle = await workflow.execute_activity(
@@ -1005,215 +805,29 @@ class FeatureWorkflow(
                 # malformed-SARIF-reads-as-clean hole (FR-915).
                 return f"rejected:context ({self._codebase_map.collected.reason})"
 
-        # 0. RESEARCH (FR-107) — optional, human-gated, NOT memoized. A served
+        # 0. RESEARCH (FR-107) â€” optional, human-gated, NOT memoized. A served
         # memo means pages were not fetched this run, so a brief cannot be
         # cached (spec finding 4). The brief contributes only its canonical
         # digest to downstream keys (finding 3), never its prose.
         brief_digest_val = ""
         if cfg.research_enabled and t_research is not None:
-            self._stage("researching", "research")
-            _r_started = workflow.now()
-            research_role = cfg.roles.get("research")
-            deps = ResearchDeps(
-                run_id=workflow.info().workflow_id,
-                provider=(research_role.provider or "fake") if research_role else "fake",
-                max_searches=cfg.research.max_searches,
-                max_fetches=cfg.research.max_fetches,
-                max_cost_usd=cfg.research.max_cost_usd,
-                memory_backend=cfg.memory.backend,
-                memory_base_url=cfg.memory.base_url,
-                memory_bank=cfg.memory.project_bank,
+            res = await research.step(
+                self._ctx,
+                cfg=cfg,
+                idea=idea,
                 memory_watermark=self._memory_watermark,
+                research_agent=t_research,
+                research_model=resolve_role_model(cfg, "research"),
             )
-            # Budget enforcement under fan-out: each sub-question charges its
-            # OWN persisted scope ("sq-<id>") plus the shared "run" ceiling via
-            # charge_scoped inside the toolset, so one sub-question cannot
-            # drain the run. research_subquestion degrades a BudgetExceeded /
-            # UsageLimitExceeded into a gap rather than re-raising -- the
-            # counter is persisted, so a retry would hit the same exhausted
-            # cap six times with backoff (bench-todo-api-greenfield-1785485669:
-            # an uncaught UsageLimitExceeded once killed the whole
-            # FeatureWorkflow, not just the research stage).
-            research_spend = RoleUsage(
-                role="research", model=STAGE_MODELS.get("research", "unknown")
-            )
-            try:
-                findings = await self._fan_out_research(cfg, idea, deps, research_spend)
-                if all(f.failed for f in findings):
-                    # No brief to synthesize -- and no point paying for the
-                    # call. Degrade the STAGE, never the run (2026-07-20
-                    # decision).
-                    brief = _degraded_research_brief(RuntimeError("every sub-question failed"))
-                else:
-                    brief, synth_usage = await workflow.execute_activity(
-                        synthesize_brief,
-                        SynthesizeInput(
-                            idea_json=idea.model_dump_json(),
-                            findings=findings,
-                            model=STAGE_MODELS.get("research", "unknown"),
-                        ),
-                        **RESEARCH_SYNTH_ACT,
-                    )
-                    await self._fold_research_usage(cfg, synth_usage, research_spend)
-            except Exception as exc:
-                # Fan-out / synthesis model-call failure degrades the STAGE,
-                # never the run (spec §8 tier 1;
-                # bench-todo-api-greenfield-1785485669: an uncaught
-                # UsageLimitExceeded once killed the whole FeatureWorkflow,
-                # not just the research stage). Grounding violations are NOT
-                # exceptions -- they fail the stage closed below -- so this
-                # broad guard only catches model-call failures (a
-                # plan/synthesize ActivityError after its retries exhaust).
-                brief = _degraded_research_brief(exc)
-                findings = []
-            # Task 7 fallback (Task 1 finding A): the original
-            # @agent.output_validator was silently dropped by TemporalAgent, so
-            # grounding is enforced here as a post-run ACTIVITY. Reads page
-            # files (I/O) — must run via execute_activity, not inline, or
-            # test_factory_purity.py fires. The activity RETURNS the violations
-            # list (does not raise) so we can inspect it directly — temporalio
-            # wraps activity-raised exceptions in ActivityError, which would
-            # prevent catching a typed exception here. Non-empty = fail closed.
-            violations = await workflow.execute_activity(
-                verify_brief_activity, args=[brief, workflow.info().workflow_id], **VERIFY_ACT
-            )
-            if violations:
-                # Ungrounded brief: fail this stage but do NOT stop the
-                # pipeline (2026-07-20 human decision — see report for
-                # rationale). Nothing from an unverified brief is trustworthy
-                # enough to retain to memory or feed into downstream content
-                # keys, so brief_digest_val stays "" and retain is skipped;
-                # everything after research proceeds on the idea alone, same
-                # as a research-disabled run.
-                self._stage("research_failed", "research")
-                err = "; ".join(f"{v.kind}: {v.source}: {v.quote[:80]!r}" for v in violations)
-                await self._record(
-                    cfg,
-                    self._stage_record(
-                        cfg,
-                        stage="research",
-                        role="research",
-                        started=_r_started,
-                        ended=workflow.now(),
-                        quality_score=None,
-                        judge="error",
-                        outcome=BenchmarkOutcome.FAIL,
-                        model=STAGE_MODELS.get("research", "unknown"),
-                        spend=research_spend,
-                        error=f"rejected:research.grounding: {err}",
-                    ),
-                )
-            else:
-                brief_digest_val = brief_digest(brief)
-                round_n = 1
-                while True:
-                    gate = await self._gate("research", cfg.gate_settings(), round=round_n)
-                    if gate.outcome == GateOutcome.APPROVE:
-                        break
-                    if gate.outcome == GateOutcome.REJECT:
-                        return "rejected:research"
-                    # REVISE
-                    if not _should_refine(round_n, cfg.research):
-                        # Exhausted: proceed with what we have. Research
-                        # degrades a run; it never stops one.
-                        break
-                    gaps, conflicts = _refine_seed(brief)
-                    try:
-                        findings += await self._fan_out_research(
-                            cfg,
-                            idea,
-                            deps,
-                            research_spend,
-                            id_offset=len(findings),
-                            guidance=gate.guidance or "",
-                            gaps=gaps,
-                            contradictions=conflicts,
-                        )
-                        # Re-merge over ALL findings: round one is never discarded.
-                        brief, synth_usage = await workflow.execute_activity(
-                            synthesize_brief,
-                            SynthesizeInput(
-                                idea_json=idea.model_dump_json(),
-                                findings=findings,
-                                model=STAGE_MODELS.get("research", "unknown"),
-                            ),
-                            **RESEARCH_SYNTH_ACT,
-                        )
-                        await self._fold_research_usage(cfg, synth_usage, research_spend)
-                    except Exception:
-                        # Refine-round model failure: keep the prior VERIFIED
-                        # brief and stop refining rather than discard round one
-                        # or crash the run. Research degrades; it never stops
-                        # the pipeline (spec §8).
-                        break
-                    # Round-2 findings must be verified too.
-                    violations = await workflow.execute_activity(
-                        verify_brief_activity,
-                        args=[brief, workflow.info().workflow_id],
-                        **VERIFY_ACT,
-                    )
-                    if violations:
-                        self._stage("research_failed", "research")
-                        brief_digest_val = ""
-                        break
-                    brief_digest_val = brief_digest(brief)
-                    round_n += 1
-                if brief_digest_val:
-                    # Grounded brief (possibly after a refine round): retain,
-                    # judge, and record PASS.
-                    for item in verified_findings_to_retain(
-                        brief, workflow.info().workflow_id, bank=cfg.memory.project_bank
-                    ):
-                        await self._retain(cfg, item.kind, item.bank, item.text, item.metadata)
-                    _r_quality = await self._judge(
-                        cfg,
-                        brief.model_dump_json(),
-                        "research",
-                        author_model=STAGE_MODELS.get("research", "unknown"),
-                    )
-                    await self._record(
-                        cfg,
-                        self._stage_record(
-                            cfg,
-                            stage="research",
-                            role="research",
-                            started=_r_started,
-                            ended=workflow.now(),
-                            quality_score=_r_quality.score,
-                            judge=_r_quality.judge,
-                            outcome=BenchmarkOutcome.PASS,
-                            model=STAGE_MODELS.get("research", "unknown"),
-                            spend=research_spend,
-                        ),
-                    )
-                else:
-                    # A refine round failed grounding: record FAIL, mirroring
-                    # the initial-violations path. retain is skipped (nothing
-                    # from an unverified brief is trustworthy) and the run
-                    # proceeds on the idea alone, same as a research-disabled
-                    # run.
-                    await self._record(
-                        cfg,
-                        self._stage_record(
-                            cfg,
-                            stage="research",
-                            role="research",
-                            started=_r_started,
-                            ended=workflow.now(),
-                            quality_score=None,
-                            judge="error",
-                            outcome=BenchmarkOutcome.FAIL,
-                            model=STAGE_MODELS.get("research", "unknown"),
-                            spend=research_spend,
-                            error="rejected:research.grounding (refine)",
-                        ),
-                    )
+            if res.rejection:
+                return res.rejection
+            brief_digest_val = res.digest
 
         # E-33: serial budget check after the research section (runs whether
         # research is on or off; off-by-default research adds no spend here).
         await self._check_budget(cfg)
 
-        # 1. CLARIFY — open questions answered by human via signals
+        # 1. CLARIFY â€” open questions answered by human via signals
         reqs = await clarify.step(
             self._ctx,
             cfg=cfg,
@@ -1266,7 +880,7 @@ class FeatureWorkflow(
             # NOTE: under the default config (research_enabled=False,
             # provider="fake", no $SDLC_RESEARCH_FAKE_CORPUS), the architect's
             # research(q) tool is advertised but will raise if the LLM calls
-            # it — the fake corpus is a CI fixture, not production-accessible.
+            # it â€” the fake corpus is a CI fixture, not production-accessible.
             # Set research_enabled=True and a real provider (or point
             # SDLC_RESEARCH_FAKE_CORPUS at a corpus) to use it.
             # The error surfaces to the model, which stops calling the tool;
@@ -1274,7 +888,7 @@ class FeatureWorkflow(
             # NOTE (accepted loss, 2026-07-17 human decision): the budget
             # counter on deps.budget accumulates correctly for direct/test
             # invocation, but under TemporalAgent each tool activity receives
-            # a fresh deserialized copy — shared-budget enforcement is
+            # a fresh deserialized copy â€” shared-budget enforcement is
             # advisory-only when the architect runs temporalized.
             research_role = cfg.roles.get("research") if cfg.research_enabled else None
             architect_deps = ResearchDeps(
@@ -1470,7 +1084,7 @@ class FeatureWorkflow(
         graph_error = _validate_task_graph(plan.tasks)
         if graph_error:
             return f"failed:plan-validation:{graph_error}"
-        # Sync tasks only after the graph is valid — an invalid plan would
+        # Sync tasks only after the graph is valid â€” an invalid plan would
         # otherwise leave PENDING rows that never move and permanently skew
         # /stats for the project.
         await self._board_sync_tasks(cfg, self._plan_version, plan.tasks)
@@ -1488,16 +1102,15 @@ class FeatureWorkflow(
         """Stages 4-6: tasks, merge gate, PR, deploy. Shared by the ordinary
         pipeline and by E-44's seeded entry point -- one implementation of
         'how a governed change reaches a PR' (D1)."""
-        # 4. DEV / TEST / DEVOPS tasks — ADR-13: serial by default;
+        # 4. DEV / TEST / DEVOPS tasks â€” ADR-13: serial by default;
         # wave mode parallelizes, but tasks sharing declared overlaps
         # serialize regardless. Handoffs flow task -> task (FR-805).
         done: dict[str, TaskResult] = {}
         handoffs: list = []
         remaining = {t.id: t for t in plan.tasks}
-        import asyncio
 
         async def run_one(t: DevTask) -> TaskResult:
-            """Execute the task only. Merging is a separate concern — see
+            """Execute the task only. Merging is a separate concern â€” see
             _merge_task (Resolution B: merging inside run_one would race
             the integration worktree under wave mode's asyncio.gather)."""
             await self._board_task_status(cfg, t.id, TaskStatus.IN_PROGRESS)
@@ -1508,7 +1121,7 @@ class FeatureWorkflow(
                 # propagating exception means the run is aborting. Record a
                 # terminal status so the board (which agents read for live
                 # state) does not leave this task looking forever in_progress
-                # — indistinguishable from a task still running.
+                # â€” indistinguishable from a task still running.
                 await self._board_task_status(
                     cfg, t.id, TaskStatus.FAILED, error=f"unhandled: {type(exc).__name__}: {exc}"
                 )
@@ -1555,7 +1168,7 @@ class FeatureWorkflow(
             else:
                 # Wave mode: execute the batch in parallel (preserving the
                 # gather), THEN merge results sequentially so integration
-                # updates are ordered — two tasks racing the integration
+                # updates are ordered â€” two tasks racing the integration
                 # worktree would corrupt the merge (Resolution B).
                 batch: list[DevTask] = []
                 seen: set[str] = set()
@@ -1575,7 +1188,7 @@ class FeatureWorkflow(
 
             await self._check_budget(cfg)  # E-33: serial boundary per task wave
 
-        # 4b. ANALYZE (stage 9) — clean-context Analyst proposes the
+        # 4b. ANALYZE (stage 9) â€” clean-context Analyst proposes the
         # criterion->test mapping; the workflow enforces it (FR-106). Runs on
         # the integrated whole, before the merge gate.
         # The integration diff is run context shared by analyze AND the merge
@@ -1605,7 +1218,7 @@ class FeatureWorkflow(
 
         await self._check_budget(cfg)  # E-33: serial boundary after analyst
 
-        # 5. MERGE — DeterministicQualityGate first (SC-5), then the human
+        # 5. MERGE â€” DeterministicQualityGate first (SC-5), then the human
         # gate (which doubles as the advisory-override mechanism), then
         # MergeVerdict advisory only under SOFT policy.
         _started = workflow.now()
@@ -1615,7 +1228,7 @@ class FeatureWorkflow(
         # task's merge has accumulated.
         integration_worktree = self._integration_wt
         # E-30/FR-108/ADR-14: run the toolchain adapter (coverage-instrumented
-        # tests + lint) against the merged integration head — a REAL
+        # tests + lint) against the merged integration head â€” a REAL
         # integration-green signal, and the coverage.xml measure_coverage reads.
         # No adapter for the built language => degrade to the pre-E-30 path
         # (per-task aggregate green + the plan's own lint command).
@@ -1763,7 +1376,7 @@ class FeatureWorkflow(
             )
             if not gate.approved:
                 return "rejected:merge:advisory"
-            # Human waved the advisory checks through — record each waiver.
+            # Human waved the advisory checks through â€” record each waiver.
             reviewer = gate.reviewer or "human"
             reason = gate.comments or "advisory override"
             overrides = [
@@ -1785,7 +1398,7 @@ class FeatureWorkflow(
             )
         else:
             # 5d. Gate passed clean. MergeVerdict is advisory and ONLY
-            # consulted under SOFT policy — it can approve an already-clean
+            # consulted under SOFT policy â€” it can approve an already-clean
             # build; it can never reach this branch otherwise.
             if cfg.gates.get("merge", GateConfig()).policy == GatePolicy.SOFT:
                 verdict: MergeVerdict = (
@@ -1853,7 +1466,7 @@ class FeatureWorkflow(
                 **ACT,
             )
 
-        # 6. DEPLOY gate → DeploymentWorkflow child (E-67/FR-1104)
+        # 6. DEPLOY gate â†’ DeploymentWorkflow child (E-67/FR-1104)
         _started = workflow.now()
         gate = await self._gate("deploy", cfg.gate_settings())
         _ended = workflow.now()

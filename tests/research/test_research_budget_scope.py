@@ -5,8 +5,8 @@ import json
 
 import pytest
 
-from sdlc.research.budget_store import budget_path, charge_persisted, charge_scoped
-from sdlc.research.deps import BudgetExceeded, ResearchDeps
+from sdlc.stages.research.budget_store import budget_path, charge_persisted, charge_scoped
+from sdlc.stages.research.deps import BudgetExceeded, ResearchDeps
 
 
 def _deps(run_id: str = "r1", max_fetches: int = 2) -> ResearchDeps:
@@ -94,12 +94,12 @@ async def test_charge_scoped_with_run_scope_enforces_count_at_full_allowance():
 async def test_research_subquestion_charges_its_own_scope():
     # The per-sub-question allowance is only real if the toolset charges the
     # sub-question's scope rather than the shared run counter.
-    from sdlc.research.stage import SubQuestionInput
-    from sdlc.research.stage import _research_subquestion_impl as research_subquestion
     from sdlc.stages.research.models import (
         ResearchBrief,
         SubQuestion,
     )
+    from sdlc.stages.research.stage import SubQuestionInput
+    from sdlc.stages.research.stage import _research_subquestion_impl as research_subquestion
 
     inp = SubQuestionInput(
         sub_question=SubQuestion(id="sq-7", question="q"),

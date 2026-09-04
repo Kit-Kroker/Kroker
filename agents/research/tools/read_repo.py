@@ -3,7 +3,7 @@ from pathlib import Path
 
 from pydantic_ai import RunContext
 
-from sdlc.research.deps import ResearchDeps
+from sdlc.stages.research.deps import ResearchDeps
 
 
 async def read_repo(ctx: RunContext[ResearchDeps], path: str) -> str:

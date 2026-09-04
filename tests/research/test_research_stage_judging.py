@@ -3,11 +3,11 @@ contract score."""
 
 import inspect
 
-from sdlc.workflows import feature
+from sdlc.stages import research
 
 
 def test_research_brief_is_judged():
-    src = inspect.getsource(feature.FeatureWorkflow._pipeline)
+    src = inspect.getsource(research.step)
     assert '"research"' in src
     assert "brief.model_dump_json()" in src
     assert "quality_score=_r_quality.score" in src
@@ -25,7 +25,7 @@ def test_research_record_no_longer_hardcodes_contract_judge():
     judged). So locate the SUCCESS record by its real-score marker rather
     than by position -- a position-based rindex silently targets whichever
     record happens to be last."""
-    src = inspect.getsource(feature.FeatureWorkflow._pipeline)
+    src = inspect.getsource(research.step)
     idx = src.index("quality_score=_r_quality.score")
     block = src[max(0, idx - 350) : idx + 50]
     assert "quality_score=None" not in block

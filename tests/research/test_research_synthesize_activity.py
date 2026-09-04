@@ -12,8 +12,6 @@ from pydantic_ai.models.test import TestModel
 from sdlc.core.models import (
     RoleUsage,
 )
-from sdlc.research.stage import SynthesizeInput, _numbered_sources
-from sdlc.research.stage import _synthesize_brief_impl as synthesize_brief
 from sdlc.stages.research.models import (
     ConsultedSource,
     GroundedFinding,
@@ -21,6 +19,8 @@ from sdlc.stages.research.models import (
     SubQuestion,
     SubQuestionFinding,
 )
+from sdlc.stages.research.stage import SynthesizeInput, _numbered_sources
+from sdlc.stages.research.stage import _synthesize_brief_impl as synthesize_brief
 
 
 def _finding(sq_id: str, brief: ResearchBrief) -> SubQuestionFinding:
@@ -149,7 +149,7 @@ def test_synthesis_confidence_is_bound_to_the_unit_interval():
     # value is rejected here, not silently landed in the brief.
     from pydantic import ValidationError
 
-    from sdlc.research.stage import _SynthesisOutput
+    from sdlc.stages.research.stage import _SynthesisOutput
 
     with pytest.raises(ValidationError):
         _SynthesisOutput(confidence=42.0)

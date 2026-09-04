@@ -6,8 +6,8 @@ import pytest
 from pydantic_ai import RunContext
 
 from agents.research.exa_wrapper import get_wrapped_exa_search
-from sdlc.research.budget_store import budget_path
-from sdlc.research.deps import BudgetExceeded, ResearchDeps
+from sdlc.stages.research.budget_store import budget_path
+from sdlc.stages.research.deps import BudgetExceeded, ResearchDeps
 
 
 def _ctx(deps: ResearchDeps) -> RunContext:

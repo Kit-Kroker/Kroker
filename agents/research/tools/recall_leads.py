@@ -1,7 +1,7 @@
 from pydantic_ai import RunContext
 
 from sdlc.memory.activities import _backend
-from sdlc.research.deps import ResearchDeps
+from sdlc.stages.research.deps import ResearchDeps
 
 
 async def recall_leads(

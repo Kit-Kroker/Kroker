@@ -18,10 +18,12 @@ from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.usage import UsageLimits
 from temporalio import activity
 
-from ..core.models import (
+from ...core.models import (
     RoleUsage,
 )
-from ..stages.research.models import (
+from .deps import BudgetExceeded, ResearchDeps
+from .merge import merge_briefs
+from .models import (
     Contradiction,
     Gap,
     ResearchBrief,
@@ -29,8 +31,6 @@ from ..stages.research.models import (
     SubQuestion,
     SubQuestionFinding,
 )
-from .deps import BudgetExceeded, ResearchDeps
-from .merge import merge_briefs
 from .prompts import PLAN_SYSTEM, SYNTHESIS_SYSTEM, sub_question_prompt
 
 

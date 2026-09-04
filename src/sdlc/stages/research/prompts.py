@@ -12,6 +12,10 @@ and NEVER interpolate the question into the prefix.
 
 from __future__ import annotations
 
+import hashlib
+
+from ...core.models import PipelineConfig
+
 SUB_QUESTION_PREFIX = """\
 You are a research analyst working on one narrow sub-question that forms part \
 of a larger investigation. Another analyst will combine your answer with \
@@ -120,3 +124,25 @@ def sub_question_prompt(question: str) -> str:
     the prefix -- that would make every call's prefix unique and defeat the
     cache entirely."""
     return f"{SUB_QUESTION_PREFIX}\n---\n\nYour sub-question:\n\n{question}\n"
+
+
+"""Research stage prompt generation and digest (spec A §5)."""
+
+
+def prompt_digest(cfg: PipelineConfig) -> str:
+    """Salt for the memoization key (spec A §3.5)."""
+    h = hashlib.sha256()
+    h.update(b"research_prompts_v1")
+    rc = cfg.roles.get("research")
+    if rc and rc.model:
+        h.update(rc.model.encode("utf-8"))
+    return f":research:{h.hexdigest()[:16]}"
+
+
+__all__ = [
+    "PLAN_SYSTEM",
+    "SUB_QUESTION_PREFIX",
+    "SYNTHESIS_SYSTEM",
+    "prompt_digest",
+    "sub_question_prompt",
+]

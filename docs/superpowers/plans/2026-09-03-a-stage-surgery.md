@@ -1729,7 +1729,7 @@ git commit -m "refactor(<stage>): move the <stage> stage into a vertical slice"
 - [x] **Step 7: Write `analyze.md` and `AGENTS.md` from templates**
 - [x] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
 - [x] **Step 9: Run full verification suite**
-- [ ] **Step 10: Commit `refactor(analyze): move the analyze stage into a vertical slice`**
+- [x] **Step 10: Commit `refactor(analyze): move the analyze stage into a vertical slice`**
 
 ### Task 20.4: Stage `research` (Rank 4)
 
@@ -1745,15 +1745,15 @@ git commit -m "refactor(<stage>): move the <stage> stage into a vertical slice"
 - Uncovered needs: None (orchestrator handles serial budget check; agents passed as parameters).
 - Enum sites: None.
 
-- [ ] **Step 1: Write failing contract test** (`tests/research/test_research_slice_contract.py`)
-- [ ] **Step 2: Run test to verify it fails**
-- [ ] **Step 3: Lift the inline block into `step.py`** (`feature.py:1328-1420`, `:2563-2770`)
-- [ ] **Step 4: Move research activities to `activities.py` and create `prompts.py` with `prompt_digest(cfg)`**
-- [ ] **Step 5: Register in `STAGE_MODULES` and update `worker.py`**
-- [ ] **Step 6: Move tests** (23 files `tests/test_research_*.py` -> `tests/research/`)
-- [ ] **Step 7: Write `research.md` and `AGENTS.md` from templates**
-- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
-- [ ] **Step 9: Run full verification suite**
+- [x] **Step 1: Write failing contract test** (`tests/research/test_research_slice_contract.py`)
+- [x] **Step 2: Run test to verify it fails**
+- [x] **Step 3: Lift the inline block into `step.py`** (`feature.py:1328-1420`, `:2563-2770`)
+- [x] **Step 4: Move research activities to `activities.py` and create `prompts.py` with `prompt_digest(cfg)`**
+- [x] **Step 5: Register in `STAGE_MODULES` and update `worker.py`**
+- [x] **Step 6: Move tests** (23 files `tests/test_research_*.py` -> `tests/research/`)
+- [x] **Step 7: Write `research.md` and `AGENTS.md` from templates**
+- [x] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [x] **Step 9: Run full verification suite**
 - [ ] **Step 10: Commit `refactor(research): move the research stage into a vertical slice`**
 
 ### Task 20.5: Stage `review` (Rank 5)

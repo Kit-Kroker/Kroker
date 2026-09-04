@@ -3,7 +3,7 @@ enough to cache. Under ~512 tokens a prefix is silently NOT cached -- no
 error, the counter just stays at zero -- so this is guarded by a test rather
 than a comment."""
 
-from sdlc.research.prompts import (
+from sdlc.stages.research.prompts import (
     PLAN_SYSTEM,
     SUB_QUESTION_PREFIX,
     SYNTHESIS_SYSTEM,

@@ -51,7 +51,7 @@ def test_research_subquery_shares_the_budget_object():
     counter."""
     import inspect
 
-    from sdlc.research import toolset
+    from sdlc.stages.research import toolset
 
     sig = inspect.signature(toolset.research_subquery)
     assert list(sig.parameters)[0] == "deps"  # the shared ResearchDeps
@@ -73,7 +73,7 @@ async def test_research_subquery_degrades_instead_of_raising_on_budget_exceeded(
     research_subquery must catch it and degrade to a ResearchBrief with the
     shortfall recorded in gaps, never let it propagate."""
     import sdlc.agents.roles as roles
-    from sdlc.research.deps import BudgetExceeded, ResearchDeps
+    from sdlc.stages.research.deps import BudgetExceeded, ResearchDeps
 
     class _ExhaustedAgent:
         async def run(self, question, deps):
@@ -81,7 +81,7 @@ async def test_research_subquery_degrades_instead_of_raising_on_budget_exceeded(
 
     monkeypatch.setattr(roles, "t_research", _ExhaustedAgent())
 
-    from sdlc.research import toolset
+    from sdlc.stages.research import toolset
 
     deps = ResearchDeps(
         run_id="r1", provider="fake", max_searches=5, max_fetches=10, max_cost_usd=1.0

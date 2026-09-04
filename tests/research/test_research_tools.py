@@ -4,9 +4,9 @@ from pathlib import Path
 import pytest
 from pydantic_ai import RunContext
 
-from sdlc.research.deps import ResearchDeps
+from sdlc.stages.research.deps import ResearchDeps
 
-AGENTS_TOOLS = Path(__file__).resolve().parents[1] / "agents" / "research" / "tools"
+AGENTS_TOOLS = Path(__file__).resolve().parents[2] / "agents" / "research" / "tools"
 
 
 def _load_tool(name: str):
@@ -24,7 +24,7 @@ def _ctx(deps: ResearchDeps) -> RunContext:
 
 @pytest.fixture
 def deps(monkeypatch, tmp_path):
-    corpus = Path(__file__).resolve().parent / "fakes" / "research_corpus"
+    corpus = Path(__file__).resolve().parent.parent / "fakes" / "research_corpus"
     monkeypatch.setenv("SDLC_RESEARCH_FAKE_CORPUS", str(corpus))
     monkeypatch.setenv("SDLC_RUNS_ROOT", str(tmp_path))
     return ResearchDeps(

@@ -12,8 +12,8 @@ import time
 
 import pytest
 
-from sdlc.research.budget_store import budget_path, charge_persisted
-from sdlc.research.deps import BudgetExceeded, ResearchDeps
+from sdlc.stages.research.budget_store import budget_path, charge_persisted
+from sdlc.stages.research.deps import BudgetExceeded, ResearchDeps
 
 
 def _deps(run_id: str = "r1", max_fetches: int = 2) -> ResearchDeps:

@@ -149,7 +149,7 @@ documentation (`src/`, `tests/`, `scripts/`, `interfaces/`, `agents/`,
 |---|---|---|
 | intake | `src/sdlc/stages/intake/` | migrated |
 | context (brownfield) | `src/sdlc/workflows/feature.py` | types moved, step pending |
-| research | `src/sdlc/workflows/feature.py` | types moved, step pending |
+| research | `src/sdlc/stages/research/` | migrated |
 | clarify | `src/sdlc/stages/clarify/` | migrated |
 | architecture | `src/sdlc/workflows/feature.py` | types moved, step pending |
 | plan | `src/sdlc/workflows/feature.py` | types moved, step pending |

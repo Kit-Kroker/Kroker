@@ -12,7 +12,7 @@ from sdlc.stages.research.models import (
     SubQuestion,
     SubQuestionFinding,
 )
-from sdlc.workflows.feature import (
+from sdlc.stages.research.step import (
     RESEARCH_PLAN_ACT,
     RESEARCH_SQ_ACT,
     RESEARCH_SYNTH_ACT,
@@ -54,7 +54,7 @@ def test_sub_question_activity_config_satisfies_the_heartbeat_invariant():
     # interval < heartbeat_timeout < start_to_close. Violating it either times
     # out a healthy activity or leaves a dead worker undetected until
     # start_to_close.
-    from sdlc.research.stage import HEARTBEAT_INTERVAL_SECONDS
+    from sdlc.stages.research.stage import HEARTBEAT_INTERVAL_SECONDS
 
     hb = RESEARCH_SQ_ACT["heartbeat_timeout"].total_seconds()
     stc = RESEARCH_SQ_ACT["start_to_close_timeout"].total_seconds()

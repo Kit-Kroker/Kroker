@@ -3,9 +3,9 @@ import logging
 
 from pydantic_ai import RunContext
 
-from sdlc.research.budget_store import charge_scoped
-from sdlc.research.deps import ResearchDeps
-from sdlc.research.verify import write_page
+from sdlc.stages.research.budget_store import charge_scoped
+from sdlc.stages.research.deps import ResearchDeps
+from sdlc.stages.research.verify import write_page
 
 logger = logging.getLogger(__name__)
 

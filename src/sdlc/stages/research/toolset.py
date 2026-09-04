@@ -6,11 +6,11 @@ from __future__ import annotations
 
 from typing import cast
 
-from ..stages.research.models import (
+from .deps import BudgetExceeded, ResearchDeps
+from .models import (
     Gap,
     ResearchBrief,
 )
-from .deps import BudgetExceeded, ResearchDeps
 
 
 async def research_subquery(deps: ResearchDeps, question: str) -> ResearchBrief:
