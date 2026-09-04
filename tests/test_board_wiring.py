@@ -3,24 +3,26 @@
 
 import inspect
 
-from sdlc.workflows import feature
+from sdlc.workflows import board_host, feature
 
 
 def test_board_activity_options_have_retries():
     """Board writes are NOT best-effort: agents read tasks from the board,
     so a failed write must retry rather than be swallowed like EXPORT_ACT."""
-    assert feature.BOARD_ACT["retry_policy"].maximum_attempts >= 3
+    assert board_host.BOARD_ACT["retry_policy"].maximum_attempts >= 3
 
 
 def test_workflow_imports_board_activities():
-    src = inspect.getsource(feature)
+    # Spec A "stage surgery": the board wiring moved off feature.py onto the
+    # BoardHost mixin (composed into FeatureWorkflow via its MRO).
+    src = inspect.getsource(board_host)
     for name in (
         "publish_artifact_version",
         "sync_plan_tasks",
         "set_task_authoritative",
         "attach_task_evidence",
     ):
-        assert name in src, f"{name} not wired into feature.py"
+        assert name in src, f"{name} not wired into board_host.py"
 
 
 def test_every_project_artifact_key_is_published():
@@ -30,7 +32,8 @@ def test_every_project_artifact_key_is_published():
 
 
 def test_rejected_gate_publishes_rejected_status():
-    src = inspect.getsource(feature)
+    # The publish (and its REJECTED status) lives in BoardHost._board_publish.
+    src = inspect.getsource(board_host)
     assert "ArtifactStatus.REJECTED" in src, "a rejected design must still be recorded as history"
 
 

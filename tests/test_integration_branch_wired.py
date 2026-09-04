@@ -9,6 +9,9 @@ import pathlib
 import pytest
 
 SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+# Spec A "stage surgery": _merge_task and its merge_into_integration call
+# moved off feature.py onto the TaskHost mixin (in the workflow's MRO).
+TASK_HOST = pathlib.Path("src/sdlc/workflows/task_host.py")
 ACT = pathlib.Path("src/sdlc/activities.py")
 
 
@@ -18,8 +21,18 @@ def feature_src():
 
 
 @pytest.fixture(scope="module")
+def task_host_src():
+    return TASK_HOST.read_text(encoding="utf-8")
+
+
+@pytest.fixture(scope="module")
 def feature_tree(feature_src):
     return ast.parse(feature_src)
+
+
+@pytest.fixture(scope="module")
+def task_host_tree(task_host_src):
+    return ast.parse(task_host_src)
 
 
 def _fn(tree, name):
@@ -35,10 +48,10 @@ def test_workflow_calls_setup_integration_branch(feature_src):
     )
 
 
-def test_workflow_calls_merge_into_integration(feature_src):
-    assert "merge_into_integration" in feature_src, (
-        "on task completion, run_one must merge the task branch back into "
-        "the integration branch (ADR-14)"
+def test_workflow_calls_merge_into_integration(task_host_src):
+    assert "merge_into_integration" in task_host_src, (
+        "on task completion, the workflow must merge the task branch back "
+        "into the integration branch via TaskHost._merge_task (ADR-14)"
     )
 
 
@@ -99,19 +112,19 @@ def test_run_one_does_not_merge(feature_tree, feature_src):
     )
 
 
-def test_merge_task_helper_exists(feature_tree):
+def test_merge_task_helper_exists(task_host_tree):
     """Resolution B: a _merge_task helper carries the merge + conflict
     check + head update, called from both SERIAL and wave paths."""
-    methods = {n.name for n in ast.walk(feature_tree) if isinstance(n, ast.AsyncFunctionDef)}
+    methods = {n.name for n in ast.walk(task_host_tree) if isinstance(n, ast.AsyncFunctionDef)}
     assert "_merge_task" in methods, (
         "_merge_task helper missing — both SERIAL and wave paths must "
         "funnel merges through it (Resolution B)"
     )
 
 
-def test_merge_task_helper_calls_merge_activity(feature_tree, feature_src):
-    helper = _fn(feature_tree, "_merge_task")
-    body = ast.get_source_segment(feature_src, helper)
+def test_merge_task_helper_calls_merge_activity(task_host_tree, task_host_src):
+    helper = _fn(task_host_tree, "_merge_task")
+    body = ast.get_source_segment(task_host_src, helper)
     assert body is not None and "merge_into_integration" in body, (
         "_merge_task must call the merge_into_integration activity"
     )

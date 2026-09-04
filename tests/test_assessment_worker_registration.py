@@ -16,10 +16,14 @@ import re
 def _registered_activity_names() -> set[str]:
     from sdlc import worker
 
-    src = inspect.getsource(worker)
-    m = re.search(r"activities=\[(.*?)^\s*\],", src, re.S | re.M)
-    assert m, "could not find the activities=[...] literal in worker.py"
-    return set(re.findall(r"\w+", m.group(1)))
+    # Spec A "stage surgery": main() no longer holds an inline activities
+    # literal; the names live in the list returned by get_worker_activities().
+    # The two splats (*stage_activities, *agent_activities) compose at runtime
+    # and are ignored; every flat-listed name must be found.
+    src = inspect.getsource(worker.get_worker_activities)
+    m = re.search(r"return \[(.*?)^\s*\]", src, re.S | re.M)
+    assert m, "could not find the return [...] list literal in get_worker_activities"
+    return set(re.findall(r"\w+", m.group(1))) - {"stage_activities", "agent_activities"}
 
 
 def _called_activity_names() -> set[str]:
@@ -42,6 +46,6 @@ def test_every_activity_the_assessment_workflow_calls_is_registered():
     missing = sorted(_called_activity_names() - _registered_activity_names())
     assert not missing, (
         f"{missing} are called by AssessmentWorkflow but absent from "
-        f"worker.py's activities list -- on a real worker each would fail "
-        f"to start and degrade to its fallback"
+        f"worker.py's get_worker_activities list -- on a real worker each "
+        f"would fail to start and degrade to its fallback"
     )

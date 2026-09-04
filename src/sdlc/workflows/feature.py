@@ -8,7 +8,6 @@ signal waits with a per-gate policy (hard / soft / off).
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
 from datetime import datetime, timedelta
 
 from temporalio import workflow
@@ -58,17 +57,12 @@ with workflow.unsafe.imports_passed_through():
     from ..artifacts.retention import RetentionInput, apply_session_retention, keep_full_transcripts
     from ..benchmarks.models import BenchmarkOutcome
     from ..board.models import TaskStatus
-    from ..clarify.merge import merge_clarification
-    from ..clarify.models import ProbeResult
-    from ..clarify.prompts import probe_prompt, probe_prompt_digest
-    from ..clarify.routing import grounded_dimensions, live_dimensions
     from ..context.classify import classify
     from ..context.models import CodebaseMap
     from ..context.project import map_digest, project
     from ..context.render import render_for_prompt
     from ..core.context import StageContext, StageServices
     from ..core.models import (
-        ClarificationDimension,
         ExecutionMode,
         GateConfig,
         GateDecision,
@@ -134,7 +128,6 @@ with workflow.unsafe.imports_passed_through():
     from ..pricing import PriceUsageInput, price_usage
     from ..prompts import (
         analyst_prompt,
-        clarify_prompt,
         merge_verdict_prompt,
         planner_prompt,
     )
@@ -152,6 +145,7 @@ with workflow.unsafe.imports_passed_through():
         brief_digest,
         verify_brief_activity,
     )
+    from ..stages import clarify
     from .benchmark_host import BenchmarkHost
     from .board_host import BoardHost
     from .deployment import DeploymentInput, DeploymentWorkflow
@@ -224,103 +218,6 @@ RESEARCH_SQ_ACT = workflow.ActivityConfig(
 RESEARCH_SYNTH_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=10), retry_policy=RetryPolicy(maximum_attempts=3)
 )
-
-
-def _probe_results_from(
-    dimensions: Sequence[ClarificationDimension],
-    results: Sequence[ProbeResult | BaseException],
-) -> list[ProbeResult]:
-    """Pair each probed dimension with its result, discarding the dead ones.
-
-    An exception means the probe never produced an answer, so the dimension
-    is ABSENT from the output -- and therefore absent from dimensions_probed,
-    which is what distinguishes "never ran" from "ran and abstained".
-
-    The asked-for dimension overrides whatever the model reported: the burst
-    knows which probe it dispatched, and a mislabelled result would attribute
-    questions to a dimension that never ran.
-    """
-    out: list[ProbeResult] = []
-    for dim, res in zip(dimensions, results, strict=False):
-        if isinstance(res, BaseException):
-            continue
-        out.append(res if res.dimension is dim else res.model_copy(update={"dimension": dim}))
-    return out
-
-
-def _clarify_memo_extra(cfg: PipelineConfig, codebase_map: CodebaseMap | None) -> str:
-    """The E-85 terms appended to the clarify stage's memo input.
-
-    Empty when the fan-out is off, so a flag-off run keys exactly as it did
-    pre-E-85 and its existing memos keep hitting. That emptiness is the
-    whole "the default pipeline is byte-identical to today" guarantee, so it
-    lives in a helper a test can pin rather than inline in the stage.
-
-    On, three terms, each covering something the base key cannot see:
-      - the probe-prompt digest, or editing a probe serves a stale
-        clarification silently;
-      - the codebase-map digest, or a clarification grounded in a tree
-        survives that tree changing;
-      - the question cap, which decides which questions reach a human and
-        which land on `dropped`. Spec section 10 names it as the first knob
-        the benchmark tunes, so a memo made under a different cap is a
-        differently shaped artifact, not the same one.
-    """
-    if not cfg.clarify_probes_enabled:
-        return ""
-    digest = map_digest(codebase_map) if codebase_map is not None else "none"
-    return f"|e85:{probe_prompt_digest()}|map:{digest}|cap:{cfg.clarify_question_cap}"
-
-
-async def _clarify_fanout(
-    run_role,
-    *,
-    route_agent,
-    probe_agent,
-    route_prompt: str,
-    idea_json: str,
-    grounding: str,
-    mode: ProjectMode,
-    cap: int,
-):
-    """The E-85 clarify orchestration: route, fan out, merge.
-
-    Module-level and collaborator-injected so the orchestration is testable
-    without Temporal: `run_role(agent, prompt)` is the caller's already-bound
-    model-egress point (self._run_role with cfg / role / model / `into`
-    applied) and returns an AgentRunResult.
-
-    `route_prompt` carries NO map content. ROUTE_SCOPE tells the supervisor
-    it cannot read the codebase; handing it one anyway contradicts its own
-    instructions. It learns greenfield-vs-brownfield from idea.mode inside
-    idea_json, and live_dimensions enforces the mode narrowing in code
-    regardless of what the model asks for.
-    """
-    route = (await run_role(route_agent, route_prompt)).output
-    dims = live_dimensions(route.live_dimensions, mode)
-    reqs_json = route.model_dump_json()
-
-    async def _probe(d):
-        return (
-            await run_role(
-                probe_agent,
-                probe_prompt(
-                    d, idea_json=idea_json, requirements_json=reqs_json, grounding=grounding
-                ),
-            )
-        ).output
-
-    # return_exceptions=True IS the degrade-alone rule here: a probe that
-    # times out, loses its worker or exhausts its BOUNDED retries (see
-    # CLARIFY_FANOUT_ACTIVITY_CONFIG -- without a maximum_attempts Temporal
-    # would retry forever and this gather would never return) raises inside
-    # its own coroutine and gather captures it, leaving every sibling's
-    # result intact. _probe_results_from turns each captured exception into
-    # a dropped dimension.
-    results = await asyncio.gather(*[_probe(d) for d in dims], return_exceptions=True)
-    return merge_clarification(
-        route, _probe_results_from(dims, results), cap=cap, grounded=grounded_dimensions(mode)
-    )
 
 
 def _requirements_for_downstream(reqs: ClarifiedRequirements) -> str:
@@ -1419,143 +1316,16 @@ class FeatureWorkflow(
         await self._check_budget(cfg)
 
         # 1. CLARIFY — open questions answered by human via signals
-        self._stage("clarifying", "clarify")
-        _started = workflow.now()
-        snapshot = await self._recall(
-            cfg,
-            cfg.memory.project_bank,
-            query=f"clarify:{idea.title}",
-            filters={"stage": "clarify"},
-        )
-
-        clarify_spend = RoleUsage(role="clarify", model=resolve_role_model(cfg, "clarify"))
-
-        async def _run_clarify_single():
-            """Pre-E-85 path: one call, one prompt. Byte-identical to before."""
-            return (
-                await self._run_role(
-                    cfg,
-                    "clarify",
-                    resolve_role_model(cfg, "clarify"),
-                    t_clarify,
-                    clarify_prompt(idea.model_dump_json(), snapshot.items),
-                    into=clarify_spend,
-                )
-            ).output
-
-        async def _run_clarify_fanout():
-            """E-85: supervisor routes and asks C1/C2, probes fan out per
-            dimension, pure merge ranks and caps.
-
-            Every call still leaves through _run_role -- _clarify_fanout
-            takes the already-bound egress as its collaborator, so E-33's
-            accounting covers the route call and all N probes.
-
-            The probes get render_for_prompt's BOUNDED rendering, never the
-            raw map JSON: fan-out multiplies input cost by N, which makes
-            this the largest cost lever in the stage, and the architect
-            stage already reads the map the same way.
-            """
-
-            async def _egress(agent, prompt):
-                return await self._run_role(
-                    cfg,
-                    "clarify",
-                    resolve_role_model(cfg, "clarify"),
-                    agent,
-                    prompt,
-                    into=clarify_spend,
-                )
-
-            return await _clarify_fanout(
-                _egress,
-                route_agent=t_clarify_route,
-                probe_agent=t_clarify_probe,
-                route_prompt=clarify_prompt(idea.model_dump_json(), snapshot.items),
-                idea_json=idea.model_dump_json(),
-                grounding=(
-                    render_for_prompt(self._codebase_map) if self._codebase_map is not None else ""
-                ),
-                mode=idea.mode,
-                cap=cfg.clarify_question_cap,
-            )
-
-        # E-85: the fan-out's extra memo terms (probe prompts, tree, cap).
-        # Empty with the flag off, so flag-off memos keep hitting -- the
-        # rationale for each term lives on _clarify_memo_extra.
-        _clarify_key_extra = _clarify_memo_extra(cfg, self._codebase_map)
-
-        reqs, _ = await self._cached_stage(
-            cfg,
-            "clarify",
-            idea.model_dump_json() + brief_digest_val + _clarify_key_extra,
-            ClarifiedRequirements,
-            _run_clarify_fanout if cfg.clarify_probes_enabled else _run_clarify_single,
-        )
-        if reqs.open_questions:
-            clarify_policy = cfg.gates.get("clarify", GateConfig()).policy
-            if clarify_policy == GatePolicy.OFF:
-                for q in reqs.open_questions:
-                    self._emit(
-                        RunEventKind.CLARIFICATION_ASKED,
-                        stage="clarify",
-                        question_id=q.id,
-                        question=q.question,
-                        # data is dict[str, str] -- "" not None, or the
-                        # RunEvent fails validation on the flag-off path.
-                        dimension=q.dimension.value if q.dimension else "",
-                    )
-                # unattended run (e.g. a benchmark cell) — no human is
-                # present to answer; fall back to the clarifier's own
-                # suggested_answer rather than blocking forever.
-                for q in reqs.open_questions:
-                    q.answer = q.suggested_answer
-                for q in reqs.open_questions:
-                    # "human" preserves HEAD semantics: a client that signaled
-                    # answer_question before this point wins even on the
-                    # unattended path (cross-host read; see AGENTS.md).
-                    answered = (
-                        "human"
-                        if q.id in self._question_answers
-                        else "suggested"
-                        if q.answer is not None
-                        else "unanswered"
-                    )
-                    self._emit(
-                        RunEventKind.CLARIFICATION_ANSWERED,
-                        stage="clarify",
-                        question_id=q.id,
-                        answered_by=answered,
-                    )
-            else:
-                answers = await self.ask_and_wait(
-                    reqs.open_questions,
-                    stage="clarify",
-                    timeout_hours=cfg.gate_timeout_hours,
-                )
-                for q in reqs.open_questions:
-                    q.answer = answers.get(q.id)
-        _ended = workflow.now()
-        _quality = await self._judge(
-            cfg,
-            reqs.model_dump_json(),
-            "clarifier",
-            author_model=resolve_role_model(cfg, "clarify"),
-        )
-        await self._record(
-            cfg,
-            self._stage_record(
-                cfg,
-                stage="clarify",
-                role="clarify",
-                started=_started,
-                ended=_ended,
-                quality_score=_quality.score,
-                judge=_quality.judge,
-                outcome=BenchmarkOutcome.PASS,
-                model=resolve_role_model(cfg, "clarify"),
-                spend=clarify_spend,
-            ),
+        reqs = await clarify.step(
+            self._ctx,
+            cfg=cfg,
+            idea=idea,
+            codebase_map=self._codebase_map,
+            brief_digest=brief_digest_val,
+            clarify_agent=t_clarify,
+            route_agent=t_clarify_route,
+            probe_agent=t_clarify_probe,
+            clarify_model=resolve_role_model(cfg, "clarify"),
         )
         await self._board_publish(cfg, "requirements", reqs.model_dump_json())
         await self._retain(

@@ -8,7 +8,6 @@ Consumes: ReportHost._emit via the MRO.
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import cast
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
@@ -22,17 +21,14 @@ with workflow.unsafe.imports_passed_through():
     from ..benchmarks.models import (
         BenchmarkOutcome,
         BenchmarkRecord,
-        BenchmarkScope,
-        JudgeKind,
         QualityScore,
-        SpeedBag,
         WasteBag,
     )
+    from ..benchmarks.record_builder import stage_record
     from ..benchmarks.recorder import record_benchmark
     from ..core.models import PipelineConfig, RoleUsage
     from ..models import PlanDrift
     from ..observability.trace import RunEventKind
-    from ..observability.usage import cost_bag_from_spend
 
 RECORD_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=5)
@@ -71,30 +67,27 @@ class BenchmarkHost:
         plan_drift: PlanDrift | None = None,
         error: str | None = None,
     ) -> BenchmarkRecord:
-        scope = BenchmarkScope.TASK_ATTEMPT if task_id is not None else BenchmarkScope.STAGE
-        return BenchmarkRecord(
-            run_id=workflow.info().workflow_id,
-            bench_run_id=cfg.benchmark.bench_run_id or "_unknown",
-            case_id=cfg.benchmark.case_id or "_unknown",
-            scope=scope,
+        return stage_record(
+            cfg,
             stage=stage,
-            task_id=task_id,
-            attempt=attempt,
             role=role,
+            started=started,
+            ended=ended,
+            quality_score=quality_score,
+            judge=judge,
+            outcome=outcome,
+            model=model,
             harness=harness,
             lead_harness=lead_harness,
-            model=model,
-            prompt_sha="",
-            quality=QualityScore(score=quality_score, judge=cast(JudgeKind, judge)),
-            cost=cost_bag_from_spend(spend, cost_usd),
-            speed=SpeedBag(
-                wall_clock_s=(ended - started).total_seconds(), started_at=started, ended_at=ended
-            ),
+            cost_usd=cost_usd,
+            spend=spend,
+            fix_attempts=fix_attempts,
+            task_id=task_id,
+            attempt=attempt,
             waste=waste,
             plan_drift=plan_drift,
-            outcome=outcome,
-            fix_attempts=fix_attempts,
             error=error,
+            run_id=workflow.info().workflow_id,
         )
 
     async def _record(self, cfg: PipelineConfig, record: BenchmarkRecord) -> None:

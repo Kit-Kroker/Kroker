@@ -11,7 +11,6 @@ from dataclasses import dataclass
 import pytest
 from test_factory_purity import FEATURE_PY, _load_class, _methods
 
-from sdlc.clarify.models import ClarifyRoute, ProbeResult
 from sdlc.core.models import (
     ClarificationDimension as CD,
 )
@@ -22,9 +21,12 @@ from sdlc.models import (
     ClarifiedRequirements,
     OpenQuestion,
 )
-from sdlc.workflows.feature import (
+from sdlc.stages.clarify.models import ClarifyRoute, ProbeResult
+from sdlc.stages.clarify.step import (
     _clarify_fanout,
     _probe_results_from,
+)
+from sdlc.workflows.feature import (
     _requirements_for_downstream,
 )
 
@@ -57,6 +59,7 @@ def test_an_exception_drops_that_dimension_rather_than_raising():
     assert out == []
 
 
+@pytest.mark.clause("CLARIFY-1.4")
 def test_one_failure_does_not_discard_its_siblings():
     out = _probe_results_from([C3, C4], [RuntimeError("boom"), _ok(C4)])
     assert [p.dimension for p in out] == [C4]
@@ -360,6 +363,8 @@ def test_the_architect_reads_the_downstream_view_not_the_raw_artifact():
     """AST, because the leak was a `reqs.model_dump_json()` in the
     architect's prompt AND in its cache key. Nothing else in the suite
     inspects those two expressions."""
+    import pathlib
+
     tree = ast.parse(FEATURE_PY.read_text(encoding="utf-8"), filename=str(FEATURE_PY))
     src = ast.unparse(_methods(_load_class(tree, "FeatureWorkflow"))["_pipeline"])
     assert "reqs_for_architect = _requirements_for_downstream(reqs)" in src
@@ -369,5 +374,6 @@ def test_the_architect_reads_the_downstream_view_not_the_raw_artifact():
     assert "cache_key = reqs_for_architect +" in src
     # The clarify stage's own uses still read the FULL artifact: `dropped`
     # is the measurement record and must reach disk and the board.
-    assert "self._judge(cfg, reqs.model_dump_json(), 'clarifier'" in src
+    step_src = pathlib.Path("src/sdlc/stages/clarify/step.py").read_text(encoding="utf-8")
+    assert "ctx.judge(" in step_src and "reqs.model_dump_json()" in step_src
     assert "self._board_publish(cfg, 'requirements', reqs.model_dump_json())" in src

@@ -17,9 +17,12 @@ therefore invalidates exactly the runs it should.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Sequence
+from typing import Any
 
-from ..core.models import (
+from ...core.models import (
     ClarificationDimension,
+    PipelineConfig,
 )
 
 ROUTE_SCOPE = """\
@@ -295,3 +298,41 @@ def probe_prompt_digest() -> str:
         h.update(dim.value.encode())
         h.update(SCOPES[dim].encode())
     return h.hexdigest()
+
+
+def prompt_digest(cfg: PipelineConfig) -> str:
+    """Salt for the memoization key (spec A §3.5).
+
+    PROMPT_SHAS hashes agents/<role>/instructions.md only, so a prompt living
+    here is invisible to content_key and an edit would serve a stale memo.
+    E-85 already patched this locally for the probes (_clarify_memo_extra);
+    this generalises it to every slice.
+
+    Preserves E-85's flag-off guarantee: with the fan-out disabled the extra
+    terms are empty, so a flag-off run keys exactly as it did before and its
+    existing memos keep hitting.
+    """
+    if not cfg.clarify_probes_enabled:
+        return ""
+    return f":e85:{probe_prompt_digest()}"
+
+
+def _clarify_memo_extra(cfg: PipelineConfig, codebase_map: Any = None) -> str:
+    """The E-85 terms appended to the clarify stage's memo input.
+    Kept for backwards compatibility and test verification."""
+    if not cfg.clarify_probes_enabled:
+        return ""
+    from ...context.project import map_digest
+
+    digest = map_digest(codebase_map) if codebase_map is not None else "none"
+    return f"|e85:{probe_prompt_digest()}|map:{digest}|cap:{cfg.clarify_question_cap}"
+
+
+def _memory_block(items: Sequence[str]) -> str:
+    if not items:
+        return ""
+    return "\nRelevant memory:\n- " + "\n- ".join(items)
+
+
+def clarify_prompt(idea_json: str, memory: Sequence[str]) -> str:
+    return idea_json + _memory_block(memory)

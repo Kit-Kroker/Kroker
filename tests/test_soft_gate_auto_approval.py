@@ -51,7 +51,10 @@ def test_unconfigured_gate_defaults_to_hard_and_falls_through():
 
 import pathlib
 
-SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+# _revisable_stage lives on RoleHost (spec A Task 7); the merge soft path
+# stays in feature.py until the merge stage migrates.
+SRC = pathlib.Path("src/sdlc/workflows/role_host.py")
+MERGE_SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 
 
 def test_revisable_stage_passes_auto_decision():
@@ -67,7 +70,7 @@ def test_revisable_stage_passes_auto_decision():
 
 
 def test_merge_soft_path_uses_auto_decision_for():
-    src = SRC.read_text(encoding="utf-8")
+    src = MERGE_SRC.read_text(encoding="utf-8")
     # Find the merge stage's soft-path block (after the MergeVerdict call)
     # and confirm it consults _auto_decision_for rather than a bare
     # verdict.approve check alone.

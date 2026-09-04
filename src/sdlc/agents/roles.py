@@ -18,9 +18,9 @@ from pydantic_ai.durable_exec.temporal import TemporalAgent
 from temporalio.common import RetryPolicy
 from temporalio.workflow import ActivityConfig
 
-from ..clarify.models import ClarifyRoute, ProbeResult
-from ..clarify.prompts import PROBE_SYSTEM, ROUTE_SCOPE
 from ..core.models import PipelineConfig
+from ..stages.clarify.models import ClarifyRoute, ProbeResult
+from ..stages.clarify.prompts import PROBE_SYSTEM, ROUTE_SCOPE
 from .loader import build_agents, load_registry
 
 AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=10))

@@ -8,9 +8,17 @@ out of scope here)."""
 from __future__ import annotations
 
 import ast
+from pathlib import Path
 
 import pytest
 from test_factory_purity import FEATURE_PY, _load_class, _methods
+
+# Spec A "stage surgery": clarify's recall moved into the clarify slice
+# (ctx.recall in step.py); _dev_task moved onto the TaskHost mixin.
+CLARIFY_STEP_PY = (
+    Path(__file__).resolve().parents[1] / "src" / "sdlc" / "stages" / "clarify" / "step.py"
+)
+TASK_HOST_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "task_host.py"
 
 
 @pytest.fixture(scope="module")
@@ -18,6 +26,13 @@ def feature_class():
     source = FEATURE_PY.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(FEATURE_PY))
     return _load_class(tree, "FeatureWorkflow")
+
+
+@pytest.fixture(scope="module")
+def task_host_class():
+    source = TASK_HOST_PY.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(TASK_HOST_PY))
+    return _load_class(tree, "TaskHost")
 
 
 def _calls_self_method(fn: ast.AST, method: str) -> bool:
@@ -36,8 +51,11 @@ def _calls_self_method(fn: ast.AST, method: str) -> bool:
 def test_run_calls_recall_at_least_three_times_source_count(feature_class):
     methods = _methods(feature_class)
     # E-32: the pipeline body lives in _pipeline now (run wraps it + _retro).
+    # Spec A: architect + plan still recall in _pipeline; clarify's recall
+    # moved into the slice (ctx.recall in step.py).
     src = ast.unparse(methods["_pipeline"])
-    assert src.count("self._recall(") >= 3, (
+    slice_src = ast.unparse(ast.parse(CLARIFY_STEP_PY.read_text(encoding="utf-8")))
+    assert src.count("self._recall(") + slice_src.count("ctx.recall(") >= 3, (
         "expected recall before clarify/architect/plan at minimum"
     )
 
@@ -55,7 +73,7 @@ def test_gate_helper_retains_gate_feedback(feature_class):
     assert _calls_self_method(methods["_on_gate_decided"], "_retain")
 
 
-def test_dev_task_retains_gotcha_on_fix_loop(feature_class):
-    methods = _methods(feature_class)
+def test_dev_task_retains_gotcha_on_fix_loop(task_host_class):
+    methods = _methods(task_host_class)
     assert "_dev_task" in methods
     assert _calls_self_method(methods["_dev_task"], "_retain")

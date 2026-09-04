@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from ..core.models import (
+from ...core.models import (
     ClarificationDimension,
 )
-from ..models import (
+from ...models import (
     OpenQuestion,
 )
 

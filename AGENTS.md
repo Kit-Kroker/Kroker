@@ -150,7 +150,7 @@ documentation (`src/`, `tests/`, `scripts/`, `interfaces/`, `agents/`,
 | intake | `src/sdlc/workflows/feature.py` | in `feature.py` |
 | context (brownfield) | `src/sdlc/workflows/feature.py` | in `feature.py` |
 | research | `src/sdlc/workflows/feature.py` | in `feature.py` |
-| clarify | `src/sdlc/workflows/feature.py` | **pilot — moves first (spec A)** |
+| clarify | `src/sdlc/stages/clarify/` | migrated |
 | architecture | `src/sdlc/workflows/feature.py` | in `feature.py` |
 | plan | `src/sdlc/workflows/feature.py` | in `feature.py` |
 | code | `src/sdlc/workflows/feature.py` | in `feature.py` |

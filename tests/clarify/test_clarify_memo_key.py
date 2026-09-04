@@ -16,20 +16,27 @@ non-empty extra really does move a key, i.e. that the term is load-bearing.
 
 from __future__ import annotations
 
-import ast
+from typing import Any
 
 import pytest
-from test_factory_purity import FEATURE_PY, _load_class, _methods
 
 from sdlc.assessment.scan.models import Confidence
-from sdlc.clarify.prompts import probe_prompt_digest
+from sdlc.benchmarks.models import QualityScore
 from sdlc.context.models import CodebaseMap, MapModule
 from sdlc.core.models import (
+    IdeaBrief,
     PipelineConfig,
+    ProjectMode,
 )
 from sdlc.measurement import Measurement
 from sdlc.memoization.cache import content_key
-from sdlc.workflows.feature import _clarify_memo_extra
+from sdlc.models import ClarifiedRequirements
+from sdlc.stages import clarify
+from sdlc.stages.clarify.prompts import (
+    _clarify_memo_extra,
+    probe_prompt_digest,
+    prompt_digest,
+)
 
 
 def _map(name: str = "cap001", tree: str = "t1") -> CodebaseMap:
@@ -120,56 +127,112 @@ def test_the_flag_on_key_differs_from_the_pre_e85_key():
     assert _key(_clarify_memo_extra(_cfg(), _map())) != _key("")
 
 
-# ---- the stage actually USES the helper -------------------------------
-# Everything above tests _clarify_memo_extra in isolation, which leaves one
-# gap wide open: delete `+ _clarify_key_extra` from the stage's
-# _cached_stage call and every assertion above still passes. Nothing else in
-# the suite inspects that call. An AST assertion on the pipeline body closes
-# it -- the same technique tests/test_memoization_wiring.py uses to pin the
-# other _cached_stage invariants without booting Temporal.
+# ---- the stage actually USES the helper and prompt_digest ------------------
+# Tests that clarify.step passes both the extra memo key terms and prompt_digest
+# into ctx.cached_stage, ensuring cache invalidation on probe edits, tree changes,
+# or cap changes, while preserving byte-identity when the flag is off.
 
 
-@pytest.fixture(scope="module")
-def pipeline_src() -> str:
-    tree = ast.parse(FEATURE_PY.read_text(encoding="utf-8"), filename=str(FEATURE_PY))
-    return ast.unparse(_methods(_load_class(tree, "FeatureWorkflow"))["_pipeline"])
+class _StubContext:
+    def __init__(self) -> None:
+        self.stage_calls: list[tuple[str, str | None]] = []
+        self.cached_stage_calls: list[dict[str, Any]] = []
+        self.judged: list[tuple[str, str]] = []
+        self.recorded: list[Any] = []
+
+    def stage(self, status: str, trace: str | None = None) -> None:
+        self.stage_calls.append((status, trace))
+
+    async def recall(self, cfg: Any, bank: str, *, query: str, filters: dict[str, str]) -> Any:
+        from sdlc.models import RecallSnapshot
+
+        return RecallSnapshot(query_hash="qh", bank=bank, watermark="wm", items=[])
+
+    async def cached_stage(
+        self,
+        cfg: Any,
+        stage: str,
+        key: str,
+        artifact_type: Any,
+        run_fn: Any,
+        *,
+        prompt_digest: str = "",
+    ) -> tuple[ClarifiedRequirements, bool]:
+        self.cached_stage_calls.append(
+            {
+                "cfg": cfg,
+                "stage": stage,
+                "key": key,
+                "artifact_type": artifact_type,
+                "prompt_digest": prompt_digest,
+            }
+        )
+        return (
+            ClarifiedRequirements(
+                summary="stub summary",
+                functional_requirements=[],
+                non_functional_requirements=[],
+                out_of_scope=[],
+                open_questions=[],
+            ),
+            False,
+        )
+
+    async def judge(
+        self, cfg: Any, artifact_json: str, stage: str, *, author_model: str = ""
+    ) -> QualityScore:
+        self.judged.append((stage, author_model))
+        return QualityScore(score=1.0, judge="contract", rationale="")
+
+    async def record(self, cfg: Any, record: Any) -> None:
+        self.recorded.append(record)
 
 
-def _clarify_cached_stage_call() -> ast.Call:
-    """The `self._cached_stage(cfg, 'clarify', ...)` call in _pipeline."""
-    tree = ast.parse(FEATURE_PY.read_text(encoding="utf-8"), filename=str(FEATURE_PY))
-    body = _methods(_load_class(tree, "FeatureWorkflow"))["_pipeline"]
-    for node in ast.walk(body):
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "_cached_stage"
-            and len(node.args) >= 3
-            and isinstance(node.args[1], ast.Constant)
-            and node.args[1].value == "clarify"
-        ):
-            return node
-    pytest.fail("no self._cached_stage(cfg, 'clarify', ...) call in _pipeline")
-
-
-def test_the_clarify_stage_appends_the_extra_to_its_memo_input():
-    """The load-bearing wiring assertion. Without the extra in the key, a
-    probe-prompt edit, a changed tree or a retuned cap all serve a stale
-    clarification with no error."""
-    key_arg = ast.unparse(_clarify_cached_stage_call().args[2])
-    assert "_clarify_key_extra" in key_arg, (
-        "the clarify stage's memo input dropped the E-85 extra; probe "
-        "edits, tree changes and cap changes would all serve stale memos"
+@pytest.mark.clause("CLARIFY-1.5")
+@pytest.mark.asyncio
+async def test_step_appends_extra_and_passes_prompt_digest():
+    ctx = _StubContext()
+    cfg = _cfg()
+    idea = IdeaBrief(title="test idea", description="some desc", mode=ProjectMode.GREENFIELD)
+    cmap = _map()
+    reqs = await clarify.step(
+        ctx,
+        cfg=cfg,
+        idea=idea,
+        codebase_map=cmap,
+        brief_digest="bd123",
+        clarify_agent=None,
+        route_agent=None,
+        probe_agent=None,
     )
+    assert reqs.summary == "stub summary"
+    assert len(ctx.cached_stage_calls) == 1
+    call = ctx.cached_stage_calls[0]
+    assert call["stage"] == "clarify"
+    assert call["prompt_digest"] == prompt_digest(cfg)
+    assert ":e85:" in call["prompt_digest"]
+    assert idea.model_dump_json() in call["key"]
+    assert "bd123" in call["key"]
+    assert _clarify_memo_extra(cfg, cmap) in call["key"]
 
 
-def test_the_clarify_memo_input_still_carries_its_pre_e85_terms():
-    # The extra is APPENDED. If it ever replaced the base terms, flag-off
-    # byte-identity would be gone.
-    key_arg = ast.unparse(_clarify_cached_stage_call().args[2])
-    assert "idea.model_dump_json()" in key_arg
-    assert "brief_digest_val" in key_arg
-
-
-def test_the_extra_comes_from_the_helper_these_tests_pin(pipeline_src):
-    assert "_clarify_memo_extra(cfg, self._codebase_map)" in pipeline_src
+@pytest.mark.asyncio
+async def test_step_flag_off_passes_empty_prompt_digest_and_no_memo_extra():
+    ctx = _StubContext()
+    cfg = PipelineConfig()
+    idea = IdeaBrief(title="test idea", description="some desc", mode=ProjectMode.GREENFIELD)
+    reqs = await clarify.step(
+        ctx,
+        cfg=cfg,
+        idea=idea,
+        codebase_map=None,
+        brief_digest="",
+        clarify_agent=None,
+        route_agent=None,
+        probe_agent=None,
+    )
+    assert reqs.summary == "stub summary"
+    assert len(ctx.cached_stage_calls) == 1
+    call = ctx.cached_stage_calls[0]
+    assert call["prompt_digest"] == ""
+    assert call["key"] == idea.model_dump_json()

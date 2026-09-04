@@ -11,12 +11,14 @@ invariant STRUCTURALLY:
     ZERO ``record_benchmark`` and ZERO ``judge_artifact`` activity calls.
 
 The invariant is enforced by two gated helpers — ``_record`` and ``_judge``
-— whose FIRST statement is ``if not self._benchmarking(cfg): return``. These
-tests assert (a) those guards exist and come first, and (b) the benchmark
-activities are called ONLY through those helpers (no unguarded direct
-``execute_activity`` calls anywhere else in the workflow). This catches the
-realistic regression — someone adding a record/judge call on an unguarded
-path — without depending on a brittle full-workflow runtime test.
+on the ``BenchmarkHost`` mixin (composed into ``FeatureWorkflow`` via its
+MRO since spec A "stage surgery") — each guarded by
+``if not self._benchmarking(cfg): return`` before its activity call. These
+tests assert (a) those guards exist and precede the call, and (b) the
+benchmark activities are called ONLY through those helpers (no unguarded
+direct ``execute_activity`` calls anywhere else in the workflow). This
+catches the realistic regression — someone adding a record/judge call on an
+unguarded path — without depending on a brittle full-workflow runtime test.
 
 A future hardening task can add the runtime time-skipping test once the
 proposer agents honor ``cfg.roles`` (so a real worker can run the workflow
@@ -32,6 +34,11 @@ from pathlib import Path
 import pytest
 
 FEATURE_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "feature.py"
+# Spec A "stage surgery": the benchmark helpers moved off FeatureWorkflow
+# onto the BenchmarkHost mixin; the workflow composes it via its MRO.
+BENCHMARK_HOST_PY = (
+    Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "benchmark_host.py"
+)
 
 _BENCHMARK_ACTIVITIES = {"record_benchmark", "judge_artifact"}
 _GATED_HELPERS = {"_record", "_judge"}
@@ -143,8 +150,15 @@ def feature_class() -> ast.ClassDef:
     return _load_class(tree, "FeatureWorkflow")
 
 
-def test_record_helper_is_guarded(feature_class):
-    methods = _methods(feature_class)
+@pytest.fixture(scope="module")
+def benchmark_host_class() -> ast.ClassDef:
+    source = BENCHMARK_HOST_PY.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(BENCHMARK_HOST_PY))
+    return _load_class(tree, "BenchmarkHost")
+
+
+def test_record_helper_is_guarded(benchmark_host_class):
+    methods = _methods(benchmark_host_class)
     assert "_record" in methods, "_record helper missing"
     assert _benchmarking_guard_precedes_activity(methods["_record"], "record_benchmark"), (
         "_record must guard its record_benchmark call with "
@@ -154,8 +168,8 @@ def test_record_helper_is_guarded(feature_class):
     )
 
 
-def test_judge_helper_is_guarded(feature_class):
-    methods = _methods(feature_class)
+def test_judge_helper_is_guarded(benchmark_host_class):
+    methods = _methods(benchmark_host_class)
     assert "_judge" in methods, "_judge helper missing"
     assert _benchmarking_guard_precedes_activity(methods["_judge"], "judge_artifact"), (
         "_judge must guard its judge_artifact call with "
@@ -165,34 +179,38 @@ def test_judge_helper_is_guarded(feature_class):
     )
 
 
-def test_benchmark_activities_only_called_through_gated_helpers(feature_class):
+def test_benchmark_activities_only_called_through_gated_helpers(
+    feature_class, benchmark_host_class
+):
     """No direct ``workflow.execute_activity(record_benchmark/judge_artifact,
     ...)`` calls outside ``_record``/``_judge``. Prevents an unguarded
-    call sneaking in on any other code path."""
-    methods = _methods(feature_class)
-    for name, fn in methods.items():
-        if name in _GATED_HELPERS:
-            continue
-        calls = _activity_calls_in_method(fn) & _BENCHMARK_ACTIVITIES
-        assert not calls, (
-            f"method {name!r} calls benchmark activity/activities {calls} "
-            f"directly — benchmark activities must only be invoked through "
-            f"the gated _record/_judge helpers"
-        )
+    call sneaking in on any other code path — on FeatureWorkflow or on the
+    BenchmarkHost mixin that now carries the helpers (spec A)."""
+    for cls in (feature_class, benchmark_host_class):
+        methods = _methods(cls)
+        for name, fn in methods.items():
+            if name in _GATED_HELPERS:
+                continue
+            calls = _activity_calls_in_method(fn) & _BENCHMARK_ACTIVITIES
+            assert not calls, (
+                f"method {name!r} calls benchmark activity/activities {calls} "
+                f"directly — benchmark activities must only be invoked through "
+                f"the gated _record/_judge helpers"
+            )
 
 
-def test_gated_helpers_call_the_right_activities(feature_class):
+def test_gated_helpers_call_the_right_activities(benchmark_host_class):
     """_record calls record_benchmark; _judge calls judge_artifact."""
-    methods = _methods(feature_class)
+    methods = _methods(benchmark_host_class)
     assert "record_benchmark" in _activity_calls_in_method(methods["_record"])
     assert "judge_artifact" in _activity_calls_in_method(methods["_judge"])
 
 
-def test_benchmarking_predicate_is_the_case_id_check(feature_class):
+def test_benchmarking_predicate_is_the_case_id_check(benchmark_host_class):
     """The guard predicate must actually check case_id (the v1 'benchmarking
     on' signal). If someone redefines _benchmarking to always-True, every
     production run would emit records."""
-    methods = _methods(feature_class)
+    methods = _methods(benchmark_host_class)
     assert "_benchmarking" in methods, "_benchmarking predicate missing"
     src = ast.unparse(methods["_benchmarking"])
     assert "case_id" in src, (

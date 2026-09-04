@@ -3,16 +3,16 @@ cache. Under ~512 tokens a prefix is silently NOT cached -- no error, the
 counter just stays at zero -- so this is a test, not a comment. Modelled on
 tests/test_research_prompt_cacheable.py."""
 
-from sdlc.clarify.prompts import (
+from sdlc.core.models import (
+    ClarificationDimension,
+)
+from sdlc.stages.clarify.prompts import (
     PROBE_PREFIX,
     PROBE_SYSTEM,
     ROUTE_SCOPE,
     SCOPES,
     probe_prompt,
     probe_prompt_digest,
-)
-from sdlc.core.models import (
-    ClarificationDimension,
 )
 
 # ~4 chars per token; 512 tokens is the documented cache floor. 2400 chars
@@ -82,13 +82,15 @@ def test_editing_a_scope_block_moves_the_digest(monkeypatch):
     before = probe_prompt_digest()
     patched = dict(SCOPES)
     patched[C4] = patched[C4] + "\nAlso consider idempotency.\n"
-    monkeypatch.setattr("sdlc.clarify.prompts.SCOPES", patched)
+    monkeypatch.setattr("sdlc.stages.clarify.prompts.SCOPES", patched)
     assert probe_prompt_digest() != before
 
 
 def test_editing_the_prefix_moves_the_digest(monkeypatch):
     before = probe_prompt_digest()
-    monkeypatch.setattr("sdlc.clarify.prompts.PROBE_PREFIX", PROBE_PREFIX + "\nOne more rule.\n")
+    monkeypatch.setattr(
+        "sdlc.stages.clarify.prompts.PROBE_PREFIX", PROBE_PREFIX + "\nOne more rule.\n"
+    )
     assert probe_prompt_digest() != before
 
 
@@ -99,5 +101,5 @@ def test_swapping_two_scopes_moves_the_digest(monkeypatch):
     before = probe_prompt_digest()
     patched = dict(SCOPES)
     patched[C3], patched[C6] = patched[C6], patched[C3]
-    monkeypatch.setattr("sdlc.clarify.prompts.SCOPES", patched)
+    monkeypatch.setattr("sdlc.stages.clarify.prompts.SCOPES", patched)
     assert probe_prompt_digest() != before

@@ -26,7 +26,7 @@ def test_clarify_prompt_matches_what_the_workflow_sends():
         IdeaBrief,
         ProjectMode,
     )
-    from sdlc.prompts import clarify_prompt
+    from sdlc.stages.clarify.prompts import clarify_prompt
 
     spec = yaml.safe_load(
         (CASES / "add-login-greenfield" / "case.yaml").read_text(encoding="utf-8")

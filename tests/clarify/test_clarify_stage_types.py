@@ -2,13 +2,13 @@
 ProbeResult one probe's; merge folds both into ClarifiedRequirements. Neither
 is ever persisted or shown to a human."""
 
-from sdlc.clarify.models import ClarifyRoute, ProbeResult
 from sdlc.core.models import (
     ClarificationDimension,
 )
 from sdlc.models import (
     OpenQuestion,
 )
+from sdlc.stages.clarify.models import ClarifyRoute, ProbeResult
 
 C4 = ClarificationDimension.INTERFACE_SPEC
 

@@ -101,6 +101,8 @@ class RoleHost:
         input_json: str,
         output_type: type[StageT],
         run_fn: Callable[[], Awaitable[StageT]],
+        *,
+        prompt_digest: str = "",
     ) -> tuple[StageT, bool]:
         """Skips `run_fn()` (a no-arg async callable invoking the proposer
         agent) when an identical (stage, input, prompt, model,
@@ -115,7 +117,7 @@ class RoleHost:
         key = content_key(
             stage,
             input_json,
-            PROMPT_SHAS[stage],
+            PROMPT_SHAS[stage] + prompt_digest,
             resolve_role_model(cfg, stage),
             getattr(self, "_memory_watermark", None) or "none",
         )

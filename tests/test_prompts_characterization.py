@@ -7,12 +7,12 @@ from __future__ import annotations
 
 from sdlc.prompts import (
     analyst_prompt,
-    clarify_prompt,
     merge_verdict_prompt,
     planner_prompt,
     qa_prompt,
     reviewer_prompt,
 )
+from sdlc.stages.clarify.prompts import clarify_prompt
 
 IDEA = '{"title":"T","description":"D"}'
 ARCH = '{"stack":"python"}'

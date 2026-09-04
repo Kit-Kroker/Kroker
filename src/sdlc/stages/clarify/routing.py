@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from ..core.models import (
+from ...core.models import (
     ClarificationDimension as CD,
 )
-from ..core.models import (
+from ...core.models import (
     ProjectMode,
 )
 

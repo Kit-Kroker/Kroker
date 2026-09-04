@@ -7,6 +7,7 @@ from sdlc.workflows.feature import FeatureWorkflow
 
 SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 GATES_SRC = pathlib.Path("src/sdlc/workflows/gates.py")
+QUESTION_SRC = pathlib.Path("src/sdlc/workflows/question_host.py")
 
 
 def test_new_workflow_has_empty_pending_registry():
@@ -30,15 +31,17 @@ def test_gate_accepts_context_param():
 
 def test_gate_surface_wires_pending_population():
     """E-42: the query and the pending registry moved to GateHost; the
-    clarify half stayed in FeatureWorkflow."""
+    clarify half moved to QuestionHost."""
     gates = GATES_SRC.read_text(encoding="utf-8")
     assert "def pending_decisions(" in gates
     assert "gate_pending(" in gates
     assert "self._pending" in gates
     assert "self._pending.pop(" in gates
 
-    feature = SRC.read_text(encoding="utf-8")
-    assert "clarify_pending(" in feature
+    sources = SRC.read_text(encoding="utf-8") + (
+        QUESTION_SRC.read_text(encoding="utf-8") if QUESTION_SRC.exists() else ""
+    )
+    assert "clarify_pending(" in sources
 
 
 import datetime as dt

@@ -17,10 +17,10 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 
-from ..core.models import (
+from ...core.models import (
     ClarificationDimension,
 )
-from ..models import (
+from ...models import (
     ClarifiedRequirements,
     OpenQuestion,
 )

@@ -5,18 +5,18 @@ or convention for a requirement to be ambiguous AGAINST: a C5 probe on an
 empty tree can only ask which conventions we should adopt, which authors a
 decision rather than resolving an ambiguity (E-85 D5)."""
 
-from sdlc.clarify.routing import (
-    PROBE_DIMENSIONS,
-    SUPERVISOR_DIMENSIONS,
-    grounded_dimensions,
-    live_dimensions,
-    permitted_dimensions,
-)
 from sdlc.core.models import (
     ClarificationDimension as CD,
 )
 from sdlc.core.models import (
     ProjectMode,
+)
+from sdlc.stages.clarify.routing import (
+    PROBE_DIMENSIONS,
+    SUPERVISOR_DIMENSIONS,
+    grounded_dimensions,
+    live_dimensions,
+    permitted_dimensions,
 )
 
 ALL = list(CD)

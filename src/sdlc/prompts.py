@@ -31,11 +31,6 @@ def _frozen_contract_block(assertions: Sequence[str]) -> str:
     return "Frozen contract assertions:\n- " + "\n- ".join(assertions)
 
 
-def clarify_prompt(idea_json: str, memory: Sequence[str]) -> str:
-    """feature.py:1893."""
-    return idea_json + _memory_block(memory)
-
-
 def planner_prompt(arch_json: str, memory: Sequence[str], guidance: str | None) -> str:
     """feature.py:2040-2044."""
     return (

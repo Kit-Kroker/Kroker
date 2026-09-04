@@ -40,6 +40,8 @@ class StageContext(Protocol):
         input_json: str,
         output_type: type,
         run_fn: Callable[[], Awaitable[Any]],
+        *,
+        prompt_digest: str = "",
     ) -> Awaitable[tuple[Any, bool]]: ...
     def revisable_stage(
         self, name: str, cfg: Any, run_fn: Callable[[str | None], Awaitable[Any]]

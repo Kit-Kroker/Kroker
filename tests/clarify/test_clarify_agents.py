@@ -14,8 +14,8 @@ from sdlc.agents.roles import (
     t_clarify_probe,
     t_clarify_route,
 )
-from sdlc.clarify.models import ClarifyRoute, ProbeResult
-from sdlc.clarify.prompts import PROBE_SYSTEM, ROUTE_SCOPE
+from sdlc.stages.clarify.models import ClarifyRoute, ProbeResult
+from sdlc.stages.clarify.prompts import PROBE_SYSTEM, ROUTE_SCOPE
 
 
 def test_the_route_agent_outputs_a_clarify_route():

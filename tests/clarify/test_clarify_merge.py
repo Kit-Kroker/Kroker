@@ -5,12 +5,12 @@ The cap is load-bearing: MAC raised task success WHILE CUTTING dialogue turns
 (6.53 -> 4.86), and six dimensions sweeping in parallel is a direct assault on
 that. `dropped` is what keeps capping distinguishable from incuriosity."""
 
-from sdlc.clarify.merge import MATERIALITY_FLOOR, merge_clarification
-from sdlc.clarify.models import ClarifyRoute, ProbeResult
 from sdlc.core.models import (
     ClarificationDimension as CD,
 )
 from sdlc.models import OpenQuestion
+from sdlc.stages.clarify.merge import MATERIALITY_FLOOR, merge_clarification
+from sdlc.stages.clarify.models import ClarifyRoute, ProbeResult
 
 GROUNDED = frozenset(
     {CD.TECHNICAL_CONTEXT, CD.INTERFACE_SPEC, CD.CODE_STRUCTURE, CD.DATA_SEMANTICS}

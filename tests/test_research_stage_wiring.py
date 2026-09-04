@@ -25,8 +25,12 @@ def test_research_feeds_brief_digest_into_clarify_key():
     identical facts still hit."""
     src = _run_method_src()
     assert "brief_digest" in src
-    # clarify's cached-stage input is idea + the digest, not idea alone.
-    assert "idea.model_dump_json() + " in src
+    # clarify's cached-stage input is idea + the digest, not idea alone. The
+    # key assembly lives in the clarify slice since Task 13 (spec A).
+    step = (
+        Path(__file__).resolve().parents[1] / "src" / "sdlc" / "stages" / "clarify" / "step.py"
+    ).read_text(encoding="utf-8")
+    assert "idea.model_dump_json() + " in step
 
 
 def test_research_stage_is_not_memoized():
