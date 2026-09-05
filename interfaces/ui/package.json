@@ -14,7 +14,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:pw": "playwright test",
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit",
+    "ds:bundle": "vite-node scripts/build-ds-bundle.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.43.0",
