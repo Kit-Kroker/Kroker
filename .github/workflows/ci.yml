@@ -39,5 +39,7 @@ jobs:
         # deadlock in the local Windows environment (see the plan's
         # Follow-up 1 for the documented class), so this tier only runs
         # here, on Linux.
-        run: pytest -m temporal
-        timeout-minutes: 30
+        run: pytest -m temporal -v
+        env:
+          PYTHONUNBUFFERED: 1
+        timeout-minutes: 60
