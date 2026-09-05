@@ -1,4 +1,4 @@
-﻿# interfaces/ui/ — AGENTS.md
+# interfaces/ui/ — AGENTS.md
 
 Local invariants for the `@kroker/ui` design-system package.
 

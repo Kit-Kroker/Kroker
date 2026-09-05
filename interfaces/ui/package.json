@@ -4,14 +4,24 @@
   "version": "0.0.0",
   "type": "module",
   "exports": {
+    ".": "./src/index.ts",
     "./tokens.css": "./src/tokens/tokens.css",
     "./*": "./src/*"
   },
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "test": "vitest run",
     "test:pw": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.43.0",
+    "@vitejs/plugin-vue": "^5.0.4",
+    "@vue/test-utils": "^2.4.5",
+    "jsdom": "^24.0.0",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.0",
     "vitest": "^1.6.0"
   }
 }

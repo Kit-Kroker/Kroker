@@ -22,3 +22,6 @@ artifacts/
 node_modules/
 interfaces/ui/dist-ds/
 interfaces/ui/dist-types/
+interfaces/ui/showcase/dist/
+test-results/
+playwright-report/
