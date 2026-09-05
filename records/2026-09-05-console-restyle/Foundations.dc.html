@@ -1,0 +1,146 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+  <style>
+    :root {
+      --ground-0: #090b0f;   --ground-1: #0c0f14;   --ground-2: #0d1016;
+      --ground-3: #10141b;   --ground-4: #151a23;   --ground-5: #161c26;
+      --line-faint: #171c25; --line: #1e242f;       --line-strong: #2a3140;
+      --ink-primary: #e8edf5;    --ink-secondary: #d9dfe9;  --ink-tertiary: #c8cfdb;
+      --ink-identifier: #9db4d8; --ink-muted: #8a93a5;      --ink-faint: #7d8697;
+      --ink-subtle: #5d6675;     --ink-whisper: #4d5665;
+      --accent: #e0b050;          --accent-hover: #ecc06a;   --accent-ink: #1a1405;
+      --accent-tint-surface: #2a2310; --accent-tint-border: #574a2c;
+      --link: #4a6da8;
+      --status-running: #5b9dd9;  --status-blocked: #e0b050; --status-failed: #e06c55;
+      --status-done: #4fae7f;     --status-quarantined: #b98fdc;
+      --status-pending: #2a3140;  --status-skipped: #1b202b;
+      --font-sans: 'IBM Plex Sans', sans-serif;
+      --font-mono: 'IBM Plex Mono', monospace;
+    }
+    body { margin: 0; background: var(--ground-1); font-family: var(--font-sans); color: var(--ink-primary); }
+    a { color: var(--link); } a:hover { color: var(--accent-hover); }
+    .page { padding: 40px 44px; max-width: 1040px; }
+    .kicker { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: var(--ink-subtle); text-transform: uppercase; margin-bottom: 10px; }
+    h1 { font-family: var(--font-mono); font-size: 22px; font-weight: 600; letter-spacing: 0.02em; margin: 0 0 8px; color: var(--ink-primary); }
+    .lede { font-size: 13px; line-height: 1.6; color: var(--ink-faint); max-width: 640px; margin: 0 0 36px; }
+    .lede b { color: var(--ink-tertiary); font-weight: 500; }
+    section { margin-bottom: 34px; }
+    .sec-title { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; }
+    .swatch { width: 128px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--ground-3); }
+    .swatch-fill { height: 52px; border-bottom: 1px solid var(--line); }
+    .swatch-meta { padding: 8px 10px; }
+    .swatch-name { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-secondary); }
+    .swatch-hex { font-family: var(--font-mono); font-size: 9.5px; color: var(--ink-subtle); margin-top: 2px; }
+    .type-sample { display: flex; align-items: baseline; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--line-faint); }
+    .type-sample:last-child { border-bottom: none; }
+    .type-label { font-family: var(--font-mono); font-size: 10px; color: var(--ink-subtle); width: 150px; flex: 0 0 auto; }
+    .type-mono { font-family: var(--font-mono); }
+    .type-sans { font-family: var(--font-sans); }
+    .note { font-size: 12px; line-height: 1.6; color: var(--ink-faint); background: var(--ground-2); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; }
+    .note b { color: var(--ink-tertiary); }
+  </style>
+</helmet>
+<div class="page">
+  <div class="kicker">Design System · Kroker Factory Console</div>
+  <h1>Foundations</h1>
+  <p class="lede">
+    The semantic taxonomy for <b>@kroker/ui</b>'s design tokens. Every value here is
+    unchanged from the console's current palette (spec C phases 1&ndash;6 hold the look
+    identical) &mdash; this canvas gives the accreted <code>--c-&lt;hex&gt;</code> names
+    meaning, so Task 16 is a rename, not a rewrite.
+  </p>
+
+  <section>
+    <div class="sec-title">Grounds</div>
+    <div class="row">
+      <div class="swatch"><div class="swatch-fill" style="background: var(--ground-0)"></div><div class="swatch-meta"><div class="swatch-name">ground-0</div><div class="swatch-hex">#090b0f · shell</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--ground-1)"></div><div class="swatch-meta"><div class="swatch-name">ground-1</div><div class="swatch-hex">#0c0f14 · page</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--ground-2)"></div><div class="swatch-meta"><div class="swatch-name">ground-2</div><div class="swatch-hex">#0d1016 · recessed</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--ground-3)"></div><div class="swatch-meta"><div class="swatch-name">ground-3</div><div class="swatch-hex">#10141b · raised</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--ground-4)"></div><div class="swatch-meta"><div class="swatch-name">ground-4</div><div class="swatch-hex">#151a23 · hover</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--ground-5)"></div><div class="swatch-meta"><div class="swatch-name">ground-5</div><div class="swatch-hex">#161c26 · toast</div></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-title">Lines</div>
+    <div class="row">
+      <div class="swatch"><div class="swatch-fill" style="background: var(--ground-1); border-bottom: 3px solid var(--line-faint)"></div><div class="swatch-meta"><div class="swatch-name">line-faint</div><div class="swatch-hex">#171c25 · row divider</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--ground-1); border-bottom: 3px solid var(--line)"></div><div class="swatch-meta"><div class="swatch-name">line</div><div class="swatch-hex">#1e242f · panel edge</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--ground-1); border-bottom: 3px solid var(--line-strong)"></div><div class="swatch-meta"><div class="swatch-name">line-strong</div><div class="swatch-hex">#2a3140 · input/card</div></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-title">Ink</div>
+    <div class="row">
+      <div class="swatch"><div class="swatch-fill" style="background: var(--ground-1); display:flex; align-items:center; justify-content:center; font-family: var(--font-mono); font-size:13px; color: var(--ink-primary)">Aa</div><div class="swatch-meta"><div class="swatch-name">ink-primary</div><div class="swatch-hex">#e8edf5</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--ground-1); display:flex; align-items:center; justify-content:center; font-family: var(--font-mono); font-size:13px; color: var(--ink-secondary)">Aa</div><div class="swatch-meta"><div class="swatch-name">ink-secondary</div><div class="swatch-hex">#d9dfe9</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--ground-1); display:flex; align-items:center; justify-content:center; font-family: var(--font-mono); font-size:13px; color: var(--ink-tertiary)">Aa</div><div class="swatch-meta"><div class="swatch-name">ink-tertiary</div><div class="swatch-hex">#c8cfdb</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--ground-1); display:flex; align-items:center; justify-content:center; font-family: var(--font-mono); font-size:13px; color: var(--ink-identifier)">Aa</div><div class="swatch-meta"><div class="swatch-name">ink-identifier</div><div class="swatch-hex">#9db4d8 · run ids</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--ground-1); display:flex; align-items:center; justify-content:center; font-family: var(--font-mono); font-size:13px; color: var(--ink-muted)">Aa</div><div class="swatch-meta"><div class="swatch-name">ink-muted</div><div class="swatch-hex">#8a93a5</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--ground-1); display:flex; align-items:center; justify-content:center; font-family: var(--font-mono); font-size:13px; color: var(--ink-faint)">Aa</div><div class="swatch-meta"><div class="swatch-name">ink-faint</div><div class="swatch-hex">#7d8697</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--ground-1); display:flex; align-items:center; justify-content:center; font-family: var(--font-mono); font-size:13px; color: var(--ink-subtle)">Aa</div><div class="swatch-meta"><div class="swatch-name">ink-subtle</div><div class="swatch-hex">#5d6675</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--ground-1); display:flex; align-items:center; justify-content:center; font-family: var(--font-mono); font-size:13px; color: var(--ink-whisper)">Aa</div><div class="swatch-meta"><div class="swatch-name">ink-whisper</div><div class="swatch-hex">#4d5665 · subtitle</div></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-title">Accent</div>
+    <div class="row">
+      <div class="swatch"><div class="swatch-fill" style="background: var(--accent)"></div><div class="swatch-meta"><div class="swatch-name">accent</div><div class="swatch-hex">#e0b050 · = status-blocked</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--accent-hover)"></div><div class="swatch-meta"><div class="swatch-name">accent-hover</div><div class="swatch-hex">#ecc06a</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--accent-ink); border: 1px solid var(--line)"></div><div class="swatch-meta"><div class="swatch-name">accent-ink</div><div class="swatch-hex">#1a1405 · text on accent</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--accent-tint-surface)"></div><div class="swatch-meta"><div class="swatch-name">accent-tint-surface</div><div class="swatch-hex">#2a2310</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--accent-tint-border)"></div><div class="swatch-meta"><div class="swatch-name">accent-tint-border</div><div class="swatch-hex">#574a2c</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--link)"></div><div class="swatch-meta"><div class="swatch-name">link</div><div class="swatch-hex">#4a6da8 · declared, unused today</div></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-title">Status (unchanged &mdash; already semantic)</div>
+    <div class="row">
+      <div class="swatch"><div class="swatch-fill" style="background: var(--status-running)"></div><div class="swatch-meta"><div class="swatch-name">status-running</div><div class="swatch-hex">#5b9dd9</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--status-blocked)"></div><div class="swatch-meta"><div class="swatch-name">status-blocked</div><div class="swatch-hex">#e0b050</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--status-failed)"></div><div class="swatch-meta"><div class="swatch-name">status-failed</div><div class="swatch-hex">#e06c55</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--status-done)"></div><div class="swatch-meta"><div class="swatch-name">status-done</div><div class="swatch-hex">#4fae7f</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--status-quarantined)"></div><div class="swatch-meta"><div class="swatch-name">status-quarantined</div><div class="swatch-hex">#b98fdc</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--status-pending); border: 1px solid var(--line)"></div><div class="swatch-meta"><div class="swatch-name">status-pending</div><div class="swatch-hex">#2a3140 · = line-strong</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background: var(--status-skipped); border: 1px solid var(--line)"></div><div class="swatch-meta"><div class="swatch-name">status-skipped</div><div class="swatch-hex">#1b202b</div></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-title">Type</div>
+    <div class="type-sample"><span class="type-label">mark · 14px/600</span><span class="type-mono" style="font-size:14px; font-weight:600; letter-spacing:0.08em; color: var(--ink-primary)">SDLC&middot;FACTORY</span></div>
+    <div class="type-sample"><span class="type-label">table head · 10px</span><span class="type-mono" style="font-size:10px; letter-spacing:0.08em; color: var(--ink-subtle)">RUN &nbsp; TITLE &nbsp; STAGES &nbsp; STATUS</span></div>
+    <div class="type-sample"><span class="type-label">run id · 12px</span><span class="type-mono" style="font-size:12px; color: var(--ink-identifier)">run-feat-auth</span></div>
+    <div class="type-sample"><span class="type-label">row title · 13px sans</span><span class="type-sans" style="font-size:13px; color: var(--ink-tertiary)">Add oauth2 authentication provider</span></div>
+    <div class="type-sample"><span class="type-label">tab · 12px</span><span class="type-mono" style="font-size:12px; letter-spacing:0.04em; color: var(--ink-faint)">INBOX</span></div>
+    <div class="type-sample"><span class="type-label">button · 11.5px/600</span><span class="type-mono" style="font-size:11.5px; font-weight:600; color: var(--accent-ink); background: var(--accent); padding: 6px 12px; border-radius:4px;">+ START RUN</span></div>
+  </section>
+
+  <div class="note">
+    <b>Scope note.</b> The reference material examined for this spec (a separate project's
+    Claude Design pass, light and editorial) points in a direction opposite the console's
+    deliberately dark, dense, monospaced identity &mdash; the two were flagged as
+    incompatible during planning, and the aesthetic direction was left open pending the
+    user. Absent that decision, this canvas stays <b>structurally faithful</b>: it
+    organizes the existing palette into a named system without changing a single value, so
+    the restyle in Task 16 is provably a rename and every presentation clause from phases
+    3&ndash;6 stays green untouched. A values-level visual refresh is a follow-up the user
+    can scope separately, now that the token seams exist to carry it.
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

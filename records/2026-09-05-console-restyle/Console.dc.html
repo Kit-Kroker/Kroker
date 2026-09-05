@@ -1,0 +1,117 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+  <style>
+    :root {
+      --ground-0: #090b0f; --ground-2: #0d1016; --ground-3: #10141b; --ground-4: #151a23;
+      --line-faint: #171c25; --line: #1e242f; --line-strong: #2a3140;
+      --ink-primary: #e8edf5; --ink-secondary: #d9dfe9; --ink-tertiary: #c8cfdb;
+      --ink-identifier: #9db4d8; --ink-muted: #8a93a5; --ink-faint: #7d8697;
+      --ink-subtle: #5d6675; --ink-whisper: #4d5665;
+      --accent: #e0b050; --accent-hover: #ecc06a; --accent-ink: #1a1405;
+      --status-running: #5b9dd9; --status-blocked: #e0b050; --status-failed: #e06c55;
+      --status-done: #4fae7f; --status-pending: #2a3140;
+      --font-sans: 'IBM Plex Sans', sans-serif;
+      --font-mono: 'IBM Plex Mono', monospace;
+    }
+    body { margin: 0; background: var(--ground-0); font-family: var(--font-sans); }
+    a { color: var(--link, var(--ink-primary)); }
+    .hdr { height: 52px; display: flex; align-items: center; gap: 24px; padding: 0 20px; background: var(--ground-0); border-bottom: 1px solid var(--line); }
+    .brand { display: flex; align-items: baseline; gap: 10px; }
+    .mark { font-family: var(--font-mono); font-weight: 600; font-size: 14px; letter-spacing: 0.08em; color: var(--ink-primary); }
+    .sub { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-whisper); }
+    .tabs { display: flex; gap: 4px; height: 100%; }
+    .tab { display: flex; align-items: center; gap: 8px; padding: 0 14px; height: 100%; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em; color: var(--ink-faint); border-bottom: 2px solid transparent; text-decoration: none; }
+    .tab-active { color: var(--ink-primary); border-bottom-color: var(--accent); }
+    .badge { min-width: 18px; height: 18px; padding: 0 5px; display: inline-flex; align-items: center; justify-content: center; background: var(--accent); color: var(--accent-ink); border-radius: 9px; font-size: 10.5px; font-weight: 600; }
+    .spacer { flex: 1; }
+    .stats { display: flex; align-items: center; gap: 18px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); }
+    .stats b { color: var(--ink-secondary); }
+    .start { font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; padding: 7px 14px; background: var(--accent); color: var(--accent-ink); border: none; border-radius: 4px; }
+    .body { padding: 20px; }
+    .fleet-table { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--ground-3); }
+    .fleet-head { display: grid; grid-template-columns: 170px minmax(140px,1.4fr) 172px 126px minmax(90px,1fr) 76px 60px; gap: 12px; padding: 8px 14px; background: var(--ground-2); border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: var(--ink-subtle); }
+    .fleet-row { display: grid; grid-template-columns: 170px minmax(140px,1.4fr) 172px 126px minmax(90px,1fr) 76px 60px; gap: 12px; align-items: center; padding: 11px 14px; border-bottom: 1px solid var(--line-faint); text-decoration: none; color: inherit; }
+    .fleet-row-id { font-family: var(--font-mono); font-size: 12px; color: var(--ink-identifier); }
+    .fleet-row-title { display: flex; align-items: center; gap: 8px; }
+    .fleet-row-title-text { color: var(--ink-tertiary); font-size: 13px; }
+    .fleet-row-mode { font-family: var(--font-mono); font-size: 9.5px; padding: 2px 6px; border: 1px solid var(--line-strong); border-radius: 3px; color: var(--ink-faint); }
+    .dots { display: flex; gap: 3px; }
+    .dot { width: 9px; height: 9px; border-radius: 2px; }
+    .fleet-row-status { display: flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 11px; }
+    .pip { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+    .fleet-row-blocker { font-size: 11px; color: var(--ink-muted); }
+    .fleet-row-cost { text-align: right; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-tertiary); }
+    .fleet-row-age { text-align: right; font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle); }
+  </style>
+</helmet>
+<header class="hdr">
+  <div class="brand"><span class="mark">SDLC&middot;FACTORY</span><span class="sub">temporal &middot; ai-sdlc queue</span></div>
+  <nav class="tabs">
+    <a class="tab tab-active">FLEET</a>
+    <a class="tab">INBOX <span class="badge">3</span></a>
+  </nav>
+  <div class="spacer"></div>
+  <div class="stats">
+    <span>runs <b>12</b>/50</span>
+    <span>spend today <b>$145.20</b></span>
+    <button class="start">+ START RUN</button>
+  </div>
+</header>
+<div class="body">
+  <div class="fleet-table">
+    <div class="fleet-head"><span>RUN</span><span>TITLE</span><span>STAGES</span><span>STATUS</span><span>BLOCKER</span><span style="text-align:right">COST</span><span style="text-align:right">AGE</span></div>
+    <a class="fleet-row">
+      <span class="fleet-row-id">run-auth</span>
+      <span class="fleet-row-title"><span class="fleet-row-title-text">Add oauth provider</span><span class="fleet-row-mode">brownfield</span></span>
+      <span class="dots">
+        <span class="dot" style="background: var(--status-done)"></span>
+        <span class="dot" style="background: var(--status-running)"></span>
+        <span class="dot" style="background: var(--status-pending)"></span>
+        <span class="dot" style="background: var(--status-pending)"></span>
+      </span>
+      <span class="fleet-row-status" style="color: var(--status-running)"><span class="pip" style="background: var(--status-running)"></span> running</span>
+      <span class="fleet-row-blocker">&mdash;</span>
+      <span class="fleet-row-cost">$4.25</span>
+      <span class="fleet-row-age">14m</span>
+    </a>
+    <a class="fleet-row">
+      <span class="fleet-row-id">run-blocked</span>
+      <span class="fleet-row-title"><span class="fleet-row-title-text">Schema migration</span><span class="fleet-row-mode">brownfield</span></span>
+      <span class="dots">
+        <span class="dot" style="background: var(--status-done)"></span>
+        <span class="dot" style="background: var(--status-blocked)"></span>
+        <span class="dot" style="background: var(--status-pending)"></span>
+        <span class="dot" style="background: var(--status-pending)"></span>
+      </span>
+      <span class="fleet-row-status" style="color: var(--status-blocked)"><span class="pip" style="background: var(--status-blocked)"></span> awaiting human</span>
+      <span class="fleet-row-blocker">clarify gate</span>
+      <span class="fleet-row-cost">$3.10</span>
+      <span class="fleet-row-age">2h</span>
+    </a>
+    <a class="fleet-row">
+      <span class="fleet-row-id">run-done</span>
+      <span class="fleet-row-title"><span class="fleet-row-title-text">Fix edge router</span><span class="fleet-row-mode">greenfield</span></span>
+      <span class="dots">
+        <span class="dot" style="background: var(--status-done)"></span>
+        <span class="dot" style="background: var(--status-done)"></span>
+        <span class="dot" style="background: var(--status-pending)"></span>
+        <span class="dot" style="background: var(--status-pending)"></span>
+      </span>
+      <span class="fleet-row-status" style="color: var(--status-done)"><span class="pip" style="background: var(--status-done)"></span> done</span>
+      <span class="fleet-row-blocker">&mdash;</span>
+      <span class="fleet-row-cost">&mdash;</span>
+      <span class="fleet-row-age">1d</span>
+    </a>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
