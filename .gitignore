@@ -8,10 +8,12 @@ runs/
 .vscode/
 opencode.json
 /build/
-# specs are versioned; plans and scratch are not. Note the trailing `*`:
+# specs and plans are versioned; reviews and scratch are not. Note the
+# trailing `*`:
 # git does not descend into an excluded directory, so `docs/superpowers/`
 # plus a negation would not work — the parent must stay traversable.
 docs/superpowers/*
 !docs/superpowers/specs/
+!docs/superpowers/plans/
 # generated benchmark/analysis artifacts (E-83 review note)
 artifacts/
