@@ -20,7 +20,6 @@ from ...benchmarks.models import BenchmarkOutcome
 from ...benchmarks.record_builder import stage_record
 from ...core.context import StageContext
 from ...core.models import PipelineConfig, RoleUsage
-from ...handoff import verified_integrity_flags, verified_plan_deviations
 from ...harness.session import session_text_from_jsonl
 from ...memory.models import MemoryKind
 from .models import DeepReviewReport, ReviewReport
@@ -296,6 +295,8 @@ async def run_deep_review(
             into=spend,
         )
         report: DeepReviewReport = getattr(role_res, "output", role_res)
+        from ...handoff import verified_integrity_flags, verified_plan_deviations
+
         kept_flags, dropped_flags = verified_integrity_flags(report.integrity_flags, transcript)
         if dropped_flags:
             _log_warning(

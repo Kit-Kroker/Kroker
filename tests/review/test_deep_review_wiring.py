@@ -3,6 +3,7 @@ import pathlib
 FEATURE_SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 TASK_HOST_SRC = pathlib.Path("src/sdlc/workflows/task_host.py")
 REVIEW_SRC = pathlib.Path("src/sdlc/stages/review/step.py")
+CODE_SRC = pathlib.Path("src/sdlc/stages/code/step.py")
 
 
 def _src() -> str:
@@ -12,6 +13,8 @@ def _src() -> str:
         + TASK_HOST_SRC.read_text(encoding="utf-8")
         + "\n"
         + REVIEW_SRC.read_text(encoding="utf-8")
+        + "\n"
+        + CODE_SRC.read_text(encoding="utf-8")
     )
 
 

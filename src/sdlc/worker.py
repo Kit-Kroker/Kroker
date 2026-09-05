@@ -89,7 +89,6 @@ from .notify.activities import notify
 from .observability.activities import export_run_artifacts
 from .pricing import price_usage
 from .stages import STAGE_MODULES
-from .stages.code.activities import run_coding_task
 from .triage.activities import (
     triage_baseline,
     triage_build_probe,
@@ -138,7 +137,6 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
         read_round,
         checkpoint_round,
         load_crew,
-        run_coding_task,
         read_committed_bytes,
         get_task_diff,
         record_benchmark,

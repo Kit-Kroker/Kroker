@@ -1870,16 +1870,16 @@ git commit -m "refactor(<stage>): move the <stage> stage into a vertical slice"
 - Uncovered needs: Child workflow `CrewTaskWorkflow.run` (`:1938`); `escalation_round` loop local.
 - Enum sites: `role_cfg.harness is HarnessKind.CREW` (`:1891`, `:1927`), `esc.outcome is EscalationOutcome.APPROVED` (`:1703`).
 
-- [ ] **Step 1: Write failing contract test** (`tests/code/test_code_slice_contract.py`)
-- [ ] **Step 2: Run test to verify it fails**
-- [ ] **Step 3: Lift the inline block into `step.py`** (`:1593-1709`, `:1833-2089`)
-- [ ] **Step 4: Create `prompts.py` with `prompt_digest(cfg)`**
-- [ ] **Step 5: Register in `STAGE_MODULES`**
-- [ ] **Step 6: Move tests** (`tests/test_coding_task_checkpoint.py`, `tests/test_handoff_*.py` -> `tests/code/`)
-- [ ] **Step 7: Write `code.md` and `AGENTS.md` from templates**
-- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
-- [ ] **Step 9: Run full verification suite**
-- [ ] **Step 10: Commit `refactor(code): move the code stage into a vertical slice`**
+- [x] **Step 1: Write failing contract test** (`tests/code/test_code_slice_contract.py`)
+- [x] **Step 2: Run test to verify it fails**
+- [x] **Step 3: Lift the inline block into `step.py`** (`:1593-1709`, `:1833-2089`)
+- [x] **Step 4: Create `prompts.py` with `prompt_digest(cfg)`**
+- [x] **Step 5: Register in `STAGE_MODULES`**
+- [x] **Step 6: Move tests** (`tests/test_coding_task_checkpoint.py`, `tests/test_handoff_*.py` -> `tests/code/`)
+- [x] **Step 7: Write `code.md` and `AGENTS.md` from templates**
+- [x] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [x] **Step 9: Run full verification suite**
+- [x] **Step 10: Commit `refactor(code): move the code stage into a vertical slice`**
 
 ### Task 20.10: Stage `architecture` (Rank 10)
 

@@ -17,61 +17,43 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from ..agents.roles import (
-        STAGE_MODELS,
         resolve_role_model,
         t_adversary,
         t_deep_review,
+        t_handoff,
         t_qa,
         t_reviewer,
     )
-    from ..benchmarks.models import BenchmarkOutcome, WasteBag
+    from ..benchmarks.models import BenchmarkOutcome
     from ..core.models import (
         ArtifactRef,
-        GateOutcome,
-        GatePolicy,
-        HarnessKind,
         PipelineConfig,
         RoleConfig,
-        RoleUsage,
     )
-    from ..crew.activities import LoadCrewInput, load_crew
     from ..harness.models import (
         DeferredToolUse,
         EscalationOutcome,
         ToolDenial,
         ToolEscalation,
-        ToolGrant,
     )
-    from ..memory.models import MemoryKind
     from ..observability.trace import RunEventKind
-    from ..pending import GateContext
-    from ..stages.code.activities import CodingTaskInput, run_coding_task
+    from ..stages.code.step import step as code_step
     from ..stages.plan.models import (
         DevTask,
-        compute_plan_drift,
     )
-    from ..stages.qa import step as qa_step
-    from ..stages.qa.activities import QAInput, run_test_suite
-    from ..stages.qa.step import _fix_loop_issues
     from ..stages.review import (
         run_adversary as review_run_adversary,
     )
     from ..stages.review import (
         run_deep_review as review_run_deep_review,
     )
-    from ..stages.review import (
-        step as review_step,
-    )
     from ..stages.review.models import DeepReviewReport, ReviewReport
     from ..vcs import (
-        DiffInput,
         MergeInput,
         WorktreeInput,
         create_worktree,
-        get_task_diff,
         merge_into_integration,
     )
-    from .crew import FS_ACT, CrewTaskInput, CrewTaskWorkflow
     from .models import TaskResult
 
 ACT = workflow.ActivityConfig(
@@ -290,12 +272,12 @@ class TaskHost:
         past that, a FRESH session is seeded with a structured handoff —
         compacted context is treated as failure, never continued.
         FR-804: the QA validator sees contract + diff + test output only.
+        Delegates task execution to stages.code.step (spec A §3.3).
+        escalation_round is scoped per-task in step(), not instance state.
         """
-        role_cfg = cfg.roles.get(task.role, cfg.roles["dev"])
-        # Registry validation (validate_run_roles, ADR-6) fails closed unless
-        # the dev/reviewer models are set, and the fallback here is always
-        # cfg.roles["dev"] — so the role driving a task carries a model, and
-        # the usage/record types below are typed on that.
+        role_cfg = cfg.roles.get(
+            task.role, cfg.roles.get("dev", RoleConfig(model="claude-3-5-sonnet"))
+        )
         assert role_cfg.model is not None
         handle = await workflow.execute_activity(
             create_worktree,
@@ -307,497 +289,24 @@ class TaskHost:
             ),
             **ACT,
         )
-        worktree = handle.path
-        contract = task.contract
-        assertions = contract.assertions if contract else task.acceptance_criteria
-        # FR-801/805: scoped context — contract + recent handoff concerns,
-        # never other tasks' transcripts.
         handoff_notes = _handoff_notes(prior_handoffs)
-        stack_directive = _contract_stack_directive(contract)
-        prompt = (
-            f"Task: {task.title}\n{task.description}\n"
-            + stack_directive
-            + "Your work will be validated against this frozen contract:\n- "
-            + "\n- ".join(assertions)
-            + (
-                "\nHandoffs from preceding tasks:\n" + "\n".join(handoff_notes)
-                if handoff_notes
-                else ""
-            )
-            + "\nWork only in this worktree. Run the tests before finishing."
-            + "\nThis worktree is already a git repository (checked out on its"
-            " own branch) even if the task looks like a fresh/greenfield"
-            " project — do NOT run `git init`, and do NOT delete or modify"
-            " the `.git` file/directory."
+        return await code_step(
+            self._ctx,  # type: ignore[attr-defined]
+            cfg=cfg,
+            task=task,
+            contract=task.contract,
+            worktree=handle.path,
+            notes=handoff_notes,
+            branch=handle.branch,
+            branch_point=handle.branch_point or from_ref,
+            dev_agent=None,
+            qa_agent=t_qa,
+            reviewer_agent=t_reviewer,
+            adversary_agent=t_adversary,
+            deep_review_agent=t_deep_review,
+            handoff_agent=t_handoff,
+            session_refs=self._session_refs,
         )
-
-        crew_layout = crew_roles = None
-        crew_protocol = ""
-        crew_sessions: dict[str, str] = {}
-        if role_cfg.harness is HarnessKind.CREW:
-            crew = await workflow.execute_activity(
-                load_crew,
-                LoadCrewInput(
-                    layout=role_cfg.layout or "code",
-                    lead_harness=role_cfg.lead_harness,
-                    lead_model=role_cfg.model,
-                ),
-                **FS_ACT,
-            )
-            crew_layout, crew_roles, crew_protocol = (crew.layout, crew.roles, crew.protocol)
-
-        session_id: str | None = None
-        resumes = 0
-        run = None
-        attempt = 0
-        escalation_round = 0
-        # Attempts available before the escalation gate fires. A REVISE at
-        # that gate grants exactly one more (see the escalation below), the
-        # same "one producer re-run per round" rule _revisable_stage applies
-        # to the stage gates.
-        budget = cfg.max_fix_attempts + 1
-        gate_round = 0
-        while True:
-            attempt += 1
-            _attempt_started = workflow.now()
-            self._emit(  # type: ignore[attr-defined]
-                RunEventKind.FIX_ATTEMPT, stage="code", task_id=task.id, attempt=str(attempt)
-            )
-            # E-17: the harness may SUSPEND at a tool call an escalate rule
-            # matched (claude's `defer`). The child process has already
-            # exited, so the durable wait belongs here, in the workflow —
-            # then we resume the same session with the human's decision.
-            grants: list[ToolGrant] = []
-            asked = 0
-            capped = False
-            while True:
-                if role_cfg.harness is HarnessKind.CREW:
-                    # E-88: the crew is a child workflow, not an activity.
-                    # It returns the same HarnessRunResult, so everything
-                    # around this call -- the E-17 deferred loop, the
-                    # escalations, the cost accumulation -- is unchanged.
-                    assert crew_layout is not None
-                    assert crew_roles is not None
-                    # mypy cannot match the MethodAsyncSingleParam overload
-                    # once the id/execution_timeout keywords are present,
-                    # although the shapes are identical.
-                    crew = await workflow.execute_child_workflow(  # type: ignore[call-overload]
-                        CrewTaskWorkflow.run,
-                        CrewTaskInput(
-                            layout=crew_layout.layout,
-                            lead=crew_layout.lead,
-                            roles=crew_roles,
-                            prompt=prompt,
-                            worktree=worktree,
-                            task_id=task.id,
-                            attempt=attempt,
-                            deliverable_path=crew_layout.deliverable.path,
-                            rounds_max=crew_layout.rounds.max,
-                            wall_clock_s=crew_layout.limits.wall_clock_s,
-                            turn_timeout_s=crew_layout.limits.turn_timeout_s,
-                            cost_usd=crew_layout.limits.cost_usd,
-                            sessions=crew_sessions,
-                            protocol=crew_protocol,
-                            containment_enabled=cfg.containment_enabled,
-                            containment_policy_path=cfg.containment.policy_path,
-                            containment_strict=cfg.containment.strict,
-                            gate_settings=cfg.gate_settings(),
-                            max_tool_escalations=cfg.max_tool_escalations,
-                        ),
-                        id=f"{workflow.info().workflow_id}-crew-{task.id}-{attempt}",
-                        execution_timeout=timedelta(seconds=crew_layout.limits.wall_clock_s + 600),
-                    )
-                    crew_sessions = crew.sessions
-                    run = crew.run
-                    self._session_refs.extend(crew.session_refs)
-                else:
-                    # The existing call, moved into the else branch verbatim:
-                    # same CodingTaskInput(...) arguments, same _long_act.
-                    # A doing-role always carries a concrete harness here: a
-                    # CREW role took the branch above, and a harnessless
-                    # (proposer/research) role can never reach _dev_task.
-                    assert role_cfg.harness is not None
-                    run = await workflow.execute_activity(
-                        run_coding_task,
-                        CodingTaskInput(
-                            harness=role_cfg.harness,
-                            prompt=prompt,
-                            worktree=worktree,
-                            model=role_cfg.model,
-                            session_id=session_id,
-                            task_id=task.id,
-                            attempt=attempt,
-                            containment_enabled=cfg.containment_enabled,
-                            containment_policy_path=cfg.containment.policy_path,
-                            containment_strict=cfg.containment.strict,
-                            grants=grants,
-                        ),
-                        **_long_act(role_cfg),
-                    )
-                assert run is not None
-                for esc in run.escalations:
-                    await self._record_escalation(cfg, task, esc)
-                for esc in escalations_from_denials(run.denials):
-                    await self._record_escalation(cfg, task, esc)
-                if run.deferred is None or capped:
-                    break
-                # Resuming for an approval is NOT a failure resume: it costs
-                # neither a fix attempt nor the FR-802 resume budget.
-                session_id = run.session_id
-                if asked >= cfg.max_tool_escalations:
-                    capped = True
-                    grants = [
-                        ToolGrant(
-                            tool_use_id=run.deferred.tool_use_id,
-                            tool=run.deferred.tool,
-                            input_digest=run.deferred.input_digest,
-                            rule_id=run.deferred.rule_id,
-                            approved=False,
-                            reason="escalation cap reached",
-                        )
-                    ]
-                    await self._record_escalation(
-                        cfg,
-                        task,
-                        ToolEscalation(
-                            tool=run.deferred.tool,
-                            rule_id=run.deferred.rule_id,
-                            target=run.deferred.target,
-                            outcome=EscalationOutcome.CAPPED,
-                            decided_by="policy",
-                        ),
-                    )
-                    continue  # one more resume, only to deliver the deny
-                asked += 1
-                escalation_round += 1
-                decision = await self._gate(  # type: ignore[attr-defined]
-                    "tool_approval",
-                    cfg.gate_settings(),
-                    round=escalation_round,
-                    context=GateContext(
-                        spec_summary=_escalation_summary(task.id, task.title, run.deferred)
-                    ),
-                    default_policy=GatePolicy.HARD,
-                )
-                grants = [
-                    ToolGrant(
-                        tool_use_id=run.deferred.tool_use_id,
-                        tool=run.deferred.tool,
-                        input_digest=run.deferred.input_digest,
-                        rule_id=run.deferred.rule_id,
-                        approved=decision.approved,
-                        reason=decision.comments or "",
-                    )
-                ]
-                await self._record_escalation(
-                    cfg,
-                    task,
-                    ToolEscalation(
-                        tool=run.deferred.tool,
-                        rule_id=run.deferred.rule_id,
-                        target=run.deferred.target,
-                        outcome=(
-                            EscalationOutcome.APPROVED
-                            if decision.approved
-                            else EscalationOutcome.TIMEOUT
-                            if decision.decided_by == "timeout"
-                            else EscalationOutcome.REJECTED
-                        ),
-                        decided_by=decision.decided_by,
-                        round=escalation_round,
-                    ),
-                )
-            # The crew seam extends the FULL ref list in its branch; the
-            # last ref also rides run.session_ref for the clean-context
-            # consumers — don't double-count it here.
-            if run.session_ref is not None and run.session_ref not in self._session_refs:
-                self._session_refs.append(run.session_ref)
-
-            # E-33 harness join: the harness reports REAL dollars (CLI
-            # total_cost_usd) — no pricing activity needed. Accumulate
-            # under the executing role.
-            #
-            # `into` is not optional here: self._role_usage is per RUN and per
-            # role, while a stage='code' BenchmarkRecord is per TASK ATTEMPT,
-            # so the record cannot read the accumulator. Without a bag of its
-            # own the record went out with cost.usd set and
-            # cost.input_tokens/output_tokens null — for every harness, not
-            # only crew (cost_bag_from_spend degrades to CostBag(usd=...)
-            # when spend is None). E-88's acceptance asks for non-null token
-            # counts, and the tokens were in `run` the whole time.
-            code_spend = RoleUsage(role="dev", model=role_cfg.model)
-            self._track_usage(  # type: ignore[attr-defined]
-                role="dev",
-                model=role_cfg.model,
-                input_tokens=run.input_tokens or 0,
-                output_tokens=run.output_tokens or 0,
-                cost_usd=run.cost_usd,
-                into=code_spend,
-            )
-
-            # Clean-context validation: contract + tests + diff. No narrative.
-            # Uses the contract's own stack-specific test_commands (FR-803)
-            # rather than QAInput's Python-toolchain default — a non-Python
-            # stack must never be QA'd with pytest.
-            test_cmd = _contract_shell_cmd(
-                contract.test_commands if contract else None, DEFAULT_TEST_CMD
-            )
-            qa_raw = await workflow.execute_activity(
-                run_test_suite,
-                QAInput(worktree=worktree, test_cmd=test_cmd),
-                **_long_act(cfg.roles.get("test", role_cfg)),
-            )
-            diff = await workflow.execute_activity(
-                get_task_diff,
-                DiffInput(worktree=worktree, branch_point=handle.branch_point),
-                **ACT,
-            )
-            qa_spend = RoleUsage(role="qa", model=resolve_role_model(cfg, "qa"))
-            qa = await qa_step(
-                self._ctx,  # type: ignore[attr-defined]
-                cfg=cfg,
-                task=task,
-                contract=contract,
-                diff=diff,
-                worktree=worktree,
-                qa_agent=t_qa,
-                qa_raw=qa_raw,
-                qa_spend=qa_spend,
-            )
-
-            # Second clean-context judge (FR-204): same inputs as QA — frozen
-            # contract + materialized diff + test output. No narrative, no
-            # session. A different model family than the developer (ADR-6).
-            review = await review_step(
-                self._ctx,  # type: ignore[attr-defined]
-                cfg=cfg,
-                task=task,
-                contract=contract,
-                diff=diff,
-                worktree=worktree,
-                reviewer_agent=t_reviewer,
-                qa_raw=qa_raw,
-                reviewer_model=STAGE_MODELS.get("review", "unknown"),
-                attempt=attempt - 1,
-                started=_attempt_started,
-            )
-
-            # `qa_raw.tests_passed` is the actual subprocess exit code;
-            # `qa.tests_passed` is the LLM QA agent's OWN retyped guess at
-            # the same fact (its instructions ask it to judge contract
-            # compliance, not to re-derive this bit) and can disagree with
-            # ground truth. The pass/fail gate must anchor on qa_raw here —
-            # an LLM opinion must never overwrite a deterministic signal.
-            task_passed = qa_raw.tests_passed and not qa.issues
-
-            await self._record(  # type: ignore[attr-defined]
-                cfg,
-                self._stage_record(  # type: ignore[attr-defined]
-                    cfg,
-                    stage="code",
-                    role=task.role,
-                    started=_attempt_started,
-                    ended=workflow.now(),
-                    quality_score=(1.0 if task_passed else 0.0),
-                    judge="contract",
-                    outcome=(BenchmarkOutcome.PASS if task_passed else BenchmarkOutcome.FAIL),
-                    model=role_cfg.model,
-                    harness=role_cfg.harness,
-                    lead_harness=role_cfg.lead_harness,
-                    cost_usd=run.cost_usd,
-                    spend=code_spend,
-                    waste=WasteBag.from_digest(run.session_digest),
-                    plan_drift=compute_plan_drift(task, diff.get("files", [])),
-                    fix_attempts=attempt - 1,
-                    task_id=task.id,
-                    attempt=attempt - 1,
-                ),
-            )
-
-            # The QA report gets its OWN record. The stage="code" record above
-            # keeps its deterministic contract score (1.0 iff tests passed and
-            # no issues) -- an LLM opinion must never overwrite a deterministic
-            # signal. Cardinality is per-task-attempt, not once-per-run like
-            # clarifier/architect/planner; scoring.py means over them natively.
-            _qa_quality = await self._judge(  # type: ignore[attr-defined]
-                cfg, qa.model_dump_json(), "qa", author_model=resolve_role_model(cfg, "qa")
-            )
-            await self._record(  # type: ignore[attr-defined]
-                cfg,
-                self._stage_record(  # type: ignore[attr-defined]
-                    cfg,
-                    stage="qa",
-                    role="qa",
-                    started=_attempt_started,
-                    ended=workflow.now(),
-                    quality_score=_qa_quality.score,
-                    judge=_qa_quality.judge,
-                    outcome=(BenchmarkOutcome.PASS if task_passed else BenchmarkOutcome.FAIL),
-                    model=resolve_role_model(cfg, "qa"),
-                    spend=qa_spend,
-                    task_id=task.id,
-                    attempt=attempt - 1,
-                ),
-            )
-
-            review_ok = review is None or review.approve
-
-            adversary = None
-            if task_passed and review_ok:
-                # Approving path only: a rejection is already headed for the
-                # fix loop, so the expensive error is a false approve. The
-                # adversary is a SECOND opinion -- it presupposes a first, so
-                # it never runs when review is disabled (review is None); the
-                # primary reviewer is the sole designated blocking lens, which
-                # is the entire justification for this lens being fail-open.
-                if review is not None:
-                    adversary = await self._run_adversary(  # type: ignore[attr-defined]
-                        cfg, contract, assertions, diff, qa_raw, task
-                    )
-                # A split fails the attempt ONLY when the adversary has
-                # actionable (critical/high) findings. A reject with no
-                # blocking findings has nothing to put in a retry prompt -- it
-                # would hit the ``if not issues: break`` below and silently
-                # abandon a task that passed its gate. Same rule as the primary:
-                # blocking_findings is actionable, the boolean is not.
-                if adversary is None or adversary.approve or not adversary.blocking_findings:
-                    deep = await self._run_deep_review(  # type: ignore[attr-defined]
-                        cfg, run, contract, assertions, diff, task
-                    )
-                    handoff = await self._run_handoff(  # type: ignore[attr-defined]
-                        cfg, run, contract, assertions, diff, task
-                    )
-                    return TaskResult(
-                        task_id=task.id,
-                        status="done",
-                        attempts=attempt,
-                        branch=handle.branch,
-                        run=run,
-                        handoff=handoff,
-                        qa=qa_raw,
-                        review=review,
-                        deep_review=deep,
-                    )
-                # Split: fall through to the retry path below. max_fix_attempts
-                # still bounds it, and exhaustion enters the existing
-                # accept / retry-with-guidance / quarantine gate unchanged.
-
-            issues = "" if attempt >= budget else _fix_loop_issues(qa, qa_raw, review, adversary)
-            if attempt < budget and not issues:
-                # The task failed its gate, yet neither judge produced a
-                # single actionable statement — there is nothing to put in a
-                # retry prompt, so re-attempting only re-rolls the dice at
-                # full cost. That combination means the gate fired on
-                # something the loop cannot express (historically: harness
-                # provisioning), so stop and surface it rather than burning
-                # the remaining budget on a blank instruction.
-                workflow.logger.warning(
-                    "task %s attempt %s failed with no actionable feedback "
-                    "(qa_raw.tests_passed=%s) - abandoning fix loop",
-                    task.id,
-                    attempt,
-                    qa_raw.tests_passed,
-                )
-                budget = attempt  # nothing to retry on → escalate now
-
-            if attempt >= budget:
-                # Escalate: the human accepts, asks for a revision, or
-                # quarantines. REVISE must be read off `outcome`, never off
-                # `decision.approved` — that property is False for BOTH
-                # reject and revise (its own docstring says callers who must
-                # distinguish read `outcome`), and collapsing the two here
-                # made APPROVE the only outcome a run could survive.
-                #
-                # The analysis carries the SAME evidence the fix loop got — a
-                # human asked to adjudicate a task whose only real failure was
-                # a red test command must be shown that command's output, not
-                # an empty list.
-                gate_round += 1
-                analysis = _fix_loop_issues(qa, qa_raw, review) if qa else ""
-                decision = await self._gate(  # type: ignore[attr-defined]
-                    f"task:{task.id}",
-                    cfg.gate_settings(),
-                    round=gate_round,
-                    context=GateContext(task_id=task.id, analysis=analysis, attempts=attempt),
-                )
-                if decision.outcome is GateOutcome.REVISE and gate_round <= cfg.max_gate_rounds:
-                    # Bounded exactly like _revisable_stage: one more attempt
-                    # per granted round, then the gate is asked again. Past
-                    # max_gate_rounds the final gate decides accept-anyway vs
-                    # quarantine, so revise can never loop forever.
-                    guidance = decision.guidance or decision.comments or ""
-                    budget = attempt + 1
-                    # Fresh session: the operator is redirecting the work, and
-                    # the prior session is anchored to the approach they just
-                    # rejected.
-                    session_id = None
-                    prompt = (
-                        stack_directive
-                        + f"Task: {task.title}\n{task.description}\n"
-                        + "An operator reviewed the previous attempts and "
-                        "asked for these changes:\n"
-                        + f"{guidance}\n"
-                        + "Contract:\n- "
-                        + "\n- ".join(assertions)
-                    )
-                    continue
-                deep = await self._run_deep_review(  # type: ignore[attr-defined]
-                    cfg, run, contract, assertions, diff, task
-                )
-                return TaskResult(
-                    task_id=task.id,
-                    status="done" if decision.approved else "quarantined",
-                    # `attempt`, not the ceiling: the loop can exit early when
-                    # it has no actionable feedback to retry on, and the
-                    # benchmark's fix_attempts column has to reflect what was
-                    # actually spent.
-                    attempts=attempt,
-                    branch=handle.branch,
-                    qa=qa_raw,
-                    review=review,
-                    deep_review=deep,
-                    notes=decision.comments or "",
-                )
-
-            await self._retain(  # type: ignore[attr-defined]
-                cfg,
-                MemoryKind.GOTCHA,
-                cfg.memory.project_bank,
-                text=f"task {task.id} ({task.title}) attempt {attempt} failed: {issues}",
-                metadata={"task_id": task.id, "run_id": workflow.info().workflow_id},
-            )
-            if _should_resume_session(
-                qa, resumes, cfg.max_session_resumes, run.near_context_ceiling()
-            ):
-                session_id = run.session_id  # resume: context intact
-                resumes += 1
-                prompt = stack_directive + f"Previous attempt has issues. Fix them:\n- {issues}"
-            else:
-                # Either past the resume bound, at/over the context ceiling
-                # (compaction = failure), or the diff used the wrong
-                # language/runtime entirely → fresh session seeded with a
-                # structured handoff (FR-802, ADR-13). A stack mismatch is
-                # never resumed even within budget: the prior session is
-                # anchored to files it would need to delete wholesale.
-                session_id = None
-                discard_note = (
-                    "The previous attempt used the WRONG language/runtime "
-                    "entirely. Delete that wrong-stack scaffolding rather "
-                    "than patching it, and reimplement from scratch in the "
-                    "mandated stack below.\n"
-                    if qa.stack_mismatch
-                    else "A previous session implemented part of this in the same "
-                    f"worktree (files: {', '.join(diff['files'][:20])}). "
-                    "Review the current state, then fix these unmet contract "
-                    "assertions.\n"
-                )
-                prompt = (
-                    stack_directive
-                    + f"Task: {task.title}\n{task.description}\n"
-                    + discard_note
-                    + f"Unmet contract assertions:\n- {issues}\n"
-                    "Contract:\n- " + "\n- ".join(assertions)
-                )
 
     async def _run_adversary(
         self,

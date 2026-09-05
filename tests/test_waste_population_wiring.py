@@ -11,6 +11,7 @@ from sdlc.workflows.feature import FeatureWorkflow
 
 FEATURE_SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 TASK_HOST_SRC = pathlib.Path("src/sdlc/workflows/task_host.py")
+CODE_SRC = pathlib.Path("src/sdlc/stages/code/step.py")
 
 
 class _Source:
@@ -19,6 +20,8 @@ class _Source:
             FEATURE_SRC.read_text(encoding=encoding)
             + "\n"
             + TASK_HOST_SRC.read_text(encoding=encoding)
+            + "\n"
+            + CODE_SRC.read_text(encoding=encoding)
         )
 
 

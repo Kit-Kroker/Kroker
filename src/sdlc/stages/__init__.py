@@ -20,9 +20,33 @@ if TYPE_CHECKING:
 
 def __getattr__(name: str) -> Any:
     if name == "STAGE_MODULES":
-        from . import analyze, clarify, context, deploy, intake, merge, qa, research, retro, review
+        from . import (
+            analyze,
+            clarify,
+            code,
+            context,
+            deploy,
+            intake,
+            merge,
+            qa,
+            research,
+            retro,
+            review,
+        )
 
-        return (clarify, intake, qa, retro, analyze, research, review, context, merge, deploy)
+        return (
+            clarify,
+            intake,
+            qa,
+            retro,
+            analyze,
+            research,
+            review,
+            context,
+            merge,
+            deploy,
+            code,
+        )
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 

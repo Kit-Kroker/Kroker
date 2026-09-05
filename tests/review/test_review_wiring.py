@@ -4,6 +4,7 @@ FEATURE_SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 TASK_HOST_SRC = pathlib.Path("src/sdlc/workflows/task_host.py")
 REVIEW_SRC = pathlib.Path("src/sdlc/stages/review/step.py")
 MERGE_SRC = pathlib.Path("src/sdlc/stages/merge/step.py")
+CODE_SRC = pathlib.Path("src/sdlc/stages/code/step.py")
 
 
 class _Source:
@@ -16,6 +17,8 @@ class _Source:
             + REVIEW_SRC.read_text(encoding=encoding)
             + "\n"
             + MERGE_SRC.read_text(encoding=encoding)
+            + "\n"
+            + CODE_SRC.read_text(encoding=encoding)
         )
 
 

@@ -18,6 +18,7 @@ from test_factory_purity import FEATURE_PY, _load_class, _methods
 CLARIFY_STEP_PY = (
     Path(__file__).resolve().parents[1] / "src" / "sdlc" / "stages" / "clarify" / "step.py"
 )
+CODE_STEP_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "stages" / "code" / "step.py"
 TASK_HOST_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "task_host.py"
 
 
@@ -76,4 +77,5 @@ def test_gate_helper_retains_gate_feedback(feature_class):
 def test_dev_task_retains_gotcha_on_fix_loop(task_host_class):
     methods = _methods(task_host_class)
     assert "_dev_task" in methods
-    assert _calls_self_method(methods["_dev_task"], "_retain")
+    code_slice_src = CODE_STEP_PY.read_text(encoding="utf-8")
+    assert _calls_self_method(methods["_dev_task"], "_retain") or "ctx.retain(" in code_slice_src
