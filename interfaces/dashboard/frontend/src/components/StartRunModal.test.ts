@@ -28,8 +28,7 @@ describe('StartRunModal', () => {
     const ui = useUiStore()
     ui.openStart()
     const w = mount(StartRunModal)
-    await w.find('[data-testid="submit"]').trigger('click')
-    expect(ui.toasts.some((t) => t.msg.includes('Title required'))).toBe(true)
+    expect(w.find('[data-testid="submit"]').attributes('disabled')).toBeDefined()
   })
 
   it('starts a run, toasts, and closes', async () => {
