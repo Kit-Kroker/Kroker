@@ -33,3 +33,11 @@ jobs:
 
       - name: Pytest
         run: pytest
+
+      - name: Pytest (temporal tier)
+        # The authoritative gate for the gate/wait temporal tests: they
+        # deadlock in the local Windows environment (see the plan's
+        # Follow-up 1 for the documented class), so this tier only runs
+        # here, on Linux.
+        run: pytest -m temporal
+        timeout-minutes: 30
