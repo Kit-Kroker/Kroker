@@ -33,11 +33,11 @@ const summary = computed(() => `${fleet.runs.length} runs · ${fleet.blockedCoun
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #e8edf5;
+  color: var(--c-e8edf5);
 }
 .summary {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
-  color: #5d6675;
+  color: var(--c-5d6675);
 }
 </style>

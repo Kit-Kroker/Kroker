@@ -44,8 +44,8 @@ const totalCost = computed(() => money(fleet.totalCost))
   align-items: center;
   gap: 24px;
   padding: 0 20px;
-  background: #090b0f;
-  border-bottom: 1px solid #1e242f;
+  background: var(--c-090b0f);
+  border-bottom: 1px solid var(--c-1e242f);
 }
 .brand {
   display: flex;
@@ -53,16 +53,16 @@ const totalCost = computed(() => money(fleet.totalCost))
   gap: 10px;
 }
 .mark {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
   font-size: 14px;
   letter-spacing: 0.08em;
-  color: #e8edf5;
+  color: var(--c-e8edf5);
 }
 .sub {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
-  color: #4d5665;
+  color: var(--c-4d5665);
 }
 .tabs {
   display: flex;
@@ -75,20 +75,20 @@ const totalCost = computed(() => money(fleet.totalCost))
   gap: 8px;
   padding: 0 14px;
   height: 100%;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.04em;
-  color: #7d8697;
+  color: var(--c-7d8697);
   border-bottom: 2px solid transparent;
   text-decoration: none;
   cursor: pointer;
 }
 .tab:hover {
-  color: #e8edf5;
+  color: var(--c-e8edf5);
 }
 .tab-active {
-  color: #e8edf5;
-  border-bottom-color: #e0b050;
+  color: var(--c-e8edf5);
+  border-bottom-color: var(--status-blocked);
 }
 .badge {
   min-width: 18px;
@@ -97,8 +97,8 @@ const totalCost = computed(() => money(fleet.totalCost))
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #e0b050;
-  color: #1a1405;
+  background: var(--status-blocked);
+  color: var(--c-1a1405);
   border-radius: 9px;
   font-size: 10.5px;
   font-weight: 600;
@@ -110,25 +110,25 @@ const totalCost = computed(() => money(fleet.totalCost))
   display: flex;
   align-items: center;
   gap: 18px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
-  color: #7d8697;
+  color: var(--c-7d8697);
 }
 .stats b {
-  color: #d9dfe9;
+  color: var(--c-d9dfe9);
 }
 .start {
   cursor: pointer;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   font-weight: 600;
   padding: 7px 14px;
-  background: #e0b050;
-  color: #1a1405;
+  background: var(--status-blocked);
+  color: var(--c-1a1405);
   border: none;
   border-radius: 4px;
 }
 .start:hover {
-  background: #ecc06a;
+  background: var(--c-ecc06a);
 }
 </style>

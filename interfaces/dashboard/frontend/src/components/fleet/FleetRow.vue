@@ -42,18 +42,18 @@ const dots = computed(() =>
   gap: 12px;
   align-items: center;
   padding: 11px 14px;
-  border-bottom: 1px solid #171c25;
+  border-bottom: 1px solid var(--c-171c25);
   cursor: pointer;
   text-decoration: none;
   color: inherit;
 }
 .row:hover {
-  background: #151a23;
+  background: var(--c-151a23);
 }
 .id {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
-  color: #9db4d8;
+  color: var(--c-9db4d8);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -68,22 +68,22 @@ const dots = computed(() =>
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #c8cfdb;
+  color: var(--c-c8cfdb);
 }
 .mode {
   flex: none;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9.5px;
   padding: 2px 6px;
-  border: 1px solid #2a3140;
+  border: 1px solid var(--c-2a3140);
   border-radius: 3px;
-  color: #7d8697;
+  color: var(--c-7d8697);
 }
 .status {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 .pip {
@@ -93,21 +93,21 @@ const dots = computed(() =>
 }
 .blocker {
   font-size: 11px;
-  color: #8a93a5;
+  color: var(--c-8a93a5);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .cost {
   text-align: right;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
-  color: #c8cfdb;
+  color: var(--c-c8cfdb);
 }
 .age {
   text-align: right;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
-  color: #5d6675;
+  color: var(--c-5d6675);
 }
 </style>

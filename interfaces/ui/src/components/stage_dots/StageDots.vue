@@ -35,6 +35,12 @@ const marks = computed(() =>
 <style scoped>
 .cmp-stage-dots { display: flex; gap: 3px; }
 .cmp-stage-dot { width: 9px; height: 9px; border-radius: 2px; }
+.cmp-stage-dot-pending { background: var(--status-pending); }
+.cmp-stage-dot-active { background: var(--status-running); }
+.cmp-stage-dot-done { background: var(--status-done); }
+.cmp-stage-dot-blocked { background: var(--status-blocked); }
+.cmp-stage-dot-failed { background: var(--status-failed); }
+.cmp-stage-dot-skipped { background: var(--status-skipped); }
 .cmp-stage-dot-active,
 .cmp-stage-dot-blocked {
   animation: fc-pulse 1.6s infinite;

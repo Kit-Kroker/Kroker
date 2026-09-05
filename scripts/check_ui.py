@@ -35,6 +35,7 @@ STEPS: tuple[tuple[str, list[str]], ...] = (
     ("install", ["ci"]),
     ("typecheck", ["run", "typecheck", "--workspace", DASH]),
     ("typecheck-ui", ["run", "typecheck", "--workspace", UI]),
+    ("build-dashboard", ["run", "build", "--workspace", DASH]),
     ("vitest-dashboard", ["run", "test", "--workspace", DASH]),
     ("vitest-ui", ["run", "test", "--workspace", UI]),
     ("playwright-browser", ["exec", "--", "playwright", "install", "--with-deps", "chromium"]),

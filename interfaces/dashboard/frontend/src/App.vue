@@ -39,9 +39,9 @@ onUnmounted(() => {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #0c0f14;
-  color: #d9dfe9;
-  font-family: 'IBM Plex Sans', sans-serif;
+  background: var(--c-0c0f14);
+  color: var(--c-d9dfe9);
+  font-family: var(--font-sans);
   font-size: 13px;
   overflow: hidden;
 }

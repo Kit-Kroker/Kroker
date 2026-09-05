@@ -17,10 +17,10 @@ const fleet = useFleetStore()
 
 <style scoped>
 .panel {
-  border: 1px solid #1e242f;
+  border: 1px solid var(--c-1e242f);
   border-radius: 6px;
   overflow: hidden;
-  background: #10141b;
+  background: var(--c-10141b);
 }
 .head {
   display: grid;
@@ -28,12 +28,12 @@ const fleet = useFleetStore()
   gap: 12px;
   align-items: center;
   padding: 8px 14px;
-  background: #0d1016;
-  border-bottom: 1px solid #1e242f;
-  font-family: 'IBM Plex Mono', monospace;
+  background: var(--c-0d1016);
+  border-bottom: 1px solid var(--c-1e242f);
+  font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.08em;
-  color: #5d6675;
+  color: var(--c-5d6675);
 }
 .r {
   text-align: right;

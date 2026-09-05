@@ -1,2 +1,27 @@
-/* tokens.css placeholder until Task 7 */
-:root {}
+/* interfaces/ui/src/tokens/tokens.css
+ *
+ * Pass one is mechanical (spec C §5). Names encode values, not meaning:
+ * this palette accreted and was never designed, so inventing a semantic
+ * taxonomy now means inventing it twice — once here and once when the
+ * canvas brings its own. What this pass buys is the wiring, which
+ * survives the restyle untouched.
+ */
+:root {
+  --c-0c0f14: #0c0f14;  --c-090b0f: #090b0f;  --c-151a23: #151a23;
+  --c-171c25: #171c25;  --c-1e242f: #1e242f;  --c-2a3140: #2a3140;
+  --c-d9dfe9: #d9dfe9;  --c-e8edf5: #e8edf5;  --c-c8cfdb: #c8cfdb;
+  --c-9db4d8: #9db4d8;  --c-8a93a5: #8a93a5;  --c-7d8697: #7d8697;
+  --c-5d6675: #5d6675;
+
+  --c-0d1016: #0d1016;  --c-10141b: #10141b;  --c-161c26: #161c26;
+  --c-1a1405: #1a1405;  --c-2a2310: #2a2310;  --c-4a6da8: #4a6da8;
+  --c-4d5665: #4d5665;  --c-574a2c: #574a2c;  --c-ecc06a: #ecc06a;
+
+  --status-running: #5b9dd9;   --status-blocked: #e0b050;
+  --status-failed: #e06c55;    --status-done: #4fae7f;
+  --status-quarantined: #b98fdc;
+  --status-pending: #2a3140;   --status-skipped: #1b202b;
+
+  --font-sans: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}

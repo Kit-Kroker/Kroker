@@ -29,15 +29,25 @@ const ui = useUiStore()
   pointer-events: none;
 }
 .toast {
-  background: #161c26;
-  border: 1px solid #2a3140;
-  border-left: 3px solid #4fae7f;
+  background: var(--c-161c26);
+  border: 1px solid var(--c-2a3140);
+  border-left: 3px solid var(--status-done);
   border-radius: 5px;
   padding: 10px 14px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
-  color: #c8cfdb;
+  color: var(--c-c8cfdb);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   animation: fc-toast 0.18s ease-out;
+}
+@keyframes fc-toast {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 </style>

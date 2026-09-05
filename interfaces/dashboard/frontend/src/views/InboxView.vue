@@ -13,8 +13,8 @@
   padding: 20px 20px 60px;
 }
 .hint {
-  color: #5d6675;
-  font-family: 'IBM Plex Mono', monospace;
+  color: var(--c-5d6675);
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 </style>
