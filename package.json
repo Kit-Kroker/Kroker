@@ -1,0 +1,5 @@
+{
+  "name": "kroker-interfaces",
+  "private": true,
+  "workspaces": ["interfaces/ui", "interfaces/dashboard/frontend"]
+}
