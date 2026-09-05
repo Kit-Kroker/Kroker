@@ -18,12 +18,35 @@ from __future__ import annotations
 import subprocess
 import sys
 
+# The gate/wait temporal tests deadlock in the local Windows environment
+# (surgery plan Follow-up 1 documents the class); on Windows the local run
+# of this tier skips them, CI on Linux runs the tier whole.
+_TEMPORAL_IGNORES = (
+    [
+        f"--ignore=tests/{name}"
+        for name in (
+            "test_tool_approval_gate.py",
+            "test_board_workflow.py",
+            "test_budget_gate.py",
+            "test_model_usage_capture.py",
+            "test_e2e_greenfield.py",
+            "test_dashboard_e2e.py",
+        )
+    ]
+    if sys.platform == "win32"
+    else []
+)
+
 GATES: tuple[tuple[str, list[str]], ...] = (
     ("ruff", ["ruff", "check", "."]),
     ("ruff-format", ["ruff", "format", "--check", "."]),
     ("file-size", [sys.executable, "scripts/check_file_size.py", "--full"]),
     ("mypy", ["mypy", "src"]),
     ("pytest", [sys.executable, "-m", "pytest", "-q"]),
+    (
+        "pytest-temporal",
+        [sys.executable, "-m", "pytest", "-m", "temporal", "-q", *_TEMPORAL_IGNORES],
+    ),
 )
 
 

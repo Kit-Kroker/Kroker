@@ -26,7 +26,10 @@ def _services(**over):
 
 
 def test_protocol_has_exactly_eleven_services():
-    members = {m for m in StageContext.__protocol_attrs__ if not m.startswith("_")}
+    # `__protocol_attrs__` does not exist on every supported interpreter
+    # (3.11 lacks it), so read the protocol's own namespace instead; the
+    # underscore filter strips the typing internals.
+    members = {m for m in StageContext.__dict__ if not m.startswith("_")}
     assert members == ELEVEN
 
 
