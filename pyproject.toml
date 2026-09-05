@@ -28,6 +28,9 @@ dev = [
     "pytest>=8",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=5",
+    # Turns the temporal gate/wait hangs (Follow-up 1) into failures with a
+    # stack dump, so the tier completes and names its stall point.
+    "pytest-timeout>=2",
     "jsonschema>=4",
     "ruff>=0.16.5",
     "mypy>=2.3",
