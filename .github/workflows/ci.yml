@@ -45,3 +45,28 @@ jobs:
         env:
           PYTHONUNBUFFERED: 1
         timeout-minutes: 60
+
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: interfaces/dashboard/frontend/.nvmrc
+          cache: npm
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('package-lock.json') }}
+
+      # One run: line, deliberately. tests/test_verify.py asserts every
+      # run: in this file has a matching gate in scripts/verify.py; the
+      # browser install and every npm call live inside the wrapper.
+      - name: UI gate
+        run: python scripts/check_ui.py

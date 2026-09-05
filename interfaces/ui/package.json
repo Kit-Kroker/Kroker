@@ -10,5 +10,8 @@
   "scripts": {
     "test": "vitest run",
     "test:pw": "playwright test"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
   }
 }

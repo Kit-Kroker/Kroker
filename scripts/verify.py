@@ -47,6 +47,7 @@ GATES: tuple[tuple[str, list[str]], ...] = (
         "pytest-temporal",
         [sys.executable, "-m", "pytest", "-m", "temporal", "-q", *_TEMPORAL_IGNORES],
     ),
+    ("ui", [sys.executable, "scripts/check_ui.py"]),
 )
 
 
