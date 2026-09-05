@@ -23,7 +23,7 @@ with workflow.unsafe.imports_passed_through():
     from ..core.models import (
         DeployConfig,
     )
-    from ..deploy.activities import (
+    from ..stages.deploy.activities import (
         DeployActivityInput,
         RollbackInput,
         SmokeCheckInput,

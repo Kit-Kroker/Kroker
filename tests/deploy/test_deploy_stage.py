@@ -12,10 +12,10 @@ from sdlc.core.models import (
     GateDecision,
     GateOutcome,
 )
+from sdlc.stages.deploy import _deploy_result, _deploy_verdict, _sanitize_tag
 from sdlc.stages.deploy.models import DeployReport
-from sdlc.workflows.feature import _deploy_result, _deploy_verdict, _sanitize_tag
 
-SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+SRC = pathlib.Path("src/sdlc/stages/deploy/step.py")
 
 
 def _report(**over) -> DeployReport:

@@ -77,12 +77,6 @@ from .crew.activities import (
     run_crew_turn,
 )
 from .crew.loader import validate_crew_clis
-from .deploy.activities import (
-    deploy_apply,
-    deploy_current_version,
-    deploy_rollback,
-    smoke_check,
-)
 from .harness.registry import check_harness_versions
 from .memoization.activities import cache_get, cache_put
 from .memory.activities import (
@@ -145,10 +139,6 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
         checkpoint_round,
         load_crew,
         run_coding_task,
-        deploy_current_version,
-        deploy_apply,
-        smoke_check,
-        deploy_rollback,
         read_committed_bytes,
         get_task_diff,
         record_benchmark,

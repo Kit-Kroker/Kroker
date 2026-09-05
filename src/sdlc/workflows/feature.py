@@ -38,7 +38,6 @@ with workflow.unsafe.imports_passed_through():
     from ..core.models import (
         ExecutionMode,
         GateDecision,
-        GateOutcome,
         GatePolicy,
         IdeaBrief,
         PipelineConfig,
@@ -46,10 +45,6 @@ with workflow.unsafe.imports_passed_through():
         RoleUsage,
         RunState,
         RunSummary,
-    )
-    from ..gate import (
-        CheckClass,
-        CheckResult,
     )
     from ..handoff import (
         claim_survival_score,
@@ -61,9 +56,8 @@ with workflow.unsafe.imports_passed_through():
     from ..notify.contract import NotifyReason
     from ..observability.summary import build_run_summary
     from ..observability.trace import RunEventKind
-    from ..pending import GateContext
     from ..prompts import planner_prompt
-    from ..stages import analyze, clarify, context, intake, merge, research, retro
+    from ..stages import analyze, clarify, context, deploy, intake, merge, research, retro
     from ..stages.analyze.models import untraced_criteria
     from ..stages.architecture.models import ArchitectureSpec
     from ..stages.clarify.models import ClarifiedRequirements
@@ -72,7 +66,7 @@ with workflow.unsafe.imports_passed_through():
         DeltaCheckInput,
         check_brownfield_delta,
     )
-    from ..stages.deploy.models import DeployPlan, DeployReport, SmokeCheck
+    from ..stages.deploy.models import DeployPlan
     from ..stages.plan.models import DevTask, ImplementationPlan
     from ..stages.research.deps import ResearchDeps
     from ..vcs import (
@@ -84,7 +78,6 @@ with workflow.unsafe.imports_passed_through():
     )
     from .benchmark_host import BenchmarkHost
     from .board_host import BoardHost
-    from .deployment import DeploymentInput, DeploymentWorkflow
     from .gates import GateHost
     from .memory_host import MEM_ACT, MemoryHost
     from .models import SeededWork, TaskResult
@@ -133,50 +126,6 @@ def _requirements_for_downstream(reqs: ClarifiedRequirements) -> str:
     prompt or its cache key.
     """
     return reqs.model_dump_json(exclude={"dropped", "dimensions_probed"})
-
-
-def _deploy_result(report: DeployReport, decision: GateDecision | None, pr_url: str) -> str:
-    """Map a DeployReport plus the deploy_failed gate decision onto the run's
-    terminal string. Pure, so the mapping is testable without Temporal.
-
-    `decision` is None only when the report says deployed.
-
-    A report whose rollback did NOT happen can never return `rolled-back:` --
-    the environment is live and in an unknown state, and flattening that into
-    an ordinary failure hides the one outcome needing a human immediately.
-    """
-    if report.deployed:
-        return f"deployed:{pr_url}"
-    if not report.rolled_back:
-        return f"deploy-broken:{pr_url}"
-    if decision is not None and decision.outcome is GateOutcome.REJECT:
-        return f"deploy-rejected:{pr_url}"
-    return f"rolled-back:{pr_url}"
-
-
-def _deploy_verdict(report: DeployReport) -> str:
-    """What the deploy_failed gate renders. The rollback reason plus, when
-    available, the deploy command's own output -- without it the human
-    deciding what to do next never sees what the apply actually produced
-    (F4: the common smoke-fails case)."""
-    if report.apply_detail.strip():
-        return f"{report.rollback_reason}\n\nDeploy output:\n{report.apply_detail}"
-    return report.rollback_reason
-
-
-def _sanitize_tag(raw: str) -> str:
-    """Turn an arbitrary workflow id into a valid image tag.
-
-    The version becomes IMAGE_TAG for the compose adapter, and a benchmark
-    child id is `f"{bench_run_id}/{cell.cell_id}"` -- the '/' (and any other
-    char outside [A-Za-z0-9_.-]) is not legal in a docker tag. Replace invalid
-    chars with '-', and never let the result start with '.' or '-'.
-    """
-    import re
-
-    tag = re.sub(r"[^A-Za-z0-9_.-]", "-", raw)[:128]
-    tag = re.sub(r"^[.-]+", "", tag) or "run"
-    return tag
 
 
 def _merge_evidence_all_green(results: list) -> bool:
@@ -437,33 +386,8 @@ class FeatureWorkflow(
             return fallback
 
     def _deploy_plan(self, cfg: PipelineConfig) -> DeployPlan:
-        """The frozen DeployPlan for this run.
-
-        TRANSITIONAL: devops_planner authoring this at the planning stage and
-        the plan gate freezing it (spec D-2) is the next increment. Until
-        then the run deploys with at most one liveness check -- weak but
-        honest, and `frozen=True` keeps the contract's shape intact so the
-        planner can start filling it without a second code path.
-
-        The http liveness check is emitted ONLY when a base_url is configured:
-        a script-adapter deploy has no endpoint, and an http check against an
-        empty endpoint errors and would roll back every deploy (D-7 broken).
-        With no base_url the plan therefore carries ZERO checks, so a script
-        deploy succeeds on a zero exit code alone -- the one case that falls
-        short of DeployReport's "deployed is earned by passing smoke checks"
-        contract. A command smoke check (the natural fix for the D-7 path)
-        lands with devops_planner. The version is sanitized into a valid
-        image tag -- a benchmark child id carries a '/', which is not legal
-        as a docker tag.
-        """
-        checks = []
-        if cfg.deploy.base_url:
-            checks.append(SmokeCheck(name="liveness", kind="http", path="/health"))
-        return DeployPlan(
-            environment="staging",
-            version=_sanitize_tag(workflow.info().workflow_id),
-            smoke_checks=checks,
-        )
+        """The frozen DeployPlan for this run."""
+        return deploy._deploy_plan(cfg, workflow.info().workflow_id)
 
     # ------------------------------ run ---------------------------------
 
@@ -1027,102 +951,11 @@ class FeatureWorkflow(
         if pr_url.startswith("rejected:"):
             return pr_url
 
-        # 6. DEPLOY gate â†’ DeploymentWorkflow child (E-67/FR-1104)
-        _started = workflow.now()
-        gate = await self._gate("deploy", cfg.gate_settings())
-        _ended = workflow.now()
-        if not gate.approved or not cfg.deploy.enabled:
-            # The deploy stage did not run: record the gate decision only.
-            await self._record(
-                cfg,
-                self._stage_record(
-                    cfg,
-                    stage="deploy",
-                    role="devops",
-                    started=_started,
-                    ended=_ended,
-                    quality_score=None,
-                    judge="llm_judge",
-                    outcome=(BenchmarkOutcome.PASS if gate.approved else BenchmarkOutcome.REVISED),
-                    model=resolve_role_model(cfg, "devops"),
-                ),
-            )
-            return f"merged-not-deployed:{pr_url}"
-
-        deploy_plan = self._deploy_plan(cfg)
-        attempt = 1
-        while True:
-            report = await workflow.execute_child_workflow(
-                DeploymentWorkflow.run,
-                DeploymentInput(
-                    plan=deploy_plan, cfg=cfg.deploy, repo_path=repo_path, attempt=attempt
-                ),
-                # Derived, never generated: replay must produce the same id,
-                # and a retry round stays identifiable in the Temporal UI.
-                id=f"{workflow.info().workflow_id}-deploy-{attempt}",
-                task_queue=workflow.info().task_queue,
-            )
-            if report.deployed:
-                # One record, reflecting the actual result -- never a
-                # premature PASS from the gate. (SC-5 / E-40: a reading must
-                # not read as clean when it was not.)
-                await self._record(
-                    cfg,
-                    self._stage_record(
-                        cfg,
-                        stage="deploy",
-                        role="devops",
-                        started=_started,
-                        ended=workflow.now(),
-                        quality_score=None,
-                        judge="contract",
-                        outcome=BenchmarkOutcome.PASS,
-                        model=resolve_role_model(cfg, "devops"),
-                    ),
-                )
-                self._stage("deployed", "deploy")
-                return _deploy_result(report, None, pr_url)
-
-            # The gate opens even when the rollback itself failed -- that is
-            # the case a human most needs to see.
-            decision = await self._gate(
-                "deploy_failed",
-                cfg.gate_settings(),
-                round=attempt,
-                context=GateContext(
-                    # ABSOLUTE: the human is not waving a check through --
-                    # the rollback already happened. They are deciding what
-                    # to do next.
-                    checks=[
-                        CheckResult(
-                            name=c.name,
-                            passed=c.passed,
-                            classification=CheckClass.ABSOLUTE,
-                            detail=c.detail,
-                        )
-                        for c in report.checks
-                    ],
-                    verdict=_deploy_verdict(report),
-                ),
-                default_policy=GatePolicy.HARD,
-            )
-            if decision.outcome is GateOutcome.REVISE and attempt < cfg.max_gate_rounds:
-                attempt += 1
-                continue
-            # Rolled back or deploy-broken: record FAIL, never the gate's PASS.
-            await self._record(
-                cfg,
-                self._stage_record(
-                    cfg,
-                    stage="deploy",
-                    role="devops",
-                    started=_started,
-                    ended=workflow.now(),
-                    quality_score=None,
-                    judge="contract",
-                    outcome=BenchmarkOutcome.FAIL,
-                    model=resolve_role_model(cfg, "devops"),
-                ),
-            )
-            self._stage("deploy_failed", "deploy")
-            return _deploy_result(report, decision, pr_url)
+        # 6. DEPLOY gate → DeploymentWorkflow child (E-67/FR-1104)
+        return await deploy.step(
+            self._ctx,
+            cfg=cfg,
+            deploy_plan=self._deploy_plan(cfg),
+            repo_path=repo_path,
+            pr_url=pr_url,
+        )

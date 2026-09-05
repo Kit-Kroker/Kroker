@@ -158,7 +158,7 @@ documentation (`src/`, `tests/`, `scripts/`, `interfaces/`, `agents/`,
 | qa | `src/sdlc/stages/qa/` | migrated |
 | analyze | `src/sdlc/stages/analyze/` | migrated |
 | merge | `src/sdlc/stages/merge/` | migrated |
-| deploy | `src/sdlc/workflows/feature.py` | types moved, step pending |
+| deploy | `src/sdlc/stages/deploy/` | migrated |
 | retro / reflect | `src/sdlc/stages/retro/` | migrated |
 
 Rule: **you touched a stage, you move it.**

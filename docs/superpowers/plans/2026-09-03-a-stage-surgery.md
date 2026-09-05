@@ -1845,16 +1845,16 @@ git commit -m "refactor(<stage>): move the <stage> stage into a vertical slice"
 - Uncovered needs: Child workflow `DeploymentWorkflow.run` (`:3601`).
 - Enum sites: `decision.outcome is GateOutcome.REVISE` (`:3654`).
 
-- [ ] **Step 1: Write failing contract test** (`tests/deploy/test_deploy_slice_contract.py`)
-- [ ] **Step 2: Run test to verify it fails**
-- [ ] **Step 3: Lift the inline block into `step.py`** (`feature.py:1744-1771`, `:3575-3673`)
-- [ ] **Step 4: Move deploy activities from `deploy/activities.py` to `stages/deploy/activities.py` and create `prompts.py` with `prompt_digest(cfg)`**
-- [ ] **Step 5: Register in `STAGE_MODULES` and update `worker.py`**
-- [ ] **Step 6: Move tests** (`tests/test_deploy_*.py`, `tests/test_deployment_workflow.py` -> `tests/deploy/`)
-- [ ] **Step 7: Write `deploy.md` and `AGENTS.md` from templates**
-- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
-- [ ] **Step 9: Run full verification suite**
-- [ ] **Step 10: Commit `refactor(deploy): move the deploy stage into a vertical slice`**
+- [x] **Step 1: Write failing contract test** (`tests/deploy/test_deploy_slice_contract.py`)
+- [x] **Step 2: Run test to verify it fails**
+- [x] **Step 3: Lift the inline block into `step.py`** (`feature.py:1744-1771`, `:3575-3673`)
+- [x] **Step 4: Move deploy activities from `deploy/activities.py` to `stages/deploy/activities.py` and create `prompts.py` with `prompt_digest(cfg)`**
+- [x] **Step 5: Register in `STAGE_MODULES` and update `worker.py`**
+- [x] **Step 6: Move tests** (`tests/test_deploy_*.py`, `tests/test_deployment_workflow.py` -> `tests/deploy/`)
+- [x] **Step 7: Write `deploy.md` and `AGENTS.md` from templates**
+- [x] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [x] **Step 9: Run full verification suite**
+- [x] **Step 10: Commit `refactor(deploy): move the deploy stage into a vertical slice`**
 
 ### Task 20.9: Stage `code` (Rank 9)
 

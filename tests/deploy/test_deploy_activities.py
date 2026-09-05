@@ -12,7 +12,7 @@ import pytest
 from sdlc.core.models import (
     DeployConfig,
 )
-from sdlc.deploy.activities import (
+from sdlc.stages.deploy.activities import (
     ApplyResult,
     CurrentVersionResult,
     DeployActivityInput,
