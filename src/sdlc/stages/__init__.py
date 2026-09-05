@@ -22,6 +22,7 @@ def __getattr__(name: str) -> Any:
     if name == "STAGE_MODULES":
         from . import (
             analyze,
+            architecture,
             clarify,
             code,
             context,
@@ -46,6 +47,7 @@ def __getattr__(name: str) -> Any:
             merge,
             deploy,
             code,
+            architecture,
         )
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

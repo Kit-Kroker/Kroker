@@ -151,7 +151,7 @@ documentation (`src/`, `tests/`, `scripts/`, `interfaces/`, `agents/`,
 | context (brownfield) | `src/sdlc/stages/context/` | migrated |
 | research | `src/sdlc/stages/research/` | migrated |
 | clarify | `src/sdlc/stages/clarify/` | migrated |
-| architecture | `src/sdlc/workflows/feature.py` | types moved, step pending |
+| architecture | `src/sdlc/stages/architecture/` | migrated |
 | plan | `src/sdlc/workflows/feature.py` | types moved, step pending |
 | code | `src/sdlc/stages/code/` | migrated |
 | review | `src/sdlc/stages/review/` | migrated |

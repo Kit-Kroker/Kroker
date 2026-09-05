@@ -368,11 +368,14 @@ def test_the_architect_reads_the_downstream_view_not_the_raw_artifact():
 
     tree = ast.parse(FEATURE_PY.read_text(encoding="utf-8"), filename=str(FEATURE_PY))
     src = ast.unparse(_methods(_load_class(tree, "FeatureWorkflow"))["_pipeline"])
-    assert "reqs_for_architect = _requirements_for_downstream(reqs)" in src
+    arch_step_src = ast.unparse(
+        ast.parse(pathlib.Path("src/sdlc/stages/architecture/step.py").read_text(encoding="utf-8"))
+    )
+    assert "reqs_for_architect = _requirements_for_downstream(requirements)" in arch_step_src
     # the prompt...
-    assert r"f'mode={idea.mode.value}\n{reqs_for_architect}'" in src
+    assert r"f'mode={mode_val}\n{reqs_for_architect}'" in arch_step_src
     # ...and the memo key, which must key on exactly what it prompted with.
-    assert "cache_key = reqs_for_architect +" in src
+    assert "cache_key = reqs_for_architect +" in arch_step_src
     # The clarify stage's own uses still read the FULL artifact: `dropped`
     # is the measurement record and must reach disk and the board.
     step_src = pathlib.Path("src/sdlc/stages/clarify/step.py").read_text(encoding="utf-8")

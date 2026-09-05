@@ -18,6 +18,9 @@ from test_factory_purity import FEATURE_PY, _load_class, _methods
 CLARIFY_STEP_PY = (
     Path(__file__).resolve().parents[1] / "src" / "sdlc" / "stages" / "clarify" / "step.py"
 )
+ARCH_STEP_PY = (
+    Path(__file__).resolve().parents[1] / "src" / "sdlc" / "stages" / "architecture" / "step.py"
+)
 CODE_STEP_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "stages" / "code" / "step.py"
 TASK_HOST_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "task_host.py"
 
@@ -52,13 +55,17 @@ def _calls_self_method(fn: ast.AST, method: str) -> bool:
 def test_run_calls_recall_at_least_three_times_source_count(feature_class):
     methods = _methods(feature_class)
     # E-32: the pipeline body lives in _pipeline now (run wraps it + _retro).
-    # Spec A: architect + plan still recall in _pipeline; clarify's recall
-    # moved into the slice (ctx.recall in step.py).
+    # Spec A: plan still recalls in _pipeline; clarify and architecture recall
+    # moved into their slices (ctx.recall in step.py).
     src = ast.unparse(methods["_pipeline"])
     slice_src = ast.unparse(ast.parse(CLARIFY_STEP_PY.read_text(encoding="utf-8")))
-    assert src.count("self._recall(") + slice_src.count("ctx.recall(") >= 3, (
-        "expected recall before clarify/architect/plan at minimum"
-    )
+    arch_slice_src = ast.unparse(ast.parse(ARCH_STEP_PY.read_text(encoding="utf-8")))
+    assert (
+        src.count("self._recall(")
+        + slice_src.count("ctx.recall(")
+        + arch_slice_src.count("ctx.recall(")
+        >= 3
+    ), "expected recall before clarify/architect/plan at minimum"
 
 
 def test_run_calls_retain_for_stage_summaries(feature_class):

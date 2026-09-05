@@ -3,7 +3,9 @@ from pathlib import Path
 
 import pytest
 
-ARCHITECT_PY = Path(__file__).resolve().parents[1] / "agents" / "architect" / "agent.py"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+ARCHITECT_PY = REPO_ROOT / "agents" / "architect" / "agent.py"
+ARCHITECT_STEP_PY = REPO_ROOT / "src" / "sdlc" / "stages" / "architecture" / "step.py"
 
 
 def test_architect_agent_registers_a_research_tool():
@@ -24,8 +26,7 @@ def test_architect_deps_use_a_dedicated_budget_scope():
     scope -- not the default 'run', whose count cap would bite against the
     research stage's already-accumulated searches and leave the architect
     unable to search on a fan-out run."""
-    feature_py = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "feature.py"
-    tree = ast.parse(feature_py.read_text(encoding="utf-8"))
+    tree = ast.parse(ARCHITECT_STEP_PY.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
         if not (
             isinstance(node, ast.Assign)
@@ -42,7 +43,7 @@ def test_architect_deps_use_a_dedicated_budget_scope():
             "budget-run.json the research fan-out already charges"
         )
         return
-    pytest.fail("architect_deps = ResearchDeps(...) not found in feature.py")
+    pytest.fail("architect_deps = ResearchDeps(...) not found in step.py")
 
 
 def test_research_subquery_shares_the_budget_object():

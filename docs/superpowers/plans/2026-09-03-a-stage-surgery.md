@@ -1895,16 +1895,16 @@ git commit -m "refactor(<stage>): move the <stage> stage into a vertical slice"
 - Uncovered needs: 1 (`_board_publish` -> returns spec + gate decision; orchestrator publishes).
 - Enum sites: None.
 
-- [ ] **Step 1: Write failing contract test** (`tests/architecture/test_architecture_slice_contract.py`)
-- [ ] **Step 2: Run test to verify it fails**
-- [ ] **Step 3: Lift the inline block into `step.py`** (`feature.py:2922-3090`)
-- [ ] **Step 4: Create `prompts.py` with `prompt_digest(cfg)` and empty `activities.py`**
-- [ ] **Step 5: Register in `STAGE_MODULES`**
-- [ ] **Step 6: Move tests** (`tests/test_architect_*.py` -> `tests/architecture/`)
-- [ ] **Step 7: Write `architecture.md` and `AGENTS.md` from templates**
-- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
-- [ ] **Step 9: Run full verification suite**
-- [ ] **Step 10: Commit `refactor(architecture): move the architecture stage into a vertical slice`**
+- [x] **Step 1: Write failing contract test** (`tests/architecture/test_architecture_slice_contract.py`)
+- [x] **Step 2: Run test to verify it fails**
+- [x] **Step 3: Lift the inline block into `step.py`** (`feature.py:2922-3090`)
+- [x] **Step 4: Create `prompts.py` with `prompt_digest(cfg)` and empty `activities.py`**
+- [x] **Step 5: Register in `STAGE_MODULES`**
+- [x] **Step 6: Move tests** (`tests/test_architect_*.py` -> `tests/architecture/`)
+- [x] **Step 7: Write `architecture.md` and `AGENTS.md` from templates**
+- [x] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [x] **Step 9: Run full verification suite**
+- [x] **Step 10: Commit `refactor(architecture): move the architecture stage into a vertical slice`**
 
 ### Task 20.11: Stage `plan` (Rank 11)
 

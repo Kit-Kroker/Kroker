@@ -12,7 +12,6 @@ from datetime import datetime, timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
-from temporalio.exceptions import ApplicationError
 
 with workflow.unsafe.imports_passed_through():
     from ..agents.roles import (
@@ -32,8 +31,6 @@ with workflow.unsafe.imports_passed_through():
     from ..benchmarks.models import BenchmarkOutcome
     from ..board.models import TaskStatus
     from ..context.models import CodebaseMap
-    from ..context.project import map_digest
-    from ..context.render import render_for_prompt
     from ..core.context import StageContext, StageServices
     from ..core.models import (
         ExecutionMode,
@@ -57,18 +54,23 @@ with workflow.unsafe.imports_passed_through():
     from ..observability.summary import build_run_summary
     from ..observability.trace import RunEventKind
     from ..prompts import planner_prompt
-    from ..stages import analyze, clarify, context, deploy, intake, merge, research, retro
+    from ..stages import (
+        analyze,
+        architecture,
+        clarify,
+        context,
+        deploy,
+        intake,
+        merge,
+        research,
+        retro,
+    )
     from ..stages.analyze.models import untraced_criteria
     from ..stages.architecture.models import ArchitectureSpec
     from ..stages.clarify.models import ClarifiedRequirements
     from ..stages.code.models import HandoffSummary
-    from ..stages.context.activities import (
-        DeltaCheckInput,
-        check_brownfield_delta,
-    )
     from ..stages.deploy.models import DeployPlan
     from ..stages.plan.models import DevTask, ImplementationPlan
-    from ..stages.research.deps import ResearchDeps
     from ..vcs import (
         DiffInput,
         IntegrationHandle,
@@ -566,166 +568,16 @@ class FeatureWorkflow(
         await self._check_budget(cfg)
 
         # 2. ARCHITECT (+ human approval of the spec)
-        self._stage("architecting", "architecture")
-        _started = workflow.now()
-        snapshot = await self._recall(
-            cfg,
-            cfg.memory.project_bank,
-            query=f"architect:{idea.title}",
-            filters={"stage": "architect"},
-        )
-
-        arch_spend = RoleUsage(role="architect", model=resolve_role_model(cfg, "architect"))
-
-        # E-84 D10/D12: render the codebase map once upfront for prompt and memo key.
-        map_block = ""
-        map_key = ""
-        if self._codebase_map is not None:
-            rendered_map = render_for_prompt(self._codebase_map)
-            map_key = map_digest(self._codebase_map)
-            map_block = (
-                f"\n\nCodebase map at commit {self._codebase_map.commit_sha[:12]}:\n{rendered_map}"
-            )
-
-        async def _run_architect(guidance: str | None) -> ArchitectureSpec:
-            # ResearchDeps is ALWAYS constructed so the architect agent's
-            # deps_type=ResearchDeps is satisfied uniformly. When research is
-            # disabled, provider="fake".
-            # NOTE: under the default config (research_enabled=False,
-            # provider="fake", no $SDLC_RESEARCH_FAKE_CORPUS), the architect's
-            # research(q) tool is advertised but will raise if the LLM calls
-            # it â€” the fake corpus is a CI fixture, not production-accessible.
-            # Set research_enabled=True and a real provider (or point
-            # SDLC_RESEARCH_FAKE_CORPUS at a corpus) to use it.
-            # The error surfaces to the model, which stops calling the tool;
-            # the architect still produces its ArchitectureSpec.
-            # NOTE (accepted loss, 2026-07-17 human decision): the budget
-            # counter on deps.budget accumulates correctly for direct/test
-            # invocation, but under TemporalAgent each tool activity receives
-            # a fresh deserialized copy â€” shared-budget enforcement is
-            # advisory-only when the architect runs temporalized.
-            research_role = cfg.roles.get("research") if cfg.research_enabled else None
-            architect_deps = ResearchDeps(
-                run_id=workflow.info().workflow_id,
-                provider=(research_role.provider or "fake") if research_role else "fake",
-                max_searches=cfg.research.max_searches,
-                max_fetches=cfg.research.max_fetches,
-                max_cost_usd=cfg.research.max_cost_usd,
-                memory_backend=cfg.memory.backend,
-                memory_base_url=cfg.memory.base_url,
-                memory_bank=cfg.memory.project_bank,
-                memory_watermark=self._memory_watermark,
-                # max_searches/max_fetches are PER-CONSUMER (each research
-                # sub-question gets its own budget-sq-<id>.json). The architect
-                # is a peer consumer in a later stage sharing the same run_id
-                # (hence budget-run.json), so it must charge a dedicated scope:
-                # the default 'run' would let the research fan-out's accumulated
-                # searches exhaust the architect's count allowance before it
-                # starts. budget-architect.json still feeds the shared run COST
-                # ceiling via charge_scoped's run-counter step.
-                scope="architect",
-            )
-
-            delta_retries = cfg.max_delta_retries
-            delta_guidance: str | None = None
-            # E-85: the architect reads the requirements, not the stage's
-            # measurement record. Rendered once so the prompt and the memo
-            # key below cannot drift apart.
-            reqs_for_architect = _requirements_for_downstream(reqs)
-            while True:
-                prompt = (
-                    f"mode={idea.mode.value}\n{reqs_for_architect}"
-                    + (map_block if self._codebase_map is not None else "")
-                    + (
-                        "\nRelevant memory:\n- " + "\n- ".join(snapshot.items)
-                        if snapshot.items
-                        else ""
-                    )
-                    + (f"\nRevision guidance from reviewer:\n{guidance}" if guidance else "")
-                    + (f"\nDelta correction required:\n{delta_guidance}" if delta_guidance else "")
-                )
-
-                async def _produce(prompt: str = prompt):
-                    return (
-                        await self._run_role(
-                            cfg,
-                            "architect",
-                            resolve_role_model(cfg, "architect"),
-                            t_architect,
-                            prompt,
-                            deps=architect_deps,
-                            into=arch_spend,
-                        )
-                    ).output
-
-                cache_key = (
-                    reqs_for_architect
-                    + (guidance or "")
-                    + (map_key if self._codebase_map is not None else "")
-                    + (delta_guidance or "")
-                )
-                arch, _ = await self._cached_stage(
-                    cfg, "architect", cache_key, ArchitectureSpec, _produce
-                )
-
-                if self._codebase_map is None:
-                    return arch
-
-                delta_check = await workflow.execute_activity(
-                    check_brownfield_delta,
-                    DeltaCheckInput(
-                        repo_dir=repo_path,
-                        commit_sha=self._codebase_map.commit_sha,
-                        delta=arch.delta,
-                    ),
-                    **INTAKE_ACT,
-                )
-                if delta_check.passed:
-                    return arch
-
-                if delta_retries <= 0:
-                    raise ApplicationError(
-                        f"brownfield architecture delta failed grounding check "
-                        f"after retries: {delta_check.detail}",
-                        non_retryable=True,
-                    )
-                delta_retries -= 1
-                delta_guidance = (
-                    f"The proposed delta does not match the repository at "
-                    f"{self._codebase_map.commit_sha[:12]}: "
-                    f"{delta_check.detail}. Update delta.added, delta.modified, "
-                    f"and delta.removed so every path resolves."
-                )
-
-        arch, gate = await self._revisable_stage("architecture", cfg, _run_architect)
-        _ended = workflow.now()
-        _quality = await self._judge(
-            cfg,
-            arch.model_dump_json(),
-            "architect",
-            author_model=resolve_role_model(cfg, "architect"),
-        )
-        await self._record(
-            cfg,
-            self._stage_record(
-                cfg,
-                stage="architecture",
-                role="architect",
-                started=_started,
-                ended=_ended,
-                quality_score=_quality.score,
-                judge=_quality.judge,
-                outcome=(BenchmarkOutcome.PASS if gate.approved else BenchmarkOutcome.REVISED),
-                model=resolve_role_model(cfg, "architect"),
-                spend=arch_spend,
-            ),
-        )
-        await self._retain(
-            cfg,
-            MemoryKind.STAGE_SUMMARY,
-            cfg.memory.project_bank,
-            text=f"architect: {arch.overview}",
-            metadata={"stage": "architect", "run_id": workflow.info().workflow_id},
+        arch, gate = await architecture.step(
+            self._ctx,
+            cfg=cfg,
+            requirements=reqs,
+            codebase_map=self._codebase_map,
+            memory_watermark=self._memory_watermark,
+            idea=idea,
+            repo_path=repo_path,
+            architect_agent=t_architect,
+            architect_model=resolve_role_model(cfg, "architect"),
         )
         await self._check_budget(cfg)  # E-33: serial boundary after architect
         await self._board_publish(
