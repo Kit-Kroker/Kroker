@@ -39,8 +39,8 @@ onUnmounted(() => {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--c-0c0f14);
-  color: var(--c-d9dfe9);
+  background: var(--ground-1);
+  color: var(--ink-secondary);
   font-family: var(--font-sans);
   font-size: 13px;
   overflow: hidden;

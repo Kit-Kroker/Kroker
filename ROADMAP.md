@@ -276,7 +276,7 @@
 - [ ] **FR-503** confidence-gated repair approval; timeout = inaction.
 
 ### Interfaces (FR-600)
-- [x] **FR-601** dashboard fleet/spine/inbox — Vue 3 frontend over a FastAPI backend serving live Temporal state (E-10, 2026-08-18). Closed runs render from `run_summary()` within Temporal's retention window; older history would need a store (OQ-13).
+- [x] **FR-601** dashboard fleet/spine/inbox — Vue 3 frontend over a FastAPI backend serving live Temporal state (E-10, 2026-08-18). Closed runs render from `run_summary()` within Temporal's retention window; older history would need a store (OQ-13). The frontend's components now live in the `@kroker/ui` library and the `http` provider is the default, `VITE_API=mock` selecting the in-memory one (E-89).
 - [ ] **FR-602** MCP server (list/detail/inbox/answer/decide/start) — no `interfaces/mcp/`.
 - [ ] ⚠️ **FR-603** CLI — `start/status/answer/approve/revise/reject/benchmark` ✅
   (`revise` landed with E-7; gate rounds are now derived from the pending item,
@@ -366,6 +366,16 @@ as tracked rather than accidental.
 - [ ] **FR-1106** durable observation window → collect → evaluate → keep/kill/extend gate (E-70). See **OQ-9**.
 - [ ] **FR-1107** PoC mode: bounded, disposable, marked so it never accrues as debt (E-71).
 - [ ] **FR-1108** `inconclusive` is a valid verdict; never a favourable read on insufficient data (E-70).
+
+### Component library (FR-1400)
+
+- [x] **FR-1400** component library — `interfaces/ui/` holds presentation components that import no domain type; the dashboard's `src/adapters/` map `Run`/`InboxItem` onto display primitives (E-89, 2026-09-06).
+- [x] **FR-1401** every component carries a clause contract co-located with it (`<name>.md` beside `<Name>.vue`, cited by both test tiers) (E-89).
+- [x] **FR-1402** every component carries at least one named profile, rendered by the showcase route (E-89).
+- [x] **FR-1403** presentation clauses are verified in a real browser — Playwright against the showcase profiles and the assembled SPA on the mock provider (E-89).
+- [x] **FR-1404** design tokens are the only place a colour, size or font literal appears; names are semantic per the canvas at `records/2026-09-05-console-restyle/` (E-89).
+- [x] **FR-1405** the showcase is exportable as a Claude Design preview bundle (`npm run ds:bundle` → `interfaces/ui/dist-ds/`) (E-89).
+- [x] **FR-1406** the Node toolchain is gated in CI — one wrapper, `python scripts/check_ui.py`, invoked identically by `ci.yml` and `scripts/verify.py` (E-89).
 
 ---
 
@@ -499,3 +509,4 @@ in-flight work lives in its design doc until merge.
 | Suggested ordering across the groups | [`ordering.md`](docs/roadmap/ordering.md) |
 | Agent board (`E-78`) | [`agent-board.md`](docs/roadmap/agent-board.md) |
 | The crew (`E-88`) | [`crew.md`](docs/roadmap/crew.md) |
+| UI component library (`E-89`) | [`ui-component-library.md`](docs/roadmap/ui-component-library.md) |

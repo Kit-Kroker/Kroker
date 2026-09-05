@@ -53,18 +53,18 @@ const formatCost = (cost: number | null | undefined) => {
   gap: 12px;
   align-items: center;
   padding: 11px 14px;
-  border-bottom: 1px solid var(--c-171c25);
+  border-bottom: 1px solid var(--line-faint);
   cursor: pointer;
   text-decoration: none;
   color: inherit;
 }
 .cmp-fleet-row:hover {
-  background: var(--c-151a23);
+  background: var(--ground-4);
 }
 .cmp-fleet-row-id {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--c-9db4d8);
+  color: var(--ink-identifier);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -79,16 +79,16 @@ const formatCost = (cost: number | null | undefined) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--c-c8cfdb);
+  color: var(--ink-tertiary);
 }
 .cmp-fleet-row-mode {
   flex: none;
   font-family: var(--font-mono);
   font-size: 9.5px;
   padding: 2px 6px;
-  border: 1px solid var(--c-2a3140);
+  border: 1px solid var(--line-strong);
   border-radius: 3px;
-  color: var(--c-7d8697);
+  color: var(--ink-faint);
 }
 .cmp-fleet-row-status {
   display: flex;
@@ -99,7 +99,7 @@ const formatCost = (cost: number | null | undefined) => {
 }
 .cmp-fleet-row-blocker {
   font-size: 11px;
-  color: var(--c-8a93a5);
+  color: var(--ink-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -108,12 +108,12 @@ const formatCost = (cost: number | null | undefined) => {
   text-align: right;
   font-family: var(--font-mono);
   font-size: 11.5px;
-  color: var(--c-c8cfdb);
+  color: var(--ink-tertiary);
 }
 .cmp-fleet-row-age {
   text-align: right;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--c-5d6675);
+  color: var(--ink-subtle);
 }
 </style>

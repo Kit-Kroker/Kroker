@@ -134,8 +134,8 @@ function handleSubmit() {
 }
 .card {
   width: 480px;
-  background: var(--c-10141b);
-  border: 1px solid var(--c-2a3140);
+  background: var(--ground-3);
+  border: 1px solid var(--line-strong);
   border-radius: 8px;
   padding: 22px 24px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
@@ -145,7 +145,7 @@ function handleSubmit() {
   font-size: 12px;
   letter-spacing: 0.08em;
   font-weight: 600;
-  color: var(--c-e8edf5);
+  color: var(--ink-primary);
   margin-bottom: 18px;
 }
 .lbl {
@@ -153,15 +153,15 @@ function handleSubmit() {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.06em;
-  color: var(--c-5d6675);
+  color: var(--ink-subtle);
   margin-bottom: 6px;
 }
 .inp {
   width: 100%;
-  background: var(--c-0d1016);
-  border: 1px solid var(--c-2a3140);
+  background: var(--ground-2);
+  border: 1px solid var(--line-strong);
   border-radius: 5px;
-  color: var(--c-d9dfe9);
+  color: var(--ink-secondary);
   font-size: 12.5px;
   padding: 9px 12px;
   margin-bottom: 14px;
@@ -182,14 +182,14 @@ function handleSubmit() {
   font-size: 11.5px;
   padding: 8px 0;
   border-radius: 4px;
-  background: var(--c-0d1016);
-  color: var(--c-7d8697);
-  border: 1px solid var(--c-2a3140);
+  background: var(--ground-2);
+  color: var(--ink-faint);
+  border: 1px solid var(--line-strong);
 }
 .mode.on {
-  background: var(--c-2a2310);
+  background: var(--accent-tint-surface);
   color: var(--status-blocked);
-  border-color: var(--c-574a2c);
+  border-color: var(--accent-tint-border);
 }
 .actions {
   display: flex;
@@ -202,12 +202,12 @@ function handleSubmit() {
   font-size: 11.5px;
   padding: 8px 16px;
   background: none;
-  color: var(--c-8a93a5);
-  border: 1px solid var(--c-2a3140);
+  color: var(--ink-muted);
+  border: 1px solid var(--line-strong);
   border-radius: 4px;
 }
 .ghost:hover {
-  color: var(--c-d9dfe9);
+  color: var(--ink-secondary);
 }
 .go {
   cursor: pointer;
@@ -216,12 +216,12 @@ function handleSubmit() {
   font-weight: 600;
   padding: 8px 16px;
   background: var(--status-blocked);
-  color: var(--c-1a1405);
+  color: var(--accent-ink);
   border: none;
   border-radius: 4px;
 }
 .go:hover:not(:disabled) {
-  background: var(--c-ecc06a);
+  background: var(--accent-hover);
 }
 .go:disabled {
   opacity: 0.4;

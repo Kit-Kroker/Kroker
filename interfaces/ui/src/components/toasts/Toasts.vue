@@ -36,14 +36,14 @@ defineProps<{
   pointer-events: none;
 }
 .toast {
-  background: var(--c-161c26);
-  border: 1px solid var(--c-2a3140);
+  background: var(--ground-5);
+  border: 1px solid var(--line-strong);
   border-left: 3px solid var(--status-done);
   border-radius: 5px;
   padding: 10px 14px;
   font-family: var(--font-mono);
   font-size: 11.5px;
-  color: var(--c-c8cfdb);
+  color: var(--ink-tertiary);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   animation: fc-toast 0.18s ease-out;
 }

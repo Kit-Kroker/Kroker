@@ -13,7 +13,7 @@
   padding: 20px 20px 60px;
 }
 .hint {
-  color: var(--c-5d6675);
+  color: var(--ink-subtle);
   font-family: var(--font-mono);
   font-size: 12px;
 }

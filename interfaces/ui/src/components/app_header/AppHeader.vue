@@ -62,8 +62,8 @@ const emit = defineEmits<{
   align-items: center;
   gap: 24px;
   padding: 0 20px;
-  background: var(--c-090b0f);
-  border-bottom: 1px solid var(--c-1e242f);
+  background: var(--ground-0);
+  border-bottom: 1px solid var(--line);
 }
 .brand {
   display: flex;
@@ -75,12 +75,12 @@ const emit = defineEmits<{
   font-weight: 600;
   font-size: 14px;
   letter-spacing: 0.08em;
-  color: var(--c-e8edf5);
+  color: var(--ink-primary);
 }
 .sub {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--c-4d5665);
+  color: var(--ink-whisper);
 }
 .tabs {
   display: flex;
@@ -96,16 +96,16 @@ const emit = defineEmits<{
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.04em;
-  color: var(--c-7d8697);
+  color: var(--ink-faint);
   border-bottom: 2px solid transparent;
   text-decoration: none;
   cursor: pointer;
 }
 .tab:hover {
-  color: var(--c-e8edf5);
+  color: var(--ink-primary);
 }
 .tab-active {
-  color: var(--c-e8edf5);
+  color: var(--ink-primary);
   border-bottom-color: var(--status-blocked);
 }
 .badge {
@@ -116,7 +116,7 @@ const emit = defineEmits<{
   align-items: center;
   justify-content: center;
   background: var(--status-blocked);
-  color: var(--c-1a1405);
+  color: var(--accent-ink);
   border-radius: 9px;
   font-size: 10.5px;
   font-weight: 600;
@@ -130,10 +130,10 @@ const emit = defineEmits<{
   gap: 18px;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--c-7d8697);
+  color: var(--ink-faint);
 }
 .stats b {
-  color: var(--c-d9dfe9);
+  color: var(--ink-secondary);
 }
 .start {
   cursor: pointer;
@@ -142,11 +142,11 @@ const emit = defineEmits<{
   font-weight: 600;
   padding: 7px 14px;
   background: var(--status-blocked);
-  color: var(--c-1a1405);
+  color: var(--accent-ink);
   border: none;
   border-radius: 4px;
 }
 .start:hover {
-  background: var(--c-ecc06a);
+  background: var(--accent-hover);
 }
 </style>

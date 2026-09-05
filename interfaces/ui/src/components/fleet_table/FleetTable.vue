@@ -21,10 +21,10 @@ defineProps<{
 
 <style scoped>
 .cmp-fleet-table {
-  border: 1px solid var(--c-1e242f);
+  border: 1px solid var(--line);
   border-radius: 6px;
   overflow: hidden;
-  background: var(--c-10141b);
+  background: var(--ground-3);
 }
 .cmp-fleet-table-head {
   display: grid;
@@ -32,19 +32,19 @@ defineProps<{
   gap: 12px;
   align-items: center;
   padding: 8px 14px;
-  background: var(--c-0d1016);
-  border-bottom: 1px solid var(--c-1e242f);
+  background: var(--ground-2);
+  border-bottom: 1px solid var(--line);
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.08em;
-  color: var(--c-5d6675);
+  color: var(--ink-subtle);
 }
 .cmp-fleet-table-empty {
   padding: 32px 14px;
   text-align: center;
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--c-5d6675);
+  color: var(--ink-subtle);
 }
 .r {
   text-align: right;

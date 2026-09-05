@@ -6,7 +6,8 @@ bound by these rules.
 
 ## Three documents, one job each
 
-Every unit of code (a vertical slice under `src/sdlc/stages/<stage>/`) has three
+Every unit of code (a vertical slice under `src/sdlc/stages/<stage>/`, or a
+component under `interfaces/ui/src/components/<name>/`) has three
 co-located documents with non-overlapping purposes. They do not collapse:
 
 | Document | Question | Audience | Lifetime |
@@ -47,6 +48,7 @@ The `docs/` directory is organised by durability rather than topic or chronology
 | `docs/superpowers/plans/` | Write-once | Historical implementation plans. Never updated after landing. |
 | `docs/superpowers/reviews/` | Write-once | Historical review records. Never updated after landing. |
 | `docs/templates/` | Living | Canonical templates for `<stage>.md` and slice-level `AGENTS.md`. |
+| `interfaces/ui/src/components/<name>/<name>.md` | Living (with code) | UI component clause contracts (WHAT) — the `docs/` triad's first member, co-located with the component instead of under `docs/`; same for `src/tokens/tokens.md` and the assembled-console clauses at `interfaces/ui/app.md`. |
 
 The durability split settles maintenance arguments:
 - If a document goes stale and should be updated to reflect reality, it belongs in `reference/` or the appropriate living folder.

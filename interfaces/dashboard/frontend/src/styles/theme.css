@@ -2,7 +2,7 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: var(--c-0c0f14);
+  background: var(--ground-1);
 }
 * {
   box-sizing: border-box;
@@ -12,16 +12,16 @@ body {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--c-2a3140);
+  background: var(--line-strong);
   border-radius: 5px;
-  border: 2px solid var(--c-0c0f14);
+  border: 2px solid var(--ground-1);
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 textarea:focus,
 input:focus {
-  outline: 1px solid var(--c-4a6da8);
+  outline: 1px solid var(--link);
 }
 @keyframes fc-pulse {
   0%,

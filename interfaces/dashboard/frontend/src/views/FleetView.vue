@@ -33,11 +33,11 @@ const summary = computed(() => `${fleet.runs.length} runs · ${fleet.blockedCoun
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: var(--c-e8edf5);
+  color: var(--ink-primary);
 }
 .summary {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--c-5d6675);
+  color: var(--ink-subtle);
 }
 </style>
