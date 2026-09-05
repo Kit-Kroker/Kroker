@@ -54,9 +54,20 @@ constraining a component's own markup.
 
 ## Running this package's tests
 
+Before running Playwright locally, always ensure `PLAYWRIGHT_BROWSERS_PATH` is set to avoid filling up the primary system drive:
+
+```bash
+export PLAYWRIGHT_BROWSERS_PATH="D:/own/.pw-browsers"
+# Windows PowerShell:
+# $env:PLAYWRIGHT_BROWSERS_PATH="D:/own/.pw-browsers"
+```
+
 ```bash
 # Vitest (logic specs)
 npm run test --workspace @kroker/ui
+
+# Typecheck
+npm run typecheck --workspace @kroker/ui
 
 # Playwright (presentation specs — needs a browser install the first time)
 npm run test:pw --workspace @kroker/ui

@@ -21,9 +21,11 @@ and CI is the only place the UI is truly gated.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 DASH = "sdlc-dashboard"
 UI = "@kroker/ui"
@@ -32,6 +34,7 @@ UI = "@kroker/ui"
 STEPS: tuple[tuple[str, list[str]], ...] = (
     ("install", ["ci"]),
     ("typecheck", ["run", "typecheck", "--workspace", DASH]),
+    ("typecheck-ui", ["run", "typecheck", "--workspace", UI]),
     ("vitest-dashboard", ["run", "test", "--workspace", DASH]),
     ("vitest-ui", ["run", "test", "--workspace", UI]),
     ("playwright-browser", ["exec", "--", "playwright", "install", "--with-deps", "chromium"]),
@@ -42,6 +45,12 @@ STEPS: tuple[tuple[str, list[str]], ...] = (
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.parse_args(argv)
+
+    if sys.platform == "win32" and "PLAYWRIGHT_BROWSERS_PATH" not in os.environ:
+        pw_dir = Path("D:/own/.pw-browsers")
+        if pw_dir.parent.exists():
+            pw_dir.mkdir(parents=True, exist_ok=True)
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(pw_dir)
 
     npm = shutil.which("npm")
     if npm is None:

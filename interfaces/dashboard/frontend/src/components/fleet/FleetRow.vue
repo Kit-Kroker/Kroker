@@ -3,10 +3,18 @@ import { computed } from 'vue'
 import type { Run } from '../../api/types'
 import { statusMetaOf } from '../../composables/status'
 import { money } from '../../composables/format'
-import StageDots from './StageDots.vue'
+import { STAGES } from '../../constants'
+import { stageStateOf } from '../../composables/stageState'
+import StageDots from '@kroker/ui/components/stage_dots/StageDots.vue'
 
 const props = defineProps<{ run: Run }>()
 const meta = computed(() => statusMetaOf(props.run))
+const dots = computed(() =>
+  STAGES.map((stage, i) => ({
+    stage,
+    state: stageStateOf(props.run, i),
+  })),
+)
 </script>
 
 <template>
@@ -16,7 +24,7 @@ const meta = computed(() => statusMetaOf(props.run))
       <span class="title-text">{{ run.title }}</span>
       <span class="mode">{{ run.mode }}</span>
     </span>
-    <StageDots :run="run" />
+    <StageDots :dots="dots" />
     <span class="status" :style="{ color: meta.color }">
       <span class="pip" :style="{ background: meta.color, animation: meta.anim }" />
       {{ meta.label }}

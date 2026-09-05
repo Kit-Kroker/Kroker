@@ -12,7 +12,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run preview --workspace @kroker/ui',
+    command: 'npm run build --workspace @kroker/ui && npm run preview --workspace @kroker/ui',
     url: 'http://localhost:4173',
     reuseExistingServer: !process.env.CI,
   },
