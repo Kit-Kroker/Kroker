@@ -1,0 +1,14 @@
+{
+  "name": "@kroker/ui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    "./tokens.css": "./src/tokens/tokens.css",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:pw": "playwright test"
+  }
+}

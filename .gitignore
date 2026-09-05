@@ -21,3 +21,4 @@ artifacts/
 # npm workspace root
 node_modules/
 interfaces/ui/dist-ds/
+interfaces/ui/dist-types/

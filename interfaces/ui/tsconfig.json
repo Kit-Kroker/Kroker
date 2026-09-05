@@ -13,10 +13,7 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
-    "paths": { "@kroker/ui/*": ["../../ui/src/*"] }
+    "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": ["src", "showcase", "vite-env.d.ts"]
 }
