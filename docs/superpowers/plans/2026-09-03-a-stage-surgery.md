@@ -1937,7 +1937,7 @@ git commit -m "refactor(<stage>): move the <stage> stage into a vertical slice"
 - Modify: `src/sdlc/workflows/feature.py`, `src/sdlc/workflows/task_host.py`, `.file-size-baseline.json`, `AGENTS.md`
 - Test: `tests/integration/test_feature_residual.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/integration/test_feature_residual.py
@@ -1963,16 +1963,16 @@ def test_every_stage_row_says_migrated():
     assert "types moved, step pending" not in table
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/integration/test_feature_residual.py -v`
 Expected: FAIL — `feature.py` is still over 1000 until the last stage lands
 
-- [ ] **Step 3: Confirm `TaskHost` shed its stage bodies**
+- [x] **Step 3: Confirm `TaskHost` shed its stage bodies**
 
 With code, review and qa migrated, `_dev_task` is a loop skeleton: worktree provisioning, the attempt loop, the escalation gate, dispatch to the three steps, the task gate, session-resume branching, and envelope assembly. If `task_host.py` is still near 1000, the three bodies did not fully leave — find what stayed.
 
-- [ ] **Step 4: Run the full verification**
+- [x] **Step 4: Run the full verification**
 
 ```bash
 pytest -m "not slow and not temporal"
@@ -1983,7 +1983,7 @@ pre-commit run --all-files
 
 Expected: all green; `.file-size-baseline.json` holds one entry.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
