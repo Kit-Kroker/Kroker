@@ -1,14 +1,15 @@
-"""Plans are a durability class, not scratch (spec C, Risks).
+"""The superpowers durability classes are tracked, not scratch (spec C, Risks).
 
-`docs/documentation-rules.md` lists `docs/superpowers/plans/` as write-once
-documentation alongside `specs/`, but `.gitignore` excluded it while 47 plans
-were already committed and 76 existed on disk. Every plan written after the
-rule landed was silently dropped -- spec C's own plan was the one that
-surfaced it, being invisible to `git status` the moment it was written.
+`docs/documentation-rules.md` lists `specs/`, `plans/` and `reviews/` under
+`docs/superpowers/` as three write-once documentation classes, but `.gitignore`
+re-included only `specs/`. The other two were silently dropped: 29 plans
+written between 2026-08-07 and 2026-09-02, and every review ever written.
+Spec C's own plan was the one that surfaced it, being invisible to
+`git status` the moment it was written.
 
-This test is the tripwire: it asserts the negation exists without asserting
-how `.gitignore` spells it, so reordering the file cannot break it while
-deleting the negation does.
+These tests are the tripwire: they assert the negations exist without
+asserting how `.gitignore` spells them, so reordering the file cannot break
+them while deleting a negation does.
 """
 
 from __future__ import annotations
@@ -29,6 +30,12 @@ def _ignored(path: str) -> bool:
 def test_plans_directory_is_tracked():
     assert not _ignored("docs/superpowers/plans/example.md"), (
         "docs/superpowers/plans/ is git-ignored; new plans would never be committed"
+    )
+
+
+def test_reviews_directory_is_tracked():
+    assert not _ignored("docs/superpowers/reviews/example.md"), (
+        "docs/superpowers/reviews/ is git-ignored; new reviews would never be committed"
     )
 
 
