@@ -40,7 +40,7 @@ describe('statusMetaOf', () => {
     expect(statusMetaOf(run({ status: 'running' })).label).toBe('running')
     expect(statusMetaOf(run({ status: 'blocked' })).label).toBe('awaiting human')
     expect(statusMetaOf(run({ status: 'failed' })).anim).toBe('none')
-    expect(statusMetaOf(run({ status: 'done' })).color).toBe('#4fae7f')
+    expect(statusMetaOf(run({ status: 'done' })).color).toBe('var(--status-done)')
   })
 })
 

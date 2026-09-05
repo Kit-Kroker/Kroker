@@ -25,3 +25,11 @@
   --font-sans: 'IBM Plex Sans', sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
 }
+
+.cmp-status-pip-running { background: var(--status-running); }
+.cmp-status-pip-blocked { background: var(--status-blocked); }
+.cmp-status-pip-failed { background: var(--status-failed); }
+.cmp-status-pip-done { background: var(--status-done); }
+.cmp-status-pip-quarantined { background: var(--status-quarantined); }
+.cmp-status-pip-pending { background: var(--status-pending); }
+.cmp-status-pip-skipped { background: var(--status-skipped); }

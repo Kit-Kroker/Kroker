@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { STAGES, ARTIFACTS, STATUS_COLORS } from './constants'
+import { STAGES, ARTIFACTS, STATUS_KINDS } from './constants'
 
 describe('constants', () => {
   it('has 14 stages aligned with 14 artifacts', () => {
@@ -15,10 +15,10 @@ describe('constants', () => {
     expect(STAGES[13]).toBe('retro')
   })
 
-  it('exposes the status color palette', () => {
-    expect(STATUS_COLORS.running).toBe('#5b9dd9')
-    expect(STATUS_COLORS.blocked).toBe('#e0b050')
-    expect(STATUS_COLORS.failed).toBe('#e06c55')
-    expect(STATUS_COLORS.done).toBe('#4fae7f')
+  it('exposes the status kinds list', () => {
+    expect(STATUS_KINDS).toContain('running')
+    expect(STATUS_KINDS).toContain('blocked')
+    expect(STATUS_KINDS).toContain('failed')
+    expect(STATUS_KINDS).toContain('done')
   })
 })

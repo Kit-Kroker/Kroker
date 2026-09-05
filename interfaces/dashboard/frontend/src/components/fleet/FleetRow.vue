@@ -6,6 +6,7 @@ import { money } from '../../composables/format'
 import { STAGES } from '../../constants'
 import { stageStateOf } from '../../composables/stageState'
 import StageDots from '@kroker/ui/components/stage_dots/StageDots.vue'
+import StatusPip from '@kroker/ui/components/status_pip/StatusPip.vue'
 
 const props = defineProps<{ run: Run }>()
 const meta = computed(() => statusMetaOf(props.run))
@@ -26,7 +27,7 @@ const dots = computed(() =>
     </span>
     <StageDots :dots="dots" />
     <span class="status" :style="{ color: meta.color }">
-      <span class="pip" :style="{ background: meta.color, animation: meta.anim }" />
+      <StatusPip :kind="run.status" :pulsing="run.status === 'running' || run.status === 'blocked'" />
       {{ meta.label }}
     </span>
     <span class="blocker">{{ run.blocker || '—' }}</span>
@@ -85,11 +86,6 @@ const dots = computed(() =>
   gap: 7px;
   font-family: var(--font-mono);
   font-size: 11px;
-}
-.pip {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
 }
 .blocker {
   font-size: 11px;

@@ -13,4 +13,16 @@ defineProps<{ kind: string; pulsing?: boolean }>()
   border-radius: 50%;
   display: inline-block;
 }
+.cmp-status-pip.is-pulsing {
+  animation: fc-pulse 1.6s infinite;
+}
+@keyframes fc-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
 </style>

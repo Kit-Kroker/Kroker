@@ -34,12 +34,14 @@ export const ARTIFACTS = [
   'RunSummary',
 ] as const
 
-export const STATUS_COLORS = {
-  running: '#5b9dd9',
-  blocked: '#e0b050',
-  failed: '#e06c55',
-  done: '#4fae7f',
-  quarantined: '#b98fdc',
-  pending: '#2a3140',
-  skipped: '#1b202b',
-} as const
+export const STATUS_KINDS = [
+  'running',
+  'blocked',
+  'failed',
+  'done',
+  'quarantined',
+  'pending',
+  'skipped',
+] as const
+
+export type StatusKind = (typeof STATUS_KINDS)[number]

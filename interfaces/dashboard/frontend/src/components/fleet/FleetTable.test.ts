@@ -44,4 +44,14 @@ describe('FleetTable', () => {
     expect(w.text()).toContain('$3.10')
     expect(w.text()).toContain('2h 14m')
   })
+
+  it('renders status pip with stable class and no inline style', () => {
+    const fleet = useFleetStore()
+    fleet.runs = [mkRun({ status: 'blocked' })]
+    const w = mount(FleetTable, { global: { stubs: { RouterLink: RouterLinkStub } } })
+    const pip = w.find('.cmp-status-pip')
+    expect(pip.exists()).toBe(true)
+    expect(pip.classes()).toContain('cmp-status-pip-blocked')
+    expect(pip.attributes('style')).toBeUndefined()
+  })
 })
