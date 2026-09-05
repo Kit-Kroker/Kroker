@@ -6,4 +6,4 @@ export function selectApi(mode: 'mock' | 'http', opts?: { simulateLive?: boolean
   return mode === 'http' ? createHttpApi() : createMockApi({ simulateLive: opts?.simulateLive ?? true })
 }
 
-export const api: DashboardApi = selectApi(import.meta.env.VITE_API === 'http' ? 'http' : 'mock')
+export const api: DashboardApi = selectApi(import.meta.env.VITE_API === 'mock' ? 'mock' : 'http')

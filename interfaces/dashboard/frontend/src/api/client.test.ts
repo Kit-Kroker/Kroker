@@ -4,6 +4,7 @@ import snapshot from './__fixtures__/fleet-snapshot.json'
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
 })
 
 describe('selectApi', () => {
@@ -37,5 +38,29 @@ describe('selectApi', () => {
     })
     expect(run.id).toBe('feature-x')
     expect(run.status).toBe('running')
+  })
+
+  it('defaults to the http provider when VITE_API is unset', async () => {
+    vi.resetModules()
+    vi.stubEnv('VITE_API', '')
+    // Env is read at module init, so the default is only observable through
+    // a fresh import. Behavioral distinction, not object identity: with no
+    // fetch stub the http provider has no backend and rejects, where the
+    // mock provider would resolve seeded runs.
+    const { api } = await import('./client')
+    await expect(api.listRuns()).rejects.toThrow()
+  })
+
+  it('selects the mock provider when VITE_API is mock', async () => {
+    vi.resetModules()
+    vi.stubEnv('VITE_API', 'mock')
+    const { api } = await import('./client')
+    try {
+      expect(await api.listRuns()).toHaveLength(7)
+    } finally {
+      // The module-level api constructs the mock with simulateLive, whose
+      // interval would otherwise outlive the test.
+      ;(api as unknown as { dispose?: () => void }).dispose?.()
+    }
   })
 })

@@ -28,15 +28,9 @@ npm run dev        # Vite dev server (http://localhost:5173)
 The UI talks only to `src/api/client.ts`, which exposes the `DashboardApi`
 interface. The active provider is selected by `VITE_API`:
 
-- `VITE_API=mock` (default) — the in-memory mock at `src/api/mock/`, a
-  line-for-line port of the React prototype's seed data and decision flows.
-- `VITE_API=http` — reserved for the future FastAPI provider
-  (`src/api/http.ts`, not yet wired). Reimplement `DashboardApi` there with
-  `fetch` against `VITE_API_BASE`.
-
-When the FastAPI provider lands, no component or store changes are needed:
-implement `DashboardApi`, set `VITE_API=http`, and the UI points at the real
-Temporal-backed service.
+- `http` (default) — live provider (`src/api/http.ts`) talking to the backend.
+- `VITE_API=mock` — the in-memory mock at `src/api/mock/`, which is what the
+  showcase and the Playwright app tier run on.
 
 ## Status
 
