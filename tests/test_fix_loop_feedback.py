@@ -8,11 +8,11 @@ while the deterministic ModuleNotFoundError that actually failed the gate was
 never shown to it)."""
 
 from sdlc.stages.qa.models import QAReport
+from sdlc.stages.qa.step import _fix_loop_issues
 from sdlc.stages.review.models import (
     ReviewFinding,
     ReviewReport,
 )
-from sdlc.workflows.task_host import _fix_loop_issues
 
 
 def _review(*findings: ReviewFinding) -> ReviewReport:

@@ -53,7 +53,6 @@ with workflow.unsafe.imports_passed_through():
     from ..notify.contract import NotifyReason
     from ..observability.summary import build_run_summary
     from ..observability.trace import RunEventKind
-    from ..prompts import planner_prompt
     from ..stages import (
         analyze,
         architecture,
@@ -64,6 +63,9 @@ with workflow.unsafe.imports_passed_through():
         merge,
         research,
         retro,
+    )
+    from ..stages import (
+        plan as plan_stage,
     )
     from ..stages.analyze.models import untraced_criteria
     from ..stages.architecture.models import ArchitectureSpec
@@ -587,59 +589,14 @@ class FeatureWorkflow(
             return "rejected:architecture"
 
         # 3. PLAN (soft gate by default)
-        _started = workflow.now()
-        snapshot = await self._recall(
-            cfg, cfg.memory.project_bank, query=f"plan:{idea.title}", filters={"stage": "plan"}
-        )
-
-        plan_spend = RoleUsage(role="planner", model=resolve_role_model(cfg, "plan"))
-
-        async def _run_plan(guidance: str | None) -> ImplementationPlan:
-            prompt = planner_prompt(arch.model_dump_json(), snapshot.items, guidance)
-
-            async def _produce():
-                return (
-                    await self._run_role(
-                        cfg,
-                        "planner",
-                        resolve_role_model(cfg, "plan"),
-                        t_planner,
-                        prompt,
-                        into=plan_spend,
-                    )
-                ).output
-
-            plan, _ = await self._cached_stage(
-                cfg, "plan", arch.model_dump_json() + (guidance or ""), ImplementationPlan, _produce
-            )
-            return plan
-
-        plan, gate = await self._revisable_stage("plan", cfg, _run_plan)
-        _ended = workflow.now()
-        _quality = await self._judge(
-            cfg, plan.model_dump_json(), "planner", author_model=resolve_role_model(cfg, "plan")
-        )
-        await self._record(
-            cfg,
-            self._stage_record(
-                cfg,
-                stage="plan",
-                role="planner",
-                started=_started,
-                ended=_ended,
-                quality_score=_quality.score,
-                judge=_quality.judge,
-                outcome=(BenchmarkOutcome.PASS if gate.approved else BenchmarkOutcome.REVISED),
-                model=resolve_role_model(cfg, "plan"),
-                spend=plan_spend,
-            ),
-        )
-        await self._retain(
-            cfg,
-            MemoryKind.STAGE_SUMMARY,
-            cfg.memory.project_bank,
-            text=f"plan: {len(plan.tasks)} tasks",
-            metadata={"stage": "plan", "run_id": workflow.info().workflow_id},
+        plan, gate = await plan_stage.step(
+            self._ctx,
+            cfg=cfg,
+            architecture=arch,
+            requirements=reqs,
+            idea=idea,
+            planner_agent=t_planner,
+            planner_model=resolve_role_model(cfg, "plan"),
         )
         await self._check_budget(cfg)  # E-33: serial boundary after planner
         self._plan_version = await self._board_publish(

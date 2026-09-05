@@ -17,6 +17,7 @@ CLARIFY_STEP_PY = (
 ARCH_STEP_PY = (
     Path(__file__).resolve().parents[1] / "src" / "sdlc" / "stages" / "architecture" / "step.py"
 )
+PLAN_STEP_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "stages" / "plan" / "step.py"
 
 
 @pytest.fixture(scope="module")
@@ -47,15 +48,17 @@ def test_cached_stage_helper_exists(role_host_class):
 def test_run_uses_cached_stage_for_clarify_architect_plan(feature_class):
     methods = _methods(feature_class)
     # E-32: the pipeline body lives in _pipeline now (run wraps it + _retro).
-    # Spec A: plan still calls self._cached_stage in _pipeline;
-    # clarify and architecture calls moved into their slices (ctx.cached_stage in step.py).
+    # Spec A: clarify, architecture, and plan calls moved into their slices
+    # (ctx.cached_stage in step.py).
     src = ast.unparse(methods["_pipeline"])
     slice_src = ast.unparse(ast.parse(CLARIFY_STEP_PY.read_text(encoding="utf-8")))
     arch_slice_src = ast.unparse(ast.parse(ARCH_STEP_PY.read_text(encoding="utf-8")))
+    plan_slice_src = ast.unparse(ast.parse(PLAN_STEP_PY.read_text(encoding="utf-8")))
     assert (
         src.count("self._cached_stage(")
         + slice_src.count("ctx.cached_stage(")
         + arch_slice_src.count("ctx.cached_stage(")
+        + plan_slice_src.count("ctx.cached_stage(")
         >= 3
     )
 

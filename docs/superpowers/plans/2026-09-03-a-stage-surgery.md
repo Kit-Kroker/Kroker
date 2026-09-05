@@ -1920,16 +1920,16 @@ git commit -m "refactor(<stage>): move the <stage> stage into a vertical slice"
 - Uncovered needs: 1 (`_board_publish` / `_board_sync_tasks` -> returns envelope with `version_id`; orchestrator publishes).
 - Enum sites: None.
 
-- [ ] **Step 1: Write failing contract test** (`tests/plan/test_plan_slice_contract.py`)
-- [ ] **Step 2: Run test to verify it fails**
-- [ ] **Step 3: Lift the inline block into `step.py`** (`feature.py:3091-3159`)
-- [ ] **Step 4: Create `prompts.py` with `prompt_digest(cfg)` and empty `activities.py`**
-- [ ] **Step 5: Register in `STAGE_MODULES`**
-- [ ] **Step 6: Move tests** (`tests/test_plan_*.py`, `tests/test_planner_agent_retries.py` -> `tests/plan/`)
-- [ ] **Step 7: Write `plan.md` and `AGENTS.md` from templates**
-- [ ] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
-- [ ] **Step 9: Run full verification suite**
-- [ ] **Step 10: Commit `refactor(plan): move the plan stage into a vertical slice`**
+- [x] **Step 1: Write failing contract test** (`tests/plan/test_plan_slice_contract.py`)
+- [x] **Step 2: Run test to verify it fails**
+- [x] **Step 3: Lift the inline block into `step.py`** (`feature.py:3091-3159`)
+- [x] **Step 4: Create `prompts.py` with `prompt_digest(cfg)` and empty `activities.py`**
+- [x] **Step 5: Register in `STAGE_MODULES`**
+- [x] **Step 6: Move tests** (`tests/test_plan_*.py`, `tests/test_planner_agent_retries.py` -> `tests/plan/`)
+- [x] **Step 7: Write `plan.md` and `AGENTS.md` from templates**
+- [x] **Step 8: Update root `AGENTS.md` stage table to `migrated`**
+- [x] **Step 9: Run full verification suite**
+- [x] **Step 10: Commit `refactor(plan): move the plan stage into a vertical slice`**
 
 ### Task 21: Close out — `feature.py` under the ceiling
 

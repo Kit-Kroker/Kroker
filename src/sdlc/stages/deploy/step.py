@@ -26,7 +26,6 @@ from ...core.models import (
 )
 from ...gate import CheckClass, CheckResult
 from ...pending import GateContext
-from ...workflows.deployment import DeploymentInput, DeploymentWorkflow
 from .models import (
     DeployPlan,
     DeployReport,
@@ -134,6 +133,8 @@ async def _execute_deployment_workflow(
     attempt: int,
 ) -> DeployReport:
     """Run DeploymentWorkflow child workflow. Pure indirection so step tests can patch it."""
+    from ...workflows.deployment import DeploymentInput, DeploymentWorkflow
+
     return await workflow.execute_child_workflow(
         DeploymentWorkflow.run,
         DeploymentInput(plan=plan, cfg=cfg, repo_path=repo_path, attempt=attempt),

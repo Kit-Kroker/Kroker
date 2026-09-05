@@ -29,6 +29,7 @@ def __getattr__(name: str) -> Any:
             deploy,
             intake,
             merge,
+            plan,
             qa,
             research,
             retro,
@@ -48,6 +49,7 @@ def __getattr__(name: str) -> Any:
             deploy,
             code,
             architecture,
+            plan,
         )
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

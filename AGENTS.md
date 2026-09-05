@@ -152,7 +152,7 @@ documentation (`src/`, `tests/`, `scripts/`, `interfaces/`, `agents/`,
 | research | `src/sdlc/stages/research/` | migrated |
 | clarify | `src/sdlc/stages/clarify/` | migrated |
 | architecture | `src/sdlc/stages/architecture/` | migrated |
-| plan | `src/sdlc/workflows/feature.py` | types moved, step pending |
+| plan | `src/sdlc/stages/plan/` | migrated |
 | code | `src/sdlc/stages/code/` | migrated |
 | review | `src/sdlc/stages/review/` | migrated |
 | qa | `src/sdlc/stages/qa/` | migrated |

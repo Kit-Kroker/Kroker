@@ -40,6 +40,7 @@ from sdlc.core.models import (
 from sdlc.gate import CheckClass, CheckResult, build_check
 from sdlc.measurement import Measurement
 from sdlc.observability.activities import export_run_artifacts
+from sdlc.stages import architecture
 from sdlc.stages.analyze.models import AnalysisReport
 from sdlc.stages.architecture.models import (
     ArchitectureDecision,
@@ -69,27 +70,31 @@ from tests.fakes.fake_activities import GIT_FAKES, fake_check_brownfield_delta
 from tests.fakes.fake_agents import fake_agent_activities
 
 
+def _arch_src() -> str:
+    return inspect.getsource(FeatureWorkflow._pipeline) + inspect.getsource(architecture.step)
+
+
 def test_the_architect_prompt_carries_the_rendered_map():
     """D12: brownfield runs see the map; greenfield runs do not."""
-    src = inspect.getsource(FeatureWorkflow._pipeline)
+    src = _arch_src()
     assert "render_for_prompt(" in src
 
 
 def test_the_delta_check_is_called_under_brownfield():
-    src = inspect.getsource(FeatureWorkflow._pipeline)
+    src = _arch_src()
     assert "check_brownfield_delta" in src
 
 
 def test_the_cache_key_includes_the_map_digest():
     """D10: two runs with identical requirements on different trees cannot
     share an architecture memo."""
-    src = inspect.getsource(FeatureWorkflow._pipeline)
+    src = _arch_src()
     assert "map_digest(" in src or "map_key" in src
 
 
 def test_the_re_prompt_happens_before_failing_closed():
     """D11: one retry by default, bounded by PipelineConfig.max_delta_retries."""
-    src = inspect.getsource(FeatureWorkflow._pipeline)
+    src = _arch_src()
     assert "max_delta_retries" in src
 
 

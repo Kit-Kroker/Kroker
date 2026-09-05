@@ -1,10 +1,10 @@
 """Split verdicts merge both reviewers' findings into the retry prompt."""
 
+from sdlc.stages.qa.step import _fix_loop_issues
 from sdlc.stages.review.models import (
     ReviewFinding,
     ReviewReport,
 )
-from sdlc.workflows.task_host import _fix_loop_issues
 
 
 class _QA:

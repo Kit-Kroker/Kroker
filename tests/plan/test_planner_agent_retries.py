@@ -13,7 +13,7 @@ from pathlib import Path
 
 from pydantic_ai.settings import ModelSettings
 
-AGENT_PY = Path(__file__).resolve().parents[1] / "agents" / "planner" / "agent.py"
+AGENT_PY = Path(__file__).resolve().parents[2] / "agents" / "planner" / "agent.py"
 
 
 def _build():
