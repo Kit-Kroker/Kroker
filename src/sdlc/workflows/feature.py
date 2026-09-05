@@ -37,7 +37,6 @@ with workflow.unsafe.imports_passed_through():
     from ..core.context import StageContext, StageServices
     from ..core.models import (
         ExecutionMode,
-        GateConfig,
         GateDecision,
         GateOutcome,
         GatePolicy,
@@ -51,25 +50,20 @@ with workflow.unsafe.imports_passed_through():
     from ..gate import (
         CheckClass,
         CheckResult,
-        GateOverride,
-        GateReport,
-        QualityGateInput,
-        build_check,
     )
     from ..handoff import (
         claim_survival_score,
         cross_check_claims,
     )
     from ..harness.session import session_text_from_jsonl
-    from ..measurement import CollectionState
     from ..memory.activities import WatermarkInput, capture_watermark
     from ..memory.models import MemoryKind
     from ..notify.contract import NotifyReason
     from ..observability.summary import build_run_summary
     from ..observability.trace import RunEventKind
     from ..pending import GateContext
-    from ..prompts import merge_verdict_prompt, planner_prompt
-    from ..stages import analyze, clarify, context, intake, research, retro
+    from ..prompts import planner_prompt
+    from ..stages import analyze, clarify, context, intake, merge, research, retro
     from ..stages.analyze.models import untraced_criteria
     from ..stages.architecture.models import ArchitectureSpec
     from ..stages.clarify.models import ClarifiedRequirements
@@ -79,20 +73,7 @@ with workflow.unsafe.imports_passed_through():
         check_brownfield_delta,
     )
     from ..stages.deploy.models import DeployPlan, DeployReport, SmokeCheck
-    from ..stages.merge.activities import (
-        CoverageInput,
-        IntegrationChecks,
-        IntegrationChecksInput,
-        PROpenInput,
-        evaluate_gate,
-        measure_coverage,
-        open_pull_request,
-        run_integration_checks,
-    )
-    from ..stages.merge.models import CoverageReport, MergeVerdict
     from ..stages.plan.models import DevTask, ImplementationPlan
-    from ..stages.qa.activities import LintInput, SecurityScanInput, run_lint, security_scan
-    from ..stages.qa.models import SecurityReport
     from ..stages.research.deps import ResearchDeps
     from ..vcs import (
         DiffInput,
@@ -111,10 +92,9 @@ with workflow.unsafe.imports_passed_through():
     from .report_host import ReportHost
     from .role_host import (
         RoleHost,
-        _auto_decision_for,
         _BudgetRejected,
     )
-    from .task_host import TaskHost, _contract_shell_cmd
+    from .task_host import TaskHost
 
 INTAKE_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=2), retry_policy=RetryPolicy(maximum_attempts=3)
@@ -126,15 +106,6 @@ ACT = workflow.ActivityConfig(
 VERIFY_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=1),
     retry_policy=RetryPolicy(maximum_attempts=1),
-)
-
-
-# E-30: run_integration_checks runs a real test suite + lint against the
-# merged integration head. Generous start_to_close (> the activity's
-# internal test 600s + fallback 600s + lint 300s worst case); 2 attempts like
-# the per-task test run. It does not heartbeat, so no heartbeat_timeout.
-INTEG_ACT = workflow.ActivityConfig(
-    start_to_close_timeout=timedelta(minutes=30), retry_policy=RetryPolicy(maximum_attempts=2)
 )
 
 
@@ -1037,253 +1008,24 @@ class FeatureWorkflow(
 
         await self._check_budget(cfg)  # E-33: serial boundary after analyst
 
-        # 5. MERGE â€” DeterministicQualityGate first (SC-5), then the human
+        # 5. MERGE — DeterministicQualityGate first (SC-5), then the human
         # gate (which doubles as the advisory-override mechanism), then
         # MergeVerdict advisory only under SOFT policy.
-        _started = workflow.now()
-
-        # 5a. Collect typed evidence from the run. The merge stage runs
-        # against the integration worktree (ADR-14), where every completed
-        # task's merge has accumulated.
-        integration_worktree = self._integration_wt
-        # E-30/FR-108/ADR-14: run the toolchain adapter (coverage-instrumented
-        # tests + lint) against the merged integration head â€” a REAL
-        # integration-green signal, and the coverage.xml measure_coverage reads.
-        # No adapter for the built language => degrade to the pre-E-30 path
-        # (per-task aggregate green + the plan's own lint command).
-        ichecks: IntegrationChecks = await workflow.execute_activity(
-            run_integration_checks,
-            IntegrationChecksInput(
-                worktree=integration_worktree, changed_files=integration_diff["files"]
-            ),
-            **INTEG_ACT,
+        pr_url = await merge.step(
+            self._ctx,
+            cfg=cfg,
+            task_results=list(done.values()),
+            integration_wt=self._integration_wt,
+            idea=idea,
+            arch=arch,
+            plan=plan,
+            integration_diff=integration_diff,
+            untraced=untraced,
+            merge_agent=t_merge_verdict,
+            merge_model=STAGE_MODELS.get("merge_verdict", "unknown"),
         )
-        if ichecks.toolchain is not None:
-            all_tests_green = ichecks.qa.tests_passed
-            lint_clean, lint_detail = ichecks.lint_clean, ichecks.lint_detail
-        else:
-            lint_commands = next(
-                (
-                    t.contract.lint_commands
-                    for t in plan.tasks
-                    if t.contract and t.contract.lint_commands
-                ),
-                None,
-            )
-            lint_cmd = _contract_shell_cmd(lint_commands, DEFAULT_LINT_CMD)
-            lint_clean, lint_detail = await workflow.execute_activity(
-                run_lint, LintInput(worktree=integration_worktree, lint_cmd=lint_cmd), **ACT
-            )
-            all_tests_green = _merge_evidence_all_green(list(done.values()))
-
-        # Coverage is read AFTER the integration test run that emits
-        # coverage.xml (E-30 closes the FR-106 gap: the artifact now lands where
-        # the seam reads). measured=False stays a no-op advisory pass.
-        cov: CoverageReport = await workflow.execute_activity(
-            measure_coverage,
-            CoverageInput(worktree=integration_worktree, changed_files=integration_diff["files"]),
-            **ACT,
-        )
-
-        security: SecurityReport = await workflow.execute_activity(
-            security_scan, SecurityScanInput(worktree=integration_worktree), **ACT
-        )
-
-        # MEASURED carries a value by the Measurement validator (FR-915);
-        # hoisted so the check below narrows on it instead of re-testing state.
-        diff_coverage = (
-            cov.coverage.value if cov.coverage.state is CollectionState.MEASURED else None
-        )
-
-        checks = [
-            build_check(
-                "build_integration_green",
-                all_tests_green,
-                CheckClass.ABSOLUTE,
-                detail="aggregate of per-task pytest runs",
-            ),
-            build_check("lint_clean", lint_clean, CheckClass.ABSOLUTE, detail=lint_detail),
-            # FR-915: "the scan found nothing" and "no scan happened" are
-            # different facts and get different check names. Conflating them
-            # into one compound condition is the exact defect this split
-            # exists to prevent, reproduced inside the gate that prevents it.
-            build_check(
-                "security_scan_collected",
-                security.state is CollectionState.MEASURED,
-                CheckClass.ABSOLUTE,
-                detail=(security.reason or "security scan ran"),
-            ),
-            build_check(
-                "security_no_critical",
-                security.critical == 0,
-                CheckClass.ABSOLUTE,
-                detail=f"{security.critical} critical finding(s)",
-            ),
-            build_check(
-                "review_severity",
-                all(r.review is None or r.review.approve for r in done.values()),
-                CheckClass.ADVISORY,
-                detail="clean-context reviewer blocking findings (FR-204)",
-            ),
-            build_check(
-                "traceability",
-                not untraced,
-                CheckClass.ADVISORY,
-                detail=(
-                    f"{len(untraced)} criterion(s) without a test: {untraced[:10]}"
-                    if untraced
-                    else "every acceptance criterion traces to >=1 test"
-                ),
-            ),
-            build_check(
-                "coverage",
-                (True if diff_coverage is None else diff_coverage >= cfg.coverage_threshold),
-                CheckClass.ADVISORY,
-                detail=(
-                    cov.coverage.reason
-                    if diff_coverage is None
-                    else f"diff coverage {diff_coverage:.1f}% vs "
-                    f"threshold {cfg.coverage_threshold:.1f}%"
-                ),
-            ),
-        ]
-        gate_report: GateReport = await workflow.execute_activity(
-            evaluate_gate, QualityGateInput(checks=checks), **ACT
-        )
-
-        # 5b. Absolute failure = terminal. No override path exists.
-        absolute_blocking = [
-            c.name
-            for c in gate_report.checks
-            if c.name in gate_report.blocking and c.classification is CheckClass.ABSOLUTE
-        ]
-        if absolute_blocking:
-            await self._retain(
-                cfg,
-                MemoryKind.GATE_FEEDBACK,
-                cfg.memory.project_bank,
-                text=f"merge blocked (absolute): {absolute_blocking}",
-                metadata={"gate": "merge", "round": "1", "run_id": workflow.info().workflow_id},
-            )
-            await self._record(
-                cfg,
-                self._stage_record(
-                    cfg,
-                    stage="merge",
-                    role="reviewer",
-                    started=_started,
-                    ended=workflow.now(),
-                    quality_score=0.0,
-                    judge="contract",
-                    outcome=BenchmarkOutcome.FAIL,
-                    model="deterministic",
-                ),
-            )
-            return f"rejected:merge:absolute-gate-failed:{','.join(absolute_blocking)}"
-
-        # 5c. Advisory failure: the human merge gate IS the override. A
-        # human APPROVE records audited GateOverrides; REJECT terminates.
-        overrides: list[GateOverride] = []
-        if not gate_report.passed:
-            advisory_blocking = [
-                c.name
-                for c in gate_report.checks
-                if c.name in gate_report.blocking and c.classification is CheckClass.ADVISORY
-            ]
-            gate = await self._gate(
-                "merge", cfg.gate_settings(), context=GateContext(checks=gate_report.checks)
-            )
-            if not gate.approved:
-                return "rejected:merge:advisory"
-            # Human waved the advisory checks through â€” record each waiver.
-            reviewer = gate.reviewer or "human"
-            reason = gate.comments or "advisory override"
-            overrides = [
-                GateOverride(check=n, approved_by=reviewer, reason=reason)
-                for n in advisory_blocking
-            ]
-            self._emit(
-                RunEventKind.GATE_DECIDED,
-                stage="merge",
-                gate="merge",
-                round="1",
-                policy="soft",
-                decided_by=(gate.reviewer or "human"),
-                approved="true",
-                overrides=",".join(o.check for o in overrides),
-            )
-            gate_report = await workflow.execute_activity(
-                evaluate_gate, QualityGateInput(checks=checks, overrides=overrides), **ACT
-            )
-        else:
-            # 5d. Gate passed clean. MergeVerdict is advisory and ONLY
-            # consulted under SOFT policy â€” it can approve an already-clean
-            # build; it can never reach this branch otherwise.
-            if cfg.gates.get("merge", GateConfig()).policy == GatePolicy.SOFT:
-                verdict: MergeVerdict = (
-                    await self._run_role(
-                        cfg,
-                        "merge_verdict",
-                        STAGE_MODELS.get("merge_verdict", "unknown"),
-                        t_merge_verdict,
-                        merge_verdict_prompt([r.model_dump() for r in done.values()]),
-                    )
-                ).output
-                auto = _auto_decision_for(
-                    "merge", cfg, verdict.confidence if verdict.approve else None
-                )
-                if auto is None:
-                    # Soft policy + (negative verdict OR confidence below
-                    # threshold) = escalate to human.
-                    gate = await self._gate(
-                        "merge", cfg.gate_settings(), context=GateContext(checks=gate_report.checks)
-                    )
-                    if not gate.approved:
-                        return "rejected:merge:soft-verdict"
-
-        _ended = workflow.now()
-        await self._record(
-            cfg,
-            self._stage_record(
-                cfg,
-                stage="merge",
-                role="reviewer",
-                started=_started,
-                ended=_ended,
-                quality_score=(1.0 if gate_report.passed else 0.0),
-                judge="contract",
-                outcome=(BenchmarkOutcome.REVISED if overrides else BenchmarkOutcome.PASS),
-                model="deterministic",
-            ),
-        )
-        await self._retain(
-            cfg,
-            MemoryKind.GATE_FEEDBACK,
-            cfg.memory.project_bank,
-            text=(
-                f"merge gate: passed={gate_report.passed} overridden={[o.check for o in overrides]}"
-            ),
-            metadata={"gate": "merge", "round": "1", "run_id": workflow.info().workflow_id},
-        )
-
-        if cfg.benchmark.case_id is not None:
-            # Benchmark repos are local scratch checkouts with no `origin`
-            # remote and no GitHub host to open a PR against -- pushing
-            # would always fail past this point, turning an otherwise
-            # clean run into a spurious FeatureWorkflow failure after every
-            # real signal (build/lint/security/merge) already passed.
-            pr_url = "skipped:benchmark-run-has-no-remote"
-        else:
-            pr_url = await workflow.execute_activity(
-                open_pull_request,
-                PROpenInput(
-                    worktree=self._integration_wt,
-                    title=idea.title,
-                    body=arch.overview,
-                    base_branch=idea.base_branch,
-                ),
-                **ACT,
-            )
+        if pr_url.startswith("rejected:"):
+            return pr_url
 
         # 6. DEPLOY gate â†’ DeploymentWorkflow child (E-67/FR-1104)
         _started = workflow.now()

@@ -4,7 +4,7 @@ from sdlc.core.models import (
     GatePolicy,
     PipelineConfig,
 )
-from sdlc.workflows.feature import _auto_decision_for
+from sdlc.workflows.role_host import _auto_decision_for
 
 
 def _cfg(policy: GatePolicy, threshold: float = 0.8) -> PipelineConfig:
@@ -52,9 +52,9 @@ def test_unconfigured_gate_defaults_to_hard_and_falls_through():
 import pathlib
 
 # _revisable_stage lives on RoleHost (spec A Task 7); the merge soft path
-# stays in feature.py until the merge stage migrates.
+# lives in src/sdlc/stages/merge/step.py (Task 20.7).
 SRC = pathlib.Path("src/sdlc/workflows/role_host.py")
-MERGE_SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+MERGE_SRC = pathlib.Path("src/sdlc/stages/merge/step.py")
 
 
 def test_revisable_stage_passes_auto_decision():
@@ -74,8 +74,8 @@ def test_merge_soft_path_uses_auto_decision_for():
     # Find the merge stage's soft-path block (after the MergeVerdict call)
     # and confirm it consults _auto_decision_for rather than a bare
     # verdict.approve check alone.
-    idx = src.find('"merge_verdict"')
-    assert idx != -1, "merge stage no longer calls t_merge_verdict"
+    idx = src.rfind('"merge_verdict"')
+    assert idx != -1, "merge stage no longer calls merge_verdict"
     tail = src[idx : idx + 700]
     assert "_auto_decision_for(" in tail, (
         "merge gate's soft path must route through _auto_decision_for so "

@@ -25,12 +25,8 @@ def test_analyst_in_all_temporal_agents():
 
 def test_measure_coverage_registered_on_worker():
     # The worker's activity list is assembled in get_worker_activities()
-    # (main() consumes it); assert the callable is imported into the worker
-    # module and included alongside security_scan.
-    import inspect
-
+    # (main() consumes it); assert the callable is included (via merge.ACTIVITIES).
     import sdlc.worker as w
 
-    assert hasattr(w, "measure_coverage")
-    src = inspect.getsource(w.get_worker_activities)
-    assert "measure_coverage" in src
+    names = [getattr(a, "__name__", str(a)) for a in w.get_worker_activities()]
+    assert "measure_coverage" in names

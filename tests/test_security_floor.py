@@ -141,7 +141,7 @@ def test_security_check_absolute_even_if_requested_advisory():
 def test_feature_workflow_builds_security_check():
     import pathlib
 
-    src = pathlib.Path("src/sdlc/workflows/feature.py").read_text(encoding="utf-8")
+    src = pathlib.Path("src/sdlc/stages/merge/step.py").read_text(encoding="utf-8")
     assert (
         'build_check(\n                "security_no_critical"' in src
         or '"security_no_critical"' in src

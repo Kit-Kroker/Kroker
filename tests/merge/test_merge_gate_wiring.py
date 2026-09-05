@@ -3,7 +3,8 @@ import pathlib
 
 import pytest
 
-SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+SRC = pathlib.Path("src/sdlc/stages/merge/step.py")
+FEATURE_SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 
 
 def _fn(tree, name):
@@ -14,40 +15,41 @@ def _fn(tree, name):
 
 
 @pytest.fixture(scope="module")
-def feature_src():
+def step_src():
     return SRC.read_text(encoding="utf-8")
 
 
 @pytest.fixture(scope="module")
-def feature_tree(feature_src):
-    return ast.parse(feature_src)
+def step_tree(step_src):
+    return ast.parse(step_src)
 
 
-def test_merge_stage_calls_evaluate_gate_before_merge_verdict(feature_tree, feature_src):
+def test_merge_stage_calls_evaluate_gate_before_merge_verdict(step_tree, step_src):
     """SC-5: the deterministic gate is a hard precondition. Its activity
-    call must textually precede any t_merge_verdict.run call in the pipeline."""
-    # E-44: stages 4-6 live in _build_and_merge now (_pipeline wraps 0-3 + the
-    # seeded entry point, run wraps _pipeline + _retro).
-    run = _fn(feature_tree, "_build_and_merge")
-    src = ast.get_source_segment(feature_src, run)
+    call must textually precede any merge_verdict call in the pipeline."""
+    run = _fn(step_tree, "step")
+    src = ast.get_source_segment(step_src, run)
     assert src is not None
     g = src.find("evaluate_gate")
-    v = src.find("t_merge_verdict")
+    v = src.find("merge_verdict")
     assert g != -1, "merge stage does not call evaluate_gate activity"
-    # When MergeVerdict is unreachable (e.g. gate failed), v may be -1;
-    # when it is present it MUST come after the gate.
     if v != -1:
         assert g < v, "MergeVerdict consulted before DeterministicQualityGate"
 
 
-def test_merge_stage_terminates_on_absolute_failure(feature_src):
-    """An absolute gate failure is terminal — the workflow must return
+def test_merge_stage_terminates_on_absolute_failure(step_src):
+    """An absolute gate failure is terminal — the stage must return
     before any human-gate wait or MergeVerdict consult."""
     needle = "absolute-gate-failed"
-    assert needle in feature_src, (
+    assert needle in step_src, (
         "merge stage must short-circuit on absolute gate failure "
         f"(looked for return marker containing {needle!r})"
     )
+
+
+def test_feature_workflow_delegates_to_merge_step():
+    f_src = FEATURE_SRC.read_text(encoding="utf-8")
+    assert "merge.step" in f_src
 
 
 from sdlc.gate import (

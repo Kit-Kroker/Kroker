@@ -96,12 +96,6 @@ from .observability.activities import export_run_artifacts
 from .pricing import price_usage
 from .stages import STAGE_MODULES
 from .stages.code.activities import run_coding_task
-from .stages.merge.activities import (
-    evaluate_gate,
-    measure_coverage,
-    open_pull_request,
-    run_integration_checks,
-)
 from .triage.activities import (
     triage_baseline,
     triage_build_probe,
@@ -151,15 +145,11 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
         checkpoint_round,
         load_crew,
         run_coding_task,
-        run_integration_checks,
-        measure_coverage,
-        open_pull_request,
         deploy_current_version,
         deploy_apply,
         smoke_check,
         deploy_rollback,
         read_committed_bytes,
-        evaluate_gate,
         get_task_diff,
         record_benchmark,
         judge_artifact,

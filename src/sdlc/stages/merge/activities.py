@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 import defusedxml.ElementTree as DET
 from defusedxml.common import DefusedXmlException
+from pydantic import BaseModel
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
@@ -114,9 +115,8 @@ class IntegrationChecksInput:
     setup_timeout_s: int = 300
 
 
-@dataclass
-class IntegrationChecks:
-    toolchain: str | None  # ToolchainKind value, or None if undetected
+class IntegrationChecks(BaseModel):
+    toolchain: str | None = None  # ToolchainKind value, or None if undetected
     qa: QAReport
     lint_clean: bool
     lint_detail: str
