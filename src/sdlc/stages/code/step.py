@@ -43,13 +43,13 @@ from ...harness.models import (
 from ...memory.models import MemoryKind
 from ...observability.trace import RunEventKind
 from ...pending import GateContext
-from ...vcs import DiffInput, get_task_diff
+from ...vcs import DiffInput, DriftInput, DriftReport, check_test_drift, get_task_diff
 from ...workflows.crew import FS_ACT, CrewTaskInput, CrewTaskWorkflow
 from ..plan.models import DevTask, compute_plan_drift
 from ..qa import step as qa_step
 from ..qa.activities import QAInput, run_test_suite
 from ..qa.step import _fix_loop_issues
-from .activities import CodingTaskInput, run_coding_task
+from .activities import CodingTaskInput, DriftGlobsInput, load_drift_globs, run_coding_task
 from .models import HandoffSummary
 
 ACT = workflow.ActivityConfig(
@@ -116,6 +116,74 @@ def _contract_shell_cmd(commands: list[str] | None, default: str) -> str:
     if not commands:
         return default
     return " && ".join(commands)
+
+
+def _is_repair_attempt(attempt: int, thawed: bool) -> bool:
+    """Attempt 1 is the FREE pass -- the dev authors the contract's tests
+    there. Every later attempt is a repair attempt, including the
+    operator-REVISE continuation, unless a human explicitly thawed it for
+    exactly this attempt."""
+    return attempt > 1 and not thawed
+
+
+def _next_anchor(
+    current: str | None, commit_sha: str | None, *, freely_writable: bool
+) -> str | None:
+    """The C2 anchor rule, as a table rather than as inline loop conditions.
+
+    A is the checkpoint of the last attempt in which tests were FREELY
+    WRITABLE: attempt 1, plus any attempt a human thawed. It is captured once
+    and then held -- moving it to each attempt's checkpoint would let attempt
+    2 weaken a test that attempt 3 inherits as its baseline, laundering the
+    weakening over two attempts. A thaw is the ONLY thing that moves it, and
+    it must, or the backstop would flag the very edits the operator just
+    authorized.
+
+    `freely_writable` is the attempt's own status, not a derived one: A may
+    only ever be a checkpoint the session could legitimately have written
+    tests in. Deriving it from `current is None` instead would promote a
+    frozen attempt's checkpoint to the baseline whenever attempt 1 produced
+    none (fact 7a), laundering exactly what the ratchet exists to stop.
+
+    `commit_sha` is None when an attempt produced no checkpoint (a swallowed
+    commit failure, or a crew round-1 deadline). Then A simply does not move;
+    there is deliberately no branch_point fallback."""
+    if commit_sha and freely_writable:
+        return commit_sha
+    return current
+
+
+def _drift_note(report: DriftReport) -> str:
+    """The deterministic finding, rendered for the human at the fix-loop gate.
+
+    Three channels, named separately on purpose: 'the session hid a change'
+    is a different accusation from 'a test changed', and a human decides them
+    differently. The patch is included so weakening is distinguishable from a
+    formatter run in one look."""
+    if not report.available:
+        return (
+            "TEST-FREEZE BACKSTOP UNAVAILABLE: "
+            f"{report.unavailable_reason}. Test drift was NOT checked for this attempt."
+        )
+    if not report.found:
+        return ""
+    lines: list[str] = []
+    if report.index_bit_paths:
+        lines.append(
+            "EVASION: the session set skip-worktree/assume-unchanged on protected "
+            "paths, hiding edits from the diff: " + ", ".join(report.index_bit_paths)
+        )
+    if report.fence_paths:
+        lines.append(
+            "FROZEN TESTS CHANGED during a repair attempt: " + ", ".join(report.fence_paths)
+        )
+    if report.report_paths:
+        lines.append(
+            "TEST CONFIGURATION CHANGED during a repair attempt: " + ", ".join(report.report_paths)
+        )
+    if report.patch:
+        lines.append("\nDrift patch:\n" + report.patch)
+    return "\n".join(lines)
 
 
 _TEST_OUTPUT_MAX = 1500
@@ -229,6 +297,7 @@ async def _execute_coding_task(
     crew_roles: Any = None,
     crew_protocol: str = "",
     crew_sessions: dict[str, str] | None = None,
+    repair: bool = False,
 ) -> tuple[HarnessRunResult, dict[str, str], list[ArtifactRef]]:
     if role_cfg.harness is HarnessKind.CREW:
         assert crew_layout is not None
@@ -253,6 +322,7 @@ async def _execute_coding_task(
                 containment_enabled=cfg.containment_enabled,
                 containment_policy_path=cfg.containment.policy_path,
                 containment_strict=cfg.containment.strict,
+                repair=repair,
                 gate_settings=cfg.gate_settings(),
                 max_tool_escalations=cfg.max_tool_escalations,
             ),
@@ -276,6 +346,7 @@ async def _execute_coding_task(
                 containment_policy_path=cfg.containment.policy_path,
                 containment_strict=cfg.containment.strict,
                 grants=grants,
+                repair=repair,
             ),
             **_long_act(role_cfg),
         )
@@ -495,6 +566,13 @@ async def step(
     escalation_round = 0
     budget = cfg.max_fix_attempts + 1
     gate_round = 0
+    # C2 anchor A: the checkpoint of the last attempt in which tests were
+    # freely writable -- attempt 1, plus any thawed attempt. Captured once
+    # and never re-anchored to the PREVIOUS attempt, or attempt 2 could
+    # weaken a test and attempt 3 would inherit the weakened state as its
+    # baseline. Plain workflow state derived from activity output: replay-safe.
+    anchor: str | None = None
+    thawed = False  # set by an operator thaw for exactly one attempt (below)
 
     while True:
         attempt += 1
@@ -522,6 +600,7 @@ async def step(
                 crew_roles=crew_roles,
                 crew_protocol=crew_protocol,
                 crew_sessions=crew_sessions,
+                repair=_is_repair_attempt(attempt, thawed),
             )
             if isinstance(exec_out, tuple):
                 run, crew_sessions, c_refs = exec_out
@@ -611,6 +690,43 @@ async def step(
                 ),
             )
 
+        # Capture A on the first attempt that produced a checkpoint; a thawed
+        # attempt RE-anchors on completion so the human-authorized edits
+        # become the new baseline rather than firing drift forever after.
+        # The rule is a pure helper so the ratchet is testable as a table.
+        anchor = _next_anchor(
+            anchor, run.commit_sha, freely_writable=not _is_repair_attempt(attempt, thawed)
+        )
+
+        drift = DriftReport()
+        if cfg.containment_enabled and anchor is not None and _is_repair_attempt(attempt, thawed):
+            policy_globs = await workflow.execute_activity(
+                load_drift_globs,
+                DriftGlobsInput(policy_path=cfg.containment.policy_path),
+                **ACT,
+            )
+            drift = await workflow.execute_activity(
+                check_test_drift,
+                DriftInput(
+                    worktree=worktree,
+                    anchor=anchor,
+                    fence_globs=policy_globs.fence,
+                    report_globs=policy_globs.report,
+                ),
+                **ACT,
+            )
+        elif cfg.containment_enabled and _is_repair_attempt(attempt, thawed):
+            # Skip-and-RECORD, never skip-and-report-clean: with no anchor
+            # there is nothing to measure against, and an all-default
+            # DriftReport would read as a backstop that ran and found
+            # nothing. found stays False -- no forced gate -- but the gate
+            # analysis must say the backstop never ran.
+            drift = DriftReport(
+                available=False,
+                unavailable_reason="no anchor captured (attempt 1 produced no checkpoint)",
+            )
+        thawed = False  # a thaw is single-attempt by construction
+
         code_spend = RoleUsage(role="dev", model=role_cfg.model or "")
         ctx.emit(
             RunEventKind.MODEL_USAGE,
@@ -663,7 +779,7 @@ async def step(
             started=_attempt_started,
         )
 
-        task_passed = bool(qa_raw.tests_passed and not qa.issues)
+        task_passed = bool(qa_raw.tests_passed and not qa.issues and not drift.found)
 
         await ctx.record(
             cfg,
@@ -752,6 +868,15 @@ async def step(
                 )
 
         issues = "" if attempt >= budget else _fix_loop_issues(qa, qa_raw, review, adversary)
+        drift_note = _drift_note(drift)
+        if drift.found:
+            # Ground truth beats the manipulated signal, and a frozen session
+            # cannot honestly restore what it broke -- restoring a protected
+            # test is itself a denied write -- so another attempt could only
+            # succeed by going around the fence again. Straight to the human,
+            # with the patch.
+            budget = attempt
+            issues = "\n- ".join(x for x in (issues, drift_note) if x)
         if attempt < budget and not issues:
             workflow.logger.warning(
                 "task %s attempt %s failed with no actionable feedback "
@@ -765,6 +890,12 @@ async def step(
         if attempt >= budget:
             gate_round += 1
             analysis = _fix_loop_issues(qa, qa_raw, review) if qa else ""
+            analysis = "\n".join(x for x in (analysis, drift_note) if x)
+            if getattr(getattr(run, "containment", None), "freeze_vacuous", False):
+                analysis += (
+                    "\nNOTE: the test-freeze globs matched 0 files in this repo, so the "
+                    "freeze fenced nothing this attempt (likely an unfamiliar test layout)."
+                )
             decision = await ctx.gate(
                 f"task:{task.id}",
                 cfg.gate_settings(),
