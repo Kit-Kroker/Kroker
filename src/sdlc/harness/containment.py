@@ -59,10 +59,29 @@ class Action(StrEnum):
     ESCALATE = "escalate"
 
 
+class Phase(StrEnum):
+    """WHEN a rule is active. `always` is every rule that existed before C2
+    and stays the default, so an old policy file parses unchanged.
+
+    Deliberately not version-bumped (the asset stays `version: 1`). An OLD
+    reader encountering `phase: repair` drops the unknown field (pydantic
+    ignores extras) and enforces the rule ALWAYS -- over-enforcement, which
+    is the safe direction for a fence, and observable because the denial
+    carries the rule id. The reverse skew is benign: no key -> ALWAYS. The
+    hook runs on the worker's own interpreter, so in-tree skew is zero; it
+    can only enter through a foreign `policy_path` override. The version
+    guard is reserved for a field whose old-code misread is silent AND
+    unsafe."""
+
+    ALWAYS = "always"
+    REPAIR = "repair"
+
+
 class Rule(BaseModel):
     id: str
     layer: ContainmentLayer  # MINIMUM capability required (spec §4a)
     action: Action = Action.DENY  # E-17; DENY keeps every E-16 rule as-is
+    phase: Phase = Phase.ALWAYS  # C2: `repair` rules are inert on pass 1
     tools: list[str]
     predicate: Predicate
     reason: str
@@ -73,6 +92,12 @@ class Rule(BaseModel):
 class Policy(BaseModel):
     version: int
     rules: list[Rule] = Field(default_factory=list)
+    # C2: globs that are MEASURED by the drift backstop but never enforced
+    # by any adapter -- test/build config and dependency manifests, which
+    # are sometimes legitimately edited during repair. Not modelled as a
+    # Rule: a rule needs `tools`/`predicate`/`action` to be evaluated
+    # against a tool call, and these are only ever evaluated against a diff.
+    drift_paths: list[str] = Field(default_factory=list)
     # Absolute path the asset was loaded from (None for hand-built policies).
     # The hook needs it: claude runs the hook with cwd = the task worktree
     # (a temp dir), so the hook's own discovery would fail — the adapter
@@ -137,7 +162,20 @@ def load_policy(path: str | os.PathLike | None = None) -> Policy:
                 )
         except Exception as e:  # noqa: BLE001 - re-typed
             raise ContainmentError(f"invalid rule {rid!r} in {p}: {e}") from e
-    return Policy(version=version, rules=rules, source_path=p.resolve())
+    raw_drift = raw.get("drift_paths") or []
+    # `list()` on a scalar shreds it into one-character globs
+    # (`drift_paths: pyproject.toml` -> 14 globs matching nothing), and on a
+    # mapping it yields the keys. Both pass `list[str]` and leave the backstop
+    # measuring nothing while the asset looks configured -- fail-open in the
+    # one set that exists to be observable. Structural, so it raises like the
+    # rules loop does; a non-str element would otherwise escape as a pydantic
+    # ValidationError, which is not a ContainmentError.
+    if not isinstance(raw_drift, list) or not all(isinstance(g, str) for g in raw_drift):
+        raise ContainmentError(
+            f"drift_paths in {p} must be a list of glob strings, got {raw_drift!r}"
+        )
+    drift_paths = list(raw_drift)
+    return Policy(version=version, rules=rules, drift_paths=drift_paths, source_path=p.resolve())
 
 
 class Verdict(BaseModel):
@@ -231,14 +269,52 @@ def _rule_denies(rule: Rule, tool: str, tool_input: dict, worktree: str) -> bool
     return False
 
 
-def evaluate(policy: Policy, tool: str, tool_input: dict, worktree: str) -> Verdict:
-    """First matching rule wins. `worktree` is a PARAMETER, never computed:
-    create_worktree may return <task>.N after a Windows lock fallback and its
-    returned path is authoritative (activities.py:260-274)."""
+def evaluate(
+    policy: Policy, tool: str, tool_input: dict, worktree: str, repair: bool = False
+) -> Verdict:
+    """First matching rule wins. `worktree` and `repair` are both
+    PARAMETERS, never computed: create_worktree may return <task>.N after a
+    Windows lock fallback and its returned path is authoritative
+    (activities.py:260-274); and only the fix loop knows whether this is a
+    repair attempt -- `attempt` is hardcoded to 1 at both CrewTurnInput
+    construction sites, so inferring it activity-side would silently unfreeze
+    every crew repair attempt."""
     for rule in policy.rules:
+        if rule.phase is Phase.REPAIR and not repair:
+            continue
         if _rule_denies(rule, tool, tool_input, worktree):
             return Verdict(allow=False, rule_id=rule.id, reason=rule.reason, action=rule.action)
     return Verdict(allow=True)
+
+
+def repair_patterns(policy: Policy) -> list[str]:
+    """Every pattern carried by a repair-phase rule -- the fence set G.
+
+    One definition, read by three consumers: the two adapters compile it
+    into their own deny syntax, and the drift backstop measures content
+    under it. Two notions of "the tests" would drift apart; this one
+    cannot."""
+    return [pat for rule in policy.rules if rule.phase is Phase.REPAIR for pat in rule.patterns]
+
+
+def drift_globs(policy: Policy) -> list[str]:
+    """The drift set D = G u C: fenced paths plus report-only paths.
+
+    De-duplicated, order-stable (G first) so a pathspec built from it is
+    deterministic across replays."""
+    out: list[str] = []
+    for pat in [*repair_patterns(policy), *policy.drift_paths]:
+        if pat not in out:
+            out.append(pat)
+    return out
+
+
+def has_repair_rule(policy: Policy) -> bool:
+    """Whether this policy fences anything at all during repair. A policy
+    with none leaves repair sessions hook-unfrozen (the backstop still
+    runs), which `containment_strict` refuses -- see the strict check in
+    stages/code/activities.py."""
+    return any(rule.phase is Phase.REPAIR for rule in policy.rules)
 
 
 # The hook writes this marker into the reason string after the `[rule-id] `

@@ -13,6 +13,10 @@ E-17: an ESCALATE rule defers instead of denying, but ONLY when the call is
 solo — `defer` is discarded by the CLI when the assistant message carries
 sibling tool_use blocks, and the call would then fall through to
 acceptEdits. Every other path denies.
+
+C2: `--repair` activates `phase: repair` rules (the contract's test files).
+Absent = pass 1 = those rules are inert, which is how the dev is free to
+author the tests in the first place.
 """
 
 from __future__ import annotations
@@ -120,13 +124,17 @@ def _escalate(
 
 
 def decide(
-    payload: dict, policy: Policy, worktree: str, grants: list[ToolGrant] | None = None
+    payload: dict,
+    policy: Policy,
+    worktree: str,
+    grants: list[ToolGrant] | None = None,
+    repair: bool = False,
 ) -> dict:
     tool = payload.get("tool_name")
     tool_input = payload.get("tool_input") or {}
     if not isinstance(tool, str) or not isinstance(tool_input, dict):
         return _decision("allow")
-    verdict = evaluate(policy, tool, tool_input, worktree)
+    verdict = evaluate(policy, tool, tool_input, worktree, repair=repair)
     if verdict.allow:
         return _decision("allow")
     rule_id = verdict.rule_id or "unknown"
@@ -141,13 +149,17 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--worktree", required=True)
     ap.add_argument("--policy", default=None)
     ap.add_argument("--grants", default=None)
+    # C2: set by the adapter when this invocation is a REPAIR attempt. The
+    # flag lives in the out-of-worktree settings file, so the agent cannot
+    # flip it.
+    ap.add_argument("--repair", action="store_true")
     args = ap.parse_args(argv)
 
     try:
         payload = json.loads(sys.stdin.read() or "{}")
         policy = load_policy(args.policy)
         grants = load_grants(args.grants)
-        out = decide(payload, policy, args.worktree, grants)
+        out = decide(payload, policy, args.worktree, grants, repair=args.repair)
     except Exception as e:  # noqa: BLE001
         # Fail CLOSED. A hook that crashes open is worse than no hook: the
         # run would look contained while enforcing nothing.
