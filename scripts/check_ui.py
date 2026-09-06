@@ -36,9 +36,17 @@ STEPS: tuple[tuple[str, list[str]], ...] = (
     ("typecheck", ["run", "typecheck", "--workspace", DASH]),
     ("typecheck-ui", ["run", "typecheck", "--workspace", UI]),
     ("build-dashboard", ["run", "build", "--workspace", DASH]),
+    # @kroker/ui's vite root is showcase/ (vite.config.ts): this build is what
+    # ds-bundle's vite.preview() serves next -- without it, build-ds-bundle.ts
+    # silently falls back to a URL with nothing listening on it.
+    ("build-ui", ["run", "build", "--workspace", UI]),
     ("vitest-dashboard", ["run", "test", "--workspace", DASH]),
-    ("vitest-ui", ["run", "test", "--workspace", UI]),
     ("playwright-browser", ["exec", "--", "playwright", "install", "--with-deps", "chromium"]),
+    # Populates dist-ds/ (gitignored, spec C Task 12/13's DesignSync payload)
+    # before vitest-ui runs: build-ds-bundle.spec.ts asserts against those
+    # files and has no fixture of its own.
+    ("ds-bundle", ["run", "ds:bundle", "--workspace", UI]),
+    ("vitest-ui", ["run", "test", "--workspace", UI]),
     ("playwright", ["run", "test:pw", "--workspace", UI]),
 )
 
