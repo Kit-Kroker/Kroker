@@ -226,6 +226,7 @@ class CrewTurnInput:
     containment_policy_path: str | None = None
     containment_strict: bool = False
     grants: list[ToolGrant] = field(default_factory=list)
+    repair: bool = False  # C2: see CodingTaskInput.repair
 
 
 @dataclass
@@ -276,6 +277,7 @@ async def run_crew_turn(inp: CrewTurnInput) -> CrewTurnOutput:
         session_id=session_id,
         timeout_s=inp.turn_timeout_s,
         write_root=write_root,
+        repair=inp.repair,
     )
     try:
         _, report = _resolve_containment(harness, inp, req)

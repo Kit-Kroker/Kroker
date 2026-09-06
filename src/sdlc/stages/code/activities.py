@@ -42,6 +42,12 @@ class CodingTaskInput:
     # E-17: human decisions about suspended tool calls. Written to a grants
     # file activity-side and read by the hook; empty on a first attempt.
     grants: list[ToolGrant] = field(default_factory=list)
+    # C2: this is a REPAIR attempt, which activates `phase: repair` policy
+    # rules (the contract's test files). Set by the fix loop, NEVER derived
+    # from `attempt` here -- CrewTurnInput hardcodes attempt=1 at both of its
+    # construction sites, so an activity-side inference would leave every
+    # crew repair attempt silently unfrozen.
+    repair: bool = False
 
 
 def _resolve_containment(
@@ -92,6 +98,7 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
         model=inp.model,
         session_id=inp.session_id,
         timeout_s=inp.timeout_s,
+        repair=inp.repair,
     )
     _, report = _resolve_containment(harness, inp, req)
     with span("harness.run", harness=inp.harness.value, task_id=inp.task_id, attempt=inp.attempt):

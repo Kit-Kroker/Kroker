@@ -87,6 +87,7 @@ class CrewTaskInput(BaseModel):
     containment_enabled: bool = False
     containment_policy_path: str | None = None
     containment_strict: bool = False
+    repair: bool = False  # C2: forwarded to every turn in this attempt
     # E-88 §6: the gate is hosted HERE, so the child needs the same three
     # fields GateHost reads. GateSettings exists precisely so a gate host
     # need not take the whole PipelineConfig.
@@ -189,6 +190,7 @@ class CrewTaskWorkflow(GateHost):
                         containment_policy_path=inp.containment_policy_path,
                         containment_strict=inp.containment_strict,
                         grants=grants,
+                        repair=inp.repair,
                     ),
                     **_turn_act(min(inp.turn_timeout_s, int(remaining))),
                 )
@@ -334,6 +336,7 @@ class CrewTaskWorkflow(GateHost):
                             containment_enabled=inp.containment_enabled,
                             containment_policy_path=inp.containment_policy_path,
                             containment_strict=inp.containment_strict,
+                            repair=inp.repair,
                         ),
                         **_turn_act(budget_s),
                     )
