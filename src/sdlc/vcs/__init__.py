@@ -5,9 +5,12 @@ from __future__ import annotations
 from .git import (
     CommittedBytesInput,
     DiffInput,
+    DriftInput,
+    DriftReport,
     _chmod_retry,
     _git,
     _rmtree_with_retry,
+    check_test_drift,
     get_task_diff,
     read_committed_bytes,
 )
@@ -38,6 +41,7 @@ ACTIVITIES = [
     merge_into_integration,
     build_verification_branch,
     get_task_diff,
+    check_test_drift,
     read_committed_bytes,
 ]
 
@@ -45,6 +49,8 @@ __all__ = [
     "ACTIVITIES",
     "CommittedBytesInput",
     "DiffInput",
+    "DriftInput",
+    "DriftReport",
     "IntegrationHandle",
     "IntegrationInput",
     "MergeInput",
@@ -61,6 +67,7 @@ __all__ = [
     "_rmtree_with_retry",
     "_worktrees_root",
     "build_verification_branch",
+    "check_test_drift",
     "create_worktree",
     "get_task_diff",
     "merge_into_integration",

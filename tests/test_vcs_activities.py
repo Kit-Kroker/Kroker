@@ -21,6 +21,7 @@ def test_vcs_owns_the_plumbing():
         "merge_into_integration",
         "build_verification_branch",
         "get_task_diff",
+        "check_test_drift",
         "read_committed_bytes",
     }
 
