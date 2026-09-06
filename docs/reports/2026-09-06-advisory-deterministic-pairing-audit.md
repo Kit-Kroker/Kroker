@@ -68,11 +68,11 @@ most of the binding actually happens, one stage earlier.
 
 | # | Pass (file:line) | Failure mode if wrong | Enforcement | Backstop | Verdict |
 |---|---|---|---|---|---|
-| 1 | MergeVerdict — `merge/models.py:21`, consulted `merge/step.py:399` | approves a build the human should have seen (SOFT only, post-clean-gate) | `evaluate_quality_gate` (`gate.py:133`) runs first and cannot be bypassed | the twin *is* the backstop; residual: its confidence skips the human — see row 8 | PAIRED |
+| 1 | MergeVerdict — `merge/models.py:21`, consulted `merge/step.py:399` | approves a build the human should have seen (SOFT only, post-clean-gate) | `evaluate_quality_gate` (`gate.py:141`) runs first and cannot be bypassed | the twin *is* the backstop; residual: its confidence skips the human — see row 8 | PAIRED |
 | 2 | Primary reviewer — `code/step.py:797`, `merge/step.py:287-292` | wrong-approve admits unreviewed code at task admission and merge | the block is a conjunct of the done path (`code/step.py:797`) and the `review_severity` ADVISORY check (`merge/step.py:287-292`) | absolute merge checks cover code-level dimensions only; design-quality jurisdiction has the human alone | ENFORCED |
 | 3 | Adversary lens — invoked `code/step.py:802`, consulted `:812` | a blocking rejection is missed; a wrong rejection stalls the loop | rejection skips the done path (`:812`), feeds the fix loop (`:838`), reaches the human gate on exhaustion (`:867`) | runs only after `task_passed and review_ok` (`:800`), so tighten-only — but its fail-open legs have nothing | ENFORCED (fail-open leg UNPAIRED) |
 | 4 | deep_review — `code/step.py:813`, `:894` | fabricates findings or misses signal; either way it never blocks | none needed for blocking — never in the success condition (post-decision at both sites) | output-side: `handoff.py:99-124`, `:127-149` drop ungrounded flags/deviations (E-43/E-83); input-side: the E-38 scrub (`memory/scrub.py:18`, applied `harness/session.py:59`) | FILTERED |
-| 5 | Handoff extractor — `code/step.py:417` | hallucinated claims enter the durable handoff record | never gates; recorded for the next task's context | `handoff.py:60-84` `cross_check_claims` drops claims outside the diff or ungrounded in the transcript; fail-open degrades to a mechanical files-only `HandoffSummary` (`code/step.py:459-465`) | FILTERED |
+| 5 | Handoff extractor — `code/step.py:417` | hallucinated claims enter the durable handoff record | never gates; recorded for the next task's context | `handoff.py:46-84` `cross_check_claims` drops claims outside the diff or ungrounded in the transcript; fail-open degrades to a mechanical files-only `HandoffSummary` (`code/step.py:459-465`) | FILTERED |
 | 6 | Analyst — `analyze/step.py:121` | "everything traces" hides untested acceptance criteria | deterministic `untraced_criteria` reduction (`analyze/step.py:136`) feeds the merge `traceability` ADVISORY check (`merge/step.py:293-302`) | none in its own jurisdiction for a wrong-yes; merge-time human waiver is the catch | ENFORCED |
 | 7 | QA LLM pass — `qa/step.py:175` | "no issues" on a defective diff passes the task | `qa.issues` is a conjunct of `task_passed` (`code/step.py:750`) | deterministic twin `run_test_suite` (`qa/step.py:137-141`) holds the wrong-yes for test-detectable issues; the LLM conjunct is tighten-only | PAIRED |
 | 8 | Confidence auto-approve — `role_host.py:55-75`, consumed `:224` | a mis-calibrated confidence removes the human gate | none — SOFT + `confidence >= threshold` synthesizes the APPROVE (`role_host.py:68-75`) | guards only: `None` confidence never auto-approves (`role_host.py:64-65`); exhausted rounds force a final gate (`:236-239`) | UNPAIRED |
@@ -84,7 +84,7 @@ Defined at `merge/models.py:21` with the docstring that states its ceiling:
 consult site (`merge/step.py:391-399`) sits in the `else` branch after the
 deterministic gate passed clean (`:316-318` evaluates; `:382` branches), and
 only under `GatePolicy.SOFT`. The deterministic twin — `evaluate_quality_gate`
-(`gate.py:133`) — covers the pass's entire jurisdiction and blocks without
+(`gate.py:141`) — covers the pass's entire jurisdiction and blocks without
 any LLM.
 
 The one-line cross-reference the verdict owes row 8: while MergeVerdict
@@ -149,7 +149,7 @@ never gates — FILTERED.
 ### Row 5 — Handoff extractor, FILTERED
 
 Invoked at `code/step.py:417`. Its output is deterministically cross-checked
-by `handoff.py:60-84` `cross_check_claims`: claims naming files outside the
+by `handoff.py:46-84` `cross_check_claims`: claims naming files outside the
 diff are dropped, quotes absent from the transcript are dropped. It never
 gates. Its fail-open leg is the only one in the census that lands on a
 deterministic artifact: on exception the stage returns the mechanical
@@ -255,7 +255,7 @@ row here. Nothing is unaccounted for.
 Ruled explicitly, so a reader need not wonder whether they were missed or
 dodged:
 
-- **`ctx.judge`** (`core/context.py:54`) — benchmark quality scoring; an LLM
+- **`ctx.judge`** (`core/context.py:52`) — benchmark quality scoring; an LLM
   verdict retained as evidence, which Prong B arguably reaches via C5's
   calibration loop. It scores runs for the benchmark; it admits nothing and
   blocks nothing, so it is off this audit's admission surface.
