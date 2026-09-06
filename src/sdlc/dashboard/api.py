@@ -48,6 +48,7 @@ class DecideBody(BaseModel):
     key: str
     outcome: GateOutcome
     text: str = ""
+    thaw_tests: bool = False  # C2, revise only
 
 
 class StartBody(BaseModel):
@@ -164,7 +165,7 @@ def create_router(poller: FleetPoller, starter: Callable | None = None) -> APIRo
         return await _reply(
             run_id,
             body.key,
-            Reply(outcome=body.outcome, text=body.text or None),
+            Reply(outcome=body.outcome, text=body.text or None, thaw_tests=body.thaw_tests),
             x_actor,
             want="gate",
         )

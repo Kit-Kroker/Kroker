@@ -45,6 +45,11 @@ class Reply(BaseModel):
 
     outcome: GateOutcome | None = None  # gate replies
     text: str | None = None  # answer text, or comment/guidance
+    # C2 (gate replies, code-stage task gate only). A field lands on this
+    # surface-neutral model only when: a human-direct surface collects it
+    # structurally; exactly one gate kind reads it; and NO agent surface
+    # exposes it. `outcome` is the existing gate-specific precedent.
+    thaw_tests: bool = False
 
 
 class SignalCall(BaseModel):
@@ -117,6 +122,7 @@ def default_translate(d: PendingDecision, reply: Reply) -> SignalCall:
                 decided_by="human",
                 comments=reply.text,
                 guidance=guidance,
+                thaw_tests=reply.thaw_tests and reply.outcome is GateOutcome.REVISE,
             ),
         )
     raise TypeError(f"unhandled pending decision: {type(d)!r}")

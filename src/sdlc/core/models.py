@@ -157,6 +157,12 @@ class GateDecision(BaseModel):
     reviewer: str | None = None
     comments: str | None = None
     guidance: str | None = None  # fed back into the agent on 'revise'
+    # C2: authorize the NEXT attempt to edit the contract's frozen tests.
+    # Read only by the code-stage task gate, and only on `revise` -- inert
+    # everywhere else, exactly like `guidance` on a non-revise outcome.
+    # Never inferred from `guidance` text: a session that writes gate-facing
+    # prose about a "wrong test" must not be able to unfreeze itself.
+    thaw_tests: bool = False
     decided_at: datetime | None = None
 
     @property

@@ -128,6 +128,14 @@ def add_decision_parsers(sub) -> None:
         g.add_argument(
             "--comment", default=None, help="comment; required for revise (becomes guidance)"
         )
+        if name == "revise":
+            # C2: only `revise` resumes the fix loop, so a thaw is
+            # meaningless on approve/reject.
+            g.add_argument(
+                "--thaw-tests",
+                action="store_true",
+                help="authorize the next attempt to edit the contract's frozen tests",
+            )
 
     a = sub.add_parser("answer")
     a.add_argument("--id", required=True)
@@ -144,7 +152,11 @@ def selector_for(args):
         return Selector(reply_kind="text", name=args.q), Reply(text=args.text)
     return (
         Selector(reply_kind="gate", name=args.gate),
-        Reply(outcome=_OUTCOME[args.cmd], text=args.comment),
+        Reply(
+            outcome=_OUTCOME[args.cmd],
+            text=args.comment,
+            thaw_tests=getattr(args, "thaw_tests", False),
+        ),
     )
 
 
