@@ -50,7 +50,11 @@ target-version = "py311"
 line-length = 100
 # benchmarks/cases/** are vendored fixtures (third-party reference repos and
 # their oracle tests) — data, not product code. Keep them byte-stable.
-extend-exclude = ["benchmarks/cases"]
+# docs/superpowers/** are write-once historical records (same rationale as the
+# file-size ratchet's exemption in scripts/check_file_size.py). ruff format
+# rewrites python fences inside .md and dedents body-context snippets to module
+# level, which corrupts approved plan artifacts.
+extend-exclude = ["benchmarks/cases", "docs/superpowers"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
