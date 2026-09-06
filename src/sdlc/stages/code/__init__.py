@@ -5,7 +5,10 @@ from __future__ import annotations
 from .activities import (
     ACTIVITIES,
     CodingTaskInput,
+    DriftGlobs,
+    DriftGlobsInput,
     _resolve_containment,
+    load_drift_globs,
     run_coding_task,
 )
 from .models import HandoffClaim, HandoffSummary, IntegrityFlag
@@ -22,6 +25,8 @@ from .step import (
 __all__ = [
     "ACTIVITIES",
     "CodingTaskInput",
+    "DriftGlobs",
+    "DriftGlobsInput",
     "HandoffClaim",
     "HandoffSummary",
     "IntegrityFlag",
@@ -31,6 +36,7 @@ __all__ = [
     "_run_adversary",
     "_run_deep_review",
     "_run_handoff",
+    "load_drift_globs",
     "prompt_digest",
     "run_coding_task",
     "step",

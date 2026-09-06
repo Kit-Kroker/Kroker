@@ -102,6 +102,13 @@ class ContainmentReport(BaseModel):
     # E-17: rules that can actually raise a gate on THIS harness. Empty on a
     # harness without `defer`, so degradation is visible rather than silent.
     rules_escalatable: list[str] = Field(default_factory=list)
+    # C2: the freeze compiled, but its globs match nothing in this repo --
+    # protection that LOOKS active and fences nothing. A warning, not a
+    # refusal: usually an alien repo layout (a Go task under Python-shaped
+    # globs), not an attack. None means "not probed" (not a repair attempt,
+    # or containment disabled).
+    freeze_vacuous: bool = False
+    freeze_files_matched: int | None = None
 
 
 class DeferredToolUse(BaseModel):

@@ -6,12 +6,18 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from pydantic import BaseModel, Field
 from temporalio import activity
 
 from ...artifacts.capture import capture_session
 from ...core.models import HarnessKind
 from ...harness.base import HarnessRequest
-from ...harness.containment import ContainmentError, load_policy
+from ...harness.containment import (
+    ContainmentError,
+    has_repair_rule,
+    load_policy,
+    repair_patterns,
+)
 from ...harness.models import HarnessRunResult, ToolGrant
 from ...harness.registry import HARNESSES
 from ...observability.logfire_setup import span
@@ -81,7 +87,48 @@ def _resolve_containment(
             f"leaves these rules unenforceable: "
             f"{', '.join(report.rules_unenforceable)}"
         )
+
+    if getattr(inp, "repair", False):
+        if not has_repair_rule(policy):
+            if inp.containment_strict:
+                raise ContainmentError(
+                    "containment_strict is set and this is a repair attempt, but the "
+                    "policy carries no `phase: repair` rule -- the contract's tests "
+                    "would be unfrozen while the report claims containment is active."
+                )
+        else:
+            # Vacuity probe: repo-side I/O, so it lives here rather than in
+            # apply_containment (adapters are per-CLI compilers; the policy
+            # module is pure). A WARNING even under strict -- a vacuous glob
+            # set is a layout mismatch, not the asset lying.
+            probe = _git(["ls-files", "--", *repair_patterns(policy)], inp.worktree)
+            matched = len([x for x in probe.stdout.splitlines() if x.strip()])
+            report.freeze_files_matched = matched
+            report.freeze_vacuous = matched == 0
     return policy, report
+
+
+@dataclass
+class DriftGlobsInput:
+    policy_path: str | None = None
+
+
+class DriftGlobs(BaseModel):
+    fence: list[str] = Field(default_factory=list)
+    report: list[str] = Field(default_factory=list)
+
+
+@activity.defn
+async def load_drift_globs(inp: DriftGlobsInput) -> DriftGlobs:
+    """Resolve the drift set activity-side.
+
+    The workflow sandbox cannot read files, so the loop cannot load the
+    policy itself -- the same split the containment flags already follow.
+    Returned split rather than merged because the two halves carry different
+    accusations: a fenced path that changed went AROUND a deny rule; a
+    report-only path may have been edited legitimately."""
+    policy = load_policy(inp.policy_path)
+    return DriftGlobs(fence=repair_patterns(policy), report=list(policy.drift_paths))
 
 
 @activity.defn
@@ -156,11 +203,14 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
     return result
 
 
-ACTIVITIES = [run_coding_task]
+ACTIVITIES = [run_coding_task, load_drift_globs]
 
 __all__ = [
     "ACTIVITIES",
     "CodingTaskInput",
+    "DriftGlobs",
+    "DriftGlobsInput",
     "_resolve_containment",
+    "load_drift_globs",
     "run_coding_task",
 ]
