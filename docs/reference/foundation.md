@@ -78,12 +78,18 @@ No LLM, no I/O. Consumes typed check evidence and decides pass/fail:
   classification, detail}`**, **`GateOverride{check, approved_by, reason}`**,
   **`GateReport{passed, blocking, overridden, checks}`**.
 - **`build_check(name, passed, requested, detail="")`** forces
-  `ABSOLUTE_FLOOR` names (`security_no_critical`) to `ABSOLUTE` even if a
-  project marks them advisory.
+  `ABSOLUTE_FLOOR` names (`security_no_critical`, `security_scan_collected`) to
+  `ABSOLUTE` even if a project marks them advisory.
 - **`evaluate_quality_gate(checks, overrides=None)`**: a failed **absolute**
   check always blocks (override ignored); a failed **advisory** check blocks
   unless a matching audited `GateOverride` is recorded; `passed = not
   blocking`.
+- **`MERGE_REQUIRED_CHECKS`** is the manifest of checks the merge gate must see.
+  `evaluate_quality_gate` synthesizes a failing `MISCONFIGURED` check for every
+  manifest name absent from its input, at that name's manifest classification,
+  and echoes it in `GateReport.checks` — an absent check blocks rather than
+  passing silently. The same function re-asserts `ABSOLUTE_FLOOR` on input, so a
+  directly-constructed `CheckResult` cannot demote a floor check.
 
 ### `sdlc/agents/roles.py` & `sdlc/workflows/feature.py`
 

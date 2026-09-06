@@ -264,3 +264,27 @@ def repo_agents_dir():
     from sdlc.agents.loader import _resolve_agents_dir
 
     return _resolve_agents_dir()
+
+
+@pytest.fixture
+def required_checks():
+    """Build the full MERGE_REQUIRED_CHECKS list, every check passing.
+
+    `required_checks()` -> seven passing checks.
+    `required_checks(coverage=False)` -> the same seven with `coverage`
+    failing at its manifest classification.
+
+    Returns a fresh list on every call, so no test shares a list object or
+    depends on another test not mutating one. Driven by the manifest rather
+    than a hardcoded seven, so these tests keep asserting mechanics if the
+    manifest ever grows.
+    """
+    from sdlc.gate import MERGE_REQUIRED_CHECKS, CheckResult, build_check
+
+    def _build(**passed: bool) -> list[CheckResult]:
+        return [
+            build_check(name, passed.get(name, True), klass)
+            for name, klass in MERGE_REQUIRED_CHECKS.items()
+        ]
+
+    return _build

@@ -9,7 +9,8 @@ file carries only what is true *here*.
 
 - Cross-stage calls are banned: merge evaluates quality and safety gates on the integration worktree independently.
 - The step signature takes `ctx: StageContext` as first argument, never the workflow instance.
-- Absolute checks are non-overridable: on failure, the stage fails closed immediately.
+- Absolute checks are non-overridable: on failure, the stage fails closed immediately. The floor is re-asserted on input inside `evaluate_quality_gate`, so a directly-constructed `CheckResult` cannot demote a floor check to advisory.
+- A required check that never reaches the gate is a failing check, not a silent pass: `MERGE_REQUIRED_CHECKS` (`gate.py`) is the authoritative list, and absence synthesizes a failing `MISCONFIGURED` result at the manifest classification.
 - Advisory checks may be overridden only by human approval via `ctx.gate("merge", ...)`.
 - MergeVerdict is advisory and consulted ONLY under SOFT gate policy after the deterministic gate passes clean.
 - The slice exports `step`, `prompt_digest`, `merge_verdict_prompt`, and `ACTIVITIES = [measure_coverage, run_integration_checks, open_pull_request, evaluate_gate]`.

@@ -76,14 +76,14 @@ def test_absolute_failure_blocks_despite_override():
     assert report.overridden == []
 
 
-def test_advisory_failure_passes_with_audited_override():
-    checks = [build_check("coverage_gate", False, CheckClass.ADVISORY)]
+def test_advisory_failure_passes_with_audited_override(required_checks):
+    checks = required_checks(coverage=False)
     report = evaluate_quality_gate(
         checks,
-        overrides=[GateOverride(check="coverage_gate", approved_by="human", reason="accepted")],
+        overrides=[GateOverride(check="coverage", approved_by="human", reason="accepted")],
     )
     assert report.passed
-    assert "coverage_gate" in report.overridden
+    assert "coverage" in report.overridden
 
 
 from sdlc.stages.qa.models import QAReport

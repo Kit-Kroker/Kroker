@@ -22,10 +22,11 @@ def test_advisory_failure_blocks_without_override():
     assert "coverage" in rep.blocking
 
 
-def test_advisory_failure_passes_with_override():
-    checks = [build_check("coverage", False, CheckClass.ADVISORY)]
+def test_advisory_failure_passes_with_override(required_checks):
+    checks = required_checks(coverage=False)
     rep = evaluate_quality_gate(
-        checks, overrides=[GateOverride(check="coverage", approved_by="alice", reason="legacy gap")]
+        checks,
+        overrides=[GateOverride(check="coverage", approved_by="alice", reason="legacy gap")],
     )
     assert rep.passed is True
     assert rep.overridden == ["coverage"]
@@ -42,11 +43,7 @@ def test_security_floor_cannot_be_demoted():
     assert rep.passed is False
 
 
-def test_all_pass_is_clean():
-    checks = [
-        build_check("lint", True, CheckClass.ABSOLUTE),
-        build_check("coverage", True, CheckClass.ADVISORY),
-    ]
-    rep = evaluate_quality_gate(checks)
+def test_all_pass_is_clean(required_checks):
+    rep = evaluate_quality_gate(required_checks())
     assert rep.passed is True
     assert rep.blocking == []

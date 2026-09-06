@@ -49,6 +49,11 @@ def test_not_collected_scan_blocks_on_its_own_check():
     assert "security_no_critical" not in result.blocking
 
 
-def test_measured_clean_scan_passes_both():
+def test_measured_clean_scan_passes_both(required_checks):
     report = SecurityReport(critical=0, state=CollectionState.MEASURED)
-    assert evaluate_quality_gate(_checks(report)).blocking == []
+    others = [
+        c
+        for c in required_checks()
+        if c.name not in {"security_scan_collected", "security_no_critical"}
+    ]
+    assert evaluate_quality_gate(others + _checks(report)).blocking == []

@@ -177,12 +177,13 @@ the *requirement*.
 **Pure code. No LLM.** It consumes typed evidence already produced by earlier
 stages, reduced to `CheckResult`s, and returns a `GateReport`.
 
-Six checks, in two classes:
+Seven checks, in two classes:
 
 | Check | Class | Evidence |
 |---|---|---|
 | `build_integration_green` | **ABSOLUTE** | aggregate of per-task pytest runs |
 | `lint_clean` | **ABSOLUTE** | lint activity |
+| `security_scan_collected` | **ABSOLUTE** | security scan: the scan actually ran |
 | `security_no_critical` | **ABSOLUTE** | security scan: `critical == 0` |
 | `review_severity` | advisory | clean-context reviewer blocking findings |
 | `traceability` | advisory | every acceptance criterion maps to ≥1 test |
@@ -194,11 +195,22 @@ Six checks, in two classes:
   `rejected:merge:absolute-gate-failed:<checks>` and the run is over.
 - **ADVISORY** — blocks only until an **audited human override** is recorded.
 
-**The floor.** `ABSOLUTE_FLOOR = {"security_no_critical"}`: that check is
-forced to ABSOLUTE by `build_check()` even if a project's config asks for
-advisory. A project can tune its own strictness; it cannot configure away
-"no critical vulnerabilities". Worth saying out loud — it is the clearest
+**The floor.** `ABSOLUTE_FLOOR = {"security_no_critical",
+"security_scan_collected"}`: those checks are forced to ABSOLUTE by
+`build_check()` even if a project's config asks for advisory, and re-asserted by
+`evaluate_quality_gate()` on any check handed to it directly. A project can tune
+its own strictness; it cannot configure away "no critical vulnerabilities", nor
+demote "the scan actually ran" (FR-915 — a scan that could not run is as absolute
+as a scan that found a critical). Worth saying out loud — it is the clearest
 example of policy living in code rather than in a prompt.
+
+**And the gate fails closed on its own inputs.** `MERGE_REQUIRED_CHECKS` names
+the seven checks above as the set the merge gate must see. A name absent from the
+evidence handed to the gate is synthesized as a *failing* check at its manifest
+classification, with `MISCONFIGURED` in its detail — so a check that quietly
+stopped being produced blocks the merge instead of passing unnoticed. Absolute
+absence is terminal; advisory absence reaches the human gate as a waivable
+finding.
 
 **Where the human fits.** On advisory failure, the human merge gate *is* the
 override mechanism. An `approve` records a `GateOverride{check, approved_by,
