@@ -9,7 +9,48 @@
 # This is a fence, not a sandbox. Egress rules are tool-level: a socket opened
 # from inside an allowed Bash call is invisible to them. Network-level egress
 # is E-21's OS/container tier.
+#
+# C2: the version stays 1 despite the new `phase` rule field and the
+# `drift_paths` key. An OLD reader drops an unknown `phase` and enforces the
+# rule ALWAYS -- over-enforcement, the safe direction for a fence, and
+# observable because the denial carries the rule id. The reverse skew (no
+# `phase` key) is ALWAYS, which is what every pre-C2 rule means. The hook
+# runs on the worker's own interpreter, so in-tree skew is structurally zero;
+# skew can only enter via a foreign `policy_path` override. A version bump is
+# reserved for a field whose old-code misread is silent AND unsafe.
 version: 1
+
+# C2: paths the deterministic drift backstop MEASURES but no adapter ever
+# denies. Test/build config and dependency manifests are sometimes
+# legitimately edited during a repair attempt (a dependency bump is a real
+# fix), so fencing them would block honest work -- but a repair attempt that
+# disables the suite via `addopts = "--ignore=tests"` must never complete
+# silently green. Measured, reported to the human at the fix-loop gate.
+drift_paths:
+  - "pyproject.toml"
+  - "**/pyproject.toml"
+  - "setup.cfg"
+  - "**/setup.cfg"
+  - "pytest.ini"
+  - "**/pytest.ini"
+  - "tox.ini"
+  - "**/tox.ini"
+  - "jest.config.*"
+  - "**/jest.config.*"
+  - "vitest.config.*"
+  - "**/vitest.config.*"
+  - ".github/workflows/**"
+  - "**/.github/workflows/**"
+  - "requirements.txt"
+  - "**/requirements.txt"
+  - "requirements-dev.txt"
+  - "**/requirements-dev.txt"
+  - "package.json"
+  - "**/package.json"
+  - "go.mod"
+  - "**/go.mod"
+  - "Cargo.toml"
+  - "**/Cargo.toml"
 
 rules:
   - id: no-out-of-worktree-write
@@ -51,3 +92,68 @@ rules:
       - files.pythonhosted.org
       - registry.npmjs.org
     reason: "Egress is restricted to the model API, git remote, and package registries."
+
+  # C2. `phase: repair` makes this rule INERT on the first implementation
+  # pass -- the dev must be free to author the contract's tests -- and active
+  # only during bounded repair attempts, where editing the tests that judge
+  # you is the reward hack this row exists to close.
+  #
+  # PATTERN FORMS ARE PAIRED ON PURPOSE. `**/tests/**` matches nothing
+  # relative; `tests/**` matches nothing absolute. The hook sees ABSOLUTE
+  # file_path targets, git's pathspec (used by the drift backstop) sees
+  # RELATIVE ones. Measured: git's DEFAULT pathspec and Python's fnmatch
+  # agree exactly on these forms. Dropping either half of a pair makes one
+  # engine silently vacuous. See tests/test_containment_dialects.py.
+  #
+  # `tools` deliberately EXCLUDES Bash: PATH_MATCHES compares against
+  # target_of(), which returns the COMMAND STRING for Bash, so a Bash entry
+  # here would be dead code that reads like coverage. `sed -i`, `cat >`,
+  # `python -c` and `git rm` are caught deterministically by the drift
+  # backstop instead (src/sdlc/vcs/git.py:check_test_drift).
+  - id: no-test-edit-during-repair
+    layer: native               # enforced by BOTH adapters; opencode has no hook
+    action: deny                # NOT escalate: escalate is hook-only by
+                                # validation, opencode has no hook layer, so an
+                                # escalating freeze would be unenforceable there
+    phase: repair
+    tools: [Write, Edit, NotebookEdit]
+    predicate: path_matches
+    patterns:
+      # directories
+      - "tests/**"
+      - "**/tests/**"
+      - "test/**"
+      - "**/test/**"
+      - "spec/**"
+      - "**/spec/**"
+      - "__tests__/**"
+      - "**/__tests__/**"
+      - "src/test/**"
+      - "**/src/test/**"
+      # file shapes (Go and flat-layout Python have no directory to catch)
+      - "test_*.py"
+      - "**/test_*.py"
+      - "*_test.py"
+      - "**/*_test.py"
+      - "*_test.go"
+      - "**/*_test.go"
+      - "*.test.*"
+      - "**/*.test.*"
+      - "*.spec.*"
+      - "**/*.spec.*"
+      - "*Test.php"
+      - "**/*Test.php"
+      # framework plumbing: conftest.py is the collection-time skip channel,
+      # and a weakened snapshot is a weakened assertion
+      - "conftest.py"
+      - "**/conftest.py"
+      - "__snapshots__/**"
+      - "**/__snapshots__/**"
+      - "*.snap"
+      - "**/*.snap"
+    reason: >-
+      Tests are frozen during repair attempts: you may not edit, create or
+      delete test files while fixing the code they judge. If you believe a
+      test itself is wrong, do NOT try to change it -- say so explicitly in
+      your final summary, with the file and the assertion, and an operator
+      will decide at the review gate.

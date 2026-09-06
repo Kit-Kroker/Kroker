@@ -198,3 +198,42 @@ def test_git_pathspec_selects_every_relative_probe(tmp_path, target):
         check=True,
     ).stdout.split()
     assert target in out, f"{target} invisible to the git dialect via {pats}"
+
+
+# --- Task 3: the rule that actually ships ----------------------------------
+
+
+def test_shipped_policy_freezes_every_probe_shape_during_repair():
+    """The rule that actually ships must pass the same probes as the fixture.
+
+    A fixture-only guarantee is worthless: the fixture is not what runs."""
+    from sdlc.harness.containment import load_policy
+
+    policy = load_policy(Path(__file__).resolve().parents[1] / "policy" / "containment.yaml")
+    for target in (NESTED_REL, NESTED_ABS, ROOT_REL, "/wt/conftest.py", "src/util_test.go"):
+        assert (
+            evaluate(policy, "Write", {"file_path": target}, "/wt", repair=True).allow is False
+        ), f"shipped policy lets {target} through during repair"
+        assert (
+            evaluate(policy, "Write", {"file_path": target}, "/wt", repair=False).allow is True
+        ), f"shipped policy blocks {target} on the FREE first pass"
+
+
+def test_shipped_policy_does_not_list_bash_on_the_freeze_rule():
+    """PATH_MATCHES can never fire on Bash -- target_of returns the COMMAND
+    string for it. Listing Bash would be dead code that reads like coverage.
+    The Bash channel belongs to the drift backstop."""
+    from sdlc.harness.containment import load_policy
+
+    policy = load_policy(Path(__file__).resolve().parents[1] / "policy" / "containment.yaml")
+    freeze = next(r for r in policy.rules if r.id == "no-test-edit-during-repair")
+    assert "Bash" not in freeze.tools
+
+
+def test_shipped_policy_drift_set_covers_test_config():
+    from sdlc.harness.containment import drift_globs, load_policy
+
+    policy = load_policy(Path(__file__).resolve().parents[1] / "policy" / "containment.yaml")
+    d = drift_globs(policy)
+    for expected in ("pyproject.toml", "pytest.ini", "tests/**", "requirements.txt"):
+        assert expected in d, f"{expected} missing from the drift set D"
