@@ -63,7 +63,7 @@ Stop after Task 2's commit. **Do not open a pull request.** Integration is a fas
 - Produces: `MERGE_REQUIRED_CHECKS: Final[Mapping[str, CheckClass]]` in `src/sdlc/gate.py` — the seven-name manifest, importable as `from sdlc.gate import MERGE_REQUIRED_CHECKS`. Two private helpers `_normalized(checks: list[CheckResult]) -> list[CheckResult]` and `_synthesized(present: set[str]) -> list[CheckResult]`. A pytest fixture `required_checks` in `tests/conftest.py` whose value is a builder `(**passed: bool) -> list[CheckResult]`. Task 2 consumes none of these; it reads `gate.py` only to cite it.
 - Exit path, if a second caller of `evaluate_quality_gate` ever appears (spec §2.7): the manifest promotes to a **required** field on `QualityGateInput` — never to a defaulted parameter, because a default is itself the fail-open mechanism C3 exists to kill. Not work for this task; recorded so nobody adds the parameter pre-emptively.
 
-- [ ] **Step 1: Add the `required_checks` fixture to `tests/conftest.py`**
+- [x] **Step 1: Add the `required_checks` fixture to `tests/conftest.py`**
 
 Append at the end of the file. The import is function-level deliberately (precedent: `tests/test_security_floor.py:130`), so conftest's module-level environment setup is untouched.
 
@@ -92,7 +92,7 @@ def required_checks():
     return _build
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Create `tests/test_required_checks_manifest.py` with exactly this content:
 
@@ -250,12 +250,12 @@ def test_the_manifest_pins_the_checks_the_merge_step_builds():
     assert built == set(MERGE_REQUIRED_CHECKS)
 ```
 
-- [ ] **Step 3: Run the new tests to verify they fail**
+- [x] **Step 3: Run the new tests to verify they fail**
 
 Run: `pytest tests/test_required_checks_manifest.py -v`
 Expected: collection error — `ImportError: cannot import name 'MERGE_REQUIRED_CHECKS' from 'sdlc.gate'`. Every test in the file errors. This is the correct red.
 
-- [ ] **Step 4: Add the manifest constant to `src/sdlc/gate.py`**
+- [x] **Step 4: Add the manifest constant to `src/sdlc/gate.py`**
 
 Add three imports to the existing import block. `ruff`'s isort rule is enabled (`pyproject.toml:60` selects `I`), so the order matters: the block must end up **exactly** as below, or Step 10 fails on I001 with no obvious cause.
 
@@ -289,7 +289,7 @@ MERGE_REQUIRED_CHECKS: Final[Mapping[str, CheckClass]] = MappingProxyType(
 )
 ```
 
-- [ ] **Step 5: Add the two helpers and rewrite `evaluate_quality_gate`**
+- [x] **Step 5: Add the two helpers and rewrite `evaluate_quality_gate`**
 
 Insert both helpers after `build_check` and before `evaluate_quality_gate`:
 
@@ -360,12 +360,12 @@ def evaluate_quality_gate(
     )
 ```
 
-- [ ] **Step 6: Run the new tests to verify they pass**
+- [x] **Step 6: Run the new tests to verify they pass**
 
 Run: `pytest tests/test_required_checks_manifest.py -v`
 Expected: PASS, 10 passed.
 
-- [ ] **Step 7: Run the full fast tier to surface the planned migrations**
+- [x] **Step 7: Run the full fast tier to surface the planned migrations**
 
 Run: `pytest -q`
 Expected: exactly 4 failures, all of them tests that assert a clean or exact outcome from a partial list (spec §2.10):
@@ -376,7 +376,7 @@ Expected: exactly 4 failures, all of them tests that assert a clean or exact out
 
 If any *other* test fails, stop — the census in spec §2.10 is wrong and the discrepancy needs reporting before proceeding.
 
-- [ ] **Step 8: Migrate the four tests**
+- [x] **Step 8: Migrate the four tests**
 
 In `tests/test_quality_gate.py`, replace `test_advisory_failure_passes_with_override` and `test_all_pass_is_clean` with:
 
@@ -424,17 +424,17 @@ def test_advisory_failure_passes_with_audited_override(required_checks):
     assert "coverage" in report.overridden
 ```
 
-- [ ] **Step 9: Run the full fast tier to verify green**
+- [x] **Step 9: Run the full fast tier to verify green**
 
 Run: `pytest -q`
 Expected: PASS, 0 failures.
 
-- [ ] **Step 10: Run lint, format and typecheck**
+- [x] **Step 10: Run lint, format and typecheck**
 
 Run: `ruff check .` then `ruff format .` then `mypy` (the AGENTS.md-documented trio; `ruff format` in write mode, so a formatting delta is fixed here rather than puzzled over when pre-commit enforces it at Step 18).
 Expected: `ruff check` clean, `ruff format` reporting files left unchanged or reformatting only files this task touched, `mypy` clean. `mypy` is scoped to `src/` by config (`pyproject.toml:75`); if it reports pre-existing errors elsewhere in `src/`, confirm none of them names `gate.py`.
 
-- [ ] **Step 11: Update the merge stage contract — `src/sdlc/stages/merge/merge.md`**
+- [x] **Step 11: Update the merge stage contract — `src/sdlc/stages/merge/merge.md`**
 
 Append this new clause after MERGE-1.5:
 
@@ -461,7 +461,7 @@ Add one bullet to the "Failure modes" list:
 - **Missing required check**: a name in `MERGE_REQUIRED_CHECKS` that never reached the gate is synthesized as a failing `MISCONFIGURED` check at its manifest classification — terminal if absolute, human-waivable if advisory (MERGE-1.6).
 ```
 
-- [ ] **Step 12: Update `src/sdlc/stages/merge/AGENTS.md`**
+- [x] **Step 12: Update `src/sdlc/stages/merge/AGENTS.md`**
 
 Replace the existing invariant line `- Absolute checks are non-overridable: on failure, the stage fails closed immediately.` with these two:
 
@@ -470,7 +470,7 @@ Replace the existing invariant line `- Absolute checks are non-overridable: on f
 - A required check that never reaches the gate is a failing check, not a silent pass: `MERGE_REQUIRED_CHECKS` (`gate.py`) is the authoritative list, and absence synthesizes a failing `MISCONFIGURED` result at the manifest classification.
 ```
 
-- [ ] **Step 13: Update the `gate.py` module docstring**
+- [x] **Step 13: Update the `gate.py` module docstring**
 
 Append this paragraph to the existing module docstring, after the sentence ending "after this gate has already passed.":
 
@@ -484,7 +484,7 @@ construction, so a directly-constructed CheckResult cannot demote a floor check
 and waive it with a single override.
 ```
 
-- [ ] **Step 14: Update `docs/reference/foundation.md`**
+- [x] **Step 14: Update `docs/reference/foundation.md`**
 
 Two edits in the `sdlc/gate.py` section (currently lines 73-86).
 
@@ -507,7 +507,7 @@ Second, add one bullet immediately after the `evaluate_quality_gate` bullet that
   directly-constructed `CheckResult` cannot demote a floor check.
 ```
 
-- [ ] **Step 15: Update `docs/reference/presentation-pipeline-temporal.md`**
+- [x] **Step 15: Update `docs/reference/presentation-pipeline-temporal.md`**
 
 Section 5b (currently lines 175-207) is the repo's most detailed gate prose and is stale in two independent ways. `docs/reference/` is "Maintained — maintained when stale" per `docs/documentation-rules.md:44`, and C3 changes exactly this section's semantics.
 
@@ -538,7 +538,7 @@ absence is terminal; advisory absence reaches the human gate as a waivable
 finding.
 ```
 
-- [ ] **Step 16: Flip the C3 row in the register**
+- [x] **Step 16: Flip the C3 row in the register**
 
 In `docs/reports/external-ideas-2026-09.md`, edit **only** the C3 row (line 51). Task 2 owns the C4 row, the Status legend, and any new rows — do not touch them here. Set Status to `✅ **Fixed**` and replace the "Where it lands" cell, correcting its two stale line cites (`:57` and `:66`; the real lines are `:60` and `:71`):
 
@@ -548,12 +548,12 @@ In `docs/reports/external-ideas-2026-09.md`, edit **only** the C3 row (line 51).
 
 Leave the priority shortlist (lines 108-127) alone — shipped items stay listed unmarked there, as C2 and C6 already do.
 
-- [ ] **Step 17: Verify the whole task before committing**
+- [x] **Step 17: Verify the whole task before committing**
 
 Run: `pytest -q && ruff check . && ruff format --check . && mypy && python scripts/check_file_size.py`
 Expected: tests pass, lint/format/type clean, file-size check exits 0.
 
-- [ ] **Step 18: Commit**
+- [x] **Step 18: Commit**
 
 Write the message to `.workspace/tmp/c3-commit-msg.txt` first, then commit with `-F`. Do **not** use a shell heredoc or a multi-line `-m`: the executor shell on this machine may be PowerShell 5.1, where heredocs are not valid syntax. `git add` takes one path per argument on one line for the same reason.
 
@@ -614,7 +614,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>
 
 The contradiction is not new: the C2 and C6 rows were both updated in the same directory without anyone reconciling the rule. C4 is the first to notice it, in a task whose deliverable exists to name gaps honestly, so it is fixed here rather than inherited.
 
-- [ ] **Step 1: Re-run the census greps and record the commit**
+- [x] **Step 1: Re-run the census greps and record the commit**
 
 Run each of these from the repo root and keep the output — it goes into the document verbatim in Step 3. `grep` is not on PATH in PowerShell on this machine: either run these in git-bash, or use the `rg` equivalents below. **Print in the document whichever form you actually ran** — the audit's reproducibility depends on the command that was executed, not on one that merely sounds canonical.
 
@@ -630,7 +630,7 @@ The header cites the commit these greps were **last run against** — that is Ta
 
 Expected `run_role(` sites, from the census done at design time: `review/step.py:127,195,289`; `analyze/step.py:121`; `clarify/step.py:78,84,146,161`; `architecture/step.py:138`; `code/step.py:417`; `plan/step.py:88`; `merge/step.py:391`; `qa/step.py:175`; plus the workflow-side twins `workflows/feature.py:340` and `workflows/role_host.py:133` / `core/context.py:33`. If the line numbers have shifted, use the ones you observe — Task 1 touched none of the files in this census, so no shift is expected.
 
-- [ ] **Step 2: Verify the eight rows' cites still resolve**
+- [x] **Step 2: Verify the eight rows' cites still resolve**
 
 For each row in spec §3.4, open the cited file:line and confirm the claim. These four are the load-bearing ones the design corrected against the originating brief — do not take them on trust:
 
@@ -641,7 +641,7 @@ For each row in spec §3.4, open the cited file:line and confirm the claim. Thes
 
 Two more cite corrections carried in from review, to apply as you write rather than repeat: the watermark-freeze mechanism lives at `role_host.py:122` and MemoryHost, not `core/context.py:55` (which is the `recall` protocol stub).
 
-- [ ] **Step 3: Write the audit document**
+- [x] **Step 3: Write the audit document**
 
 Create `docs/reports/2026-09-06-advisory-deterministic-pairing-audit.md` with this structure. Row content comes from spec §3.4 — that spec is committed and travels with this plan; transcribe each row's failure mode, enforcement, backstop and verdict from it, with the cite corrections from Step 2 applied. Each of the three middle table columns is a one-phrase compression of the corresponding §3.4 paragraph; the subsection beneath the table carries that row's full argument. The out-of-scope table's rows are enumerated from the Step 1 grep output, not from memory.
 
@@ -747,7 +747,7 @@ absent required checks. Row 1's mechanism is therefore stronger than it was when
 the C4 row was written.]
 ```
 
-- [ ] **Step 4: Verify the document satisfies its own completion criterion**
+- [x] **Step 4: Verify the document satisfies its own completion criterion**
 
 Check all five of spec §3.6 against what you wrote, and fix anything missing:
 1. Every in-scope row carries a verdict with `file:line` for both pass and mechanism.
@@ -756,7 +756,7 @@ Check all five of spec §3.6 against what you wrote, and fix anything missing:
 4. Every UNPAIRED item has a named follow-up register row (C7, C8 below) or an argued signal-only justification stating blast radius.
 5. The C4 register row points at the document and names the real row count — eight.
 
-- [ ] **Step 5: Add the reconciling paragraph to `docs/documentation-rules.md`**
+- [x] **Step 5: Add the reconciling paragraph to `docs/documentation-rules.md`**
 
 Insert as a standalone paragraph immediately after the three-bullet "durability split" list and before the `## ARCHITECTURE.md and ROADMAP.md describe main only` heading:
 
@@ -772,7 +772,7 @@ Anything beyond a status stamp belongs in a new dated report.
 
 An earlier draft of this paragraph claimed the register was the directory's *only* exception and that its name deliberately departs from the `<YYYY-MM-DD>-<topic>.md` pattern. Both claims are false — `git log --follow docs/reports/feature-coverage-audit-2026-07-05.md` shows two in-place amendments (`0980f85`, `f906309`), and three files there already use topic-first names. Do not reintroduce the exclusivity claim; a paragraph in a docs-rules file that the repo's own history disproves is exactly the credibility failure this audit exists to avoid.
 
-- [ ] **Step 6: Extend the register's Status legend**
+- [x] **Step 6: Extend the register's Status legend**
 
 In `docs/reports/external-ideas-2026-09.md`, append to the "What Status means" paragraph (lines 19-23), immediately after "…until someone settles what it means.":
 
@@ -786,7 +786,7 @@ what remains open.
 
 `Fixed` is already used by the C2, C3 and C6 rows and was never defined; defining both tokens here costs one sentence and closes that debt at the moment `Audited` makes it load-bearing.
 
-- [ ] **Step 7: Update the C4 row**
+- [x] **Step 7: Update the C4 row**
 
 Replace line 52. Status becomes `✅ **Audited**` — not `Fixed`, because nothing was fixed: an audit was produced and the gaps it found remain open. `Source` stays `playbook`; provenance does not change when an idea is executed. The pointer goes in the "Where it lands" column, whose job is the landing site:
 
@@ -794,7 +794,7 @@ Replace line 52. Status becomes `✅ **Audited**` — not `Fixed`, because nothi
 | C4 | **Advisory + deterministic pairing rule** — every LLM check ships with a deterministic enforcement path behind it (the playbook's "skill makes violations rare, hook makes them near-impossible") | playbook | ✅ **Audited** | shipped as the pairing audit — `docs/reports/2026-09-06-advisory-deterministic-pairing-audit.md`; a census of **eight** in-scope passes (2 PAIRED · 3 ENFORCED · 2 FILTERED · 1 UNPAIRED) against the two-prong scope criterion, with the deterministic mechanism behind each cited at `file:line`. Open gaps filed as C7 and C8 |
 ```
 
-- [ ] **Step 8: File the two follow-up rows**
+- [x] **Step 8: File the two follow-up rows**
 
 Append to section C, after the C6 row and its explanatory block:
 
@@ -803,7 +803,7 @@ Append to section C, after the C6 row and its explanatory block:
 | C8 | **A lens that did not run is indistinguishable from a lens that approved** — the fail-open legs of the review stage leave no tombstone | *found in audit* | ✅ Gap verified | `run_adversary` returns `None` on exception, disabled config, or missing agent (`review/step.py:179-183`, `:234-240`) and `code/step.py:812` reads `None` as agreement; the primary reviewer's own leg (`review/step.py:114-115` → `code/step.py:797`) compounds it, because `code/step.py:801` runs the adversary only `if review is not None`. This is C3's hole one layer up — a check that never ran, read as a check that passed — and the C3 fix does not reach it, because these lenses never travel through `evaluate_quality_gate`. Candidate shape: record an explicit absence tombstone that the task's success condition must see |
 ```
 
-- [ ] **Step 9: Verify the diff is words only**
+- [x] **Step 9: Verify the diff is words only**
 
 Run: `git status --short && git diff --stat`
 Expected: exactly three modified/created paths — `docs/reports/2026-09-06-advisory-deterministic-pairing-audit.md`, `docs/reports/external-ideas-2026-09.md`, `docs/documentation-rules.md`. **Anything under `src/`, `tests/`, `agents/`, prompts, or config in this diff is a defect** — revert it and report rather than committing.
@@ -813,7 +813,7 @@ Expected: exit 0. `docs/` counts toward the 1000-line ceiling.
 
 Two things in the register that this task must leave alone: the rendered-register artifact link in the header table (line 9) is stale by nature and is not this task's problem, and the priority shortlist (lines 108-127) keeps shipped items listed unmarked.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 Write the message to `.workspace/tmp/c4-commit-msg.txt`, then commit with `-F`, for the same PowerShell reason as Task 1 Step 18 — no heredoc, no multi-line `-m`.
 
