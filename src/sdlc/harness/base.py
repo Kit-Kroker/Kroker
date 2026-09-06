@@ -120,6 +120,14 @@ class HarnessRequest:
     # its orchestration directory (so it can write nowhere else). None means
     # "the same as cwd", which is every non-crew caller.
     write_root: str | None = None
+    # C2: whether this is a REPAIR attempt (attempt >= 2 in the code stage's
+    # fix loop, including the operator-REVISE continuation), which activates
+    # `phase: repair` policy rules -- the contract's test files. Set by the
+    # LOOP, never inferred here: both CrewTurnInput construction sites
+    # hardcode attempt=1, so an activity-side inference would silently
+    # unfreeze every crew repair attempt. A thawed attempt sets this back to
+    # False for exactly one attempt.
+    repair: bool = False
 
 
 def _log_live_event(line: str) -> None:

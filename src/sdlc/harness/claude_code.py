@@ -19,6 +19,7 @@ from ..memory.scrub import scrub
 from .base import SUMMARY_MAX, CodingHarness, HarnessRequest, _split_reason
 from .containment import (
     Action,
+    Phase,
     Policy,
     Rule,
     digest_tool_input,
@@ -91,10 +92,16 @@ class ClaudeCodeHarness(CodingHarness):
         block the very call the human approved.
         """
         grants_path = self._write_grants(grants)
+        # C2: rules whose phase does not match this invocation are compiled
+        # into NEITHER layer. Filtering the MATCHER too (not just the deny
+        # list) keeps a pass-1 settings file byte-identical to pre-C2: with
+        # no repair rules active, no Write/Edit pays a hook spawn that could
+        # only ever return allow.
+        active = [r for r in policy.rules if r.phase is not Phase.REPAIR or req.repair]
         hooks = (
             [
                 {
-                    "matcher": "|".join(sorted({t for r in policy.rules for t in r.tools})),
+                    "matcher": "|".join(sorted({t for r in active for t in r.tools})),
                     "hooks": [
                         {
                             "type": "command",
@@ -103,13 +110,13 @@ class ClaudeCodeHarness(CodingHarness):
                     ],
                 }
             ]
-            if policy.rules
+            if active
             else []
         )
 
         deny = [
             p
-            for r in policy.rules
+            for r in active
             if ContainmentLayer.NATIVE is r.layer
             for p in self._native_patterns(r)
         ]
@@ -127,9 +134,9 @@ class ClaudeCodeHarness(CodingHarness):
         return ContainmentReport(
             enabled=True,
             layers_active=[ContainmentLayer.NATIVE, ContainmentLayer.HOOK],
-            rules_enforced=[r.id for r in policy.rules],
+            rules_enforced=[r.id for r in active],
             rules_unenforceable=[],
-            rules_escalatable=[r.id for r in policy.rules if r.action is Action.ESCALATE],
+            rules_escalatable=[r.id for r in active if r.action is Action.ESCALATE],
         )
 
     @staticmethod
@@ -163,6 +170,11 @@ class ClaudeCodeHarness(CodingHarness):
             cmd += f' --policy "{Path(source_path).as_posix()}"'
         if grants_path is not None:
             cmd += f' --grants "{Path(grants_path).as_posix()}"'
+        # C2: activates `phase: repair` rules for this invocation. The hook
+        # command line lives in the OUT-OF-WORKTREE settings file, so the
+        # agent cannot flip it.
+        if req.repair:
+            cmd += " --repair"
         return cmd
 
     @staticmethod

@@ -16,8 +16,10 @@ from pathlib import Path
 from ..core.models import HarnessKind
 from .base import SUMMARY_MAX, CodingHarness, HarnessRequest
 from .containment import (
+    Phase,
     Policy,
     Predicate,
+    repair_patterns,
 )
 from .models import (
     ContainmentLayer,
@@ -101,6 +103,8 @@ class OpenCodeHarness(CodingHarness):
         enforced: list[str] = []
         unenforceable: list[str] = []
         for rule in policy.rules:
+            if rule.phase is Phase.REPAIR and not req.repair:
+                continue  # C2: inert on the free first pass
             if ContainmentLayer.HOOK is rule.layer:
                 unenforceable.append(rule.id)  # needs a hook we do not have
                 continue
@@ -119,6 +123,18 @@ class OpenCodeHarness(CodingHarness):
 
         # Merge into the worktree's opencode.json so an existing config
         # (e.g. the repo's plugin block) is preserved, not clobbered.
+        #
+        # C2: this merge is APPEND-ONLY by construction (`update()` never
+        # removes), which would make the freeze RATCHET: patterns written on
+        # a repair attempt would survive into a thawed one and the human's
+        # thaw would silently fail on this harness. So freeze keys we own are
+        # explicitly taken back out when this invocation is not a repair.
+        # Conservative on purpose: we only remove a key whose pattern is ours
+        # AND whose current value is exactly "deny". RESIDUAL, accepted: a
+        # repo-authored key that collides with one of our patterns and is
+        # also "deny" is indistinguishable from ours and will be removed on
+        # thaw. Scoped to the `edit` bucket because G is PATH_MATCHES; a
+        # future COMMAND_MATCHES repair rule would live in `bash`.
         path = Path(req.cwd) / "opencode.json"
         doc: dict = {}
         if path.is_file():
@@ -133,6 +149,12 @@ class OpenCodeHarness(CodingHarness):
             for tool, rules in perms.items():
                 existing.setdefault(tool, {}).update(rules)
             perms = existing
+        if not req.repair:
+            edit = perms.get("edit")
+            if isinstance(edit, dict):
+                for pat in self._owned_patterns(policy):
+                    if edit.get(pat) == "deny":
+                        edit.pop(pat, None)
         doc["permission"] = perms
         path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
 
@@ -142,6 +164,13 @@ class OpenCodeHarness(CodingHarness):
             rules_enforced=enforced,
             rules_unenforceable=unenforceable,
         )
+
+    @staticmethod
+    def _owned_patterns(policy: Policy) -> list[str]:
+        """The freeze patterns THIS adapter is responsible for adding and
+        removing. Computed from the policy REGARDLESS of phase, because on a
+        thawed attempt we must still know which keys to take back out."""
+        return repair_patterns(policy)
 
     def parse(self, stdout: str, exit_code: int) -> HarnessRunResult:
         """Parse opencode's ``--format json`` event stream.
