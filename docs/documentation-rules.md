@@ -55,6 +55,14 @@ The durability split settles maintenance arguments:
 - If a document is a dated diagnostic snapshot or audit of past state, it belongs in `reports/` and is never touched again.
 - Files under `docs/superpowers/**` are historical records describing the tree on the day they were written. When a file moves in the tree, old references in `docs/superpowers/**` are deliberately left untouched.
 
+**The register in `reports/` is living, not a snapshot.**
+`external-ideas-2026-09.md` is revised as candidates land — Status flips when an
+item ships, corrections are dated inline ("Corrected 2026-09-01") — so the
+never-updated rule above does not apply to it. The same liberty extends only to
+*status stamps* on otherwise-frozen snapshots: a dated report may later be
+marked superseded or closed, as `feature-coverage-audit-2026-07-05.md` was.
+Anything beyond a status stamp belongs in a new dated report.
+
 ## ARCHITECTURE.md and ROADMAP.md describe main only
 
 `ARCHITECTURE.md` and `ROADMAP.md` are living documents that reflect only what
