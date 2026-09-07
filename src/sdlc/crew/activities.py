@@ -6,6 +6,8 @@ none of it.
 from __future__ import annotations
 
 import json
+import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -365,6 +367,41 @@ class CheckpointInput:
     exit_code: int
 
 
+def _stage_disk_exec_bits(worktree: str) -> None:
+    """Mirror on-disk exec bits into the index, where core.filemode=false
+    makes them invisible to `git add`. A worktree of a Windows-authored
+    template repo runs with filemode off, so a lead's `chmod +x` stages as
+    100644 and the integration merge later checks the script out
+    non-executable (bench-crew-probe-1788765412: scripts/run_campaign.sh
+    lost its bit this way and 4/101 entrypoint tests failed on
+    PermissionError). `git update-index --chmod=+x` writes the index mode
+    directly regardless of core.filemode; run unconditionally it records
+    exactly what git itself would with filemode=true, so it is a no-op on a
+    filemode-true worktree. Best-effort by design -- a failure here must
+    not cost the round its commit."""
+    if sys.platform.startswith("win"):
+        return  # Windows stat cannot express exec bits; nothing to mirror
+    from ..vcs import _git
+
+    ls = _git(["ls-files", "-s", "-z"], worktree)
+    if ls.returncode != 0:
+        return
+    candidates = []
+    for entry in ls.stdout.split("\0"):
+        meta, sep, path = entry.partition("\t")
+        # Only tracked regular files recorded non-executable can need the
+        # mirror; symlinks (120000) and already-755 entries are left alone.
+        if not sep or not path or meta.split()[0] != "100644":
+            continue
+        try:
+            if os.stat(os.path.join(worktree, path)).st_mode & 0o111:
+                candidates.append(path)
+        except OSError:
+            continue
+    for i in range(0, len(candidates), 50):
+        _git(["update-index", "--chmod=+x", "--", *candidates[i : i + 50]], worktree)
+
+
 @activity.defn
 async def checkpoint_round(inp: CheckpointInput) -> str | None:
     """Close a round with a commit. Per ROUND rather than per task: it is
@@ -404,6 +441,7 @@ async def checkpoint_round(inp: CheckpointInput) -> str | None:
                 "the agent likely deleted or reinitialized it)"
             )
         raise RuntimeError(f"git add failed in {inp.worktree}: {detail}{hint}")
+    _stage_disk_exec_bits(inp.worktree)
     commit = _git(
         [
             "commit",

@@ -6,6 +6,7 @@ timeout from discarding work already done."""
 from __future__ import annotations
 
 import subprocess
+import sys
 
 import pytest
 
@@ -106,3 +107,45 @@ async def test_checkpoint_surfaces_gits_own_diagnostic(tmp_path):
     """A bare CalledProcessError loses stderr when Temporal serializes it."""
     with pytest.raises(RuntimeError, match="not a git repository"):
         await checkpoint_round(CheckpointInput(worktree=str(tmp_path), round=1, exit_code=0))
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="exec bits are a POSIX fact; Windows stat cannot express one",
+)
+async def test_checkpoint_stages_exec_bits_that_filemode_false_git_cannot_see(tmp_path):
+    """A worktree of a Windows-authored template repo runs with
+    core.filemode=false, and there `git add` is blind to chmod +x: the round
+    commits mode 100644 and the integration merge later checks the script
+    out non-executable (bench-crew-probe-1788765412 lost 4/101 entrypoint
+    tests to exactly this). The checkpoint must mirror disk exec bits into
+    the index itself."""
+    repo = _repo(tmp_path)
+    subprocess.run(["git", "-C", str(repo), "config", "core.filemode", "false"], check=True)
+    script = repo / "scripts" / "run.sh"
+    script.parent.mkdir()
+    script.write_text("#!/bin/sh\n:\n", encoding="utf-8")
+    script.chmod(0o755)
+    # Precondition the fix exists for: with filemode=false a plain add
+    # really does stage 100644 despite the on-disk 755. (If this ever fails
+    # because git staged 100755, the test environment has filemode=true and
+    # no longer reproduces the bug.)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    plain = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", "-s", "scripts/run.sh"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()[0]
+    assert plain == "100644"
+    subprocess.run(["git", "-C", str(repo), "reset", "-q"], check=True)
+
+    await checkpoint_round(CheckpointInput(worktree=str(repo), round=1, exit_code=0))
+
+    committed = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", "-s", "scripts/run.sh"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()[0]
+    assert committed == "100755"
