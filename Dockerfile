@@ -87,6 +87,15 @@ RUN pip install --no-cache-dir .[logfire]
 # scores 0/0 (judge='error') even on correct code.
 RUN pip install --no-cache-dir pytest-asyncio
 
+# Lint fallback for a worker without PyPI egress at runtime. run_integration_checks
+# resolves `ruff` from the worktree's own .sdlc-venv (qa/activities.py
+# _ensure_python_env pip-installs pytest/pytest-cov/ruff there), but that install
+# is best-effort and needs the network: on an egress-less worker the venv comes
+# up without it, `ruff check .` falls through to PATH, and lint_clean becomes
+# unearnable for every Python case. Same floor as the repo's own dev pin
+# (pyproject dev deps), so image and dev tooling never disagree on the minimum.
+RUN pip install --no-cache-dir "ruff>=0.16.5"
+
 ENV TEMPORAL_HOST=temporal:7233
 ENV SDLC_WORKTREES_ROOT=/tmp/sdlc/worktrees
 # Explicit, not left to cwd-discovery: WORKDIR /app would make discovery
