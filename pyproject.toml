@@ -31,7 +31,7 @@ dev = [
     # Turns the temporal gate/wait hangs (Follow-up 1) into failures with a
     # stack dump, so the tier completes and names its stall point.
     "pytest-timeout>=2",
-    "jsonschema>=4",
+    "jsonschema>=4.26.0",
     "ruff>=0.16.5",
     "mypy>=2.3",
     "pre-commit>=4",
