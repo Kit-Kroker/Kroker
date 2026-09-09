@@ -748,6 +748,7 @@ async def step(
         )
 
         task_passed = bool(qa_raw.tests_passed and not qa.issues and not drift.found)
+        plan_drift = compute_plan_drift(task, diff.get("files", []))
 
         await ctx.record(
             cfg,
@@ -766,7 +767,7 @@ async def step(
                 cost_usd=run.cost_usd,
                 spend=code_spend,
                 waste=WasteBag.from_digest(run.session_digest),
-                plan_drift=compute_plan_drift(task, diff.get("files", [])),
+                plan_drift=plan_drift,
                 fix_attempts=attempt - 1,
                 task_id=task.id,
                 attempt=attempt - 1,
@@ -833,6 +834,7 @@ async def step(
                     qa=qa_raw,
                     review=review,
                     deep_review=deep,
+                    plan_drift=plan_drift,
                 )
 
         issues = "" if attempt >= budget else _fix_loop_issues(qa, qa_raw, review, adversary)
@@ -903,6 +905,7 @@ async def step(
                 review=review,
                 deep_review=deep,
                 notes=decision.comments or "",
+                plan_drift=plan_drift,
             )
 
         await ctx.retain(

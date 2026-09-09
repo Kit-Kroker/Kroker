@@ -168,6 +168,135 @@ async def test_code_step_executes_and_returns_task_result():
     assert any(r["stage"] == "code" and r["outcome"] == BenchmarkOutcome.PASS for r in ctx.recorded)
 
 
+@pytest.mark.clause("CODE-1.3")
+@pytest.mark.asyncio
+async def test_code_step_populates_plan_drift_on_done_path():
+    ctx = _StubCtx()
+    cfg = PipelineConfig()
+    task = DevTask(
+        id="task-drift",
+        title="Implement feature",
+        description="Write code",
+        role="dev",
+        acceptance_criteria=["Tests pass"],
+        files_hint=["app.py", "unused_hint.py"],
+    )
+    contract = ValidationContract(task_id="task-drift", assertions=["Tests pass"])
+
+    run_result = HarnessRunResult(
+        harness=HarnessKind.CLAUDE_CODE,
+        exit_code=0,
+        commit_sha="c1",
+        cost_usd=0.5,
+        summary="success",
+    )
+    qa_report = QAReport(tests_passed=True, issues=[])
+    review_report = ReviewReport(approve=True, issues=[])
+    deep_review = DeepReviewReport(verdict="LGTM", passed=True)
+    handoff = HandoffSummary(
+        task_id="task-drift",
+        files_touched=["app.py"],
+        what_changed=[HandoffClaim(text="done", evidence="session")],
+    )
+
+    with (
+        patch("sdlc.stages.code.step._execute_coding_task", new_callable=AsyncMock) as mock_exec,
+        patch("sdlc.stages.code.step.qa_step", new_callable=AsyncMock) as mock_qa,
+        patch("sdlc.stages.review.step.step", new_callable=AsyncMock) as mock_rev,
+        patch("sdlc.stages.code.step._run_deep_review", new_callable=AsyncMock) as mock_deep,
+        patch("sdlc.stages.code.step._run_handoff", new_callable=AsyncMock) as mock_ho,
+        patch("temporalio.workflow.execute_activity", new_callable=AsyncMock) as mock_act,
+    ):
+        mock_exec.return_value = run_result
+        mock_qa.return_value = qa_report
+        mock_rev.return_value = review_report
+        mock_deep.return_value = deep_review
+        mock_ho.return_value = handoff
+        mock_act.side_effect = [
+            QAReport(tests_passed=True, issues=[]),  # qa_raw
+            {"files": ["app.py", "extra_unhinted.py"]},  # diff
+        ]
+
+        tr = await code.step(
+            ctx,
+            cfg=cfg,
+            task=task,
+            contract=contract,
+            worktree="/worktree",
+            notes=["Note 1"],
+            dev_agent=None,
+            crew_layout=None,
+            branch="feature-1",
+        )
+
+    assert tr.status == "done"
+    assert tr.plan_drift is not None
+    assert tr.plan_drift.touched_unhinted == ["extra_unhinted.py"]
+    assert tr.plan_drift.hinted_untouched == ["unused_hint.py"]
+
+
+@pytest.mark.clause("CODE-1.5")
+@pytest.mark.asyncio
+async def test_code_step_populates_plan_drift_on_quarantine_path():
+    ctx = _StubCtx(
+        gate_decisions=[
+            GateDecision(gate="task:task-drift-q", outcome=GateOutcome.REJECT, decided_by="human")
+        ]
+    )
+    cfg = PipelineConfig(max_fix_attempts=1)
+    task = DevTask(
+        id="task-drift-q",
+        title="Buggy task",
+        description="Fails",
+        role="dev",
+        acceptance_criteria=["works"],
+        files_hint=["buggy.py"],
+    )
+
+    run_result = HarnessRunResult(
+        harness=HarnessKind.CLAUDE_CODE,
+        exit_code=1,
+        commit_sha="c3",
+        cost_usd=0.1,
+        summary="failed",
+    )
+    qa_failing = QAReport(tests_passed=False, issues=["tests failed"])
+    review_report = ReviewReport(approve=False, issues=["tests red"])
+
+    with (
+        patch("sdlc.stages.code.step._execute_coding_task", new_callable=AsyncMock) as mock_exec,
+        patch("sdlc.stages.code.step.qa_step", new_callable=AsyncMock) as mock_qa,
+        patch("sdlc.stages.review.step.step", new_callable=AsyncMock) as mock_rev,
+        patch("sdlc.stages.code.step._run_deep_review", new_callable=AsyncMock) as mock_deep,
+        patch("temporalio.workflow.execute_activity", new_callable=AsyncMock) as mock_act,
+    ):
+        mock_exec.return_value = run_result
+        mock_qa.return_value = qa_failing
+        mock_rev.return_value = review_report
+        mock_deep.return_value = None
+        mock_act.side_effect = [
+            QAReport(tests_passed=False, issues=["failure"]),
+            {"files": ["buggy.py"]},
+            QAReport(tests_passed=False, issues=["failure"]),
+            {"files": ["buggy.py", "other_unhinted.py"]},
+        ]
+
+        tr = await code.step(
+            ctx,
+            cfg=cfg,
+            task=task,
+            worktree="/worktree",
+            notes=[],
+            dev_agent=None,
+            crew_layout=None,
+            branch="buggy-branch",
+        )
+
+    assert tr.status == "quarantined"
+    assert tr.plan_drift is not None
+    assert tr.plan_drift.touched_unhinted == ["other_unhinted.py"]
+
+
 @pytest.mark.clause("CODE-1.4")
 @pytest.mark.asyncio
 async def test_code_step_records_benchmark_records():
