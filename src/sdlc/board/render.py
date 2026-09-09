@@ -27,9 +27,14 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from ..stages.architecture.models import ArchitectureDecision, ArchitectureSpec
+from ..stages.architecture.models import (
+    ArchitectureDecision,
+    ArchitectureSpec,
+    ValidationContract,
+)
 from ..stages.clarify.models import ClarifiedRequirements, OpenQuestion
 from ..stages.context.models import BrownfieldDelta
+from ..stages.plan.models import DevTask, ImplementationPlan
 from .models import ArtifactVersion
 
 # Bumped when a renderer changes its output. Part of the ETag: neither
@@ -189,9 +194,54 @@ def _architecture_body(a: ArchitectureSpec) -> list[str]:
     ]
 
 
+def _contract_block(c: ValidationContract | None) -> list[str]:
+    if c is None:
+        return ["- validation contract: (none)"]
+    return [
+        "- validation contract:",
+        f"  - stack: {c.stack or '(unspecified)'}",
+        *[f"  - assertion: {a}" for a in c.assertions],
+        *[f"  - test command: {t}" for t in c.test_commands],
+        *[f"  - lint command: {t}" for t in c.lint_commands],
+    ]
+
+
+def _task_block(t: DevTask) -> list[str]:
+    return [
+        f"### {t.id} -- {t.title}",
+        "",
+        # `role` has a closed vocabulary ("dev"/"test"/"devops"), so it is
+        # rendered under an explicit label: the coverage test anchors on
+        # "role: <value>" because a bare "dev" collides with other output.
+        f"- role: {t.role}",
+        "",
+        t.description,
+        "",
+        f"- depends on: {_inline(t.depends_on)}",
+        f"- files hint: {_inline(t.files_hint)}",
+        f"- overlaps: {_inline(t.overlaps)}",
+        "- acceptance criteria:",
+        *[f"  - {c}" for c in t.acceptance_criteria],
+        *_contract_block(t.contract),
+        "",
+    ]
+
+
+def _plan_body(p: ImplementationPlan) -> list[str]:
+    tasks: list[str] = []
+    for t in p.tasks:
+        tasks += _task_block(t)
+    return [
+        *_section("Confidence", [f"- confidence: {_pct(p.confidence)}"]),
+        *_section("Overview", [f"- {len(p.tasks)} task(s)"]),
+        *_section("Tasks", tasks or ["- (none)"]),
+    ]
+
+
 RENDERERS: dict[str, tuple[type[BaseModel], Callable[[Any], list[str]]]] = {
     "requirements": (ClarifiedRequirements, _requirements_body),
     "architecture": (ArchitectureSpec, _architecture_body),
+    "plan": (ImplementationPlan, _plan_body),
 }
 
 

@@ -262,3 +262,80 @@ def test_architecture_without_delta_says_so():
     out = render_architecture(model)
     assert "greenfield" in out
     assert "not recorded" in out  # confidence is None
+
+
+from sdlc.stages.architecture.models import ValidationContract
+from sdlc.stages.plan.models import DevTask, ImplementationPlan
+
+
+def full_plan() -> ImplementationPlan:
+    return ImplementationPlan(
+        confidence=0.5,
+        tasks=[
+            DevTask(
+                id="SENTINEL_TID",
+                title="SENTINEL_TITLE",
+                description="SENTINEL_DESC",
+                depends_on=["SENTINEL_DEP"],
+                acceptance_criteria=["SENTINEL_AC"],
+                files_hint=["SENTINEL_HINT"],
+                overlaps=["SENTINEL_OVERLAP"],
+                role="devops",
+                contract=ValidationContract(
+                    task_id="SENTINEL_TID",
+                    assertions=["SENTINEL_ASSERTION"],
+                    test_commands=["SENTINEL_TESTCMD"],
+                    lint_commands=["SENTINEL_LINTCMD"],
+                    stack="SENTINEL_STACK",
+                ),
+            )
+        ],
+    )
+
+
+def render_plan(model: ImplementationPlan) -> str:
+    v = version()
+    v.key = "plan"
+    return render_version_markdown(
+        "plan", model.model_dump_json().encode("utf-8"), project="acme", version=v
+    )
+
+
+def test_plan_body_renders_every_section():
+    out = render_plan(full_plan())
+    for sentinel in (
+        "SENTINEL_TID",
+        "SENTINEL_TITLE",
+        "SENTINEL_DESC",
+        "SENTINEL_DEP",
+        "SENTINEL_AC",
+        "SENTINEL_HINT",
+        "SENTINEL_OVERLAP",
+        "SENTINEL_ASSERTION",
+        "SENTINEL_TESTCMD",
+        "SENTINEL_LINTCMD",
+        "SENTINEL_STACK",
+    ):
+        assert sentinel in out, sentinel
+
+
+def test_plan_role_renders_under_a_label():
+    # role has a closed vocabulary, so a bare substring check would pass
+    # even if the field were dropped. The label is the anchor.
+    assert "role: devops" in render_plan(full_plan())
+
+
+def test_plan_reports_its_task_count():
+    assert "1 task(s)" in render_plan(full_plan())
+
+
+def test_plan_without_tasks_renders_cleanly():
+    out = render_plan(ImplementationPlan(tasks=[]))
+    assert "0 task(s)" in out
+    assert "(none)" in out
+
+
+def test_task_without_a_contract_says_so():
+    plan = full_plan()
+    plan.tasks[0].contract = None
+    assert "validation contract: (none)" in render_plan(plan)
