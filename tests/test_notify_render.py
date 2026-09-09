@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from sdlc.gate import CheckClass, CheckResult
 from sdlc.notify.contract import NotifyReason
 from sdlc.notify.render import render_notification
-from sdlc.pending import ClarifyPending, MergeGatePending
+from sdlc.pending import ClarifyPending, MergeGatePending, gate_pending
 
 T0 = datetime(2026, 7, 26, 12, 0, tzinfo=UTC)
 
@@ -139,3 +139,72 @@ def test_text_is_ascii_only():
         base_url=None,
     )
     text.encode("ascii")  # raises UnicodeEncodeError on failure
+
+
+def gate_pending_for(gate: str):
+    return gate_pending(gate, 1, None)
+
+
+def links_for(
+    gate: str, *, base_url="http://localhost:8500/", project="acme", reason=NotifyReason.OPENED
+) -> str:
+    return render_notification(
+        pending=gate_pending_for(gate),
+        reason=reason,
+        run_id="run-1",
+        opened_at=T0,
+        now=T0,
+        deadline=None,
+        base_url=base_url,
+        project=project,
+    )
+
+
+def test_merge_gate_links_all_three_artifact_renders():
+    text = links_for("merge")
+    for key in ("requirements", "architecture", "plan"):
+        assert f"/projects/acme/artifacts/{key}/current/markdown" in text
+
+
+def test_architecture_gate_links_requirements_but_not_its_own_artifact():
+    # requirements is published at feature.py:560, before this gate opens;
+    # architecture is published only after it is decided (feature.py:585),
+    # so linking it here would 404.
+    text = links_for("architecture")
+    assert "/artifacts/requirements/current/markdown" in text
+    assert "/artifacts/architecture/current/markdown" not in text
+    assert "/artifacts/plan/current/markdown" not in text
+
+
+def test_plan_gate_links_the_two_earlier_artifacts_only():
+    text = links_for("plan")
+    assert "/artifacts/requirements/current/markdown" in text
+    assert "/artifacts/architecture/current/markdown" in text
+    assert "/artifacts/plan/current/markdown" not in text
+
+
+def test_clarify_gate_links_nothing_because_nothing_is_published():
+    assert "/markdown" not in links_for("clarify")
+
+
+def test_task_escalation_gate_links_all_three():
+    text = links_for("task:T01")
+    for key in ("requirements", "architecture", "plan"):
+        assert f"/artifacts/{key}/current/markdown" in text
+
+
+def test_no_base_url_omits_the_links_without_erroring():
+    text = links_for("merge", base_url=None)
+    assert "/markdown" not in text
+    assert "sdlc approve" in text  # the rest of the notification is intact
+
+
+def test_no_project_omits_the_links_without_erroring():
+    text = links_for("merge", project=None)
+    assert "/markdown" not in text
+    assert "sdlc approve" in text
+
+
+def test_expired_notifications_carry_no_links():
+    # EXPIRE already suppresses the command block; links follow it.
+    assert "/markdown" not in links_for("merge", reason=NotifyReason.EXPIRE)

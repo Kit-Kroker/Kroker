@@ -12,8 +12,9 @@
 # identity).
 version: 1
 
-# Absolute base for deep links. Null until the dashboard (E-10) exists, at
-# which point notifications gain a URL beside the CLI commands.
+# Absolute base for deep links -- the origin serving both the dashboard and
+# the board API (interfaces/dashboard/api/main.py composes them into one
+# process). Null disables every link; notifications are still delivered.
 base_url: null
 
 # Hosts a `webhook` route may POST to. A notify webhook is the pipeline's

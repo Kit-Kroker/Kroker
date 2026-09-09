@@ -46,6 +46,7 @@ async def notify(inp: NotifyInput) -> Results:
         now=inp.now,
         deadline=inp.deadline,
         base_url=routes.base_url,
+        project=inp.project,
     )
 
     out: list[DeliveryResult] = []

@@ -25,6 +25,46 @@ def _hours(delta) -> str:
     return f"{int(delta.total_seconds() // 3600)}h"
 
 
+# F4. Which artifact renders a gate's notification may link.
+#
+# A gate links what is ALREADY on the board when it opens, and never its own
+# key: `_board_publish` runs only after a gate is decided
+# (workflows/feature.py:560/585/602), so a gate's own artifact does not exist
+# at notification time and a link to it would 404. The order below is the
+# publish order.
+_ALL_ARTIFACTS = ("requirements", "architecture", "plan")
+_GATE_LINKS: dict[str, tuple[str, ...]] = {
+    "clarify": (),  # nothing published yet
+    "architecture": ("requirements",),
+    "plan": ("requirements", "architecture"),
+    "merge": _ALL_ARTIFACTS,
+    "deploy": _ALL_ARTIFACTS,
+    # Opened by the deploy stage after a failed smoke check
+    # (stages/deploy/step.py:212). Every publish has happened by then, and
+    # this is precisely a gate where a human needs the plan in front of them.
+    "deploy_failed": _ALL_ARTIFACTS,
+}
+
+
+def _artifact_links(gate: str, base_url: str | None, project: str | None) -> list[str]:
+    """Deep links to the readable renders. Empty whenever anything needed is
+    missing -- an unset base_url or project omits the links and never fails
+    the notification."""
+    if not base_url or not project:
+        return []
+    # A per-task escalation gate is `task:<id>`; by then every publish has
+    # happened, so it gets the full set.
+    keys = _ALL_ARTIFACTS if gate.startswith("task:") else _GATE_LINKS.get(gate, ())
+    if not keys:
+        return []
+    root = base_url.rstrip("/")
+    return [
+        "",
+        "  background:",
+        *[f"    {root}/projects/{project}/artifacts/{key}/current/markdown" for key in keys],
+    ]
+
+
 def render_notification(
     pending: PendingDecision,
     reason: NotifyReason,
@@ -33,6 +73,7 @@ def render_notification(
     now: datetime,
     deadline: datetime | None,
     base_url: str | None,
+    project: str | None = None,
 ) -> str:
     r = default_render(pending)
     gate = getattr(pending, "gate", None)
@@ -68,5 +109,6 @@ def render_notification(
             lines.append(f"  sdlc answer {run_id} --question {pending.key}")
         if base_url:
             lines.append(f"  {base_url.rstrip('/')}/runs/{run_id}")
+        lines += _artifact_links(gate or "", base_url, project)
 
     return "\n".join(lines)

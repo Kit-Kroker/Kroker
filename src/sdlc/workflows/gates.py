@@ -128,6 +128,14 @@ class GateHost:
         swallowed, because a notification that failed to deliver must be
         visible (spec 6, ROADMAP 9.6)."""
         gate = getattr(pending, "gate", None) or pending.key
+        # GateHost is also the base of CrewTaskWorkflow, TriageWorkflow,
+        # TidyUpWorkflow and AssessmentWorkflow (crew.py:112, triage.py:150,
+        # tidyup.py:183, assessment.py:334), none of which has _cfg. getattr
+        # is the documented pattern for exactly this -- see the `_status` row
+        # in workflows/AGENTS.md, which reads via getattr for the same
+        # reason. A host without a config simply sends no link.
+        cfg = getattr(self, "_cfg", None)
+        project = getattr(cfg, "project_key", None) if cfg else None
         try:
             out: Results = await workflow.execute_activity(
                 notify,
@@ -138,6 +146,7 @@ class GateHost:
                     opened_at=opened_at,
                     now=workflow.now(),
                     deadline=deadline,
+                    project=project,
                 ),
                 **NOTIFY_ACT,
             )

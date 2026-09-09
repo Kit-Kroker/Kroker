@@ -32,6 +32,10 @@ class NotifyInput(BaseModel):
     opened_at: datetime
     now: datetime  # workflow.now() -- the activity reads no clock
     deadline: datetime | None = None
+    # F4: the board project whose artifact renders a notification may link.
+    # Optional with a default so old workflow histories deserialize
+    # unchanged -- this field is added to a payload that Temporal replays.
+    project: str | None = None
 
 
 class DeliveryResult(BaseModel):
