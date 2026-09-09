@@ -339,3 +339,182 @@ def test_task_without_a_contract_says_so():
     plan = full_plan()
     plan.tasks[0].contract = None
     assert "validation contract: (none)" in render_plan(plan)
+
+
+from typing import get_args
+
+from pydantic import BaseModel
+
+from sdlc.board.render import _OMITTED, RENDERERS
+
+# Every (model, field) that IS rendered, mapped to a string that must appear
+# in the rendered output of the fully-populated fixture. Adding a field to
+# any artifact model fails test_no_field_is_silently_dropped until it is
+# either listed here or added to _OMITTED.
+#
+# Free-text fields use their sentinel. Closed-vocabulary fields (role,
+# dimension) must use a LABELLED anchor: "dev" and "test" occur incidentally
+# in other output, so a bare value would pass even if the field were dropped.
+_EXPECTED: dict[tuple[str, str], str] = {
+    ("ClarifiedRequirements", "summary"): "SENTINEL_SUMMARY",
+    ("ClarifiedRequirements", "functional_requirements"): "SENTINEL_FR",
+    ("ClarifiedRequirements", "non_functional_requirements"): "SENTINEL_NFR",
+    ("ClarifiedRequirements", "out_of_scope"): "SENTINEL_OOS",
+    ("ClarifiedRequirements", "open_questions"): "SENTINEL_QUESTION",
+    ("ClarifiedRequirements", "dimensions_probed"): "dimensions probed: C1",
+    ("ClarifiedRequirements", "dropped"): "SENTINEL_DROPPED_Q",
+    ("OpenQuestion", "id"): "SENTINEL_QID",
+    ("OpenQuestion", "question"): "SENTINEL_QUESTION",
+    ("OpenQuestion", "why_it_matters"): "SENTINEL_WHY",
+    ("OpenQuestion", "suggested_answer"): "SENTINEL_SUGGESTED",
+    ("OpenQuestion", "answer"): "SENTINEL_ANSWER",
+    ("OpenQuestion", "dimension"): "dimension: C2",
+    ("OpenQuestion", "asked_by"): "SENTINEL_ASKEDBY",
+    ("OpenQuestion", "materiality"): "materiality: 0.75",
+    ("OpenQuestion", "evidence"): "SENTINEL_EVIDENCE",
+    ("ArchitectureSpec", "overview"): "SENTINEL_OVERVIEW",
+    ("ArchitectureSpec", "decisions"): "SENTINEL_DECISION",
+    # affected_modules is DERIVED from delta by ArchitectureSpec's validator
+    # (architecture/models.py:28-42), so its sentinels also appear in the
+    # delta section. Anchor on the heading or dropping either field would
+    # still pass -- the same collision trap as `role` and `dimension`.
+    ("ArchitectureSpec", "affected_modules"): "## Affected modules\n\n- SENTINEL_MODIFIED",
+    ("ArchitectureSpec", "new_components"): "SENTINEL_NEWCOMP",
+    ("ArchitectureSpec", "risks"): "SENTINEL_RISK",
+    ("ArchitectureSpec", "confidence"): "82%",
+    ("ArchitectureSpec", "delta"): "## Brownfield delta\n\nadded:",
+    ("ArchitectureDecision", "id"): "SENTINEL_DID",
+    ("ArchitectureDecision", "decision"): "SENTINEL_DECISION",
+    ("ArchitectureDecision", "rationale"): "SENTINEL_RATIONALE",
+    ("ArchitectureDecision", "alternatives_considered"): "SENTINEL_ALT",
+    ("BrownfieldDelta", "added"): "added:\n- SENTINEL_ADDED",
+    ("BrownfieldDelta", "modified"): "modified:\n- SENTINEL_MODIFIED",
+    ("BrownfieldDelta", "removed"): "removed:\n- SENTINEL_REMOVED",
+    ("ImplementationPlan", "tasks"): "SENTINEL_TID",
+    ("ImplementationPlan", "confidence"): "50%",
+    ("DevTask", "id"): "SENTINEL_TID",
+    ("DevTask", "title"): "SENTINEL_TITLE",
+    ("DevTask", "description"): "SENTINEL_DESC",
+    ("DevTask", "depends_on"): "SENTINEL_DEP",
+    ("DevTask", "acceptance_criteria"): "SENTINEL_AC",
+    ("DevTask", "files_hint"): "SENTINEL_HINT",
+    ("DevTask", "overlaps"): "SENTINEL_OVERLAP",
+    ("DevTask", "contract"): "SENTINEL_ASSERTION",
+    ("DevTask", "role"): "role: devops",
+    ("ValidationContract", "assertions"): "SENTINEL_ASSERTION",
+    ("ValidationContract", "test_commands"): "SENTINEL_TESTCMD",
+    ("ValidationContract", "lint_commands"): "SENTINEL_LINTCMD",
+    ("ValidationContract", "stack"): "SENTINEL_STACK",
+}
+
+
+def _model_types(anno) -> set[type[BaseModel]]:
+    """Every BaseModel reachable through an annotation (list[X], X | None)."""
+    found: set[type[BaseModel]] = set()
+    if isinstance(anno, type) and issubclass(anno, BaseModel):
+        found.add(anno)
+    for arg in get_args(anno):
+        found |= _model_types(arg)
+    return found
+
+
+def _walk(cls: type[BaseModel], seen: set[type[BaseModel]] | None = None):
+    """cls plus every artifact model reachable through a RENDERED field.
+
+    Omitted fields' subtrees are deliberately NOT walked. An omitted field's
+    type is not part of the rendered surface, so its own fields cannot be
+    "silently dropped" -- the whole field is dropped, on purpose, and that
+    decision is already recorded in _OMITTED.
+
+    Without this skip the walk reaches ArtifactRef through spec_ref and
+    plan_ref, and then demands that ArtifactRef.kind/.uri/.sha256 be either
+    rendered or omitted. Both ways out are wrong: rendering them contradicts
+    section 4.3, and adding an "ArtifactRef" entry to _OMITTED breaks the
+    pinned count of five. Skipping is the only correct answer, and it makes
+    the walk return exactly the eight artifact models the spec names.
+    """
+    seen = seen if seen is not None else set()
+    if cls in seen:
+        return seen
+    seen.add(cls)
+    omitted = _OMITTED.get(cls.__name__, set())
+    for name, f in cls.model_fields.items():
+        if name in omitted:
+            continue
+        for nested in _model_types(f.annotation):
+            _walk(nested, seen)
+    return seen
+
+
+def all_artifact_models() -> set[type[BaseModel]]:
+    models: set[type[BaseModel]] = set()
+    for model_cls, _ in RENDERERS.values():
+        models |= _walk(model_cls)
+    return models
+
+
+def test_no_field_is_silently_dropped():
+    """Every field of every artifact model is rendered or explicitly omitted.
+
+    Recursion is what gives this teeth: DevTask's nine fields and
+    OpenQuestion's nine are only reachable through nesting, and two of the
+    three omissions sit two levels down in ValidationContract.
+    """
+    undeclared = []
+    for model_cls in all_artifact_models():
+        name = model_cls.__name__
+        omitted = _OMITTED.get(name, set())
+        for field in model_cls.model_fields:
+            if field in omitted:
+                continue
+            if (name, field) not in _EXPECTED:
+                undeclared.append(f"{name}.{field}")
+    assert not undeclared, (
+        "these artifact model fields are neither rendered nor in _OMITTED: "
+        + ", ".join(sorted(undeclared))
+        + " -- render them in board/render.py or record the omission"
+    )
+
+
+def test_every_declared_field_actually_reaches_the_output():
+    rendered = "\n".join(
+        [
+            render_requirements(full_requirements()),
+            render_architecture(full_architecture()),
+            render_plan(full_plan()),
+        ]
+    )
+    missing = [f"{m}.{f}" for (m, f), probe in _EXPECTED.items() if probe not in rendered]
+    assert not missing, f"declared as rendered but absent from output: {missing}"
+
+
+def test_omission_set_names_only_real_fields():
+    by_name = {m.__name__: m for m in all_artifact_models()}
+    for model_name, fields in _OMITTED.items():
+        assert model_name in by_name, f"_OMITTED names unknown model {model_name}"
+        for field in fields:
+            assert field in by_name[model_name].model_fields, (
+                f"_OMITTED names unknown field {model_name}.{field}"
+            )
+
+
+def test_the_omission_set_is_exactly_the_five_documented_entries():
+    # Spec section 4.3. Growing this is a decision that belongs in the spec,
+    # so it is pinned here rather than left to drift.
+    assert sum(len(v) for v in _OMITTED.values()) == 5
+
+
+def test_the_walk_reaches_exactly_the_eight_artifact_models():
+    # Spec section 4.3 says eight. If ArtifactRef appears here, _walk has
+    # stopped skipping omitted fields' subtrees and is walking into
+    # claim-check plumbing.
+    assert {m.__name__ for m in all_artifact_models()} == {
+        "ClarifiedRequirements",
+        "OpenQuestion",
+        "ArchitectureSpec",
+        "ArchitectureDecision",
+        "BrownfieldDelta",
+        "ImplementationPlan",
+        "DevTask",
+        "ValidationContract",
+    }
