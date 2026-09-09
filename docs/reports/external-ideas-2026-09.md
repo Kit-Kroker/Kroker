@@ -81,7 +81,7 @@ what remains open.
 | E1 | **Rollback rehearsal** — auto-rollback exists (stage 13); add regularly exercised rollback drills in staging so the path is proven before it is needed | playbook | Extends | deploy stage + `schedules/`. Drills can run without DAPER; *band-triggered* rollback cannot |
 | E2 | **Deploy as allowlisted tools** — deploy/status/rollback exposed as scoped per-environment tools (MCP), not a shell with credentials | playbook | New | deploy adapter seam (`compose` / `script`) |
 | E3 | **PR babysitting** — after the merge gate, an agent sweeps unresolved review comments and failing checks and pushes fixes until green; a human only approves | playbook | New | a new bounded stage between merge gate and deploy |
-| E4 | **Plan drift requires plan amendment** — drift without a committed plan amendment is a review flag; plan↔diff sync enforced | playbook | ✅ Gap verified | `compute_plan_drift` (`models.py:401`) is wired at `feature.py:1722` — the number is computed every run and **nothing reads it**. The cheapest item in the register: turn an existing signal into a review condition |
+| E4 | **Plan drift requires plan amendment** — drift without a committed plan amendment is a review flag; plan↔diff sync enforced | playbook | ✅ Fixed | shipped — plan_drift is now a 4th CheckClass.ADVISORY check at the merge gate (src/sdlc/stages/merge/step.py, MERGE-1.7), joining MERGE_REQUIRED_CHECKS for C3's fail-closed coverage. See docs/superpowers/specs/2026-09-09-e4-plan-drift-review-condition-design.md and the implementation plan for the full design — this is acknowledgment via the audited GateOverride path, not the register wording's literal "sync enforced" |
 
 ## F. Operator UX and the meta-loop
 
