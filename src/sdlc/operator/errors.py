@@ -12,6 +12,7 @@ import functools
 
 from ..board.store import ConflictError, InvalidTransition, NotFoundError
 from ..channels.transport import Ambiguous, NoMatch
+from ..dashboard.fleet import FleetCapacityExceeded
 
 
 class ToolError(Exception):
@@ -39,6 +40,15 @@ def translate(exc: Exception, *, hint: str = "") -> ToolError:
         msg = f"board conflict: {exc}"
     elif isinstance(exc, InvalidTransition):
         msg = f"invalid board transition: {exc}"
+    elif isinstance(exc, FleetCapacityExceeded):
+        # B4: an actionable refusal, not a bug -- the model should stop
+        # starting runs and tell the operator what is blocking.
+        msg = (
+            f"the fleet is at capacity: {exc.pending} run(s) are already "
+            f"awaiting a human decision and the cap is {exc.cap}. Do not "
+            f"retry; tell the operator to clear some pending decisions "
+            f"first (the inbox lists them)."
+        )
     else:
         # Deliberately type-only: the message may carry paths or credentials.
         msg = f"the factory raised {type(exc).__name__}; the operator should check the server log"

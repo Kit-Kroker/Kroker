@@ -29,6 +29,7 @@ from ..core.models import (
     PipelineConfig,
     ProjectMode,
 )
+from ..dashboard.fleet import check_fleet_capacity, fleet_pending_cap
 from ..naming import slug
 from . import render
 from .deps import OperatorDeps
@@ -526,6 +527,14 @@ async def start_run(
             f"from; ask the operator for a descriptive title"
         )
     wf_id = f"feature-{stem}"
+    # B4 fleet back-pressure, before anything is started -- see
+    # docs/superpowers/specs/2026-09-09-b4-fleet-backpressure-design.md.
+    # The cap is read FIRST: with none configured this must not touch the
+    # fleet at all, since the poller's snapshot() falls back to an inline
+    # fan-out when its cache is stale (fleet.py:218-224).
+    cap = fleet_pending_cap()
+    if cap is not None:
+        check_fleet_capacity(await deps.poller.snapshot(), cap)
     try:
         started = await deps.starter(idea, PipelineConfig(), wf_id)
     except Exception as e:  # noqa: BLE001 -- narrowed into ToolError

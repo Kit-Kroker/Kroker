@@ -1,12 +1,16 @@
 """Write verbs: kind enforcement, derived rounds, receipts, actor identity."""
 
+from datetime import UTC, datetime
+
 import pytest
 
+from sdlc.channels.inbox import RunInbox
 from sdlc.channels.transport import SubmitResult
 from sdlc.core.models import (
     GateOutcome,
     ProjectMode,
 )
+from sdlc.dashboard.fleet import FleetSnapshot
 from sdlc.operator import tools
 from sdlc.operator.deps import OperatorDeps
 from sdlc.operator.errors import ToolError
@@ -14,6 +18,8 @@ from sdlc.pending import ClarifyPending, StageGatePending
 
 GATE = StageGatePending(key="architecture#2", gate="architecture", round=2, spec_summary="s")
 Q1 = ClarifyPending(key="Q1", question="q", why_it_matters="w")
+
+AT_SNAP = datetime(2026, 9, 9, 12, 0, tzinfo=UTC)
 
 
 class FakeHandle:
@@ -31,11 +37,18 @@ class FakeClient:
 
 
 class FakePoller:
-    def __init__(self, handle):
+    def __init__(self, handle, snap=None):
         self._handle = handle
+        self._snap = snap if snap is not None else FleetSnapshot(at=AT_SNAP)
 
     async def _client_or_connect(self):
         return FakeClient(self._handle)
+
+    async def snapshot(self):
+        # B4: start_run reads the fleet's pending-decision load from here.
+        # Defaults to an empty fleet so every pre-existing start_run test
+        # keeps admitting.
+        return self._snap
 
 
 @pytest.fixture
@@ -194,3 +207,51 @@ async def test_a_title_with_no_alphanumerics_is_refused(deps):
     with pytest.raises(ToolError) as e:
         await tools.start_run(deps, title="!!!", mode=ProjectMode.GREENFIELD)
     assert "descriptive title" in e.value.message
+
+
+@pytest.mark.asyncio
+async def test_start_run_refuses_when_the_fleet_is_at_capacity(deps, monkeypatch):
+    """B4: the tool must decline rather than adding a fifth pending decision
+    to a fleet capped at four."""
+    monkeypatch.setenv("SDLC_FLEET_PENDING_CAP", "2")
+    deps.poller._snap = FleetSnapshot(
+        at=AT_SNAP,
+        total_open_runs=2,
+        inbox=[
+            RunInbox(run_id="feature-one", pending=[Q1]),
+            RunInbox(run_id="feature-two", pending=[Q1]),
+        ],
+    )
+    with pytest.raises(ToolError) as e:
+        await tools.start_run(deps, title="Add SSO", mode=ProjectMode.GREENFIELD)
+    assert "capacity" in str(e.value.message)
+    assert "2" in str(e.value.message)
+    assert deps.started == []  # the starter was never called
+
+
+@pytest.mark.asyncio
+async def test_start_run_admits_below_the_cap(deps, monkeypatch):
+    monkeypatch.setenv("SDLC_FLEET_PENDING_CAP", "3")
+    deps.poller._snap = FleetSnapshot(
+        at=AT_SNAP,
+        total_open_runs=1,
+        inbox=[RunInbox(run_id="feature-one", pending=[Q1])],
+    )
+    run_id = await tools.start_run(deps, title="Add SSO", mode=ProjectMode.GREENFIELD)
+    assert run_id == "feature-add-sso"
+    assert len(deps.started) == 1
+
+
+@pytest.mark.asyncio
+async def test_start_run_does_not_read_the_fleet_when_no_cap_is_set(deps, monkeypatch):
+    """Opt-in means the snapshot is never taken, not that it is taken and
+    ignored -- poller.snapshot() falls back to an inline Temporal fan-out
+    when its cache is stale, so an un-opted-in operator must not pay it."""
+    monkeypatch.delenv("SDLC_FLEET_PENDING_CAP", raising=False)
+
+    async def exploding_snapshot():
+        raise AssertionError("start_run read the fleet with no cap configured")
+
+    deps.poller.snapshot = exploding_snapshot
+    run_id = await tools.start_run(deps, title="Add SSO", mode=ProjectMode.GREENFIELD)
+    assert run_id == "feature-add-sso"
