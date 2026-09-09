@@ -50,6 +50,12 @@ class FleetSnapshot(BaseModel):
     closed: list[RunSummary] = Field(default_factory=list)
     inbox: list[RunInbox] = Field(default_factory=list)
     errors: list[InboxError] = Field(default_factory=list)
+    # B4: the OPEN-run subset of `errors`. `errors` mixes both passes below --
+    # a failed pending_decisions query on a live run, and a failed run_summary
+    # on an already-closed one. Only the first kind means "this run's pending
+    # state is unknown"; a closed run owes nothing. The fleet cap counts this
+    # field, never `errors`.
+    open_errors: list[InboxError] = Field(default_factory=list)
 
 
 async def _fetch_open(client, run_id: str):
@@ -115,7 +121,9 @@ async def fetch_fleet(client, *, now: datetime, closed_limit: int = CLOSED_LIMIT
     snap = FleetSnapshot(at=now, total_open_runs=len(open_ids))
     for run_id, outcome in zip(open_ids, open_results, strict=False):
         if isinstance(outcome, Exception):
-            snap.errors.append(InboxError(run_id=run_id, error=str(outcome)))
+            err = InboxError(run_id=run_id, error=str(outcome))
+            snap.errors.append(err)
+            snap.open_errors.append(err)  # B4: cap counts open failures only
             continue
         state, pending = outcome
         if state is not None:

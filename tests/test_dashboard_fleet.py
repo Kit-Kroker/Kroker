@@ -201,3 +201,30 @@ async def test_a_run_landing_in_both_passes_is_rendered_once():
     assert [r.run_id for r in snap.runs] == ["run-x"]
     assert snap.closed == []
     assert snap.errors == []
+
+
+@pytest.mark.asyncio
+async def test_an_open_run_query_failure_lands_in_both_errors_and_open_errors():
+    client = _Client(
+        {
+            "run-a": _Handle(state=_state("run-a"), pending=[Q1]),
+            "run-bad": _Handle(error=RuntimeError("query timeout")),
+        }
+    )
+    snap = await fetch_fleet(client, now=AT)
+    assert [e.run_id for e in snap.errors] == ["run-bad"]
+    assert [e.run_id for e in snap.open_errors] == ["run-bad"]
+
+
+@pytest.mark.asyncio
+async def test_a_closed_run_query_failure_stays_out_of_open_errors():
+    """B4: a closed run owes no human a decision, so its failed run_summary
+    query must never consume a fleet cap slot -- it belongs in errors (which
+    the dashboard renders) but not in open_errors (which the cap counts)."""
+    client = _Client(
+        {"run-a": _Handle(state=_state("run-a"), pending=[])},
+        {"run-done": _Handle(error=RuntimeError("summary unavailable"))},
+    )
+    snap = await fetch_fleet(client, now=AT)
+    assert [e.run_id for e in snap.errors] == ["run-done"]
+    assert snap.open_errors == []
