@@ -41,6 +41,7 @@ from .core.models import (
     PipelineConfig,
     ProjectMode,
 )
+from .dashboard.fleet import FleetCapacityExceeded, guard_fleet_capacity
 from .naming import slug
 from .worker import TASK_QUEUE
 from .workflows.assessment import AssessmentInput, AssessmentWorkflow
@@ -384,6 +385,21 @@ async def main() -> None:
                 raise SystemExit(1) from None
         wf_id = f"feature-{slug(args.title)}"
         assert client is not None
+        # B4 fleet back-pressure -- see
+        # docs/superpowers/specs/2026-09-09-b4-fleet-backpressure-design.md.
+        # Refuse a new run while the fleet already owes humans its full
+        # allowance of decisions. No-ops without touching Temporal when
+        # SDLC_FLEET_PENDING_CAP is unset.
+        try:
+            await guard_fleet_capacity(client)
+        except FleetCapacityExceeded as e:
+            print(
+                f"fleet at capacity: {e.pending} run(s) awaiting a human "
+                f"decision, cap is {e.cap}. Clear some pending decisions "
+                f"(python -m sdlc.cli inbox) or raise "
+                f"SDLC_FLEET_PENDING_CAP."
+            )
+            raise SystemExit(1) from None
         handle = await client.start_workflow(
             FeatureWorkflow.run,
             args=[
