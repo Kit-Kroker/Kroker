@@ -1,0 +1,185 @@
+"""Board artifact -> Markdown renderer (F4)."""
+
+from datetime import UTC, datetime
+
+import pytest
+
+from sdlc.board.models import ArtifactVersion
+from sdlc.board.render import (
+    MAX_RENDER_BYTES,
+    RENDER_VERSION,
+    ArtifactTooLarge,
+    ArtifactUnreadable,
+    UnknownArtifactKey,
+    render_version_markdown,
+)
+from sdlc.core.models import ClarificationDimension
+from sdlc.stages.clarify.models import ClarifiedRequirements, OpenQuestion
+
+
+def version(n: int = 3, vid: int = 41) -> ArtifactVersion:
+    return ArtifactVersion(
+        id=vid,
+        project="acme",
+        key="requirements",
+        n=n,
+        run_id="run-xyz",
+        sha256="9f2c" + "0" * 60,
+        uri="file:///tmp/x.json",
+        created_at=datetime(2026, 9, 9, 8, 14, 2, tzinfo=UTC),
+    )
+
+
+def full_requirements() -> ClarifiedRequirements:
+    return ClarifiedRequirements(
+        summary="SENTINEL_SUMMARY",
+        functional_requirements=["SENTINEL_FR"],
+        non_functional_requirements=["SENTINEL_NFR"],
+        out_of_scope=["SENTINEL_OOS"],
+        dimensions_probed=[ClarificationDimension.FUNCTIONAL_INTENT],
+        open_questions=[
+            OpenQuestion(
+                id="SENTINEL_QID",
+                question="SENTINEL_QUESTION",
+                why_it_matters="SENTINEL_WHY",
+                suggested_answer="SENTINEL_SUGGESTED",
+                answer="SENTINEL_ANSWER",
+                dimension=ClarificationDimension.BUSINESS_SEMANTICS,
+                asked_by="SENTINEL_ASKEDBY",
+                materiality=0.75,
+                evidence="SENTINEL_EVIDENCE",
+            )
+        ],
+        dropped=[
+            OpenQuestion(
+                id="SENTINEL_DROPPED_ID",
+                question="SENTINEL_DROPPED_Q",
+                why_it_matters="SENTINEL_DROPPED_WHY",
+            )
+        ],
+    )
+
+
+def render_requirements(model: ClarifiedRequirements) -> str:
+    return render_version_markdown(
+        "requirements",
+        model.model_dump_json().encode("utf-8"),
+        project="acme",
+        version=version(),
+    )
+
+
+def test_banner_carries_provenance():
+    out = render_requirements(full_requirements())
+    assert out.startswith("# Requirements -- acme")
+    assert "| artifact | requirements |" in out
+    assert "| version | 3 (id 41) |" in out
+    assert "| run | run-xyz |" in out
+    assert "2026-09-09T08:14:02" in out
+    assert "9f2c" in out
+
+
+def test_requirements_body_renders_every_section():
+    out = render_requirements(full_requirements())
+    for sentinel in (
+        "SENTINEL_SUMMARY",
+        "SENTINEL_FR",
+        "SENTINEL_NFR",
+        "SENTINEL_OOS",
+        "SENTINEL_QUESTION",
+        "SENTINEL_WHY",
+        "SENTINEL_SUGGESTED",
+        "SENTINEL_ANSWER",
+        "SENTINEL_ASKEDBY",
+        "SENTINEL_EVIDENCE",
+    ):
+        assert sentinel in out, sentinel
+
+
+def test_dropped_questions_render_under_their_own_heading():
+    out = render_requirements(full_requirements())
+    assert "SENTINEL_DROPPED_Q" in out
+    head = out.index("Dropped")
+    assert out.index("SENTINEL_DROPPED_Q") > head
+
+
+def test_answered_and_unanswered_questions_are_distinguishable():
+    # Anchored on the "-- " separator deliberately: "ANSWERED" is a
+    # substring of "UNANSWERED", so a bare check would pass even if every
+    # question rendered as unanswered.
+    out = render_requirements(full_requirements())
+    assert "-- ANSWERED" in out
+    assert "-- UNANSWERED" in out
+
+
+def test_renderer_scaffolding_is_ascii():
+    # ASCII fixtures in, ASCII out: this pins the renderer's own literals.
+    out = render_requirements(full_requirements())
+    assert out.isascii()
+
+
+def test_artifact_content_is_not_transliterated():
+    model = full_requirements()
+    model.summary = "café naïve"
+    out = render_requirements(model)
+    assert "café naïve" in out
+
+
+def test_empty_collections_do_not_produce_dangling_headings():
+    model = ClarifiedRequirements(
+        summary="s",
+        functional_requirements=[],
+        non_functional_requirements=[],
+        out_of_scope=[],
+        open_questions=[],
+    )
+    out = render_requirements(model)
+    assert "(none)" in out
+    assert "\n\n\n\n" not in out
+
+
+def test_unknown_key_is_refused():
+    with pytest.raises(UnknownArtifactKey) as e:
+        render_version_markdown("nope", b"{}", project="acme", version=version())
+    assert "requirements" in str(e.value)
+
+
+def test_oversize_blob_is_refused_before_parsing():
+    with pytest.raises(ArtifactTooLarge):
+        render_version_markdown(
+            "requirements",
+            b"x" * (MAX_RENDER_BYTES + 1),
+            project="acme",
+            version=version(),
+        )
+
+
+@pytest.mark.parametrize("raw", [b"not json at all", b'{"summary": "a", "trunc', b"\xff\xfe{}"])
+def test_unparseable_bytes_raise_one_error_type(raw):
+    # model_validate_json collapses malformed JSON and bad UTF-8 into
+    # ValidationError; nothing else may escape.
+    with pytest.raises(ArtifactUnreadable):
+        render_version_markdown("requirements", raw, project="acme", version=version())
+
+
+def test_schema_drift_raises_the_same_error():
+    with pytest.raises(ArtifactUnreadable) as e:
+        render_version_markdown(
+            "requirements",
+            b'{"summary": "only this"}',
+            project="acme",
+            version=version(),
+        )
+    assert "ClarifiedRequirements" in str(e.value)
+
+
+def test_render_version_is_an_int():
+    assert isinstance(RENDER_VERSION, int)
+
+
+def test_render_cap_matches_the_json_route_cap():
+    # Pinned deliberately: board/api.py defines its own MAX_CONTENT_BYTES and
+    # render.py cannot import it without a cycle.
+    from sdlc.board import api as api_mod
+
+    assert MAX_RENDER_BYTES == api_mod.MAX_CONTENT_BYTES
