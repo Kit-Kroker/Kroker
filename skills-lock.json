@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "ai-stage-gate": {
+      "source": "ML-SystemDesign/MLSystemDesign",
+      "sourceType": "github",
+      "skillPath": "skills/ai-stage-gate/SKILL.md",
+      "computedHash": "9b3eb38b13ca5c24ef87d693cb2c1fa793815970da5ab87bb9716d30682f548f"
+    },
     "building-pydantic-ai-agents": {
       "source": "pydantic/skills",
       "sourceType": "github",
@@ -24,6 +30,18 @@
       "sourceType": "github",
       "skillPath": "skills/logfire-ui/SKILL.md",
       "computedHash": "3499e1345a1e1cbc9d86a82b3d2fa62bb9a16d9d5430b819269ac9394d698836"
+    },
+    "lossless-doc-compress": {
+      "source": "ML-SystemDesign/MLSystemDesign",
+      "sourceType": "github",
+      "skillPath": "skills/lossless-doc-compress/SKILL.md",
+      "computedHash": "450c69e68160bf774be0f5990810bff1324d1295222b36fbaa173766bcd1bfaa"
+    },
+    "ml-system-design-review": {
+      "source": "ML-SystemDesign/MLSystemDesign",
+      "sourceType": "github",
+      "skillPath": "skills/ml-system-design-review/SKILL.md",
+      "computedHash": "b7fef4e83cbd5dfc1451798023bb7ed6306c0c024f96ecf7fb6ba8a858828d8c"
     },
     "pydantic": {
       "source": "pydantic/skills",
