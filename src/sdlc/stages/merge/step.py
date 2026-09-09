@@ -28,6 +28,7 @@ from ...core.models import (
 )
 from ...gate import (
     CheckClass,
+    CheckResult,
     GateOverride,
     GateReport,
     QualityGateInput,
@@ -37,6 +38,7 @@ from ...measurement import CollectionState
 from ...memory.models import MemoryKind
 from ...observability.trace import RunEventKind
 from ...pending import GateContext
+from ..plan.models import PlanDrift
 from ..qa.activities import LintInput, SecurityScanInput, run_lint, security_scan
 from ..qa.models import SecurityReport
 from .activities import (
@@ -79,6 +81,40 @@ def _merge_evidence_all_green(results: list) -> bool:
     `all([])` pass. The merge absolute check must see real green evidence.
     """
     return bool(results) and all(r.qa is not None and r.qa.tests_passed for r in results)
+
+
+def _plan_drift_flags(drift: PlanDrift) -> bool:
+    """E4: per-task threshold. Only unhinted touches count -- hinted_untouched
+    (over-hinting) is harmless and files_hint is explicitly a hint, not a
+    gate (plan/models.py PlanDrift docstring). Single-file tasks are exempt:
+    there is no calibration signal at n=1."""
+    if drift.files_touched <= 1:
+        return False
+    unhinted = len(drift.touched_unhinted)
+    return unhinted >= 2 or (unhinted / drift.files_touched) >= 0.5
+
+
+def _plan_drift_check(results: list) -> CheckResult:
+    """E4: run-level aggregation is 'any task fires', not an average or a
+    fleet-wide accumulator -- one task past its own threshold fails the
+    check regardless of how many other tasks are clean, and many tasks each
+    individually under threshold pass (that is the accepted shape of a
+    per-task predicate, not a gap). Unfiltered by status: a quarantined
+    task's drift counts too, matching the existing review_severity/untraced
+    precedent of reading all results."""
+    drifted = [
+        r.task_id for r in results if r.plan_drift is not None and _plan_drift_flags(r.plan_drift)
+    ]
+    return build_check(
+        "plan_drift",
+        not drifted,
+        CheckClass.ADVISORY,
+        detail=(
+            f"{len(drifted)} task(s) touched unhinted files beyond threshold: {drifted[:10]}"
+            if drifted
+            else "no task exceeded the plan-drift threshold (or drift is unmeasured)"
+        ),
+    )
 
 
 def _auto_decision_for(

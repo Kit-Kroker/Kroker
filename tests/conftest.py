@@ -270,13 +270,13 @@ def repo_agents_dir():
 def required_checks():
     """Build the full MERGE_REQUIRED_CHECKS list, every check passing.
 
-    `required_checks()` -> seven passing checks.
-    `required_checks(coverage=False)` -> the same seven with `coverage`
+    `required_checks()` -> eight passing checks.
+    `required_checks(coverage=False)` -> the same eight with `coverage`
     failing at its manifest classification.
 
     Returns a fresh list on every call, so no test shares a list object or
     depends on another test not mutating one. Driven by the manifest rather
-    than a hardcoded seven, so these tests keep asserting mechanics if the
+    than a hardcoded count, so these tests keep asserting mechanics if the
     manifest ever grows.
     """
     from sdlc.gate import MERGE_REQUIRED_CHECKS, CheckResult, build_check

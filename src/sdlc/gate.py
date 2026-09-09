@@ -92,6 +92,7 @@ MERGE_REQUIRED_CHECKS: Final[Mapping[str, CheckClass]] = MappingProxyType(
         "review_severity": CheckClass.ADVISORY,
         "traceability": CheckClass.ADVISORY,
         "coverage": CheckClass.ADVISORY,
+        "plan_drift": CheckClass.ADVISORY,
     }
 )
 
