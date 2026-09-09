@@ -47,8 +47,12 @@ def test_review_gated_on_config_flag():
 
 
 def test_pass_condition_requires_review_approval():
+    """C8: the success path reads a typed presence value instead of `review is
+    None`, but the SEMANTICS are unchanged -- primary_admits fails on any
+    present-and-rejecting primary, exactly as `review is None or
+    review.approve` did."""
     src = SRC.read_text(encoding="utf-8")
-    assert "review is None or review.approve" in src, (
+    assert "review_ok = primary_admits(review_outcome)" in src, (
         "the task success path must require reviewer approval when review ran"
     )
 

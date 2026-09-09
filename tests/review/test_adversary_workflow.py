@@ -162,14 +162,18 @@ def test_non_blocking_adversary_rejection_does_not_abandon_the_task():
     """A reject whose findings are all medium/low has no actionable instruction;
     it must be treated as agreement, not fall through to ``if not issues: break``
     which silently abandons a task that passed its gate. blocking_findings is
-    actionable; the boolean alone is not -- same rule as the primary."""
+    actionable; the boolean alone is not -- same rule as the primary.
+
+    C8 moved that rule from an inline ``not adversary.blocking_findings``
+    expression into ``backstop_admits`` (review/lenses.py), which reads
+    ``has_blocking_findings`` off the tombstone. The invariant is unchanged;
+    only its home is. test_backstop_admits_present_cells pins the behaviour
+    directly, this pins that the task layer still routes through it."""
     src = _src()
     idx = src.find("await _run_adversary")
-    if idx == -1:
-        idx = src.find("await self._run_adversary")
     assert idx != -1
     gate = src[idx : idx + 800]
-    assert "not adversary.blocking_findings" in gate
+    assert "backstop_admits(adversary_outcome)" in gate
 
 
 def test_review_record_names_the_model_that_actually_ran():
@@ -182,17 +186,20 @@ def test_review_record_names_the_model_that_actually_ran():
     assert 'resolve_role_model(cfg, "review")' not in src
 
 
-def test_adversary_never_runs_without_a_primary_reviewer():
-    """The adversary is a SECOND opinion; it presupposes a first. When review
-    is disabled (review is None) it must not run -- the primary reviewer is the
-    sole designated blocking lens, which is the justification for this lens
-    being fail-open."""
+def test_adversary_runs_without_a_primary_reviewer():
+    """C8 REVERSES the earlier position that the adversary presupposes a first
+    opinion. Decorrelation does not require a primary to exist -- the lens
+    reads the same contract, diff and test output either way -- and the
+    fail-open justification is about the adversary FAILING, not about the
+    primary having run. The old guard meant 'primary off, adversary on' ran no
+    lens at all while the operator believed one was running: C8's own defect,
+    in a guard rather than a None-read. Nobody gets a surprise adversary --
+    adversarial_review_enabled defaults to False, so this stays a two-flag
+    opt-in."""
     src = _src()
     pred = src.find("if task_passed and review_ok:")
     call = src.find("await _run_adversary")
-    if call == -1:
-        call = src.find("await self._run_adversary")
     assert pred != -1 and call > pred
-    assert "review is not None" in src[pred:call], (
-        "the adversary must be guarded by primary-reviewer presence"
+    assert "review is not None" not in src[pred:call], (
+        "the adversary must NOT be gated on primary-reviewer presence"
     )

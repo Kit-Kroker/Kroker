@@ -13,6 +13,7 @@ file carries only what is true *here*.
 - The slice exports `step`, `prompt_digest`, and `ACTIVITIES = [run_coding_task, load_drift_globs]`.
 - `freeze.py` holds the C2 freeze/thaw decision rules as pure functions (no `ctx`, no I/O, table-testable); `step.py` re-exports them, so existing `from ...code.step import _next_anchor` sites keep working. Audit recorders (`_record_escalation`, `_record_thaw`) stay in `step.py`.
 - All tool escalations and approvals are recorded to benchmarks and trace events.
+- The C8 lens tombstones are classified here but defined in the review slice (`stages/review/lenses.py`); this slice never re-implements the presence rules or the admission predicates.
 - QA and review stages are invoked clean-context, validating against the frozen contract.
 
 ## Temporal notes for this slice

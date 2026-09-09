@@ -332,8 +332,6 @@ async def _run_adversary(
     task: Any,
     adversary_agent: Any = None,
 ) -> ReviewReport | None:
-    if not cfg.adversarial_review_enabled or adversary_agent is None:
-        return None
     from ...agents.roles import resolve_role_model
     from ..review.step import run_adversary as review_run_adversary
 
@@ -491,6 +489,7 @@ async def step(
     """
     from ...agents.roles import STAGE_MODELS, resolve_role_model
     from ...workflows.models import TaskResult
+    from ..review.lenses import backstop_admits, classify_lens, primary_admits
     from ..review.step import step as review_step
 
     role_cfg = cfg.roles.get(task.role, cfg.roles.get("dev", RoleConfig(model="claude-3-5-sonnet")))
@@ -795,22 +794,45 @@ async def step(
             ),
         )
 
-        review_ok = review is None or review.approve
+        review_outcome = classify_lens(
+            "reviewer",
+            enabled=cfg.review_enabled,
+            agent_present=reviewer_agent is not None,
+            reached=True,  # the primary runs on every attempt (:736)
+            report=review,
+        )
+        review_ok = primary_admits(review_outcome)
 
         adversary = None
+        # Classified as unreached up front: the adversary's run site is inside
+        # the approving block, so a task that never gets there never reached
+        # its lens. Overwritten below if it does.
+        adversary_outcome = classify_lens(
+            "adversary",
+            enabled=cfg.adversarial_review_enabled,
+            agent_present=adversary_agent is not None,
+            reached=False,
+            report=None,
+        )
         if task_passed and review_ok:
-            if review is not None:
-                adversary = await _run_adversary(
-                    ctx,
-                    cfg,
-                    contract,
-                    assertions,
-                    diff,
-                    qa_raw,
-                    task,
-                    adversary_agent=adversary_agent,
-                )
-            if adversary is None or adversary.approve or not adversary.blocking_findings:
+            adversary = await _run_adversary(
+                ctx,
+                cfg,
+                contract,
+                assertions,
+                diff,
+                qa_raw,
+                task,
+                adversary_agent=adversary_agent,
+            )
+            adversary_outcome = classify_lens(
+                "adversary",
+                enabled=cfg.adversarial_review_enabled,
+                agent_present=adversary_agent is not None,
+                reached=True,
+                report=adversary,
+            )
+            if backstop_admits(adversary_outcome):
                 deep = await _run_deep_review(
                     ctx,
                     cfg,
@@ -834,6 +856,7 @@ async def step(
                     qa=qa_raw,
                     review=review,
                     deep_review=deep,
+                    lens_outcomes=[review_outcome, adversary_outcome],
                     plan_drift=plan_drift,
                 )
 
@@ -904,6 +927,7 @@ async def step(
                 qa=qa_raw,
                 review=review,
                 deep_review=deep,
+                lens_outcomes=[review_outcome, adversary_outcome],
                 notes=decision.comments or "",
                 plan_drift=plan_drift,
             )

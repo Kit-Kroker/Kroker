@@ -31,9 +31,12 @@ verifying accusations against transcript evidence and failing open on error. [E-
 ### REVIEW-1.5
 The slice exports `step`, `run_adversary`, `run_deep_review`, and `ACTIVITIES = []`. [FR-106]
 
+### REVIEW-1.6
+Every lens in `GATING_LENSES` (`src/sdlc/stages/review/lenses.py`) yields a typed `LensOutcome` recording what it did: `PRESENT` with the report's verdict, or one of three absent states — `DECLARED_ABSENT` (the operator disabled it), `NOT_REACHED` (enabled, but its run site was never reached on this task), `UNDECLARED_ABSENT` (enabled and reached, but no report came back). `LensOutcome`'s validator makes an absent-and-approved outcome unconstructible, and every absent state carries a reason. `classify_lens` is the single producer, pure and derived from the same facts the runner's own pre-check consults, so a tombstone cannot disagree with the predicate that gated the run. Fail-open at the task layer is preserved and now explicit: `primary_admits` and `backstop_admits` admit every absent state, so absence never blocks delivery — it is graded at the merge gate instead (MERGE-1.8). [C8]
+
 ## Failure modes
 
-- **Model call failure in primary review**: If review fails or is disabled via `PipelineConfig.review_enabled=False`, returns `None`, allowing task flow to proceed according to configuration.
-- **Adversary failure**: The adversary lens fails open: any exception logs a warning and returns `None`, which the orchestrator treats as agreement.
+- **Primary review absent**: the primary returns `None` in exactly two cases — `PipelineConfig.review_enabled=False`, or no reviewer agent configured. An exception inside the primary is *not* caught and propagates. Either absence is recorded as a `LensOutcome` (REVIEW-1.6) rather than read as approval.
+- **Adversary failure**: the adversary lens fails open: any exception logs a warning and returns `None`, which no longer reads as agreement — it is recorded as an `UNDECLARED_ABSENT` tombstone (REVIEW-1.6) that the merge gate grades.
 - **Deep review failure**: The deep review lens is strictly advisory and fails open: any exception or transcript loading error logs a warning and returns `None`, never blocking delivery.
 - **Unverified transcript accusation**: If deep review claims an integrity violation or plan deviation whose evidence quote is not found in the transcript bytes, the flag is dropped before reporting.

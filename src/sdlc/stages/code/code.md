@@ -21,6 +21,9 @@ The code stage records benchmark records for each attempt of the task, emitting 
 ### CODE-1.5
 When the bounded fix loop attempts are exhausted without passing both tests and review, the code stage escalates to the human gate `task:{task.id}`. If the operator grants revision, it resets session context and continues; otherwise it quarantines or completes according to operator decision. [FR-105]
 
+### CODE-1.6
+Every `TaskResult` the code stage returns — from both return sites, across all three statuses — carries one `LensOutcome` per name in `GATING_LENSES`, classified once per attempt. The task success condition reads those outcomes through `primary_admits` / `backstop_admits` rather than testing a report for `None`; no presence state blocks the done path. [C8]
+
 ## Failure modes
 
 - **Tool escalation timeout / rejection**: A suspended tool call is rejected by policy or human gate; execution resumes with denied grant.
