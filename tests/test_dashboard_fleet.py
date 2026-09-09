@@ -7,11 +7,20 @@ from types import SimpleNamespace
 
 import pytest
 
+from sdlc.channels.inbox import InboxError, RunInbox
 from sdlc.core.models import (
     RunState,
     RunSummary,
 )
-from sdlc.dashboard.fleet import FleetSnapshot, fetch_fleet
+from sdlc.dashboard.fleet import (
+    FleetCapacityExceeded,
+    FleetSnapshot,
+    check_fleet_capacity,
+    fetch_fleet,
+    fleet_pending_cap,
+    guard_fleet_capacity,
+    pending_run_count,
+)
 from sdlc.pending import ClarifyPending, StageGatePending
 
 AT = datetime(2026, 8, 18, 9, 0, tzinfo=UTC)
@@ -228,3 +237,148 @@ async def test_a_closed_run_query_failure_stays_out_of_open_errors():
     snap = await fetch_fleet(client, now=AT)
     assert [e.run_id for e in snap.errors] == ["run-done"]
     assert snap.open_errors == []
+
+
+# -- pending_run_count: what the cap actually counts (B4) --
+
+
+def _snap(*, pending_runs: int = 0, open_errs: int = 0, closed_errs: int = 0) -> FleetSnapshot:
+    return FleetSnapshot(
+        at=AT,
+        total_open_runs=pending_runs + open_errs,
+        inbox=[RunInbox(run_id=f"open-{i}", pending=[Q1]) for i in range(pending_runs)],
+        open_errors=[InboxError(run_id=f"bad-{i}", error="boom") for i in range(open_errs)],
+        errors=(
+            [InboxError(run_id=f"bad-{i}", error="boom") for i in range(open_errs)]
+            + [InboxError(run_id=f"done-{i}", error="boom") for i in range(closed_errs)]
+        ),
+    )
+
+
+def test_an_empty_fleet_has_nothing_pending():
+    assert pending_run_count(_snap()) == 0
+
+
+def test_each_run_with_pending_items_counts_once():
+    assert pending_run_count(_snap(pending_runs=2)) == 2
+
+
+def test_an_unqueryable_open_run_counts_toward_the_cap():
+    """Fail-closed: an open run whose query failed has an UNKNOWN pending
+    state, not a zero one. C8's shape -- an absence must never read as an
+    approval."""
+    assert pending_run_count(_snap(open_errs=1)) == 1
+
+
+def test_a_closed_run_error_counts_for_nothing():
+    """The Task 1 regression: three failed closed-run summary fetches are
+    visible in errors but owe no decisions, so the cap must ignore them."""
+    assert pending_run_count(_snap(closed_errs=3)) == 0
+
+
+def test_pending_and_unqueryable_open_runs_sum():
+    assert pending_run_count(_snap(pending_runs=2, open_errs=1, closed_errs=5)) == 3
+
+
+def test_a_run_with_three_pending_items_still_counts_once():
+    snap = FleetSnapshot(
+        at=AT,
+        total_open_runs=1,
+        inbox=[RunInbox(run_id="busy", pending=[Q1, Q1, ARCH])],
+    )
+    assert pending_run_count(snap) == 1
+
+
+# -- check_fleet_capacity: the admission decision --
+
+
+def test_no_cap_configured_always_admits():
+    check_fleet_capacity(_snap(pending_runs=99), None)  # must not raise
+
+
+def test_below_the_cap_admits():
+    check_fleet_capacity(_snap(pending_runs=4), 5)  # must not raise
+
+
+def test_exactly_at_the_cap_refuses():
+    """The boundary is >=, not >: cap=5 must mean at most five pending, so a
+    sixth start is refused rather than admitted."""
+    with pytest.raises(FleetCapacityExceeded):
+        check_fleet_capacity(_snap(pending_runs=5), 5)
+
+
+def test_over_the_cap_refuses():
+    with pytest.raises(FleetCapacityExceeded):
+        check_fleet_capacity(_snap(pending_runs=7), 5)
+
+
+def test_the_refusal_carries_the_cap_and_the_count():
+    with pytest.raises(FleetCapacityExceeded) as e:
+        check_fleet_capacity(_snap(pending_runs=6), 5)
+    assert e.value.cap == 5
+    assert e.value.pending == 6
+    assert "6" in str(e.value) and "5" in str(e.value)
+
+
+# -- fleet_pending_cap: the env var --
+
+
+def test_an_unset_cap_means_no_cap(monkeypatch):
+    monkeypatch.delenv("SDLC_FLEET_PENDING_CAP", raising=False)
+    assert fleet_pending_cap() is None
+
+
+def test_a_set_cap_is_parsed(monkeypatch):
+    monkeypatch.setenv("SDLC_FLEET_PENDING_CAP", "5")
+    assert fleet_pending_cap() == 5
+
+
+def test_a_garbage_cap_fails_loudly_rather_than_disabling_the_check(monkeypatch):
+    """A typo'd cap must not silently mean 'no back-pressure' -- the same
+    fail-closed posture as counting unqueryable open runs."""
+    monkeypatch.setenv("SDLC_FLEET_PENDING_CAP", "lots")
+    with pytest.raises(ValueError):
+        fleet_pending_cap()
+
+
+# -- guard_fleet_capacity: fetch + check, for a caller holding a client --
+
+
+@pytest.mark.asyncio
+async def test_the_guard_admits_when_no_cap_is_set(monkeypatch):
+    monkeypatch.delenv("SDLC_FLEET_PENDING_CAP", raising=False)
+    client = _Client({"run-a": _Handle(state=_state("run-a"), pending=[ARCH])})
+    await guard_fleet_capacity(client)  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_the_guard_never_touches_the_fleet_when_no_cap_is_set(monkeypatch):
+    """B4 is opt-in, and opt-in must mean the fetch does not happen at all --
+    not merely that its result is ignored. Reading the cap after awaiting the
+    fetch (argument evaluation is left to right) would make every un-opted-in
+    deployment pay a fan-out per start, and would turn a Temporal visibility
+    blip into a failed `start` for operators who never enabled the cap.
+    """
+    monkeypatch.delenv("SDLC_FLEET_PENDING_CAP", raising=False)
+
+    class _ExplodingClient:
+        def list_workflows(self, query):
+            raise AssertionError("the guard queried the fleet with no cap configured")
+
+    await guard_fleet_capacity(_ExplodingClient())  # must not raise, must not query
+
+
+@pytest.mark.asyncio
+async def test_the_guard_refuses_when_the_fetched_fleet_is_at_cap(monkeypatch):
+    monkeypatch.setenv("SDLC_FLEET_PENDING_CAP", "1")
+    client = _Client({"run-a": _Handle(state=_state("run-a"), pending=[ARCH])})
+    with pytest.raises(FleetCapacityExceeded) as e:
+        await guard_fleet_capacity(client)
+    assert e.value.pending == 1
+
+
+@pytest.mark.asyncio
+async def test_the_guard_admits_when_the_fetched_fleet_is_below_cap(monkeypatch):
+    monkeypatch.setenv("SDLC_FLEET_PENDING_CAP", "2")
+    client = _Client({"run-a": _Handle(state=_state("run-a"), pending=[ARCH])})
+    await guard_fleet_capacity(client)  # 1 pending < cap 2

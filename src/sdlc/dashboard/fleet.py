@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field, TypeAdapter
@@ -144,6 +145,78 @@ async def fetch_fleet(client, *, now: datetime, closed_limit: int = CLOSED_LIMIT
         elif outcome is not None:
             snap.closed.append(outcome)
     return snap
+
+
+class FleetCapacityExceeded(RuntimeError):
+    """B4: admission refused -- the fleet already owes humans as many
+    decisions as it is allowed to. Carries cap/pending so a caller can render
+    a message or an HTTP status without re-querying the fleet."""
+
+    def __init__(self, cap: int, pending: int) -> None:
+        super().__init__(
+            f"fleet pending-decision cap reached: {pending} run(s) pending, cap is {cap}"
+        )
+        self.cap = cap
+        self.pending = pending
+
+
+def pending_run_count(snap: FleetSnapshot) -> int:
+    """Runs currently owed a human decision, or whose load is unknown -- OPEN
+    runs only.
+
+    Counts RUNS, not pending items: a run holding three open questions is one
+    human interaction to reclaim, not three. Unqueryable open runs count
+    (fail-closed) because their pending state is unknown, not zero -- the same
+    reason C8 refuses to read a lens that never ran as a lens that approved.
+    Unqueryable CLOSED runs (in `errors` but not `open_errors`) are excluded:
+    a finished run owes nothing.
+    """
+    return len(snap.inbox) + len(snap.open_errors)
+
+
+def check_fleet_capacity(snap: FleetSnapshot, cap: int | None) -> None:
+    """Raise FleetCapacityExceeded if the fleet is already at or over `cap`.
+
+    `cap is None` means no cap is configured and every start is admitted. The
+    boundary is >= so a configured 5 means at most five pending runs at any
+    admission decision -- with > the steady state would settle at six.
+    """
+    if cap is None:
+        return
+    pending = pending_run_count(snap)
+    if pending >= cap:
+        raise FleetCapacityExceeded(cap, pending)
+
+
+def fleet_pending_cap() -> int | None:
+    """The configured cap, or None when unset (no cap -- B4 is opt-in).
+
+    A set-but-unparseable value raises rather than degrading to None: a
+    typo'd cap must not silently mean "no back-pressure".
+    """
+    raw = os.environ.get("SDLC_FLEET_PENDING_CAP")
+    if raw is None:
+        return None
+    return int(raw)
+
+
+async def guard_fleet_capacity(client) -> None:
+    """Fetch the fleet and refuse admission if it is at cap (B4).
+
+    For a caller holding a Temporal client rather than a FleetPoller -- the
+    CLI. A caller that already has a poller should read the cap itself and
+    pass `await poller.snapshot()` to check_fleet_capacity, so the poller's
+    cached fan-out is reused instead of paying a fresh one.
+
+    Reads the cap FIRST and returns without touching the client when none is
+    configured. B4 is opt-in, so a deployment that never set the env var must
+    not start paying a fleet fan-out per run start -- nor start failing on one
+    when Temporal visibility is degraded.
+    """
+    cap = fleet_pending_cap()
+    if cap is None:
+        return
+    check_fleet_capacity(await fetch_fleet(client, now=_utcnow()), cap)
 
 
 def _utcnow() -> datetime:
