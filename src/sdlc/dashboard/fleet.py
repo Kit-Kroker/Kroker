@@ -1,4 +1,5 @@
-"""Fleet fan-out and snapshot for the dashboard backend (E-10).
+"""Fleet fan-out and snapshot for the dashboard backend (E-10), and the
+fleet-wide admission cap over it (B4).
 
 Imports no web framework: the fan-out and the poller are where the interesting
 failures live, so they must be testable without an HTTP client -- the same
@@ -9,6 +10,28 @@ a capped second pass over recently CLOSED runs. That second pass is why the
 dashboard needs no database (spec D7): Temporal keeps closed workflows
 queryable for its retention period, so Temporal is the store. The bound is
 real -- history reaches back only as far as that retention.
+
+Back-pressure (B4, designed in
+docs/superpowers/specs/2026-09-09-b4-fleet-backpressure-design.md): FR-303
+holds ONE run at ONE gate; nothing capped how many runs could stall on humans
+at once. fleet_pending_cap reads that cap from SDLC_FLEET_PENDING_CAP;
+check_fleet_capacity raises FleetCapacityExceeded once pending_run_count
+reaches it; guard_fleet_capacity composes fetch-then-check for a caller
+holding a client rather than a poller. The three client-side FeatureWorkflow
+start paths (cli.py's `start`, operator start_run, dashboard POST /runs)
+consult it before starting anything, each translating the refusal into its
+own surface's failure shape.
+
+Five properties are load-bearing, each with a test that fails if it is
+dropped: the count is of RUNS, not pending items; only OPEN runs count, which
+is why open_errors exists apart from errors; an unqueryable open run counts
+(fail-closed -- unknown is not zero, C8's rule); the boundary is >=, so a
+configured N means N; and the cap is opt-in, which means an unset cap must
+skip the fetch ENTIRELY rather than discard its result -- read the cap before
+awaiting a snapshot, never as the second argument to a call whose first
+argument fetches. In-workflow child spawns (tidyup, benchmarks) are NOT
+capped -- they run in a workflow sandbox with no client, and are bounded
+fan-out from a run a human already approved.
 """
 
 from __future__ import annotations
