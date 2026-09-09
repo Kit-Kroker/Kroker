@@ -347,6 +347,7 @@ async def step(
                 f"threshold {cfg.coverage_threshold:.1f}%"
             ),
         ),
+        _plan_drift_check(results_list),
     ]
 
     gate_report: GateReport = await _exec_activity(

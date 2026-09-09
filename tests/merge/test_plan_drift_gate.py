@@ -161,3 +161,16 @@ def test_plan_drift_failure_is_waivable_by_an_audited_override():
     )
     assert report.passed is False  # other required checks are still absent and unwaived
     assert "plan_drift" in report.overridden
+
+
+# -- wiring: the real checks list in step() must actually call _plan_drift_check --
+
+
+def test_merge_step_checks_list_calls_plan_drift_check():
+    import pathlib
+
+    src = pathlib.Path("src/sdlc/stages/merge/step.py").read_text(encoding="utf-8")
+    assert "_plan_drift_check(results_list)" in src, (
+        "merge/step.py's real checks list must call _plan_drift_check, or the "
+        "check exists (and satisfies the manifest census) without ever running"
+    )
