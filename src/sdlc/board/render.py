@@ -27,7 +27,9 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from ..stages.architecture.models import ArchitectureDecision, ArchitectureSpec
 from ..stages.clarify.models import ClarifiedRequirements, OpenQuestion
+from ..stages.context.models import BrownfieldDelta
 from .models import ArtifactVersion
 
 # Bumped when a renderer changes its output. Part of the ETag: neither
@@ -145,8 +147,51 @@ def _requirements_body(r: ClarifiedRequirements) -> list[str]:
     ]
 
 
+def _decision_block(d: ArchitectureDecision) -> list[str]:
+    return [
+        f"### {d.id} -- {d.decision}",
+        "",
+        f"- rationale: {d.rationale}",
+        f"- alternatives considered: {_inline(d.alternatives_considered)}",
+        "",
+    ]
+
+
+def _delta_block(delta: BrownfieldDelta | None) -> list[str]:
+    if delta is None:
+        return ["- (greenfield; no brownfield delta recorded)"]
+    # Three lists, not one: added and modified have opposite grounding
+    # rules (context/models.py:11-13) and a flat list loses that.
+    return [
+        "added:",
+        *_bullets(delta.added),
+        "",
+        "modified:",
+        *_bullets(delta.modified),
+        "",
+        "removed:",
+        *_bullets(delta.removed),
+    ]
+
+
+def _architecture_body(a: ArchitectureSpec) -> list[str]:
+    decisions: list[str] = []
+    for d in a.decisions:
+        decisions += _decision_block(d)
+    return [
+        *_section("Overview", [a.overview]),
+        *_section("Confidence", [f"- confidence: {_pct(a.confidence)}"]),
+        *_section("Decisions", decisions or ["- (none)"]),
+        *_section("Risks", _bullets(a.risks)),
+        *_section("Affected modules", _bullets(a.affected_modules)),
+        *_section("New components", _bullets(a.new_components)),
+        *_section("Brownfield delta", _delta_block(a.delta)),
+    ]
+
+
 RENDERERS: dict[str, tuple[type[BaseModel], Callable[[Any], list[str]]]] = {
     "requirements": (ClarifiedRequirements, _requirements_body),
+    "architecture": (ArchitectureSpec, _architecture_body),
 }
 
 

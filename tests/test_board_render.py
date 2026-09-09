@@ -183,3 +183,82 @@ def test_render_cap_matches_the_json_route_cap():
     from sdlc.board import api as api_mod
 
     assert MAX_RENDER_BYTES == api_mod.MAX_CONTENT_BYTES
+
+
+from sdlc.stages.architecture.models import ArchitectureDecision, ArchitectureSpec
+from sdlc.stages.context.models import BrownfieldDelta
+
+
+def full_architecture() -> ArchitectureSpec:
+    return ArchitectureSpec(
+        overview="SENTINEL_OVERVIEW",
+        confidence=0.82,
+        decisions=[
+            ArchitectureDecision(
+                id="SENTINEL_DID",
+                decision="SENTINEL_DECISION",
+                rationale="SENTINEL_RATIONALE",
+                alternatives_considered=["SENTINEL_ALT"],
+            )
+        ],
+        new_components=["SENTINEL_NEWCOMP"],
+        risks=["SENTINEL_RISK"],
+        delta=BrownfieldDelta(
+            added=["SENTINEL_ADDED"],
+            modified=["SENTINEL_MODIFIED"],
+            removed=["SENTINEL_REMOVED"],
+        ),
+    )
+
+
+def render_architecture(model: ArchitectureSpec) -> str:
+    v = version()
+    v.key = "architecture"
+    return render_version_markdown(
+        "architecture",
+        model.model_dump_json().encode("utf-8"),
+        project="acme",
+        version=v,
+    )
+
+
+def test_architecture_body_renders_every_section():
+    out = render_architecture(full_architecture())
+    for sentinel in (
+        "SENTINEL_OVERVIEW",
+        "SENTINEL_DID",
+        "SENTINEL_DECISION",
+        "SENTINEL_RATIONALE",
+        "SENTINEL_ALT",
+        "SENTINEL_NEWCOMP",
+        "SENTINEL_RISK",
+        "SENTINEL_ADDED",
+        "SENTINEL_MODIFIED",
+        "SENTINEL_REMOVED",
+    ):
+        assert sentinel in out, sentinel
+
+
+def test_architecture_confidence_renders_as_a_percentage():
+    assert "82%" in render_architecture(full_architecture())
+
+
+def test_architecture_delta_separates_added_modified_removed():
+    # Delta-scoped probes, not bare index(): the validator derives
+    # affected_modules from delta.modified | delta.removed
+    # (architecture/models.py:38-42) and the Affected modules section
+    # renders BEFORE the delta, so SENTINEL_MODIFIED's first occurrence
+    # would otherwise precede SENTINEL_ADDED and a bare ordering check
+    # can never pass. Same anchoring as _EXPECTED below.
+    out = render_architecture(full_architecture())
+    assert "added:\n- SENTINEL_ADDED" in out
+    assert "modified:\n- SENTINEL_MODIFIED" in out
+    assert "removed:\n- SENTINEL_REMOVED" in out
+    assert out.index("added:") < out.index("modified:") < out.index("removed:")
+
+
+def test_architecture_without_delta_says_so():
+    model = ArchitectureSpec(overview="o", decisions=[])
+    out = render_architecture(model)
+    assert "greenfield" in out
+    assert "not recorded" in out  # confidence is None
