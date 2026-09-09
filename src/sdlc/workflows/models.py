@@ -9,13 +9,14 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from ..harness.models import HarnessRunResult
 from ..stages.architecture.models import ArchitectureSpec
 from ..stages.code.models import HandoffSummary
 from ..stages.plan.models import ImplementationPlan, PlanDrift
 from ..stages.qa.models import QAReport
+from ..stages.review.lenses import LensOutcome
 from ..stages.review.models import DeepReviewReport, ReviewReport
 
 
@@ -59,5 +60,6 @@ class TaskResult(BaseModel):
     qa: QAReport | None = None  # NEW: evidence for the merge gate
     review: ReviewReport | None = None  # FR-204: clean-context review evidence
     deep_review: DeepReviewReport | None = None  # E-39: advisory lens
+    lens_outcomes: list[LensOutcome] = Field(default_factory=list)  # C8: lens-absence tombstones
     plan_drift: PlanDrift | None = None  # E4: drift evidence for the merge gate
     notes: str = ""
