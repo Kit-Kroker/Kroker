@@ -6,6 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from sdlc.channels.inbox import RunInbox
 from sdlc.channels.transport import SubmitResult
 from sdlc.core.models import (
     RunState,
@@ -220,3 +221,68 @@ def test_start_run_409s_on_a_duplicate_id(start_client):
         "/runs", json={"title": "taken", "description": "d", "mode": "greenfield"}
     )
     assert r.status_code == 409
+
+
+def test_start_run_429s_when_the_fleet_is_at_capacity(snap, monkeypatch):
+    """B4: a full fleet is 429 (a load limit the caller should back off from),
+    never 502 -- the operator must not be told Temporal is broken."""
+    monkeypatch.setenv("SDLC_FLEET_PENDING_CAP", "1")
+    snap.inbox = [RunInbox(run_id="feature-one", pending=[ARCH])]
+    started = []
+
+    async def starter(idea, cfg, wf_id):
+        started.append(wf_id)
+        return wf_id
+
+    app = FastAPI()
+    app.include_router(create_router(_FakePoller(snap), starter=starter))
+    r = TestClient(app).post(
+        "/runs", json={"title": "Add SSO", "description": "d", "mode": "greenfield"}
+    )
+    assert r.status_code == 429
+    assert "cap" in r.json()["detail"]
+    assert started == []  # the starter was never called
+
+
+def test_start_run_admits_below_the_cap(snap, monkeypatch):
+    monkeypatch.setenv("SDLC_FLEET_PENDING_CAP", "2")
+    snap.inbox = [RunInbox(run_id="feature-one", pending=[ARCH])]
+    started = []
+
+    async def starter(idea, cfg, wf_id):
+        started.append(wf_id)
+        return wf_id
+
+    app = FastAPI()
+    app.include_router(create_router(_FakePoller(snap), starter=starter))
+    r = TestClient(app).post(
+        "/runs", json={"title": "Add SSO", "description": "d", "mode": "greenfield"}
+    )
+    assert r.status_code == 200
+    assert started == ["feature-add-sso"]
+
+
+def test_start_run_does_not_read_the_fleet_when_no_cap_is_set(snap, monkeypatch):
+    """Opt-in must mean the snapshot is never taken. A poller whose snapshot()
+    raises stands in for degraded Temporal visibility: with no cap set, the
+    route must still return 200 rather than newly 502-ing a deployment that
+    never enabled back-pressure."""
+    monkeypatch.delenv("SDLC_FLEET_PENDING_CAP", raising=False)
+
+    class _ExplodingPoller:
+        async def snapshot(self):
+            raise AssertionError("the route read the fleet with no cap configured")
+
+    started = []
+
+    async def starter(idea, cfg, wf_id):
+        started.append(wf_id)
+        return wf_id
+
+    app = FastAPI()
+    app.include_router(create_router(_ExplodingPoller(), starter=starter))
+    r = TestClient(app).post(
+        "/runs", json={"title": "Add SSO", "description": "d", "mode": "greenfield"}
+    )
+    assert r.status_code == 200
+    assert started == ["feature-add-sso"]

@@ -34,7 +34,13 @@ from ..core.models import (
     ProjectMode,
 )
 from .channel import DashboardChannel
-from .fleet import FleetPoller, FleetSnapshot
+from .fleet import (
+    FleetCapacityExceeded,
+    FleetPoller,
+    FleetSnapshot,
+    check_fleet_capacity,
+    fleet_pending_cap,
+)
 
 HEARTBEAT_S = 15.0
 
@@ -176,6 +182,17 @@ def create_router(poller: FleetPoller, starter: Callable | None = None) -> APIRo
             title=body.title, description=body.description, mode=body.mode, repo_url=body.repo
         )
         wf_id = f"feature-{slug(body.title)}"
+        # B4 fleet back-pressure -- see
+        # docs/superpowers/specs/2026-09-09-b4-fleet-backpressure-design.md.
+        # 429 rather than 502: a full review queue is a load limit to back off
+        # from, not a broken upstream. The cap is read first so an un-opted-in
+        # deployment never pays the snapshot.
+        cap = fleet_pending_cap()
+        if cap is not None:
+            try:
+                check_fleet_capacity(await poller.snapshot(), cap)
+            except FleetCapacityExceeded as e:
+                raise HTTPException(429, str(e)) from None
         try:
             await start_run(idea, PipelineConfig(), wf_id)
         except HTTPException:
