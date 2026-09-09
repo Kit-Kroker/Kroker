@@ -73,8 +73,20 @@ uvicorn interfaces.dashboard.api.main:app --host 127.0.0.1 --port 8500
 `GET /projects/{p}` for artifacts + task rollup, `/artifacts/{key}` for version
 lineage, `/tasks?status=`, `/events` for the change log, `/stats` for board
 counters. Agents claim work with `POST /projects/{p}/tasks/{id}/claim` and an
-`If-Match: <row_version>` header. **Bind to localhost** — there is no auth yet,
-and the `X-Actor` header identifying a writer is self-asserted (ROADMAP OQ-11).
+`If-Match: <row_version>` header.
+
+For humans rather than agents, `/artifacts/{key}/current/markdown` and
+`/artifacts/{key}/versions/{id}/markdown` render `requirements`,
+`architecture` and `plan` as Markdown generated from the stored typed
+artifact — the same data the JSON routes serve, readable without a
+dashboard. An artifact that no longer matches its model returns 422 rather
+than a partial render; the JSON route stays available as the escape hatch.
+
+**Bind to localhost** — there is no auth yet, and the `X-Actor` header
+identifying a writer is self-asserted (ROADMAP OQ-11). The Markdown URLs are
+designed to be pasted into a chat or a ticket, which makes this easier to
+forget: pasting one shares a link that only works inside the trusted
+network, and anyone who reaches that network can read it.
 
 **Deploy (stage 13).** Off by default. Enable per project with
 `PipelineConfig.deploy` — `adapter: compose` (reference) or `script`
