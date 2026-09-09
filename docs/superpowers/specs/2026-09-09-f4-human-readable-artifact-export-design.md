@@ -1,11 +1,11 @@
 # F4 — human-readable artifact export
 
 **Date:** 2026-09-09
-**Status:** design, pending user + reviewer sign-off
+**Status:** approved design (Gate 1, 2026-09-09); open questions resolved in §9. Implementation plan: `docs/superpowers/plans/2026-09-09-f4-human-readable-artifact-export.md`
 **Scope:** one row from the external-ideas register (`docs/reports/external-ideas-2026-09.md:93`, section F, F4). A new, small build: a pure renderer that turns each of the board's three typed artifacts into Markdown, plus two read routes on the existing board API that serve it.
 **Satisfies:** no FR moves. Nothing in `PRD.md`, `ROADMAP.md`, or `src/` renders a board artifact for a human today; the register's Status for this row is `New` ("a real build with no existing seam") and that is confirmed below.
 **Baseline:** `main` at `7cdc14c`.
-**Does not cover:** any Vue/dashboard UI work; any new CLI subcommand; writing `.md` files to disk; publishing `IdeaBrief` to the board; rendering task evidence or harness sessions; auth on the board API. See §8.
+**Does not cover:** any Vue/dashboard UI work; any new CLI subcommand; writing `.md` files to disk; publishing `IdeaBrief` to the board; rendering task evidence or harness sessions; auth on the board API; linking a gate to its own not-yet-published artifact. See §8, and §9 for the Gate 1 rulings.
 
 ---
 
@@ -347,11 +347,15 @@ other.
 id.** A rejected artifact has no current version, so there is no
 `current/markdown` document to carry a link, and the only route that lists
 the lineage is the raw-JSON `/artifacts/{key}` one — which is the surface
-F4 exists to spare a non-engineer. This spec does not fix it, because the
-natural fix is a link handed to the reader rather than a new discovery UI,
-which is open question 1. It is recorded here so that resolving OQ-1
-resolves this too, and so nobody reads §6 as claiming the versioned route
-is reachable today without engineer help.
+F4 exists to spare a non-engineer.
+
+**Gate 1's OQ-1 ruling does not close this**, contrary to what an earlier
+draft of this section predicted. The notification links point at
+`current/markdown`, and a rejected artifact has no current version, so
+nothing links it. The gap stands: a reader of a rejected artifact still
+needs the lineage route to find a version id. It is recorded so nobody
+reads §6 as claiming the versioned route is reachable today without
+engineer help.
 
 **Caching: `ETag` plus explicit revalidation.** Both routes set
 `ETag: W/"<RENDER_VERSION>-<version_id>-<sha256[:16]>"` and
@@ -459,35 +463,79 @@ and are updated at merge, not here.
 - **Publishing `IdeaBrief` to the board.** `core/models.py:108` is pipeline
   input and nothing publishes it, so the register's word "intent" can only
   mean `ClarifiedRequirements.summary` and its FR/NFR lists today. Making
-  the raw idea a board artifact is a real gap but a different change. Named
-  as an open question below.
+  the raw idea a board artifact is a real gap but a different change.
+  **Confirmed out at Gate 1 (§9, OQ-3).**
 - **Task evidence and harness sessions.** `TaskEvidence` bodies and
   `harness_session` blobs are also claim-check JSON, but they are agent
   inputs, not gate reading, and their kinds are open-ended.
 - **Auth.** Inherited unchanged from the board API (`OQ-11`).
+- **Linking a gate to its own artifact.** Gate 1 ruled that notifications
+  should carry links, and §9's OQ-1 records both what was built and why a
+  gate cannot link the artifact it is deciding on. Making that possible
+  needs a pipeline write-reordering and a workflow-versioning story; it is
+  out of scope here and named as its own future spec.
 
-## 9. Open questions for the user gate
+**One item moved *into* scope at Gate 1.** An earlier draft of this section
+listed the gate-notification link as out of scope. OQ-1 was ruled yes, so
+the adapted form described in §9 is in scope and is Task 6 of the plan.
 
-1. **Should the gate notification link the render?** The routes are useless
-   to a non-engineer who is never given the URL. Linking
-   `current/markdown` from the gate notification is a one-line change at the
-   notification call site. It is left out of this spec's scope because the
-   board API is documented as *optional* (`README.md:66`) and the pipeline
-   can run with nothing serving it — a notification linking a dead URL is
-   worse than none. Making this work properly needs a decision about whether
-   a configured board base URL becomes a precondition for the link. **This
-   is the question that decides whether F4 is adopted or merely available.**
-   It also subsumes the §6 discovery gap: a link in the gate notification
-   is what gives a reader of a *rejected* artifact its version id without
-   sending them to the raw-JSON lineage route.
-2. **`/markdown` or `.md`?** §6 recommends the literal segment for the
-   routing reason given. A `.md`-suffixed URL is achievable — confirmed
-   working when the suffixed route is declared above the int-typed one —
-   so if it is judged materially friendlier for the target audience, the
-   only cost is a declaration-order constraint that needs a comment to keep
-   a later editor from silently breaking it by reordering.
-3. **Is `IdeaBrief` in or out?** A non-engineer's "intent" is arguably the
-   raw idea, not the clarified requirements. Publishing it as a fourth board
-   artifact key is a small change to `feature.py` but it is a pipeline
-   change, not a read-path one, so it is excluded here rather than
-   smuggled in.
+## 9. Open questions — resolved at Gate 1 (2026-09-09)
+
+All three were ruled on when this spec was approved. The rulings and their
+consequences are recorded here; the implementation lives in
+`docs/superpowers/plans/2026-09-09-f4-human-readable-artifact-export.md`.
+
+### OQ-1 — should the gate notification link the render? **Ruled: yes.**
+
+A configured board base URL is a precondition; when it is unset the link is
+omitted and the notification is still delivered. That half was already the
+shape of `notify/render.py:69-70`, and the notify activity never raises by
+design (`notify/activities.py:1-10`), so "omit, do not error" falls out of
+the existing structure.
+
+**The ruling could not be honoured literally, and the plan adapts it.** A
+gate cannot link *its own* artifact: `_notify` fires while the human is
+awaited (`workflows/gates.py:192-203`, reached through
+`workflows/role_host.py:212-244`), and `_board_publish` runs only after the
+gate resolves (`workflows/feature.py:560/585/602`), so the artifact under
+review is not on the board when its own notification is sent and the link
+would 404 when clicked.
+
+Publishing it as `PROPOSED` beforehand does not fix this. A non-`CURRENT`
+publish never moves `current_version` (`board/store.py:206-211`, confirmed
+by execution), so `current/markdown` still 404s — or, if a previous run left
+a `CURRENT` row, silently serves the wrong run's artifact. No store method
+promotes a version afterwards; `publish_artifact_version` only appends. And
+it would be this repo's first non-patchable workflow change: no Temporal
+versioning API is used anywhere in `src/`, and `workflows/gates.py:165` is
+an unbounded wait, so a run parked at a gate across a deploy would replay
+old history through a path emitting a command that history never recorded.
+
+**What is implemented instead**: each gate links the artifacts already
+published when it opens, never its own — `architecture` → `requirements`;
+`plan` → `requirements` + `architecture`;
+`merge` / `deploy` / `deploy_failed` / `task:<id>` → all three; `clarify` →
+nothing. This keeps most of the ruling's value with no pipeline change and
+no dead URLs.
+
+Two costs are accepted rather than hidden. `current` is keyed per
+`(project, key)`, not per run, so two concurrent runs on one project can
+cross-link; the banner's `run_id` (§4.1) makes that visible but does not
+prevent it. And the §6 discovery gap **is not** closed by this ruling — a
+rejected artifact has no current version, so nothing links it and its
+reader still needs the raw-JSON lineage route.
+
+Linking a gate's own artifact remains unbuilt. It needs a pipeline
+write-reordering plus a workflow-versioning story, and belongs in its own
+spec rather than an F4 follow-up.
+
+### OQ-2 — `/markdown` or `.md`? **Ruled: keep `/markdown`.**
+
+The literal trailing segment stands, for the routing reason in §6. No
+declaration-order constraint is introduced.
+
+### OQ-3 — is `IdeaBrief` in or out? **Ruled: out.**
+
+No fourth board artifact key. "Intent" continues to mean
+`ClarifiedRequirements.summary` and its FR/NFR lists. Publishing the raw
+idea remains a real gap and a separate, pipeline-level change.
