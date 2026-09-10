@@ -34,6 +34,9 @@ runs with fix attempts, or benchmark executions. [E-32, E-38]
 The slice exports `step` and `ACTIVITIES = []`. All retro operations execute under best-effort
 guarantees: internal activity failures or exceptions are trapped so the run outcome is never changed. [E-32]
 
+### RETRO-1.6
+Retro scores the run's own SOFT auto-approvals. For every gate in `RunSummary.gates` with `policy == "soft"`, `decided_by == "policy"` and a non-`None` confidence, it computes a realized-outcome label from the run's retained signals — plan-drift ratio for the plan gate, capped fix-attempt ratio for the architecture gate, the judge score in preference to either when benchmarking — and appends `(gate, bucket_key, confidence, outcome_label)` to the calibration ledger. Best-effort like every other retro side effect: a ledger outage is swallowed and the run's outcome is unchanged (RETRO-1.4). Gates a human decided are not evidence, and neither are OFF-policy approvals, which carry `decided_by == "policy"` too. [C7]
+
 ## Failure modes
 
 - **Memory backend down**: `reflect` or `retain` fails due to network or service unavailability; trapped so the workflow completes successfully.

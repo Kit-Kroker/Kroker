@@ -467,10 +467,12 @@ async def step(
             confidence = verdict.confidence if verdict.approve else None
             auto = None
             if confidence is not None:
-                # Ruling OQ2: merge samples are appended but never labelled,
-                # so this resolves to insufficient_data and the human gate
-                # below always fires. No branch on the gate name (SG-3) --
-                # the behaviour comes from the ledger being empty for merge.
+                # Ruling OQ2: merge-gate decisions are simply not sampled --
+                # no row is written (outcome_label is NOT NULL, so an
+                # unlabelled row cannot exist) -- so this resolves to
+                # insufficient_data and the human gate below always fires. No
+                # branch on the gate name (SG-3) -- the behaviour comes from
+                # the ledger being empty for merge.
                 source = (
                     LabelSource.BENCHMARK
                     if cfg.benchmark.case_id is not None

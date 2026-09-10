@@ -482,12 +482,13 @@ redefining what "calibrated" has meant historically. *Folded into §3, §4.2.1,
 firing.** Merge has no *attributable* realized-outcome signal (§3: the deploy
 stage is the one weak candidate — off by default, often absent, never linked
 back to the gate decision). Consequence, accepted deliberately rather than
-incidentally: merge-gate rows are still written to the ledger, but are never
-labeled, so `calibration_verdict_for("merge", ...)` never clears
-insufficient-data and the human merge gate always fires under SOFT. The
-post-merge signal that would lift this is filed as its own register-row
-proposal rather than blocking C7. Per protocol the register row itself is
-added by the user. *Folded into §3, §4.2.1.*
+incidentally: merge-gate decisions are simply not sampled — no ledger row is
+written at all (`CalibrationSample.outcome_label` is NOT NULL, so an
+unlabelled row cannot exist) — so `calibration_verdict_for("merge", ...)`
+never clears insufficient-data and the human merge gate always fires under
+SOFT. The post-merge signal that would lift this is filed as its own
+register-row proposal rather than blocking C7. Per protocol the register row
+itself is added by the user. *Folded into §3, §4.2.1.*
 
 **OQ3 — cold-start floor: N=20 SAMPLES per bucket.** Sample-level, not
 run-level — the `MIN_RUNS = 5` floor at `sc_rollup.py:24` is the precedent for
