@@ -7,7 +7,7 @@ See docs/superpowers/specs/2026-09-10-c7-confidence-gate-design.md.
 from __future__ import annotations
 
 from .decision import auto_decision_for
-from .labels import fix_attempt_label, plan_drift_label, unhinted_ratio
+from .labels import calibration_samples_for, fix_attempt_label, plan_drift_label, unhinted_ratio
 from .models import INSUFFICIENT, CalibrationSample, CalibrationVerdict, LabelSource
 from .verdict import MIN_SAMPLES, WINDOW, bucket_key, verdict_for
 
@@ -20,6 +20,7 @@ __all__ = [
     "LabelSource",
     "auto_decision_for",
     "bucket_key",
+    "calibration_samples_for",
     "fix_attempt_label",
     "plan_drift_label",
     "unhinted_ratio",

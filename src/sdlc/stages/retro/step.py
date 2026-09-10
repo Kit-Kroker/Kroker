@@ -14,6 +14,8 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 from ...artifacts.retention import RetentionInput, apply_session_retention, keep_full_transcripts
+from ...calibration.activities import RecordSamplesInput, record_calibration_samples
+from ...calibration.labels import calibration_samples_for
 from ...core.context import StageContext
 from ...core.models import ArtifactRef, PipelineConfig, RunSummary
 from ...memory.activities import ReflectInput, reflect
@@ -28,6 +30,10 @@ _MEM_ACT = workflow.ActivityConfig(
 _EXPORT_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=2),
     retry_policy=RetryPolicy(maximum_attempts=1),
+)
+_LEDGER_ACT = workflow.ActivityConfig(
+    start_to_close_timeout=timedelta(seconds=30),
+    retry_policy=RetryPolicy(maximum_attempts=3),
 )
 
 
@@ -101,6 +107,25 @@ async def step(
                 ),
                 **_EXPORT_ACT,
             )
+        except Exception:
+            pass
+
+        # C7: score this run's SOFT auto-approves against what actually
+        # happened, so the next run's confidence has something behind it.
+        # Best-effort like the export above -- a ledger outage must never
+        # change a run's outcome (RETRO-1.4).
+        try:
+            samples = calibration_samples_for(
+                summary,
+                max_fix_attempts=cfg.max_fix_attempts,
+                benchmarking=cfg.benchmark.case_id is not None,
+            )
+            if samples:
+                await workflow.execute_activity(
+                    record_calibration_samples,
+                    RecordSamplesInput(samples=samples),
+                    **_LEDGER_ACT,
+                )
         except Exception:
             pass
     except Exception:
