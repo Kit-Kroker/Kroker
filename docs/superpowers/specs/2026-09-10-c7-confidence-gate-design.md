@@ -284,7 +284,8 @@ retention story.
 
 ## 5. Open questions
 
-For each, a recommendation is given; none is self-ruled.
+For each, a recommendation is given; none is self-ruled. **All nine were
+ruled at the user gate on 2026-09-10 — see §6.**
 
 1. **Production realized-outcome proxies are noisier than a judge score.**
    Fix-attempt rate and plan-drift rate are real, already-computed signals,
@@ -455,3 +456,96 @@ For each, a recommendation is given; none is self-ruled.
    than a settled default. Treat all three as the
    user's call, not something this design should settle unilaterally, since
    a wrong choice here is precisely how the check goes vacuous.
+
+## 6. Rulings — user gate, 2026-09-10
+
+All nine open questions were decided at the gate, taking both reviewer passes
+(`.workspace/tmp/reviewer-1.md`, verdict *fixes-needed*, folded at `a960411`;
+`.workspace/tmp/reviewer-2.md`, verdict *approve*, waived minors folded at
+`31fe9a2`) into account. **Every ruling took this spec's own recommendation
+unchanged** — so §4's design as written above is the design as ruled, and no
+section needed re-editing to match a ruling. Each question is restated below
+so the reasoning survives the decision, and the implementation plan
+(`docs/superpowers/plans/2026-09-10-c7-confidence-gate.md`) implements the
+spec as ruled here, not the spec's open-ended form.
+
+**OQ1 — production proxies: ACCEPT for v1, with `source` tagging.**
+Fix-attempt and plan-drift rates are indirect evidence of whether an
+auto-approved artifact was good, but they are the only signals that exist
+outside benchmark mode, which is where nearly all auto-approvals actually
+happen. Every sample carries `source` (`benchmark` | `production-proxy`) so a
+later, better production signal can replace the proxy without silently
+redefining what "calibrated" has meant historically. *Folded into §3, §4.2.1,
+§4.2.2.*
+
+**OQ2 — the merge gate: SHIP WITHOUT IT; merge's SOFT auto-approve stops
+firing.** Merge has no *attributable* realized-outcome signal (§3: the deploy
+stage is the one weak candidate — off by default, often absent, never linked
+back to the gate decision). Consequence, accepted deliberately rather than
+incidentally: merge-gate rows are still written to the ledger, but are never
+labeled, so `calibration_verdict_for("merge", ...)` never clears
+insufficient-data and the human merge gate always fires under SOFT. The
+post-merge signal that would lift this is filed as its own register-row
+proposal rather than blocking C7. Per protocol the register row itself is
+added by the user. *Folded into §3, §4.2.1.*
+
+**OQ3 — cold-start floor: N=20 SAMPLES per bucket.** Sample-level, not
+run-level — the `MIN_RUNS = 5` floor at `sc_rollup.py:24` is the precedent for
+having a floor at all, not for its value. Every bucket starts
+insufficient-data and therefore fails through to the human, so a new proposer
+model or gate earns auto-approve rather than defaulting to it. This question
+governs the floor only; the agreement constants are OQ9(3). *Folded into
+§4.2.4, §5 Q3.*
+
+**OQ4 — bucketing: PER `(gate, author_model)`, with the additive schema
+change.** `author_model` is added to the `GATE_DECIDED` emit and
+`GateOutcomeSummary`; `bucket_key` is derived from it, not stored. Coarser
+`(gate)`-only bucketing would let a well-calibrated model's history mask a
+poorly-calibrated one's — the exact substitution this spec exists to prevent.
+Old records read back with `author_model=None` and never clear the floor.
+*Folded into §4.2.3.*
+
+**OQ5 — window: ROLLING, last 200 samples per bucket.** A prompt or model
+change should be able to earn trust back rather than being permanently
+weighted down by stale samples. The cold-start floor (OQ3) applies to the
+window's contents, so a freshly-reset bucket fails through to the human until
+it refills. *Folded into §4.2.4.*
+
+**OQ6 — populations: NEVER POOLED.** Benchmark (judge-backed) and
+production-proxy samples stay in separate buckets permanently. Pooling would
+let judge-backed evidence silently authorize auto-approves that only
+proxy-backed evidence actually supports — and the pressure to pool "just for
+sample count" is exactly why this is a standing ruling rather than an
+implementation detail. *Folded into §4.2.1, §4.2.2.*
+
+**OQ7 — downgrade shape: BINARY.** An `uncalibrated` or `insufficient_data`
+verdict disables auto-approve for that bucket outright; no sliding threshold
+penalty. Same fail-safe shape as the existing `None`-confidence guard
+(`role_host.py:64-65`), and it avoids introducing a second uncalibrated tuning
+constant on day one. *Folded into §4.1, §4.2.4.*
+
+**OQ8 — label plumbing: OPTION (a), extend the `STAGE_ENDED` emit and
+`RunSummary`.** Both `plan_drift` (the OQ9 scalar) and `quality_score` ride
+`STAGE_ENDED` (`benchmark_host.py:93-102`) alongside the existing
+`fix_attempts`, and `_stage_outcome` (`observability/summary.py:20-30`)
+carries them into `RunSummary.stages`. The judge score cannot ride
+`GATE_DECIDED`: that event fires from `_on_gate_decided` at the end of
+`_gate()` (`gates.py:234`), before `ctx.judge` runs. Retro's
+`(cfg, summary, session_refs, trace)` signature is unchanged — it is not
+handed raw task results. *Folded into §4.2.1, §5 Q8.*
+
+**OQ9 — label definitions: ALL THREE PINNED as recommended.**
+(1) plan-drift label = the continuous `touched_unhinted / files_touched` ratio
+(`plan/models.py:40-43`), mean-aggregated across the run's tasks, inverted
+(`1 - ratio`), clamped to `[0, 1]` — continuous over the binary per-task flag
+(`merge/step.py:87-95`) so the label can discriminate instead of collapsing
+into two clusters. (2) fix-attempt label =
+`1 - min(attempts, cfg.max_fix_attempts) / cfg.max_fix_attempts`,
+mean-aggregated per run; project-relative baselining is deferred rather than
+adding a second undefined normalization now. (3) agreement constants in two
+sequenced steps: inherit `calibration.py`'s `threshold=0.75` / `epsilon=0.15`
+at cold start, then re-derive both empirically from the first batch of real
+collected samples. The vacuity risk this settles — labels clustering near 1.0
+letting any high self-reported confidence clear the bar — is the failure mode
+that would have recreated audit row 8's hole under a calibration-shaped name.
+*Folded into §4.2.1, §5 Q9.*
