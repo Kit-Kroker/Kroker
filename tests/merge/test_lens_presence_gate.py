@@ -6,7 +6,7 @@ and NOT_REACHED pass and are still reported. Ruling OQ3: one uniform check.
 
 from sdlc.gate import CheckClass
 from sdlc.stages.merge.step import _lens_presence_check
-from sdlc.stages.review.lenses import LensOutcome, LensPresence
+from sdlc.stages.review.lenses import LensOutcome, LensPresence, primary_admits
 from sdlc.workflows.models import TaskResult
 
 
@@ -102,3 +102,99 @@ def test_quarantined_tasks_are_graded_too():
 def test_no_task_results_passes():
     check = _lens_presence_check([])
     assert check.passed is True
+
+
+def test_manifest_carries_the_new_check_as_advisory():
+    """In MERGE_REQUIRED_CHECKS so C3's synthesis covers the case where the
+    producer stops emitting it. ADVISORY, never ABSOLUTE -- an absolute
+    presence check would delete the config flags by force."""
+    from sdlc.gate import MERGE_REQUIRED_CHECKS
+
+    assert MERGE_REQUIRED_CHECKS["review_lenses_present"] is CheckClass.ADVISORY
+
+
+def test_absent_from_gate_input_synthesizes_a_misconfigured_failure():
+    """C3's fail-closed synthesis, now covering this check."""
+    from sdlc.gate import MERGE_REQUIRED_CHECKS, build_check, evaluate_quality_gate
+
+    checks = [
+        build_check(name, True, klass)
+        for name, klass in MERGE_REQUIRED_CHECKS.items()
+        if name != "review_lenses_present"
+    ]
+    report = evaluate_quality_gate(checks)
+    assert report.passed is False
+    assert "review_lenses_present" in report.blocking
+    synthesized = next(c for c in report.checks if c.name == "review_lenses_present")
+    assert "MISCONFIGURED" in synthesized.detail
+
+
+def test_undeclared_absence_is_waivable_by_an_audited_override():
+    """ADVISORY means the human who accepts a missing lens leaves a record."""
+    from sdlc.gate import MERGE_REQUIRED_CHECKS, GateOverride, build_check, evaluate_quality_gate
+
+    checks = [
+        build_check(name, name != "review_lenses_present", klass)
+        for name, klass in MERGE_REQUIRED_CHECKS.items()
+    ]
+    assert evaluate_quality_gate(checks).passed is False
+    waived = evaluate_quality_gate(
+        checks,
+        [
+            GateOverride(
+                check="review_lenses_present",
+                approved_by="operator",
+                reason="adversary agent unavailable in this environment",
+            )
+        ],
+    )
+    assert waived.passed is True
+    assert "review_lenses_present" in waived.overridden
+
+
+def test_the_live_checks_list_produces_the_check():
+    """Source needle: the helper must actually be called by merge.step, not
+    merely exist. Without this the manifest entry alone would make every gate
+    fail via synthesis."""
+    import pathlib
+
+    src = pathlib.Path("src/sdlc/stages/merge/step.py").read_text(encoding="utf-8")
+    assert "_lens_presence_check(results_list)" in src
+
+
+def test_review_severity_grades_only_present_lenses():
+    """The merge gate stops reading absence as approval. It grades through
+    primary_admits, so it cannot diverge from the task success condition on
+    what 'approved' means."""
+    import pathlib
+
+    src = pathlib.Path("src/sdlc/stages/merge/step.py").read_text(encoding="utf-8")
+    assert "r.review is None or r.review.approve" not in src
+    assert "primary_admits" in src
+
+
+def test_review_severity_still_fails_on_a_present_rejecting_reviewer():
+    """Spec 4 test 9's behavioural half. The source needle above proves the old
+    None-read is gone; this proves the new expression still BLOCKS, so the
+    rewrite cannot have quietly turned review_severity into a check that passes
+    everything. Reads the same generator the checks list builds."""
+    rejecting = _result(
+        "t1",
+        LensOutcome(lens="reviewer", presence=LensPresence.PRESENT, approved=False),
+        _present("adversary"),
+    )
+    approving = _result("t2", _present("reviewer"), _present("adversary"))
+
+    def _severity(results):
+        return all(
+            primary_admits(o)
+            for r in results
+            for o in (getattr(r, "lens_outcomes", None) or [])
+            if o.lens == "reviewer"
+        )
+
+    assert _severity([rejecting]) is False
+    assert _severity([approving]) is True
+    # An absent reviewer contributes nothing here -- that is
+    # review_lenses_present's question, not this check's.
+    assert _severity([_result("t3")]) is True

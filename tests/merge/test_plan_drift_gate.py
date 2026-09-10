@@ -8,6 +8,7 @@ at n=1). Aggregation across tasks is "any task fires", never averaged.
 from sdlc.gate import CheckClass
 from sdlc.stages.merge.step import _plan_drift_check, _plan_drift_flags
 from sdlc.stages.plan.models import PlanDrift
+from sdlc.stages.review.lenses import LensOutcome, LensPresence
 from sdlc.workflows.models import TaskResult
 
 
@@ -20,8 +21,28 @@ def _drift(files_touched: int, touched_unhinted: list[str], hinted_untouched=Non
     )
 
 
+def _lenses_ran() -> list[LensOutcome]:
+    """C8: both gating lenses accounted for, so review_lenses_present passes.
+    Supply outcomes -- never relax the check to go green."""
+    return [
+        LensOutcome(lens="reviewer", presence=LensPresence.PRESENT, approved=True),
+        LensOutcome(
+            lens="adversary",
+            presence=LensPresence.DECLARED_ABSENT,
+            reason="adversary disabled by configuration",
+        ),
+    ]
+
+
 def _result(task_id: str, drift: PlanDrift | None) -> TaskResult:
-    return TaskResult(task_id=task_id, status="done", attempts=1, branch="b", plan_drift=drift)
+    return TaskResult(
+        task_id=task_id,
+        status="done",
+        attempts=1,
+        branch="b",
+        plan_drift=drift,
+        lens_outcomes=_lenses_ran(),
+    )
 
 
 # -- _plan_drift_flags: per-task predicate --
@@ -122,6 +143,7 @@ def test_quarantined_task_drift_still_counts():
         attempts=3,
         branch="b",
         plan_drift=_drift(2, ["a.py", "b.py"]),
+        lens_outcomes=_lenses_ran(),
     )
     check = _plan_drift_check([quarantined])
     assert check.passed is False

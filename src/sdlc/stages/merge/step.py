@@ -41,7 +41,7 @@ from ...pending import GateContext
 from ..plan.models import PlanDrift
 from ..qa.activities import LintInput, SecurityScanInput, run_lint, security_scan
 from ..qa.models import SecurityReport
-from ..review.lenses import GATING_LENSES, LensPresence
+from ..review.lenses import GATING_LENSES, LensPresence, primary_admits
 from .activities import (
     CoverageInput,
     IntegrationChecks,
@@ -363,9 +363,15 @@ async def step(
         ),
         build_check(
             "review_severity",
-            all(r.review is None or r.review.approve for r in results_list),
+            all(
+                primary_admits(o)
+                for r in results_list
+                for o in (getattr(r, "lens_outcomes", None) or [])
+                if o.lens == "reviewer"
+            ),
             CheckClass.ADVISORY,
-            detail="clean-context reviewer blocking findings (FR-204)",
+            detail="clean-context reviewer blocking findings (FR-204); "
+            "absence is graded by review_lenses_present, not here",
         ),
         build_check(
             "traceability",
@@ -389,6 +395,7 @@ async def step(
             ),
         ),
         _plan_drift_check(results_list),
+        _lens_presence_check(results_list),
     ]
 
     gate_report: GateReport = await _exec_activity(

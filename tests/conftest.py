@@ -270,8 +270,8 @@ def repo_agents_dir():
 def required_checks():
     """Build the full MERGE_REQUIRED_CHECKS list, every check passing.
 
-    `required_checks()` -> eight passing checks.
-    `required_checks(coverage=False)` -> the same eight with `coverage`
+    `required_checks()` -> nine passing checks.
+    `required_checks(coverage=False)` -> the same nine with `coverage`
     failing at its manifest classification.
 
     Returns a fresh list on every call, so no test shares a list object or

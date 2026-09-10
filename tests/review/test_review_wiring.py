@@ -74,8 +74,9 @@ def test_merge_gate_has_review_severity_check():
         "an advisory check (FR-106)"
     )
     idx = src.find('"review_severity"')
-    block = src[idx : idx + 220]
+    block = src[idx : idx + 400]
     assert "CheckClass.ADVISORY" in block, "review check must be advisory"
-    assert "r.review is None or r.review.approve" in block, (
-        "review check passes iff every task was approved or had review off"
+    assert "primary_admits(o)" in block, (
+        "review check grades PRESENT reviewer lenses through the same predicate "
+        "the task success condition uses; absence is review_lenses_present's job"
     )

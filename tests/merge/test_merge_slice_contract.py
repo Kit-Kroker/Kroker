@@ -28,8 +28,22 @@ from sdlc.stages.merge.activities import (
 )
 from sdlc.stages.merge.models import MergeVerdict
 from sdlc.stages.qa.models import QAReport
+from sdlc.stages.review.lenses import LensOutcome, LensPresence
 from sdlc.stages.review.models import ReviewReport
 from sdlc.workflows.models import TaskResult
+
+
+def _lenses_ran() -> list[LensOutcome]:
+    """C8: both gating lenses accounted for, so review_lenses_present passes.
+    Supply outcomes -- never relax the check to go green."""
+    return [
+        LensOutcome(lens="reviewer", presence=LensPresence.PRESENT, approved=True),
+        LensOutcome(
+            lens="adversary",
+            presence=LensPresence.DECLARED_ABSENT,
+            reason="adversary disabled by configuration",
+        ),
+    ]
 
 
 class _StubRoleOutput:
@@ -109,7 +123,16 @@ async def test_merge_fails_closed_on_absolute_gate_failure():
         repo_url="/repo",
         mode=ProjectMode.GREENFIELD,
     )
-    results = [TaskResult(task_id="t1", status="done", attempts=1, branch="b", qa=None)]
+    results = [
+        TaskResult(
+            task_id="t1",
+            status="done",
+            attempts=1,
+            branch="b",
+            qa=None,
+            lens_outcomes=_lenses_ran(),
+        )
+    ]
 
     # Mock evaluate_gate to simulate absolute check failure
     failing_gate = GateReport(
@@ -175,6 +198,16 @@ async def test_merge_advisory_failure_presents_to_human_gate():
             branch="b",
             qa=QAReport(tests_passed=True),
             review=ReviewReport(approve=False),
+            # C8: this fixture's story is a REJECTING reviewer, so the outcome
+            # matches the report rather than the passing default pair.
+            lens_outcomes=[
+                LensOutcome(lens="reviewer", presence=LensPresence.PRESENT, approved=False),
+                LensOutcome(
+                    lens="adversary",
+                    presence=LensPresence.DECLARED_ABSENT,
+                    reason="adversary disabled by configuration",
+                ),
+            ],
         )
     ]
 
@@ -250,6 +283,7 @@ async def test_merge_soft_policy_consults_verdict():
             attempts=1,
             branch="b",
             qa=QAReport(tests_passed=True),
+            lens_outcomes=_lenses_ran(),
         )
     ]
 
@@ -294,6 +328,7 @@ async def test_merge_success_creates_pr():
             attempts=1,
             branch="b",
             qa=QAReport(tests_passed=True),
+            lens_outcomes=_lenses_ran(),
         )
     ]
     passing_gate = GateReport(passed=True, checks=[], blocking=[], overridden=[])

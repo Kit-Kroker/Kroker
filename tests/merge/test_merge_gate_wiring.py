@@ -87,14 +87,30 @@ def test_advisory_failure_passes_with_audited_override(required_checks):
 
 
 from sdlc.stages.qa.models import QAReport
+from sdlc.stages.review.lenses import LensOutcome, LensPresence
 from sdlc.workflows.feature import _merge_evidence_all_green
 from sdlc.workflows.models import TaskResult
+
+
+def _lenses_ran() -> list[LensOutcome]:
+    """C8: both gating lenses accounted for, so review_lenses_present passes.
+    Supply outcomes -- never relax the check to go green."""
+    return [
+        LensOutcome(lens="reviewer", presence=LensPresence.PRESENT, approved=True),
+        LensOutcome(
+            lens="adversary",
+            presence=LensPresence.DECLARED_ABSENT,
+            reason="adversary disabled by configuration",
+        ),
+    ]
 
 
 def test_merge_evidence_treats_missing_qa_as_failure():
     """SC-5: an escalation-approved task (qa=None) must NOT be filtered to a
     vacuous all([]) pass."""
-    no_qa = TaskResult(task_id="t1", status="done", attempts=1, branch="b")
+    no_qa = TaskResult(
+        task_id="t1", status="done", attempts=1, branch="b", lens_outcomes=_lenses_ran()
+    )
     assert not _merge_evidence_all_green([no_qa]), (
         "missing QA evidence must fail the merge absolute check"
     )
@@ -102,16 +118,31 @@ def test_merge_evidence_treats_missing_qa_as_failure():
 
 def test_merge_evidence_all_green_passes():
     ok = TaskResult(
-        task_id="t1", status="done", attempts=1, branch="b", qa=QAReport(tests_passed=True)
+        task_id="t1",
+        status="done",
+        attempts=1,
+        branch="b",
+        qa=QAReport(tests_passed=True),
+        lens_outcomes=_lenses_ran(),
     )
     assert _merge_evidence_all_green([ok])
 
 
 def test_merge_evidence_one_failing_fails():
     ok = TaskResult(
-        task_id="t1", status="done", attempts=1, branch="b", qa=QAReport(tests_passed=True)
+        task_id="t1",
+        status="done",
+        attempts=1,
+        branch="b",
+        qa=QAReport(tests_passed=True),
+        lens_outcomes=_lenses_ran(),
     )
     bad = TaskResult(
-        task_id="t2", status="done", attempts=1, branch="b", qa=QAReport(tests_passed=False)
+        task_id="t2",
+        status="done",
+        attempts=1,
+        branch="b",
+        qa=QAReport(tests_passed=False),
+        lens_outcomes=_lenses_ran(),
     )
     assert not _merge_evidence_all_green([ok, bad])
