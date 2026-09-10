@@ -124,7 +124,7 @@ unconditionally, that can stand in as realized-outcome proxies:
 The **merge** gate has no *attributable* realized-outcome signal today. The
 deploy stage (E-67, `src/sdlc/deploy/`: apply → smoke → rollback, with its
 own `deploy_failed` gate) does observe post-merge build behavior, but it is
-off by default (`DeployConfig.enabled = False`, `core/models.py:301-304`,
+off by default (`DeployConfig.enabled = False`, `core/models.py:301-305`,
 D-9), is not always configured even when reached (`merged-not-deployed:`
 outcomes exist as their own class, `sc_rollup.py:32`), and nothing links a
 deploy outcome back to the merge gate's `confidence` or `GateOutcomeSummary`
@@ -137,8 +137,10 @@ this spec; see Open Question 2.
 ### 4.1 Shape
 
 A **gate calibration ledger**: a durable, cross-run table of
-`(gate, bucket_key, confidence, realized_outcome)` tuples, built from data
-already flowing through retro, plus a `calibration_verdict_for(gate,
+`(gate, bucket_key, confidence, realized_outcome)` tuples, built at retro
+from the run's own data — today that reaches retro only for the fix-attempt
+label; the plan-drift and judge-score labels need the plumbing Open
+Question 8 decides — plus a `calibration_verdict_for(gate,
 bucket_key)` lookup that `_auto_decision_for`'s caller consults before
 honoring a self-reported confidence. An auto-approve now requires **two**
 conditions instead of one: `confidence >= threshold` **and** the ledger's
@@ -260,8 +262,9 @@ retention story.
    result, same shape as the existing memoization read).
 
 5. **De-duplicating the two `_auto_decision_for` copies.** `merge/step.py`'s
-   copy (`:161-177`) is byte-identical logic to `role_host.py`'s
-   (`:55-75`) apart from the docstring. C7 is the natural forcing function
+   copy (`:161-177`) is logically identical to `role_host.py`'s
+   (`:55-75`), with identical output, differing only in the docstring and
+   in how the `comments` string is formatted (§1). C7 is the natural forcing function
    to collapse them into one shared function (`role_host.py`'s, imported by
    `merge/step.py`) rather than plumbing the calibration-verdict parameter
    through two independent copies that will drift again. This is a
@@ -293,10 +296,14 @@ For each, a recommendation is given; none is self-ruled.
    a future, better production signal can replace the proxy without
    silently changing what "calibrated" has meant historically.
 
-2. **The merge gate has no realized-outcome signal, so under this design its
+2. **The merge gate has no *attributable* realized-outcome signal (§3 — the
+   deploy stage is the one weak candidate, off by default and never linked
+   back to the gate decision), so under this design its
    SOFT auto-approve stops firing entirely (§4.2.1) until one exists.** Is
    that acceptable as a shipped side effect, or does merge need its own
-   scoped fix first (e.g., a minimal post-merge revert/hotfix linkage) as a
+   scoped fix first (a minimal post-merge revert/hotfix linkage, or
+   attributing the existing deploy outcome back to the merge gate's
+   `GateOutcomeSummary` row) as a
    prerequisite rather than a follow-up? **Recommendation:** ship the
    architecture/plan calibration now (proxies exist, addresses the audit's
    headline row for two of the three sites), and file the merge-gate
@@ -309,11 +316,12 @@ For each, a recommendation is given; none is self-ruled.
    `(gate, bucket_key)` is allowed to auto-approve at all?
    **Recommendation:** reuse the existing `MIN_RUNS = 5` floor pattern from
    `sc_rollup.py:24` conceptually, but at the *sample* (not *run*) level —
-   N=20 samples per bucket, matching `calibration.py`'s existing default
-   `threshold=0.75` / `epsilon=0.15` for the agreement math itself. Every
+   N=20 samples per bucket. Every
    bucket starts "insufficient data" → fails through to human, so a new
    proposer model or gate has to earn auto-approve rather than default to
-   it.
+   it. The agreement math's own constants (`threshold` / `epsilon`) are a
+   separate, sequenced decision — see Open Question 9(3), which governs
+   them; this question fixes only the sample floor.
 
 4. **Bucket granularity.** Per `(gate, author_model)` (recommended, §4.2.3)
    or per `gate` alone (simpler, no schema change to `GateOutcomeSummary`/
@@ -360,16 +368,26 @@ For each, a recommendation is given; none is self-ruled.
    and merge, never durable outside benchmark mode) and `ctx.judge`'s
    `QualityScore` for the architecture/plan artifact (computed, but never
    written to `summary` or `trace`). Two ways to close this:
-   - **(a) Extend `STAGE_ENDED` / `RunSummary`.** Add `plan_drift` (the
-     chosen scalar — see Open Question 9) to the code-stage `STAGE_ENDED`
-     emit alongside the existing `fix_attempts`, and a `quality_score`
-     field to the architecture/plan `GATE_DECIDED` emit (or a parallel
-     `STAGE_ENDED`-shaped event) so `_gate_outcome`/`_stage_outcome`
-     (`observability/summary.py`) can carry both into `RunSummary` the same
-     way they already carry `fix_attempts` and `confidence`. Small, additive
-     (new optional trace fields, old traces replay as `None`), and keeps
-     retro's `(cfg, summary, session_refs, trace)` signature the sole input
-     to labeling — the property §4.2.1 originally (incorrectly) assumed.
+   - **(a) Extend the `STAGE_ENDED` emit / `RunSummary`.** Add `plan_drift`
+     (the chosen scalar — see Open Question 9) and `quality_score` to the
+     `STAGE_ENDED` emit (`benchmark_host.py:93-102`) alongside the existing
+     `fix_attempts`, so `_stage_outcome` (`observability/summary.py:20-30`)
+     carries both into `RunSummary.stages` the same way it already carries
+     `fix_attempts`. Small, additive (new optional trace fields, old traces
+     replay as `None`), and keeps retro's
+     `(cfg, summary, session_refs, trace)` signature the sole input to
+     labeling — the property §4.2.1 originally (incorrectly) assumed.
+     **The judge score must ride `STAGE_ENDED`, not `GATE_DECIDED`**: the
+     gate-decided event fires from `_on_gate_decided` at the end of `_gate()`
+     (`gates.py:234`), which returns *before* `ctx.judge` is called
+     (`architecture/step.py:190-195`, `plan/step.py:111-116` — both after
+     `revisable_stage` has already returned), so the score does not exist
+     yet at that point. The named alternative, if the score must be
+     correlated to a specific gate round rather than to the stage, is a
+     merge-style enriched re-emit: a second, stage-authored `GATE_DECIDED`
+     carrying the extra field after the score exists, the way
+     `merge/step.py:453-462` already re-emits its own gate-decided event
+     with an `overrides` field the host's `_on_gate_decided` never emits.
    - **(b) Thread task results into retro.** Change retro's step signature
      to also receive the run's task results / `BenchmarkRecord`-shaped data
      directly (as merge already does, `merge/step.py`'s `task_results`
@@ -415,11 +433,12 @@ For each, a recommendation is given; none is self-ruled.
      confidence-worthiness"?) and an aggregation level (per-task, then
      averaged into one run-level label per gate decision, or one label per
      task attributed to the same architecture/plan decision?).
-   - Q3's reuse of `calibration.py`'s `epsilon=0.15` / `threshold=0.75`
-     constants (chosen for judge-score-vs-human-score agreement) is only
-     defensible once the label scale is pinned down on the same footing —
-     otherwise the constants are being imported without the population
-     they were tuned against.
+   - **The agreement constants** `epsilon=0.15` / `threshold=0.75`
+     (`calibration.py:125-127`) were chosen for judge-score-vs-human-score
+     agreement, a different population from confidence-vs-outcome-label.
+     Inheriting them is only defensible while the ledger has no real samples
+     to derive better ones from — which makes this a sequenced decision, not
+     a standing one, and this question (not Q3) governs it.
    **Recommendation:** before the implementation plan, pin: (1) plan-drift
    label = the continuous `touched_unhinted/files_touched` ratio,
    mean-aggregated across the run's tasks, inverted (`1 - ratio`) and
@@ -428,8 +447,11 @@ For each, a recommendation is given; none is self-ruled.
    label = `1 - min(attempts, cfg.max_fix_attempts) / cfg.max_fix_attempts`,
    mean-aggregated per run, deferring any project-relative baselining to a
    later iteration rather than adding a second undefined normalization now;
-   (3) re-derive `epsilon`/`threshold` empirically from the first batch of
-   *real* collected samples once the ledger has data, rather than inheriting
-   `calibration.py`'s constants by default — but treat all three as the
+   (3) the agreement constants in two explicitly sequenced steps — **inherit
+   `calibration.py`'s `threshold=0.75` / `epsilon=0.15` at cold start**, when
+   there is no ledger data to do better with, **then re-derive both
+   empirically from the first batch of real collected samples** once the
+   ledger has them, treating the inherited pair as a starting position rather
+   than a settled default. Treat all three as the
    user's call, not something this design should settle unilaterally, since
    a wrong choice here is precisely how the check goes vacuous.
