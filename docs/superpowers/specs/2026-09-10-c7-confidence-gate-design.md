@@ -177,9 +177,10 @@ retention story.
    - `plan`: label = 1.0 minus the plan-drift rate from `plan_drift` checks
      across the run's tasks (proxy from §3); same benchmark preference and
      tagging.
-   - `merge`: no label computed in this design (§3) — the merge gate's
-     entries are retained (so the ledger is ready the day a signal exists)
-     but never scored, and `calibration_verdict_for("merge", ...)` always
+   - `merge`: no label computed in this design (§3) — merge-gate decisions
+     are simply not sampled (no entry is written; `outcome_label` is NOT
+     NULL, so an unscorable row cannot exist), and
+     `calibration_verdict_for("merge", ...)` always
      returns "insufficient data," which — per §4.1 — means merge's SOFT
      auto-approve never fires under this design until Open Question 2 is
      resolved. This is a behavior change worth flagging on its own: it is a
