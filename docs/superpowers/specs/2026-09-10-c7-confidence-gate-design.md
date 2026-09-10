@@ -12,11 +12,13 @@
 Under `GatePolicy.SOFT`, a proposer's own self-reported `confidence` field,
 if `>= GateConfig.threshold`, synthesizes a `GateDecision(outcome=APPROVE,
 decided_by="policy")` that the gate short-circuits on — the human wait never
-happens. This logic is defined twice, byte-for-byte identical except for the
-docstring:
+happens. This logic is defined twice, logically identical with identical
+output, differing only in the docstring and cosmetic formatting (one builds
+its `comments` string via line-continuation, the other via a parenthesized
+expression):
 
 - `role_host.py:55-75` (`_auto_decision_for`), consumed at `role_host.py:224`
-  inside `_revisable_stage` (`:212-239`), which serves the architecture gate
+  inside `_revisable_stage` (`:212-244`), which serves the architecture gate
   (`architecture/step.py:188`) and the plan gate (`plan/step.py:109`).
 - `merge/step.py:161-177` (`_auto_decision_for`, an independent copy — not
   imported from `role_host.py`), consulted at `merge/step.py:484` inside
@@ -89,7 +91,7 @@ makes that framing literal rather than aspirational.
 `workflows/benchmark_host.py:107-139`) is the strongest available quality
 signal — a cross-family LLM judge score against a pinned rubric — and it is
 already called unconditionally after both the architecture and plan gates
-(`architecture/step.py:190-195`, `plan/step.py:110-114`). But it is a
+(`architecture/step.py:190-195`, `plan/step.py:111-116`). But it is a
 **no-op outside benchmark mode**: `_judge` returns
 `QualityScore(score=None, judge="llm_judge")` immediately when
 `not self._benchmarking(cfg)` (`benchmark_host.py:126-128`). Most real runs
@@ -104,7 +106,7 @@ unconditionally, that can stand in as realized-outcome proxies:
 - **Plan drift** (E4): `compute_plan_drift` (`plan/models.py:51`) runs per
   task at code-stage (`code/step.py:750`), is attached to every
   `BenchmarkRecord`-shaped task result, and is aggregated at merge into the
-  `plan_drift` ADVISORY check (`merge/step.py:87-116`, `:397`) — "any task
+  `plan_drift` ADVISORY check (`merge/step.py:87-118`, consulted `:397`) — "any task
   exceeded the per-task threshold." This is a plan-quality signal computed
   today and, per the audit's out-of-scope table, "read by nothing" for any
   calibration purpose. It is the natural realized-outcome proxy for the
@@ -119,10 +121,16 @@ unconditionally, that can stand in as realized-outcome proxies:
   plan stage has nothing analogous" to the architect's brownfield delta
   check).
 
-The **merge** gate has no realized-outcome signal at all today — nothing
-in the codebase observes what happens to a build after it merges (no revert
-detection, no post-merge hotfix linkage). This is a real hole in the design
-space, not an oversight in this spec; see Open Question 2.
+The **merge** gate has no *attributable* realized-outcome signal today. The
+deploy stage (E-67, `src/sdlc/deploy/`: apply → smoke → rollback, with its
+own `deploy_failed` gate) does observe post-merge build behavior, but it is
+off by default (`DeployConfig.enabled = False`, `core/models.py:301-304`,
+D-9), is not always configured even when reached (`merged-not-deployed:`
+outcomes exist as their own class, `sc_rollup.py:32`), and nothing links a
+deploy outcome back to the merge gate's `confidence` or `GateOutcomeSummary`
+row that produced the build being deployed. So it is a candidate signal, not
+a usable one as-is — a real hole in the design space, not an oversight in
+this spec; see Open Question 2.
 
 ## 4. Design
 
@@ -153,11 +161,13 @@ retention story.
 ### 4.2 Pieces
 
 1. **Realized-outcome labeling (retro-stage addition).** At retro, for each
-   `GateOutcomeSummary` in `RunSummary.gates` where `decided_by == "policy"`
-   (i.e., every auto-approve — HARD-decided and human-decided rows are not
-   calibration inputs, since there is no "would a human have caught this"
-   counterfactual for them), compute a realized-outcome label from
-   already-available run data:
+   `GateOutcomeSummary` in `RunSummary.gates` where `policy == "soft" and
+   decided_by == "policy" and confidence is not None` — this is deliberately
+   narrower than "every `decided_by == 'policy'` row": `GatePolicy.OFF` also
+   synthesizes `decided_by="policy"` (`gates.py:195-198`), but with no
+   confidence to score, so it must be excluded explicitly rather than by
+   accident of having nothing to compute — compute a realized-outcome label
+   from already-available run data:
    - `architecture`: label = 1.0 minus a normalized downstream fix-attempt
      rate for tasks in the run (proxy from §3); if benchmark mode and
      `ctx.judge` produced a score for this stage, prefer the judge score
@@ -173,11 +183,33 @@ retention story.
      resolved. This is a behavior change worth flagging on its own: it is a
      strictly more conservative posture than today's merge gate, adopted
      as a consequence of the ground-truth gap rather than chosen directly.
-   This labeling is pure computation over data the run already produced —
-   no new activity, no new I/O, added to the retro step that already runs
-   best-effort and non-blocking (`stages/retro/step.py`'s existing
-   try/except envelope covers it, so a labeling bug degrades to "this run's
-   samples are skipped," never a run-outcome change).
+
+   **Correction: this labeling is *not* pure computation inside retro as it
+   stands today, for two of the three inputs.** Retro's step signature is
+   `(ctx, cfg, summary, session_refs, trace)` (`stages/retro/step.py:34-40`).
+   `RunSummary` (`core/models.py:454-476`) carries no plan-drift or
+   quality-score field, and the `STAGE_ENDED` trace emit
+   (`benchmark_host.py:93-102`) carries only `stage`, `role`, `outcome`,
+   `duration_s`, `fix_attempts`, and `cost_usd` — no `plan_drift`, no
+   `task_id`, no judge `QualityScore`. Per-task `PlanDrift` is attached to
+   `BenchmarkRecord`s (`code/step.py:750, 769`) and reaches durable storage
+   only in benchmark mode (`benchmark_host.py:103-105`); in a production run
+   it lives only in workflow-local memory during the code stage and in
+   merge's in-flight `CheckResult`, which `GATE_DECIDED` never carries
+   (`feature.py:241-250`; merge's own gate-decided emit at
+   `merge/step.py:453-462` doesn't either). The judge score has the same
+   problem: `_quality.score` (`architecture/step.py:190-195`,
+   `plan/step.py:111-116`) never reaches `summary` or `trace`. Only the
+   fix-attempt label is actually computable inside retro today, from
+   `summary.stages[].fix_attempts`.
+
+   This is a plumbing decision the spec must make, not leave for the
+   implementation plan to discover — see **Open Question 8**. Once that
+   plumbing exists, labeling itself stays pure computation over data the run
+   already produced, added to the retro step that already runs best-effort
+   and non-blocking (`stages/retro/step.py`'s existing try/except envelope
+   covers it, so a labeling bug degrades to "this run's samples are
+   skipped," never a run-outcome change).
 
 2. **Ledger storage.** One row per labeled sample:
    `(gate, bucket_key, confidence, outcome_label, source, run_id,
@@ -195,15 +227,29 @@ retention story.
    — recommended, since different proposer models calibrate differently —
    requires threading `resolve_role_model(cfg, stage)` (already computed at
    the `_cached_stage` call site, `role_host.py:121`) into the gate-decided
-   event and `GateOutcomeSummary`. This is a small, additive schema change
-   (new optional field, old records read back with `bucket_key=None` →
-   treated as "insufficient data," never a crash). See Open Question 4 for
-   the alternative (bucket by `gate` alone).
+   event and `GateOutcomeSummary`. This is a small, additive schema change:
+   the field being added is `author_model` (`bucket_key` is derived from it,
+   e.g. `f"{gate}:{author_model}"` — not itself a stored field). Old
+   records read back with `author_model=None` → their derived bucket_key is
+   excluded from lookups (or falls into a `(gate, None)` bucket that never
+   clears the sample floor) → treated as "insufficient data," never a crash.
+   See Open Question 4 for the alternative (bucket by `gate` alone).
 
 4. **`calibration_verdict_for(gate, bucket_key)` lookup.** A new activity,
-   read once per `_revisable_stage`/merge-gate call, before
-   `_auto_decision_for` runs — analogous to how `_cached_stage` reads
-   `cache_get` before invoking `run_fn` (`role_host.py:124-126`). Computes
+   read once per `_revisable_stage`/merge-gate call **only when the gate's
+   configured policy is SOFT and the artifact's `confidence` is not
+   `None`** — every other path (`HARD`, `OFF`, SOFT-with-no-confidence,
+   the exhausted-rounds final gate) skips the read entirely, so §4.3's
+   "untouched" claim holds as a property of the call site, not just of
+   `_auto_decision_for`'s internals, and no activity call or new dependency
+   is added to those paths. Read before `_auto_decision_for` runs —
+   analogous to how `_cached_stage` reads
+   `cache_get` before invoking `run_fn` (`role_host.py:124-126`). **Lookup
+   failure (storage outage, activity exhausts its retry policy) is treated
+   as `insufficient_data`** — the same in-band fail-safe value as "not
+   enough samples yet," not a stage failure — so the auto-approve path
+   degrades to the human wait exactly like the existing `None`-confidence
+   guard, rather than raising. Computes
    `compute_agreement` over the ledger rows for that bucket (most recent N,
    or a time window — Open Question 5) and returns a small
    `CalibrationVerdict(verdict: "calibrated"|"uncalibrated"|"insufficient_data",
@@ -307,3 +353,83 @@ For each, a recommendation is given; none is self-ruled.
    either. **Recommendation:** binary for v1 — it's the same fail-safe
    shape as the existing `None`-confidence guard, easy to reason about, and
    avoids inventing a second uncalibrated parameter on day one.
+
+8. **Plumbing the plan-drift and judge-score labels into retro.** §4.2.1's
+   labeling step needs two inputs retro cannot see today: per-task
+   `PlanDrift` (production runs only compute it transiently at code-stage
+   and merge, never durable outside benchmark mode) and `ctx.judge`'s
+   `QualityScore` for the architecture/plan artifact (computed, but never
+   written to `summary` or `trace`). Two ways to close this:
+   - **(a) Extend `STAGE_ENDED` / `RunSummary`.** Add `plan_drift` (the
+     chosen scalar — see Open Question 9) to the code-stage `STAGE_ENDED`
+     emit alongside the existing `fix_attempts`, and a `quality_score`
+     field to the architecture/plan `GATE_DECIDED` emit (or a parallel
+     `STAGE_ENDED`-shaped event) so `_gate_outcome`/`_stage_outcome`
+     (`observability/summary.py`) can carry both into `RunSummary` the same
+     way they already carry `fix_attempts` and `confidence`. Small, additive
+     (new optional trace fields, old traces replay as `None`), and keeps
+     retro's `(cfg, summary, session_refs, trace)` signature the sole input
+     to labeling — the property §4.2.1 originally (incorrectly) assumed.
+   - **(b) Thread task results into retro.** Change retro's step signature
+     to also receive the run's task results / `BenchmarkRecord`-shaped data
+     directly (as merge already does, `merge/step.py`'s `task_results`
+     parameter), bypassing the trace/summary round-trip entirely.
+   **Recommendation: (a).** It is strictly additive to an already-established
+   pattern (`fix_attempts` and `confidence` already make this exact
+   round-trip through `STAGE_ENDED`/`GATE_DECIDED` → `RunSummary`), keeps
+   retro's signature and its "derived purely from `RunSummary`/`trace`"
+   contract intact, and doesn't hand retro a second, wider surface (raw task
+   results) it would otherwise have to defensively read past. (b) is more
+   direct but couples retro to the task-result shape the way merge is
+   coupled to it, which is exactly the kind of surface-widening this
+   codebase's `StageContext` seam (`core/context.py`'s docstring: "is this a
+   capability the orchestrator provides, or a value it holds?") argues
+   against for a best-effort, non-blocking stage.
+
+9. **Label definition and normalization.** §4.2.1's labels — "1.0 minus a
+   normalized downstream fix-attempt rate" and "1.0 minus the plan-drift
+   rate" — leave the exact quantity undefined, and the calibration verdict
+   is entirely a function of it: `compute_agreement`'s verdict is
+   `|confidence − label| <= epsilon` for `>= threshold` of samples
+   (`calibration.py:125-157`). If labels cluster near 1.0 — e.g., most tasks
+   take zero fix attempts, or most plans don't drift — then any
+   consistently-high self-reported confidence clears the agreement bar
+   trivially, reconstructing row 8's hole under a calibration-shaped name:
+   the check would say "calibrated" without ever having been tested against
+   a case where the proposer should have been less confident. Concretely
+   undefined:
+   - **Plan-drift label**: the codebase already computes two different
+     quantities that could serve — the binary per-task
+     `_plan_drift_flags` threshold check (`merge/step.py:87-95`, "did this
+     task exceed the per-task ratio") or the continuous
+     `touched_unhinted / files_touched` ratio itself
+     (`plan/models.py:40-43`). A binary label produces a near-degenerate
+     [0, 1] outcome distribution (mostly 0 or 1 drift-exceeded, aggregated
+     across a run's tasks into some run-level fraction); the continuous
+     ratio is smoother but needs its own clamping/aggregation decision
+     (mean across tasks? worst task? weighted by task size?).
+   - **Fix-attempt label**: needs an explicit denominator (attempts capped
+     at `cfg.max_fix_attempts`? normalized against a run-wide or
+     project-wide baseline rate rather than an absolute count, so a
+     naturally-harder codebase doesn't permanently read as "low
+     confidence-worthiness"?) and an aggregation level (per-task, then
+     averaged into one run-level label per gate decision, or one label per
+     task attributed to the same architecture/plan decision?).
+   - Q3's reuse of `calibration.py`'s `epsilon=0.15` / `threshold=0.75`
+     constants (chosen for judge-score-vs-human-score agreement) is only
+     defensible once the label scale is pinned down on the same footing —
+     otherwise the constants are being imported without the population
+     they were tuned against.
+   **Recommendation:** before the implementation plan, pin: (1) plan-drift
+   label = the continuous `touched_unhinted/files_touched` ratio,
+   mean-aggregated across the run's tasks, inverted (`1 - ratio`) and
+   clamped to `[0, 1]` — continuous over binary, so the label has room to
+   discriminate rather than degenerating to two clusters; (2) fix-attempt
+   label = `1 - min(attempts, cfg.max_fix_attempts) / cfg.max_fix_attempts`,
+   mean-aggregated per run, deferring any project-relative baselining to a
+   later iteration rather than adding a second undefined normalization now;
+   (3) re-derive `epsilon`/`threshold` empirically from the first batch of
+   *real* collected samples once the ledger has data, rather than inheriting
+   `calibration.py`'s constants by default — but treat all three as the
+   user's call, not something this design should settle unilaterally, since
+   a wrong choice here is precisely how the check goes vacuous.
