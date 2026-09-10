@@ -18,6 +18,10 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from ..agents.roles import PROMPT_SHAS, resolve_role_model
+    from ..calibration.activities import VerdictInput, calibration_verdict
+    from ..calibration.decision import auto_decision_for
+    from ..calibration.models import INSUFFICIENT, CalibrationVerdict, LabelSource
+    from ..calibration.verdict import bucket_key
     from ..core.models import (
         GateConfig,
         GateDecision,
@@ -44,35 +48,18 @@ PRICE_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=1)
 )
 
+# C7: a calibration read that cannot answer must not fail the stage. Three
+# attempts, then the caller degrades to INSUFFICIENT and the human waits.
+CALIB_ACT = workflow.ActivityConfig(
+    start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=3)
+)
+
 StageT = TypeVar("StageT", bound=BaseModel)
 
 
 class _BudgetRejected(Exception):
     """Raised at a budget-gate reject; caught in run() so the terminal
     outcome is the ordinary string "rejected:budget" and retro still runs."""
-
-
-def _auto_decision_for(
-    name: str, cfg: PipelineConfig, confidence: float | None
-) -> GateDecision | None:
-    """FR-301: SOFT + confidence >= threshold -> an APPROVE decision _gate()
-    can short-circuit on. None confidence (missing/legacy artifact) or below
-    threshold -> None, falling through to the human wait -- never a silent
-    auto-approve on absent data (same defensive stance as
-    HarnessRunResult.near_context_ceiling())."""
-    gate_cfg = cfg.gates.get(name, GateConfig())
-    if gate_cfg.policy != GatePolicy.SOFT or confidence is None:
-        return None
-    if confidence < gate_cfg.threshold:
-        return None
-    return GateDecision(
-        gate=name,
-        round=1,
-        outcome=GateOutcome.APPROVE,
-        decided_by="policy",
-        comments=f"auto-approved: confidence={confidence:.2f} "
-        f">= threshold={gate_cfg.threshold:.2f}",
-    )
 
 
 def _spec_summary(artifact: object) -> str:
@@ -209,6 +196,26 @@ class RoleHost:
                 raise _BudgetRejected()
             self._budget_threshold += cfg.run_budget_usd
 
+    async def _calibration_verdict(
+        self, cfg: PipelineConfig, gate: str, author_model: str
+    ) -> CalibrationVerdict:
+        """C7. A lookup that cannot answer is INSUFFICIENT, not an exception:
+        the gate then waits for a human, which is the same fail-safe direction
+        as a None confidence. A storage outage must not fail the run."""
+        source = (
+            LabelSource.BENCHMARK
+            if cfg.benchmark.case_id is not None
+            else LabelSource.PRODUCTION_PROXY
+        )
+        try:
+            return await workflow.execute_activity(
+                calibration_verdict,
+                VerdictInput(gate=gate, bucket_key=bucket_key(author_model, source)),
+                **CALIB_ACT,
+            )
+        except Exception:
+            return INSUFFICIENT
+
     async def _revisable_stage(
         self,
         name: str,
@@ -221,19 +228,32 @@ class RoleHost:
         human's guidance at round+1, up to cfg.max_gate_rounds. Past that,
         escalate to a final human gate (the configured policy still applies,
         but no auto_decision is passed, so SOFT also waits) (FR-301).
+        C7: even inside the loop, SOFT auto-approval additionally requires a
+        `calibrated` verdict for this gate's (gate, author_model) bucket —
+        confidence alone no longer ends the review.
         `run_fn(guidance: str | None)` must re-execute the producer with the
         guidance injected."""
         guidance: str | None = None
         for round in range(1, cfg.max_gate_rounds + 1):
             artifact = await run_fn(guidance)
-            auto = _auto_decision_for(name, cfg, getattr(artifact, "confidence", None))
+            confidence = getattr(artifact, "confidence", None)
+            # SG-4: HARD, OFF and None-confidence rounds never reach the
+            # ledger -- they cannot auto-approve regardless, so a read would
+            # buy a dependency on storage for nothing.
+            auto = None
+            if (
+                confidence is not None
+                and cfg.gates.get(name, GateConfig()).policy is GatePolicy.SOFT
+            ):
+                calibration = await self._calibration_verdict(cfg, name, author_model)
+                auto = auto_decision_for(name, cfg, confidence, calibration)
             decision = await self._gate(  # type: ignore[attr-defined]
                 name,
                 cfg.gate_settings(),
                 auto_decision=auto,
                 round=round,
                 context=GateContext(spec_summary=_spec_summary(artifact)),
-                confidence=getattr(artifact, "confidence", None),
+                confidence=confidence,
                 author_model=author_model,
             )
             if decision.outcome is not GateOutcome.REVISE:

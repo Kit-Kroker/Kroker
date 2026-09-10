@@ -17,11 +17,13 @@ from temporalio.common import RetryPolicy
 
 from ...benchmarks.models import BenchmarkOutcome
 from ...benchmarks.record_builder import stage_record
+from ...calibration.activities import VerdictInput, calibration_verdict
+from ...calibration.decision import auto_decision_for
+from ...calibration.models import INSUFFICIENT, LabelSource
+from ...calibration.verdict import bucket_key
 from ...core.context import StageContext
 from ...core.models import (
     GateConfig,
-    GateDecision,
-    GateOutcome,
     GatePolicy,
     IdeaBrief,
     PipelineConfig,
@@ -155,25 +157,6 @@ def _lens_presence_check(results: list) -> CheckResult:
         not failures,
         CheckClass.ADVISORY,
         detail="; ".join(failures + notes) or "no task results to grade",
-    )
-
-
-def _auto_decision_for(
-    name: str, cfg: PipelineConfig, confidence: float | None
-) -> GateDecision | None:
-    gate_cfg = cfg.gates.get(name, GateConfig())
-    if gate_cfg.policy != GatePolicy.SOFT or confidence is None:
-        return None
-    if confidence < gate_cfg.threshold:
-        return None
-    return GateDecision(
-        gate=name,
-        round=1,
-        outcome=GateOutcome.APPROVE,
-        decided_by="policy",
-        comments=(
-            f"auto-approved: confidence={confidence:.2f} >= threshold={gate_cfg.threshold:.2f}"
-        ),
     )
 
 
@@ -481,7 +464,27 @@ async def step(
                 merge_verdict_prompt(dumps),
             )
             verdict: MergeVerdict = getattr(role_output, "output", role_output)
-            auto = _auto_decision_for("merge", cfg, verdict.confidence if verdict.approve else None)
+            confidence = verdict.confidence if verdict.approve else None
+            auto = None
+            if confidence is not None:
+                # Ruling OQ2: merge samples are appended but never labelled,
+                # so this resolves to insufficient_data and the human gate
+                # below always fires. No branch on the gate name (SG-3) --
+                # the behaviour comes from the ledger being empty for merge.
+                source = (
+                    LabelSource.BENCHMARK
+                    if cfg.benchmark.case_id is not None
+                    else LabelSource.PRODUCTION_PROXY
+                )
+                try:
+                    calibration = await _exec_activity(
+                        calibration_verdict,
+                        VerdictInput(gate="merge", bucket_key=bucket_key(merge_model, source)),
+                        **_ACT,
+                    )
+                except Exception:
+                    calibration = INSUFFICIENT
+                auto = auto_decision_for("merge", cfg, confidence, calibration)
             if auto is None:
                 gate = await ctx.gate(
                     "merge", cfg.gate_settings(), context=GateContext(checks=gate_report.checks)
