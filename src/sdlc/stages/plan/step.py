@@ -106,7 +106,7 @@ async def step(
         )
         return plan_obj
 
-    plan_obj, gate = await ctx.revisable_stage("plan", cfg, _run_plan)
+    plan_obj, gate = await ctx.revisable_stage("plan", cfg, _run_plan, author_model=resolved_model)
     _ended = _now()
     _quality = await ctx.judge(
         cfg,

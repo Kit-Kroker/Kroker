@@ -236,6 +236,7 @@ class FeatureWorkflow(
         policy: GatePolicy,
         decision: GateDecision,
         confidence: float | None = None,
+        author_model: str | None = None,
     ) -> None:
         conf = confidence
         self._emit(
@@ -247,6 +248,7 @@ class FeatureWorkflow(
             decided_by=decision.decided_by,
             approved=("true" if decision.approved else "false"),
             **({"confidence": str(conf)} if conf is not None else {}),
+            **({"author_model": author_model} if author_model else {}),
         )
         cfg = self._cfg
         if cfg is None:

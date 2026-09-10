@@ -20,6 +20,8 @@ from .usage import merge_usage
 def _stage_outcome(ev: RunEvent) -> StageOutcome:
     d = ev.data
     cost = d.get("cost_usd")
+    drift = d.get("plan_drift")
+    quality = d.get("quality_score")
     return StageOutcome(
         stage=ev.stage or d.get("stage", "?"),
         role=d.get("role", "?"),
@@ -27,6 +29,9 @@ def _stage_outcome(ev: RunEvent) -> StageOutcome:
         duration_s=float(d.get("duration_s", "0")),
         cost_usd=float(cost) if cost is not None else None,
         fix_attempts=int(d.get("fix_attempts", "0")),
+        plan_drift=float(drift) if drift is not None else None,
+        quality_score=float(quality) if quality is not None else None,
+        quality_judge=d.get("quality_judge") or None,
     )
 
 
@@ -41,6 +46,7 @@ def _gate_outcome(ev: RunEvent) -> GateOutcomeSummary:
         decided_by=d.get("decided_by", "?"),
         approved=d.get("approved") == "true",
         confidence=float(conf) if conf is not None else None,
+        author_model=d.get("author_model") or None,
         overrides=[c for c in ov.split(",") if c],
     )
 

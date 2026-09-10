@@ -26,6 +26,7 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..benchmarks.record_builder import stage_record
     from ..benchmarks.recorder import record_benchmark
+    from ..calibration.labels import unhinted_ratio
     from ..core.models import PipelineConfig, RoleUsage
     from ..observability.trace import RunEventKind
     from ..stages.plan.models import PlanDrift
@@ -91,6 +92,7 @@ class BenchmarkHost:
         )
 
     async def _record(self, cfg: PipelineConfig, record: BenchmarkRecord) -> None:
+        drift = record.plan_drift
         self._emit(  # type: ignore[attr-defined]
             RunEventKind.STAGE_ENDED,
             stage=record.stage,
@@ -99,6 +101,15 @@ class BenchmarkHost:
             duration_s=str(record.speed.wall_clock_s),
             fix_attempts=str(record.fix_attempts),
             **({"cost_usd": str(record.cost.usd)} if record.cost.usd is not None else {}),
+            **({"plan_drift": str(unhinted_ratio(drift))} if drift is not None else {}),
+            **(
+                {
+                    "quality_score": str(record.quality.score),
+                    "quality_judge": str(record.quality.judge),
+                }
+                if record.quality.score is not None
+                else {}
+            ),
         )
         if not self._benchmarking(cfg):
             return

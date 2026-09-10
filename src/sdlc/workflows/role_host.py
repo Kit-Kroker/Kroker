@@ -210,7 +210,12 @@ class RoleHost:
             self._budget_threshold += cfg.run_budget_usd
 
     async def _revisable_stage(
-        self, name: str, cfg: PipelineConfig, run_fn: Callable[[str | None], Awaitable[StageT]]
+        self,
+        name: str,
+        cfg: PipelineConfig,
+        run_fn: Callable[[str | None], Awaitable[StageT]],
+        *,
+        author_model: str = "",
     ) -> tuple[StageT, GateDecision]:
         """Run a proposer stage, gate it, and on REVISE re-run with the
         human's guidance at round+1, up to cfg.max_gate_rounds. Past that,
@@ -229,6 +234,7 @@ class RoleHost:
                 round=round,
                 context=GateContext(spec_summary=_spec_summary(artifact)),
                 confidence=getattr(artifact, "confidence", None),
+                author_model=author_model,
             )
             if decision.outcome is not GateOutcome.REVISE:
                 return artifact, decision
@@ -240,5 +246,6 @@ class RoleHost:
             cfg.gate_settings(),
             round=cfg.max_gate_rounds + 1,
             context=GateContext(spec_summary=_spec_summary(artifact)),
+            author_model=author_model,
         )
         return artifact, decision

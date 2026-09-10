@@ -185,7 +185,9 @@ async def step(
                 f"and delta.removed so every path resolves."
             )
 
-    arch, gate = await ctx.revisable_stage("architecture", cfg, _run_architect)
+    arch, gate = await ctx.revisable_stage(
+        "architecture", cfg, _run_architect, author_model=resolved_model
+    )
     _ended = _now()
     _quality = await ctx.judge(
         cfg,

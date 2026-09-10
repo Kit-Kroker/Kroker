@@ -78,6 +78,7 @@ class GateHost:
         policy: GatePolicy,
         decision: GateDecision,
         confidence: float | None = None,
+        author_model: str | None = None,
     ) -> None:
         """A gate has been decided, by a human, a policy, or a timeout.
 
@@ -86,6 +87,10 @@ class GateHost:
         a second gate opening while this one awaits a human would overwrite a
         stashed value and silently drop RunSummary.gates[].confidence, which
         SC-6's calibration compare reads.
+
+        `author_model` (C7) travels the same way and for the same reason: it
+        is half of the calibration bucket key, so a clobbered value would file
+        one model's sample under another's evidence.
         """
 
     async def _on_notified(
@@ -183,6 +188,7 @@ class GateHost:
         round: int = 1,
         context: GateContext | None = None,
         confidence: float | None = None,
+        author_model: str | None = None,
         default_policy: GatePolicy | None = None,
     ) -> GateDecision:
         """Durable HITL gate with policy-based auto-approval."""
@@ -231,5 +237,5 @@ class GateHost:
                 self._status = "running"
                 self._pending.pop(key, None)
 
-        await self._on_gate_decided(name, round, policy, decision, confidence)
+        await self._on_gate_decided(name, round, policy, decision, confidence, author_model)
         return decision

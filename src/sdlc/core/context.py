@@ -44,7 +44,12 @@ class StageContext(Protocol):
         prompt_digest: str = "",
     ) -> Awaitable[tuple[Any, bool]]: ...
     def revisable_stage(
-        self, name: str, cfg: Any, run_fn: Callable[[str | None], Awaitable[Any]]
+        self,
+        name: str,
+        cfg: Any,
+        run_fn: Callable[[str | None], Awaitable[Any]],
+        *,
+        author_model: str = "",
     ) -> Awaitable[tuple[Any, Any]]: ...
 
     # Benchmark and memory

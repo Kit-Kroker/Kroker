@@ -426,6 +426,16 @@ class StageOutcome(BaseModel):
     duration_s: float
     cost_usd: float | None = None
     fix_attempts: int = 0
+    # C7 (ruling OQ8): realized-outcome label inputs. None = NOT MEASURED,
+    # never zero -- an unmeasured stage must produce no calibration sample
+    # rather than vote "that went fine".
+    plan_drift: float | None = None  # mean unhinted-touch ratio for the stage
+    quality_score: float | None = None  # judge score; None outside benchmark mode
+    # Which judge produced quality_score. QualityScore also carries CONTRACT
+    # pass/fail bookkeeping (code/step.py:760-761), which is not the rubric
+    # judgment ruling OQ1 prefers -- without the identity the two are
+    # indistinguishable downstream.
+    quality_judge: str | None = None
 
 
 class ClarificationOutcome(BaseModel):
@@ -448,6 +458,10 @@ class GateOutcomeSummary(BaseModel):
     decided_by: str  # "human" | "policy" | "timeout"
     approved: bool
     confidence: float | None = None
+    # C7 (ruling OQ4): the proposer model whose confidence this is. Buckets
+    # are per-(gate, model) because calibration is a property of the model,
+    # not of the gate. None on pre-C7 records.
+    author_model: str | None = None
     overrides: list[str] = Field(default_factory=list)
 
 

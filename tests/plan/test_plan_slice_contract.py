@@ -74,7 +74,7 @@ async def test_step_executes_planner_and_revisable_stage():
             return RecallSnapshot(query_hash="q", bank="b", watermark="w", items=[])
 
         async def revisable_stage(
-            self, name: str, cfg: Any, run_fn: Any
+            self, name: str, cfg: Any, run_fn: Any, *, author_model: str = ""
         ) -> tuple[ImplementationPlan, GateDecision]:
             plan_obj = await run_fn(None)
             decision = GateDecision(
