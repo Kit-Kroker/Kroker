@@ -17,7 +17,9 @@
 - **Never pool benchmark and production-proxy samples** (ruling OQ6). Enforced structurally: `source` is folded into `bucket_key`, so pooling requires deliberately constructing a different key, not merely forgetting a `WHERE` clause.
 - **Cold start is expected and correct.** The moment Task 5 lands, every bucket is `insufficient_data` and every SOFT gate waits for a human until the ledger fills to `MIN_SAMPLES`. This is the ruled behaviour, not a regression. Do not add a grace period, a bootstrap default, or a "trust until proven otherwise" mode.
 - **Merge never auto-approves under this design** (ruling OQ2), and this must fall out of the *data*, not a special case in the code. Merge rows are appended to the ledger and never labelled, so `verdict_for` returns `insufficient_data` forever. Do not write `if gate == "merge"` anywhere.
-- **Pinned label definitions** (ruling OQ9), exact: plan-drift label = `1 - mean(len(touched_unhinted) / files_touched)` across the run's measured tasks, clamped to `[0, 1]`. Fix-attempt label = `1 - mean(min(attempts, max_fix_attempts) / max_fix_attempts)` across the run's stages. Agreement constants inherited at cold start: `THRESHOLD = 0.75`, `EPSILON = 0.15`. Sample floor `MIN_SAMPLES = 20`, window `WINDOW = 200`.
+- **Pinned label definitions** (ruling OQ9), exact: plan-drift label = `1 - mean(len(touched_unhinted) / files_touched)` across the run's measured tasks, clamped to `[0, 1]`. Fix-attempt label = `1 - mean(min(attempts, max_fix_attempts) / max_fix_attempts)` across the run's tasks. Agreement constants inherited at cold start: `THRESHOLD = 0.75`, `EPSILON = 0.15`. Sample floor `MIN_SAMPLES = 20`, window `WINDOW = 200`.
+- **Both labels aggregate over the run's TASKS, not over every stage row.** Task attempts are recorded under `stage="code"` (`code/step.py:752-772`); every other stage emits a row with `fix_attempts=0`, so an unfiltered population drags a run in which every task exhausted its budget up toward "mostly fine". Diluting the label is the same vacuity failure as leaving it undefined, and OQ9's pinning exists to prevent it.
+- **Only an `llm_judge` score may displace a proxy label, and only for its own stage** (ruling OQ1, spec §4.2.1 "for this stage"). `QualityScore` also carries CONTRACT 1.0/0.0 pass-fail values (`code/step.py:760-761`), which are not the rubric judgment; and a run-wide blend would grade each gate partly on work it did not produce.
 - **Do not add a twelfth `StageContext` service.** `tests/core/test_core_stage_context.py:28` pins exactly eleven. The ledger is reached through `workflow.execute_activity` directly, the way retro already reaches `reflect`, `export_run_artifacts`, and `apply_session_retention`.
 - **Pydantic v2 defaults to `extra='ignore'`.** `GateDecision(approved=True, ...)` in two existing test stubs silently discards `approved` — it is a read-only `@property` (`core/models.py:169-173`). Do not copy that idiom. Every model construction you write must name only real fields; verify against the model definition, never against a passing test.
 - Broken source-assertion pins are **amended with a stated reason, never deleted**, and never "fixed" by reinstating code this design removes.
@@ -38,7 +40,7 @@ These are binding. On fire: **stop, leave the work uncommitted, diagnose (reprod
 
 ## Pin-Amendment Inventory
 
-Every existing test that reads code this plan rewrites. Produced by grepping `tests/` for each string the plan deletes or renames (`_auto_decision_for`, `revisable_stage`, `GateOutcomeSummary`, `StageOutcome`, `_on_gate_decided`, `retro.ACTIVITIES`). **SG-1 measures against this list.**
+Every existing test that reads code this plan rewrites. Produced by grepping `tests/` for each string the plan deletes or renames (`_auto_decision_for`, `revisable_stage`, `GateOutcomeSummary`, `StageOutcome`, `_on_gate_decided`, `retro.ACTIVITIES`), **then extended by walking the behavioural paths the rewrite touches** — identifier grep cannot see a test that exercises a rewritten code path without naming any rewritten identifier, which is the C8 lesson that put a stop-guard on this section in the first place. **SG-1 measures against this list.**
 
 **Breaks — must be amended (11):**
 
@@ -58,7 +60,10 @@ Every existing test that reads code this plan rewrites. Produced by grepping `te
 
 (Row 11 is two files, one amendment shape — counted as one pin, eleven line-level amendments total.)
 
-**Verified NOT to break — do not "fix" these (7):**
+**Verified NOT to break — do not "fix" these (9):**
+
+- `tests/merge/test_merge_slice_contract.py:264-310` `test_merge_soft_policy_consults_verdict` (MERGE-1.4) — **the only behavioural merge-SOFT test in the suite**, and the reason Task 5 Step 8's "Expected: green" holds. It survives for a specific reason worth stating rather than assuming: its `MergeVerdict(approve=False, confidence=0.3, ...)` makes `confidence` `None` at the consult (`merge/step.py:484` reads `verdict.confidence if verdict.approve else None`), so the ledger fetch is never reached and the human gate fires exactly as before. Every other test in that file runs under the default HARD policy (`core/models.py:340`), so the soft path is never entered at all. Identifier grep cannot see this — it is behavioural-path coverage — which is why it is listed explicitly.
+- `tests/test_benchmark_sc_rollup.py:42` — a `GateOutcomeSummary` construction in a helper; optional-field-safe like the others.
 
 - `tests/test_run_summary_model.py:26` `GateOutcomeSummary(...)` — the added `author_model` is optional with a default.
 - `tests/test_run_summary_model.py:21` and `tests/test_observability_export.py:26` `StageOutcome(...)` — added fields are optional with defaults.
@@ -698,12 +703,12 @@ __all__ = [
 - [ ] **Step 8: Run the tests to verify they pass**
 
 Run: `pytest tests/calibration/ -q`
-Expected: PASS, all 31.
+Expected: PASS, all 32.
 
 - [ ] **Step 9: Run the full suite**
 
 Run: `pytest tests/ -q`
-Expected: green, same counts as the Task 0 baseline plus 31. Nothing consumes the new package yet, so **any** failure here is SG-1.
+Expected: green, same counts as the Task 0 baseline plus 32. Nothing consumes the new package yet, so **any** failure here is SG-1.
 
 - [ ] **Step 10: Commit**
 
@@ -743,7 +748,7 @@ git commit -F .git/C7_MSG
   - `RecordSamplesInput(samples: list[CalibrationSample])` and `@activity.defn async def record_calibration_samples(inp) -> None`
   - `VerdictInput(gate: str, bucket_key: str)` and `@activity.defn async def calibration_verdict(inp) -> CalibrationVerdict`
 
-**Context for the implementer:** The ledger is append-only, so it needs none of `capability/store.py`'s optimistic-concurrency machinery — model it on the `capability_event` table (`board/schema.py:102-110`), which is the repo's existing append-only-log shape. It lives in the board's SQLite file per ADR-19 ("adapters, not substrate") rather than inventing a third storage scheme.
+**Context for the implementer:** The ledger is append-only, so it needs none of `capability/store.py`'s optimistic-concurrency machinery — model it on the `capability_event` table (`board/schema.py:103-111`), which is the repo's existing append-only-log shape. It lives in the board's SQLite file per ADR-19 ("adapters, not substrate") rather than inventing a third storage scheme.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1004,13 +1009,13 @@ ACTIVITIES = [record_calibration_samples, calibration_verdict]
 
 - [ ] **Step 6: Register the activities on the worker**
 
-In `src/sdlc/worker.py`, beside the existing memoization import at `:81`:
+In `src/sdlc/worker.py`, insert the import **after the `.board.activities` block (`:66-71`) and before `.crew.activities` (`:72`)** — the import block is isort-ordered and `pyproject.toml:60` selects `"I"`, so placing it beside the memoization import at `:81` would fail `ruff check src/` with I001 in the verification checklist:
 
 ```python
 from .calibration.activities import calibration_verdict, record_calibration_samples
 ```
 
-and in the activity list beside `cache_get, cache_put` at `:151-152`:
+and in the activity list beside `cache_get, cache_put` at `:151-152` (list entries are order-insensitive; only the import statement's position matters):
 
 ```python
         record_calibration_samples,
@@ -1068,11 +1073,11 @@ git commit -F .git/C7_MSG
   - `GateOutcomeSummary.author_model: str | None`
   - `revisable_stage(name, cfg, run_fn, *, author_model: str)` on the `StageContext` Protocol and `RoleHost`
 
-**Context for the implementer:** The judge score cannot ride `GATE_DECIDED` — that event fires from `_on_gate_decided` at the end of `_gate()` (`gates.py:234`), which returns *before* `ctx.judge` is called (`architecture/step.py:190-195`, `plan/step.py:111-116`). It rides `STAGE_ENDED` instead, which `benchmark_host.py:93-102` emits from a `BenchmarkRecord` that **already carries** both `plan_drift` (`benchmarks/models.py:157`) and `quality.score` (`:154`). No new computation reaches the emit — three more kwargs off an object it already holds.
+**Context for the implementer:** The judge score cannot ride `GATE_DECIDED` — that event fires from `_on_gate_decided` at the end of `_gate()` (`gates.py:234`), which returns *before* `ctx.judge` is called (`architecture/step.py:190-195`, `plan/step.py:111-116`). It rides `STAGE_ENDED` instead, which `benchmark_host.py:93-102` emits from a `BenchmarkRecord` that **already carries** both `plan_drift` (`benchmarks/models.py:157`) and `quality.score` (`:153`). No new computation reaches the emit — three more kwargs off an object it already holds.
 
 `author_model` must be a *parameter* on the gate path, never instance state, for the reason `tests/test_gate_host.py:44` already documents for `confidence`: wave mode runs `_dev_task` concurrently, so a second gate opening while this one awaits a human would clobber a stashed value.
 
-**Watch the stage-key trap:** `resolve_role_model(cfg, stage)` is keyed by `STAGE_ROLES` (`agents/roles.py:148-163`), whose keys are `"architect"` and `"plan"` — **not** the gate names `"architecture"` and `"plan"`. Do not call `resolve_role_model(cfg, name)` inside `_revisable_stage`; the gate name is the wrong keyspace and `"architecture"` would raise `KeyError`. Both stage steps already compute `resolved_model` (`architecture/step.py:81-85`, `plan/step.py:67-71`) — pass that in.
+**Watch the stage-key trap:** `resolve_role_model(cfg, stage)` is keyed by `STAGE_ROLES` (`agents/roles.py:148-163`), whose keys are `"architect"` and `"plan"` — **not** the gate names `"architecture"` and `"plan"`. Do not call `resolve_role_model(cfg, name)` inside `_revisable_stage`; the gate name is the wrong keyspace and `"architecture"` would raise `KeyError`. Both stage steps already compute `resolved_model` (`architecture/step.py:82-86`, `plan/step.py:67-71`) — pass that in.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1108,12 +1113,13 @@ def _ev(seq, kind, stage=None, **data):
     )
 
 
-def test_stage_outcome_carries_the_two_new_labels_optionally():
+def test_stage_outcome_carries_the_new_label_inputs_optionally():
     """Old records validate unchanged -- the fields default to None, which
     means UNMEASURED, not zero."""
     s = StageOutcome(stage="plan", role="planner", outcome="pass", duration_s=1.0)
     assert s.plan_drift is None
     assert s.quality_score is None
+    assert s.quality_judge is None
 
 
 def test_gate_outcome_summary_carries_author_model_optionally():
@@ -1128,13 +1134,14 @@ def test_build_run_summary_reads_plan_drift_and_quality_score():
         _ev(
             1,
             RunEventKind.STAGE_ENDED,
-            stage="planning",
-            role="planner",
+            stage="code",
+            role="dev",
             outcome="pass",
             duration_s=1.0,
             fix_attempts=2,
             plan_drift=0.25,
             quality_score=0.8,
+            quality_judge="contract",
         ),
         _ev(2, RunEventKind.RUN_FINISHED),
     ]
@@ -1149,6 +1156,34 @@ def test_build_run_summary_reads_plan_drift_and_quality_score():
     assert s.stages[0].plan_drift == 0.25
     assert s.stages[0].quality_score == 0.8
     assert s.stages[0].fix_attempts == 2
+
+
+def test_the_judge_identity_travels_with_the_score():
+    """Without it, a CONTRACT 1.0 pass-fail value and a rubric judge score are
+    indistinguishable downstream, and the weaker one silently stands in for
+    the stronger (ruling OQ1)."""
+    trace = [
+        _ev(
+            1,
+            RunEventKind.STAGE_ENDED,
+            stage="plan",
+            role="planner",
+            outcome="pass",
+            duration_s=1.0,
+            quality_score=0.85,
+            quality_judge="llm_judge",
+        ),
+        _ev(2, RunEventKind.RUN_FINISHED),
+    ]
+    s = build_run_summary(
+        run_id="r1",
+        mode="greenfield",
+        outcome="deployed:x",
+        trace=trace,
+        memory_enabled=False,
+        memory_watermark=None,
+    )
+    assert s.stages[0].quality_judge == "llm_judge"
 
 
 def test_build_run_summary_reads_author_model_off_the_gate_event():
@@ -1178,9 +1213,10 @@ def test_build_run_summary_reads_author_model_off_the_gate_event():
 
 
 def test_a_pre_c7_trace_still_builds():
-    """No plan_drift, no quality_score, no author_model keys at all."""
+    """No plan_drift, no quality_score, no quality_judge, no author_model keys
+    at all."""
     trace = [
-        _ev(1, RunEventKind.STAGE_ENDED, stage="planning", role="planner",
+        _ev(1, RunEventKind.STAGE_ENDED, stage="plan", role="planner",
             outcome="pass", duration_s=1.0),
         _ev(2, RunEventKind.GATE_DECIDED, gate="plan", round=1, policy="soft",
             decided_by="human", approved="true"),
@@ -1191,6 +1227,7 @@ def test_a_pre_c7_trace_still_builds():
         memory_enabled=False, memory_watermark=None,
     )
     assert s.stages[0].plan_drift is None
+    assert s.stages[0].quality_judge is None
     assert s.gates[0].author_model is None
 
 
@@ -1249,6 +1286,11 @@ In `src/sdlc/core/models.py`, in `StageOutcome` (`:420-428`), after `fix_attempt
     # rather than vote "that went fine".
     plan_drift: float | None = None  # mean unhinted-touch ratio for the stage
     quality_score: float | None = None  # judge score; None outside benchmark mode
+    # Which judge produced quality_score. QualityScore also carries CONTRACT
+    # pass/fail bookkeeping (code/step.py:760-761), which is not the rubric
+    # judgment ruling OQ1 prefers -- without the identity the two are
+    # indistinguishable downstream.
+    quality_judge: str | None = None
 ```
 
 In `GateOutcomeSummary` (`:441-451`), after `confidence: float | None = None`:
@@ -1277,12 +1319,20 @@ In `src/sdlc/workflows/benchmark_host.py`, in `_record` (`:93-102`), extend the 
             **({"cost_usd": str(record.cost.usd)} if record.cost.usd is not None else {}),
             **({"plan_drift": str(unhinted_ratio(drift))} if drift is not None else {}),
             **(
-                {"quality_score": str(record.quality.score)}
+                {
+                    "quality_score": str(record.quality.score),
+                    "quality_judge": str(record.quality.judge),
+                }
                 if record.quality.score is not None
                 else {}
             ),
         )
 ```
+
+The judge identity travels with the score, never separately: a score whose
+judge is unknown is indistinguishable from a rubric score, and the code and
+merge stages emit CONTRACT 1.0/0.0 pass-fail values through this same field
+(`code/step.py:760-761`).
 
 Add the import **inside** the existing `workflow.unsafe.imports_passed_through()` block (`benchmark_host.py:15`), beside the `PlanDrift` import already at `:31` — a workflow-file import outside that block is sandboxed and will fail at runtime:
 
@@ -1369,6 +1419,7 @@ def _stage_outcome(ev: RunEvent) -> StageOutcome:
         fix_attempts=int(d.get("fix_attempts", "0")),
         plan_drift=float(drift) if drift is not None else None,
         quality_score=float(quality) if quality is not None else None,
+        quality_judge=d.get("quality_judge") or None,
     )
 ```
 
@@ -1435,7 +1486,7 @@ Do **not** also "fix" the `GateDecision(approved=True, ...)` construction in tho
 - [ ] **Step 7: Run the new tests**
 
 Run: `pytest tests/calibration/test_calibration_plumbing.py -q`
-Expected: PASS, all 9.
+Expected: PASS, all 10.
 
 - [ ] **Step 8: Run the amended pins and their neighbours**
 
@@ -1545,7 +1596,9 @@ def _stage(stage: str, role: str, **kw) -> StageOutcome:
 
 
 def test_a_soft_auto_approved_plan_gate_yields_a_drift_labelled_sample():
-    s = _summary([_auto("plan", 0.9)], [_stage("planning", "planner", plan_drift=0.25)])
+    """Drift is recorded on the task rows (code/step.py:769), not on the plan
+    stage's own row."""
+    s = _summary([_auto("plan", 0.9)], [_stage("code", "dev", plan_drift=0.25)])
     samples = calibration_samples_for(s, max_fix_attempts=2, benchmarking=False)
     assert len(samples) == 1
     assert samples[0].gate == "plan"
@@ -1561,15 +1614,74 @@ def test_an_architecture_gate_is_labelled_from_fix_attempts():
     assert samples[0].outcome_label == 0.5
 
 
+def test_zero_attempt_non_task_rows_cannot_dilute_the_label():
+    """The population is the run's TASKS. Every other stage emits a row with
+    fix_attempts=0, so aggregating over all rows would drag a run in which
+    every task exhausted its budget up toward 'mostly fine' -- rebuilding
+    audit row 8's hole by dilution rather than by omission."""
+    s = _summary(
+        [_auto("architecture", 0.9)],
+        [
+            _stage("code", "dev", fix_attempts=2),
+            _stage("intake", "intake"),
+            _stage("clarify", "clarify"),
+            _stage("architecture", "architect"),
+            _stage("plan", "planner"),
+            _stage("qa", "qa"),
+        ],
+    )
+    samples = calibration_samples_for(s, max_fix_attempts=2, benchmarking=False)
+    assert samples[0].outcome_label == 0.0
+
+
 def test_benchmarking_prefers_the_judge_score_and_tags_the_source():
     """Ruling OQ1 + OQ6: the stronger label wins, and lands in its own bucket."""
     s = _summary(
         [_auto("plan", 0.9)],
-        [_stage("planning", "planner", plan_drift=0.9, quality_score=0.85)],
+        [
+            _stage("plan", "planner", quality_score=0.85, quality_judge="llm_judge"),
+            _stage("code", "dev", plan_drift=0.9),
+        ],
     )
     samples = calibration_samples_for(s, max_fix_attempts=2, benchmarking=True)
     assert samples[0].outcome_label == 0.85
     assert samples[0].bucket_key == bucket_key("m/x", LabelSource.BENCHMARK)
+
+
+def test_the_judge_label_is_attributed_to_its_own_stage():
+    """Spec 4.2.1: the judge score FOR THIS STAGE. A run-wide blend would let
+    the planner's rubric score help authorize the architecture gate, and the
+    architect's help authorize the plan gate -- each gate would be graded
+    partly on work it did not produce."""
+    s = _summary(
+        [_auto("architecture", 0.9)],
+        [
+            _stage("plan", "planner", quality_score=0.95, quality_judge="llm_judge"),
+            _stage("code", "dev", fix_attempts=2),
+        ],
+    )
+    samples = calibration_samples_for(s, max_fix_attempts=2, benchmarking=True)
+    assert samples[0].outcome_label == 0.0, (
+        "the architecture gate has no judge score of its own, so it must fall "
+        "back to the proxy -- not borrow the plan stage's score"
+    )
+
+
+def test_a_contract_score_never_displaces_the_proxy_label():
+    """QualityScore also carries CONTRACT pass/fail bookkeeping -- the code
+    stage records 1.0/0.0 (code/step.py:760-761). That is not the rubric
+    judgment spec 3 calls the strongest signal, and it must not stand in for
+    one: a green run would otherwise label 1.0 on every benchmark run
+    regardless of what the rubric thought."""
+    s = _summary(
+        [_auto("plan", 0.9)],
+        [
+            _stage("plan", "planner", quality_score=1.0, quality_judge="contract"),
+            _stage("code", "dev", plan_drift=0.25),
+        ],
+    )
+    samples = calibration_samples_for(s, max_fix_attempts=2, benchmarking=True)
+    assert samples[0].outcome_label == 0.75
 
 
 def test_a_human_decided_gate_is_not_a_sample():
@@ -1579,7 +1691,7 @@ def test_a_human_decided_gate_is_not_a_sample():
         gate="plan", round=1, policy="soft", decided_by="human",
         approved=True, confidence=0.9, author_model="m/x",
     )
-    s = _summary([g], [_stage("planning", "planner", plan_drift=0.0)])
+    s = _summary([g], [_stage("code", "dev", plan_drift=0.0)])
     assert calibration_samples_for(s, max_fix_attempts=2, benchmarking=False) == []
 
 
@@ -1591,7 +1703,7 @@ def test_an_off_policy_approval_is_not_a_sample():
         gate="plan", round=1, policy="off", decided_by="policy",
         approved=True, confidence=0.9, author_model="m/x",
     )
-    s = _summary([g], [_stage("planning", "planner", plan_drift=0.0)])
+    s = _summary([g], [_stage("code", "dev", plan_drift=0.0)])
     assert calibration_samples_for(s, max_fix_attempts=2, benchmarking=False) == []
 
 
@@ -1600,7 +1712,7 @@ def test_a_policy_approval_without_confidence_is_not_a_sample():
         gate="plan", round=1, policy="soft", decided_by="policy",
         approved=True, confidence=None, author_model="m/x",
     )
-    s = _summary([g], [_stage("planning", "planner", plan_drift=0.0)])
+    s = _summary([g], [_stage("code", "dev", plan_drift=0.0)])
     assert calibration_samples_for(s, max_fix_attempts=2, benchmarking=False) == []
 
 
@@ -1615,7 +1727,7 @@ def test_the_merge_gate_is_never_labelled():
 def test_an_unlabellable_run_yields_nothing():
     """A plan gate with no measured drift anywhere: no sample, rather than a
     1.0 that would vote 'the plan was perfect' on no evidence."""
-    s = _summary([_auto("plan", 0.9)], [_stage("planning", "planner")])
+    s = _summary([_auto("plan", 0.9)], [_stage("plan", "planner")])
     assert calibration_samples_for(s, max_fix_attempts=2, benchmarking=False) == []
 
 
@@ -1624,7 +1736,7 @@ def test_a_pre_c7_gate_row_buckets_as_unknown_and_still_samples():
         gate="plan", round=1, policy="soft", decided_by="policy",
         approved=True, confidence=0.9, author_model=None,
     )
-    s = _summary([g], [_stage("planning", "planner", plan_drift=0.0)])
+    s = _summary([g], [_stage("code", "dev", plan_drift=0.0)])
     samples = calibration_samples_for(s, max_fix_attempts=2, benchmarking=False)
     assert samples[0].bucket_key == bucket_key(None, LabelSource.PRODUCTION_PROXY)
 ```
@@ -1692,7 +1804,7 @@ async def test_retro_appends_one_sample_batch():
     cfg = PipelineConfig(memory=MemoryConfig(enabled=False))
     summary = _summary(
         [_auto_plan_gate()],
-        [StageOutcome(stage="planning", role="planner", outcome="pass",
+        [StageOutcome(stage="code", role="dev", outcome="pass",
                       duration_s=1.0, plan_drift=0.25)],
     )
     with patch("temporalio.workflow.execute_activity", new_callable=AsyncMock) as act:
@@ -1729,7 +1841,7 @@ async def test_a_ledger_failure_does_not_change_the_run_outcome():
     cfg = PipelineConfig(memory=MemoryConfig(enabled=False))
     summary = _summary(
         [_auto_plan_gate()],
-        [StageOutcome(stage="planning", role="planner", outcome="pass",
+        [StageOutcome(stage="code", role="dev", outcome="pass",
                       duration_s=1.0, plan_drift=0.25)],
     )
     with patch(
@@ -1766,9 +1878,39 @@ Append to `src/sdlc/calibration/labels.py`:
 _DRIFT_GATES = frozenset({"plan"})
 _FIX_ATTEMPT_GATES = frozenset({"architecture"})
 
+# Ruling OQ9's population is the run's TASKS, not every stage row. Task
+# attempts are recorded under stage="code" (code/step.py:752-772), which is
+# also the only stage that carries plan_drift. Every OTHER stage emits a row
+# with fix_attempts=0 (intake, clarify, architecture, plan, review, qa,
+# merge, deploy), so aggregating across all of them drags a disastrous run
+# up toward "mostly fine": five tasks each exhausting max_fix_attempts=2,
+# plus six zero rows, would label 0.625 instead of 0.0. That dilution is the
+# vacuity direction OQ9's pinning exists to prevent, so the population is
+# filtered rather than assumed. Each ATTEMPT emits its own row, so the mean
+# is over attempts -- which is the intended reading: the label measures what
+# the fix loop cost, not how many distinct tasks entered it.
+_TASK_STAGE = "code"
 
-def _judge_label(summary: RunSummary) -> float | None:
-    scores = [s.quality_score for s in summary.stages if s.quality_score is not None]
+# Spec 3 names the cross-family LLM rubric score "the strongest available
+# quality signal", and ruling OQ1 prefers it when benchmarking. It is not
+# the only thing QualityScore carries: the code stage records a CONTRACT
+# score of 1.0/0.0 (code/step.py:760-761) and merge does likewise. Those are
+# pass/fail bookkeeping, not a rubric judgment, and must never displace a
+# proxy label while wearing the judge's name.
+_LLM_JUDGE = "llm_judge"
+
+
+def _judge_label(summary: RunSummary, gate: str) -> float | None:
+    """Spec 4.2.1: the judge score FOR THIS STAGE -- not a run-wide blend, in
+    which the architect's score would help authorize the plan gate and vice
+    versa. The two proposer stages record under their own gate's name
+    (architecture/step.py:200, plan/step.py:121), so the gate name IS the
+    stage key and no mapping table is needed."""
+    scores = [
+        s.quality_score
+        for s in summary.stages
+        if s.stage == gate and s.quality_score is not None and s.quality_judge == _LLM_JUDGE
+    ]
     if not scores:
         return None
     return max(0.0, min(1.0, sum(scores) / len(scores)))
@@ -1780,20 +1922,23 @@ def calibration_samples_for(
     """Pure. Every SOFT gate this run auto-approved on a self-reported
     confidence, scored against what the rest of the run then did.
 
-    The filter is narrower than "decided_by == 'policy'": GatePolicy.OFF
+    The gate filter is narrower than "decided_by == 'policy'": GatePolicy.OFF
     synthesizes that too (gates.py:195-198), and the budget gate emits its own
     GATE_DECIDED. Only a SOFT gate that had a confidence to honour is
     evidence about whether honouring confidence works.
     """
     source = LabelSource.BENCHMARK if benchmarking else LabelSource.PRODUCTION_PROXY
-    judged = _judge_label(summary) if benchmarking else None
-    drift = plan_drift_label([s.plan_drift for s in summary.stages if s.plan_drift is not None])
-    fixes = fix_attempt_label([s.fix_attempts for s in summary.stages], max_fix_attempts)
+    tasks = [s for s in summary.stages if s.stage == _TASK_STAGE]
+    drift = plan_drift_label([s.plan_drift for s in tasks if s.plan_drift is not None])
+    fixes = fix_attempt_label([s.fix_attempts for s in tasks], max_fix_attempts)
 
     out: list[CalibrationSample] = []
     for g in summary.gates:
         if g.policy != "soft" or g.decided_by != "policy" or g.confidence is None:
             continue
+        # Per-gate, not hoisted: the judge label is attributed to the stage
+        # that earned it.
+        judged = _judge_label(summary, g.gate) if benchmarking else None
         if g.gate in _DRIFT_GATES:
             label = judged if judged is not None else drift
         elif g.gate in _FIX_ATTEMPT_GATES:
@@ -1869,7 +2014,7 @@ Insert this block after the `apply_session_retention` block (`:86-104`), still i
 - [ ] **Step 5: Run the new tests**
 
 Run: `pytest tests/calibration/ -q`
-Expected: PASS, all 54.
+Expected: PASS, all 68 (32 + 10 ledger + 10 plumbing + 12 label + 4 retro).
 
 - [ ] **Step 6: Run the retro suite**
 
@@ -1932,6 +2077,8 @@ The verdict read is **conditioned on SOFT-with-confidence** (spec §4.2.4). HARD
 A lookup failure resolves to `INSUFFICIENT`, never an exception: the retry policy makes an outage rare, and when it happens the gate waits for a human rather than failing the stage.
 
 Merge uses its own `_exec_activity` helper (`merge/step.py:232-238`), which already handles the in-workflow / out-of-workflow split — do not call `workflow.execute_activity` directly from the merge step.
+
+**Why the merge behavioural suite stays green through this task**, stated so a green result is evidence rather than luck: the one behavioural merge-SOFT test (`tests/merge/test_merge_slice_contract.py:264-310`) uses `MergeVerdict(approve=False, ...)`, and `merge/step.py:484` reads `verdict.confidence if verdict.approve else None` — so `confidence` is `None`, the new fetch is skipped entirely, and the human gate fires as before. Every other test in that file runs under the default HARD policy (`core/models.py:340`) and never enters the soft path. If that file goes red here, the cause is *not* "the design started blocking merges" — it is a wiring error in Step 4, and **SG-1** applies.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2139,7 +2286,7 @@ Expected: PASS, all 6.
 - [ ] **Step 6: Amend the ten `test_soft_gate_auto_approval.py` pins**
 
 Run: `pytest tests/test_soft_gate_auto_approval.py -q`
-Expected: **ten** failures (inventory rows 1-10) — an import error plus the source needles. Any *eleventh* failure anywhere is **SG-1**.
+Expected: **one collection error** for the file — `ImportError: cannot import name '_auto_decision_for' from 'sdlc.workflows.role_host'`. A module-level import failure stops collection, so pytest reports one error rather than ten failures; inventory rows 1-10 are all behind it and surface one at a time as you fix the import. Amend all ten before re-running.
 
 Replace the import at `:7`:
 
@@ -2355,7 +2502,7 @@ git commit -F .git/C7_MSG
 
 Run before declaring the branch finished. Evidence before assertions — paste the actual output, do not assert from memory.
 
-- [ ] `pytest tests/ -q` — green, count compared against the Task 0 baseline (expect +~70 tests)
+- [ ] `pytest tests/ -q` — green, count compared against the Task 0 baseline (expect +74 tests: 32 + 10 + 10 + 16 + 6)
 - [ ] `ruff check src/ tests/` and `ruff format --check src/ tests/` — clean
 - [ ] `mypy src/` — no new errors versus baseline
 - [ ] `git log --format='%s%n%b' origin/main..HEAD | grep -i "co-authored\|claude-session\|generated with"` — **no output**. Any hit means an attribution trailer slipped in; rewrite the message before the branch is integrated.
@@ -2365,4 +2512,5 @@ Run before declaring the branch finished. Evidence before assertions — paste t
 - [ ] `python -c "import inspect, sdlc.calibration.decision as d; print(inspect.signature(d.auto_decision_for))"` — the `calibration` parameter has **no default**.
 - [ ] All **11** inventory pins are amended, none deleted: `tests/test_soft_gate_auto_approval.py` rows 1-10 (Task 5 Step 6), the two `revisable_stage` stubs in row 11 (Task 3 Step 6). If you amended anything else, it was outside the inventory — report it as an SG-1 that was cleared, with the reason.
 - [ ] Spec §4.2's five pieces all have a home: labelling → Task 4; ledger storage → Task 2; `bucket_key` → Tasks 1 and 3; the verdict lookup → Tasks 2 and 5; the de-duplication → Task 5.
-- [ ] All nine rulings in spec §6 have a home: OQ1 → Task 4 (`source` tagging); OQ2 → Task 4 (`_DRIFT_GATES`/`_FIX_ATTEMPT_GATES` exclude merge) and Task 6 (MERGE clause); OQ3 → Task 1 (`MIN_SAMPLES`); OQ4 → Tasks 1 and 3 (`bucket_key`, `author_model`); OQ5 → Tasks 1 and 2 (`WINDOW`, `recent`); OQ6 → Task 1 (source folded into the key); OQ7 → Task 1 (binary check in `decision.py`); OQ8 → Task 3 (`STAGE_ENDED`/`RunSummary`); OQ9 → Task 1 (`labels.py`, the constants).
+- [ ] All nine rulings in spec §6 have a home: OQ1 → Task 4 (`source` tagging, `_judge_label`'s per-stage + `llm_judge` filter); OQ2 → Task 4 (`_DRIFT_GATES`/`_FIX_ATTEMPT_GATES` exclude merge) and Task 6 (MERGE clause); OQ3 → Task 1 (`MIN_SAMPLES`); OQ4 → Tasks 1 and 3 (`bucket_key`, `author_model`); OQ5 → Tasks 1 and 2 (`WINDOW`, `recent`); OQ6 → Task 1 (source folded into the key); OQ7 → Task 1 (binary check in `decision.py`); OQ8 → Task 3 (`STAGE_ENDED`/`RunSummary`); OQ9 → Task 1 (`labels.py`, the constants) and Task 4 (`_TASK_STAGE`, the ruled population).
+- [ ] `grep -n "_TASK_STAGE\|_LLM_JUDGE" src/sdlc/calibration/labels.py` — both population filters present. Without them the labels dilute toward 1.0 and a contract pass/fail score stands in for the rubric judgment, which is audit row 8's hole rebuilt under a calibration-shaped name.
