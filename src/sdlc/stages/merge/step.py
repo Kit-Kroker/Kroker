@@ -41,6 +41,7 @@ from ...pending import GateContext
 from ..plan.models import PlanDrift
 from ..qa.activities import LintInput, SecurityScanInput, run_lint, security_scan
 from ..qa.models import SecurityReport
+from ..review.lenses import GATING_LENSES, LensPresence
 from .activities import (
     CoverageInput,
     IntegrationChecks,
@@ -114,6 +115,46 @@ def _plan_drift_check(results: list) -> CheckResult:
             if drifted
             else "no task exceeded the plan-drift threshold (or drift is unmeasured)"
         ),
+    )
+
+
+def _lens_presence_check(results: list) -> CheckResult:
+    """C8: a lens that did not run must not be graded as one that approved.
+
+    Ruling OQ2 -- fail only on UNDECLARED_ABSENT (the lens was asked for, was
+    reached, and did not deliver) or on a MISSING outcome. The missing-outcome
+    clause is what preserves the defense against an empty `lens_outcomes`
+    list: a producer that predates the field has no UNDECLARED_ABSENT entry to
+    trip on, so without it a task with no tombstones at all would pass. A
+    missing tombstone is as severe as a broken one.
+
+    DECLARED_ABSENT (the operator turned it off) and NOT_REACHED (the run site
+    was never reached -- routine geometry on quarantined and budget-exhausted
+    tasks) both pass, and every state is named in the detail regardless: the
+    ruling honours operator intent and pipeline shape without letting either
+    go silent.
+
+    Ruling OQ3 -- one uniform check over both lenses; the detail names which.
+    Unfiltered by status, matching review_severity and plan_drift.
+    """
+    failures: list[str] = []
+    notes: list[str] = []
+    for r in results:
+        recorded = {o.lens: o for o in (getattr(r, "lens_outcomes", None) or [])}
+        task_id = getattr(r, "task_id", "?")
+        for lens in sorted(GATING_LENSES):
+            outcome = recorded.get(lens)
+            if outcome is None:
+                failures.append(f"{task_id}/{lens}: no outcome recorded")
+            elif outcome.presence is LensPresence.UNDECLARED_ABSENT:
+                failures.append(f"{task_id}/{lens}: {outcome.presence.value} ({outcome.reason})")
+            else:
+                notes.append(f"{task_id}/{lens}: {outcome.presence.value}")
+    return build_check(
+        "review_lenses_present",
+        not failures,
+        CheckClass.ADVISORY,
+        detail="; ".join(failures + notes) or "no task results to grade",
     )
 
 

@@ -83,6 +83,9 @@ ABSOLUTE_FLOOR: frozenset[str] = frozenset(
 # classification it carries here. Edits deserve ABSOLUTE_FLOOR-grade scrutiny —
 # after C3, deleting an entry is the only way to make a dropped check quiet
 # again, so the pressure point moved from the producer to this constant.
+# One entry grades evidence rather than a measurement: `review_lenses_present`
+# (C8) says whether each gating lens produced a tombstone at all, so a lens
+# that silently stopped running fails here instead of reading as approval.
 MERGE_REQUIRED_CHECKS: Final[Mapping[str, CheckClass]] = MappingProxyType(
     {
         "build_integration_green": CheckClass.ABSOLUTE,
@@ -90,6 +93,7 @@ MERGE_REQUIRED_CHECKS: Final[Mapping[str, CheckClass]] = MappingProxyType(
         "security_scan_collected": CheckClass.ABSOLUTE,
         "security_no_critical": CheckClass.ABSOLUTE,
         "review_severity": CheckClass.ADVISORY,
+        "review_lenses_present": CheckClass.ADVISORY,
         "traceability": CheckClass.ADVISORY,
         "coverage": CheckClass.ADVISORY,
         "plan_drift": CheckClass.ADVISORY,
