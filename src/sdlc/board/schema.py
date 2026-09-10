@@ -136,6 +136,19 @@ CREATE TABLE IF NOT EXISTS finding_disposition_event (
     detail     TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS gate_calibration (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    gate          TEXT NOT NULL,
+    bucket_key    TEXT NOT NULL,
+    confidence    REAL NOT NULL,
+    outcome_label REAL NOT NULL,
+    run_id        TEXT NOT NULL,
+    recorded_at   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_gate_calibration_bucket
+    ON gate_calibration(gate, bucket_key, id);
 """
 
 DEFAULT_DB = "runs/board.sqlite3"

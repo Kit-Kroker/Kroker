@@ -69,6 +69,7 @@ from .board.activities import (
     set_task_authoritative,
     sync_plan_tasks,
 )
+from .calibration.activities import calibration_verdict, record_calibration_samples
 from .crew.activities import (
     checkpoint_round,
     load_crew,
@@ -150,6 +151,8 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
         reflect,
         cache_get,
         cache_put,
+        record_calibration_samples,
+        calibration_verdict,
         export_run_artifacts,
         notify,
         price_usage,
