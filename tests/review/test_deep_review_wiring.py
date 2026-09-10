@@ -23,9 +23,18 @@ def test_deep_review_helper_exists():
 
 
 def test_deep_review_gated_on_config_flag():
+    """C8 (Task 4) retarget: `t_deep_review is not None` read the dead
+    task_host twin, deleted as an unreachable duplicate of the gate; the live
+    predicate is run_deep_review's own pre-check in review/step.py (mirrored
+    by the code-stage wrapper that actually calls it)."""
     src = _src()
     assert "cfg.deep_review_enabled" in src
-    assert "t_deep_review is not None" in src
+    stage_src = REVIEW_SRC.read_text(encoding="utf-8")
+    idx = stage_src.find("async def run_deep_review")
+    assert idx != -1
+    body = stage_src[idx : idx + 800]
+    assert "cfg.deep_review_enabled" in body
+    assert "deep_review_agent is not None" in body
 
 
 def test_deep_review_reads_via_load_session_only():

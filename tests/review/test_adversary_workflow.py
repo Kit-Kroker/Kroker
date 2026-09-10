@@ -82,10 +82,20 @@ def _src() -> str:
 
 
 def test_adversary_helper_exists_and_is_config_gated():
+    """C8 (Task 4) retarget: the `t_adversary is not None` /
+    `adversary_agent is None` clause read the dead task_host twin and the
+    duplicate code-wrapper pre-check, both deleted by C8's single-sourcing of
+    the absence rule; the live gate is run_adversary's own pre-check in
+    review/step.py."""
     src = _src()
     assert "async def _run_adversary" in src
     assert "cfg.adversarial_review_enabled" in src
-    assert "t_adversary is not None" in src or "adversary_agent is None" in src
+    stage_src = STAGE_SRC.read_text(encoding="utf-8")
+    idx = stage_src.find("async def run_adversary")
+    assert idx != -1
+    body = stage_src[idx : idx + 1600]
+    assert "cfg.adversarial_review_enabled" in body
+    assert "adversary_agent is not None" in body
 
 
 def test_success_predicate_is_unchanged():
@@ -104,9 +114,13 @@ def test_adversary_runs_only_on_the_approving_path():
 
 
 def test_adversary_is_fail_open():
-    """A failed lens counts as agreement -- it must never fail a task."""
-    src = _src()
-    idx = src.find("async def _run_adversary")
+    """A failed lens counts as agreement at the task layer -- it must never
+    fail a task (REVIEW-1.3 stands). C8 retargets this at run_adversary, which
+    is where fail-open actually lives: the code-stage wrapper's duplicate
+    pre-check was removed so the runner holds the only copy of the rule, and
+    the dead task_host twin that this find() used to land on is gone."""
+    src = STAGE_SRC.read_text(encoding="utf-8")
+    idx = src.find("async def run_adversary")
     body = src[idx : idx + 2600]
     assert "return None" in body
     assert "raise" not in body

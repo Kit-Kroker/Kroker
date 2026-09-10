@@ -10,14 +10,12 @@ from __future__ import annotations
 
 import os
 from datetime import timedelta
-from typing import Any
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from ..agents.roles import (
-        resolve_role_model,
         t_adversary,
         t_deep_review,
         t_handoff,
@@ -41,13 +39,6 @@ with workflow.unsafe.imports_passed_through():
     from ..stages.plan.models import (
         DevTask,
     )
-    from ..stages.review import (
-        run_adversary as review_run_adversary,
-    )
-    from ..stages.review import (
-        run_deep_review as review_run_deep_review,
-    )
-    from ..stages.review.models import DeepReviewReport, ReviewReport
     from ..vcs import (
         MergeInput,
         WorktreeInput,
@@ -306,59 +297,4 @@ class TaskHost:
             deep_review_agent=t_deep_review,
             handoff_agent=t_handoff,
             session_refs=self._session_refs,
-        )
-
-    async def _run_adversary(
-        self,
-        cfg: PipelineConfig,
-        contract: Any,
-        assertions: list[str],
-        diff: dict[str, Any],
-        qa_raw: Any,
-        task: Any,
-    ) -> ReviewReport | None:
-        """Spec 3.2: the decorrelated second opinion, on the APPROVING path only."""
-        if not (cfg.adversarial_review_enabled and t_adversary is not None):
-            return None
-        return await review_run_adversary(
-            self._ctx,  # type: ignore[attr-defined]
-            cfg=cfg,
-            contract=contract,
-            assertions=assertions,
-            diff=diff,
-            qa_raw=qa_raw,
-            task=task,
-            adversary_agent=t_adversary,
-            adversary_model=resolve_role_model(cfg, "adversary"),
-        )
-
-    async def _run_deep_review(
-        self,
-        cfg: PipelineConfig,
-        run: Any,
-        contract: Any,
-        assertions: list[str],
-        diff: dict[str, Any],
-        task: Any,
-    ) -> DeepReviewReport | None:
-        """E-39 advisory lens: read the SCRUBBED harness transcript as data and
-        emit DeepReviewReport.
-        """
-        if not (
-            cfg.deep_review_enabled
-            and t_deep_review is not None
-            and run is not None
-            and run.session_ref is not None
-        ):
-            return None
-        return await review_run_deep_review(
-            self._ctx,  # type: ignore[attr-defined]
-            cfg=cfg,
-            run=run,
-            contract=contract,
-            assertions=assertions,
-            diff=diff,
-            task=task,
-            deep_review_agent=t_deep_review,
-            deep_review_model=resolve_role_model(cfg, "deep_review"),
         )
