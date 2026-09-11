@@ -32,6 +32,9 @@ from both QA and reviewer judges into structured retry instructions, detecting s
 The slice exports `step` and `ACTIVITIES` (`run_test_suite`, `run_lint`, `security_scan`), which run
 in isolated worktree environments with bounded timeouts and group process management. [FR-106]
 
+### QA-1.6
+The security scan measures the change, not the tree. `scan_paths` is a pure read over an explicit path list that emits one finding per match, each carrying its normalized source line. It skips paths under Kroker's own `_SCAN_SKIP_DIRS`, and any listed file it cannot read makes the point `NOT_COLLECTED`. `scoped_security_scan` lists tracked files (`git ls-files`) at the integration head and at the pinned base worktree, and returns a `ScopedSecurityReport`. `introduced` is the head-minus-base multiset over `(rule, path, line)`, with base paths mapped through the change's renames; pre-existing and resolved findings are counts. A report that is not `MEASURED` carries no findings and no counts. There is no exemption of any kind: pre-existing fixtures are pre-existing at the base, and new fixtures assemble their trigger text at runtime. [SC-5, FR-106, FR-915; diff-scoped gates DS4/DS7/DS9]
+
 ## Failure modes
 
 - **Test failure**: Subprocess returns non-zero; failure traceback and short test summary info are captured for the fix loop.
@@ -39,3 +42,4 @@ in isolated worktree environments with bounded timeouts and group process manage
 - **Stopped early**: Suite aborted early (`-x` / `--maxfail`); flagged via `stopped_early` so the agent recognizes partial evidence.
 - **Zero tests collected**: Pytest exits 5 with "no tests ran"; treated as vacuous pass when a task does not introduce tests yet.
 - **Missing python dependencies**: Worktree venv provisions dependencies from `pyproject.toml` or `requirements.txt` to avoid ambient environment contamination.
+- **Base not materialized / tracked file unreadable / `git ls-files` failed**: the scoped scan is `NOT_COLLECTED` with the reason, and the merge gate's absolute `security_scan_collected` fails.

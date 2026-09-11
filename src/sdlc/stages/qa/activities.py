@@ -8,14 +8,23 @@ import os
 import pathlib
 import re
 import sys
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 
 from temporalio import activity
 
+from ...change_scope import FindingKey, delta, normalize_line, normalize_path, rename_map
 from ...measurement import CollectionState
 from ...process import kill_process_tree
 from ...toolchain.adapters import ToolchainKind, detect
-from .models import QAReport, SecurityFinding, SecurityReport, SecuritySeverity
+from ...vcs.git import _git
+from .models import (
+    QAReport,
+    ScopedSecurityReport,
+    SecurityFinding,
+    SecurityReport,
+    SecuritySeverity,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -405,32 +414,115 @@ _SCAN_SKIP_DIRS = frozenset(
 )
 
 
-@activity.defn
-async def security_scan(inp: SecurityScanInput) -> SecurityReport:
-    """Scan source files under the integration worktree against a minimal
-    deterministic ruleset. Pure filesystem read — no network, no git — so it
-    is reproducible across Temporal retries."""
+def _skipped(rel: str) -> bool:
+    return any(part in _SCAN_SKIP_DIRS for part in rel.split("/")[:-1])
+
+
+def scan_paths(root: str, paths: Sequence[str]) -> SecurityReport:
+    """DS4: the per-point scan, pure over an explicit path list.
+
+    Pure filesystem read -- no network, no git, no directory walk -- so it is
+    reproducible across Temporal retries. One finding PER MATCH, carrying the
+    normalized source line (the DS3 identity text): `pattern.search` recorded
+    at most one finding per (rule, file), which let a second identical finding
+    in a file hide behind the first. A listed file that cannot be read makes
+    the whole point NOT_COLLECTED rather than being skipped silently (DS7).
+    """
     findings: list[SecurityFinding] = []
-    root = inp.worktree
-    for dirpath, dirnames, filenames in os.walk(root):
-        # In-place slice assignment is what prunes os.walk's descent.
-        dirnames[:] = [d for d in dirnames if d not in _SCAN_SKIP_DIRS]
-        for fname in filenames:
-            if not fname.endswith(_SECURITY_SCAN_EXTENSIONS):
-                continue
-            fpath = os.path.join(dirpath, fname)
-            try:
-                text = pathlib.Path(fpath).read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            rel = os.path.relpath(fpath, root)
-            for pattern, severity, rule, detail in _SECURITY_RULES:
-                if pattern.search(text):
-                    findings.append(
-                        SecurityFinding(severity=severity, rule=rule, detail=detail, path=rel)
+    unreadable: list[str] = []
+    for rel in sorted({normalize_path(p) for p in paths}):
+        if not rel.endswith(_SECURITY_SCAN_EXTENSIONS) or _skipped(rel):
+            continue
+        try:
+            text = pathlib.Path(root, rel).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            unreadable.append(rel)
+            continue
+        for pattern, severity, rule, detail in _SECURITY_RULES:
+            for m in pattern.finditer(text):
+                start = text.rfind("\n", 0, m.start()) + 1
+                end = text.find("\n", m.start())
+                line = text[start : len(text) if end == -1 else end]
+                findings.append(
+                    SecurityFinding(
+                        severity=severity,
+                        rule=rule,
+                        detail=detail,
+                        path=rel,
+                        line=normalize_line(line),
                     )
+                )
+    if unreadable:
+        return SecurityReport(
+            critical=0,
+            state=CollectionState.NOT_COLLECTED,
+            reason=f"{len(unreadable)} tracked file(s) unreadable: {unreadable[:5]}",
+        )
     critical = sum(1 for f in findings if f.severity == "critical")
     return SecurityReport(critical=critical, findings=findings, state=CollectionState.MEASURED)
 
 
-ACTIVITIES = [run_test_suite, run_lint, security_scan]
+@activity.defn
+async def security_scan(inp: SecurityScanInput) -> SecurityReport:
+    """Whole-directory form, kept only until the merge step moves to
+    scoped_security_scan (diff-scoped gates plan, Task 7)."""
+    paths: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(inp.worktree):
+        dirnames[:] = [d for d in dirnames if d not in _SCAN_SKIP_DIRS]
+        paths.extend(os.path.relpath(os.path.join(dirpath, f), inp.worktree) for f in filenames)
+    return scan_paths(inp.worktree, paths)
+
+
+@dataclass
+class ScopedSecurityScanInput:
+    worktree: str  # the integration head
+    base_worktree: str | None  # prepare_base_worktree's path; None = not materialized
+    renames: list[list[str]] = field(default_factory=list)
+    base_reason: str = ""  # why base_worktree is None
+
+
+def _tracked(worktree: str) -> list[str] | None:
+    r = _git(["ls-files", "-z"], worktree)
+    if r.returncode != 0:
+        return None
+    return [p for p in r.stdout.split("\0") if p]
+
+
+def _security_key(f: SecurityFinding) -> FindingKey:
+    return ("security", f.rule, f.path, f.line)
+
+
+def _not_collected(reason: str) -> ScopedSecurityReport:
+    return ScopedSecurityReport(state=CollectionState.NOT_COLLECTED, reason=reason)
+
+
+@activity.defn
+async def scoped_security_scan(inp: ScopedSecurityScanInput) -> ScopedSecurityReport:
+    """DS4: tracked content at both points, then the DS3 multiset delta.
+
+    Git lives here and not in scan_paths: both trees are fixed commits (the
+    detached base at base_sha, the integration head after its last merge), so a
+    retry lists and reads the same bytes. Only the delta crosses the activity
+    boundary, which keeps payloads bounded on a repository with thousands of
+    pre-existing findings.
+    """
+    if inp.base_worktree is None:
+        return _not_collected(f"base not materialized: {inp.base_reason or 'no reason given'}")
+    points: dict[str, SecurityReport] = {}
+    for label, wt in (("head", inp.worktree), ("base", inp.base_worktree)):
+        paths = _tracked(wt)
+        if paths is None:
+            return _not_collected(f"git ls-files failed at the {label} point")
+        rep = scan_paths(wt, paths)
+        if rep.state is not CollectionState.MEASURED:
+            return _not_collected(f"{label} point: {rep.reason}")
+        points[label] = rep
+    introduced, pre, res = delta(
+        points["base"].findings, points["head"].findings, _security_key, rename_map(inp.renames)
+    )
+    return ScopedSecurityReport(
+        state=CollectionState.MEASURED, introduced=introduced, preexisting=pre, resolved=res
+    )
+
+
+ACTIVITIES = [run_test_suite, run_lint, security_scan, scoped_security_scan]

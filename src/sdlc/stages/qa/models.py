@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ...core.models import ArtifactRef
 from ...measurement import CollectionState
@@ -44,6 +44,7 @@ class SecurityFinding(BaseModel):
     rule: str  # which scanner rule matched
     detail: str
     path: str = ""
+    line: str = ""  # normalized source line: the DS3 identity text
 
 
 class SecurityReport(BaseModel):
@@ -60,3 +61,32 @@ class SecurityReport(BaseModel):
     findings: list[SecurityFinding] = Field(default_factory=list)
     state: CollectionState
     reason: str = ""
+
+
+class ScopedSecurityReport(BaseModel):
+    """DS4/DS7: the two-point security delta the merge gate reads.
+
+    `security_scan_collected` reads `state` (both points collected);
+    `security_no_critical` counts introduced criticals only. A report that is
+    not MEASURED carries no counts at all, so it can never read as "zero
+    introduced" (FR-915).
+    """
+
+    state: CollectionState
+    reason: str = ""
+    introduced: list[SecurityFinding] = Field(default_factory=list)
+    preexisting: int = 0
+    resolved: int = 0
+
+    @property
+    def introduced_critical(self) -> int:
+        return sum(1 for f in self.introduced if f.severity == "critical")
+
+    @model_validator(mode="after")
+    def _unmeasured_carries_nothing(self) -> ScopedSecurityReport:
+        if self.state is not CollectionState.MEASURED:
+            if self.introduced or self.preexisting or self.resolved:
+                raise ValueError(f"{self.state.value} report must not carry findings or counts")
+            if not self.reason.strip():
+                raise ValueError(f"{self.state.value} report requires a reason")
+        return self

@@ -15,7 +15,7 @@ file carries only what is true *here*.
 
 ## Temporal notes for this slice
 
-- `ACTIVITIES = [run_test_suite, run_lint, security_scan]`.
+- `ACTIVITIES = [run_test_suite, run_lint, security_scan, scoped_security_scan]`.
 - All activities run in worker context with bounded timeouts and safe process tree termination (`kill_process_tree`).
 - Rule 3 passthrough set: this slice passes through `core/models.py`, `workflows/models.py`, and upstream artifact models.
 
@@ -28,7 +28,13 @@ file carries only what is true *here*.
 
 - `run_test_suite`: runs test runner inside worktree venv with traceback capture.
 - `run_lint`: runs project linter inside worktree with diagnostic capture.
-- `security_scan`: executes deterministic pattern checks across source files.
+- `scan_paths`: pure per-point scan over an explicit path list (one finding per match, with its line).
+- `scoped_security_scan`: tracked files at head and base, then the `change_scope` delta (DS4).
+- `security_scan`: transitional whole-directory form; removed when the merge step moves to `scoped_security_scan`.
+
+## Fixture convention (diff-scoped gates DS9)
+
+The merge gate's security floor has no exemption for tests or fixtures. New test code never writes scanner-trigger text literally: assemble it at runtime (`"ev" + "al("`), or keep payloads in extensions the scanner does not read. Do not edit existing literal fixture lines — their normalized text is their baseline identity, and an edited line reads as introduced.
 
 ## Tests
 
