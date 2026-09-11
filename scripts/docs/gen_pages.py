@@ -73,7 +73,10 @@ def generate() -> None:
         lines.append("[Open the full interactive analysis](benchmark-analysis.html)")
     else:
         lines.append(EMPTY_MESSAGE)
-        # The link to the dated snapshot joins at the P3 cutover (Task 14).
+        lines.append(
+            "[2026-08-15 benchmark analysis snapshot]"
+            "(../docs/reports/2026-08-15-benchmark-analysis.html)"
+        )
     with mkdocs_gen_files.open(BENCHMARK_PAGE, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 

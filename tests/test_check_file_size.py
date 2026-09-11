@@ -45,8 +45,6 @@ def test_verbatim_vendored_data_is_exempt():
 
 
 def test_generated_and_machine_managed_files_are_exempt():
-    assert not is_checked("docs/roadmap.html")
-    assert not is_checked("docs/schemas/roadmap.html")
     assert not is_checked("records/2026-07-12-factory-console/support.js")
     assert not is_checked("uv.lock")
     assert not is_checked("interfaces/dashboard/frontend/package-lock.json")

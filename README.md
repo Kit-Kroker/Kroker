@@ -128,16 +128,10 @@ not be evaluated is `errored` and never counts as a pass.
   [`docs/reference/architecture-review-2026-07.md`](docs/reference/architecture-review-2026-07.md)
   for the design decisions and implementation status.
 - See [`BENCHMARK.md`](BENCHMARK.md) for the benchmark & evaluation design — the four measurement axes (harness / model×role / memory / case), how success criteria SC-1..6 get their numbers, and the E-30…E-37 increments.
-- Self-contained schema docs (no build step, open directly in a browser),
-  each checked against actual code:
-  [`docs/schemas/roadmap.html`](docs/schemas/roadmap.html) (every FR/NFR/SC/US/ADR + the
-  15-stage DAG vs code), [`docs/schemas/architecture-schema.html`](docs/schemas/architecture-schema.html),
-  [`docs/schemas/agents-schema.html`](docs/schemas/agents-schema.html) (registry lifecycle,
-  every role, ADR-6/adversary model-inequality checks),
-  [`docs/schemas/research-stage-schema.html`](docs/schemas/research-stage-schema.html) (the
-  research fan-out stage, provider seam, ExaSearch wiring),
-  [`docs/schemas/benchmark.html`](docs/schemas/benchmark.html) /
-  [`docs/schemas/benchmark-analysis.html`](docs/schemas/benchmark-analysis.html).
+- Generated documentation site — built from the living sources on every push
+  (`mkdocs build --strict` in CI, published to GitHub Pages at
+  https://kit-kroker.github.io/Kroker/). Local preview: `pip install -e ".[docs]"`
+  then `mkdocs serve`. Nothing on it is hand-maintained.
 
 ## Notes
 - Payloads through Temporal stay small (claim-check for specs/diffs/logs).

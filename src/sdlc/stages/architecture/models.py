@@ -29,8 +29,7 @@ class ArchitectureSpec(BaseModel):
     def _affected_modules_follow_the_delta(self) -> ArchitectureSpec:
         """E-84 D7: one authority for what changed.
 
-        `affected_modules` predates the typed delta and is documented as the
-        delta in docs/schemas/agents-schema.html. When a delta is present it is the
+        `affected_modules` predates the typed delta (E-84). When a delta is present it is the
         authority and this field is derived from it; when it is absent
         (greenfield, and the seeded specs tidyup/backlog.py:103 and the
         benchmark fixtures write) the field is left exactly as given.

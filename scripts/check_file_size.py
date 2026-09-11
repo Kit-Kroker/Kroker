@@ -43,17 +43,12 @@ IN_SCOPE_PREFIXES = (
 )
 
 # NOTE: these are fnmatch patterns, not shell globs -- `*` matches `/` too, so
-# "docs/superpowers/*" covers the whole subtree. Both "docs/*.html" and
-# "docs/schemas/*" appear because the generated schema pages move into
-# docs/schemas/ during this same change set and must stay exempt on both sides
-# of that move.
+# "docs/superpowers/*" covers the whole subtree.
 EXEMPT_PATTERNS = (
     "docs/superpowers/*",  # write-once historical records
     "records/*",  # verbatim Claude Design exports
     "benchmarks/*",  # the measurement instrument's vendored corpus
     "tests/fixtures/hindsight-openapi.json",  # verbatim vendored schema
-    "docs/*.html",  # generated schema pages
-    "docs/schemas/*",  # ... and their post-move home
     "build/*",
     "*/dist/*",
     "*/node_modules/*",

@@ -45,17 +45,24 @@ def test_strict_build_page_set(tmp_path: Path):
     forbidden = [s for s in sources if s.startswith(("superpowers", "reports", "schemas"))]
     assert forbidden == []
     assert not [s for s in sources if "AGENTS" in s and s != "templates/stage-AGENTS"]
-    # README links repo files as blob URLs after the hook rewrites them.
-    readme_html = (site / "index.html").read_text(encoding="utf-8")
-    assert "github.com/Kit-Kroker/Kroker/blob/main/" in readme_html
+    # Repo-file links become GitHub blob URLs after the hook rewrites them
+    # (README's own schema-page links left with the P3 cutover, so assert on
+    # a page that links out of the site — the roadmap board's source column).
+    board_html = (site / "generated" / "roadmap-board" / "index.html").read_text(encoding="utf-8")
+    assert "github.com/Kit-Kroker/Kroker/blob/main/" in board_html
 
 
 def test_benchmark_page_empty_state_in_build(tmp_path: Path):
-    """Without runs/, the site renders the benchmark empty state (spec §9.2)."""
+    """Without runs/, the site renders the benchmark empty state (spec §9.2)
+    linking to the one dated snapshot let through by exclude_docs (§9.7)."""
     from scripts.aggregate_benchmarks import EMPTY_MESSAGE
 
     site = tmp_path / "site"
     _build(site)
     page = site / "generated" / "benchmark-analysis" / "index.html"
-    assert EMPTY_MESSAGE in page.read_text(encoding="utf-8")
+    html = page.read_text(encoding="utf-8")
+    assert EMPTY_MESSAGE in html
+    assert "reports/2026-08-15-benchmark-analysis.html" in html
+    reports = list((site / "reports").iterdir())
+    assert [p.name for p in reports] == ["2026-08-15-benchmark-analysis.html"]
     assert not (site / "generated" / "benchmark-analysis.html").exists()

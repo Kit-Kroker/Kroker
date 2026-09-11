@@ -171,5 +171,5 @@ Rule: **you touched a stage, you move it.**
   stage DAG, the crew (`CrewTaskWorkflow`, E-88), ADRs.
 - [`ROADMAP.md`](ROADMAP.md) — FR/NFR status, open questions, what's landed
   vs. in flight; per-epic detail lives in `docs/roadmap/`.
-- `docs/reference/foundation.md`, `BENCHMARK.md`, and the generated schema pages
-  under `docs/schemas/` for deeper contract- and benchmark-level detail.
+- `docs/reference/foundation.md`, `BENCHMARK.md`, and the generated docs site
+  (https://kit-kroker.github.io/Kroker/) for the assembled living documentation.

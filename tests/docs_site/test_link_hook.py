@@ -121,8 +121,9 @@ def test_page_repo_paths_distinguishes_real_and_virtual(tmp_path: Path):
         Stub("README.md", None),  # virtual: no abs path at all
         Stub("ARCHITECTURE.md", str(virtual_on_disk)),  # gen-files virtual
         # excluded (exclude_docs) files stay in the Files collection but are
-        # never site pages — e.g. docs/schemas/ during P1–P2.
-        Stub("schemas/roadmap.html", str(docs_dir / "schemas" / "roadmap.html"), True),
+        # never site pages — e.g. docs/reports/* snapshots other than the
+        # dated benchmark page the empty state links to.
+        Stub("reports/2026-08-30-x.md", str(docs_dir / "reports" / "2026-08-30-x.md"), True),
     ]
     assert page_repo_paths_from_files(files, docs_dir) == {
         "docs/framework.md": "framework.md",
