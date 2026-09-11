@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Literal
 
 Status = Literal["done", "partial", "notstarted", "notmeasurable"]
@@ -112,3 +113,47 @@ def parse_board(sources: dict[str, str]) -> list[Section]:
             )
         flush()
     return sections
+
+
+BOARD_PAGE = "generated/roadmap-board.md"
+
+BLOB_BASE = "https://github.com/Kit-Kroker/Kroker/blob/main/"
+
+
+def board_sources(repo_root: Path) -> dict[str, str]:
+    """ROADMAP.md + docs/roadmap/*.md at their repo-relative paths."""
+    paths = ["ROADMAP.md"] + sorted(
+        f"docs/roadmap/{p.name}" for p in (repo_root / "docs" / "roadmap").glob("*.md")
+    )
+    return {p: (repo_root / p).read_text(encoding="utf-8") for p in paths}
+
+
+def render_board(sections: list[Section]) -> str:
+    counts: dict[str, int] = {}
+    lines = [
+        "# Roadmap status board",
+        "",
+        "Generated from `ROADMAP.md` + `docs/roadmap/*.md` on every build.",
+        "Status rule: `[x]` done · `[ ] ⚠️` partial · `[ ]` not started · `—` not measurable.",
+        "",
+    ]
+    for section in sections:
+        lines += [
+            f"## {section.title}",
+            "",
+            "| Id | Status | Title | Source |",
+            "| --- | --- | --- | --- |",
+        ]
+        for it in section.items:
+            counts[it.status] = counts.get(it.status, 0) + 1
+            title = it.title.replace("|", "\|")[:80]
+            lines.append(
+                f"| **{it.id}** | {it.status} | {title} "
+                f"| [{it.source}:{it.line}]({BLOB_BASE}{it.source}#L{it.line}) |"
+            )
+        lines.append("")
+    lines += ["## Totals", "", "| Status | Items |", "| --- | --- |"]
+    for status in ("done", "partial", "notstarted", "notmeasurable"):
+        lines.append(f"| {status} | {counts.get(status, 0)} |")
+    lines.append("")
+    return "\n".join(lines)

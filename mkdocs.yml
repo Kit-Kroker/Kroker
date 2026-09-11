@@ -70,6 +70,7 @@ nav:
           - retro: src/sdlc/stages/retro/retro.md
   - Roadmap:
       - ROADMAP: ROADMAP.md
+      - Status board: generated/roadmap-board.md
       - docs/roadmap:
           - agent-board: roadmap/agent-board.md
           - crew: roadmap/crew.md

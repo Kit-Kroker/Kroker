@@ -46,7 +46,12 @@ def generate() -> None:
         pull_virtual(repo_rel)
     for repo_rel in STAGE_CONTRACTS:
         pull_virtual(repo_rel)
-    # P2 appends the generated pages here (board, registry, benchmark).
+
+    from scripts.docs import roadmap_board
+
+    board = roadmap_board.parse_board(roadmap_board.board_sources(REPO_ROOT))
+    with mkdocs_gen_files.open(roadmap_board.BOARD_PAGE, "w", encoding="utf-8") as f:
+        f.write(roadmap_board.render_board(board))
 
 
 generate()
