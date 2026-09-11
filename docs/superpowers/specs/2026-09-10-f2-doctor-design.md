@@ -136,6 +136,8 @@ whose CLI is absent from PATH or which declares no pinned version
 `SKIP harness versions (cursor-agent not on PATH; claude, opencode checked)`.
 A row whose every leg SKIPs prints one SKIP line, never a PASS.
 
+Erratum (F2 final review, 2026-09-11): the partial-SKIP example above ("cursor-agent not on PATH; claude, opencode checked") names behaviour v1 does not ship. `check_harness_drift` reports SKIP — "pinned harness CLIs are not on PATH; nothing was checked" — only when no pinned CLI is on PATH; when some are, it reports PASS/WARN over the CLIs examined and does not name the absent ones. Per-CLI partial naming is deferred to a follow-up if operator demand appears.
+
 ## 5. The check register (v1)
 
 | # | Check | Delegates to / reads | Bad → |
