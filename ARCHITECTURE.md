@@ -441,7 +441,7 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
   loop (E-4) judge per-stage artifacts with the cross-family judge. The
   design that folds them into an SC-1..6 measurement instrument —
   held-out oracles, per-role economics, the `case × stage` error
-  heatmap — is `docs/BENCHMARK.md` (ROADMAP §9.8, E-30…E-37).
+  heatmap — is `BENCHMARK.md` (ROADMAP §9.8, E-30…E-37).
 - **Trajectory harvesting (P5 seam):** Temporal history + artifacts +
   handoffs + gate decisions already constitute complete trajectories
   (actions, tool calls, costs, outcomes, human feedback). The observability

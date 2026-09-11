@@ -34,7 +34,7 @@ python -m sdlc.cli start --title "Add SSO" --mode brownfield --repo git@...
 python -m sdlc.cli status  --id feature-add-sso
 python -m sdlc.cli answer  --id feature-add-sso --q Q1 --text "Use OIDC"
 python -m sdlc.cli approve --id feature-add-sso --gate architecture
-python -m sdlc.cli benchmark --case cat-cafe   # run the eval harness (see docs/BENCHMARK.md)
+python -m sdlc.cli benchmark --case cat-cafe   # run the eval harness (see BENCHMARK.md)
 python -m sdlc.cli doctor            # diagnose this environment's setup
 python -m sdlc.cli doctor --json     # the same results, for machines
 python -m sdlc.cli doctor --strict   # exit non-zero on warnings too
@@ -127,7 +127,7 @@ not be evaluated is `errored` and never counts as a pass.
   and the deterministic gate, and
   [`docs/reference/architecture-review-2026-07.md`](docs/reference/architecture-review-2026-07.md)
   for the design decisions and implementation status.
-- See [`docs/BENCHMARK.md`](docs/BENCHMARK.md) for the benchmark & evaluation design — the four measurement axes (harness / model×role / memory / case), how success criteria SC-1..6 get their numbers, and the E-30…E-37 increments.
+- See [`BENCHMARK.md`](BENCHMARK.md) for the benchmark & evaluation design — the four measurement axes (harness / model×role / memory / case), how success criteria SC-1..6 get their numbers, and the E-30…E-37 increments.
 - Self-contained schema docs (no build step, open directly in a browser),
   each checked against actual code:
   [`docs/schemas/roadmap.html`](docs/schemas/roadmap.html) (every FR/NFR/SC/US/ADR + the

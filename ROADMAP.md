@@ -26,7 +26,7 @@
 > fetched). `2026-07-17-research-agent-grounded-briefs`.
 
 > **2026-07-19 — benchmark & evaluation design input.** A measurement
-> design (`docs/BENCHMARK.md`) folds the existing benchmark harness (E-27)
+> design (`BENCHMARK.md`) folds the existing benchmark harness (E-27)
 > and prompt eval loop (E-4) into an instrument for the success criteria.
 > It adds **no scope**: each item anchors to an FR/NFR/SC already open, and
 > the capabilities that would (held-out oracles, anti-cheat assertions,

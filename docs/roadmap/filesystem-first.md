@@ -153,7 +153,7 @@ E-19/E-20/E-21 and E-14 are post-P1. E-5 is not scheduled.
 
 ### 9.8 Benchmark & evaluation → SC-1..6, FR-106, FR-404, FR-701, FR-702, FR-704, ADR-15, ADR-16
 
-Design: `docs/BENCHMARK.md`. The factory already has the *pieces* of a
+Design: `BENCHMARK.md` (repo root). The factory already has the *pieces* of a
 measurement system — the E-27 benchmark harness (golden cases + cross-family
 rubric judging), the E-4 prompt eval loop, eval-aware memoization (FR-103/NFR-6),
 and cost bookkeeping that "exists in benchmarks only" (§9.5). What it lacks is a
@@ -367,7 +367,7 @@ is marked **(new scope)** and needs a PRD line before it is real.
   report.html rendering of the verdict. Spec
   `docs/superpowers/specs/2026-07-24-deep-review-transcript-lens-design.md`,
   plan `docs/superpowers/plans/2026-07-24-deep-review-transcript-lens.md`.
-**Open questions (tracked in `docs/BENCHMARK.md §7`):** OQ-B1 minimum trustworthy
+**Open questions (tracked in `BENCHMARK.md §7`):** OQ-B1 minimum trustworthy
 corpus size; OQ-B2 judge independence under model sweep **answered** (E-37: judge fixed per case, family validated at expansion against every arm); OQ-B3 **answered** (E-29 closed: grounding failure = recorded stage `FAIL`, run continues); OQ-B4 the regression-gate half of E-4 as a CI gate (→ OQ-E2); OQ-B7
 session-retention policy **decided** (full on fail/benchmark/attempts>0,
 `SessionDigest` on clean-green, aggregates kept pre-truncation, scrub
