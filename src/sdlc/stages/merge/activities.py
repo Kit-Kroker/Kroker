@@ -6,7 +6,7 @@ import math
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import defusedxml.ElementTree as DET
 from defusedxml.common import DefusedXmlException
@@ -19,7 +19,7 @@ from ...gate import (
     QualityGateInput,
     evaluate_quality_gate,
 )
-from ...measurement import Measurement
+from ...measurement import CollectionState, Measurement
 from ...process import _bounded_shell
 from ...stages.qa.activities import (
     _diagnostic_slice,
@@ -29,7 +29,8 @@ from ...stages.qa.activities import (
 from ...stages.qa.models import QAReport
 from ...toolchain.adapters import ToolchainKind, detect
 from ...vcs.git import _git
-from .models import CoverageReport
+from .models import CoverageReport, ScopedLintReport
+from .scoping import scoped_lint
 
 
 @dataclass
@@ -110,6 +111,10 @@ async def measure_coverage(inp: CoverageInput) -> CoverageReport:
 class IntegrationChecksInput:
     worktree: str
     changed_files: list[str]
+    base_worktree: str | None = None  # prepare_base_worktree's path (DS2)
+    base_reason: str = ""  # why base_worktree is None
+    base_sha: str = ""
+    renames: list[list[str]] = field(default_factory=list)
     test_timeout_s: int = 600
     lint_timeout_s: int = 300
     setup_timeout_s: int = 300
@@ -120,6 +125,7 @@ class IntegrationChecks(BaseModel):
     qa: QAReport
     lint_clean: bool
     lint_detail: str
+    lint: ScopedLintReport | None = None  # None iff no toolchain adapter
 
 
 # pytest usage-error exit code: unrecognized args (e.g. --cov when pytest-cov is
@@ -155,7 +161,11 @@ async def run_integration_checks(inp: IntegrationChecksInput) -> IntegrationChec
         if setup_error:
             qa = QAReport(tests_passed=False, issues=[setup_error])
             return IntegrationChecks(
-                toolchain=adapter.kind.value, qa=qa, lint_clean=False, lint_detail=setup_error
+                toolchain=adapter.kind.value,
+                qa=qa,
+                lint_clean=False,
+                lint_detail=setup_error,
+                lint=ScopedLintReport(state=CollectionState.NOT_COLLECTED, reason=setup_error),
             )
 
     code, out = await _bounded_shell(
@@ -181,8 +191,22 @@ async def run_integration_checks(inp: IntegrationChecksInput) -> IntegrationChec
     lcode, ldetail = await _bounded_shell(
         adapter.lint_cmd(), inp.worktree, inp.lint_timeout_s, env=env
     )
+    lint = await scoped_lint(
+        adapter,
+        inp.worktree,
+        inp.base_worktree,
+        inp.base_reason,
+        inp.base_sha,
+        inp.renames,
+        env,
+        inp.lint_timeout_s,
+    )
     return IntegrationChecks(
-        toolchain=adapter.kind.value, qa=qa, lint_clean=lcode == 0, lint_detail=ldetail[-2000:]
+        toolchain=adapter.kind.value,
+        qa=qa,
+        lint_clean=lcode == 0,
+        lint_detail=ldetail[-2000:],
+        lint=lint,
     )
 
 
