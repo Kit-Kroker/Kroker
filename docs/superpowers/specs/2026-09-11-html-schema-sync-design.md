@@ -289,3 +289,24 @@ trailers, committed via `git commit -F <msgfile>`, one path per `git add`.
   wording, and have the inbox task restore them in ROADMAP (recommended).
   The alternative is to treat the 2026-08-20 deletion as intended and drop
   them from the page.
+
+## 9. Rulings and pivot (user gate, 2026-09-11)
+
+- **R1: superseded by a pivot.** The user declined both R1 options and
+  ended the hand-sync of `docs/schemas/*.html` altogether. It is replaced by
+  a generated documentation site that re-reads its sources and refreshes
+  itself. No plan hand-edits the six pages. The site is designed in
+  `docs/superpowers/specs/2026-09-11-docs-site-design.md`.
+- **R2: ruled as recommended, and carried into the site design.** The site
+  mirrors the living docs only. Register-only landings (C2, C3, C4, B4, E4,
+  C7, C8, F2, F4) appear on it when the living docs grow them, never from the
+  register directly.
+- **R3: ruled keep + restore, and carried into the site design.** US-6 and
+  US-8 stay visible. Their restoration in `ROADMAP.md` is folded into the site
+  phase's plan, because the generator cannot render what ROADMAP lacks. It
+  rides the normal gates.
+
+What survives of this spec: §§2–3 and §6 are input to the site design. They
+catalogue what diverged in the hand-maintained pages and why: the move that
+was mistaken for a sync, the older errors, the stale design-era paths, and
+the living-doc lag. §§5 and 7 no longer apply as written.
