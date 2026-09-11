@@ -268,3 +268,13 @@ rides the normal gates.
   (`interfaces/ui/**.md`) on the site (recommended, since they are the
   living WHAT documents for the component library), or keep v1 to root +
   `docs/` + stage contracts.
+
+## 11. Rulings (user gate, 2026-09-11)
+
+- **Q1: yes.** GitHub Pages will be enabled on Kit-Kroker/Kroker, and the
+  user flips the repo setting at cutover. The design and plan assume a
+  public URL.
+- **Q2: no, narrower than recommended.** v1 covers the root docs, `docs/`
+  and the stage contracts only. The `interfaces/ui/` clause docs are out of
+  v1, so the UI-clause bullet in §3's source map and the Interfaces nav
+  section are dropped. They are the designated **v2 candidate**.
