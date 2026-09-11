@@ -17,6 +17,8 @@ than the rule -- doctor owns no second copy of any rule (spec section 3).
 from __future__ import annotations
 
 import shutil
+import subprocess
+import tempfile
 
 from sdlc.agents.loader import RegistryError, load_registry, validate_registry
 from sdlc.crew.loader import CrewConfigError, crew_dir, validate_crew_clis
@@ -24,6 +26,7 @@ from sdlc.harness.containment import ContainmentError, load_policy
 from sdlc.harness.registry import HARNESSES, check_harness_versions
 from sdlc.notify.routes import NotifyConfigError, load_routes
 
+from .env import classify_key, parse_env_example
 from .models import CheckResult
 
 # Import only what THIS task's code uses -- ruff's select includes F401
@@ -119,3 +122,112 @@ def check_notify_routes() -> CheckResult:
     except Exception as e:  # noqa: BLE001
         return CheckResult.warn(name, f"could not load the notification routes: {e}")
     return CheckResult.ok(name, f"parses (v{routes.version})")
+
+
+# Resolved once at import -- see check_git_identity on why not per call.
+_TEMPDIR = tempfile.gettempdir()
+
+_BENCHMARK_NOTE = (
+    "benchmark-only operators may ignore this: a benchmark run has no remote "
+    "and skips the PR step (merge/step.py:521)"
+)
+
+
+def _version_of(path: str) -> str:
+    """First line of `<binary> --version`, or "" if it will not run. Never
+    raises: a version string is decoration, not the verdict."""
+    try:
+        out = subprocess.run(
+            [path, "--version"],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            stdin=subprocess.DEVNULL,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return (out.stdout or "").strip().splitlines()[0] if out.stdout else ""
+
+
+def check_git_binary() -> CheckResult:
+    """Row 4. Every worktree, checkout and diff in the pipeline shells out to
+    git (vcs/git.py:41)."""
+    name = "git"
+    path = shutil.which("git")
+    if path is None:
+        return CheckResult.fail(name, "git is not on PATH; the pipeline cannot create a worktree")
+    return CheckResult.ok(name, _version_of(path) or f"found at {path}")
+
+
+def check_git_identity() -> CheckResult:
+    """Row 5, the headline check (spec section 1 and section 6).
+
+    `git var GIT_COMMITTER_IDENT` is git's OWN resolution, so no rule is
+    duplicated. It runs with cwd OUTSIDE any repository on purpose: a
+    repo-local identity in this checkout proves nothing about a run, because
+    `git worktree add` gives the task worktree the TARGET repo's config
+    (vcs/worktree.py:150-165). Outside a repo, git resolves exactly the
+    system + global + env layers a freshly cloned target inherits.
+
+    Honest limit (spec section 6): on a host with a resolvable hostname git
+    may auto-detect a junk identity and exit 0. This proves an identity can
+    be PRODUCED, not that it is the right one.
+    """
+    name = "git identity"
+    path = shutil.which("git")
+    if path is None:
+        return CheckResult.skip(name, "git is not on PATH (see the git check)")
+    # _TEMPDIR is resolved once at import, not per call: CPython's
+    # gettempdir() may create and immediately delete a probe file on its
+    # first call in a process (tempfile._get_default_tempdir). That is
+    # outside any tree doctor diagnoses and is gone before the call returns,
+    # but hoisting it keeps the per-check path free of it entirely.
+    try:
+        out = subprocess.run(
+            [path, "var", "GIT_COMMITTER_IDENT"],
+            cwd=_TEMPDIR,
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            stdin=subprocess.DEVNULL,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        return CheckResult.fail(name, f"could not run `git var GIT_COMMITTER_IDENT`: {e}")
+    if out.returncode != 0:
+        detail = (out.stderr or out.stdout or "").strip().splitlines()
+        first = next((ln for ln in detail if ln.startswith("fatal:")), detail[-1] if detail else "")
+        return CheckResult.fail(
+            name,
+            f"no committer identity ({first}). Every checkpoint commit will "
+            f"fail SILENTLY -- the failure is swallowed at "
+            f"stages/code/activities.py:197-202 -- so commit_sha stays None "
+            f"and the C2 test-freeze anchor never advances. Set user.email "
+            f"and user.name globally.",
+        )
+    return CheckResult.ok(name, (out.stdout or "").strip())
+
+
+def check_gh_binary() -> CheckResult:
+    """Row 6. gh is checked inside open_pull_request (merge/activities.py:219)
+    -- the last step of a run, after every gate is green."""
+    name = "gh"
+    path = shutil.which("gh")
+    if path is None:
+        return CheckResult.fail(
+            name,
+            f"gh is not on PATH; a run reaches the pull request step with "
+            f"every gate green and then fails. {_BENCHMARK_NOTE}",
+        )
+    return CheckResult.ok(name, _version_of(path) or f"found at {path}")
+
+
+def check_gh_token() -> CheckResult:
+    """Row 7. Presence and placeholder only -- never `gh auth status`, which
+    is a live call to GitHub (spec section 5, 'not in scope')."""
+    name = "GH_TOKEN"
+    usable, reason = classify_key("GH_TOKEN", shipped=parse_env_example())
+    if not usable:
+        return CheckResult.fail(name, f"{reason}. {_BENCHMARK_NOTE}")
+    return CheckResult.ok(name, "set")
