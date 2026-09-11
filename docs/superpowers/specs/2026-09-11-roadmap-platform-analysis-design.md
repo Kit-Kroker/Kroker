@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Date | 2026-09-11 |
-| Status | Reviewer-approved (r1: `.workspace/tmp/reviewer-roadmap-2026-09-11-r1.md`, one count correction applied). **Awaiting the user gate** on OQ-1…OQ-5 (§9) |
+| Status | Reviewer-approved (r1: `.workspace/tmp/reviewer-roadmap-2026-09-11-r1.md`, one count correction applied). **User gate passed 2026-09-11**; all five open questions ruled as recommended (§10) |
 | Phase | herd-plan, planner seat. Deliverable is a **docs-only** change; no product code |
 | Base | `main` @ `5534b16` |
 | Input | The third source, a verbatim capture of a third-party analysis of Kroker (a ChatGPT conversation the user supplied, in Russian), at `.workspace/tmp/2026-09-11-external-platform-analysis.md` (gitignored; see OQ-4). Ten candidate directions plus a DESIGN / EXECUTE / EVALUATE / OPTIMIZE product framing |
@@ -138,3 +138,13 @@ No E-numbers are minted (the next free one would be E-90) and no PRD lines are d
 - **OQ-3: FR-601 downgrade** to `[ ]` ⚠️ (**recommended**: fleet only is real).
 - **OQ-4: commit the verbatim third source** at `docs/reports/2026-09-11-external-platform-analysis.md` (**recommended**, so section H has durable provenance the way sources 1 and 2 have URLs). It is user-supplied third-party text; if no, the Sources row reads "platform analysis (user-supplied, 2026-09-11; not committed)".
 - **OQ-5: T6 reach.** Fix the dead path in README.md and ARCHITECTURE.md too (**recommended**; mechanical) or only in the roadmap files.
+
+## 10. Rulings (user gate, 2026-09-11)
+
+The gate passed on 2026-09-11. Every open question was ruled as recommended; the plan implements the spec under these rulings.
+
+- **OQ-1: A, record only.** Section 14 (E-72…E-77) is recorded as design plus priority pressure. Sequencing waits on the three prerequisites of §6: a PRD line for FR-1200, OQ-10 settled, and P2's exit demonstrated. `ordering.md` item 7 states this position as ruled, not as pending.
+- **OQ-2: keep the fixed-instrument stance** (BENCHMARK §0; the human writes the verdict). F3 is the path, and H10 is recorded as the fork beyond F3.
+- **OQ-3: downgrade FR-601** to `[ ]` ⚠️ (fleet only is real).
+- **OQ-4: commit the verbatim third source** at `docs/reports/2026-09-11-external-platform-analysis.md`, never edited after it lands. The register's Sources row links it.
+- **OQ-5: wide reach.** Fix the dead `docs/BENCHMARK.md` path in README.md and ARCHITECTURE.md too, not only in the roadmap files.
