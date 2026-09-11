@@ -35,7 +35,13 @@ python -m sdlc.cli status  --id feature-add-sso
 python -m sdlc.cli answer  --id feature-add-sso --q Q1 --text "Use OIDC"
 python -m sdlc.cli approve --id feature-add-sso --gate architecture
 python -m sdlc.cli benchmark --case cat-cafe   # run the eval harness (see docs/BENCHMARK.md)
+python -m sdlc.cli doctor            # diagnose this environment's setup
+python -m sdlc.cli doctor --json     # the same results, for machines
+python -m sdlc.cli doctor --strict   # exit non-zero on warnings too
 ```
+
+> Run it before the first `start` on a new machine, and whenever a run fails in a way that smells like configuration. It reports every finding at once rather than dying on the first, and it writes nothing.
+
 
 Scoring stored benchmark runs needs no running Temporal (it reads records on disk):
 
