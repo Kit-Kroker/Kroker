@@ -1,12 +1,12 @@
-# External ideas — candidates from two 2026-09 sources
+# External ideas — candidates from three 2026-09 sources
 
 | | |
 |---|---|
 | Status | Input list — **not scope**. Nothing below is committed work until it gets a PRD line (same rule as BENCHMARK's "new scope" items). |
-| Date | 2026-09-01 |
-| Sources | [`addyosmani/factory`](https://github.com/addyosmani/factory) (reference software factory for Claude Code / Codex); Anthropic, "The AI-Native SDLC playbook" (blog, 2026-08-21) |
+| Date | 2026-09-01 (sources 1–2); 2026-09-11 (source 3, §H) |
+| Sources | [`addyosmani/factory`](https://github.com/addyosmani/factory) (reference software factory for Claude Code / Codex); Anthropic, "The AI-Native SDLC playbook" (blog, 2026-08-21); a third-party platform analysis of Kroker itself (user-supplied, 2026-09-11), verbatim at [`2026-09-11-external-platform-analysis.md`](2026-09-11-external-platform-analysis.md) |
 | Method | Each candidate is mapped to where it would land in this codebase. Verified anchors (FR/E/ADR numbers) are cited; everything else is described behaviourally until specced. |
-| Verification | **Pass run 2026-09-01 against `main`** (E-88 landed at `c308856`). Every candidate now carries a **Status**: the anchor it names was checked against `src/`, not against the PRD. Anchors re-confirmed 2026-09-01 after the merge. Rendered register: [Factory Candidate Register](https://claude.ai/code/artifact/233aa568-fc5b-4297-88ed-8f51d3049678). |
+| Verification | **Pass run 2026-09-01 against `main`** (E-88 landed at `c308856`). Every candidate now carries a **Status**: the anchor it names was checked against `src/`, not against the PRD. Anchors re-confirmed 2026-09-01 after the merge. Rendered register: [Factory Candidate Register](https://claude.ai/code/artifact/233aa568-fc5b-4297-88ed-8f51d3049678). **§H pass run 2026-09-11 against `main` @ `5534b16`**: every §H anchor checked against `src/` and the roadmap files; a designed-but-unbuilt item is marked `Designed`, never as code. |
 
 **Context.** Both sources were assessed against the 15-stage DAG and found to
 be coarser-grained implementations of the same model this repo already runs
@@ -16,9 +16,17 @@ factory repo is prompt/policy-only over stock Claude Code; the playbook is
 org-level process guidance around `.md` artifacts and Claude Code primitives.
 Neither replaces anything here; each contributes point improvements below.
 
+**The third source is a different kind (2026-09-11).** It is not a comparable
+factory but an analysis *of this repo*: ten directions for making Kroker a
+platform to design, run, evaluate and optimize delivery workflows. Most of it
+lands on mechanisms already built or already designed; §H records where each
+one lands.
+
 **What Status means.** `Gap verified` — the gap was confirmed in code, and the
 landing site exists. `Extends` — the mechanism is here; the candidate widens
-it. `New` — a real build with no existing seam. `Blocked` — it lands on a
+it. `New` — a real build with no existing seam. `Designed` — an unbuilt roadmap
+design already specifies it; the row adds no work of its own, only priority
+pressure, and nothing in it is admitted scope. `Blocked` — it lands on a
 component that does not exist. `Needs an owner` / `Product decision` — not
 buildable as written until someone settles what it means.
 `Fixed` — shipped; residuals, if any, are named in the row. `Audited` — resolved
@@ -87,7 +95,7 @@ what remains open.
 
 | # | Candidate | Source | Status | Where it lands |
 |---|---|---|---|---|
-| F1 | **"What needs you now"** — a single prioritized entry point: review queue first, ordered by urgency | factory | Extends | decision inbox (E-10 dashboard). Needs a definition of urgency before it can be built |
+| F1 | **"What needs you now"** — a single prioritized entry point: review queue first, ordered by urgency | factory | Extends | decision inbox (E-10 dashboard). Needs a definition of urgency before it can be built. **Landing site is a stub (2026-09-11):** the backend `GET /inbox` is live, but `interfaces/dashboard/frontend/src/views/InboxView.vue` has been a "Plan 2" placeholder since `ac9344e` (see H5) |
 | F2 | **Doctor** — setup diagnosis: placeholders, missing labels/remotes/keys/config gaps | factory | ✅ Fixed | shipped — `src/sdlc/doctor/`: 12 checks over the real setup surface (agents registry, crew layouts, harness CLI drift, required/suggested binaries, git identity, runtime env vars, board DB, and Temporal connectivity), evaluated concurrently via `run_checks`. Four outcomes (`PASS`, `WARN`, `FAIL`, `SKIP`) where `SKIP` is always reasoned, never silent. Rendered as an aligned terminal table with findings block and tally, or as a 12-element schema-validated JSON array (`--json`); exit code reflects the worst finding (`--strict` promotes warnings to exit code 1). Headline reframing: git committer identity — an unresolvable identity silently disarms the C2 test-freeze anchor in `check_test_drift`, so probe validation was an integrity requirement, not convenience. Delegated to canonical subsystem validators (`validate_registry`, `validate_crew_clis`, `check_harness_versions`) with the single acknowledged two-entry placeholder classification map (`check_env_vars`). Wired into `sdlc.cli` with `doctor` joined to `_needs_temporal_client`'s `local_only` tuple so the command never dies trying to connect to the Temporal instance it is probing. Read-only budget strictly pinned by tests (zero side effects, empty directory unchanged). Residuals: per-CLI partial-SKIP naming deferred per spec erratum; mixed-case placeholder escape recorded at final review (record-only). Spec: `docs/superpowers/specs/2026-09-10-f2-doctor-design.md`; plan: `docs/superpowers/plans/2026-09-10-f2-doctor.md` |
 | F3 | **Monthly constraint-tune** — a meta-loop that *proposes only* changes to the factory's own constraints from run statistics | factory | New | analyst over board statistics (ADR-21). The board data exists; the maintenance host does not |
 | F4 | **Human-readable artifact export** — generated `.md` renders of typed artifacts so non-engineers can read intent/spec without the dashboard | playbook | ✅ Fixed | shipped — `src/sdlc/board/render.py`: a key→(model, body renderer) registry that turns stored artifact bytes into a Markdown document with a provenance banner (the `run_id` there makes the accepted cross-run stale `current` link visible to the reader). Errors render as Markdown too (422 schema drift naming the raw-JSON escape hatch, 413 oversize, 410 pruned), never `{"detail": ...}`. Two routes on the existing board API: `/projects/{p}/artifacts/{key}/current/markdown` and `.../versions/{version_id}/markdown`, both `text/markdown` with ETag/304. A recursive no-silent-field-drop test makes "render *from* the typed artifact" enforced, not aspirational: every field of the eight artifact models is rendered or in a five-entry `_OMITTED`. Gate notifications link the renders of artifacts already published when the gate opens (`notify/render.py` + `workflows/gates.py` via the replay-safe optional `NotifyInput.project`; unset `base_url` or project omits links silently). Accepted gap, by design not a bug: a gate never links its own not-yet-published artifact — `_board_publish` runs only after the gate resolves, so the link would 404 at click time; the design doc records why publishing earlier does not fix it. Spec: `docs/superpowers/specs/2026-09-09-f4-human-readable-artifact-export-design.md` (71f7ee1, rulings recorded ed6e21b); plan: `docs/superpowers/plans/2026-09-09-f4-human-readable-artifact-export.md` (f181442) |
@@ -97,6 +105,30 @@ what remains open.
 | # | Candidate | Source | Status | Where it lands |
 |---|---|---|---|---|
 | G1 | **Factory-lite mode** — install a policy pack (charter + gates + skills) into an existing repo *without* the Temporal stack; full orchestrator when needed | factory | ⚠️ Product decision | not a backlog row. It is a fork in the product that every other candidate raises the cost of, so it wants a yes/no before the list is executed |
+
+## H. Platform direction — the third source (2026-09-11)
+
+Verdicts per candidate from the platform analysis, each checked against `main`.
+The design and its evidence are in
+`docs/superpowers/specs/2026-09-11-roadmap-platform-analysis-design.md`.
+
+| # | Candidate | Source | Status | Where it lands |
+|---|---|---|---|---|
+| H1 | **Visual workflow builder** — a canvas that edits the workflow rather than holding separate logic | platform analysis | Designed · E-76 | `docs/roadmap/pipeline-as-data.md` E-76 is this design: `@vue-flow/core` + dagre, one renderer in run-state or editable mode, no editing of a running graph. Once E-72 exists, the analysis's node palette would map onto it (Condition = one-output-port branching, Parallel/Merge = fan-out/collect, Retry = `max_traversals`, Gate = a node carrying `GateConfig`); its Tool and Benchmark node types have no counterpart there, and Subflow is H7. Needs E-72 → E-74 first; not sequenced (see the addendum) |
+| H2 | **FlowSpec** — workflow-as-code; YAML, CLI, API and GUI run the same spec | platform analysis | Designed · E-72…E-74 | E-72 `PipelineGraph` + node registry, E-73 `validate.py` as the single legality source, and E-74 `GraphWorkflow` *interpreting* a graph pinned as workflow input (no codegen, no per-edit `patched()`). None is built. **Not admitted:** FR-1200…FR-1206 have no line in `PRD.md`. The analysis's untyped YAML is not adopted over E-72's typed ports (objection (b), decided 2026-08-06) |
+| H3 | **Benchmark lab** — an experiment as a first-class object; a declared matrix; comparison; a Pareto quality-vs-cost frontier | platform analysis | Extends | Built: `src/sdlc/benchmarks/matrix.py` (case × harness × arm, ADR-6 judge check at expansion), per-role arms (E-37), held-out oracle (E-31), per-role $ (E-33), the five grids of `sdlc benchmark score` (E-36), `src/sdlc/benchmarks/sc_rollup.py`, and `src/sdlc/benchmarks/experiments.py` (`Experiment`: axis, baseline vs candidate deltas, `NOISE_FLOOR = 3`, committed to git, human-written verdict). New: a Pareto view (no precedent in `docs/` or `src/`); an experiment that declares and launches its matrix (today it diffs two existing evidence sets, and the matrix is declared per case in `CaseSpec.arms`); a workflow axis, which needs E-77's `graph_sha`. Limit: `benchmarks/cases/` holds 10 cases, the bottom of OQ-B1's 10–30 estimate |
+| H4 | **Evidence / traceability view** — criterion → task → files → tests → evidence → PASS, per run | platform analysis | Extends · data gap first | Built: the frozen `ValidationContract` (FR-803, `src/sdlc/stages/architecture/models.py`), the Analyst's `CriterionTrace` (`src/sdlc/stages/analyze/models.py`: task, criterion, test names; completeness enforced, FR-106), F4 Markdown renders. **Prerequisite:** nothing records a per-test or per-criterion outcome. `QAReport` is task-level and cannot tell failed from never-ran (ROADMAP P2, 2026-08-19), so a PASS column today would present a task-level boolean as a per-criterion verdict, an FR-915-class misstatement. The view belongs on the run-detail page (H5). E-51/E-52 (unbuilt) are the assessment product's bundle, not this landing site |
+| H5 | **Run replay** — a per-run timeline; each step opens model, tokens, cost, duration, input/output, tools, diff, tests | platform analysis | Extends · gap verified | The data is built: `events.jsonl`/`report.html` (E-22/E-23 inside E-32, `src/sdlc/observability/export.py`), `RunSummary.roles` (E-33), `HarnessSession` (E-38), dashboard `GET /runs/{id}` and `GET /events` (E-10, `src/sdlc/dashboard/api.py`), board tasks/events (E-78). **The view is missing:** `interfaces/dashboard/frontend/src/views/RunView.vue`, like `InboxView.vue`, has been a "Plan 2" placeholder since `ac9344e`. A linear timeline needs none of E-72…E-77; the graph-shaped replay would later come from E-75 + E-76's run-state mode. Closed runs render only within Temporal retention (OQ-13) |
+| H6 | **Workflow simulation / dry-run** — validate before a costly run; forecast cost, time, calls and gates | platform analysis | Extends | Today: `sdlc doctor` (F2: registry, crew layouts, harness CLIs, binaries, env, Temporal) and boot-time `validate_registry`. **When E-73 lands**, its `validate.py` adds reachability, bounded cycles and port types. New: a forecast. Nothing estimates today; FR-701 budgets enforce rather than forecast, and benchmark records already hold per-stage cost and wall time per arm. Bound: the planner decides the task count, so an honest estimate is per-stage before planning and per-task only after the plan gate |
+| H7 | **Subflows** — a reusable sub-workflow (e.g. a security review) as one node | platform analysis | New | Not in E-72…E-77. There is precedent for a node that runs a child workflow: `CrewTaskWorkflow` (E-88), `DeploymentWorkflow` (E-67), the `TriageWorkflow` child (E-44/E-45). Recorded as OQ-14 in `docs/roadmap/pipeline-as-data.md`; not before E-74. The analysis's "marketplace" half is out of scope |
+| H8 | **Policy engine** — governance separate from workflow; environment and risk rules decide whether a step may run | platform analysis | Extends · see B1, B3 | Built: per-gate `GateConfig` (FR-301), the C7 calibration ledger, `ABSOLUTE_FLOOR` + `MERGE_REQUIRED_CHECKS` fail-closed (C3), `policy/containment.yaml` (ADR-17, C2). The remainder is **B1** (charter) + **B3** (autonomy per environment) + risk-class conditioning, with no separate engine. Its `two_person_approval` is ⛔ blocked: operator identity is the self-asserted `X-Actor` header (OQ-11) until E-60 |
+| H9 | **Cost / model router** — pick the model per task by complexity; a cheaper model first on retry | platform analysis | New · not recommended | The static half is built: per-role model per run (`resolve_role_model`, `src/sdlc/agents/roles.py`, E-37), per-role economics (E-33; BENCHMARK.md §3.2), budget gate (FR-701). Dynamic routing lowers the memo hit rate (the FR-103 key carries the model, so results stay correct but the cache runs colder), needs ADR-6 family inequality per routed pair, and needs a deterministic decision. Revisit if H3 shows per-task mixes beating per-role allocation at n ≥ `NOISE_FLOOR` |
+| H10 | **Self-optimizing workflows** — the system mutates its own workflow and keeps what scores better | platform analysis | ⚠️ Product decision | **Ruled 2026-09-11: the fixed-instrument stance stands.** BENCHMARK.md §0 (a fixed, versioned instrument, changed by reviewed diff, as ADR-11 treats the DAG) and `src/sdlc/benchmarks/experiments.py` ("the tool computes the delta; the human writes the verdict"). The stance-compatible forms are F3 (proposes only), the E-4 prompt eval loop, and E-36 heatmap-driven iteration; F3 is the path. H10 is recorded as the fork beyond F3, not a duplicate of it |
+
+> **The source's framing is not a candidate.** Its DESIGN / EXECUTE / EVALUATE /
+> OPTIMIZE picture, and "workflow + evidence + evaluation" as the primary object,
+> is a product thesis, the one FR-1200 was already reaching for. Recorded as
+> context; it becomes scope only through the PRD.
 
 ---
 
@@ -141,3 +173,21 @@ the same loop exists. Both, with **A4**, are blocked on FR-501 —
 returns **0 hits**, and ARCHITECTURE §7 is a design, not a description. **F2**
 (doctor) stays a verified gap and a good afternoon's work, but it is
 convenience rather than integrity, so it drops below the six above.
+
+**Section H addendum (2026-09-11)** — ranked by leverage over existing seams; a
+recommendation, not a commitment:
+
+1. **H5** — the run-detail / replay view. It fills a stub, every data source
+   exists, and it has no E-72 dependency. The same page later hosts H4 and
+   E-76's run-state canvas, and the inbox view (F1's landing site) is the same
+   kind of work.
+2. **H4, data half** — a per-criterion outcome record. An integrity fix that
+   must precede any traceability UI; it also closes the P2 "failed vs never ran"
+   finding.
+3. **H3** — a Pareto view and declared experiments. Honest only at n ≥
+   `NOISE_FLOOR` per cell, so corpus growth (OQ-B1) is the real constraint.
+4. **H1 / H2 / H7** — section 14, **ruled *record only* at the 2026-09-11 user
+   gate**. Sequencing waits on a PRD line for FR-1200, OQ-10 settled, and P2's
+   exit demonstrated (`docs/roadmap/ordering.md` item 7).
+5. **H8** through B1/B3. **H9** waits behind H3. **H10** is ruled: the
+   fixed-instrument stance stands.
