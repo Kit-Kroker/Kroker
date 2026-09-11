@@ -33,15 +33,23 @@ harder to install later:
 6. Then audit depth (**E-48 → E-49 → E-50 → E-51 → E-52 → E-53 → E-54 → E-55 →
    E-56**), service (**E-59…E-63**), and the outcome loop (**E-64 → E-65 →
    E-66 → E-68/E-69 → E-70 → E-71**).
-7. **§14 (E-72…E-77) is deliberately unsequenced.** It is the only tier that
-   rewrites a core code path rather than extending one, and it competes with
-   nothing above it for invariants — the factory ships fine without it. Two
-   things argue for pulling it earlier anyway: **E-75 closes P2's outstanding
-   dashboard-backend half** regardless of whether the interpreter lands, and the
-   longer `_pipeline` accretes stages (§1 has 8 unbuilt ones), the more imperative
-   wiring the big-bang rewrite has to absorb. If §14 is wanted at all, **E-72 →
-   E-73 before §1 grows** is the cheap moment; E-75 can be lifted out and shipped
-   on its own.
+7. **§14 (E-72…E-77) is deliberately unsequenced; ruled *record only* at the
+   2026-09-11 user gate.** It is the only tier that rewrites a core code path
+   rather than extending one, and it competes with nothing above it for
+   invariants: the factory ships fine without it. A 2026-09-11 external analysis
+   ranked it first (register §H1/H2); the gate recorded that as priority
+   pressure, not a sequencing change. Sequencing waits on three prerequisites:
+   **(a)** a PRD line for FR-1200 (none exists); **(b)** OQ-10 settled (in-flight
+   runs at cutover); **(c)** P2's exit demonstrated. The pipeline has never
+   delivered *first brownfield feature merged via PR*, and a big-bang rewrite of
+   `_pipeline` before that moves the ground under an undemonstrated claim. The
+   old arguments for pulling it earlier have weakened. "E-72 → E-73 before §1
+   grows is the cheap moment" matters less now that the B0 migration has made the
+   stage bodies modular `step()` functions (`src/sdlc/stages/<stage>/step.py`),
+   and §1 has four unbuilt stages, not eight. "E-75 closes P2's dashboard-backend
+   half" was superseded 2026-08-18 by E-10. If the prerequisites clear, the
+   fallback considered is E-72 + E-73 first, with E-74 gated on P2 (spec
+   `docs/superpowers/specs/2026-09-11-roadmap-platform-analysis-design.md` §6).
 
 **Deliberate:** §10 ships before §11 even though §11 is the more impressive
 product. Triage is what tells you whether the audit is worth running (FR-903),
