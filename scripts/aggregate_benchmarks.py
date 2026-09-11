@@ -21,6 +21,18 @@ from pathlib import Path
 TS_RE = re.compile(r"-(\d{10})$")
 REPORT_ROW_RE = re.compile(r"^\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|")
 
+# Empty state (docs-site spec §2): runs/benchmarks/ is gitignored and never
+# exists in CI; an absent or empty dataset renders this instead of failing.
+EMPTY_MESSAGE = "No benchmark runs are available to this build"
+
+EMPTY_STATE_HTML = f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Benchmark analysis</title></head>
+<body style="font-family: system-ui; padding: 2rem;">
+<p>{EMPTY_MESSAGE}</p>
+</body></html>
+"""
+
 
 def run_ts(run_id: str) -> int | None:
     m = TS_RE.search(run_id)
@@ -79,7 +91,11 @@ def load_jsonl(path: Path) -> list[dict]:
 
 
 def aggregate(runs_dir: Path) -> dict:
+    if not runs_dir.is_dir():
+        return {}
     run_dirs = sorted([p for p in runs_dir.iterdir() if p.is_dir() and p.name.startswith("bench-")])
+    if not run_dirs:
+        return {}
 
     all_records: list[dict] = []
     runs_meta: list[dict] = []
@@ -580,6 +596,8 @@ window.addEventListener('load', () => {
 
 
 def build_html(data: dict) -> str:
+    if not data:
+        return EMPTY_STATE_HTML
     payload = json.dumps(data, default=str)
     return HTML_TEMPLATE.replace("__DATA__", payload)
 
@@ -594,10 +612,13 @@ def main():
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(build_html(data), encoding="utf-8")
     print(f"wrote {args.out}  ({args.out.stat().st_size:,} bytes)")
-    print(
-        f"  runs={data['totals']['runs']}  with_data={data['totals']['with_data']}  "
-        f"passed={data['totals']['passed']}  records={data['totals']['total_records']}"
-    )
+    if data:
+        print(
+            f"  runs={data['totals']['runs']}  with_data={data['totals']['with_data']}  "
+            f"passed={data['totals']['passed']}  records={data['totals']['total_records']}"
+        )
+    else:
+        print(f"  no runs under {args.runs}; wrote the empty-state page")
 
 
 if __name__ == "__main__":
