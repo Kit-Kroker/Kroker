@@ -50,3 +50,26 @@ def test_read_crew(tmp_path: Path):
     (tmp_path / "critic.yaml").write_text("harness: claude_code\n", encoding="utf-8")
     crew = read_crew(tmp_path)
     assert [(c.name, c.writes) for c in crew] == [("coder", True), ("critic", False)]
+
+
+def test_render_registry_tables_and_count():
+    from pathlib import Path
+
+    from scripts.docs.agent_registry import CrewRow, read_roles, render_registry
+
+    roles = read_roles(Path("agents"))
+    md = render_registry(roles, [CrewRow("coder", "opencode", "m", True)])
+    assert "17 roles" in md
+    assert "| architect | proposer |" in md
+    assert "## Crew roles (E-88)" in md
+
+
+def test_registry_count_equals_role_dirs():
+    """Spec §9 exit: the registry count equals the agents/ role-dir count."""
+    from pathlib import Path
+
+    from scripts.docs.agent_registry import read_roles
+
+    repo = Path(__file__).resolve().parents[2]
+    roles = read_roles(repo / "agents")
+    assert len(roles) == len([p for p in (repo / "agents").iterdir() if p.is_dir()])

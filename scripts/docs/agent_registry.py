@@ -68,3 +68,44 @@ def read_crew(roles_dir: Path) -> list[CrewRow]:
             )
         )
     return rows
+
+
+REGISTRY_PAGE = "generated/agent-registry.md"
+
+
+def _cell(v: str | None) -> str:
+    return v if v else "—"
+
+
+def render_registry(roles: list[RoleRow], crew: list[CrewRow]) -> str:
+    lines = [
+        "# Agent registry",
+        "",
+        f"{len(roles)} roles under `agents/`, read as plain YAML from"
+        " `agents/<role>/agent.yaml`. `instructions.md` presence is reported,"
+        " not its content (product prompts stay off the site).",
+        "",
+        "| Role | Kind | Harness | Model | instructions.md |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for r in roles:
+        lines.append(
+            f"| {r.name} | {_cell(r.kind)} | {_cell(r.harness)} "
+            f"| {_cell(r.model)} | {'yes' if r.has_instructions else 'no'} |"
+        )
+    lines += [
+        "",
+        "## Crew roles (E-88)",
+        "",
+        "Crew roles live in `crew/roles/*.yaml`, not in `agents/registry.yaml`"
+        " (ARCHITECTURE §4: one writer; ADR-6 family rule for non-lead roles).",
+        "",
+        "| Role | Harness | Model | Writes |",
+        "| --- | --- | --- | --- |",
+    ]
+    for c in crew:
+        lines.append(
+            f"| {c.name} | {_cell(c.harness)} | {_cell(c.model)} | {'yes' if c.writes else 'no'} |"
+        )
+    lines.append("")
+    return "\n".join(lines)

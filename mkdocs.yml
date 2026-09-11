@@ -84,6 +84,8 @@ nav:
           - ui-component-library: roadmap/ui-component-library.md
   - Benchmark:
       - BENCHMARK: BENCHMARK.md
+  - Agents:
+      - Registry: generated/agent-registry.md
   - Contributing:
       - Documentation rules: documentation-rules.md
       - Modes:

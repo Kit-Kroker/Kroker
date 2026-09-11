@@ -53,5 +53,12 @@ def generate() -> None:
     with mkdocs_gen_files.open(roadmap_board.BOARD_PAGE, "w", encoding="utf-8") as f:
         f.write(roadmap_board.render_board(board))
 
+    from scripts.docs import agent_registry
+
+    roles = agent_registry.read_roles(REPO_ROOT / "agents")
+    crew = agent_registry.read_crew(REPO_ROOT / "crew" / "roles")
+    with mkdocs_gen_files.open(agent_registry.REGISTRY_PAGE, "w", encoding="utf-8") as f:
+        f.write(agent_registry.render_registry(roles, crew))
+
 
 generate()
