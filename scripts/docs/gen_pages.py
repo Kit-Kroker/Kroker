@@ -29,6 +29,8 @@ ROOT_DOCS = [
     "SDLC-spec-v2.md",
 ]
 
+BENCHMARK_PAGE = "generated/benchmark-analysis.md"
+
 STAGE_CONTRACTS = sorted(
     str(p.relative_to(REPO_ROOT)) for p in (REPO_ROOT / "src" / "sdlc" / "stages").glob("*/*.md")
 )
@@ -59,6 +61,21 @@ def generate() -> None:
     crew = agent_registry.read_crew(REPO_ROOT / "crew" / "roles")
     with mkdocs_gen_files.open(agent_registry.REGISTRY_PAGE, "w", encoding="utf-8") as f:
         f.write(agent_registry.render_registry(roles, crew))
+
+    from scripts.aggregate_benchmarks import EMPTY_MESSAGE, aggregate, build_html
+
+    data = aggregate(REPO_ROOT / "runs" / "benchmarks")
+    lines = ["# Benchmark analysis", ""]
+    if data:
+        html = build_html(data)
+        with mkdocs_gen_files.open("generated/benchmark-analysis.html", "wb") as f:
+            f.write(html.encode("utf-8"))
+        lines.append("[Open the full interactive analysis](benchmark-analysis.html)")
+    else:
+        lines.append(EMPTY_MESSAGE)
+        # The link to the dated snapshot joins at the P3 cutover (Task 14).
+    with mkdocs_gen_files.open(BENCHMARK_PAGE, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
 
 
 generate()

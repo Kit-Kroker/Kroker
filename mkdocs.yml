@@ -84,6 +84,7 @@ nav:
           - ui-component-library: roadmap/ui-component-library.md
   - Benchmark:
       - BENCHMARK: BENCHMARK.md
+      - Analysis: generated/benchmark-analysis.md
   - Agents:
       - Registry: generated/agent-registry.md
   - Contributing:

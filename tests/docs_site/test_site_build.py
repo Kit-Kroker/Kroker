@@ -48,3 +48,14 @@ def test_strict_build_page_set(tmp_path: Path):
     # README links repo files as blob URLs after the hook rewrites them.
     readme_html = (site / "index.html").read_text(encoding="utf-8")
     assert "github.com/Kit-Kroker/Kroker/blob/main/" in readme_html
+
+
+def test_benchmark_page_empty_state_in_build(tmp_path: Path):
+    """Without runs/, the site renders the benchmark empty state (spec §9.2)."""
+    from scripts.aggregate_benchmarks import EMPTY_MESSAGE
+
+    site = tmp_path / "site"
+    _build(site)
+    page = site / "generated" / "benchmark-analysis" / "index.html"
+    assert EMPTY_MESSAGE in page.read_text(encoding="utf-8")
+    assert not (site / "generated" / "benchmark-analysis.html").exists()
