@@ -25,6 +25,24 @@ class _NoParser(ToolchainAdapter):
     def oracle_test_cmd(self, oracle_path: str, report_out: str) -> str:
         return "true"
 
+    def lint_json_cmd(self) -> str:
+        return "true"
+
+    def parse_lint(self, code: int, out: str, root: str):
+        return None
+
+    def integration_test_cmd(self, junit_out: str, coverage: bool = True) -> str:
+        return "true"
+
+    def collect_ids_cmd(self, paths) -> str:
+        return "true"
+
+    def parse_collected_ids(self, out: str) -> set[str]:
+        return set()
+
+    def selected_tests_cmd(self, node_ids, junit_out: str) -> str:
+        return "true"
+
 
 def _rules(result):
     return {f.rule for f in result.findings}

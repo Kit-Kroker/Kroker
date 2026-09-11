@@ -14,11 +14,16 @@ never runs a subprocess. Execution lives in Temporal activities
 from __future__ import annotations
 
 import ast
+import json
 import os
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from enum import StrEnum
 from typing import Literal
+
+from ..change_scope import normalize_path
+from .junit import shell_safe
 
 
 class ToolchainKind(StrEnum):
@@ -93,6 +98,35 @@ class ToolchainAdapter(ABC):
     @abstractmethod
     def lint_cmd(self) -> str: ...
 
+    # Diff-scoped gates (DS5/DS6). Declarative, so a language adds no gate code
+    # (FR-108). E-30a/b/c adapters must implement every method below.
+    lint_policy_globs: tuple[str, ...] = ()
+    suppression_pattern: str = ""  # regex; "" = no inline suppression syntax
+
+    @abstractmethod
+    def lint_json_cmd(self) -> str:
+        """Machine-readable lint over the cwd; exit 0 whether or not it found anything."""
+
+    @abstractmethod
+    def parse_lint(self, code: int, out: str, root: str) -> list[tuple[str, str, int]] | None:
+        """(rule, repo-relative POSIX path, 1-based row) per finding. None = the
+        tool failed (or reported an I/O error), never "no findings"."""
+
+    @abstractmethod
+    def integration_test_cmd(self, junit_out: str, coverage: bool = True) -> str:
+        """The merge gate's whole-suite run: NO early stop of any kind (an
+        early stop hides introduced failures behind pre-existing ones), per-test
+        JUnit at junit_out, and coverage.xml when coverage=True."""
+
+    @abstractmethod
+    def collect_ids_cmd(self, paths: Sequence[str]) -> str: ...
+
+    @abstractmethod
+    def parse_collected_ids(self, out: str) -> set[str]: ...
+
+    @abstractmethod
+    def selected_tests_cmd(self, node_ids: Sequence[str], junit_out: str) -> str: ...
+
     @abstractmethod
     def oracle_test_cmd(self, oracle_path: str, report_out: str) -> str:
         """Run ONLY the tests under oracle_path (a path relative to the
@@ -166,6 +200,62 @@ class PythonToolchain(ToolchainAdapter):
 
     def lint_cmd(self) -> str:
         return "ruff check ."
+
+    lint_policy_globs = ("pyproject.toml", "ruff.toml", ".ruff.toml", "*/ruff.toml", "*/.ruff.toml")
+    suppression_pattern = r"#\s*noqa\b"
+
+    _PYTEST_GATE = (
+        "pytest -q -p no:cacheprovider --continue-on-collection-errors -o junit_family=legacy"
+    )
+
+    def lint_json_cmd(self) -> str:
+        return "ruff check --output-format json --exit-zero --no-cache ."
+
+    def parse_lint(self, code: int, out: str, root: str) -> list[tuple[str, str, int]] | None:
+        if code != 0:
+            return None
+        m = re.search(r"(?m)^\[", out)
+        if m is None:
+            return None
+        try:
+            rows = json.loads(out[m.start() :])
+        except ValueError:
+            return None
+        found: list[tuple[str, str, int]] = []
+        for row in rows:
+            rule = row.get("code") or "syntax-error"
+            if rule == "E902":  # ruff's I/O error: the tool could not read a file
+                return None
+            path = normalize_path(os.path.relpath(row["filename"], root))
+            found.append((rule, path, int(row["location"]["row"])))
+        return sorted(found)
+
+    def integration_test_cmd(self, junit_out: str, coverage: bool = True) -> str:
+        base = f"{self._PYTEST_GATE} --junitxml={junit_out}"
+        return f"{base} --cov=. --cov-report=xml:coverage.xml" if coverage else base
+
+    def collect_ids_cmd(self, paths: Sequence[str]) -> str:
+        unsafe = [p for p in paths if not shell_safe(p)]
+        if unsafe:
+            raise ValueError(f"refusing to shell-interpolate unsafe test ids: {unsafe[:3]}")
+        quoted = " ".join(f'"{p}"' for p in paths)
+        return (
+            f"pytest --collect-only -q -p no:cacheprovider --continue-on-collection-errors {quoted}"
+        )
+
+    def parse_collected_ids(self, out: str) -> set[str]:
+        return {
+            ln.strip()
+            for ln in out.splitlines()
+            if "::" in ln and not ln[:1].isspace() and not ln.startswith(("ERROR", "="))
+        }
+
+    def selected_tests_cmd(self, node_ids: Sequence[str], junit_out: str) -> str:
+        unsafe = [p for p in node_ids if not shell_safe(p)]
+        if unsafe:
+            raise ValueError(f"refusing to shell-interpolate unsafe test ids: {unsafe[:3]}")
+        quoted = " ".join(f'"{n}"' for n in node_ids)
+        return f"{self._PYTEST_GATE} --junitxml={junit_out} {quoted}"
 
     def oracle_test_cmd(self, oracle_path: str, report_out: str) -> str:
         # -p no:cacheprovider: never write .pytest_cache into the produced
