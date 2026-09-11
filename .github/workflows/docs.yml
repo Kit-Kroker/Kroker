@@ -1,0 +1,26 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev,docs]"
+
+      - name: Docs-site unit tests
+        run: pytest tests/docs_site -v
+
+      - name: Build site (strict)
+        run: mkdocs build --strict
