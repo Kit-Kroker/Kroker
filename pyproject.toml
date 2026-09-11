@@ -32,7 +32,7 @@ dev = [
     # stack dump, so the tier completes and names its stall point.
     "pytest-timeout>=2",
     "jsonschema>=4",
-    "ruff>=0.16.5",
+    "ruff>=0.16.6",
     "mypy>=2.3",
     "pre-commit>=4",
 ]
