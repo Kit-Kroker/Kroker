@@ -33,3 +33,11 @@ def test_benchmark_never_needs_client():
 
 def test_start_needs_client():
     assert _needs_temporal_client(_ns(cmd="start")) is True
+
+
+def test_doctor_does_not_need_client():
+    """THE load-bearing wiring constraint (spec section 8). main() connects
+    at cli.py:369-373 BEFORE dispatch, so without this clause `sdlc doctor`
+    dies with a connection error in exactly the situation it exists to
+    diagnose. Doctor runs its own guarded probe instead."""
+    assert _needs_temporal_client(_ns(cmd="doctor")) is False

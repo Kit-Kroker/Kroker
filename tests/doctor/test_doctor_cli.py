@@ -93,3 +93,14 @@ async def test_run_doctor_json_mode_emits_only_json(monkeypatch, capsys):
     await run_doctor(_parse(["doctor", "--json"]))
     out = capsys.readouterr().out
     assert json.loads(out)[0]["name"] == "a"
+
+
+def test_doctor_is_reachable_through_the_real_parser():
+    """Not the local parser the other tests build -- sdlc.cli.build_parser,
+    the one main() actually uses."""
+    from sdlc.cli import build_parser
+
+    args = build_parser().parse_args(["doctor", "--strict"])
+    assert args.cmd == "doctor"
+    assert args.strict is True
+    assert args.as_json is False

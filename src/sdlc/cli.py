@@ -3,6 +3,8 @@
 python -m sdlc.cli start   --title "Add SSO" --mode brownfield --repo <url>
 python -m sdlc.cli status  --id feature-add-sso
 python -m sdlc.cli inbox
+python -m sdlc.cli doctor
+python -m sdlc.cli doctor --json --strict
 python -m sdlc.cli answer  --id feature-add-sso --q Q1 --text "Use OIDC"
 python -m sdlc.cli approve --id feature-add-sso --gate architecture
 python -m sdlc.cli revise  --id feature-add-sso --gate architecture --comment "split task 3"
@@ -105,7 +107,14 @@ def _needs_temporal_client(args) -> bool:
     """True if this invocation must connect to Temporal. calibrate is fully
     local (calibrate <rubric> is offline file+judge work; calibrate capture is
     a stub that only prints a seam message) — mirroring how every `benchmark`
-    subcommand is client-free."""
+    subcommand is client-free.
+
+    `doctor` is local-only for a stronger reason than the rest: it PROBES
+    Temporal as one of its checks, under its own timeout, and reports the
+    result. Routing it through the shared connect below would kill the
+    command with a connection error in exactly the situation it exists to
+    diagnose (F2, spec section 8).
+    """
     local_only = (
         args.cmd == "benchmark"
         or (args.cmd == "schedules" and args.sched_cmd == "list")
@@ -113,6 +122,7 @@ def _needs_temporal_client(args) -> bool:
         or args.cmd == "calibrate"
         or args.cmd == "capability"
         or args.cmd == "risk"
+        or args.cmd == "doctor"
     )
     return not local_only
 
@@ -279,6 +289,10 @@ def build_parser() -> argparse.ArgumentParser:
     from .dispositions.cli import add_dispositions_parser
 
     add_dispositions_parser(sub)
+
+    from .doctor.cli import add_doctor_parser
+
+    add_doctor_parser(sub)
 
     tr = sub.add_parser("triage")
     trsub = tr.add_subparsers(dest="triage_cmd")
@@ -562,6 +576,11 @@ async def main() -> None:
         from .dispositions.cli import run_dispositions
 
         raise SystemExit(run_dispositions(args))
+
+    if args.cmd == "doctor":
+        from .doctor.cli import run_doctor
+
+        raise SystemExit(await run_doctor(args))
 
     if args.cmd == "triage" and args.triage_cmd == "show":
         assert client is not None
