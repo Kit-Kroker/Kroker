@@ -81,9 +81,51 @@ def test_rewrite_markdown_skips_fences_and_rewrites_links(tmp_path: Path):
     (tmp_path / "worker.py").write_text("x", encoding="utf-8")
     md = (
         "# T\n\nSee [worker](worker.py) and\n\n```\n[dead](nope.py)\n```\n\n"
-        "and `code [span](nope.py)` stays.\n"
+        "and a code-span text [`worker.py`](worker.py) link.\n"
     )
     out = rewrite_markdown(md, "README.md", "README.md", {}, tmp_path)
     assert f"[worker]({BLOB_BASE}worker.py)" in out
     assert "[dead](nope.py)" in out  # inside a fence: untouched
-    assert "code [span](nope.py)" in out  # no fence/inline-code awareness needed
+    # Link text is routinely a code span in this repo; it must still rewrite.
+    assert f"[`worker.py`]({BLOB_BASE}worker.py)" in out
+
+
+def test_page_repo_paths_distinguishes_real_and_virtual(tmp_path: Path):
+    from scripts.docs.link_hook import page_repo_paths_from_files
+
+    class Stub:
+        """Mimics mkdocs 1.6 File: `.inclusion` is an enum-like object whose
+        `.name` is e.g. "EXCLUDED" / "NOT_IN_NAV" / "UNDEFINED"."""
+
+        class Inclusion:
+            def __init__(self, name: str) -> None:
+                self.name = name
+
+        def __init__(self, src_uri: str, abs_src_path: str | None, excluded: bool = False):
+            self.src_uri = src_uri
+            self.abs_src_path = abs_src_path
+            self.inclusion = self.Inclusion("EXCLUDED" if excluded else "UNDEFINED")
+
+    docs_dir = tmp_path / "docs"
+    real = docs_dir / "framework.md"
+    real.parent.mkdir()
+    real.write_text("x", encoding="utf-8")
+    # gen-files materialises virtual files in a temp dir OUTSIDE docs_dir —
+    # the file exists on disk, and that must not make it "in-tree".
+    genfiles_tmp = tmp_path / "mkdocs_gen_files_tmp"
+    genfiles_tmp.mkdir()
+    virtual_on_disk = genfiles_tmp / "ARCHITECTURE.md"
+    virtual_on_disk.write_text("x", encoding="utf-8")
+    files = [
+        Stub("framework.md", str(real)),  # in-tree
+        Stub("README.md", None),  # virtual: no abs path at all
+        Stub("ARCHITECTURE.md", str(virtual_on_disk)),  # gen-files virtual
+        # excluded (exclude_docs) files stay in the Files collection but are
+        # never site pages — e.g. docs/schemas/ during P1–P2.
+        Stub("schemas/roadmap.html", str(docs_dir / "schemas" / "roadmap.html"), True),
+    ]
+    assert page_repo_paths_from_files(files, docs_dir) == {
+        "docs/framework.md": "framework.md",
+        "README.md": "README.md",
+        "ARCHITECTURE.md": "ARCHITECTURE.md",
+    }

@@ -9,8 +9,8 @@ rewritten to a GitHub blob/raw URL. A link whose target exists nowhere in the
 repository fails the build — this is the fail-mode decision from spec §2, and
 it closes the dead-path class that sank the hand-maintained pages.
 
-Fenced code blocks and inline-code spans are skipped: a backticked
-``[x](path)`` is prose, not a link, and a dead one must not fail the build.
+Fenced code blocks are skipped. Inline-code spans are not: link text here is
+routinely a code span, and protecting backticks would tear those links apart.
 """
 
 from __future__ import annotations
@@ -97,8 +97,14 @@ def rewrite_markdown(
     page_repo_paths: dict[str, str],
     repo_root: Path,
 ) -> str:
-    """Apply rewrite_href to every md link/image href outside code fences
-    and outside inline-code spans."""
+    """Apply rewrite_href to every md link/image href outside code fences.
+
+    Inline-code spans are NOT protected: in this repo a link's *text* is
+    routinely a code span (``[`file.md`](path)``), and splitting a line on
+    backticks would tear exactly those links apart. A pseudo-link inside
+    backticks is therefore classified like any other — a dead one fails the
+    build, which is the honest signal.
+    """
     out: list[str] = []
     in_fence = False
     for line in md.splitlines(keepends=True):
@@ -117,26 +123,40 @@ def rewrite_markdown(
             new = rewrite_href(page_repo_path, page_src_uri, href, page_repo_paths, repo_root)
             return f"{m.group('pre')}{new}{m.group('post')}"
 
-        # Even parts are outside `` `…` `` inline-code spans, odd parts inside.
-        parts = re.split(r"(`[^`]*`)", line)
-        rewritten = [
-            _LINK_RE.sub(_sub, part) if i % 2 == 0 else part for i, part in enumerate(parts)
-        ]
-        out.append("".join(rewritten))
+        out.append(_LINK_RE.sub(_sub, line))
     return "".join(out)
 
 
-def page_repo_paths_from_files(files) -> dict[str, str]:
+def _is_excluded(f) -> bool:
+    """True for exclude_docs files. mkdocs 1.6 marks them with
+    File.inclusion == InclusionLevel.EXCLUDED (the enum's name, not its
+    int value, is the stable surface); NOT_IN_NAV files stay site pages."""
+    inclusion = getattr(f, "inclusion", None)
+    if inclusion is not None:
+        return getattr(inclusion, "name", str(inclusion)).upper().startswith("EXCLUDED")
+    is_exc = getattr(f, "is_excluded", None)  # future-proof fallback
+    return bool(is_exc()) if callable(is_exc) else False
+
+
+def page_repo_paths_from_files(files, docs_dir: Path) -> dict[str, str]:
     """Map every mkdocs File to the repo path its links resolve against.
 
     Real files sit under docs_dir (docs/), so their repo path is
-    "docs/" + src_uri. Files with no abs_src_path are virtual (gen-files)
-    and keep their src_uri as repo path — that is the whole point of pulling
-    sources in at their repo-relative paths.
+    "docs/" + src_uri. Virtual files (gen-files) keep their src_uri as repo
+    path — that is the whole point of pulling sources in at their
+    repo-relative paths. gen-files materialises virtual files in a temp dir,
+    so "virtual" means: no abs path, or the abs path is not under docs_dir.
+
+    Excluded files (exclude_docs) stay in the Files collection but are NOT
+    site pages — a link to one is a link to a repo file, rewritten to its
+    GitHub blob URL, never to a dead site-relative href.
     """
     mapping: dict[str, str] = {}
     for f in files:
-        if f.abs_src_path is None:
+        if _is_excluded(f):
+            continue
+        virtual = f.abs_src_path is None or docs_dir not in Path(f.abs_src_path).parents
+        if virtual:
             mapping[f.src_uri] = f.src_uri
         else:
             mapping[f"docs/{f.src_uri}"] = f.src_uri
@@ -146,7 +166,7 @@ def page_repo_paths_from_files(files) -> dict[str, str]:
 def on_page_markdown(markdown, *, page, config, files):  # mkdocs hook entry
     """Rewrite relative links before rendering; dead targets fail the build."""
     repo_root = Path(config.config_file_path).parent
-    pages = page_repo_paths_from_files(files)
+    pages = page_repo_paths_from_files(files, Path(config.docs_dir))
     rev = {v: k for k, v in pages.items()}
     repo_path = rev.get(src_uri := page.file.src_uri) or f"docs/{src_uri}"
     return rewrite_markdown(markdown, repo_path, src_uri, pages, repo_root)
