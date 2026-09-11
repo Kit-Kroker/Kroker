@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from temporalio import activity
 
 from .git import _git
-from .worktree import _ensure_worktree, _worktrees_root
+from .worktree import _clear_worktree_dir, _ensure_worktree, _worktrees_root
 
 
 @dataclass
@@ -187,3 +187,75 @@ async def build_verification_branch(inp: VerifyBranchInput) -> VerifyResult:
 
     head = _git(["rev-parse", "HEAD"], worktree).stdout.strip()
     return VerifyResult(ref=ref, head_sha=head, merged=merged, conflicted=conflicted)
+
+
+# The provisioned per-worktree venv (stages/qa/activities.py _VENV_DIR_NAME).
+# Kept across resets: re-provisioning it is the expensive part of a retry.
+_KEEP_ON_CLEAN = ".sdlc-venv"
+
+
+@dataclass
+class BaseWorktreeInput:
+    integration_wt: str  # any worktree of the repository; git worktree add runs here
+    run_id: str
+    base_sha: str  # FeatureWorkflow._base_sha, pinned at setup (DS2)
+
+
+@dataclass
+class BaseWorktree:
+    path: str | None  # None = could not materialize; `reason` says why
+    reason: str = ""
+
+
+@activity.defn
+async def prepare_base_worktree(inp: BaseWorktreeInput) -> BaseWorktree:
+    """DS2/DS3: a disposable DETACHED worktree at the pinned base commit.
+
+    Never raises on a git failure: the merge gate must fail CLOSED on an
+    unmaterializable base (DS7), which it does by handing path=None to the
+    scoped activities, which then report NOT_COLLECTED. Raising would instead
+    fail the whole workflow. Idempotent across retries: a live worktree is
+    reset to base_sha and cleaned (keeping the provisioned venv), the
+    build_verification_branch pattern. Never pushed; never the operator's
+    checkout.
+    """
+    if not inp.base_sha:
+        return BaseWorktree(None, "no pinned base_sha was supplied to the merge gate")
+    want = _git(
+        ["rev-parse", "--verify", "--quiet", f"{inp.base_sha}^{{commit}}"], inp.integration_wt
+    )
+    if want.returncode != 0:
+        return BaseWorktree(None, f"base_sha {inp.base_sha!r} does not resolve to a commit")
+    sha = want.stdout.strip()
+    root = os.path.join(_worktrees_root(), inp.run_id or "local", "base")
+    for cand in [root] + [f"{root}.{i}" for i in range(1, 8)]:
+        cand = os.path.normpath(cand)
+        live = (
+            os.path.isdir(cand)
+            and _git(["rev-parse", "--is-inside-work-tree"], cand).returncode == 0
+        )
+        if not live:
+            if os.path.exists(cand):
+                try:
+                    _clear_worktree_dir(inp.integration_wt, cand)
+                except OSError:
+                    continue  # Windows CWD lock: try the next candidate
+            add = _git(["worktree", "add", "--detach", cand, sha], inp.integration_wt)
+            if add.returncode != 0:
+                return BaseWorktree(
+                    None,
+                    f"git worktree add failed: {add.stderr.strip() or add.stdout.strip()}",
+                )
+        for args in (
+            ["checkout", "--detach", "--force", sha],
+            ["reset", "--hard", sha],
+            ["clean", "-fd", "-e", _KEEP_ON_CLEAN],
+        ):
+            r = _git(args, cand)
+            if r.returncode != 0:
+                err = r.stderr.strip() or r.stdout.strip()
+                return BaseWorktree(None, f"git {args[0]} failed in the base worktree: {err}")
+        if _git(["rev-parse", "HEAD"], cand).stdout.strip() != sha:
+            return BaseWorktree(None, "base worktree HEAD does not match base_sha after reset")
+        return BaseWorktree(cand)
+    return BaseWorktree(None, f"could not clear or create a base worktree near {root}")

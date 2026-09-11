@@ -15,6 +15,8 @@ from .git import (
     read_committed_bytes,
 )
 from .integration import (
+    BaseWorktree,
+    BaseWorktreeInput,
     IntegrationHandle,
     IntegrationInput,
     MergeInput,
@@ -23,6 +25,7 @@ from .integration import (
     VerifyResult,
     build_verification_branch,
     merge_into_integration,
+    prepare_base_worktree,
     setup_integration_branch,
 )
 from .worktree import (
@@ -40,6 +43,7 @@ ACTIVITIES = [
     setup_integration_branch,
     merge_into_integration,
     build_verification_branch,
+    prepare_base_worktree,
     get_task_diff,
     check_test_drift,
     read_committed_bytes,
@@ -47,6 +51,8 @@ ACTIVITIES = [
 
 __all__ = [
     "ACTIVITIES",
+    "BaseWorktree",
+    "BaseWorktreeInput",
     "CommittedBytesInput",
     "DiffInput",
     "DriftInput",
@@ -71,6 +77,7 @@ __all__ = [
     "create_worktree",
     "get_task_diff",
     "merge_into_integration",
+    "prepare_base_worktree",
     "read_committed_bytes",
     "setup_integration_branch",
 ]

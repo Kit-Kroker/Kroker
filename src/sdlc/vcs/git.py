@@ -102,7 +102,17 @@ async def get_task_diff(inp: DiffInput) -> dict:
     stat = _git(["diff", "--stat", rng], inp.worktree).stdout
     patch = _git(["diff", rng], inp.worktree).stdout
     files = _git(["diff", "--name-only", rng], inp.worktree).stdout.splitlines()
-    return {"stat": stat, "patch": patch[: inp.max_chars], "files": files}
+    # DS2: [old, new] for every rename git detected, so base-side finding
+    # paths can be mapped before the multiset delta (change_scope.rename_map).
+    renames = [
+        [parts[1], parts[2]]
+        for parts in (
+            ln.split("\t")
+            for ln in _git(["diff", "-M", "--name-status", rng], inp.worktree).stdout.splitlines()
+        )
+        if len(parts) == 3 and parts[0].startswith("R")
+    ]
+    return {"stat": stat, "patch": patch[: inp.max_chars], "files": files, "renames": renames}
 
 
 @dataclass

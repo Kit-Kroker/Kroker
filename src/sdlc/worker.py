@@ -105,6 +105,7 @@ from .vcs import (
     create_worktree,
     get_task_diff,
     merge_into_integration,
+    prepare_base_worktree,
     read_committed_bytes,
     setup_integration_branch,
 )
@@ -133,6 +134,7 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
         setup_integration_branch,
         merge_into_integration,
         build_verification_branch,
+        prepare_base_worktree,
         prepare_crew,
         run_crew_turn,
         read_round,
