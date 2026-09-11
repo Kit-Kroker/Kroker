@@ -1,12 +1,19 @@
 # Pipeline as data — graph interpreter + canvas (`E-72`…`E-77`) → FR-1200
 
 **The framing.** The 15-stage DAG is not data — it is imperative Python.
-`feature.py::_pipeline` (line 1625, in a 2,329-line file) hardcodes stage order,
+`FeatureWorkflow._pipeline` (`src/sdlc/workflows/feature.py:469`) hardcodes stage order,
 the typed handoffs between stages, the fix loops, the gate awaits and the signal
 handling. Every pipeline shape the factory can run is a shape someone wrote by
 hand. FR-1200 makes the pipeline a user-authored `PipelineGraph` executed by a
 generic interpreter, with a canvas to edit it — n8n's model, applied to the SDLC
 DAG.
+
+**Not admitted scope.** FR-1200…FR-1206 are cited throughout this file but have
+**no line in `PRD.md`**, and ROADMAP §2 has no FR-1200 block: the group was
+decided in a brainstorm, not admitted. **Ruled 2026-09-11** (user gate,
+`docs/superpowers/specs/2026-09-11-roadmap-platform-analysis-design.md` §10):
+record only. Sequencing waits on (a) a PRD line for FR-1200, (b) OQ-10 settled,
+and (c) P2's exit demonstrated (`ordering.md` item 7).
 
 **Decided 2026-08-06** (brainstorm, no spec written): ports carry control flow
 (n8n-style branching, not a strict DAG of composite nodes), and the interpreter
@@ -20,24 +27,32 @@ were raised and answered rather than dismissed:
   (`ArchitectureSpec`, `ImplementationPlan`, `TaskResult`…); edge validation
   rejects incompatible connections. Freedom is real but type-bounded.
 - (c) **The benchmark axis.** Node types declare a `canonical_stage`, mapping any
-  graph onto the fixed `CANONICAL_STAGES` list (`benchmarks/heatmap.py:24`), so
+  graph onto the fixed `CANONICAL_STAGES` list (`src/sdlc/benchmarks/heatmap.py:25`), so
   the heatmap and SC rollups survive arbitrary graphs. Unmapped types record as
-  `unknown`, which `heatmap.py:96` already handles.
+  `unknown`, which `heatmap.py:122` already handles.
 
-**Cheaper than it looks.** The node handlers already exist as methods —
-`_run_clarify` (:1836), `_run_architect` (:1900), `_fan_out_research` (:803),
-`_dev_task` (:1218), `_gate` (:1105), `_run_deep_review` (:876), `_run_adversary`
-(:942), `_run_handoff` (:994), `_merge_task` (:1193), `_retro` (:1559). The work
-is replacing the *wiring*, not the stage bodies. `_revisable_stage` (:1166)
-disappears entirely: wrapping a stage in a gate-and-retry loop becomes topology.
+**Cheaper than it looks.** The node handlers already exist, and since the B0
+stage migration most are module-level functions rather than `FeatureWorkflow`
+methods: `src/sdlc/stages/<stage>/step.py` for all 13 stages (clarify as
+`_run_clarify_single`/`_run_clarify_fanout`, `_run_architect` inside
+`stages/architecture/step.py`, `_fan_out_research` in `stages/research/step.py`,
+`_run_deep_review`/`_run_adversary`/`_run_handoff` in `stages/code/step.py`),
+with `_dev_task`/`_merge_task` in `workflows/task_host.py`, `_gate` in
+`workflows/gates.py`, and `_retro` still in `workflows/feature.py`. The work is
+replacing the *wiring*, not the stage bodies, and B0 already moved the bodies
+closer to E-74's `(Activation, PipelineConfig) -> Emission` shape.
+`_revisable_stage` (`workflows/role_host.py`) disappears entirely: wrapping a
+stage in a gate-and-retry loop becomes topology. *Anchors refreshed 2026-09-11;
+the earlier line numbers pointed into a 2,329-line `feature.py`.*
 
-**The quiet win.** Four boolean flags (`research_enabled`, `deep_review_enabled`,
-`adversarial_review_enabled`, `handoff_enabled`) and their scattered
-`if cfg.X_enabled and t_X is not None` guards collapse into *is there a node*.
+**The quiet win.** Three boolean flags on `PipelineConfig` (`research_enabled`,
+`deep_review_enabled`, `adversarial_review_enabled`), the handoff stage's
+`t_handoff is not None` guard, and their scattered `if cfg.X_enabled and t_X is
+not None` checks collapse into *is there a node*.
 
 - [ ] **E-72 — `PipelineGraph` model + node-type registry** → FR-1201.
   `GraphNode` / `GraphEdge` / `NodePort` in `sdlc/graph/model.py`; nodes carry
-  `RoleConfig` (`models.py:717`) and `GateConfig` (`models.py:53`) **verbatim**
+  `RoleConfig` (`src/sdlc/core/models.py:176`) and `GateConfig` (`:57`) **verbatim**
   rather than a forked `params["model"]` string, so the registry loader's
   validation, the ADR-6 model-inequality checks and `PROMPT_SHAS` memo
   invalidation keep working unchanged. `content_sha()` excludes `position` and
@@ -50,8 +65,9 @@ disappears entirely: wrapping a stage in a gate-and-retry loop becomes topology.
   increments `round` and invalidates buffered inputs at lower rounds, or a revise
   loop re-runs `architect` while `planner` still holds last round's spec);
   per-edge `max_traversals` with exhaustion terminating `ESCALATED` (reproducing
-  `feature.py:1464`); fan-out/collect. Rounds are not new — `gate_key(gate,
-  round)` (`models.py`) already carries this semantics for gates; the router
+  the per-task `max_fix_attempts` budget, `src/sdlc/stages/code/step.py:534`);
+  fan-out/collect. Rounds are not new — `gate_key(gate, round)`
+  (`src/sdlc/core/models.py:228`) already carries this semantics for gates; the router
   generalises it to the whole graph. `validate.py` is the **single** source of
   truth for legality (port compatibility, reachability, every cycle bounded,
   one entry node) and is never reimplemented in TypeScript.
@@ -75,8 +91,8 @@ disappears entirely: wrapping a stage in a gate-and-retry loop becomes topology.
   gate approve/reject; `editable` ⇒ palette + inspector. Editing a *running*
   graph is disabled by design (see (a) above). Backward edges render curved with
   a `2/3` counter, so a post-mortem shows **why** a run looped, not merely that it
-  did. `Run.stageIdx` (`api/types.ts:20`) is a linear index that cannot express
-  graph position and becomes `currentNodes: string[]`; `StageDots.vue` survives by
+  did. `Run.stageIdx` (`interfaces/dashboard/frontend/src/api/types.ts:18`) is a linear index that cannot express
+  graph position and becomes `currentNodes: string[]`; `StageDots.vue` (now `interfaces/ui/src/components/stage_dots/`, E-89) survives by
   mapping active nodes through `canonical_stage` back onto the fixed 15-stage
   strip, so the fleet table keeps its glanceable row and cannot disagree with the
   benchmark.
@@ -85,6 +101,18 @@ disappears entirely: wrapping a stage in a gate-and-retry loop becomes topology.
   *actually ran* rather than what the graph looks like now. Benchmark records
   derive `fix_attempts` from inbound-fail-edge traversal counts and `round` from
   the router, keeping the §9 measurement axes intact across hand-authored graphs.
+
+**External input (2026-09-11).** A third-party platform analysis (register §H,
+verbatim at `docs/reports/2026-09-11-external-platform-analysis.md`)
+independently proposed this group's substance and ranked it first:
+- its FlowSpec is E-72…E-74 (H2), and its visual builder is E-76 (H1);
+- its graph-shaped run replay is E-75 + E-76's run-state mode (H5);
+- the validator half of its dry-run is E-73's `validate.py` (H6);
+- its workflow-as-experiment axis needs E-77's `graph_sha` (H3).
+
+This adds priority pressure, not scope. Its untyped YAML is not adopted over
+E-72's typed ports (objection (b)). The one idea it adds that this group has not
+designed, subflows, is OQ-14.
 
 **Open questions.**
 
@@ -120,3 +148,11 @@ disappears entirely: wrapping a stage in a gate-and-retry loop becomes topology.
   singularization assume English identifiers, so a non-English codebase degrades
   to LOW-confidence single-source candidates. Recorded rather than solved:
   calibrating it needs the corpus SC-8 also needs.
+- **OQ-14 — subflows (register H7).** A subgraph node type (one node running
+  another graph as a child workflow) is expressible on E-72: the 2026-08-06
+  decision rejected composite nodes as the *branching* primitive, not a subgraph
+  node. Child-workflow precedent exists in `CrewTaskWorkflow` (E-88),
+  `DeploymentWorkflow` (E-67) and the `TriageWorkflow` child (E-44/E-45).
+  Unresolved: E-73 round/stale-input semantics across the boundary,
+  `canonical_stage` for inner nodes (E-77), and a composite's `graph_sha`. Not
+  before E-74.
