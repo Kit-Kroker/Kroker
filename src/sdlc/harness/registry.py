@@ -24,11 +24,21 @@ HARNESSES: dict[HarnessKind, CodingHarness] = {
 _VERSION_RE = re.compile(r"(\d+\.\d+(?:\.\d+)?)")
 
 
-def check_harness_versions(harnesses: dict[HarnessKind, CodingHarness] | None = None) -> None:
+def check_harness_versions(
+    harnesses: dict[HarnessKind, CodingHarness] | None = None,
+) -> list[str]:
     """E-24 (folded into E-35): warn when an installed harness CLI has drifted
     from its pinned version — the failure mode where a silent CLI upgrade
     breaks an adapter's parse. Never raises (a patch bump must not brick the
-    worker). Skips silently when the CLI is absent (CI/fakes) or unpinned."""
+    worker). Skips silently when the CLI is absent (CI/fakes) or unpinned.
+
+    Returns the drift messages as well as logging them (F2 RULING 1). The
+    log call is what the worker boots on and what test_cursor_harness pins;
+    the return value is what `sdlc doctor` reads, because a log line is an
+    observability side-effect, not a domain interface. Both, deliberately —
+    callers that ignore the list are unaffected.
+    """
+    drifts: list[str] = []
     for h in (harnesses or HARNESSES).values():
         if not h.expected_version or not h.cli:
             continue
@@ -43,6 +53,11 @@ def check_harness_versions(harnesses: dict[HarnessKind, CodingHarness] | None = 
         m = _VERSION_RE.search(out.stdout or "")
         found = m.group(1) if m else None
         if found != h.expected_version:
+            message = (
+                f"harness version drift: {h.cli} is {found}, pinned "
+                f"{h.expected_version} (adapter parse may break; capture a "
+                f"fresh transcript and update the pin)"
+            )
             _log.warning(
                 "harness version drift: %s is %s, pinned %s "
                 "(adapter parse may break; capture a fresh transcript "
@@ -51,5 +66,7 @@ def check_harness_versions(harnesses: dict[HarnessKind, CodingHarness] | None = 
                 found,
                 h.expected_version,
             )
+            drifts.append(message)
         else:
             _log.debug("harness version ok: %s %s", h.cli, found)
+    return drifts
