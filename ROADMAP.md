@@ -426,7 +426,9 @@ as tracked rather than accidental.
 - [x] **US-3** task escalation → retry-with-guidance/quarantine — guidance reaches same harness session.
 - [x] **US-4** per-project gate config (hard/soft + threshold) — `GateConfig`, no code change.
 - [x] **US-5** dev/reviewer different model family; registry rejects same-family — enforced at boot, against `dev` (the role that actually codes) since `2026-07-16-registry-drives-every-role`.
+- [x] **US-6** stakeholder one-screen fleet view — `GET /api/runs` plus the `/api/events` SSE stream (E-10).
 - [ ] ⚠️ **US-7** conversational gate approval — chat agent shipped (E-86, 2026-08-20); MCP server pending (E-11).
+- [x] **US-8** client connects a repo → readiness verdict + checkable hygiene list (E-41/E-42/E-43/E-44). *Both halves ship: the readiness verdict + `sdlc triage` (E-42), and the per-finding fix-backlog from `mechanical_backlog`, which lands on the `TidyUpReport` even when a repo is not admitted (E-44).*
 
 - [x] **US-9** client approves a tidy-up backlog → PR per item + before/after delta (E-44). `TidyUpWorkflow` opens a `tidy_up` gate with the backlog rendered, `select_items` narrows it, each accepted item becomes one governed fix run, and `compute_delta` records the before/after.
 - [ ] **US-10** assessor hands over a bundle whose every claim resolves to evidence (E-51/E-52).
