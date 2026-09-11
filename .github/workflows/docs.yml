@@ -16,6 +16,8 @@ jobs:
         with:
           python-version: "3.11"
 
+      - uses: actions/configure-pages@v5
+
       - name: Install dependencies
         run: pip install -e ".[dev,docs]"
 
@@ -24,3 +26,22 @@ jobs:
 
       - name: Build site (strict)
         run: mkdocs build --strict
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
