@@ -44,6 +44,10 @@ logfire = ["logfire[pydantic-ai]>=4.41.0"]
 # whose own versions are 0.11x. Do NOT "correct" this floor to an npm number.
 # Needs Node >= 22.22 on PATH.
 eval = ["promptfoo>=0.1.4"]
+# Generated docs site (spec 2026-09-11-docs-site). Docs tooling only —
+# deliberately NOT in `dev`: a contributor running unit tests does not need
+# mkdocs; CI installs it in docs.yml via ".[docs]".
+docs = ["mkdocs-material>=9.6", "mkdocs-gen-files>=0.5.0"]
 
 [tool.ruff]
 target-version = "py311"

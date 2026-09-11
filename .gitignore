@@ -8,6 +8,8 @@ runs/
 .vscode/
 opencode.json
 /build/
+# mkdocs build output for the generated docs site (never committed).
+/site/
 # specs, plans and reviews are versioned; scratch is not. Note the
 # trailing `*`: git does not descend into an excluded directory, so
 # `docs/superpowers/` plus a negation would not work — the parent must
