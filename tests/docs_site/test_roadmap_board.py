@@ -1,4 +1,4 @@
-"""roadmap_board: checkbox → status, keyed by the bold id; bad lines raise."""
+"""roadmap_board: checkbox → status, keyed by the bold id; bad markers raise."""
 
 from __future__ import annotations
 
@@ -16,7 +16,9 @@ MD = """# Roadmap
 - [x] **FR-101** thing one — with a dash.
 - [ ] ⚠️ **FR-102** thing two is partial.
 - [ ] **FR-103** thing three not started.
-- — **OQ-9** not measurable here.
+- — **OQ-9** not measurable here (bare dash).
+- [ ] — **NFR-9** not measurable here (bracket plus governing dash).
+- [x] ✅ **FR-104** done, with a checkmark decoration.
 
 ## 5. User stories
 
@@ -25,7 +27,7 @@ MD = """# Roadmap
 
 MD_BAD = MD.replace(
     "- [x] **FR-101** thing one — with a dash.\n",
-    "- [x] plain bullet without a bold id.\n- [x] **FR-101** thing one — with a dash.\n",
+    "- [~] **FR-101** thing one — with a dash.\n",
 )
 
 
@@ -38,6 +40,8 @@ def test_parses_all_four_statuses_and_sections():
         "FR-102": "partial",
         "FR-103": "notstarted",
         "OQ-9": "notmeasurable",
+        "NFR-9": "notmeasurable",
+        "FR-104": "done",
         "US-2": "done",
     }
     first = board[0].items[0]
@@ -46,13 +50,25 @@ def test_parses_all_four_statuses_and_sections():
     assert first.title.startswith("thing one")
 
 
-def test_marker_without_bold_id_raises():
+def test_unknown_bracket_marker_raises():
     with pytest.raises(UnparseableStatusLine) as ei:
         parse_board({"ROADMAP.md": MD_BAD})
     assert ei.value.line == 5
 
 
+def test_idless_status_lines_are_commentary_not_items():
+    board = parse_board(
+        {
+            "ROADMAP.md": (
+                "- [ ] ⚠️ Layered `src/factory/` tree — aspirational, no id.\n"
+                "- [x] **FR-1** real item.\n"
+            )
+        }
+    )
+    assert [i.id for s in board for i in s.items] == ["FR-1"]
+
+
 def test_bold_ids_like_stage_numbers_parse():
-    board = parse_board({"docs/roadmap/x.md": "- [ ] ⚠️ **12 · quality_gate** — mostly built.\n"})
+    board = parse_board({"docs/roadmap/x.md": "- [ ] ⚠️ **12 · quality_gate** — built.\n"})
     assert board[0].items[0].id == "12 · quality_gate"
     assert board[0].items[0].status == "partial"

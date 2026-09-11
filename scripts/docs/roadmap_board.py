@@ -2,9 +2,12 @@
 
 The rule is the one the retired hand page documented (spec §3.1):
 `[x]` → done, `[ ] ⚠️` → partial, `[ ]` → notstarted, `—` → notmeasurable,
-keyed by the bold id. A line that begins a list item with a status marker
-but carries no bold id is a malformed checkbox and raises, so the build
-catches it instead of silently dropping it.
+keyed by the bold id. The repo also writes `[ ] — **NFR-3** …` (a bracket
+marker plus a governing dash = notmeasurable) and decorates done items with
+`✅`; both are classified. A status line with a KNOWN marker but no bold id
+(e.g. ROADMAP §14's `[ ] ⚠️ Layered src/factory/ tree …`) is commentary,
+not a board item, and is skipped. An UNKNOWN bracket marker raises, so a
+malformed checkbox fails the build instead of silently disappearing.
 """
 
 from __future__ import annotations
@@ -15,9 +18,8 @@ from typing import Literal
 
 Status = Literal["done", "partial", "notstarted", "notmeasurable"]
 
-_STATUS_MARK_RE = re.compile(
-    r"^\s*[-*]\s+(?P<mark>\[x\]\s*|\[\s\]\s*⚠️\s*|\[\s\]\s*|—\s*)(?P<rest>.*)$"
-)
+_LIST_RE = re.compile(r"^\s*[-*]\s+(?P<tok>\[[^]\n]*\]|—)\s*(?P<rest>.*)$")
+_DECO_RE = re.compile("^(?:[⚠️✅❌–—-]\s*)*")
 _ID_RE = re.compile(r"^\*\*(?P<id>[^*]+?)\*\*(?P<tail>.*)$")
 _HEADING_RE = re.compile(r"^##\s+(?P<title>.+?)\s*$")
 
@@ -39,19 +41,30 @@ class Section:
 
 class UnparseableStatusLine(Exception):
     def __init__(self, source: str, line: int, text: str) -> None:
-        super().__init__(f"{source}:{line}: status marker without bold id: {text!r}")
+        super().__init__(f"{source}:{line}: unrecognized status marker: {text!r}")
         self.source = source
         self.line = line
         self.text = text
 
 
-def _status(mark: str) -> Status:
-    mark = mark.strip()
-    if mark == "[x]":
+def _marker_kind(tok: str) -> str | None:
+    """'done' | 'box' | 'dash' for known markers, None for unknown ones."""
+    if tok == "—":
+        return "dash"
+    inner = tok[1:-1].strip()
+    if inner.lower() == "x":
         return "done"
-    if mark == "—":
+    if inner == "":
+        return "box"
+    return None
+
+
+def _status(kind: str, deco: str) -> Status:
+    if kind == "done":
+        return "done"
+    if kind == "dash" or "—" in deco or "–" in deco:
         return "notmeasurable"
-    if "⚠️" in mark:
+    if "⚠️" in deco:
         return "partial"
     return "notstarted"
 
@@ -75,17 +88,23 @@ def parse_board(sources: dict[str, str]) -> list[Section]:
                 flush()
                 current_title = heading.group("title")
                 continue
-            m = _STATUS_MARK_RE.match(text)
+            m = _LIST_RE.match(text)
             if not m:
                 continue
-            idm = _ID_RE.match(m.group("rest"))
-            if idm is None:
+            kind = _marker_kind(m.group("tok"))
+            if kind is None:
                 raise UnparseableStatusLine(source, lineno, text)
+            deco_m = _DECO_RE.match(m.group("rest"))
+            deco = deco_m.group(0)
+            rest = m.group("rest")[deco_m.end() :]
+            idm = _ID_RE.match(rest)
+            if idm is None:
+                continue  # known marker, no bold id: commentary, not a board item
             title = idm.group("tail").lstrip(" –-—").strip()
             current.append(
                 Item(
                     id=idm.group("id").strip(),
-                    status=_status(m.group("mark")),
+                    status=_status(kind, deco),
                     title=title,
                     source=source,
                     line=lineno,
