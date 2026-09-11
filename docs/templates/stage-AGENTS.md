@@ -1,9 +1,13 @@
 # AGENTS.md — <stage>
 
 Local rules for editing this slice. Repo-wide rules are in the root
-[`AGENTS.md`](../../../../AGENTS.md); the seam contract and the Temporal
-rules are in [`docs/framework.md`](../../../../docs/framework.md). This
+[`AGENTS.md`](../../AGENTS.md); the seam contract and the Temporal
+rules are in [`docs/framework.md`](../../docs/framework.md). This
 file carries only what is true *here*.
+
+> Template note: links here resolve from `docs/templates/`. When copying
+> this file to `src/sdlc/stages/<stage>/`, re-point them four levels up
+> (`../../../../`).
 
 ## Invariants
 
