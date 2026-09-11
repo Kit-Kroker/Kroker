@@ -1,0 +1,101 @@
+# Generated docs site (spec 2026-09-11-docs-site). Standard options only,
+# so the file stays readable by zensical when Material's successor lands.
+site_name: Kroker
+site_description: >-
+  Idea-to-deployed-feature pipeline. This site is generated from the living
+  sources on every push; nothing on it is hand-maintained.
+repo_url: https://github.com/Kit-Kroker/Kroker
+repo_name: Kit-Kroker/Kroker
+docs_dir: docs
+site_dir: site
+
+# Never on the site (spec §3): write-once records, immutable snapshots
+# except the one dated benchmark page the empty state links to, the retired
+# hand-maintained schema pages, and every AGENTS.md. The `!templates/`
+# negation is required: mkdocs unconditionally prepends its own default
+# excludes (`.*` and `/templates/`), and docs/templates/ is our living
+# template gallery, not a theme override.
+exclude_docs: |
+  superpowers/
+  schemas/
+  reports/*
+  !reports/2026-08-15-benchmark-analysis.html
+  AGENTS.md
+  !templates/
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+plugins:
+  - search
+  - gen-files:
+      scripts:
+        - scripts/docs/gen_pages.py
+
+hooks:
+  - scripts/docs/link_hook.py
+
+nav:
+  - Overview:
+      - README: README.md
+      - PRD: PRD.md
+      - SDLC spec v2: SDLC-spec-v2.md
+  - Architecture:
+      - ARCHITECTURE: ARCHITECTURE.md
+      - Framework contract: framework.md
+      - Stage contracts:
+          - intake: src/sdlc/stages/intake/intake.md
+          - context: src/sdlc/stages/context/context.md
+          - research: src/sdlc/stages/research/research.md
+          - clarify: src/sdlc/stages/clarify/clarify.md
+          - architecture: src/sdlc/stages/architecture/architecture.md
+          - plan: src/sdlc/stages/plan/plan.md
+          - code: src/sdlc/stages/code/code.md
+          - review: src/sdlc/stages/review/review.md
+          - qa: src/sdlc/stages/qa/qa.md
+          - analyze: src/sdlc/stages/analyze/analyze.md
+          - merge: src/sdlc/stages/merge/merge.md
+          - deploy: src/sdlc/stages/deploy/deploy.md
+          - retro: src/sdlc/stages/retro/retro.md
+  - Roadmap:
+      - ROADMAP: ROADMAP.md
+      - docs/roadmap:
+          - agent-board: roadmap/agent-board.md
+          - crew: roadmap/crew.md
+          - filesystem-first: roadmap/filesystem-first.md
+          - ordering: roadmap/ordering.md
+          - pipeline-as-data: roadmap/pipeline-as-data.md
+          - product-outcome: roadmap/product-outcome.md
+          - service-platform: roadmap/service-platform.md
+          - tier-0-triage: roadmap/tier-0-triage.md
+          - tier-2-edcr: roadmap/tier-2-edcr.md
+          - ui-component-library: roadmap/ui-component-library.md
+  - Benchmark:
+      - BENCHMARK: BENCHMARK.md
+  - Contributing:
+      - Documentation rules: documentation-rules.md
+      - Modes:
+          - feature-clause-writing: modes/feature-clause-writing.md
+          - focused-specs: modes/focused-specs.md
+          - lesson-to-skill: modes/lesson-to-skill.md
+          - report-first: modes/report-first.md
+          - slice-migration: modes/slice-migration.md
+      - Templates:
+          - stage: templates/stage.md
+          - stage-AGENTS: templates/stage-AGENTS.md
+          - component: templates/component.md
+      - Reference:
+          - foundation: reference/foundation.md
+          - presentation-pipeline-temporal: reference/presentation-pipeline-temporal.md
+          - architecture-review-2026-07: reference/architecture-review-2026-07.md

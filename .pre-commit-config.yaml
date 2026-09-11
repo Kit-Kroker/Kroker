@@ -18,6 +18,10 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+        # mkdocs.yml carries the !!python/name: tag for pymdownx mermaid
+        # fences (the documented Material form); the safe loader can't read
+        # it, but mkdocs itself loads the file fine.
+        exclude: ^mkdocs\.yml$
       - id: check-toml
       - id: check-added-large-files
       - id: check-merge-conflict

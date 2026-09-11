@@ -1,0 +1,50 @@
+"""The built site contains exactly the v1 page set (spec §9.3).
+
+Needs mkdocs, so it skips in the default dev install and runs in the
+docs CI job (which installs .[dev,docs]).
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+pytest.importorskip("mkdocs")
+
+REPO = Path(__file__).resolve().parents[2]
+
+
+def _build(site_dir: Path) -> None:
+    subprocess.run(
+        [sys.executable, "-m", "mkdocs", "build", "--strict", "--site-dir", str(site_dir)],
+        cwd=REPO,
+        check=True,
+    )
+
+
+def _built_sources(site_dir: Path) -> list[str]:
+    # mkdocs writes a <page>/index.html per page at its src path; the
+    # top-level virtual README.md becomes the site root index.html.
+    return [
+        p.parent.relative_to(site_dir).as_posix() if p.parent != site_dir else "."
+        for p in site_dir.rglob("index.html")
+    ]
+
+
+def test_strict_build_page_set(tmp_path: Path):
+    site = tmp_path / "site"
+    _build(site)
+    sources = _built_sources(site)
+    assert "ARCHITECTURE" in sources
+    assert "src/sdlc/stages/qa/qa" in sources
+    assert "templates/stage-AGENTS" in sources  # !templates/ beats the default
+    assert "." in sources  # README renders as the site root
+    forbidden = [s for s in sources if s.startswith(("superpowers", "reports", "schemas"))]
+    assert forbidden == []
+    assert not [s for s in sources if "AGENTS" in s and s != "templates/stage-AGENTS"]
+    # README links repo files as blob URLs after the hook rewrites them.
+    readme_html = (site / "index.html").read_text(encoding="utf-8")
+    assert "github.com/Kit-Kroker/Kroker/blob/main/" in readme_html
