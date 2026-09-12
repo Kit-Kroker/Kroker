@@ -87,6 +87,13 @@ RUN pip install --no-cache-dir .[logfire]
 # scores 0/0 (judge='error') even on correct code.
 RUN pip install --no-cache-dir pytest-asyncio
 
+# tests/fakes/hindsight_contract.py imports jsonschema at module level, so the
+# merge gate's whole-suite run aborts on 5 collection errors without it and
+# build_integration_green reads NOT_COLLECTED (found on the first post-B0
+# brownfield run, DS12). It is a dev-group dependency on the host; the image
+# runs the suite, so it carries it explicitly.
+RUN pip install --no-cache-dir "jsonschema>=4"
+
 # Lint fallback for a worker without PyPI egress at runtime. run_integration_checks
 # resolves `ruff` from the worktree's own .sdlc-venv (qa/activities.py
 # _ensure_python_env pip-installs pytest/pytest-cov/ruff there), but that install
