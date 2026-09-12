@@ -40,9 +40,12 @@ harder to install later:
    ranked it first (register §H1/H2); the gate recorded that as priority
    pressure, not a sequencing change. Sequencing waits on three prerequisites:
    **(a)** a PRD line for FR-1200 (none exists); **(b)** OQ-10 settled (in-flight
-   runs at cutover); **(c)** P2's exit demonstrated. The pipeline has never
-   delivered *first brownfield feature merged via PR*, and a big-bang rewrite of
-   `_pipeline` before that moves the ground under an undemonstrated claim. The
+   runs at cutover); **(c)** P2's exit demonstrated — **cleared 2026-09-12**
+   (brownfield run `merged-not-deployed:PR #16`, operator-merged `45aa2b8`;
+   the diff-scoped gates it needed landed the same day). The
+   big-bang rewrite of
+   `_pipeline` no longer sits on an undemonstrated claim; (a) and (b) remain
+   open. The
    old arguments for pulling it earlier have weakened. "E-72 → E-73 before §1
    grows is the cheap moment" matters less now that the B0 migration has made the
    stage bodies modular `step()` functions (`src/sdlc/stages/<stage>/step.py`),

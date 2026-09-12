@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-09-11 (FR-601, FR-704 and NFR-4 re-checked against `interfaces/dashboard/frontend/src/views/` and `src/sdlc/observability/`); 2026-09-02 (E-50 against `src/sdlc/{assessment/gates,dispositions}` + `workflows/assessment.py`, full unit suite + temporal e2e green, four final-review defects fixed and re-verified); 2026-08-17 (E-49 plan 3 against `src/sdlc/assessment/risk/crosscap.py` + unit suite and Temporal e2e green); 2026-08-16 (E-49 plan 2 against `src/sdlc/assessment/risk/`, `agents/risk/`, `src/sdlc/assessment/verification.py`, Temporal e2e green); 2026-08-16 (E-49 plan 1 against `src/sdlc/assessment/risk/` + unit suite green); 2026-08-14 (E-47c against `src/sdlc/assessment/discover/` + `src/sdlc/assessment/scan/naming.py` + unit suite green); 2026-08-13 (E-47b against `src/sdlc/assessment/discover/` + `src/sdlc/assessment/scan/configpaths.py` + unit suite green); 2026-08-13 (E-46 plan 3 + review fixes against `src/sdlc/assessment/scan/`, unit + temporal e2e green); 2026-08-13 (E-46 plan 3 against `src/sdlc/assessment/scan/` + unit suite green); 2026-08-13 (E-46 plan 2 against `src/sdlc/assessment/scan/` + unit suite green); 2026-08-10 (E-45 against `src/sdlc/{assessment,workflows/assessment.py,triage/admission.py}` + unit/e2e tests green); 2026-08-09 (E-44 against `src/sdlc/{tidyup,workflows/tidyup.py,triage/delta.py}` + unit/component tests green; E-42 against `src/sdlc/workflows/{gates,triage}.py` + `pytest -m temporal`, with three review defects fixed; E-47a 2026-08-08 against `src/sdlc/capability/`; E-78 2026-08-07 against `src/sdlc/board/`; E-40/E-43 2026-08-06; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
+| Last verified | 2026-09-12 (P2 demonstrated end-to-end: diff-scoped gates landed `90fa513`…`b56a009`, brownfield run `merged-not-deployed:PR #16`, operator-merged `45aa2b8`; FR-106's absolute checks now judge the change against the pinned base); 2026-09-11 (FR-601, FR-704 and NFR-4 re-checked against `interfaces/dashboard/frontend/src/views/` and `src/sdlc/observability/`); 2026-09-02 (E-50 against `src/sdlc/{assessment/gates,dispositions}` + `workflows/assessment.py`, full unit suite + temporal e2e green, four final-review defects fixed and re-verified); 2026-08-17 (E-49 plan 3 against `src/sdlc/assessment/risk/crosscap.py` + unit suite and Temporal e2e green); 2026-08-16 (E-49 plan 2 against `src/sdlc/assessment/risk/`, `agents/risk/`, `src/sdlc/assessment/verification.py`, Temporal e2e green); 2026-08-16 (E-49 plan 1 against `src/sdlc/assessment/risk/` + unit suite green); 2026-08-14 (E-47c against `src/sdlc/assessment/discover/` + `src/sdlc/assessment/scan/naming.py` + unit suite green); 2026-08-13 (E-47b against `src/sdlc/assessment/discover/` + `src/sdlc/assessment/scan/configpaths.py` + unit suite green); 2026-08-13 (E-46 plan 3 + review fixes against `src/sdlc/assessment/scan/`, unit + temporal e2e green); 2026-08-13 (E-46 plan 3 against `src/sdlc/assessment/scan/` + unit suite green); 2026-08-13 (E-46 plan 2 against `src/sdlc/assessment/scan/` + unit suite green); 2026-08-10 (E-45 against `src/sdlc/{assessment,workflows/assessment.py,triage/admission.py}` + unit/e2e tests green); 2026-08-09 (E-44 against `src/sdlc/{tidyup,workflows/tidyup.py,triage/delta.py}` + unit/component tests green; E-42 against `src/sdlc/workflows/{gates,triage}.py` + `pytest -m temporal`, with three review defects fixed; E-47a 2026-08-08 against `src/sdlc/capability/`; E-78 2026-08-07 against `src/sdlc/board/`; E-40/E-43 2026-08-06; the rest 2026-08-05, against `src/sdlc/`, `interfaces/`, `tests/`, `config/`, `agents/`) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -91,7 +91,7 @@
 
 - [x] **P1** — Greenfield pipeline, CLI, hard gates, no memory → *one project shipped end-to-end*
   Exit criterion **demonstrated**: `tests/test_e2e_greenfield.py` drives the real `FeatureWorkflow` greenfield `IdeaBrief` → `deployed:` end-to-end in CI, and the `security_no_critical` absolute floor now bites (SC-5). Delivered on `feat/p1-consolidation` (`3cfbe62`…`41c9185`).
-- [ ] ⚠️ **P2** — Brownfield, dashboard + notifications, fix loops, cross-harness review → *first brownfield feature merged via PR*
+- [x] **P2** — Brownfield, dashboard + notifications, fix loops, cross-harness review → *first brownfield feature merged via PR*
   Cross-harness review ✅, fix loops ✅, notifications ✅ (E-9), and brownfield ✅ (E-84, 2026-08-15; `CapabilityMap` via E-47a/b/c) all landed. The dashboard backend landed 2026-08-18 (**E-10**, §9.2) — `interfaces/dashboard/api/main.py` now composes the board and dashboard routers, and the frontend's `http` provider serves live Temporal state. **Correction 2026-08-18 — "every part is built" was wrong, and the part that was missing was the *via PR* clause itself.** `open_pull_request` had never executed outside fakes: its only appearance under `tests/` was `fake_open_pull_request`, every e2e reached `deployed:` through `GIT_FAKES`, and benchmark runs short-circuit it by design (`"skipped:benchmark-run-has-no-remote"`), so nothing had ever forced the real branch. Three things were absent, each of which would have killed the demonstration after every gate had already passed: **`gh` was not in the worker image** (the `Dockerfile` apt line installed `git`, `nodejs`, `npm`); **no GitHub credential reached the worker** (`.env` had no `GH_TOKEN`, and `git push` needs one too, not just `gh`); and **the activity reported none of this** — a missing binary raised `FileNotFoundError` that `ACT` retried six times, and `check=True` raised a `CalledProcessError` whose `str()` drops gh's own diagnostic crossing Temporal, the hazard `_git`'s docstring documents one seam over. *Closed 2026-08-18:* pinned `gh` 2.97.0 plus a `!gh auth git-credential` helper in the image, `GH_TOKEN` documented in `.env.example`, non-retryable `gh`/`origin` preconditions checked **before** the push (so a misconfigured worker cannot leave a pushed branch with no PR pointing at it), and the activity's first real-git coverage — `tests/test_open_pull_request.py` and the `docker`-marked `tests/test_worker_image.py`. **The exit criterion — *first brownfield feature merged via PR* — is still a demonstration that has not been run**; what changed is that it can now fail for interesting reasons. One thing to settle before judging it: the pipeline **opens** the PR and never merges it (`activities.py` says so outright), so the `merged-not-deployed:<pr_url>` terminal status means merged *into the integration branch* — the criterion's final merge is an operator action.
 
   **2026-08-19 — the demonstration was run twice, against this repository, and
@@ -202,6 +202,28 @@
   ambient `GIT_*` from git subprocesses, a real silent-hijack hazard — was
   reverted for scope and timing and is worth its own branch and tests; it does
   **not** explain the flake (tested).
+
+  **2026-09-12 — DEMONSTRATED. PR #16 merged** (`45aa2b8`, *Add a sdlc gates
+  list CLI command*, +201/−1, confined to `cli.py` + one test file). The
+  diff-scoped gates spec (DS1–DS12) landed first, and the demonstration run
+  returned `merged-not-deployed:<PR #16>` with every DS12 observable held:
+  all four absolute checks green with **0 introduced** (security pre-existing
+  = 11, exactly the recounted figure; `lint_clean` reported 1 suppression
+  added; diff coverage 80%), the advisory `plan_drift` check failed honestly
+  (unhinted files) and was approved with a recorded justification, and
+  `open_pull_request` returned the URL the operator merged. Getting there
+  cost six hotfix commits on `main`, each a defect no unit tier could see:
+  `90fa513` lazy step re-export shadowing (`module not callable`),
+  `698319e`+`4091f44`+`b42ce8a` the workflow sandbox duplicating pydantic
+  classes across nine unmarked stage modules (with `b42ce8a` also finding the
+  cycle-safe import form), the Dockerfile's claude-code pin drifting from the
+  adapter's (`2.0.44` vs `2.1.218`), and `b56a009` `jsonschema` missing from
+  the worker image (5 collection errors → the whole suite uncollectable →
+  `NOT_COLLECTED`). One operational finding filed: restarting a run under the
+  same workflow id does not clean prior `sdlc/*` branches — `integration-conflict:T1`
+  until the operator prunes them. The 2026-08-19 residuals (retry-prompt
+  diagnostics, QAReport never-ran, false-premise contracts, `project()`
+  deadlock) did not bite this run; they remain open.
 - [ ] ⚠️ **P3** — Hindsight memory + confidence-gated soft gates → *SC-4 and SC-6 measurable*
   Memory (recall/retain/watermark) ✅ and soft gates ✅ done; SC-4/SC-6 not yet measurable (need retro/reflect wiring + real runs). **The retro stage that makes them measurable is E-32** (§9.8); the on/off memory delta is the measurement E-31/E-33 exist to run.
 - [ ] **P4** — MCP surface, maintenance loop (DAPER), fleet scale → *SC-1..3 at target*
