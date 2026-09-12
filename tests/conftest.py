@@ -41,11 +41,33 @@ def _pid_alive(pid: int) -> bool:
         return str(pid) in out
     try:
         os.kill(pid, 0)
-        return True
     except ProcessLookupError:
         return False
     except PermissionError:
         return True
+    # The signal probe succeeded, but on Linux that only proves the pid
+    # still has a proc entry -- including a killed-but-unreaped zombie.
+    # An environment whose PID 1 (or the nearest subreaper) never waits
+    # on orphans -- a bare container, some CI sandboxes -- leaves zombies
+    # in Z forever, and "did the kill work" would never go true there.
+    # A zombie has exited; it has no execution state left to kill. Only
+    # count pids that are still running. The state field is the one after
+    # the last ')': comm may contain spaces and parens of its own.
+    try:
+        stat = open(f"/proc/{pid}/stat").read()
+    except FileNotFoundError:
+        # Either /proc does not exist (non-Linux POSIX: no stat to consult)
+        # or the pid was reaped between the signal probe and this read -- a
+        # poll loop catches the latter on its next tick via the
+        # ProcessLookupError branch. Conservative True either way.
+        return True
+    except PermissionError:
+        # /proc mounted with hidepid (or equivalent) on Linux: the state
+        # cannot be inspected, so the signal probe's word stands. A
+        # killed-but-unreaped pid may read alive here -- but a live pid
+        # never reads dead, so the kill assertions fail safe.
+        return True
+    return stat.rsplit(")", 1)[1].split()[0] != "Z"
 
 
 def _wait_until_dead(pid: int, timeout_s: float = 10.0) -> None:
