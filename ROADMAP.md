@@ -395,7 +395,7 @@ as tracked rather than accidental.
 
 - [ ] **FR-1201** typed `PipelineGraph` + node-type registry; nodes carry `RoleConfig`/`GateConfig` verbatim; ports typed by existing model name; `content_sha()` excludes canvas cosmetics (E-72).
 - [ ] **FR-1202** pure `GraphRouter` + single-source `validate.py` — branching, round-based stale-input invalidation, per-edge `max_traversals` → ESCALATED; legality never reimplemented in the frontend (E-73).
-- [ ] **FR-1203** `GraphWorkflow` replaces `_pipeline` big-bang; `default.graph.yaml` reproduces today's stage sequence; graph pinned as workflow input for the run's lifetime. **Landing blocked on OQ-10** (E-74).
+- [ ] **FR-1203** `GraphWorkflow` replaces `_pipeline` big-bang; `default.graph.yaml` reproduces today's stage sequence; graph pinned as workflow input for the run's lifetime. Cutover by **grace-retention** — OQ-10 resolved 2026-09-12 (E-74).
 - [ ] **FR-1204** dashboard graph queries (`graph()`, `graph_state()`) beside the existing run queries; content-addressed `graphs/<sha>.yaml`, no graph DB (E-75).
 - [ ] **FR-1205** canvas — one renderer, run mode + edit mode; editing a running graph disabled by design; validation via FR-1202 (E-76).
 - [ ] **FR-1206** `canonical_stage` on every node type + `graph_sha` per run; unmapped types record `unknown` (E-77).

@@ -27,8 +27,8 @@
 > brainstorm decisions are normative: ports carry control flow (branching over
 > typed ports, not composite nodes), and the interpreter *replaces* the
 > hardcoded pipeline rather than running beside it. Cutover semantics for
-> in-flight runs remain open (OQ-10) and block FR-1203's landing, not its
-> design.
+> in-flight runs are settled the same day: **grace-retention** (OQ-10,
+> resolved — see §11).
 
 ---
 
@@ -578,8 +578,13 @@ benchmarks, and audit trail.
   `default.graph.yaml` SHALL reproduce today's stage sequence exactly; it is
   the regression proof of the cutover. The graph is workflow *input*, pinned
   for the run's lifetime: an edit writes a new `content_sha` that only future
-  runs pick up, and a running workflow is never mutated. Cutover semantics
-  for in-flight runs are OQ-10 and block this item's landing, not its design.
+  runs pick up, and a running workflow is never mutated. Cutover follows
+  **grace-retention** (OQ-10, resolved 2026-09-12): new starts move to
+  `GraphWorkflow` immediately, while the old workflow type stays registered —
+  unchanged, replay-safe — solely to complete in-flight executions, and is
+  removed once none remain Running. This is not strangler-with-parity: no new
+  run ever executes the old path, so `default.graph.yaml`'s reproduction of
+  the stage sequence remains the sole regression proof.
 - **FR-1204 — Graph-shaped run state.** The dashboard backend SHALL expose
   the graph a run executes and its per-node state (status, cost, duration,
   traversal counters) beside the existing run queries. Graphs SHALL be stored
@@ -732,8 +737,18 @@ P2, since it is how FR-102's `CodebaseMap` gets built.
   to decide keep/kill. What prevents a mis-instrumented or manipulated metric
   from driving the verdict? This is FR-914's grounding problem inside a system
   the factory does not control, and it has no obvious answer yet.
-- OQ-10: **FR-1203 cutover** — big-bang removal of the hand-written pipeline
-  means `FeatureWorkflow` disappears: drain in-flight runs first (block new
-  starts, wait out current ones), or accept their failure and restart? Blocks
-  FR-1203's landing, not its design. (Same question, same number as
+- OQ-10: **Resolved (2026-09-12): grace-retention.** The FR-1203 cutover
+  lands without draining: `sdlc start` moves to `GraphWorkflow` in the same
+  change, while `FeatureWorkflow` remains registered — unchanged,
+  replay-safe — solely to carry in-flight executions to their own terminal
+  states. Deletion is a follow-up commit gated on
+  `temporal workflow list --query "ExecutionStatus='Running' AND
+  WorkflowType='FeatureWorkflow'"` returning empty; with no runs in flight at
+  cutover the two commits collapse into one. Chosen over drain-first (couples
+  the deploy to foreign runs — a HITL-gated run holds the release hostage to
+  its expiry timer) and over hard-cut-and-restart (restart under the same
+  workflow id currently breaks on stale `sdlc/*` branches, a known open
+  defect, so failed runs would land on a broken recovery path). Also the only
+  policy that survives P7: a hosted multi-tenant factory cannot kill customer
+  runs at deploy time. (Same question, same number as
   `docs/roadmap/pipeline-as-data.md` OQ-10.)

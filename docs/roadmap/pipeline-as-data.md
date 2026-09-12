@@ -15,7 +15,9 @@ gate, `docs/superpowers/specs/2026-09-11-roadmap-platform-analysis-design.md`
 §10) pending exactly those PRD lines. Sequencing now waits only on **OQ-10**
 (in-flight runs at cutover), which blocks E-74's landing, not its design;
 P2's exit — the third prerequisite — was demonstrated 2026-09-12
-(`ordering.md` item 7).
+(`ordering.md` item 7). **OQ-10 resolved 2026-09-12: grace-retention** —
+see PRD §11; all three prerequisites are cleared and the group is free to
+sequence.
 
 **Decided 2026-08-06** (brainstorm, no spec written): ports carry control flow
 (n8n-style branching, not a strict DAG of composite nodes), and the interpreter
@@ -118,10 +120,16 @@ designed, subflows, is OQ-14.
 
 **Open questions.**
 
-- **OQ-10 — in-flight runs at cutover.** Big-bang means `FeatureWorkflow`
-  disappears. Drain first (block new runs, wait out current ones) or accept that
-  in-flight runs fail and are restarted? Unresolved; blocks E-74's landing, not
-  its design.
+- **OQ-10 — in-flight runs at cutover. Resolved (2026-09-12): grace-retention.**
+  The cutover lands without draining: new starts move to `GraphWorkflow` in
+  the same change, `FeatureWorkflow` stays registered — unchanged,
+  replay-safe — solely to carry in-flight executions to their own terminal
+  states, and its deletion is a follow-up commit gated on the
+  Running-executions query being empty (collapsing into one commit when
+  nothing is in flight). Rejected: drain-first (couples the deploy to foreign
+  runs) and hard-cut-and-restart (restart under the same workflow id breaks
+  on stale `sdlc/*` branches today — known open defect). This is not
+  strangler-with-parity: no new run ever executes the old path.
 - **OQ-11 — dashboard auth.** ⚠️ **Now live, not hypothetical (2026-08-07).**
   E-78's board API is already serving unauthenticated, and its two agent write
   routes trust a self-asserted `X-Actor` header — so the audit log's "who moved

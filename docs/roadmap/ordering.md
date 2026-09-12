@@ -40,19 +40,22 @@ harder to install later:
    ranked it first (register §H1/H2); the gate recorded that as priority
    pressure, not a sequencing change. Sequencing waits on three prerequisites:
    **(a)** ~~a PRD line for FR-1200~~ **cleared 2026-09-12** (PRD v1.2 admits
-   FR-1200…FR-1206); **(b)** OQ-10 settled (in-flight
-   runs at cutover); **(c)** P2's exit demonstrated — **cleared 2026-09-12**
+   FR-1200…FR-1206); **(b)** ~~OQ-10 settled~~ **cleared 2026-09-12**
+   (resolved: grace-retention — new starts move to `GraphWorkflow`
+   immediately, the old type is retained registered to drain in-flight
+   executions, removed when none remain Running); **(c)** P2's exit
+   demonstrated — **cleared 2026-09-12**
    (brownfield run `merged-not-deployed:PR #16`, operator-merged `45aa2b8`;
    the diff-scoped gates it needed landed the same day). The
    big-bang rewrite of
-   `_pipeline` no longer sits on an undemonstrated claim; (b) remains
-   open. The
+   `_pipeline` no longer sits on an undemonstrated claim. The
    old arguments for pulling it earlier have weakened. "E-72 → E-73 before §1
    grows is the cheap moment" matters less now that the B0 migration has made the
    stage bodies modular `step()` functions (`src/sdlc/stages/<stage>/step.py`),
    and §1 has four unbuilt stages, not eight. "E-75 closes P2's dashboard-backend
-   half" was superseded 2026-08-18 by E-10. If the prerequisites clear, the
-   fallback considered is E-72 + E-73 first, with E-74 gated on P2 (spec
+   half" was superseded 2026-08-18 by E-10. **All three prerequisites are now
+   cleared (2026-09-12)**; the considered entry point stands: E-72 + E-73
+   first, E-74's cutover under grace-retention (spec
    `docs/superpowers/specs/2026-09-11-roadmap-platform-analysis-design.md` §6).
 
 **Deliberate:** §10 ships before §11 even though §11 is the more impressive
