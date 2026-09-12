@@ -15,48 +15,53 @@ from typing import Any
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
-from ...benchmarks.models import BenchmarkOutcome
-from ...benchmarks.record_builder import stage_record
-from ...calibration.activities import VerdictInput, calibration_verdict
-from ...calibration.decision import auto_decision_for
-from ...calibration.models import INSUFFICIENT, LabelSource
-from ...calibration.verdict import bucket_key
-from ...core.context import StageContext
-from ...core.models import (
-    GateConfig,
-    GatePolicy,
-    IdeaBrief,
-    PipelineConfig,
-)
-from ...gate import (
-    CheckClass,
-    CheckResult,
-    GateOverride,
-    GateReport,
-    QualityGateInput,
-    build_check,
-)
-from ...measurement import CollectionState
-from ...memory.models import MemoryKind
-from ...observability.trace import RunEventKind
-from ...pending import GateContext
-from ...vcs import BaseWorktree, BaseWorktreeInput, prepare_base_worktree
-from ..plan.models import PlanDrift
-from ..qa.activities import LintInput, ScopedSecurityScanInput, run_lint, scoped_security_scan
-from ..qa.models import ScopedSecurityReport
-from ..review.lenses import GATING_LENSES, LensPresence, primary_admits
-from .activities import (
-    CoverageInput,
-    IntegrationChecks,
-    IntegrationChecksInput,
-    PROpenInput,
-    evaluate_gate,
-    measure_coverage,
-    open_pull_request,
-    run_integration_checks,
-)
-from .models import CoverageReport, MergeVerdict, ScopedLintReport, ScopedTestReport
-from .prompts import merge_verdict_prompt
+# This module executes inside the workflow sandbox (feature.py's
+# pipeline calls merge.step) and shares model classes with it — without
+# the marker the sandbox re-imports them isolated, duplicating classes
+# pydantic then rejects (first post-B0 brownfield run, DS12).
+with workflow.unsafe.imports_passed_through():
+    from ...benchmarks.models import BenchmarkOutcome
+    from ...benchmarks.record_builder import stage_record
+    from ...calibration.activities import VerdictInput, calibration_verdict
+    from ...calibration.decision import auto_decision_for
+    from ...calibration.models import INSUFFICIENT, LabelSource
+    from ...calibration.verdict import bucket_key
+    from ...core.context import StageContext
+    from ...core.models import (
+        GateConfig,
+        GatePolicy,
+        IdeaBrief,
+        PipelineConfig,
+    )
+    from ...gate import (
+        CheckClass,
+        CheckResult,
+        GateOverride,
+        GateReport,
+        QualityGateInput,
+        build_check,
+    )
+    from ...measurement import CollectionState
+    from ...memory.models import MemoryKind
+    from ...observability.trace import RunEventKind
+    from ...pending import GateContext
+    from ...vcs import BaseWorktree, BaseWorktreeInput, prepare_base_worktree
+    from ..plan.models import PlanDrift
+    from ..qa.activities import LintInput, ScopedSecurityScanInput, run_lint, scoped_security_scan
+    from ..qa.models import ScopedSecurityReport
+    from ..review.lenses import GATING_LENSES, LensPresence, primary_admits
+    from .activities import (
+        CoverageInput,
+        IntegrationChecks,
+        IntegrationChecksInput,
+        PROpenInput,
+        evaluate_gate,
+        measure_coverage,
+        open_pull_request,
+        run_integration_checks,
+    )
+    from .models import CoverageReport, MergeVerdict, ScopedLintReport, ScopedTestReport
+    from .prompts import merge_verdict_prompt
 
 DEFAULT_LINT_CMD = "ruff check ."
 

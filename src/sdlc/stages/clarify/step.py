@@ -15,30 +15,35 @@ from typing import Any
 
 from temporalio import workflow
 
-from ...benchmarks.models import BenchmarkOutcome
-from ...benchmarks.record_builder import stage_record
-from ...context.models import CodebaseMap
-from ...context.render import render_for_prompt
-from ...core.context import StageContext
-from ...core.models import (
-    ClarificationDimension,
-    GateConfig,
-    GatePolicy,
-    IdeaBrief,
-    PipelineConfig,
-    ProjectMode,
-    RoleUsage,
-)
-from ...observability.trace import RunEventKind
-from .merge import merge_clarification
-from .models import ClarifiedRequirements, ProbeResult
-from .prompts import (
-    _clarify_memo_extra,
-    clarify_prompt,
-    probe_prompt,
-    prompt_digest,
-)
-from .routing import grounded_dimensions, live_dimensions
+# This module executes inside the workflow sandbox (feature.py's
+# pipeline calls clarify.step) and shares model classes with it — without
+# the marker the sandbox re-imports them isolated, duplicating classes
+# pydantic then rejects (first post-B0 brownfield run, DS12).
+with workflow.unsafe.imports_passed_through():
+    from ...benchmarks.models import BenchmarkOutcome
+    from ...benchmarks.record_builder import stage_record
+    from ...context.models import CodebaseMap
+    from ...context.render import render_for_prompt
+    from ...core.context import StageContext
+    from ...core.models import (
+        ClarificationDimension,
+        GateConfig,
+        GatePolicy,
+        IdeaBrief,
+        PipelineConfig,
+        ProjectMode,
+        RoleUsage,
+    )
+    from ...observability.trace import RunEventKind
+    from .merge import merge_clarification
+    from .models import ClarifiedRequirements, ProbeResult
+    from .prompts import (
+        _clarify_memo_extra,
+        clarify_prompt,
+        probe_prompt,
+        prompt_digest,
+    )
+    from .routing import grounded_dimensions, live_dimensions
 
 
 def _probe_results_from(

@@ -12,14 +12,19 @@ from typing import TYPE_CHECKING, Any
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
-from ...benchmarks.models import BenchmarkOutcome
-from ...benchmarks.record_builder import stage_record
-from ...core.context import StageContext
-from ...core.models import PipelineConfig, RoleUsage
-from ...memory.models import MemoryKind
-from ...vcs.git import DiffInput, get_task_diff
-from .models import AnalysisReport, untraced_criteria
-from .prompts import analyst_prompt
+# This module executes inside the workflow sandbox (feature.py's
+# pipeline calls analyze.step) and shares model classes with it — without
+# the marker the sandbox re-imports them isolated, duplicating classes
+# pydantic then rejects (first post-B0 brownfield run, DS12).
+with workflow.unsafe.imports_passed_through():
+    from ...benchmarks.models import BenchmarkOutcome
+    from ...benchmarks.record_builder import stage_record
+    from ...core.context import StageContext
+    from ...core.models import PipelineConfig, RoleUsage
+    from ...memory.models import MemoryKind
+    from ...vcs.git import DiffInput, get_task_diff
+    from .models import AnalysisReport, untraced_criteria
+    from .prompts import analyst_prompt
 
 if TYPE_CHECKING:
     from ...workflows.models import TaskResult

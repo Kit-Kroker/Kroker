@@ -14,35 +14,40 @@ from typing import Any
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
-from ...benchmarks.models import BenchmarkOutcome
-from ...benchmarks.record_builder import stage_record
-from ...core.context import StageContext
-from ...core.models import (
-    GateOutcome,
-    IdeaBrief,
-    PipelineConfig,
-    ResearchConfig,
-    RoleUsage,
-)
-from ...pricing import PriceUsageInput, price_usage
-from .deps import ResearchDeps
-from .models import (
-    Gap,
-    ResearchBrief,
-    ResearchPlan,
-    SubQuestion,
-    SubQuestionFinding,
-)
-from .retain import verified_findings_to_retain
-from .stage import (
-    PlanInput,
-    SubQuestionInput,
-    SynthesizeInput,
-    plan_research,
-    research_subquestion,
-    synthesize_brief,
-)
-from .verify import brief_digest, verify_brief_activity
+# This module executes inside the workflow sandbox (feature.py's
+# pipeline calls research.step) and shares model classes with it — without
+# the marker the sandbox re-imports them isolated, duplicating classes
+# pydantic then rejects (first post-B0 brownfield run, DS12).
+with workflow.unsafe.imports_passed_through():
+    from ...benchmarks.models import BenchmarkOutcome
+    from ...benchmarks.record_builder import stage_record
+    from ...core.context import StageContext
+    from ...core.models import (
+        GateOutcome,
+        IdeaBrief,
+        PipelineConfig,
+        ResearchConfig,
+        RoleUsage,
+    )
+    from ...pricing import PriceUsageInput, price_usage
+    from .deps import ResearchDeps
+    from .models import (
+        Gap,
+        ResearchBrief,
+        ResearchPlan,
+        SubQuestion,
+        SubQuestionFinding,
+    )
+    from .retain import verified_findings_to_retain
+    from .stage import (
+        PlanInput,
+        SubQuestionInput,
+        SynthesizeInput,
+        plan_research,
+        research_subquestion,
+        synthesize_brief,
+    )
+    from .verify import brief_digest, verify_brief_activity
 
 RESEARCH_PLAN_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=5), retry_policy=RetryPolicy(maximum_attempts=3)

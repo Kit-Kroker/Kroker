@@ -12,17 +12,22 @@ from typing import TYPE_CHECKING, Any
 
 from temporalio import workflow
 
-from ...core.context import StageContext
-from ...core.models import (
-    GateDecision,
-    IdeaBrief,
-    PipelineConfig,
-    RoleUsage,
-)
-from ...memory.models import MemoryKind
-from ...prompts import planner_prompt
-from .models import ImplementationPlan
-from .prompts import prompt_digest
+# This module executes inside the workflow sandbox (feature.py's
+# pipeline calls plan.step) and shares model classes with it — without
+# the marker the sandbox re-imports them isolated, duplicating classes
+# pydantic then rejects (first post-B0 brownfield run, DS12).
+with workflow.unsafe.imports_passed_through():
+    from ...core.context import StageContext
+    from ...core.models import (
+        GateDecision,
+        IdeaBrief,
+        PipelineConfig,
+        RoleUsage,
+    )
+    from ...memory.models import MemoryKind
+    from ...prompts import planner_prompt
+    from .models import ImplementationPlan
+    from .prompts import prompt_digest
 
 if TYPE_CHECKING:
     from ..architecture.models import ArchitectureSpec

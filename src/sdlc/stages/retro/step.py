@@ -13,15 +13,24 @@ from datetime import timedelta
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
-from ...artifacts.retention import RetentionInput, apply_session_retention, keep_full_transcripts
-from ...calibration.activities import RecordSamplesInput, record_calibration_samples
-from ...calibration.labels import calibration_samples_for
-from ...core.context import StageContext
-from ...core.models import ArtifactRef, PipelineConfig, RunSummary
-from ...memory.activities import ReflectInput, reflect
-from ...memory.models import MemoryKind
-from ...observability.activities import RunExportInput, export_run_artifacts
-from ...observability.trace import RunEvent, RunEventKind
+# This module executes inside the workflow sandbox (feature.py's
+# pipeline calls retro.step) and shares model classes with it — without
+# the marker the sandbox re-imports them isolated, duplicating classes
+# pydantic then rejects (first post-B0 brownfield run, DS12).
+with workflow.unsafe.imports_passed_through():
+    from ...artifacts.retention import (
+        RetentionInput,
+        apply_session_retention,
+        keep_full_transcripts,
+    )
+    from ...calibration.activities import RecordSamplesInput, record_calibration_samples
+    from ...calibration.labels import calibration_samples_for
+    from ...core.context import StageContext
+    from ...core.models import ArtifactRef, PipelineConfig, RunSummary
+    from ...memory.activities import ReflectInput, reflect
+    from ...memory.models import MemoryKind
+    from ...observability.activities import RunExportInput, export_run_artifacts
+    from ...observability.trace import RunEvent, RunEventKind
 
 _MEM_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(seconds=30),

@@ -18,40 +18,45 @@ if TYPE_CHECKING:
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
-from ...artifacts.read import LoadSessionInput, load_session
-from ...benchmarks.models import BenchmarkOutcome, WasteBag
-from ...benchmarks.record_builder import stage_record
-from ...core.context import StageContext
-from ...core.models import (
-    ArtifactRef,
-    GateOutcome,
-    GatePolicy,
-    HarnessKind,
-    PipelineConfig,
-    RoleConfig,
-    RoleUsage,
-)
-from ...crew.activities import LoadCrewInput, load_crew
-from ...harness.models import (
-    DeferredToolUse,
-    EscalationOutcome,
-    HarnessRunResult,
-    ToolDenial,
-    ToolEscalation,
-    ToolGrant,
-)
-from ...memory.models import MemoryKind
-from ...observability.trace import RunEventKind
-from ...pending import GateContext
-from ...vcs import DiffInput, DriftInput, DriftReport, check_test_drift, get_task_diff
-from ...workflows.crew import FS_ACT, CrewTaskInput, CrewTaskWorkflow
-from ..plan.models import DevTask, compute_plan_drift
-from ..qa import step as qa_step
-from ..qa.activities import QAInput, run_test_suite
-from ..qa.step import _fix_loop_issues
-from .activities import CodingTaskInput, DriftGlobsInput, load_drift_globs, run_coding_task
-from .freeze import _drift_note, _is_repair_attempt, _next_anchor
-from .models import HandoffSummary
+# This module executes inside the workflow sandbox (feature.py's
+# pipeline calls code.step) and shares model classes with it — without
+# the marker the sandbox re-imports them isolated, duplicating classes
+# pydantic then rejects (first post-B0 brownfield run, DS12).
+with workflow.unsafe.imports_passed_through():
+    from ...artifacts.read import LoadSessionInput, load_session
+    from ...benchmarks.models import BenchmarkOutcome, WasteBag
+    from ...benchmarks.record_builder import stage_record
+    from ...core.context import StageContext
+    from ...core.models import (
+        ArtifactRef,
+        GateOutcome,
+        GatePolicy,
+        HarnessKind,
+        PipelineConfig,
+        RoleConfig,
+        RoleUsage,
+    )
+    from ...crew.activities import LoadCrewInput, load_crew
+    from ...harness.models import (
+        DeferredToolUse,
+        EscalationOutcome,
+        HarnessRunResult,
+        ToolDenial,
+        ToolEscalation,
+        ToolGrant,
+    )
+    from ...memory.models import MemoryKind
+    from ...observability.trace import RunEventKind
+    from ...pending import GateContext
+    from ...vcs import DiffInput, DriftInput, DriftReport, check_test_drift, get_task_diff
+    from ...workflows.crew import FS_ACT, CrewTaskInput, CrewTaskWorkflow
+    from ..plan.models import DevTask, compute_plan_drift
+    from ..qa import step as qa_step
+    from ..qa.activities import QAInput, run_test_suite
+    from ..qa.step import _fix_loop_issues
+    from .activities import CodingTaskInput, DriftGlobsInput, load_drift_globs, run_coding_task
+    from .freeze import _drift_note, _is_repair_attempt, _next_anchor
+    from .models import HandoffSummary
 
 ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=10),
