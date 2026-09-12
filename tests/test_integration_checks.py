@@ -2,6 +2,8 @@
 
 Proves the artifact now crosses into the worktree measure_coverage reads."""
 
+import subprocess
+
 import pytest
 
 from sdlc.measurement import CollectionState
@@ -11,6 +13,7 @@ from sdlc.stages.merge.activities import (
     measure_coverage,
     run_integration_checks,
 )
+from sdlc.vcs import BaseWorktreeInput, prepare_base_worktree
 
 PYPROJECT = "[project]\nname = 'fixture'\nversion = '0.0.0'\n"
 MODULE = "def covered():\n    return 1\n\n\ndef uncovered():\n    return 2\n"
@@ -39,17 +42,52 @@ TESTFILE_WITH_DEP = (
 
 @pytest.mark.asyncio
 @pytest.mark.slow
-async def test_integration_checks_produces_real_coverage(tmp_path):
+async def test_integration_checks_produces_real_coverage(tmp_path, monkeypatch):
     (tmp_path / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
     (tmp_path / "mod.py").write_text(MODULE, encoding="utf-8")
     (tmp_path / "test_mod.py").write_text(TESTFILE, encoding="utf-8")
 
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.email=t@example.test",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "base",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    monkeypatch.setenv("SDLC_WORKTREES_ROOT", str(tmp_path.parent / "wts"))
+    sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        encoding="utf-8",
+    ).stdout.strip()
+    base = await prepare_base_worktree(BaseWorktreeInput(str(tmp_path), "run-cov", sha))
+
     checks = await run_integration_checks(
-        IntegrationChecksInput(worktree=str(tmp_path), changed_files=["mod.py"])
+        IntegrationChecksInput(
+            worktree=str(tmp_path),
+            changed_files=["mod.py"],
+            base_worktree=base.path,
+            base_reason=base.reason,
+            base_sha=sha,
+        )
     )
 
     assert checks.toolchain == "python"
-    assert checks.qa.tests_passed is True
+    assert checks.tests.state is CollectionState.MEASURED and checks.tests.head_failed == 0, (
+        checks.tests.reason
+    )
     assert (tmp_path / "coverage.xml").is_file(), "coverage.xml must be emitted"
 
     # The gate reader now finds the artifact and measures a diff-scoped %.
@@ -60,7 +98,7 @@ async def test_integration_checks_produces_real_coverage(tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.slow
-async def test_integration_checks_installs_the_produced_projects_own_deps(tmp_path):
+async def test_integration_checks_installs_the_produced_projects_own_deps(tmp_path, monkeypatch):
     """Before the isolated per-worktree venv, run_integration_checks ran the
     ToolchainAdapter's bare `pytest ...` string against whatever happened to
     already be on the activity worker's ambient PATH -- which has no
@@ -71,12 +109,47 @@ async def test_integration_checks_installs_the_produced_projects_own_deps(tmp_pa
     (tmp_path / "mod.py").write_text(MODULE_WITH_DEP, encoding="utf-8")
     (tmp_path / "test_mod.py").write_text(TESTFILE_WITH_DEP, encoding="utf-8")
 
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.email=t@example.test",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "base",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    monkeypatch.setenv("SDLC_WORKTREES_ROOT", str(tmp_path.parent / "wts"))
+    sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        encoding="utf-8",
+    ).stdout.strip()
+    base = await prepare_base_worktree(BaseWorktreeInput(str(tmp_path), "run-dep", sha))
+
     checks = await run_integration_checks(
-        IntegrationChecksInput(worktree=str(tmp_path), changed_files=["mod.py"])
+        IntegrationChecksInput(
+            worktree=str(tmp_path),
+            changed_files=["mod.py"],
+            base_worktree=base.path,
+            base_reason=base.reason,
+            base_sha=sha,
+        )
     )
 
     assert checks.toolchain == "python"
-    assert checks.qa.tests_passed is True, checks.qa.issues
+    assert checks.tests.state is CollectionState.MEASURED and checks.tests.head_failed == 0, (
+        checks.tests.reason
+    )
     assert (tmp_path / ".sdlc-venv").is_dir()
 
 

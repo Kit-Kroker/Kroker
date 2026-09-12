@@ -21,16 +21,12 @@ from ...gate import (
 )
 from ...measurement import CollectionState, Measurement
 from ...process import _bounded_shell
-from ...stages.qa.activities import (
-    _diagnostic_slice,
-    _ensure_python_env,
-    _stopped_early,
-)
+from ...stages.qa.activities import _ensure_python_env
 from ...stages.qa.models import QAReport
 from ...toolchain.adapters import ToolchainKind, detect
 from ...vcs.git import _git
-from .models import CoverageReport, ScopedLintReport
-from .scoping import scoped_lint
+from .models import CoverageReport, ScopedLintReport, ScopedTestReport
+from .scoping import scoped_lint, scoped_tests
 
 
 @dataclass
@@ -126,14 +122,7 @@ class IntegrationChecks(BaseModel):
     lint_clean: bool
     lint_detail: str
     lint: ScopedLintReport | None = None  # None iff no toolchain adapter
-
-
-# pytest usage-error exit code: unrecognized args (e.g. --cov when pytest-cov is
-# absent) => 4, distinct from 1 (tests failed). A MISSING coverage plugin must
-# degrade coverage to measured=False, never falsely fail the ABSOLUTE
-# build_integration_green check — so on a 4 we re-run WITHOUT coverage for the
-# honest green signal (FR-108 green-signal invariant).
-_PYTEST_USAGE_ERROR = 4
+    tests: ScopedTestReport | None = None
 
 
 @activity.defn
@@ -166,26 +155,29 @@ async def run_integration_checks(inp: IntegrationChecksInput) -> IntegrationChec
                 lint_clean=False,
                 lint_detail=setup_error,
                 lint=ScopedLintReport(state=CollectionState.NOT_COLLECTED, reason=setup_error),
+                tests=ScopedTestReport(state=CollectionState.NOT_COLLECTED, reason=setup_error),
             )
 
-    code, out = await _bounded_shell(
-        adapter.test_cmd(coverage=True), inp.worktree, inp.test_timeout_s, env=env
+    async def _provision_base():
+        if adapter.kind is not ToolchainKind.PYTHON or inp.base_worktree is None:
+            return env, None
+        return await _ensure_python_env(inp.base_worktree, inp.setup_timeout_s)
+
+    tests = await scoped_tests(
+        adapter,
+        inp.worktree,
+        inp.base_worktree,
+        inp.base_reason,
+        inp.renames,
+        env,
+        _provision_base,
+        inp.test_timeout_s,
     )
-    if code == _PYTEST_USAGE_ERROR:
-        # Coverage tooling unavailable — get the honest green signal without it.
-        prefix = (
-            "coverage instrumentation unavailable (pytest usage error); coverage left unmeasured\n"
-        )
-        code, out = await _bounded_shell(
-            adapter.test_cmd(coverage=False), inp.worktree, inp.test_timeout_s, env=env
-        )
-        out = prefix + out
-    failing = [ln.split(" ")[0] for ln in out.splitlines() if ln.startswith("FAILED")]
+    # Transitional (removed in the step-wiring task): the step still reads qa.
     qa = QAReport(
-        tests_passed=code == 0,
-        failing_tests=failing[:50],
-        issues=[] if code == 0 else [_diagnostic_slice(out)],
-        stopped_early=_stopped_early(out),
+        tests_passed=tests.state is CollectionState.MEASURED and tests.head_failed == 0,
+        failing_tests=tests.introduced[:50],
+        issues=[] if tests.head_failed == 0 else [tests.diagnostic or tests.reason],
     )
 
     lcode, ldetail = await _bounded_shell(
@@ -207,6 +199,7 @@ async def run_integration_checks(inp: IntegrationChecksInput) -> IntegrationChec
         lint_clean=lcode == 0,
         lint_detail=ldetail[-2000:],
         lint=lint,
+        tests=tests,
     )
 
 
