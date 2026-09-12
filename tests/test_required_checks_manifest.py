@@ -147,3 +147,20 @@ def test_the_manifest_pins_the_checks_the_merge_step_builds():
         and isinstance(node.args[0].value, str)
     }
     assert built == set(MERGE_REQUIRED_CHECKS)
+
+
+def test_diff_scoped_gates_left_the_manifest_byte_identical():
+    """DS10: the change moved what the checks measure, never which checks
+    exist or how they are classified."""
+    assert dict(MERGE_REQUIRED_CHECKS) == {
+        "build_integration_green": CheckClass.ABSOLUTE,
+        "lint_clean": CheckClass.ABSOLUTE,
+        "security_scan_collected": CheckClass.ABSOLUTE,
+        "security_no_critical": CheckClass.ABSOLUTE,
+        "review_severity": CheckClass.ADVISORY,
+        "review_lenses_present": CheckClass.ADVISORY,
+        "traceability": CheckClass.ADVISORY,
+        "coverage": CheckClass.ADVISORY,
+        "plan_drift": CheckClass.ADVISORY,
+    }
+    assert ABSOLUTE_FLOOR == frozenset({"security_no_critical", "security_scan_collected"})
