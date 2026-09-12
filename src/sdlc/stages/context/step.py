@@ -8,12 +8,21 @@ Pure deterministic scan fan-out with no LLM proposer role.
 
 from __future__ import annotations
 
-from ...context.models import CodebaseMap
-from ...context.project import project
-from ...core.context import StageContext
-from ...core.models import IdeaBrief, PipelineConfig, ProjectMode
-from ...measurement import CollectionState
-from ...workflows.scanning import scan_tree
+from temporalio import workflow
+
+# This module runs inside the workflow sandbox (feature.py -> _context ->
+# context.step) and imports modules the workflow also imports
+# (workflows.scanning -> assessment.scan.models). Without the marker the
+# sandbox re-imports them isolated, creating a SECOND class for models like
+# ScanUpstream — and pydantic then rejects the workflow's instance as
+# "not an instance of ScanUpstream" (first post-B0 brownfield run, DS12).
+with workflow.unsafe.imports_passed_through():
+    from ...context.models import CodebaseMap
+    from ...context.project import project
+    from ...core.context import StageContext
+    from ...core.models import IdeaBrief, PipelineConfig, ProjectMode
+    from ...measurement import CollectionState
+    from ...workflows.scanning import scan_tree
 
 
 async def build_map(repo_path: str, commit_sha: str) -> CodebaseMap:
