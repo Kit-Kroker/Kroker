@@ -155,15 +155,17 @@ Teams adopting coding agents today face four gaps:
   loop (default 2) resuming the same harness session; QA failures a bounded
   Resolver loop (default 3); exhaustion SHALL escalate to a human gate.
 - FR-106: The quality gate SHALL be deterministic and classify each check as
-  **absolute** or **advisory**. Absolute checks (lint clean, no critical
-  security finding, build/integration green) SHALL block the merge
-  unconditionally — no policy or human override. Advisory checks (coverage,
-  criterion→test traceability completeness, review/analysis severity — config:
-  `high`) SHALL block only until an audited human `GateDecision` override is
-  recorded. Coverage SHALL be **diff-scoped**, not a repo-wide ratio. The
-  Analyst SHALL *propose* the criterion→test mapping; the gate SHALL *enforce*
-  that every acceptance criterion traces to ≥ 1 test. The LLM `MergeVerdict`
-  SHALL be advisory input to the gate, never the decider.
+  **absolute** or **advisory**. Absolute checks — the change introduces no lint
+  finding, no critical security finding, and no failing test, each measured
+  against the run's pinned base commit — SHALL block the merge unconditionally;
+  no policy or human override. Findings pre-existing at the base SHALL be
+  reported, not gated. Advisory checks (coverage, criterion→test traceability
+  completeness, review/analysis severity — config: `high`) SHALL block only
+  until an audited human `GateDecision` override is recorded. Coverage SHALL be
+  **diff-scoped**, not a repo-wide ratio. The Analyst SHALL *propose* the
+  criterion→test mapping; the gate SHALL *enforce* that every acceptance
+  criterion traces to ≥ 1 test. The LLM `MergeVerdict` SHALL be advisory input
+  to the gate, never the decider.
 - **FR-107 — Grounded research.** The pipeline MAY run a research stage before
   clarification that produces a `ResearchBrief` grounding downstream stages in
   fetched evidence. Every claim presented as grounded MUST carry a source URL
@@ -186,6 +188,10 @@ Teams adopting coding agents today face four gaps:
   produced by the test step SHALL be available in the integration worktree the
   gate reads. The factory SHALL ship at least one reference adapter exercised
   end-to-end; further language adapters are additive and off the critical path.
+  Adapters SHALL also supply the diff-scoped gate's contract: machine-readable
+  lint with a parser that distinguishes findings from tool failure, lint-policy
+  path globs, an inline-suppression pattern, a whole-suite gate test command
+  with no early stop, and selected-test re-runs with per-test JUnit.
 - **FR-109 (new scope; ADR-16)** Capture-always harness sessions: every
   harness run emits a canonical, scrubbed `HarnessSession` transcript as a
   claim-checked `ArtifactRef{kind: harness_session}` plus an inline

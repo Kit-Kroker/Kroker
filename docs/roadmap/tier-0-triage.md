@@ -40,6 +40,7 @@ which makes it the shortest path to a demonstrable assess → fix → prove loop
   by E-57/E-21). Spec
   `docs/superpowers/specs/2026-08-06-repository-triage-hygiene-signals-design.md`,
   plan `docs/superpowers/plans/2026-08-06-repository-triage-hygiene-signals.md`.
+  **Gap recorded 2026-09-11 (diff-scoped gates DS1):** no triage signal measures lint or `eval`-class code patterns. Now that the merge gate reports pre-existing findings without gating them, debt of those two classes has no measuring owner. Recorded as a follow-up; not built.
 - [x] **E-41a** dependency health — unpinned / duplicated / known-vulnerable /
   unused direct dependencies behind the FR-108 adapter's `manifests` and
   `ecosystem`. The advisory database is an `AdvisorySource` seam whose
@@ -105,6 +106,7 @@ which makes it the shortest path to a demonstrable assess → fix → prove loop
   side cannot read as having fixed everything it found; **the verification
   branch** (D6) — `build_verification_branch` constructs the "if you merged all
   of these" tree, because `open_pull_request` opens PRs and does not merge them.
+  **Unblocked 2026-09-11 (diff-scoped gates DS1):** fix runs are brownfield `FeatureWorkflow` children, so under the whole-tree merge floor a one-finding fix could not land on a repository carrying any other debt. The scoped gate judges only what the fix introduces.
 - [x] **E-84 — Brownfield intake, context, and checked delta** → FR-102. *Landed 2026-08-15.*
   Lifts `scan_tree()` fan-out to shared workflow code across audit and feature pipelines (D1/D5);
   pure `classify()` and `classify_repo` activity (D3); `CodebaseMap` projected from scan tree (D1);
