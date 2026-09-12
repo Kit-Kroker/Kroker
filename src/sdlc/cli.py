@@ -3,6 +3,7 @@
 python -m sdlc.cli start   --title "Add SSO" --mode brownfield --repo <url>
 python -m sdlc.cli status  --id feature-add-sso
 python -m sdlc.cli inbox
+python -m sdlc.cli gates-list
 python -m sdlc.cli doctor
 python -m sdlc.cli doctor --json --strict
 python -m sdlc.cli answer  --id feature-add-sso --q Q1 --text "Use OIDC"
@@ -123,6 +124,7 @@ def _needs_temporal_client(args) -> bool:
         or args.cmd == "capability"
         or args.cmd == "risk"
         or args.cmd == "doctor"
+        or args.cmd == "gates-list"
     )
     return not local_only
 
@@ -171,6 +173,27 @@ def selector_for(args):
     )
 
 
+def _render_gates_list() -> str:
+    """Render the `sdlc gates-list` table: a header row plus one row per
+    MERGE_REQUIRED_CHECKS entry, in gate.py declaration order (no sorting).
+    Pure — no arguments, no I/O; main() only prints it. The name-column
+    width is recomputed from the longest check name on every render, so the
+    table restretches when the manifest changes."""
+    from .gate import MERGE_REQUIRED_CHECKS, CheckClass
+
+    name_width = max(len(name) for name in MERGE_REQUIRED_CHECKS)
+    cls_width = max(
+        len("classification"),
+        max(len(c.value) for c in MERGE_REQUIRED_CHECKS.values()),
+    )
+    lines = [f"{'check':<{name_width}}  {'classification':<{cls_width}}  required-for-merge"]
+    for name in MERGE_REQUIRED_CHECKS:
+        classification: CheckClass = MERGE_REQUIRED_CHECKS[name]
+        required = "yes" if name in MERGE_REQUIRED_CHECKS else "no"
+        lines.append(f"{name:<{name_width}}  {classification.value:<{cls_width}}  {required}")
+    return "\n".join(lines)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """The operator CLI's argument parser. Extracted to module level so the
     tidyup-cli wiring test can exercise the same parser main() uses, and so
@@ -200,6 +223,8 @@ def build_parser() -> argparse.ArgumentParser:
     st.add_argument("--id", required=True)
 
     sub.add_parser("inbox")
+
+    sub.add_parser("gates-list")
 
     sc = sub.add_parser("schedules")
     scsub = sc.add_subparsers(dest="sched_cmd", required=True)
@@ -565,6 +590,12 @@ async def main() -> None:
                 threshold=args.threshold,
             )
         )
+        return
+
+    if args.cmd == "gates-list":
+        from .gate import MERGE_REQUIRED_CHECKS, CheckClass  # noqa: F401
+
+        print(_render_gates_list())
         return
 
     if args.cmd == "capability":
