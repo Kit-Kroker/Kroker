@@ -20,7 +20,7 @@ RUN npm install -g opencode-ai@1.18.4
 # which is layer: hook and therefore unenforceable on opencode. Pinned for
 # the same reason opencode is: a drifting CLI breaks transcript parsing.
 # Without this the crew boot check refuses to start the worker at all.
-RUN npm install -g @anthropic-ai/claude-code@2.0.44
+RUN npm install -g @anthropic-ai/claude-code@2.1.218
 
 # activities.open_pull_request shells out to `gh`, and it is the LAST step of a
 # feature run -- a worker without it fails after build, lint, security, review
