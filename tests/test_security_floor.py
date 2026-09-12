@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import pathlib
 
-import pytest
-
 from sdlc.measurement import CollectionState
-from sdlc.stages.qa.activities import SecurityScanInput, security_scan
+from sdlc.stages.qa.activities import scan_paths
 from sdlc.stages.qa.models import SecurityReport
+
+
+def _files(root: pathlib.Path) -> list[str]:
+    return [str(p.relative_to(root)) for p in root.rglob("*") if p.is_file()]
 
 
 def test_security_report_requires_a_collection_state():
@@ -24,42 +26,37 @@ def test_clean_scan_is_measured():
     assert r.state is CollectionState.MEASURED
 
 
-@pytest.mark.asyncio
-async def test_regex_scan_always_reports_measured(tmp_path: pathlib.Path):
+def test_regex_scan_always_reports_measured(tmp_path: pathlib.Path):
     """The default path always collects, so this retrofit changes no live
     behavior -- the guard is installed before the semgrep path that would
     trip it."""
     (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
-    report = await security_scan(SecurityScanInput(worktree=str(tmp_path)))
+    report = scan_paths(str(tmp_path), _files(tmp_path))
     assert report.state is CollectionState.MEASURED
 
 
-@pytest.mark.asyncio
-async def test_security_scan_clean_worktree(tmp_path: pathlib.Path):
+def test_security_scan_clean_worktree(tmp_path: pathlib.Path):
     (tmp_path / "app.py").write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
-    report = await security_scan(SecurityScanInput(worktree=str(tmp_path)))
+    report = scan_paths(str(tmp_path), _files(tmp_path))
     assert report.critical == 0
 
 
-@pytest.mark.asyncio
-async def test_security_scan_flags_hardcoded_secret(tmp_path: pathlib.Path):
+def test_security_scan_flags_hardcoded_secret(tmp_path: pathlib.Path):
     (tmp_path / "cfg.py").write_text(
         'AWS_SECRET_ACCESS_KEY = "AKIAIOSFODNN7EXAMPLEKEY1234567890abcd"\n', encoding="utf-8"
     )
-    report = await security_scan(SecurityScanInput(worktree=str(tmp_path)))
+    report = scan_paths(str(tmp_path), _files(tmp_path))
     assert report.critical >= 1
     assert any(f.severity == "critical" for f in report.findings)
 
 
-@pytest.mark.asyncio
-async def test_security_scan_flags_eval_of_input(tmp_path: pathlib.Path):
+def test_security_scan_flags_eval_of_input(tmp_path: pathlib.Path):
     (tmp_path / "danger.py").write_text("def run(s):\n    return eval(s)\n", encoding="utf-8")
-    report = await security_scan(SecurityScanInput(worktree=str(tmp_path)))
+    report = scan_paths(str(tmp_path), _files(tmp_path))
     assert report.critical >= 1
 
 
-@pytest.mark.asyncio
-async def test_security_scan_skips_the_provisioned_venv(tmp_path: pathlib.Path):
+def test_security_scan_skips_the_provisioned_venv(tmp_path: pathlib.Path):
     """`_ensure_python_env` creates `.sdlc-venv` INSIDE the worktree, so by
     merge time the scan walks a full site-packages tree. Stdlib and vendored
     third-party code is dense with `eval(` and `shell=True`, so the ABSOLUTE
@@ -73,13 +70,12 @@ async def test_security_scan_skips_the_provisioned_venv(tmp_path: pathlib.Path):
     )
     (tmp_path / "app.py").write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
 
-    report = await security_scan(SecurityScanInput(worktree=str(tmp_path)))
+    report = scan_paths(str(tmp_path), _files(tmp_path))
 
     assert report.critical == 0, report.findings
 
 
-@pytest.mark.asyncio
-async def test_security_scan_skips_vendored_dependency_trees(tmp_path: pathlib.Path):
+def test_security_scan_skips_vendored_dependency_trees(tmp_path: pathlib.Path):
     """Same reasoning for the conventions the produced project itself brings:
     a dependency's source is not the diff under review."""
     for vendor_dir in (".venv", "venv", "node_modules"):
@@ -87,13 +83,12 @@ async def test_security_scan_skips_vendored_dependency_trees(tmp_path: pathlib.P
         pkg.mkdir(parents=True)
         (pkg / "index.js").write_text("module.exports = (s) => eval(s);\n", encoding="utf-8")
 
-    report = await security_scan(SecurityScanInput(worktree=str(tmp_path)))
+    report = scan_paths(str(tmp_path), _files(tmp_path))
 
     assert report.critical == 0, report.findings
 
 
-@pytest.mark.asyncio
-async def test_security_scan_still_flags_produced_code_beside_a_venv(tmp_path: pathlib.Path):
+def test_security_scan_still_flags_produced_code_beside_a_venv(tmp_path: pathlib.Path):
     """Pruning must not turn the gate off — a real finding in the produced
     tree is still caught with a provisioned venv present."""
     vendored = tmp_path / ".sdlc-venv" / "Lib" / "site-packages"
@@ -104,7 +99,7 @@ async def test_security_scan_still_flags_produced_code_beside_a_venv(tmp_path: p
         "def run(s):\n    return eval(s)\n", encoding="utf-8"
     )
 
-    report = await security_scan(SecurityScanInput(worktree=str(tmp_path)))
+    report = scan_paths(str(tmp_path), _files(tmp_path))
 
     assert report.critical == 1
     assert report.findings[0].path.endswith("danger.py")

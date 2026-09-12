@@ -40,9 +40,10 @@ from ...measurement import CollectionState
 from ...memory.models import MemoryKind
 from ...observability.trace import RunEventKind
 from ...pending import GateContext
+from ...vcs import BaseWorktree, BaseWorktreeInput, prepare_base_worktree
 from ..plan.models import PlanDrift
-from ..qa.activities import LintInput, SecurityScanInput, run_lint, security_scan
-from ..qa.models import SecurityReport
+from ..qa.activities import LintInput, ScopedSecurityScanInput, run_lint, scoped_security_scan
+from ..qa.models import ScopedSecurityReport
 from ..review.lenses import GATING_LENSES, LensPresence, primary_admits
 from .activities import (
     CoverageInput,
@@ -54,7 +55,7 @@ from .activities import (
     open_pull_request,
     run_integration_checks,
 )
-from .models import CoverageReport, MergeVerdict
+from .models import CoverageReport, MergeVerdict, ScopedLintReport, ScopedTestReport
 from .prompts import merge_verdict_prompt
 
 DEFAULT_LINT_CMD = "ruff check ."
@@ -221,6 +222,63 @@ async def _exec_activity(activity_fn: Any, arg: Any, **kwargs: Any) -> Any:
     return res
 
 
+_M = CollectionState.MEASURED
+
+
+def _listed(items: list[str], limit: int = 10) -> str:
+    return (
+        f"; introduced: {items[:limit]}" + (" ..." if len(items) > limit else "") if items else ""
+    )
+
+
+def tests_check(r: ScopedTestReport) -> CheckResult:
+    """DS6/DS7: rendered from typed fields, never parsed back."""
+    if r.state is not _M:
+        return build_check(
+            "build_integration_green", False, CheckClass.ABSOLUTE, f"not collected: {r.reason}"
+        )
+    detail = (
+        f"{len(r.introduced)} introduced; {len(r.preexisting)} pre-existing; "
+        f"{len(r.preexisting_flaky)} pre-existing flaky" + _listed(r.introduced)
+    )
+    return build_check("build_integration_green", not r.introduced, CheckClass.ABSOLUTE, detail)
+
+
+tests_check.__test__ = False  # type: ignore[attr-defined]
+
+
+def lint_check(r: ScopedLintReport) -> CheckResult:
+    if r.state is not _M:
+        return build_check("lint_clean", False, CheckClass.ABSOLUTE, f"not collected: {r.reason}")
+    detail = (
+        f"{len(r.introduced)} introduced; {r.preexisting} pre-existing; {r.resolved} resolved; "
+        f"{len(r.policy_paths_changed)} policy path(s) changed; "
+        f"{r.suppressions_added} suppression(s) added"
+        + _listed([f"{f.rule} {f.path}: {f.line}" for f in r.introduced])
+    )
+    return build_check("lint_clean", not r.introduced, CheckClass.ABSOLUTE, detail)
+
+
+def security_checks(r: ScopedSecurityReport) -> list[CheckResult]:
+    """security_no_critical passes vacuously on NOT_COLLECTED by design:
+    security_scan_collected is the conjunct that fails closed (DS7)."""
+    collected = build_check(
+        "security_scan_collected",
+        r.state is _M,
+        CheckClass.ABSOLUTE,
+        r.reason or "collected at the base and the head",
+    )
+    crit = build_check(
+        "security_no_critical",
+        r.introduced_critical == 0,
+        CheckClass.ABSOLUTE,
+        f"{r.introduced_critical} introduced critical; {len(r.introduced)} introduced; "
+        f"{r.preexisting} pre-existing; {r.resolved} resolved"
+        + _listed([f"{f.rule} {f.path}: {f.line}" for f in r.introduced]),
+    )
+    return [collected, crit]
+
+
 async def step(
     ctx: StageContext,
     *,
@@ -232,6 +290,7 @@ async def step(
     plan: Any = None,
     integration_diff: dict[str, Any] | None = None,
     changed_files: list[str] | None = None,
+    base_sha: str = "",
     untraced: list[str] | None = None,
     merge_agent: Any = None,
     merge_model: str | None = None,
@@ -266,18 +325,54 @@ async def step(
     if untraced is None:
         untraced = []
 
+    renames = (
+        [list(p) for p in integration_diff.get("renames", [])]
+        if isinstance(integration_diff, dict)
+        else []
+    )
+    base: BaseWorktree = await _exec_activity(
+        prepare_base_worktree,
+        BaseWorktreeInput(
+            integration_wt=integration_wt, run_id=_workflow_id() or "local", base_sha=base_sha
+        ),
+        **_ACT,
+    )
+    base_path = base.path if isinstance(getattr(base, "path", None), str) else None
+    base_reason = _as_str(getattr(base, "reason", ""), "base worktree unavailable")
+
     ichecks: IntegrationChecks = await _exec_activity(
         run_integration_checks,
-        IntegrationChecksInput(worktree=integration_wt, changed_files=changed_files),
+        IntegrationChecksInput(
+            worktree=integration_wt,
+            changed_files=changed_files,
+            base_worktree=base_path,
+            base_reason=base_reason,
+            base_sha=base_sha,
+            renames=renames,
+        ),
         **_INTEG_ACT,
     )
     if getattr(ichecks, "toolchain", None) is not None:
-        all_tests_green = _as_bool(
-            getattr(getattr(ichecks, "qa", None), "tests_passed", True), True
-        )
-        lint_clean = _as_bool(getattr(ichecks, "lint_clean", True), True)
-        lint_detail = _as_str(getattr(ichecks, "lint_detail", ""), "")
+        t_rep = getattr(ichecks, "tests", None)
+        l_rep = getattr(ichecks, "lint", None)
+        absolute = [
+            tests_check(
+                t_rep
+                if isinstance(t_rep, ScopedTestReport)
+                else ScopedTestReport(
+                    state=CollectionState.NOT_COLLECTED, reason="no scoped test report"
+                )
+            ),
+            lint_check(
+                l_rep
+                if isinstance(l_rep, ScopedLintReport)
+                else ScopedLintReport(
+                    state=CollectionState.NOT_COLLECTED, reason="no scoped lint report"
+                )
+            ),
+        ]
     else:
+        # No toolchain adapter: today's fallback, unchanged (DS10, named limitation).
         lint_commands = (
             next(
                 (
@@ -294,9 +389,20 @@ async def step(
         l_clean, l_detail = await _exec_activity(
             run_lint, LintInput(worktree=integration_wt, lint_cmd=lint_cmd), **_ACT
         )
-        lint_clean = _as_bool(l_clean, True)
-        lint_detail = _as_str(l_detail, "")
-        all_tests_green = _merge_evidence_all_green(results_list)
+        absolute = [
+            build_check(
+                "build_integration_green",
+                _merge_evidence_all_green(results_list),
+                CheckClass.ABSOLUTE,
+                detail="no toolchain adapter: aggregate of per-task QA runs",
+            ),
+            build_check(
+                "lint_clean",
+                _as_bool(l_clean, True),
+                CheckClass.ABSOLUTE,
+                detail=_as_str(l_detail, ""),
+            ),
+        ]
 
     cov: CoverageReport = await _exec_activity(
         measure_coverage,
@@ -304,9 +410,20 @@ async def step(
         **_ACT,
     )
 
-    security: SecurityReport = await _exec_activity(
-        security_scan, SecurityScanInput(worktree=integration_wt), **_ACT
+    sec = await _exec_activity(
+        scoped_security_scan,
+        ScopedSecurityScanInput(
+            worktree=integration_wt,
+            base_worktree=base_path,
+            renames=renames,
+            base_reason=base_reason,
+        ),
+        **_ACT,
     )
+    if not isinstance(sec, ScopedSecurityReport):
+        sec = ScopedSecurityReport(
+            state=CollectionState.NOT_COLLECTED, reason="no scoped security report"
+        )
 
     cov_obj = getattr(cov, "coverage", None)
     diff_coverage = (
@@ -315,35 +432,9 @@ async def step(
         else None
     )
 
-    sec_state = getattr(security, "state", None)
-    sec_crit = _as_int(getattr(security, "critical", 0), 0)
-    sec_reason = _as_str(getattr(security, "reason", ""), "security scan ran")
-
     checks = [
-        build_check(
-            "build_integration_green",
-            _as_bool(all_tests_green, True),
-            CheckClass.ABSOLUTE,
-            detail="aggregate of per-task pytest runs",
-        ),
-        build_check(
-            "lint_clean",
-            _as_bool(lint_clean, True),
-            CheckClass.ABSOLUTE,
-            detail=_as_str(lint_detail, ""),
-        ),
-        build_check(
-            "security_scan_collected",
-            sec_state is CollectionState.MEASURED,
-            CheckClass.ABSOLUTE,
-            detail=sec_reason,
-        ),
-        build_check(
-            "security_no_critical",
-            sec_crit == 0,
-            CheckClass.ABSOLUTE,
-            detail=f"{sec_crit} critical finding(s)",
-        ),
+        *absolute,
+        *security_checks(sec),
         build_check(
             "review_severity",
             all(

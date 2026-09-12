@@ -31,6 +31,7 @@ Attributes on `FeatureWorkflow`'s MRO across its service-host mixins.
 | `_run_id` | `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow.run` | Stashed run ID for offline unit tests |
 | `_run_summary` | `FeatureWorkflow` | `FeatureWorkflow.run_summary`, `FeatureWorkflow` (retro) | `FeatureWorkflow` | Terminal `RunSummary`, built once at end of run |
 | `_integration_head` | `TaskHost` (in P1) / `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow` | Current commit on integration branch |
+| `_base_sha` | `FeatureWorkflow` | `FeatureWorkflow` (integration diff, `merge.step`) | `FeatureWorkflow.run` (once, at setup) | Setup head of the integration branch, pinned as the merge gate's baseline (diff-scoped gates DS2); distinct from the advancing `_integration_head` |
 | `_integration_wt` | `TaskHost` (in P1) / `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow` | Path to task integration worktree |
 | `_budget_threshold` | `RoleHost` | `RoleHost._check_budget`, `FeatureWorkflow` | `RoleHost._check_budget` | Budget threshold dollar amount |
 | `_budget_crossings` | `RoleHost` | `RoleHost._check_budget`, `FeatureWorkflow.run_state` | `RoleHost._check_budget` | Number of budget alert crossings |

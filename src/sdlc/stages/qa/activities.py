@@ -43,11 +43,6 @@ class LintInput:
     timeout_s: int = 600
 
 
-@dataclass
-class SecurityScanInput:
-    worktree: str
-
-
 # Matches an explicit Windows `py -X.Y` launcher pin, e.g. the `py -3.11
 # -m pytest` a contract writes when AGENTS.md mandates "Python 3.11".
 _PY_LAUNCHER_VERSION_RE = re.compile(r"(?<![\w.-])py\s+-(\d+\.\d+)\b")
@@ -462,17 +457,6 @@ def scan_paths(root: str, paths: Sequence[str]) -> SecurityReport:
     return SecurityReport(critical=critical, findings=findings, state=CollectionState.MEASURED)
 
 
-@activity.defn
-async def security_scan(inp: SecurityScanInput) -> SecurityReport:
-    """Whole-directory form, kept only until the merge step moves to
-    scoped_security_scan (diff-scoped gates plan, Task 7)."""
-    paths: list[str] = []
-    for dirpath, dirnames, filenames in os.walk(inp.worktree):
-        dirnames[:] = [d for d in dirnames if d not in _SCAN_SKIP_DIRS]
-        paths.extend(os.path.relpath(os.path.join(dirpath, f), inp.worktree) for f in filenames)
-    return scan_paths(inp.worktree, paths)
-
-
 @dataclass
 class ScopedSecurityScanInput:
     worktree: str  # the integration head
@@ -525,4 +509,4 @@ async def scoped_security_scan(inp: ScopedSecurityScanInput) -> ScopedSecurityRe
     )
 
 
-ACTIVITIES = [run_test_suite, run_lint, security_scan, scoped_security_scan]
+ACTIVITIES = [run_test_suite, run_lint, scoped_security_scan]

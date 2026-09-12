@@ -159,6 +159,4 @@ async def test_integration_checks_degrades_without_adapter(tmp_path):
     checks = await run_integration_checks(
         IntegrationChecksInput(worktree=str(tmp_path), changed_files=[])
     )
-    assert checks.toolchain is None
-    assert checks.lint_clean is True  # not linted => never blocking
-    assert checks.qa.tests_passed is False  # signals "no integration run here"
+    assert checks.toolchain is None and checks.lint is None and checks.tests is None

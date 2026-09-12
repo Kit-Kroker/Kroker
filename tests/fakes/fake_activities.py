@@ -35,13 +35,15 @@ from sdlc.stages.merge.models import CoverageReport
 from sdlc.stages.qa.activities import (
     LintInput,
     QAInput,
-    SecurityScanInput,
+    ScopedSecurityScanInput,
 )
 from sdlc.stages.qa.models import (
     QAReport,
-    SecurityReport,
+    ScopedSecurityReport,
 )
 from sdlc.vcs import (
+    BaseWorktree,
+    BaseWorktreeInput,
     DiffInput,
     IntegrationHandle,
     IntegrationInput,
@@ -86,6 +88,7 @@ async def fake_get_task_diff(inp: DiffInput) -> dict:
         "stat": " app/main.py | 3 +++",
         "patch": "diff --git a/app/main.py b/app/main.py\n+ok\n",
         "files": ["app/main.py"],
+        "renames": [],
     }
 
 
@@ -109,9 +112,14 @@ async def fake_open_pull_request(inp: PROpenInput) -> str:
     return "https://example.test/pr/1"
 
 
-@activity.defn(name="security_scan")
-async def fake_security_scan(inp: SecurityScanInput) -> SecurityReport:
-    return SecurityReport(critical=0, findings=[], state=CollectionState.MEASURED)
+@activity.defn(name="scoped_security_scan")
+async def fake_scoped_security_scan(inp: ScopedSecurityScanInput) -> ScopedSecurityReport:
+    return ScopedSecurityReport(state=CollectionState.MEASURED)
+
+
+@activity.defn(name="prepare_base_worktree")
+async def fake_prepare_base_worktree(inp: BaseWorktreeInput) -> BaseWorktree:
+    return BaseWorktree(path="/fake/base")
 
 
 @activity.defn(name="measure_coverage")
@@ -126,12 +134,7 @@ async def fake_run_integration_checks(inp: IntegrationChecksInput) -> Integratio
     # worktree, so the workflow takes the no-adapter fallback (per-task
     # aggregate green + fake run_lint) — identical to the pre-E-30 path the
     # e2e suite was built around. Never touches a real subprocess.
-    return IntegrationChecks(
-        toolchain=None,
-        qa=QAReport(tests_passed=False, issues=["fake: no adapter"]),
-        lint_clean=True,
-        lint_detail="fake: no adapter (not linted)",
-    )
+    return IntegrationChecks(toolchain=None)
 
 
 @activity.defn(name="publish_artifact_version")
@@ -202,7 +205,8 @@ GIT_FAKES = [
     fake_run_lint,
     fake_merge_into_integration,
     fake_open_pull_request,
-    fake_security_scan,
+    fake_scoped_security_scan,
+    fake_prepare_base_worktree,
     fake_measure_coverage,
     fake_run_integration_checks,
     fake_classify_repo,

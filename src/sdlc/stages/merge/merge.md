@@ -10,7 +10,7 @@ The orchestrator (`FeatureWorkflow._build_and_merge`) delegates to `merge.step`.
 The merge stage slice exports `step`, `prompt_digest`, `merge_verdict_prompt`, and `ACTIVITIES = [measure_coverage, run_integration_checks, open_pull_request, evaluate_gate]`. The step takes `ctx: StageContext` as first argument, takes required collaborators as keyword arguments, and never receives the workflow instance directly. [SC-5, E-30, FR-106, FR-108]
 
 ### MERGE-1.2
-On any absolute gate failure (`build_integration_green`, `lint_clean`, `security_scan_collected`, `security_no_critical`), the merge stage fails closed immediately with `rejected:merge:absolute-gate-failed:...`, retains gate feedback memory, records a failing benchmark record, and terminates without offering human override or consulting MergeVerdict. [SC-5, FR-915]
+On any absolute gate failure (`build_integration_green`, `lint_clean`, `security_scan_collected`, `security_no_critical`), the merge stage fails closed immediately with `rejected:merge:absolute-gate-failed:...`, retains gate feedback memory, records a failing benchmark record, and terminates without offering human override or consulting MergeVerdict. The absolute checks judge **the change, not the tree**. `build_integration_green`, `lint_clean` and `security_no_critical` fail only on what the change introduces relative to the run's pinned base commit. `security_scan_collected` fails when the security delta could not be computed at both points (MERGE-1.10). Findings pre-existing at the base are reported in each check's detail and never block. [SC-5, FR-106, FR-915; diff-scoped gates DS1]
 An absolute check that is *absent* from the gate input is an absolute failure by this same route — see MERGE-1.6.
 
 ### MERGE-1.3
@@ -35,6 +35,15 @@ The deterministic gate fails closed on a required check it never received. `MERG
 ### MERGE-1.9
 The MergeVerdict's `confidence` can no longer skip the human merge gate on its own. Under SOFT policy the soft path fetches a `CalibrationVerdict` for the `(merge, author_model|source)` bucket (`sdlc/calibration/`) and auto-approves only when the bucket is `calibrated` **and** the confidence clears the configured threshold. The merge bucket is never sampled — merge-gate decisions produce no ledger row at all (`CalibrationSample.outcome_label` is NOT NULL, so an unlabelled row cannot exist), there being no attributable post-merge outcome signal in this codebase and the deploy stage off by default and unlinked to the gate decision — so in practice the merge gate always waits for a human under SOFT. That is a property of the ledger being empty for `merge`, not a rule keyed on the gate's name; adding such a rule would make it editable away. [C7]
 
+### MERGE-1.10
+The merge gate measures against the run's pinned base. `base_sha` is `setup_integration_branch`'s head SHA, captured once at setup. The integration diff is `base_sha...HEAD`, and `prepare_base_worktree` materializes the base as a disposable detached worktree.
+
+Lint and security are measured over tracked content at both points. Findings are compared as a multiset over `(tool, rule, path, normalized line)`, with base paths mapped through the diff's renames.
+
+Tests run as the whole suite at the head with no early stop and continuing past collection errors. Each head failure is attributed at the base: a failure on any of up to four base attempts makes it pre-existing (or pre-existing flaky). Passing every attempt, being absent at the base, or having an id unsafe to pass to a shell makes it introduced. There is no head retry.
+
+Each scoped report carries a `CollectionState`, and a check passes only when its report is `MEASURED` and `introduced` is empty. Any failure to compute a delta is `NOT_COLLECTED` and an absolute failure: a base that cannot be materialized, a tool failure at either point, an unreadable tracked file, or a head run that stopped early, writes no report, or collects no tests. `security_no_critical` passes vacuously on `NOT_COLLECTED`; `security_scan_collected` is the conjunct that fails closed. The no-toolchain fallback (contract lint command, per-task QA aggregate) is unchanged. [SC-5, FR-106, FR-108, FR-915; diff-scoped gates DS2–DS7, DS10]
+
 ## Failure modes
 
 - **Absolute gate failure**: Failing integration tests, lint failure, uncollected security scan, or critical security vulnerabilities terminate execution immediately without override.
@@ -42,3 +51,5 @@ The MergeVerdict's `confidence` can no longer skip the human merge gate on its o
 - **Soft verdict rejection**: LLM merge verdict rejection or sub-threshold confidence rejected upon escalation to the human reviewer.
 - **Missing required check**: a name in `MERGE_REQUIRED_CHECKS` that never reached the gate is synthesized as a failing `MISCONFIGURED` check at its manifest classification — terminal if absolute, human-waivable if advisory (MERGE-1.6).
 - **Lens never ran**: a gating lens with no recorded outcome, or one that was enabled and reached but returned nothing, fails `review_lenses_present` — human-waivable through the audited override path (MERGE-1.8).
+- **Base not measurable**: the base worktree cannot be materialized, a tool fails at either point, a tracked file is unreadable, or the head test run stops early, writes no report, or collects no tests — the affected scoped report is `NOT_COLLECTED` and its absolute check fails, terminally (MERGE-1.10).
+- **Introduced finding**: a lint finding, critical security finding or failing test the change introduced — terminal; pre-existing findings are reported, not blocking (MERGE-1.2).

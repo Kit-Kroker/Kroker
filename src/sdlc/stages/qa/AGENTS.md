@@ -15,7 +15,7 @@ file carries only what is true *here*.
 
 ## Temporal notes for this slice
 
-- `ACTIVITIES = [run_test_suite, run_lint, security_scan, scoped_security_scan]`.
+- `ACTIVITIES = [run_test_suite, run_lint, scoped_security_scan]`.
 - All activities run in worker context with bounded timeouts and safe process tree termination (`kill_process_tree`).
 - Rule 3 passthrough set: this slice passes through `core/models.py`, `workflows/models.py`, and upstream artifact models.
 
@@ -30,7 +30,6 @@ file carries only what is true *here*.
 - `run_lint`: runs project linter inside worktree with diagnostic capture.
 - `scan_paths`: pure per-point scan over an explicit path list (one finding per match, with its line).
 - `scoped_security_scan`: tracked files at head and base, then the `change_scope` delta (DS4).
-- `security_scan`: transitional whole-directory form; removed when the merge step moves to `scoped_security_scan`.
 
 ## Fixture convention (diff-scoped gates DS9)
 

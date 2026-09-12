@@ -209,6 +209,7 @@ class FeatureWorkflow(
         self._started_at: datetime | None = None
         self._run_id: str = ""
         self._integration_head: str = ""
+        self._base_sha: str = ""  # DS2: setup head, pinned; _integration_head advances per merge
         self._integration_wt: str = ""
         self._run_summary: RunSummary | None = None
         self._codebase_map: CodebaseMap | None = None
@@ -505,6 +506,7 @@ class FeatureWorkflow(
             **ACT,
         )
         self._integration_head = integration.head_sha
+        self._base_sha = integration.head_sha
         self._integration_wt = integration.worktree_path
 
         # E-44 D1: a seeded run enters at stage 4. Research, clarify,
@@ -722,7 +724,7 @@ class FeatureWorkflow(
         # now lands after the diff fetch instead of before it.
         integration_diff = await workflow.execute_activity(
             get_task_diff,
-            DiffInput(worktree=self._integration_wt, branch_point=idea.base_branch),
+            DiffInput(worktree=self._integration_wt, branch_point=self._base_sha),
             **ACT,
         )
         authoritative: list[tuple[str, str]] = [
@@ -754,6 +756,7 @@ class FeatureWorkflow(
             idea=idea,
             arch=arch,
             plan=plan,
+            base_sha=self._base_sha,
             integration_diff=integration_diff,
             untraced=untraced,
             merge_agent=t_merge_verdict,

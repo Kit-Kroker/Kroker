@@ -29,7 +29,7 @@ Fix-loop analysis (`_fix_loop_issues`) unifies deterministic runner diagnostics 
 from both QA and reviewer judges into structured retry instructions, detecting stopped-early suites. [FR-802]
 
 ### QA-1.5
-The slice exports `step` and `ACTIVITIES` (`run_test_suite`, `run_lint`, `security_scan`), which run
+The slice exports `step` and `ACTIVITIES` (`run_test_suite`, `run_lint`, `scoped_security_scan`), which run
 in isolated worktree environments with bounded timeouts and group process management. [FR-106]
 
 ### QA-1.6

@@ -153,7 +153,8 @@ async def test_merge_fails_closed_on_absolute_gate_failure():
         patch("sdlc.stages.merge.step.evaluate_gate", new_callable=AsyncMock) as mock_eg,
         patch("sdlc.stages.merge.step.run_integration_checks", new_callable=AsyncMock),
         patch("sdlc.stages.merge.step.measure_coverage", new_callable=AsyncMock),
-        patch("sdlc.stages.merge.step.security_scan", new_callable=AsyncMock),
+        patch("sdlc.stages.merge.step.scoped_security_scan", new_callable=AsyncMock),
+        patch("sdlc.stages.merge.step.prepare_base_worktree", new_callable=AsyncMock),
     ):
         mock_eg.return_value = failing_gate
         res = await merge.step(
@@ -242,7 +243,8 @@ async def test_merge_advisory_failure_presents_to_human_gate():
         patch("sdlc.stages.merge.step.evaluate_gate", new_callable=AsyncMock) as mock_eg,
         patch("sdlc.stages.merge.step.run_integration_checks", new_callable=AsyncMock),
         patch("sdlc.stages.merge.step.measure_coverage", new_callable=AsyncMock),
-        patch("sdlc.stages.merge.step.security_scan", new_callable=AsyncMock),
+        patch("sdlc.stages.merge.step.scoped_security_scan", new_callable=AsyncMock),
+        patch("sdlc.stages.merge.step.prepare_base_worktree", new_callable=AsyncMock),
         patch("sdlc.stages.merge.step.open_pull_request", new_callable=AsyncMock) as mock_pr,
     ):
         mock_eg.side_effect = [failing_advisory, passing_gate]
@@ -293,7 +295,8 @@ async def test_merge_soft_policy_consults_verdict():
         patch("sdlc.stages.merge.step.evaluate_gate", new_callable=AsyncMock) as mock_eg,
         patch("sdlc.stages.merge.step.run_integration_checks", new_callable=AsyncMock),
         patch("sdlc.stages.merge.step.measure_coverage", new_callable=AsyncMock),
-        patch("sdlc.stages.merge.step.security_scan", new_callable=AsyncMock),
+        patch("sdlc.stages.merge.step.scoped_security_scan", new_callable=AsyncMock),
+        patch("sdlc.stages.merge.step.prepare_base_worktree", new_callable=AsyncMock),
     ):
         mock_eg.return_value = passing_gate
         res = await merge.step(
@@ -337,7 +340,8 @@ async def test_merge_success_creates_pr():
         patch("sdlc.stages.merge.step.evaluate_gate", new_callable=AsyncMock) as mock_eg,
         patch("sdlc.stages.merge.step.run_integration_checks", new_callable=AsyncMock),
         patch("sdlc.stages.merge.step.measure_coverage", new_callable=AsyncMock),
-        patch("sdlc.stages.merge.step.security_scan", new_callable=AsyncMock),
+        patch("sdlc.stages.merge.step.scoped_security_scan", new_callable=AsyncMock),
+        patch("sdlc.stages.merge.step.prepare_base_worktree", new_callable=AsyncMock),
         patch("sdlc.stages.merge.step.open_pull_request", new_callable=AsyncMock) as mock_pr,
     ):
         mock_eg.return_value = passing_gate

@@ -20,9 +20,7 @@ from ...gate import (
     evaluate_quality_gate,
 )
 from ...measurement import CollectionState, Measurement
-from ...process import _bounded_shell
 from ...stages.qa.activities import _ensure_python_env
-from ...stages.qa.models import QAReport
 from ...toolchain.adapters import ToolchainKind, detect
 from ...vcs.git import _git
 from .models import CoverageReport, ScopedLintReport, ScopedTestReport
@@ -118,11 +116,8 @@ class IntegrationChecksInput:
 
 class IntegrationChecks(BaseModel):
     toolchain: str | None = None  # ToolchainKind value, or None if undetected
-    qa: QAReport
-    lint_clean: bool
-    lint_detail: str
     lint: ScopedLintReport | None = None  # None iff no toolchain adapter
-    tests: ScopedTestReport | None = None
+    tests: ScopedTestReport | None = None  # None iff no toolchain adapter
 
 
 @activity.defn
@@ -137,23 +132,14 @@ async def run_integration_checks(inp: IntegrationChecksInput) -> IntegrationChec
     as before E-30. Never blocks on a language it doesn't know."""
     adapter = detect(inp.worktree)
     if adapter is None:
-        return IntegrationChecks(
-            toolchain=None,
-            qa=QAReport(tests_passed=False, issues=["no toolchain adapter for this worktree"]),
-            lint_clean=True,
-            lint_detail="no toolchain adapter (not linted)",
-        )
+        return IntegrationChecks(toolchain=None)
 
     env = None
     if adapter.kind is ToolchainKind.PYTHON:
         env, setup_error = await _ensure_python_env(inp.worktree, inp.setup_timeout_s)
         if setup_error:
-            qa = QAReport(tests_passed=False, issues=[setup_error])
             return IntegrationChecks(
                 toolchain=adapter.kind.value,
-                qa=qa,
-                lint_clean=False,
-                lint_detail=setup_error,
                 lint=ScopedLintReport(state=CollectionState.NOT_COLLECTED, reason=setup_error),
                 tests=ScopedTestReport(state=CollectionState.NOT_COLLECTED, reason=setup_error),
             )
@@ -173,16 +159,7 @@ async def run_integration_checks(inp: IntegrationChecksInput) -> IntegrationChec
         _provision_base,
         inp.test_timeout_s,
     )
-    # Transitional (removed in the step-wiring task): the step still reads qa.
-    qa = QAReport(
-        tests_passed=tests.state is CollectionState.MEASURED and tests.head_failed == 0,
-        failing_tests=tests.introduced[:50],
-        issues=[] if tests.head_failed == 0 else [tests.diagnostic or tests.reason],
-    )
 
-    lcode, ldetail = await _bounded_shell(
-        adapter.lint_cmd(), inp.worktree, inp.lint_timeout_s, env=env
-    )
     lint = await scoped_lint(
         adapter,
         inp.worktree,
@@ -195,9 +172,6 @@ async def run_integration_checks(inp: IntegrationChecksInput) -> IntegrationChec
     )
     return IntegrationChecks(
         toolchain=adapter.kind.value,
-        qa=qa,
-        lint_clean=lcode == 0,
-        lint_detail=ldetail[-2000:],
         lint=lint,
         tests=tests,
     )

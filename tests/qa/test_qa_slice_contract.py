@@ -15,7 +15,7 @@ def test_slice_exports_step_and_activities():
     assert {a.__temporal_activity_definition.name for a in qa.ACTIVITIES} >= {
         "run_test_suite",
         "run_lint",
-        "security_scan",
+        "scoped_security_scan",
     }
 
 
