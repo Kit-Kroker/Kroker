@@ -492,10 +492,19 @@ async def step(
     Runs harness / crew within worktree, runs clean-context QA and review,
     coordinates the fix loop, records benchmark records, and returns TaskResult.
     """
-    from ...agents.roles import STAGE_MODELS, resolve_role_model
-    from ...workflows.models import TaskResult
-    from ..review.lenses import backstop_admits, classify_lens, primary_admits
-    from ..review.step import step as review_step
+    # The review imports are LOCAL and wrapped: a module-level
+    # `from ..review.step import step` closes a static cycle
+    # (review.models -> code.models -> code.__init__ -> code.step ->
+    # review.step -> review.models, partially initialized), and a bare
+    # local import would be resolved by the sandbox loader, duplicating
+    # LensOutcome against TaskResult.lens_outcomes (DS12). The runtime
+    # marker keeps the sandbox on the shared modules without adding the
+    # import-time edge.
+    with workflow.unsafe.imports_passed_through():
+        from ...agents.roles import STAGE_MODELS, resolve_role_model
+        from ...workflows.models import TaskResult
+        from ..review.lenses import backstop_admits, classify_lens, primary_admits
+        from ..review.step import step as review_step
 
     role_cfg = cfg.roles.get(task.role, cfg.roles.get("dev", RoleConfig(model="claude-3-5-sonnet")))
     contract = contract or task.contract

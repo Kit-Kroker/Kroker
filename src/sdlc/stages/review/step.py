@@ -15,15 +15,21 @@ from typing import Any
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
-from ...artifacts.read import LoadSessionInput, load_session
-from ...benchmarks.models import BenchmarkOutcome
-from ...benchmarks.record_builder import stage_record
-from ...core.context import StageContext
-from ...core.models import PipelineConfig, RoleUsage
-from ...harness.session import session_text_from_jsonl
-from ...memory.models import MemoryKind
-from .models import DeepReviewReport, ReviewReport
-from .prompts import adversary_prompt, deep_review_prompt, reviewer_prompt
+# This module executes inside the workflow sandbox (code/step.py runs the
+# clean-context review per task) and shares model classes with it — without
+# the marker the sandbox re-imports them isolated, duplicating classes
+# pydantic then rejects (LensOutcome via TaskResult.lens_outcomes, first
+# post-B0 brownfield run, DS12).
+with workflow.unsafe.imports_passed_through():
+    from ...artifacts.read import LoadSessionInput, load_session
+    from ...benchmarks.models import BenchmarkOutcome
+    from ...benchmarks.record_builder import stage_record
+    from ...core.context import StageContext
+    from ...core.models import PipelineConfig, RoleUsage
+    from ...harness.session import session_text_from_jsonl
+    from ...memory.models import MemoryKind
+    from .models import DeepReviewReport, ReviewReport
+    from .prompts import adversary_prompt, deep_review_prompt, reviewer_prompt
 
 _LOGGER = logging.getLogger(__name__)
 
