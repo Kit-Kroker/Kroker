@@ -141,4 +141,4 @@ def test_feature_workflow_builds_security_check():
         'build_check(\n                "security_no_critical"' in src
         or '"security_no_critical"' in src
     ), "merge gate must build the security_no_critical check"
-    assert "security_scan" in src, "merge gate must run the security_scan activity"
+    assert "scoped_security_scan" in src, "merge gate must run the scoped_security_scan activity"

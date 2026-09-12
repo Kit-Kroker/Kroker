@@ -2,7 +2,7 @@
 
 The canonical security-finding shape is SecurityReport/SecurityFinding
 (models.py); the gate's security_no_critical check reads it unchanged. Today's
-default security_scan keeps its offline regex ruleset; an OPT-IN semgrep path
+default scan_paths keeps its offline regex ruleset; an OPT-IN semgrep path
 shells `semgrep --sarif` and feeds its output through findings_from_sarif ->
 the SAME SecurityReport. This module is only the normalizer half of that seam.
 
