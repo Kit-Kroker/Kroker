@@ -39,12 +39,13 @@ harder to install later:
    invariants: the factory ships fine without it. A 2026-09-11 external analysis
    ranked it first (register §H1/H2); the gate recorded that as priority
    pressure, not a sequencing change. Sequencing waits on three prerequisites:
-   **(a)** a PRD line for FR-1200 (none exists); **(b)** OQ-10 settled (in-flight
+   **(a)** ~~a PRD line for FR-1200~~ **cleared 2026-09-12** (PRD v1.2 admits
+   FR-1200…FR-1206); **(b)** OQ-10 settled (in-flight
    runs at cutover); **(c)** P2's exit demonstrated — **cleared 2026-09-12**
    (brownfield run `merged-not-deployed:PR #16`, operator-merged `45aa2b8`;
    the diff-scoped gates it needed landed the same day). The
    big-bang rewrite of
-   `_pipeline` no longer sits on an undemonstrated claim; (a) and (b) remain
+   `_pipeline` no longer sits on an undemonstrated claim; (b) remains
    open. The
    old arguments for pulling it earlier have weakened. "E-72 → E-73 before §1
    grows is the cheap moment" matters less now that the B0 migration has made the

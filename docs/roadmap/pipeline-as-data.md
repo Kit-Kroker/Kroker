@@ -8,12 +8,14 @@ hand. FR-1200 makes the pipeline a user-authored `PipelineGraph` executed by a
 generic interpreter, with a canvas to edit it — n8n's model, applied to the SDLC
 DAG.
 
-**Not admitted scope.** FR-1200…FR-1206 are cited throughout this file but have
-**no line in `PRD.md`**, and ROADMAP §2 has no FR-1200 block: the group was
-decided in a brainstorm, not admitted. **Ruled 2026-09-11** (user gate,
-`docs/superpowers/specs/2026-09-11-roadmap-platform-analysis-design.md` §10):
-record only. Sequencing waits on (a) a PRD line for FR-1200, (b) OQ-10 settled,
-and (c) P2's exit demonstrated (`ordering.md` item 7).
+**Admitted 2026-09-12 (PRD v1.2).** FR-1200…FR-1206 have PRD §6 lines (the
+family block there is the normative text), and ROADMAP §2 carries the mirror
+block. Before that the group was **record only** — ruled 2026-09-11 (user
+gate, `docs/superpowers/specs/2026-09-11-roadmap-platform-analysis-design.md`
+§10) pending exactly those PRD lines. Sequencing now waits only on **OQ-10**
+(in-flight runs at cutover), which blocks E-74's landing, not its design;
+P2's exit — the third prerequisite — was demonstrated 2026-09-12
+(`ordering.md` item 7).
 
 **Decided 2026-08-06** (brainstorm, no spec written): ports carry control flow
 (n8n-style branching, not a strict DAG of composite nodes), and the interpreter

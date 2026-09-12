@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Status | Draft v1.1 |
-| Date | 2026-07-02 (amended 2026-07-25) |
+| Status | Draft v1.2 |
+| Date | 2026-07-02 (amended 2026-07-25, 2026-09-12) |
 | Related | `ARCHITECTURE.md`, `SDLC-spec.md` (v2 + v2.1 addendum), `docs/superpowers/specs/2026-07-25-brownfield-assessment-and-outcome-measurement-design.md` |
 
 > **2026-07-25 amendment.** Adds two user groups and four requirement families:
@@ -16,6 +16,19 @@
 > **FR-800** context & continuity family, which was live in code but absent
 > here. Rationale, alternatives, and the BrownKit gap analysis are in the design
 > doc linked above.
+
+> **2026-09-12 amendment (v1.2).** Admits one requirement family: **FR-1200**
+> (pipeline as data: a typed, user-authored `PipelineGraph` replaces the
+> hand-written `_pipeline`, executed by a generic interpreter and edited on a
+> canvas). Promoted from the 2026-08-06 brainstorm, with independent priority
+> pressure from the 2026-09-11 external platform analysis
+> (`docs/reports/2026-09-11-external-platform-analysis.md`); the E-item
+> breakdown lives in `docs/roadmap/pipeline-as-data.md` (E-72…E-77). Two
+> brainstorm decisions are normative: ports carry control flow (branching over
+> typed ports, not composite nodes), and the interpreter *replaces* the
+> hardcoded pipeline rather than running beside it. Cutover semantics for
+> in-flight runs remain open (OQ-10) and block FR-1203's landing, not its
+> design.
 
 ---
 
@@ -70,6 +83,9 @@ Teams adopting coding agents today face four gaps:
 - G7: Outcome measurement — a product hypothesis carrying a decision rule
   fixed *before* the build, shipped, then decided against that same rule by
   durable observation.
+- G8: Pipeline as data — the stage DAG a run executes is a typed, versioned,
+  user-editable graph interpreted by the factory, not a hardcoded sequence:
+  arbitrary topology under the same gates, benchmarks, and audit.
 
 **Non-goals (v1)**
 - NG1: Replacing human product judgment — the factory executes decided work.
@@ -86,6 +102,10 @@ Teams adopting coding agents today face four gaps:
 - NG7: The factory does not build deployment or product-analytics substrate.
   Hosting targets and analytics sources are **adapters** over what the customer
   already runs (cf. FR-108's toolchain adapters), never reimplementations.
+- NG8: The canvas is not a general-purpose workflow builder. Ports are typed
+  by the factory's own artifact models and graphs are validated against the
+  SDLC DAG's rules; the external analysis's untyped YAML graph format is not
+  adopted.
 
 ## 5. User stories
 
@@ -526,6 +546,59 @@ to the same evidentiary standard.
   the pre-registered rule's requirements — FR-915's measurement honesty applied
   to product metrics.
 
+### Pipeline as data (FR-1200) *(new scope)*
+
+Where FR-100 fixes the pipeline's 15-stage shape in imperative Python, FR-1200
+makes the shape itself data: a typed, user-authored `PipelineGraph` executed
+by a generic interpreter and edited on a canvas. Every stage-presence flag
+(`research_enabled`, `deep_review_enabled`, …) becomes topology — *is there a
+node* — and a pipeline nobody hand-wrote runs under the same gates,
+benchmarks, and audit trail.
+
+- **FR-1201 — Graph model.** The pipeline SHALL be expressible as a
+  `PipelineGraph` of typed nodes and edges. Nodes SHALL carry `RoleConfig` and
+  `GateConfig` verbatim, so FR-201's registry validation, ADR-6's
+  model-inequality check, and `PROMPT_SHAS` memo invalidation keep working
+  unchanged — no forked `params["model"]` string. Ports SHALL declare payload
+  types by existing model name, and an edge between incompatible ports SHALL
+  be rejected. Graph identity SHALL be a `content_sha()` that excludes canvas
+  cosmetics (`position`, `label`): tidying the layout never invalidates a
+  memoization.
+- **FR-1202 — Router and validator.** Control flow SHALL be owned by a pure,
+  synchronous router — no Temporal, no I/O — so that branching, fan-out and
+  collect, round-based stale-input invalidation, and per-edge
+  `max_traversals` (exhaustion terminates ESCALATED, reproducing
+  `max_fix_attempts`) are testable as tables. Graph legality — port
+  compatibility, reachability, every cycle bounded, exactly one entry node —
+  SHALL live in a single validator that every consumer (interpreter, CLI,
+  canvas, tests) calls, and SHALL NEVER be reimplemented in the frontend.
+- **FR-1203 — Interpreter replaces the hand-written pipeline.** A generic
+  `GraphWorkflow` SHALL execute the graph and the hand-written `_pipeline`
+  SHALL be removed — cutover is big-bang, not strangler-with-parity. A
+  `default.graph.yaml` SHALL reproduce today's stage sequence exactly; it is
+  the regression proof of the cutover. The graph is workflow *input*, pinned
+  for the run's lifetime: an edit writes a new `content_sha` that only future
+  runs pick up, and a running workflow is never mutated. Cutover semantics
+  for in-flight runs are OQ-10 and block this item's landing, not its design.
+- **FR-1204 — Graph-shaped run state.** The dashboard backend SHALL expose
+  the graph a run executes and its per-node state (status, cost, duration,
+  traversal counters) beside the existing run queries. Graphs SHALL be stored
+  content-addressed (`graphs/<sha>.yaml`); there is no graph database.
+- **FR-1205 — Canvas.** One renderer, two modes: **run mode** — live
+  per-node status, traversal counters on loop edges (a post-mortem shows
+  *why* a run looped, not merely that it did), and gate approve/reject
+  through the standard FR-301/302 machinery — and **edit mode** — node
+  palette and inspector. Editing a *running* graph SHALL be disabled by
+  design. The canvas SHALL validate through FR-1202's validator, never its
+  own copy.
+- **FR-1206 — Benchmark mapping.** Every node type SHALL declare a
+  `canonical_stage` mapping it onto the fixed `CANONICAL_STAGES` list, so the
+  benchmark's measurement axes (fix attempts from fail-edge traversals,
+  rounds from the router, per-stage economics) survive hand-authored graphs.
+  Every run SHALL record its `graph_sha`, so a post-mortem always renders
+  the graph that actually ran. A type with no mapping records as `unknown` —
+  never silently as a canonical stage.
+
 ## 7. Non-functional requirements
 
 - NFR-1 **Durability:** no run state lost on worker/server restart; waits of
@@ -659,3 +732,8 @@ P2, since it is how FR-102's `CodebaseMap` gets built.
   to decide keep/kill. What prevents a mis-instrumented or manipulated metric
   from driving the verdict? This is FR-914's grounding problem inside a system
   the factory does not control, and it has no obvious answer yet.
+- OQ-10: **FR-1203 cutover** — big-bang removal of the hand-written pipeline
+  means `FeatureWorkflow` disappears: drain in-flight runs first (block new
+  starts, wait out current ones), or accept their failure and restart? Blocks
+  FR-1203's landing, not its design. (Same question, same number as
+  `docs/roadmap/pipeline-as-data.md` OQ-10.)
