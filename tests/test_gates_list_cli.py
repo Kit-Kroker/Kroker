@@ -3,9 +3,10 @@
 gate.py owns the manifest; the CLI renders it and never edits it. These
 tests pin what the frozen contract cares about: full stdout equality with
 a table rebuilt from the imported MERGE_REQUIRED_CHECKS/CheckClass
-constants, declaration order, the membership-computed required column,
-the four ABSOLUTE rows, the row count, and a name column that
-restretches with the longest check name -- not a golden string.
+constants, declaration order, the required column ('yes' on every row --
+the manifest is itself the required set), the four ABSOLUTE rows, the
+row count, and a name column that restretches with the longest check
+name -- not a golden string.
 """
 
 import asyncio
@@ -28,7 +29,15 @@ ABSOLUTE_CHECKS = (
 def _expected_table() -> str:
     """Rebuild the expected table from the imported constants alone: header,
     then one row per MERGE_REQUIRED_CHECKS entry in declaration order, each
-    classification rendered as its CheckClass value, 'yes' required."""
+    classification rendered as its CheckClass value.
+
+    The required column is a literal 'yes' on every row, written as a
+    literal on purpose: MERGE_REQUIRED_CHECKS is itself the required set,
+    so there is no separate not-required roster to test membership
+    against -- a membership test here could never be false (tautology)
+    and would imply a distinction the manifest does not make. If a
+    not-required row is ever introduced, this literal forces the rebuild
+    to be revisited rather than silently tracking it."""
     name_width = max(len(name) for name in MERGE_REQUIRED_CHECKS)
     cls_width = max(
         len("classification"),
@@ -36,8 +45,7 @@ def _expected_table() -> str:
     )
     lines = [f"{'check':<{name_width}}  {'classification':<{cls_width}}  required-for-merge"]
     for name, classification in MERGE_REQUIRED_CHECKS.items():
-        required = "yes" if name in MERGE_REQUIRED_CHECKS else "no"
-        lines.append(f"{name:<{name_width}}  {classification.value:<{cls_width}}  {required}")
+        lines.append(f"{name:<{name_width}}  {classification.value:<{cls_width}}  yes")
     return "\n".join(lines)
 
 

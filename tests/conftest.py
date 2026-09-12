@@ -56,8 +56,16 @@ def _pid_alive(pid: int) -> bool:
     try:
         stat = open(f"/proc/{pid}/stat").read()
     except FileNotFoundError:
-        return True  # no /proc to consult (non-Linux POSIX): trust the probe
+        # Either /proc does not exist (non-Linux POSIX: no stat to consult)
+        # or the pid was reaped between the signal probe and this read -- a
+        # poll loop catches the latter on its next tick via the
+        # ProcessLookupError branch. Conservative True either way.
+        return True
     except PermissionError:
+        # /proc mounted with hidepid (or equivalent) on Linux: the state
+        # cannot be inspected, so the signal probe's word stands. A
+        # killed-but-unreaped pid may read alive here -- but a live pid
+        # never reads dead, so the kill assertions fail safe.
         return True
     return stat.rsplit(")", 1)[1].split()[0] != "Z"
 
