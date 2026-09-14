@@ -25,6 +25,7 @@ import math
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -64,6 +65,12 @@ class ProblemCode(StrEnum):
     ADR6_VIOLATION = "adr6_violation"
     ADR6_COMBINATIONS_EXCEEDED = "adr6_combinations_exceeded"
     RESERVED_GATE_NAME = "reserved_gate_name"
+    # T4 wiring (router preconditions)
+    REQUIRED_IN_PORT_UNCONNECTED = "required_in_port_unconnected"
+    MIXED_IN_PORT = "mixed_in_port"
+    BACK_PORT_NOT_EXCLUSIVE = "back_port_not_exclusive"
+    BACK_EDGE_INTO_MANY = "back_edge_into_many"
+    ONE_PORT_MULTIPLE_SOURCES = "one_port_multiple_sources"
     # T5 topology
     FORWARD_CYCLE = "forward_cycle"
     BOUNDED_EDGE_NOT_A_LOOP = "bounded_edge_not_a_loop"
@@ -348,6 +355,94 @@ def _adr6_problems(
     return [Problem(code=ProblemCode.ADR6_VIOLATION, message=m) for m in sorted(messages)]
 
 
+def _wiring_problems(
+    graph: PipelineGraph,
+    nodes: Mapping[str, GraphNode],
+    registry: Mapping[str, NodeTypeSpec],
+) -> list[Problem]:
+    """T4 (spec §7.2): the preconditions the router's semantics rely on.
+
+    An edge takes part on a side only where that side's port resolves.
+    Duplicated 4-tuples (already `duplicate_edge`) never take part in the
+    classification rules -- their bounds may disagree -- but they still
+    count as connecting a required in-port, so a duplicate is reported once."""
+    counts = Counter(edge_key(e) for e in graph.edges)
+    duplicated = {k for k, c in counts.items() if c > 1}
+
+    def resolves(node_id: str, port: str, direction: Literal["in", "out"]) -> bool:
+        spec = _spec_of(nodes, registry, node_id)
+        return spec is not None and find_port(spec, port, direction) is not None
+
+    problems: list[Problem] = []
+    for node_id, n in nodes.items():
+        spec = registry.get(n.type)
+        if spec is None:
+            continue
+        for port in sorted((p for p in spec.ports if p.direction == "in"), key=lambda p: p.name):
+            incoming = [
+                e for e in graph.edges if e.target == node_id and e.target_port == port.name
+            ]
+            classified = [e for e in incoming if edge_key(e) not in duplicated]
+            forward = [e for e in classified if not is_back_edge(e)]
+            back = [e for e in classified if is_back_edge(e)]
+            connected_by_duplicate = len(classified) < len(incoming)
+            if port.required and not forward and not connected_by_duplicate:
+                problems.append(
+                    Problem(
+                        code=ProblemCode.REQUIRED_IN_PORT_UNCONNECTED,
+                        node=node_id,
+                        port=port.name,
+                        message=f"required in-port {node_id}.{port.name} has no forward "
+                        f"(unbounded) in-edge",
+                    )
+                )
+            if forward and back:
+                problems.append(
+                    Problem(
+                        code=ProblemCode.MIXED_IN_PORT,
+                        node=node_id,
+                        port=port.name,
+                        message=f"in-port {node_id}.{port.name} mixes forward and loop in-edges",
+                    )
+                )
+            if port.multiplicity == "many":
+                for e in back:
+                    problems.append(
+                        Problem(
+                            code=ProblemCode.BACK_EDGE_INTO_MANY,
+                            edge=edge_key(e),
+                            message=f"loop edge {edge_id(e)} targets a collect (many) port",
+                        )
+                    )
+            elif len({e.source for e in forward}) > 1:
+                problems.append(
+                    Problem(
+                        code=ProblemCode.ONE_PORT_MULTIPLE_SOURCES,
+                        node=node_id,
+                        port=port.name,
+                        message=f"in-port {node_id}.{port.name} takes one token but is fed by "
+                        f"{_names({e.source for e in forward})}; only distinct out-ports of "
+                        f"ONE node are mutually exclusive",
+                    )
+                )
+    by_out_port: dict[tuple[str, str], list[GraphEdge]] = {}
+    for e in graph.edges:
+        if edge_key(e) not in duplicated and resolves(e.source, e.source_port, "out"):
+            by_out_port.setdefault((e.source, e.source_port), []).append(e)
+    for (source, source_port), edges in sorted(by_out_port.items()):
+        if len(edges) > 1 and any(is_back_edge(e) for e in edges):
+            problems.append(
+                Problem(
+                    code=ProblemCode.BACK_PORT_NOT_EXCLUSIVE,
+                    node=source,
+                    port=source_port,
+                    message=f"out-port {source}.{source_port} carries a loop edge, so it must "
+                    f"carry no other edge",
+                )
+            )
+    return problems
+
+
 def _topology_problems(graph: PipelineGraph, node_ids: list[str]) -> list[Problem]:
     problems: list[Problem] = []
     adjacency = forward_adjacency(node_ids, graph.edges)
@@ -457,7 +552,12 @@ def validate(
     nodes = _first_nodes(graph)
     identity = _identity_problems(graph)
     references = _reference_problems(graph, nodes, registry)
-    problems = identity + references + _node_config_problems(nodes, registry, roles)
+    problems = (
+        identity
+        + references
+        + _node_config_problems(nodes, registry, roles)
+        + _wiring_problems(graph, nodes, registry)
+    )
     suppress_topology = any(
         p.code
         in (
