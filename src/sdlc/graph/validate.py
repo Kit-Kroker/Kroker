@@ -20,6 +20,8 @@ tests/graph/test_graph_purity.py).
 
 from __future__ import annotations
 
+import itertools
+import math
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from enum import StrEnum
@@ -51,11 +53,46 @@ class ProblemCode(StrEnum):
     UNKNOWN_NODE_TYPE = "unknown_node_type"
     UNKNOWN_PORT = "unknown_port"
     INCOMPATIBLE_PORTS = "incompatible_ports"
+    # T3 node configuration
+    ROLE_ON_ROLELESS_TYPE = "role_on_roleless_type"
+    GATE_ON_NON_GATE = "gate_on_non_gate"
+    LOADER_OWNED_FIELD = "loader_owned_field"
+    ROLE_NOT_IN_REGISTRY = "role_not_in_registry"
+    ROLE_KIND_MISMATCH = "role_kind_mismatch"
+    ROLE_HARNESS_MISSING = "role_harness_missing"
+    RESEARCH_PROVIDER_MISSING = "research_provider_missing"
+    ADR6_VIOLATION = "adr6_violation"
+    ADR6_COMBINATIONS_EXCEEDED = "adr6_combinations_exceeded"
+    RESERVED_GATE_NAME = "reserved_gate_name"
     # T5 topology
     FORWARD_CYCLE = "forward_cycle"
     BOUNDED_EDGE_NOT_A_LOOP = "bounded_edge_not_a_loop"
     ENTRY_COUNT = "entry_count"
     UNREACHABLE_NODE = "unreachable_node"
+
+
+# Gate names that handlers use OUTSIDE graphs (spec §3, §7.3). A gate node's
+# name is its id (E-72 D7) and shares PipelineConfig.gates[...] and the signal
+# namespace with these, so a graph gate may not take one. E-74 removes
+# "merge"/"deploy" when those gates become nodes. "research", "architecture"
+# and "plan" are deliberately absent: graph gate nodes take them over.
+RESERVED_GATE_NAMES: frozenset[str] = frozenset(
+    {
+        "budget",
+        "clarify",
+        "crew_question",
+        "deploy",
+        "deploy_failed",
+        "merge",
+        "readiness",
+        "risk",
+        "tidy_up",
+        "tool_approval",
+    }
+)
+
+# Fail closed past this many role->model combinations (spec §7.4).
+ADR6_COMBINATION_CAP = 256
 
 
 class Problem(BaseModel):
@@ -204,6 +241,113 @@ def _spec_of(
     return registry.get(n.type) if n is not None else None
 
 
+def _node_config_problems(
+    nodes: Mapping[str, GraphNode],
+    registry: Mapping[str, NodeTypeSpec],
+    roles: Mapping[str, RoleConfig],
+) -> list[Problem]:
+    """T3 (spec §7.2): E-72 §5's deferred node-configuration list."""
+    problems: list[Problem] = []
+
+    def add(code: ProblemCode, node_id: str, message: str) -> None:
+        problems.append(Problem(code=code, node=node_id, message=message))
+
+    for node_id, n in nodes.items():
+        spec = registry.get(n.type)
+        if spec is None:
+            continue  # unknown_node_type already reported; nothing to resolve against
+        if spec.kind == "gate" and node_id in RESERVED_GATE_NAMES:
+            add(
+                ProblemCode.RESERVED_GATE_NAME,
+                node_id,
+                f"gate node id {node_id!r} is a gate name handlers use outside graphs",
+            )
+        if n.gate is not None and spec.kind != "gate":
+            add(ProblemCode.GATE_ON_NON_GATE, node_id, f"{n.type!r} is not a gate type")
+        if n.role is not None and (n.role.instructions is not None or n.role.tool_files):
+            add(
+                ProblemCode.LOADER_OWNED_FIELD,
+                node_id,
+                "role.instructions and role.tool_files are loaded from agents/<role>/, "
+                "never set on a node",
+            )
+        if spec.role is None:
+            if n.role is not None:
+                add(ProblemCode.ROLE_ON_ROLELESS_TYPE, node_id, f"{n.type!r} has no role")
+            continue
+        if spec.role not in roles:
+            add(
+                ProblemCode.ROLE_NOT_IN_REGISTRY,
+                node_id,
+                f"{n.type!r} needs role {spec.role!r}, which the loaded registry lacks",
+            )
+            continue
+        if n.role is None:
+            continue
+        expected = roles[spec.role].kind
+        if n.role.kind != expected:
+            add(
+                ProblemCode.ROLE_KIND_MISMATCH,
+                node_id,
+                f"role override kind {n.role.kind!r} != registry {spec.role!r} kind "
+                f"{expected!r} (an empty `role: {{}}` defaults to 'harness')",
+            )
+        elif n.role.kind == "harness" and n.role.harness is None:
+            add(
+                ProblemCode.ROLE_HARNESS_MISSING,
+                node_id,
+                "a harness-kind role override must name a harness",
+            )
+        elif n.role.kind == "research" and n.role.provider is None:
+            add(
+                ProblemCode.RESEARCH_PROVIDER_MISSING,
+                node_id,
+                "a research-kind role override must name a provider",
+            )
+    return problems + _adr6_problems(nodes, registry, roles)
+
+
+def _adr6_problems(
+    nodes: Mapping[str, GraphNode],
+    registry: Mapping[str, NodeTypeSpec],
+    roles: Mapping[str, RoleConfig],
+) -> list[Problem]:
+    """ADR-6 over graphs (spec U4, §7.4): the registry's role->model map with
+    every graph-used role replaced by the SET of its nodes' effective models
+    (mirrors cli_roles.build_role_overrides), then the existing
+    validate_run_roles over every combination."""
+    from ..agents.loader import RegistryError, validate_run_roles
+
+    models: dict[str, set[str]] = {r: {c.model} for r, c in roles.items() if c.model is not None}
+    used: dict[str, set[str]] = {}
+    for n in nodes.values():
+        spec = registry.get(n.type)
+        if spec is None or spec.role is None or spec.role not in roles:
+            continue
+        model = (n.role.model if n.role is not None else None) or roles[spec.role].model
+        if model is not None:
+            used.setdefault(spec.role, set()).add(model)
+    models.update(used)
+    names = sorted(models)
+    choices = [sorted(models[r]) for r in names]
+    total = math.prod(len(c) for c in choices)
+    if total > ADR6_COMBINATION_CAP:
+        return [
+            Problem(
+                code=ProblemCode.ADR6_COMBINATIONS_EXCEEDED,
+                message=f"{total} role->model combinations exceed the ADR-6 check cap "
+                f"of {ADR6_COMBINATION_CAP}",
+            )
+        ]
+    messages: set[str] = set()
+    for combo in itertools.product(*choices):
+        try:
+            validate_run_roles(dict(zip(names, combo, strict=True)))
+        except RegistryError as exc:
+            messages.add(str(exc))
+    return [Problem(code=ProblemCode.ADR6_VIOLATION, message=m) for m in sorted(messages)]
+
+
 def _topology_problems(graph: PipelineGraph, node_ids: list[str]) -> list[Problem]:
     problems: list[Problem] = []
     adjacency = forward_adjacency(node_ids, graph.edges)
@@ -313,7 +457,7 @@ def validate(
     nodes = _first_nodes(graph)
     identity = _identity_problems(graph)
     references = _reference_problems(graph, nodes, registry)
-    problems = identity + references
+    problems = identity + references + _node_config_problems(nodes, registry, roles)
     suppress_topology = any(
         p.code
         in (
