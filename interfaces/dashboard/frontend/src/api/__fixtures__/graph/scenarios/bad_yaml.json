@@ -1,0 +1,16 @@
+{
+  "name": "bad_yaml",
+  "yaml": "schema_version: 1\nnodes: [\n",
+  "parse": {
+    "ok": false,
+    "shape_errors": [
+      {
+        "loc": [],
+        "msg": "graph text is not valid YAML: while parsing a flow node\nexpected the node content, but found '<stream end>'\n  in \"<unicode string>\", line 3, column 1:\n    \n    ^",
+        "line": 3,
+        "column": 1
+      }
+    ]
+  },
+  "serialize": null
+}

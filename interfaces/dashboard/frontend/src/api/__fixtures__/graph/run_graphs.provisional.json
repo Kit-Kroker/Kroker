@@ -1,0 +1,568 @@
+{
+  "_note": "PROVISIONAL until E-74/E-75: a hand-written state script, not router output. Transitions fire only on decideGate, never on a timer, so Playwright is deterministic (E-76 spec §7.2).",
+  "runs": {
+    "feature-graph-demo": {
+      "scenario": "pre_code",
+      "initial": "blocked_r2",
+      "states": {
+        "blocked_r2": {
+          "state": {
+            "kind": "state",
+            "graph_sha": "9bc61539a897be2744030e2d1147ce5083dcb776b7d6f97fe273281527009fa1",
+            "nodes": {
+              "intake": {
+                "status": "done",
+                "round": 1,
+                "started_at": "2026-09-14T09:00:00Z",
+                "ended_at": "2026-09-14T09:00:05Z",
+                "cost_usd": null
+              },
+              "researcher": {
+                "status": "done",
+                "round": 1,
+                "started_at": "2026-09-14T09:00:05Z",
+                "ended_at": "2026-09-14T09:04:00Z",
+                "cost_usd": 0.42
+              },
+              "research": {
+                "status": "done",
+                "round": 1,
+                "started_at": "2026-09-14T09:04:00Z",
+                "ended_at": "2026-09-14T09:06:00Z",
+                "cost_usd": null
+              },
+              "clarifier": {
+                "status": "done",
+                "round": 1,
+                "started_at": "2026-09-14T09:06:00Z",
+                "ended_at": "2026-09-14T09:10:00Z",
+                "cost_usd": 0.31
+              },
+              "architect": {
+                "status": "done",
+                "round": 2,
+                "started_at": "2026-09-14T09:25:00Z",
+                "ended_at": "2026-09-14T09:31:00Z",
+                "cost_usd": 1.87
+              },
+              "architecture": {
+                "status": "blocked",
+                "round": 2,
+                "started_at": "2026-09-14T09:31:00Z",
+                "ended_at": null,
+                "cost_usd": null
+              },
+              "planner": {
+                "status": "idle",
+                "round": 1,
+                "started_at": null,
+                "ended_at": null,
+                "cost_usd": null
+              },
+              "plan": {
+                "status": "idle",
+                "round": 1,
+                "started_at": null,
+                "ended_at": null,
+                "cost_usd": null
+              }
+            },
+            "edges": [
+              {
+                "edge": {
+                  "source": "intake",
+                  "source_port": "ok",
+                  "target": "researcher",
+                  "target_port": "trigger"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "researcher",
+                  "source_port": "brief",
+                  "target": "research",
+                  "target_port": "artifact"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "research",
+                  "source_port": "approve",
+                  "target": "clarifier",
+                  "target_port": "research"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "clarifier",
+                  "source_port": "requirements",
+                  "target": "architect",
+                  "target_port": "requirements"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "clarifier",
+                  "source_port": "requirements",
+                  "target": "planner",
+                  "target_port": "requirements"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "architect",
+                  "source_port": "spec",
+                  "target": "architecture",
+                  "target_port": "artifact"
+                },
+                "traversals": 2
+              },
+              {
+                "edge": {
+                  "source": "architecture",
+                  "source_port": "revise",
+                  "target": "architect",
+                  "target_port": "guidance"
+                },
+                "traversals": 1
+              }
+            ],
+            "current_nodes": [
+              "architecture"
+            ],
+            "pending": [
+              {
+                "node": "architecture",
+                "key": "architecture#2",
+                "kind": "gate"
+              }
+            ],
+            "terminal": null
+          },
+          "on": {
+            "approve": "planning",
+            "revise": "revising_r3",
+            "reject": "rejected"
+          }
+        },
+        "planning": {
+          "state": {
+            "kind": "state",
+            "graph_sha": "9bc61539a897be2744030e2d1147ce5083dcb776b7d6f97fe273281527009fa1",
+            "nodes": {
+              "intake": {
+                "status": "done",
+                "round": 1,
+                "started_at": "2026-09-14T09:00:00Z",
+                "ended_at": "2026-09-14T09:00:05Z",
+                "cost_usd": null
+              },
+              "researcher": {
+                "status": "done",
+                "round": 1,
+                "started_at": "2026-09-14T09:00:05Z",
+                "ended_at": "2026-09-14T09:04:00Z",
+                "cost_usd": 0.42
+              },
+              "research": {
+                "status": "done",
+                "round": 1,
+                "started_at": "2026-09-14T09:04:00Z",
+                "ended_at": "2026-09-14T09:06:00Z",
+                "cost_usd": null
+              },
+              "clarifier": {
+                "status": "done",
+                "round": 1,
+                "started_at": "2026-09-14T09:06:00Z",
+                "ended_at": "2026-09-14T09:10:00Z",
+                "cost_usd": 0.31
+              },
+              "architect": {
+                "status": "done",
+                "round": 2,
+                "started_at": "2026-09-14T09:25:00Z",
+                "ended_at": "2026-09-14T09:31:00Z",
+                "cost_usd": 1.87
+              },
+              "architecture": {
+                "status": "done",
+                "round": 2,
+                "started_at": "2026-09-14T09:31:00Z",
+                "ended_at": "2026-09-14T09:40:00Z",
+                "cost_usd": null
+              },
+              "planner": {
+                "status": "running",
+                "round": 1,
+                "started_at": "2026-09-14T09:40:00Z",
+                "ended_at": null,
+                "cost_usd": null
+              },
+              "plan": {
+                "status": "idle",
+                "round": 1,
+                "started_at": null,
+                "ended_at": null,
+                "cost_usd": null
+              }
+            },
+            "edges": [
+              {
+                "edge": {
+                  "source": "intake",
+                  "source_port": "ok",
+                  "target": "researcher",
+                  "target_port": "trigger"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "researcher",
+                  "source_port": "brief",
+                  "target": "research",
+                  "target_port": "artifact"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "research",
+                  "source_port": "approve",
+                  "target": "clarifier",
+                  "target_port": "research"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "clarifier",
+                  "source_port": "requirements",
+                  "target": "architect",
+                  "target_port": "requirements"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "clarifier",
+                  "source_port": "requirements",
+                  "target": "planner",
+                  "target_port": "requirements"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "architect",
+                  "source_port": "spec",
+                  "target": "architecture",
+                  "target_port": "artifact"
+                },
+                "traversals": 2
+              },
+              {
+                "edge": {
+                  "source": "architecture",
+                  "source_port": "revise",
+                  "target": "architect",
+                  "target_port": "guidance"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "architecture",
+                  "source_port": "approve",
+                  "target": "planner",
+                  "target_port": "spec"
+                },
+                "traversals": 1
+              }
+            ],
+            "current_nodes": [
+              "planner"
+            ],
+            "pending": [],
+            "terminal": null
+          },
+          "on": {}
+        },
+        "revising_r3": {
+          "state": {
+            "kind": "state",
+            "graph_sha": "9bc61539a897be2744030e2d1147ce5083dcb776b7d6f97fe273281527009fa1",
+            "nodes": {
+              "intake": {
+                "status": "done",
+                "round": 1,
+                "started_at": "2026-09-14T09:00:00Z",
+                "ended_at": "2026-09-14T09:00:05Z",
+                "cost_usd": null
+              },
+              "researcher": {
+                "status": "done",
+                "round": 1,
+                "started_at": "2026-09-14T09:00:05Z",
+                "ended_at": "2026-09-14T09:04:00Z",
+                "cost_usd": 0.42
+              },
+              "research": {
+                "status": "done",
+                "round": 1,
+                "started_at": "2026-09-14T09:04:00Z",
+                "ended_at": "2026-09-14T09:06:00Z",
+                "cost_usd": null
+              },
+              "clarifier": {
+                "status": "done",
+                "round": 1,
+                "started_at": "2026-09-14T09:06:00Z",
+                "ended_at": "2026-09-14T09:10:00Z",
+                "cost_usd": 0.31
+              },
+              "architect": {
+                "status": "running",
+                "round": 3,
+                "started_at": "2026-09-14T09:40:00Z",
+                "ended_at": null,
+                "cost_usd": null
+              },
+              "architecture": {
+                "status": "idle",
+                "round": 2,
+                "started_at": null,
+                "ended_at": null,
+                "cost_usd": null
+              },
+              "planner": {
+                "status": "idle",
+                "round": 1,
+                "started_at": null,
+                "ended_at": null,
+                "cost_usd": null
+              },
+              "plan": {
+                "status": "idle",
+                "round": 1,
+                "started_at": null,
+                "ended_at": null,
+                "cost_usd": null
+              }
+            },
+            "edges": [
+              {
+                "edge": {
+                  "source": "intake",
+                  "source_port": "ok",
+                  "target": "researcher",
+                  "target_port": "trigger"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "researcher",
+                  "source_port": "brief",
+                  "target": "research",
+                  "target_port": "artifact"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "research",
+                  "source_port": "approve",
+                  "target": "clarifier",
+                  "target_port": "research"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "clarifier",
+                  "source_port": "requirements",
+                  "target": "architect",
+                  "target_port": "requirements"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "clarifier",
+                  "source_port": "requirements",
+                  "target": "planner",
+                  "target_port": "requirements"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "architect",
+                  "source_port": "spec",
+                  "target": "architecture",
+                  "target_port": "artifact"
+                },
+                "traversals": 2
+              },
+              {
+                "edge": {
+                  "source": "architecture",
+                  "source_port": "revise",
+                  "target": "architect",
+                  "target_port": "guidance"
+                },
+                "traversals": 2
+              }
+            ],
+            "current_nodes": [
+              "architect"
+            ],
+            "pending": [],
+            "terminal": null
+          },
+          "on": {}
+        },
+        "rejected": {
+          "state": {
+            "kind": "state",
+            "graph_sha": "9bc61539a897be2744030e2d1147ce5083dcb776b7d6f97fe273281527009fa1",
+            "nodes": {
+              "intake": {
+                "status": "done",
+                "round": 1,
+                "started_at": "2026-09-14T09:00:00Z",
+                "ended_at": "2026-09-14T09:00:05Z",
+                "cost_usd": null
+              },
+              "researcher": {
+                "status": "done",
+                "round": 1,
+                "started_at": "2026-09-14T09:00:05Z",
+                "ended_at": "2026-09-14T09:04:00Z",
+                "cost_usd": 0.42
+              },
+              "research": {
+                "status": "done",
+                "round": 1,
+                "started_at": "2026-09-14T09:04:00Z",
+                "ended_at": "2026-09-14T09:06:00Z",
+                "cost_usd": null
+              },
+              "clarifier": {
+                "status": "done",
+                "round": 1,
+                "started_at": "2026-09-14T09:06:00Z",
+                "ended_at": "2026-09-14T09:10:00Z",
+                "cost_usd": 0.31
+              },
+              "architect": {
+                "status": "done",
+                "round": 2,
+                "started_at": "2026-09-14T09:25:00Z",
+                "ended_at": "2026-09-14T09:31:00Z",
+                "cost_usd": 1.87
+              },
+              "architecture": {
+                "status": "failed",
+                "round": 2,
+                "started_at": "2026-09-14T09:31:00Z",
+                "ended_at": "2026-09-14T09:40:00Z",
+                "cost_usd": null
+              },
+              "planner": {
+                "status": "idle",
+                "round": 1,
+                "started_at": null,
+                "ended_at": null,
+                "cost_usd": null
+              },
+              "plan": {
+                "status": "idle",
+                "round": 1,
+                "started_at": null,
+                "ended_at": null,
+                "cost_usd": null
+              }
+            },
+            "edges": [
+              {
+                "edge": {
+                  "source": "intake",
+                  "source_port": "ok",
+                  "target": "researcher",
+                  "target_port": "trigger"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "researcher",
+                  "source_port": "brief",
+                  "target": "research",
+                  "target_port": "artifact"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "research",
+                  "source_port": "approve",
+                  "target": "clarifier",
+                  "target_port": "research"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "clarifier",
+                  "source_port": "requirements",
+                  "target": "architect",
+                  "target_port": "requirements"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "clarifier",
+                  "source_port": "requirements",
+                  "target": "planner",
+                  "target_port": "requirements"
+                },
+                "traversals": 1
+              },
+              {
+                "edge": {
+                  "source": "architect",
+                  "source_port": "spec",
+                  "target": "architecture",
+                  "target_port": "artifact"
+                },
+                "traversals": 2
+              },
+              {
+                "edge": {
+                  "source": "architecture",
+                  "source_port": "revise",
+                  "target": "architect",
+                  "target_port": "guidance"
+                },
+                "traversals": 1
+              }
+            ],
+            "current_nodes": [],
+            "pending": [],
+            "terminal": "failed"
+          },
+          "on": {}
+        }
+      }
+    }
+  }
+}

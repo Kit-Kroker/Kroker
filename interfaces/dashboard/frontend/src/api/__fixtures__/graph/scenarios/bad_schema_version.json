@@ -1,0 +1,16 @@
+{
+  "name": "bad_schema_version",
+  "yaml": "schema_version: 2\nnodes: []\nedges: []\n",
+  "parse": {
+    "ok": false,
+    "shape_errors": [
+      {
+        "loc": [],
+        "msg": "unsupported graph schema_version 2; this worker reads 1",
+        "line": null,
+        "column": null
+      }
+    ]
+  },
+  "serialize": null
+}

@@ -1,0 +1,872 @@
+{
+  "node_types": [
+    {
+      "type": "architect",
+      "kind": "stage",
+      "role": "architect",
+      "canonical_stage": "architecture",
+      "default_id": "architect",
+      "ports": [
+        {
+          "name": "requirements",
+          "direction": "in",
+          "payload": "ClarifiedRequirements",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "codebase_map",
+          "direction": "in",
+          "payload": "CodebaseMap",
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
+          "name": "guidance",
+          "direction": "in",
+          "payload": "GateDecision",
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
+          "name": "spec",
+          "direction": "out",
+          "payload": "ArchitectureSpec",
+          "required": true,
+          "multiplicity": "one"
+        }
+      ],
+      "connectable": {
+        "spec": [
+          {
+            "type": "gate.architecture",
+            "port": "artifact"
+          },
+          {
+            "type": "plan",
+            "port": "spec"
+          }
+        ]
+      }
+    },
+    {
+      "type": "clarify",
+      "kind": "stage",
+      "role": "clarify",
+      "canonical_stage": "clarify",
+      "default_id": "clarify",
+      "ports": [
+        {
+          "name": "trigger",
+          "direction": "in",
+          "payload": null,
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
+          "name": "codebase_map",
+          "direction": "in",
+          "payload": "CodebaseMap",
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
+          "name": "research",
+          "direction": "in",
+          "payload": "ResearchBrief",
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
+          "name": "requirements",
+          "direction": "out",
+          "payload": "ClarifiedRequirements",
+          "required": true,
+          "multiplicity": "one"
+        }
+      ],
+      "connectable": {
+        "requirements": [
+          {
+            "type": "architect",
+            "port": "requirements"
+          },
+          {
+            "type": "plan",
+            "port": "requirements"
+          }
+        ]
+      }
+    },
+    {
+      "type": "context",
+      "kind": "stage",
+      "role": null,
+      "canonical_stage": "context",
+      "default_id": "context",
+      "ports": [
+        {
+          "name": "trigger",
+          "direction": "in",
+          "payload": null,
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "map",
+          "direction": "out",
+          "payload": "CodebaseMap",
+          "required": true,
+          "multiplicity": "one"
+        }
+      ],
+      "connectable": {
+        "map": [
+          {
+            "type": "architect",
+            "port": "codebase_map"
+          },
+          {
+            "type": "clarify",
+            "port": "codebase_map"
+          }
+        ]
+      }
+    },
+    {
+      "type": "gate.architecture",
+      "kind": "gate",
+      "role": null,
+      "canonical_stage": "architecture",
+      "default_id": "gate_architecture",
+      "ports": [
+        {
+          "name": "artifact",
+          "direction": "in",
+          "payload": "ArchitectureSpec",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "approve",
+          "direction": "out",
+          "payload": "ArchitectureSpec",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "revise",
+          "direction": "out",
+          "payload": "GateDecision",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "reject",
+          "direction": "out",
+          "payload": null,
+          "required": true,
+          "multiplicity": "one"
+        }
+      ],
+      "connectable": {
+        "approve": [
+          {
+            "type": "gate.architecture",
+            "port": "artifact"
+          },
+          {
+            "type": "plan",
+            "port": "spec"
+          }
+        ],
+        "revise": [
+          {
+            "type": "architect",
+            "port": "guidance"
+          },
+          {
+            "type": "plan",
+            "port": "guidance"
+          },
+          {
+            "type": "research",
+            "port": "guidance"
+          }
+        ],
+        "reject": [
+          {
+            "type": "clarify",
+            "port": "trigger"
+          },
+          {
+            "type": "context",
+            "port": "trigger"
+          },
+          {
+            "type": "research",
+            "port": "trigger"
+          }
+        ]
+      }
+    },
+    {
+      "type": "gate.plan",
+      "kind": "gate",
+      "role": null,
+      "canonical_stage": "planning",
+      "default_id": "gate_plan",
+      "ports": [
+        {
+          "name": "artifact",
+          "direction": "in",
+          "payload": "ImplementationPlan",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "approve",
+          "direction": "out",
+          "payload": "ImplementationPlan",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "revise",
+          "direction": "out",
+          "payload": "GateDecision",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "reject",
+          "direction": "out",
+          "payload": null,
+          "required": true,
+          "multiplicity": "one"
+        }
+      ],
+      "connectable": {
+        "approve": [
+          {
+            "type": "gate.plan",
+            "port": "artifact"
+          }
+        ],
+        "revise": [
+          {
+            "type": "architect",
+            "port": "guidance"
+          },
+          {
+            "type": "plan",
+            "port": "guidance"
+          },
+          {
+            "type": "research",
+            "port": "guidance"
+          }
+        ],
+        "reject": [
+          {
+            "type": "clarify",
+            "port": "trigger"
+          },
+          {
+            "type": "context",
+            "port": "trigger"
+          },
+          {
+            "type": "research",
+            "port": "trigger"
+          }
+        ]
+      }
+    },
+    {
+      "type": "gate.research",
+      "kind": "gate",
+      "role": null,
+      "canonical_stage": "research",
+      "default_id": "gate_research",
+      "ports": [
+        {
+          "name": "artifact",
+          "direction": "in",
+          "payload": "ResearchBrief",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "approve",
+          "direction": "out",
+          "payload": "ResearchBrief",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "revise",
+          "direction": "out",
+          "payload": "GateDecision",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "reject",
+          "direction": "out",
+          "payload": null,
+          "required": true,
+          "multiplicity": "one"
+        }
+      ],
+      "connectable": {
+        "approve": [
+          {
+            "type": "clarify",
+            "port": "research"
+          },
+          {
+            "type": "gate.research",
+            "port": "artifact"
+          }
+        ],
+        "revise": [
+          {
+            "type": "architect",
+            "port": "guidance"
+          },
+          {
+            "type": "plan",
+            "port": "guidance"
+          },
+          {
+            "type": "research",
+            "port": "guidance"
+          }
+        ],
+        "reject": [
+          {
+            "type": "clarify",
+            "port": "trigger"
+          },
+          {
+            "type": "context",
+            "port": "trigger"
+          },
+          {
+            "type": "research",
+            "port": "trigger"
+          }
+        ]
+      }
+    },
+    {
+      "type": "intake",
+      "kind": "stage",
+      "role": null,
+      "canonical_stage": "intake",
+      "default_id": "intake",
+      "ports": [
+        {
+          "name": "ok",
+          "direction": "out",
+          "payload": null,
+          "required": true,
+          "multiplicity": "one"
+        }
+      ],
+      "connectable": {
+        "ok": [
+          {
+            "type": "clarify",
+            "port": "trigger"
+          },
+          {
+            "type": "context",
+            "port": "trigger"
+          },
+          {
+            "type": "research",
+            "port": "trigger"
+          }
+        ]
+      }
+    },
+    {
+      "type": "plan",
+      "kind": "stage",
+      "role": "planner",
+      "canonical_stage": "planning",
+      "default_id": "plan",
+      "ports": [
+        {
+          "name": "spec",
+          "direction": "in",
+          "payload": "ArchitectureSpec",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "requirements",
+          "direction": "in",
+          "payload": "ClarifiedRequirements",
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
+          "name": "guidance",
+          "direction": "in",
+          "payload": "GateDecision",
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
+          "name": "plan",
+          "direction": "out",
+          "payload": "ImplementationPlan",
+          "required": true,
+          "multiplicity": "one"
+        }
+      ],
+      "connectable": {
+        "plan": [
+          {
+            "type": "gate.plan",
+            "port": "artifact"
+          }
+        ]
+      }
+    },
+    {
+      "type": "research",
+      "kind": "stage",
+      "role": "research",
+      "canonical_stage": "research",
+      "default_id": "research",
+      "ports": [
+        {
+          "name": "trigger",
+          "direction": "in",
+          "payload": null,
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "guidance",
+          "direction": "in",
+          "payload": "GateDecision",
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
+          "name": "brief",
+          "direction": "out",
+          "payload": "ResearchBrief",
+          "required": true,
+          "multiplicity": "one"
+        }
+      ],
+      "connectable": {
+        "brief": [
+          {
+            "type": "clarify",
+            "port": "research"
+          },
+          {
+            "type": "gate.research",
+            "port": "artifact"
+          }
+        ]
+      }
+    }
+  ],
+  "canonical_stages": [
+    "intake",
+    "constitution",
+    "context",
+    "requirements",
+    "research",
+    "clarify",
+    "architecture",
+    "planning",
+    "code",
+    "review",
+    "adversary",
+    "handoff",
+    "deep_review",
+    "analyze",
+    "qa",
+    "quality_gate",
+    "deploy",
+    "retro"
+  ],
+  "schemas": {
+    "GraphNode": {
+      "$defs": {
+        "GateConfig": {
+          "description": "Per-gate policy + the confidence bar a SOFT gate must clear to\nauto-approve (FR-301), plus the E-9 timer schedule. threshold is read\nonly when policy == SOFT; the *_after_hours fields fall back to a\nfraction of PipelineConfig.gate_timeout_hours when None (see\nsdlc.notify.schedule.build_schedule).",
+          "properties": {
+            "policy": {
+              "$ref": "#/$defs/GatePolicy",
+              "default": "hard"
+            },
+            "threshold": {
+              "default": 0.8,
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "title": "Threshold",
+              "type": "number"
+            },
+            "on_timeout": {
+              "$ref": "#/$defs/TimeoutAction",
+              "default": "reject"
+            },
+            "remind_after_hours": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Remind After Hours"
+            },
+            "escalate_after_hours": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Escalate After Hours"
+            }
+          },
+          "title": "GateConfig",
+          "type": "object"
+        },
+        "GatePolicy": {
+          "enum": [
+            "hard",
+            "soft",
+            "off"
+          ],
+          "title": "GatePolicy",
+          "type": "string"
+        },
+        "HarnessKind": {
+          "enum": [
+            "claude_code",
+            "opencode",
+            "cursor",
+            "crew"
+          ],
+          "title": "HarnessKind",
+          "type": "string"
+        },
+        "NodePosition": {
+          "additionalProperties": false,
+          "description": "Canvas coordinates. Cosmetic: never part of content_sha().",
+          "properties": {
+            "x": {
+              "title": "X",
+              "type": "number"
+            },
+            "y": {
+              "title": "Y",
+              "type": "number"
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "title": "NodePosition",
+          "type": "object"
+        },
+        "RoleConfig": {
+          "description": "Which harness/model a 'doing' role uses. Enables cross-harness review.",
+          "properties": {
+            "kind": {
+              "default": "harness",
+              "enum": [
+                "proposer",
+                "harness",
+                "research"
+              ],
+              "title": "Kind",
+              "type": "string"
+            },
+            "harness": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/HarnessKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Model"
+            },
+            "layout": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Layout"
+            },
+            "lead_harness": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/HarnessKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "provider": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "tavily",
+                    "exa",
+                    "fake"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Provider"
+            },
+            "tool_files": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Tool Files",
+              "type": "array"
+            },
+            "instructions": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Instructions"
+            },
+            "context_budget_tokens": {
+              "default": 30000,
+              "title": "Context Budget Tokens",
+              "type": "integer"
+            },
+            "extra_args": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Extra Args",
+              "type": "array"
+            },
+            "activity_timeout_hours": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Activity Timeout Hours"
+            },
+            "activity_heartbeat_minutes": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Activity Heartbeat Minutes"
+            }
+          },
+          "title": "RoleConfig",
+          "type": "object"
+        },
+        "TimeoutAction": {
+          "description": "What an expired gate does (FR-303). REJECT is today's behaviour and\nthe default everywhere except `merge` -- see PipelineConfig.gates.",
+          "enum": [
+            "reject",
+            "approve",
+            "hold"
+          ],
+          "title": "TimeoutAction",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "description": "One node. `role`/`gate` carry the core models verbatim (spec D6/D7):\na PipelineConfig.roles / PipelineConfig.gates ENTRY's semantics, resolved\nby E-74 -- nothing here interprets them.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$",
+          "title": "Type",
+          "type": "string"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "gate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GateConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "position": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NodePosition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "title": "GraphNode",
+      "type": "object"
+    },
+    "GraphEdge": {
+      "additionalProperties": false,
+      "description": "A directed connection. Identity is the endpoint 4-tuple (no id field);\nduplicates are validate.py's to reject.",
+      "properties": {
+        "source": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Source",
+          "type": "string"
+        },
+        "source_port": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Source Port",
+          "type": "string"
+        },
+        "target": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Target",
+          "type": "string"
+        },
+        "target_port": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Target Port",
+          "type": "string"
+        },
+        "max_traversals": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Traversals"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        }
+      },
+      "required": [
+        "source",
+        "source_port",
+        "target",
+        "target_port"
+      ],
+      "title": "GraphEdge",
+      "type": "object"
+    }
+  },
+  "capabilities": {
+    "validate": false,
+    "save": false,
+    "load": false,
+    "run_graph": false
+  },
+  "max_graph_bytes": 262144
+}

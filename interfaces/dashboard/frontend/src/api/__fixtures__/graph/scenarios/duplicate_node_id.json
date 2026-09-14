@@ -1,0 +1,34 @@
+{
+  "name": "duplicate_node_id",
+  "yaml": "schema_version: 1\nnodes:\n- id: intake\n  type: intake\n  position:\n    x: 0.0\n    y: 0.0\n- id: intake\n  type: intake\n  position:\n    x: 200.0\n    y: 0.0\nedges: []\n",
+  "parse": {
+    "ok": true,
+    "graph": {
+      "schema_version": 1,
+      "nodes": [
+        {
+          "id": "intake",
+          "type": "intake",
+          "position": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "id": "intake",
+          "type": "intake",
+          "position": {
+            "x": 200.0,
+            "y": 0.0
+          }
+        }
+      ],
+      "edges": []
+    },
+    "sha": "6871f40fd3a5ade9ad16b90601b1feeccb1da348fa1182a5fefd1fb5d7397a85"
+  },
+  "serialize": {
+    "ok": true,
+    "yaml": "schema_version: 1\nnodes:\n- id: intake\n  type: intake\n  position:\n    x: 0.0\n    y: 0.0\n- id: intake\n  type: intake\n  position:\n    x: 200.0\n    y: 0.0\nedges: []\n"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "dangling_edge",
+  "yaml": "schema_version: 1\nnodes:\n- id: intake\n  type: intake\n  position:\n    x: 0.0\n    y: 0.0\nedges:\n- source: intake\n  source_port: ok\n  target: ghost\n  target_port: trigger\n",
+  "parse": {
+    "ok": true,
+    "graph": {
+      "schema_version": 1,
+      "nodes": [
+        {
+          "id": "intake",
+          "type": "intake",
+          "position": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        }
+      ],
+      "edges": [
+        {
+          "source": "intake",
+          "source_port": "ok",
+          "target": "ghost",
+          "target_port": "trigger"
+        }
+      ]
+    },
+    "sha": "b40aca86eb138e96ecf62cf0a56ede6adeb3780a6ff92a9f044b9fb5b4f382d0"
+  },
+  "serialize": {
+    "ok": true,
+    "yaml": "schema_version: 1\nnodes:\n- id: intake\n  type: intake\n  position:\n    x: 0.0\n    y: 0.0\nedges:\n- source: intake\n  source_port: ok\n  target: ghost\n  target_port: trigger\n"
+  }
+}
