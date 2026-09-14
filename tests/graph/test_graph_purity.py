@@ -32,6 +32,7 @@ ALLOWED: dict[str, set[str]] = {
         "sdlc.graph.model",
         "sdlc.graph.node_types",
         "sdlc.graph.topology",
+        "sdlc.graph.router",
     },
     "router.py": {STDLIB, "pydantic", "sdlc.core.models", "sdlc.graph.topology"},
     "__init__.py": {
@@ -40,6 +41,9 @@ ALLOWED: dict[str, set[str]] = {
         "sdlc.graph.model",
         "sdlc.graph.node_types",
         "sdlc.graph.payloads",
+        "sdlc.graph.router",
+        "sdlc.graph.topology",
+        "sdlc.graph.validate",
     },
 }
 
@@ -126,3 +130,41 @@ def test_cold_import_pulls_in_no_heavy_packages():
         [sys.executable, "-c", code], capture_output=True, text=True, env=env, check=True
     )
     assert proc.stdout.strip() == "[]", proc.stdout + proc.stderr
+
+
+def test_validate_loads_only_the_agents_loader_at_call_time():
+    """validate()'s ADR-6 check imports sdlc.agents.loader inside its body.
+    Calling it must never pull in sdlc.agents.roles (which loads the
+    registry from disk at import), benchmarks, stages or temporalio."""
+    fixture = GRAPH_DIR.parents[2] / "tests" / "graph" / "fixtures" / "pre_code.graph.yaml"
+    code = "\n".join(
+        [
+            "import sys",
+            "from pathlib import Path",
+            "from sdlc.core.models import RoleConfig",
+            "from sdlc.graph import from_graph, from_yaml",
+            "roles = {",
+            "    'architect': RoleConfig(kind='proposer', model='anthropic:m'),",
+            "    'clarify': RoleConfig(kind='proposer', model='anthropic:m'),",
+            "    'dev': RoleConfig(kind='harness', harness='opencode', model='zai-coding-plan/m'),",
+            "    'planner': RoleConfig(kind='proposer', model='anthropic:m'),",
+            "    'research': RoleConfig(kind='research', model='anthropic:m', provider='fake'),",
+            "    'reviewer': RoleConfig(kind='proposer', model='anthropic:m'),",
+            "}",
+            f"g = from_yaml(Path({fixture.as_posix()!r}).read_text(encoding='utf-8'))",
+            "from_graph(g, roles=roles).start()",
+            "heavy = ('sdlc.benchmarks', 'sdlc.stages', 'sdlc.agents', 'temporalio')",
+            "print(sorted(m for m in sys.modules",
+            "    if any(m == h or m.startswith(h + '.') for h in heavy)))",
+        ]
+    )
+    src_root = str(GRAPH_DIR.parents[1])
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join([src_root, os.environ.get("PYTHONPATH", "")]),
+    }
+    proc = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, env=env, check=True
+    )
+    loaded = proc.stdout.strip()
+    assert loaded == "['sdlc.agents', 'sdlc.agents.loader']", loaded + proc.stderr

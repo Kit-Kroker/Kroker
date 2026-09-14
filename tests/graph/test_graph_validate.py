@@ -259,3 +259,24 @@ def test_problems_are_sorted_and_none_safe():
     problems = _check(g).problems
     assert list(problems) == sorted(problems, key=Problem.sort_key)
     assert len(problems) >= 4
+
+
+# ---- from_graph ---------------------------------------------------------------
+
+
+def test_from_graph_returns_a_router_over_a_clean_graph():
+    from sdlc.graph import GraphRouter, from_graph
+
+    router = from_graph(_chain(), GENERIC, roles=roles())
+    assert isinstance(router, GraphRouter)
+    assert [a.activation_id for a in router.start().activations] == ["start#1"]
+
+
+def test_from_graph_raises_invalid_graph_with_every_problem():
+    from sdlc.graph import InvalidGraph, from_graph
+
+    g = _chain(extra_nodes=(node("x", "nope"), node("s2", "sink")))
+    with pytest.raises(InvalidGraph) as excinfo:
+        from_graph(g, GENERIC, roles=roles())
+    assert excinfo.value.problems == _check(g).problems
+    assert isinstance(excinfo.value, ValueError)

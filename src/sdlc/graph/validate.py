@@ -14,8 +14,8 @@ sdlc.agents.loader INSIDE its body (sdlc/agents/__init__.py is empty, so that
 import runs no registry load).
 
 Module-level imports stay within stdlib, pydantic, sdlc.core.models and
-sdlc.graph.{model,node_types,topology} (spec §4; pinned by
-tests/graph/test_graph_purity.py).
+sdlc.graph.{model,node_types,topology,router} (spec §4 plus router for
+from_graph; pinned by tests/graph/test_graph_purity.py).
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..core.models import RoleConfig
 from .model import GraphEdge, GraphNode, PipelineGraph
 from .node_types import NODE_TYPES, NodeTypeSpec, find_port, ports_compatible
+from .router import GraphRouter
 from .topology import (
     EdgeKey,
     PortWiring,
@@ -573,3 +574,16 @@ def validate(
     if ordered:
         return ValidationReport(problems=ordered)
     return ValidationReport(problems=(), topology=_build_topology(graph, nodes, registry))
+
+
+def from_graph(
+    graph: PipelineGraph,
+    registry: Mapping[str, NodeTypeSpec] = NODE_TYPES,
+    *,
+    roles: Mapping[str, RoleConfig],
+) -> GraphRouter:
+    """A router over `graph`, or InvalidGraph carrying every problem."""
+    report = validate(graph, registry, roles=roles)
+    if report.topology is None:
+        raise InvalidGraph(report.problems)
+    return GraphRouter(report.topology)
