@@ -24,6 +24,7 @@ ALLOWED: dict[str, set[str]] = {
     "payloads.py": {STDLIB},
     "node_types.py": {STDLIB, "pydantic", "sdlc.graph.model", "sdlc.graph.payloads"},
     "io.py": {STDLIB, "yaml", "sdlc.graph.model"},
+    "topology.py": {STDLIB, "sdlc.graph.model"},
     "__init__.py": {
         STDLIB,
         "sdlc.graph.io",
