@@ -33,6 +33,7 @@ ALLOWED: dict[str, set[str]] = {
         "sdlc.graph.node_types",
         "sdlc.graph.topology",
     },
+    "router.py": {STDLIB, "pydantic", "sdlc.core.models", "sdlc.graph.topology"},
     "__init__.py": {
         STDLIB,
         "sdlc.graph.io",
