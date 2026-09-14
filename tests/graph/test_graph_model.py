@@ -160,3 +160,10 @@ def test_out_port_cannot_be_optional_or_collect():
         NodePort(name="spec", direction="out", payload="ArchitectureSpec", multiplicity="many")
     port = NodePort(name="spec", direction="in", payload=None, required=False, multiplicity="many")
     assert port.multiplicity == "many"
+
+
+@pytest.mark.parametrize("bad_name", ["Bad", "1port", "port-name", "port.name", "port#1", ""])
+def test_node_port_name_shape(bad_name):
+    """E-72 review roll-up: NodePort.name shares the id pattern."""
+    with pytest.raises(ValidationError):
+        NodePort(name=bad_name, direction="in", payload=None)

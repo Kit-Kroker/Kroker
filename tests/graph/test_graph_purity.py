@@ -1,6 +1,8 @@
-"""E-72 import rules (spec §4): sdlc.graph must not open a new route into the
-benchmarks <-> stages import cycle, so its MODULE-LEVEL imports are pinned.
-Function-local imports (check_node_types) are legal and not inspected."""
+"""Import rules for sdlc.graph (E-72 spec §4, E-73 spec §4): the package must
+not open a new route into the benchmarks <-> stages import cycle, so its
+MODULE-LEVEL imports are pinned. Function-local imports (check_node_types,
+validate's ADR-6 check) are legal and not inspected; imports guarded by
+`if TYPE_CHECKING:`, `try:` or `with` ARE module-level and are inspected."""
 
 from __future__ import annotations
 
@@ -31,6 +33,8 @@ ALLOWED: dict[str, set[str]] = {
     },
 }
 
+_SKIPPED_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+
 
 def _classify(module: str) -> str:
     root = module.split(".")[0]
@@ -41,29 +45,59 @@ def _classify(module: str) -> str:
     return root
 
 
-def _top_level_imports(path: Path) -> set[str]:
+def _module_level_imports(source: str) -> set[str]:
+    """Every import outside a function or lambda body, at any nesting depth
+    (so `if TYPE_CHECKING:`, `try:` and `with` blocks are included)."""
     found: set[str] = set()
-    for node in ast.parse(path.read_text(encoding="utf-8")).body:
-        if isinstance(node, ast.Import):
-            found |= {_classify(a.name) for a in node.names}
-        elif isinstance(node, ast.ImportFrom):
-            if node.level:
-                base = "sdlc.graph".split(".")[: 2 - (node.level - 1)]
-                module = ".".join(base + ([node.module] if node.module else []))
-            else:
-                module = node.module or ""
-            found.add(_classify(module))
+
+    def visit(node: ast.AST) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, _SKIPPED_SCOPES):
+                continue
+            if isinstance(child, ast.Import):
+                found.update(_classify(a.name) for a in child.names)
+            elif isinstance(child, ast.ImportFrom):
+                if child.level:
+                    base = "sdlc.graph".split(".")[: 2 - (child.level - 1)]
+                    module = ".".join(base + ([child.module] if child.module else []))
+                else:
+                    module = child.module or ""
+                found.add(_classify(module))
+            visit(child)
+
+    visit(ast.parse(source))
     return found
 
 
 def test_every_module_is_covered():
-    assert {p.name for p in GRAPH_DIR.glob("*.py")} == set(ALLOWED)
+    found = {p.relative_to(GRAPH_DIR).as_posix() for p in GRAPH_DIR.rglob("*.py")}
+    assert found == set(ALLOWED)
 
 
 @pytest.mark.parametrize("name", sorted(ALLOWED))
 def test_module_level_imports_are_pinned(name):
-    imported = _top_level_imports(GRAPH_DIR / name)
+    imported = _module_level_imports((GRAPH_DIR / name).read_text(encoding="utf-8"))
     assert imported <= ALLOWED[name], sorted(imported - ALLOWED[name])
+
+
+def test_walker_sees_guarded_imports_but_not_function_bodies():
+    source = (
+        "from typing import TYPE_CHECKING\n"
+        "if TYPE_CHECKING:\n"
+        "    import sdlc.agents.roles\n"
+        "try:\n"
+        "    import temporalio\n"
+        "except ImportError:\n"
+        "    pass\n"
+        "class K:\n"
+        "    import yaml\n"
+        "    def method(self):\n"
+        "        import sdlc.benchmarks.heatmap\n"
+        "def f():\n"
+        "    from sdlc.stages import plan\n"
+        "g = lambda: __import__('os')\n"
+    )
+    assert _module_level_imports(source) == {STDLIB, "sdlc.agents.roles", "temporalio", "yaml"}
 
 
 def test_cold_import_pulls_in_no_heavy_packages():

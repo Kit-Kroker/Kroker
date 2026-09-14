@@ -7,11 +7,15 @@ for every way text fails to become a graph: one catch contract for E-75/E-76.
 
 from __future__ import annotations
 
+from typing import get_args
+
 import yaml
 
 from .model import PipelineGraph
 
-_SCHEMA_VERSION = 1
+# Derived from the model's Literal[1] so the version is encoded once (E-72
+# whole-branch review minor 1, owned by E-73).
+_SCHEMA_VERSION: int = get_args(PipelineGraph.model_fields["schema_version"].annotation)[0]
 
 
 class GraphSchemaError(ValueError):

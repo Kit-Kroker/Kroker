@@ -83,3 +83,14 @@ def test_from_yaml_shape_failure_is_one_exception_type(text):
 
 def test_graph_schema_error_is_a_value_error():
     assert issubclass(GraphSchemaError, ValueError)
+
+
+def test_schema_version_is_derived_from_the_model_literal():
+    """E-72 review minor 1: the version is encoded once, in the model."""
+    from typing import get_args
+
+    from sdlc.graph import io as io_module
+
+    literal = get_args(PipelineGraph.model_fields["schema_version"].annotation)
+    assert literal == (1,)
+    assert io_module._SCHEMA_VERSION == literal[0]
