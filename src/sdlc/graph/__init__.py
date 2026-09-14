@@ -15,15 +15,29 @@ from .model import (
     PipelineGraph,
     canonical_json,
 )
+from .node_types import (
+    NODE_TYPES,
+    NodeTypeSpec,
+    check_node_types,
+    find_port,
+    ports_compatible,
+)
+from .payloads import PAYLOAD_TYPES
 
 __all__ = [
+    "NODE_TYPES",
+    "PAYLOAD_TYPES",
     "GraphEdge",
     "GraphNode",
     "GraphSchemaError",
     "NodePort",
     "NodePosition",
+    "NodeTypeSpec",
     "PipelineGraph",
     "canonical_json",
+    "check_node_types",
+    "find_port",
     "from_yaml",
+    "ports_compatible",
     "to_yaml",
 ]
