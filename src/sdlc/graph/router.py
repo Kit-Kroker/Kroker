@@ -46,6 +46,10 @@ def _sorted_dict(value: dict[str, Any]) -> dict[str, Any]:
     return dict(sorted(value.items()))
 
 
+def _node_of(activation_id: str) -> str:
+    return activation_id.rpartition("#")[0]
+
+
 class NodeState(BaseModel):
     model_config = _FROZEN
 
@@ -265,6 +269,11 @@ class GraphRouter:
                 return self._terminate(w, "rejected", f"{node_id}.reject", emitter=None)
             return self._settle(w, cancelled=[])
 
+        # 5. back edge: the port carries exactly this edge (validate T4)
+        if edges[0] in self._t.bounds:
+            cancelled = self._traverse_back(w, edges[0], token)
+            return self._settle(w, cancelled=cancelled)
+
         # 6. forward edges
         for eid in edges:
             if eid in w.slots:
@@ -311,6 +320,23 @@ class GraphRouter:
         return Step(
             state=w.freeze(), activations=(), cancelled=(), outcome=w.outcome, reason=w.reason
         )
+
+    # ---- step 5: region invalidation ----------------------------------------
+
+    def _traverse_back(self, w: _Work, eid: str, token: Token) -> list[str]:
+        w.traversals[eid] = w.traversals.get(eid, 0) + 1
+        target = self._t.edges[eid][2]
+        region = set(self._t.regions[target])
+        for slot in [s for s, tok in w.slots.items() if _node_of(tok.producer) in region]:
+            del w.slots[slot]
+        cancelled = sorted(a for a, live in w.live.items() if live.node_id in region)
+        for aid in cancelled:
+            del w.live[aid]
+            w.retired.add(aid)
+        for n in region:
+            w.nodes[n] = NodeState(round=w.nodes[n].round)
+        w.slots[eid] = token  # 5c after 5b: a self-loop's new token survives
+        return cancelled
 
     # ---- terminal outcomes -------------------------------------------------
 
@@ -391,6 +417,18 @@ class GraphRouter:
                 inputs[name] = w.slots[occupied[0]].payload_ref
         return inputs
 
+    def _unavailable(self, w: _Work, node_id: str) -> dict[str, Unavailable]:
+        out: dict[str, Unavailable] = {}
+        for port, eids in sorted(self._t.out_ports[node_id].items()):
+            if len(eids) != 1 or eids[0] not in self._t.bounds:
+                continue
+            eid = eids[0]
+            if w.traversals.get(eid, 0) >= self._t.bounds[eid]:
+                out[port] = "exhausted"
+            elif w.nodes[self._t.edges[eid][2]].status == "dead":
+                out[port] = "target_dead"
+        return out
+
     def _settle(self, w: _Work, cancelled: list[str]) -> Step:
         # Phase A: deadness to a fixpoint (activation never changes deadness).
         changed = True
@@ -416,7 +454,7 @@ class GraphRouter:
                 ready.append((n, inputs))
         issued: list[Activation] = []
         for n, inputs in ready:
-            unavailable: dict[str, Unavailable] = {}
+            unavailable = self._unavailable(w, n)
             round_ = w.nodes[n].round + 1
             aid = gate_key(n, round_)
             w.nodes[n] = NodeState(round=round_, status="running")
