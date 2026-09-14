@@ -14,6 +14,7 @@ Module-level imports stay within stdlib, pydantic and sdlc.core.models
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any, Literal
 
@@ -171,3 +172,23 @@ class PipelineGraph(BaseModel):
                 _element_json(e, frozenset()),
             ),
         )
+
+    def content_sha(self) -> str:
+        """Graph identity (FR-1201): sha256 of canonical_json(). Tidying the
+        canvas (position, label) never changes it."""
+        return hashlib.sha256(canonical_json(self).encode("utf-8")).hexdigest()
+
+
+def canonical_json(graph: PipelineGraph) -> str:
+    """The canonical form (spec §7.1): exclude_defaults, cosmetics stripped,
+    keys sorted, compact separators. Node/edge order is already normalized;
+    inner lists (RoleConfig.extra_args) keep author order on purpose."""
+    data = graph.model_dump(
+        mode="json",
+        exclude_defaults=True,
+        exclude={
+            "nodes": {"__all__": set(_NODE_COSMETIC)},
+            "edges": {"__all__": set(_EDGE_COSMETIC)},
+        },
+    )
+    return _dumps(data)

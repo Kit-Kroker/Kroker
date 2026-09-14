@@ -7,7 +7,14 @@ Nothing outside this package imports it until E-74.
 from __future__ import annotations
 
 from .io import GraphSchemaError, from_yaml, to_yaml
-from .model import GraphEdge, GraphNode, NodePort, NodePosition, PipelineGraph
+from .model import (
+    GraphEdge,
+    GraphNode,
+    NodePort,
+    NodePosition,
+    PipelineGraph,
+    canonical_json,
+)
 
 __all__ = [
     "GraphEdge",
@@ -16,6 +23,7 @@ __all__ = [
     "NodePort",
     "NodePosition",
     "PipelineGraph",
+    "canonical_json",
     "from_yaml",
     "to_yaml",
 ]
