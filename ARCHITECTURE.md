@@ -783,6 +783,7 @@ Kroker/
 │   ├── agents/                # registry loader → pydantic-ai Agent / TemporalAgent
 │   ├── memory/                # Hindsight client + protocol, scrub, query hashing
 │   ├── memoization/           # content-addressed activity cache (ADR-5)
+│   ├── graph/                 # PipelineGraph schema, node-type registry, content_sha, YAML io (E-72)
 │   ├── artifacts/             # claim-check store, capture, read, retention
 │   ├── board/                 # ADR-21: artifact versions, task lifecycle, events, API
 │   ├── benchmarks/            # eval harness: judge, scoring, sc_rollup, drift, oracle,

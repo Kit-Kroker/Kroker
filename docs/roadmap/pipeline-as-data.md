@@ -54,7 +54,7 @@ the earlier line numbers pointed into a 2,329-line `feature.py`.*
 `t_handoff is not None` guard, and their scattered `if cfg.X_enabled and t_X is
 not None` checks collapse into *is there a node*.
 
-- [ ] **E-72 — `PipelineGraph` model + node-type registry** → FR-1201.
+- [x] **E-72 — `PipelineGraph` model + node-type registry** → FR-1201.
   `GraphNode` / `GraphEdge` / `NodePort` in `sdlc/graph/model.py`; nodes carry
   `RoleConfig` (`src/sdlc/core/models.py:176`) and `GateConfig` (`:57`) **verbatim**
   rather than a forked `params["model"]` string, so the registry loader's
@@ -62,6 +62,13 @@ not None` checks collapse into *is there a node*.
   invalidation keep working unchanged. `content_sha()` excludes `position` and
   `label` so tidying the canvas never invalidates a memo. Registry declares each
   node type's ports, payload types and `canonical_stage`.
+
+  **Landed** (spec `docs/superpowers/specs/2026-09-13-graph-model-node-registry-design.md`,
+  plan `docs/superpowers/plans/2026-09-13-graph-model-node-registry.md`): `sdlc/graph/`
+  ships the frozen schema, `content_sha()`, YAML io and a seed registry for the typed
+  pre-code half (no `gate.clarify`). Rejecting incompatible edges is E-73's
+  `validate.py`; the post-plan catalog and `code` decomposition are E-74's
+  (E72-OQ-3). Open questions E72-OQ-1…8 live in the spec §10.
 - [ ] **E-73 — `GraphRouter` + `validate.py`** → FR-1202. **The bug budget lives
   here.** A pure, synchronous routing state machine — no Temporal, no I/O — so
   the hard part is table-testable in milliseconds. Owns: one-output-port-per-
