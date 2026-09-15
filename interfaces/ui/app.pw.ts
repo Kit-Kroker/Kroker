@@ -71,3 +71,82 @@ test('an inspector edit applies through the parse and commits', async ({ page })
   await expect(inspector.locator('[data-testid="field-error"]')).toHaveCount(0)
   await expect(inspector.locator('[data-testid="inspector-apply"]')).toBeDisabled()
 })
+
+test('a graph run renders its nodes, a loop counter and a curved backward edge', async ({ page }) => {  // clause: CONSOLE-4
+  await page.goto('/#/runs/feature-graph-demo')
+  const canvas = page.locator('[data-testid="run-view"] [data-testid="graph-canvas"]')
+  await expect(canvas.locator('[data-testid="graph-node"]')).toHaveCount(8)
+  await expect(canvas.locator('.vue-flow__edge-text', { hasText: '1/2' })).toHaveCount(1)
+  await expect(canvas.locator('.cmp-graph-edge-backward')).toHaveCount(3)
+  await expect(canvas.locator('.cmp-graph-node-blocked')).toHaveCount(1)
+})
+
+test('run-state re-renders never drop the canvas edges', async ({ page }) => {  // clause: GRAPH_CANVAS-9
+  // Regression (2026-09-14): RunView's elapsed clock re-renders every second;
+  // replacing vue-flow's element arrays on each tick dropped every edge.
+  await page.clock.install()
+  await page.goto('/#/runs/feature-graph-demo')
+  const canvas = page.locator('[data-testid="run-view"] [data-testid="graph-canvas"]')
+  await expect(canvas.locator('[data-testid="graph-edge"]')).toHaveCount(11)
+  // Fire RunView's 1 s clock deterministically -- no sleep, no flake budget.
+  await page.clock.runFor(5000)
+  await expect(canvas.locator('[data-testid="graph-edge"]')).toHaveCount(11)
+  await expect(canvas.locator('.vue-flow__edge-text', { hasText: '1/2' })).toHaveCount(1)
+})
+
+test('deciding the pending gate from the canvas clears it', async ({ page }) => {  // clause: CONSOLE-5
+  await page.goto('/#/runs/feature-graph-demo')
+  const gate = page.locator('[data-testid="run-view"] [data-testid="gate-decision"]')
+  await expect(gate).toHaveCount(1)
+  await gate.locator('[data-testid="gate-approve"]').click()
+  await expect(gate).toHaveCount(0)
+  await expect(page.locator('[data-testid="run-view"] .cmp-graph-node-running')).toHaveCount(1)
+})
+
+test('a legacy run shows the no-graph empty state and the strip', async ({ page }) => {  // clause: CONSOLE-6
+  await page.goto('/#/runs/feature-add-sso')
+  await expect(page.locator('[data-testid="run-graph-empty"]')).toBeVisible()
+  await expect(page.locator('[data-testid="run-view"] [data-testid="stage-dot"]')).toHaveCount(18)
+  await expect(page.locator('[data-testid="run-view"] [data-testid="graph-canvas"]')).toHaveCount(0)
+})
+
+test('the run view offers no edit affordance and opens a copy in the editor', async ({ page }) => {  // clause: CONSOLE-8
+  await page.goto('/#/runs/feature-graph-demo')
+  const view = page.locator('[data-testid="run-view"]')
+  await expect(view.locator('.vue-flow__node.draggable')).toHaveCount(0)
+  await expect(view.locator('.vue-flow__handle.connectable')).toHaveCount(0)
+  await expect(view.locator('[data-testid="node-palette"]')).toHaveCount(0)
+  await view.locator('[data-testid="open-copy"]').click()
+  await expect(page.locator('[data-testid="graph-editor-view"]')).toBeVisible()
+  await expect(page.locator('[data-testid="editor-state"]')).toHaveAttribute('data-state', 'graph_loaded')
+  await expect(page.locator('[data-testid="graph-editor-view"] [data-testid="graph-node"]')).toHaveCount(8)
+  await expect(page.locator('[data-testid="editor-sha"]')).toHaveCount(0)
+})
+
+
+test('the elapsed clock flows while the canvas structure survives a minute of ticks', async ({ page }) => {  // clause: GRAPH_CANVAS-9
+  // Positive control for the regression above: a fix that silenced the clock
+  // would also keep the edges. 70 fired seconds must move the minute-grain
+  // elapsed readout AND leave every edge in place.
+  await page.clock.install()
+  await page.goto('/#/runs/feature-graph-demo')
+  const canvas = page.locator('[data-testid="run-view"] [data-testid="graph-canvas"]')
+  const metrics = canvas.locator('[data-key="architecture"] [data-testid="node-metrics"]')
+  await expect(canvas.locator('[data-testid="graph-edge"]')).toHaveCount(11)
+  const before = await metrics.textContent()
+  await page.clock.runFor(70_000)
+  const after = await metrics.textContent()
+  expect(after).not.toBe(before)  // the clock really ticks
+  await expect(canvas.locator('[data-testid="graph-edge"]')).toHaveCount(11)
+  await expect(canvas.locator('.vue-flow__edge-text', { hasText: '1/2' })).toHaveCount(1)
+})
+
+test('a gate decision shows its busy window before the state clears it', async ({ page }) => {  // clause: CONSOLE-5
+  await page.goto('/#/runs/feature-graph-demo')
+  const gate = page.locator('[data-testid="run-view"] [data-testid="gate-decision"]')
+  await expect(gate).toHaveCount(1)
+  await gate.locator('[data-testid="gate-approve"]').click()
+  // In flight: the controls lock at once, so a rapid second submit cannot fire.
+  await expect(gate.locator('[data-testid="gate-approve"]')).toBeDisabled()
+  await expect(gate).toHaveCount(0)  // then the next state clears the whole control
+})

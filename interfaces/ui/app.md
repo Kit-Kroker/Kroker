@@ -34,6 +34,23 @@ applying it round-trips through the provider's parse and commits: the
 working copy gains the parse's sha and the inspector shows no error. [FR-1205,
 E-76 U8]
 
+### CONSOLE-4
+The run view of a graph-executed run renders one canvas node per graph node,
+a loop-edge counter as `used/max`, and its backward edge curved. [FR-1205]
+
+### CONSOLE-5
+Deciding a pending gate from the run view's canvas clears that gate's
+controls once the provider's next run state no longer lists it. [FR-1205,
+FR-301/302]
+
+### CONSOLE-6
+The run view of a run that predates graph execution shows the no-graph empty
+state and still renders the stage strip. [FR-1205, E-76 U7]
+
+### CONSOLE-8
+The run view offers no edit affordance; its "open copy in editor" link lands
+on the graph editor holding the run's graph. [FR-1205]
+
 ## Failure modes
 
 Both clauses are asserted by `app.pw.ts` against the built dashboard on

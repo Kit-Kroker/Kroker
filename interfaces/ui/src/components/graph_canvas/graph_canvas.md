@@ -45,6 +45,12 @@ tokens under `.cmp-graph-canvas`. [FR-1404]
 `move` never emits a non-finite coordinate or an unknown key, and auto-layout
 never adds an edge whose endpoint is not a supplied node key. [FR-1205]
 
+### GRAPH_CANVAS-9
+Decoration changes -- status, metrics, counters, issue counts -- never
+replace the renderer's element lists; only a structural change (keys,
+positions, ports, endpoints, backward) does, so edges persist across
+run-state updates. [FR-1205]
+
 ## Failure modes
 
 Layout throws: existing positions are kept, unpositioned nodes go on a grid,
