@@ -7,6 +7,8 @@ import appHeader from '../src/components/app_header/app_header.profiles'
 import toasts from '../src/components/toasts/toasts.profiles'
 import startRunModal from '../src/components/start_run_modal/start_run_modal.profiles'
 import gateDecision from '../src/components/gate_decision/gate_decision.profiles'
+import nodePalette from '../src/components/node_palette/node_palette.profiles'
+import issueList from '../src/components/issue_list/issue_list.profiles'
 
 export const REGISTRY: ProfileSet[] = [
   stageDots,
@@ -17,4 +19,6 @@ export const REGISTRY: ProfileSet[] = [
   toasts,
   startRunModal,
   gateDecision,
+  nodePalette,
+  issueList,
 ]
