@@ -1,0 +1,53 @@
+{
+ "close": "FAILED::brownfield architecture delta failed grounding check after retries: delta path nonexistent.py not in git tree",
+ "commands": [
+  "activity:classify_repo",
+  "activity:setup_integration_branch",
+  "activity:assessment_resolve_tree",
+  "activity:scan_packages",
+  "activity:scan_schema",
+  "activity:scan_entrypoints",
+  "activity:scan_frontend",
+  "activity:scan_config_infra",
+  "activity:scan_tests_inventory",
+  "activity:scan_testability",
+  "activity:scan_ci",
+  "activity:scan_security_static",
+  "activity:scan_sensitivity",
+  "activity:scan_coverage",
+  "activity:agent__clarify_agent__model_request",
+  "activity:price_usage",
+  "timer",
+  "activity:publish_artifact_version",
+  "activity:agent__architect_agent__model_request",
+  "activity:price_usage",
+  "activity:check_brownfield_delta",
+  "activity:agent__architect_agent__model_request",
+  "activity:price_usage",
+  "activity:check_brownfield_delta"
+ ],
+ "source_commit": "8f7dd84a13345a82edfa12bfecb0d66b9b4dc783",
+ "trace": [
+  [
+   "stage",
+   "intake"
+  ],
+  [
+   "stage",
+   "context"
+  ],
+  [
+   "stage",
+   "clarify"
+  ],
+  [
+   "stage",
+   "clarify"
+  ],
+  [
+   "stage",
+   "architecture"
+  ]
+ ],
+ "workflow": "FeatureWorkflow"
+}

@@ -1,0 +1,16 @@
+{
+ "close": "rejected:intake (brownfield declared, but the path is not a git repository: not a git repository)",
+ "commands": [
+  "activity:classify_repo",
+  "activity:export_run_artifacts",
+  "activity:apply_session_retention"
+ ],
+ "source_commit": "8f7dd84a13345a82edfa12bfecb0d66b9b4dc783",
+ "trace": [
+  [
+   "stage",
+   "intake"
+  ]
+ ],
+ "workflow": "FeatureWorkflow"
+}

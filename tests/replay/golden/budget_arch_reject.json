@@ -1,0 +1,54 @@
+{
+ "close": "rejected:architecture",
+ "commands": [
+  "activity:classify_repo",
+  "activity:setup_integration_branch",
+  "activity:agent__clarify_agent__model_request",
+  "activity:price_usage",
+  "timer",
+  "activity:publish_artifact_version",
+  "activity:agent__architect_agent__model_request",
+  "activity:price_usage",
+  "activity:notify",
+  "timer",
+  "activity:notify",
+  "timer",
+  "activity:publish_artifact_version",
+  "activity:export_run_artifacts",
+  "activity:apply_session_retention"
+ ],
+ "source_commit": "8f7dd84a13345a82edfa12bfecb0d66b9b4dc783",
+ "trace": [
+  [
+   "stage",
+   "intake"
+  ],
+  [
+   "stage",
+   "clarify"
+  ],
+  [
+   "stage",
+   "clarify"
+  ],
+  [
+   "stage",
+   "architecture"
+  ],
+  [
+   "gate",
+   "architecture",
+   "1",
+   "human",
+   "false"
+  ],
+  [
+   "gate",
+   "budget",
+   "1",
+   "human",
+   "true"
+  ]
+ ],
+ "workflow": "FeatureWorkflow"
+}

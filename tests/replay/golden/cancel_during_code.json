@@ -1,0 +1,61 @@
+{
+ "close": "CANCELED",
+ "commands": [
+  "activity:classify_repo",
+  "activity:setup_integration_branch",
+  "activity:agent__clarify_agent__model_request",
+  "activity:price_usage",
+  "timer",
+  "activity:publish_artifact_version",
+  "activity:agent__architect_agent__model_request",
+  "activity:price_usage",
+  "activity:notify",
+  "timer",
+  "activity:publish_artifact_version",
+  "activity:agent__planner_agent__model_request",
+  "activity:price_usage",
+  "activity:notify",
+  "timer",
+  "activity:publish_artifact_version",
+  "activity:sync_plan_tasks",
+  "activity:set_task_authoritative",
+  "activity:create_worktree",
+  "activity:run_coding_task",
+  "cancel_requested",
+  "activity:set_task_authoritative"
+ ],
+ "source_commit": "8f7dd84a13345a82edfa12bfecb0d66b9b4dc783",
+ "trace": [
+  [
+   "stage",
+   "intake"
+  ],
+  [
+   "stage",
+   "clarify"
+  ],
+  [
+   "stage",
+   "clarify"
+  ],
+  [
+   "stage",
+   "architecture"
+  ],
+  [
+   "gate",
+   "architecture",
+   "1",
+   "human",
+   "true"
+  ],
+  [
+   "gate",
+   "plan",
+   "1",
+   "human",
+   "true"
+  ]
+ ],
+ "workflow": "FeatureWorkflow"
+}

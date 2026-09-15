@@ -1,0 +1,38 @@
+{
+ "close": "rejected:budget",
+ "commands": [
+  "activity:classify_repo",
+  "activity:setup_integration_branch",
+  "activity:agent__clarify_agent__model_request",
+  "activity:price_usage",
+  "timer",
+  "activity:publish_artifact_version",
+  "activity:notify",
+  "timer",
+  "activity:export_run_artifacts",
+  "activity:apply_session_retention"
+ ],
+ "source_commit": "8f7dd84a13345a82edfa12bfecb0d66b9b4dc783",
+ "trace": [
+  [
+   "stage",
+   "intake"
+  ],
+  [
+   "stage",
+   "clarify"
+  ],
+  [
+   "stage",
+   "clarify"
+  ],
+  [
+   "gate",
+   "budget",
+   "1",
+   "human",
+   "false"
+  ]
+ ],
+ "workflow": "FeatureWorkflow"
+}

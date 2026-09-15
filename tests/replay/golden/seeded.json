@@ -1,0 +1,62 @@
+{
+ "close": "deployed:https://example.test/pr/1",
+ "commands": [
+  "activity:classify_repo",
+  "activity:setup_integration_branch",
+  "activity:create_worktree",
+  "activity:run_coding_task",
+  "activity:run_test_suite",
+  "activity:get_task_diff",
+  "activity:agent__qa_analyst_agent__model_request",
+  "activity:price_usage",
+  "activity:agent__reviewer_agent__model_request",
+  "activity:price_usage",
+  "activity:merge_into_integration",
+  "activity:get_task_diff",
+  "activity:agent__analyst_agent__model_request",
+  "activity:price_usage",
+  "activity:prepare_base_worktree",
+  "activity:run_integration_checks",
+  "activity:run_lint",
+  "activity:measure_coverage",
+  "activity:scoped_security_scan",
+  "activity:evaluate_gate",
+  "activity:open_pull_request",
+  "activity:notify",
+  "timer",
+  "child:DeploymentWorkflow",
+  "activity:export_run_artifacts",
+  "activity:apply_session_retention"
+ ],
+ "source_commit": "8f7dd84a13345a82edfa12bfecb0d66b9b4dc783",
+ "trace": [
+  [
+   "stage",
+   "intake"
+  ],
+  [
+   "stage",
+   "code"
+  ],
+  [
+   "stage",
+   "analyze"
+  ],
+  [
+   "stage",
+   "merge"
+  ],
+  [
+   "gate",
+   "deploy",
+   "1",
+   "human",
+   "true"
+  ],
+  [
+   "stage",
+   "deploy"
+  ]
+ ],
+ "workflow": "FeatureWorkflow"
+}
