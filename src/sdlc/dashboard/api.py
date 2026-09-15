@@ -20,7 +20,7 @@ import asyncio
 import json
 from collections.abc import Callable
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -33,6 +33,7 @@ from ..core.models import (
     PipelineConfig,
     ProjectMode,
 )
+from . import graph_wire
 from .channel import DashboardChannel
 from .fleet import (
     FleetCapacityExceeded,
@@ -175,6 +176,41 @@ def create_router(poller: FleetPoller, starter: Callable | None = None) -> APIRo
             x_actor,
             want="gate",
         )
+
+    async def _graph_body(request: Request) -> dict:
+        """The capped JSON body of a graph route (E-76 spec §5.3). Read raw
+        so the cap applies before any parsing: /graphs/parse accepts
+        arbitrary YAML on an unauthenticated, localhost-bound surface."""
+        raw = await request.body()
+        if len(raw) > graph_wire.MAX_GRAPH_BYTES:
+            raise HTTPException(413, f"graph body exceeds {graph_wire.MAX_GRAPH_BYTES} bytes")
+        try:
+            body = json.loads(raw)
+        except ValueError as e:
+            raise HTTPException(422, "body is not JSON") from e
+        if not isinstance(body, dict):
+            raise HTTPException(422, "body must be a JSON object")
+        return body
+
+    @router.get("/graphs/catalog", response_model=graph_wire.CatalogWire)
+    async def graph_catalog():
+        return graph_wire.catalog()
+
+    @router.post("/graphs/parse", response_model=graph_wire.ParseOk | graph_wire.ParseErr)
+    async def graph_parse(request: Request):
+        body = await _graph_body(request)
+        if set(body) == {"yaml"} and isinstance(body["yaml"], str):
+            return graph_wire.parse_text(body["yaml"])
+        if set(body) == {"graph"}:
+            return graph_wire.parse_object(body["graph"])
+        raise HTTPException(422, "body must be exactly one of {yaml: string} or {graph: object}")
+
+    @router.post("/graphs/serialize", response_model=graph_wire.SerializeOk | graph_wire.ParseErr)
+    async def graph_serialize(request: Request):
+        body = await _graph_body(request)
+        if set(body) != {"graph"}:
+            raise HTTPException(422, "body must be {graph: object}")
+        return graph_wire.serialize(body["graph"])
 
     @router.post("/runs", response_model=StartedRun)
     async def start(body: StartBody):

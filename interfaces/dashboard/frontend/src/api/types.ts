@@ -1,3 +1,8 @@
+import type {
+  CatalogWire, GraphResponse, GraphStateResponse, GraphWire, LoadWire, ParseWire, SaveWire,
+  SerializeWire, ValidationWire,
+} from './graph-types'
+
 export type Status = 'running' | 'blocked' | 'failed' | 'done'
 export type GateOutcome = 'approve' | 'revise' | 'reject'
 export type ProjectMode = 'brownfield' | 'greenfield'
@@ -15,7 +20,9 @@ export interface Run {
   title: string
   mode: ProjectMode
   repo: string
-  stageIdx: number
+  // Canonical stage NAMES (E-76 spec §5.8): a graph can fan out, so more
+  // than one may be active. Never an index -- see adapters/fleet.ts.
+  activeStages: string[]
   status: Status
   blocker: string
   cost: number | null
@@ -106,4 +113,15 @@ export interface DashboardApi {
   resolveEscalation(runId: string, key: string, retry: boolean, guidance: string): Promise<void>
   startRun(input: StartRunInput): Promise<Run>
   subscribe(cb: (s: FleetState) => void): () => void
+
+  // Graph surface (E-76 spec §7.1). A method whose capability is false in
+  // getCatalog() throws CapabilityUnavailable; views gate on capabilities.
+  getCatalog(): Promise<CatalogWire>
+  parseGraph(input: { yaml: string } | { graph: GraphWire }): Promise<ParseWire>
+  serializeGraph(graph: GraphWire): Promise<SerializeWire>
+  validateGraph(graph: GraphWire): Promise<ValidationWire>
+  saveGraph(graph: GraphWire): Promise<SaveWire>
+  loadGraph(sha: string): Promise<LoadWire>
+  getRunGraph(runId: string): Promise<GraphResponse>
+  subscribeGraphState(runId: string, cb: (s: GraphStateResponse) => void, onError?: (failures: number) => void): () => void
 }

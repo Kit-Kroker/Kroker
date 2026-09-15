@@ -3,6 +3,9 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import FleetTable from './FleetTable.vue'
 import { useFleetStore } from '../../stores/fleet'
+import { useCatalogStore } from '../../stores/catalog'
+import catalogJson from '../../api/__fixtures__/graph/catalog.json'
+import type { CatalogWire } from '../../api/graph-types'
 import type { Run } from '../../api/types'
 
 const RouterLinkStub = {
@@ -11,13 +14,14 @@ const RouterLinkStub = {
 }
 
 const mkRun = (over: Partial<Run> = {}): Run => ({
-  id: 'feature-x', title: 'A feature', mode: 'brownfield', repo: 'r', stageIdx: 4,
+  id: 'feature-x', title: 'A feature', mode: 'brownfield', repo: 'r', activeStages: ['clarify'],
   status: 'blocked', blocker: 'clarify gate', cost: 3.12, budget: 40, age: '2h',
   decisions: [], ...over,
 })
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  useCatalogStore().catalog = catalogJson as unknown as CatalogWire
 })
 
 describe('FleetTable', () => {
@@ -30,11 +34,11 @@ describe('FleetTable', () => {
     expect(w.text()).toContain('STATUS')
   })
 
-  it('renders 14 stage dots per row', () => {
+  it('renders one stage dot per served canonical stage', () => {
     const fleet = useFleetStore()
     fleet.runs = [mkRun()]
     const w = mount(FleetTable, { global: { stubs: { RouterLink: RouterLinkStub } } })
-    expect(w.findAll('[data-testid="stage-dot"]')).toHaveLength(14)
+    expect(w.findAll('[data-testid="stage-dot"]')).toHaveLength(18)
   })
 
   it('formats cost and age', () => {

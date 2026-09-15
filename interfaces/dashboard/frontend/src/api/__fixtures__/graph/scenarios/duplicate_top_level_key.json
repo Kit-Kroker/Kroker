@@ -1,0 +1,16 @@
+{
+  "name": "duplicate_top_level_key",
+  "yaml": "schema_version: 1\nnodes: []\nnodes: []\nedges: []\n",
+  "parse": {
+    "ok": false,
+    "shape_errors": [
+      {
+        "loc": [],
+        "msg": "graph text is not valid YAML: while constructing a mapping\n  in \"<unicode string>\", line 1, column 1:\n    schema_version: 1\n    ^\nfound duplicate key 'nodes'\n  in \"<unicode string>\", line 3, column 1:\n    nodes: []\n    ^",
+        "line": 3,
+        "column": 1
+      }
+    ]
+  },
+  "serialize": null
+}

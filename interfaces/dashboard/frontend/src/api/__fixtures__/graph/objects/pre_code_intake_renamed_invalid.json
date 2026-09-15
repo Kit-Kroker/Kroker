@@ -1,0 +1,185 @@
+{
+  "name": "pre_code_intake_renamed_invalid",
+  "base": "pre_code",
+  "graph": {
+    "schema_version": 1,
+    "nodes": [
+      {
+        "id": "architect",
+        "type": "architect",
+        "role": {
+          "kind": "proposer",
+          "model": "anthropic:claude-opus-4-1"
+        },
+        "position": {
+          "x": 800.0,
+          "y": 0.0
+        }
+      },
+      {
+        "id": "architecture",
+        "type": "gate.architecture",
+        "gate": {},
+        "position": {
+          "x": 1000.0,
+          "y": 0.0
+        }
+      },
+      {
+        "id": "clarifier",
+        "type": "clarify",
+        "position": {
+          "x": 600.0,
+          "y": 0.0
+        }
+      },
+      {
+        "id": "Intake",
+        "type": "intake",
+        "position": {
+          "x": 0.0,
+          "y": 0.0
+        }
+      },
+      {
+        "id": "plan",
+        "type": "gate.plan",
+        "gate": {
+          "policy": "soft",
+          "threshold": 0.75
+        },
+        "position": {
+          "x": 1400.0,
+          "y": 0.0
+        },
+        "label": "Plan gate"
+      },
+      {
+        "id": "planner",
+        "type": "plan",
+        "position": {
+          "x": 1200.0,
+          "y": 0.0
+        }
+      },
+      {
+        "id": "research",
+        "type": "gate.research",
+        "position": {
+          "x": 400.0,
+          "y": 0.0
+        },
+        "label": "Research gate"
+      },
+      {
+        "id": "researcher",
+        "type": "research",
+        "role": {
+          "kind": "research",
+          "provider": "fake"
+        },
+        "position": {
+          "x": 200.0,
+          "y": 0.0
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": "architect",
+        "source_port": "spec",
+        "target": "architecture",
+        "target_port": "artifact"
+      },
+      {
+        "source": "architecture",
+        "source_port": "approve",
+        "target": "planner",
+        "target_port": "spec"
+      },
+      {
+        "source": "architecture",
+        "source_port": "revise",
+        "target": "architect",
+        "target_port": "guidance",
+        "max_traversals": 2
+      },
+      {
+        "source": "clarifier",
+        "source_port": "requirements",
+        "target": "architect",
+        "target_port": "requirements"
+      },
+      {
+        "source": "clarifier",
+        "source_port": "requirements",
+        "target": "planner",
+        "target_port": "requirements"
+      },
+      {
+        "source": "Intake",
+        "source_port": "ok",
+        "target": "researcher",
+        "target_port": "trigger"
+      },
+      {
+        "source": "plan",
+        "source_port": "revise",
+        "target": "planner",
+        "target_port": "guidance",
+        "max_traversals": 2
+      },
+      {
+        "source": "planner",
+        "source_port": "plan",
+        "target": "plan",
+        "target_port": "artifact"
+      },
+      {
+        "source": "research",
+        "source_port": "approve",
+        "target": "clarifier",
+        "target_port": "research"
+      },
+      {
+        "source": "research",
+        "source_port": "revise",
+        "target": "researcher",
+        "target_port": "guidance",
+        "max_traversals": 2,
+        "label": "refine"
+      },
+      {
+        "source": "researcher",
+        "source_port": "brief",
+        "target": "research",
+        "target_port": "artifact"
+      }
+    ]
+  },
+  "parse": {
+    "ok": false,
+    "shape_errors": [
+      {
+        "loc": [
+          "nodes",
+          3,
+          "id"
+        ],
+        "msg": "String should match pattern '^[a-z][a-z0-9_]*$'",
+        "line": null,
+        "column": null
+      },
+      {
+        "loc": [
+          "edges",
+          5,
+          "source"
+        ],
+        "msg": "String should match pattern '^[a-z][a-z0-9_]*$'",
+        "line": null,
+        "column": null
+      }
+    ]
+  }
+}

@@ -105,18 +105,28 @@ not None` checks collapse into *is there a node*.
   the benchmark before/after anyway as a regression check; the choice was to not
   *gate* on dual-running, not to discard free evidence.
 - [ ] **E-75 — graph queries on the dashboard backend** → FR-1204. **Superseded in part 2026-08-18:** E-10 built the backend, so this narrows to adding `graph_state()` and `graph()` beside the existing queries once `GraphWorkflow` exists. The "dashboard backend remains" half of P2 is closed; what is left here is graph-shaped run state, which needs E-74 first. The only storage is still content-addressed `graphs/<sha>.yaml`.
-- [ ] **E-76 — canvas** → FR-1205. `@vue-flow/core` (React Flow's Vue port, what
+- [x] **E-76 — canvas** → FR-1205. `@vue-flow/core` (React Flow's Vue port, what
   n8n itself uses; fits the existing Vue 3 + Pinia + Vite stack) plus `dagre` for
   auto-layout of YAML-authored graphs. **One renderer, two modes**: `runState`
   present ⇒ status rings, cost, durations, traversal counters on loop edges, live
   gate approve/reject; `editable` ⇒ palette + inspector. Editing a *running*
   graph is disabled by design (see (a) above). Backward edges render curved with
   a `2/3` counter, so a post-mortem shows **why** a run looped, not merely that it
-  did. `Run.stageIdx` (`interfaces/dashboard/frontend/src/api/types.ts:18`) is a linear index that cannot express
-  graph position and becomes `currentNodes: string[]`; `StageDots.vue` (now `interfaces/ui/src/components/stage_dots/`, E-89) survives by
-  mapping active nodes through `canonical_stage` back onto the fixed 15-stage
-  strip, so the fleet table keeps its glanceable row and cannot disagree with the
-  benchmark.
+  did. `Run.stageIdx` was a linear index that could not express
+  graph position; it became `Run.activeStages: string[]` (canonical stage
+  names), while `current_nodes` lives in the run's graph state. `StageDots.vue`
+  (`interfaces/ui/src/components/stage_dots/`, E-89) renders the canonical
+  stage list the catalog serves (18 stages), matched by name, so the fleet
+  table keeps its glanceable row and cannot disagree with the benchmark.
+
+  **Landed** (spec `docs/superpowers/specs/2026-09-14-graph-canvas-design.md`,
+  plan `docs/superpowers/plans/2026-09-14-graph-canvas.md`): six `@kroker/ui`
+  components, edit mode at `/graphs`, run mode in RunView, the pure
+  `/graphs/catalog|parse|serialize` routes over `sdlc/dashboard/graph_wire.py`,
+  and the strict graph YAML loader. Run mode is exercised on the mock provider;
+  live run data arrives with E-75, validation with E-73, save/load with E-77
+  (all gated by server-declared capabilities). Open questions E76-OQ-1…5 live
+  in the spec §12.
 - [ ] **E-77 — graph store + custom-graph benchmark mapping** → FR-1206. Runs
   record their `graph_sha`, so a post-mortem always renders the graph that
   *actually ran* rather than what the graph looks like now. Benchmark records

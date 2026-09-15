@@ -1,0 +1,19 @@
+{
+  "name": "role_typo",
+  "yaml": "schema_version: 1\nnodes:\n- id: architect\n  type: architect\n  role:\n    modle: x\nedges: []\n",
+  "parse": {
+    "ok": false,
+    "shape_errors": [
+      {
+        "loc": [
+          "nodes",
+          0
+        ],
+        "msg": "Value error, unknown role key(s): modle",
+        "line": null,
+        "column": null
+      }
+    ]
+  },
+  "serialize": null
+}

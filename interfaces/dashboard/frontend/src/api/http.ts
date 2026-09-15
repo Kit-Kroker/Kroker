@@ -2,16 +2,14 @@ import type {
   ClarifyItem, DashboardApi, Decision, EscalationItem, FleetState, GateItem,
   GateOutcome, InboxItem, OverrideItem, Run, StartRunInput, Status,
 } from './types'
+import { createHttpGraphApi } from './http-graph'
+import { HttpStatusError } from './errors'
 
-// Mirrors sdlc/benchmarks/heatmap.py CANONICAL_STAGES. StageDots maps active
-// stages back onto its fixed strip, so this list is the join key between the
-// dashboard and the benchmark axis.
-const CANONICAL_STAGES = [
-  'intake', 'constitution', 'context', 'requirements', 'research',
-  'clarify', 'architecture', 'planning', 'code', 'review', 'adversary',
-  'handoff', 'deep_review', 'analyze', 'qa', 'quality_gate', 'deploy',
-  'retro',
-]
+// Stage NAMES only (E-76 spec §9.1): the strip's canonical list is served by
+// GET /graphs/catalog, never copied here, and no node id is ever invented.
+function stagesOf(name: string | null | undefined): string[] {
+  return name ? [name] : []
+}
 
 function age(fromIso: string | null | undefined, now: Date): string {
   if (!fromIso) return ''
@@ -66,7 +64,7 @@ function mapRun(s: any, pendingCount: number, now: Date): Run {
     title: s.title,
     mode: s.mode,
     repo: s.repo_url ?? '',
-    stageIdx: Math.max(0, CANONICAL_STAGES.indexOf(s.current_stage ?? '')),
+    activeStages: stagesOf(s.current_stage),
     status: liveStatus(s.status),
     blocker: blocker(s.status, pendingCount),
     cost: s.cost_usd_total,
@@ -82,7 +80,7 @@ function mapClosed(s: any, now: Date): Run {
     title: s.title,
     mode: s.mode,
     repo: s.repo_url ?? '',
-    stageIdx: Math.max(0, CANONICAL_STAGES.indexOf(s.terminal_stage ?? '')),
+    activeStages: stagesOf(s.terminal_stage),
     status: closedStatus(s.outcome),
     blocker: '',
     cost: s.cost_usd_total,
@@ -153,7 +151,7 @@ export function createHttpApi(baseUrl = '/api'): DashboardApi {
       headers: { 'Content-Type': 'application/json' },
       ...init,
     })
-    if (!r.ok) throw new Error(`${init?.method ?? 'GET'} ${path}: ${r.status}`)
+    if (!r.ok) throw new HttpStatusError(r.status, `${init?.method ?? 'GET'} ${path}: ${r.status}`)
     return r.status === 204 ? null : r.json()
   }
 
@@ -169,6 +167,7 @@ export function createHttpApi(baseUrl = '/api'): DashboardApi {
     })
 
   return {
+    ...createHttpGraphApi(baseUrl),
     async listRuns() { return (await snapshot()).runs },
     async getRun(id) { return (await snapshot()).runs.find((r) => r.id === id) },
     async listInbox() { return (await snapshot()).inbox },
@@ -202,7 +201,7 @@ export function createHttpApi(baseUrl = '/api'): DashboardApi {
       const nowIso = new Date().toISOString()
       return {
         id: run_id, title: input.title, mode: input.mode, repo: input.repo,
-        stageIdx: 0, status: 'running' as const, blocker: '',
+        activeStages: [], status: 'running' as const, blocker: '',
         cost: null, budget: null, age: age(nowIso, new Date(nowIso)),
         decisions: [],
       }

@@ -1,0 +1,41 @@
+{
+  "name": "incompatible_ports",
+  "yaml": "schema_version: 1\nnodes:\n- id: architect\n  type: architect\n  position:\n    x: 200.0\n    y: 0.0\n- id: intake\n  type: intake\n  position:\n    x: 0.0\n    y: 0.0\nedges:\n- source: intake\n  source_port: ok\n  target: architect\n  target_port: requirements\n",
+  "parse": {
+    "ok": true,
+    "graph": {
+      "schema_version": 1,
+      "nodes": [
+        {
+          "id": "architect",
+          "type": "architect",
+          "position": {
+            "x": 200.0,
+            "y": 0.0
+          }
+        },
+        {
+          "id": "intake",
+          "type": "intake",
+          "position": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        }
+      ],
+      "edges": [
+        {
+          "source": "intake",
+          "source_port": "ok",
+          "target": "architect",
+          "target_port": "requirements"
+        }
+      ]
+    },
+    "sha": "514f3747647cd883db56e62df256498739d2df6e1e2ccb2c05252bc900526ecb"
+  },
+  "serialize": {
+    "ok": true,
+    "yaml": "schema_version: 1\nnodes:\n- id: architect\n  type: architect\n  position:\n    x: 200.0\n    y: 0.0\n- id: intake\n  type: intake\n  position:\n    x: 0.0\n    y: 0.0\nedges:\n- source: intake\n  source_port: ok\n  target: architect\n  target_port: requirements\n"
+  }
+}

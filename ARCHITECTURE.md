@@ -797,7 +797,7 @@ Kroker/
 │   ├── research/              # grounded briefs: toolset, tavily, verify, budget (FR-107)
 │   ├── channels/              # contract.py, transport.py, inbox.py — one channel
 │   │                          #   abstraction behind every surface (E-6/E-7/E-8, ADR-8)
-│   ├── dashboard/             # fleet poller, REST + SSE api, channel adapter (E-10)
+│   ├── dashboard/             # fleet poller, REST + SSE api, channel adapter (E-10); graph_wire + graph routes (E-76)
 │   ├── operator/              # chat agent's tool layer — 12 verbs (E-86)
 │   ├── notify/                # routes, schedule, notifiers, render (E-9)
 │   ├── observability/         # trace, export (events.jsonl/report.html), usage, logfire
@@ -810,7 +810,7 @@ Kroker/
 │   └── cli.py · cli_roles.py
 ├── interfaces/
 │   ├── dashboard/api/main.py  # composes the board + dashboard routers (+ /chat)
-│   ├── dashboard/frontend/    # Vue 3 SPA against the live API
+│   ├── dashboard/frontend/    # Vue 3 SPA against the live API; graph canvas run + edit views (E-76)
 │   └── chat/                  # operator chat agent assets (E-86)
 ├── tests/                     # ~466 files, flat; fakes/ and fixtures/ beneath
 │                              #   markers: slow · temporal · live · docker · crew ·

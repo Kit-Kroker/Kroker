@@ -4,7 +4,7 @@ export interface AppHeaderProps {
   maxCount?: number
   totalCost?: string
   inboxCount?: number
-  activeTab?: 'fleet' | 'inbox' | string
+  activeTab?: 'fleet' | 'inbox' | 'graphs' | string
 }
 
 withDefaults(defineProps<AppHeaderProps>(), {
@@ -43,6 +43,15 @@ const emit = defineEmits<{
       >
         INBOX
         <span v-if="inboxCount > 0" data-testid="inbox-count" class="badge">{{ inboxCount }}</span>
+      </RouterLink>
+      <RouterLink
+        to="/graphs"
+        class="tab"
+        :class="{ 'tab-active': activeTab === 'graphs' }"
+        active-class="tab-active"
+        data-testid="graphs-tab"
+      >
+        GRAPHS
       </RouterLink>
     </nav>
     <div class="spacer" />

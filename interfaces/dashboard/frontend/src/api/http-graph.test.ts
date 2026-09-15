@@ -1,0 +1,86 @@
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
+import { createHttpGraphApi } from './http-graph'
+import { CapabilityUnavailable } from './graph-types'
+import catalogJson from './__fixtures__/graph/catalog.json'
+import preCode from './__fixtures__/graph/scenarios/pre_code.json'
+
+const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200 })
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.useRealTimers()
+})
+
+describe('http graph provider', () => {
+  let fetchMock: ReturnType<typeof vi.fn>
+  beforeEach(() => {
+    fetchMock = vi.fn(async (path: string) => {
+      if (path === '/api/graphs/catalog') return ok(catalogJson)
+      if (path === '/api/graphs/parse') return ok(preCode.parse)
+      return new Response('nope', { status: 404 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+  })
+
+  it('fetches the catalog once per session', async () => {
+    const api = createHttpGraphApi()
+    await api.getCatalog()
+    await api.getCatalog()
+    expect(fetchMock.mock.calls.filter(([p]) => p === '/api/graphs/catalog')).toHaveLength(1)
+  })
+
+  it('does not cache a failed catalog fetch', async () => {
+    fetchMock.mockImplementationOnce(async () => new Response('down', { status: 502 }))
+    const api = createHttpGraphApi()
+    await expect(api.getCatalog()).rejects.toThrow('502')
+    expect((await api.getCatalog()).canonical_stages).toHaveLength(18)
+  })
+
+  it('posts parse input verbatim to the shipped route', async () => {
+    const api = createHttpGraphApi()
+    await api.parseGraph({ yaml: preCode.yaml })
+    const [path, init] = fetchMock.mock.calls.find(([p]) => p === '/api/graphs/parse')!
+    expect(path).toBe('/api/graphs/parse')
+    expect(JSON.parse(init.body)).toEqual({ yaml: preCode.yaml })
+  })
+
+  it.each([
+    ['validateGraph', 'validate'],
+    ['saveGraph', 'save'],
+    ['loadGraph', 'load'],
+    ['getRunGraph', 'run_graph'],
+  ] as const)('%s refuses without calling the route while %s is not declared', async (method, cap) => {
+    const api = createHttpGraphApi()
+    const arg = method === 'loadGraph' || method === 'getRunGraph' ? 'x' : ({ schema_version: 1, nodes: [], edges: [] } as never)
+    await expect((api[method] as (a: unknown) => Promise<unknown>)(arg)).rejects.toEqual(new CapabilityUnavailable(cap))
+    expect(fetchMock.mock.calls.map(([p]) => p)).toEqual(['/api/graphs/catalog'])
+  })
+
+  it('never polls run state while run_graph is not declared', async () => {
+    vi.useFakeTimers()
+    const api = createHttpGraphApi()
+    const cb = vi.fn()
+    api.subscribeGraphState('r1', cb)
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(cb).not.toHaveBeenCalled()
+    expect(fetchMock.mock.calls.map(([p]) => p)).toEqual(['/api/graphs/catalog'])
+  })
+
+  it('polls run state when declared and ends the chain on a terminal state', async () => {
+    vi.useFakeTimers()
+    const catalog = { ...catalogJson, capabilities: { ...catalogJson.capabilities, run_graph: true } }
+    let polls = 0
+    fetchMock.mockImplementation(async (path: string) => {
+      if (path === '/api/graphs/catalog') return ok(catalog)
+      polls += 1
+      return ok({ kind: 'state', graph_sha: 's', nodes: {}, edges: [], current_nodes: [], pending: [], terminal: polls >= 2 ? 'done' : null })
+    })
+    const api = createHttpGraphApi()
+    const cb = vi.fn()
+    api.subscribeGraphState('r 1', cb)
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(polls).toBe(2)
+    expect(cb).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls.some(([p]) => p === '/api/runs/r%201/graph_state')).toBe(true)
+  })
+})

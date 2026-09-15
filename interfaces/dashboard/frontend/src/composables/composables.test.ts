@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { money, budgetPct, budgetColor } from './format'
 import { statusMetaOf } from './status'
-import { stageStateOf } from './stageState'
+import { stageStates } from './stageState'
 import type { Run } from '../api/types'
 
 const run = (over: Partial<Run>): Run => ({
@@ -9,7 +9,7 @@ const run = (over: Partial<Run>): Run => ({
   title: 't',
   mode: 'brownfield',
   repo: 'r',
-  stageIdx: 5,
+  activeStages: ['clarify'],
   status: 'running',
   blocker: '',
   cost: 1,
@@ -44,17 +44,36 @@ describe('statusMetaOf', () => {
   })
 })
 
-describe('stageStateOf', () => {
-  it('marks prior stages done', () => {
-    expect(stageStateOf(run({ stageIdx: 5 }), 3)).toBe('done')
+const STRIP = ['intake', 'research', 'clarify', 'architecture', 'planning']
+
+describe('stageStates', () => {
+  it('marks stages before the lowest active stage done and later ones pending', () => {
+    expect(stageStates(run({ activeStages: ['clarify'] }), STRIP)).toEqual(
+      ['done', 'done', 'active', 'pending', 'pending'],
+    )
   })
-  it('marks the current stage active when running', () => {
-    expect(stageStateOf(run({ stageIdx: 5, status: 'running' }), 5)).toBe('active')
+  it('marks the active stage blocked, failed or done from the run status', () => {
+    expect(stageStates(run({ status: 'blocked' }), STRIP)[2]).toBe('blocked')
+    expect(stageStates(run({ status: 'failed' }), STRIP)[2]).toBe('failed')
+    expect(stageStates(run({ status: 'done' }), STRIP)[2]).toBe('done')
   })
-  it('marks the current stage blocked when run is blocked', () => {
-    expect(stageStateOf(run({ stageIdx: 5, status: 'blocked' }), 5)).toBe('blocked')
+  it('marks every active stage of a fanned-out run', () => {
+    expect(stageStates(run({ activeStages: ['research', 'architecture'] }), STRIP)).toEqual(
+      ['done', 'active', 'pending', 'active', 'pending'],
+    )
   })
-  it('marks future stages pending', () => {
-    expect(stageStateOf(run({ stageIdx: 5 }), 9)).toBe('pending')
+  it.each(['running', 'blocked', 'failed', 'done'] as const)(
+    'renders every mark pending when no stage is active (status %s)',
+    (status) => {
+      expect(stageStates(run({ activeStages: [], status }), STRIP)).toEqual(STRIP.map(() => 'pending'))
+    },
+  )
+  it('ignores a stage name that is not canonical and reports it once', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(stageStates(run({ activeStages: ['bogus'] }), STRIP)).toEqual(STRIP.map(() => 'pending'))
+    stageStates(run({ activeStages: ['bogus'] }), STRIP)
+    expect(err).toHaveBeenCalledTimes(1)
+    expect(err).toHaveBeenCalledWith(expect.stringContaining('bogus'))
+    err.mockRestore()
   })
 })

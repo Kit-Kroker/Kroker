@@ -341,8 +341,10 @@ the agents registry.
 - **`from_yaml(text) -> PipelineGraph`:** raises exactly one exception type,
   `GraphSchemaError` (a `ValueError` subclass), for every way the text fails
   to become a graph. E-75/E-76 get a single catch contract.
-  - `yaml.safe_load`; a `yaml.YAMLError` is re-raised as `GraphSchemaError`
-    (chained);
+  - a strict `yaml.SafeLoader` subclass (E-76 spec D10) rejects anchors,
+    aliases and `<<` merge keys at compose/construct time and a duplicate key
+    in any mapping (`yaml.safe_load` would keep the last one silently); every
+    `yaml.YAMLError` is re-raised as `GraphSchemaError` (chained);
   - a non-mapping document raises `GraphSchemaError`;
   - a `schema_version` other than `1` raises
     `GraphSchemaError("unsupported graph schema_version …; this worker reads 1")`
