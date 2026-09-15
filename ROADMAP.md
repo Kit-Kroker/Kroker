@@ -393,8 +393,8 @@ as tracked rather than accidental.
 
 ### Pipeline as data (FR-1200) *(new scope; PRD v1.2 2026-09-12)*
 
-- [ ] ⚠️ **FR-1201** typed `PipelineGraph` + node-type registry; nodes carry `RoleConfig`/`GateConfig` verbatim; ports typed by existing model name; `content_sha()` excludes canvas cosmetics (E-72). Partial: E-72 landed the schema, `content_sha()`, YAML io and the seed registry with the `ports_compatible` rule; *rejecting* incompatible edges is enforced by FR-1202's `validate.py` (E-73).
-- [ ] **FR-1202** pure `GraphRouter` + single-source `validate.py` — branching, round-based stale-input invalidation, per-edge `max_traversals` → ESCALATED; legality never reimplemented in the frontend (E-73).
+- [ ] ⚠️ **FR-1201** typed `PipelineGraph` + node-type registry; nodes carry `RoleConfig`/`GateConfig` verbatim; ports typed by existing model name; `content_sha()` excludes canvas cosmetics (E-72). Partial: E-72 landed the schema, `content_sha()`, YAML io and the seed registry with the `ports_compatible` rule, and E-73's `validate.py` rejects incompatible edges; registry validation, ADR-6 and `PROMPT_SHAS` keep working only once E-74 projects `node.role` into the run config.
+- [ ] ⚠️ **FR-1202** pure `GraphRouter` + single-source `validate.py` — branching, round-based stale-input invalidation, per-edge `max_traversals` → ESCALATED; legality never reimplemented in the frontend (E-73). Partial: E-73 landed `sdlc/graph/topology.py`, `validate.py` and `router.py`; the interpreter (E-74), API (E-75) and canvas (E-76) are the consumers that must call them.
 - [ ] **FR-1203** `GraphWorkflow` replaces `_pipeline` big-bang; `default.graph.yaml` reproduces today's stage sequence; graph pinned as workflow input for the run's lifetime. Cutover by **grace-retention** — OQ-10 resolved 2026-09-12 (E-74).
 - [ ] **FR-1204** dashboard graph queries (`graph()`, `graph_state()`) beside the existing run queries; content-addressed `graphs/<sha>.yaml`, no graph DB (E-75).
 - [ ] **FR-1205** canvas — one renderer, run mode + edit mode; editing a running graph disabled by design; validation via FR-1202 (E-76).

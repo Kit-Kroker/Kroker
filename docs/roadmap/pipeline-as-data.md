@@ -69,7 +69,7 @@ not None` checks collapse into *is there a node*.
   pre-code half (no `gate.clarify`). Rejecting incompatible edges is E-73's
   `validate.py`; the post-plan catalog and `code` decomposition are E-74's
   (E72-OQ-3). Open questions E72-OQ-1…8 live in the spec §10.
-- [ ] **E-73 — `GraphRouter` + `validate.py`** → FR-1202. **The bug budget lives
+- [x] **E-73 — `GraphRouter` + `validate.py`** → FR-1202. **The bug budget lives
   here.** A pure, synchronous routing state machine — no Temporal, no I/O — so
   the hard part is table-testable in milliseconds. Owns: one-output-port-per-
   activation branching; **round-based stale-input invalidation** (a backward edge
@@ -82,6 +82,16 @@ not None` checks collapse into *is there a node*.
   generalises it to the whole graph. `validate.py` is the **single** source of
   truth for legality (port compatibility, reachability, every cycle bounded,
   one entry node) and is never reimplemented in TypeScript.
+
+  **Landed** (spec `docs/superpowers/specs/2026-09-14-graph-router-and-validator-design.md`,
+  plan `docs/superpowers/plans/2026-09-14-graph-router-and-validator.md`): `sdlc/graph/`
+  gains `topology.py`, `validate.py` (25 `ProblemCode`s; the only producer of `Topology`)
+  and `router.py` (a pure reducer). A loop edge is exactly an edge carrying
+  `max_traversals`; the literal "invalidate inputs at lower rounds" is superseded by
+  REGION invalidation, because it would starve `architect` of upstream inputs. Exhaustion
+  is ESCALATED at the router, and each activation's `unavailable_ports` snapshot lets a
+  gate run as today's final gate (E-74 handler rule). Open questions E73-OQ-1…8 live in
+  the spec §10; E73-OQ-3 (never-reset counters) is a documented limitation.
 - [ ] **E-74 — `GraphWorkflow` replaces `_pipeline`** → FR-1203. Thin Temporal
   layer over E-73: dispatch table from `node.type` to the existing handlers,
   which converge on `(Activation, PipelineConfig) -> Emission`; exceptions become

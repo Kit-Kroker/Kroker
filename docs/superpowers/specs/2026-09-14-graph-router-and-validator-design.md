@@ -182,6 +182,13 @@ REJECTED/ESCALATED are terminal immediately. Else COMPLETED when `live` is empty
 - **T4** Termination: every event script is finite — each back edge is bounded, the forward subgraph is a DAG, and the §6.5 re-issue path increments a counter.
 - **T5** Never ESCALATED on a snapshot-available port.
 
+**Erratum (2026-09-14, plan review R1/R3 / E-73 implementation):**
+- **Invariant I holds on forward slots, with I-back for back-edge slots** (producer node in `REGION(target)`; no `one` port holds two tokens) exactly as the plan's deviation 1 states (step 5b resets the emitter to `pending` before 5c delivers its token; occupied-slot delivery remains unreachable and no stale token carries into a later generation).
+- **T2 equality is modulo issue-time `unavailable_ports` snapshots** exactly as deviation 2 states (`target_dead` at issue legitimately depends on forward-emission arrival order under races).
+- **Section 6.5 precedence:** when a loop port is both `exhausted` and targets a dead node, `exhausted` takes precedence over `target_dead` (deviation 6).
+- **Section 4 `RouterState.emissions` field:** applied emissions are stored, sorted by activation id, to support rule F3 duplicate-vs-conflicting checks while preserving deterministic state equality (deviation 3).
+- **Section 7.2 T3 rows are per-override:** kind-consistent overrides are checked for harness/provider requirements (yielding at most one diagnostic per override; plan review R3 / deviation 9).
+
 ### 6.8 Deliberately not in the router
 
 Payload inspection; retries of failed activities; per-instance (per-task) budgets (E73-OQ-7); handler-local state across activations (E73-OQ-4).
