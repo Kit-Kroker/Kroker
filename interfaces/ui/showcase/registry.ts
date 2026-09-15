@@ -10,6 +10,7 @@ import gateDecision from '../src/components/gate_decision/gate_decision.profiles
 import nodePalette from '../src/components/node_palette/node_palette.profiles'
 import issueList from '../src/components/issue_list/issue_list.profiles'
 import yamlPane from '../src/components/yaml_pane/yaml_pane.profiles'
+import schemaForm from '../src/components/schema_form/schema_form.profiles'
 
 export const REGISTRY: ProfileSet[] = [
   stageDots,
@@ -23,4 +24,5 @@ export const REGISTRY: ProfileSet[] = [
   nodePalette,
   issueList,
   yamlPane,
+  schemaForm,
 ]
