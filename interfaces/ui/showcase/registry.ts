@@ -9,6 +9,7 @@ import startRunModal from '../src/components/start_run_modal/start_run_modal.pro
 import gateDecision from '../src/components/gate_decision/gate_decision.profiles'
 import nodePalette from '../src/components/node_palette/node_palette.profiles'
 import issueList from '../src/components/issue_list/issue_list.profiles'
+import yamlPane from '../src/components/yaml_pane/yaml_pane.profiles'
 
 export const REGISTRY: ProfileSet[] = [
   stageDots,
@@ -21,4 +22,5 @@ export const REGISTRY: ProfileSet[] = [
   gateDecision,
   nodePalette,
   issueList,
+  yamlPane,
 ]
