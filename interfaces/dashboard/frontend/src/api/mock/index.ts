@@ -10,6 +10,16 @@ import type {
   EscalationItem,
   StartRunInput,
 } from '../types'
+import { createMockGraph } from './graph'
+import { HttpStatusError } from '../errors'
+import catalogJson from '../__fixtures__/graph/catalog.json'
+
+// Stage NAMES, advanced along the served canonical list (E-76 spec §9.1).
+const CANONICAL: string[] = (catalogJson as { canonical_stages: string[] }).canonical_stages
+const nextStage = (stages: string[]): string[] => {
+  const i = Math.max(...stages.map((s) => CANONICAL.indexOf(s)))
+  return [CANONICAL[Math.min(i + 1, CANONICAL.length - 1)]]
+}
 
 export function tickCosts(runs: Run[]): Run[] {
   return runs.map((r) =>
@@ -22,11 +32,28 @@ export function tickCosts(runs: Run[]): Run[] {
 function seedRuns(): Run[] {
   return [
     {
+      // Executes a graph (mock/graph.ts + run_graphs.provisional.json): the
+      // only seeded run whose RunView renders a canvas.
+      id: 'feature-graph-demo',
+      title: 'Graph-executed pre-code pipeline',
+      mode: 'greenfield',
+      repo: 'git@github.com:acme/graph-demo',
+      activeStages: ['architecture'],
+      status: 'blocked',
+      blocker: 'architecture gate — round 2',
+      cost: 2.6,
+      budget: 20,
+      age: '40m',
+      decisions: [
+        { ts: '09:25', gate: 'architecture r1', outcome: 'revise', comment: 'split the auth service', decider: 'human · sam' },
+      ],
+    },
+    {
       id: 'feature-add-sso',
       title: 'Add SSO to customer portal',
       mode: 'brownfield',
       repo: 'git@github.com:acme/portal',
-      stageIdx: 4,
+      activeStages: ['clarify'],
       status: 'blocked',
       blocker: 'clarify gate — 2 questions',
       cost: 3.12,
@@ -41,7 +68,7 @@ function seedRuns(): Run[] {
       title: 'Outbound webhooks for billing events',
       mode: 'brownfield',
       repo: 'git@github.com:acme/billing',
-      stageIdx: 11,
+      activeStages: ['quality_gate'],
       status: 'blocked',
       blocker: 'merge gate — advisory: coverage',
       cost: 18.4,
@@ -58,7 +85,7 @@ function seedRuns(): Run[] {
       title: 'Self-serve onboarding flow (new service)',
       mode: 'greenfield',
       repo: 'git@github.com:acme/onboard',
-      stageIdx: 7,
+      activeStages: ['code'],
       status: 'running',
       blocker: '',
       cost: 9.75,
@@ -76,7 +103,7 @@ function seedRuns(): Run[] {
       title: 'Fix: retry budget exhausted under burst load',
       mode: 'brownfield',
       repo: 'git@github.com:acme/gateway',
-      stageIdx: 10,
+      activeStages: ['qa'],
       status: 'blocked',
       blocker: 'escalation — T-07 resolver 3/3',
       cost: 6.2,
@@ -89,7 +116,7 @@ function seedRuns(): Run[] {
       title: 'Usage metering for billing tiers',
       mode: 'brownfield',
       repo: 'git@github.com:acme/billing',
-      stageIdx: 5,
+      activeStages: ['architecture'],
       status: 'blocked',
       blocker: 'architecture gate — round 1',
       cost: 2.05,
@@ -102,7 +129,7 @@ function seedRuns(): Run[] {
       title: 'Audit-trail export (events.jsonl + report)',
       mode: 'brownfield',
       repo: 'git@github.com:acme/portal',
-      stageIdx: 13,
+      activeStages: ['deploy'],
       status: 'running',
       blocker: '',
       cost: 14.02,
@@ -118,7 +145,7 @@ function seedRuns(): Run[] {
       title: 'Dark mode for settings pages',
       mode: 'brownfield',
       repo: 'git@github.com:acme/portal',
-      stageIdx: 14,
+      activeStages: ['retro'],
       status: 'done',
       blocker: '',
       cost: 7.88,
@@ -134,6 +161,16 @@ function seedRuns(): Run[] {
 
 function seedInbox(): InboxItem[] {
   return [
+    {
+      id: 'architecture#2',
+      type: 'gate',
+      gate: 'architecture',
+      runId: 'feature-graph-demo',
+      round: 2,
+      age: '9m',
+      title: 'Architecture (round 2) — graph demo',
+      body: 'Revised after round 1: auth split into its own service.',
+    },
     {
       id: 'q1',
       type: 'clarify',
@@ -204,6 +241,7 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
   const simulateLive = opts.simulateLive ?? true
   let runs: Run[] = seedRuns()
   let inbox: InboxItem[] = seedInbox()
+  const graph = createMockGraph()
 
   const delay = () => new Promise<void>((r) => setTimeout(r, 120 + Math.random() * 180))
 
@@ -224,6 +262,15 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
   const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x))
 
   const api: DashboardApi & { dispose(): void } = {
+    getCatalog: graph.getCatalog,
+    parseGraph: graph.parseGraph,
+    serializeGraph: graph.serializeGraph,
+    validateGraph: graph.validateGraph,
+    saveGraph: graph.saveGraph,
+    loadGraph: graph.loadGraph,
+    getRunGraph: graph.getRunGraph,
+    subscribeGraphState: graph.subscribeGraphState,
+
     async listRuns() {
       await delay()
       return clone(runs)
@@ -241,7 +288,7 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
     async answerClarify(runId: string, key: string, answer: string) {
       await delay()
       const it = inbox.find((i) => i.id === key && i.runId === runId) as ClarifyItem | undefined
-      if (!it) throw new Error(`no pending item ${key} on ${runId}`)
+      if (!it) throw new HttpStatusError(404, `no pending item ${key} on ${runId}`)
       removeItem(key)
       addDecision(it.runId, {
         gate: `clarify Q${it.id.slice(1)} r${it.round}`,
@@ -250,43 +297,44 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
       })
       const left = inbox.some((i) => i.runId === it.runId && i.type === 'clarify')
       if (!left) {
-        patchRun(it.runId, { status: 'running', stageIdx: 5, blocker: '' })
+        patchRun(it.runId, { status: 'running', activeStages: ['architecture'], blocker: '' })
       }
     },
 
     async decideGate(runId: string, key: string, outcome: GateOutcome, comment: string) {
       await delay()
       const it = inbox.find((i) => i.id === key && i.runId === runId && i.type === 'gate') as GateItem | undefined
-      if (!it) throw new Error(`no pending item ${key} on ${runId}`)
+      if (!it) throw new HttpStatusError(404, `no pending item ${key} on ${runId}`)
       removeItem(key)
       addDecision(it.runId, { gate: `${it.gate} r${it.round}`, outcome, comment })
       if (outcome === 'approve') {
-        patchRun(it.runId, (r) => ({ status: 'running', stageIdx: r.stageIdx + 1, blocker: '' }))
+        patchRun(it.runId, (r) => ({ status: 'running', activeStages: nextStage(r.activeStages), blocker: '' }))
       } else if (outcome === 'revise') {
         patchRun(it.runId, { status: 'running', blocker: `revising — round ${it.round + 1}` })
       } else {
         patchRun(it.runId, { status: 'failed', blocker: `rejected at ${it.gate}` })
       }
+      graph.onDecision(runId, key, outcome)
     },
 
     async overrideMerge(runId: string, key: string, approve: boolean, justification: string) {
       await delay()
       const it = inbox.find((i) => i.id === key && i.runId === runId && i.type === 'override') as OverrideItem | undefined
-      if (!it) throw new Error(`no pending item ${key} on ${runId}`)
+      if (!it) throw new HttpStatusError(404, `no pending item ${key} on ${runId}`)
       removeItem(key)
       if (approve) {
         addDecision(it.runId, { gate: `merge r${it.round}`, outcome: 'approve', comment: `ADVISORY OVERRIDE: ${justification}`, decider: 'human · you (override)' })
-        patchRun(it.runId, { status: 'running', stageIdx: 12, blocker: '' })
+        patchRun(it.runId, { status: 'running', activeStages: ['deploy'], blocker: '' })
       } else {
         addDecision(it.runId, { gate: `merge r${it.round}`, outcome: 'revise', comment: justification || 'raise diff coverage to 0.80' })
-        patchRun(it.runId, { status: 'running', stageIdx: 7, blocker: 'revising — coverage' })
+        patchRun(it.runId, { status: 'running', activeStages: ['code'], blocker: 'revising — coverage' })
       }
     },
 
     async resolveEscalation(runId: string, key: string, retry: boolean, guidance: string) {
       await delay()
       const it = inbox.find((i) => i.id === key && i.runId === runId && i.type === 'escalation') as EscalationItem | undefined
-      if (!it) throw new Error(`no pending item ${key} on ${runId}`)
+      if (!it) throw new HttpStatusError(404, `no pending item ${key} on ${runId}`)
       removeItem(key)
       if (retry) {
         addDecision(it.runId, { gate: 'escalation T-07', outcome: 'approve', comment: `retry w/ guidance: ${guidance || '(none)'}` })
@@ -312,7 +360,7 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
         title: t,
         mode: input.mode,
         repo: input.repo || 'git@github.com:acme/portal',
-        stageIdx: 3,
+        activeStages: ['requirements'],
         status: 'running',
         blocker: '',
         cost: 0.04,

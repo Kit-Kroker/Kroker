@@ -19,6 +19,10 @@ The header renders the live run counter and spend stats from provider
 state, and the inbox badge appears when the provider reports inbox items.
 [FR-601]
 
+### CONSOLE-3
+The fleet strip renders one mark per canonical stage the provider's catalog
+serves (18 today), keyed by name. [FR-1205, E-76 U4]
+
 ## Failure modes
 
 Both clauses are asserted by `app.pw.ts` against the built dashboard on

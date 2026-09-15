@@ -2,16 +2,18 @@
 import { onMounted, onUnmounted } from 'vue'
 import { useFleetStore } from './stores/fleet'
 import { useInboxStore } from './stores/inbox'
+import { useCatalogStore } from './stores/catalog'
 import AppHeader from './components/AppHeader.vue'
 import Toasts from './components/Toasts.vue'
 import StartRunModal from './components/StartRunModal.vue'
 
 const fleet = useFleetStore()
 const inbox = useInboxStore()
+const catalog = useCatalogStore()
 let pollId: ReturnType<typeof setInterval> | null = null
 
 onMounted(async () => {
-  await Promise.all([fleet.refresh(), inbox.refresh()])
+  await Promise.all([catalog.load(), fleet.refresh(), inbox.refresh()])
   pollId = setInterval(() => {
     if (document.visibilityState === 'visible') {
       fleet.refresh()

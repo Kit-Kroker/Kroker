@@ -3,7 +3,7 @@ import { createMockApi, tickCosts } from './index'
 import type { Run } from '../types'
 
 const mk = (over: Partial<Run>): Run => ({
-  id: 'x', title: 't', mode: 'brownfield', repo: 'r', stageIdx: 5, status: 'running',
+  id: 'x', title: 't', mode: 'brownfield', repo: 'r', activeStages: ['architecture'], status: 'running',
   blocker: '', cost: 1, budget: 10, age: '1m', decisions: [],
   ...over,
 })
@@ -26,9 +26,9 @@ describe('mock api decision flows', () => {
     api = createMockApi({ simulateLive: false })
   })
 
-  it('seeds 7 runs and 5 inbox items', async () => {
-    expect(await api.listRuns()).toHaveLength(7)
-    expect(await api.listInbox()).toHaveLength(5)
+  it('seeds 8 runs and 6 inbox items, including the graph demo run', async () => {
+    expect(await api.listRuns()).toHaveLength(8)
+    expect(await api.listInbox()).toHaveLength(6)
   })
 
   it('answers a clarify question and logs a decision', async () => {
@@ -43,7 +43,7 @@ describe('mock api decision flows', () => {
     await api.answerClarify('feature-add-sso', 'q1', 'OIDC')
     await api.answerClarify('feature-add-sso', 'q2', 'Keep password behind a flag')
     const run = await api.getRun('feature-add-sso')
-    expect(run?.stageIdx).toBe(5)
+    expect(run?.activeStages).toEqual(['architecture'])
     expect(run?.status).toBe('running')
   })
 
@@ -59,7 +59,7 @@ describe('mock api decision flows', () => {
     await api.decideGate('feature-usage-metering', 'g2', 'approve', '')
     const run = await api.getRun('feature-usage-metering')
     expect(run?.status).toBe('running')
-    expect(run?.stageIdx).toBeGreaterThan(5)
+    expect(run?.activeStages).toEqual(['planning'])
   })
 
   it('rejecting a gate fails the branch', async () => {
@@ -68,17 +68,17 @@ describe('mock api decision flows', () => {
     expect(run?.status).toBe('failed')
   })
 
-  it('override approve moves run to deploy (stageIdx 12)', async () => {
+  it('override approve moves run to deploy', async () => {
     await api.overrideMerge('feature-billing-webhooks', 'g1', true, 'retry branches covered indirectly')
     const run = await api.getRun('feature-billing-webhooks')
-    expect(run?.stageIdx).toBe(12)
+    expect(run?.activeStages).toEqual(['deploy'])
     expect(run?.status).toBe('running')
   })
 
-  it('override send-back drops run to code (stageIdx 7)', async () => {
+  it('override send-back drops run to code', async () => {
     await api.overrideMerge('feature-billing-webhooks', 'g1', false, '')
     const run = await api.getRun('feature-billing-webhooks')
-    expect(run?.stageIdx).toBe(7)
+    expect(run?.activeStages).toEqual(['code'])
   })
 
   it('escalation retry resumes the task', async () => {

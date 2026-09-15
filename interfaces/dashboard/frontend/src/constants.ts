@@ -1,22 +1,3 @@
-export const STAGES = [
-  'intake',
-  'constitution',
-  'context',
-  'requirements',
-  'clarify',
-  'architecture',
-  'planning',
-  'code',
-  'review',
-  'analyze',
-  'qa',
-  'quality_gate',
-  'deploy',
-  'retro',
-] as const
-
-export type StageName = (typeof STAGES)[number]
-
 export const ARTIFACTS = [
   'IdeaBrief',
   'Constitution',

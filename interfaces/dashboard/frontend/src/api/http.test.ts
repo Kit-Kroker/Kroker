@@ -30,11 +30,9 @@ describe('mapSnapshot', () => {
     expect(runs.find((r) => r.id === 'feature-unpriced')!.cost).toBeNull()
   })
 
-  it('derives stageIdx from current_stage', () => {
+  it('carries current_stage as a stage name, never an index', () => {
     const { runs } = mapSnapshot(snapshot as never, NOW)
-    // CANONICAL_STAGES: intake, constitution, context, requirements,
-    // research, clarify, architecture -> index 6
-    expect(runs.find((r) => r.id === 'feature-add-sso')!.stageIdx).toBe(6)
+    expect(runs.find((r) => r.id === 'feature-add-sso')!.activeStages).toEqual(['architecture'])
   })
 
   it('formats age from started_at', () => {
