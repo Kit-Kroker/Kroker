@@ -23,8 +23,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from sdlc.core.models import RoleConfig
 from sdlc.graph import (
     NODE_TYPES,
     GraphEdge,
@@ -35,6 +36,9 @@ from sdlc.graph import (
     from_yaml,
     ports_compatible,
     to_yaml,
+)
+from sdlc.graph import (
+    validate as _validate_graph,
 )
 
 MAX_GRAPH_BYTES = 256 * 1024
@@ -249,6 +253,27 @@ class IssueTarget(BaseModel):
     node: str | None = None
     port: str | None = None
 
+    @model_validator(mode="after")
+    def _validate_shape(self) -> IssueTarget:
+        others = (self.id, self.edge, self.node, self.port)
+        if self.kind == "graph":
+            if any(v is not None for v in others):
+                raise ValueError("graph target must have no other fields")
+        elif self.kind == "node":
+            if self.id is None or any(v is not None for v in (self.edge, self.node, self.port)):
+                raise ValueError("node target must have exactly id set")
+        elif self.kind == "edge":
+            if self.edge is None or any(v is not None for v in (self.id, self.node, self.port)):
+                raise ValueError("edge target must have exactly edge set")
+        elif self.kind == "port":
+            if (
+                self.node is None
+                or self.port is None
+                or any(v is not None for v in (self.id, self.edge))
+            ):
+                raise ValueError("port target must have exactly node and port set")
+        return self
+
 
 class Issue(BaseModel):
     model_config = _WIRE
@@ -264,6 +289,58 @@ class ValidationWire(BaseModel):
 
     issues: list[Issue]
     back_edges: list[EdgeRef]
+
+
+def _issue_target(p: Any) -> IssueTarget:
+    if p.edge is not None:
+        edge_ref = EdgeRef(
+            source=p.edge[0],
+            source_port=p.edge[1],
+            target=p.edge[2],
+            target_port=p.edge[3],
+        )
+        return IssueTarget(kind="edge", edge=edge_ref)
+    if p.port is not None:
+        return IssueTarget(kind="port", node=p.node, port=p.port)
+    if p.node is not None:
+        return IssueTarget(kind="node", id=p.node)
+    return IssueTarget(kind="graph")
+
+
+def validation(
+    graph: PipelineGraph,
+    registry: Mapping[str, NodeTypeSpec] = NODE_TYPES,
+    *,
+    roles: Mapping[str, RoleConfig],
+) -> ValidationWire:
+    report = _validate_graph(graph, registry, roles=roles)
+    issues = [
+        Issue(
+            code=str(p.code.value if hasattr(p.code, "value") else p.code),
+            severity="error",
+            message=p.message,
+            target=_issue_target(p),
+        )
+        for p in report.problems
+    ]
+
+    seen_edges: set[tuple[str, str, str, str]] = set()
+    back_edges: list[EdgeRef] = []
+    for e in graph.edges:
+        if e.max_traversals is not None:
+            key = (e.source, e.source_port, e.target, e.target_port)
+            if key not in seen_edges:
+                seen_edges.add(key)
+                back_edges.append(
+                    EdgeRef(
+                        source=e.source,
+                        source_port=e.source_port,
+                        target=e.target,
+                        target_port=e.target_port,
+                    )
+                )
+
+    return ValidationWire(issues=issues, back_edges=back_edges)
 
 
 # --- PROVISIONAL: save / load (E-75 + E-77) ------------------------------------
