@@ -37,3 +37,14 @@ Attributes on `FeatureWorkflow`'s MRO across its service-host mixins.
 | `_budget_crossings` | `RoleHost` | `RoleHost._check_budget`, `FeatureWorkflow.run_state` | `RoleHost._check_budget` | Number of budget alert crossings |
 | `_escalation_round`| *Eliminated* (Rule 2) | None (per-task local in `TaskHost._dev_task`) | None | Formerly instance counter, now local to prevent wave-mode races |
 | `_codebase_map` | `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow` | Brownfield codebase map cache |
+
+## Grace edits while FeatureWorkflow is registered (E-74 U6)
+
+`FeatureWorkflow` stays registered only to carry in-flight runs to terminal
+state (PRD OQ-10 grace-retention). Until it is deleted, any edit that changes
+the COMMAND SEQUENCE of code it executes (stage steps, hosts, `build.run_tasks`,
+`run_host.py`) must be wrapped in `workflow.patched("<epic>-<slug>")`.
+`tests/replay/test_feature_replay.py` is the enforcement: its histories are
+never re-recorded to make an edit pass. After deletion, intentional golden
+changes re-baseline from GraphWorkflow with the projection diff attached to
+the review.
