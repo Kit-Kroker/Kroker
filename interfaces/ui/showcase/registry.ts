@@ -11,6 +11,7 @@ import nodePalette from '../src/components/node_palette/node_palette.profiles'
 import issueList from '../src/components/issue_list/issue_list.profiles'
 import yamlPane from '../src/components/yaml_pane/yaml_pane.profiles'
 import schemaForm from '../src/components/schema_form/schema_form.profiles'
+import graphCanvas from '../src/components/graph_canvas/graph_canvas.profiles'
 
 export const REGISTRY: ProfileSet[] = [
   stageDots,
@@ -25,4 +26,5 @@ export const REGISTRY: ProfileSet[] = [
   issueList,
   yamlPane,
   schemaForm,
+  graphCanvas,
 ]
