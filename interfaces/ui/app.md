@@ -23,6 +23,17 @@ state, and the inbox badge appears when the provider reports inbox items.
 The fleet strip renders one mark per canonical stage the provider's catalog
 serves (18 today), keyed by name. [FR-1205, E-76 U4]
 
+### CONSOLE-7
+The graph editor renders the canvas after applying well-shaped recorded text,
+and keeps the canvas disabled while showing shape errors after applying text
+that does not parse. [FR-1205, E-76 U5]
+
+### CONSOLE-9
+In the graph editor, editing one inspector field of a recorded graph and
+applying it round-trips through the provider's parse and commits: the
+working copy gains the parse's sha and the inspector shows no error. [FR-1205,
+E-76 U8]
+
 ## Failure modes
 
 Both clauses are asserted by `app.pw.ts` against the built dashboard on

@@ -21,6 +21,7 @@ describe('AppHeader', () => {
     expect(w.text()).toContain('SDLC·FACTORY')
     expect(w.text()).toContain('FLEET')
     expect(w.text()).toContain('INBOX')
+    expect(w.text()).toContain('GRAPHS')
     expect(w.text()).toContain('runs 7/50')
     expect(w.text()).toContain('spend today $19.80')
   })
