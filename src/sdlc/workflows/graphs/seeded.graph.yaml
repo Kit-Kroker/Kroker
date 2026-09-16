@@ -1,0 +1,22 @@
+schema_version: 1
+nodes:
+- {id: intake, type: intake}
+- {id: seed_spec, type: seed.spec}
+- {id: seed_plan, type: seed.plan}
+- {id: code, type: code}
+- {id: analyze, type: analyze}
+- {id: merge, type: merge}
+- {id: deploy, type: deploy}
+edges:
+- {source: intake, source_port: ok, target: seed_spec, target_port: trigger}
+- {source: intake, source_port: brownfield, target: seed_spec, target_port: trigger}
+- {source: intake, source_port: ok, target: seed_plan, target_port: trigger}
+- {source: intake, source_port: brownfield, target: seed_plan, target_port: trigger}
+- {source: seed_plan, source_port: plan, target: code, target_port: plan}
+- {source: seed_plan, source_port: plan, target: analyze, target_port: plan}
+- {source: seed_plan, source_port: plan, target: merge, target_port: plan}
+- {source: seed_spec, source_port: spec, target: merge, target_port: spec}
+- {source: code, source_port: results, target: analyze, target_port: results}
+- {source: code, source_port: results, target: merge, target_port: results}
+- {source: analyze, source_port: analysis, target: merge, target_port: analysis}
+- {source: merge, source_port: pr, target: deploy, target_port: pr}
