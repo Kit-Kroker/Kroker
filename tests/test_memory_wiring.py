@@ -24,6 +24,7 @@ ARCH_STEP_PY = (
 PLAN_STEP_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "stages" / "plan" / "step.py"
 CODE_STEP_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "stages" / "code" / "step.py"
 TASK_HOST_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "task_host.py"
+RUN_HOST_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "run_host.py"
 
 
 @pytest.fixture(scope="module")
@@ -38,6 +39,13 @@ def task_host_class():
     source = TASK_HOST_PY.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(TASK_HOST_PY))
     return _load_class(tree, "TaskHost")
+
+
+@pytest.fixture(scope="module")
+def run_host_class():
+    source = RUN_HOST_PY.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(RUN_HOST_PY))
+    return _load_class(tree, "RunHost")
 
 
 def _calls_self_method(fn: ast.AST, method: str) -> bool:
@@ -76,10 +84,11 @@ def test_run_calls_retain_for_stage_summaries(feature_class):
     assert _calls_self_method(methods["_pipeline"], "_retain")
 
 
-def test_gate_helper_retains_gate_feedback(feature_class):
-    methods = _methods(feature_class)
-    # E-42: _gate moved to GateHost; the retain is now in the _on_gate_decided
+def test_gate_helper_retains_gate_feedback(run_host_class):
+    methods = _methods(run_host_class)
+    # E-42: _gate moved to GateHost; the retain is in the _on_gate_decided
     # hook override, which runs for every gate decision (human, policy, timeout).
+    # E-74: _on_gate_decided hook extracted to the RunHost mixin.
     assert "_on_gate_decided" in methods
     assert _calls_self_method(methods["_on_gate_decided"], "_retain")
 

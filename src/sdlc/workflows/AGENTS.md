@@ -25,11 +25,11 @@ Attributes on `FeatureWorkflow`'s MRO across its service-host mixins.
 | `_pending_questions` | `QuestionHost` | `QuestionHost.ask_and_wait` | `QuestionHost.ask_and_wait` | List of open question IDs currently awaiting answers |
 | `_memory_watermark` | `MemoryHost` | `MemoryHost._recall`, `FeatureWorkflow` | `FeatureWorkflow` | Watermark for memory capture |
 | `_session_refs` | `TaskHost` | `TaskHost._dev_task`, `FeatureWorkflow` (retro) | `TaskHost._dev_task` | Coding attempt session references |
-| `_cfg` | `FeatureWorkflow` | `FeatureWorkflow`, `GateHost._notify` | `FeatureWorkflow.run` | Stashed pipeline config for queries/hooks. `GateHost._notify` reads `project_key` via `getattr(self, "_cfg", None)` for F4 artifact links, so GateHost-only hosts (crew, triage, assessment, tidyup) send no link. |
-| `_idea` | `FeatureWorkflow` | `FeatureWorkflow.run_state` | `FeatureWorkflow.run` | Stashed initial idea brief |
-| `_started_at` | `FeatureWorkflow` | `FeatureWorkflow.run_state`, `FeatureWorkflow.run_summary` | `FeatureWorkflow.run` | Run start timestamp |
-| `_run_id` | `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow.run` | Stashed run ID for offline unit tests |
-| `_run_summary` | `FeatureWorkflow` | `FeatureWorkflow.run_summary`, `FeatureWorkflow` (retro) | `FeatureWorkflow` | Terminal `RunSummary`, built once at end of run |
+| `_cfg` | `RunHost` | `FeatureWorkflow`, `GateHost._notify` | `FeatureWorkflow.run` | Stashed pipeline config for queries/hooks. `GateHost._notify` reads `project_key` via `getattr(self, "_cfg", None)` for F4 artifact links, so GateHost-only hosts (crew, triage, assessment, tidyup) send no link. |
+| `_idea` | `RunHost` | `RunHost._snapshot_run_state` | `FeatureWorkflow.run` | Stashed initial idea brief |
+| `_started_at` | `RunHost` | `RunHost._snapshot_run_state`, `FeatureWorkflow.run_summary` | `FeatureWorkflow.run` | Run start timestamp |
+| `_run_id` | `RunHost` | `FeatureWorkflow` | `FeatureWorkflow.run` | Stashed run ID for offline unit tests |
+| `_run_summary` | `RunHost` | `FeatureWorkflow.run_summary`, `RunHost._retro` | `FeatureWorkflow` | Terminal `RunSummary`, built once at end of run |
 | `_integration_head` | `TaskHost` (in P1) / `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow` | Current commit on integration branch |
 | `_base_sha` | `FeatureWorkflow` | `FeatureWorkflow` (integration diff, `merge.step`) | `FeatureWorkflow.run` (once, at setup) | Setup head of the integration branch, pinned as the merge gate's baseline (diff-scoped gates DS2); distinct from the advancing `_integration_head` |
 | `_integration_wt` | `TaskHost` (in P1) / `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow` | Path to task integration worktree |
