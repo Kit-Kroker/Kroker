@@ -40,6 +40,7 @@ STAGES = [
     "plan",
     "research",
     "retro",
+    "review",
 ]
 
 
