@@ -113,6 +113,7 @@ from .workflows.assessment import AssessmentWorkflow
 from .workflows.crew import CrewTaskWorkflow
 from .workflows.deployment import DeploymentWorkflow
 from .workflows.feature import FeatureWorkflow
+from .workflows.graph import GraphWorkflow
 from .workflows.reflect import ReflectWorkflow
 from .workflows.tidyup import TidyUpWorkflow
 from .workflows.triage import TriageWorkflow
@@ -200,6 +201,20 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
     ]
 
 
+def graph_boot_problems() -> list[str]:
+    """E-72 D2 / E-74 D14: the registry self-check plus handler coverage, at boot."""
+    from .graph.node_types import NODE_TYPES, check_node_types
+    from .workflows.graph_catalog import NOT_EXECUTABLE
+    from .workflows.graph_nodes import HANDLERS
+
+    problems = list(check_node_types())
+    expected = sorted(NODE_TYPES)
+    covered = sorted({*HANDLERS, *NOT_EXECUTABLE})
+    if expected != covered:
+        problems.append(f"handler coverage mismatch: registry {expected} vs handled {covered}")
+    return problems
+
+
 async def main() -> None:
     # Fail closed: a registry that violates the ADR-6 family-inequality
     # invariant must never boot a worker (FR-204/US-5).
@@ -208,6 +223,10 @@ async def main() -> None:
     # image does not carry must kill the worker here, not forty minutes and
     # one billed lead into a run.
     validate_crew_clis()
+    # E-74: a registry the graph interpreter cannot run must never boot a worker.
+    graph_problems = graph_boot_problems()
+    if graph_problems:
+        raise SystemExit("graph registry unhealthy: " + "; ".join(graph_problems))
     # E-24 (via E-35): warn — not fail — on harness CLI version drift.
     check_harness_versions()
 
@@ -227,6 +246,7 @@ async def main() -> None:
         task_queue=TASK_QUEUE,
         workflows=[
             FeatureWorkflow,
+            GraphWorkflow,
             BenchmarkWorkflow,
             ReflectWorkflow,
             DeploymentWorkflow,

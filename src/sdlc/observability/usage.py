@@ -4,9 +4,13 @@ testable outside the workflow sandbox."""
 
 from __future__ import annotations
 
-from ..core.models import (
-    RoleUsage,
-)
+from temporalio import workflow
+
+with workflow.unsafe.imports_passed_through():
+    from ..benchmarks.models import CostBag
+    from ..core.models import (
+        RoleUsage,
+    )
 
 
 def merge_usage(
@@ -36,8 +40,6 @@ def cost_bag_from_spend(spend: RoleUsage | None, cost_usd: float | None = None):
     cost_usd (harness-reported dollars) wins over the spend's priced sum.
     A zero-token spend (memoization cache hit — the closure never ran)
     degrades to None fields, matching pre-E-33 records."""
-    from ..benchmarks.models import CostBag
-
     if spend is None:
         return CostBag(usd=cost_usd)
     return CostBag(

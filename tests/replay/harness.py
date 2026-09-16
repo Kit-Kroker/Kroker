@@ -163,3 +163,23 @@ def load_history(name: str) -> WorkflowHistory:
 
 def load_golden(name: str) -> dict[str, Any]:
     return json.loads((GOLDEN / f"{name}.json").read_text(encoding="utf-8"))
+
+
+async def _start_graph(client: Client, scenario: Scenario, wf_id: str) -> WorkflowHandle:
+    from sdlc.workflows.graph import GraphWorkflow
+    from sdlc.workflows.graph_catalog import build_run_input
+
+    run_input = build_run_input(scenario.idea(), scenario.cfg(), scenario.seeded())
+    return await client.start_workflow(
+        GraphWorkflow.run, run_input, id=wf_id, task_queue=TASK_QUEUE
+    )
+
+
+def _graph_workflows() -> tuple[type, ...]:
+    from sdlc.workflows.deployment import DeploymentWorkflow
+    from sdlc.workflows.graph import GraphWorkflow
+
+    return (GraphWorkflow, DeploymentWorkflow)
+
+
+GRAPH_STARTER = Starter("GraphWorkflow", _graph_workflows(), _start_graph)

@@ -7,18 +7,19 @@ from typing import Any, cast
 
 from temporalio import workflow
 
-from ..core.models import PipelineConfig, RoleUsage
-from ..observability.usage import cost_bag_from_spend
-from ..stages.plan.models import PlanDrift
-from .models import (
-    BenchmarkOutcome,
-    BenchmarkRecord,
-    BenchmarkScope,
-    JudgeKind,
-    QualityScore,
-    SpeedBag,
-    WasteBag,
-)
+with workflow.unsafe.imports_passed_through():
+    from ..core.models import PipelineConfig, RoleUsage
+    from ..observability.usage import cost_bag_from_spend
+    from ..stages.plan.models import PlanDrift
+    from .models import (
+        BenchmarkOutcome,
+        BenchmarkRecord,
+        BenchmarkScope,
+        JudgeKind,
+        QualityScore,
+        SpeedBag,
+        WasteBag,
+    )
 
 
 def stage_record(
