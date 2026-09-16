@@ -15,6 +15,9 @@ The architecture stage returns a tuple of `(ArchitectureSpec, GateDecision)`. Th
 ### ARCH-1.3
 The architecture stage runs the architect agent with memoization and revisable review loops, checks brownfield filesystem deltas via `check_brownfield_delta`, records benchmark telemetry and memory summary, and provides grounded research tools via dedicated budget scopes. [FR-203, E-84, E-85]
 
+### ARCH-1.4
+The step is composed of `prepare` (the once-per-stage prefix: stage event, start time, role usage, memory recall, map grounding, prompt salt), `produce` (one architect round including delta retries, keyed by the unchanged memo input) and `finish` (judge, benchmark record, memory retain). `step` composes them around `revisable_stage` for FeatureWorkflow; GraphWorkflow calls them across the `architect` and `gate.architecture` nodes. [E-74 spec §4.3, §6.1]
+
 ## Failure modes
 
 - **Delta grounding mismatch**: Proposed file changes do not match repository layout; retries with delta guidance or raises ApplicationError.
