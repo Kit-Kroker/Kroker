@@ -1,6 +1,52 @@
 {
   "node_types": [
     {
+      "type": "analyze",
+      "kind": "stage",
+      "role": null,
+      "canonical_stage": "analyze",
+      "default_id": "analyze",
+      "ports": [
+        {
+          "name": "results",
+          "direction": "in",
+          "payload": "BuildResult",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "plan",
+          "direction": "in",
+          "payload": "ImplementationPlan",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "analysis",
+          "direction": "out",
+          "payload": "AnalyzeResult",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "fail",
+          "direction": "out",
+          "payload": "NodeFailure",
+          "required": true,
+          "multiplicity": "one"
+        }
+      ],
+      "connectable": {
+        "analysis": [
+          {
+            "type": "merge",
+            "port": "analysis"
+          }
+        ],
+        "fail": []
+      }
+    },
+    {
       "type": "architect",
       "kind": "stage",
       "role": "architect",
@@ -34,6 +80,13 @@
           "payload": "ArchitectureSpec",
           "required": true,
           "multiplicity": "one"
+        },
+        {
+          "name": "fail",
+          "direction": "out",
+          "payload": "NodeFailure",
+          "required": true,
+          "multiplicity": "one"
         }
       ],
       "connectable": {
@@ -43,10 +96,15 @@
             "port": "artifact"
           },
           {
+            "type": "merge",
+            "port": "spec"
+          },
+          {
             "type": "plan",
             "port": "spec"
           }
-        ]
+        ],
+        "fail": []
       }
     },
     {
@@ -83,6 +141,13 @@
           "payload": "ClarifiedRequirements",
           "required": true,
           "multiplicity": "one"
+        },
+        {
+          "name": "fail",
+          "direction": "out",
+          "payload": "NodeFailure",
+          "required": true,
+          "multiplicity": "one"
         }
       ],
       "connectable": {
@@ -95,7 +160,80 @@
             "type": "plan",
             "port": "requirements"
           }
-        ]
+        ],
+        "fail": []
+      }
+    },
+    {
+      "type": "code",
+      "kind": "stage",
+      "role": null,
+      "canonical_stage": "code",
+      "default_id": "code",
+      "ports": [
+        {
+          "name": "plan",
+          "direction": "in",
+          "payload": "ImplementationPlan",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "results",
+          "direction": "out",
+          "payload": "BuildResult",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "halt",
+          "direction": "out",
+          "payload": null,
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "fail",
+          "direction": "out",
+          "payload": "NodeFailure",
+          "required": true,
+          "multiplicity": "one"
+        }
+      ],
+      "connectable": {
+        "results": [
+          {
+            "type": "analyze",
+            "port": "results"
+          },
+          {
+            "type": "merge",
+            "port": "results"
+          }
+        ],
+        "halt": [
+          {
+            "type": "clarify",
+            "port": "trigger"
+          },
+          {
+            "type": "context",
+            "port": "trigger"
+          },
+          {
+            "type": "research",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.plan",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.spec",
+            "port": "trigger"
+          }
+        ],
+        "fail": []
       }
     },
     {
@@ -118,6 +256,20 @@
           "payload": "CodebaseMap",
           "required": true,
           "multiplicity": "one"
+        },
+        {
+          "name": "reject",
+          "direction": "out",
+          "payload": null,
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "fail",
+          "direction": "out",
+          "payload": "NodeFailure",
+          "required": true,
+          "multiplicity": "one"
         }
       ],
       "connectable": {
@@ -129,8 +281,90 @@
           {
             "type": "clarify",
             "port": "codebase_map"
+          },
+          {
+            "type": "research",
+            "port": "codebase_map"
           }
-        ]
+        ],
+        "reject": [
+          {
+            "type": "clarify",
+            "port": "trigger"
+          },
+          {
+            "type": "context",
+            "port": "trigger"
+          },
+          {
+            "type": "research",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.plan",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.spec",
+            "port": "trigger"
+          }
+        ],
+        "fail": []
+      }
+    },
+    {
+      "type": "deploy",
+      "kind": "stage",
+      "role": null,
+      "canonical_stage": "deploy",
+      "default_id": "deploy",
+      "ports": [
+        {
+          "name": "pr",
+          "direction": "in",
+          "payload": "PullRequest",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "done",
+          "direction": "out",
+          "payload": null,
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "fail",
+          "direction": "out",
+          "payload": "NodeFailure",
+          "required": true,
+          "multiplicity": "one"
+        }
+      ],
+      "connectable": {
+        "done": [
+          {
+            "type": "clarify",
+            "port": "trigger"
+          },
+          {
+            "type": "context",
+            "port": "trigger"
+          },
+          {
+            "type": "research",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.plan",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.spec",
+            "port": "trigger"
+          }
+        ],
+        "fail": []
       }
     },
     {
@@ -176,6 +410,10 @@
             "port": "artifact"
           },
           {
+            "type": "merge",
+            "port": "spec"
+          },
+          {
             "type": "plan",
             "port": "spec"
           }
@@ -205,6 +443,14 @@
           },
           {
             "type": "research",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.plan",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.spec",
             "port": "trigger"
           }
         ]
@@ -249,8 +495,24 @@
       "connectable": {
         "approve": [
           {
+            "type": "analyze",
+            "port": "plan"
+          },
+          {
+            "type": "code",
+            "port": "plan"
+          },
+          {
             "type": "gate.plan",
             "port": "artifact"
+          },
+          {
+            "type": "merge",
+            "port": "plan"
+          },
+          {
+            "type": "plan_check",
+            "port": "plan"
           }
         ],
         "revise": [
@@ -278,6 +540,14 @@
           },
           {
             "type": "research",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.plan",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.spec",
             "port": "trigger"
           }
         ]
@@ -356,6 +626,14 @@
           {
             "type": "research",
             "port": "trigger"
+          },
+          {
+            "type": "seed.plan",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.spec",
+            "port": "trigger"
           }
         ]
       }
@@ -373,6 +651,27 @@
           "payload": null,
           "required": true,
           "multiplicity": "one"
+        },
+        {
+          "name": "brownfield",
+          "direction": "out",
+          "payload": null,
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "reject",
+          "direction": "out",
+          "payload": null,
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "fail",
+          "direction": "out",
+          "payload": "NodeFailure",
+          "required": true,
+          "multiplicity": "one"
         }
       ],
       "connectable": {
@@ -388,8 +687,150 @@
           {
             "type": "research",
             "port": "trigger"
+          },
+          {
+            "type": "seed.plan",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.spec",
+            "port": "trigger"
           }
-        ]
+        ],
+        "brownfield": [
+          {
+            "type": "clarify",
+            "port": "trigger"
+          },
+          {
+            "type": "context",
+            "port": "trigger"
+          },
+          {
+            "type": "research",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.plan",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.spec",
+            "port": "trigger"
+          }
+        ],
+        "reject": [
+          {
+            "type": "clarify",
+            "port": "trigger"
+          },
+          {
+            "type": "context",
+            "port": "trigger"
+          },
+          {
+            "type": "research",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.plan",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.spec",
+            "port": "trigger"
+          }
+        ],
+        "fail": []
+      }
+    },
+    {
+      "type": "merge",
+      "kind": "stage",
+      "role": null,
+      "canonical_stage": "quality_gate",
+      "default_id": "merge",
+      "ports": [
+        {
+          "name": "results",
+          "direction": "in",
+          "payload": "BuildResult",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "plan",
+          "direction": "in",
+          "payload": "ImplementationPlan",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "spec",
+          "direction": "in",
+          "payload": "ArchitectureSpec",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "analysis",
+          "direction": "in",
+          "payload": "AnalyzeResult",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "pr",
+          "direction": "out",
+          "payload": "PullRequest",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "reject",
+          "direction": "out",
+          "payload": null,
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "fail",
+          "direction": "out",
+          "payload": "NodeFailure",
+          "required": true,
+          "multiplicity": "one"
+        }
+      ],
+      "connectable": {
+        "pr": [
+          {
+            "type": "deploy",
+            "port": "pr"
+          }
+        ],
+        "reject": [
+          {
+            "type": "clarify",
+            "port": "trigger"
+          },
+          {
+            "type": "context",
+            "port": "trigger"
+          },
+          {
+            "type": "research",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.plan",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.spec",
+            "port": "trigger"
+          }
+        ],
+        "fail": []
       }
     },
     {
@@ -426,15 +867,123 @@
           "payload": "ImplementationPlan",
           "required": true,
           "multiplicity": "one"
+        },
+        {
+          "name": "fail",
+          "direction": "out",
+          "payload": "NodeFailure",
+          "required": true,
+          "multiplicity": "one"
         }
       ],
       "connectable": {
         "plan": [
           {
+            "type": "analyze",
+            "port": "plan"
+          },
+          {
+            "type": "code",
+            "port": "plan"
+          },
+          {
             "type": "gate.plan",
             "port": "artifact"
+          },
+          {
+            "type": "merge",
+            "port": "plan"
+          },
+          {
+            "type": "plan_check",
+            "port": "plan"
           }
-        ]
+        ],
+        "fail": []
+      }
+    },
+    {
+      "type": "plan_check",
+      "kind": "stage",
+      "role": null,
+      "canonical_stage": "planning",
+      "default_id": "plan_check",
+      "ports": [
+        {
+          "name": "plan",
+          "direction": "in",
+          "payload": "ImplementationPlan",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "ok",
+          "direction": "out",
+          "payload": "ImplementationPlan",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "halt",
+          "direction": "out",
+          "payload": null,
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "fail",
+          "direction": "out",
+          "payload": "NodeFailure",
+          "required": true,
+          "multiplicity": "one"
+        }
+      ],
+      "connectable": {
+        "ok": [
+          {
+            "type": "analyze",
+            "port": "plan"
+          },
+          {
+            "type": "code",
+            "port": "plan"
+          },
+          {
+            "type": "gate.plan",
+            "port": "artifact"
+          },
+          {
+            "type": "merge",
+            "port": "plan"
+          },
+          {
+            "type": "plan_check",
+            "port": "plan"
+          }
+        ],
+        "halt": [
+          {
+            "type": "clarify",
+            "port": "trigger"
+          },
+          {
+            "type": "context",
+            "port": "trigger"
+          },
+          {
+            "type": "research",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.plan",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.spec",
+            "port": "trigger"
+          }
+        ],
+        "fail": []
       }
     },
     {
@@ -448,7 +997,7 @@
           "name": "trigger",
           "direction": "in",
           "payload": null,
-          "required": true,
+          "required": false,
           "multiplicity": "one"
         },
         {
@@ -459,9 +1008,30 @@
           "multiplicity": "one"
         },
         {
+          "name": "codebase_map",
+          "direction": "in",
+          "payload": "CodebaseMap",
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
           "name": "brief",
           "direction": "out",
           "payload": "ResearchBrief",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "reject",
+          "direction": "out",
+          "payload": null,
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "fail",
+          "direction": "out",
+          "payload": "NodeFailure",
           "required": true,
           "multiplicity": "one"
         }
@@ -476,7 +1046,132 @@
             "type": "gate.research",
             "port": "artifact"
           }
-        ]
+        ],
+        "reject": [
+          {
+            "type": "clarify",
+            "port": "trigger"
+          },
+          {
+            "type": "context",
+            "port": "trigger"
+          },
+          {
+            "type": "research",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.plan",
+            "port": "trigger"
+          },
+          {
+            "type": "seed.spec",
+            "port": "trigger"
+          }
+        ],
+        "fail": []
+      }
+    },
+    {
+      "type": "seed.plan",
+      "kind": "stage",
+      "role": null,
+      "canonical_stage": "planning",
+      "default_id": "seed_plan",
+      "ports": [
+        {
+          "name": "trigger",
+          "direction": "in",
+          "payload": null,
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
+          "name": "plan",
+          "direction": "out",
+          "payload": "ImplementationPlan",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "fail",
+          "direction": "out",
+          "payload": "NodeFailure",
+          "required": true,
+          "multiplicity": "one"
+        }
+      ],
+      "connectable": {
+        "plan": [
+          {
+            "type": "analyze",
+            "port": "plan"
+          },
+          {
+            "type": "code",
+            "port": "plan"
+          },
+          {
+            "type": "gate.plan",
+            "port": "artifact"
+          },
+          {
+            "type": "merge",
+            "port": "plan"
+          },
+          {
+            "type": "plan_check",
+            "port": "plan"
+          }
+        ],
+        "fail": []
+      }
+    },
+    {
+      "type": "seed.spec",
+      "kind": "stage",
+      "role": null,
+      "canonical_stage": "architecture",
+      "default_id": "seed_spec",
+      "ports": [
+        {
+          "name": "trigger",
+          "direction": "in",
+          "payload": null,
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
+          "name": "spec",
+          "direction": "out",
+          "payload": "ArchitectureSpec",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "fail",
+          "direction": "out",
+          "payload": "NodeFailure",
+          "required": true,
+          "multiplicity": "one"
+        }
+      ],
+      "connectable": {
+        "spec": [
+          {
+            "type": "gate.architecture",
+            "port": "artifact"
+          },
+          {
+            "type": "merge",
+            "port": "spec"
+          },
+          {
+            "type": "plan",
+            "port": "spec"
+          }
+        ],
+        "fail": []
       }
     }
   ],

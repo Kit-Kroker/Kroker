@@ -49,6 +49,7 @@ EXEMPT_PATTERNS = (
     "records/*",  # verbatim Claude Design exports
     "benchmarks/*",  # the measurement instrument's vendored corpus
     "tests/fixtures/hindsight-openapi.json",  # verbatim vendored schema
+    "*/__fixtures__/*",  # generated fixture dumps (AGENTS.md)
     "build/*",
     "*/dist/*",
     "*/node_modules/*",

@@ -60,13 +60,31 @@ def _out(
     return NodePort(name=name, direction="out", payload=payload, terminal=terminal)
 
 
-def _gate(type_: str, payload: str, canonical_stage: str) -> NodeTypeSpec:
-    """A revise-loop gate: artifact:T -> approve:T | revise:GateDecision | reject."""
+def _fail() -> NodePort:
+    return _out("fail", "NodeFailure", terminal="failed")  # E-74 D8: every stage type
+
+
+def _reject() -> NodePort:
+    return _out("reject", None, terminal="rejected")
+
+
+def _halt() -> NodePort:
+    return _out("halt", None, terminal="failed")  # domain failure carrying a result string
+
+
+def _gate(
+    type_: str,
+    payload: str,
+    canonical_stage: str,
+    budget_after: Literal["none", "continuing", "exiting"],
+) -> NodeTypeSpec:
+    """A revise-loop gate: artifact:T -> approve:T | revise:GateDecision | reject (terminal)."""
     return NodeTypeSpec(
         type=type_,
         kind="gate",
         role=None,
         canonical_stage=canonical_stage,
+        budget_after=budget_after,
         ports=(
             _in("artifact", payload),
             _out("approve", payload),
@@ -76,35 +94,42 @@ def _gate(type_: str, payload: str, canonical_stage: str) -> NodeTypeSpec:
     )
 
 
-# The seed catalog (spec §6.4): the typed pre-code half. Type names equal
-# STAGE_ROLES stage keys where one exists, so E-74 reaches PROMPT_SHAS[type]
-# without a second mapping. No gate.clarify: clarify's HITL is a Q&A channel
-# inside its handler (stages/clarify/step.py:199), not approve/revise/reject.
-# A gate's canonical_stage is its producer's stage (FR-1206).
-_SEED: tuple[NodeTypeSpec, ...] = (
+# The post-plan catalog (spec §6.4, E-74 §6). Type names equal STAGE_ROLES
+# stage keys where one exists, so E-74 reaches PROMPT_SHAS[type] without a
+# second mapping. No gate.clarify: clarify's HITL is a Q&A channel inside its
+# handler (stages/clarify/step.py:199), not approve/revise/reject. A gate's
+# canonical_stage is its producer's stage (FR-1206).
+_CATALOG: tuple[NodeTypeSpec, ...] = (
+    # ---- pre-code (E-72 seed; E-74 adds reject/fail/brownfield ports) ----
     NodeTypeSpec(
         type="intake",
         kind="stage",
         role=None,
         canonical_stage="intake",
-        ports=(_out("ok", None),),
+        # `ok` is the greenfield path (name kept from E-72 so stored graphs keep their sha).
+        ports=(_out("ok", None), _out("brownfield", None), _reject(), _fail()),
     ),
     NodeTypeSpec(
         type="context",
         kind="stage",
         role=None,
         canonical_stage="context",
-        ports=(_in("trigger", None), _out("map", "CodebaseMap")),
+        ports=(_in("trigger", None), _out("map", "CodebaseMap"), _reject(), _fail()),
     ),
     NodeTypeSpec(
         type="research",
         kind="stage",
         role="research",
         canonical_stage="research",
+        budget_after="continuing",
         ports=(
-            _in("trigger", None),
+            _in("trigger", None, required=False),
             _in("guidance", "GateDecision", required=False),
+            # Ordering only (brownfield runs map context before research, feature.py:524-535).
+            _in("codebase_map", "CodebaseMap", required=False),
             _out("brief", "ResearchBrief"),
+            _reject(),
+            _fail(),
         ),
     ),
     NodeTypeSpec(
@@ -112,11 +137,13 @@ _SEED: tuple[NodeTypeSpec, ...] = (
         kind="stage",
         role="clarify",
         canonical_stage="clarify",
+        budget_after="continuing",
         ports=(
             _in("trigger", None, required=False),
             _in("codebase_map", "CodebaseMap", required=False),
             _in("research", "ResearchBrief", required=False),
             _out("requirements", "ClarifiedRequirements"),
+            _fail(),
         ),
     ),
     NodeTypeSpec(
@@ -129,6 +156,7 @@ _SEED: tuple[NodeTypeSpec, ...] = (
             _in("codebase_map", "CodebaseMap", required=False),
             _in("guidance", "GateDecision", required=False),
             _out("spec", "ArchitectureSpec"),
+            _fail(),
         ),
     ),
     NodeTypeSpec(
@@ -141,14 +169,84 @@ _SEED: tuple[NodeTypeSpec, ...] = (
             _in("requirements", "ClarifiedRequirements", required=False),
             _in("guidance", "GateDecision", required=False),
             _out("plan", "ImplementationPlan"),
+            _fail(),
         ),
     ),
-    _gate("gate.research", "ResearchBrief", "research"),
-    _gate("gate.architecture", "ArchitectureSpec", "architecture"),
-    _gate("gate.plan", "ImplementationPlan", "planning"),
+    _gate("gate.research", "ResearchBrief", "research", "none"),
+    _gate("gate.architecture", "ArchitectureSpec", "architecture", "exiting"),
+    _gate("gate.plan", "ImplementationPlan", "planning", "exiting"),
+    # ---- post-plan (E-74 §6; coarse `code` per U1) ----
+    NodeTypeSpec(
+        type="plan_check",
+        kind="stage",
+        role=None,
+        canonical_stage="planning",
+        ports=(
+            _in("plan", "ImplementationPlan"),
+            _out("ok", "ImplementationPlan"),
+            _halt(),
+            _fail(),
+        ),
+    ),
+    NodeTypeSpec(
+        type="seed.spec",
+        kind="stage",
+        role=None,
+        canonical_stage="architecture",
+        ports=(_in("trigger", None, required=False), _out("spec", "ArchitectureSpec"), _fail()),
+    ),
+    NodeTypeSpec(
+        type="seed.plan",
+        kind="stage",
+        role=None,
+        canonical_stage="planning",
+        ports=(_in("trigger", None, required=False), _out("plan", "ImplementationPlan"), _fail()),
+    ),
+    NodeTypeSpec(
+        type="code",
+        kind="stage",
+        role=None,
+        canonical_stage="code",
+        ports=(_in("plan", "ImplementationPlan"), _out("results", "BuildResult"), _halt(), _fail()),
+    ),
+    NodeTypeSpec(
+        type="analyze",
+        kind="stage",
+        role=None,
+        canonical_stage="analyze",
+        budget_after="continuing",
+        ports=(
+            _in("results", "BuildResult"),
+            _in("plan", "ImplementationPlan"),
+            _out("analysis", "AnalyzeResult"),
+            _fail(),
+        ),
+    ),
+    NodeTypeSpec(
+        type="merge",
+        kind="stage",
+        role=None,
+        canonical_stage="quality_gate",
+        ports=(
+            _in("results", "BuildResult"),
+            _in("plan", "ImplementationPlan"),
+            _in("spec", "ArchitectureSpec"),
+            _in("analysis", "AnalyzeResult"),
+            _out("pr", "PullRequest"),
+            _reject(),
+            _fail(),
+        ),
+    ),
+    NodeTypeSpec(
+        type="deploy",
+        kind="stage",
+        role=None,
+        canonical_stage="deploy",
+        ports=(_in("pr", "PullRequest"), _out("done", None), _fail()),
+    ),
 )
 
-NODE_TYPES: Mapping[str, NodeTypeSpec] = MappingProxyType({s.type: s for s in _SEED})
+NODE_TYPES: Mapping[str, NodeTypeSpec] = MappingProxyType({s.type: s for s in _CATALOG})
 
 
 def find_port(spec: NodeTypeSpec, name: str, direction: Literal["in", "out"]) -> NodePort | None:

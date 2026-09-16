@@ -32,7 +32,12 @@ describe('toCanvas (edit mode)', () => {
     const architect = nodes.find((n) => n.key === 'architect')!
     expect(architect.subtitle).toBe('architect')
     expect(architect.ports.find((p) => p.name === 'guidance')).toMatchObject({ side: 'in', kind: 'data', optional: true })
-    expect(nodes.find((n) => n.key === 'intake')!.ports).toEqual([{ name: 'ok', side: 'out', kind: 'signal', label: 'ok', optional: false }])
+    expect(nodes.find((n) => n.key === 'intake')!.ports).toEqual([
+      { name: 'ok', side: 'out', kind: 'signal', label: 'ok', optional: false },
+      { name: 'brownfield', side: 'out', kind: 'signal', label: 'brownfield', optional: false },
+      { name: 'reject', side: 'out', kind: 'signal', label: 'reject', optional: false },
+      { name: 'fail', side: 'out', kind: 'data', label: 'fail', optional: false },
+    ])
     expect(nodes.find((n) => n.key === 'plan')!.title).toBe('Plan gate')
   })
 
