@@ -11,6 +11,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from ..core.models import IdeaBrief, PipelineConfig, RoleConfig
+from ..graph.model import PipelineGraph
 from ..harness.models import HarnessRunResult
 from ..stages.analyze.models import AnalysisReport
 from ..stages.architecture.models import ArchitectureSpec
@@ -86,3 +88,13 @@ class PullRequest(BaseModel):
     """E-74: the `merge` node's output -- the PR url (or the benchmark skip string)."""
 
     url: str
+
+
+class GraphRunInput(BaseModel):
+    """E-74 §5.1: GraphWorkflow's single, pinned input."""
+
+    idea: IdeaBrief
+    cfg: PipelineConfig
+    graph: PipelineGraph
+    roles: dict[str, RoleConfig]  # registry roles overlaid with cfg.roles, loader fields stripped
+    seeded: SeededWork | None = None

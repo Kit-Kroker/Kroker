@@ -12,15 +12,15 @@ def test_the_monolith_is_deleted():
 
 
 def test_no_import_still_resolves_to_the_deleted_monolith():
-    # `from .models import` inside a subpackage is that package's OWN models
-    # module and is fine. Only the paths that used to reach src/sdlc/models.py
-    # are defects: `from ..models import` in a subpackage, and
-    # `from .models import` in a module sitting directly in src/sdlc/.
+    # Only relative imports that resolve back up to src/sdlc/models.py are defects:
+    # at depth N from src/sdlc/ (where direct files have depth 1), exactly N leading dots
+    # ('from ' + '.' * N + 'models import') would reach the deleted monolith.
     offenders = []
-    for p in pathlib.Path("src/sdlc").rglob("*.py"):
+    root = pathlib.Path("src/sdlc")
+    for p in root.rglob("*.py"):
         text = p.read_text(encoding="utf-8")
-        if "from ..models import" in text:
-            offenders.append(str(p))
-        if p.parent.name == "sdlc" and "from .models import" in text:
+        depth = len(p.relative_to(root).parts)
+        target = f"from {'.' * depth}models import"
+        if target in text:
             offenders.append(str(p))
     assert offenders == [], offenders
