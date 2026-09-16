@@ -145,3 +145,5 @@ class Topology:
     out_ports: Mapping[str, Mapping[str, tuple[str, ...]]]  # node -> EVERY out-port -> edge ids
     in_ports: Mapping[str, Mapping[str, PortWiring]]  # node -> connected in-port -> wiring
     regions: Mapping[str, tuple[str, ...]]  # back-edge target v -> REGION(v)
+    # node -> terminal out-port -> outcome
+    terminal_ports: Mapping[str, Mapping[str, Literal["rejected", "failed"]]]

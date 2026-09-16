@@ -156,7 +156,7 @@ def catalog(registry: Mapping[str, NodeTypeSpec] = NODE_TYPES) -> CatalogWire:
             role=spec.role,
             canonical_stage=spec.canonical_stage,
             default_id=default_id(spec.type),
-            ports=[PortWire(**p.model_dump()) for p in spec.ports],
+            ports=[PortWire(**p.model_dump(exclude={"terminal"})) for p in spec.ports],
             connectable=_connectable(spec, registry),
         )
         for spec in (registry[key] for key in sorted(registry))

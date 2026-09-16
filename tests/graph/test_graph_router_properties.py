@@ -165,7 +165,7 @@ def _check_redelivery(router: GraphRouter, state: RouterState) -> None:
 
 
 def _ends_run(t, live: LiveActivation, port: str) -> bool:
-    return port == "reject" and live.node_id in t.gate_nodes
+    return port in t.terminal_ports.get(live.node_id, {})
 
 
 def _explore(router: GraphRouter) -> dict[str, RouterState]:

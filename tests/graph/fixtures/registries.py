@@ -27,8 +27,8 @@ def port_in(
     )
 
 
-def port_out(name: str, payload: str | None) -> NodePort:
-    return NodePort(name=name, direction="out", payload=payload)
+def port_out(name: str, payload: str | None, *, terminal: str | None = None) -> NodePort:
+    return NodePort(name=name, direction="out", payload=payload, terminal=terminal)  # type: ignore[arg-type]
 
 
 def stage(type_: str, *ports: NodePort, role: str | None = None) -> NodeTypeSpec:
@@ -45,7 +45,7 @@ def gate(type_: str, payload: str) -> NodeTypeSpec:
             port_in("artifact", payload),
             port_out("approve", payload),
             port_out("revise", "GateDecision"),
-            port_out("reject", None),
+            port_out("reject", None, terminal="rejected"),
         ),
     )
 

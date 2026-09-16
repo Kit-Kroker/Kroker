@@ -50,8 +50,10 @@ def _in(
     )
 
 
-def _out(name: str, payload: str | None) -> NodePort:
-    return NodePort(name=name, direction="out", payload=payload)
+def _out(
+    name: str, payload: str | None, *, terminal: Literal["rejected", "failed"] | None = None
+) -> NodePort:
+    return NodePort(name=name, direction="out", payload=payload, terminal=terminal)
 
 
 def _gate(type_: str, payload: str, canonical_stage: str) -> NodeTypeSpec:
@@ -65,7 +67,7 @@ def _gate(type_: str, payload: str, canonical_stage: str) -> NodeTypeSpec:
             _in("artifact", payload),
             _out("approve", payload),
             _out("revise", "GateDecision"),
-            _out("reject", None),
+            _out("reject", None, terminal="rejected"),
         ),
     )
 
@@ -192,6 +194,8 @@ def _gate_shape_problems(spec: NodeTypeSpec) -> list[str]:
         problems.append(f"gate out-port 'approve' must carry the artifact payload {artifact!r}")
     if reject is None or reject.payload is not None:
         problems.append("gate out-port 'reject' must be a signal port")
+    elif reject.terminal != "rejected":
+        problems.append("gate out-port 'reject' must be terminal='rejected'")
     if revise is not None and revise.payload != "GateDecision":
         problems.append("gate out-port 'revise' must carry 'GateDecision'")
     extra = sorted(set(outs) - {"approve", "reject", "revise"})

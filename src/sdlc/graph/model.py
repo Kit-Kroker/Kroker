@@ -66,6 +66,9 @@ class NodePort(BaseModel):
     payload: str | None  # a PAYLOAD_TYPES key; None = signal port
     required: bool = True  # meaningful on in-ports only
     multiplicity: Literal["one", "many"] = "one"  # "many" = collect; in-ports only
+    # E-74 (D6): an emission on this out-port with NO edges ends the run with
+    # this outcome; with edges it routes like any port (error routing is topology).
+    terminal: Literal["rejected", "failed"] | None = None
 
     @model_validator(mode="after")
     def _out_ports_are_plain(self) -> NodePort:
@@ -73,6 +76,10 @@ class NodePort(BaseModel):
             raise ValueError(
                 f"out-port {self.name!r} must be required with multiplicity 'one' "
                 f"(optional and collect apply to in-ports only)"
+            )
+        if self.direction == "in" and self.terminal is not None:
+            raise ValueError(
+                f"in-port {self.name!r} cannot be terminal (terminal applies to out-ports only)"
             )
         return self
 

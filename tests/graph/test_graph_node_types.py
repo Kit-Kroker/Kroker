@@ -27,8 +27,8 @@ def _in(name, payload, **kw):
     return NodePort(name=name, direction="in", payload=payload, **kw)
 
 
-def _out(name, payload):
-    return NodePort(name=name, direction="out", payload=payload)
+def _out(name, payload, *, terminal=None):
+    return NodePort(name=name, direction="out", payload=payload, terminal=terminal)
 
 
 def _stage(type_, *ports, role=None, canonical_stage="architecture"):
@@ -266,3 +266,27 @@ def test_payload_resolution_failures(monkeypatch):
     )
     assert problems[3].startswith("t.d: payload 'NoAttr' does not resolve (sdlc.core.models:")
     assert len(problems) == 4
+
+
+def test_gate_reject_must_be_terminal_rejected():
+    from sdlc.graph.node_types import NodeTypeSpec as Spec
+
+    bad = Spec(
+        type="gate.x",
+        kind="gate",
+        role=None,
+        canonical_stage="architecture",
+        ports=(
+            NodePort(name="artifact", direction="in", payload="ArchitectureSpec"),
+            NodePort(name="approve", direction="out", payload="ArchitectureSpec"),
+            NodePort(name="reject", direction="out", payload=None),
+        ),
+    )
+    problems = check_node_types(MappingProxyType({"gate.x": bad}))
+    assert "gate.x: gate out-port 'reject' must be terminal='rejected'" in problems
+
+
+def test_seed_gate_rejects_are_terminal():
+    for gate in ("gate.research", "gate.architecture", "gate.plan"):
+        reject = find_port(NODE_TYPES[gate], "reject", "out")
+        assert reject is not None and reject.terminal == "rejected"

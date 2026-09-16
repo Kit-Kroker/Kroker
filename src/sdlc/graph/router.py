@@ -29,13 +29,13 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from ..core.models import gate_key
 from .topology import PortWiring, Topology
 
-Outcome = Literal["running", "completed", "rejected", "escalated"]
+Outcome = Literal["running", "completed", "rejected", "escalated", "failed"]
 Unavailable = Literal["exhausted", "target_dead"]
 DropReason = Literal["stale", "duplicate", "post_terminal"]
 NodeStatus = Literal["pending", "running", "done", "dead"]
 
 _FROZEN = ConfigDict(frozen=True, extra="forbid")
-_TERMINAL: tuple[Outcome, ...] = ("rejected", "escalated")
+_TERMINAL: tuple[Outcome, ...] = ("rejected", "escalated", "failed")
 
 
 class RouterError(Exception):
@@ -263,10 +263,12 @@ class GraphRouter:
         token = Token(payload_ref=event.payload_ref, producer=event.activation_id)
         edges = self._t.out_ports[node_id][event.port]
 
-        # 4. no edges: a gate's unconnected reject ends the run; anything else is a sink
+        # 4. no edges: a terminal port ends the run (gate reject included, E-74 D6);
+        #    any other edgeless port is a sink
         if not edges:
-            if event.port == "reject" and node_id in self._t.gate_nodes:
-                return self._terminate(w, "rejected", f"{node_id}.reject", emitter=None)
+            kind = self._t.terminal_ports.get(node_id, {}).get(event.port)
+            if kind is not None:
+                return self._terminate(w, kind, f"{node_id}.{event.port}", emitter=None)
             return self._settle(w, cancelled=[])
 
         # 5. back edge: the port carries exactly this edge (validate T4)

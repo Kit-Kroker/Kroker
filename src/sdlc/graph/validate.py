@@ -502,13 +502,17 @@ def _build_topology(
     )
     by_id: dict[str, GraphEdge] = {edge_id(e): e for e in graph.edges}
     out_ports: dict[str, dict[str, tuple[str, ...]]] = {}
+    terminal_ports: dict[str, dict[str, Literal["rejected", "failed"]]] = {}
     in_ports: dict[str, dict[str, PortWiring]] = {}
     for node_id in node_ids:
         spec = registry[nodes[node_id].type]
         outs: dict[str, tuple[str, ...]] = {}
+        terms: dict[str, Literal["rejected", "failed"]] = {}
         ins: dict[str, PortWiring] = {}
         for port in sorted(spec.ports, key=lambda p: (p.direction, p.name)):
             if port.direction == "out":
+                if port.terminal is not None:
+                    terms[port.name] = port.terminal
                 outs[port.name] = tuple(
                     i
                     for i, e in sorted(by_id.items())
@@ -528,6 +532,7 @@ def _build_topology(
                     back_edges=tuple(i for i, e in incoming if is_back_edge(e)),
                 )
         out_ports[node_id] = dict(sorted(outs.items()))
+        terminal_ports[node_id] = dict(sorted(terms.items()))
         in_ports[node_id] = dict(sorted(ins.items()))
     bounds = {i: e.max_traversals for i, e in sorted(by_id.items()) if e.max_traversals is not None}
     targets = sorted({by_id[i].target for i in bounds})
@@ -540,6 +545,7 @@ def _build_topology(
         out_ports=out_ports,
         in_ports=in_ports,
         regions={v: forward_reach(adjacency, v) for v in targets},
+        terminal_ports=terminal_ports,
     )
 
 

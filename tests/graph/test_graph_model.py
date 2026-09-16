@@ -167,3 +167,16 @@ def test_node_port_name_shape(bad_name):
     """E-72 review roll-up: NodePort.name shares the id pattern."""
     with pytest.raises(ValidationError):
         NodePort(name=bad_name, direction="in", payload=None)
+
+
+def test_node_port_terminal_is_for_out_ports_only():
+    import pytest
+    from pydantic import ValidationError
+
+    from sdlc.graph import NodePort
+
+    assert (
+        NodePort(name="fail", direction="out", payload="F", terminal="failed").terminal == "failed"
+    )
+    with pytest.raises(ValidationError, match="cannot be terminal"):
+        NodePort(name="x", direction="in", payload=None, terminal="rejected")
