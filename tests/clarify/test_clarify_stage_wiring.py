@@ -373,7 +373,7 @@ def test_the_architect_reads_the_downstream_view_not_the_raw_artifact():
     )
     assert "reqs_for_architect = _requirements_for_downstream(requirements)" in arch_step_src
     # the prompt...
-    assert r"f'mode={mode_val}\n{reqs_for_architect}'" in arch_step_src
+    assert r"f'mode={prep.mode_val}\n{reqs_for_architect}'" in arch_step_src
     # ...and the memo key, which must key on exactly what it prompted with.
     assert "cache_key = reqs_for_architect +" in arch_step_src
     # The clarify stage's own uses still read the FULL artifact: `dropped`

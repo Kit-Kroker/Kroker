@@ -199,4 +199,9 @@ def test_both_proposer_stages_pass_their_resolved_model():
         src = pathlib.Path(path).read_text(encoding="utf-8")
         idx = src.find("revisable_stage(")
         assert idx != -1, path
-        assert "author_model=resolved_model" in src[idx : idx + 200], path
+        expected = (
+            "author_model=prep.resolved_model"
+            if "architecture" in path
+            else "author_model=resolved_model"
+        )
+        assert expected in src[idx : idx + 200], path

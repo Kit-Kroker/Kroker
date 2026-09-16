@@ -40,7 +40,6 @@ from sdlc.core.models import (
 from sdlc.gate import CheckClass, CheckResult, build_check
 from sdlc.measurement import Measurement
 from sdlc.observability.activities import export_run_artifacts
-from sdlc.stages import architecture
 from sdlc.stages.analyze.models import AnalysisReport
 from sdlc.stages.architecture.models import (
     ArchitectureDecision,
@@ -71,7 +70,11 @@ from tests.fakes.fake_agents import fake_agent_activities
 
 
 def _arch_src() -> str:
-    return inspect.getsource(FeatureWorkflow._pipeline) + inspect.getsource(architecture.step)
+    import pathlib
+
+    return inspect.getsource(FeatureWorkflow._pipeline) + pathlib.Path(
+        "src/sdlc/stages/architecture/step.py"
+    ).read_text(encoding="utf-8")
 
 
 def test_the_architect_prompt_carries_the_rendered_map():
