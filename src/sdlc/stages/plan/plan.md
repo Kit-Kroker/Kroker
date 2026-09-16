@@ -15,6 +15,9 @@ The plan stage returns a tuple of `(ImplementationPlan, GateDecision)`. The orch
 ### PLAN-1.3
 The plan stage runs the planner agent with memoization and revisable review loops, records benchmark telemetry and memory summary, and retains the task plan summary in the project memory bank. [FR-303, E-84, E-85]
 
+### PLAN-1.4
+The step is composed of `prepare` (start time, role usage, memory recall, prompt salt), `produce` (one planner round keyed by the unchanged memo input) and `finish` (judge, benchmark record, memory retain). `step` composes them around `revisable_stage` for FeatureWorkflow; GraphWorkflow calls them across the `plan` and `gate.plan` nodes. [E-74 spec §4.3, §6.1]
+
 ## Failure modes
 
 - **Invalid task graph**: Cyclic or missing task dependencies detected during orchestrator validation; fails early before scheduling work.

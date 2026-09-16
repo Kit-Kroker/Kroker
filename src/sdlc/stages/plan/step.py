@@ -7,6 +7,7 @@ retains the plan summary in memory, and returns (ImplementationPlan, GateDecisio
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -48,6 +49,126 @@ def _workflow_id() -> str:
         return "direct-execution"
 
 
+@dataclass
+class PlanPrep:
+    """The once-per-stage prefix of the plan stage (E-74 §4.3)."""
+
+    started: datetime
+    resolved_model: str
+    spend: RoleUsage
+    snapshot: Any
+    salt: str
+
+
+async def prepare(
+    ctx: StageContext,
+    *,
+    cfg: PipelineConfig,
+    idea: IdeaBrief | None = None,
+    planner_model: str | None = None,
+) -> PlanPrep:
+    started = _now()
+    plan_role = cfg.roles.get("plan")
+    resolved_model = (
+        planner_model
+        or (plan_role.model if plan_role and plan_role.model else None)
+        or "claude-3-5-sonnet"
+    )
+    spend = RoleUsage(role="planner", model=resolved_model)
+    title = idea.title if idea else "feature"
+    snapshot = await ctx.recall(
+        cfg,
+        cfg.memory.project_bank,
+        query=f"plan:{title}",
+        filters={"stage": "plan"},
+    )
+    return PlanPrep(
+        started=started,
+        resolved_model=resolved_model,
+        spend=spend,
+        snapshot=snapshot,
+        salt=prompt_digest(cfg),
+    )
+
+
+async def produce(
+    ctx: StageContext,
+    prep: PlanPrep,
+    *,
+    cfg: PipelineConfig,
+    architecture: ArchitectureSpec,
+    requirements: ClarifiedRequirements | None = None,
+    planner_agent: Any = None,
+    guidance: str | None = None,
+) -> ImplementationPlan:
+    """One planner round. Verbatim body of the former `_run_plan(guidance)`."""
+    prompt = planner_prompt(architecture.model_dump_json(), prep.snapshot.items, guidance)
+
+    async def _produce() -> ImplementationPlan:
+        res = await ctx.run_role(
+            cfg,
+            "planner",
+            prep.resolved_model,
+            planner_agent,
+            prompt,
+            into=prep.spend,
+        )
+        return res.output
+
+    cache_key = architecture.model_dump_json() + (guidance or "")
+    plan_obj, _ = await ctx.cached_stage(
+        cfg,
+        "plan",
+        cache_key,
+        ImplementationPlan,
+        _produce,
+        prompt_digest=prep.salt,
+    )
+    return plan_obj
+
+
+async def finish(
+    ctx: StageContext,
+    prep: PlanPrep,
+    *,
+    cfg: PipelineConfig,
+    artifact: ImplementationPlan,
+    gate: GateDecision,
+) -> None:
+    from ...benchmarks.models import BenchmarkOutcome
+    from ...benchmarks.record_builder import stage_record
+
+    _ended = _now()
+    _quality = await ctx.judge(
+        cfg,
+        artifact.model_dump_json(),
+        "planner",
+        author_model=prep.resolved_model,
+    )
+    await ctx.record(
+        cfg,
+        stage_record(
+            cfg,
+            stage="plan",
+            role="planner",
+            started=prep.started,
+            ended=_ended,
+            quality_score=_quality.score,
+            judge=_quality.judge,
+            outcome=(BenchmarkOutcome.PASS if gate.approved else BenchmarkOutcome.REVISED),
+            model=prep.resolved_model,
+            spend=prep.spend,
+        ),
+    )
+    await ctx.retain(
+        cfg,
+        MemoryKind.STAGE_SUMMARY,
+        cfg.memory.project_bank,
+        text=f"plan: {len(artifact.tasks)} tasks",
+        metadata={"stage": "plan", "run_id": _workflow_id()},
+    )
+
+
 async def step(
     ctx: StageContext,
     *,
@@ -58,87 +179,22 @@ async def step(
     planner_agent: Any = None,
     planner_model: str | None = None,
 ) -> tuple[ImplementationPlan, GateDecision]:
-    """Execute the plan stage.
-
-    Runs the planner agent with memoization and revisable review loops,
-    records benchmark telemetry and memory summary, and returns
-    (ImplementationPlan, GateDecision).
-    """
-    from ...benchmarks.models import BenchmarkOutcome
-    from ...benchmarks.record_builder import stage_record
-
-    _started = _now()
-    plan_role = cfg.roles.get("plan")
-    resolved_model = (
-        planner_model
-        or (plan_role.model if plan_role and plan_role.model else None)
-        or "claude-3-5-sonnet"
-    )
-    plan_spend = RoleUsage(role="planner", model=resolved_model)
-
-    title = idea.title if idea else "feature"
-    snapshot = await ctx.recall(
-        cfg,
-        cfg.memory.project_bank,
-        query=f"plan:{title}",
-        filters={"stage": "plan"},
-    )
-
-    _salt = prompt_digest(cfg)
+    """Execute the plan stage: prepare, the revisable produce loop, finish."""
+    prep = await prepare(ctx, cfg=cfg, idea=idea, planner_model=planner_model)
 
     async def _run_plan(guidance: str | None) -> ImplementationPlan:
-        prompt = planner_prompt(architecture.model_dump_json(), snapshot.items, guidance)
-
-        async def _produce() -> ImplementationPlan:
-            res = await ctx.run_role(
-                cfg,
-                "planner",
-                resolved_model,
-                planner_agent,
-                prompt,
-                into=plan_spend,
-            )
-            return res.output
-
-        cache_key = architecture.model_dump_json() + (guidance or "")
-        plan_obj, _ = await ctx.cached_stage(
-            cfg,
-            "plan",
-            cache_key,
-            ImplementationPlan,
-            _produce,
-            prompt_digest=_salt,
+        return await produce(
+            ctx,
+            prep,
+            cfg=cfg,
+            architecture=architecture,
+            requirements=requirements,
+            planner_agent=planner_agent,
+            guidance=guidance,
         )
-        return plan_obj
 
-    plan_obj, gate = await ctx.revisable_stage("plan", cfg, _run_plan, author_model=resolved_model)
-    _ended = _now()
-    _quality = await ctx.judge(
-        cfg,
-        plan_obj.model_dump_json(),
-        "planner",
-        author_model=resolved_model,
+    plan_obj, gate = await ctx.revisable_stage(
+        "plan", cfg, _run_plan, author_model=prep.resolved_model
     )
-    await ctx.record(
-        cfg,
-        stage_record(
-            cfg,
-            stage="plan",
-            role="planner",
-            started=_started,
-            ended=_ended,
-            quality_score=_quality.score,
-            judge=_quality.judge,
-            outcome=(BenchmarkOutcome.PASS if gate.approved else BenchmarkOutcome.REVISED),
-            model=resolved_model,
-            spend=plan_spend,
-        ),
-    )
-    await ctx.retain(
-        cfg,
-        MemoryKind.STAGE_SUMMARY,
-        cfg.memory.project_bank,
-        text=f"plan: {len(plan_obj.tasks)} tasks",
-        metadata={"stage": "plan", "run_id": _workflow_id()},
-    )
+    await finish(ctx, prep, cfg=cfg, artifact=plan_obj, gate=gate)
     return plan_obj, gate
