@@ -16,11 +16,15 @@ from types import MappingProxyType
 
 PAYLOAD_TYPES: Mapping[str, str] = MappingProxyType(
     {
+        "AnalyzeResult": "sdlc.workflows.models:AnalyzeResult",
         "ArchitectureSpec": "sdlc.stages.architecture.models:ArchitectureSpec",
+        "BuildResult": "sdlc.workflows.models:BuildResult",
         "ClarifiedRequirements": "sdlc.stages.clarify.models:ClarifiedRequirements",
         "CodebaseMap": "sdlc.context.models:CodebaseMap",
         "GateDecision": "sdlc.core.models:GateDecision",
         "ImplementationPlan": "sdlc.stages.plan.models:ImplementationPlan",
+        "NodeFailure": "sdlc.core.models:NodeFailure",
+        "PullRequest": "sdlc.workflows.models:PullRequest",
         "ResearchBrief": "sdlc.stages.research.models:ResearchBrief",
     }
 )

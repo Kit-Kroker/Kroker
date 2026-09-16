@@ -36,6 +36,10 @@ class NodeTypeSpec(BaseModel):
     role: str | None  # registry ROLE name (agents.loader.KNOWN_ROLES); None = role-less
     canonical_stage: str | None  # a CANONICAL_STAGES member; None records as "unknown"
     ports: tuple[NodePort, ...]  # declaration order kept for the palette
+    # E-74 D12: whether the dispatcher runs the run-budget check after this
+    # type's emission -- "continuing": on a port carrying forward edges;
+    # "exiting": on any port carrying no back edge; "none": never.
+    budget_after: Literal["none", "continuing", "exiting"] = "none"
 
 
 def _in(

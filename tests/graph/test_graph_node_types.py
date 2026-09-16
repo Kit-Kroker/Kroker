@@ -127,11 +127,15 @@ def test_seed_catalog_ports():
 
 def test_payload_allowlist_seed():
     assert dict(PAYLOAD_TYPES) == {
+        "AnalyzeResult": "sdlc.workflows.models:AnalyzeResult",
         "ArchitectureSpec": "sdlc.stages.architecture.models:ArchitectureSpec",
+        "BuildResult": "sdlc.workflows.models:BuildResult",
         "ClarifiedRequirements": "sdlc.stages.clarify.models:ClarifiedRequirements",
         "CodebaseMap": "sdlc.context.models:CodebaseMap",
         "GateDecision": "sdlc.core.models:GateDecision",
         "ImplementationPlan": "sdlc.stages.plan.models:ImplementationPlan",
+        "NodeFailure": "sdlc.core.models:NodeFailure",
+        "PullRequest": "sdlc.workflows.models:PullRequest",
         "ResearchBrief": "sdlc.stages.research.models:ResearchBrief",
     }
 
@@ -290,3 +294,12 @@ def test_seed_gate_rejects_are_terminal():
     for gate in ("gate.research", "gate.architecture", "gate.plan"):
         reject = find_port(NODE_TYPES[gate], "reject", "out")
         assert reject is not None and reject.terminal == "rejected"
+
+
+def test_new_payloads_resolve():
+    for name in ("AnalyzeResult", "BuildResult", "NodeFailure", "PullRequest"):
+        assert node_types_module._resolve_payload(name) is None, name
+
+
+def test_budget_after_defaults_to_none():
+    assert _stage("x.y", _out("o", None)).budget_after == "none"

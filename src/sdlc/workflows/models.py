@@ -7,11 +7,12 @@ stage slice.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 from ..harness.models import HarnessRunResult
+from ..stages.analyze.models import AnalysisReport
 from ..stages.architecture.models import ArchitectureSpec
 from ..stages.code.models import HandoffSummary
 from ..stages.plan.models import ImplementationPlan, PlanDrift
@@ -63,3 +64,25 @@ class TaskResult(BaseModel):
     lens_outcomes: list[LensOutcome] = Field(default_factory=list)  # C8: lens-absence tombstones
     plan_drift: PlanDrift | None = None  # E4: drift evidence for the merge gate
     notes: str = ""
+
+
+class BuildResult(BaseModel):
+    """E-74: the `code` node's output -- every task result, in completion order."""
+
+    task_results: list[TaskResult]
+
+
+class AnalyzeResult(BaseModel):
+    """E-74: the `analyze` node's output. The integration diff is fetched once and
+    shared with merge (feature.py's analyze section), so it rides the payload.
+    `integration_diff` is get_task_diff's dict (files/renames are lists)."""
+
+    report: AnalysisReport
+    untraced: list[str]
+    integration_diff: dict[str, Any]
+
+
+class PullRequest(BaseModel):
+    """E-74: the `merge` node's output -- the PR url (or the benchmark skip string)."""
+
+    url: str

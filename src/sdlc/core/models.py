@@ -173,6 +173,15 @@ class GateDecision(BaseModel):
         return self.outcome is GateOutcome.APPROVE
 
 
+class NodeFailure(BaseModel):
+    """E-74 D8: a handler exception converted into a routable `fail` emission.
+    An envelope no stage produces, hence core/."""
+
+    activation_id: str
+    error_type: str
+    message: str
+
+
 class RoleConfig(BaseModel):
     """Which harness/model a 'doing' role uses. Enables cross-harness review."""
 
