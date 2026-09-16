@@ -68,3 +68,26 @@ def test_topology_lists_only_terminal_ports():
     t = run.router.topology
     assert dict(t.terminal_ports["a"]) == {"fail": "failed"}
     assert dict(t.terminal_ports["start"]) == {}
+
+
+import pytest
+
+from sdlc.graph import Halt, RouterError
+
+
+def test_halt_terminates_a_running_state_and_cancels_every_live_activation():
+    run = Run(_two_workers(), TERM)
+    run.emit("start#1", "ok")
+    step = run.router.advance(run.state, Halt(outcome="rejected", reason="budget"))
+    assert (step.outcome, step.reason) == ("rejected", "budget")
+    assert step.cancelled == ("a#1", "b#1")
+    assert step.state.retired == ("a#1", "b#1")
+    assert step.activations == ()
+
+
+def test_halt_after_a_terminal_outcome_is_an_interpreter_bug():
+    run = Run(_two_workers(), TERM)
+    run.emit("start#1", "ok")
+    run.emit("a#1", "fail")
+    with pytest.raises(RouterError, match="halt after terminal outcome"):
+        run.router.advance(run.state, Halt(outcome="rejected", reason="budget"))

@@ -23,6 +23,8 @@ Pins the edge behaviour the plan specifies:
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from pydantic import ValidationError
 
@@ -205,3 +207,147 @@ def test_topology_terminal_ports_shape_and_unknown_node():
     assert set(topology.terminal_ports) == {"start", "a", "b", "c", "s"}
     # unknown node lookups yield {}
     assert topology.terminal_ports.get("nope", {}) == {}
+
+
+# ---- the Halt event (E-74 Task 8, D7) ---------------------------------------
+#
+# Halt is imported inside each test: before Task 8 lands sdlc.graph does not
+# export it, and a per-test ImportError keeps the Task 7 rows above green
+# instead of collapsing the whole file into one collection error.
+
+
+def test_halt_schema_default_kind_and_valid_outcomes():
+    from sdlc.graph import Halt
+
+    halt = Halt(outcome="failed", reason="x")
+    assert halt.kind == "halt"
+    assert halt.outcome == "failed"
+    assert halt.reason == "x"
+    # reason is an unconstrained str: the empty string is a valid post-mortem
+    assert Halt(outcome="rejected", reason="").reason == ""
+
+
+@pytest.mark.parametrize("outcome", ["running", "completed"])
+def test_halt_rejects_non_terminal_outcomes(outcome):
+    from sdlc.graph import Halt
+
+    with pytest.raises(ValidationError, match="Input should be 'rejected' or 'failed'"):
+        Halt(outcome=outcome, reason="x")
+
+
+def test_halt_rejects_extra_fields():
+    from sdlc.graph import Halt
+
+    with pytest.raises(ValidationError, match="extra_forbidden"):
+        Halt(outcome="failed", reason="x", bolt_on=True)
+
+
+def test_advance_rejects_unsupported_events_but_takes_halt():
+    from sdlc.graph import Halt, RouterError
+
+    run = Run(_three_workers(), term3())
+    run.emit("start#1", "ok")
+
+    with pytest.raises(RouterError, match="unsupported event str"):
+        run.router.advance(run.state, "bad")
+    # a Halt-lookalike that is not a Halt must not slip through the union
+    lookalike = SimpleNamespace(kind="halt", outcome="failed", reason="x")
+    with pytest.raises(RouterError, match="unsupported event SimpleNamespace"):
+        run.router.advance(run.state, lookalike)
+    # the real event is accepted on the untouched running state
+    step = run.router.advance(run.state, Halt(outcome="rejected", reason="dispatch stop"))
+    assert (step.outcome, step.reason) == ("rejected", "dispatch stop")
+
+
+@pytest.mark.parametrize("outcome", ["rejected", "failed"])
+def test_halt_terminates_running_state_and_cancels_every_live(outcome):
+    from sdlc.graph import Halt
+
+    run = Run(_three_workers(), term3())
+    run.emit("start#1", "ok")
+
+    step = run.router.advance(run.state, Halt(outcome=outcome, reason="budget exhausted"))
+
+    assert (step.outcome, step.reason) == (outcome, "budget exhausted")
+    assert step.cancelled == ("a#1", "b#1", "c#1")
+    assert step.state.retired == ("a#1", "b#1", "c#1")
+    assert step.activations == ()
+    assert step.state.live == ()
+    # a halt is not an emission: the applied record is untouched
+    assert [(e.activation_id, e.port) for e in step.state.emissions] == [("start#1", "ok")]
+
+
+def _completed_run():
+    run = Run(_three_workers(), term3())
+    run.emit("start#1", "ok")
+    run.emit("a#1", "out")  # fills s.art, issues s#1
+    run.emit("s#1", "done")
+    run.emit("b#1", "out")  # edgeless sink
+    run.emit("c#1", "out")
+    return run
+
+
+def _escalated_run():
+    # validate() rejects a one port fanned in from two sources, so the
+    # illegal state is fabricated directly: inject a token into the slot,
+    # then let a real emission collide with it (occupied-slot invariant).
+    from sdlc.graph.router import Emitted, Token
+
+    run = Run(_three_workers(), term3())
+    run.emit("start#1", "ok")
+    illegal = run.state.model_copy(
+        update={"slots": {"a.out->s.art": Token(payload_ref="ghost", producer="a#1")}}
+    )
+    step = run.router.advance(illegal, Emitted(activation_id="a#1", port="out", payload_ref="x"))
+    assert step.outcome == "escalated"
+    return SimpleNamespace(router=run.router, state=step.state)
+
+
+def test_halt_after_a_completed_state_is_an_interpreter_bug():
+    from sdlc.graph import Halt, RouterError
+
+    run = _completed_run()
+    assert run.state.outcome == "completed"
+
+    with pytest.raises(RouterError, match="halt after terminal outcome 'completed'"):
+        run.router.advance(run.state, Halt(outcome="failed", reason="late stop"))
+
+
+def test_halt_after_an_escalated_state_is_an_interpreter_bug():
+    from sdlc.graph import Halt, RouterError
+
+    run = _escalated_run()
+
+    with pytest.raises(RouterError, match="halt after terminal outcome 'escalated'"):
+        run.router.advance(run.state, Halt(outcome="rejected", reason="late stop"))
+
+
+def test_halt_on_an_already_halted_state_is_an_interpreter_bug():
+    from sdlc.graph import Halt, RouterError
+
+    run = Run(_three_workers(), term3())
+    run.emit("start#1", "ok")
+    halted = run.router.advance(run.state, Halt(outcome="rejected", reason="first stop"))
+    assert halted.outcome == "rejected"
+
+    with pytest.raises(RouterError, match="halt after terminal outcome 'rejected'"):
+        run.router.advance(halted.state, Halt(outcome="failed", reason="second stop"))
+
+
+def test_emissions_after_a_halt_are_dropped_post_terminal():
+    from sdlc.graph import Halt
+    from sdlc.graph.router import Emitted
+
+    run = Run(_three_workers(), term3())
+    run.emit("start#1", "ok")
+    halted = run.router.advance(run.state, Halt(outcome="failed", reason="budget exhausted"))
+
+    step = run.router.advance(
+        halted.state, Emitted(activation_id="b#1", port="out", payload_ref="b#1:out")
+    )
+
+    assert step.outcome == "failed"
+    assert [(d.activation_id, d.port, d.reason) for d in step.state.dropped] == [
+        ("b#1", "out", "post_terminal")
+    ]
+    assert [(e.activation_id, e.port) for e in step.state.emissions] == [("start#1", "ok")]

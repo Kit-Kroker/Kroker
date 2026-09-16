@@ -148,6 +148,17 @@ class Emitted(BaseModel):
     payload_ref: str
 
 
+class Halt(BaseModel):
+    """A dispatcher-level stop (E-74 D7): budget rejection and the like. Keeps
+    router state the post-mortem truth when the run ends outside a port."""
+
+    model_config = _FROZEN
+
+    kind: Literal["halt"] = "halt"
+    outcome: Literal["rejected", "failed"]
+    reason: str
+
+
 class Activation(BaseModel):
     model_config = _FROZEN
 
@@ -227,8 +238,14 @@ class GraphRouter:
         state = RouterState(nodes={n: NodeState() for n in self._t.node_ids})
         return self._settle(_Work.of(state), cancelled=[])
 
-    def advance(self, state: RouterState, event: Emitted) -> Step:
-        """Apply one emission (spec §6.2)."""
+    def advance(self, state: RouterState, event: Emitted | Halt) -> Step:
+        """Apply one emission (spec §6.2) or a Halt (E-74 D7)."""
+        if isinstance(event, Halt):
+            if state.outcome != "running":
+                raise RouterError(
+                    f"halt after terminal outcome {state.outcome!r} ({event.reason!r})"
+                )
+            return self._terminate(_Work.of(state), event.outcome, event.reason, emitter=None)
         if not isinstance(event, Emitted):
             raise RouterError(f"unsupported event {type(event).__name__}")
         w = _Work.of(state)
