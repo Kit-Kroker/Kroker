@@ -272,8 +272,8 @@ def _resolve_payload(name: str) -> str | None:
     module_name, _, class_name = target.partition(":")
     try:
         cls = getattr(importlib.import_module(module_name), class_name)
-    except (ImportError, AttributeError) as exc:
-        return f"payload {name!r} does not resolve ({target}): {exc}"
+    except Exception as exc:  # noqa: BLE001 -- E-74: boot must report, never crash (inbox E-72 minor 2)
+        return f"payload {name!r} does not resolve ({target}): {type(exc).__name__}: {exc}"
     if not (isinstance(cls, type) and issubclass(cls, BaseModel)):
         return f"payload {name!r} ({target}) is not a pydantic model"
     if cls.__name__ != name:

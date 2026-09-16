@@ -436,3 +436,9 @@ and `scripts/check_file_size.py`.
 - **E72-OQ-6 — role precedence (owner E-74).** Which wins when `node.role` and a run-level `cfg.roles` override (CLI `--role-model`, benchmark arms) are both set?
 - **E72-OQ-7 — cosmetic last-write-wins (owner E-77).** Two layouts of one graph share `graphs/<sha>.yaml`, so re-saving a tidy overwrites the layout for every run pinned to that sha.
 - **E72-OQ-8 — registry drift vs pinned graphs (owner E-77).** A stored graph resolves types and ports against the current worker's registry. If a later registry change renames or removes a port, a post-mortem render of an old graph can fail validation. Should the store snapshot the resolved port specs next to the graph?
+
+**Erratum (2026-09-15, E-74 M1 — spec `2026-09-15-graph-workflow-cutover-design.md`):**
+- **§5 role precedence (E72-OQ-6 resolved, E-74 U5):** a non-None `node.role` fills the `PipelineConfig.roles[NodeTypeSpec.role]` entry **only when the run does not already override that role**; a key present in `cfg.roles` (CLI `--role-model`, benchmark arm) wins.
+- **§6.1 registry fields:** `NodePort.terminal: Literal["rejected","failed"] | None` (out-ports only) and `NodeTypeSpec.budget_after: Literal["none","continuing","exiting"]` are added; gate rule 6 additionally requires `reject.terminal == "rejected"`.
+- **§6.2/§6.4 catalog:** `PAYLOAD_TYPES` gains `NodeFailure`, `BuildResult`, `AnalyzeResult`, `PullRequest`. Every stage type gains `fail: NodeFailure` (terminal failed); `intake` gains `brownfield` and a terminal `reject`; `context` gains a terminal `reject`; `research.trigger` becomes optional and `research` gains an ordering-only optional `codebase_map: CodebaseMap` and a terminal `reject`. The post-plan types are catalogued by E-74 §6 (E72-OQ-3 closed). E72-OQ-4 closed by `fail`/`NodeFailure`.
+- **§6.3:** `_resolve_payload` reports any import-time exception as a problem string (boot-safe).

@@ -327,3 +327,9 @@ One formal round on the full draft. Every finding is dispositioned; the advisor 
 | A1 | (advisor) | Draft T1 ("a back token never reaches a running target") is false — counterexample graph | **Accepted.** T1 restated as "a back token into a live target retires it"; step 5b cancels a live v explicitly; §6.4's back-only argument re-grounded on U3 rule 2 + 5b, not T1. | §6.2 step 5, §6.4, §6.7, §8 row (13) |
 | A2 | (advisor) | Snapshot vs recompute diverge for `target_dead` | **Accepted.** Snapshot is the contract; a snapshot-available port into a now-dead target is processed normally and re-issued with `target_dead`; theorem T5. | §6.2 step 5, §6.5, §8 row (14) |
 | A3 | (advisor) | 5b-before-5c ordering is load-bearing for self-loops | **Accepted.** Stated normatively. | §6.2 step 5, §8 row (8) |
+
+**Erratum (2026-09-15, E-74 M1 — spec `2026-09-15-graph-workflow-cutover-design.md` D6/D7):**
+- **§6.2 step 4:** "gate-kind node and `port == "reject"` with no edges → REJECTED" is generalised: an emission on a port listed in `Topology.terminal_ports` with no edges terminates with that port's outcome (`rejected` | `failed`), reason `"<node>.<port>"`. Gate `reject` ports declare `terminal="rejected"`, so REJECTED behaviour is unchanged. A terminal port with edges routes normally. E73-OQ-5 closed.
+- **§4 / §6.6:** `Outcome` gains `failed`; REJECTED, ESCALATED and FAILED are terminal (post-terminal drops apply to all three).
+- **§4 events:** `Halt{outcome: rejected|failed, reason}` joins `Emitted`; on a RUNNING state it terminates like step 2 with `emitter=None` (every live activation cancelled and retired); on a terminal state it raises `RouterError`.
+- **§8:** `tests/graph/test_graph_router_terminal.py` pins the new rows; the property suite's run-ending predicate reads `Topology.terminal_ports`.

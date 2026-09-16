@@ -219,3 +219,13 @@ def test_new_payloads_resolve():
 
 def test_budget_after_defaults_to_none():
     assert _stage("x.y", _out("o", None)).budget_after == "none"
+
+
+def test_resolve_payload_reports_an_import_time_crash(monkeypatch):
+    monkeypatch.setattr(
+        node_types_module,
+        "PAYLOAD_TYPES",
+        {**node_types_module.PAYLOAD_TYPES, "Boom": "tests.graph.fixtures.boom_payload:Boom"},
+    )
+    problem = node_types_module._resolve_payload("Boom")
+    assert problem is not None and "does not resolve" in problem and "RuntimeError" in problem
