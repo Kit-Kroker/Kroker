@@ -7,7 +7,6 @@ signal waits with a per-gate policy (hard / soft / off).
 
 from __future__ import annotations
 
-import asyncio
 from datetime import timedelta
 
 from temporalio import workflow
@@ -29,11 +28,9 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..artifacts.read import LoadSessionInput, load_session
     from ..benchmarks.models import BenchmarkOutcome
-    from ..board.models import TaskStatus
     from ..context.models import CodebaseMap
     from ..core.context import StageContext, StageServices
     from ..core.models import (
-        ExecutionMode,
         IdeaBrief,
         PipelineConfig,
         ProjectMode,
@@ -66,7 +63,8 @@ with workflow.unsafe.imports_passed_through():
     from ..stages.clarify.models import ClarifiedRequirements
     from ..stages.code.models import HandoffSummary
     from ..stages.deploy.models import DeployPlan
-    from ..stages.plan.models import DevTask, ImplementationPlan
+    from ..stages.plan.models import ImplementationPlan
+    from ..stages.plan.validation import validate_task_graph as _validate_task_graph
     from ..vcs import (
         DiffInput,
         IntegrationHandle,
@@ -76,9 +74,10 @@ with workflow.unsafe.imports_passed_through():
     )
     from .benchmark_host import BenchmarkHost
     from .board_host import BoardHost
+    from .build import run_tasks
     from .gates import GateHost
     from .memory_host import MEM_ACT, MemoryHost
-    from .models import SeededWork, TaskResult
+    from .models import SeededWork
     from .question_host import QuestionHost
     from .report_host import ReportHost
     from .role_host import (
@@ -139,49 +138,6 @@ def _merge_evidence_all_green(results: list) -> bool:
 # Fallbacks only for contracts predating test_commands/lint_commands
 # (legacy cached artifacts) â€” every fresh plan populates both per-stack.
 DEFAULT_LINT_CMD = "ruff check ."
-
-
-def _validate_task_graph(tasks: list[DevTask]) -> str | None:
-    """None when every task's depends_on resolves to another task in the
-    same plan and the graph has no cycle; otherwise a human-readable reason.
-
-    Catches both failure shapes the scheduler's ready-loop (run_one's caller,
-    below) would otherwise only discover after burning a run: a dangling
-    reference (a revision round dropped a task while a survivor still cites
-    its id -- exactly bench-todo-api-greenfield-1785868165's single-task
-    T7-depends-on-T3..T6 plan) and a true A->B->A cycle. Surfacing this right
-    after the plan gate turns both into an immediate, legible
-    `failed:plan-validation:...` instead of the scheduler's opaque
-    `failed:dependency-cycle` once tasks are already mid-execution."""
-    ids = {t.id for t in tasks}
-    for t in tasks:
-        unknown = [d for d in t.depends_on if d not in ids]
-        if unknown:
-            return f"task {t.id!r} depends on unknown task id(s) {unknown!r}"
-
-    by_id = {t.id: t for t in tasks}
-    WHITE, GRAY, BLACK = 0, 1, 2
-    color = dict.fromkeys(ids, WHITE)
-
-    def visit(tid: str, path: list[str]) -> str | None:
-        color[tid] = GRAY
-        for dep in by_id[tid].depends_on:
-            if color[dep] == GRAY:
-                cycle = path[path.index(dep) :] + [dep]
-                return " -> ".join(cycle)
-            if color[dep] == WHITE:
-                found = visit(dep, path + [dep])
-                if found:
-                    return found
-        color[tid] = BLACK
-        return None
-
-    for t in tasks:
-        if color[t.id] == WHITE:
-            cycle = visit(t.id, [t.id])
-            if cycle:
-                return f"dependency cycle: {cycle}"
-    return None
 
 
 @workflow.defn
@@ -522,88 +478,9 @@ class FeatureWorkflow(
         # 4. DEV / TEST / DEVOPS tasks â€” ADR-13: serial by default;
         # wave mode parallelizes, but tasks sharing declared overlaps
         # serialize regardless. Handoffs flow task -> task (FR-805).
-        done: dict[str, TaskResult] = {}
-        handoffs: list = []
-        remaining = {t.id: t for t in plan.tasks}
-
-        async def run_one(t: DevTask) -> TaskResult:
-            """Execute the task only. Merging is a separate concern â€” see
-            _merge_task (Resolution B: merging inside run_one would race
-            the integration worktree under wave mode's asyncio.gather)."""
-            await self._board_task_status(cfg, t.id, TaskStatus.IN_PROGRESS)
-            try:
-                r = await self._dev_task(t, repo_path, self._integration_head, cfg, handoffs)
-            except Exception as exc:
-                # _dev_task's own fix loop is exhausted before it raises, so a
-                # propagating exception means the run is aborting. Record a
-                # terminal status so the board (which agents read for live
-                # state) does not leave this task looking forever in_progress
-                # â€” indistinguishable from a task still running.
-                await self._board_task_status(
-                    cfg, t.id, TaskStatus.FAILED, error=f"unhandled: {type(exc).__name__}: {exc}"
-                )
-                raise
-            _BOARD_STATUS = {
-                "done": TaskStatus.DONE,
-                "failed": TaskStatus.FAILED,
-                "quarantined": TaskStatus.QUARANTINED,
-            }
-            await self._board_task_status(
-                cfg,
-                t.id,
-                _BOARD_STATUS[r.status],
-                fix_attempts=r.attempts,
-                branch=r.branch,
-                error=(r.notes or None if r.status != "done" else None),
-            )
-            for kind, report in (
-                ("qa", r.qa),
-                ("review", r.review),
-                ("deep_review", r.deep_review),
-            ):
-                if report is not None:
-                    await self._board_evidence(cfg, t.id, kind, report.model_dump_json())
-            done[r.task_id] = r
-            if r.handoff:
-                handoffs.append(r.handoff)
-            remaining.pop(r.task_id)
-            return r
-
-        while remaining:
-            ready = [t for t in remaining.values() if all(d in done for d in t.depends_on)]
-            if not ready:
-                return "failed:dependency-cycle"
-
-            if cfg.execution_mode == ExecutionMode.SERIAL:
-                # SERIAL: execute + merge sequentially so the next task
-                # branches from the updated integration head.
-                tr = await run_one(ready[0])
-                if tr.status == "done":
-                    conflict = await self._merge_task(tr, repo_path)
-                    if conflict:
-                        return conflict
-            else:
-                # Wave mode: execute the batch in parallel (preserving the
-                # gather), THEN merge results sequentially so integration
-                # updates are ordered â€” two tasks racing the integration
-                # worktree would corrupt the merge (Resolution B).
-                batch: list[DevTask] = []
-                seen: set[str] = set()
-                for t in ready:
-                    if seen.isdisjoint(t.overlaps):
-                        batch.append(t)
-                        seen.update(t.overlaps)
-                results = await asyncio.gather(*[run_one(t) for t in batch])
-                for tr in results:
-                    if tr.status == "done":
-                        conflict = await self._merge_task(tr, repo_path)
-                        if conflict:
-                            return conflict
-
-            if any(r.status == "quarantined" for r in done.values()):
-                return "failed:quarantined-tasks"
-
-            await self._check_budget(cfg)  # E-33: serial boundary per task wave
+        done, failure = await run_tasks(self, cfg=cfg, plan=plan, repo_path=repo_path)
+        if failure is not None:
+            return failure
 
         # 4b. ANALYZE (stage 9) â€” clean-context Analyst proposes the
         # criterion->test mapping; the workflow enforces it (FR-106). Runs on

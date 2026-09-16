@@ -11,6 +11,7 @@ import pytest
 SRC = pathlib.Path("src/sdlc/workflows/feature.py")
 # Spec A "stage surgery": _merge_task and its merge_into_integration call
 TASK_HOST = pathlib.Path("src/sdlc/workflows/task_host.py")
+BUILD = pathlib.Path("src/sdlc/workflows/build.py")
 ACT = pathlib.Path("src/sdlc/vcs/integration.py")
 
 
@@ -25,6 +26,11 @@ def task_host_src():
 
 
 @pytest.fixture(scope="module")
+def build_src():
+    return BUILD.read_text(encoding="utf-8")
+
+
+@pytest.fixture(scope="module")
 def feature_tree(feature_src):
     return ast.parse(feature_src)
 
@@ -32,6 +38,11 @@ def feature_tree(feature_src):
 @pytest.fixture(scope="module")
 def task_host_tree(task_host_src):
     return ast.parse(task_host_src)
+
+
+@pytest.fixture(scope="module")
+def build_tree(build_src):
+    return ast.parse(build_src)
 
 
 def _fn(tree, name):
@@ -98,12 +109,13 @@ def test_workflow_threads_worktree_path_not_repo_path(feature_src):
     )
 
 
-def test_run_one_does_not_merge(feature_tree, feature_src):
+def test_run_one_does_not_merge(build_tree, build_src):
     """Resolution B: merge_into_integration is NOT inside run_one — it
     races the integration branch in wave mode (concurrent gather). run_one
-    must execute the task only; merges happen after the gather/await."""
-    run_one = _fn(feature_tree, "run_one")
-    body = ast.get_source_segment(feature_src, run_one)
+    must execute the task only; merges happen after the gather/await.
+    E-74: run_one moved from feature.py to workflows/build.py with run_tasks."""
+    run_one = _fn(build_tree, "run_one")
+    body = ast.get_source_segment(build_src, run_one)
     assert body is not None
     assert "merge_into_integration" not in body, (
         "run_one must NOT merge (Resolution B: wave-mode race). "
