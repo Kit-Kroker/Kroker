@@ -1,7 +1,7 @@
 """TidyUpWorkflow (E-44) -- Tier 0's fix half.
 
 Assess -> fix -> PROVE. Accepted MECHANICAL findings become governed
-brownfield FeatureWorkflow child runs, one PR each (NG5, D2), and triage then
+brownfield pipeline child runs (GraphWorkflow; FeatureWorkflow for children started before E-74),
 re-runs against a composite verification branch so the before/after delta is
 recorded evidence rather than a claim.
 
@@ -38,8 +38,8 @@ with workflow.unsafe.imports_passed_through():
     from ..triage.delta import FindingDelta, compute_delta
     from ..triage.models import RepoTriage, Verdict
     from ..vcs import VerifyBranchInput, build_verification_branch
-    from .feature import FeatureWorkflow
     from .gates import GateHost
+    from .pipeline_child import execute_pipeline_child
     from .triage import TriageInput, TriageWorkflow
 
 # Local git only; a retry is free because the branch is force-created.
@@ -225,20 +225,17 @@ class TidyUpWorkflow(GateHost):
         wf_id = fix_workflow_id(workflow.info().workflow_id, index)
         branch = f"sdlc/{wf_id}/integration"
         try:
-            outcome = await workflow.execute_child_workflow(
-                FeatureWorkflow.run,
-                args=[
-                    IdeaBrief(
-                        title=f"tidy-up: {finding.rule}",
-                        description=finding.detail,
-                        mode=ProjectMode.BROWNFIELD,
-                        repo_url=inp.repo_dir,
-                        base_branch=inp.base_branch,
-                    ),
-                    inp.fix_cfg,
-                    seeded_work_for(identity, finding, signal_version),
-                ],
-                id=wf_id,
+            outcome = await execute_pipeline_child(
+                child_id=wf_id,
+                idea=IdeaBrief(
+                    title=f"tidy-up: {finding.rule}",
+                    description=finding.detail,
+                    mode=ProjectMode.BROWNFIELD,
+                    repo_url=inp.repo_dir,
+                    base_branch=inp.base_branch,
+                ),
+                cfg=inp.fix_cfg,
+                seeded=seeded_work_for(identity, finding, signal_version),
                 task_queue=workflow.info().task_queue,
             )
         except Exception as e:  # noqa: BLE001

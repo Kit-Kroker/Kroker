@@ -1,6 +1,7 @@
 """BenchmarkWorkflow — the matrix runner.
 
-For each (case × harness × model) cell, start a FeatureWorkflow child with
+For each (case × harness × model) cell, start a pipeline child (GraphWorkflow;
+FeatureWorkflow for children started before E-74) with
 the cell's roles overridden and benchmark config set. Collect nothing in-
 workflow — the record_benchmark activity writes each record to the file
 store; after all cells complete, the finalize_benchmark_report activity
@@ -30,7 +31,7 @@ with workflow.unsafe.imports_passed_through():
         ProjectMode,
         RoleConfig,
     )
-    from ..workflows.feature import FeatureWorkflow
+    from ..workflows.pipeline_child import execute_pipeline_child
     from .judge import load_case_assets
     from .matrix import expand_matrix
     from .models import (
@@ -266,10 +267,11 @@ class BenchmarkWorkflow:
                 workflow.logger.warning("cell %s rejected: %s", child_id, e)
                 continue
             try:
-                await workflow.execute_child_workflow(
-                    FeatureWorkflow.run,
-                    args=[idea, cfg, None],
-                    id=child_id,
+                await execute_pipeline_child(
+                    child_id=child_id,
+                    idea=idea,
+                    cfg=cfg,
+                    seeded=None,
                     task_queue=workflow.info().task_queue,
                 )
             except Exception as e:
