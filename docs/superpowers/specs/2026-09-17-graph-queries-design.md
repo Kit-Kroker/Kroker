@@ -4,7 +4,7 @@
 |---|---|
 | Epic | E-75 (pipeline-as-data) → FR-1204 |
 | Date | 2026-09-17 |
-| Status | reviewer-approved (2026-09-17, round 3 after two CHANGES REQUESTED rounds); skeptic round dispositioned (§13); pending user gate on E75-OQ-1…E75-OQ-4 and the R-Q2 refinement |
+| Status | **user-approved (2026-09-17)**: E75-OQ-1 = (a) backend-only; E75-OQ-2…4 accepted deferrals; R-Q2 confirmed (§12). Reviewer-approved 2026-09-17 (round 3 after two CHANGES REQUESTED rounds); skeptic round dispositioned (§13) |
 | Normative text | `PRD.md` §6 FR-1204 (FR-1205 for the consumer) |
 | Frozen contracts | E-72 `2026-09-13-graph-model-node-registry-design.md`; E-73 `2026-09-14-graph-router-and-validator-design.md` (+ §6.7 erratum); E-74 `2026-09-15-graph-workflow-cutover-design.md` (D3, D5, D7, §5.4–§5.7, §8.1) |
 | Consumer contract | E-76 `2026-09-14-graph-canvas-design.md` §5.5–§5.8, §9, §9.1 (PROVISIONAL shapes this spec amends and promotes) |
@@ -361,27 +361,27 @@ activation history (Q3 non-goal); crew-child escalation attribution
 FR-1204; ARCHITECTURE component list gains the run view, store and routes;
 `workflows/AGENTS.md` ownership rows; E-76 spec §5.7 pointer to this spec's §7.4.
 
-## 12. Open questions (for the user gate)
+## 12. Open questions — resolved at the user gate (2026-09-17)
 
-- **E75-OQ-1 — scope fork (brief constraint 4).** (a) *Recommended:* E-75
-  backend-only as above; the canvas follow-up flips `run_graph`/`validate`,
-  amends `graph-types.ts` + provisional fixtures atomically, and maps
-  `stage_marks` in `http.ts` for the fleet strip. (b) E-75 also does that
-  frontend work. (a) matches Q1 and keeps the frontend unchanged; the cost is
-  that E76-OQ-3's `skipped` rendering is served but not yet shown.
-- **E75-OQ-2 — crew-child escalations.** A code node whose task escalation is
-  pending inside a crew child shows `running`, not `blocked`. Querying the
-  child per poll is deferred.
-- **E75-OQ-3 — closed-run `run_summary` replay each fleet tick.** The same
-  immutable cache would remove it; left as a follow-up to keep E-75's fleet
-  change narrow.
-- **E75-OQ-4 — harness and crew spend are unpriced.** Only `RoleHost._run_role`
-  records usage (`role_host.py:153`); coding-harness activities and crew
-  children never reach `cost_usd_total`, so the `code` node's cost (like the
-  run's) is model-role spend only. Pricing harness spend is a separate
-  observability item, not E-75.
-- **R-Q2 (ruling refinement, not a question):** write at the client start
-  helper + history backfill instead of `build_run_input` (§2.1, V1).
+- **E75-OQ-1 — scope fork (brief constraint 4). Resolved: option (a).** E-75 is
+  backend-only as specified. A named follow-up epic (canvas run-mode wiring,
+  E-76 family) flips `run_graph`/`validate`, amends `graph-types.ts` and the
+  provisional fixtures atomically, and maps `stage_marks` in `http.ts` for the
+  fleet strip. Until it lands, E76-OQ-3's `skipped` rendering is served but not
+  shown. Rejected: (b) E-75 also doing that frontend work.
+- **E75-OQ-2 — crew-child escalations. Accepted deferral.** A code node whose
+  task escalation is pending inside a crew child shows `running`, not
+  `blocked`; querying the child per poll is a follow-up.
+- **E75-OQ-3 — closed-run `run_summary` replay each fleet tick. Accepted
+  deferral.** The same immutable cache would remove it; a follow-up.
+- **E75-OQ-4 — harness and crew spend are unpriced. Accepted deferral.** Only
+  `RoleHost._run_role` records usage (`role_host.py:153`); coding-harness
+  activities and crew children never reach `cost_usd_total`, so node cost (like
+  the run's) is model-role spend only. Pricing harness spend is a separate
+  observability item.
+- **R-Q2 (ruling refinement). Confirmed by the user:** the store is written at
+  the client start helper (`sdlc/graph/start.py`) with history backfill, not
+  at `build_run_input` (§2.1, V1).
 
 ## 13. Skeptic dispositions (`.workspace/tmp/e75-skeptic-full.md`)
 
