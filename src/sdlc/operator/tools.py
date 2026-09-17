@@ -31,6 +31,7 @@ from ..core.models import (
 )
 from ..dashboard.fleet import check_fleet_capacity, fleet_pending_cap
 from ..naming import slug
+from ..workflows.graph_catalog import GraphStartError
 from . import render
 from .deps import OperatorDeps
 from .errors import ToolError, guard
@@ -537,6 +538,8 @@ async def start_run(
         check_fleet_capacity(await deps.poller.snapshot(), cap)
     try:
         started = await deps.starter(idea, PipelineConfig(), wf_id)
+    except GraphStartError as e:
+        raise ToolError(f"this run cannot start: {e}") from None
     except Exception as e:  # noqa: BLE001 -- narrowed into ToolError
         if "already started" in str(e).lower():
             raise ToolError(

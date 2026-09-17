@@ -55,10 +55,9 @@ CLOSED_LIMIT = 20
 # Newest-first, so the just-finished run is always inside the cap. ORDER BY
 # requires advanced visibility; standard visibility (the dev server this
 # project deploys) rejects the clause, so _closed_run_ids falls back once.
-_CLOSED_QUERY = (
-    "WorkflowType='FeatureWorkflow' AND ExecutionStatus!='Running' ORDER BY CloseTime DESC"
-)
-_CLOSED_QUERY_UNORDERED = "WorkflowType='FeatureWorkflow' AND ExecutionStatus!='Running'"
+_PIPELINE_TYPES = "(WorkflowType='FeatureWorkflow' OR WorkflowType='GraphWorkflow')"
+_CLOSED_QUERY = f"{_PIPELINE_TYPES} AND ExecutionStatus!='Running' ORDER BY CloseTime DESC"
+_CLOSED_QUERY_UNORDERED = f"{_PIPELINE_TYPES} AND ExecutionStatus!='Running'"
 _ORDER_BY_SUPPORTED = True
 
 _PENDING_LIST = TypeAdapter(list[PendingDecision])

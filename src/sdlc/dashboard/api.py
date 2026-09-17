@@ -33,6 +33,7 @@ from ..core.models import (
     PipelineConfig,
     ProjectMode,
 )
+from ..workflows.graph_catalog import GraphStartError
 from . import graph_wire
 from .channel import DashboardChannel
 from .fleet import (
@@ -233,6 +234,8 @@ def create_router(poller: FleetPoller, starter: Callable | None = None) -> APIRo
             await start_run(idea, PipelineConfig(), wf_id)
         except HTTPException:
             raise
+        except GraphStartError as e:
+            raise HTTPException(422, str(e)) from e
         except Exception as e:  # noqa: BLE001
             if "already started" in str(e).lower():
                 raise HTTPException(409, f"run {wf_id!r} already exists") from e

@@ -48,7 +48,7 @@ from .dashboard.fleet import FleetCapacityExceeded, guard_fleet_capacity
 from .naming import slug
 from .worker import TASK_QUEUE
 from .workflows.assessment import AssessmentInput, AssessmentWorkflow
-from .workflows.feature import FeatureWorkflow
+from .workflows.graph import GraphWorkflow
 from .workflows.tidyup import TidyUpInput, TidyUpWorkflow
 from .workflows.triage import TriageInput, TriageWorkflow
 
@@ -439,20 +439,21 @@ async def main() -> None:
                 f"SDLC_FLEET_PENDING_CAP."
             )
             raise SystemExit(1) from None
+        from .workflows.graph_catalog import GraphStartError, build_run_input
+
+        idea = IdeaBrief(
+            title=args.title,
+            description=args.description,
+            mode=ProjectMode(args.mode),
+            repo_url=args.repo,
+        )
+        try:
+            run_input = build_run_input(idea, cfg)
+        except GraphStartError as e:
+            print(f"cannot start: {e}")
+            raise SystemExit(1) from None
         handle = await client.start_workflow(
-            FeatureWorkflow.run,
-            args=[
-                IdeaBrief(
-                    title=args.title,
-                    description=args.description,
-                    mode=ProjectMode(args.mode),
-                    repo_url=args.repo,
-                ),
-                cfg,
-                None,
-            ],
-            id=wf_id,
-            task_queue=TASK_QUEUE,
+            GraphWorkflow.run, run_input, id=wf_id, task_queue=TASK_QUEUE
         )
         print(f"started {handle.id}")
         return
@@ -761,7 +762,7 @@ async def main() -> None:
         return
 
     assert client is not None
-    handle = client.get_workflow_handle_for(FeatureWorkflow.run, args.id)
+    handle = client.get_workflow_handle_for(GraphWorkflow.run, args.id)
 
     if args.cmd in DECISION_CMDS:
         from .channels.transport import Ambiguous, NoMatch, resolve, submit
@@ -779,7 +780,7 @@ async def main() -> None:
         return
 
     if args.cmd == "status":
-        print(await handle.query(FeatureWorkflow.status))
+        print(await handle.query(GraphWorkflow.status))
 
 
 if __name__ == "__main__":

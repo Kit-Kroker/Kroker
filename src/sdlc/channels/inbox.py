@@ -77,10 +77,10 @@ def _open_runs_query(*types: str) -> str:
 async def list_open_run_ids(client, *types: str) -> list[str]:
     """Every currently-running workflow id of the given types.
 
-    Defaults to FeatureWorkflow alone, which is what every caller had before
-    E-88 -- ReflectWorkflow and BenchmarkWorkflow share the task queue and
-    never expose pending_decisions, so they are excluded here rather than
-    probed and discarded.
+    Defaults to FeatureWorkflow and GraphWorkflow (E-74 grace) -- ReflectWorkflow
+    and BenchmarkWorkflow share the task queue and never expose
+    pending_decisions, so they are excluded here rather than probed and
+    discarded.
 
     A PARAMETER rather than a wider constant (step-2 spec §E): the inbox
     wants crew children, because a crew's gate is exactly what a human owes a
@@ -88,7 +88,7 @@ async def list_open_run_ids(client, *types: str) -> list[str]:
     crew child is part of a run rather than one. Widening the constant would
     have changed both.
     """
-    query = _open_runs_query(*(types or ("FeatureWorkflow",)))
+    query = _open_runs_query(*(types or ("FeatureWorkflow", "GraphWorkflow")))
     return [wf.id async for wf in client.list_workflows(query)]
 
 
@@ -107,7 +107,9 @@ async def fetch_inbox(client) -> Inbox:
     concurrently, and aggregate. A run with nothing pending is dropped, not
     listed; a run whose query raised becomes an InboxError instead of
     aborting the whole fetch."""
-    run_ids = await list_open_run_ids(client, "FeatureWorkflow", "CrewTaskWorkflow")
+    run_ids = await list_open_run_ids(
+        client, "FeatureWorkflow", "GraphWorkflow", "CrewTaskWorkflow"
+    )
     results = await asyncio.gather(*(_fetch_one(client, rid) for rid in run_ids))
 
     inbox = Inbox(total_open_runs=len(run_ids))

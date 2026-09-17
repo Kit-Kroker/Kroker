@@ -286,3 +286,16 @@ def test_start_run_does_not_read_the_fleet_when_no_cap_is_set(snap, monkeypatch)
     )
     assert r.status_code == 200
     assert started == ["feature-add-sso"]
+
+
+def test_start_run_422s_on_an_unstartable_graph(snap):
+    from sdlc.workflows.graph_catalog import GraphStartError
+
+    async def starter(idea, cfg, wf_id):
+        raise GraphStartError(["no_handler: no handler for node type 'x'"])
+
+    app = FastAPI()
+    app.include_router(create_router(_FakePoller(snap), starter=starter))
+    r = TestClient(app).post("/runs", json={"title": "t", "description": "d", "mode": "greenfield"})
+    assert r.status_code == 422
+    assert "no_handler" in r.text

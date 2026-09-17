@@ -91,3 +91,17 @@ async def test_reads_reset_the_follow_streak(deps):
     deps.note_follow()
     await tools.list_runs(deps)
     assert deps.follow_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_start_run_turns_an_unstartable_graph_into_a_tool_error(deps):
+    from sdlc.core.models import ProjectMode
+    from sdlc.workflows.graph_catalog import GraphStartError
+
+    async def starter(idea, cfg, wf_id):
+        raise GraphStartError(["max_gate_rounds must be >= 1 on the graph path (got 0)"])
+
+    deps.starter = starter
+    with pytest.raises(ToolError) as e:
+        await tools.start_run(deps, "Add SSO", ProjectMode.GREENFIELD)
+    assert "max_gate_rounds" in e.value.message

@@ -119,6 +119,7 @@ class _StubClient:
 
     async def list_workflows(self, query):
         assert "FeatureWorkflow" in query
+        assert "GraphWorkflow" in query
         assert "Running" in query
         for run_id in self._handles:
             yield SimpleNamespace(id=run_id)

@@ -33,7 +33,8 @@ from sdlc.observability.logfire_setup import configure as configure_logfire
 from sdlc.operator.agent import ChatConfigError, build_chat_app
 from sdlc.operator.deps import OperatorDeps
 from sdlc.worker import TASK_QUEUE
-from sdlc.workflows.feature import FeatureWorkflow
+from sdlc.workflows.graph import GraphWorkflow
+from sdlc.workflows.graph_catalog import build_run_input
 
 log = logging.getLogger(__name__)
 
@@ -53,8 +54,9 @@ poller = FleetPoller(_connect)
 
 async def _start(idea: IdeaBrief, cfg: PipelineConfig, wf_id: str) -> str:
     client = await poller._client_or_connect()
+    run_input = build_run_input(idea, cfg)  # GraphStartError -> 422 in dashboard/api.py
     handle = await client.start_workflow(
-        FeatureWorkflow.run, args=[idea, cfg, None], id=wf_id, task_queue=TASK_QUEUE
+        GraphWorkflow.run, run_input, id=wf_id, task_queue=TASK_QUEUE
     )
     return handle.id
 
