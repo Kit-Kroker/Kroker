@@ -69,7 +69,7 @@ any canvas/fleet frontend change are the named canvas follow-up (§11, E75-OQ-1)
 | D5 | **Replay neutrality.** Every addition is memory-only (attributes, dict writes, `workflow.now()` reads at event time) — no commands. Pinned by the unchanged SG-3 goldens and `test_feature_replay.py`; neither is re-recorded. |
 | D6 | **Graph source = start input.** `GET /runs/{id}/graph` decodes `GraphRunInput` from the first history event with the client's data converter; FeatureWorkflow runs answer `no_graph/legacy_run`. |
 | D7 | **Capabilities stay false**; routes exist and are exercised by Python tests and recorded fixtures only. |
-| D8 | **Closed runs are immutable.** Route- and fleet-side caches keyed by run id hold closed-run views/marks; a closed run is queried at most once per process. |
+| D8 | **Closed runs are immutable.** Route- and fleet-side caches keyed by run id hold closed-run views/marks; a closed run is successfully queried at most once per process (a failed query is retried next tick). |
 
 ## 3. Verified anchors and corrected hypotheses
 
@@ -233,6 +233,8 @@ queries `graph_view` **once** and derives its marks with
 are never carried over — they may predate the close (N1). The query is made —
 **only for rows whose visibility `workflow_type` is `GraphWorkflow`** (the
 closed scan is widened to return `(id, type)`; FeatureWorkflow rows are never queried, F8).
+
+> **Erratum (E-75 plan, Task 9).** The fleet derives closed marks from one `run_state` query (which already carries `stage_marks` computed from the same view) adjusted by `run_view.close_marks`, pinned equal to recomputing with `execution_closed=True` (`tests/graph/test_run_view_projections.py`). Same one-query-per-run bound; no fleet-side topology or history read.
 The cache is pruned each tick to the ids in the current closed list, so it is
 bounded by `closed_limit` (20). Each closed run costs at most one query per
 process (≤20 on a cold start), against today's 20 `run_summary` replays per tick (V8), so no extra

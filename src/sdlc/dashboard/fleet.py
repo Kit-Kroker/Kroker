@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import os
 from datetime import UTC, datetime
 
@@ -45,9 +46,11 @@ from pydantic import BaseModel, Field, TypeAdapter
 
 from ..channels.inbox import InboxError, RunInbox, list_open_run_ids
 from ..core.models import (
+    DotState,
     RunState,
     RunSummary,
 )
+from ..graph import close_marks
 from ..pending import PendingDecision
 
 CLOSED_LIMIT = 20
@@ -79,6 +82,10 @@ class FleetSnapshot(BaseModel):
     # state is unknown"; a closed run owes nothing. The fleet cap counts this
     # field, never `errors`.
     open_errors: list[InboxError] = Field(default_factory=list)
+    # E-75 §5.3: stage marks for CLOSED GraphWorkflow rows, derived once per
+    # run from run_state and adjusted for the close (open rows carry theirs
+    # on RunState.stage_marks). Absent key: linear strip fallback.
+    closed_marks: dict[str, dict[str, DotState]] = Field(default_factory=dict)
 
 
 async def _fetch_open(client, run_id: str):
@@ -106,16 +113,16 @@ async def _fetch_closed(client, run_id: str):
         return e
 
 
-async def _scan_closed(client, query: str, limit: int) -> list[str]:
-    ids: list[str] = []
+async def _scan_closed(client, query: str, limit: int) -> list[tuple[str, str | None]]:
+    runs: list[tuple[str, str | None]] = []
     async for wf in client.list_workflows(query):
-        ids.append(wf.id)
-        if len(ids) >= limit:
+        runs.append((wf.id, getattr(wf, "workflow_type", None)))
+        if len(runs) >= limit:
             break
-    return ids
+    return runs
 
 
-async def _closed_run_ids(client, limit: int) -> list[str]:
+async def _closed_runs(client, limit: int) -> list[tuple[str, str | None]]:
     global _ORDER_BY_SUPPORTED
     if _ORDER_BY_SUPPORTED:
         try:
@@ -129,17 +136,45 @@ async def _closed_run_ids(client, limit: int) -> list[str]:
     return await _scan_closed(client, _CLOSED_QUERY_UNORDERED, limit)
 
 
-async def fetch_fleet(client, *, now: datetime, closed_limit: int = CLOSED_LIMIT) -> FleetSnapshot:
+_NO_MARKS: dict[str, DotState] = {}
+
+
+async def _fetch_marks(client, run_id: str):
+    """Never raises (the _fetch_closed pattern). {} when the run closed before
+    dispatch started (run_state carries no marks)."""
+    try:
+        raw = await client.get_workflow_handle(run_id).query("run_state")
+        state = RunState.model_validate(raw) if raw is not None else None
+        if state is None or state.stage_marks is None:
+            return _NO_MARKS
+        return close_marks(state.stage_marks)
+    except Exception as e:  # noqa: BLE001
+        return e
+
+
+async def fetch_fleet(
+    client,
+    *,
+    now: datetime,
+    closed_limit: int = CLOSED_LIMIT,
+    marks_cache: dict[str, dict[str, DotState]] | None = None,
+) -> FleetSnapshot:
     """Discover open and recently-closed runs and fan out over both."""
     open_ids = await list_open_run_ids(client)
-    closed_ids = await _closed_run_ids(client, closed_limit)
+    closed = await _closed_runs(client, closed_limit)
+    closed_ids = [run_id for run_id, _ in closed]
+    open_id_set = set(open_ids)
+    cache = marks_cache if marks_cache is not None else {}
+    graph_closed = [r for r, t in closed if t == "GraphWorkflow" and r not in open_id_set]
+    for stale in [k for k in cache if k not in graph_closed]:
+        del cache[stale]  # bounded by closed_limit
+    need_marks = [r for r in graph_closed if r not in cache]
 
-    open_results, closed_results = await asyncio.gather(
+    open_results, closed_results, marks_results = await asyncio.gather(
         asyncio.gather(*(_fetch_open(client, r) for r in open_ids)),
         asyncio.gather(*(_fetch_closed(client, r) for r in closed_ids)),
+        asyncio.gather(*(_fetch_marks(client, r) for r in need_marks)),
     )
-
-    open_id_set = set(open_ids)
 
     snap = FleetSnapshot(at=now, total_open_runs=len(open_ids))
     for run_id, outcome in zip(open_ids, open_results, strict=False):
@@ -166,6 +201,13 @@ async def fetch_fleet(client, *, now: datetime, closed_limit: int = CLOSED_LIMIT
             snap.errors.append(InboxError(run_id=run_id, error=str(outcome)))
         elif outcome is not None:
             snap.closed.append(outcome)
+
+    for run_id, outcome in zip(need_marks, marks_results, strict=True):
+        if isinstance(outcome, Exception):
+            snap.errors.append(InboxError(run_id=run_id, error=f"stage marks: {outcome}"))
+        else:
+            cache[run_id] = outcome
+    snap.closed_marks = {r: dict(cache[r]) for r in graph_closed if cache.get(r)}
     return snap
 
 
@@ -276,7 +318,8 @@ class FleetPoller:
         self._interval = interval
         self._grace_s = grace_s
         self._clock = clock or _utcnow
-        self._fetch = fetch or fetch_fleet
+        self._marks_cache: dict[str, dict[str, DotState]] = {}
+        self._fetch = fetch or functools.partial(fetch_fleet, marks_cache=self._marks_cache)
         self._client = None
         self._snapshot: FleetSnapshot | None = None
         self._subscribers: set[asyncio.Queue] = set()
