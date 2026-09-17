@@ -4,9 +4,10 @@ Spec: docs/superpowers/specs/2026-09-14-graph-canvas-design.md §5-§6.
 
 Pure projections over sdlc.graph: the models here are the HTTP contract the
 canvas consumes. E-76's routes (catalog, parse, serialize) use them now;
-E-75's routes use the PROVISIONAL ones as `response_model=` later, so a
-route cannot drift from the fixtures `scripts/dump_graph_fixtures.py`
-records from these same functions.
+E-75's routes use the run-graph and run-state models, FINAL since E-75
+(spec 2026-09-17-graph-queries-design §7.4), so a route cannot drift from
+the fixtures `scripts/dump_graph_fixtures.py` records from these same
+functions.
 
 Nothing here decides legality (FR-1202): `connectable` is Python's
 `ports_compatible` served as data, and there is deliberately no validate
@@ -20,7 +21,7 @@ benchmarks <-> stages import cycle.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -30,11 +31,17 @@ from sdlc.graph import (
     NODE_TYPES,
     GraphEdge,
     GraphNode,
+    GraphRunView,
     GraphSchemaError,
     NodeTypeSpec,
     PipelineGraph,
+    Topology,
     from_yaml,
+    latest_activation,
+    node_cost,
+    node_status,
     ports_compatible,
+    run_outcome,
     to_yaml,
 )
 from sdlc.graph import (
@@ -279,7 +286,7 @@ class Issue(BaseModel):
     model_config = _WIRE
 
     code: str
-    severity: Literal["error", "warning"]
+    severity: Literal["error", "warning", "not_executable"]
     message: str
     target: IssueTarget
 
@@ -343,6 +350,23 @@ def validation(
     return ValidationWire(issues=issues, back_edges=back_edges)
 
 
+def with_executable(wire: ValidationWire, problems: Iterable[Any]) -> ValidationWire:
+    """E74-OQ-4: executable() problems beside validate's, with a distinct
+    severity -- a legal graph this worker cannot run is not an `error`.
+    `problems` are workflows.graph_catalog.ExecutableProblem (duck-typed:
+    graph_wire does not import workflow code)."""
+    extra = [
+        Issue(
+            code=p.code,
+            severity="not_executable",
+            message=p.message,
+            target=IssueTarget(kind="node", id=p.node),
+        )
+        for p in problems
+    ]
+    return ValidationWire(issues=[*wire.issues, *extra], back_edges=wire.back_edges)
+
+
 # --- PROVISIONAL: save / load (E-75 + E-77) ------------------------------------
 
 
@@ -369,7 +393,7 @@ class LoadMissing(BaseModel):
     reason: Literal["not_found"] = "not_found"
 
 
-# --- PROVISIONAL: run graph and run state (E-75 on E-74) -----------------------
+# --- run graph and run state (FINAL, E-75 spec §7) ------------------------------
 
 
 class GraphResponse(BaseModel):
@@ -391,7 +415,7 @@ class NoGraph(BaseModel):
 class NodeRunState(BaseModel):
     model_config = _WIRE
 
-    status: Literal["idle", "running", "blocked", "done", "failed", "stale"]
+    status: Literal["idle", "running", "blocked", "done", "failed", "stale", "skipped", "cancelled"]
     round: int
     started_at: str | None
     ended_at: str | None
@@ -402,15 +426,23 @@ class EdgeRunState(BaseModel):
     model_config = _WIRE
 
     edge: EdgeRef
-    traversals: int
+    traversals: int  # back edges only; absent = 0
 
 
 class PendingRef(BaseModel):
     model_config = _WIRE
 
-    node: str
+    node: str | None  # None: opened outside any activation
     key: str
     kind: Literal["gate", "clarify", "escalation"]
+
+
+class RunOutcomeWire(BaseModel):
+    model_config = _WIRE
+
+    state: Literal["running", "completed", "rejected", "escalated", "failed"]
+    reason: str | None
+    result: str | None  # the run's return string (E74-OQ-1), once known
 
 
 class GraphState(BaseModel):
@@ -422,4 +454,90 @@ class GraphState(BaseModel):
     edges: list[EdgeRunState]
     current_nodes: list[str]
     pending: list[PendingRef]
-    terminal: Literal["done", "failed", "escalated"] | None
+    outcome: RunOutcomeWire
+
+
+def _edge_ref(key: tuple[str, str, str, str]) -> EdgeRef:
+    return EdgeRef(source=key[0], source_port=key[1], target=key[2], target_port=key[3])
+
+
+def graph_response(graph: PipelineGraph) -> GraphResponse:
+    back = sorted(
+        (e.source, e.source_port, e.target, e.target_port)
+        for e in graph.edges
+        if e.max_traversals is not None
+    )
+    return GraphResponse(
+        sha=graph.content_sha(),
+        graph=_graph_json(graph),
+        back_edges=[_edge_ref(k) for k in back],
+    )
+
+
+def project_graph_state(
+    view: GraphRunView | None,
+    graph: PipelineGraph,
+    topology: Topology,
+    *,
+    execution_closed: bool,
+    close_status: str | None = None,
+    registry: Mapping[str, NodeTypeSpec] = NODE_TYPES,
+) -> GraphState:
+    """E-75 spec §5, §7.4. Every rule lives in sdlc.graph.run_view; this only
+    shapes the wire. No field changes without a state change (E-76 §5.7)."""
+    outcome = RunOutcomeWire(
+        **run_outcome(
+            view, execution_closed=execution_closed, close_status=close_status
+        ).model_dump()
+    )
+    if view is None:
+        idle = NodeRunState(status="idle", round=0, started_at=None, ended_at=None, cost_usd=None)
+        return GraphState(
+            graph_sha=graph.content_sha(),
+            nodes={n.id: idle for n in graph.nodes},
+            edges=[],
+            current_nodes=[],
+            pending=[],
+            outcome=outcome,
+        )
+    nodes: dict[str, NodeRunState] = {}
+    for n in graph.nodes:
+        aid = latest_activation(n.id, view.state)
+        facts = view.activations.get(aid) if aid is not None else None
+        nodes[n.id] = NodeRunState(
+            status=node_status(n.id, view, topology, execution_closed=execution_closed),
+            round=view.state.nodes[n.id].round,
+            started_at=facts.started_at.isoformat() if facts is not None else None,
+            ended_at=(
+                facts.ended_at.isoformat()
+                if facts is not None and facts.ended_at is not None
+                else None
+            ),
+            cost_usd=node_cost(n.id, view, registry.get(n.type)),
+        )
+    edges = [
+        EdgeRunState(edge=_edge_ref(topology.edges[eid]), traversals=count)
+        for eid, count in sorted(view.state.traversals.items())
+        if count > 0
+    ]
+    live = [] if execution_closed else sorted({a.node_id for a in view.state.live})
+    pending = (
+        []
+        if execution_closed
+        else [
+            PendingRef(
+                node=p.activation_id.rpartition("#")[0] if p.activation_id else None,
+                key=p.key,
+                kind=p.kind,
+            )
+            for p in view.pending
+        ]
+    )
+    return GraphState(
+        graph_sha=view.graph_sha,
+        nodes=nodes,
+        edges=edges,
+        current_nodes=live,
+        pending=pending,
+        outcome=outcome,
+    )
