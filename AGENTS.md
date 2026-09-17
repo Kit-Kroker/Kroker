@@ -174,3 +174,8 @@ Rule: **you touched a stage, you move it.**
   vs. in flight; per-epic detail lives in `docs/roadmap/`.
 - `docs/reference/foundation.md`, `BENCHMARK.md`, and the generated docs site
   (https://kit-kroker.github.io/Kroker/) for the assembled living documentation.
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+<!-- SPECKIT END -->

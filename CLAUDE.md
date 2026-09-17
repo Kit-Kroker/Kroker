@@ -14,3 +14,8 @@ Do not treat `agents/` (the directory) as instructions. That is the
 product's own runtime role registry, loaded by
 `src/sdlc/agents/loader.py`. `AGENTS.md` files are for whoever is editing
 the repo. `AGENTS.md` explains the distinction.
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+<!-- SPECKIT END -->

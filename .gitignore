@@ -7,6 +7,8 @@ runs/
 .env
 .vscode/
 opencode.json
+# spec-kit runtime caches (catalog mirror); scaffold itself is tracked
+.specify/extensions/.cache/
 /build/
 # mkdocs build output for the generated docs site (never committed).
 /site/

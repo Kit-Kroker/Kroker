@@ -1,0 +1,25 @@
+{
+  "version": "0.11.3",
+  "integration_state_schema": 1,
+  "installed_integrations": [
+    "claude",
+    "opencode",
+    "gemini"
+  ],
+  "integration_settings": {
+    "claude": {
+      "script": "ps",
+      "invoke_separator": "-"
+    },
+    "opencode": {
+      "script": "ps",
+      "invoke_separator": "."
+    },
+    "gemini": {
+      "script": "ps",
+      "invoke_separator": "."
+    }
+  },
+  "integration": "claude",
+  "default_integration": "claude"
+}
