@@ -37,6 +37,10 @@ Attributes on the MRO of `FeatureWorkflow` and `GraphWorkflow` across its servic
 | `_budget_crossings` | `RoleHost` | `RoleHost._check_budget`, `FeatureWorkflow.run_state` | `RoleHost._check_budget` | Number of budget alert crossings |
 | `_escalation_round`| *Eliminated* (Rule 2) | None (per-task local in `TaskHost._dev_task`) | None | Formerly instance counter, now local to prevent wave-mode races |
 | `_codebase_map` | `FeatureWorkflow` | `FeatureWorkflow` | `FeatureWorkflow` | Brownfield codebase map cache |
+| `_activation_spend` | `ReportHost` | `GraphWorkflow.graph_view` | `ReportHost._track_usage` | E-75: priced spend per graph activation id, `(sum, all_priced)`; keyed by `ACTIVATION`; empty on FeatureWorkflow |
+| `_unattributed_spend` | `ReportHost` | tests (spend invariant) | `ReportHost._track_usage` | E-75: spend outside any activation (preamble, retro) |
+| `_pending_activation` | `GateHost` | `GateHost._pending_facts` | `GateHost._gate`, `GateHost.submit_gate_decision`, `QuestionHost.ask_and_wait`, `QuestionHost.answer_question` (cross-host, via `getattr`) | E-75: pending key → opening activation id; joined onto `_pending`, never iterated alone |
+| `_graph`, `_graph_sha`, `_dispatcher`, `_result` | `GraphWorkflow` | `GraphWorkflow.graph_view`, `GraphWorkflow.run_state` | `GraphWorkflow.run` | E-75: pinned graph, its sha, the live dispatcher, the return string (set after retro) |
 
 ## Grace edits while FeatureWorkflow is registered (E-74 U6)
 

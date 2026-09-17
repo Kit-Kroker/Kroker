@@ -14,6 +14,7 @@ from datetime import timedelta
 from temporalio import workflow
 
 with workflow.unsafe.imports_passed_through():
+    from ..graph.run_view import ACTIVATION
     from ..observability.trace import RunEventKind
     from ..pending import clarify_pending
     from ..stages.clarify.models import OpenQuestion
@@ -37,6 +38,7 @@ class QuestionHost:
         pending = getattr(self, "_pending", None)
         if pending is not None:
             pending.pop(question_id, None)
+            getattr(self, "_pending_activation", {}).pop(question_id, None)
 
     async def ask_and_wait(
         self,
@@ -68,9 +70,12 @@ class QuestionHost:
         self._stage(f"awaiting:{stage}", trace=stage)  # type: ignore[attr-defined]
         self._pending_questions = [q.id for q in questions]
         pending = getattr(self, "_pending", None)
+        attribution = getattr(self, "_pending_activation", None)
         if pending is not None:
             for p in clarify_pending(list(questions), set(), opened_at=workflow.now()):
                 pending[p.key] = p
+                if attribution is not None:
+                    attribution[p.key] = ACTIVATION.get()
         await workflow.wait_condition(
             lambda: all(q.id in self._question_answers for q in questions),
             timeout=timedelta(hours=timeout_hours),
@@ -82,6 +87,8 @@ class QuestionHost:
                 answers[q.id] = ans
             if pending is not None:
                 pending.pop(q.id, None)
+                if attribution is not None:
+                    attribution.pop(q.id, None)
         for q in questions:
             ans = answers.get(q.id)
             answered = (

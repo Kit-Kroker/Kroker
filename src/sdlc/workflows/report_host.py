@@ -15,6 +15,7 @@ from temporalio import workflow
 
 with workflow.unsafe.imports_passed_through():
     from ..core.models import RoleUsage
+    from ..graph.run_view import ACTIVATION
     from ..observability.trace import RunEvent, RunEventKind
     from ..observability.usage import merge_usage
 
@@ -28,6 +29,11 @@ class ReportHost:
         self._seq: int = 0
         self._status: str = "starting"
         self._role_usage: dict[str, RoleUsage] = {}
+        # E-75 §4.3: priced spend per graph activation (sum, all-priced) and the
+        # remainder spent outside any activation (preamble, retro). Memory-only;
+        # always empty on FeatureWorkflow, where ACTIVATION is never set.
+        self._activation_spend: dict[str, tuple[float, bool]] = {}
+        self._unattributed_spend: tuple[float, bool] = (0.0, True)
 
     def _emit(self, kind: RunEventKind, stage: str | None = None, **data: str) -> None:
         """Append a domain event to the run trace. Pure state mutation — safe
@@ -63,6 +69,13 @@ class ReportHost:
         a MODEL_USAGE event. Pure state mutation — safe in workflow code.
         `into` additionally folds the same delta into a caller-held bag
         (per-stage benchmark records)."""
+        aid = ACTIVATION.get()
+        prior = self._activation_spend.get(aid, (0.0, True)) if aid else self._unattributed_spend
+        folded = (prior[0] + (cost_usd or 0.0), prior[1] and cost_usd is not None)
+        if aid:
+            self._activation_spend[aid] = folded
+        else:
+            self._unattributed_spend = folded
         bag = self._role_usage.setdefault(role, RoleUsage(role=role, model=model))
         for target in (bag, into) if into is not None else (bag,):
             merge_usage(

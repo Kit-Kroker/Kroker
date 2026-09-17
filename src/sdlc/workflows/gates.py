@@ -35,6 +35,7 @@ with workflow.unsafe.imports_passed_through():
         TimeoutAction,
         gate_key,
     )
+    from ..graph.run_view import ACTIVATION, PendingFact, pending_kind
     from ..notify.activities import notify
     from ..notify.contract import NotifyInput, NotifyReason, Results
     from ..notify.schedule import build_schedule
@@ -65,6 +66,9 @@ class GateHost:
         # pending items render under the run they belong to. None on a
         # top-level host, which is every host but the crew.
         self._parent_run_id: str | None = None
+        # E-75 §4.3: pending key -> the graph activation that opened it (None
+        # outside one). Joined onto _pending, never iterated on its own.
+        self._pending_activation: dict[str, str | None] = {}
 
     # ------------------------- hooks (no-op) ---------------------------
 
@@ -109,6 +113,7 @@ class GateHost:
             self._gate_decisions[key] = decision
         # _pending means "not yet decided" for every variant (E-7).
         self._pending.pop(key, None)
+        self._pending_activation.pop(key, None)
 
     @workflow.query
     def status(self) -> str:
@@ -209,6 +214,7 @@ class GateHost:
                 name, round, context, opened_at=workflow.now(), parent_run_id=self._parent_run_id
             )
             self._pending[key] = pending
+            self._pending_activation[key] = ACTIVATION.get()
             self._status = f"awaiting:{name}"
             await self._on_gate_awaited(name, round)
             schedule, expires = build_schedule(
@@ -236,6 +242,25 @@ class GateHost:
             finally:
                 self._status = "running"
                 self._pending.pop(key, None)
+                self._pending_activation.pop(key, None)
 
         await self._on_gate_decided(name, round, policy, decision, confidence, author_model)
         return decision
+
+    def _pending_facts(self) -> tuple[PendingFact, ...]:
+        """E-75 §4.3: every open pending with its attributed activation.
+        Iterates _pending (the source of truth), so a stale attribution entry
+        can never surface a decision that is no longer owed."""
+        return tuple(
+            sorted(
+                (
+                    PendingFact(
+                        key=key,
+                        activation_id=self._pending_activation.get(key),
+                        kind=pending_kind(p.kind),
+                    )
+                    for key, p in self._pending.items()
+                ),
+                key=lambda f: f.key,
+            )
+        )
