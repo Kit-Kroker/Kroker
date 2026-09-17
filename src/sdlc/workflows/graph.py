@@ -17,7 +17,9 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..core.context import StageServices
     from ..core.models import RunState, RunSummary
+    from ..graph.model import PipelineGraph
     from ..graph.node_types import NODE_TYPES
+    from ..graph.run_view import GraphRunView, stage_marks
     from ..graph.validate import InvalidGraph, from_graph
     from ..memory.activities import WatermarkInput, capture_watermark
     from .benchmark_host import BenchmarkHost
@@ -54,6 +56,11 @@ class GraphWorkflow(
         self._base_sha: str = ""
         self._integration_wt: str = ""
         self._codebase_map = None
+        # E-75 §4.2: read by graph_view / run_state only; set once by run().
+        self._graph: PipelineGraph | None = None
+        self._graph_sha: str = ""
+        self._dispatcher: GraphDispatcher | None = None
+        self._result: str | None = None
         self._ctx = StageServices(
             emit=self._emit,
             stage=self._stage,
@@ -75,8 +82,30 @@ class GraphWorkflow(
 
     @workflow.query
     def run_state(self) -> RunState | None:
-        """Live run state for the dashboard fleet view (E-10)."""
-        return self._snapshot_run_state()
+        """Live run state for the dashboard fleet view (E-10), with the
+        graph's stage marks once dispatch has started (E-75 §5.3)."""
+        snap = self._snapshot_run_state()
+        view = self._graph_run_view()
+        if snap is None or view is None or self._graph is None or self._dispatcher is None:
+            return snap
+        marks = stage_marks(view, self._dispatcher.topology, self._graph, NODE_TYPES)
+        return snap.model_copy(update={"stage_marks": marks})
+
+    @workflow.query
+    def graph_view(self) -> GraphRunView | None:
+        """Router state + per-activation facts (E-75 §4.2); None before dispatch."""
+        return self._graph_run_view()
+
+    def _graph_run_view(self) -> GraphRunView | None:
+        d = self._dispatcher
+        if d is None:
+            return None
+        return d.view(
+            graph_sha=self._graph_sha,
+            result=self._result,
+            pending=self._pending_facts(),
+            spend=self._activation_spend,
+        )
 
     @workflow.run
     async def run(self, inp: GraphRunInput) -> str:
@@ -96,6 +125,9 @@ class GraphWorkflow(
                 "graph not executable: " + "; ".join(p.message for p in problems),
                 non_retryable=True,
             )
+
+        self._graph = inp.graph
+        self._graph_sha = inp.graph.content_sha()
 
         self._idea = idea
         self._started_at = workflow.now()
@@ -131,9 +163,11 @@ class GraphWorkflow(
             facts=facts,
             cfg=cfg,
         )
+        self._dispatcher = dispatcher
         outcome = await dispatcher.run()
         if outcome.stored_failure is not None:
             raise outcome.stored_failure  # D8: same failure as FeatureWorkflow; retro not run (U9)
         result = outcome_string(outcome, router.topology)
         await self._retro(cfg, idea, result)
+        self._result = result  # E-75 F3: never a success string while retro can still fail
         return result
