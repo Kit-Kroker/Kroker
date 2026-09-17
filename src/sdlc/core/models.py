@@ -499,6 +499,11 @@ class RunSummary(BaseModel):
     memory_retains: int = 0
 
 
+# The fleet strip's per-stage marks (E-75 spec §5.3); the vocabulary of
+# interfaces/ui/src/components/stage_dots/StageDots.vue DotState.
+DotState = Literal["pending", "active", "done", "blocked", "failed", "skipped"]
+
+
 class RunState(BaseModel):
     """Live counterpart to RunSummary: what a run looks like mid-flight,
     exposed via the run_state() query (E-10).
@@ -523,3 +528,7 @@ class RunState(BaseModel):
     cost_usd_total: float | None = None
     budget_usd: float | None = None
     budget_crossings: int = 0
+    # E-75 spec §5.3: canonical stage -> mark, projected from router state by
+    # GraphWorkflow.run_state. None for FeatureWorkflow runs (linear strip
+    # fallback). Not named `stages`: RunSummary.stages means something else.
+    stage_marks: dict[str, DotState] | None = None
