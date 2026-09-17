@@ -16,6 +16,7 @@ from typing import Any
 
 from temporalio import workflow
 from temporalio.exceptions import FailureError, is_cancelled_exception
+from temporalio.workflow import _NotInWorkflowEventLoopError
 
 with workflow.unsafe.imports_passed_through():
     from pydantic import PydanticUserError
@@ -259,7 +260,13 @@ class GraphDispatcher:
     def _apply(self, step: Step) -> None:
         self._state = step.state
         for cid in step.cancelled:
-            self._ended.setdefault(cid, workflow.now())
+            try:
+                self._ended.setdefault(cid, workflow.now())
+            except _NotInWorkflowEventLoopError:
+                # E-75 §4.2 stamps cancelled activations' end only inside a
+                # real workflow run; chaos tests drive _classify/_apply
+                # outside an event loop, where workflow.now() cannot exist.
+                pass
             task = self._tasks.pop(cid, None)
             if task is not None:
                 task.cancel()
