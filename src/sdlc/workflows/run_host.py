@@ -131,7 +131,11 @@ class RunHost:
         """
         if self._idea is None or self._started_at is None:
             return None
-        priced = [u.cost_usd for u in self._role_usage.values() if u.cost_usd is not None]  # type: ignore[attr-defined]
+        priced = [
+            u.cost_usd
+            for u in self._role_usage.values()  # type: ignore[attr-defined]
+            if u.cost_usd is not None
+        ]  # determinism: insertion-ordered usage dict
         budget = self._cfg.run_budget_usd if self._cfg and self._cfg.run_budget_usd > 0 else None
         stage = next(
             (e.stage for e in reversed(self._trace) if e.kind is RunEventKind.STAGE_STARTED),  # type: ignore[attr-defined]

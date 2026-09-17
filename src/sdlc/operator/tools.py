@@ -31,7 +31,6 @@ from ..core.models import (
 )
 from ..dashboard.fleet import check_fleet_capacity, fleet_pending_cap
 from ..naming import slug
-from ..workflows.graph_catalog import GraphStartError
 from . import render
 from .deps import OperatorDeps
 from .errors import ToolError, guard
@@ -536,6 +535,8 @@ async def start_run(
     cap = fleet_pending_cap()
     if cap is not None:
         check_fleet_capacity(await deps.poller.snapshot(), cap)
+    from ..workflows.graph_catalog import GraphStartError
+
     try:
         started = await deps.starter(idea, PipelineConfig(), wf_id)
     except GraphStartError as e:

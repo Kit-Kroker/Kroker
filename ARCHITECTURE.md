@@ -33,7 +33,7 @@ flowchart TB
     TS <-->|task dispatch| W
 
     subgraph W[Temporal workers]
-        FW[FeatureWorkflow + MaintenanceWorkflow<br/>deterministic orchestration]
+        FW[GraphWorkflow + MaintenanceWorkflow<br/>deterministic orchestration]
         FW --> PA[Proposer agents<br/>Pydantic AI · TemporalAgent]
         FW --> HR[Harness runner<br/>claude -p · opencode run]
         FW --> SA[Support activities<br/>memory · git · QA · notify]
@@ -56,7 +56,7 @@ through its validated diff artifact.
 | Component | Owns | Never does |
 |---|---|---|
 | Temporal server | run state, event history, timers, signals, schedules, visibility | business logic |
-| FeatureWorkflow | stage sequencing, gate waits, fix-loop bounds, budget counters | I/O, subprocesses, memory, nondeterminism |
+| GraphWorkflow (FeatureWorkflow retained for in-flight runs) | stage sequencing, gate waits, fix-loop bounds, budget counters | I/O, subprocesses, memory, nondeterminism |
 | MaintenanceWorkflow **(P4 — designed, not built)** | DAPER cycle, repair gating, child factory runs | direct code patches |
 | Proposer agents | typed artifact proposals (Requirements … RepairPlan) | tool calls, file access |
 | Harness runner activity | `claude -p` / `opencode run` execution, heartbeats, checkpoint commits, cost capture | leaving the worktree; choosing its own permissions |
@@ -70,8 +70,10 @@ through its validated diff artifact.
 
 ## 3. Pipeline architecture
 
-Stage DAG (SDLC-spec v2 §1). One `FeatureWorkflow` per run; the code stage
-fans out per-task child work in dependency-ordered parallel waves.
+Stage DAG (SDLC-spec v2 §1). One `GraphWorkflow` per run, executing a pinned
+`PipelineGraph` (E-74); the code stage fans out per-task child work in
+dependency-ordered parallel waves. Rollback of E-74 is roll-forward only:
+there is no start-site switch back to FeatureWorkflow.
 
 ```mermaid
 flowchart LR
@@ -769,7 +771,9 @@ Kroker/
 │   ├── activities.py          # the main non-deterministic surface: harness runs, git,
 │   │                          #   worktrees, tests, PRs, containment resolution
 │   ├── workflows/             # deterministic only (Temporal sandbox)
-│   │   ├── feature.py         #   FeatureWorkflow — the 15-stage DAG, gates, fix loops
+│   │   ├── feature.py         #   FeatureWorkflow — retained for in-flight runs (E-74 grace)
+│   │   ├── graph.py           #   GraphWorkflow — the pipeline as data (E-74)
+│   │   ├── graph_nodes/       #   node handlers over the stage steps
 │   │   ├── crew.py            #   CrewTaskWorkflow (E-88) — the round loop + brakes
 │   │   ├── gates.py           #   GateHost — signal-wait gates + pending publication
 │   │   ├── fanout.py          #   clarify probe fan-out (E-85)

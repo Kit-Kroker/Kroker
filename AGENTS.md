@@ -104,8 +104,9 @@ not forced into the stage shape. Non-pipeline domains cut recursively into
 phases of their own process (`assessment` → scan / discover / risk / gates).
 
 Two binding rules govern slices:
-- **Cross-stage calls are banned**; the orchestrator (`FeatureWorkflow`) is the
-  sole coordinator. Importing a *type* another stage produces is not a call.
+- **Cross-stage calls are banned**; the orchestrator (`GraphWorkflow`;
+  `FeatureWorkflow` only for in-flight runs) is the sole coordinator. Importing
+  a *type* another stage produces is not a call.
 - **The producer owns its artifacts.** A stage's `models.py` holds what it
   produces; `core/` holds only what no stage produces — configuration and
   envelopes (`PipelineConfig`, `GateDecision`, `RoleConfig`, `IdeaBrief`).

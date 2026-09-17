@@ -92,7 +92,7 @@ not None` checks collapse into *is there a node*.
   is ESCALATED at the router, and each activation's `unavailable_ports` snapshot lets a
   gate run as today's final gate (E-74 handler rule). Open questions E73-OQ-1…8 live in
   the spec §10; E73-OQ-3 (never-reset counters) is a documented limitation.
-- [ ] **E-74 — `GraphWorkflow` replaces `_pipeline`** → FR-1203. Thin Temporal
+- [x] **E-74 — `GraphWorkflow` replaces `_pipeline`** → FR-1203. Thin Temporal
   layer over E-73: dispatch table from `node.type` to the existing handlers,
   which converge on `(Activation, PipelineConfig) -> Emission`; exceptions become
   `fail` emissions so error routing is topology. `PipelineConfig` splits by scope
@@ -104,6 +104,16 @@ not None` checks collapse into *is there a node*.
   its stage sequence. **Big-bang was chosen over strangler-with-parity** — run
   the benchmark before/after anyway as a regression check; the choice was to not
   *gate* on dual-running, not to discard free evidence.
+
+  **Landed** (spec `docs/superpowers/specs/2026-09-15-graph-workflow-cutover-design.md`,
+  plan `docs/superpowers/plans/2026-09-15-graph-workflow-cutover.md`): every new run —
+  `sdlc start`, dashboard/operator, benchmark cells, tidy-up fix runs — starts
+  `GraphWorkflow` over a pinned, validated graph (`workflows/graphs/default`,
+  `default-research`, `seeded`), and GraphWorkflow reproduces FeatureWorkflow's
+  golden traces exactly (stage/gate trace, command projection, close). `code` is one
+  coarse node; **follow-ups:** per-task topology with `max_fix_attempts → max_traversals`
+  (E74-OQ-3), research-as-topology (E74-OQ-2), and the FeatureWorkflow deletion gated
+  on the two Running queries of spec §8.5. Rollback is roll-forward only.
 - [ ] **E-75 — graph queries on the dashboard backend** → FR-1204. **Superseded in part 2026-08-18:** E-10 built the backend, so this narrows to adding `graph_state()` and `graph()` beside the existing queries once `GraphWorkflow` exists. The "dashboard backend remains" half of P2 is closed; what is left here is graph-shaped run state, which needs E-74 first. The only storage is still content-addressed `graphs/<sha>.yaml`.
 - [x] **E-76 — canvas** → FR-1205. `@vue-flow/core` (React Flow's Vue port, what
   n8n itself uses; fits the existing Vue 3 + Pinia + Vite stack) plus `dagre` for

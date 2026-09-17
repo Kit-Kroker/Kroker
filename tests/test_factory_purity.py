@@ -216,3 +216,23 @@ def test_benchmarking_predicate_is_the_case_id_check(benchmark_host_class):
     assert "case_id" in src, (
         f"_benchmarking must gate on cfg.benchmark.case_id; predicate was: {src!r}"
     )
+
+
+GRAPH_MODULES = sorted(
+    [
+        *(Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "graph_nodes").glob(
+            "*.py"
+        ),
+        Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "graph.py",
+        Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "graph_dispatch.py",
+    ]
+)
+
+
+def test_graph_modules_schedule_benchmark_activities_only_through_the_guarded_helpers():
+    for path in GRAPH_MODULES:
+        src = path.read_text(encoding="utf-8")
+        for name in _BENCHMARK_ACTIVITIES:
+            assert name not in src, (
+                f"{path.name} references {name}; use BenchmarkHost._record/_judge"
+            )

@@ -1,13 +1,13 @@
 # `src/sdlc/workflows/` — Attribute-Ownership Table
 
-Attributes on `FeatureWorkflow`'s MRO across its service-host mixins.
+Attributes on the MRO of `FeatureWorkflow` and `GraphWorkflow` across its service-host mixins.
 
 ## Rules of MRO Attribute Ownership
 
 1. **Every attribute has exactly one owning host.** Only the owning host's `__init__` may instantiate it.
 2. **Only the owning host may write an attribute**, unless explicitly documented below as a cross-host mutation.
 3. **Cross-host readers are permitted** through the MRO (`self.<attr>`), but must be recorded here to prevent accidental coupling.
-4. **No handlers on mixins — one blessed exception.** Signal and query handlers live on `FeatureWorkflow` or `GateHost`. `QuestionHost.answer_question` is the sanctioned exception (spec A §3.1's own design: the signal and the wait are one service). Its handler name is a wire contract; never rename it.
+4. **No handlers on mixins — one blessed exception.** Signal and query handlers live on the concrete workflow class (`FeatureWorkflow`, `GraphWorkflow`) or `GateHost`. `QuestionHost.answer_question` is the sanctioned exception (spec A §3.1's own design: the signal and the wait are one service). Its handler name is a wire contract; never rename it.
 
 ## Attribute Ownership
 

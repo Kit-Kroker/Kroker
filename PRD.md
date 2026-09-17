@@ -750,5 +750,10 @@ P2, since it is how FR-102's `CodebaseMap` gets built.
   workflow id currently breaks on stale `sdlc/*` branches, a known open
   defect, so failed runs would land on a broken recovery path). Also the only
   policy that survives P7: a hosted multi-tenant factory cannot kill customer
-  runs at deploy time. (Same question, same number as
+  runs at deploy time.
+  **Amended 2026-09-15 (E-74 U7):** the deletion is a separate follow-up
+  even when nothing is in flight at cutover, and it additionally waits for
+  no Running `TidyUpWorkflow`/`BenchmarkWorkflow` started before the
+  cutover deploy (their replay still starts FeatureWorkflow children).
+  (Same question, same number as
   `docs/roadmap/pipeline-as-data.md` OQ-10.)
