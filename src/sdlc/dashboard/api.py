@@ -33,7 +33,8 @@ from ..core.models import (
     PipelineConfig,
     ProjectMode,
 )
-from ..workflows.graph_catalog import GraphStartError
+from ..graph import PipelineGraph
+from ..workflows.graph_catalog import GraphStartError, executable, resolved_roles
 from . import graph_wire
 from .channel import DashboardChannel
 from .fleet import (
@@ -43,6 +44,7 @@ from .fleet import (
     check_fleet_capacity,
     fleet_pending_cap,
 )
+from .run_graph import RunGraphs, RunNotFound, RunQueryFailed
 
 HEARTBEAT_S = 15.0
 
@@ -80,9 +82,15 @@ async def _default_starter(idea: IdeaBrief, cfg: PipelineConfig, wf_id: str) -> 
     raise HTTPException(503, "no starter configured")
 
 
-def create_router(poller: FleetPoller, starter: Callable | None = None) -> APIRouter:
+def create_router(
+    poller: FleetPoller, starter: Callable | None = None, run_graphs: RunGraphs | None = None
+) -> APIRouter:
     router = APIRouter()
     start_run = starter or _default_starter
+    # Lazy: the pure graph routes' tests pass a poller that fails on any attribute access.
+    graphs = (
+        run_graphs if run_graphs is not None else RunGraphs(lambda: poller._client_or_connect())
+    )
 
     async def _reply(run_id: str, key: str, reply: Reply, actor: str, want: str):
         handle = await _handle(poller, run_id)
@@ -212,6 +220,54 @@ def create_router(poller: FleetPoller, starter: Callable | None = None) -> APIRo
         if set(body) != {"graph"}:
             raise HTTPException(422, "body must be {graph: object}")
         return graph_wire.serialize(body["graph"])
+
+    @router.post("/graphs/validate", response_model=graph_wire.ValidationWire)
+    async def graph_validate(request: Request):
+        """validate + executable (E-75 §7.3). Capability `validate` stays false
+        until the canvas follow-up (spec D7)."""
+        body = await _graph_body(request)
+        if set(body) != {"graph"}:
+            raise HTTPException(422, "body must be {graph: object}")
+        parsed = graph_wire.parse_object(body["graph"])
+        if isinstance(parsed, graph_wire.ParseErr):
+            raise HTTPException(422, "graph does not parse; use /graphs/parse for shape errors")
+        graph = PipelineGraph.model_validate(parsed.graph)
+        wire = graph_wire.validation(graph, roles=resolved_roles(PipelineConfig()))
+        return graph_wire.with_executable(wire, executable(graph))
+
+    async def _source(run_id: str):
+        try:
+            return await graphs.source(run_id)
+        except RunNotFound as e:
+            raise HTTPException(404, f"no run {run_id!r}") from e
+
+    @router.get(
+        "/runs/{run_id}/graph", response_model=graph_wire.GraphResponse | graph_wire.NoGraph
+    )
+    async def run_graph(run_id: str):
+        src = await _source(run_id)
+        if src.run_input is None:
+            return graph_wire.NoGraph()
+        return graph_wire.graph_response(src.run_input.graph)
+
+    @router.get(
+        "/runs/{run_id}/graph_state", response_model=graph_wire.GraphState | graph_wire.NoGraph
+    )
+    async def run_graph_state(run_id: str):
+        src = await _source(run_id)
+        if src.run_input is None or src.topology is None:
+            return graph_wire.NoGraph()
+        try:
+            view = await graphs.view(src, run_id)
+        except RunQueryFailed as e:
+            raise HTTPException(502, str(e)) from e
+        return graph_wire.project_graph_state(
+            view,
+            src.run_input.graph,
+            src.topology,
+            execution_closed=src.closed,
+            close_status=src.close_status,
+        )
 
     @router.post("/runs", response_model=StartedRun)
     async def start(body: StartBody):
