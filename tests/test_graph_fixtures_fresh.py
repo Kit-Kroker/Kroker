@@ -142,3 +142,27 @@ def test_legality_broken_scenarios_still_parse(name):
     assert rec["parse"]["ok"] is True
     assert rec["parse"]["sha"]
     assert rec["serialize"]["ok"] is True
+
+
+def test_run_state_recordings_cover_every_outcome_state():
+    built = dump.build()
+    states = built["run_state/graph_state.recorded.json"]
+    assert {name: s["outcome"]["state"] for name, s in states.items()} == {
+        "blocked_at_architecture": "running",
+        "completed": "completed",
+        "escalated_revise_exhausted": "escalated",
+        "interrupted": "failed",
+        "not_started": "running",
+        "rejected_at_architecture": "rejected",
+        "unrouted_fail": "failed",
+    }
+    assert {s["outcome"]["state"] for s in states.values()} == {
+        "running",
+        "completed",
+        "rejected",
+        "escalated",
+        "failed",
+    }
+    assert built["run_state/graph_response.recorded.json"]["kind"] == "graph"
+    severities = {i["severity"] for i in built["run_state/validation.recorded.json"]["issues"]}
+    assert "not_executable" in severities

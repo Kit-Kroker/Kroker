@@ -1,0 +1,706 @@
+{
+  "blocked_at_architecture": {
+    "kind": "state",
+    "graph_sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+    "nodes": {
+      "analyze": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "architect": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": 1.87
+      },
+      "architecture": {
+        "status": "blocked",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "clarify": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": 0.31
+      },
+      "code": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "context": {
+        "status": "skipped",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "deploy": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "intake": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": null
+      },
+      "merge": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "plan": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "plan_check": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "planner": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      }
+    },
+    "edges": [],
+    "current_nodes": [
+      "architecture"
+    ],
+    "pending": [
+      {
+        "node": "architecture",
+        "key": "architecture#1",
+        "kind": "gate"
+      }
+    ],
+    "outcome": {
+      "state": "running",
+      "reason": null,
+      "result": null
+    }
+  },
+  "completed": {
+    "kind": "state",
+    "graph_sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+    "nodes": {
+      "analyze": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": null
+      },
+      "architect": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": 0.0
+      },
+      "architecture": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": null
+      },
+      "clarify": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": 0.0
+      },
+      "code": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": null
+      },
+      "context": {
+        "status": "skipped",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "deploy": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": null
+      },
+      "intake": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": null
+      },
+      "merge": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": null
+      },
+      "plan": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": null
+      },
+      "plan_check": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": null
+      },
+      "planner": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": 0.0
+      }
+    },
+    "edges": [],
+    "current_nodes": [],
+    "pending": [],
+    "outcome": {
+      "state": "completed",
+      "reason": null,
+      "result": "deployed:https://example.invalid/pr/1"
+    }
+  },
+  "escalated_revise_exhausted": {
+    "kind": "state",
+    "graph_sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+    "nodes": {
+      "analyze": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "architect": {
+        "status": "done",
+        "round": 3,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "architecture": {
+        "status": "failed",
+        "round": 3,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "clarify": {
+        "status": "done",
+        "round": 1,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "code": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "context": {
+        "status": "skipped",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "deploy": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "intake": {
+        "status": "done",
+        "round": 1,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "merge": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "plan": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "plan_check": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "planner": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      }
+    },
+    "edges": [
+      {
+        "edge": {
+          "source": "architecture",
+          "source_port": "revise",
+          "target": "architect",
+          "target_port": "guidance"
+        },
+        "traversals": 2
+      }
+    ],
+    "current_nodes": [],
+    "pending": [],
+    "outcome": {
+      "state": "escalated",
+      "reason": "architecture.revise: exhausted",
+      "result": null
+    }
+  },
+  "interrupted": {
+    "kind": "state",
+    "graph_sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+    "nodes": {
+      "analyze": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "architect": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": 1.87
+      },
+      "architecture": {
+        "status": "cancelled",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "clarify": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": 0.31
+      },
+      "code": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "context": {
+        "status": "skipped",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "deploy": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "intake": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": null
+      },
+      "merge": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "plan": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "plan_check": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "planner": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      }
+    },
+    "edges": [],
+    "current_nodes": [],
+    "pending": [],
+    "outcome": {
+      "state": "failed",
+      "reason": "interrupted:terminated",
+      "result": null
+    }
+  },
+  "not_started": {
+    "kind": "state",
+    "graph_sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+    "nodes": {
+      "analyze": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "architect": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "architecture": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "clarify": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "code": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "context": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "deploy": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "intake": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "merge": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "plan": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "plan_check": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "planner": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      }
+    },
+    "edges": [],
+    "current_nodes": [],
+    "pending": [],
+    "outcome": {
+      "state": "running",
+      "reason": null,
+      "result": null
+    }
+  },
+  "rejected_at_architecture": {
+    "kind": "state",
+    "graph_sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+    "nodes": {
+      "analyze": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "architect": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": 1.87
+      },
+      "architecture": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": null
+      },
+      "clarify": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": 0.31
+      },
+      "code": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "context": {
+        "status": "skipped",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "deploy": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "intake": {
+        "status": "done",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": null
+      },
+      "merge": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "plan": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "plan_check": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "planner": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      }
+    },
+    "edges": [],
+    "current_nodes": [],
+    "pending": [],
+    "outcome": {
+      "state": "rejected",
+      "reason": "architecture.reject",
+      "result": "rejected:architecture"
+    }
+  },
+  "unrouted_fail": {
+    "kind": "state",
+    "graph_sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+    "nodes": {
+      "analyze": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "architect": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "architecture": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "clarify": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "code": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "context": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "deploy": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "intake": {
+        "status": "failed",
+        "round": 1,
+        "started_at": "2026-09-17T09:00:00+00:00",
+        "ended_at": "2026-09-17T09:00:00+00:00",
+        "cost_usd": null
+      },
+      "merge": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "plan": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "plan_check": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      },
+      "planner": {
+        "status": "idle",
+        "round": 0,
+        "started_at": null,
+        "ended_at": null,
+        "cost_usd": null
+      }
+    },
+    "edges": [],
+    "current_nodes": [],
+    "pending": [],
+    "outcome": {
+      "state": "failed",
+      "reason": "intake.fail: ApplicationError",
+      "result": null
+    }
+  }
+}

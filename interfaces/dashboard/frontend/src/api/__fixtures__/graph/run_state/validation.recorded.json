@@ -1,0 +1,48 @@
+{
+  "issues": [
+    {
+      "code": "gate_name_collision",
+      "severity": "not_executable",
+      "message": "gate node id 'research' collides with a handler-internal gate of the same name",
+      "target": {
+        "kind": "node",
+        "id": "research",
+        "edge": null,
+        "node": null,
+        "port": null
+      }
+    },
+    {
+      "code": "not_executable",
+      "severity": "not_executable",
+      "message": "the research refine loop is handler-internal until research-as-topology (E74-OQ-2)",
+      "target": {
+        "kind": "node",
+        "id": "research",
+        "edge": null,
+        "node": null,
+        "port": null
+      }
+    }
+  ],
+  "back_edges": [
+    {
+      "source": "architecture",
+      "source_port": "revise",
+      "target": "architect",
+      "target_port": "guidance"
+    },
+    {
+      "source": "plan",
+      "source_port": "revise",
+      "target": "planner",
+      "target_port": "guidance"
+    },
+    {
+      "source": "research",
+      "source_port": "revise",
+      "target": "researcher",
+      "target_port": "guidance"
+    }
+  ]
+}

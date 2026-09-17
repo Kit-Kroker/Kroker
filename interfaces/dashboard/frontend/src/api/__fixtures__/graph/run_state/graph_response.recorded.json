@@ -1,0 +1,195 @@
+{
+  "kind": "graph",
+  "sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+  "graph": {
+    "schema_version": 1,
+    "nodes": [
+      {
+        "id": "analyze",
+        "type": "analyze"
+      },
+      {
+        "id": "architect",
+        "type": "architect"
+      },
+      {
+        "id": "architecture",
+        "type": "gate.architecture"
+      },
+      {
+        "id": "clarify",
+        "type": "clarify"
+      },
+      {
+        "id": "code",
+        "type": "code"
+      },
+      {
+        "id": "context",
+        "type": "context"
+      },
+      {
+        "id": "deploy",
+        "type": "deploy"
+      },
+      {
+        "id": "intake",
+        "type": "intake"
+      },
+      {
+        "id": "merge",
+        "type": "merge"
+      },
+      {
+        "id": "plan",
+        "type": "gate.plan"
+      },
+      {
+        "id": "plan_check",
+        "type": "plan_check"
+      },
+      {
+        "id": "planner",
+        "type": "plan"
+      }
+    ],
+    "edges": [
+      {
+        "source": "analyze",
+        "source_port": "analysis",
+        "target": "merge",
+        "target_port": "analysis"
+      },
+      {
+        "source": "architect",
+        "source_port": "spec",
+        "target": "architecture",
+        "target_port": "artifact"
+      },
+      {
+        "source": "architecture",
+        "source_port": "approve",
+        "target": "merge",
+        "target_port": "spec"
+      },
+      {
+        "source": "architecture",
+        "source_port": "approve",
+        "target": "planner",
+        "target_port": "spec"
+      },
+      {
+        "source": "architecture",
+        "source_port": "revise",
+        "target": "architect",
+        "target_port": "guidance",
+        "max_traversals": 2
+      },
+      {
+        "source": "clarify",
+        "source_port": "requirements",
+        "target": "architect",
+        "target_port": "requirements"
+      },
+      {
+        "source": "clarify",
+        "source_port": "requirements",
+        "target": "planner",
+        "target_port": "requirements"
+      },
+      {
+        "source": "code",
+        "source_port": "results",
+        "target": "analyze",
+        "target_port": "results"
+      },
+      {
+        "source": "code",
+        "source_port": "results",
+        "target": "merge",
+        "target_port": "results"
+      },
+      {
+        "source": "context",
+        "source_port": "map",
+        "target": "architect",
+        "target_port": "codebase_map"
+      },
+      {
+        "source": "context",
+        "source_port": "map",
+        "target": "clarify",
+        "target_port": "codebase_map"
+      },
+      {
+        "source": "intake",
+        "source_port": "brownfield",
+        "target": "context",
+        "target_port": "trigger"
+      },
+      {
+        "source": "intake",
+        "source_port": "ok",
+        "target": "clarify",
+        "target_port": "trigger"
+      },
+      {
+        "source": "merge",
+        "source_port": "pr",
+        "target": "deploy",
+        "target_port": "pr"
+      },
+      {
+        "source": "plan",
+        "source_port": "approve",
+        "target": "plan_check",
+        "target_port": "plan"
+      },
+      {
+        "source": "plan",
+        "source_port": "revise",
+        "target": "planner",
+        "target_port": "guidance",
+        "max_traversals": 2
+      },
+      {
+        "source": "plan_check",
+        "source_port": "ok",
+        "target": "analyze",
+        "target_port": "plan"
+      },
+      {
+        "source": "plan_check",
+        "source_port": "ok",
+        "target": "code",
+        "target_port": "plan"
+      },
+      {
+        "source": "plan_check",
+        "source_port": "ok",
+        "target": "merge",
+        "target_port": "plan"
+      },
+      {
+        "source": "planner",
+        "source_port": "plan",
+        "target": "plan",
+        "target_port": "artifact"
+      }
+    ]
+  },
+  "back_edges": [
+    {
+      "source": "architecture",
+      "source_port": "revise",
+      "target": "architect",
+      "target_port": "guidance"
+    },
+    {
+      "source": "plan",
+      "source_port": "revise",
+      "target": "planner",
+      "target_port": "guidance"
+    }
+  ]
+}

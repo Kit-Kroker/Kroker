@@ -7,6 +7,11 @@ serialize answer it gives was produced here by the real sdlc.graph code, and
 tests/test_graph_fixtures_fresh.py fails when the committed JSON no longer
 equals what build() produces. The two *.provisional.json files beside them
 are hand-written until E-73/E-74 exist and are not touched by this script.
+
+`run_state/*.recorded.json` (E-75) are exports of the FINAL run-graph/
+run-state/validate projections, recorded from router steps over the shipped
+default graph. No frontend code reads them yet; the canvas follow-up swaps
+them in with the TS mirror.
 """
 
 from __future__ import annotations
@@ -20,7 +25,24 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from datetime import UTC, datetime  # noqa: E402
+
+from sdlc.core.models import PipelineConfig  # noqa: E402
 from sdlc.dashboard import graph_wire  # noqa: E402
+from sdlc.graph import (  # noqa: E402
+    NODE_TYPES,
+    ActivationFacts,
+    Emitted,
+    GraphRouter,
+    GraphRunView,
+    PendingFact,
+    UnroutedFailure,
+    from_yaml,
+    validate,
+)
+from sdlc.workflows.graph_catalog import SHIPPED, executable, resolved_roles  # noqa: E402
+
+AT = datetime(2026, 9, 17, 9, 0, tzinfo=UTC)
 
 OUT = ROOT / "interfaces/dashboard/frontend/src/api/__fixtures__/graph"
 PRE_CODE = ROOT / "tests/graph/fixtures/pre_code.graph.yaml"
@@ -92,6 +114,110 @@ def _dump(model: Any) -> Any:
     return model.model_dump(mode="json")
 
 
+def _run_state() -> dict[str, Any]:
+    g = SHIPPED["default"]
+    roles = resolved_roles(PipelineConfig())
+    topology = validate(g, NODE_TYPES, roles=roles).topology
+    assert topology is not None
+    router = GraphRouter(topology)
+
+    def emit(state, aid, port):
+        return router.advance(
+            state, Emitted(activation_id=aid, port=port, payload_ref=f"{aid}.{port}")
+        ).state
+
+    s = router.start().state
+    s = emit(s, "intake#1", "ok")
+    s = emit(s, "clarify#1", "requirements")
+    at_gate = emit(s, "architect#1", "spec")
+    assert at_gate.nodes["architecture"].status == "running"
+    facts = {
+        "intake#1": ActivationFacts(started_at=AT, ended_at=AT),
+        "clarify#1": ActivationFacts(started_at=AT, ended_at=AT, cost_usd=0.31),
+        "architect#1": ActivationFacts(started_at=AT, ended_at=AT, cost_usd=1.87),
+        "architecture#1": ActivationFacts(started_at=AT),
+    }
+    blocked = GraphRunView(
+        graph_sha=g.content_sha(),
+        state=at_gate,
+        activations=facts,
+        pending=(PendingFact(key="architecture#1", activation_id="architecture#1", kind="gate"),),
+    )
+    rejected = GraphRunView(
+        graph_sha=g.content_sha(),
+        state=emit(at_gate, "architecture#1", "reject"),
+        activations={**facts, "architecture#1": ActivationFacts(started_at=AT, ended_at=AT)},
+        result="rejected:architecture",
+    )
+    done = at_gate
+    for aid, port in (
+        ("architecture#1", "approve"),
+        ("planner#1", "plan"),
+        ("plan#1", "approve"),
+        ("plan_check#1", "ok"),
+        ("code#1", "results"),
+        ("analyze#1", "analysis"),
+        ("merge#1", "pr"),
+        ("deploy#1", "done"),
+    ):
+        done = emit(done, aid, port)
+    assert done.outcome == "completed"
+    completed = GraphRunView(
+        graph_sha=g.content_sha(),
+        state=done,
+        activations={
+            aid: ActivationFacts(started_at=AT, ended_at=AT)
+            for aid in sorted({e.activation_id for e in done.emissions})
+        },
+        result="deployed:https://example.invalid/pr/1",
+    )
+    looping = at_gate
+    for aid, port in (
+        ("architecture#1", "revise"),
+        ("architect#2", "spec"),
+        ("architecture#2", "revise"),
+        ("architect#3", "spec"),
+    ):
+        looping = emit(looping, aid, port)
+    exhausted = emit(looping, "architecture#3", "revise")
+    assert exhausted.outcome == "escalated"
+    escalated = GraphRunView(
+        graph_sha=g.content_sha(), state=exhausted, escalated_by="architecture#3"
+    )
+    failed = GraphRunView(
+        graph_sha=g.content_sha(),
+        state=emit(router.start().state, "intake#1", "fail"),
+        activations={"intake#1": ActivationFacts(started_at=AT, ended_at=AT)},
+        unrouted_failure=UnroutedFailure(activation_id="intake#1", error_type="ApplicationError"),
+    )
+    cases = {
+        "not_started": (None, False, None),
+        "blocked_at_architecture": (blocked, False, None),
+        "rejected_at_architecture": (rejected, True, "completed"),
+        "completed": (completed, True, "completed"),
+        "escalated_revise_exhausted": (escalated, True, "completed"),
+        "unrouted_fail": (failed, True, "failed"),
+        "interrupted": (blocked, True, "terminated"),
+    }
+    states = {
+        name: _dump(
+            graph_wire.project_graph_state(
+                view, g, topology, execution_closed=closed, close_status=status
+            )
+        )
+        for name, (view, closed, status) in sorted(cases.items())
+    }
+    pre_code = from_yaml(PRE_CODE.read_text(encoding="utf-8"))
+    validation = graph_wire.with_executable(
+        graph_wire.validation(pre_code, roles=roles), executable(pre_code)
+    )
+    return {
+        "run_state/graph_response.recorded.json": _dump(graph_wire.graph_response(g)),
+        "run_state/graph_state.recorded.json": states,
+        "run_state/validation.recorded.json": _dump(validation),
+    }
+
+
 def build() -> dict[str, Any]:
     """Relative path under OUT -> JSON-ready object."""
     files: dict[str, Any] = {"catalog.json": _dump(graph_wire.catalog())}
@@ -121,6 +247,7 @@ def build() -> dict[str, Any]:
             "graph": graph,
             "parse": _dump(graph_wire.parse_object(graph)),
         }
+    files.update(_run_state())
     return files
 
 
