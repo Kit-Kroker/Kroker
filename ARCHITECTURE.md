@@ -789,6 +789,8 @@ Kroker/
 │   ├── memoization/           # content-addressed activity cache (ADR-5)
 │   ├── graph/                 # PipelineGraph schema, node-type registry, content_sha, YAML io (E-72);
 │   │                          #   topology.py, validate.py (legality), router.py — pure GraphRouter (E-73)
+│   │                          #   run_view.py  # graph_view facts + projections (E-75)
+│   │                          #   store.py, start.py  # graphs/<sha>.yaml + client start (E-75)
 │   ├── artifacts/             # claim-check store, capture, read, retention
 │   ├── board/                 # ADR-21: artifact versions, task lifecycle, events, API
 │   ├── benchmarks/            # eval harness: judge, scoring, sc_rollup, drift, oracle,
@@ -801,7 +803,7 @@ Kroker/
 │   ├── research/              # grounded briefs: toolset, tavily, verify, budget (FR-107)
 │   ├── channels/              # contract.py, transport.py, inbox.py — one channel
 │   │                          #   abstraction behind every surface (E-6/E-7/E-8, ADR-8)
-│   ├── dashboard/             # fleet poller, REST + SSE api, channel adapter (E-10); graph_wire + graph routes (E-76)
+│   ├── dashboard/             # fleet poller, REST + SSE api, channel adapter (E-10); graph_wire + graph routes (E-76); run graph/state routes, run_graph source (E-75)
 │   ├── operator/              # chat agent's tool layer — 12 verbs (E-86)
 │   ├── notify/                # routes, schedule, notifiers, render (E-9)
 │   ├── observability/         # trace, export (events.jsonl/report.html), usage, logfire

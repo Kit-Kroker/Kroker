@@ -114,7 +114,9 @@ not None` checks collapse into *is there a node*.
   coarse node; **follow-ups:** per-task topology with `max_fix_attempts → max_traversals`
   (E74-OQ-3), research-as-topology (E74-OQ-2), and the FeatureWorkflow deletion gated
   on the two Running queries of spec §8.5. Rollback is roll-forward only.
-- [ ] **E-75 — graph queries on the dashboard backend** → FR-1204. **Superseded in part 2026-08-18:** E-10 built the backend, so this narrows to adding `graph_state()` and `graph()` beside the existing queries once `GraphWorkflow` exists. The "dashboard backend remains" half of P2 is closed; what is left here is graph-shaped run state, which needs E-74 first. The only storage is still content-addressed `graphs/<sha>.yaml`.
+- [x] **E-75 — graph queries on the dashboard backend** → FR-1204. `GraphWorkflow` exposes a `graph_view` query (router state + per-activation timing, attributed cost and pendings, recorded in memory with no new commands); the dashboard serves `GET /runs/{id}/graph` (the pinned start input, read from history), `GET /runs/{id}/graph_state` and `POST /graphs/validate` (`executable()` problems as `not_executable`), and `RunState.stage_marks` renders `skipped` stages for graph runs. Graphs are stored content-addressed as `graphs/<sha>.yaml` (`sdlc/graph/store.py`), written at client start and backfilled on first read; no graph database.
+
+  **Landed** (spec `docs/superpowers/specs/2026-09-17-graph-queries-design.md`, plan `docs/superpowers/plans/2026-09-17-graph-queries.md`). Backend-only: catalog capabilities stay `false`. **Follow-ups:** canvas run-mode wiring (flip `run_graph`/`validate`, amend `graph-types.ts` and fixtures, map `stage_marks` in `http.ts`); crew-child escalation attribution (E75-OQ-2); closed-run `run_summary` replay per fleet tick (E75-OQ-3); pricing harness/crew spend (E75-OQ-4). Durable `graph_sha` per run stays E-77.
 - [x] **E-76 — canvas** → FR-1205. `@vue-flow/core` (React Flow's Vue port, what
   n8n itself uses; fits the existing Vue 3 + Pinia + Vite stack) plus `dagre` for
   auto-layout of YAML-authored graphs. **One renderer, two modes**: `runState`
