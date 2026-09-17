@@ -892,3 +892,15 @@ Expected: `ALL PASS`.
 - [ ] **Step 4: Report**
 
 Report to the user: scaffold commit hash, seven created files + ten mode files, keybinding state, smoke results per mode, and the recommended first real action — a live `herdr-v3-constitution` run.
+
+---
+
+## Post-implementation errata (2026-09-17)
+
+Corrections discovered during execution; this plan's earlier code blocks are superseded where they conflict:
+
+1. `_crew.sh` scaffold check: `$WS_DIR/.specify` is wrong (resolves to `.workspace/.specify`); the shipped lib uses `$WS_DIR/../.specify` (repo root).
+2. All `--permission-mode acceptEdits` extras in mode layouts shipped as `--permission-mode=acceptEdits`: herdr 0.9.0's PowerShell pane wrapper joins space-separated flag+value into a single argv token, which claude 2.1.274 rejects as an unknown option.
+3. spec-kit 0.11.3 has no `.specify/templates/checklists/` directory; checklists are generated via `/speckit-checklist` (+ `/speckit-analyze`). Briefs and the protocol reference the skills, not the directory.
+4. The constitution artifact path is `.specify/memory/constitution.md`, not `.specify/constitution.md`.
+5. assess extension is not in the 0.11.3 PyPI package; installed from spec-kit@main via `specify extension add <dir> --dev`, tool pinned at 0.11.3.
