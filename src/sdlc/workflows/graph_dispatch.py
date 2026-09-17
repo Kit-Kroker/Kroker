@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from temporalio import workflow
@@ -24,6 +25,13 @@ with workflow.unsafe.imports_passed_through():
     from ..graph.model import PipelineGraph
     from ..graph.node_types import NodeTypeSpec
     from ..graph.router import Activation, Emitted, GraphRouter, Halt, RouterState, Step
+    from ..graph.run_view import (
+        ACTIVATION,
+        ActivationFacts,
+        GraphRunView,
+        PendingFact,
+        UnroutedFailure,
+    )
     from ..graph.topology import Topology
     from .graph_nodes.base import (
         Handler,
@@ -87,9 +95,18 @@ class GraphDispatcher:
         self._last_sink_result: str | None = None
         self._budget_halted = False
         self._stored_failure: BaseException | None = None
+        # E-75 §4.2: memory-only facts for the graph_view query (no commands).
+        self._started: dict[str, datetime] = {}
+        self._ended: dict[str, datetime] = {}
+        self._escalated_by: str | None = None
+        self._unrouted: UnroutedFailure | None = None
 
     @property
     def _t(self) -> Topology:
+        return self._router.topology
+
+    @property
+    def topology(self) -> Topology:
         return self._router.topology
 
     async def run(self) -> DispatchOutcome:
@@ -117,6 +134,7 @@ class GraphDispatcher:
             await workflow.wait_condition(lambda: bool(self._results))
             aid, raw = self._results.pop(0)
             self._tasks.pop(aid, None)
+            self._ended.setdefault(aid, workflow.now())
             if aid not in {a.activation_id for a in self._state.live}:
                 continue  # cancelled by an invalidation or a terminal step
             node_id = aid.rpartition("#")[0]
@@ -145,6 +163,9 @@ class GraphDispatcher:
                 author_model=result.author_model,
                 meta=dict(sorted(result.meta.items())),
             )
+            live = next(a for a in self._state.live if a.activation_id == aid)
+            if result.port in live.unavailable_ports and self._escalated_by is None:
+                self._escalated_by = aid  # router step 2 terminates ESCALATED on this emission
             step = self._router.advance(
                 self._state, Emitted(activation_id=aid, port=result.port, payload_ref=ref)
             )
@@ -180,7 +201,10 @@ class GraphDispatcher:
             carries=self._carries,
         )
 
+        self._started[act.activation_id] = workflow.now()
+
         async def _one() -> None:
+            ACTIVATION.set(act.activation_id)  # the ONLY set site (E-75 D4; pinned)
             try:
                 out: Any = await handler(nc, act, cfg)
             except BaseException as e:  # noqa: BLE001 -- run() classifies (§5.4 step 2)
@@ -204,6 +228,7 @@ class GraphDispatcher:
         if isinstance(raw, FAILURE_TYPES) and declares_fail:
             if not self._t.out_ports[node_id]["fail"]:
                 self._stored_failure = raw
+                self._unrouted = UnroutedFailure(activation_id=aid, error_type=type(raw).__name__)
             return NodeResult(
                 port="fail",
                 payload=NodeFailure(
@@ -234,10 +259,40 @@ class GraphDispatcher:
     def _apply(self, step: Step) -> None:
         self._state = step.state
         for cid in step.cancelled:
+            self._ended.setdefault(cid, workflow.now())
             task = self._tasks.pop(cid, None)
             if task is not None:
                 task.cancel()
                 self._cancelled.append(task)
+
+    def view(
+        self,
+        *,
+        graph_sha: str,
+        result: str | None,
+        pending: tuple[PendingFact, ...],
+        spend: Mapping[str, tuple[float, bool]],
+    ) -> GraphRunView:
+        """E-75 §4.2: the only reader of router state from outside. Sync and
+        read-only -- safe inside a query handler."""
+        activations = {
+            aid: ActivationFacts(
+                started_at=started,
+                ended_at=self._ended.get(aid),
+                cost_usd=spend.get(aid, (0.0, True))[0],
+                priced=spend.get(aid, (0.0, True))[1],
+            )
+            for aid, started in sorted(self._started.items())
+        }
+        return GraphRunView(
+            graph_sha=graph_sha,
+            state=self._state,
+            activations=activations,
+            pending=pending,
+            result=result,
+            escalated_by=self._escalated_by,
+            unrouted_failure=self._unrouted,
+        )
 
 
 def outcome_string(outcome: DispatchOutcome, topology: Topology) -> str:
