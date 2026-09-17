@@ -44,8 +44,13 @@ from .run_view import (
     PendingKind,
     RunOutcome,
     UnroutedFailure,
+    close_marks,
     latest_activation,
+    node_cost,
+    node_status,
     pending_kind,
+    run_outcome,
+    stage_marks,
 )
 from .topology import Topology
 from .validate import (
@@ -92,12 +97,17 @@ __all__ = [
     "ValidationReport",
     "canonical_json",
     "check_node_types",
+    "close_marks",
     "find_port",
     "from_graph",
     "from_yaml",
     "latest_activation",
+    "node_cost",
+    "node_status",
     "pending_kind",
     "ports_compatible",
+    "run_outcome",
+    "stage_marks",
     "to_yaml",
     "validate",
 ]
