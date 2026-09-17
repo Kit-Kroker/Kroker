@@ -35,7 +35,7 @@ import os
 from datetime import UTC, datetime
 
 from dotenv import load_dotenv
-from temporalio.client import Client
+from temporalio.client import Client, WorkflowHandle
 from temporalio.contrib.pydantic import pydantic_data_converter
 
 from .core.models import (
@@ -452,8 +452,16 @@ async def main() -> None:
         except GraphStartError as e:
             print(f"cannot start: {e}")
             raise SystemExit(1) from None
-        handle = await client.start_workflow(
-            GraphWorkflow.run, run_input, id=wf_id, task_queue=TASK_QUEUE
+        from .graph.start import start_graph_run
+
+        # The annotation preserves the exact type client.start_workflow(
+        # GraphWorkflow.run, ...) inferred here before the helper existed
+        # (reveal_type: WorkflowHandle[GraphWorkflow, str]); the shared
+        # `handle` local's first assignment fixes its declared type for the
+        # whole function, and any other type reshapes mypy's overload
+        # solving in the later tidyup/assess branches.
+        handle: WorkflowHandle[GraphWorkflow, str] = await start_graph_run(
+            client, GraphWorkflow.run, run_input, id=wf_id, task_queue=TASK_QUEUE
         )
         print(f"started {handle.id}")
         return

@@ -29,6 +29,7 @@ from sdlc.core.models import (
 )
 from sdlc.dashboard.api import create_router
 from sdlc.dashboard.fleet import FleetPoller
+from sdlc.graph.start import start_graph_run
 from sdlc.observability.logfire_setup import configure as configure_logfire
 from sdlc.operator.agent import ChatConfigError, build_chat_app
 from sdlc.operator.deps import OperatorDeps
@@ -55,8 +56,8 @@ poller = FleetPoller(_connect)
 async def _start(idea: IdeaBrief, cfg: PipelineConfig, wf_id: str) -> str:
     client = await poller._client_or_connect()
     run_input = build_run_input(idea, cfg)  # GraphStartError -> 422 in dashboard/api.py
-    handle = await client.start_workflow(
-        GraphWorkflow.run, run_input, id=wf_id, task_queue=TASK_QUEUE
+    handle = await start_graph_run(
+        client, GraphWorkflow.run, run_input, id=wf_id, task_queue=TASK_QUEUE
     )
     return handle.id
 

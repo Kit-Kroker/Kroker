@@ -44,6 +44,8 @@ ALLOWED: dict[str, set[str]] = {
         "sdlc.graph.router",
         "sdlc.graph.topology",
     },
+    "store.py": {STDLIB, "sdlc.graph.io", "sdlc.graph.model"},
+    "start.py": {STDLIB, "sdlc.graph.store"},
     "__init__.py": {
         STDLIB,
         "sdlc.graph.io",

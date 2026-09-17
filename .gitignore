@@ -29,3 +29,4 @@ interfaces/ui/dist-types/
 interfaces/ui/showcase/dist/
 test-results/
 playwright-report/
+/graphs/

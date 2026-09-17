@@ -6,6 +6,7 @@ import asyncio
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -21,6 +22,8 @@ import pytest
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-dummy")
 os.environ.setdefault("OPENAI_API_KEY", "test-dummy")
 os.environ.setdefault("EXA_API_KEY", "test-dummy")
+# E-75: start sites write graphs/<sha>.yaml; keep test runs out of the checkout.
+os.environ.setdefault("SDLC_GRAPH_STORE", str(Path(tempfile.gettempdir()) / "sdlc-test-graphs"))
 
 
 def _pid_alive(pid: int) -> bool:
