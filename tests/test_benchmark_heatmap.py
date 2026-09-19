@@ -1,8 +1,10 @@
+import json
 from datetime import datetime, timedelta
 
 from sdlc.benchmarks.heatmap import (
     ORACLE_STAGE,
     build_heatmap,
+    render_heatmap_json,
 )
 from sdlc.benchmarks.models import (
     BenchmarkOutcome,
@@ -151,3 +153,32 @@ def test_oracle_non_fail_rework_not_counted_as_oracle_failure():
     hm = build_heatmap(recs)
     cell = next(c for c in hm.cells if c.stage == ORACLE_STAGE)
     assert cell.oracle_fails == 1  # only the FAIL, not the ESCALATED
+
+
+def test_unknown_stage_renders_in_trailing_bucket_before_oracle():
+    """E-77 T028 pin (existing behaviour): records stamped stage='unknown'
+    (unmapped/unregistered node types, FR-004/FR-005) aggregate into the
+    trailing non-canonical bucket like any other stage -- never dropped, never
+    folded into a canonical column -- and render before the synthetic oracle
+    column. Pinned now so E-77's heatmap pass (T033) keeps it byte-stable."""
+    recs = [
+        _rec(stage="code", outcome=BenchmarkOutcome.REVISED, fix=1),
+        _rec(stage="unknown", outcome=BenchmarkOutcome.FAIL, fix=2),
+        _rec(stage="unknown", outcome=BenchmarkOutcome.PASS, fix=3),
+        _rec(stage="oracle", scope=BenchmarkScope.ORACLE, outcome=BenchmarkOutcome.FAIL),
+    ]
+    hm = build_heatmap(recs)
+    assert hm.stages == ["code", "unknown", "oracle"]
+    by = {(c.case, c.stage): c for c in hm.cells}
+    bucket = by[("c1", "unknown")]
+    assert bucket.gate_rejects == 1  # the FAIL; PASS is not rework
+    assert bucket.fix_attempts == 5  # 2 + 3, summed like any other stage
+    assert bucket.n_runs == 1
+    assert bucket.density == 6.0  # (1 gate + 5 fix) over 1 run
+    rendered = json.loads(render_heatmap_json(hm))
+    assert rendered["stages"] == ["code", "unknown", "oracle"]
+    unknown_cells = [c for c in rendered["cells"] if c["stage"] == "unknown"]
+    assert len(unknown_cells) == 1
+    assert unknown_cells[0]["gate_rejects"] == 1
+    assert unknown_cells[0]["fix_attempts"] == 5
+    assert unknown_cells[0]["density"] == 6.0
