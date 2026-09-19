@@ -32,6 +32,7 @@ with workflow.unsafe.imports_passed_through():
         GraphRunView,
         PendingFact,
         UnroutedFailure,
+        fail_reentry,
     )
     from ..graph.topology import Topology
     from .graph_nodes.base import (
@@ -219,11 +220,11 @@ class GraphDispatcher:
         )
 
         self._started[act.activation_id] = workflow.now()
-        self._attrib[act.activation_id] = ActivationAttrib(  # E-77 FR-014
+        self._attrib[act.activation_id] = ActivationAttrib(  # E-77 FR-014/FR-015
             node_id=act.node_id,
             round=act.round,
             node_stage=resolve_stage(node.type, self._registry),
-            fail_reentry=None,  # T031 wires the router-derived indicator
+            fail_reentry=fail_reentry(act, self._state, self._t),
         )
 
         async def _one() -> None:

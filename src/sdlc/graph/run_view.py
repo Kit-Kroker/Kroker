@@ -224,7 +224,9 @@ def close_marks(marks: Mapping[str, DotState]) -> dict[str, DotState]:
     return {k: ("failed" if v in ("active", "blocked") else v) for k, v in sorted(marks.items())}
 
 
-def fail_reentry(activation: Activation, state: RouterState, topology: Topology) -> int | None:
+def fail_reentry(
+    activation: Activation, state: RouterState, topology: Topology
+) -> Literal[0, 1] | None:
     """The R-5 fail-edge re-entry indicator (E-77 FR-015). None = the
     activation's node has no inbound fail back edge, so the axis is absent
     (every graph buildable today); 1 = an input ref '<aid>.fail' arrived

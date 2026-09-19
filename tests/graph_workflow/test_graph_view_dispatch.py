@@ -295,6 +295,35 @@ _DEFAULT_PORTS = {
 }
 
 
+# T031-test: the T029 fail-edge fixture (tests/graph/test_fail_reentry.py),
+# rebuilt locally so the probe workflow never imports a test module. The
+# fixer's 'failure' in-port (payload NodeFailure) is the only legal fail-edge
+# target in any graph buildable today (G4).
+_FAILER = stage(
+    "fixer",
+    port_in("trigger", None),
+    port_in("failure", "NodeFailure", required=False),
+    port_in("guidance", "GateDecision", required=False),
+    port_out("fixed", "ImplementationPlan"),
+)
+_FAILLOOP_REG = registry(*list(NODE_TYPES.values()), _FAILER)
+_FAILLOOP_GRAPH = graph(
+    [
+        node("intake", "intake"),
+        node("fixer", "fixer"),
+        node("code", "code"),
+        node("gate", "gate.plan"),
+    ],
+    [
+        edge("intake.ok", "fixer.trigger"),
+        edge("fixer.fixed", "code.plan"),
+        edge("fixer.fixed", "gate.artifact"),
+        edge("code.fail", "fixer.failure", bound=3),
+        edge("gate.revise", "fixer.guidance", bound=2),
+    ],
+)
+
+
 def _attrib_rows(d: GraphDispatcher) -> list[dict]:
     """The dispatcher's per-activation facts, as primitives a workflow result
     can carry. Raises AttributeError until T014 lands `_attrib`."""
@@ -320,19 +349,40 @@ class AttribProbe:
 
     @workflow.run
     async def run(self, scenario: str) -> str:
-        if scenario == "escalation":
-            g, reg, port_by_type = (
-                _ESCALATION_GRAPH,
-                REG,
-                {"start": "ok", "loop": "out", "fixer": "fix"},
-            )
-        else:
-            g = from_yaml(DEFAULT_GRAPH_YAML.read_text(encoding="utf-8"))
-            reg, port_by_type = NODE_TYPES, _DEFAULT_PORTS
+        if scenario == "failloop":
+            g, reg = _FAILLOOP_GRAPH, _FAILLOOP_REG
 
-        async def emit(nc, act, cfg):
-            port = port_by_type[nc.node.type]
-            return NodeResult(port=port, result="completed" if port == "done" else None)
+            async def ok(nc, act, cfg):
+                return NodeResult(port="ok")
+
+            async def fixed(nc, act, cfg):
+                return NodeResult(port="fixed")
+
+            async def approve(nc, act, cfg):
+                return NodeResult(port="approve")
+
+            async def flaky_code(nc, act, cfg):
+                if act.round <= 2:  # two successive fail-edge re-entries of the fixer
+                    raise ApplicationError(f"code round {act.round} failed", non_retryable=True)
+                return NodeResult(port="results")
+
+            handlers = {"intake": ok, "fixer": fixed, "code": flaky_code, "gate.plan": approve}
+        else:
+            if scenario == "escalation":
+                g, reg, port_by_type = (
+                    _ESCALATION_GRAPH,
+                    REG,
+                    {"start": "ok", "loop": "out", "fixer": "fix"},
+                )
+            else:
+                g = from_yaml(DEFAULT_GRAPH_YAML.read_text(encoding="utf-8"))
+                reg, port_by_type = NODE_TYPES, _DEFAULT_PORTS
+
+            async def emit(nc, act, cfg):
+                port = port_by_type[nc.node.type]
+                return NodeResult(port=port, result="completed" if port == "done" else None)
+
+            handlers = {t: emit for t in port_by_type}
 
         report = validate(g, reg, roles=roles())
         assert report.topology is not None, report.problems
@@ -349,7 +399,7 @@ class AttribProbe:
             router=GraphRouter(report.topology),
             graph=g,
             registry=reg,
-            handlers={t: emit for t in port_by_type},
+            handlers=handlers,
             facts=facts,
             cfg=PipelineConfig(),
         )
@@ -423,3 +473,25 @@ def test_attrib_is_written_only_in_dispatcher_start():
     assert hits, "no _attrib write site exists yet (T014 fills it in _start)"
     offenders = [lines[i].strip() for i in hits if not start < i < end]
     assert offenders == []
+
+
+@pytest.mark.asyncio
+async def test_fail_edge_reentry_indicator_is_0_1_1_over_three_fixer_activations():
+    """E-77 T031 (RED): the R-5 indicator captured at issue time — 0 on the
+    first (forward) activation of a node with an inbound fail back edge, 1 on
+    each re-entry over that edge. The fixer is re-entered twice over
+    code.fail (code raises on rounds 1 and 2, the dispatcher converts each
+    raise into a fail emission routed over the back edge, and succeeds on
+    round 3); the gate approves on sight, so gate.revise stays unused."""
+    rows = await _run_attrib("failloop")
+    fixer = [r for r in rows if r["node_id"] == "fixer"]
+    assert [r["aid"] for r in fixer] == ["fixer#1", "fixer#2", "fixer#3"]
+    assert [r["round"] for r in fixer] == [1, 2, 3]  # T014, already correct
+    assert [r["fail_reentry"] for r in fixer] == [0, 1, 1]  # RED: None until T031
+    # every node WITHOUT an inbound fail back edge keeps the axis absent
+    others = [r for r in rows if r["node_id"] != "fixer"]
+    assert others and all(r["fail_reentry"] is None for r in others)
+    # T031 changes only the indicator: the other _attrib fields stay correct
+    for r in rows:
+        assert r["node_id"] == r["aid"].rpartition("#")[0]
+        assert r["round"] == int(r["aid"].rpartition("#")[2])
