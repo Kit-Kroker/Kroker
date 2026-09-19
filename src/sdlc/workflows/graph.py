@@ -15,11 +15,12 @@ with workflow.unsafe.imports_passed_through():
     from ..agents import (
         loader as _loader,  # noqa: F401 -- validate()'s lazy import stays passthrough
     )
+    from ..benchmarks.models import BenchmarkRecord, GraphAttribution
     from ..core.context import StageServices
-    from ..core.models import RunState, RunSummary
+    from ..core.models import PipelineConfig, RunState, RunSummary
     from ..graph.model import PipelineGraph
-    from ..graph.node_types import NODE_TYPES
-    from ..graph.run_view import GraphRunView, stage_marks
+    from ..graph.node_types import NODE_TYPES, UNKNOWN_STAGE
+    from ..graph.run_view import ACTIVATION, GraphRunView, stage_marks
     from ..graph.validate import InvalidGraph, from_graph
     from ..memory.activities import WatermarkInput, capture_watermark
     from .benchmark_host import BenchmarkHost
@@ -83,8 +84,11 @@ class GraphWorkflow(
     @workflow.query
     def run_state(self) -> RunState | None:
         """Live run state for the dashboard fleet view (E-10), with the
-        graph's stage marks once dispatch has started (E-75 §5.3)."""
+        graph's stage marks once dispatch has started (E-75 §5.3) and the
+        pinned graph sha as soon as it is known (E-77 R-3)."""
         snap = self._snapshot_run_state()
+        if snap is not None and self._graph_sha:
+            snap = snap.model_copy(update={"graph_sha": self._graph_sha})
         view = self._graph_run_view()
         if snap is None or view is None or self._graph is None or self._dispatcher is None:
             return snap
@@ -106,6 +110,35 @@ class GraphWorkflow(
             pending=self._pending_facts(),
             spend=self._activation_spend,
         )
+
+    def _stamp(self, record: BenchmarkRecord) -> BenchmarkRecord:
+        """E-77 R-4: stamp a record with the run's graph attribution. Pure --
+        returns a copy, never mutates. Outside any activation (preamble,
+        retro) or for an aid missing from _attrib, graph_sha only."""
+        sha = self._graph_sha
+        if not sha:
+            return record
+        aid = ACTIVATION.get()
+        attrib = self._dispatcher._attrib.get(aid) if aid and self._dispatcher else None
+        if attrib is None:
+            return record.model_copy(update={"graph": GraphAttribution(graph_sha=sha)})
+        graph = GraphAttribution(
+            graph_sha=sha,
+            activation_id=aid,
+            node_id=attrib.node_id,
+            round=attrib.round,
+            node_stage=attrib.node_stage,
+            fail_reentry=attrib.fail_reentry,
+        )
+        update: dict[str, object] = {"graph": graph}
+        if attrib.node_stage == UNKNOWN_STAGE:
+            update["stage"] = UNKNOWN_STAGE  # G2: unknown is recorded, never folded
+        return record.model_copy(update=update)
+
+    async def _record(self, cfg: PipelineConfig, record: BenchmarkRecord) -> None:
+        """E-77 FR-010: every record this workflow emits carries the graph
+        attribution before the base host emits/schedules it."""
+        await super()._record(cfg, self._stamp(record))
 
     @workflow.run
     async def run(self, inp: GraphRunInput) -> str:
