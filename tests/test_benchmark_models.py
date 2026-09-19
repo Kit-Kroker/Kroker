@@ -161,3 +161,82 @@ def test_case_spec_language_defaults_none_and_accepts_value():
 
 def test_oracle_task_scope_exists():
     assert BenchmarkScope.ORACLE_TASK.value == "oracle_task"
+
+
+# --- E-77 T004 (RED): GraphAttribution + BenchmarkRecord.graph -------------
+# Field names and invariants: .specify/specs/001-canonical-stage-graph-sha/
+# data-model.md. Imports stay function-local so the not-yet-landed symbols
+# fail these tests individually instead of breaking collection of the file.
+
+
+def _graph_attribution(**kw):
+    from sdlc.benchmarks.models import GraphAttribution
+
+    base = dict(
+        graph_sha="f" * 64,
+        activation_id="act-1",
+        node_id="plan-claims",
+        round=2,
+        node_stage="code",
+        fail_reentry=1,
+    )
+    base.update(kw)
+    return GraphAttribution(**base)
+
+
+def test_graph_attribution_is_frozen():
+    """data-model.md: the new benchmark models are frozen pydantic models."""
+    import pytest
+    from pydantic import ValidationError
+
+    attrib = _graph_attribution()
+    with pytest.raises(ValidationError):
+        attrib.graph_sha = "0" * 64
+
+
+def test_graph_attribution_without_activation_forbids_activation_fields():
+    """Invariant: activation_id is None => node_id, round, node_stage and
+    fail_reentry are all None; each violation raises ValidationError."""
+    import pytest
+    from pydantic import ValidationError
+
+    violations = [
+        ("node_id", "plan-claims"),
+        ("round", 2),
+        ("node_stage", "code"),
+        ("fail_reentry", 1),
+    ]
+    for field, value in violations:
+        with pytest.raises(ValidationError):
+            _graph_attribution(activation_id=None, **{field: value})
+
+
+def test_graph_attribution_fail_reentry_domain_is_none_zero_one():
+    """Invariant: fail_reentry accepts exactly None, 0 and 1."""
+    import pytest
+    from pydantic import ValidationError
+
+    assert _graph_attribution(fail_reentry=None).fail_reentry is None
+    assert _graph_attribution(fail_reentry=0).fail_reentry == 0
+    assert _graph_attribution(fail_reentry=1).fail_reentry == 1
+    for bad in (2, -1, 7):
+        with pytest.raises(ValidationError):
+            _graph_attribution(fail_reentry=bad)
+
+
+def test_benchmark_record_graph_defaults_to_none():
+    """FR-024: `graph` is optional — FeatureWorkflow-shaped records keep None."""
+    assert _record().graph is None
+
+
+def test_current_record_json_without_graph_key_parses_unchanged():
+    """records-and-store.md: JSON captured from a current record (no 'graph'
+    key) still parses into BenchmarkRecord; absent reads as not recorded."""
+    import json
+
+    r = _record()
+    captured = json.loads(r.model_dump_json())
+    captured.pop("graph", None)  # a pre-E-77 capture carries no such key
+    r2 = BenchmarkRecord.model_validate_json(json.dumps(captured))
+    assert r2 == r
+    assert r2.graph is None

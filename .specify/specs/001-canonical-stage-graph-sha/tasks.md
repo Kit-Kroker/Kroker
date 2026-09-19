@@ -48,7 +48,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
 
   Command: `pytest tests/graph/test_graph_node_types.py` (must fail on the missing names).
 - [ ] T003 Implement `UNKNOWN_STAGE`, `resolve_stage(node_type, registry)` and `check_node_types(registry=NODE_TYPES, *, require_mapped=True)` in `src/sdlc/graph/node_types.py` (R-1, R-2), and export them from `src/sdlc/graph/__init__.py`. No new module-level imports. Commands: `pytest tests/graph/test_graph_node_types.py`, then `pytest tests/graph/test_graph_purity.py`.
-- [ ] T004 [P] RED tests in `tests/test_benchmark_models.py`:
+- [X] T004 [P] RED tests in `tests/test_benchmark_models.py`:
   - `GraphAttribution` is frozen, and its invariants hold (activation fields all `None` when `activation_id is None`; `fail_reentry ∈ {None,0,1}`);
   - `BenchmarkRecord.graph` defaults to `None`;
   - a record JSON without `graph` (captured from a current record) parses unchanged.
