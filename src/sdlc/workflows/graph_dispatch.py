@@ -24,7 +24,7 @@ with workflow.unsafe.imports_passed_through():
 
     from ..core.models import NodeFailure, PipelineConfig
     from ..graph.model import PipelineGraph
-    from ..graph.node_types import NodeTypeSpec
+    from ..graph.node_types import NodeTypeSpec, resolve_stage
     from ..graph.router import Activation, Emitted, GraphRouter, Halt, RouterState, Step
     from ..graph.run_view import (
         ACTIVATION,
@@ -64,6 +64,20 @@ class DispatchOutcome:
     stored_failure: BaseException | None
 
 
+@dataclass(frozen=True, slots=True)
+class ActivationAttrib:
+    """E-77 per-activation facts (data-model "Dispatcher per-activation
+    facts"): the router round, the resolved canonical stage and (from T031)
+    the fail-edge re-entry indicator, captured at issue time. Owner:
+    GraphDispatcher, filled in _start. Reader: GraphWorkflow._stamp. Memory
+    only — it issues no commands (FR-025)."""
+
+    node_id: str
+    round: int
+    node_stage: str
+    fail_reentry: int | None = None  # T031 replaces this with the derived indicator
+
+
 class GraphDispatcher:
     def __init__(
         self,
@@ -99,6 +113,8 @@ class GraphDispatcher:
         # E-75 §4.2: memory-only facts for the graph_view query (no commands).
         self._started: dict[str, datetime] = {}
         self._ended: dict[str, datetime] = {}
+        # E-77: memory-only attribution facts, keyed by activation id (FR-014).
+        self._attrib: dict[str, ActivationAttrib] = {}
         self._escalated_by: str | None = None
         self._unrouted: UnroutedFailure | None = None
 
@@ -203,6 +219,12 @@ class GraphDispatcher:
         )
 
         self._started[act.activation_id] = workflow.now()
+        self._attrib[act.activation_id] = ActivationAttrib(  # E-77 FR-014
+            node_id=act.node_id,
+            round=act.round,
+            node_stage=resolve_stage(node.type, self._registry),
+            fail_reentry=None,  # T031 wires the router-derived indicator
+        )
 
         async def _one() -> None:
             ACTIVATION.set(act.activation_id)  # the ONLY set site (E-75 D4; pinned)

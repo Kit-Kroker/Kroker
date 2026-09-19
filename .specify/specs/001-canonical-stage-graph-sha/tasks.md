@@ -86,7 +86,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
   - `_attrib` is written only in `_start` (grep-style pin like the existing `ACTIVATION` set-site pin).
 
   Command: `pytest tests/graph_workflow/test_graph_view_dispatch.py`.
-- [ ] T014 [US1] Implement `ActivationAttrib` and `GraphDispatcher._attrib` in `src/sdlc/workflows/graph_dispatch.py`, filled in `_start` next to `self._started[...]` (`graph_dispatch.py:205`), with `fail_reentry=None` until T027. Memory only, no commands (FR-025). Command: `pytest tests/graph_workflow/test_graph_view_dispatch.py`.
+- [X] T014 [US1] Implement `ActivationAttrib` and `GraphDispatcher._attrib` in `src/sdlc/workflows/graph_dispatch.py`, filled in `_start` next to `self._started[...]` (`graph_dispatch.py:205`), with `fail_reentry=None` until T027. Memory only, no commands (FR-025). Command: `pytest tests/graph_workflow/test_graph_view_dispatch.py`.
 - [ ] T015 [P] [US1] RED unit tests in the new `tests/graph_workflow/test_record_stamping.py` (pure, no Temporal: build `GraphWorkflow`, set `_graph_sha` and a stub dispatcher with `_attrib`, and drive `_stamp` with `ACTIVATION` set or unset):
   - inside an activation: `record.graph` carries `graph_sha`, `activation_id`, `node_id`, `round`, `node_stage` and `fail_reentry`;
   - outside any activation: `graph_sha` only, the other fields `None`;
