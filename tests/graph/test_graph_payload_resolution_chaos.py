@@ -47,7 +47,9 @@ def _boom_spec(payload: str, type_: str = "chaos.boom") -> NodeTypeSpec:
         type=type_,
         kind="stage",
         role=None,
-        canonical_stage=None,
+        # E-77: a mapped stage keeps these crash-resilience pins about the
+        # payload walk (require_mapped now flags a None stage by default).
+        canonical_stage="architecture",
         ports=(NodePort(name="out", direction="out", payload=payload),),
     )
 

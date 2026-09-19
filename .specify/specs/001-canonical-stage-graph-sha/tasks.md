@@ -68,7 +68,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
 
   Command: `pytest tests/graph/test_graph_store_e77.py`.
 - [X] T011 Implement in `src/sdlc/graph/store.py` (R-6..R-8, contracts/records-and-store.md): the layout write inside `put` (never touching `latest`); `RegistrySnapshot`, `registry_sha`, `put_registry`/`get_registry`; `RunGraphPointer`, the safe-name rule and `put_pointer`/`get_pointer`; a private `_atomic_replace(tmp, target, *, attempts=5)` with bounded backoff. Amend the `store.py` allow-list in `tests/graph/test_graph_purity.py` to add exactly `sdlc.graph.node_types` and `sdlc.core.models`. Commands: `pytest tests/graph/test_graph_store_e77.py`, then `pytest tests/graph/test_graph_store.py`, then `pytest tests/graph/test_graph_purity.py`.
-- [ ] T012 Foundational checkpoint: `pytest tests/graph`, then `pytest tests/test_benchmark_models.py tests/test_run_state_model.py tests/test_run_summary_model.py`, then `python scripts/check_file_size.py`.
+- [X] T012 Foundational checkpoint: `pytest tests/graph`, then `pytest tests/test_benchmark_models.py tests/test_run_state_model.py tests/test_run_summary_model.py`, then `python scripts/check_file_size.py`.
 
 **Checkpoint**: resolver, record/summary fields, layout identity and immutable store files are all green.
 
