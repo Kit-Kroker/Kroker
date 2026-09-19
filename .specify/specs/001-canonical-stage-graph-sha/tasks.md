@@ -172,7 +172,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
 
 **Independent test**: spec US5 AS1–5, SC-006, SC-008.
 
-- [ ] T034 [P] [US5] RED tests appended to `tests/graph/test_graph_store_e77.py`:
+- [X] T034 [P] [US5] RED tests appended to `tests/graph/test_graph_store_e77.py`:
   - `save` returns `(sha, layout_sha)` and moves `latest`, while `put` never does (including a `put` of an older layout after a `save`, which simulates backfill);
   - `get(sha)` returns the latest layout; `get(sha, layout=x)` returns x or `None`;
   - a missing, empty, torn (non-hex) or dangling `latest` falls back to the identity file;
@@ -180,7 +180,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
 
   Command: `pytest tests/graph/test_graph_store_e77.py`.
 - [ ] T035 [US5] Implement `GraphStore.save` and `get(sha, layout=None)` with `latest` handling via `_atomic_replace` in `src/sdlc/graph/store.py` (R-6). Command: `pytest tests/graph/test_graph_store_e77.py`.
-- [ ] T036 [P] [US5] RED tests in `tests/test_dashboard_run_graph_routes.py`, using the existing fakes:
+- [X] T036 [P] [US5] RED tests in `tests/test_dashboard_run_graph_routes.py`, using the existing fakes:
   - (a) a history-present run whose pinned graph fails `validate` against the current registry: `/runs/{id}/graph` returns 200 with the graph, and `/runs/{id}/graph_state` returns `{"kind":"unavailable","reason":"registry_drift","problems":[...]}` (today: 500);
   - (b) the same run with a pointer naming a registry snapshot under which the graph validates: `graph_state` projects normally;
   - (c) describe → NOT_FOUND with a pointer: `/graph` serves the pointer's layout, and `/graph_state` returns `unavailable/retention_expired`;

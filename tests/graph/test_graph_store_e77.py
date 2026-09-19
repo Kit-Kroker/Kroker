@@ -315,3 +315,95 @@ def test_atomic_replace_gives_up_after_five_failures_logged_not_raised(
     assert not final.exists()
     assert any(r.levelno >= logging.WARNING for r in caplog.records)
     assert list(tmp_path.iterdir()) == []  # no .tmp left behind
+
+
+# --- E-77 T034 (RED): save() moves `latest`; get() prefers it (FR-019/020) ---
+# save(graph) -> (sha, layout_sha) = put + move `latest`. `latest` is the
+# ONLY mutable file besides the pointer: written by save() alone, never by
+# put, backfill or start; a value that is absent, torn or unverifiable is
+# ignored and the identity file is served instead.
+
+
+def test_save_returns_pair_and_moves_latest_but_put_never_does(tmp_path):
+    store = GraphStore(tmp_path)
+    g = _graph()
+    sha = store.put(g)
+    latest = tmp_path / sha / "latest"
+    assert not latest.exists()  # put never writes `latest`
+    saved_sha, layout_sha = store.save(g)
+    assert (saved_sha, layout_sha) == (sha, g.document_sha())
+    assert latest.read_text(encoding="utf-8").strip() == layout_sha
+    moved = _graph(_moved)
+    assert store.save(moved) == (sha, moved.document_sha())  # a later save moves it
+    assert latest.read_text(encoding="utf-8").strip() == moved.document_sha()
+    store.put(g)  # backfill of an older layout after a save...
+    assert latest.read_text(encoding="utf-8").strip() == moved.document_sha()  # ...never moves it
+
+
+def test_get_without_layout_serves_latest_and_with_layout_exact(tmp_path):
+    store = GraphStore(tmp_path)
+    g = _graph()
+    sha = store.put(g)
+    moved = _graph(_moved)
+    _, latest_layout = store.save(moved)
+    served = store.get(sha)  # no layout: the latest layout wins
+    by_id = {n.id: n for n in served.nodes}
+    assert by_id["architect"].position is not None and by_id["architect"].position.x == 99
+    assert store.get(sha, layout=latest_layout) == moved  # exact layout, or...
+    assert store.get(sha, layout=g.document_sha()) == g  # ...any verifying one
+    assert store.get(sha, layout="e" * 64) is None  # ...or None, never a fallback
+
+
+_MISSING = object()
+
+
+@pytest.mark.parametrize(
+    "latest_text",
+    [_MISSING, "", "zz-torn-not-a-sha\n", "f" * 64, "d" * 64],
+    ids=["missing", "empty", "torn", "dangling-absent", "dangling-unverified"],
+)
+def test_a_broken_latest_falls_back_to_the_identity_file(tmp_path, latest_text):
+    store = GraphStore(tmp_path)
+    g = _graph()
+    sha = store.put(g)
+    store.save(g)  # a good latest first
+    latest = tmp_path / sha / "latest"
+    if latest_text is _MISSING:
+        latest.unlink()
+    else:
+        if latest_text == "d" * 64:  # names a layout that exists but cannot verify
+            torn = tmp_path / sha / "layouts" / f"{latest_text}.yaml"
+            torn.parent.mkdir(parents=True, exist_ok=True)
+            torn.write_text("]: not a graph", encoding="utf-8")
+        latest.write_text(latest_text, encoding="utf-8")
+    assert store.get(sha) == g  # the identity file's graph, cosmetics included
+
+
+def test_concurrent_saves_leave_both_layouts_and_one_valid_latest(tmp_path):
+    import threading
+
+    store = GraphStore(tmp_path)
+    g = _graph()
+    sha = store.put(g)
+    barrier = threading.Barrier(2)
+    errors: list[Exception] = []
+
+    def worker(graph):
+        try:
+            barrier.wait()
+            store.save(graph)
+        except Exception as e:  # noqa: BLE001 -- reported through `errors`
+            errors.append(e)
+
+    threads = [threading.Thread(target=worker, args=graph) for graph in (g, _graph(_moved))]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    layouts = {f.stem for f in _layouts(tmp_path, sha)}
+    assert len(layouts) == 2  # both layout documents survived
+    latest = (tmp_path / sha / "latest").read_text(encoding="utf-8").strip()
+    assert re.fullmatch(r"[0-9a-f]{64}", latest)  # never torn
+    assert latest in layouts  # names exactly one real, verifying layout
+    assert store.get(sha) is not None  # and the store still serves the graph
