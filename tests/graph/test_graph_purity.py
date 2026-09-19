@@ -44,7 +44,15 @@ ALLOWED: dict[str, set[str]] = {
         "sdlc.graph.router",
         "sdlc.graph.topology",
     },
-    "store.py": {STDLIB, "sdlc.graph.io", "sdlc.graph.model"},
+    # E-77 (T011): node_types for the registry snapshot, core.models for
+    # RoleConfig in RunGraphPointer -- the only additions, still no Temporal.
+    "store.py": {
+        STDLIB,
+        "sdlc.graph.io",
+        "sdlc.graph.model",
+        "sdlc.graph.node_types",
+        "sdlc.core.models",
+    },
     "start.py": {STDLIB, "sdlc.graph.store"},
     "__init__.py": {
         STDLIB,
