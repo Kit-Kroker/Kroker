@@ -107,7 +107,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
 
   Command: `pytest tests/graph/test_graph_start.py`.
 - [ ] T021 [US1] Implement it in `src/sdlc/graph/start.py` (R-8). `start.py`'s import pin stays `{stdlib, sdlc.graph.store}` (the registry comes from `sdlc.graph.node_types` through the store API; if a direct import is needed, amend the pin in `tests/graph/test_graph_purity.py` explicitly). Commands: `pytest tests/graph/test_graph_start.py`, then `pytest tests/graph/test_graph_purity.py`.
-- [ ] T022 [P] [US1] RED tests:
+- [X] T022 [P] [US1] RED tests:
   - `tests/graph_workflow/test_pipeline_child_upgrade.py`: `execute_pipeline_child(..., on_graph=cb)` calls `cb(run_input.graph.content_sha())` exactly once before the child starts on the graph branch, and never on the FeatureWorkflow branch;
   - `tests/test_benchmark_workflow.py`: `_oracle_record` and `_oracle_task_records` given a sha set `graph=GraphAttribution(graph_sha=sha)` with every activation field `None`, and set `graph=None` when no sha is known.
 

@@ -146,3 +146,66 @@ async def test_started_children_replay_as_feature_and_later_children_are_graph()
             history = await handle.fetch_history()
     assert result == ["feature-child", "graph-child"]
     assert _child_types(history) == ["FeatureWorkflow", "GraphWorkflow"]
+
+
+# --- E-77 T022 (RED): the on_graph callback (FR-010/SC-003) -----------------
+# Unit level on purpose: workflow.patched() decides the branch, so faking it
+# pins each branch without a Temporal server. These inherit the module's
+# `temporal` mark; run with `pytest -m temporal <this file>` (the default
+# addopts deselect everything in this module).
+
+
+@pytest.mark.asyncio
+async def test_on_graph_fires_once_with_content_sha_before_the_child_starts(monkeypatch):
+    from sdlc.agents.roles import REGISTRY
+    from sdlc.workflows.graph_catalog import build_run_input
+    from sdlc.workflows.graph_nodes import HANDLERS
+
+    events: list[tuple[str, str]] = []
+
+    async def fake_child(run, *args, **kw):
+        events.append(("child-started", kw["id"]))
+        return "graph-child"
+
+    async def on_graph(sha: str) -> None:
+        events.append(("on-graph", sha))
+
+    monkeypatch.setattr("temporalio.workflow.patched", lambda patch_id: True)
+    monkeypatch.setattr("temporalio.workflow.execute_child_workflow", fake_child)
+    result = await execute_pipeline_child(
+        child_id="child-1",
+        idea=greenfield_idea(),
+        cfg=e2e_config(),
+        seeded=None,
+        task_queue=TQ,
+        on_graph=on_graph,
+    )
+    assert result == "graph-child"
+    expected = build_run_input(
+        greenfield_idea(), e2e_config(), None, registry_roles=REGISTRY, handler_types=HANDLERS
+    )
+    assert events == [("on-graph", expected.graph.content_sha()), ("child-started", "child-1")]
+
+
+@pytest.mark.asyncio
+async def test_on_graph_is_never_called_on_the_feature_branch(monkeypatch):
+    calls: list[str] = []
+
+    async def fake_child(run, *args, **kw):
+        return "feature-child"
+
+    async def on_graph(sha: str) -> None:
+        calls.append(sha)
+
+    monkeypatch.setattr("temporalio.workflow.patched", lambda patch_id: False)
+    monkeypatch.setattr("temporalio.workflow.execute_child_workflow", fake_child)
+    result = await execute_pipeline_child(
+        child_id="child-1",
+        idea=greenfield_idea(),
+        cfg=e2e_config(),
+        seeded=None,
+        task_queue=TQ,
+        on_graph=on_graph,
+    )
+    assert result == "feature-child"
+    assert calls == []

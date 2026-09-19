@@ -299,6 +299,56 @@ def test_oracle_task_records_none_score_is_fail():
     assert recs[0].quality.score is None
 
 
+# --- E-77 T022 (RED): oracle records stamp GraphAttribution (FR-010/SC-003) --
+
+_GRAPH_SHA = "a" * 64
+
+
+def test_oracle_record_with_a_sha_carries_a_bare_graph_attribution():
+    """Outside any activation the oracle record pins only the graph identity;
+    equality with GraphAttribution(graph_sha=sha) pins every activation field
+    (activation_id, node_id, round, node_stage, fail_reentry) as None."""
+    from sdlc.benchmarks.models import GraphAttribution
+
+    t0 = datetime(2026, 7, 23, tzinfo=UTC)
+    t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=UTC)
+    r = _oracle_record(
+        _cell(), _grade(), "b1", "b1/todo-api#opencode#m", t0, t1, graph_sha=_GRAPH_SHA
+    )
+    assert r.graph == GraphAttribution(graph_sha=_GRAPH_SHA)
+
+
+def test_oracle_record_without_a_sha_leaves_graph_none():
+    t0 = datetime(2026, 7, 23, tzinfo=UTC)
+    t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=UTC)
+    r = _oracle_record(_cell(), _grade(), "b1", "b1/todo-api#opencode#m", t0, t1)
+    assert r.graph is None
+
+
+def test_oracle_task_records_with_a_sha_stamp_every_record():
+    from sdlc.benchmarks.models import GraphAttribution
+
+    t0 = datetime(2026, 7, 23, tzinfo=UTC)
+    t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=UTC)
+    grade = _grade_with_tasks(
+        TaskGrade(task_id="t01", error_class="functional", score=1.0, judge="oracle", detail="1/1")
+    )
+    recs = _oracle_task_records(
+        _cell(), grade, "b1", "b1/todo-api#opencode#m", t0, t1, graph_sha=_GRAPH_SHA
+    )
+    assert [r.graph for r in recs] == [GraphAttribution(graph_sha=_GRAPH_SHA)]
+
+
+def test_oracle_task_records_without_a_sha_leave_graph_none():
+    t0 = datetime(2026, 7, 23, tzinfo=UTC)
+    t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=UTC)
+    grade = _grade_with_tasks(
+        TaskGrade(task_id="t01", error_class="functional", score=None, judge="error", detail="oops")
+    )
+    recs = _oracle_task_records(_cell(), grade, "b1", "run1", t0, t1)
+    assert all(r.graph is None for r in recs)
+
+
 def test_oracle_task_records_empty_when_no_task_grades():
     t0 = datetime(2026, 7, 23, tzinfo=UTC)
     t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=UTC)
