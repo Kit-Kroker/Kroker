@@ -248,6 +248,22 @@ _CATALOG: tuple[NodeTypeSpec, ...] = (
 
 NODE_TYPES: Mapping[str, NodeTypeSpec] = MappingProxyType({s.type: s for s in _CATALOG})
 
+UNKNOWN_STAGE = "unknown"
+"""FR-1206's recorded-but-unmapped stage (E-77 R2): a node whose type is
+unregistered or declares canonical_stage=None attributes here. Never a
+CANONICAL_STAGES member; declaring it on a spec is an authoring error that
+check_node_types() reports."""
+
+
+def resolve_stage(node_type: str, registry: Mapping[str, NodeTypeSpec]) -> str:
+    """The single stage resolver (E-77 FR-003/006): the declared
+    canonical_stage of a registered type, else UNKNOWN_STAGE. Never raises:
+    an absent mapping records as "unknown", it is not a validation error."""
+    spec = registry.get(node_type)
+    if spec is None or spec.canonical_stage is None:
+        return UNKNOWN_STAGE
+    return spec.canonical_stage
+
 
 def find_port(spec: NodeTypeSpec, name: str, direction: Literal["in", "out"]) -> NodePort | None:
     return next((p for p in spec.ports if p.name == name and p.direction == direction), None)
@@ -306,9 +322,13 @@ def _gate_shape_problems(spec: NodeTypeSpec) -> list[str]:
     return problems
 
 
-def check_node_types(registry: Mapping[str, NodeTypeSpec] = NODE_TYPES) -> list[str]:
+def check_node_types(
+    registry: Mapping[str, NodeTypeSpec] = NODE_TYPES, *, require_mapped: bool = True
+) -> list[str]:
     """Registry self-check (spec §6.3). Returns problems SORTED; [] = healthy.
-    E-72 runs it from a unit test; E-74 wires it into worker boot."""
+    E-72 runs it from a unit test; E-74 wires it into worker boot.
+    E-77 FR-001: require_mapped flags a type without a canonical_stage;
+    injected/out-of-tree registries may opt out (R2)."""
     from ..agents.loader import KNOWN_ROLES
     from ..benchmarks.heatmap import CANONICAL_STAGES
 
@@ -329,7 +349,10 @@ def check_node_types(registry: Mapping[str, NodeTypeSpec] = NODE_TYPES) -> list[
             error = resolved[port.payload]
             if error is not None:
                 problems.append(f"{key}.{port.name}: {error}")
-        if spec.canonical_stage is not None and spec.canonical_stage not in CANONICAL_STAGES:
+        if spec.canonical_stage is None:
+            if require_mapped:
+                problems.append(f"{key}: no canonical_stage")
+        elif spec.canonical_stage not in CANONICAL_STAGES:
             problems.append(f"{key}: canonical_stage {spec.canonical_stage!r} is not canonical")
         if spec.role is not None and spec.role not in KNOWN_ROLES:
             problems.append(f"{key}: role {spec.role!r} is not a known registry role")

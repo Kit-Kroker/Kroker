@@ -139,6 +139,9 @@ EXPECTED_BROKEN = sorted(
         "unknown_payload.y: payload 'NoSuchModel' is not in PAYLOAD_TYPES",
         "bad_stage: canonical_stage 'plan' is not canonical",
         "bad_role: role 'architecht' is not a known registry role",
+        # E-77 FR-001: require_mapped defaults on, so the fixture's one
+        # None-stage type is now flagged too (previously silently accepted).
+        "gate.no_artifact: no canonical_stage",
         "gate.bad: gate type must be role-less",
         "gate.bad: gate out-port 'approve' must carry the artifact payload 'ImplementationPlan'",
         "gate.bad: gate out-port 'reject' must be a signal port",

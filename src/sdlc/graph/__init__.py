@@ -19,10 +19,12 @@ from .model import (
 )
 from .node_types import (
     NODE_TYPES,
+    UNKNOWN_STAGE,
     NodeTypeSpec,
     check_node_types,
     find_port,
     ports_compatible,
+    resolve_stage,
 )
 from .payloads import PAYLOAD_TYPES
 from .router import (
@@ -93,6 +95,7 @@ __all__ = [
     "RunOutcome",
     "Step",
     "Topology",
+    "UNKNOWN_STAGE",
     "UnroutedFailure",
     "ValidationReport",
     "canonical_json",
@@ -106,6 +109,7 @@ __all__ = [
     "node_status",
     "pending_kind",
     "ports_compatible",
+    "resolve_stage",
     "run_outcome",
     "stage_marks",
     "to_yaml",
