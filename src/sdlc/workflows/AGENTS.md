@@ -41,6 +41,9 @@ Attributes on the MRO of `FeatureWorkflow` and `GraphWorkflow` across its servic
 | `_unattributed_spend` | `ReportHost` | tests (spend invariant) | `ReportHost._track_usage` | E-75: spend outside any activation (preamble, retro) |
 | `_pending_activation` | `GateHost` | `GateHost._pending_facts` | `GateHost._gate`, `GateHost.submit_gate_decision`, `QuestionHost.ask_and_wait`, `QuestionHost.answer_question` (cross-host, via `getattr`) | E-75: pending key → opening activation id; joined onto `_pending`, never iterated alone |
 | `_graph`, `_graph_sha`, `_dispatcher`, `_result` | `GraphWorkflow` | `GraphWorkflow.graph_view`, `GraphWorkflow.run_state` | `GraphWorkflow.run` | E-75: pinned graph, its sha, the live dispatcher, the return string (set after retro) |
+| `_attrib` (on `GraphDispatcher`) | `GraphDispatcher` | `GraphWorkflow._stamp` | `GraphDispatcher._start` (the only write site, pinned by test) | E-77: per-activation attribution facts — node_id, round, node_stage, fail_reentry; memory only, no commands (FR-025) |
+| `BenchmarkHost._record` override | `GraphWorkflow` (override) | — | `GraphWorkflow._record` (stamps via `_stamp`, then `super()._record`) | E-77 R-4: every record carries `GraphAttribution` before emit/schedule; base host behaviour unchanged |
+| `_graph_sha` (new cross-host reader) | `GraphWorkflow` | `RunHost._retro` (cross-host, via `getattr(self, "_graph_sha", "") or None` → `build_run_summary`) | `GraphWorkflow.run` (unchanged) | E-77 R-3: summary content only — no command change (U6) |
 
 ## Grace edits while FeatureWorkflow is registered (E-74 U6)
 

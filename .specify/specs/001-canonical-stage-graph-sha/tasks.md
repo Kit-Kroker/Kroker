@@ -113,7 +113,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
 
   Commands: `pytest tests/graph_workflow/test_pipeline_child_upgrade.py`, then `pytest tests/test_benchmark_workflow.py`.
 - [X] T023 [US1] Implement `on_graph` in `src/sdlc/workflows/pipeline_child.py` and oracle stamping in `src/sdlc/benchmarks/workflow.py` (R-9). The parent keeps the cell's sha from the callback; this adds no command. Commands: `pytest tests/graph_workflow/test_pipeline_child_upgrade.py`, then `pytest tests/test_benchmark_workflow.py`, then `pytest -m temporal tests/graph_workflow/test_parent_wiring.py`.
-- [ ] T024 [US1] Add ownership rows to `src/sdlc/workflows/AGENTS.md`:
+- [X] T024 [US1] Add ownership rows to `src/sdlc/workflows/AGENTS.md`:
   - `_attrib`: owner `GraphDispatcher`, reader `GraphWorkflow._stamp`, writer `GraphDispatcher._start`;
   - the `GraphWorkflow._record` override;
   - `_graph_sha`'s new reader `RunHost._retro` (cross-host, via `getattr`).
