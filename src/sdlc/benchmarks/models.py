@@ -11,7 +11,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..agents.loader import HARNESS_ROLES, PROPOSER_ROLES
 from ..core.models import (
@@ -132,6 +132,30 @@ class WasteBag(BaseModel):
         )
 
 
+class GraphAttribution(BaseModel):
+    """E-77: which graph a record's run pinned, and where inside it the
+    record was emitted. `BenchmarkRecord.graph = None` means pre-E-77 or a
+    FeatureWorkflow run (FR-024: readers treat absent as not recorded)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    graph_sha: str
+    # None outside any activation (preamble, retro, oracle records).
+    activation_id: str | None = None
+    node_id: str | None = None
+    round: int | None = None  # the router round of the activation (FR-014)
+    node_stage: str | None = None  # resolve_stage at issue time; "unknown" allowed
+    fail_reentry: Literal[0, 1] | None = None  # R-5 indicator; None = axis absent
+
+    @model_validator(mode="after")
+    def _activation_fields_need_an_activation(self) -> GraphAttribution:
+        if self.activation_id is None and any(
+            getattr(self, f) is not None for f in ("node_id", "round", "node_stage", "fail_reentry")
+        ):
+            raise ValueError("activation fields require an activation_id")
+        return self
+
+
 class BenchmarkRecord(BaseModel):
     # identity
     run_id: str
@@ -158,6 +182,9 @@ class BenchmarkRecord(BaseModel):
     outcome: BenchmarkOutcome
     fix_attempts: int = 0
     error: str | None = None
+    # E-77: the graph the record's run pinned; None = FeatureWorkflow or a
+    # pre-E-77 record (contracts/records-and-store.md).
+    graph: GraphAttribution | None = None
 
 
 class CompositeWeights(BaseModel):
