@@ -43,3 +43,50 @@ def test_run_summary_round_trips():
 
 def test_memory_kind_has_run_summary():
     assert MemoryKind.RUN_SUMMARY.value == "run_summary"
+
+
+# --- E-77 T005 (RED): RunSummary.graph_sha (FR-009/FR-024) ------------------
+
+
+def _summary(**kw):
+    base = dict(
+        run_id="r1",
+        mode="greenfield",
+        outcome="deployed:http://pr",
+        terminal_stage="deploy",
+        started_at=datetime(2026, 7, 22, 12, 0, tzinfo=UTC),
+        ended_at=datetime(2026, 7, 22, 12, 30, tzinfo=UTC),
+        duration_s=1800.0,
+    )
+    base.update(kw)
+    return RunSummary(**base)
+
+
+def test_run_summary_graph_sha_defaults_to_none():
+    assert _summary().graph_sha is None
+
+
+def test_pre_e77_summary_json_without_graph_sha_parses_unchanged():
+    """contracts/records-and-store.md: summary.json written before E-77 has
+    no graph_sha key; it parses unchanged, reading the field as not recorded."""
+    import json
+
+    s = _summary()
+    captured = json.loads(s.model_dump_json())
+    captured.pop("graph_sha", None)  # a pre-E-77 summary.json has no such key
+    s2 = RunSummary.model_validate_json(json.dumps(captured))
+    assert s2 == s
+    assert s2.graph_sha is None
+
+
+def test_run_summary_ignores_unknown_keys_and_graph_sha_stays_none():
+    """Core envelopes keep pydantic's default extra='ignore' (project
+    memory — only graph/ models use forbid)."""
+    import json
+
+    payload = json.loads(_summary().model_dump_json())
+    payload.pop("graph_sha", None)
+    payload["future_e78_field"] = {"anything": [1, 2]}
+    s2 = RunSummary.model_validate(payload)
+    assert s2.run_id == "r1"  # the unknown key was ignored, not rejected
+    assert s2.graph_sha is None

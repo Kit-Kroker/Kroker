@@ -89,3 +89,30 @@ def test_run_summary_title_defaults_empty_so_existing_callers_are_unaffected():
     )
     assert s.title == ""
     assert s.repo_url is None
+
+
+# --- E-77 T005 (RED): RunState.graph_sha (FR-009/FR-024) -------------------
+# Core envelopes keep pydantic's default extra='ignore' (project memory —
+# only graph/ models use forbid); graph_sha is optional and None for
+# FeatureWorkflow runs.
+
+
+def test_run_state_graph_sha_defaults_to_none():
+    s = RunState(run_id="feature-x", title="X", mode="greenfield", status="running", started_at=AT)
+    assert s.graph_sha is None
+
+
+def test_run_state_ignores_unknown_keys_and_graph_sha_stays_none():
+    """E-77 rides a new optional field onto the core envelope; it must not
+    flip the envelope to extra='forbid' — unknown keys parse, never raise."""
+    payload = dict(
+        run_id="feature-x",
+        title="X",
+        mode="greenfield",
+        status="running",
+        started_at=AT,
+        future_e78_field={"anything": [1, 2]},
+    )
+    s = RunState.model_validate(payload)
+    assert s.run_id == "feature-x"  # the unknown key was ignored, not rejected
+    assert s.graph_sha is None
