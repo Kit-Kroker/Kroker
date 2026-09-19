@@ -201,7 +201,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
 
 **Independent test**: spec US4 AS1–6 (contracts/http-graphs.md).
 
-- [ ] T038 [P] [US4] RED tests in `tests/test_dashboard_graph_routes.py`:
+- [X] T038 [P] [US4] RED tests in `tests/test_dashboard_graph_routes.py`:
   - `POST /graphs` answers `SaveOk` with `sha`, `layout_sha` and `validation` equal to `/graphs/validate`'s answer for the same graph;
   - an illegal-but-schema-valid draft is saved;
   - a non-`{graph}` body, a schema failure and a body over the cap give 422/422/413 with nothing written (the store dir is unchanged);
