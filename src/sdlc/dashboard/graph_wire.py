@@ -41,6 +41,7 @@ from sdlc.graph import (
     node_cost,
     node_status,
     ports_compatible,
+    resolve_stage,
     run_outcome,
     to_yaml,
 )
@@ -420,6 +421,9 @@ class NodeRunState(BaseModel):
     started_at: str | None
     ended_at: str | None
     cost_usd: float | None
+    # E-77 US3/FR-003: resolve_stage of the node's type under the registry
+    # the run is projected with ("unknown" for unmapped/drifted types).
+    canonical_stage: str | None = None
 
 
 class EdgeRunState(BaseModel):
@@ -457,6 +461,18 @@ class GraphState(BaseModel):
     outcome: RunOutcomeWire
 
 
+class GraphStateUnavailable(BaseModel):
+    """E-77 R-10/FR-021: the run exists but its graph state cannot be
+    projected — the pinned graph no longer validates (registry drift) or the
+    run's history is gone (retention). Never a server error."""
+
+    model_config = _WIRE
+
+    kind: Literal["unavailable"] = "unavailable"
+    reason: Literal["registry_drift", "retention_expired"]
+    problems: list[str]
+
+
 def _edge_ref(key: tuple[str, str, str, str]) -> EdgeRef:
     return EdgeRef(source=key[0], source_port=key[1], target=key[2], target_port=key[3])
 
@@ -491,10 +507,19 @@ def project_graph_state(
         ).model_dump()
     )
     if view is None:
-        idle = NodeRunState(status="idle", round=0, started_at=None, ended_at=None, cost_usd=None)
         return GraphState(
             graph_sha=graph.content_sha(),
-            nodes={n.id: idle for n in graph.nodes},
+            nodes={
+                n.id: NodeRunState(
+                    status="idle",
+                    round=0,
+                    started_at=None,
+                    ended_at=None,
+                    cost_usd=None,
+                    canonical_stage=resolve_stage(n.type, registry),
+                )
+                for n in graph.nodes
+            },
             edges=[],
             current_nodes=[],
             pending=[],
@@ -514,6 +539,7 @@ def project_graph_state(
                 else None
             ),
             cost_usd=node_cost(n.id, view, registry.get(n.type)),
+            canonical_stage=resolve_stage(n.type, registry),
         )
     edges = [
         EdgeRunState(edge=_edge_ref(topology.edges[eid]), traversals=count)

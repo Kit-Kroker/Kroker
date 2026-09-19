@@ -189,7 +189,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
   - (f) `GraphState.nodes[*].canonical_stage` equals `resolve_stage` (and is `"unknown"` for the drift-degraded node types).
 
   Command: `pytest tests/test_dashboard_run_graph_routes.py`.
-- [ ] T037 [US5] Implement in `src/sdlc/dashboard/run_graph.py`: remove the raise at `run_graph.py:111-112` in favour of `topology=None` plus problems; add the pointer fallback, snapshot-registry resolution and pointer roles (R-10). In `src/sdlc/dashboard/graph_wire.py`, add `GraphStateUnavailable` and `NodeRunState.canonical_stage` (filled by `resolve_stage`). In `src/sdlc/dashboard/api.py`, extend the `graph_state` response union. Commands: `pytest tests/test_dashboard_run_graph_routes.py`, then `pytest tests/test_dashboard_graph_state_wire.py`.
+- [X] T037 [US5] Implement in `src/sdlc/dashboard/run_graph.py`: remove the raise at `run_graph.py:111-112` in favour of `topology=None` plus problems; add the pointer fallback, snapshot-registry resolution and pointer roles (R-10). In `src/sdlc/dashboard/graph_wire.py`, add `GraphStateUnavailable` and `NodeRunState.canonical_stage` (filled by `resolve_stage`). In `src/sdlc/dashboard/api.py`, extend the `graph_state` response union. Commands: `pytest tests/test_dashboard_run_graph_routes.py`, then `pytest tests/test_dashboard_graph_state_wire.py`.
 
 **Checkpoint**: US5 AS1–5, SC-006, SC-008 and US2 AS5 are green.
 

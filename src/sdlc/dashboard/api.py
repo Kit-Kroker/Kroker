@@ -33,7 +33,7 @@ from ..core.models import (
     PipelineConfig,
     ProjectMode,
 )
-from ..graph import PipelineGraph
+from ..graph import NODE_TYPES, PipelineGraph
 from ..workflows.graph_catalog import GraphStartError, executable, resolved_roles
 from . import graph_wire
 from .channel import DashboardChannel
@@ -235,28 +235,45 @@ def create_router(
         wire = graph_wire.validation(graph, roles=resolved_roles(PipelineConfig()))
         return graph_wire.with_executable(wire, executable(graph))
 
-    async def _source(run_id: str):
-        try:
-            return await graphs.source(run_id)
-        except RunNotFound as e:
-            raise HTTPException(404, f"no run {run_id!r}") from e
-
     @router.get(
-        "/runs/{run_id}/graph", response_model=graph_wire.GraphResponse | graph_wire.NoGraph
+        "/runs/{run_id}/graph",
+        response_model=graph_wire.GraphResponse | graph_wire.NoGraph,
     )
     async def run_graph(run_id: str):
-        src = await _source(run_id)
+        try:
+            src = await graphs.source(run_id)
+        except RunNotFound:
+            # E-77 FR-012/FR-013: after retention, the pointer still names the
+            # stored graph; without one, today's 404 stands.
+            graph = await graphs.graph_from_pointer(run_id)
+            if graph is None:
+                raise HTTPException(404, f"no run {run_id!r}") from None
+            return graph_wire.graph_response(graph)
         if src.run_input is None:
             return graph_wire.NoGraph()
         return graph_wire.graph_response(src.run_input.graph)
 
     @router.get(
-        "/runs/{run_id}/graph_state", response_model=graph_wire.GraphState | graph_wire.NoGraph
+        "/runs/{run_id}/graph_state",
+        response_model=graph_wire.GraphState
+        | graph_wire.GraphStateUnavailable
+        | graph_wire.NoGraph,
     )
     async def run_graph_state(run_id: str):
-        src = await _source(run_id)
-        if src.run_input is None or src.topology is None:
+        try:
+            src = await graphs.source(run_id)
+        except RunNotFound:
+            if graphs.pointer_exists(run_id):
+                return graph_wire.GraphStateUnavailable(reason="retention_expired", problems=[])
+            raise HTTPException(404, f"no run {run_id!r}") from None
+        if src.run_input is None:
             return graph_wire.NoGraph()
+        if src.topology is None:
+            # E-77 R-10/FR-021: registry drift degrades the projection, it is
+            # never a server error.
+            return graph_wire.GraphStateUnavailable(
+                reason="registry_drift", problems=list(src.problems)
+            )
         try:
             view = await graphs.view(src, run_id)
         except RunQueryFailed as e:
@@ -267,6 +284,7 @@ def create_router(
             src.topology,
             execution_closed=src.closed,
             close_status=src.close_status,
+            registry=src.registry if src.registry is not None else NODE_TYPES,
         )
 
     @router.post("/runs", response_model=StartedRun)
