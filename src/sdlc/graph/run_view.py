@@ -31,7 +31,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from ..core.models import DotState, gate_key
 from .model import PipelineGraph
 from .node_types import NodeTypeSpec, resolve_stage
-from .router import RouterState
+from .router import Activation, RouterState
 from .topology import Topology
 
 ACTIVATION: ContextVar[str | None] = ContextVar("sdlc_graph_activation", default=None)
@@ -222,3 +222,24 @@ def close_marks(marks: Mapping[str, DotState]) -> dict[str, DotState]:
     """Marks computed while open, adjusted for a closed execution: a live
     (active/blocked) stage is where the run stopped."""
     return {k: ("failed" if v in ("active", "blocked") else v) for k, v in sorted(marks.items())}
+
+
+def fail_reentry(activation: Activation, state: RouterState, topology: Topology) -> int | None:
+    """The R-5 fail-edge re-entry indicator (E-77 FR-015). None = the
+    activation's node has no inbound fail back edge, so the axis is absent
+    (every graph buildable today); 1 = an input ref '<aid>.fail' arrived
+    over that back edge; 0 otherwise (first activation, or a re-entry over a
+    non-fail back edge). Counted once per activation by its caller."""
+    wiring = topology.in_ports.get(activation.node_id, {})
+    has_fail_back = any(
+        topology.edges[eid][1] == "fail"  # EdgeKey = (source, source_port, target, target_port)
+        for w in wiring.values()
+        for eid in w.back_edges
+    )
+    if not has_fail_back:
+        return None
+    for value in activation.inputs.values():
+        refs = value if isinstance(value, tuple) else (value,)
+        if any(r.rpartition(".")[2] == "fail" for r in refs):
+            return 1
+    return 0
