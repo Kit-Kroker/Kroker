@@ -36,7 +36,7 @@ from typing import Any, Literal, TypeAlias
 from ..core.models import RoleConfig
 from .io import GraphSchemaError, from_yaml, to_yaml
 from .model import PipelineGraph
-from .node_types import NodeTypeSpec
+from .node_types import NODE_TYPES, NodeTypeSpec
 
 _log = logging.getLogger(__name__)
 _SHA = re.compile(r"[0-9a-f]{64}")
@@ -281,7 +281,12 @@ class GraphStore:
             raise GraphStoreCorrupt(f"{path} hashes to {graph.content_sha()}")
         return graph
 
-    def put_registry(self, registry: Mapping[str, NodeTypeSpec]) -> str:
+    def put_registry(self, registry: Mapping[str, NodeTypeSpec] | None = None) -> str:
+        """Snapshot `registry` (the shipped NODE_TYPES when None) under its
+        content hash. The default keeps start.py free of a node_types import
+        (T021's purity pin)."""
+        if registry is None:
+            registry = NODE_TYPES
         sha = registry_sha(registry)
         path = self.root / "registry" / f"{sha}.json"
         try:

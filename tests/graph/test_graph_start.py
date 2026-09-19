@@ -56,7 +56,8 @@ async def test_identity_layout_registry_and_pointer_exist_before_start_workflow(
     sha = inp.graph.content_sha()
     await start_graph_run(client, _run_fn, inp, id="feature-add-sso", task_queue="q", store=store)
     assert client.started  # the run did start
-    tree = client.tree_at_start
+    # normalized to forward slashes: Windows rglob yields backslash separators
+    tree = [p.replace("\\", "/") for p in client.tree_at_start]
     assert f"{sha}.yaml" in tree  # graph identity
     assert any(p.startswith(f"{sha}/layouts/") for p in tree)  # layout document
     assert any(p.startswith("registry/") for p in tree)  # registry snapshot
