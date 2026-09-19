@@ -100,6 +100,24 @@ def build_heatmap(
             acc[key]["gate"] += 1
         acc[key]["fix"] += r.fix_attempts
 
+    # E-77 R-12 / FR-017: the once-per-activation fix pass. One extra count
+    # per distinct (run_id, activation_id) carrying fail_reentry == 1, on
+    # the (case, node_stage) cell -- an honest re-entry axis, not a record
+    # count. Skipped entirely when no record carries the indicator, so
+    # output stays byte-identical to pre-E-77 records.
+    reentered: set[tuple[str, str, str, str]] = set()
+    for r in records:
+        g = r.graph
+        if (
+            g is not None
+            and g.fail_reentry == 1
+            and g.activation_id is not None
+            and g.node_stage is not None
+        ):
+            reentered.add((r.run_id, g.activation_id, r.case_id, g.node_stage))
+    for _run_id, _activation_id, case, stage in reentered:
+        acc[(case, stage)]["fix"] += 1
+
     cells: list[HeatmapCell] = []
     for (case, stage), a in acc.items():
         n_runs = max(len(runs_by_case[case]), 1)
