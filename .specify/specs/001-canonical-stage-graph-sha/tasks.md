@@ -179,7 +179,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
   - two threads saving different layouts leave both layout files present and `latest` naming one of them, with no torn file.
 
   Command: `pytest tests/graph/test_graph_store_e77.py`.
-- [ ] T035 [US5] Implement `GraphStore.save` and `get(sha, layout=None)` with `latest` handling via `_atomic_replace` in `src/sdlc/graph/store.py` (R-6). Command: `pytest tests/graph/test_graph_store_e77.py`.
+- [X] T035 [US5] Implement `GraphStore.save` and `get(sha, layout=None)` with `latest` handling via `_atomic_replace` in `src/sdlc/graph/store.py` (R-6). Command: `pytest tests/graph/test_graph_store_e77.py`.
 - [X] T036 [P] [US5] RED tests in `tests/test_dashboard_run_graph_routes.py`, using the existing fakes:
   - (a) a history-present run whose pinned graph fails `validate` against the current registry: `/runs/{id}/graph` returns 200 with the graph, and `/runs/{id}/graph_state` returns `{"kind":"unavailable","reason":"registry_drift","problems":[...]}` (today: 500);
   - (b) the same run with a pointer naming a registry snapshot under which the graph validates: `graph_state` projects normally;

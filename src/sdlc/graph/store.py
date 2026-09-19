@@ -263,6 +263,28 @@ class GraphStore:
                 raise
         return sha
 
+    def save(self, graph: PipelineGraph) -> tuple[str, str]:
+        """E-77 US5: put, then move `latest` to this layout. `save` is the
+        ONLY writer of latest (put and start never touch it); last write
+        wins is the editor's contract (E72-OQ-7)."""
+        sha = self.put(graph)
+        doc = graph.document_sha()
+        latest = self.root / sha / "latest"
+        latest.parent.mkdir(parents=True, exist_ok=True)
+        self._atomic_replace(latest, f"{doc}\n")
+        return sha, doc
+
+    def _latest_layout(self, sha: str) -> PipelineGraph | None:
+        """The latest hint, trusted only when it names a verifying layout;
+        any miss (missing/empty/torn/dangling) reads as 'no hint'."""
+        try:
+            text = (self.root / sha / "latest").read_text(encoding="utf-8").strip()
+        except OSError:
+            return None
+        if not _SHA.fullmatch(text):
+            return None
+        return self._read_layout(self.root / sha / "layouts" / f"{text}.yaml", text, sha)
+
     def get(self, sha: str, layout: str | None = None) -> PipelineGraph | None:
         identity = self._path(sha)  # validates the sha shape
         if layout is not None:
@@ -270,6 +292,9 @@ class GraphStore:
                 return None
             path = self.root / sha / "layouts" / f"{layout}.yaml"
             return self._read_layout(path, layout, sha)
+        latest = self._latest_layout(sha)
+        if latest is not None:
+            return latest
         path = identity
         if not path.exists():
             return None
