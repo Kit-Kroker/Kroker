@@ -40,6 +40,7 @@ with workflow.unsafe.imports_passed_through():
         BenchmarkRecord,
         BenchmarkScope,
         CaseSpec,
+        GraphAttribution,
         QualityScore,
         SpeedBag,
     )
@@ -139,10 +140,13 @@ def _oracle_record(
     run_id: str,
     started: datetime,
     ended: datetime,
+    *,
+    graph_sha: str | None = None,
 ) -> BenchmarkRecord:
     """Build the stage='oracle' record from a grade. An integrity breach
     (held-out or language mismatch) sets .error so it surfaces in the report's
-    failure section -- loud, never silent."""
+    failure section -- loud, never silent. E-77 R-9: oracle records sit
+    outside any activation, so a known graph pins graph_sha only."""
     err = None
     if not grade.held_out_ok:
         err = "held-out breach: oracle path in produced diff"
@@ -177,6 +181,7 @@ def _oracle_record(
         ),
         outcome=outcome,
         error=err,
+        graph=(GraphAttribution(graph_sha=graph_sha) if graph_sha else None),
     )
 
 
@@ -187,6 +192,8 @@ def _oracle_task_records(
     run_id: str,
     started: datetime,
     ended: datetime,
+    *,
+    graph_sha: str | None = None,
 ) -> list[BenchmarkRecord]:
     """One record per TaskGrade in grade.task_grades. error_class is not
     stored on the record -- task_matrix.py / error_matrix.py join it from
@@ -214,6 +221,7 @@ def _oracle_task_records(
                     ended_at=ended,
                 ),
                 outcome=outcome,
+                graph=(GraphAttribution(graph_sha=graph_sha) if graph_sha else None),
             )
         )
     return out
@@ -266,6 +274,12 @@ class BenchmarkWorkflow:
                 # never runs, so there is nothing to grade; log and skip it
                 workflow.logger.warning("cell %s rejected: %s", child_id, e)
                 continue
+            arm_graph_sha: str | None = None  # E-77 R-9: this cell's pinned graph
+
+            async def _keep_sha(sha: str) -> None:
+                nonlocal arm_graph_sha
+                arm_graph_sha = sha
+
             try:
                 await execute_pipeline_child(
                     child_id=child_id,
@@ -273,6 +287,7 @@ class BenchmarkWorkflow:
                     cfg=cfg,
                     seeded=None,
                     task_queue=workflow.info().task_queue,
+                    on_graph=_keep_sha,
                 )
             except Exception as e:
                 # a failed/escalated cell is a data point, not a crash
@@ -296,11 +311,13 @@ class BenchmarkWorkflow:
                 ended = workflow.now()
                 await workflow.execute_activity(
                     record_benchmark,
-                    _oracle_record(cell, grade, bench_run_id, child_id, started, ended),
+                    _oracle_record(
+                        cell, grade, bench_run_id, child_id, started, ended, graph_sha=arm_graph_sha
+                    ),
                     **RECORD_ACT,
                 )
                 for rec in _oracle_task_records(
-                    cell, grade, bench_run_id, child_id, started, ended
+                    cell, grade, bench_run_id, child_id, started, ended, graph_sha=arm_graph_sha
                 ):
                     await workflow.execute_activity(record_benchmark, rec, **RECORD_ACT)
 

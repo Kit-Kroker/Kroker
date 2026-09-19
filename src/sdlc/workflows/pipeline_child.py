@@ -9,6 +9,8 @@ goes to GraphWorkflow. The else-branch is deleted with FeatureWorkflow (§8.5).
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 from temporalio import workflow
 
 with workflow.unsafe.imports_passed_through():
@@ -31,11 +33,17 @@ async def execute_pipeline_child(
     cfg: PipelineConfig,
     seeded: SeededWork | None,
     task_queue: str,
+    on_graph: Callable[[str], Awaitable[None]] | None = None,
 ) -> str:
+    """`on_graph` (E-77 R-9): awaited with the child's pinned graph
+    content_sha once the run input is built, BEFORE the child starts — only
+    on the graph branch. The benchmark parent keeps the cell's sha from it."""
     if workflow.patched(f"e74-graph-child:{child_id}"):
         run_input = build_run_input(
             idea, cfg, seeded, registry_roles=REGISTRY, handler_types=HANDLERS
         )  # GraphStartError propagates into the parent's existing failure branch
+        if on_graph is not None:
+            await on_graph(run_input.graph.content_sha())
         return await workflow.execute_child_workflow(
             GraphWorkflow.run, run_input, id=child_id, task_queue=task_queue
         )
