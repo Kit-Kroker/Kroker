@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -17,10 +18,11 @@ from sdlc.core.models import PipelineConfig
 from sdlc.dashboard import graph_wire
 from sdlc.dashboard.api import create_router
 from sdlc.dashboard.run_graph import RunGraphs
-from sdlc.graph import NODE_TYPES, GraphRouter, GraphRunView, validate
-from sdlc.graph.store import GraphStore
+from sdlc.graph import NODE_TYPES, UNKNOWN_STAGE, GraphRouter, GraphRunView, resolve_stage, validate
+from sdlc.graph.store import GraphStore, RunGraphPointer
 from sdlc.workflows.graph_catalog import build_run_input
 from tests.fakes.canned import greenfield_idea
+from tests.graph.fixtures.registries import edge, graph, node, port_out, registry, stage
 
 FIXTURE = Path(__file__).parent / "graph" / "fixtures" / "pre_code.graph.yaml"
 RUN_INPUT = build_run_input(greenfield_idea(), PipelineConfig())
@@ -174,3 +176,133 @@ def test_capabilities_stay_false():
         "load": False,
         "run_graph": False,
     }
+
+
+# ---------------------------------------------------------------------------
+# E-77 T036 (RED): registry drift, per-run pointers and retention (FR-021..FR-023).
+# A run pinned a graph containing 'ghost', a type the current registry no
+# longer has. Today run_graph.py:111-112 raises on that drift (a 500 on both
+# routes); the store's pointer + registry snapshot APIs (T011) are the inputs
+# the T037 fallback reads.
+# ---------------------------------------------------------------------------
+
+_GHOST = stage("ghost", port_out("out", "ImplementationPlan"))  # canonical_stage=None
+_SNAP_REG = registry(_GHOST, *list(NODE_TYPES.values()))  # the registry the run started under
+_DRIFT_GRAPH = graph(
+    [node("ghost", "ghost"), node("code", "code")],
+    [edge("ghost.out", "code.plan")],
+)
+_DRIFT_INPUT = RUN_INPUT.model_copy(update={"graph": _DRIFT_GRAPH})
+
+
+class _DriftHandle(_Handle):
+    """A run whose pinned start input contains the drifted type."""
+
+    def __init__(self, run_input, **kw):
+        super().__init__(**kw)
+        self._run_input = run_input
+
+    async def fetch_history_events(self):
+        self.history_reads += 1
+        if self.history_gone:
+            raise RPCError("history purged", RPCStatusCode.NOT_FOUND, b"")
+        [payload] = await pydantic_data_converter.encode([self._run_input])
+        attrs = SimpleNamespace(input=SimpleNamespace(payloads=[payload]))
+        yield SimpleNamespace(workflow_execution_started_event_attributes=attrs)
+
+
+@pytest.fixture
+def drift_setup(tmp_path):
+    handles = {
+        "drift-run": _DriftHandle(_DRIFT_INPUT, status=WorkflowExecutionStatus.COMPLETED),
+        "drift-snap-run": _DriftHandle(_DRIFT_INPUT, status=WorkflowExecutionStatus.COMPLETED),
+        "gone-run": _Handle(missing=True),  # retention expired; pointer survives
+        "gone-bare": _Handle(missing=True),  # retention expired; no pointer
+        "legacy-run": _Handle(wf_type="FeatureWorkflow"),
+    }
+    client = _Client(handles)
+
+    async def get_client():
+        return client
+
+    store = GraphStore(tmp_path)
+    sha = store.put(_DRIFT_GRAPH)  # identity file + the run's layout
+    snap = store.put_registry(_SNAP_REG)
+    for run_id in ("drift-snap-run", "gone-run"):
+        store.put_pointer(
+            RunGraphPointer(
+                run_id=run_id,
+                graph_sha=sha,
+                layout_sha=_DRIFT_GRAPH.document_sha(),
+                registry_sha=snap,
+                roles=RUN_INPUT.roles,
+                started_at=datetime.now(UTC),
+            )
+        )
+    app = FastAPI()
+    app.include_router(create_router(_NoPoller(), run_graphs=RunGraphs(get_client, store=store)))
+    # server errors surface as 500 responses so the RED assertions compare
+    # today's drift raise against the 200s the contract promises
+    return TestClient(app, raise_server_exceptions=False), handles, store
+
+
+def test_registry_drift_serves_the_graph_and_reports_unavailable_state(drift_setup):
+    """(a) FR-021: a history-present run whose pinned graph no longer validates
+    gets the graph served (200) and an explicit unavailable/registry_drift
+    state -- never a server error."""
+    client, _, _ = drift_setup
+    r = client.get("/runs/drift-run/graph")
+    assert r.status_code == 200, r.text  # RED: 500 today (run_graph.py:111-112)
+    body = r.json()
+    assert body["kind"] == "graph" and body["sha"] == _DRIFT_GRAPH.content_sha()
+    s = client.get("/runs/drift-run/graph_state")
+    assert s.status_code == 200, s.text  # RED: 500 today
+    state = s.json()
+    assert state["kind"] == "unavailable"
+    assert state["reason"] == "registry_drift"
+    assert state["problems"], "drift problems must be carried"
+
+
+def test_a_pointer_registry_snapshot_restores_normal_projection(drift_setup):
+    """(b)+(f) FR-022: the pointer names the registry snapshot the run started
+    under; against it the graph validates and graph_state projects normally,
+    with each node's canonical_stage == resolve_stage of its type under that
+    registry -- 'unknown' for the drifted type's unmapped entry."""
+    client, _, _ = drift_setup
+    s = client.get("/runs/drift-snap-run/graph_state")
+    assert s.status_code == 200, s.text  # RED: 500 today (the pointer is ignored)
+    body = s.json()
+    assert body["kind"] == "state"
+    assert body["graph_sha"] == _DRIFT_GRAPH.content_sha()
+    for n in _DRIFT_GRAPH.nodes:
+        expected = resolve_stage(n.type, _SNAP_REG)
+        assert body["nodes"][n.id]["canonical_stage"] == expected  # RED: field absent today
+    assert body["nodes"]["ghost"]["canonical_stage"] == UNKNOWN_STAGE
+
+
+def test_describe_not_found_with_a_pointer_serves_the_layout_graph(drift_setup):
+    """(c) FR-012/FR-013: after retention, the pointer still names the stored
+    graph and layout; /graph serves it and /graph_state answers
+    unavailable/retention_expired instead of 404."""
+    client, _, _ = drift_setup
+    r = client.get("/runs/gone-run/graph")
+    assert r.status_code == 200, r.text  # RED: 404 today
+    assert r.json()["kind"] == "graph"
+    assert r.json()["sha"] == _DRIFT_GRAPH.content_sha()
+    s = client.get("/runs/gone-run/graph_state")
+    assert s.status_code == 200, s.text  # RED: 404 today
+    state = s.json()
+    assert state["kind"] == "unavailable"
+    assert state["reason"] == "retention_expired"
+    assert state["problems"] == []
+
+
+def test_describe_not_found_without_a_pointer_and_legacy_runs_stay_as_today(drift_setup):
+    """(d)+(e) pins: no pointer and no history is 404 on both routes; a
+    FeatureWorkflow run keeps NoGraph on both."""
+    client, _, _ = drift_setup
+    assert client.get("/runs/gone-bare/graph").status_code == 404
+    assert client.get("/runs/gone-bare/graph_state").status_code == 404
+    for path in ("/runs/legacy-run/graph", "/runs/legacy-run/graph_state"):
+        r = client.get(path)
+        assert r.status_code == 200 and r.json() == {"kind": "no_graph", "reason": "legacy_run"}
