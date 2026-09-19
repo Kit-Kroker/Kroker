@@ -497,6 +497,9 @@ class RunSummary(BaseModel):
     memory_enabled: bool = False
     memory_watermark: str | None = None
     memory_retains: int = 0
+    # E-77 FR-009: the graph the run pinned (content_sha of its input graph);
+    # None = FeatureWorkflow run or a pre-E-77 summary. Never re-derived.
+    graph_sha: str | None = None
 
 
 # The fleet strip's per-stage marks (E-75 spec §5.3); the vocabulary of
@@ -532,3 +535,5 @@ class RunState(BaseModel):
     # GraphWorkflow.run_state. None for FeatureWorkflow runs (linear strip
     # fallback). Not named `stages`: RunSummary.stages means something else.
     stage_marks: dict[str, DotState] | None = None
+    # E-77 FR-009: the run's pinned graph sha; None for FeatureWorkflow.
+    graph_sha: str | None = None
