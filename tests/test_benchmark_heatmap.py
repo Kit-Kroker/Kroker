@@ -182,3 +182,165 @@ def test_unknown_stage_renders_in_trailing_bucket_before_oracle():
     assert unknown_cells[0]["gate_rejects"] == 1
     assert unknown_cells[0]["fix_attempts"] == 5
     assert unknown_cells[0]["density"] == 6.0
+
+
+# --- E-77 T032 (RED): the once-per-activation fix pass (FR-017 / R-12) -------
+
+_PIN_RECORDS = [
+    _rec(case="pin", run="p1", stage="clarify", outcome=BenchmarkOutcome.REVISED, fix=1),
+    _rec(case="pin", run="p1", stage="code", outcome=BenchmarkOutcome.FAIL, fix=2),
+    _rec(case="pin", run="p2", stage="code", outcome=BenchmarkOutcome.PASS, fix=0),
+    _rec(
+        case="pin",
+        run="p1",
+        stage="oracle",
+        scope=BenchmarkScope.ORACLE,
+        outcome=BenchmarkOutcome.FAIL,
+    ),
+    _rec(case="pin", run="p1", stage="mystery", outcome=BenchmarkOutcome.FAIL, fix=1),
+]
+
+_PINNED_JSON = """{
+  "cells": [
+    {
+      "case": "pin",
+      "stage": "clarify",
+      "gate_rejects": 1,
+      "fix_attempts": 1,
+      "oracle_fails": 0,
+      "n_runs": 2,
+      "density": 1.0
+    },
+    {
+      "case": "pin",
+      "stage": "code",
+      "gate_rejects": 1,
+      "fix_attempts": 2,
+      "oracle_fails": 0,
+      "n_runs": 2,
+      "density": 1.5
+    },
+    {
+      "case": "pin",
+      "stage": "oracle",
+      "gate_rejects": 0,
+      "fix_attempts": 0,
+      "oracle_fails": 1,
+      "n_runs": 2,
+      "density": 0.5
+    },
+    {
+      "case": "pin",
+      "stage": "mystery",
+      "gate_rejects": 1,
+      "fix_attempts": 1,
+      "oracle_fails": 0,
+      "n_runs": 2,
+      "density": 1.0
+    }
+  ],
+  "cases": [
+    "pin"
+  ],
+  "stages": [
+    "clarify",
+    "code",
+    "mystery",
+    "oracle"
+  ],
+  "max_density": 1.5,
+  "language_by_case": {
+    "pin": ""
+  }
+}"""
+
+
+def test_current_records_render_byte_identical_to_the_pinned_literal():
+    """T032(a): captured on the pre-T033 code over fixed current-shape
+    records (varied stages, an oracle record, no graph field). No record
+    carries fail_reentry == 1, so T033's extra pass must be a no-op here --
+    byte-identical forever."""
+    assert render_heatmap_json(build_heatmap(_PIN_RECORDS)) == _PINNED_JSON
+
+
+def _stamped(rec, activation_id, node_id, round_, node_stage, fail_reentry):
+    from sdlc.benchmarks.models import GraphAttribution
+
+    return rec.model_copy(
+        update={
+            "graph": GraphAttribution(
+                graph_sha="a" * 64,
+                activation_id=activation_id,
+                node_id=node_id,
+                round=round_,
+                node_stage=node_stage,
+                fail_reentry=fail_reentry,
+            )
+        }
+    )
+
+
+def test_fail_reentry_adds_exactly_one_per_reentered_activation():
+    """FR-017 / R-12, as written: "add 1 to the fix count of (case_id,
+    graph.node_stage) once per distinct (run_id, graph.activation_id) where
+    graph.fail_reentry == 1". The distinct key is (run_id, activation_id)
+    alone, so an activation counts ONCE however many records it emitted, on
+    the cell of its node_stage. Records of one activation share that stage
+    (it is the activation's node's stage), so the fixture keeps node_stage
+    uniform per activation: code#2 (fail_reentry=1) and qa#1 (fail_reentry=1)
+    each add 1 to their own stage cell; code#1 (fail_reentry=0) adds nothing.
+    Expected delta: (fx, code) +1 and (fx, qa) +1 -- exactly 2 in total,
+    and no other cell moves."""
+    plain = [
+        _rec(case="fx", run="r1", stage="code", outcome=BenchmarkOutcome.PASS, fix=1),
+        _rec(case="fx", run="r1", stage="code", outcome=BenchmarkOutcome.FAIL, fix=2),
+        _rec(case="fx", run="r1", stage="code", outcome=BenchmarkOutcome.REVISED, fix=1),
+        _rec(case="fx", run="r1", stage="code", outcome=BenchmarkOutcome.PASS, fix=0),
+        _rec(case="fx", run="r1", stage="qa", outcome=BenchmarkOutcome.PASS, fix=3),
+        _rec(case="fx", run="r1", stage="qa", outcome=BenchmarkOutcome.FAIL, fix=1),
+    ]
+    stamped = [
+        _stamped(plain[0], "code#1", "code", 1, "code", 0),
+        _stamped(plain[1], "code#1", "code", 1, "code", 0),
+        _stamped(plain[2], "code#2", "code", 2, "code", 1),
+        _stamped(plain[3], "code#2", "code", 2, "code", 1),
+        _stamped(plain[4], "qa#1", "qa", 1, "qa", 1),
+        _stamped(plain[5], "qa#1", "qa", 1, "qa", 1),
+    ]
+    base = {(c.case, c.stage): c.fix_attempts for c in build_heatmap(plain).cells}
+    got = {(c.case, c.stage): c.fix_attempts for c in build_heatmap(stamped).cells}
+    assert got == {
+        ("fx", "code"): base[("fx", "code")] + 1,  # code#2: two records, one add
+        ("fx", "qa"): base[("fx", "qa")] + 1,  # qa#1: two records, one add
+    }
+
+
+def test_duplicate_records_of_one_reentered_activation_add_one_not_two():
+    plain = [
+        _rec(case="dupe", run="r1", stage="code", outcome=BenchmarkOutcome.FAIL, fix=0),
+        _rec(case="dupe", run="r1", stage="code", outcome=BenchmarkOutcome.FAIL, fix=0),
+    ]
+    stamped = [
+        _stamped(plain[0], "code#3", "code", 3, "code", 1),
+        _stamped(plain[1], "code#3", "code", 3, "code", 1),
+    ]
+    base = {(c.case, c.stage): c.fix_attempts for c in build_heatmap(plain).cells}
+    got = {(c.case, c.stage): c.fix_attempts for c in build_heatmap(stamped).cells}
+    assert got == {("dupe", "code"): base[("dupe", "code")] + 1}  # once per activation
+
+
+def test_fail_reentry_none_everywhere_is_byte_identical_to_no_graph():
+    """FR-017's other half: when no record carries fail_reentry == 1, the
+    output is byte-identical to main -- even with full graph attribution
+    (activation, round, node stage) present on every record."""
+    plain = [
+        _rec(case="absent", run="r1", stage="code", outcome=BenchmarkOutcome.FAIL, fix=1),
+        _rec(case="absent", run="r1", stage="qa", outcome=BenchmarkOutcome.REVISED, fix=2),
+    ]
+    axis_absent = [
+        _stamped(plain[0], "code#1", "code", 1, "code", None),
+        _stamped(plain[1], "qa#1", "qa", 1, "qa", None),
+    ]
+    assert render_heatmap_json(build_heatmap(axis_absent)) == render_heatmap_json(
+        build_heatmap(plain)
+    )

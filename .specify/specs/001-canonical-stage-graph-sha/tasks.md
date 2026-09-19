@@ -153,7 +153,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
   Command: `pytest tests/graph/test_fail_reentry.py`.
 - [X] T030 [US3] Implement `fail_reentry(activation, state, topology)` in `src/sdlc/graph/run_view.py` (R-5; no new imports) and export it from `src/sdlc/graph/__init__.py`. Command: `pytest tests/graph/test_fail_reentry.py`.
 - [ ] T031 [US3] Wire it into `GraphDispatcher._start` in `src/sdlc/workflows/graph_dispatch.py`, replacing T014's `None`. Extend `tests/graph_workflow/test_graph_view_dispatch.py`: driving the dispatcher over the T029 fixture graph with a failing handler yields `_attrib` indicators 0, 1, 1 for three activations of the fixer. Command: `pytest tests/graph_workflow/test_graph_view_dispatch.py`.
-- [ ] T032 [P] [US3] RED tests in `tests/test_benchmark_heatmap.py`:
+- [X] T032 [P] [US3] RED tests in `tests/test_benchmark_heatmap.py`:
   - (a) **byte-identity pin, written and passing before T033**: `render_heatmap_json(build_heatmap(records))` over a fixed list of current-shape records equals a committed literal;
   - (b) three activations with `fail_reentry` 0, 1, 1, each emitting two records (e.g. `code` + `qa`), add exactly 2 to the `(case, node_stage)` fix cell;
   - (c) duplicate records of one re-entered activation add 1;
