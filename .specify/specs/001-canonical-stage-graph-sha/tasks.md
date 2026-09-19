@@ -28,7 +28,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
 
 **Purpose**: prove main is green on every pin E-77 must keep unchanged, before any edit.
 
-- [ ] T001 Record the green baseline on main and save the output to `.workspace/tmp/e77-baseline.txt`. Run each command separately: `pytest tests/graph`, `pytest tests/test_benchmark_heatmap.py`, `pytest tests/test_graph_fixtures_fresh.py`, `pytest -m temporal tests/replay`, `python scripts/check_file_size.py`. Any red here is reported to the orchestrator, not fixed inside E-77.
+- [X] T001 Record the green baseline on main and save the output to `.workspace/tmp/e77-baseline.txt`. Run each command separately: `pytest tests/graph`, `pytest tests/test_benchmark_heatmap.py`, `pytest tests/test_graph_fixtures_fresh.py`, `pytest -m temporal tests/replay`, `python scripts/check_file_size.py`. Any red here is reported to the orchestrator, not fixed inside E-77.
 
 ---
 
@@ -38,7 +38,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
 
 **⚠️ CRITICAL**: no user-story task starts before T012 is done.
 
-- [ ] T002 [P] RED tests in `tests/graph/test_graph_node_types.py`:
+- [X] T002 [P] RED tests in `tests/graph/test_graph_node_types.py`:
   - `UNKNOWN_STAGE == "unknown"` and `UNKNOWN_STAGE not in CANONICAL_STAGES`;
   - `resolve_stage(t, NODE_TYPES)` equals each shipped type's `canonical_stage` (all 16);
   - `resolve_stage` returns `"unknown"` for a type absent from the registry and for an injected spec with `canonical_stage=None`;

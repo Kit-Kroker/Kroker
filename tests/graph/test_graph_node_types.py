@@ -8,15 +8,18 @@ from types import MappingProxyType
 
 import pytest
 
+from sdlc.benchmarks.heatmap import CANONICAL_STAGES  # the single source (FR-002)
 from sdlc.graph import (
     NODE_TYPES,
     PAYLOAD_TYPES,
+    UNKNOWN_STAGE,
     NodePort,
     NodeTypeSpec,
     check_node_types,
     find_port,
     from_yaml,
     ports_compatible,
+    resolve_stage,
 )
 from sdlc.graph import node_types as node_types_module
 
@@ -229,3 +232,57 @@ def test_resolve_payload_reports_an_import_time_crash(monkeypatch):
     )
     problem = node_types_module._resolve_payload("Boom")
     assert problem is not None and "does not resolve" in problem and "RuntimeError" in problem
+
+
+# ---------------------------------------------------------------------------
+# E-77: canonical-stage resolution (FR-001..FR-006, SC-001)
+# ---------------------------------------------------------------------------
+
+
+def test_unknown_stage_is_the_literal_and_not_canonical():
+    """FR-004: `unknown` is a recorded value, never a CANONICAL_STAGES member."""
+    assert UNKNOWN_STAGE == "unknown"
+    assert UNKNOWN_STAGE not in CANONICAL_STAGES
+
+
+def test_shipped_registry_declares_a_stage_for_all_sixteen_types():
+    assert len(NODE_TYPES) == 16
+
+
+@pytest.mark.parametrize("type_", sorted(NODE_TYPES))
+def test_resolve_stage_returns_each_shipped_types_declared_stage(type_):
+    """SC-001: every shipped type resolves to the stage it declares."""
+    assert NODE_TYPES[type_].canonical_stage in CANONICAL_STAGES
+    assert resolve_stage(type_, NODE_TYPES) == NODE_TYPES[type_].canonical_stage
+
+
+def test_resolve_stage_is_unknown_for_a_type_absent_from_the_registry():
+    """FR-006: an unregistered type resolves to unknown, never raises."""
+    assert resolve_stage("no_such_type", NODE_TYPES) == UNKNOWN_STAGE
+
+
+def test_resolve_stage_is_unknown_for_a_declared_unmapped_type():
+    """FR-003: a registered-but-unmapped (canonical_stage=None) type records
+    as unknown (R2) -- an absent mapping is not an authoring error."""
+    reg = {"draft": _stage("draft", _out("ok", None), canonical_stage=None)}
+    assert resolve_stage("draft", reg) == UNKNOWN_STAGE
+
+
+def test_check_node_types_flags_a_missing_canonical_stage_only_when_required():
+    """FR-001: the self-check flags a shipped type without a mapping;
+    injected/out-of-tree registries may opt out (R2)."""
+    reg = {"draft": _stage("draft", _out("ok", None), canonical_stage=None)}
+    assert check_node_types(reg) == ["draft: no canonical_stage"]
+    assert check_node_types(reg, require_mapped=False) == []
+
+
+def test_check_node_types_shipped_registry_healthy_under_both_modes():
+    assert check_node_types() == []
+    assert check_node_types(require_mapped=False) == []
+
+
+def test_a_declared_unknown_is_reported_as_not_canonical():
+    """FR-004: `unknown` is not accepted as a declared canonical_stage --
+    a wrong mapping is an authoring error; only absence records as unknown."""
+    reg = {"weird": _stage("weird", _out("ok", None), canonical_stage="unknown")}
+    assert check_node_types(reg) == ["weird: canonical_stage 'unknown' is not canonical"]
