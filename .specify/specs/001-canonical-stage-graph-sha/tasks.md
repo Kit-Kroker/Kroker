@@ -80,7 +80,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
 
 **Independent test**: spec US1. Start a non-default graph run; the pointer, `run_state`, `run_summary` and every record carry the same `graph_sha`, and it names a stored graph.
 
-- [ ] T013 [P] [US1] RED tests in `tests/graph_workflow/test_graph_view_dispatch.py`:
+- [X] T013 [P] [US1] RED tests in `tests/graph_workflow/test_graph_view_dispatch.py`:
   - the dispatcher's `_attrib[aid]` holds `node_id`, `round` (equal to `Activation.round`) and `node_stage` (`resolve_stage` of the node type) for every issued activation;
   - `fail_reentry` is `None` for every activation of the shipped default graph;
   - `_attrib` is written only in `_start` (grep-style pin like the existing `ACTIVATION` set-site pin).

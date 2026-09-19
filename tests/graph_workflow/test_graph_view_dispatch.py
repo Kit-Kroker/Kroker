@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import uuid
+from pathlib import Path
 
 import pytest
 from temporalio import workflow
@@ -14,7 +16,16 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
 from sdlc.core.models import PipelineConfig
-from sdlc.graph import ACTIVATION, GraphRouter, GraphRunView, validate
+from sdlc.graph import (
+    ACTIVATION,
+    NODE_TYPES,
+    UNKNOWN_STAGE,
+    GraphRouter,
+    GraphRunView,
+    from_yaml,
+    resolve_stage,
+    validate,
+)
 from sdlc.workflows.graph_dispatch import GraphDispatcher
 from sdlc.workflows.graph_nodes.base import NodeResult, RunFacts
 from tests.fakes.canned import greenfield_idea
@@ -242,3 +253,173 @@ async def test_the_escalating_emission_is_recorded():
     assert final.state.outcome == "escalated"
     assert final.escalated_by == "u#2"
     assert final.state.traversals == {"u.fix->v.guidance": 1}
+
+
+# ---------------------------------------------------------------------------
+# E-77 T013 (RED): dispatcher per-activation facts — GraphDispatcher._attrib
+# (spec data-model "Dispatcher per-activation facts"; FR-014/FR-015 until T031).
+# ---------------------------------------------------------------------------
+
+SRC = Path(__file__).resolve().parents[2] / "src" / "sdlc"
+DEFAULT_GRAPH_YAML = SRC / "workflows" / "graphs" / "default.graph.yaml"
+TQ2 = "e77-attrib-dispatch"
+
+# The ViewProbe "escalation" graph, rebuilt module-level so the assertions can
+# read node types without reaching into a workflow instance.
+_ESCALATION_GRAPH = graph(
+    [node("start", "start"), node("v", "loop"), node("u", "fixer")],
+    [
+        edge("start.ok", "v.trigger"),
+        edge("v.out", "u.trigger"),
+        edge("u.fix", "v.guidance", bound=1),
+    ],
+)
+_ESCALATION_TYPES = {"start": "start", "v": "loop", "u": "fixer"}
+
+# Happy-path out-port per shipped type in default.graph.yaml. intake takes the
+# brownfield edge so every one of the 12 nodes activates exactly once (the
+# greenfield ok path never reaches context); both gates approve on sight.
+_DEFAULT_PORTS = {
+    "intake": "brownfield",
+    "context": "map",
+    "clarify": "requirements",
+    "architect": "spec",
+    "gate.architecture": "approve",
+    "plan": "plan",
+    "gate.plan": "approve",
+    "plan_check": "ok",
+    "code": "results",
+    "analyze": "analysis",
+    "merge": "pr",
+    "deploy": "done",
+}
+
+
+def _attrib_rows(d: GraphDispatcher) -> list[dict]:
+    """The dispatcher's per-activation facts, as primitives a workflow result
+    can carry. Raises AttributeError until T014 lands `_attrib`."""
+    return [
+        {
+            "aid": aid,
+            "node_id": a.node_id,
+            "round": a.round,
+            "node_stage": a.node_stage,
+            "fail_reentry": a.fail_reentry,
+        }
+        for aid, a in sorted(d._attrib.items())
+    ]
+
+
+@workflow.defn(sandboxed=False)
+class AttribProbe:
+    def __init__(self) -> None:
+        self.dispatcher: GraphDispatcher | None = None
+
+    async def _check_budget(self, cfg) -> None:  # probe never rejects (gates are exiting)
+        return None
+
+    @workflow.run
+    async def run(self, scenario: str) -> str:
+        if scenario == "escalation":
+            g, reg, port_by_type = (
+                _ESCALATION_GRAPH,
+                REG,
+                {"start": "ok", "loop": "out", "fixer": "fix"},
+            )
+        else:
+            g = from_yaml(DEFAULT_GRAPH_YAML.read_text(encoding="utf-8"))
+            reg, port_by_type = NODE_TYPES, _DEFAULT_PORTS
+
+        async def emit(nc, act, cfg):
+            port = port_by_type[nc.node.type]
+            return NodeResult(port=port, result="completed" if port == "done" else None)
+
+        report = validate(g, reg, roles=roles())
+        assert report.topology is not None, report.problems
+        facts = RunFacts(
+            idea=greenfield_idea(),
+            repo_path="/r",
+            run_id=workflow.info().workflow_id,
+            seeded=None,
+            memory_watermark=None,
+        )
+        self.dispatcher = GraphDispatcher(
+            host=self,
+            services=None,
+            router=GraphRouter(report.topology),
+            graph=g,
+            registry=reg,
+            handlers={t: emit for t in port_by_type},
+            facts=facts,
+            cfg=PipelineConfig(),
+        )
+        await self.dispatcher.run()
+        return json.dumps(_attrib_rows(self.dispatcher))
+
+
+async def _run_attrib(scenario: str) -> list[dict]:
+    async with await WorkflowEnvironment.start_time_skipping(
+        data_converter=pydantic_data_converter
+    ) as env:
+        with env.auto_time_skipping_disabled():
+            async with Worker(
+                env.client,
+                task_queue=TQ2,
+                workflows=[AttribProbe],
+                workflow_runner=UnsandboxedWorkflowRunner(),
+            ):
+                handle = await env.client.start_workflow(
+                    AttribProbe.run, scenario, id=f"attrib-{uuid.uuid4()}", task_queue=TQ2
+                )
+                return json.loads(await handle.result())
+
+
+@pytest.mark.asyncio
+async def test_attrib_rows_carry_node_round_and_resolved_stage_for_every_issued_activation():
+    """FR-014: _attrib[aid] names the node, the router round of that
+    activation (round 2 on back-edge re-entry), and resolve_stage of the
+    node's type — 'unknown' for the unmapped fixture registry."""
+    rows = await _run_attrib("escalation")
+    assert [r["aid"] for r in rows] == ["start#1", "u#1", "u#2", "v#1", "v#2"]
+    for r in rows:
+        node_id, _, round_ = r["aid"].rpartition("#")
+        assert r["node_id"] == node_id
+        assert r["round"] == int(round_)  # equal to the Activation's round
+        assert r["node_stage"] == resolve_stage(_ESCALATION_TYPES[node_id], REG)
+    # re-entry over the u.fix -> v.guidance back edge mints round 2
+    assert next(r for r in rows if r["aid"] == "v#2")["round"] == 2
+    assert next(r for r in rows if r["aid"] == "u#2")["round"] == 2
+    # every fixture type is unmapped (canonical_stage=None) -> unknown (FR-006)
+    assert all(r["node_stage"] == UNKNOWN_STAGE for r in rows)
+
+
+@pytest.mark.asyncio
+async def test_default_graph_fail_reentry_is_none_for_every_activation():
+    """G4 tradeoff: no shipped type accepts a failure payload, so the shipped
+    default graph can wire no fail edge — the axis is absent (None), never 0,
+    until T031 derives it for graphs that express a fix loop."""
+    rows = await _run_attrib("default")
+    types = {n.id: n.type for n in from_yaml(DEFAULT_GRAPH_YAML.read_text(encoding="utf-8")).nodes}
+    assert {r["aid"] for r in rows} == {f"{n}#1" for n in types}  # all 12 nodes, once each
+    for r in rows:
+        assert r["fail_reentry"] is None
+        assert r["round"] == 1
+        assert r["node_stage"] == resolve_stage(types[r["node_id"]], NODE_TYPES)
+        assert r["node_stage"] != UNKNOWN_STAGE  # every shipped type is mapped (SC-001)
+
+
+def test_attrib_is_written_only_in_dispatcher_start():
+    """Data-model ownership row: _attrib is filled in _start next to
+    _started[...] and nowhere else — the same grep-style pin shape as the
+    ACTIVATION set-site pin (tests/graph_workflow/test_store_import_pin.py)."""
+    lines = (SRC / "workflows" / "graph_dispatch.py").read_text(encoding="utf-8").splitlines()
+    start = next((i for i, line in enumerate(lines) if line.startswith("    def _start")), None)
+    assert start is not None
+    end = next(
+        (i for i, line in enumerate(lines[start + 1 :], start + 1) if line.startswith("    def ")),
+        len(lines),
+    )
+    hits = [i for i, line in enumerate(lines) if "_attrib[" in line]
+    assert hits, "no _attrib write site exists yet (T014 fills it in _start)"
+    offenders = [lines[i].strip() for i in hits if not start < i < end]
+    assert offenders == []
