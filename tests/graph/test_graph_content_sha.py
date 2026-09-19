@@ -178,3 +178,44 @@ def test_extra_args_order_is_meaningful():
         return mutate
 
     assert _small(args(["-a", "-b"])).content_sha() != _small(args(["-b", "-a"])).content_sha()
+
+
+# --- E-77 T008 (RED): PipelineGraph.document_sha (FR-019 layout identity) ---
+# document_sha() hashes the canonical JSON WITH cosmetics (data-model.md);
+# content_sha() keeps hashing the cosmetic-free form. Reuses the mutators
+# above on purpose: one fixture, two identities over it.
+
+
+def test_document_sha_is_order_independent():
+    """Layout identity inherits NFR-10: same graph, reordered lists, one sha."""
+    expected = _small().document_sha()
+    shuffles = [
+        (list(reversed(SMALL["nodes"])), list(reversed(SMALL["edges"]))),
+        (SMALL["nodes"][2:] + SMALL["nodes"][:2], SMALL["edges"][1:] + SMALL["edges"][:1]),
+    ]
+    for nodes, edges in shuffles:
+        g = PipelineGraph.model_validate({"schema_version": 1, "nodes": nodes, "edges": edges})
+        assert g.content_sha() == _small().content_sha()  # the shuffle changed nothing semantic
+        assert g.document_sha() == expected
+
+
+@pytest.mark.parametrize(
+    "cosmetic", [_set_position, _move_position, _drop_position, _relabel_node, _label_edge]
+)
+def test_cosmetics_change_document_sha_but_not_content_sha(cosmetic):
+    """FR-019 vs FR-1201: positions/labels are layout identity, not content."""
+    base = _small()
+    edited = _small(cosmetic)
+    assert edited.content_sha() == base.content_sha()
+    assert edited.document_sha() != base.document_sha()
+
+
+def test_document_sha_is_deterministic_64_lowercase_hex():
+    """Same shape contract as content_sha: 64 lowercase hex, stable across
+    repeated calls and independent builds of the same graph."""
+    import re
+
+    g = _small()
+    assert re.fullmatch(r"[0-9a-f]{64}", g.document_sha())
+    assert g.document_sha() == g.document_sha()
+    assert _small().document_sha() == g.document_sha()
