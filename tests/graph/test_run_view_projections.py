@@ -294,3 +294,72 @@ def test_close_marks_equals_recomputing_with_execution_closed(which):
     assert close_marks(stage_marks(v, T, G, REG)) == stage_marks(
         v, T, G, REG, execution_closed=True
     )
+
+
+# --- E-77 T026 (RED): unmapped/unregistered nodes land on 'unknown' (FR-005) --
+
+# Like REG, but 'side' is registered with canonical_stage=None (unmapped) and
+# 'sink' is absent from the registry entirely (unregistered).
+MIXED = registry(
+    REG["start"],
+    REG["work"],
+    REG["check"],
+    REG["side"].model_copy(update={"canonical_stage": None}),
+)
+
+
+def test_unregistered_and_unmapped_nodes_contribute_under_unknown():
+    from sdlc.graph import UNKNOWN_STAGE
+
+    v = _view(_at_gate(), pending=(PendingFact(key="g#1", activation_id="g#1", kind="gate"),))
+    marks = stage_marks(v, T, G, MIXED)
+    assert marks == {
+        "architecture": "blocked",  # w done + g blocked: the usual merge
+        "intake": "done",
+        # x (side, unmapped) is dead -> skipped dot; s (sink, unregistered) is
+        # idle -> pending dot; same precedence rule drops the skipped one.
+        UNKNOWN_STAGE: "pending",
+    }
+
+
+def test_unmapped_nodes_never_change_canonical_stage_marks():
+    from sdlc.graph import UNKNOWN_STAGE
+
+    v = _view(_at_gate(), pending=(PendingFact(key="g#1", activation_id="g#1", kind="gate"),))
+    base = stage_marks(v, T, G, REG)
+    mixed = stage_marks(v, T, G, MIXED)
+    assert {k: mixed[k] for k in ("intake", "architecture")} == {
+        "intake": base["intake"],
+        "architecture": base["architecture"],
+    }
+    assert mixed[UNKNOWN_STAGE] == "pending"  # their only footprint is 'unknown'
+
+
+def test_default_graph_marks_are_pinned_literal():
+    """Computed on the pre-T027 code (== main: every shipped type is mapped,
+    so the resolve_stage change moves nothing) at the start state. Any later
+    change to the default graph's stage set or marks trips this literal."""
+    from sdlc.agents.roles import REGISTRY as AGENT_ROLES
+    from sdlc.graph.node_types import NODE_TYPES
+    from sdlc.workflows.graph_catalog import build_run_input
+    from sdlc.workflows.graph_nodes import HANDLERS
+    from tests.fakes.canned import e2e_config, greenfield_idea
+
+    run_input = build_run_input(
+        greenfield_idea(), e2e_config(), None, registry_roles=AGENT_ROLES, handler_types=HANDLERS
+    )
+    report = validate(run_input.graph, NODE_TYPES, roles=run_input.roles)
+    assert report.topology is not None, report.problems
+    router = GraphRouter(report.topology)
+    marks = stage_marks(_view(router.start().state), report.topology, run_input.graph, NODE_TYPES)
+    assert marks == {
+        "analyze": "pending",
+        "architecture": "pending",
+        "clarify": "pending",
+        "code": "pending",
+        "context": "pending",
+        "deploy": "pending",
+        "intake": "active",
+        "planning": "pending",
+        "quality_gate": "pending",
+    }
