@@ -185,6 +185,13 @@ class PipelineGraph(BaseModel):
         canvas (position, label) never changes it."""
         return hashlib.sha256(canonical_json(self).encode("utf-8")).hexdigest()
 
+    def document_sha(self) -> str:
+        """Layout identity (E-77 FR-019): sha256 of the canonical JSON WITH
+        cosmetics (exclude_defaults, keys sorted, order already normalized).
+        Canvas edits (position, label) change it; reordering does not."""
+        document = _dumps(self.model_dump(mode="json", exclude_defaults=True))
+        return hashlib.sha256(document.encode("utf-8")).hexdigest()
+
 
 def canonical_json(graph: PipelineGraph) -> str:
     """The canonical form (spec §7.1): exclude_defaults, cosmetics stripped,
