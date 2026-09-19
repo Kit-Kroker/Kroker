@@ -395,7 +395,7 @@ def test_concurrent_saves_leave_both_layouts_and_one_valid_latest(tmp_path):
         except Exception as e:  # noqa: BLE001 -- reported through `errors`
             errors.append(e)
 
-    threads = [threading.Thread(target=worker, args=graph) for graph in (g, _graph(_moved))]
+    threads = [threading.Thread(target=worker, args=(graph,)) for graph in (g, _graph(_moved))]
     for t in threads:
         t.start()
     for t in threads:
