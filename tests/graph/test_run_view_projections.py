@@ -268,9 +268,11 @@ def test_stage_marks_cancelled_is_failed_and_stale_is_pending():
     assert stage_marks(halted, T, G, REG)["architecture"] == "failed"  # F11
 
 
-def test_nodes_without_a_canonical_stage_contribute_nothing():
+def test_nodes_without_a_canonical_stage_contribute_only_unknown():
+    """E-77 FR-005 changed the pre-T027 skip: unmapped nodes contribute
+    under 'unknown' (never to a canonical key), visibly instead of silently."""
     bare = registry(*(spec.model_copy(update={"canonical_stage": None}) for spec in REG.values()))
-    assert stage_marks(_view(_at_gate()), T, G, bare) == {}
+    assert stage_marks(_view(_at_gate()), T, G, bare) == {"unknown": "active"}
 
 
 @pytest.mark.parametrize("which", ["rejected", "escalated"])

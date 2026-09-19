@@ -30,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 from ..core.models import DotState, gate_key
 from .model import PipelineGraph
-from .node_types import NodeTypeSpec
+from .node_types import NodeTypeSpec, resolve_stage
 from .router import RouterState
 from .topology import Topology
 
@@ -207,11 +207,10 @@ def stage_marks(
     pending; skipped only when every contributing node is skipped."""
     by_stage: dict[str, list[DotState]] = {}
     for n in graph.nodes:  # sorted by PipelineGraph's validator
-        spec = registry.get(n.type)
-        if spec is None or spec.canonical_stage is None:
-            continue
+        # E-77 FR-005: an unmapped/unregistered node is never silently
+        # skipped -- it contributes under UNKNOWN_STAGE (R2).
         status = node_status(n.id, view, topology, execution_closed=execution_closed)
-        by_stage.setdefault(spec.canonical_stage, []).append(_DOT[status])
+        by_stage.setdefault(resolve_stage(n.type, registry), []).append(_DOT[status])
     out: dict[str, DotState] = {}
     for name in sorted(by_stage):
         dots = [d for d in by_stage[name] if d != "skipped"]

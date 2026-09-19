@@ -130,7 +130,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
 **Independent test**: spec US2 with injected registries.
 
 - [X] T026 [P] [US2] RED tests in `tests/graph/test_run_view_projections.py`: `stage_marks` over a graph containing (i) a node of an injected type with `canonical_stage=None` and (ii) a node whose type is absent from the passed registry puts both under the key `"unknown"`, using the existing precedence rule. No canonical stage gains a contributor. The shipped default graph's marks are unchanged from main (compare to the value computed before the change, pinned literally). Command: `pytest tests/graph/test_run_view_projections.py`.
-- [ ] T027 [US2] Change `stage_marks` in `src/sdlc/graph/run_view.py` to use `resolve_stage` instead of `continue` (`run_view.py:211-212`). Commands: `pytest tests/graph/test_run_view_projections.py`, then `pytest tests/test_dashboard_fleet_marks.py`.
+- [X] T027 [US2] Change `stage_marks` in `src/sdlc/graph/run_view.py` to use `resolve_stage` instead of `continue` (`run_view.py:211-212`). Commands: `pytest tests/graph/test_run_view_projections.py`, then `pytest tests/test_dashboard_fleet_marks.py`.
 - [ ] T028 [US2] RED→GREEN test in `tests/test_benchmark_heatmap.py`: records with `stage="unknown"` render in the trailing non-canonical bucket, before `oracle` (existing behaviour, now pinned for E-77). Command: `pytest tests/test_benchmark_heatmap.py`.
 
 **Checkpoint**: US2 AS1–4, 6–7 are green (AS5, the post-mortem of a drifted stored graph, completes in T036).
