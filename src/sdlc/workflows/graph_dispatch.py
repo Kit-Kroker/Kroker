@@ -12,7 +12,7 @@ import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from temporalio import workflow
 from temporalio.exceptions import FailureError, is_cancelled_exception
@@ -75,7 +75,7 @@ class ActivationAttrib:
     node_id: str
     round: int
     node_stage: str
-    fail_reentry: int | None = None  # T031 replaces this with the derived indicator
+    fail_reentry: Literal[0, 1] | None = None  # T031 replaces this with the derived indicator
 
 
 class GraphDispatcher:

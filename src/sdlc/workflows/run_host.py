@@ -110,6 +110,10 @@ class RunHost:
                 budget_usd=(cfg.run_budget_usd if cfg.run_budget_usd > 0 else None),
                 title=idea.title,
                 repo_url=idea.repo_url,
+                # E-77 R-3: the run's pinned graph, when the host is a
+                # GraphWorkflow; None for FeatureWorkflow (content only, no
+                # command change, U6).
+                graph_sha=getattr(self, "_graph_sha", "") or None,
             )
             self._run_summary = summary
             await retro.step(

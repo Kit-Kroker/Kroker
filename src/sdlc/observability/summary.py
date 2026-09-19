@@ -84,6 +84,7 @@ def build_run_summary(
     budget_usd: float | None = None,
     title: str = "",
     repo_url: str | None = None,
+    graph_sha: str | None = None,
 ) -> RunSummary:
     stages = [_stage_outcome(e) for e in trace if e.kind is RunEventKind.STAGE_ENDED]
 
@@ -153,4 +154,5 @@ def build_run_summary(
         memory_enabled=memory_enabled,
         memory_watermark=memory_watermark,
         memory_retains=retains,
+        graph_sha=graph_sha,
     )
