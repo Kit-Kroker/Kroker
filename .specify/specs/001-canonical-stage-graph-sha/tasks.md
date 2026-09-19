@@ -117,7 +117,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
   - `_attrib`: owner `GraphDispatcher`, reader `GraphWorkflow._stamp`, writer `GraphDispatcher._start`;
   - the `GraphWorkflow._record` override;
   - `_graph_sha`'s new reader `RunHost._retro` (cross-host, via `getattr`).
-- [ ] T025 [US1] Replay gate: `pytest -m temporal tests/replay`. It must pass with **no** re-recorded golden or history (`git status tests/replay` clean).
+- [X] T025 [US1] Replay gate: `pytest -m temporal tests/replay`. It must pass with **no** re-recorded golden or history (`git status tests/replay` clean).
 
 **Checkpoint**: US1 is complete and independently demonstrable (spec US1 AS1–5).
 
