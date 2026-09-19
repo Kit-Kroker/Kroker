@@ -178,3 +178,65 @@ def test_budget_crossings_counted_from_gate_events():
     )
     assert s.budget_crossings == 2
     assert s.budget_usd is None  # not passed → off
+
+
+# --- E-77 T017 (RED): build_run_summary graph_sha (FR-009, R-3/U6) ----------
+
+
+def test_graph_sha_keyword_sets_the_field():
+    trace = [
+        _ev(0, RunEventKind.STAGE_ENDED, stage="code", role="dev", outcome="pass", duration_s=4.0),
+        _ev(1, RunEventKind.RUN_FINISHED),
+    ]
+    s = build_run_summary(
+        run_id="r9",
+        mode="greenfield",
+        outcome="done",
+        trace=trace,
+        memory_enabled=False,
+        memory_watermark=None,
+        graph_sha="a" * 64,
+    )
+    assert s.graph_sha == "a" * 64
+
+
+def test_without_graph_sha_the_summary_is_unchanged_and_graph_sha_is_none():
+    """Pre-change output, field for field: the hand-built RunSummary below is
+    the committed expectation (this file pins outputs by direct construction,
+    not committed dicts); both sides carry graph_sha=None."""
+    from sdlc.core.models import RunSummary, StageOutcome
+
+    trace = [
+        _ev(
+            0,
+            RunEventKind.STAGE_ENDED,
+            stage="code",
+            role="dev",
+            outcome="pass",
+            duration_s=4.0,
+            cost_usd=1.5,
+        ),
+        _ev(1, RunEventKind.RUN_FINISHED),
+    ]
+    s = build_run_summary(
+        run_id="r9",
+        mode="greenfield",
+        outcome="done",
+        trace=trace,
+        memory_enabled=False,
+        memory_watermark=None,
+    )
+    expected = RunSummary(
+        run_id="r9",
+        mode="greenfield",
+        outcome="done",
+        terminal_stage="code",
+        started_at=T0,
+        ended_at=T0 + timedelta(seconds=1),
+        duration_s=1.0,
+        stages=[
+            StageOutcome(stage="code", role="dev", outcome="pass", duration_s=4.0, cost_usd=1.5)
+        ],
+    )
+    assert s == expected
+    assert s.graph_sha is None
