@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import Callable
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -34,6 +35,7 @@ from ..core.models import (
     ProjectMode,
 )
 from ..graph import NODE_TYPES, PipelineGraph
+from ..graph.store import GraphStoreCorrupt
 from ..workflows.graph_catalog import GraphStartError, executable, resolved_roles
 from . import graph_wire
 from .channel import DashboardChannel
@@ -47,6 +49,7 @@ from .fleet import (
 from .run_graph import RunGraphs, RunNotFound, RunQueryFailed
 
 HEARTBEAT_S = 15.0
+_SHA_RE = re.compile(r"[0-9a-f]{64}")  # E-77: /graphs/{sha} path shape
 
 
 class AnswerBody(BaseModel):
@@ -234,6 +237,44 @@ def create_router(
         graph = PipelineGraph.model_validate(parsed.graph)
         wire = graph_wire.validation(graph, roles=resolved_roles(PipelineConfig()))
         return graph_wire.with_executable(wire, executable(graph))
+
+    @router.post("/graphs", response_model=graph_wire.SaveOk)
+    async def graph_save(request: Request):
+        """E-77 US4 (contracts/http-graphs.md): save a draft. A graph that
+        fails legality is still saved -- legality comes only from the single
+        validator, reported in `validation` exactly as /graphs/validate."""
+        body = await _graph_body(request)
+        if set(body) != {"graph"}:
+            raise HTTPException(422, "body must be {graph: object}")
+        parsed = graph_wire.parse_object(body["graph"])
+        if isinstance(parsed, graph_wire.ParseErr):
+            raise HTTPException(422, "graph does not parse; use /graphs/parse for shape errors")
+        graph = PipelineGraph.model_validate(parsed.graph)
+        wire = graph_wire.with_executable(
+            graph_wire.validation(graph, roles=resolved_roles(PipelineConfig())),
+            executable(graph),
+        )
+        try:
+            sha, layout_sha = graphs.store.save(graph)
+        except Exception as e:  # noqa: BLE001 -- store I/O failure is 500, never half-visible
+            raise HTTPException(500, f"graph store write failed: {e}") from e
+        return graph_wire.SaveOk(sha=sha, layout_sha=layout_sha, validation=wire)
+
+    @router.get("/graphs/{sha}", response_model=graph_wire.LoadOk | graph_wire.LoadMissing)
+    async def graph_load(sha: str, layout: str | None = None):
+        """E-77 US4: load by identity. `?layout=` selects one document; the
+        default serves the verifying latest, else the identity file."""
+        if not _SHA_RE.fullmatch(sha):
+            raise HTTPException(422, "sha must be 64 lowercase hex chars")
+        if layout is not None and not _SHA_RE.fullmatch(layout):
+            raise HTTPException(422, "layout must be 64 lowercase hex chars")
+        try:
+            graph = graphs.store.get(sha, layout=layout)
+        except GraphStoreCorrupt as e:
+            raise HTTPException(500, str(e)) from e
+        if graph is None:
+            return graph_wire.LoadMissing()
+        return graph_wire.load_response(sha, graph, layout_sha=graph.document_sha())
 
     @router.get(
         "/runs/{run_id}/graph",

@@ -82,6 +82,12 @@ class RunGraphs:
         self._registries: _Lru = _Lru(cache_size)
         self._problems: _Lru = _Lru(cache_size)
 
+    @property
+    def store(self) -> GraphStore:
+        """The content-addressed store backfill and the save/load routes
+        share (E-77 US4)."""
+        return self._store
+
     async def source(self, run_id: str) -> RunSource:
         client = await self._client()
         handle = client.get_workflow_handle(run_id)

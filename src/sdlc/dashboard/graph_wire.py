@@ -117,8 +117,8 @@ class Capabilities(BaseModel):
     )
 
     can_validate: bool = Field(default=False, alias="validate")
-    save: bool = False
-    load: bool = False
+    save: bool = True  # E-77 flips save/load live (R-11, US4)
+    load: bool = True
     run_graph: bool = False
 
 
@@ -376,6 +376,7 @@ class SaveOk(BaseModel):
 
     ok: Literal[True] = True
     sha: str
+    layout_sha: str | None = None  # E-77: the saved layout document's sha
     validation: ValidationWire | None
 
 
@@ -385,6 +386,7 @@ class LoadOk(BaseModel):
     ok: Literal[True] = True
     sha: str
     graph: dict[str, Any]
+    layout_sha: str | None = None  # E-77: the served layout document's sha
 
 
 class LoadMissing(BaseModel):
@@ -475,6 +477,12 @@ class GraphStateUnavailable(BaseModel):
 
 def _edge_ref(key: tuple[str, str, str, str]) -> EdgeRef:
     return EdgeRef(source=key[0], source_port=key[1], target=key[2], target_port=key[3])
+
+
+def load_response(sha: str, graph: PipelineGraph, *, layout_sha: str | None = None) -> LoadOk:
+    """E-77 US4: the LoadOk wire for a stored graph, in the same canonical
+    JSON shape the parse/serialize routes serve (exclude_defaults)."""
+    return LoadOk(sha=sha, graph=_graph_json(graph), layout_sha=layout_sha)
 
 
 def graph_response(graph: PipelineGraph) -> GraphResponse:

@@ -211,7 +211,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
   - the catalog has `save` and `load` true, with `validate`/`run_graph` as on main.
 
   Command: `pytest tests/test_dashboard_graph_routes.py`.
-- [ ] T039 [US4] Implement the routes in `src/sdlc/dashboard/api.py` (reusing `_graph_body`, `parse_object`, `validation`, `with_executable`, and the `GraphStore` via `RunGraphs`' store). In `src/sdlc/dashboard/graph_wire.py`, add `SaveOk.layout_sha`/`LoadOk.layout_sha` and set `Capabilities.save/load` defaults to `True` (R-11). Command: `pytest tests/test_dashboard_graph_routes.py`.
+- [X] T039 [US4] Implement the routes in `src/sdlc/dashboard/api.py` (reusing `_graph_body`, `parse_object`, `validation`, `with_executable`, and the `GraphStore` via `RunGraphs`' store). In `src/sdlc/dashboard/graph_wire.py`, add `SaveOk.layout_sha`/`LoadOk.layout_sha` and set `Capabilities.save/load` defaults to `True` (R-11). Command: `pytest tests/test_dashboard_graph_routes.py`.
 - [ ] T040 [US4] Regenerate the recorded fixtures with `python scripts/dump_graph_fixtures.py`. Then run `pytest tests/test_graph_fixtures_fresh.py`. Review the diff: only `catalog.json` capabilities and `run_state/graph_state.recorded.json` `canonical_stage` fields change, under `interfaces/dashboard/frontend/src/api/__fixtures__/graph/`.
 - [ ] T041 [US4] Test-only frontend updates forced by the flip (FR-026):
   - in `interfaces/dashboard/frontend/src/api/http-graph.test.ts`, the refusal cases (currently lines 47-56) use an explicit no-capability catalog, as `http-graph.chaos.test.ts` does with `NO_CAPS`;
