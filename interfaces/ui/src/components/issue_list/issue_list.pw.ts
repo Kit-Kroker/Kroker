@@ -8,6 +8,9 @@ test('issues render in order with severity classes', async ({ page }) => {  // c
   await expect(rows).toHaveCount(3)
   await expect(rows.nth(0)).toHaveClass(/cmp-issue-error/)
   await expect(rows.nth(2)).toHaveClass(/cmp-issue-warning/)
+  const notExecutable = page.locator(`${at('with-not-executable')} [data-testid="issue"]`)
+  await expect(notExecutable).toHaveCount(2)
+  await expect(notExecutable.nth(1)).toHaveClass(/cmp-issue-not_executable/)
   await expect(page.locator(`${at('none')} [data-testid="issues-none"]`)).toBeVisible()
 })
 

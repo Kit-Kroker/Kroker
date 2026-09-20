@@ -23,7 +23,10 @@ An edge with a `counter` renders `used/max` as its label text. [FR-1205]
 
 ### GRAPH_CANVAS-4
 A node with a `status` carries `cmp-graph-node-<status>`; an unknown status
-fails rendering rather than falling back (STAGE_DOTS-1.2 precedent).
+fails rendering rather than falling back (STAGE_DOTS-1.2 precedent). The
+status set is the run-state set: `idle`, `running`, `blocked`, `done`,
+`failed`, `stale`, plus the run-end states `skipped` (never routed to) and
+`cancelled` (cut down by a closed execution) -- E-75 design §7.4.
 [FR-1205]
 
 ### GRAPH_CANVAS-5

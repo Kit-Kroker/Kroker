@@ -1,7 +1,9 @@
 <script setup lang="ts">
 export interface IssueItem {
   key: string
-  severity: 'error' | 'warning'
+  // The validator's severities (E-75 design §7.3): not_executable is legal
+  // but unrunnable by this worker -- never reclassified to error/warning.
+  severity: 'error' | 'warning' | 'not_executable'
   message: string
   targetLabel: string
   /** Canvas key to focus; null for a graph-level issue. */
@@ -40,4 +42,5 @@ ul { margin: 0; padding: 0; list-style: none; }
 .target.graph { color: var(--ink-faint); cursor: default; }
 .cmp-issue-error .message { color: var(--status-failed); }
 .cmp-issue-warning .message { color: var(--status-blocked); }
+.cmp-issue-not_executable .message { color: var(--status-quarantined); }
 </style>

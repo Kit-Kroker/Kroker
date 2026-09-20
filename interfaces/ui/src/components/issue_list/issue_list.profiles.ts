@@ -18,5 +18,15 @@ export default defineProfiles({
         ],
       },
     },
+    {
+      name: 'with-not-executable',
+      summary: 'A legal graph this worker cannot run: not_executable beside an error.',
+      props: {
+        items: [
+          { key: 'i0', severity: 'error', message: "node id 'research' is used by 2 nodes", targetLabel: 'research', focusKey: 'research' },
+          { key: 'i1', severity: 'not_executable', message: 'the research refine loop is handler-internal until research-as-topology (E74-OQ-2)', targetLabel: 'research', focusKey: 'research' },
+        ],
+      },
+    },
   ],
 })

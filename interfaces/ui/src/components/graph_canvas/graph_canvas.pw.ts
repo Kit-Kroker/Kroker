@@ -30,6 +30,8 @@ test('a node status carries its stable class', async ({ page }) => {  // clause:
   await expect(page.locator(`${at('run-mid-flight')} .cmp-graph-node-running`)).toHaveCount(1)
   await expect(page.locator(`${at('run-mid-flight')} .cmp-graph-node-done`)).toHaveCount(1)
   await expect(page.locator(`${at('run-gate-pending')} .cmp-graph-node-blocked`)).toHaveCount(1)
+  await expect(page.locator(`${at('run-skipped-leg')} .cmp-graph-node-skipped`)).toHaveCount(2)
+  await expect(page.locator(`${at('run-interrupted')} .cmp-graph-node-cancelled`)).toHaveCount(1)
   await expect(page.locator(`${at('run-mid-flight')} [data-testid="node-metrics"]`)).toContainText('$1.87')
 })
 

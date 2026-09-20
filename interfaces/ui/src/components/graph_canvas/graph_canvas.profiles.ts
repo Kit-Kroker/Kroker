@@ -69,5 +69,15 @@ export default defineProfiles({
       summary: 'A gate node held for a human decision.',
       props: { nodes: pipeline({ intake: 'done', architect: 'done', architecture: 'blocked', planner: 'idle' }), edges: wires(1) },
     },
+    {
+      name: 'run-skipped-leg',
+      summary: 'A graph that routes around the architecture leg: those nodes render skipped.',
+      props: { nodes: pipeline({ intake: 'done', architect: 'skipped', architecture: 'skipped', planner: 'running' }), edges: wires(0) },
+    },
+    {
+      name: 'run-interrupted',
+      summary: 'A closed execution cancels the node it held mid-flight.',
+      props: { nodes: pipeline({ intake: 'done', architect: 'done', architecture: 'cancelled', planner: 'idle' }), edges: wires(1) },
+    },
   ],
 })

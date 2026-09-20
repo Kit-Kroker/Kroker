@@ -17,6 +17,21 @@ describe('IssueList', () => {
     expect(mount(IssueList, { props: { items: [] } }).find('[data-testid="issues-none"]').exists()).toBe(true)
   })
 
+  it('a not_executable issue keeps its own class, never reclassified', () => {  // clause: ISSUE_LIST-1
+    const w = mount(IssueList, {
+      props: {
+        items: [
+          { key: 'e', severity: 'error' as const, message: 'the error', targetLabel: 'n', focusKey: 'n0' },
+          { key: 'x', severity: 'not_executable' as const, message: 'handler-internal until E74-OQ-2', targetLabel: 'research', focusKey: 'research' },
+        ],
+      },
+    })
+    const rows = w.findAll('[data-testid="issue"]')
+    expect(rows[1].classes()).toContain('cmp-issue-not_executable')
+    expect(rows[1].classes()).not.toContain('cmp-issue-error')
+    expect(rows[1].classes()).not.toContain('cmp-issue-warning')
+  })
+
   it('emits focus for an element issue and offers no control for a graph issue', async () => {  // clause: ISSUE_LIST-2
     const w = mount(IssueList, { props: { items } })
     const rows = w.findAll('[data-testid="issue"]')

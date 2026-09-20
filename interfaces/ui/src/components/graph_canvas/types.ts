@@ -2,9 +2,11 @@
 // as literals; no domain type and no vue-flow type ever appears here
 // (FR-1400). The dashboard's adapters/graph.ts builds these.
 
-export type CanvasStatus = 'idle' | 'running' | 'blocked' | 'done' | 'failed' | 'stale'
+// 'skipped'/'cancelled' are the E-75 §7.4 run-end states (a node the graph
+// never routes to; a live node cut down by a closed execution).
+export type CanvasStatus = 'idle' | 'running' | 'blocked' | 'done' | 'failed' | 'stale' | 'skipped' | 'cancelled'
 
-export const CANVAS_STATUSES: readonly CanvasStatus[] = ['idle', 'running', 'blocked', 'done', 'failed', 'stale']
+export const CANVAS_STATUSES: readonly CanvasStatus[] = ['idle', 'running', 'blocked', 'done', 'failed', 'stale', 'skipped', 'cancelled']
 
 export interface CanvasPort {
   name: string

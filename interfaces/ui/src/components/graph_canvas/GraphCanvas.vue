@@ -304,6 +304,8 @@ defineExpose({ relayout })
 .cmp-graph-node-done { box-shadow: 0 0 0 2px var(--status-done); }
 .cmp-graph-node-failed { box-shadow: 0 0 0 2px var(--status-failed); }
 .cmp-graph-node-stale { box-shadow: 0 0 0 2px var(--status-skipped); }
+.cmp-graph-node-skipped { box-shadow: 0 0 0 2px var(--status-skipped); }
+.cmp-graph-node-cancelled { box-shadow: 0 0 0 2px var(--status-quarantined); }
 .cmp-graph-node-running,
 .cmp-graph-node-blocked { animation: fc-pulse 1.6s infinite; }
 @keyframes fc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
