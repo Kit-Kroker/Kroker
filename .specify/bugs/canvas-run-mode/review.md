@@ -128,3 +128,5 @@ None.
 ## Verdict
 
 APPROVE
+
+Ack (2026-09-20): da61092 verified, approve.
