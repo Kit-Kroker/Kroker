@@ -36,6 +36,14 @@ Every row is assertion-RED on the pre-fix tree (verified individually; see
 .specify/bugs/notify-flake/). Deterministic: pure inspection of scenario
 bundles and committed goldens, no Temporal, no server, no timers.
 
+Consolidation (2026-09-20): this file subsumes qa-happy's
+test_activity_registration.py (b89e11e) -- its three unique pins are folded
+in (the fake must never be the production transport; evaluate_gate /
+export_run_artifacts stay registered everywhere; the golden file set and
+per-file notify counts are frozen) -- and that duplicate file is retired.
+Orchestrator ruling: partial_awaiting_architecture's fixture golden IS in
+the sweep set.
+
 Concurrency axis: registration completeness IS the deterministic pin for the
 race (the stress reproduction is nondeterministic by the task card's own
 ruling and is evidence, not a gate). No fabricated threading rows.
@@ -49,9 +57,10 @@ from typing import Any
 
 import pytest
 
+from sdlc.notify.activities import notify as production_notify
 from sdlc.notify.contract import NotifyInput, NotifyReason, Results
 from sdlc.pending import StageGatePending
-from tests.replay.harness import load_golden
+from tests.replay.harness import GOLDEN, load_golden
 from tests.replay.scenarios import SCENARIOS, _base_activities, _budget_activities
 
 _BY_NAME = {s.name: s for s in SCENARIOS}
@@ -60,6 +69,30 @@ NOTIFY_SCHEDULERS = [
     for s in SCENARIOS
     if any(c == "activity:notify" for c in load_golden(s.name)["commands"])
 ]
+
+# activity:notify schedulings per committed golden file (counts at the bug
+# base, main 2c732e0; 34 in total -- folded in from qa-happy's
+# test_activity_registration.py at consolidation). The fix registers a fake
+# and must not change what the workflows schedule; the goldens are
+# byte-frozen and may not be regenerated, so these counts are contract.
+NOTIFY_SCHEDULINGS: dict[str, int] = {
+    "arch_revise_final": 5,
+    "arch_timeout_reject": 4,
+    "brownfield_happy": 3,
+    "budget_arch_reject": 2,
+    "budget_clarify_reject": 1,
+    "cancel_during_code": 2,
+    "context_reject": 0,
+    "delta_failed": 0,
+    "greenfield_happy": 3,
+    "intake_reject": 0,
+    "max_gate_rounds_1": 4,
+    "partial_awaiting_architecture": 1,
+    "plan_revise_approve": 4,
+    "research_greenfield": 1,
+    "seeded": 1,
+    "waves": 3,
+}
 
 
 def _registered_names(fns: list) -> set[str]:
@@ -123,6 +156,50 @@ def test_budget_activities_registers_notify():
     )
 
 
+def _registered_map(name: str) -> dict[str, Any]:
+    """name -> callable, exactly as Worker(activities=...) registers it."""
+    out: dict[str, Any] = {}
+    for fn in _BY_NAME[name].activities():
+        defn = getattr(fn, "__temporal_activity_definition", None)
+        if defn is not None:
+            out[defn.name] = fn
+    return out
+
+
+@pytest.mark.parametrize("name", [s.name for s in SCENARIOS])
+def test_no_bundle_registers_a_name_twice(name):
+    """The same activity name twice in one bundle is a Worker-construction
+    error -- the fix could introduce it by adding the notify fake in two
+    places (e.g. inside fake_agent_activities AND the bundle). (qa-chaos
+    landing-green guard, adopted at consolidation.)"""
+    names = list(_registered_map(name))
+    dupes = sorted({n for n in names if names.count(n) > 1})
+    assert not dupes, f"{name}: bundle registers {dupes} more than once"
+
+
+@pytest.mark.parametrize("name", [s.name for s in SCENARIOS])
+def test_core_activities_stay_registered(name):
+    """The fix may only ADD registrations (today: notify, plan_research).
+    Dropping any existing one breaks the golden runs for an unrelated
+    reason. (Folded from qa-happy's test_activity_registration.py.)"""
+    registered = _registered_map(name)
+    missing = {"evaluate_gate", "export_run_artifacts"} - set(registered)
+    assert not missing, f"{name}: core activities {sorted(missing)} dropped"
+
+
+def test_goldens_schedule_notify_exactly_as_pinned():
+    """Guards both halves of the byte-identity constraint: the golden file
+    set is unchanged (16 files), and scheduling notify stays in the
+    projections (a "fix" that deschedules notify in production, or a golden
+    regeneration, turns this red). (Folded from qa-happy's
+    test_activity_registration.py.)"""
+    files = {p.name[: -len(".json")] for p in GOLDEN.glob("*.json")}
+    assert files == set(NOTIFY_SCHEDULINGS), "the golden file set changed"
+    for name, count in NOTIFY_SCHEDULINGS.items():
+        commands = load_golden(name)["commands"]
+        assert commands.count("activity:notify") == count, name
+
+
 def _notify_fake(bundle: list) -> Any:
     for fn in bundle:
         defn = getattr(fn, "__temporal_activity_definition", None)
@@ -143,6 +220,10 @@ async def test_registered_notify_fake_honours_the_results_contract(name):
     boundaries (deadline=None HOLD, project=None non-F4 hosts) that
     NotifyInput carries."""
     fake = _notify_fake(_BY_NAME[name].activities())
+    assert fake is not production_notify, (
+        "the harness must register a no-op fake notify, never the production "
+        "transport (folded from qa-happy's test_activity_registration.py)"
+    )
     inp = NotifyInput(
         run_id="e74-chaos-notify",
         pending=StageGatePending(
