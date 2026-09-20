@@ -3,11 +3,31 @@
 - **Slug**: notify-flake
 - **Tested**: 2026-09-20
 - **Fix**: ./fix.md (commit a8f9ac6 on `fix/notify-flake`)
-- **Verdict**: partial — the assessed cause is fixed and deterministically
-  pinned; the full-file leg of the verification gate is blocked by a
-  SECOND, PRE-EXISTING race that exists identically at main. Per the bug
-  flow ('partial' → stop, diagnose, wait for ruling) this seat has NOT
-  claimed 'verified' and awaits the orchestrator.
+- **Verdict**: partial — ACCEPTED by orchestrator ruling 2026-09-20 (on
+  file): the brief's out-of-scope list explicitly excludes any other flake,
+  the atomicity constraint binds, and the baseline evidence (identical
+  divergence + notify error at clean 2c732e0,
+  `.workspace/tmp/nf-baseline-ff-run2.txt`) is decisive. Follow-up card:
+  `.workspace/tasks/golden-tick-race.md` (committed on this branch).
+
+## Adjusted gate (ruling on file, 2026-09-20)
+
+The verification gate for THIS slug, as adjusted by the ruling, is:
+
+1. Deterministic contract: `tests/replay/test_notify_registration_chaos.py`
+   **77/77 green** (was 29 RED / 48 green at base) — MET.
+2. Per-scenario SG-1: **15/15 scenarios exit 0** — MET.
+3. Golden byte-identity: zero changes under `tests/replay/golden/` +
+   `tests/replay/histories/` (`git status` / `git diff main`), in-test
+   count-freeze row green — MET.
+4. **Zero `not registered` occurrences** in every branch full-file run log
+   (the assessed race is eliminated) — MET.
+5. Full-file failure mode is **tick-race-only** — MET (SG-3 divergence on
+   waves/budget_arch_reject only; no other failure class observed).
+6. 3× consecutive green full-file: **UNMEETABLE UNTIL golden-tick-race IS
+   FIXED** — the same gate fails at clean main 2c732e0 (baseline run2
+   evidence); ruling on file accepts this leg as blocked by the follow-up
+   bug, not by this fix.
 
 ## What was verified (all green)
 
