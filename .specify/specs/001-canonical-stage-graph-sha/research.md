@@ -102,7 +102,7 @@ Every decision below resolves an unknown in the plan's Technical Context. Anchor
 
 - **Decision:** `build_heatmap` keeps its per-record loop unchanged. After it, one pass adds 1 to `acc[(case_id, g.node_stage)]["fix"]` for each distinct `(run_id, g.activation_id)` with `g.fail_reentry == 1`. The key is created only if absent; the pass only runs when an indicator exists.
 - **Rationale:** counting once per activation on the node's resolved stage removes both skeptic multiplications. When no record carries `graph.fail_reentry == 1`, the pass is a no-op, so output is byte-identical (pinned by a test over recorded records).
-- **Not changed:** the pre-existing `attempt − 1` handler convention (E77-OQ-1).
+- **Not changed:** the pre-existing `attempt − 1` handler convention (E77-OQ-1). *(Subsequently fixed 2026-09-20 — bug `heatmap-fix-inflation`, branch `fix/heatmap-fix-inflation`: E-77's own scope stayed exactly as decided here; the heatmap now takes the counter's max per `(case_id, stage, run_id, task_id)` group, aggregate-side. E77-OQ-1 RESOLVED.)*
 
 ## R-13 Docs on landing (R5)
 

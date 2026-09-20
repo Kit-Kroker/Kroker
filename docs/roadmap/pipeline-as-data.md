@@ -161,7 +161,10 @@ not None` checks collapse into *is there a node*.
   never zero — on every graph buildable today, waiting on graph-expressed fix
   loops (E74-OQ-3); the heatmap's pre-existing `attempt − 1` inflation (a task
   needing n attempts reports n(n−1)/2 fix attempts rather than n−1, E77-OQ-1)
-  is recorded as a follow-up for the benchmark owner.
+  — **fixed 2026-09-20**, same-day bug flow `heatmap-fix-inflation` (branch
+  `fix/heatmap-fix-inflation`, E77-OQ-1 RESOLVED): the fix axis now takes the
+  max per `(case_id, stage, run_id, task_id)` group instead of summing the
+  running counter, so recorded baselines re-aggregate to n−1 per task.
 
 **External input (2026-09-11).** A third-party platform analysis (register §H,
 verbatim at `docs/reports/2026-09-11-external-platform-analysis.md`)

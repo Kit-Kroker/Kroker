@@ -271,3 +271,5 @@ Advisor (`.workspace/tmp/advisor-e77-1.md`) and skeptic (`.workspace/tmp/skeptic
 ## Open Questions
 
 - **E77-OQ-1 — pre-existing heatmap inflation (not E-77's to fix; recorded).** The `code` handler stamps `fix_attempts = attempt − 1` on every attempt record (`stages/code/step.py:784`) and the heatmap sums records (`benchmarks/heatmap.py:101`), so a task needing n attempts reports n(n−1)/2 fix attempts rather than n−1 (skeptic 1.3, verified). FR-017 pins today's outputs byte-for-byte, so E-77 neither copies nor repairs the convention; the repair (and its effect on recorded benchmark baselines) is a named follow-up for the benchmark owner.
+
+  **RESOLVED (2026-09-20):** fixed by the `heatmap-fix-inflation` bug flow on branch `fix/heatmap-fix-inflation` — Direction A, aggregate-side: the heatmap's fix axis takes `max(fix_attempts)` per `(case_id, stage, run_id, task_id)` group and sums the group maxima (`task_id=None` records pass through per record). The producer stamp is unchanged; all recorded history re-aggregates honestly to n−1 per task. FR-017's pins stayed byte-identical. Chain: `.specify/bugs/heatmap-fix-inflation/`.
