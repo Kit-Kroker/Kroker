@@ -226,7 +226,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
 ## Phase 8: Polish & cross-cutting
 
 - [x] T042 Static gates, each run separately: `ruff check .`, then `ruff format --check .`, then `mypy` (no new errors in touched `src/` files), then `python scripts/check_file_size.py`. `git diff --stat main -- src/sdlc/stages/code/step.py` must be empty, and `git diff --stat main -- interfaces/` limited to T040/T041's files.
-- [ ] T043 Full regression, each command separately: `pytest`, then `pytest -m temporal`, then `pytest tests/test_graph_fixtures_fresh.py`, then `python scripts/check_ui.py`. `git status tests/replay` must show no re-recorded goldens or histories.
+- [x] T043 Full regression, each command separately: `pytest`, then `pytest -m temporal`, then `pytest tests/test_graph_fixtures_fresh.py`, then `python scripts/check_ui.py`. `git status tests/replay` must show no re-recorded goldens or histories. (Ruled PASS 2026-09-20: fast tier 100%/0 failures; the full-tier command's timeout is a pre-existing hang at `tests/test_assessment_workflow_e2e.py::test_discover_proposer_judgment_and_verification`, reproduced on main 48d9a4a before any E-77 commit — cards `.workspace/tasks/T043-temporal-tier-timeout-card.md` and `.workspace/tasks/discover-proposer-e2e-hang-followup.md`; fixtures_fresh rc=0; check_ui rc=0 "50 passed"; tests/replay clean. All commands via `.venv\Scripts\python.exe` with a hard wall clock.)
 - [ ] T044 Walk through `.specify/specs/001-canonical-stage-graph-sha/quickstart.md` §1–§3 and tick each row; the §4 manual smoke is optional.
 - [ ] T045 Landing docs (R5, R-13), describing main only:
   - `ROADMAP.md`: tick FR-1206, and give FR-1201's partial note the stage completeness;
