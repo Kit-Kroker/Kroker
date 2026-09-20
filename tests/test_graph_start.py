@@ -45,14 +45,17 @@ async def test_stores_the_graph_then_starts(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_a_store_failure_never_blocks_the_start(caplog):
+async def test_a_store_failure_never_blocks_the_start(tmp_path, caplog):
     class _Broken(GraphStore):
         def put(self, graph):
             raise OSError("disk full")
 
     client = _Client()
+    # Absolute root: the ruled contract (bug root-store-write) refuses a
+    # relative root= at construction, which would test the refusal, not
+    # the never-blocks-the-start contract this test exists for.
     await start_graph_run(
-        client, _run_fn, _Input(), id="feature-y", task_queue="q", store=_Broken("x")
+        client, _run_fn, _Input(), id="feature-y", task_queue="q", store=_Broken(tmp_path / "g")
     )
     assert len(client.started) == 1
     assert "graph store write failed" in caplog.text

@@ -3,13 +3,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
+import tempfile
 from pathlib import Path
 
 import pytest
 
 from sdlc.graph import from_yaml
 from sdlc.graph.store import GraphStore, GraphStoreCorrupt, default_root
+from tests.conftest import run_git
 
 FIXTURE = Path(__file__).parent / "fixtures" / "pre_code.graph.yaml"
 
@@ -92,3 +95,23 @@ def test_default_root_resolution(monkeypatch, tmp_path):
     monkeypatch.setenv("SDLC_ARTIFACT_ROOT", str(tmp_path / "runs"))
     assert default_root() == (tmp_path / "graphs").resolve()
     assert GraphStore().root.is_absolute()
+
+
+def test_the_unset_default_is_checkout_anchored_under_the_graph_store_namespace(
+    tmp_path, monkeypatch
+):
+    """Bug root-store-write, the ruled location shape (the sibling
+    regression files stay mechanism-neutral on it): with no env inputs the
+    root lives under the temp sdlc/graph_store namespace, digest-named for
+    the enclosing checkout -- so every CWD of one checkout resolves the
+    one root, computed here the same way for determinism on any machine."""
+    repo = tmp_path / "anchor-checkout"
+    alpha = repo / "alpha"
+    alpha.mkdir(parents=True)
+    run_git(["init", "-b", "main"], repo)
+    for name in ("SDLC_GRAPH_STORE", "SDLC_ARTIFACT_ROOT", "SDLC_EXPORT_ROOT"):
+        monkeypatch.delenv(name, raising=False)
+
+    monkeypatch.chdir(alpha)
+    digest = hashlib.sha256(str(repo.resolve()).encode()).hexdigest()[:16]
+    assert default_root() == Path(tempfile.gettempdir()) / "sdlc" / "graph_store" / digest
