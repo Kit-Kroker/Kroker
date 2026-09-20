@@ -82,6 +82,19 @@ def build_heatmap(
     acc: dict[tuple[str, str], dict[str, int]] = defaultdict(
         lambda: {"gate": 0, "fix": 0, "oracle": 0}
     )
+    # heatmap-fix-inflation (E77-OQ-1, ruled Direction A): a record's
+    # fix_attempts is the producer's RUNNING counter -- fixes made before
+    # this attempt (code/step.py:784) -- not an increment, so only a task's
+    # final record carries its true total. The fix axis therefore may not
+    # sum records: each (case_id, stage, run_id, task_id) group contributes
+    # its MAX (== n-1 for a task needing n attempts), and the cell sums the
+    # group maxima. run_id is load-bearing in that key: task ids are
+    # plan-scoped and repeat in every run of a case, so a task-id-only key
+    # would merge reruns' loops into one max and undercount (sc_rollup.py
+    # groups identically). Records with no task_id pass through per-record:
+    # no producer emits task_id=None with a nonzero counter, and
+    # per-record passthrough keeps pre-attribution records byte-stable.
+    fix_group_max: dict[tuple[str, str, str, str], int] = {}
     for r in records:
         if r.scope is BenchmarkScope.ORACLE_TASK:
             # task-level detail belongs in the task/error matrices (E-36
@@ -98,7 +111,14 @@ def build_heatmap(
                 acc[key]["oracle"] += 1
         elif r.outcome in REWORK_OUTCOMES:
             acc[key]["gate"] += 1
-        acc[key]["fix"] += r.fix_attempts
+        if r.task_id is not None:
+            group = (r.case_id, stage, r.run_id, r.task_id)
+            if r.fix_attempts > fix_group_max.get(group, 0):
+                fix_group_max[group] = r.fix_attempts
+        elif r.fix_attempts:
+            acc[key]["fix"] += r.fix_attempts
+    for (case, stage, _run_id, _task_id), group_max in fix_group_max.items():
+        acc[(case, stage)]["fix"] += group_max
 
     # E-77 R-12 / FR-017: the once-per-activation fix pass. One extra count
     # per distinct (run_id, activation_id) carrying fail_reentry == 1, on
