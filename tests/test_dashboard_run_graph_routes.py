@@ -180,6 +180,17 @@ def test_capabilities_stay_false():
     }
 
 
+def test_served_catalog_opens_the_run_graph_routes_to_the_http_provider(setup):
+    """Happy path of the reported symptom (bug canvas-run-mode, E75-OQ-1 (a)):
+    with the run-graph routes mounted, the catalog the http provider gates on
+    must declare run_graph and validate true -- today it serves the pre-flip
+    caps, so runGraph.ts's can('run_graph') keeps refusing the live routes
+    and canvas run mode only works on the mock provider."""
+    client, _, _ = setup
+    caps = client.get("/graphs/catalog").json()["capabilities"]
+    assert caps == {"validate": True, "save": True, "load": True, "run_graph": True}
+
+
 # ---------------------------------------------------------------------------
 # E-77 T036 (RED): registry drift, per-run pointers and retention (FR-021..FR-023).
 # A run pinned a graph containing 'ghost', a type the current registry no

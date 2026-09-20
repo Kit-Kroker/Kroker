@@ -95,6 +95,28 @@ def test_catalog_capabilities_are_all_false_until_later_epics():
     assert graph_wire.Capabilities.model_validate({"validate": True}).can_validate is True
 
 
+# --- canvas run-mode wiring (E75-OQ-1, bug canvas-run-mode) -- RED contracts --
+
+
+def test_catalog_capabilities_declare_canvas_run_mode_live():
+    """The reported symptom: canvas RUN MODE works only on the mock provider
+    because the served catalog declares run_graph/validate false, so the http
+    provider refuses the E-75 run-graph routes (runGraph gates on
+    can('run_graph')). E75-OQ-1 option (a) rules the flip: after the wiring
+    the catalog declares all four capabilities true."""
+    wire = graph_wire.catalog().model_dump(mode="json")["capabilities"]
+    assert wire == {"validate": True, "save": True, "load": True, "run_graph": True}
+
+
+def test_capability_defaults_flip_exactly_validate_and_run_graph():
+    """The ruled backend scope is the two booleans in this module's
+    Capabilities (can_validate, run_graph); save/load stay true exactly as
+    E-77 landed them (R-11)."""
+    caps = graph_wire.Capabilities()
+    assert (caps.can_validate, caps.run_graph) == (True, True)
+    assert (caps.save, caps.load) == (True, True)
+
+
 def test_catalog_serves_node_and_edge_schemas_with_embedded_defs():
     schemas = graph_wire.catalog().schemas
     assert set(schemas) == {"GraphNode", "GraphEdge"}

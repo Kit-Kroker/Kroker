@@ -45,6 +45,31 @@ def test_no_stray_recordings():
     assert on_disk - built == PROVISIONAL
 
 
+# --- canvas run-mode (E75-OQ-1, bug canvas-run-mode) -- RED contracts --------
+
+
+def test_committed_catalog_fixture_declares_run_mode_capabilities():
+    """The dashboard mock serves the committed catalog.json; canvas run mode
+    against it needs run_graph/validate declared true (the committed file
+    still serves the pre-flip caps). Regenerate with
+    `python scripts/dump_graph_fixtures.py` after the flip -- never hand-edit."""
+    caps = json.loads((dump.OUT / "catalog.json").read_text(encoding="utf-8"))["capabilities"]
+    assert caps == {"validate": True, "save": True, "load": True, "run_graph": True}
+
+
+def test_the_provisional_run_fixtures_are_swapped_for_the_recorded_contract():
+    """E-75 design §7.4 (F10): the Python-recorded fixtures are the FINAL
+    contract the TS mirror catches up to; the mock's hand-written
+    *.provisional.json data is swapped out, leaving the fixtures dir exactly
+    the fresh build -- no provisional strays remain."""
+    on_disk = {p.relative_to(dump.OUT).as_posix() for p in dump.OUT.rglob("*.json")}
+    strays = on_disk - set(dump.build())
+    assert strays == set(), (
+        f"canvas run-mode swap incomplete: {sorted(strays)} must go -- the recorded "
+        "fixtures replace the provisional mock data (E-75 design 7.4, E75-OQ-1 (a))"
+    )
+
+
 def test_scenarios_cover_both_parse_outcomes():
     built = dump.build()
     outcomes = {
