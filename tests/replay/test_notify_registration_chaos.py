@@ -170,11 +170,20 @@ def _registered_map(name: str) -> dict[str, Any]:
 def test_no_bundle_registers_a_name_twice(name):
     """The same activity name twice in one bundle is a Worker-construction
     error -- the fix could introduce it by adding the notify fake in two
-    places (e.g. inside fake_agent_activities AND the bundle). (qa-chaos
-    landing-green guard, adopted at consolidation.)"""
-    names = list(_registered_map(name))
+    places (e.g. inside fake_agent_activities AND the bundle). Names are
+    collected from the RAW bundle into a LIST: a dict would deduplicate
+    registrations on insert and this row could never fail. (qa-chaos
+    landing-green guard, adopted at consolidation; list shape restored at
+    reviewer finding.)"""
+    names = [
+        defn.name
+        for fn in _BY_NAME[name].activities()
+        if (defn := getattr(fn, "__temporal_activity_definition", None)) is not None
+    ]
     dupes = sorted({n for n in names if names.count(n) > 1})
-    assert not dupes, f"{name}: bundle registers {dupes} more than once"
+    assert len(names) == len(set(names)) and not dupes, (
+        f"{name}: bundle registers {dupes} more than once"
+    )
 
 
 @pytest.mark.parametrize("name", [s.name for s in SCENARIOS])

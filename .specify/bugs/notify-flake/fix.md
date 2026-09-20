@@ -49,9 +49,13 @@ async def fake_plan_research(inp: PlanInput) -> ResearchPlan:
   deadline=None/project=None boundaries, purity row (never the production
   transport), no-drop guard, duplicate-name guard, golden file-set +
   per-file notify-count freeze (34 schedulings).
-- RED→GREEN evidence: 29 RED / 15 green at base (pre-fix, verified in this
-  worktree, `.workspace/tmp/nf-wt-red-pre-fix.txt`) → 77/77 green after
-  a8f9ac6 (`.workspace/tmp/nf-wt-green-contract.txt`).
+- RED→GREEN evidence: the pre-fix state of the CURRENT 77-item file is
+  29 RED / 48 green (verified in this worktree at base; the pre-fix run
+  log `.workspace/tmp/nf-wt-red-pre-fix.txt` is a COMBINED run — its 53
+  FAILED lines are 29 from this file + 24 from qa-happy's then-separate
+  `test_activity_registration.py`, the pre-consolidation 44-item state of
+  which was 29 RED / 15 green) → 77/77 green after a8f9ac6
+  (`.workspace/tmp/nf-wt-green-contract.txt`).
 
 ## Local Verification
 
