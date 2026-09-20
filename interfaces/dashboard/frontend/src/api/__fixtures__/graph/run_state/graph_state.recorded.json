@@ -8,84 +8,96 @@
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "analyze"
       },
       "architect": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": 1.87
+        "cost_usd": 1.87,
+        "canonical_stage": "architecture"
       },
       "architecture": {
         "status": "blocked",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "architecture"
       },
       "clarify": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": 0.31
+        "cost_usd": 0.31,
+        "canonical_stage": "clarify"
       },
       "code": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "code"
       },
       "context": {
         "status": "skipped",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "context"
       },
       "deploy": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "deploy"
       },
       "intake": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "intake"
       },
       "merge": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "quality_gate"
       },
       "plan": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       },
       "plan_check": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       },
       "planner": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       }
     },
     "edges": [],
@@ -114,84 +126,96 @@
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "analyze"
       },
       "architect": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": 0.0
+        "cost_usd": 0.0,
+        "canonical_stage": "architecture"
       },
       "architecture": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "architecture"
       },
       "clarify": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": 0.0
+        "cost_usd": 0.0,
+        "canonical_stage": "clarify"
       },
       "code": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "code"
       },
       "context": {
         "status": "skipped",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "context"
       },
       "deploy": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "deploy"
       },
       "intake": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "intake"
       },
       "merge": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "quality_gate"
       },
       "plan": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       },
       "plan_check": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       },
       "planner": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": 0.0
+        "cost_usd": 0.0,
+        "canonical_stage": "planning"
       }
     },
     "edges": [],
@@ -212,84 +236,96 @@
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "analyze"
       },
       "architect": {
         "status": "done",
         "round": 3,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "architecture"
       },
       "architecture": {
         "status": "failed",
         "round": 3,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "architecture"
       },
       "clarify": {
         "status": "done",
         "round": 1,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "clarify"
       },
       "code": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "code"
       },
       "context": {
         "status": "skipped",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "context"
       },
       "deploy": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "deploy"
       },
       "intake": {
         "status": "done",
         "round": 1,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "intake"
       },
       "merge": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "quality_gate"
       },
       "plan": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       },
       "plan_check": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       },
       "planner": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       }
     },
     "edges": [
@@ -320,84 +356,96 @@
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "analyze"
       },
       "architect": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": 1.87
+        "cost_usd": 1.87,
+        "canonical_stage": "architecture"
       },
       "architecture": {
         "status": "cancelled",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "architecture"
       },
       "clarify": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": 0.31
+        "cost_usd": 0.31,
+        "canonical_stage": "clarify"
       },
       "code": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "code"
       },
       "context": {
         "status": "skipped",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "context"
       },
       "deploy": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "deploy"
       },
       "intake": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "intake"
       },
       "merge": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "quality_gate"
       },
       "plan": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       },
       "plan_check": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       },
       "planner": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       }
     },
     "edges": [],
@@ -418,84 +466,96 @@
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "analyze"
       },
       "architect": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "architecture"
       },
       "architecture": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "architecture"
       },
       "clarify": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "clarify"
       },
       "code": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "code"
       },
       "context": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "context"
       },
       "deploy": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "deploy"
       },
       "intake": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "intake"
       },
       "merge": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "quality_gate"
       },
       "plan": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       },
       "plan_check": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       },
       "planner": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       }
     },
     "edges": [],
@@ -516,84 +576,96 @@
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "analyze"
       },
       "architect": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": 1.87
+        "cost_usd": 1.87,
+        "canonical_stage": "architecture"
       },
       "architecture": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "architecture"
       },
       "clarify": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": 0.31
+        "cost_usd": 0.31,
+        "canonical_stage": "clarify"
       },
       "code": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "code"
       },
       "context": {
         "status": "skipped",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "context"
       },
       "deploy": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "deploy"
       },
       "intake": {
         "status": "done",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "intake"
       },
       "merge": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "quality_gate"
       },
       "plan": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       },
       "plan_check": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       },
       "planner": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       }
     },
     "edges": [],
@@ -614,84 +686,96 @@
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "analyze"
       },
       "architect": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "architecture"
       },
       "architecture": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "architecture"
       },
       "clarify": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "clarify"
       },
       "code": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "code"
       },
       "context": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "context"
       },
       "deploy": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "deploy"
       },
       "intake": {
         "status": "failed",
         "round": 1,
         "started_at": "2026-09-17T09:00:00+00:00",
         "ended_at": "2026-09-17T09:00:00+00:00",
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "intake"
       },
       "merge": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "quality_gate"
       },
       "plan": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       },
       "plan_check": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       },
       "planner": {
         "status": "idle",
         "round": 0,
         "started_at": null,
         "ended_at": null,
-        "cost_usd": null
+        "cost_usd": null,
+        "canonical_stage": "planning"
       }
     },
     "edges": [],

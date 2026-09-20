@@ -1559,8 +1559,8 @@
   },
   "capabilities": {
     "validate": false,
-    "save": false,
-    "load": false,
+    "save": true,
+    "load": true,
     "run_graph": false
   },
   "max_graph_bytes": 262144
