@@ -32,6 +32,7 @@ from sdlc.core.models import (
 )
 from sdlc.gate import CheckClass, CheckResult, build_check
 from sdlc.harness.models import HarnessRunResult
+from sdlc.notify.contract import NotifyInput, Results
 from sdlc.observability.activities import export_run_artifacts
 from sdlc.pricing import PriceUsageInput
 from sdlc.pricing import price_usage as real_price_usage
@@ -41,6 +42,8 @@ from sdlc.stages.code.activities import CodingTaskInput
 from sdlc.stages.context.activities import DeltaCheckInput, RepoProbeInput
 from sdlc.stages.merge.activities import evaluate_gate
 from sdlc.stages.plan.models import DevTask, ImplementationPlan
+from sdlc.stages.research.models import ResearchPlan
+from sdlc.stages.research.stage import PlanInput
 from sdlc.stages.research.verify import verify_brief_activity
 from sdlc.workflows.models import SeededWork
 from tests.fakes.canned import (
@@ -102,6 +105,33 @@ A, R, V = GateOutcome.APPROVE, GateOutcome.REJECT, GateOutcome.REVISE
 @activity.defn(name="price_usage")
 async def fixed_price(inp: PriceUsageInput) -> float | None:
     return 1.0  # every metered proposer call costs exactly $1 (tests/test_budget_gate.py)
+
+
+@activity.defn(name="notify")
+async def fake_notify(inp: NotifyInput) -> Results:
+    """No-op delivery (bug notify-flake). GateHost._gate notifies through the
+    production `notify` activity (NOTIFY_ACT), so every golden whose workflow
+    opens a gate schedules `activity:notify`; the harness must REGISTER that
+    type -- an unregistered pending activity task races the next workflow
+    task and hard-fails it ("Activity function notify not registered"), the
+    full-file flake. The harness never delivers anything, and the success
+    path iterates `out.results` OUTSIDE _notify's try/except (gates.py), so
+    the fake returns the real contract shape with zero deliveries."""
+    return Results()
+
+
+@activity.defn(name="plan_research")
+async def fake_plan_research(inp: PlanInput) -> ResearchPlan:
+    """Empty decomposition (bug notify-flake). research_greenfield's golden
+    memorializes the DEGRADED research path: plan_research scheduled once,
+    and no research_subquestion / synthesize_brief after it -- the
+    unregistered expiry used to fail the fan-out into
+    _degraded_research_brief (caught at stages/research/step.py). The same
+    exception is caught today, so registration may not CHANGE the run: an
+    empty plan lands in that same all-findings-failed degrade branch
+    deterministically and schedules nothing extra, keeping the command
+    projection byte-identical."""
+    return ResearchPlan()
 
 
 @activity.defn(name="assessment_resolve_tree")
@@ -245,6 +275,7 @@ def _base_activities(specs: list = AGENT_SPECS) -> list:
     return [
         evaluate_gate,
         export_run_artifacts,
+        fake_notify,
         *GIT_FAKES,
         *DEPLOY_FAKES,
         *fake_agent_activities(specs),
@@ -337,6 +368,7 @@ def _budget_activities() -> list:
     return [
         evaluate_gate,
         export_run_artifacts,
+        fake_notify,
         fixed_price,
         *fakes,
         *DEPLOY_FAKES,
@@ -398,6 +430,7 @@ SCENARIOS: tuple[Scenario, ...] = (
         lambda: [
             evaluate_gate,
             export_run_artifacts,
+            fake_notify,
             fake_resolve_tree,
             *SCAN_FAKES,
             *GIT_FAKES,
@@ -447,6 +480,7 @@ SCENARIOS: tuple[Scenario, ...] = (
         lambda: [
             evaluate_gate,
             export_run_artifacts,
+            fake_notify,
             *GIT_FAKES,
             *fake_agent_activities(AGENT_SPECS),
         ],
@@ -468,6 +502,7 @@ SCENARIOS: tuple[Scenario, ...] = (
         lambda: [
             evaluate_gate,
             export_run_artifacts,
+            fake_notify,
             *git_fakes_except("run_coding_task", "attach_task_evidence"),
             _staggered_coding_task(),
             _t1_gated_evidence(),
@@ -484,6 +519,7 @@ SCENARIOS: tuple[Scenario, ...] = (
         lambda: [
             evaluate_gate,
             export_run_artifacts,
+            fake_notify,
             *GIT_FAKES,
             *DEPLOY_FAKES,
             *fake_agent_activities(
@@ -520,6 +556,8 @@ SCENARIOS: tuple[Scenario, ...] = (
             evaluate_gate,
             verify_brief_activity,
             export_run_artifacts,
+            fake_notify,
+            fake_plan_research,
             *GIT_FAKES,
             *DEPLOY_FAKES,
             *_research_fake_activities(),
@@ -551,6 +589,7 @@ SCENARIOS: tuple[Scenario, ...] = (
         lambda: [
             evaluate_gate,
             export_run_artifacts,
+            fake_notify,
             *git_fakes_except("run_coding_task"),
             blocking_coding_task,
             *fake_agent_activities(AGENT_SPECS),
@@ -574,6 +613,7 @@ SCENARIOS: tuple[Scenario, ...] = (
         lambda: [
             evaluate_gate,
             export_run_artifacts,
+            fake_notify,
             *GIT_FAKES,
             *fake_agent_activities(AGENT_SPECS),
         ],
