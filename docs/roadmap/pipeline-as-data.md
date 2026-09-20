@@ -116,7 +116,7 @@ not None` checks collapse into *is there a node*.
   on the two Running queries of spec §8.5. Rollback is roll-forward only.
 - [x] **E-75 — graph queries on the dashboard backend** → FR-1204. `GraphWorkflow` exposes a `graph_view` query (router state + per-activation timing, attributed cost and pendings, recorded in memory with no new commands); the dashboard serves `GET /runs/{id}/graph` (the pinned start input, read from history), `GET /runs/{id}/graph_state` and `POST /graphs/validate` (`executable()` problems as `not_executable`), and `RunState.stage_marks` renders `skipped` stages for graph runs. Graphs are stored content-addressed as `graphs/<sha>.yaml` (`sdlc/graph/store.py`), written at client start and backfilled on first read; no graph database.
 
-  **Landed** (spec `docs/superpowers/specs/2026-09-17-graph-queries-design.md`, plan `docs/superpowers/plans/2026-09-17-graph-queries.md`). Backend-only: catalog capabilities stay `false`. **Follow-ups:** canvas run-mode wiring (flip `run_graph`/`validate`, amend `graph-types.ts` and fixtures, map `stage_marks` in `http.ts`); crew-child escalation attribution (E75-OQ-2); closed-run `run_summary` replay per fleet tick (E75-OQ-3); pricing harness/crew spend (E75-OQ-4). Durable `graph_sha` per run stays E-77.
+  **Landed** (spec `docs/superpowers/specs/2026-09-17-graph-queries-design.md`, plan `docs/superpowers/plans/2026-09-17-graph-queries.md`). Backend-only at landing: catalog capabilities stayed `false` until the canvas run-mode wiring — **delivered 2026-09-20**, same-day bug flow `canvas-run-mode` (branch `fix/canvas-run-mode`, E75-OQ-1 (a)): `run_graph`/`validate` flipped, `graph-types.ts` + fixtures amended to the FINAL §7.4 wire, `stage_marks` mapped in `http.ts`. **Follow-ups:** crew-child escalation attribution (E75-OQ-2); closed-run `run_summary` replay per fleet tick (E75-OQ-3); pricing harness/crew spend (E75-OQ-4). Durable `graph_sha` per run stays E-77.
 - [x] **E-76 — canvas** → FR-1205. `@vue-flow/core` (React Flow's Vue port, what
   n8n itself uses; fits the existing Vue 3 + Pinia + Vite stack) plus `dagre` for
   auto-layout of YAML-authored graphs. **One renderer, two modes**: `runState`
@@ -154,10 +154,18 @@ not None` checks collapse into *is there a node*.
   unregistered node types contribute `unknown` stage marks and record stages —
   never silently dropped. The store keeps immutable layouts (one file per layout
   identity) under an editor-only `latest`; `POST /graphs` / `GET /graphs/{sha}`
-  serve with `save`/`load` capabilities `true` (`run_graph` stays as on main).
+  serve with all four capabilities `true` (`validate`/`run_graph` flipped by
+  the canvas run-mode wiring below).
   **Follow-ups:** canvas run mode / fleet-strip consumption of
   `canonical_stage` and `unknown` marks + the TS mirror (E-76 family,
-  E75-OQ-1); the fail-edge fix axis derives from topology but records absent —
+  E75-OQ-1) — **delivered 2026-09-20**, same-day bug flow `canvas-run-mode`
+  (branch `fix/canvas-run-mode`): capabilities flipped, `graph-types.ts`
+  mirrored to the FINAL §7.4 wire (incl. `canonical_stage` and the
+  `unavailable` degradation), the fleet strip renders served
+  `stage_marks`/`closed_marks` verbatim with the linear fallback intact
+  (a non-canonical `unknown` key renders nothing), and the mock serves the
+  recorded `run_state/*` fixtures; the fail-edge fix axis derives from
+  topology but records absent —
   never zero — on every graph buildable today, waiting on graph-expressed fix
   loops (E74-OQ-3); the heatmap's pre-existing `attempt − 1` inflation (a task
   needing n attempts reports n(n−1)/2 fix attempts rather than n−1, E77-OQ-1)

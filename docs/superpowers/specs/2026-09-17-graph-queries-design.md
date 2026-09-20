@@ -49,6 +49,8 @@ any canvas/fleet frontend change are the named canvas follow-up (§11, E75-OQ-1)
 
 **Erratum (2026-09-20, E-77):** the save/load row above has landed — `POST /graphs` / `GET /graphs/{sha}` serve and capabilities `save`/`load` are `true` (spec `.specify/specs/001-canonical-stage-graph-sha/spec.md`).
 
+**Erratum (2026-09-20, canvas run-mode wiring):** the "run mode wiring, capability flips, TS mirror" row has landed (bug flow `canvas-run-mode`, branch `fix/canvas-run-mode`) — `validate`/`run_graph` are `true`, `graph-types.ts` mirrors §7.4's FINAL shapes (plus E-77's `canonical_stage` and the `unavailable` member), the mock consumes the recorded `run_state/*` fixtures, and `http.ts` maps `stage_marks`/`closed_marks` for the fleet strip.
+
 ## 2. Rulings and decisions
 
 ### 2.1 Orchestrator rulings (pre-resolved, binding)
@@ -374,6 +376,11 @@ FR-1204; ARCHITECTURE component list gains the run view, store and routes;
   provisional fixtures atomically, and maps `stage_marks` in `http.ts` for the
   fleet strip. Until it lands, E76-OQ-3's `skipped` rendering is served but not
   shown. Rejected: (b) E-75 also doing that frontend work.
+  **Landed (2026-09-20):** bug flow `canvas-run-mode` (branch
+  `fix/canvas-run-mode`) implemented option (a) as ruled — the flip, the TS
+  mirror catch-up (§7.4 plus E-77's `canonical_stage`/`unavailable`), the
+  provisional-fixture swap and the fleet-strip mapping; E76-OQ-3's
+  served-but-not-shown gap is closed.
 - **E75-OQ-2 — crew-child escalations. Accepted deferral.** A code node whose
   task escalation is pending inside a crew child shows `running`, not
   `blocked`; querying the child per poll is a follow-up.

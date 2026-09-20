@@ -105,7 +105,7 @@ A graph author (via the API today; the canvas once its follow-up wires it) saves
 1. **Given** a schema-valid graph within the size cap, **When** it is saved, **Then** the response carries its `graph_sha` and the validator's result (a draft that fails legality is still saveable; legality comes only from the single validator).
 2. **Given** a stored sha, **When** it is loaded, **Then** the graph is returned; **Given** an unknown or malformed sha, **Then** the response is "not found" / rejected, never a server error.
 3. **Given** an input that is not schema-valid or exceeds the size cap, **When** it is saved, **Then** it is rejected and nothing is written.
-4. **Given** the catalog, **When** it is read, **Then** `save` and `load` are true; `run_graph` stays as on main (canvas run-mode follow-up).
+4. **Given** the catalog, **When** it is read, **Then** `save` and `load` are true; `validate` and `run_graph` are true as well (flipped by the canvas run-mode wiring, E75-OQ-1, 2026-09-20).
 5. **Given** two saves of the same graph with different layouts, **When** the editor loads that sha, **Then** it receives the most recently saved layout; **and** every run keeps rendering the layout it started with (US5).
 6. **Given** a dashboard history backfill or a run start storing a graph, **When** it writes, **Then** the editor's "latest" layout is never moved — only an explicit save moves it.
 

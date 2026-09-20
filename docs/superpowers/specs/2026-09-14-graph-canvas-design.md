@@ -237,7 +237,7 @@ type LoadWire = { ok: true; sha: string; graph: GraphWire } | { ok: false; reaso
 
 ### 5.7 Run graph and run state (PROVISIONAL, E-75 on E-74)
 
-> **Superseded by E-75** (`2026-09-17-graph-queries-design.md` §7.4): `terminal` is replaced by `outcome`, `NodeRunState.status` adds `skipped`/`cancelled`, `PendingRef.node` is nullable. The TS mirror follows in the canvas run-mode follow-up.
+> **Superseded by E-75** (`2026-09-17-graph-queries-design.md` §7.4): `terminal` is replaced by `outcome`, `NodeRunState.status` adds `skipped`/`cancelled`, `PendingRef.node` is nullable. The TS mirror caught up with the canvas run-mode wiring (landed 2026-09-20, bug flow `canvas-run-mode`).
 
 `GET /runs/{run_id}/graph`, `GET /runs/{run_id}/graph_state`:
 
