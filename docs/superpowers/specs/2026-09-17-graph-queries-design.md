@@ -47,6 +47,8 @@ any canvas/fleet frontend change are the named canvas follow-up (§11, E75-OQ-1)
 | save/load routes (`POST /graphs`, `GET /graphs/{sha}`), capabilities `save`/`load` | E-77 (store already exists) |
 | run mode wiring, capability flips, TS mirror | canvas follow-up (E-76 family) |
 
+**Erratum (2026-09-20, E-77):** the save/load row above has landed — `POST /graphs` / `GET /graphs/{sha}` serve and capabilities `save`/`load` are `true` (spec `.specify/specs/001-canonical-stage-graph-sha/spec.md`).
+
 ## 2. Rulings and decisions
 
 ### 2.1 Orchestrator rulings (pre-resolved, binding)

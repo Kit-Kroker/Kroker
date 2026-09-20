@@ -393,12 +393,12 @@ as tracked rather than accidental.
 
 ### Pipeline as data (FR-1200) *(new scope; PRD v1.2 2026-09-12)*
 
-- [ ] ⚠️ **FR-1201** typed `PipelineGraph` + node-type registry; nodes carry `RoleConfig`/`GateConfig` verbatim; ports typed by existing model name; `content_sha()` excludes canvas cosmetics (E-72). Partial: E-72 landed the schema, `content_sha()`, YAML io and the seed registry with the `ports_compatible` rule, and E-73's `validate.py` rejects incompatible edges; E-74 projects `node.role` into the run config (a run-level override wins).
+- [x] **FR-1201** typed `PipelineGraph` + node-type registry; nodes carry `RoleConfig`/`GateConfig` verbatim; ports typed by existing model name; `content_sha()` excludes canvas cosmetics (E-72). Landed: E-72 landed the schema, `content_sha()`, YAML io and the seed registry with the `ports_compatible` rule, and E-73's `validate.py` rejects incompatible edges; E-74 projects `node.role` into the run config (a run-level override wins); E-77 completes the registry's stage mapping — every shipped type's `canonical_stage` is self-checked, and unmapped or unregistered types resolve visibly to `unknown`.
 - [ ] ⚠️ **FR-1202** pure `GraphRouter` + single-source `validate.py` — branching, round-based stale-input invalidation, per-edge `max_traversals` → ESCALATED; legality never reimplemented in the frontend (E-73). Partial: E-73 landed `sdlc/graph/topology.py`, `validate.py` and `router.py`; the interpreter (E-74), API (E-75) and canvas (E-76) are the consumers that must call them.
 - [x] **FR-1203** `GraphWorkflow` replaces `_pipeline` big-bang; `default.graph.yaml` reproduces today's stage sequence; graph pinned as workflow input for the run's lifetime. Cutover by **grace-retention** — OQ-10 resolved 2026-09-12 (E-74). Landed: GraphWorkflow serves every new run; FeatureWorkflow retained for in-flight runs until the §8.5 deletion follow-up.
 - [x] **FR-1204** dashboard graph queries beside the existing run queries — `graph_view` query, `/runs/{id}/graph`, `/runs/{id}/graph_state`, `/graphs/validate`; content-addressed `graphs/<sha>.yaml`, no graph DB (E-75, landed backend-only; canvas wiring is a follow-up).
 - [ ] ⚠️ **FR-1205** canvas — one renderer, run mode + edit mode; editing a running graph disabled by design; validation via FR-1202 (E-76 landed: canvas, edit mode, pure graph routes; live run state is served by E-75 and awaits the canvas run-mode follow-up, validation on E-73).
-- [ ] **FR-1206** `canonical_stage` on every node type + `graph_sha` per run; unmapped types record `unknown` (E-77).
+- [x] **FR-1206** `canonical_stage` on every node type + `graph_sha` per run; unmapped types record `unknown` (E-77). Landed: `graph_sha` on run summary, live state, benchmark records and a per-run pointer; unmapped types mark `unknown`, never dropped; the fail-edge fix axis is derived but absent until graph-expressed fix loops (E74-OQ-3).
 
 ### Component library (FR-1400)
 

@@ -139,11 +139,29 @@ not None` checks collapse into *is there a node*.
   live run data arrives with E-75, validation with E-73, save/load with E-77
   (all gated by server-declared capabilities). Open questions E76-OQ-1…5 live
   in the spec §12.
-- [ ] **E-77 — graph store + custom-graph benchmark mapping** → FR-1206. Runs
+- [x] **E-77 — graph store + custom-graph benchmark mapping** → FR-1206. Runs
   record their `graph_sha`, so a post-mortem always renders the graph that
   *actually ran* rather than what the graph looks like now. Benchmark records
   derive `fix_attempts` from inbound-fail-edge traversal counts and `round` from
   the router, keeping the §9 measurement axes intact across hand-authored graphs.
+
+  **Landed** (spec `.specify/specs/001-canonical-stage-graph-sha/spec.md`):
+  every graph run records its `graph_sha` — run summary, live state, benchmark
+  records (benchmark-arm and oracle records included) and a per-run pointer
+  written at client start naming the run's layout, registry snapshot and roles,
+  so a post-mortem survives history retention and registry drift (a drifted
+  graph degrades to `unknown` nodes, never a server error). Unmapped or
+  unregistered node types contribute `unknown` stage marks and record stages —
+  never silently dropped. The store keeps immutable layouts (one file per layout
+  identity) under an editor-only `latest`; `POST /graphs` / `GET /graphs/{sha}`
+  serve with `save`/`load` capabilities `true` (`run_graph` stays as on main).
+  **Follow-ups:** canvas run mode / fleet-strip consumption of
+  `canonical_stage` and `unknown` marks + the TS mirror (E-76 family,
+  E75-OQ-1); the fail-edge fix axis derives from topology but records absent —
+  never zero — on every graph buildable today, waiting on graph-expressed fix
+  loops (E74-OQ-3); the heatmap's pre-existing `attempt − 1` inflation (a task
+  needing n attempts reports n(n−1)/2 fix attempts rather than n−1, E77-OQ-1)
+  is recorded as a follow-up for the benchmark owner.
 
 **External input (2026-09-11).** A third-party platform analysis (register §H,
 verbatim at `docs/reports/2026-09-11-external-platform-analysis.md`)

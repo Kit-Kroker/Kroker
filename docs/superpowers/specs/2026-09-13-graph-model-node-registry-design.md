@@ -442,3 +442,7 @@ and `scripts/check_file_size.py`.
 - **§6.1 registry fields:** `NodePort.terminal: Literal["rejected","failed"] | None` (out-ports only) and `NodeTypeSpec.budget_after: Literal["none","continuing","exiting"]` are added; gate rule 6 additionally requires `reject.terminal == "rejected"`.
 - **§6.2/§6.4 catalog:** `PAYLOAD_TYPES` gains `NodeFailure`, `BuildResult`, `AnalyzeResult`, `PullRequest`. Every stage type gains `fail: NodeFailure` (terminal failed); `intake` gains `brownfield` and a terminal `reject`; `context` gains a terminal `reject`; `research.trigger` becomes optional and `research` gains an ordering-only optional `codebase_map: CodebaseMap` and a terminal `reject`. The post-plan types are catalogued by E-74 §6 (E72-OQ-3 closed). E72-OQ-4 closed by `fail`/`NodeFailure`.
 - **§6.3:** `_resolve_payload` reports any import-time exception as a problem string (boot-safe).
+
+**Erratum (2026-09-20, E-77 — spec `.specify/specs/001-canonical-stage-graph-sha/spec.md`):**
+- **§10 E72-OQ-7 resolved:** the store was verified first-write-wins, not last-write-wins; E-77 keeps the identity file immutable and adds content-addressed layout files (one per layout identity), a per-run layout pin at client start and an editor-only `latest` — a save can never re-pin a run.
+- **§10 E72-OQ-8 resolved:** the store keeps an immutable registry snapshot (one per version) named by the per-run pointer with the run's roles; a drifted graph degrades on read to `unknown` nodes and an explicit `registry_drift` state — never a server error.
