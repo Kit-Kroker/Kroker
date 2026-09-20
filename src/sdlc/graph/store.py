@@ -14,6 +14,13 @@ registry snapshots under `registry/`, and per-run pointers under `runs/`.
 `latest` (E-77 US5) and the pointer are the only mutable files, both via
 tmp + os.replace with a bounded Windows retry.
 
+Roots are CWD-independent (bug root-store-write): a relative env input or
+an explicit relative `root=` is refused (ValueError) instead of anchoring
+at wherever the process happened to start; the default root anchors to the
+enclosing checkout and materializes under the temp
+`sdlc/graph_store/<digest>/` namespace -- one checkout resolves one root
+from every CWD, and two checkouts never share a store.
+
 Module-level imports stay within stdlib, sdlc.graph and sdlc.core.models
 (RoleConfig, for pointer roles) -- pinned by tests/graph/test_graph_purity.py.
 """
@@ -25,6 +32,7 @@ import json
 import logging
 import os
 import re
+import tempfile
 import time
 import uuid
 from collections.abc import Mapping
@@ -51,14 +59,56 @@ class GraphStoreCorrupt(RuntimeError):
     """A stored file does not hash to its name, or to_yaml is not faithful."""
 
 
+def _absolute_env(name: str) -> Path:
+    """An env-supplied root must be absolute (bug root-store-write): a
+    relative value -- including the Windows drive-relative shapes
+    (`D:x`, `\\graphs`) that Path.resolve() quietly anchors -- is refused
+    with a ValueError naming the variable, before any file is touched."""
+    value = os.environ[name]
+    if not Path(value).is_absolute():
+        raise ValueError(
+            f"{name} must be an absolute path, got {value!r}: "
+            "relative store roots anchor at the process CWD and are refused"
+        )
+    return Path(value).resolve()
+
+
+def _checkout_anchor() -> Path:
+    """The enclosing checkout: nearest ancestor of the CWD holding `.git`
+    (a directory for a clone, a FILE for a linked worktree -- the
+    working-tree path is the identity, never the shared gitdir). Outside
+    any repo, the resolved CWD itself. Stdlib-local twin of memoization/
+    cache.py's _checkout_root: store.py's imports are purity-pinned
+    (tests/graph/test_graph_purity.py)."""
+    cwd = Path.cwd().resolve()
+    for candidate in (cwd, *cwd.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return cwd
+
+
+def _anchored_root() -> Path:
+    """The default store root, keyed on the checkout (not the CWD): under
+    the temp sdlc/graph_store namespace, digest-named so every CWD of one
+    checkout resolves the SAME root while two checkouts never share one."""
+    digest = hashlib.sha256(str(_checkout_anchor()).encode()).hexdigest()[:16]
+    return Path(tempfile.gettempdir()) / "sdlc" / "graph_store" / digest
+
+
 def default_root() -> Path:
-    """SDLC_GRAPH_STORE, else a `graphs` sibling of the run artifact root --
-    outside per-run directories, so pruning a run never deletes a graph."""
-    explicit = os.environ.get("SDLC_GRAPH_STORE")
-    if explicit:
-        return Path(explicit).resolve()
-    runs = os.environ.get("SDLC_ARTIFACT_ROOT") or os.environ.get("SDLC_EXPORT_ROOT") or "./runs"
-    return (Path(runs).resolve().parent / "graphs").resolve()
+    """The store root, CWD-independent (bug root-store-write): an absolute
+    SDLC_GRAPH_STORE verbatim; an absolute SDLC_ARTIFACT_ROOT or
+    SDLC_EXPORT_ROOT yields its `graphs` sibling -- outside per-run
+    directories, so pruning a run never deletes a graph; any relative
+    value is refused (ValueError naming the variable). Default: anchored
+    to the enclosing checkout under the temp graph_store namespace."""
+    if os.environ.get("SDLC_GRAPH_STORE"):
+        return _absolute_env("SDLC_GRAPH_STORE")
+    if os.environ.get("SDLC_ARTIFACT_ROOT"):
+        return (_absolute_env("SDLC_ARTIFACT_ROOT").parent / "graphs").resolve()
+    if os.environ.get("SDLC_EXPORT_ROOT"):
+        return (_absolute_env("SDLC_EXPORT_ROOT").parent / "graphs").resolve()
+    return _anchored_root()
 
 
 # The parsed registry-snapshot document: {"schema": 1, "node_types": [...]}.
@@ -189,7 +239,15 @@ class RunGraphPointer:
 
 class GraphStore:
     def __init__(self, root: str | os.PathLike | None = None) -> None:
-        self.root = Path(root).resolve() if root is not None else default_root()
+        if root is None:
+            self.root = default_root()
+        elif not Path(root).is_absolute():
+            raise ValueError(
+                f"graph store root must be absolute, got {str(root)!r}: "
+                "relative roots anchor at the process CWD and are refused"
+            )
+        else:
+            self.root = Path(root).resolve()
         _log.debug("graph store root: %s", self.root)
 
     def _path(self, sha: str) -> Path:
