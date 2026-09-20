@@ -23,7 +23,11 @@ os.environ.setdefault("ANTHROPIC_API_KEY", "test-dummy")
 os.environ.setdefault("OPENAI_API_KEY", "test-dummy")
 os.environ.setdefault("EXA_API_KEY", "test-dummy")
 # E-75: start sites write graphs/<sha>.yaml; keep test runs out of the checkout.
-os.environ.setdefault("SDLC_GRAPH_STORE", str(Path(tempfile.gettempdir()) / "sdlc-test-graphs"))
+# Hardened (bug root-store-write): bare setdefault let a pre-exported
+# RELATIVE value through, re-creating the CWD-anchored litter the fix
+# refuses -- pin an absolute store whatever the shell exported.
+if not Path(os.environ.get("SDLC_GRAPH_STORE", "")).is_absolute():
+    os.environ["SDLC_GRAPH_STORE"] = str(Path(tempfile.gettempdir()) / "sdlc-test-graphs")
 
 
 def _pid_alive(pid: int) -> bool:

@@ -15,6 +15,7 @@ These are persisted formats read across process and code versions. The field tab
 
 ## Store files
 
+- Root anchoring (bug root-store-write): the store root is CWD-independent. `SDLC_GRAPH_STORE` — and the `SDLC_ARTIFACT_ROOT`/`SDLC_EXPORT_ROOT` `graphs`-sibling derivation — accept only absolute values; a relative value, including the Windows drive-relative shapes (`D:x`, `\graphs`), raises `ValueError` naming the variable before any file is touched, and an explicit relative `root=` is refused the same way. The default anchors to the enclosing checkout (`.git` directory or file; the working-tree path is the identity) and materializes under `<tempdir>/sdlc/graph_store/<sha256(anchor)[:16]>/`; outside any repo the anchor is the resolved CWD. One checkout resolves one root from every CWD; two checkouts never share a store.
 - Every immutable file is content-addressed and trusted only after verification (parse, then hash == name, and for layouts `content_sha ==` the directory's sha).
 - `latest` and the per-run pointer are the only mutable files. Both are written tmp + `os.replace`; a reader that sees a torn or dangling value falls back and never raises.
 - `latest` has bounded retry on Windows sharing violations (`PermissionError`/`FileExistsError`: 5 attempts, backoff to about 100 ms); a final failure is logged and the saver still gets 200.
