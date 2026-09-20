@@ -13,8 +13,10 @@ afterEach(() => { vi.restoreAllMocks() })
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
 describe('mock graph: a recording, never a simulator', () => {
-  it('overrides the recorded all-false capabilities so every flow is exercisable', async () => {
-    expect(catalogJson.capabilities).toEqual({ validate: false, save: false, load: false, run_graph: false })
+  it('overrides the recorded capabilities so every flow is exercisable', async () => {
+    // E-77 (FR-026): the recording now declares save/load true (validate and
+    // run_graph stay false for the canvas follow-up).
+    expect(catalogJson.capabilities).toEqual({ validate: false, save: true, load: true, run_graph: false })
     const catalog = await createMockGraph().getCatalog()
     expect(catalog.capabilities).toEqual({ validate: true, save: true, load: true, run_graph: true })
     expect(catalog.canonical_stages).toEqual(catalogJson.canonical_stages)

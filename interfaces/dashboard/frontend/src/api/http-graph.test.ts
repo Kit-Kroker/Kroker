@@ -50,6 +50,11 @@ describe('http graph provider', () => {
     ['loadGraph', 'load'],
     ['getRunGraph', 'run_graph'],
   ] as const)('%s refuses without calling the route while %s is not declared', async (method, cap) => {
+    // E-77 (FR-026): the recorded catalog now declares save/load, so the
+    // refusal cases pin an explicit no-capability catalog (as the chaos
+    // suite does with NO_CAPS) instead of leaning on the recording.
+    const noCaps = { ...(catalogJson as object), capabilities: { validate: false, save: false, load: false, run_graph: false } }
+    fetchMock.mockImplementationOnce(async (path: string) => ok(noCaps))
     const api = createHttpGraphApi()
     const arg = method === 'loadGraph' || method === 'getRunGraph' ? 'x' : ({ schema_version: 1, nodes: [], edges: [] } as never)
     await expect((api[method] as (a: unknown) => Promise<unknown>)(arg)).rejects.toEqual(new CapabilityUnavailable(cap))
