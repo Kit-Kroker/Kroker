@@ -23,21 +23,34 @@ from ..stages.clarify.models import ClarifyRoute, ProbeResult
 from ..stages.clarify.prompts import PROBE_SYSTEM, ROUTE_SCOPE
 from .loader import build_agents, load_registry
 
-AGENT_ACTIVITY_CONFIG = ActivityConfig(start_to_close_timeout=timedelta(minutes=10))
+# Bounded (bug e2e-proposer-hang): with no retry_policy Temporal's default
+# is UNLIMITED attempts, and a retryable failure -- or an activity no worker
+# serves -- never exhausts. The workflow-side t_<role>.run(...) await then
+# never resolves and the stage HANGS instead of failing into its degrade /
+# fail-closed path; every other activity config in this repo was already
+# bounded and this was the sole outlier. Errors raised non-retryable (e.g.
+# ApplicationError(non_retryable=True), the e2e exception-test contract)
+# still fail on the first attempt -- Temporal honors that flag regardless
+# of the policy -- so the bound only turns "retries forever" into
+# "retries, exhausts, raises".
+AGENT_ACTIVITY_MAX_ATTEMPTS = 3
+AGENT_ACTIVITY_CONFIG = ActivityConfig(
+    start_to_close_timeout=timedelta(minutes=10),
+    retry_policy=RetryPolicy(maximum_attempts=AGENT_ACTIVITY_MAX_ATTEMPTS),
+)
 
-# E-85: the clarify fan-out's own config. It exists ONLY because
-# AGENT_ACTIVITY_CONFIG sets no retry_policy, which means Temporal's default
-# applies: UNLIMITED attempts. Every other agent is a single serial call, so
-# an unlimited retry there is a slow stage. For the fan-out it is a different
-# failure entirely -- spec §8 and decision D10 say a dead probe degrades to
-# "that dimension asked nothing" while its siblings still report, and
-# _clarify_fanout implements that with asyncio.gather(return_exceptions=True).
-# A retryable failure that never exhausts never raises, so gather never
-# returns and the stage HANGS instead of degrading. A bounded
-# maximum_attempts is what makes fail-open true rather than aspirational.
+# E-85: the clarify fan-out's own config. Spec §8 and decision D10 say a
+# dead probe degrades to "that dimension asked nothing" while its siblings
+# still report, and _clarify_fanout implements that with
+# asyncio.gather(return_exceptions=True). A probe whose failure never
+# exhausts never raises, so gather never returns and the stage HANGS
+# instead of degrading; a bounded maximum_attempts is what makes fail-open
+# true rather than aspirational.
 #
-# Deliberately a separate ActivityConfig, not a mutation of the shared one:
-# no other agent's retry behaviour changes.
+# Deliberately a separate ActivityConfig even though the shared one is
+# bounded now: the fan-out's budget and the serial-call norm move for
+# different reasons (D10 vs a single model call's transient blip), and
+# fusing the knobs would couple them.
 CLARIFY_FANOUT_MAX_ATTEMPTS = 3
 CLARIFY_FANOUT_ACTIVITY_CONFIG = ActivityConfig(
     start_to_close_timeout=timedelta(minutes=10),

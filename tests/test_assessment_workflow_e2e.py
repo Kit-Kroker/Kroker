@@ -352,18 +352,23 @@ async def test_scan_phase_flips_terminal_status_to_partial():
 
 
 def _git(args, cwd):
-    subprocess.run(
+    return subprocess.run(
         ["git", *args],
         cwd=cwd,
         check=True,
         capture_output=True,
         text=True,
         stdin=subprocess.DEVNULL,
-    )
+    ).stdout
 
 
 @pytest.fixture
-def assessed_repo(tmp_path):
+def assessed_repo(tmp_path, monkeypatch):
+    # Per-test memo root (bug e2e-proposer-hang, mechanism 2, deferred to
+    # the follow-up card): the default %TEMP%/sdlc/memo_cache is
+    # machine-global and content-keyed, so earlier runs on the machine
+    # satisfy the memo and the proposer await never happens.
+    monkeypatch.setenv("SDLC_MEMOIZATION_CACHE_ROOT", str(tmp_path / "memo-cache"))
     (tmp_path / "package.json").write_text('{"dependencies": {"next": "14.0.0"}}\n')
     (tmp_path / "app" / "payments").mkdir(parents=True)
     (tmp_path / "app" / "payments" / "page.tsx").write_text(
@@ -384,13 +389,7 @@ def assessed_repo(tmp_path):
     _git(["config", "user.name", "t"], tmp_path)
     _git(["add", "-A"], tmp_path)
     _git(["commit", "-qm", "init"], tmp_path)
-    sha = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        stdin=subprocess.DEVNULL,
-    ).stdout.strip()
+    sha = _git(["rev-parse", "HEAD"], tmp_path).strip()
     return str(tmp_path), sha
 
 

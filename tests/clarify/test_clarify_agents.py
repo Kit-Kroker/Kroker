@@ -3,6 +3,7 @@ the clarify role's model, so agents/ stays at 15 roles."""
 
 from sdlc.agents.roles import (
     AGENT_ACTIVITY_CONFIG,
+    AGENT_ACTIVITY_MAX_ATTEMPTS,
     ALL_TEMPORAL_AGENTS,
     CLARIFY_FANOUT_ACTIVITY_CONFIG,
     CLARIFY_FANOUT_MAX_ATTEMPTS,
@@ -95,11 +96,10 @@ def test_the_flag_off_agents_prompt_is_still_the_registry_prompt():
 
 
 def test_the_fanout_agents_bound_their_retries():
-    """AGENT_ACTIVITY_CONFIG sets no retry_policy, so Temporal's default --
-    UNLIMITED attempts -- applies. Under the old single clarify call that
-    was one call retrying forever. Under the fan-out it is worse: a probe
-    that never exhausts never raises, asyncio.gather never returns, and the
-    stage HANGS instead of degrading (spec §8, D10)."""
+    """A probe that never exhausts never raises, asyncio.gather never
+    returns, and the stage HANGS instead of degrading into D10's
+    "that dimension asked nothing" (spec §8). The fan-out's budget is its
+    own knob, pinned here independently of the shared config's."""
     assert 1 <= CLARIFY_FANOUT_MAX_ATTEMPTS < 10
     assert (
         CLARIFY_FANOUT_ACTIVITY_CONFIG["retry_policy"].maximum_attempts
@@ -110,13 +110,25 @@ def test_the_fanout_agents_bound_their_retries():
         assert agent.activity_config["retry_policy"].maximum_attempts == CLARIFY_FANOUT_MAX_ATTEMPTS
 
 
-def test_no_other_agents_retry_behaviour_changed():
-    """The fan-out config is SEPARATE precisely so it cannot reach any
-    other role. Mutating the shared one would silently bound every agent.
+def test_the_shared_config_bounds_every_agent():
+    """Bug e2e-proposer-hang: AGENT_ACTIVITY_CONFIG used to set no
+    retry_policy, so Temporal's default -- UNLIMITED attempts -- applied. A
+    retryable failure (or an activity no worker serves) never exhausted,
+    t_<role>.run(...) never resolved, and the stage hung instead of failing
+    into its degrade / fail-closed path. maximum_attempts == 0 is Temporal's
+    encoding of UNLIMITED: no agent in the fleet may carry it anymore."""
+    assert 1 <= AGENT_ACTIVITY_MAX_ATTEMPTS < 10
+    assert AGENT_ACTIVITY_CONFIG["retry_policy"].maximum_attempts == AGENT_ACTIVITY_MAX_ATTEMPTS
+    assert t_clarify.activity_config["retry_policy"].maximum_attempts == (
+        AGENT_ACTIVITY_MAX_ATTEMPTS
+    )
+    for agent in ALL_TEMPORAL_AGENTS:
+        assert agent.activity_config["retry_policy"].maximum_attempts > 0
 
-    maximum_attempts == 0 is Temporal's encoding of UNLIMITED, and it is
-    what every agent on the shared config still gets -- including the
-    flag-off clarify agent, whose behaviour E-85 must not change."""
+
+def test_the_fanout_config_stays_a_separate_knob():
+    """E-85 kept the fan-out budget on its own config object so it could
+    never reach another role. The shared config is bounded too now (bug
+    e2e-proposer-hang), but the two bounds move for different reasons and
+    must not be fused."""
     assert CLARIFY_FANOUT_ACTIVITY_CONFIG is not AGENT_ACTIVITY_CONFIG
-    assert "retry_policy" not in AGENT_ACTIVITY_CONFIG
-    assert t_clarify.activity_config["retry_policy"].maximum_attempts == 0
