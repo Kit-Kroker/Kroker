@@ -89,7 +89,9 @@ def test_catalog_serves_the_benchmark_canonical_stages():
 
 def test_catalog_capabilities_are_all_false_until_later_epics():
     wire = graph_wire.catalog().model_dump(mode="json")["capabilities"]
-    assert wire == {"validate": False, "save": False, "load": False, "run_graph": False}
+    # E-77 flips save/load live (R-11); validate and run_graph stay false
+    # until the canvas follow-up (spec D7).
+    assert wire == {"validate": False, "save": True, "load": True, "run_graph": False}
     assert graph_wire.Capabilities.model_validate({"validate": True}).can_validate is True
 
 

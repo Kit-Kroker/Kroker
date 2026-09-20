@@ -172,8 +172,10 @@ def test_validate_route_serves_validate_plus_executable(setup):
 def test_capabilities_stay_false():
     assert graph_wire.catalog().capabilities.model_dump(by_alias=True) == {
         "validate": False,
-        "save": False,
-        "load": False,
+        # E-77 flips save/load live (R-11); validate and run_graph stay
+        # false until the canvas follow-up (spec D7).
+        "save": True,
+        "load": True,
         "run_graph": False,
     }
 
