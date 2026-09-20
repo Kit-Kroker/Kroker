@@ -23,10 +23,17 @@ def _rec(
     case="c1",
     run="r1",
     stage="code",
-    scope=BenchmarkScope.STAGE,
+    scope=None,
     outcome=BenchmarkOutcome.PASS,
     fix=0,
+    task_id=None,
+    attempt=None,
 ):
+    # scope=None derives TASK_ATTEMPT iff task_id is set, mirroring
+    # benchmarks/record_builder.py:47; an explicit scope still wins (the
+    # oracle tests below rely on that).
+    if scope is None:
+        scope = BenchmarkScope.TASK_ATTEMPT if task_id is not None else BenchmarkScope.STAGE
     t = datetime(2026, 7, 24, 10)
     return BenchmarkRecord(
         run_id=run,
@@ -34,6 +41,8 @@ def _rec(
         case_id=case,
         scope=scope,
         stage=stage,
+        task_id=task_id,
+        attempt=attempt,
         role="dev",
         harness=HarnessKind.CLAUDE_CODE,
         model="m",
@@ -344,3 +353,133 @@ def test_fail_reentry_none_everywhere_is_byte_identical_to_no_graph():
     assert render_heatmap_json(build_heatmap(axis_absent)) == render_heatmap_json(
         build_heatmap(plain)
     )
+
+
+# --- heatmap-fix-inflation (E77-OQ-1, Direction A): RED regression contracts --
+#
+# src/sdlc/stages/code/step.py:784 stamps fix_attempts = attempt - 1 (a
+# running counter 0..n-1, strictly monotone within (run_id, task_id)) on
+# EVERY code attempt record, and build_heatmap SUMS the field record-by-
+# record, so a task needing n attempts reports n(n-1)/2 instead of n-1
+# (n=4 -> 6 shown). Ruled semantics (cause gate, Direction A,
+# .specify/bugs/heatmap-fix-inflation/assessment.md): the fix axis groups
+# records by (case_id, stage, run_id, task_id) where task_id is not None,
+# each group contributes MAX(fix_attempts) over its records, and the cell
+# sums the group maxima. task_id=None records pass through per-record (no
+# real producer emits task_id=None with fix > 0). Everything else is
+# unchanged: gate rejects, oracle fails, n_runs, the density formula, and
+# the E-77 fail_reentry pass stays additive/separate. Every test in this
+# section is RED on the pre-fix sum-aggregation.
+
+
+def _fix_task_records(case, run, task, stamps):
+    """Producer-shaped code records for ONE task that needed len(stamps)
+    attempts: one record per attempt stamped fix_attempts = attempt = k
+    (code/step.py:784-786). Non-final attempts FAIL, the final one PASSES --
+    so gate_rejects also comes out producer-shaped (one per FAILED attempt).
+    """
+    recs = []
+    for k in stamps:
+        final = k == stamps[-1]
+        recs.append(
+            _rec(
+                case=case,
+                run=run,
+                stage="code",
+                outcome=BenchmarkOutcome.PASS if final else BenchmarkOutcome.FAIL,
+                fix=k,
+                task_id=task,
+                attempt=k,
+            )
+        )
+    return recs
+
+
+def test_fix_axis_counts_n_minus_one_for_a_task_needing_four_attempts():
+    recs = _fix_task_records("c1", "r1", "T01", (0, 1, 2, 3))
+    by = {(c.case, c.stage): c for c in build_heatmap(recs).cells}
+    assert by[("c1", "code")].fix_attempts == 3  # max of the group, not 0+1+2+3
+
+
+def test_fix_axis_counts_n_minus_one_for_a_task_needing_three_attempts():
+    recs = _fix_task_records("c1", "r1", "T01", (0, 1, 2))
+    by = {(c.case, c.stage): c for c in build_heatmap(recs).cells}
+    assert by[("c1", "code")].fix_attempts == 2  # not 0+1+2
+
+
+def test_fix_axis_groups_by_run_id_because_task_ids_repeat_across_runs():
+    """The group key MUST carry run_id: the same task id appears in every
+    run, and each run's loop is its own counter. Two runs of T01, each
+    needing 3 attempts, contribute one group max of 2 apiece: 4 total, not
+    one group of six records (max 2) and not the pre-fix sum 6."""
+    recs = _fix_task_records("c1", "r1", "T01", (0, 1, 2)) + _fix_task_records(
+        "c1", "r2", "T01", (0, 1, 2)
+    )
+    by = {(c.case, c.stage): c for c in build_heatmap(recs).cells}
+    assert by[("c1", "code")].fix_attempts == 4
+
+
+def test_fix_axis_sums_group_maxima_across_tasks_in_one_run():
+    recs = _fix_task_records("c1", "r1", "T01", (0, 1, 2)) + _fix_task_records(
+        "c1", "r1", "T02", (0, 1)
+    )
+    by = {(c.case, c.stage): c for c in build_heatmap(recs).cells}
+    assert by[("c1", "code")].fix_attempts == 3  # 2 + 1, not a cell-wide max
+
+
+def test_adjacent_zero_fix_qa_records_leave_the_code_cell_untouched():
+    """The qa records of the same loop (step.py:793-808) never carry
+    fix_attempts; their presence must not change the code cell -- neither by
+    diluting a group max nor by adding one of their own."""
+    code_only = _fix_task_records("c1", "r1", "T01", (0, 1, 2, 3))
+    with_qa = code_only + [
+        _rec(
+            case="c1",
+            run="r1",
+            stage="qa",
+            outcome=BenchmarkOutcome.PASS if k == 3 else BenchmarkOutcome.FAIL,
+            task_id="T01",
+            attempt=k,
+        )
+        for k in range(4)
+    ]
+    without = {(c.case, c.stage): c for c in build_heatmap(code_only).cells}[("c1", "code")]
+    with_ = {(c.case, c.stage): c for c in build_heatmap(with_qa).cells}[("c1", "code")]
+    assert with_.fix_attempts == without.fix_attempts == 3
+
+
+def test_fix_axis_deflation_leaves_gate_runs_and_density_formula_unchanged():
+    """Direction A touches ONLY the fix axis: one task, one run, n=4 keeps
+    its three gate rejections (a per-event count of FAILED records, not a
+    re-stamped counter), n_runs=1, and the density formula recomputes from
+    the deflated total: (3 gate + 3 fix) / 1 run = 6.0."""
+    recs = _fix_task_records("c1", "r1", "T01", (0, 1, 2, 3))
+    cell = {(c.case, c.stage): c for c in build_heatmap(recs).cells}[("c1", "code")]
+    assert cell.fix_attempts == 3
+    assert cell.gate_rejects == 3
+    assert cell.n_runs == 1
+    assert cell.density == 6.0
+
+
+def test_fail_reentry_pass_stays_additive_on_top_of_the_grouped_max():
+    """FR-016/FR-017 interplay under Direction A: the once-per-activation
+    fail_reentry +1 remains a SEPARATE axis added on top of the grouped
+    handler count -- never folded into the max, never swallowed. A task
+    needing 3 attempts (group max 2) whose third attempt rode a re-entered
+    activation reports 2 + 1 = 3, not the pre-fix 3 + 1 = 4."""
+    plain = _fix_task_records("fx", "r1", "T01", (0, 1, 2))
+    stamped = []
+    for r in plain:
+        reentered = r.attempt == 2
+        stamped.append(
+            _stamped(
+                r,
+                "code#2" if reentered else "code#1",
+                "code",
+                2 if reentered else 1,
+                "code",
+                1 if reentered else 0,
+            )
+        )
+    by = {(c.case, c.stage): c for c in build_heatmap(stamped).cells}
+    assert by[("fx", "code")].fix_attempts == 3
