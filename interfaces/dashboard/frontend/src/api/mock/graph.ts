@@ -1,28 +1,58 @@
 // The mock's graph surface (E-76 spec D4, §7.2): a RECORDING, not a
 // simulator. Catalog, parse and serialize answers were produced by the real
-// Python (scripts/dump_graph_fixtures.py); validation and run state are
-// hand-written PROVISIONAL fixtures. Anything unrecorded is answered as
-// unrecorded -- never as success -- so Playwright cannot pass on behaviour
-// nothing real produced.
+// Python (scripts/dump_graph_fixtures.py); validation and run state are the
+// E-75 RECORDED projections (run_state/*.recorded.json) -- the FINAL wire
+// the TS mirror parses. Anything unrecorded is answered as unrecorded --
+// never as success -- so Playwright cannot pass on behaviour nothing real
+// produced. The only hand-written part is the run script's TRANSITION table
+// (which recorded state follows a gate decision) -- mock logic over
+// Python-recorded states, no production semantics (canvas-run-mode gate
+// ruling 3, 2026-09-20).
 import type { DashboardApi, GateOutcome } from '../types'
 import type {
   CatalogWire, GraphResponse, GraphStateResponse, GraphWire, ParseWire, ValidationWire,
 } from '../graph-types'
 import catalogJson from '../__fixtures__/graph/catalog.json'
-import validationJson from '../__fixtures__/graph/validation.provisional.json'
-import runGraphsJson from '../__fixtures__/graph/run_graphs.provisional.json'
+import graphResponseJson from '../__fixtures__/graph/run_state/graph_response.recorded.json'
+import graphStateJson from '../__fixtures__/graph/run_state/graph_state.recorded.json'
+import validationRecorded from '../__fixtures__/graph/run_state/validation.recorded.json'
 
 interface Scenario { name: string; yaml: string; parse: ParseWire; serialize: { ok: true; yaml: string } | null }
 interface ObjectRecording { name: string; base: string; graph: GraphWire; parse: ParseWire }
 interface ScriptState { state: GraphStateResponse; on: Partial<Record<GateOutcome, string>> }
-interface RunScript { scenario: string; initial: string; states: Record<string, ScriptState> }
+interface RunScript { initial: string; states: Record<string, ScriptState> }
 
 const scenarioModules = import.meta.glob('../__fixtures__/graph/scenarios/*.json', { eager: true, import: 'default' })
 const objectModules = import.meta.glob('../__fixtures__/graph/objects/*.json', { eager: true, import: 'default' })
 const SCENARIOS = Object.values(scenarioModules) as Scenario[]
 const OBJECTS = Object.values(objectModules) as ObjectRecording[]
-const VALIDATION = validationJson as unknown as Record<string, ValidationWire>
-const RUN_SCRIPTS = (runGraphsJson as unknown as { runs: Record<string, RunScript> }).runs
+
+// The recorded validation is pre_code's (validation + executable problems,
+// E-75 §7.3); it answers the pre_code scenario, everything else is
+// unrecorded.
+const VALIDATION: Record<string, ValidationWire> = {
+  pre_code: validationRecorded as unknown as ValidationWire,
+}
+
+const RECORDED_RESPONSE = graphResponseJson as unknown as GraphResponse
+const RECORDED_STATES = graphStateJson as unknown as Record<string, GraphStateResponse>
+
+const RUN_SCRIPTS: Record<string, RunScript> = {
+  // The recorded blocked_at_architecture run: the pending architecture#1
+  // gate approves to the recorded completed state, rejects to the recorded
+  // rejected one. Terminal states have no outgoing transitions.
+  'feature-graph-demo': {
+    initial: 'blocked_at_architecture',
+    states: {
+      blocked_at_architecture: {
+        state: RECORDED_STATES.blocked_at_architecture,
+        on: { approve: 'completed', reject: 'rejected_at_architecture' },
+      },
+      completed: { state: RECORDED_STATES.completed, on: {} },
+      rejected_at_architecture: { state: RECORDED_STATES.rejected_at_architecture, on: {} },
+    },
+  },
+}
 
 // A LOOKUP KEY ONLY: object keys sorted, arrays untouched. Never a sha, never
 // a canonical form, never exported (pinned by mock/graph.test.ts).
@@ -73,7 +103,9 @@ export function createMockGraph(): MockGraph {
 
   const catalog: CatalogWire = {
     ...(catalogJson as unknown as CatalogWire),
-    // The recording carries Python's all-false; the mock exercises every flow.
+    // The mock exercises every flow regardless of what the recording
+    // declares (the shipped catalog's capabilities track the server's
+    // rollout, not the mock's coverage).
     capabilities: { validate: true, save: true, load: true, run_graph: true },
   }
 
@@ -144,11 +176,9 @@ export function createMockGraph(): MockGraph {
     },
 
     async getRunGraph(runId): Promise<GraphResponse> {
-      const script = RUN_SCRIPTS[runId]
-      if (!script) return { kind: 'no_graph', reason: 'legacy_run' }
-      const recorded = SCENARIOS.find((s) => s.name === script.scenario)!.parse
-      if (!recorded.ok) throw new Error(`mock: scenario ${script.scenario} does not parse`)
-      return { kind: 'graph', sha: recorded.sha, graph: clone(recorded.graph), back_edges: clone(VALIDATION[script.scenario].back_edges) }
+      // The recorded run graph of the shipped default pipeline (E-75 §7.1).
+      if (!RUN_SCRIPTS[runId]) return { kind: 'no_graph', reason: 'legacy_run' }
+      return clone(RECORDED_RESPONSE)
     },
 
     subscribeGraphState(runId, cb) {

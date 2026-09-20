@@ -2,6 +2,7 @@ import type {
   CatalogWire, GraphResponse, GraphStateResponse, GraphWire, LoadWire, ParseWire, SaveWire,
   SerializeWire, ValidationWire,
 } from './graph-types'
+import type { DotState } from '@kroker/ui/components/stage_dots/StageDots.vue'
 
 export type Status = 'running' | 'blocked' | 'failed' | 'done'
 export type GateOutcome = 'approve' | 'revise' | 'reject'
@@ -23,6 +24,11 @@ export interface Run {
   // Canonical stage NAMES (E-76 spec §5.8): a graph can fan out, so more
   // than one may be active. Never an index -- see adapters/fleet.ts.
   activeStages: string[]
+  // E-75 §8 / E-76 §9.1 rule 1: a graph run's stage marks, served by the
+  // snapshot (RunState.stage_marks open; closed_marks[run_id] closed) and
+  // rendered verbatim by the strip. Null = no marks (FeatureWorkflow and
+  // not-yet-dispatched runs) = the linear activeStages fallback, unchanged.
+  stageMarks: Record<string, DotState> | null
   status: Status
   blocker: string
   cost: number | null

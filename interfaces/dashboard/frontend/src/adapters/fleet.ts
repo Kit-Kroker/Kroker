@@ -8,7 +8,7 @@ import { stageStates } from '../composables/stageState'
 // TS copy (E-76 spec U4). Empty until the catalog loads: StageDots renders no
 // marks for an unresolved list (STAGE_DOTS-1.1).
 export function toStageDots(
-  run: Pick<Run, 'activeStages' | 'status'>,
+  run: Pick<Run, 'activeStages' | 'status' | 'stageMarks'>,
   canonicalStages: readonly string[],
 ): StageDot[] {
   const states = stageStates(run, canonicalStages)

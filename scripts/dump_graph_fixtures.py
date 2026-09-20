@@ -2,16 +2,15 @@
 
     python scripts/dump_graph_fixtures.py
 
-The mock is a recording, not a simulator (spec D4): every catalog, parse and
-serialize answer it gives was produced here by the real sdlc.graph code, and
-tests/test_graph_fixtures_fresh.py fails when the committed JSON no longer
-equals what build() produces. The two *.provisional.json files beside them
-are hand-written until E-73/E-74 exist and are not touched by this script.
+The mock is a recording, not a simulator (spec D4): every catalog, parse,
+serialize, validate and run-state answer it gives was produced here by the
+real sdlc.graph code, and tests/test_graph_fixtures_fresh.py fails when the
+committed JSON no longer equals what build() produces.
 
 `run_state/*.recorded.json` (E-75) are exports of the FINAL run-graph/
 run-state/validate projections, recorded from router steps over the shipped
-default graph. No frontend code reads them yet; the canvas follow-up swaps
-them in with the TS mirror.
+default graph; the canvas run-mode wiring (E75-OQ-1, 2026-09-20) swapped
+them in as the mock's -- and the TS mirror's -- contract.
 """
 
 from __future__ import annotations

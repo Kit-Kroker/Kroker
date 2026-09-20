@@ -2,6 +2,7 @@ import type {
   ClarifyItem, DashboardApi, Decision, EscalationItem, FleetState, GateItem,
   GateOutcome, InboxItem, OverrideItem, Run, StartRunInput, Status,
 } from './types'
+import type { DotState } from '@kroker/ui/components/stage_dots/StageDots.vue'
 import { createHttpGraphApi } from './http-graph'
 import { HttpStatusError } from './errors'
 
@@ -65,6 +66,9 @@ function mapRun(s: any, pendingCount: number, now: Date): Run {
     mode: s.mode,
     repo: s.repo_url ?? '',
     activeStages: stagesOf(s.current_stage),
+    // E-75 §8: graph rows carry their marks; absent/null keeps the linear
+    // fallback (FeatureWorkflow, pre-dispatch) -- never inferred marks.
+    stageMarks: s.stage_marks ?? null,
     status: liveStatus(s.status),
     blocker: blocker(s.status, pendingCount),
     cost: s.cost_usd_total,
@@ -74,13 +78,16 @@ function mapRun(s: any, pendingCount: number, now: Date): Run {
   }
 }
 
-function mapClosed(s: any, now: Date): Run {
+function mapClosed(s: any, marks: Record<string, DotState> | null | undefined, now: Date): Run {
   return {
     id: s.run_id,
     title: s.title,
     mode: s.mode,
     repo: s.repo_url ?? '',
     activeStages: stagesOf(s.terminal_stage),
+    // Closed graph rows read the snapshot's closed_marks (FleetSnapshot
+    // derives them once per run); every other closed row stays null.
+    stageMarks: marks ?? null,
     status: closedStatus(s.outcome),
     blocker: '',
     cost: s.cost_usd_total,
@@ -130,10 +137,11 @@ export function mapSnapshot(snap: any, now: Date = new Date()): FleetState {
   const pendingByRun = new Map<string, any[]>()
   for (const r of snap.inbox ?? []) pendingByRun.set(r.run_id, r.pending)
 
+  const closedMarks: Record<string, Record<string, DotState>> = snap.closed_marks ?? {}
   const runs = [
     ...(snap.runs ?? []).map((s: any) =>
       mapRun(s, (pendingByRun.get(s.run_id) ?? []).length, now)),
-    ...(snap.closed ?? []).map((s: any) => mapClosed(s, now)),
+    ...(snap.closed ?? []).map((s: any) => mapClosed(s, closedMarks[s.run_id], now)),
   ]
   const inbox: InboxItem[] = []
   for (const r of snap.inbox ?? []) {
@@ -201,7 +209,7 @@ export function createHttpApi(baseUrl = '/api'): DashboardApi {
       const nowIso = new Date().toISOString()
       return {
         id: run_id, title: input.title, mode: input.mode, repo: input.repo,
-        activeStages: [], status: 'running' as const, blocker: '',
+        activeStages: [], stageMarks: null, status: 'running' as const, blocker: '',
         cost: null, budget: null, age: age(nowIso, new Date(nowIso)),
         decisions: [],
       }

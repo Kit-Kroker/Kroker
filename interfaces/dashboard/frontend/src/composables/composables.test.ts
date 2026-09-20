@@ -10,6 +10,7 @@ const run = (over: Partial<Run>): Run => ({
   mode: 'brownfield',
   repo: 'r',
   activeStages: ['clarify'],
+  stageMarks: null,
   status: 'running',
   blocker: '',
   cost: 1,

@@ -2,11 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { edgeKeys, formatElapsed, locLabel, locWithin, nodeKeys, toCanvas } from './graph'
 import catalogJson from '../api/__fixtures__/graph/catalog.json'
 import preCode from '../api/__fixtures__/graph/scenarios/pre_code.json'
-import runGraphs from '../api/__fixtures__/graph/run_graphs.provisional.json'
-import validation from '../api/__fixtures__/graph/validation.provisional.json'
 import graphResponse from '../api/__fixtures__/graph/run_state/graph_response.recorded.json'
 import graphState from '../api/__fixtures__/graph/run_state/graph_state.recorded.json'
-import type { CatalogWire, GraphStateResponse, GraphWire, Issue } from '../api/graph-types'
+import validationRecorded from '../api/__fixtures__/graph/run_state/validation.recorded.json'
+import type { CatalogWire, GraphStateResponse, GraphWire, Issue, ValidationWire } from '../api/graph-types'
 
 const catalog = catalogJson as unknown as CatalogWire
 const typeOf = (t: string) => catalog.node_types.find((n) => n.type === t)
@@ -58,7 +57,9 @@ describe('toCanvas (edit mode)', () => {
   })
 
   it('marks backward only the edges the server named', () => {
-    const backEdges = (validation as unknown as Record<string, { back_edges: never[] }>).pre_code.back_edges
+    // The recorded validation is pre_code's (E-75 §7.3): its back_edges are
+    // the three revise loops of the PRE graph.
+    const backEdges = (validationRecorded as unknown as ValidationWire).back_edges
     const m = toCanvas(PRE, { typeOf, backEdges })
     expect(m.edges.filter((x) => x.backward).map((x) => x.from.port)).toEqual(['revise', 'revise', 'revise'])
     expect(toCanvas(PRE, { typeOf }).edges.some((x) => x.backward)).toBe(false)
@@ -83,25 +84,29 @@ describe('toCanvas (edit mode)', () => {
 })
 
 describe('toCanvas (run mode)', () => {
-  const script = (runGraphs as unknown as { runs: Record<string, { states: Record<string, { state: GraphStateResponse }> }> }).runs['feature-graph-demo']
-  const state = script.states.blocked_r2.state
+  // Re-sourced from the recorded run_state contract (E75-OQ-1): the
+  // provisional run_graphs.provisional.json script is gone; blocked gives
+  // the decoration picture, escalated the traversal counts.
+  const states = graphState as unknown as Record<string, GraphStateResponse>
 
   it('joins traversals with the pinned max_traversals, defaulting to 0', () => {
-    const m = toCanvas(PRE, { typeOf, state })
+    const m = toCanvas(PRE, { typeOf, state: states.escalated_revise_exhausted })
     const loop = m.edges.find((x) => x.key === 'architecture.revise>architect.guidance')!
-    expect(loop.counter).toEqual({ used: 1, max: 2 })
+    expect(loop.counter).toEqual({ used: 2, max: 2 }) // the recorded revisal count
     expect(m.edges.find((x) => x.key === 'plan.revise>planner.guidance')!.counter).toEqual({ used: 0, max: 2 })
     expect(m.edges.find((x) => x.key === 'architect.spec>architecture.artifact')!.counter).toBeUndefined()
   })
 
   it('decorates status, cost, elapsed and round', () => {
-    const m = toCanvas(PRE, { typeOf, state, now: new Date('2026-09-14T09:35:30Z') })
+    // The recorded blocked_at_architecture projection: every activation ran
+    // AT→AT (elapsed 0m 00s), the gate is still open at `now` (+30s).
+    const m = toCanvas(PRE, { typeOf, state: states.blocked_at_architecture, now: new Date('2026-09-17T09:00:30Z') })
     const architect = m.nodes.find((n) => n.key === 'architect')!
     expect(architect.status).toBe('done')
-    expect(architect.metrics).toEqual({ cost: '$1.87', elapsed: '6m 00s', round: 'r2' })
+    expect(architect.metrics).toEqual({ cost: '$1.87', elapsed: '0m 00s', round: undefined })
     const gate = m.nodes.find((n) => n.key === 'architecture')!
-    expect(gate.metrics).toEqual({ cost: '—', elapsed: '4m 30s', round: 'r2' })
-    expect(m.pendingByNode.architecture).toEqual([{ node: 'architecture', key: 'architecture#2', kind: 'gate' }])
+    expect(gate.metrics).toEqual({ cost: '—', elapsed: '0m 30s', round: undefined })
+    expect(m.pendingByNode.architecture).toEqual([{ node: 'architecture', key: 'architecture#1', kind: 'gate' }])
   })
 
   // --- chaos: FINAL wire shapes the provisional mirror does not know yet ----
@@ -229,7 +234,7 @@ describe('helpers', () => {
       edges: [],
       current_nodes: [],
       pending: [],
-      terminal: null,
+      outcome: { state: 'running', reason: null, result: null },
     }
     const m = toCanvas(PRE, { typeOf, state, now: new Date('2026-09-14T09:00:30Z') })
     expect(m.nodes.find((n) => n.key === 'intake')!.metrics).toEqual({ cost: '$0.00', elapsed: '0m 30s', round: undefined })

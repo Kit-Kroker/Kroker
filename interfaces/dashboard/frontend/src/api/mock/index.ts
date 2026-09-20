@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   DashboardApi,
   FleetState,
   GateOutcome,
@@ -14,7 +14,7 @@ import { createMockGraph } from './graph'
 import { HttpStatusError } from '../errors'
 import catalogJson from '../__fixtures__/graph/catalog.json'
 
-// Stage NAMES, advanced along the served canonical list (E-76 spec §9.1).
+// Stage NAMES, advanced along the served canonical list (E-76 spec Â§9.1).
 const CANONICAL: string[] = (catalogJson as { canonical_stages: string[] }).canonical_stages
 const nextStage = (stages: string[]): string[] => {
   const i = Math.max(...stages.map((s) => CANONICAL.indexOf(s)))
@@ -32,20 +32,28 @@ export function tickCosts(runs: Run[]): Run[] {
 function seedRuns(): Run[] {
   return [
     {
-      // Executes a graph (mock/graph.ts + run_graphs.provisional.json): the
-      // only seeded run whose RunView renders a canvas.
+      // Executes a graph (mock/graph.ts over the recorded run_state
+      // fixtures): the only seeded run whose RunView renders a canvas. Its
+      // stageMarks mirror the recorded blocked_at_architecture projection --
+      // the strip renders them verbatim; canonical stages outside the run's
+      // graph (constitution, requirements, research, ...) render skipped.
       id: 'feature-graph-demo',
       title: 'Graph-executed pre-code pipeline',
       mode: 'greenfield',
       repo: 'git@github.com:acme/graph-demo',
       activeStages: ['architecture'],
+      stageMarks: {
+        intake: 'done', clarify: 'done', context: 'skipped', architecture: 'blocked',
+        planning: 'pending', code: 'pending', analyze: 'pending', quality_gate: 'pending',
+        deploy: 'pending',
+      },
       status: 'blocked',
-      blocker: 'architecture gate — round 2',
+      blocker: 'architecture gate â€” round 1',
       cost: 2.6,
       budget: 20,
       age: '40m',
       decisions: [
-        { ts: '09:25', gate: 'architecture r1', outcome: 'revise', comment: 'split the auth service', decider: 'human · sam' },
+        { ts: '09:25', gate: 'architecture r1', outcome: 'revise', comment: 'split the auth service', decider: 'human Â· sam' },
       ],
     },
     {
@@ -54,13 +62,14 @@ function seedRuns(): Run[] {
       mode: 'brownfield',
       repo: 'git@github.com:acme/portal',
       activeStages: ['clarify'],
+      stageMarks: null, // legacy row: linear strip fallback
       status: 'blocked',
-      blocker: 'clarify gate — 2 questions',
+      blocker: 'clarify gate â€” 2 questions',
       cost: 3.12,
       budget: 40,
       age: '2h 14m',
       decisions: [
-        { ts: '09:12', gate: 'clarify r1 (partial)', outcome: 'approve', comment: '4 questions auto-answered, confidence ≥ 0.95', decider: 'policy (soft)' },
+        { ts: '09:12', gate: 'clarify r1 (partial)', outcome: 'approve', comment: '4 questions auto-answered, confidence â‰¥ 0.95', decider: 'policy (soft)' },
       ],
     },
     {
@@ -69,13 +78,14 @@ function seedRuns(): Run[] {
       mode: 'brownfield',
       repo: 'git@github.com:acme/billing',
       activeStages: ['quality_gate'],
+      stageMarks: null, // legacy row: linear strip fallback
       status: 'blocked',
-      blocker: 'merge gate — advisory: coverage',
+      blocker: 'merge gate â€” advisory: coverage',
       cost: 18.4,
       budget: 60,
       age: '9h 03m',
       decisions: [
-        { ts: '02:20', gate: 'architecture r1', outcome: 'approve', comment: 'delta grounded in CodebaseMap', decider: 'human · mika' },
+        { ts: '02:20', gate: 'architecture r1', outcome: 'approve', comment: 'delta grounded in CodebaseMap', decider: 'human Â· mika' },
         { ts: '03:05', gate: 'plan r1', outcome: 'approve', comment: '7 tasks / 3 waves, DAG valid', decider: 'policy (soft)' },
         { ts: '08:44', gate: 'task T-04 repair', outcome: 'approve', comment: 'review fix loop 1/2 green', decider: 'policy' },
       ],
@@ -86,15 +96,16 @@ function seedRuns(): Run[] {
       mode: 'greenfield',
       repo: 'git@github.com:acme/onboard',
       activeStages: ['code'],
+      stageMarks: null, // legacy row: linear strip fallback
       status: 'running',
       blocker: '',
       cost: 9.75,
       budget: 50,
       age: '4h 41m',
       decisions: [
-        { ts: '11:02', gate: 'clarify r1', outcome: 'approve', comment: 'all suggestions accepted', decider: 'human · sam' },
-        { ts: '11:38', gate: 'architecture r1', outcome: 'revise', comment: 'split auth from profile service', decider: 'human · sam' },
-        { ts: '12:19', gate: 'architecture r2', outcome: 'approve', comment: '', decider: 'human · sam' },
+        { ts: '11:02', gate: 'clarify r1', outcome: 'approve', comment: 'all suggestions accepted', decider: 'human Â· sam' },
+        { ts: '11:38', gate: 'architecture r1', outcome: 'revise', comment: 'split auth from profile service', decider: 'human Â· sam' },
+        { ts: '12:19', gate: 'architecture r2', outcome: 'approve', comment: '', decider: 'human Â· sam' },
         { ts: '12:31', gate: 'plan r1', outcome: 'approve', comment: 'confidence 0.97', decider: 'policy (soft)' },
       ],
     },
@@ -104,8 +115,9 @@ function seedRuns(): Run[] {
       mode: 'brownfield',
       repo: 'git@github.com:acme/gateway',
       activeStages: ['qa'],
+      stageMarks: null, // legacy row: linear strip fallback
       status: 'blocked',
-      blocker: 'escalation — T-07 resolver 3/3',
+      blocker: 'escalation â€” T-07 resolver 3/3',
       cost: 6.2,
       budget: 30,
       age: '6h 27m',
@@ -117,8 +129,9 @@ function seedRuns(): Run[] {
       mode: 'brownfield',
       repo: 'git@github.com:acme/billing',
       activeStages: ['architecture'],
+      stageMarks: null, // legacy row: linear strip fallback
       status: 'blocked',
-      blocker: 'architecture gate — round 1',
+      blocker: 'architecture gate â€” round 1',
       cost: 2.05,
       budget: 45,
       age: '1h 02m',
@@ -130,6 +143,7 @@ function seedRuns(): Run[] {
       mode: 'brownfield',
       repo: 'git@github.com:acme/portal',
       activeStages: ['deploy'],
+      stageMarks: null, // legacy row: linear strip fallback
       status: 'running',
       blocker: '',
       cost: 14.02,
@@ -137,7 +151,7 @@ function seedRuns(): Run[] {
       age: '11h 50m',
       decisions: [
         { ts: '05:12', gate: 'merge r1', outcome: 'approve', comment: 'all checks green', decider: 'policy (soft)' },
-        { ts: '06:01', gate: 'deploy r1', outcome: 'approve', comment: 'PR #482 merged, staging deploy', decider: 'human · mika' },
+        { ts: '06:01', gate: 'deploy r1', outcome: 'approve', comment: 'PR #482 merged, staging deploy', decider: 'human Â· mika' },
       ],
     },
     {
@@ -146,6 +160,7 @@ function seedRuns(): Run[] {
       mode: 'brownfield',
       repo: 'git@github.com:acme/portal',
       activeStages: ['retro'],
+      stageMarks: null, // legacy row: linear strip fallback
       status: 'done',
       blocker: '',
       cost: 7.88,
@@ -153,7 +168,7 @@ function seedRuns(): Run[] {
       age: '1d 3h',
       decisions: [
         { ts: 'yday', gate: 'merge r1', outcome: 'approve', comment: '', decider: 'policy (soft)' },
-        { ts: 'yday', gate: 'deploy r1', outcome: 'approve', comment: '', decider: 'human · sam' },
+        { ts: 'yday', gate: 'deploy r1', outcome: 'approve', comment: '', decider: 'human Â· sam' },
       ],
     },
   ]
@@ -162,14 +177,15 @@ function seedRuns(): Run[] {
 function seedInbox(): InboxItem[] {
   return [
     {
-      id: 'architecture#2',
+      // The recorded blocked_at_architecture pending gate (architecture#1).
+      id: 'architecture#1',
       type: 'gate',
       gate: 'architecture',
       runId: 'feature-graph-demo',
-      round: 2,
+      round: 1,
       age: '9m',
-      title: 'Architecture (round 2) — graph demo',
-      body: 'Revised after round 1: auth split into its own service.',
+      title: 'Architecture (round 1) — graph demo',
+      body: 'The recorded pre-code graph run, held at its architecture gate.',
     },
     {
       id: 'q1',
@@ -177,7 +193,7 @@ function seedInbox(): InboxItem[] {
       runId: 'feature-add-sso',
       round: 1,
       age: '38m',
-      title: 'Q1 — Which identity protocol should SSO support?',
+      title: 'Q1 â€” Which identity protocol should SSO support?',
       body: 'The repo has no auth-provider abstraction. Requirements mention "enterprise SSO" but not a protocol; the CodebaseMap shows session middleware in portal/auth/session.py.',
       suggestion: 'OIDC (Authorization Code + PKCE). It fits the existing session middleware; defer SAML to a follow-up run if an enterprise customer requires it.',
     },
@@ -187,7 +203,7 @@ function seedInbox(): InboxItem[] {
       runId: 'feature-add-sso',
       round: 1,
       age: '38m',
-      title: 'Q2 — Should password login remain enabled after SSO ships?',
+      title: 'Q2 â€” Should password login remain enabled after SSO ships?',
       body: 'US-1 is silent on migration. Disabling password auth immediately would lock out users whose IdP mapping fails on first login.',
       suggestion: 'Keep password auth behind a feature flag for 2 releases, then retire it once SSO adoption is > 95%.',
     },
@@ -198,7 +214,7 @@ function seedInbox(): InboxItem[] {
       runId: 'feature-usage-metering',
       round: 1,
       age: '54m',
-      title: 'Architecture (delta) — usage metering',
+      title: 'Architecture (delta) â€” usage metering',
       body: 'Adds MeteringService (event ingest + hourly rollup), modifies billing-worker to emit usage events, adds 3 contracts (UsageEvent, MeterReading, TierQuota). No removals. Grounded in CodebaseMap @ a41c9e.',
     },
     {
@@ -208,15 +224,15 @@ function seedInbox(): InboxItem[] {
       runId: 'feature-billing-webhooks',
       round: 1,
       age: '1h 12m',
-      title: 'Merge gate — advisory check needs a decision',
+      title: 'Merge gate â€” advisory check needs a decision',
       body: 'All absolute checks pass. One advisory check fails; merging requires an audited human override (FR-106).',
-      verdict: 'MergeVerdict 0.91 — approve. Uncovered lines are retry/backoff branches exercised indirectly by the integration suite; direct unit coverage would need an injected clock.',
+      verdict: 'MergeVerdict 0.91 â€” approve. Uncovered lines are retry/backoff branches exercised indirectly by the integration suite; direct unit coverage would need an injected clock.',
       checks: [
         { name: 'lint', kind: 'ABSOLUTE', ok: true, detail: 'clean' },
         { name: 'security (critical)', kind: 'ABSOLUTE', ok: true, detail: '0 critical findings' },
-        { name: 'build / integration', kind: 'ABSOLUTE', ok: true, detail: 'green · 4m12s' },
-        { name: 'diff coverage', kind: 'ADVISORY', ok: false, detail: '0.68 — target 0.80' },
-        { name: 'criterion→test traceability', kind: 'ADVISORY', ok: true, detail: '9/9 criteria mapped' },
+        { name: 'build / integration', kind: 'ABSOLUTE', ok: true, detail: 'green Â· 4m12s' },
+        { name: 'diff coverage', kind: 'ADVISORY', ok: false, detail: '0.68 â€” target 0.80' },
+        { name: 'criterionâ†’test traceability', kind: 'ADVISORY', ok: true, detail: '9/9 criteria mapped' },
         { name: 'review severity', kind: 'ADVISORY', ok: true, detail: 'max severity: medium' },
       ],
     },
@@ -226,9 +242,9 @@ function seedInbox(): InboxItem[] {
       runId: 'fix-rate-limit-retry',
       round: 1,
       age: '2h 05m',
-      title: 'T-07 "retry budget accounting" — resolver exhausted (3/3)',
+      title: 'T-07 "retry budget accounting" â€” resolver exhausted (3/3)',
       body: 'QA fix loop hit MAX_REPAIR_ATTEMPTS. The task branch stays parked on its worktree; wave 3 is holding.',
-      analysis: 'test_retry_budget flakes on wall-clock timing. A reliable fix needs an injected clock in RateLimiter, but rate_limiter/core.py is outside the task’s declared file scope. Recommend widening scope or quarantining.',
+      analysis: 'test_retry_budget flakes on wall-clock timing. A reliable fix needs an injected clock in RateLimiter, but rate_limiter/core.py is outside the taskâ€™s declared file scope. Recommend widening scope or quarantining.',
     },
   ]
 }
@@ -254,7 +270,7 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
   }
   const addDecision = (runId: string, d: { ts?: string; gate: string; outcome: GateOutcome; comment?: string; decider?: string }) =>
     patchRun(runId, (r) => ({
-      decisions: [...r.decisions, { ts: now(), decider: 'human · you', comment: '', ...d }],
+      decisions: [...r.decisions, { ts: now(), decider: 'human Â· you', comment: '', ...d }],
     }))
   const removeItem = (id: string) => {
     inbox = inbox.filter((i) => i.id !== id)
@@ -293,7 +309,7 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
       addDecision(it.runId, {
         gate: `clarify Q${it.id.slice(1)} r${it.round}`,
         outcome: 'approve',
-        comment: answer.length > 60 ? answer.slice(0, 57) + '…' : answer,
+        comment: answer.length > 60 ? answer.slice(0, 57) + 'â€¦' : answer,
       })
       const left = inbox.some((i) => i.runId === it.runId && i.type === 'clarify')
       if (!left) {
@@ -310,7 +326,7 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
       if (outcome === 'approve') {
         patchRun(it.runId, (r) => ({ status: 'running', activeStages: nextStage(r.activeStages), blocker: '' }))
       } else if (outcome === 'revise') {
-        patchRun(it.runId, { status: 'running', blocker: `revising — round ${it.round + 1}` })
+        patchRun(it.runId, { status: 'running', blocker: `revising â€” round ${it.round + 1}` })
       } else {
         patchRun(it.runId, { status: 'failed', blocker: `rejected at ${it.gate}` })
       }
@@ -323,11 +339,11 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
       if (!it) throw new HttpStatusError(404, `no pending item ${key} on ${runId}`)
       removeItem(key)
       if (approve) {
-        addDecision(it.runId, { gate: `merge r${it.round}`, outcome: 'approve', comment: `ADVISORY OVERRIDE: ${justification}`, decider: 'human · you (override)' })
+        addDecision(it.runId, { gate: `merge r${it.round}`, outcome: 'approve', comment: `ADVISORY OVERRIDE: ${justification}`, decider: 'human Â· you (override)' })
         patchRun(it.runId, { status: 'running', activeStages: ['deploy'], blocker: '' })
       } else {
         addDecision(it.runId, { gate: `merge r${it.round}`, outcome: 'revise', comment: justification || 'raise diff coverage to 0.80' })
-        patchRun(it.runId, { status: 'running', activeStages: ['code'], blocker: 'revising — coverage' })
+        patchRun(it.runId, { status: 'running', activeStages: ['code'], blocker: 'revising â€” coverage' })
       }
     },
 
@@ -361,6 +377,7 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
         mode: input.mode,
         repo: input.repo || 'git@github.com:acme/portal',
         activeStages: ['requirements'],
+        stageMarks: null,
         status: 'running',
         blocker: '',
         cost: 0.04,

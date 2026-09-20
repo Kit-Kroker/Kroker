@@ -45,8 +45,11 @@ const ROUTES: [string, (api: HttpGraphApi) => Promise<unknown>][] = [
   ['loadGraph', (api) => api.loadGraph('deadbeef')],
 ]
 
-const stateBody = (terminal: string | null) => ({
-  kind: 'state', graph_sha: 's', nodes: {}, edges: [], current_nodes: [], pending: [], terminal,
+// E-75 §7.4: outcome replaces terminal; a running outcome is the only
+// non-final body.
+const stateBody = (state: 'running' | 'completed') => ({
+  kind: 'state', graph_sha: 's', nodes: {}, edges: [], current_nodes: [], pending: [],
+  outcome: { state, reason: null, result: null },
 })
 
 describe('http graph provider under hostile responses', () => {
@@ -175,7 +178,7 @@ describe('subscribeGraphState resilience', () => {
 
   it('unsubscribing before the first fetch returns delivers nothing and leaks no polls', async () => {
     vi.useFakeTimers()
-    const polls = servePolling(() => ok(stateBody(null)))
+    const polls = servePolling(() => ok(stateBody('running')))
     const cb = vi.fn()
     const onError = vi.fn()
     const unsub = createHttpGraphApi().subscribeGraphState('r1', cb, onError)
@@ -268,15 +271,15 @@ describe('mock graph under hostile use', () => {
     const mock = createMockGraph()
     const cb = vi.fn()
     mock.subscribeGraphState('feature-graph-demo', cb)
-    await flushMicro()                               // initial delivery: blocked_r2
+    await flushMicro()                               // initial delivery: the recorded blocked script
     expect(cb).toHaveBeenCalledTimes(1)
     expect(() => mock.onDecision('bogus-run', 'k', 'approve')).not.toThrow()
     await flushMicro()
     expect(cb).toHaveBeenCalledTimes(1)              // no listener noise
-    mock.onDecision('feature-graph-demo', 'architecture#2', 'approve')  // still works
+    mock.onDecision('feature-graph-demo', 'architecture#1', 'approve')  // still works
     await flushMicro()
-    expect(cb).toHaveBeenCalledTimes(2)              // state advanced to planning
-    expect(cb.mock.calls[1][0]).toMatchObject({ kind: 'state', current_nodes: ['planner'] })
+    expect(cb).toHaveBeenCalledTimes(2)              // state advanced to the recorded completed
+    expect(cb.mock.calls[1][0]).toMatchObject({ kind: 'state', outcome: { state: 'completed' } })
   })
 
   it('onDecision for a non-pending gate key is a silent no-op', async () => {
@@ -286,7 +289,7 @@ describe('mock graph under hostile use', () => {
     await flushMicro()
     cb.mockClear()
     expect(() => mock.onDecision('feature-graph-demo', 'no-such-key', 'reject')).not.toThrow()
-    expect(() => mock.onDecision('feature-graph-demo', 'architecture#1', 'approve')).not.toThrow()  // wrong phase replay
+    expect(() => mock.onDecision('feature-graph-demo', 'architecture#2', 'approve')).not.toThrow()  // wrong phase replay
     await flushMicro()
     expect(cb).not.toHaveBeenCalled()
   })

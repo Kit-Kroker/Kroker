@@ -11,9 +11,18 @@ export type StageState = DotState
 const reported = new Set<string>()
 
 export function stageStates(
-  run: Pick<Run, 'activeStages' | 'status'>,
+  run: Pick<Run, 'activeStages' | 'status' | 'stageMarks'>,
   canonicalStages: readonly string[],
 ): StageState[] {
+  // Rule 1 (E-75 §8): a graph run's marks are the strip's source of truth,
+  // rendered verbatim in canonical order; a canonical stage absent from the
+  // marks is `skipped` (E76-OQ-3 closes). Present-but-empty marks therefore
+  // render every stage skipped -- never the linear fallback. A marks key
+  // outside the canonical list (e.g. `unknown`) renders nothing and is NOT
+  // the rule-3 fault: that path governs activeStages names only.
+  if (run.stageMarks != null) {
+    return canonicalStages.map((stage) => run.stageMarks?.[stage] ?? 'skipped')
+  }
   const positions: number[] = []
   for (const name of run.activeStages) {
     const i = canonicalStages.indexOf(name)

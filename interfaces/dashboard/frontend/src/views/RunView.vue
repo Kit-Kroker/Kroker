@@ -57,7 +57,10 @@ const otherPending = (nodeKey: string) => model.value?.pendingByNode[nodeKey]?.f
     </header>
 
     <p v-if="runGraph.error" class="banner error" data-testid="run-graph-error">{{ runGraph.error }}</p>
-    <p v-else-if="!catalog.can('run_graph')" class="banner" data-testid="run-graph-unavailable">Graph view arrives with E-75.</p>
+    <p v-else-if="!catalog.can('run_graph')" class="banner" data-testid="run-graph-unavailable">Graph view is not available on this server.</p>
+    <p v-else-if="runGraph.state?.kind === 'unavailable'" class="banner" data-testid="run-graph-state-unavailable">
+      This run's graph state is no longer available ({{ runGraph.state.reason === 'retention_expired' ? 'history retention expired' : 'the graph no longer validates against the current registry' }}).
+    </p>
     <p v-else-if="runGraph.graph?.kind === 'no_graph'" class="banner" data-testid="run-graph-empty">
       This run predates graph execution.
     </p>

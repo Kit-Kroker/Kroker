@@ -4,7 +4,7 @@
 import type { CanvasEdge, CanvasNode, CanvasPort } from '@kroker/ui/components/graph_canvas/types'
 import type { IssueItem } from '@kroker/ui/components/issue_list/IssueList.vue'
 import type {
-  EdgeRef, EdgeWire, GraphStateResponse, GraphWire, Issue, NodeTypeWire, PendingRef,
+  EdgeRef, EdgeWire, GraphStateResponse, GraphWire, Issue, NodeTypeWire, PendingRef, RunOutcomeWire,
 } from '../api/graph-types'
 import { sameEdge } from '../api/graph-types'
 
@@ -17,6 +17,8 @@ export interface CanvasModel {
   edgeIndex: Record<string, number>
   /** node id -> pending refs on that node (run mode) */
   pendingByNode: Record<string, PendingRef[]>
+  /** The run's outcome (E-75 §7.4), or null without a state/no_graph. */
+  outcome: RunOutcomeWire | null
 }
 
 export interface CanvasOptions {
@@ -164,7 +166,10 @@ export function toCanvas(graph: GraphWire, opts: CanvasOptions): CanvasModel {
   })
 
   const pendingByNode: Record<string, PendingRef[]> = {}
-  for (const p of state?.pending ?? []) (pendingByNode[p.node] ??= []).push(p)
+  // E-75 §7.4: an unattributed pending (node null, opened outside any
+  // activation) anchors to no canvas node -- the inbox is its surface, so it
+  // is never keyed (a coerced "null" key would be a phantom node).
+  for (const p of state?.pending ?? []) if (p.node !== null) (pendingByNode[p.node] ??= []).push(p)
 
   return {
     nodes,
@@ -173,6 +178,7 @@ export function toCanvas(graph: GraphWire, opts: CanvasOptions): CanvasModel {
     nodeIndex: Object.fromEntries(nKeys.map((k, i) => [k, i])),
     edgeIndex: Object.fromEntries(eKeys.map((k, i) => [k, i])),
     pendingByNode,
+    outcome: state?.kind === 'state' ? state.outcome : null,
   }
 }
 

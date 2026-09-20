@@ -27,7 +27,11 @@ assert _spec and _spec.loader
 dump = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(dump)
 
-PROVISIONAL = {"validation.provisional.json", "run_graphs.provisional.json"}
+# Canvas run-mode wiring (E75-OQ-1, 2026-09-20): the hand-written
+# *.provisional.json mock fixtures are gone -- the mock consumes the
+# recorded run_state/* contract, so the fixtures dir is EXACTLY the fresh
+# build with no allowed strays.
+PROVISIONAL: set[str] = set()
 
 
 def test_committed_recordings_equal_a_fresh_build():

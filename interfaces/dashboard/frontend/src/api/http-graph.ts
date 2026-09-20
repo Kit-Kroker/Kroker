@@ -4,6 +4,7 @@
 import type { DashboardApi } from './types'
 import {
   CapabilityUnavailable,
+  isFinalState,
   type Capability,
   type CatalogWire,
   type GraphStateResponse,
@@ -73,8 +74,10 @@ export function createHttpGraphApi(baseUrl = '/api', pollOpts?: PollOptions): Gr
         }
         try {
           const state: GraphStateResponse = await call(`${run(runId)}/graph_state`, { signal })
-          const final = state.kind === 'no_graph' || state.terminal !== null
-          return { kind: 'value', value: state, final }
+          // E-75 §7.4: outcome replaces terminal -- finality is the outcome's
+          // state (running polls on; completed/rejected/escalated/failed and
+          // the E-77 `unavailable` degradation all end the chain).
+          return { kind: 'value', value: state, final: isFinalState(state) }
         } catch (e) {
           if (isNotFound(e)) return { kind: 'stop' }
           throw e

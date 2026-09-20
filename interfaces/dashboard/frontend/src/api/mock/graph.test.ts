@@ -92,37 +92,35 @@ describe('mock graph runs', () => {
   })
 
   it('serves the demo run graph with the recorded sha and back edges', async () => {
+    // The swap targets the RECORDED GraphResponse of the shipped default
+    // graph (run_state/graph_response.recorded.json), not pre_code's parse.
     const r = await createMockGraph().getRunGraph('feature-graph-demo')
     expect(r.kind).toBe('graph')
     if (r.kind === 'graph') {
-      expect(r.sha).toBe((preCode.parse as { sha: string }).sha)
-      expect(r.back_edges).toHaveLength(3)
+      expect(r.sha).toBe((recordedResponse as { sha: string }).sha)
+      expect(r.back_edges).toHaveLength((recordedResponse as { back_edges: unknown[] }).back_edges.length)
     }
   })
 
   it('delivers the scripted state and advances only on a decision for the pending key', async () => {
+    // Ruling 3 of the canvas-run-mode gate: the recorded script is
+    // blocked_at_architecture -{approve}-> completed / -{reject}-> rejected.
+    // (The old provisional revise-bumps-traversals flow has no recorded
+    // counterpart; traversal counts are asserted statically on the escalated
+    // recording in adapters/graph.test.ts.)
     const api = createMockApi({ simulateLive: false })
     const seen: GraphStateResponse[] = []
     const stop = api.subscribeGraphState('feature-graph-demo', (s) => seen.push(s))
     await tick()
     const first = seen.at(-1)!
-    expect(first.kind === 'state' && first.pending.map((p) => p.key)).toEqual(['architecture#2'])
-    await api.decideGate('feature-graph-demo', 'architecture#2', 'approve', '')
+    expect(first.kind === 'state' && first.pending.map((p) => p.key)).toEqual(['architecture#1'])
+    await api.decideGate('feature-graph-demo', 'architecture#1', 'approve', '')
     const next = seen.at(-1)!
-    expect(next.kind === 'state' && next.current_nodes).toEqual(['planner'])
+    expect(next.kind === 'state' && next.outcome.state).toBe('completed')
+    expect(next.kind === 'state' && next.current_nodes).toEqual([])
     stop()
-    await expect(api.decideGate('feature-graph-demo', 'architecture#2', 'approve', '')).rejects.toThrow()
-  })
-
-  it('revise bumps the loop edge traversal count', async () => {
-    const api = createMockApi({ simulateLive: false })
-    const seen: GraphStateResponse[] = []
-    api.subscribeGraphState('feature-graph-demo', (s) => seen.push(s))
-    await tick()
-    await api.decideGate('feature-graph-demo', 'architecture#2', 'revise', 'again')
-    const s = seen.at(-1)!
-    const loop = s.kind === 'state' ? s.edges.find((e) => e.edge.source === 'architecture' && e.edge.source_port === 'revise') : undefined
-    expect(loop?.traversals).toBe(2)
+    // the pending key is gone: a second decision for it is a 404, never a replay
+    await expect(api.decideGate('feature-graph-demo', 'architecture#1', 'approve', '')).rejects.toThrow()
   })
 
   it('delivers nothing after unsubscribe', async () => {

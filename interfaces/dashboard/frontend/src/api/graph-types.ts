@@ -2,7 +2,7 @@
 // models in src/sdlc/dashboard/graph_wire.py, pinned by the recorded
 // fixtures in __fixtures__/graph/ (tests/test_graph_fixtures_fresh.py).
 // `role` and `gate` stay opaque: the canvas never learns RoleConfig fields.
-// FINAL = shipped by E-76; PROVISIONAL = E-73/E-75/E-77 implement.
+// Sections marked FINAL match the landed wire (E-76/E-73/E-75/E-77).
 
 export interface NodeWire {
   id: string
@@ -83,7 +83,7 @@ export type ParseWire =
 
 export type SerializeWire = { ok: true; yaml: string } | { ok: false; shape_errors: ShapeError[] }
 
-// --- validate (PROVISIONAL, E-73 + E-75) ---------------------------------------------
+// --- validate (FINAL, E-73 + E-75) ---------------------------------------------
 
 export interface IssueTarget {
   kind: 'graph' | 'node' | 'edge' | 'port'
@@ -95,7 +95,9 @@ export interface IssueTarget {
 
 export interface Issue {
   code: string
-  severity: 'error' | 'warning'
+  // E-75 design §7.3: not_executable is legal but unrunnable by this
+  // worker -- the validator's severity, distinct from error/warning.
+  severity: 'error' | 'warning' | 'not_executable'
   message: string
   target: IssueTarget
 }
@@ -105,7 +107,7 @@ export interface ValidationWire {
   back_edges: EdgeRef[]
 }
 
-// --- save / load (PROVISIONAL, E-75 + E-77) --------------------------------------------
+// --- save / load (FINAL, E-75 + E-77) --------------------------------------------
 
 export type SaveWire =
   | { ok: true; sha: string; validation: ValidationWire | null }
@@ -115,13 +117,18 @@ export type LoadWire =
   | { ok: true; sha: string; graph: GraphWire }
   | { ok: false; reason: 'not_found' }
 
-// --- run graph and run state (PROVISIONAL, E-75 on E-74) --------------------------------
+// --- run graph and run state (FINAL, E-75 §7.4 as landed by E-75/E-77) ------
+// The mirror of graph_wire.py's run-state models, caught up to the recorded
+// fixtures in __fixtures__/graph/run_state/ (tests/test_graph_fixtures_fresh.py).
 
 export type GraphResponse =
   | { kind: 'graph'; sha: string; graph: GraphWire; back_edges: EdgeRef[] }
   | { kind: 'no_graph'; reason: 'legacy_run' }
 
-export type NodeRunStatus = 'idle' | 'running' | 'blocked' | 'done' | 'failed' | 'stale'
+// The run-state status set (graph_wire.NodeRunState.status): skipped = a node
+// the run's graph never routes to; cancelled = a live node cut down by a
+// closed execution.
+export type NodeRunStatus = 'idle' | 'running' | 'blocked' | 'done' | 'failed' | 'stale' | 'skipped' | 'cancelled'
 
 export interface NodeRunState {
   status: NodeRunStatus
@@ -129,25 +136,52 @@ export interface NodeRunState {
   started_at: string | null
   ended_at: string | null
   cost_usd: number | null
+  /** E-77 US3/FR-003: resolve_stage of the node's type; null when unknown. */
+  canonical_stage?: string | null
 }
 
+// E-75 §7.4: node is null for an unattributed pending (opened outside any
+// activation) -- the inbox is its surface, no canvas node anchors it.
 export interface PendingRef {
-  node: string
+  node: string | null
   key: string
   kind: 'gate' | 'clarify' | 'escalation'
 }
 
+// E-75 §7.4: outcome replaces terminal. state 'running' is the ONLY
+// non-final state; the poll ends on anything else.
+export interface RunOutcomeWire {
+  state: 'running' | 'completed' | 'rejected' | 'escalated' | 'failed'
+  reason: string | null
+  result: string | null
+}
+
+/** E-77 R-10/FR-021: the run exists but its state cannot be projected. */
+export interface GraphStateUnavailable {
+  kind: 'unavailable'
+  reason: 'registry_drift' | 'retention_expired'
+  problems: string[]
+}
+
 export type GraphStateResponse =
   | { kind: 'no_graph'; reason: 'legacy_run' }
+  | GraphStateUnavailable
   | {
       kind: 'state'
       graph_sha: string
       nodes: Record<string, NodeRunState>
+      /** Back edges only; an absent edge means 0 traversals. */
       edges: { edge: EdgeRef; traversals: number }[]
+      /** Distinct node ids of state.live, sorted. */
       current_nodes: string[]
       pending: PendingRef[]
-      terminal: null | 'done' | 'failed' | 'escalated'
+      outcome: RunOutcomeWire
     }
+
+/** Finality (E-75 §7.4): anything but a running state ends the poll. */
+export function isFinalState(state: GraphStateResponse): boolean {
+  return state.kind !== 'state' || state.outcome.state !== 'running'
+}
 
 export class CapabilityUnavailable extends Error {
   constructor(readonly capability: Capability) {

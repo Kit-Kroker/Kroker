@@ -18,7 +18,8 @@ import { useUiStore } from './ui'
 
 const GRAPH = { kind: 'graph' as const, sha: 'sha-1', graph: { schema_version: 1 as const, nodes: [], edges: [] }, back_edges: [] }
 const state = (over: Partial<Extract<GraphStateResponse, { kind: 'state' }>> = {}): GraphStateResponse => ({
-  kind: 'state', graph_sha: 'sha-1', nodes: {}, edges: [], current_nodes: [], terminal: null,
+  kind: 'state', graph_sha: 'sha-1', nodes: {}, edges: [], current_nodes: [],
+  outcome: { state: 'running', reason: null, result: null },
   pending: [{ node: 'architecture', key: 'architecture#2', kind: 'gate' }], ...over,
 })
 

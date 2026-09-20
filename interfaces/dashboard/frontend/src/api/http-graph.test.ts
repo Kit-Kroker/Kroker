@@ -72,14 +72,20 @@ describe('http graph provider', () => {
     expect(fetchMock.mock.calls.map(([p]) => p)).toEqual(['/api/graphs/catalog'])
   })
 
-  it('polls run state when declared and ends the chain on a terminal state', async () => {
+  it('polls run state when declared and ends the chain on a non-running outcome', async () => {
+    // Body re-shaped to the FINAL wire (E-75 §7.4): outcome replaces
+    // terminal; the recorded-bodies test below pins the same finality over
+    // real projections. This row keeps the URL-encoding pin ('r 1').
     vi.useFakeTimers()
     const catalog = { ...catalogJson, capabilities: { ...catalogJson.capabilities, run_graph: true } }
     let polls = 0
     fetchMock.mockImplementation(async (path: string) => {
       if (path === '/api/graphs/catalog') return ok(catalog)
       polls += 1
-      return ok({ kind: 'state', graph_sha: 's', nodes: {}, edges: [], current_nodes: [], pending: [], terminal: polls >= 2 ? 'done' : null })
+      return ok({
+        kind: 'state', graph_sha: 's', nodes: {}, edges: [], current_nodes: [], pending: [],
+        outcome: { state: polls >= 2 ? 'completed' : 'running', reason: null, result: null },
+      })
     })
     const api = createHttpGraphApi()
     const cb = vi.fn()
