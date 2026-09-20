@@ -225,7 +225,7 @@ description: "Task list for E-77 — graph store + custom-graph benchmark mappin
 
 ## Phase 8: Polish & cross-cutting
 
-- [ ] T042 Static gates, each run separately: `ruff check .`, then `ruff format --check .`, then `mypy` (no new errors in touched `src/` files), then `python scripts/check_file_size.py`. `git diff --stat main -- src/sdlc/stages/code/step.py` must be empty, and `git diff --stat main -- interfaces/` limited to T040/T041's files.
+- [x] T042 Static gates, each run separately: `ruff check .`, then `ruff format --check .`, then `mypy` (no new errors in touched `src/` files), then `python scripts/check_file_size.py`. `git diff --stat main -- src/sdlc/stages/code/step.py` must be empty, and `git diff --stat main -- interfaces/` limited to T040/T041's files.
 - [ ] T043 Full regression, each command separately: `pytest`, then `pytest -m temporal`, then `pytest tests/test_graph_fixtures_fresh.py`, then `python scripts/check_ui.py`. `git status tests/replay` must show no re-recorded goldens or histories.
 - [ ] T044 Walk through `.specify/specs/001-canonical-stage-graph-sha/quickstart.md` §1–§3 and tick each row; the §4 manual smoke is optional.
 - [ ] T045 Landing docs (R5, R-13), describing main only:
