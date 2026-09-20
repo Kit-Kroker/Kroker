@@ -4,6 +4,8 @@ import catalogJson from '../api/__fixtures__/graph/catalog.json'
 import preCode from '../api/__fixtures__/graph/scenarios/pre_code.json'
 import runGraphs from '../api/__fixtures__/graph/run_graphs.provisional.json'
 import validation from '../api/__fixtures__/graph/validation.provisional.json'
+import graphResponse from '../api/__fixtures__/graph/run_state/graph_response.recorded.json'
+import graphState from '../api/__fixtures__/graph/run_state/graph_state.recorded.json'
 import type { CatalogWire, GraphStateResponse, GraphWire, Issue } from '../api/graph-types'
 
 const catalog = catalogJson as unknown as CatalogWire
@@ -100,6 +102,69 @@ describe('toCanvas (run mode)', () => {
     const gate = m.nodes.find((n) => n.key === 'architecture')!
     expect(gate.metrics).toEqual({ cost: '—', elapsed: '4m 30s', round: 'r2' })
     expect(m.pendingByNode.architecture).toEqual([{ node: 'architecture', key: 'architecture#2', kind: 'gate' }])
+  })
+
+  // --- chaos: FINAL wire shapes the provisional mirror does not know yet ----
+  // PendingRef.node is nullable (E-75 §7.4): an unattributed pending has no
+  // node to anchor to -- the inbox is its surface. Statuses skipped/cancelled
+  // appear in the recorded interrupted scenario (graph_state.recorded.json).
+
+  it('an unattributed pending is keyed nowhere; skipped and cancelled pass through as statuses', () => {
+    const state = {
+      kind: 'state',
+      graph_sha: 's',
+      nodes: {
+        intake: { status: 'skipped', round: 0, started_at: null, ended_at: null, cost_usd: null },
+        architecture: { status: 'cancelled', round: 1, started_at: null, ended_at: null, cost_usd: null },
+      },
+      edges: [],
+      current_nodes: [],
+      pending: [
+        { node: null, key: 'clarify#1', kind: 'clarify' },
+        { node: 'architecture', key: 'architecture#1', kind: 'gate' },
+      ],
+      outcome: { state: 'running', reason: null, result: null },
+    } as unknown as GraphStateResponse
+    const m = toCanvas(PRE, { typeOf, state })
+    // never a coerced "null" key, never a throw; only the attributed ref keys
+    expect(Object.keys(m.pendingByNode)).toEqual(['architecture'])
+    expect(m.nodes.find((n) => n.key === 'intake')!.status).toBe('skipped')
+    expect(m.nodes.find((n) => n.key === 'architecture')!.status).toBe('cancelled')
+  })
+})
+
+describe('toCanvas (run mode over the recorded FINAL contract)', () => {
+  // E75-OQ-1 (bug canvas-run-mode): the recorded fixtures are the FINAL wire
+  // (E-75 design §7.4). The canvas must decorate them as-is and surface the
+  // run's outcome so a terminal run view can render it.
+  const GRAPH = (graphResponse as unknown as { graph: GraphWire }).graph
+  const STATES = graphState as unknown as Record<string, GraphStateResponse>
+  const outcomeOf = (m: ReturnType<typeof toCanvas>) => (m as { outcome?: unknown }).outcome
+  const statusOf = (m: ReturnType<typeof toCanvas>, key: string): string =>
+    String(m.nodes.find((n) => n.key === key)?.status)
+
+  it('blocked: recorded architect cost and gate pending ref, with the running outcome present', () => {
+    const m = toCanvas(GRAPH, { typeOf, state: STATES.blocked_at_architecture, now: new Date('2026-09-14T09:35:30Z') })
+    const architect = m.nodes.find((n) => n.key === 'architect')!
+    expect(architect.status).toBe('done')
+    expect(architect.metrics?.cost).toBe('$1.87')
+    expect(m.pendingByNode.architecture).toEqual([{ node: 'architecture', key: 'architecture#1', kind: 'gate' }])
+    expect(statusOf(m, 'context')).toBe('skipped')
+    expect(outcomeOf(m)).toEqual({ state: 'running', reason: null, result: null }) // RED until the wiring lands
+  })
+
+  it('escalated: the revise loop counter is the recorded traversal count, with the escalated outcome', () => {
+    const m = toCanvas(GRAPH, { typeOf, state: STATES.escalated_revise_exhausted })
+    const loop = m.edges.find((x) => x.key === 'architecture.revise>architect.guidance')!
+    expect(loop.counter).toEqual({ used: 2, max: 2 }) // static: the recorded revisal count
+    expect(outcomeOf(m)).toEqual({ state: 'escalated', reason: 'architecture.revise: exhausted', result: null }) // RED
+  })
+
+  it('completed: every node decorated terminal, with the completed outcome present', () => {
+    const m = toCanvas(GRAPH, { typeOf, state: STATES.completed })
+    expect(m.nodes.filter((n) => n.status !== 'done' && n.status !== 'skipped')).toEqual([])
+    expect(statusOf(m, 'context')).toBe('skipped')
+    expect(outcomeOf(m)).toEqual({ state: 'completed', reason: null, result: 'deployed:https://example.invalid/pr/1' }) // RED
   })
 })
 

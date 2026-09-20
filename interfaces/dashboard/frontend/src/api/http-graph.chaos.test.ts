@@ -214,6 +214,46 @@ describe('subscribeGraphState resilience', () => {
     await vi.advanceTimersByTimeAsync(16000)         // fail 4: the chain survived
     expect(polls()).toBe(before + 1)
   })
+
+  // --- chaos: FINAL wire shapes the provisional finality check misreads ------
+  // outcome replaces terminal (E-75 §7.4): a running state with no terminal
+  // field must poll on; today `terminal !== null` sees undefined and stops.
+
+  it('an outcome-shaped running state is non-final: changed pending keeps polling', async () => {
+    vi.useFakeTimers()
+    const bodies = [
+      { kind: 'state', graph_sha: 's', nodes: {}, edges: [], current_nodes: [],
+        pending: [{ node: 'architecture', key: 'architecture#1', kind: 'gate' }],
+        outcome: { state: 'running', reason: null, result: null } },
+      { kind: 'state', graph_sha: 's', nodes: {}, edges: [], current_nodes: [],
+        pending: [{ node: 'architecture', key: 'architecture#2', kind: 'gate' }],
+        outcome: { state: 'running', reason: null, result: null } },
+    ]
+    let statePolls = 0
+    fetchMock.mockImplementation(async (path: string) => {
+      if (path === '/api/graphs/catalog') return ok(asCatalog(ALL_CAPS))
+      if (path === '/api/runs/r1/graph_state') {
+        statePolls += 1
+        return ok(bodies[Math.min(statePolls, bodies.length) - 1])
+      }
+      throw new Error(`unexpected fetch ${path}`)
+    })
+    const cb = vi.fn()
+    createHttpGraphApi('/api', { jitter: 0, random: () => 0.5 }).subscribeGraphState('r1', cb)
+    await vi.advanceTimersByTimeAsync(0)             // first delivery: pending #1
+    expect(cb).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(2000)          // running is non-final: poll again
+    expect(statePolls).toBe(2)
+    expect(cb).toHaveBeenCalledTimes(2)
+    const second = cb.mock.calls[1][0] as unknown as { pending: { key: string }[] }
+    expect(second.pending[0].key).toBe('architecture#2')
+  })
+
+  // NOT pinned here: an `unavailable` body already ends the chain cleanly
+  // today -- `terminal` is absent, so `!== null` is true by accident and the
+  // observable behavior (one fetch, one delivery, no retries) matches the
+  // FINAL contract. Its honest RED surface is the RunView banner, which has
+  // no branch for it (views/RunView.test.ts).
 })
 
 describe('mock graph under hostile use', () => {

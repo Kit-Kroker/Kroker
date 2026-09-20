@@ -6,6 +6,8 @@ import catalogJson from '../__fixtures__/graph/catalog.json'
 import preCode from '../__fixtures__/graph/scenarios/pre_code.json'
 import badYaml from '../__fixtures__/graph/scenarios/bad_yaml.json'
 import soft from '../__fixtures__/graph/objects/pre_code_architecture_soft.json'
+import recordedResponse from '../__fixtures__/graph/run_state/graph_response.recorded.json'
+import recordedStates from '../__fixtures__/graph/run_state/graph_state.recorded.json'
 import type { GraphStateResponse, GraphWire } from '../graph-types'
 
 afterEach(() => { vi.restoreAllMocks() })
@@ -131,4 +133,47 @@ describe('mock graph runs', () => {
     await tick()
     expect(cb).not.toHaveBeenCalled()
   })
+
+  // --- canvas run-mode wiring (E75-OQ-1, bug canvas-run-mode): after the
+  // swap the mock serves the RECORDED run graph and script, never the
+  // hand-written provisional one.
+
+  it('serves the recorded graph and the recorded blocked script with its outcome', async () => {
+    const g = createMockGraph()
+    const r = await g.getRunGraph('feature-graph-demo')
+    expect(r.kind).toBe('graph')
+    if (r.kind === 'graph') {
+      expect(r.sha).toBe((recordedResponse as { sha: string }).sha)
+      expect(r.graph.nodes).toHaveLength(12)
+    }
+    const seen: GraphStateResponse[] = []
+    g.subscribeGraphState('feature-graph-demo', (s) => seen.push(s))
+    await tick()
+    const first = seen.at(-1)! as unknown as RecordedState
+    expect(first).toEqual((recordedStates as Record<string, unknown>).blocked_at_architecture)
+    expect(first.pending).toEqual([{ node: 'architecture', key: 'architecture#1', kind: 'gate' }])
+    expect(first.outcome).toEqual({ state: 'running', reason: null, result: null })
+    expect(first.nodes.context.status).toBe('skipped')
+    g.onDecision('feature-graph-demo', 'architecture#1', 'approve')
+    expect(seen.at(-1)! as unknown as RecordedState).toEqual(
+      (recordedStates as Record<string, unknown>).completed,
+    )
+  })
+
+  it('reject at the architecture gate advances to the recorded rejected state', async () => {
+    const g = createMockGraph()
+    const seen: GraphStateResponse[] = []
+    g.subscribeGraphState('feature-graph-demo', (s) => seen.push(s))
+    await tick()
+    g.onDecision('feature-graph-demo', 'architecture#1', 'reject')
+    const s = seen.at(-1)! as unknown as RecordedState
+    expect(s).toEqual((recordedStates as Record<string, unknown>).rejected_at_architecture)
+    expect(s.outcome).toEqual({ state: 'rejected', reason: 'architecture.reject', result: 'rejected:architecture' })
+  })
 })
+
+interface RecordedState {
+  pending: { node: string | null; key: string; kind: string }[]
+  nodes: Record<string, { status: string }>
+  outcome: { state: string; reason: string | null; result: string | null }
+}

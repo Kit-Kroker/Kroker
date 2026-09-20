@@ -91,4 +91,27 @@ describe('mapSnapshot', () => {
     const { inbox } = mapSnapshot(snapshot as never, NOW)
     expect(inbox[0].age).toBe('2h 00m')
   })
+
+  // --- canvas run-mode wiring (E75-OQ-1, bug canvas-run-mode): the served
+  // marks become the strip's source of truth (E-75 §8; E76-OQ-3 closes).
+
+  it('carries an open graph run stage_marks verbatim as stageMarks', () => {
+    const { runs } = mapSnapshot(snapshot as never, NOW)
+    const row = runs.find((r) => r.id === 'graph-run-live')!
+    const marks = (snapshot as { runs: { run_id: string; stage_marks?: Record<string, string> }[] })
+      .runs.find((r) => r.run_id === 'graph-run-live')!.stage_marks!
+    expect((row as { stageMarks?: unknown }).stageMarks).toEqual(marks)
+  })
+
+  it('maps a closed graph run from closed_marks and leaves unmarked rows null', () => {
+    const { runs } = mapSnapshot(snapshot as never, NOW)
+    const closed = runs.find((r) => r.id === 'graph-run-closed')!
+    const marks = (snapshot as { closed_marks: Record<string, Record<string, string>> })
+      .closed_marks['graph-run-closed']
+    expect((closed as { stageMarks?: unknown }).stageMarks).toEqual(marks)
+    // FeatureWorkflow rows keep the linear fallback contract: null, not
+    // undefined, not inferred marks.
+    const sso = runs.find((r) => r.id === 'feature-add-sso')!
+    expect((sso as { stageMarks?: unknown }).stageMarks).toBeNull()
+  })
 })

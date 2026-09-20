@@ -49,6 +49,22 @@ describe('fleet adapter', () => {
     expect(dots.filter((d) => d.state === 'blocked').map((d) => d.stage)).toEqual(['clarify'])
   })
 
+  it('renders the strip from stageMarks verbatim; canonical stages absent from the marks render skipped', () => {
+    // E75-OQ-1 / E-75 §8: a graph run's marks are the strip's source of
+    // truth (E76-OQ-3's skipped becomes visible), in the served canonical
+    // order -- never inferred from activeStages.
+    const marked = {
+      ...mkRun({ activeStages: ['architecture'], status: 'blocked' }),
+      stageMarks: { intake: 'done', context: 'skipped', clarify: 'done', architecture: 'blocked' },
+    } as never
+    const dots = toStageDots(marked, CANONICAL)
+    expect(dots.find((d) => d.stage === 'intake')!.state).toBe('done')
+    expect(dots.find((d) => d.stage === 'context')!.state).toBe('skipped')
+    expect(dots.find((d) => d.stage === 'architecture')!.state).toBe('blocked')
+    expect(dots.find((d) => d.stage === 'research')!.state).toBe('skipped') // absent from the marks
+    expect(dots.find((d) => d.stage === 'retro')!.state).toBe('skipped') // absent from the marks
+  })
+
   it('renders nothing before the catalog loads', () => {
     expect(toStageDots(mkRun(), [])).toEqual([])
   })

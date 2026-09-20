@@ -3,6 +3,7 @@ import { createHttpGraphApi } from './http-graph'
 import { CapabilityUnavailable } from './graph-types'
 import catalogJson from './__fixtures__/graph/catalog.json'
 import preCode from './__fixtures__/graph/scenarios/pre_code.json'
+import recorded from './__fixtures__/graph/run_state/graph_state.recorded.json'
 
 const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200 })
 
@@ -87,5 +88,29 @@ describe('http graph provider', () => {
     expect(polls).toBe(2)
     expect(cb).toHaveBeenCalledTimes(2)
     expect(fetchMock.mock.calls.some(([p]) => p === '/api/runs/r%201/graph_state')).toBe(true)
+  })
+
+  it('polls on a running outcome and ends the chain on a completed outcome (recorded FINAL bodies)', async () => {
+    // E75-OQ-1: the FINAL wire replaces terminal with outcome; finality is
+    // outcome.state !== 'running'. The bodies are the recorded fixtures, so
+    // this also pins the poll parsing the FINAL shape.
+    vi.useFakeTimers()
+    const catalog = { ...catalogJson, capabilities: { ...catalogJson.capabilities, run_graph: true } }
+    let polls = 0
+    fetchMock.mockImplementation(async (path: string) => {
+      if (path === '/api/graphs/catalog') return ok(catalog)
+      polls += 1
+      return ok(polls === 1 ? recorded.blocked_at_architecture : recorded.completed)
+    })
+    const api = createHttpGraphApi()
+    const cb = vi.fn()
+    api.subscribeGraphState('r 1', cb)
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(polls).toBe(2) // a running outcome must keep the chain alive
+    expect(cb).toHaveBeenCalledTimes(2)
+    expect(cb.mock.calls[0][0].nodes.context.status).toBe('skipped') // FINAL body passes through verbatim
+    expect(cb.mock.calls.at(-1)![0].outcome).toEqual({
+      state: 'completed', reason: null, result: 'deployed:https://example.invalid/pr/1',
+    })
   })
 })

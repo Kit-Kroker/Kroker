@@ -28,6 +28,37 @@ describe('GraphCanvas', () => {
     expect(() => mount(GraphCanvas, { props: { nodes: [node('a', { status: 'sideways' as never })], edges: [] } })).toThrow(/sideways/)
   })
 
+  // --- canvas run-mode wiring (E75-OQ-1, bug canvas-run-mode): skipped and
+  // cancelled are served statuses (recorded interrupted scenario) -- they
+  // carry their stable classes and must not trip the unknown-status throw.
+  // vue-flow's node slots need real layout and never render in jsdom (the
+  // pw tier owns full rendering); stubbing just the VueFlow renderer
+  // surfaces this component's own node template so the class is assertable.
+
+  const VueFlowStub = {
+    name: 'VueFlow',
+    setup: (_p: unknown, { slots }: { slots: Record<string, ((args: { id: string }) => unknown) | undefined> }) =>
+      () => slots['node-kroker']?.({ id: 'a' }),
+  }
+  const mountStatus = (status: string) => {
+    let w: ReturnType<typeof mount> | undefined
+    expect(() => {
+      w = mount(GraphCanvas, {
+        props: { nodes: [node('a', { status: status as never })], edges: [] },
+        global: { stubs: { VueFlow: VueFlowStub } },
+      })
+    }).not.toThrow()
+    return w!
+  }
+
+  it('renders a skipped node with its stable class, not the GRAPH_CANVAS-4 throw', () => {  // clause: GRAPH_CANVAS-4
+    expect(mountStatus('skipped').find('.cmp-graph-node-skipped').exists()).toBe(true)
+  })
+
+  it('renders a cancelled node with its stable class, not the GRAPH_CANVAS-4 throw', () => {  // clause: GRAPH_CANVAS-4
+    expect(mountStatus('cancelled').find('.cmp-graph-node-cancelled').exists()).toBe(true)
+  })
+
   it('emits no remove in run mode and removes the selection in edit mode', async () => {  // clause: GRAPH_CANVAS-5
     const ro = mount(GraphCanvas, { props: { nodes: [node('a')], edges: [], selectedKey: 'a' } })
     await ro.find('[data-testid="graph-canvas"]').trigger('keydown', { key: 'Delete' })

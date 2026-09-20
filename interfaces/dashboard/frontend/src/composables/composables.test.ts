@@ -76,4 +76,47 @@ describe('stageStates', () => {
     expect(err).toHaveBeenCalledWith(expect.stringContaining('bogus'))
     err.mockRestore()
   })
+
+  // --- canvas run-mode wiring (E75-OQ-1, bug canvas-run-mode): served
+  // stage_marks become the strip's source (E-75 §8; E76-OQ-3).
+
+  it('renders stageMarks verbatim in canonical order; absent stages render skipped', () => {
+    const marked = {
+      ...run({ activeStages: ['clarify'], status: 'running' }),
+      stageMarks: { intake: 'done', clarify: 'active', planning: 'pending' },
+    } as never
+    expect(stageStates(marked, STRIP)).toEqual(['done', 'skipped', 'active', 'skipped', 'pending'])
+  })
+
+  it('keeps the linear inference exactly when stageMarks is null', () => {
+    const legacy = {
+      ...run({ activeStages: ['clarify'], status: 'running' }),
+      stageMarks: null,
+    } as never
+    expect(stageStates(legacy, STRIP)).toEqual(['done', 'done', 'active', 'pending', 'pending'])
+  })
+
+  // --- chaos: marks edge cases the verbatim/null pins leave open ----------
+
+  it('marks present but EMPTY renders every canonical stage skipped, never the linear fallback', () => {
+    const marked = {
+      ...run({ activeStages: ['clarify'], status: 'running' }),
+      stageMarks: {},
+    } as never
+    expect(stageStates(marked, STRIP)).toEqual(STRIP.map(() => 'skipped'))
+  })
+
+  it('a non-canonical marks key renders nothing and is not an activeStages product fault', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const marked = {
+      ...run({ activeStages: [], status: 'running' }),
+      stageMarks: { unknown: 'done' },
+    } as never
+    // the unknown key added no dot: exactly one state per canonical stage,
+    // all absent from the marks -> skipped; and the rule-3 fault path
+    // (console.error) governs activeStages names only, never marks keys
+    expect(stageStates(marked, STRIP)).toEqual(STRIP.map(() => 'skipped'))
+    expect(err).not.toHaveBeenCalled()
+    err.mockRestore()
+  })
 })
