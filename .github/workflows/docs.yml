@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
 
       - name: Install dependencies
         run: pip install -e ".[dev,docs]"
