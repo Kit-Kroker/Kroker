@@ -8,7 +8,9 @@
   the atomicity constraint binds, and the baseline evidence (identical
   divergence + notify error at clean 2c732e0,
   `.workspace/tmp/nf-baseline-ff-run2.txt`) is decisive. Follow-up card:
-  `.workspace/tasks/golden-tick-race.md` (committed on this branch).
+  `.workspace/tasks/golden-tick-race.md` — LOCAL card, untracked inbox per
+  `.gitignore` (`.workspace/` is ignored by design); the tracked knowledge
+  lives in this file's mechanism + options sections below.
 
 ## Adjusted gate (ruling on file, 2026-09-20)
 
