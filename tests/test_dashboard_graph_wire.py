@@ -87,11 +87,13 @@ def test_catalog_serves_the_benchmark_canonical_stages():
     assert graph_wire.catalog().canonical_stages == CANONICAL_STAGES
 
 
-def test_catalog_capabilities_are_all_false_until_later_epics():
+def test_catalog_capabilities_are_all_true_after_canvas_run_mode():
+    # E75-OQ-1 (a), landed 2026-09-20: the canvas run-mode wiring flipped
+    # validate and run_graph live beside E-77's save/load. The dict equality
+    # also pins the exact four-key alias set (a fifth capability, a dropped
+    # one, or a can_validate spelling fails here).
     wire = graph_wire.catalog().model_dump(mode="json")["capabilities"]
-    # E-77 flips save/load live (R-11); validate and run_graph stay false
-    # until the canvas follow-up (spec D7).
-    assert wire == {"validate": False, "save": True, "load": True, "run_graph": False}
+    assert wire == {"validate": True, "save": True, "load": True, "run_graph": True}
     assert graph_wire.Capabilities.model_validate({"validate": True}).can_validate is True
 
 

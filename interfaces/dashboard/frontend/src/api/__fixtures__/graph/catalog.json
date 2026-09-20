@@ -1558,10 +1558,10 @@
     }
   },
   "capabilities": {
-    "validate": false,
+    "validate": true,
     "save": true,
     "load": true,
-    "run_graph": false
+    "run_graph": true
   },
   "max_graph_bytes": 262144
 }

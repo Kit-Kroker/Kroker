@@ -169,14 +169,15 @@ def test_validate_route_serves_validate_plus_executable(setup):
     assert client.post("/graphs/validate", json={"yaml": "x"}).status_code == 422
 
 
-def test_capabilities_stay_false():
+def test_capabilities_declare_canvas_run_mode_live():
+    # E75-OQ-1 (a), landed 2026-09-20: validate and run_graph flipped true
+    # beside E-77's save/load -- the http provider may fetch the run-graph
+    # routes.
     assert graph_wire.catalog().capabilities.model_dump(by_alias=True) == {
-        "validate": False,
-        # E-77 flips save/load live (R-11); validate and run_graph stay
-        # false until the canvas follow-up (spec D7).
+        "validate": True,
         "save": True,
         "load": True,
-        "run_graph": False,
+        "run_graph": True,
     }
 
 

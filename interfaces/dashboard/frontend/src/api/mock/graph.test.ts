@@ -15,10 +15,11 @@ afterEach(() => { vi.restoreAllMocks() })
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
 describe('mock graph: a recording, never a simulator', () => {
-  it('overrides the recorded capabilities so every flow is exercisable', async () => {
-    // E-77 (FR-026): the recording now declares save/load true (validate and
-    // run_graph stay false for the canvas follow-up).
-    expect(catalogJson.capabilities).toEqual({ validate: false, save: true, load: true, run_graph: false })
+  it('exposes the recorded capabilities, exercising every flow', async () => {
+    // E75-OQ-1 (a), 2026-09-20: the recording declares all four true (the
+    // flip regenerated catalog.json); the mock keeps overriding defensively
+    // so its flows never depend on the server's rollout state.
+    expect(catalogJson.capabilities).toEqual({ validate: true, save: true, load: true, run_graph: true })
     const catalog = await createMockGraph().getCatalog()
     expect(catalog.capabilities).toEqual({ validate: true, save: true, load: true, run_graph: true })
     expect(catalog.canonical_stages).toEqual(catalogJson.canonical_stages)

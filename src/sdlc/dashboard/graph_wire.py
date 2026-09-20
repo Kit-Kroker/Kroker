@@ -108,18 +108,20 @@ class NodeTypeWire(BaseModel):
 
 
 class Capabilities(BaseModel):
-    """Server-declared graph capabilities (spec D9). E-76 serves all False;
-    E-73 flips `validate`, E-75/E-77 the rest. The wire key `validate` is an
-    alias: a field of that name would shadow BaseModel.validate."""
+    """Server-declared graph capabilities (spec D9). E-76 served all False;
+    E-73 landed validate's routes, E-77 save/load, and the canvas run-mode
+    wiring (E75-OQ-1, 2026-09-20) flipped validate and run_graph live. The
+    wire key `validate` is an alias: a field of that name would shadow
+    BaseModel.validate."""
 
     model_config = ConfigDict(
         frozen=True, extra="forbid", serialize_by_alias=True, validate_by_name=True
     )
 
-    can_validate: bool = Field(default=False, alias="validate")
+    can_validate: bool = Field(default=True, alias="validate")
     save: bool = True  # E-77 flips save/load live (R-11, US4)
     load: bool = True
-    run_graph: bool = False
+    run_graph: bool = True  # E75-OQ-1 (a): the canvas runs against live data
 
 
 class CatalogWire(BaseModel):

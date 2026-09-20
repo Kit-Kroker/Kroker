@@ -73,7 +73,12 @@ describe('RunView banners', () => {
   })
 
   it('without the run_graph capability the banner no longer claims E-75', async () => {
-    const catalog = catalogJson as unknown as CatalogWire // the recorded catalog: run_graph false
+    // E75-OQ-1: the recorded catalog now declares run_graph true, so the
+    // no-capability case pins an explicit false override.
+    const catalog = {
+      ...(catalogJson as unknown as CatalogWire),
+      capabilities: { validate: true, save: true, load: true, run_graph: false },
+    }
     useCatalogStore().catalog = catalog
     api.getCatalog.mockResolvedValue(catalog)
     const w = mount(RunView, { props: { id: 'r1' }, global: { stubs: { RouterLink: RouterLinkStub } } })

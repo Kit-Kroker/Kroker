@@ -63,6 +63,12 @@ describe('http graph provider', () => {
   })
 
   it('never polls run state while run_graph is not declared', async () => {
+    // E75-OQ-1: the recorded catalog now declares run_graph true, so the
+    // refusal case pins an explicit no-capability catalog (the :56 pattern)
+    // instead of leaning on the recording.
+    const noRunGraph = { ...catalogJson, capabilities: { ...catalogJson.capabilities, run_graph: false } }
+    fetchMock.mockImplementation(async (path: string) =>
+      path === '/api/graphs/catalog' ? ok(noRunGraph) : new Response('nope', { status: 404 }))
     vi.useFakeTimers()
     const api = createHttpGraphApi()
     const cb = vi.fn()
