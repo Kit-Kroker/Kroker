@@ -545,10 +545,12 @@ describe('screen folders layout (T005)', () => {
     expect(stale).toEqual([])
   })
 
-  it('keeps the T006 deletions in place until T006', () => {
-    expect(existsSync(join(srcRoot, 'adapters/inbox.ts'))).toBe(true)
-    expect(existsSync(join(srcRoot, 'constants.ts'))).toBe(true)
-    expect(existsSync(join(srcRoot, 'constants.test.ts'))).toBe(true)
+  it('the T006 deletions landed (hold pin retired)', () => {
+    // T005 held the trio in place; T006 deleted them (FR-007a). The pin
+    // now asserts the deletion completed rather than the interim state.
+    expect(existsSync(join(srcRoot, 'adapters/inbox.ts'))).toBe(false)
+    expect(existsSync(join(srcRoot, 'constants.ts'))).toBe(false)
+    expect(existsSync(join(srcRoot, 'constants.test.ts'))).toBe(false)
   })
 })
 
@@ -658,5 +660,73 @@ describe('screen module shape (T005)', () => {
       expect(router).toContain(spec)
     }
     expect(router).not.toContain('../views/')
+  })
+})
+
+// T006 (RED): group A close-out (FR-007a, quickstart §2). The retired trio
+// and every pre-restructure directory are gone; vite-env.d.ts stays at the
+// src root; no test file remains outside the four layers. The presence pin
+// is green today and must stay green; the absence pins fail until the
+// deletions land.
+describe('group A close-out (T006)', () => {
+  const srcRoot = join(__dirname, '..')
+
+  it('deletes the retired trio (FR-007a: constants, its test, adapters/inbox.ts)', () => {
+    const stale = ['constants.ts', 'constants.test.ts', 'adapters/inbox.ts'].filter((rel) =>
+      existsSync(join(srcRoot, rel)),
+    )
+    expect(stale).toEqual([])
+  })
+
+  it('retires every pre-restructure directory', () => {
+    const stale = ['adapters', 'components', 'views', 'stores', 'composables', 'styles'].filter(
+      (dir) => existsSync(join(srcRoot, dir)),
+    )
+    expect(stale).toEqual([])
+  })
+
+  it('keeps vite-env.d.ts at the src root (it never moves)', () => {
+    expect(existsSync(join(srcRoot, 'vite-env.d.ts'))).toBe(true)
+  })
+
+  it('leaves no test file outside the four layers (quickstart §2)', () => {
+    const outside = getFiles(srcRoot)
+      .map((f) => relOf(f, srcRoot))
+      .filter((rel): rel is string => rel !== null)
+      .filter((rel) => rel.endsWith('.test.ts') && !/^(app|api|shared|features)\//.test(rel))
+    expect(outside).toEqual([])
+  })
+})
+
+// T006 (RED, root shape): after group A the src root is exactly the four
+// layer directories plus vite-env.d.ts (quickstart §2). A Set comparison,
+// not a per-name absence list -- anything unexpected at the root (a stray
+// file, a nested dotfile) fails it, which is the point. The test-location
+// pin walks *.test.ts(x) itself: getFiles does not collect .tsx.
+describe('src root shape (T006)', () => {
+  const srcRoot = join(__dirname, '..')
+
+  it('every test file lives under app/, api/, shared/ or features/', () => {
+    const offenders: string[] = []
+    const walk = (dir: string) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, e.name)
+        if (e.isDirectory()) {
+          walk(full)
+        } else if (/\.test\.tsx?$/.test(e.name)) {
+          const rel = relOf(full, srcRoot)
+          if (rel !== null && !/^(app|api|shared|features)\//.test(rel)) {
+            offenders.push(rel)
+          }
+        }
+      }
+    }
+    walk(srcRoot)
+    expect(offenders).toEqual([])
+  })
+
+  it('the src root holds exactly app/, api/, shared/, features/ and vite-env.d.ts', () => {
+    const names = new Set(readdirSync(srcRoot, { withFileTypes: true }).map((e) => e.name))
+    expect(names).toEqual(new Set(['app', 'api', 'shared', 'features', 'vite-env.d.ts']))
   })
 })

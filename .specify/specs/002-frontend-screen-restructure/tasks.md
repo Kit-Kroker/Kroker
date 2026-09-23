@@ -79,7 +79,7 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
   - update the router's view imports; switch on the `features/` file-count guard.
 
   Gate: `check_ui.py` green; boundary scans see > 0 files in each layer.
-- [ ] T006 [US1] Delete and document (FR-007a, FR-008):
+- [x] T006 [US1] Delete and document (FR-007a, FR-008):
   - delete `FE/constants.ts`, `FE/constants.test.ts` and `FE/adapters/inbox.ts`.
   - assert `FE/components/`, `views/`, `stores/`, `adapters/`, `composables/`, `styles/` no longer exist, and that no test file sits outside `app/`, `api/`, `shared/`, `features/`.
   - in `interfaces/AGENTS.md`, add the screen-location table and layer rules from contracts/source-layout.md (Screen, Route, Folder, View; the Run row names `features/run/RunView.vue` as the route component until T039 switches it to `app/RunPage.vue` and updates the row; naming rule) and replace its `src/adapters/` references.
