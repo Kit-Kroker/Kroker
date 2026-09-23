@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useFleetStore } from '../../shared/fleet.store'
 import { useCatalogStore } from '../../shared/catalog.store'
 import FleetTable from '@kroker/ui/components/fleet_table/FleetTable.vue'
-import { toFleetRow } from '../../adapters/fleet'
+import { toFleetRow } from './fleet.adapter'
 
 const fleet = useFleetStore()
 const catalog = useCatalogStore()

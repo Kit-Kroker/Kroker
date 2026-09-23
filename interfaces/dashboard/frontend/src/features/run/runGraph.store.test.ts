@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import catalogJson from '../api/__fixtures__/graph/catalog.json'
-import { HttpStatusError } from '../api/errors'
-import type { CatalogWire, GraphStateResponse } from '../api/graph-types'
+import catalogJson from '../../api/__fixtures__/graph/catalog.json'
+import { HttpStatusError } from '../../api/errors'
+import type { CatalogWire, GraphStateResponse } from '../../api/graph-types'
 
 const api = vi.hoisted(() => ({
   getCatalog: vi.fn(),
@@ -10,11 +10,11 @@ const api = vi.hoisted(() => ({
   subscribeGraphState: vi.fn(),
   decideGate: vi.fn(),
 }))
-vi.mock('../api/client', () => ({ api }))
+vi.mock('../../api/client', () => ({ api }))
 
-import { useRunGraphStore } from './runGraph'
-import { useCatalogStore } from '../shared/catalog.store'
-import { useUiStore } from '../app/ui.store'
+import { useRunGraphStore } from './runGraph.store'
+import { useCatalogStore } from '../../shared/catalog.store'
+import { useUiStore } from '../../app/ui.store'
 
 const GRAPH = { kind: 'graph' as const, sha: 'sha-1', graph: { schema_version: 1 as const, nodes: [], edges: [] }, back_edges: [] }
 const state = (over: Partial<Extract<GraphStateResponse, { kind: 'state' }>> = {}): GraphStateResponse => ({

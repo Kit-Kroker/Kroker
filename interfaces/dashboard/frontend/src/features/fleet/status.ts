@@ -1,4 +1,4 @@
-import type { Run, Status } from '../api/types'
+import type { Run, Status } from '../../api/types'
 
 export interface StatusMeta {
   color: string

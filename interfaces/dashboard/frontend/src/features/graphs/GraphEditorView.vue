@@ -8,10 +8,10 @@ import NodePalette from '@kroker/ui/components/node_palette/NodePalette.vue'
 import IssueList from '@kroker/ui/components/issue_list/IssueList.vue'
 import YamlPane from '@kroker/ui/components/yaml_pane/YamlPane.vue'
 import type { PortRef } from '@kroker/ui/components/graph_canvas/types'
-import GraphInspector from '../components/graph/GraphInspector.vue'
-import { useCatalogStore } from '../shared/catalog.store'
-import { useGraphEditorStore } from '../stores/graphEditor'
-import { locLabel, nodeKeys, toCanvas } from '../shared/graphCanvas.adapter'
+import GraphInspector from './GraphInspector.vue'
+import { useCatalogStore } from '../../shared/catalog.store'
+import { useGraphEditorStore } from './graphEditor.store'
+import { locLabel, nodeKeys, toCanvas } from '../../shared/graphCanvas.adapter'
 
 const route = useRoute()
 const catalog = useCatalogStore()

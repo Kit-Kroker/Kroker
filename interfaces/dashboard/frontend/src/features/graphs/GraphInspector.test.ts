@@ -14,7 +14,7 @@ const api = vi.hoisted(() => ({ parseGraph: vi.fn() }))
 vi.mock('../../api/client', () => ({ api }))
 
 import { useCatalogStore } from '../../shared/catalog.store'
-import { useGraphEditorStore } from '../../stores/graphEditor'
+import { useGraphEditorStore } from './graphEditor.store'
 
 const catalog = catalogJson as unknown as CatalogWire
 const PRE = (preCode.parse as { ok: true; graph: GraphWire }).graph

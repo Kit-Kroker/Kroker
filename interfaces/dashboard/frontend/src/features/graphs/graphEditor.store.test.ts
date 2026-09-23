@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import catalogJson from '../api/__fixtures__/graph/catalog.json'
-import preCode from '../api/__fixtures__/graph/scenarios/pre_code.json'
-import badYaml from '../api/__fixtures__/graph/scenarios/bad_yaml.json'
-import soft from '../api/__fixtures__/graph/objects/pre_code_architecture_soft.json'
-import renamedInvalid from '../api/__fixtures__/graph/objects/pre_code_intake_renamed_invalid.json'
-import type { CatalogWire, GraphWire, ParseWire, ValidationWire } from '../api/graph-types'
+import catalogJson from '../../api/__fixtures__/graph/catalog.json'
+import preCode from '../../api/__fixtures__/graph/scenarios/pre_code.json'
+import badYaml from '../../api/__fixtures__/graph/scenarios/bad_yaml.json'
+import soft from '../../api/__fixtures__/graph/objects/pre_code_architecture_soft.json'
+import renamedInvalid from '../../api/__fixtures__/graph/objects/pre_code_intake_renamed_invalid.json'
+import type { CatalogWire, GraphWire, ParseWire, ValidationWire } from '../../api/graph-types'
 
 type Deferred<T> = { promise: Promise<T>; resolve: (v: T) => void }
 const deferred = <T>(): Deferred<T> => {
@@ -22,10 +22,10 @@ const api = vi.hoisted(() => ({
   loadGraph: vi.fn(),
   getRunGraph: vi.fn(),
 }))
-vi.mock('../api/client', () => ({ api }))
+vi.mock('../../api/client', () => ({ api }))
 
-import { useGraphEditorStore } from './graphEditor'
-import { useCatalogStore } from '../shared/catalog.store'
+import { useGraphEditorStore } from './graphEditor.store'
+import { useCatalogStore } from '../../shared/catalog.store'
 
 const PRE = preCode.parse as { ok: true; graph: GraphWire; sha: string }
 const withCaps = (caps: Partial<CatalogWire['capabilities']>) =>

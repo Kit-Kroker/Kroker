@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useFleetStore } from '../shared/fleet.store'
-import FleetTable from '../components/fleet/FleetTable.vue'
+import { useFleetStore } from '../../shared/fleet.store'
+import FleetTable from './FleetTable.vue'
 
 const fleet = useFleetStore()
 const summary = computed(() => `${fleet.runs.length} runs · ${fleet.blockedCount} blocked on humans`)

@@ -3,8 +3,8 @@
 // the complete set of guards: each protects the editor's own addressing or
 // reversibility, removes no expressiveness (text apply still reaches every
 // graph), and reports nothing as a validation result.
-import type { EdgeWire, GraphWire, NodeWire } from '../api/graph-types'
-import { edgeKeys, nodeKeys } from '../shared/graphCanvas.adapter'
+import type { EdgeWire, GraphWire, NodeWire } from '../../api/graph-types'
+import { edgeKeys, nodeKeys } from '../../shared/graphCanvas.adapter'
 
 const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x))
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { toFleetRow } from './fleet'
-import type { Run } from '../api/types'
-import catalogJson from '../api/__fixtures__/graph/catalog.json'
+import { toFleetRow } from './fleet.adapter'
+import type { Run } from '../../api/types'
+import catalogJson from '../../api/__fixtures__/graph/catalog.json'
 
 const CANONICAL: string[] = catalogJson.canonical_stages
 

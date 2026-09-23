@@ -4,7 +4,7 @@
 import { computed, ref, watch } from 'vue'
 import SchemaForm from '@kroker/ui/components/schema_form/SchemaForm.vue'
 import { useCatalogStore } from '../../shared/catalog.store'
-import { useGraphEditorStore } from '../../stores/graphEditor'
+import { useGraphEditorStore } from './graphEditor.store'
 import type { EdgeWire, NodeWire } from '../../api/graph-types'
 
 const catalog = useCatalogStore()

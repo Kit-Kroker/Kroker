@@ -1,7 +1,7 @@
-import type { Run } from '../api/types'
+import type { Run } from '../../api/types'
 import type { FleetRowProps } from '@kroker/ui/components/fleet_row/FleetRow.vue'
-import { statusMetaOf } from '../composables/status'
-import { toStageDots } from '../shared/stageStrip.adapter'
+import { statusMetaOf } from './status'
+import { toStageDots } from '../../shared/stageStrip.adapter'
 
 export function toFleetRow(run: Run, canonicalStages: readonly string[]): FleetRowProps {
   const meta = statusMetaOf(run)

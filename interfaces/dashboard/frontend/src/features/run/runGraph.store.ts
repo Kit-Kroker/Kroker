@@ -4,12 +4,12 @@
 // re-enable the controls.
 import { defineStore } from 'pinia'
 import { ref, shallowRef } from 'vue'
-import { api } from '../api/client'
-import { isNotFound } from '../api/errors'
-import type { GateOutcome } from '../api/types'
-import type { GraphResponse, GraphStateResponse } from '../api/graph-types'
-import { useCatalogStore } from '../shared/catalog.store'
-import { useUiStore } from '../app/ui.store'
+import { api } from '../../api/client'
+import { isNotFound } from '../../api/errors'
+import type { GateOutcome } from '../../api/types'
+import type { GraphResponse, GraphStateResponse } from '../../api/graph-types'
+import { useCatalogStore } from '../../shared/catalog.store'
+import { useUiStore } from '../../app/ui.store'
 
 export const useRunGraphStore = defineStore('runGraph', () => {
   const catalog = useCatalogStore()

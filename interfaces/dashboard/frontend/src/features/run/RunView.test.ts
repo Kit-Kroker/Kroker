@@ -8,10 +8,10 @@ import { describe, it, expect, beforeEach, afterEach, vi, beforeAll } from 'vite
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import RunView from './RunView.vue'
-import catalogJson from '../api/__fixtures__/graph/catalog.json'
-import type { CatalogWire, GraphStateResponse } from '../api/graph-types'
-import { useCatalogStore } from '../shared/catalog.store'
-import { useUiStore } from '../app/ui.store'
+import catalogJson from '../../api/__fixtures__/graph/catalog.json'
+import type { CatalogWire, GraphStateResponse } from '../../api/graph-types'
+import { useCatalogStore } from '../../shared/catalog.store'
+import { useUiStore } from '../../app/ui.store'
 
 const api = vi.hoisted(() => ({
   getCatalog: vi.fn(),
@@ -19,7 +19,7 @@ const api = vi.hoisted(() => ({
   subscribeGraphState: vi.fn(),
   decideGate: vi.fn(),
 }))
-vi.mock('../api/client', () => ({ api }))
+vi.mock('../../api/client', () => ({ api }))
 
 const RouterLinkStub = { props: ['to'], template: '<a data-testid="stub-link"><slot /></a>' }
 const GRAPH = { kind: 'graph' as const, sha: 'sha-1', graph: { schema_version: 1 as const, nodes: [], edges: [] }, back_edges: [] }

@@ -70,7 +70,7 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
   - switch on the `shared/` file-count guard.
 
   Gate: `check_ui.py` green; the case count is preserved across splits.
-- [ ] T005 [US1] Screens (R-6 table):
+- [x] T005 [US1] Screens (R-6 table):
   - **fleet**: `FE/views/FleetView.vue` and `FE/components/fleet/FleetTable.vue` + test → `FE/features/fleet/`; the remaining `toFleetRow` → `FE/features/fleet/fleet.adapter.ts` (importing `toStageDots` from shared), with `fleet.test.ts` case 1 → `fleet.adapter.test.ts`; `FE/composables/status.ts` → `FE/features/fleet/status.ts`, with the `statusMetaOf` describe → `status.test.ts`.
   - **run**: `FE/views/RunView.vue` + test and `FE/stores/runGraph.ts` + test → `FE/features/run/` (`runGraph.store.ts`, `runGraph.store.test.ts`).
   - **graphs**: `FE/views/GraphEditorView.vue`, `FE/components/graph/GraphInspector.vue` + test, `schemaCoverage.test.ts`, `FE/stores/graphEditor.ts` + test (→ `graphEditor.store.ts`/`.test.ts`) and `FE/stores/graphEdits.ts` + test → `FE/features/graphs/`.

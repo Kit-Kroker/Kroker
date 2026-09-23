@@ -5,11 +5,11 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import GraphCanvas from '@kroker/ui/components/graph_canvas/GraphCanvas.vue'
 import GateDecision from '@kroker/ui/components/gate_decision/GateDecision.vue'
 import StageDots from '@kroker/ui/components/stage_dots/StageDots.vue'
-import { useCatalogStore } from '../shared/catalog.store'
-import { useFleetStore } from '../shared/fleet.store'
-import { useRunGraphStore } from '../stores/runGraph'
-import { toCanvas } from '../shared/graphCanvas.adapter'
-import { toStageDots } from '../shared/stageStrip.adapter'
+import { useCatalogStore } from '../../shared/catalog.store'
+import { useFleetStore } from '../../shared/fleet.store'
+import { useRunGraphStore } from './runGraph.store'
+import { toCanvas } from '../../shared/graphCanvas.adapter'
+import { toStageDots } from '../../shared/stageStrip.adapter'
 
 const props = defineProps<{ id: string }>()
 const catalog = useCatalogStore()

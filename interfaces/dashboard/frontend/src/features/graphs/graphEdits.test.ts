@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   addNode, connect, edgeEditCandidate, freshId, idOfKey, moveNode, nodeEditCandidate, removeElement, withoutEmptyLabel,
 } from './graphEdits'
-import type { GraphWire } from '../api/graph-types'
+import type { GraphWire } from '../../api/graph-types'
 
 const e = (source: string, source_port: string, target: string, target_port: string) => ({ source, source_port, target, target_port })
 const G = (): GraphWire => ({

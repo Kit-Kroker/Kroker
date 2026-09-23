@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { statusMetaOf } from './status'
-import type { Run } from '../api/types'
+import type { Run } from '../../api/types'
 
 const run = (over: Partial<Run>): Run => ({
   id: 'x',

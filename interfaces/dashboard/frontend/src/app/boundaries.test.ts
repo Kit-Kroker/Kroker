@@ -57,7 +57,9 @@ function banned(fromRel: string, toRel: string): boolean {
       return fromRel.split('/')[1] !== toRel.split('/')[1]
     }
     if (toLayer === 'app') {
-      return !/^app\/[^/]+\.store\.ts$/.test(toRel)
+      // Extensionless specifiers ('../ui.store') resolve lexically, so the
+      // allowlist takes both the bare stem and the .ts form.
+      return !/^app\/[^/]+\.store(\.ts)?$/.test(toRel)
     }
     return false
   }
@@ -253,6 +255,10 @@ describe('real tree', () => {
       // T004: shared/ arrives with this task; once the directory exists,
       // scanning it must never be vacuous.
       expect(layerCounts.shared).toBeGreaterThan(0)
+    }
+    if ('features' in layerCounts) {
+      // T005: the screen folders switch the same guard on.
+      expect(layerCounts.features).toBeGreaterThan(0)
     }
     expect(violations(files, srcRoot)).toEqual([])
   })
@@ -483,9 +489,66 @@ describe('shared layer layout (T004)', () => {
     expect(stale).toEqual([])
   })
 
-  it('keeps composables/status.ts and composables.test.ts in place until T005', () => {
-    expect(existsSync(join(srcRoot, 'composables/status.ts'))).toBe(true)
-    expect(existsSync(join(srcRoot, 'composables/composables.test.ts'))).toBe(true)
+  it('composables/status.ts and composables.test.ts moved with T005 (hold pin retired)', () => {
+    // T004 held these in place; T005 moved them to features/fleet. The pin
+    // now asserts the move completed rather than pinning the interim state.
+    expect(existsSync(join(srcRoot, 'composables/status.ts'))).toBe(false)
+    expect(existsSync(join(srcRoot, 'composables/composables.test.ts'))).toBe(false)
+  })
+})
+
+// T005 (RED): the screen-folder move (R-6 screen rows; FR-001 one folder
+// per screen, FR-002 naming, FR-003 the verified-import-graph placement --
+// statusMetaOf is fleet-local). Absence pins retire the pre-restructure
+// directories; the still-present pins hold adapters/inbox.ts and the
+// constants pair for T006 -- deleting them in T005 is an over-move.
+describe('screen folders layout (T005)', () => {
+  const srcRoot = join(__dirname, '..')
+
+  it('has every screen file in its features/<screen> home (R-6 table)', () => {
+    const targets = [
+      // fleet
+      'features/fleet/FleetView.vue',
+      'features/fleet/FleetTable.vue',
+      'features/fleet/FleetTable.test.ts',
+      'features/fleet/fleet.adapter.ts',
+      'features/fleet/fleet.adapter.test.ts',
+      'features/fleet/status.ts',
+      'features/fleet/status.test.ts',
+      // run
+      'features/run/RunView.vue',
+      'features/run/RunView.test.ts',
+      'features/run/runGraph.store.ts',
+      'features/run/runGraph.store.test.ts',
+      // graphs
+      'features/graphs/GraphEditorView.vue',
+      'features/graphs/GraphInspector.vue',
+      'features/graphs/GraphInspector.test.ts',
+      'features/graphs/schemaCoverage.test.ts',
+      'features/graphs/graphEditor.store.ts',
+      'features/graphs/graphEditor.store.test.ts',
+      'features/graphs/graphEdits.ts',
+      'features/graphs/graphEdits.test.ts',
+      // inbox
+      'features/inbox/InboxView.vue',
+      // board: empty-ready until group C fills it (FR-001)
+      'features/board/.gitkeep',
+    ]
+    const missing = targets.filter((rel) => !existsSync(join(srcRoot, rel)))
+    expect(missing).toEqual([])
+  })
+
+  it('retires the pre-restructure directories', () => {
+    const stale = ['views', 'components', 'stores', 'composables'].filter((dir) =>
+      existsSync(join(srcRoot, dir)),
+    )
+    expect(stale).toEqual([])
+  })
+
+  it('keeps the T006 deletions in place until T006', () => {
+    expect(existsSync(join(srcRoot, 'adapters/inbox.ts'))).toBe(true)
+    expect(existsSync(join(srcRoot, 'constants.ts'))).toBe(true)
+    expect(existsSync(join(srcRoot, 'constants.test.ts'))).toBe(true)
   })
 })
 
@@ -500,8 +563,10 @@ describe('shared split shape (T004)', () => {
     expect(typeof m.toStageDots).toBe('function')
   })
 
-  it('the adapters/fleet remnant keeps toFleetRow and no longer exports toStageDots', async () => {
-    const m = await import('../adapters/fleet')
+  it('the fleet adapter keeps toFleetRow and no longer exports toStageDots', async () => {
+    // T004 pinned the remnant at adapters/fleet; T005 moved it to the
+    // fleet screen folder, so the invariant follows the module.
+    const m = await import('../features/fleet/fleet.adapter')
     expect((m as Record<string, unknown>).toStageDots).toBeUndefined()
     expect(typeof m.toFleetRow).toBe('function')
   })
@@ -532,5 +597,66 @@ describe('shared split shape (T004)', () => {
     for (const name of ['money', 'budgetPct', 'budgetColor'] as const) {
       expect(typeof m[name]).toBe('function')
     }
+  })
+})
+
+// T005 (RED, shape pins): the screen-folder move in module terms. The
+// gone-module pins use @vite-ignore runtime variables -- a literal dynamic
+// import is resolved statically by the transformer, and once the module is
+// deleted that is a load error, not a rejection. All its fail today:
+// features/ holds only board/.gitkeep, and the router still resolves the
+// views from ../views/.
+describe('screen module shape (T005)', () => {
+  it('features/fleet/fleet.adapter exports toFleetRow and not toStageDots', async () => {
+    const m = await import('../features/fleet/fleet.adapter')
+    expect(typeof m.toFleetRow).toBe('function')
+    expect((m as Record<string, unknown>).toStageDots).toBeUndefined()
+  })
+
+  it('features/fleet/status exports statusMetaOf', async () => {
+    const m = await import('../features/fleet/status')
+    expect(typeof m.statusMetaOf).toBe('function')
+  })
+
+  it('features/run/runGraph.store exports useRunGraphStore', async () => {
+    const m = await import('../features/run/runGraph.store')
+    expect(typeof m.useRunGraphStore).toBe('function')
+  })
+
+  it('features/graphs/graphEditor.store exports useGraphEditorStore', async () => {
+    const m = await import('../features/graphs/graphEditor.store')
+    expect(typeof m.useGraphEditorStore).toBe('function')
+  })
+
+  it('features/graphs/graphEdits exports the edit helpers', async () => {
+    const m = await import('../features/graphs/graphEdits')
+    for (const name of ['addNode', 'connect', 'removeElement', 'freshId'] as const) {
+      expect(typeof m[name]).toBe('function')
+    }
+  })
+
+  it('the pre-move screen modules are gone', async () => {
+    const gone = [
+      '../adapters/fleet',
+      '../composables/status',
+      '../stores/runGraph',
+      '../stores/graphEditor',
+    ]
+    for (const spec of gone) {
+      await expect(import(/* @vite-ignore */ spec)).rejects.toThrow()
+    }
+  })
+
+  it('the router imports every view from features/', () => {
+    const router = readFileSync(join(__dirname, 'router.ts'), 'utf8')
+    for (const spec of [
+      '../features/fleet/FleetView.vue',
+      '../features/inbox/InboxView.vue',
+      '../features/run/RunView.vue',
+      '../features/graphs/GraphEditorView.vue',
+    ]) {
+      expect(router).toContain(spec)
+    }
+    expect(router).not.toContain('../views/')
   })
 })

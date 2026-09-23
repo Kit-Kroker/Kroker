@@ -4,14 +4,14 @@
 // it was dispatched at and is discarded if the working copy moved since.
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
-import { api } from '../api/client'
-import type { EdgeWire, GraphWire, NodeWire, ShapeError, ValidationWire } from '../api/graph-types'
-import { useCatalogStore } from '../shared/catalog.store'
+import { api } from '../../api/client'
+import type { EdgeWire, GraphWire, NodeWire, ShapeError, ValidationWire } from '../../api/graph-types'
+import { useCatalogStore } from '../../shared/catalog.store'
 import {
   addNode as addNodeOp, connect as connectOp, edgeEditCandidate, moveNode, nodeEditCandidate, removeElement,
   withoutEmptyLabel, type EditResult,
 } from './graphEdits'
-import { edgeKeys, locWithin, nodeKeys } from '../shared/graphCanvas.adapter'
+import { edgeKeys, locWithin, nodeKeys } from '../../shared/graphCanvas.adapter'
 
 export type EditorState = 'empty' | 'text_broken' | 'graph_loaded'
 export interface FieldError { path: string; msg: string }
