@@ -25,7 +25,7 @@ const api = vi.hoisted(() => ({
 vi.mock('../api/client', () => ({ api }))
 
 import { useGraphEditorStore } from './graphEditor'
-import { useCatalogStore } from './catalog'
+import { useCatalogStore } from '../shared/catalog.store'
 
 const PRE = preCode.parse as { ok: true; graph: GraphWire; sha: string }
 const withCaps = (caps: Partial<CatalogWire['capabilities']>) =>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useFleetStore } from '../stores/fleet'
+import { useFleetStore } from '../shared/fleet.store'
 import FleetTable from '../components/fleet/FleetTable.vue'
 
 const fleet = useFleetStore()

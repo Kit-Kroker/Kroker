@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { edgeKeys, formatElapsed, locLabel, locWithin, nodeKeys, toCanvas } from './graph'
+import { edgeKeys, formatElapsed, locLabel, locWithin, nodeKeys, toCanvas } from './graphCanvas.adapter'
 import catalogJson from '../api/__fixtures__/graph/catalog.json'
 import preCode from '../api/__fixtures__/graph/scenarios/pre_code.json'
 import graphResponse from '../api/__fixtures__/graph/run_state/graph_response.recorded.json'

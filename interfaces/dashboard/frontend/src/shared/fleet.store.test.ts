@@ -11,7 +11,7 @@ vi.mock('../api/client', () => {
   return { api }
 })
 
-import { useFleetStore } from './fleet'
+import { useFleetStore } from './fleet.store'
 
 beforeEach(() => {
   setActivePinia(createPinia())

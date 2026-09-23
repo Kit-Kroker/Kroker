@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useFleetStore } from '../../stores/fleet'
+import { useFleetStore } from '../../shared/fleet.store'
 import { useInboxStore } from '../inbox.store'
 import { useUiStore } from '../ui.store'
-import { money } from '../../composables/format'
+import { money } from '../../shared/format'
 import AppHeader from '@kroker/ui/components/app_header/AppHeader.vue'
 
 const fleet = useFleetStore()

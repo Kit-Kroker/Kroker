@@ -13,7 +13,7 @@ import type { CatalogWire, GraphWire, ParseWire } from '../../api/graph-types'
 const api = vi.hoisted(() => ({ parseGraph: vi.fn() }))
 vi.mock('../../api/client', () => ({ api }))
 
-import { useCatalogStore } from '../../stores/catalog'
+import { useCatalogStore } from '../../shared/catalog.store'
 import { useGraphEditorStore } from '../../stores/graphEditor'
 
 const catalog = catalogJson as unknown as CatalogWire

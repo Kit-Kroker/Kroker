@@ -61,7 +61,7 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
   - switch on the `app/` file-count guard in `boundaries.test.ts`.
 
   Gate: `check_ui.py` green (typecheck, build, both vitest runs, both Playwright tiers).
-- [ ] T004 [US1] Shared layer (R-6):
+- [x] T004 [US1] Shared layer (R-6):
   - `FE/stores/catalog.ts` → `FE/shared/catalog.store.ts`; `FE/stores/fleet.ts` → `FE/shared/fleet.store.ts`, with the `fleet store` describe from `stores.test.ts` → `FE/shared/fleet.store.test.ts`. Delete the emptied `stores.test.ts`.
   - `FE/adapters/graph.ts` + `graph.test.ts` → `FE/shared/graphCanvas.adapter.ts` + `.test.ts`.
   - `FE/composables/format.ts` → `FE/shared/format.ts`; `FE/composables/stageState.ts` → `FE/shared/stageState.ts`.

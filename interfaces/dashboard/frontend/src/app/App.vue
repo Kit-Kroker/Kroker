@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
-import { useFleetStore } from '../stores/fleet'
+import { useFleetStore } from '../shared/fleet.store'
 import { useInboxStore } from './inbox.store'
-import { useCatalogStore } from '../stores/catalog'
+import { useCatalogStore } from '../shared/catalog.store'
 import AppHeader from './shell/AppHeader.vue'
 import Toasts from './shell/Toasts.vue'
 import StartRunModal from './shell/StartRunModal.vue'

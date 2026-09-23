@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useFleetStore } from '../../stores/fleet'
-import { useCatalogStore } from '../../stores/catalog'
+import { useFleetStore } from '../../shared/fleet.store'
+import { useCatalogStore } from '../../shared/catalog.store'
 import FleetTable from '@kroker/ui/components/fleet_table/FleetTable.vue'
 import { toFleetRow } from '../../adapters/fleet'
 

@@ -10,7 +10,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import RunView from './RunView.vue'
 import catalogJson from '../api/__fixtures__/graph/catalog.json'
 import type { CatalogWire, GraphStateResponse } from '../api/graph-types'
-import { useCatalogStore } from '../stores/catalog'
+import { useCatalogStore } from '../shared/catalog.store'
 import { useUiStore } from '../app/ui.store'
 
 const api = vi.hoisted(() => ({

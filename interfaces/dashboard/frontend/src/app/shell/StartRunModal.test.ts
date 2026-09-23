@@ -3,7 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import StartRunModal from './StartRunModal.vue'
 import { useUiStore } from '../ui.store'
-import { useFleetStore } from '../../stores/fleet'
+import { useFleetStore } from '../../shared/fleet.store'
 
 vi.mock('../../api/client', () => ({
   api: {

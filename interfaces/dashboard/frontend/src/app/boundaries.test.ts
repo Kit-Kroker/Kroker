@@ -249,6 +249,11 @@ describe('real tree', () => {
       }
     }
     expect(layerCounts.app ?? 0).toBeGreaterThan(0) // T003: the app shell lives in app/
+    if ('shared' in layerCounts) {
+      // T004: shared/ arrives with this task; once the directory exists,
+      // scanning it must never be vacuous.
+      expect(layerCounts.shared).toBeGreaterThan(0)
+    }
     expect(violations(files, srcRoot)).toEqual([])
   })
 })
@@ -435,5 +440,97 @@ describe('import resolution (T003)', () => {
       }
     }
     expect(misses).toEqual([])
+  })
+})
+
+// T004 (RED): the shared-layer move (R-6 rows for the cross-screen stores,
+// the graph-canvas adapter, format/stageState, and the toStageDots split
+// out of the fleet adapter). The target pins and absence pins fail until
+// the move lands; the composables pins are HOLD pins -- status.ts and
+// composables.test.ts move in T005, not now, and an over-eager move that
+// takes them early must fail here.
+describe('shared layer layout (T004)', () => {
+  const srcRoot = join(__dirname, '..')
+
+  it('has every shared-layer file in its T004 home (R-6 table)', () => {
+    const targets = [
+      'shared/catalog.store.ts',
+      'shared/fleet.store.ts',
+      'shared/fleet.store.test.ts',
+      'shared/graphCanvas.adapter.ts',
+      'shared/graphCanvas.adapter.test.ts',
+      'shared/format.ts',
+      'shared/format.test.ts',
+      'shared/stageState.ts',
+      'shared/stageState.test.ts',
+      'shared/stageStrip.adapter.ts',
+      'shared/stageStrip.adapter.test.ts',
+    ]
+    const missing = targets.filter((rel) => !existsSync(join(srcRoot, rel)))
+    expect(missing).toEqual([])
+  })
+
+  it('leaves no shared-layer source at the pre-move locations', () => {
+    const stale = [
+      'stores/catalog.ts',
+      'stores/fleet.ts',
+      'stores/stores.test.ts',
+      'adapters/graph.ts',
+      'adapters/graph.test.ts',
+      'composables/format.ts',
+      'composables/stageState.ts',
+    ].filter((rel) => existsSync(join(srcRoot, rel)))
+    expect(stale).toEqual([])
+  })
+
+  it('keeps composables/status.ts and composables.test.ts in place until T005', () => {
+    expect(existsSync(join(srcRoot, 'composables/status.ts'))).toBe(true)
+    expect(existsSync(join(srcRoot, 'composables/composables.test.ts'))).toBe(true)
+  })
+})
+
+// T004 (RED, shape pins): the layout pins above prove the files moved;
+// these prove the SPLIT moved the right exports -- something a file-layout
+// check cannot express. Real dynamic imports of real modules (legal in a
+// test file). All six fail today: shared/ does not exist yet, and
+// adapters/fleet.ts still exports toStageDots.
+describe('shared split shape (T004)', () => {
+  it('shared/stageStrip.adapter exports toStageDots', async () => {
+    const m = await import('../shared/stageStrip.adapter')
+    expect(typeof m.toStageDots).toBe('function')
+  })
+
+  it('the adapters/fleet remnant keeps toFleetRow and no longer exports toStageDots', async () => {
+    const m = await import('../adapters/fleet')
+    expect((m as Record<string, unknown>).toStageDots).toBeUndefined()
+    expect(typeof m.toFleetRow).toBe('function')
+  })
+
+  it('shared/fleet.store exports useFleetStore and stores/fleet is gone', async () => {
+    const m = await import('../shared/fleet.store')
+    expect(typeof m.useFleetStore).toBe('function')
+    // Vite resolves literal dynamic imports statically, so the gone-module
+    // pin must stay opaque to the transformer and throw at runtime.
+    const gone = '../stores/fleet'
+    await expect(import(/* @vite-ignore */ gone)).rejects.toThrow()
+  })
+
+  it('shared/stageState exports stageStates', async () => {
+    const m = await import('../shared/stageState')
+    expect(typeof m.stageStates).toBe('function')
+  })
+
+  it('shared/graphCanvas.adapter exports the canvas mappers', async () => {
+    const m = await import('../shared/graphCanvas.adapter')
+    for (const name of ['toCanvas', 'nodeKeys', 'edgeKeys', 'locLabel', 'locWithin'] as const) {
+      expect(typeof m[name]).toBe('function')
+    }
+  })
+
+  it('shared/format exports the money helpers', async () => {
+    const m = await import('../shared/format')
+    for (const name of ['money', 'budgetPct', 'budgetColor'] as const) {
+      expect(typeof m[name]).toBe('function')
+    }
   })
 })

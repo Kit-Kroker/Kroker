@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useUiStore } from '../ui.store'
-import { useFleetStore } from '../../stores/fleet'
+import { useFleetStore } from '../../shared/fleet.store'
 import StartRunModal, { type StartRunPayload } from '@kroker/ui/components/start_run_modal/StartRunModal.vue'
 
 const ui = useUiStore()

@@ -13,7 +13,7 @@ const api = vi.hoisted(() => ({
 vi.mock('../api/client', () => ({ api }))
 
 import { useRunGraphStore } from './runGraph'
-import { useCatalogStore } from './catalog'
+import { useCatalogStore } from '../shared/catalog.store'
 import { useUiStore } from '../app/ui.store'
 
 const GRAPH = { kind: 'graph' as const, sha: 'sha-1', graph: { schema_version: 1 as const, nodes: [], edges: [] }, back_edges: [] }
