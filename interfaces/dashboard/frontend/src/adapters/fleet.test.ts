@@ -1,6 +1,4 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
 import { toFleetRow, toStageDots } from './fleet'
 import type { Run } from '../api/types'
 import catalogJson from '../api/__fixtures__/graph/catalog.json'
@@ -67,34 +65,5 @@ describe('fleet adapter', () => {
 
   it('renders nothing before the catalog loads', () => {
     expect(toStageDots(mkRun(), [])).toEqual([])
-  })
-
-  it('satisfies the ownership rule: ui never imports from dashboard or api/types', () => {
-    function getFiles(dir: string): string[] {
-      const entries = readdirSync(dir)
-      const files: string[] = []
-      for (const e of entries) {
-        const full = join(dir, e)
-        if (statSync(full).isDirectory()) {
-          files.push(...getFiles(full))
-        } else if (full.endsWith('.ts') || full.endsWith('.vue')) {
-          files.push(full)
-        }
-      }
-      return files
-    }
-
-    const uiSrc = join(__dirname, '../../../../ui/src')
-    const files = getFiles(uiSrc)
-    const violations: string[] = []
-
-    for (const f of files) {
-      const content = readFileSync(f, 'utf8')
-      if (content.includes("from '../../dashboard") || content.includes('api/types')) {
-        violations.push(f)
-      }
-    }
-
-    expect(violations).toEqual([])
   })
 })

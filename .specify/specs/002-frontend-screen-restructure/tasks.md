@@ -34,7 +34,7 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
 
 ## Phase 1: Setup (baseline)
 
-- [ ] T001 Record the green baseline on the branch point. Run `python scripts/check_ui.py` and save the output to `.workspace/tmp/002-baseline.txt`, including the vitest-dashboard, vitest-ui and Playwright pass counts (SC-002 baseline). Then run `python scripts/check_clauses.py` and append its summary line. Any red is reported to the orchestrator, not fixed inside this feature.
+- [x] T001 Record the green baseline on the branch point. Run `python scripts/check_ui.py` and save the output to `.workspace/tmp/002-baseline.txt`, including the vitest-dashboard, vitest-ui and Playwright pass counts (SC-002 baseline). Then run `python scripts/check_clauses.py` and append its summary line. Any red is reported to the orchestrator, not fixed inside this feature.
 
 ---
 
@@ -43,7 +43,7 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
 **Goal**: FR-001–FR-008, SC-001–SC-003. The move is behaviour-neutral.
 **Independent test**: quickstart §2.
 
-- [ ] T002 [US1] RED/guard: create `FE/app/boundaries.test.ts` per R-5 and contracts/source-layout.md:
+- [x] T002 [US1] RED/guard: create `FE/app/boundaries.test.ts` per R-5 and contracts/source-layout.md:
   - an exported pure `violations(files: {path; text}[], root)` scanner. It scans whole-file text including `.vue`, extracts specifiers from `from`, side-effect `import`, dynamic `import()`, `vi.mock()` and `import.meta.glob()`, resolves relative specifiers only, and normalizes all paths to `/`.
   - rules: `features/<x>` → `features/<y>` is banned; `shared/`, `api/` → `features/`, `app/` is banned; `features/` → `app/` is allowed only for `app/*.store.ts`.
   - self-tests, each on an in-memory planted violation: cross-screen `features/run/RunView.vue → features/board/BoardTab.vue`; `features/x → app/RunPage.vue`; `shared → features`; `api → app`; a Windows-backslash path; a multi-line import; a `vi.mock` path.
