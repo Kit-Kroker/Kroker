@@ -11,7 +11,7 @@ import RunView from './RunView.vue'
 import catalogJson from '../api/__fixtures__/graph/catalog.json'
 import type { CatalogWire, GraphStateResponse } from '../api/graph-types'
 import { useCatalogStore } from '../stores/catalog'
-import { useUiStore } from '../stores/ui'
+import { useUiStore } from '../app/ui.store'
 
 const api = vi.hoisted(() => ({
   getCatalog: vi.fn(),

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import Toasts from './Toasts.vue'
-import { useUiStore } from '../stores/ui'
+import { useUiStore } from '../ui.store'
 
 beforeEach(() => {
   setActivePinia(createPinia())

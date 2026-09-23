@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import StartRunModal from './StartRunModal.vue'
-import { useUiStore } from '../stores/ui'
-import { useFleetStore } from '../stores/fleet'
+import { useUiStore } from '../ui.store'
+import { useFleetStore } from '../../stores/fleet'
 
-vi.mock('../api/client', () => ({
+vi.mock('../../api/client', () => ({
   api: {
     listRuns: vi.fn(async () => [{ id: 'feature-add-sso', title: 'Add SSO' }]),
     startRun: vi.fn(async (input: { title: string; repo: string; mode: string }) => ({

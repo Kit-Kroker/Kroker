@@ -1,8 +1,8 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
-import FleetView from './views/FleetView.vue'
-import InboxView from './views/InboxView.vue'
-import RunView from './views/RunView.vue'
-import GraphEditorView from './views/GraphEditorView.vue'
+import FleetView from '../views/FleetView.vue'
+import InboxView from '../views/InboxView.vue'
+import RunView from '../views/RunView.vue'
+import GraphEditorView from '../views/GraphEditorView.vue'
 
 export const router = createRouter({
   history: createWebHashHistory(),

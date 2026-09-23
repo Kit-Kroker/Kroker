@@ -9,7 +9,7 @@ import { isNotFound } from '../api/errors'
 import type { GateOutcome } from '../api/types'
 import type { GraphResponse, GraphStateResponse } from '../api/graph-types'
 import { useCatalogStore } from './catalog'
-import { useUiStore } from './ui'
+import { useUiStore } from '../app/ui.store'
 
 export const useRunGraphStore = defineStore('runGraph', () => {
   const catalog = useCatalogStore()

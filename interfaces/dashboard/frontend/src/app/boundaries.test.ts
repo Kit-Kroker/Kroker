@@ -235,16 +235,20 @@ describe('ownership: resolver-based', () => {
 })
 
 describe('real tree', () => {
-  it('features/, shared/ and api/ (whichever exist today) hold no violations', () => {
+  it('app/, features/, shared/ and api/ (whichever exist today) hold no violations', () => {
     const srcRoot = join(__dirname, '..')
     const files: { path: string; text: string }[] = []
-    for (const layer of ['features', 'shared', 'api']) {
+    const layerCounts: Record<string, number> = {}
+    for (const layer of ['app', 'features', 'shared', 'api']) {
       const dir = join(srcRoot, layer)
       if (!existsSync(dir)) continue // the layer arrives with the task that creates it
+      layerCounts[layer] = 0
       for (const f of getFiles(dir)) {
         files.push({ path: f, text: readFileSync(f, 'utf8') })
+        layerCounts[layer] += 1
       }
     }
+    expect(layerCounts.app ?? 0).toBeGreaterThan(0) // T003: the app shell lives in app/
     expect(violations(files, srcRoot)).toEqual([])
   })
 })
@@ -332,5 +336,104 @@ describe('boundary scanner edge cases', () => {
       plant('features/graphs/a/b.vue', "import View from '../../graphs/GraphEditorView.vue'"),
     ]
     expect(violations(planted, ROOT)).toEqual([])
+  })
+})
+
+// T003 (RED): the app-shell move (R-6 rows for main.ts, App.vue, router.ts,
+// theme.css, shell wrappers, the two shell stores). Every assertion below
+// fails until the move lands -- the targets do not exist yet, index.html
+// still boots /src/main.ts, and the pre-move files are still in place.
+describe('app shell layout (T003)', () => {
+  const srcRoot = join(__dirname, '..')
+
+  it('has every app-shell file in its T003 home (R-6 table)', () => {
+    const targets = [
+      'app/main.ts',
+      'app/App.vue',
+      'app/App.test.ts',
+      'app/router.ts',
+      'app/theme.css',
+      'app/ui.store.ts',
+      'app/inbox.store.ts',
+      'app/shell.stores.test.ts',
+      'app/shell/AppHeader.vue',
+      'app/shell/AppHeader.test.ts',
+      'app/shell/StartRunModal.vue',
+      'app/shell/StartRunModal.test.ts',
+      'app/shell/Toasts.vue',
+      'app/shell/Toasts.test.ts',
+    ]
+    const missing = targets.filter((rel) => !existsSync(join(srcRoot, rel)))
+    expect(missing).toEqual([])
+  })
+
+  it('boots index.html from /src/app/main.ts', () => {
+    const html = readFileSync(join(srcRoot, '..', 'index.html'), 'utf8')
+    const entry = html.match(/<script[^>]*\ssrc="([^"]+)"/)
+    expect(entry?.[1]).toBe('/src/app/main.ts')
+  })
+
+  it('leaves no app-shell source at the pre-move locations', () => {
+    expect(existsSync(join(srcRoot, 'stores/ui.ts'))).toBe(false)
+    expect(existsSync(join(srcRoot, 'stores/inbox.ts'))).toBe(false)
+    expect(existsSync(join(srcRoot, 'styles'))).toBe(false)
+  })
+})
+
+// T003 (GREEN guard): every relative specifier in the whole dashboard src
+// tree -- imports AND vi.mock strings AND dynamic imports AND globs --
+// must resolve to a real file on disk. Green today, and it is what keeps
+// every later move (T004-T006) honest: a single stale path left behind by
+// a git mv shows up here as a miss.
+describe('import resolution (T003)', () => {
+  it('every relative specifier in the src tree resolves to a file on disk', () => {
+    const srcRoot = join(__dirname, '..')
+
+    // Self-exclusion: this file's own text is dense with the scanner
+    // self-tests' planted specifiers ('../board/BoardTab.vue' & co.) and
+    // the shared regex literals -- those paths do not exist on disk BY
+    // DESIGN, so scanning this file would report its fixtures as stale
+    // imports. Every other file in the tree is scanned, tests included.
+    const SELF = norm(resolve(__dirname, 'boundaries.test.ts'))
+    const files = getFiles(srcRoot).filter((f) => norm(f) !== SELF)
+    expect(files.length).toBeGreaterThan(0) // an empty walk must not pass vacuously
+
+    const resolvesOnDisk = (native: string): boolean => {
+      if (existsSync(native) && statSync(native).isFile()) return true
+      for (const suffix of ['.ts', '.tsx', '.vue', '.js']) {
+        const p = `${native}${suffix}`
+        if (existsSync(p) && statSync(p).isFile()) return true
+      }
+      const index = join(native, 'index.ts')
+      return existsSync(index) && statSync(index).isFile()
+    }
+
+    const misses: string[] = []
+    for (const f of files) {
+      const text = readFileSync(f, 'utf8')
+      for (const pattern of SPECIFIER_PATTERNS) {
+        for (const m of text.matchAll(pattern)) {
+          const spec = m[1]
+          if (!spec.startsWith('.')) continue // bare and alias specifiers are not path-resolved
+          // import.meta.glob carries wildcards: existence is "the longest
+          // wildcard-free prefix names an existing directory" ('../board/*.vue'
+          // -> the ../board directory must exist).
+          if (spec.includes('*')) {
+            const star = spec.indexOf('*')
+            const cut = spec.lastIndexOf('/', star)
+            const prefix = cut === -1 ? '' : spec.slice(0, cut)
+            const base = prefix ? resolve(dirname(f), prefix) : dirname(f)
+            if (!(existsSync(base) && statSync(base).isDirectory())) {
+              misses.push(`${norm(f)}: ${spec} (glob target directory missing)`)
+            }
+            continue
+          }
+          if (!resolvesOnDisk(resolve(dirname(f), spec))) {
+            misses.push(`${norm(f)}: ${spec}`)
+          }
+        }
+      }
+    }
+    expect(misses).toEqual([])
   })
 })

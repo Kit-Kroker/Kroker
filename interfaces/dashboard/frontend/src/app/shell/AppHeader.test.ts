@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import AppHeader from './AppHeader.vue'
-import { useFleetStore } from '../stores/fleet'
-import { useInboxStore } from '../stores/inbox'
-import { useUiStore } from '../stores/ui'
+import { useFleetStore } from '../../stores/fleet'
+import { useInboxStore } from '../inbox.store'
+import { useUiStore } from '../ui.store'
 
 const RouterLinkStub = { template: '<a><slot /></a>' }
 

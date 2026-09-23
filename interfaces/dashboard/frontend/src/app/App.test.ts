@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import App from './App.vue'
 import { router } from './router'
 
-vi.mock('./api/client', () => ({
+vi.mock('../api/client', () => ({
   api: {
     listRuns: vi.fn(async () => []),
     listInbox: vi.fn(async () => []),

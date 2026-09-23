@@ -52,7 +52,7 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
   - real-tree scans over whichever of `features/`, `shared/`, `api/` exist. There is no file-count guard yet for directories that don't exist.
 
   Delete case 6 from `FE/adapters/fleet.test.ts` in the same commit. Gate: `check_ui.py` green; vitest-dashboard count = baseline − 1 (the moved case) + the new cases.
-- [ ] T003 [US1] App shell (G1, G6):
+- [x] T003 [US1] App shell (G1, G6):
   - `git mv` `FE/main.ts`, `FE/App.vue`, `FE/App.test.ts`, `FE/router.ts` into `FE/app/`, and `FE/styles/theme.css` → `FE/app/theme.css`.
   - move `FE/components/AppHeader.vue`, `StartRunModal.vue`, `Toasts.vue` and their `.test.ts` files → `FE/app/shell/`.
   - `FE/stores/ui.ts` → `FE/app/ui.store.ts`; `FE/stores/inbox.ts` → `FE/app/inbox.store.ts`.

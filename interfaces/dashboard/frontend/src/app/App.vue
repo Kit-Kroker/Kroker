@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
-import { useFleetStore } from './stores/fleet'
-import { useInboxStore } from './stores/inbox'
-import { useCatalogStore } from './stores/catalog'
-import AppHeader from './components/AppHeader.vue'
-import Toasts from './components/Toasts.vue'
-import StartRunModal from './components/StartRunModal.vue'
+import { useFleetStore } from '../stores/fleet'
+import { useInboxStore } from './inbox.store'
+import { useCatalogStore } from '../stores/catalog'
+import AppHeader from './shell/AppHeader.vue'
+import Toasts from './shell/Toasts.vue'
+import StartRunModal from './shell/StartRunModal.vue'
 
 const fleet = useFleetStore()
 const inbox = useInboxStore()
