@@ -172,9 +172,9 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
 
 ### Tab host and board view (R-4, R-13)
 
-- [ ] T035 [US3] Barrel probe (plan C6): import one ported component from `@kroker/ui` in a dashboard source file and run `check_ui.py`. On `TS2307`, add `"@kroker/ui": ["../../ui/src/index.ts"]` to `interfaces/dashboard/frontend/tsconfig.json` `paths`. Keep the import only if T037 uses it.
-- [ ] T036 [US3] RED — `FE/features/run/RunView.tabs.test.ts`, using a string-template probe slot: Graph is the default; `tab: 'board'` renders the probe; Board is disabled without the slot; Gates and Cost are disabled and don't switch; selecting Graph unmounts the probe; an unknown `tab` renders Graph; the slot waits for the run ("loading run…"); "run not found" shows after the fleet's first fetch. The existing `FE/features/run/RunView.test.ts` must stay green unchanged. Must fail: `RunView` has no `tab` prop or TabBar yet.
-- [ ] T037 [US3] GREEN — the tab host only, in `FE/features/run/RunView.vue` and `FE/app/router.ts`:
+- [x] T035 [US3] Barrel probe (plan C6): import one ported component from `@kroker/ui` in a dashboard source file and run `check_ui.py`. On `TS2307`, add `"@kroker/ui": ["../../ui/src/index.ts"]` to `interfaces/dashboard/frontend/tsconfig.json` `paths`. Keep the import only if T037 uses it.
+- [x] T036 [US3] RED — `FE/features/run/RunView.tabs.test.ts`, using a string-template probe slot: Graph is the default; `tab: 'board'` renders the probe; Board is disabled without the slot; Gates and Cost are disabled and don't switch; selecting Graph unmounts the probe; an unknown `tab` renders Graph; the slot waits for the run ("loading run…"); "run not found" shows after the fleet's first fetch. The existing `FE/features/run/RunView.test.ts` must stay green unchanged. Must fail: `RunView` has no `tab` prop or TabBar yet.
+- [x] T037 [US3] GREEN — the tab host only, in `FE/features/run/RunView.vue` and `FE/app/router.ts`:
   - `RunView.vue` gets a `tab` prop, `TABS`, the ported `TabBar`, and a typed `#board` slot (`defineSlots`) with slot props `{ runId, projectKey }`.
   - the header (title plus StageDots) sits above the tabs (FR-018 amended); graph content goes in a flex-column Graph panel under `v-if`.
   - on tab select, call `router.replace` when a router is present.
