@@ -117,8 +117,8 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
 - [x] T022 [P] [US2] Port **tab_bar** (Shell).
 
   Note: the [P] marks mean the files are independent. Every port edits `registry.ts` and `index.ts`, so parallel ports are merged serially.
-- [ ] T023 [US2] Group B close-out: `check_ui.py` green; `check_clauses.py` shows no line for any of the 13 prefixes plus `TOKENS`, `STATUS_PIP`, `SHOWCASE`; `UI/src/index.ts` exports all 13 components (plus `DetailSection`); the registry order matches the prototype's, with existing sets keeping their G9 sections.
-- [ ] T024 [US2] PARKED — G2b record import: copy `records/2026-09-23-design-foundations/` into `records/` once the orchestrator supplies the source path (spec Open items). Does not gate anything.
+- [x] T023 [US2] Group B close-out: `check_ui.py` green; `check_clauses.py` shows no line for any of the 13 prefixes plus `TOKENS`, `STATUS_PIP`, `SHOWCASE`; `UI/src/index.ts` exports all 13 components (plus `DetailSection`); the registry order matches the prototype's, with existing sets keeping their G9 sections.
+- [ ] T024 [US2] PARKED by orchestrator ruling (2026-09-24): `records/2026-09-23-design-foundations/` exists in no findable copy of the prototype; skipped — does not gate anything. Original text: copy `records/2026-09-23-design-foundations/` into `records/` once the orchestrator supplies the source path (spec Open items). Does not gate anything.
 
 **Checkpoint US2**: group B green; reviewer gate.
 
