@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+﻿import { describe, it, expect, vi, afterEach } from 'vitest'
 import { selectApi } from './client'
 import snapshot from './__fixtures__/fleet-snapshot.json'
 
@@ -8,9 +8,9 @@ afterEach(() => {
 })
 
 describe('selectApi', () => {
-  it('mock provider seeds 8 runs', async () => {
+  it('mock provider seeds 10 runs', async () => {
     const api = selectApi('mock', { simulateLive: false })
-    expect(await api.listRuns()).toHaveLength(8)
+    expect(await api.listRuns()).toHaveLength(10)
   })
 
   it('http provider fetches and maps the fleet snapshot', async () => {
@@ -56,7 +56,7 @@ describe('selectApi', () => {
     vi.stubEnv('VITE_API', 'mock')
     const { api } = await import('./client')
     try {
-      expect(await api.listRuns()).toHaveLength(8)
+      expect(await api.listRuns()).toHaveLength(10)
     } finally {
       // The module-level api constructs the mock with simulateLive, whose
       // interval would otherwise outlive the test.

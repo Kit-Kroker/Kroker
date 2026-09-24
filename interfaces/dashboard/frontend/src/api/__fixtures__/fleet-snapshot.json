@@ -36,7 +36,8 @@
       ],
       "cost_usd_total": 3.12,
       "budget_usd": 40.0,
-      "budget_crossings": 0
+      "budget_crossings": 0,
+      "project_key": "kroker"
     },
     {
       "run_id": "feature-unpriced",
@@ -85,7 +86,8 @@
         "deploy": "pending",
         "retro": "pending"
       },
-      "graph_sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38"
+      "graph_sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+      "project_key": null
     }
   ],
   "closed": [
@@ -108,7 +110,8 @@
       "budget_crossings": 0,
       "memory_enabled": false,
       "memory_watermark": null,
-      "memory_retains": 0
+      "memory_retains": 0,
+      "project_key": "kroker"
     },
     {
       "run_id": "fix-payment-retry",
@@ -171,7 +174,8 @@
       "budget_crossings": 0,
       "memory_enabled": false,
       "memory_watermark": null,
-      "memory_retains": 0
+      "memory_retains": 0,
+      "project_key": null
     }
   ],
   "closed_marks": {

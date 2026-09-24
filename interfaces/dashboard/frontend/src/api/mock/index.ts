@@ -55,6 +55,9 @@ function seedRuns(): Run[] {
       decisions: [
         { ts: '09:25', gate: 'architecture r1', outcome: 'revise', comment: 'split the auth service', decider: 'human · sam' },
       ],
+      // 002 G5: the run whose board the Board tab renders (mock fixtures in
+      // features/board/__fixtures__).
+      projectKey: 'kroker',
     },
     {
       id: 'feature-add-sso',
@@ -71,6 +74,7 @@ function seedRuns(): Run[] {
       decisions: [
         { ts: '09:12', gate: 'clarify r1 (partial)', outcome: 'approve', comment: '4 questions auto-answered, confidence ≥ 0.95', decider: 'policy (soft)' },
       ],
+      projectKey: null, // 002: no board project -- the banner case
     },
     {
       id: 'feature-billing-webhooks',
@@ -89,6 +93,7 @@ function seedRuns(): Run[] {
         { ts: '03:05', gate: 'plan r1', outcome: 'approve', comment: '7 tasks / 3 waves, DAG valid', decider: 'policy (soft)' },
         { ts: '08:44', gate: 'task T-04 repair', outcome: 'approve', comment: 'review fix loop 1/2 green', decider: 'policy' },
       ],
+      projectKey: null,
     },
     {
       id: 'feature-onboarding-v2',
@@ -108,6 +113,7 @@ function seedRuns(): Run[] {
         { ts: '12:19', gate: 'architecture r2', outcome: 'approve', comment: '', decider: 'human · sam' },
         { ts: '12:31', gate: 'plan r1', outcome: 'approve', comment: 'confidence 0.97', decider: 'policy (soft)' },
       ],
+      projectKey: null,
     },
     {
       id: 'fix-rate-limit-retry',
@@ -122,6 +128,7 @@ function seedRuns(): Run[] {
       budget: 30,
       age: '6h 27m',
       decisions: [{ ts: '13:15', gate: 'plan r1', outcome: 'approve', comment: '', decider: 'policy (soft)' }],
+      projectKey: null,
     },
     {
       id: 'feature-usage-metering',
@@ -136,6 +143,7 @@ function seedRuns(): Run[] {
       budget: 45,
       age: '1h 02m',
       decisions: [{ ts: '14:30', gate: 'clarify r1', outcome: 'approve', comment: 'auto, confidence 0.96', decider: 'policy (soft)' }],
+      projectKey: null,
     },
     {
       id: 'feature-audit-export',
@@ -153,6 +161,40 @@ function seedRuns(): Run[] {
         { ts: '05:12', gate: 'merge r1', outcome: 'approve', comment: 'all checks green', decider: 'policy (soft)' },
         { ts: '06:01', gate: 'deploy r1', outcome: 'approve', comment: 'PR #482 merged, staging deploy', decider: 'human · mika' },
       ],
+      projectKey: null,
+    },
+    {
+      // 002 G4 mock scenarios: a run whose project answers 404 on the mock
+      // board (the not-found banner) and a run on a reachable project with
+      // zero tasks for it (the empty state).
+      id: 'fix-board-ghost-project',
+      title: 'Fix ghost-project board wiring',
+      mode: 'brownfield',
+      repo: 'git@github.com:acme/portal',
+      activeStages: ['plan'],
+      stageMarks: null,
+      status: 'blocked',
+      blocker: 'plan gate — round 1',
+      cost: 1.4,
+      budget: 20,
+      age: '22m',
+      decisions: [{ ts: '09:40', gate: 'plan r1', outcome: 'approve', comment: '', decider: 'policy (soft)' }],
+      projectKey: 'ghost-project',
+    },
+    {
+      id: 'feature-empty-board',
+      title: 'Fresh project, no board writes yet',
+      mode: 'greenfield',
+      repo: 'git@github.com:acme/newproj',
+      activeStages: ['intake'],
+      stageMarks: null,
+      status: 'running',
+      blocker: '',
+      cost: 0.3,
+      budget: 15,
+      age: '5m',
+      decisions: [],
+      projectKey: 'kroker-empty',
     },
     {
       id: 'feature-dark-mode',
@@ -170,6 +212,7 @@ function seedRuns(): Run[] {
         { ts: 'yday', gate: 'merge r1', outcome: 'approve', comment: '', decider: 'policy (soft)' },
         { ts: 'yday', gate: 'deploy r1', outcome: 'approve', comment: '', decider: 'human · sam' },
       ],
+      projectKey: 'kroker',
     },
   ]
 }
@@ -384,6 +427,7 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
         budget: 40,
         age: 'just now',
         decisions: [],
+        projectKey: null,
       }
       runs = [run, ...runs]
       return clone(run)

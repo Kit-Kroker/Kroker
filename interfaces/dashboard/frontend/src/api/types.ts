@@ -35,6 +35,9 @@ export interface Run {
   budget: number | null
   age: string
   decisions: Decision[]
+  // 002 G4/FR-020a: the run's board project, from the wire's project_key.
+  // Null = unknown/unset -- the Board tab shows its banner, never a guess.
+  projectKey: string | null
 }
 
 export interface ClarifyItem {

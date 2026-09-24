@@ -75,6 +75,9 @@ function mapRun(s: any, pendingCount: number, now: Date): Run {
     budget: s.budget_usd,
     age: age(s.started_at, now),
     decisions: decisions(s.decisions),
+    // 002 G4: the wire's project_key; ?? null so absent and null are both
+    // an explicit absent value -- the SPA never guesses 'default'.
+    projectKey: s.project_key ?? null,
   }
 }
 
@@ -94,6 +97,8 @@ function mapClosed(s: any, marks: Record<string, DotState> | null | undefined, n
     budget: s.budget_usd,
     age: age(s.started_at, now),
     decisions: [],
+    // 002 G4: same rule on closed rows (run_summary replay or old payload).
+    projectKey: s.project_key ?? null,
   }
 }
 
@@ -211,7 +216,7 @@ export function createHttpApi(baseUrl = '/api'): DashboardApi {
         id: run_id, title: input.title, mode: input.mode, repo: input.repo,
         activeStages: [], stageMarks: null, status: 'running' as const, blocker: '',
         cost: null, budget: null, age: age(nowIso, new Date(nowIso)),
-        decisions: [],
+        decisions: [], projectKey: null,
       }
     },
 
