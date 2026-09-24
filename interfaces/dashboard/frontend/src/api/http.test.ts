@@ -115,3 +115,43 @@ describe('mapSnapshot', () => {
     expect((sso as { stageMarks?: unknown }).stageMarks).toBeNull()
   })
 })
+
+// --- 002 T027 (RED): project_key on the run wire (FR-020a, G4/R-1). The
+// fixture rows carry no project_key until T028's hand-edit, so the set
+// cases inject it onto a clone; the fixture IS the absent case.
+
+describe('project_key mapping', () => {
+  it("maps project_key onto an open row's projectKey", () => {
+    const s = structuredClone(snapshot)
+    ;(s as { runs: Record<string, unknown>[] }).runs
+      .find((r) => r.run_id === 'feature-add-sso')!.project_key = 'kroker'
+    const { runs } = mapSnapshot(s as never, NOW)
+    const sso = runs.find((r) => r.id === 'feature-add-sso')!
+    expect((sso as { projectKey?: unknown }).projectKey).toBe('kroker')
+  })
+
+  it("maps project_key onto a closed row's projectKey", () => {
+    const s = structuredClone(snapshot)
+    ;(s as { closed: Record<string, unknown>[] }).closed
+      .find((r) => r.run_id === 'feature-dark-mode')!.project_key = 'kroker'
+    const { runs } = mapSnapshot(s as never, NOW)
+    const dark = runs.find((r) => r.id === 'feature-dark-mode')!
+    expect((dark as { projectKey?: unknown }).projectKey).toBe('kroker')
+  })
+
+  it('maps an absent key and an explicit null to null, never "default"', () => {
+    // FR-020a: an unavailable project key is an explicit absent value the
+    // Board tab banners off -- the mapper must not guess the backend's
+    // "default" bucket name for it.
+    const absent = mapSnapshot(snapshot as never, NOW)
+    // T028's hand-edit sets feature-add-sso and leaves feature-unpriced
+    // key-absent -- that row is the fixture's genuine absent case.
+    expect((absent.runs.find((r) => r.id === 'feature-unpriced')! as { projectKey?: unknown }).projectKey).toBeNull()
+
+    const s = structuredClone(snapshot)
+    ;(s as { runs: Record<string, unknown>[] }).runs
+      .find((r) => r.run_id === 'feature-add-sso')!.project_key = null
+    const nulled = mapSnapshot(s as never, NOW)
+    expect((nulled.runs.find((r) => r.id === 'feature-add-sso')! as { projectKey?: unknown }).projectKey).toBeNull()
+  })
+})

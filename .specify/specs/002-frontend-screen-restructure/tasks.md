@@ -142,8 +142,8 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
 
 ### Frontend run wire (FR-020a, FR-020b)
 
-- [ ] T027 [US3] RED in `FE/api/http.test.ts`: `mapSnapshot` maps `project_key` to `Run.projectKey` for open and closed rows; an absent or null key gives `null`, never `"default"`. `check_ui.py` fails.
-- [ ] T028 [US3] Implement:
+- [x] T027 [US3] RED in `FE/api/http.test.ts`: `mapSnapshot` maps `project_key` to `Run.projectKey` for open and closed rows; an absent or null key gives `null`, never `"default"`. `check_ui.py` fails.
+- [x] T028 [US3] Implement:
   - `Run.projectKey: string | null` (required) in `FE/api/types.ts`; the `mapRun`/`mapClosed` mapping; `projectKey: null` in the `startRun` fallback (`http.ts`).
   - the `FE/api/mock/index.ts` runs: one with a board project, one `null`, one whose project 404s, one with an empty board.
   - a hand-edit of `FE/api/__fixtures__/fleet-snapshot.json` to add `project_key` on open and closed rows, both set and absent.

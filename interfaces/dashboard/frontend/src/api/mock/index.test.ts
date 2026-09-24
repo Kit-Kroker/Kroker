@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+﻿import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createMockApi, tickCosts } from './index'
 import type { Run } from '../types'
 
@@ -26,8 +26,8 @@ describe('mock api decision flows', () => {
     api = createMockApi({ simulateLive: false })
   })
 
-  it('seeds 8 runs and 6 inbox items, including the graph demo run', async () => {
-    expect(await api.listRuns()).toHaveLength(8)
+  it('seeds 10 runs and 6 inbox items, including the graph demo run', async () => {
+    expect(await api.listRuns()).toHaveLength(10)
     expect(await api.listInbox()).toHaveLength(6)
   })
 
@@ -98,5 +98,47 @@ describe('mock api decision flows', () => {
     const r = await api.startRun({ title: 'Add SSO to customer portal', description: '', repo: '', mode: 'brownfield' })
     expect(r.id).toBe('feature-add-sso-to-customer')
     expect((await api.listRuns())[0].id).toBe(r.id)
+  })
+})
+
+// T027 companion (RED): the four board-oriented mock runs T028 must add
+// (contracts/board-client.md mock contract). Pinned by shape only -- no
+// project name or implementation detail is hardcoded. Every it fails
+// today: no run carries a projectKey yet.
+describe('mock runs cover the board scenarios (T028)', () => {
+  let api: ReturnType<typeof createMockApi>
+  beforeEach(() => {
+    api = createMockApi({ simulateLive: false })
+  })
+
+  it('has a run on a real board project (non-null projectKey)', async () => {
+    const runs = await api.listRuns()
+    expect(runs.some((r) => r.projectKey != null)).toBe(true)
+  })
+
+  it('has a run with no board project (projectKey null)', async () => {
+    const runs = await api.listRuns()
+    expect(runs.some((r) => r.projectKey === null)).toBe(true)
+  })
+
+  it('has a run whose projectKey can 404 on the mock board', async () => {
+    // Asserted by value distinctness only: a non-null key exists, and the
+    // runs carry >= 3 distinct projectKeys including null, so at least two
+    // board projects exist beyond any single rich one.
+    const runs = await api.listRuns()
+    const keys = runs.map((r) => r.projectKey)
+    expect(runs.some((r) => r.projectKey != null)).toBe(true)
+    expect(new Set(keys).has(null)).toBe(true)
+    expect(new Set(keys).size).toBeGreaterThanOrEqual(3)
+  })
+
+  it('has a run whose project is reachable with an empty board', async () => {
+    // The empty-state project is a THIRD distinct non-null key: one project
+    // cannot at once hold the rich board, 404, and be reachable-but-empty,
+    // so >= 3 non-null keys is the runs-side precondition for all four
+    // scenarios coexisting (the mock board decides which is which).
+    const runs = await api.listRuns()
+    const nonNull = new Set(runs.map((r) => r.projectKey).filter((k) => k != null))
+    expect(nonNull.size).toBeGreaterThanOrEqual(3)
   })
 })
