@@ -2,6 +2,8 @@ import type { ProfileSet } from '../src/profile'
 import stageDots from '../src/components/stage_dots/stage_dots.profiles'
 import statusPip from '../src/components/status_pip/status_pip.profiles'
 import button from '../src/components/button/button.profiles'
+import surface from '../src/components/surface/surface.profiles'
+import tag from '../src/components/tag/tag.profiles'
 import fleetRow from '../src/components/fleet_row/fleet_row.profiles'
 import fleetTable from '../src/components/fleet_table/fleet_table.profiles'
 import appHeader from '../src/components/app_header/app_header.profiles'
@@ -17,6 +19,8 @@ import graphCanvas from '../src/components/graph_canvas/graph_canvas.profiles'
 export const REGISTRY: ProfileSet[] = [
   // primitives first: the showcase reads top-down from foundations to screens
   button,
+  surface,
+  tag,
   stageDots,
   statusPip,
   fleetRow,
