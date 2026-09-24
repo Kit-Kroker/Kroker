@@ -9,7 +9,17 @@ export const router = createRouter({
   routes: [
     { path: '/', name: 'fleet', component: FleetView },
     { path: '/inbox', name: 'inbox', component: InboxView },
-    { path: '/runs/:id', name: 'run', component: RunView, props: true },
+    {
+      path: '/runs/:id',
+      name: 'run',
+      component: RunView,
+      // R-4: the active tab travels as ?tab=; delivered as a prop only when
+      // the query carries a string. Replace, never push, on switches.
+      props: (r) => ({
+        id: r.params.id as string,
+        ...(typeof r.query.tab === 'string' ? { tab: r.query.tab } : {}),
+      }),
+    },
     { path: '/graphs', name: 'graphs', component: GraphEditorView },
   ],
 })
