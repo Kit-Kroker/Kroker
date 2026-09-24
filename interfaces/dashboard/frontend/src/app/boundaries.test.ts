@@ -531,8 +531,10 @@ describe('screen folders layout (T005)', () => {
       'features/graphs/graphEdits.test.ts',
       // inbox
       'features/inbox/InboxView.vue',
-      // board: empty-ready until group C fills it (FR-001)
-      'features/board/.gitkeep',
+      // board: the .gitkeep hold pin retired in T029 when the first real
+      // board files landed (FR-001's empty-ready phase ended there)
+      'features/board/board.api.ts',
+      'features/board/board.api.test.ts',
     ]
     const missing = targets.filter((rel) => !existsSync(join(srcRoot, rel)))
     expect(missing).toEqual([])
