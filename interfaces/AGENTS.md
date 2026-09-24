@@ -48,6 +48,13 @@ camelCase: `runGraph`, `graphEditor`, `stageStrip`, `graphCanvas`); pure
 helpers keep a plain name (`graphEdits.ts`, `status.ts`, `format.ts`);
 tests sit beside their module.
 
+Transport: a surface used by one screen keeps its client inside that screen.
+`features/board/board.api.ts` holds the board's HTTP and mock clients and
+its wire types. It picks between them with `API_MODE` from `api/client.ts`,
+the same rule that picks `api`, so the two can't disagree. It reuses
+`api/errors.ts` (`isNotFound`) and `api/poll.ts` (`startPoll`). Surfaces that
+several screens read go through `DashboardApi` in `api/`.
+
 ## The cardinal rule
 
 **`ui/` must never import from `dashboard/`.** If a component's props cannot

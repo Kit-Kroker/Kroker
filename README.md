@@ -88,6 +88,28 @@ artifact — the same data the JSON routes serve, readable without a
 dashboard. An artifact that no longer matches its model returns 422 rather
 than a partial render; the JSON route stays available as the escape hatch.
 
+**Dashboard.** The same process mounts the operator console's API under
+`/api` (live run state read from Temporal) next to the board routes. The
+Vue frontend in `interfaces/dashboard/frontend/` is built from the
+`@kroker/ui` design system (`interfaces/ui/`) and organised by screen: the
+fleet, the run page, the graph editor, and a decision-inbox placeholder.
+The run page is a tab host — Graph | Board | Gates | Cost, with Gates and
+Cost not built yet. The tab is kept in the URL (`#/runs/<id>?tab=board`).
+The Board tab is a read-only view of the run's tasks, their evidence and
+event timeline, and the artifact versions the run published. It reads the
+`/projects/*` routes above, keyed by the run's `project_key`. A run with no
+project, or a project with no board, shows a banner instead. The screen
+map and import rules are in [`interfaces/AGENTS.md`](interfaces/AGENTS.md).
+
+```bash
+cd interfaces/dashboard/frontend
+npm run dev                  # proxies /api and /projects to 127.0.0.1:8500
+VITE_API=mock npm run dev    # in-memory data, no backend needed
+```
+
+Checks never call `npm` directly: `python scripts/check_ui.py` runs
+install, typecheck, both Vitest suites and both Playwright tiers.
+
 **Bind to localhost** — there is no auth yet, and the `X-Actor` header
 identifying a writer is self-asserted (ROADMAP OQ-11). The Markdown URLs are
 designed to be pasted into a chat or a ticket, which makes this easier to
