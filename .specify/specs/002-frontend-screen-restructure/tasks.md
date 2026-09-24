@@ -105,8 +105,8 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
 - [x] T010 [US2] Port **button** (Primitives; slots) by the port recipe, **plus** the GREEN half of T009: `UI/showcase/Showcase.vue` renders `p.slots` through a `v-for` dynamic-slot `<template #[name]>{{ text }}</template>` inside `<component>`, with text interpolation and never `v-html`; `build-ds-bundle` needs no change. Gate: T009's test and button's own tests are green; no `SHOWCASE-1` or `BUTTON-*` line in `check_clauses.py`.
 - [x] T011 [P] [US2] Port **tag** (Primitives; slots).
 - [x] T012 [P] [US2] Port **surface** (Primitives; slots).
-- [ ] T013 [P] [US2] Port **segmented_control** (Primitives).
-- [ ] T014 [P] [US2] Port **filter_chip** (Primitives).
+- [x] T013 [P] [US2] Port **segmented_control** (Primitives).
+- [x] T014 [P] [US2] Port **filter_chip** (Primitives).
 - [ ] T015 [P] [US2] Port **field** (Forms).
 - [ ] T016 [P] [US2] Port **check_row** (Data).
 - [ ] T017 [P] [US2] Port **status_tag** (Status; imports StatusPip — after T008).
