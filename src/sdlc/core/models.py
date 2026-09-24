@@ -500,6 +500,9 @@ class RunSummary(BaseModel):
     # E-77 FR-009: the graph the run pinned (content_sha of its input graph);
     # None = FeatureWorkflow run or a pre-E-77 summary. Never re-derived.
     graph_sha: str | None = None
+    # 002 G4: the run's PipelineConfig.project_key, for the dashboard board
+    # tab. None = summary built before the field existed / config unset.
+    project_key: str | None = None
 
 
 # The fleet strip's per-stage marks (E-75 spec §5.3); the vocabulary of
@@ -537,3 +540,6 @@ class RunState(BaseModel):
     stage_marks: dict[str, DotState] | None = None
     # E-77 FR-009: the run's pinned graph sha; None for FeatureWorkflow.
     graph_sha: str | None = None
+    # 002 G4: the run's PipelineConfig.project_key (board reach); None when
+    # _cfg is not yet set. Read by the dashboard run wire, never guessed.
+    project_key: str | None = None

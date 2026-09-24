@@ -85,6 +85,7 @@ def build_run_summary(
     title: str = "",
     repo_url: str | None = None,
     graph_sha: str | None = None,
+    project_key: str | None = None,
 ) -> RunSummary:
     stages = [_stage_outcome(e) for e in trace if e.kind is RunEventKind.STAGE_ENDED]
 
@@ -155,4 +156,5 @@ def build_run_summary(
         memory_watermark=memory_watermark,
         memory_retains=retains,
         graph_sha=graph_sha,
+        project_key=project_key,
     )

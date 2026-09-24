@@ -25,7 +25,7 @@ Attributes on the MRO of `FeatureWorkflow` and `GraphWorkflow` across its servic
 | `_pending_questions` | `QuestionHost` | `QuestionHost.ask_and_wait` | `QuestionHost.ask_and_wait` | List of open question IDs currently awaiting answers |
 | `_memory_watermark` | `MemoryHost` | `MemoryHost._recall`, `FeatureWorkflow` | `FeatureWorkflow` | Watermark for memory capture |
 | `_session_refs` | `TaskHost` | `TaskHost._dev_task`, `FeatureWorkflow` (retro) | `TaskHost._dev_task` | Coding attempt session references |
-| `_cfg` | `RunHost` | `FeatureWorkflow`, `GateHost._notify` | `FeatureWorkflow.run` | Stashed pipeline config for queries/hooks. `GateHost._notify` reads `project_key` via `getattr(self, "_cfg", None)` for F4 artifact links, so GateHost-only hosts (crew, triage, assessment, tidyup) send no link. |
+| `_cfg` | `RunHost` | `FeatureWorkflow`, `GateHost._notify`, `RunHost._snapshot_run_state` (reads `project_key`) | `FeatureWorkflow.run`, `GraphWorkflow.run` | Stashed pipeline config for queries/hooks. `GateHost._notify` reads `project_key` via `getattr(self, "_cfg", None)` for F4 artifact links, so GateHost-only hosts (crew, triage, assessment, tidyup) send no link. `RunHost._snapshot_run_state` reads `project_key` the same guarded way (002 G4: the run wire carries it for the board tab). |
 | `_idea` | `RunHost` | `RunHost._snapshot_run_state` | `FeatureWorkflow.run` | Stashed initial idea brief |
 | `_started_at` | `RunHost` | `RunHost._snapshot_run_state`, `FeatureWorkflow.run_summary` | `FeatureWorkflow.run` | Run start timestamp |
 | `_run_id` | `RunHost` | `FeatureWorkflow` | `FeatureWorkflow.run` | Stashed run ID for offline unit tests |

@@ -114,6 +114,8 @@ class RunHost:
                 # GraphWorkflow; None for FeatureWorkflow (content only, no
                 # command change, U6).
                 graph_sha=getattr(self, "_graph_sha", "") or None,
+                # 002 G4: the board's project key, from the run's own config.
+                project_key=cfg.project_key,
             )
             self._run_summary = summary
             await retro.step(
@@ -159,4 +161,6 @@ class RunHost:
             cost_usd_total=sum(priced) if priced else None,
             budget_usd=budget,
             budget_crossings=self._budget_crossings,  # type: ignore[attr-defined]
+            # 002 G4: the board's project key; None until _cfg is stashed.
+            project_key=(self._cfg.project_key if self._cfg else None),
         )

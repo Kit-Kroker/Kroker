@@ -240,3 +240,39 @@ def test_without_graph_sha_the_summary_is_unchanged_and_graph_sha_is_none():
     )
     assert s == expected
     assert s.graph_sha is None
+
+
+# --- 002 T025 (RED): build_run_summary project_key (FR-020a, R-1) ----------
+
+
+def test_project_key_keyword_sets_the_field():
+    trace = [
+        _ev(0, RunEventKind.STAGE_ENDED, stage="code", role="dev", outcome="pass", duration_s=4.0),
+        _ev(1, RunEventKind.RUN_FINISHED),
+    ]
+    s = build_run_summary(
+        run_id="r10",
+        mode="greenfield",
+        outcome="done",
+        trace=trace,
+        memory_enabled=False,
+        memory_watermark=None,
+        project_key="kroker",
+    )
+    assert s.project_key == "kroker"
+
+
+def test_without_project_key_the_field_is_none():
+    trace = [
+        _ev(0, RunEventKind.STAGE_ENDED, stage="code", role="dev", outcome="pass", duration_s=4.0),
+        _ev(1, RunEventKind.RUN_FINISHED),
+    ]
+    s = build_run_summary(
+        run_id="r10",
+        mode="greenfield",
+        outcome="done",
+        trace=trace,
+        memory_enabled=False,
+        memory_watermark=None,
+    )
+    assert s.project_key is None
