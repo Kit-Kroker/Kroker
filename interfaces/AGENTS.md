@@ -21,15 +21,16 @@ Two packages:
 |---|---|---|---|
 | Fleet | `/` | `src/features/fleet/` | `FleetView.vue` |
 | Decision inbox | `/inbox` | `src/features/inbox/` | `InboxView.vue` |
-| Run detail | `/runs/:id` (route component `src/features/run/RunView.vue`) | `src/features/run/` | `RunView.vue` |
+| Run detail | `/runs/:id` (route component `src/app/RunPage.vue`, composition only) | `src/features/run/` | `RunView.vue` (tab host) |
 | Board | tab of `/runs/:id` (`?tab=board`) | `src/features/board/` | `BoardTab.vue` |
 | Graphs (editor) | `/graphs` | `src/features/graphs/` | `GraphEditorView.vue` |
 
 The screen-location table mirrors the stage table in the root `AGENTS.md`:
-a contributor reads one row and opens one folder. The Run row names
-`features/run/RunView.vue` as the route component; when the board tab host
-lands, the route component becomes `app/RunPage.vue` (composition only) and
-this row follows it.
+a contributor reads one row and opens one folder. The run page composes
+the board in the app layer (R-13): the `/runs/:id` route component is
+`app/RunPage.vue` (composition only), which renders `features/run/
+RunView.vue` and fills its typed `#board` slot with
+`features/board/BoardTab.vue`; `RunView` never imports `features/board/`.
 
 ## Layers and import boundaries (dashboard)
 
