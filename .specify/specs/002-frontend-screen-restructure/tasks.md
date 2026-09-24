@@ -103,8 +103,8 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
 - [x] T008 [US2] status_pip (G3, R-8): replace `UI/src/components/status_pip/status_pip.md`, `.profiles.ts`, `.spec.ts` and `.pw.ts` with the `PROTO` versions, keep `StatusPip.vue` unchanged, and set `group: 'Fleet'` in the profiles (FR-015). Gate: `check_ui.py` green; no `STATUS_PIP-*` clause line. Ignore a stale `dist-ds/status_pip/all-kinds.html`.
 - [x] T009 [US2] RED — showcase slots (R-9): add `UI/showcase/showcase.md` (`SHOWCASE-1`: a profile's text slots render inside its stage) and `UI/showcase/showcase.pw.ts`, which asserts that `#showcase-button-primary .showcase-stage` contains the text `Run this version` (the prototype's button `primary` profile slot). `// clause: SHOWCASE-1` goes on the same line. Must fail: button is not registered and slots are not rendered.
 - [x] T010 [US2] Port **button** (Primitives; slots) by the port recipe, **plus** the GREEN half of T009: `UI/showcase/Showcase.vue` renders `p.slots` through a `v-for` dynamic-slot `<template #[name]>{{ text }}</template>` inside `<component>`, with text interpolation and never `v-html`; `build-ds-bundle` needs no change. Gate: T009's test and button's own tests are green; no `SHOWCASE-1` or `BUTTON-*` line in `check_clauses.py`.
-- [ ] T011 [P] [US2] Port **tag** (Primitives; slots).
-- [ ] T012 [P] [US2] Port **surface** (Primitives; slots).
+- [x] T011 [P] [US2] Port **tag** (Primitives; slots).
+- [x] T012 [P] [US2] Port **surface** (Primitives; slots).
 - [ ] T013 [P] [US2] Port **segmented_control** (Primitives).
 - [ ] T014 [P] [US2] Port **filter_chip** (Primitives).
 - [ ] T015 [P] [US2] Port **field** (Forms).
