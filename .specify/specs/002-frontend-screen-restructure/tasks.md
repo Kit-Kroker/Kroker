@@ -107,8 +107,8 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
 - [x] T012 [P] [US2] Port **surface** (Primitives; slots).
 - [x] T013 [P] [US2] Port **segmented_control** (Primitives).
 - [x] T014 [P] [US2] Port **filter_chip** (Primitives).
-- [ ] T015 [P] [US2] Port **field** (Forms).
-- [ ] T016 [P] [US2] Port **check_row** (Data).
+- [x] T015 [P] [US2] Port **field** (Forms).
+- [x] T016 [P] [US2] Port **check_row** (Data).
 - [ ] T017 [P] [US2] Port **status_tag** (Status; imports StatusPip — after T008).
 - [ ] T018 [P] [US2] Port **stat** (Data; imports StatusPip — after T008).
 - [ ] T019 [P] [US2] Port **list_row** (Data; slots).
