@@ -90,3 +90,24 @@ def test_run_summary_ignores_unknown_keys_and_graph_sha_stays_none():
     s2 = RunSummary.model_validate(payload)
     assert s2.run_id == "r1"  # the unknown key was ignored, not rejected
     assert s2.graph_sha is None
+
+
+# --- 002 T025 (RED): RunSummary.project_key (FR-020a, G4/R-1) -----------------
+
+
+def test_run_summary_project_key_defaults_to_none():
+    assert _summary().project_key is None
+
+
+def test_pre_002_summary_json_without_project_key_parses_unchanged():
+    """A summary.json written before 002 has no project_key key; it parses
+    unchanged, reading the field as not recorded (None, FR-020a). Pins the
+    null path at the JSON level per R-1, never "old closed run → banner"."""
+    import json
+
+    s = _summary()
+    captured = json.loads(s.model_dump_json())
+    captured.pop("project_key", None)  # a pre-002 summary.json has no such key
+    s2 = RunSummary.model_validate_json(json.dumps(captured))
+    assert s2 == s
+    assert s2.project_key is None

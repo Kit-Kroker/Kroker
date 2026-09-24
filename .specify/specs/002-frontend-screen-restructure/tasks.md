@@ -131,14 +131,14 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
 
 ### Backend run wire (G4, R-1)
 
-- [ ] T025 [P] [US3] RED:
+- [x] T025 [P] [US3] RED:
   - `tests/test_run_state_model.py`: add `project_key` to the shared-field set; `RunState.project_key` defaults to `None`.
   - `tests/test_run_summary_model.py`: `RunSummary.project_key` defaults to `None`, and a payload without the key parses.
   - `tests/test_run_summary_build.py`: `build_run_summary(..., project_key="kroker")` sets it; omitting it gives `None`.
   - `tests/test_run_host.py`: `_snapshot_run_state` returns `project_key` from `_cfg.project_key`.
 
   Commands (one per call): `pytest tests/test_run_state_model.py`, `pytest tests/test_run_summary_model.py`, `pytest tests/test_run_summary_build.py`, `pytest tests/test_run_host.py`.
-- [ ] T026 [US3] Implement `project_key: str | None = None` on `RunState` and `RunSummary` (`src/sdlc/core/models.py`), the `build_run_summary(project_key=…)` kwarg (`src/sdlc/observability/summary.py`), `_retro` passing `cfg.project_key`, and `_snapshot_run_state` setting `self._cfg.project_key if self._cfg else None` (`src/sdlc/workflows/run_host.py`). Update the `_cfg` row in `src/sdlc/workflows/AGENTS.md` (add the `_snapshot_run_state` reader and the `GraphWorkflow.run` writer). Gates: the T025 commands, `ruff check .`, `ruff format --check .`, `mypy`, `python scripts/check_file_size.py`.
+- [x] T026 [US3] Implement `project_key: str | None = None` on `RunState` and `RunSummary` (`src/sdlc/core/models.py`), the `build_run_summary(project_key=…)` kwarg (`src/sdlc/observability/summary.py`), `_retro` passing `cfg.project_key`, and `_snapshot_run_state` setting `self._cfg.project_key if self._cfg else None` (`src/sdlc/workflows/run_host.py`). Update the `_cfg` row in `src/sdlc/workflows/AGENTS.md` (add the `_snapshot_run_state` reader and the `GraphWorkflow.run` writer). Gates: the T025 commands, `ruff check .`, `ruff format --check .`, `mypy`, `python scripts/check_file_size.py`.
 
 ### Frontend run wire (FR-020a, FR-020b)
 

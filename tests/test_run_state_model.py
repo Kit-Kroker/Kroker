@@ -54,6 +54,7 @@ def test_run_state_mirrors_run_summary_field_names_where_they_overlap():
         "roles",
         "title",
         "repo_url",
+        "project_key",
     }
     assert shared <= set(RunState.model_fields)
     assert shared <= set(RunSummary.model_fields)
@@ -116,3 +117,14 @@ def test_run_state_ignores_unknown_keys_and_graph_sha_stays_none():
     s = RunState.model_validate(payload)
     assert s.run_id == "feature-x"  # the unknown key was ignored, not rejected
     assert s.graph_sha is None
+
+
+# --- 002 T025 (RED): RunState.project_key (FR-020a, G4/R-1) ------------------
+
+
+def test_run_state_project_key_defaults_to_none():
+    """Absent is an explicit None, never "default" by guess (FR-020a): the
+    Board tab shows its no-project banner off None; PipelineConfig's
+    "default" stays behind the run wire."""
+    s = RunState(run_id="feature-x", title="X", mode="greenfield", status="running", started_at=AT)
+    assert s.project_key is None
