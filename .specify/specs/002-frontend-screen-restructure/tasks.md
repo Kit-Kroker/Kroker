@@ -111,8 +111,8 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
 - [x] T016 [P] [US2] Port **check_row** (Data).
 - [x] T017 [P] [US2] Port **status_tag** (Status; imports StatusPip — after T008).
 - [x] T018 [P] [US2] Port **stat** (Data; imports StatusPip — after T008).
-- [ ] T019 [P] [US2] Port **list_row** (Data; slots).
-- [ ] T020 [P] [US2] Port **detail_pane** (Data) with `DetailSection.vue` as a sibling. Export both `DetailPane` and `DetailSection` (plus `DetailField`) from `UI/src/index.ts` (G8).
+- [x] T019 [P] [US2] Port **list_row** (Data; slots).
+- [x] T020 [P] [US2] Port **detail_pane** (Data) with `DetailSection.vue` as a sibling. Export both `DetailPane` and `DetailSection` (plus `DetailField`) from `UI/src/index.ts` (G8).
 - [ ] T021 [P] [US2] Port **timeline** (Data; imports StatusPip — after T008; `empty` slot).
 - [ ] T022 [P] [US2] Port **tab_bar** (Shell).
 
