@@ -18,7 +18,11 @@ import { REGISTRY } from './registry'
         <!-- The id is on this wrapper, never on the component root, so
              test infrastructure never constrains a component's markup. -->
         <div class="showcase-stage">
-          <component :is="set.target" v-bind="p.props" />
+          <!-- SHOWCASE-1: a profile's text slots render inside its stage,
+               as text interpolation -- never v-html. -->
+          <component :is="set.target" v-bind="p.props">
+            <template v-for="(text, name) in p.slots ?? {}" :key="name" #[name]>{{ text }}</template>
+          </component>
         </div>
       </article>
     </section>
