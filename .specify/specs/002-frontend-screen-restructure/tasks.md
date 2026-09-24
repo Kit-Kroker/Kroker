@@ -210,7 +210,7 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
 
 ## Phase 5: Polish & cross-cutting
 
-- [ ] T041 Feature close-out (quickstart.md §1–§4, `.specify/specs/002-frontend-screen-restructure/spec.md` Status line):
+- [x] T041 Feature close-out (quickstart.md §1–§4, `.specify/specs/002-frontend-screen-restructure/spec.md` Status line):
   - run quickstart §1–§4 in full: `check_ui.py`, `check_clauses.py`, `check_file_size.py --full`, and the Python gates.
   - confirm `features/board/.gitkeep` is gone.
   - update the spec Status line with the delivered date.

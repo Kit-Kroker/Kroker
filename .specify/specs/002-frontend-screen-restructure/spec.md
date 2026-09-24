@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-23
 
-**Status**: Approved — GATE 1 cleared 2026-09-23 (user, relayed by the orchestrator). OQ-1…OQ-9 resolved as rulings G1–G9 below; the reasoning and rejected alternatives stay in **Resolved decisions** at the end. One ruling (G2b, record import) is blocked on a source path — see **Open items**.
+**Status**: Delivered 2026-09-24 — all 41 tasks executed (T024 record import PARKED by orchestrator ruling: the source directory exists in no findable prototype copy); groups A/B/C reviewer-approved; final gates green (dashboard 374 / ui 147 / playwright 86 vs baseline 242/102/50; clauses 187 declared, 9 pre-existing untested, 0 dangling). Approved — GATE 1 cleared 2026-09-23 (user, relayed by the orchestrator). OQ-1…OQ-9 resolved as rulings G1–G9 below; the reasoning and rejected alternatives stay in **Resolved decisions** at the end. One ruling (G2b, record import) is blocked on a source path — see **Open items**.
 
 **Input**: Orchestrator TASK BRIEF (re-send), three ordered parts in one spec: (A) group `interfaces/dashboard/frontend/src` by screen; (B) port the design-system components missing from `interfaces/ui/` out of the prototype copy at `C:/Users/start/Downloads/Pipeline management prototype/kroker-ui/`; (C) add the Agent Board screen as a tab of the run view. Every factual claim in the brief was treated as a hypothesis and checked on main `5899f77` — see **Verified context**.
 
