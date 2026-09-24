@@ -656,7 +656,9 @@ describe('screen module shape (T005)', () => {
     for (const spec of [
       '../features/fleet/FleetView.vue',
       '../features/inbox/InboxView.vue',
-      '../features/run/RunView.vue',
+      // R-13 since T039: the run route composes through app/RunPage.vue,
+      // which fills RunView's #board slot -- the pin follows the route.
+      './RunPage.vue',
       '../features/graphs/GraphEditorView.vue',
     ]) {
       expect(router).toContain(spec)

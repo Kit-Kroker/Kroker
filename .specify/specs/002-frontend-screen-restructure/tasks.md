@@ -181,12 +181,12 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
   - the run route still points at `RunView`, but `props: true` becomes the R-4 props function, so `?tab` reaches it. Board stays disabled here because no slot is supplied yet.
 
   Gate: `check_ui.py` green — `RunView.tabs.test.ts` green, `RunView.test.ts` unchanged and green, app-tier canvas tests green.
-- [ ] T038 [US3] RED — `FE/features/board/BoardTab.test.ts` and `FE/app/RunPage.test.ts`, both with `./board.api` / `features/board/board.api` mocked:
+- [x] T038 [US3] RED — `FE/features/board/BoardTab.test.ts` and `FE/app/RunPage.test.ts`, both with `./board.api` / `features/board/board.api` mocked:
   - `BoardTab.test.ts` covers the props `{ runId, projectKey }`; the store starting on mount, stopping on unmount, and restarting on a `projectKey` change; task rows (`ListRow` + `StatusTag`); selection showing `DetailPane` fields, an evidence `DetailSection` and a `Timeline`; version rows; the `Stat` strip labelled "this run"; the `no_project` and `not_found` banners; the empty state; the connection-lost line.
   - `RunPage.test.ts` checks that `RunPage` renders `BoardTab` inside RunView's board panel and enables the Board tab.
 
   Must fail: `BoardTab.vue` and `RunPage.vue` don't exist yet.
-- [ ] T039 [US3] GREEN — the board view and app-layer composition:
+- [x] T039 [US3] GREEN — the board view and app-layer composition:
   - `FE/features/board/BoardTab.vue` as specified by T038.
   - `FE/app/RunPage.vue` renders only `<RunView>` and fills `#board` with `BoardTab` (R-13).
   - `FE/app/router.ts` switches the run route's component to `RunPage`, keeping the R-4 props function.
