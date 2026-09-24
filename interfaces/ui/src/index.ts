@@ -9,3 +9,5 @@ export type { SegmentOption } from './components/segmented_control/SegmentedCont
 export { default as Surface } from './components/surface/Surface.vue'
 export { default as Tag } from './components/tag/Tag.vue'
 export { default as FilterChip } from './components/filter_chip/FilterChip.vue'
+export { default as Field } from './components/field/Field.vue'
+export { default as CheckRow } from './components/check_row/CheckRow.vue'

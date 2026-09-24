@@ -6,6 +6,8 @@ import segmentedControl from '../src/components/segmented_control/segmented_cont
 import surface from '../src/components/surface/surface.profiles'
 import tag from '../src/components/tag/tag.profiles'
 import filterChip from '../src/components/filter_chip/filter_chip.profiles'
+import field from '../src/components/field/field.profiles'
+import checkRow from '../src/components/check_row/check_row.profiles'
 import fleetRow from '../src/components/fleet_row/fleet_row.profiles'
 import fleetTable from '../src/components/fleet_table/fleet_table.profiles'
 import appHeader from '../src/components/app_header/app_header.profiles'
@@ -25,8 +27,10 @@ export const REGISTRY: ProfileSet[] = [
   surface,
   tag,
   filterChip,
+  field,
   stageDots,
   statusPip,
+  checkRow,
   fleetRow,
   fleetTable,
   appHeader,
