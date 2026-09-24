@@ -196,7 +196,7 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
 
 ### App tier
 
-- [ ] T040 [US3] RED, then GREEN in the app tier. Add clauses `CONSOLE-10…` to `UI/app.md` and cite them in `UI/app.pw.ts`, running against the board mock:
+- [x] T040 [US3] RED, then GREEN in the app tier. Add clauses `CONSOLE-10…` to `UI/app.md` and cite them in `UI/app.pw.ts`, running against the board mock:
   - `?tab=board` opens Board and a copied URL reopens it (SC-005);
   - the task list renders and selection shows detail, evidence and timeline;
   - the counter strip reads "this run";
