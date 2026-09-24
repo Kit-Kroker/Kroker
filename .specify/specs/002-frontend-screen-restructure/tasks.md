@@ -163,12 +163,12 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
 - [x] T030 [US3] Implement `FE/features/board/board.types.ts`, `board.api.ts` (http, mock and selection via `API_MODE`) and the `__fixtures__/` scenarios. Gate: `check_ui.py` green.
 - [x] T031 [P] [US3] RED in `FE/features/board/board.adapter.test.ts`: `toTaskRow` (label = task id; `pulsing` only for `in_progress`/`blocked`; `diverged`), `toTaskDetail` (fields plus evidence), `toTimeline` (oldest first, nulls as `undefined`), `toVersionRows` (run filter, newest first), and `toCounters` ("this run", zero state).
 - [x] T032 [US3] Implement `FE/features/board/board.adapter.ts` (pure). Gate: `check_ui.py` green.
-- [ ] T033 [US3] RED in `FE/features/board/board.store.test.ts`, with `./board.api` mocked:
+- [x] T033 [US3] RED in `FE/features/board/board.store.test.ts`, with `./board.api` mocked:
   - every data-model §4 transition: `no_project`; 404 on step 1 or step 3; a step-2 404 falling back; a step-4 404 skipping a key; a non-404 failure during `loading` retrying; `empty`; `ready`; a poll failure keeping data; a poll-time 404 on step 3.
   - `stop()` clearing the poll and the selection.
   - selection fetching detail and events.
   - the selected task refreshing on a `row_version` change.
-- [ ] T034 [US3] Implement `FE/features/board/board.store.ts` (Pinia, `startPoll`; the initial load runs inside the poll loop until its first success). Gate: `check_ui.py` green.
+- [x] T034 [US3] Implement `FE/features/board/board.store.ts` (Pinia, `startPoll`; the initial load runs inside the poll loop until its first success). Gate: `check_ui.py` green.
 
 ### Tab host and board view (R-4, R-13)
 
