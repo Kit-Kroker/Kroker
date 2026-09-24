@@ -5,6 +5,8 @@ import statusTag from '../src/components/status_tag/status_tag.profiles'
 import stat from '../src/components/stat/stat.profiles'
 import listRow from '../src/components/list_row/list_row.profiles'
 import detailPane from '../src/components/detail_pane/detail_pane.profiles'
+import timeline from '../src/components/timeline/timeline.profiles'
+import tabBar from '../src/components/tab_bar/tab_bar.profiles'
 import button from '../src/components/button/button.profiles'
 import segmentedControl from '../src/components/segmented_control/segmented_control.profiles'
 import surface from '../src/components/surface/surface.profiles'
@@ -38,7 +40,9 @@ export const REGISTRY: ProfileSet[] = [
   stat,
   listRow,
   detailPane,
+  timeline,
   checkRow,
+  tabBar,
   fleetRow,
   fleetTable,
   appHeader,
