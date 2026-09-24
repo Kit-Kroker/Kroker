@@ -1,6 +1,8 @@
 import type { ProfileSet } from '../src/profile'
 import stageDots from '../src/components/stage_dots/stage_dots.profiles'
 import statusPip from '../src/components/status_pip/status_pip.profiles'
+import statusTag from '../src/components/status_tag/status_tag.profiles'
+import stat from '../src/components/stat/stat.profiles'
 import button from '../src/components/button/button.profiles'
 import segmentedControl from '../src/components/segmented_control/segmented_control.profiles'
 import surface from '../src/components/surface/surface.profiles'
@@ -28,8 +30,10 @@ export const REGISTRY: ProfileSet[] = [
   tag,
   filterChip,
   field,
-  stageDots,
   statusPip,
+  statusTag,
+  stageDots,
+  stat,
   checkRow,
   fleetRow,
   fleetTable,
