@@ -155,12 +155,12 @@ Paths below are relative to the repo root. `FE` = `interfaces/dashboard/frontend
 
 ### Board transport, adapter, store (R-3, R-11, data-model §2–§4)
 
-- [ ] T029 [US3] RED in `FE/features/board/board.api.test.ts` (delete `.gitkeep`):
+- [x] T029 [US3] RED in `FE/features/board/board.api.test.ts` (delete `.gitkeep`):
   - URL building for steps 1–6 (contracts/board-client.md), including `run_id`, `plan` and `subject` encoding.
   - `pickPlanVersion` chooses the newest `id` (not `n`) with a matching `run_id`, else `undefined`.
   - `isNotFound`-based 404 classification per step.
   - `createMockBoardApi` covers every fixture scenario in the contract.
-- [ ] T030 [US3] Implement `FE/features/board/board.types.ts`, `board.api.ts` (http, mock and selection via `API_MODE`) and the `__fixtures__/` scenarios. Gate: `check_ui.py` green.
+- [x] T030 [US3] Implement `FE/features/board/board.types.ts`, `board.api.ts` (http, mock and selection via `API_MODE`) and the `__fixtures__/` scenarios. Gate: `check_ui.py` green.
 - [ ] T031 [P] [US3] RED in `FE/features/board/board.adapter.test.ts`: `toTaskRow` (label = task id; `pulsing` only for `in_progress`/`blocked`; `diverged`), `toTaskDetail` (fields plus evidence), `toTimeline` (oldest first, nulls as `undefined`), `toVersionRows` (run filter, newest first), and `toCounters` ("this run", zero state).
 - [ ] T032 [US3] Implement `FE/features/board/board.adapter.ts` (pure). Gate: `check_ui.py` green.
 - [ ] T033 [US3] RED in `FE/features/board/board.store.test.ts`, with `./board.api` mocked:
