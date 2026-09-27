@@ -18,6 +18,11 @@ deliverable:
   path: notes.md
   schema: notes-v1
 limits:
-  wall_clock_s: 3000
-  turn_timeout_s: 1800
+  # 5400/2700, not 3000/1800: a slow proxy (z.ai in front of opus) spends
+  # 1800s of a turn on model latency alone, and a big-diff round needs the
+  # headroom for test runs inside the same wall clock. Battle values from
+  # phases 2-3 (R2 died twice at 6000s wall clock BEFORE these landed; with
+  # them, R3's T1-T13 went through without a single wall-clock kill).
+  wall_clock_s: 5400
+  turn_timeout_s: 2700
   cost_usd: 25.0
