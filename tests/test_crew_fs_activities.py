@@ -65,15 +65,40 @@ async def test_read_round_reports_a_missing_deliverable_rather_than_raising(tmp_
     assert out.missing is True
 
 
-async def test_read_round_rejects_an_unknown_schema(tmp_path):
+async def test_read_round_turns_a_bad_deliverable_schema_into_critique(tmp_path):
+    """An unknown schema in the deliverable is agent misbehavior the next
+    round's brief must correct -- a violation, not an activity crash."""
     repo = _repo(tmp_path)
     d = round_dir(repo, "code", 1)
     d.mkdir(parents=True)
     (d / "notes.md").write_text(json.dumps({**GOOD, "schema": "notes-v2"}), encoding="utf-8")
-    with pytest.raises(Exception, match="notes-v2"):
-        await read_round(
-            ReadRoundInput(worktree=str(repo), layout="code", round=1, deliverable_path="notes.md")
-        )
+    out = await read_round(
+        ReadRoundInput(worktree=str(repo), layout="code", round=1, deliverable_path="notes.md")
+    )
+    assert out.missing is False
+    assert "notes-v2" in out.critique
+    assert "PROTOCOL VIOLATIONS" in out.critique
+
+
+async def test_read_round_turns_a_prose_advisor_into_critique(tmp_path):
+    """Regression (T06 run, 2026-09-21): the critic wrote advisor.md as a
+    Markdown review instead of advisor-v1 JSON and the crew died on it. The
+    violation must reach the next round's brief as corrective critique."""
+    repo = _repo(tmp_path)
+    d = round_dir(repo, "code", 1)
+    d.mkdir(parents=True)
+    (d / "notes.md").write_text(json.dumps(GOOD), encoding="utf-8")
+    (d / "advisor.md").write_text(
+        "# Advisor review -- round 1\n\n**Land the direction.**\n", encoding="utf-8"
+    )
+    out = await read_round(
+        ReadRoundInput(worktree=str(repo), layout="code", round=1, deliverable_path="notes.md")
+    )
+    assert out.missing is False
+    assert "greet()" in out.note_summary  # the valid deliverable still reads
+    assert "advisor.md" in out.critique
+    assert "PROTOCOL VIOLATIONS" in out.critique
+    assert out.verdict is None  # review.json absent -> no verdict
 
 
 async def test_read_round_rejects_a_path_escaping_the_round_directory(tmp_path):

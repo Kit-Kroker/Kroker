@@ -13,7 +13,6 @@ import pytest
 from temporalio.exceptions import ApplicationError
 
 from sdlc.crew.activities import (
-    CrewProtocolError,
     LoadCrewInput,
     ReadRoundInput,
     load_crew,
@@ -166,7 +165,8 @@ async def test_read_round_is_fine_with_no_critic_output(tmp_path):
 @pytest.mark.asyncio
 async def test_an_unknown_advisory_schema_is_an_error(tmp_path):
     """Untrusted input: an unknown schema is refused, never parsed
-    best-effort."""
+    best-effort -- the refusal reaches the next round's brief as a
+    protocol violation instead of crashing the crew."""
     d = round_dir(tmp_path, "code", 1)
     d.mkdir(parents=True)
     (d / "notes.md").write_text(
@@ -176,19 +176,18 @@ async def test_an_unknown_advisory_schema_is_an_error(tmp_path):
     (d / "advisor.md").write_text(
         json.dumps({"schema": "advisor-v2", "assessment": "x"}), encoding="utf-8"
     )
-    with pytest.raises(CrewProtocolError, match="advisor-v1"):
-        await read_round(
-            ReadRoundInput(
-                worktree=str(tmp_path), layout="code", round=1, deliverable_path="notes.md"
-            )
-        )
+    out = await read_round(
+        ReadRoundInput(worktree=str(tmp_path), layout="code", round=1, deliverable_path="notes.md")
+    )
+    assert "advisor-v1" in out.critique
+    assert "PROTOCOL VIOLATIONS" in out.critique
 
 
 @pytest.mark.asyncio
 async def test_an_unknown_review_verdict_is_an_error(tmp_path):
     """'verdict' drives a control decision, so it is a closed set. A free
     string would let a model invent an outcome the workflow never planned
-    for."""
+    for -- so it is refused and reported, never forwarded."""
     d = round_dir(tmp_path, "code", 1)
     d.mkdir(parents=True)
     (d / "notes.md").write_text(
@@ -198,12 +197,11 @@ async def test_an_unknown_review_verdict_is_an_error(tmp_path):
     (d / "review.json").write_text(
         json.dumps({"schema": "review-v1", "verdict": "ship it", "findings": []}), encoding="utf-8"
     )
-    with pytest.raises(CrewProtocolError):
-        await read_round(
-            ReadRoundInput(
-                worktree=str(tmp_path), layout="code", round=1, deliverable_path="notes.md"
-            )
-        )
+    out = await read_round(
+        ReadRoundInput(worktree=str(tmp_path), layout="code", round=1, deliverable_path="notes.md")
+    )
+    assert "review.json" in out.critique
+    assert out.verdict is None
 
 
 @pytest.mark.asyncio
@@ -228,12 +226,11 @@ async def test_a_question_needs_a_class_and_evidence(tmp_path):
         ),
         encoding="utf-8",
     )
-    with pytest.raises(CrewProtocolError, match="evidence"):
-        await read_round(
-            ReadRoundInput(
-                worktree=str(tmp_path), layout="code", round=1, deliverable_path="notes.md"
-            )
-        )
+    out = await read_round(
+        ReadRoundInput(worktree=str(tmp_path), layout="code", round=1, deliverable_path="notes.md")
+    )
+    assert "evidence" in out.critique
+    assert out.question == ""
 
 
 @pytest.mark.asyncio

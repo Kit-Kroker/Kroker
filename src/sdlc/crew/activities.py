@@ -144,26 +144,45 @@ async def read_round(inp: ReadRoundInput) -> RoundReading:
             f"{path.name} is too large: {size} bytes exceeds {MAX_ROUND_FILE_BYTES}"
         )
     raw = path.read_text(encoding="utf-8", errors="replace")
+    # An agent-written protocol file in the wrong shape is misbehavior the
+    # NEXT round's brief must correct, not a worker fault worth crashing the
+    # crew for: collect every violation as critique and let the round bound
+    # (rounds.max) keep the loop finite.
+    violations: list[str] = []
+    summary = ""
     try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise CrewProtocolError(f"{path.name} is not valid JSON: {e}") from e
-    if not isinstance(payload, dict):
-        raise CrewProtocolError(f"{path.name} must contain a JSON object")
-    schema = payload.get("schema")
-    if schema != "notes-v1":
-        raise CrewProtocolError(
-            f"{path.name} declares schema {schema!r}; only 'notes-v1' is "
-            f"understood, and an unknown schema is an error rather than a "
-            f"best-effort parse"
-        )
-    note = RoundNote(**payload)
-    summary = "\n".join([note.what_changed, note.why, note.verification, note.left_undone]).strip()
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise CrewProtocolError(f"{path.name} is not valid JSON: {e}") from e
+        if not isinstance(payload, dict):
+            raise CrewProtocolError(f"{path.name} must contain a JSON object")
+        schema = payload.get("schema")
+        if schema != "notes-v1":
+            raise CrewProtocolError(
+                f"{path.name} declares schema {schema!r}; only 'notes-v1' is "
+                f"understood, and an unknown schema is an error rather than a "
+                f"best-effort parse"
+            )
+        note = RoundNote(**payload)
+        summary = "\n".join(
+            [note.what_changed, note.why, note.verification, note.left_undone]
+        ).strip()
+    except (CrewProtocolError, ValidationError) as e:
+        violations.append(str(e))
 
     base = round_dir(inp.worktree, inp.layout, inp.round)
-    advisory = _read_schema(base / "advisor.md", "advisor-v1", RoundAdvisory)
-    review = _read_schema(base / "review.json", "review-v1", RoundReview)
-    q = _read_schema(base / "question.json", "question-v1", CrewQuestion)
+
+    def _aux(name: str, schema_name: str, model):
+        try:
+            return _read_schema(base / name, schema_name, model)
+        except (CrewProtocolError, ValidationError) as e:
+            violations.append(str(e))
+            return None
+
+    advisory = _aux("advisor.md", "advisor-v1", RoundAdvisory)
+    review = _aux("review.json", "review-v1", RoundReview)
+    q = _aux("question.json", "question-v1", CrewQuestion)
     question = ""
     if q is not None:
         question = (
@@ -172,6 +191,12 @@ async def read_round(inp: ReadRoundInput) -> RoundReading:
         )
 
     parts: list[str] = []
+    if violations:
+        parts.append(
+            "PROTOCOL VIOLATIONS in your previous round's files -- fix them "
+            "THIS round by rewriting each file in its required schema, the "
+            "run cannot proceed on prose: " + " | ".join(violations)
+        )
     if advisory is not None:
         parts.append(f"Assessment: {advisory.assessment}")
         if advisory.risks:
