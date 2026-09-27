@@ -6,10 +6,17 @@ services:
       - "8233:8233"   # Web UI
     environment:
       TEMPORAL_ADDRESS: "temporal:7233"
-    # `temporal cli start` runs an embedded server — enough for a single-node
-    # dev/mini-prod setup. For real production swap in the full Temporal Server
-    # with Postgres/Cassandra persistence.
-    command: ["server", "start-dev", "--ip", "0.0.0.0"]
+    # `server start-dev` with `--db-path` on a volume survives container
+    # restarts and host reboots (in-memory default lost 2 full runs this
+    # week). For real production swap in the full Temporal Server with
+    # Postgres/Cassandra persistence.
+    # uid 1000 (temporal) cannot write into a fresh named volume (root-owned
+    # at first mount); run the dev server as root - local stack only.
+    user: root
+    command: ["server", "start-dev", "--ip", "0.0.0.0", "--db-filename", "/tmp/state/temporal.db"]
+    volumes:
+      - temporal-state:/tmp/state
+    restart: unless-stopped
 
   hindsight:
     image: ghcr.io/vectorize-io/hindsight:latest
@@ -58,3 +65,4 @@ volumes:
   worker-repos:
   worker-runs:
   hindsight-data:
+  temporal-state:
