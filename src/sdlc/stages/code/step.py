@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
+from temporalio.exceptions import ChildWorkflowError
 
 # This module executes inside the workflow sandbox (feature.py's
 # pipeline calls code.step) and shares model classes with it — without
@@ -568,21 +569,40 @@ async def step(
         asked = 0
         capped = False
         while True:
-            exec_out = await _execute_coding_task(
-                role_cfg=role_cfg,
-                prompt=prompt,
-                worktree=worktree,
-                session_id=session_id,
-                task_id=task.id,
-                attempt=attempt,
-                grants=grants,
-                cfg=cfg,
-                crew_layout=crew_layout,
-                crew_roles=crew_roles,
-                crew_protocol=crew_protocol,
-                crew_sessions=crew_sessions,
-                repair=_is_repair_attempt(attempt, thawed),
-            )
+            try:
+                exec_out = await _execute_coding_task(
+                    role_cfg=role_cfg,
+                    prompt=prompt,
+                    worktree=worktree,
+                    session_id=session_id,
+                    task_id=task.id,
+                    attempt=attempt,
+                    grants=grants,
+                    cfg=cfg,
+                    crew_layout=crew_layout,
+                    crew_roles=crew_roles,
+                    crew_protocol=crew_protocol,
+                    crew_sessions=crew_sessions,
+                    repair=_is_repair_attempt(attempt, thawed),
+                )
+            except ChildWorkflowError:
+                # A crew child that died on its wall clock (execution_timeout)
+                # or crashed outright failed THIS ATTEMPT, not the run: unhandled,
+                # the exception kills the whole graph. Synthesize a failed round
+                # and let the fix loop / task gate judge it like any other round.
+                exec_out = (
+                    HarnessRunResult(
+                        harness=HarnessKind.CREW,
+                        exit_code=124,  # conventional timeout exit code
+                        summary=(
+                            "crew child workflow failed before producing a round "
+                            "result (wall-clock timeout or crash); treated as a "
+                            "failed attempt for the fix loop"
+                        ),
+                    ),
+                    {},
+                    [],
+                )
             if isinstance(exec_out, tuple):
                 run, crew_sessions, c_refs = exec_out
             else:
