@@ -166,8 +166,22 @@ async def _ensure_python_env(
     # (so pydantic etc. resolve), then unconditionally guarantee the tools
     # the adapter's commands need — belt-and-suspenders for a project whose
     # [dev] extra forgot pytest/ruff, or has no packaging metadata at all.
-    await _bounded_shell(f'"{py_exe}" -m pip install -q -e ".[dev]"', worktree, timeout_s)
-    await _bounded_shell(f'"{py_exe}" -m pip install -q -e "{worktree}"', worktree, timeout_s)
+    # A uv workspace ([tool.uv.workspace], uv.lock) is opaque to pip — the
+    # members resolve as path deps pip cannot install, the -e install dies,
+    # and the failure is tolerated, leaving this venv without the project's
+    # deps; the merge-gate suite then fails at collection and reads as
+    # introduced failures. uv understands workspaces and is a small wheel,
+    # so when the project carries a uv.lock the install goes through uv.
+    await _bounded_shell(f'"{py_exe}" -m pip install -q uv', worktree, timeout_s)
+    if os.path.isfile(os.path.join(worktree, "uv.lock")):
+        await _bounded_shell(
+            f'"{py_exe}" -m uv pip install -q --python "{py_exe}" -e ".[dev]"',
+            worktree,
+            timeout_s,
+        )
+    else:
+        await _bounded_shell(f'"{py_exe}" -m pip install -q -e ".[dev]"', worktree, timeout_s)
+        await _bounded_shell(f'"{py_exe}" -m pip install -q -e "{worktree}"', worktree, timeout_s)
     # Both `-e` installs above hard-error on a project carrying no
     # pyproject.toml/setup.py ("does not appear to be a Python project") —
     # yet `requirements.txt` is itself one of PythonToolchain's markers, so

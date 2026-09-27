@@ -80,6 +80,25 @@ async def test_run_test_suite_installs_deps_from_requirements_dev_txt(tmp_path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.slow
+async def test_run_test_suite_installs_a_uv_workspace_via_uv(tmp_path):
+    """A project carrying uv.lock routes its install through uv, not pip:
+    a uv workspace is opaque to pip (members resolve as path deps pip cannot
+    install, the -e install dies and the failure is tolerated, leaving the
+    venv without the project's deps — the merge-gate suite then fails at
+    collection and reads as an introduced failure; retro phase-2 incident 9)."""
+    (tmp_path / "pyproject.toml").write_text(PYPROJECT_WITH_DEP, encoding="utf-8")
+    (tmp_path / "uv.lock").write_text("", encoding="utf-8")  # marker only; uv pip ignores it
+    (tmp_path / "mod.py").write_text(MODULE_WITH_DEP, encoding="utf-8")
+    (tmp_path / "test_mod.py").write_text(TESTFILE_WITH_DEP, encoding="utf-8")
+
+    report = await run_test_suite(QAInput(worktree=str(tmp_path)))
+
+    assert report.tests_passed is True, report.issues
+    assert (tmp_path / ".sdlc-venv").is_dir()
+
+
+@pytest.mark.asyncio
 async def test_run_test_suite_skips_provisioning_without_a_python_adapter(tmp_path):
     # No marker file -> detect() returns None -> falls back to the pre-fix
     # bare-PATH behaviour untouched (e.g. a non-Python contract command).
