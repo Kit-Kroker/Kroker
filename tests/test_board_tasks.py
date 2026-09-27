@@ -98,13 +98,23 @@ def test_invalid_transition_is_rejected(store, plan_v):
         store.set_task_authoritative("proj", plan_v, "T01", TaskStatus.DONE, actor="workflow:run-1")
 
 
-def test_done_is_terminal(store, plan_v):
+def test_done_reentry_is_the_reset_replay_edge(store, plan_v):
+    """DONE -> IN_PROGRESS is the one sanctioned re-entry: a Temporal workflow
+    reset replay re-executes a task whose completion was truncated, and the
+    board follows the history instead of vetoing it. Same reasoning admits
+    FAILED -> DONE (a replayed completion over a pre-reset failed row).
+    DONE -> anything else stays terminal."""
+    store.set_task_authoritative("proj", plan_v, "T01", TaskStatus.IN_PROGRESS, actor="workflow:r")
+    store.set_task_authoritative("proj", plan_v, "T01", TaskStatus.DONE, actor="workflow:r")
     store.set_task_authoritative("proj", plan_v, "T01", TaskStatus.IN_PROGRESS, actor="workflow:r")
     store.set_task_authoritative("proj", plan_v, "T01", TaskStatus.DONE, actor="workflow:r")
     with pytest.raises(InvalidTransition):
-        store.set_task_authoritative(
-            "proj", plan_v, "T01", TaskStatus.IN_PROGRESS, actor="workflow:r"
-        )
+        store.set_task_authoritative("proj", plan_v, "T01", TaskStatus.FAILED, actor="workflow:r")
+    # reset replay: a replayed attempt fails in-flight (failed), then the
+    # re-driven completion lands done over the failed row
+    store.set_task_authoritative("proj", plan_v, "T01", TaskStatus.IN_PROGRESS, actor="workflow:r")
+    store.set_task_authoritative("proj", plan_v, "T01", TaskStatus.FAILED, actor="workflow:r")
+    store.set_task_authoritative("proj", plan_v, "T01", TaskStatus.DONE, actor="workflow:r")
 
 
 def test_rejected_write_appends_no_event(store, plan_v):
