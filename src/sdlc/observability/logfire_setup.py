@@ -11,12 +11,25 @@ from __future__ import annotations
 import os
 from contextlib import nullcontext
 
-_ENABLED = bool(os.environ.get("LOGFIRE_TOKEN"))
+
+def _is_enabled() -> bool:
+    """Read the gate at call time, never at import.
+
+    This module is imported inside the workflow sandbox, where imports are
+    recorded replay commands. A module-level env read makes the import
+    itself carry a result that can differ between the original execution
+    and a replay after the worker restarted with a different environment
+    (token added/removed between boots) — exactly the non-determinism that
+    poisoned R1 mid-run (TMPRL1100, retro phase-3 incident Ф3-1). Call-time
+    reads keep the import side-effect-free; where the value matters the
+    caller is worker/activity context, not workflow code.
+    """
+    return bool(os.environ.get("LOGFIRE_TOKEN"))
 
 
 def configure() -> bool:
     """Called once at worker boot. Returns True iff Logfire is live."""
-    if not _ENABLED:
+    if not _is_enabled():
         return False
     try:
         import logfire  # lazy: optional dependency, only needed when gated on
@@ -29,7 +42,7 @@ def configure() -> bool:
 
 def span(name: str, **attrs):
     """Context manager: logfire.span when enabled, else nullcontext."""
-    if not _ENABLED:
+    if not _is_enabled():
         return nullcontext()
     try:
         import logfire
