@@ -289,6 +289,23 @@ class CodingHarness(ABC):
                     size += len(chunk)
             return b"".join(chunks).decode(errors="replace")[:SUMMARY_MAX]
 
+        beat_stop = asyncio.Event()
+
+        async def _beat_loop() -> None:
+            # The heartbeat must measure "process alive", not "process
+            # printing": a reasoning model behind a slow proxy can produce
+            # no stdout for many minutes without being dead. Beat on a
+            # timer so a silent-but-working harness keeps the activity
+            # alive; the loop stops when the run ends.
+            while not beat_stop.is_set():
+                if heartbeat:
+                    heartbeat()
+                try:
+                    await asyncio.wait_for(beat_stop.wait(), timeout=30)
+                except TimeoutError:
+                    pass
+
+        beat_task = asyncio.create_task(_beat_loop())
         start = time.monotonic()
         try:
             stdout_b, stderr_s, _ = await asyncio.wait_for(
@@ -307,6 +324,9 @@ class CodingHarness(ABC):
         except Exception:
             await asyncio.shield(kill_process_tree(proc))
             raise
+        finally:
+            beat_stop.set()
+            beat_task.cancel()
         duration_s = time.monotonic() - start
 
         result = self.parse(stdout_b.decode(errors="replace"), proc.returncode or 0)
