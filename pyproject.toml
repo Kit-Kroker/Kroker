@@ -23,6 +23,14 @@ dependencies = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# Runtime assets read from the installed package, not the repo checkout:
+# workflows/graphs/*.graph.yaml is loaded at import (graph_catalog.py) and
+# stage contract / AGENTS markdown is discovered relative to the package dir.
+# setuptools ships only *.py in a wheel unless told otherwise, so a pip
+# install of this project crashes the worker on boot without this.
+[tool.setuptools.package-data]
+sdlc = ["**/*.yaml", "**/*.md"]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
