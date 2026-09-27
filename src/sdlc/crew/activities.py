@@ -19,7 +19,7 @@ from ..artifacts.capture import capture_session
 from ..core.models import (
     HarnessKind,
 )
-from ..harness.base import HarnessRequest
+from ..harness.base import HarnessRequest, provider_env
 from ..harness.models import (
     HarnessRunResult,
     ToolGrant,
@@ -280,6 +280,7 @@ async def run_crew_turn(inp: CrewTurnInput) -> CrewTurnOutput:
         timeout_s=inp.turn_timeout_s,
         write_root=write_root,
         repair=inp.repair,
+        env=provider_env(),
     )
     try:
         _, report = _resolve_containment(harness, inp, req)

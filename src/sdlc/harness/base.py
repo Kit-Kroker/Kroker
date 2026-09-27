@@ -95,6 +95,15 @@ ENV_ALLOWLIST: tuple[str, ...] = (
 )
 
 
+def provider_env() -> dict[str, str]:
+    """ANTHROPIC_* provider credentials for `req.env` -- the deliberate
+    injection point the allowlist comment promises. File-based auth
+    (opencode's auth.json) needs nothing; env-authenticated CLIs
+    (claude_code) get their key/base-url/model aliases here and nowhere
+    else, so the secret channel stays exactly this prefix."""
+    return {k: v for k, v in os.environ.items() if k.startswith("ANTHROPIC_")}
+
+
 def build_env(
     req_env: dict[str, str], allowlist: tuple[str, ...] = ENV_ALLOWLIST
 ) -> dict[str, str]:

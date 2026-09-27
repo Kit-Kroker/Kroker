@@ -11,7 +11,7 @@ from temporalio import activity
 
 from ...artifacts.capture import capture_session
 from ...core.models import HarnessKind
-from ...harness.base import HarnessRequest
+from ...harness.base import HarnessRequest, provider_env
 from ...harness.containment import (
     ContainmentError,
     has_repair_rule,
@@ -146,6 +146,7 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
         session_id=inp.session_id,
         timeout_s=inp.timeout_s,
         repair=inp.repair,
+        env=provider_env(),
     )
     _, report = _resolve_containment(harness, inp, req)
     with span("harness.run", harness=inp.harness.value, task_id=inp.task_id, attempt=inp.attempt):
