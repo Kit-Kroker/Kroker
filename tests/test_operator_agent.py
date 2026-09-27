@@ -4,6 +4,7 @@ from datetime import UTC
 
 import pytest
 from pydantic_ai.models.test import TestModel
+from pydantic_ai.tools import DeferredToolRequests
 
 from sdlc.operator import agent as chat_agent
 from sdlc.operator import tools
@@ -49,6 +50,15 @@ def test_only_the_writes_require_approval():
     assert approval["start_run"] is True
     assert approval["list_runs"] is False
     assert approval["follow"] is False
+
+
+def test_deferred_write_calls_are_an_output_type():
+    """The write tools are requires_approval=True, so pydantic-ai returns
+    their calls as DeferredToolRequests. Without it among the output types
+    a deferred call raises instead of reaching the bundled UI's approve/deny
+    dialog (retro phase-1 incident 11: the chat crashed on the first write)."""
+    agent = chat_agent.build_agent(_test_cfg())
+    assert DeferredToolRequests in agent.output_type
 
 
 def test_binding_hides_deps_from_the_model_schema():

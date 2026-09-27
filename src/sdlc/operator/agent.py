@@ -28,6 +28,7 @@ import yaml
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import ToolFailed
 from pydantic_ai.settings import ModelSettings
+from pydantic_ai.tools import DeferredToolRequests
 from pydantic_ai.toolsets import FunctionToolset
 
 if TYPE_CHECKING:
@@ -188,6 +189,12 @@ def build_agent(cfg: ChatConfig | None = None) -> Agent:
         cfg.model,
         deps_type=OperatorDeps,
         toolsets=[build_toolset()],
+        # The write tools are requires_approval=True, so their calls come
+        # back as DeferredToolRequests the bundled UI renders an approve/deny
+        # dialog for ("the model proposes; the operator disposes", spec D4).
+        # Without DeferredToolRequests among the output types a deferred call
+        # raises instead of reaching the operator.
+        output_type=[str, DeferredToolRequests],
         model_settings=ModelSettings(max_tokens=cfg.max_tokens),
         instructions=cfg.instructions,
     )
