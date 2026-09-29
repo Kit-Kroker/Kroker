@@ -27,3 +27,32 @@ def test_span_attrs_are_metadata_only_by_convention(monkeypatch):
     ctx = mod.span("capture", events=12, bytes=3400, session_id="abc")
     with ctx:
         pass
+
+
+def test_configure_instruments_without_transcript_content(monkeypatch):
+    """When Logfire is live, instrumentation must not carry payloads.
+
+    The module docstring's "NEVER transcript payloads" holds for spans on the
+    wire too: instrument_pydantic_ai() defaults to include_content=True, which
+    records prompts, completions and tool arguments. configure() must opt out
+    explicitly (fully honoured from pydantic-ai 2.44, which the lock pins).
+    """
+    import sys
+
+    calls = {}
+
+    class _FakeLogfire:
+        def configure(self, **kw):
+            calls["configure"] = kw
+
+        def instrument_pydantic_ai(self, **kw):
+            calls["instrument"] = kw
+
+        def span(self, *a, **kw):  # pragma: no cover - not reached here
+            raise AssertionError("span() not used by configure()")
+
+    monkeypatch.setitem(sys.modules, "logfire", _FakeLogfire())
+    mod = _reload(monkeypatch, "token")
+    assert mod.configure() is True
+    assert calls["configure"] == {"send_to_logfire": "if-token-present", "console": False}
+    assert calls["instrument"] == {"include_content": False}

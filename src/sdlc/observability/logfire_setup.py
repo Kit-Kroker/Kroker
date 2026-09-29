@@ -36,7 +36,11 @@ def configure() -> bool:
     except ImportError:
         return False
     logfire.configure(send_to_logfire="if-token-present", console=False)
-    logfire.instrument_pydantic_ai()
+    # include_content=False is the docstring's invariant made enforced, not
+    # conventional: the default instruments prompts, completions and tool
+    # payloads into spans (GHSA-4x9p: the flag redacts completely only from
+    # pydantic-ai 2.44, which the lock pins).
+    logfire.instrument_pydantic_ai(include_content=False)
     return True
 
 
