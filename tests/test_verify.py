@@ -30,20 +30,27 @@ def _gate_key(command: str) -> str:
 
     The first two non-flag tokens: enough to tell `ruff check` from
     `ruff format`, and insensitive to `python -m pytest -q` versus a bare
-    `pytest`.
+    `pytest` or `uv run --no-sync pytest`.
     """
+    tokens = command.replace(sys.executable, "python").split()
+    if tokens[:2] == ["uv", "run"]:
+        tokens = tokens[2:]
     parts = [
         token
-        for token in command.replace(sys.executable, "python").split()
+        for token in tokens
         if not token.startswith("-") and token not in ("python", "python3")
     ]
     return " ".join(parts[:2])
 
 
 def test_every_ci_gate_is_in_verify():
-    # `pip install -e` is setup, not a gate: verify.py runs in an
-    # already-installed tree.
-    ci = {_gate_key(c) for c in _ci_commands() if not c.startswith("pip install")}
+    # `pip install` and `uv sync --frozen` are setup, not gates: verify.py
+    # runs in an already-installed tree.
+    ci = {
+        _gate_key(c)
+        for c in _ci_commands()
+        if not (c.startswith("pip install") or c.startswith("uv sync"))
+    }
     covered = {_gate_key(" ".join(cmd)) for _, cmd in GATES}
     missing = ci - covered
     assert not missing, f"CI runs {sorted(missing)} but scripts/verify.py does not"

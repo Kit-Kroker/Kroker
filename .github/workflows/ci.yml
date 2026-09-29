@@ -16,23 +16,29 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: pip install -e ".[dev]"
+      # Everything below runs from uv.lock: pip resolved the floors
+      # independently and could pick up a breaking 0.x minor on any push
+      # while the dev venv stayed behind (they drifted 31 minors apart).
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies (from uv.lock)
+        run: uv sync --frozen --extra dev
 
       - name: Ruff check
-        run: ruff check .
+        run: uv run --no-sync ruff check .
 
       - name: Ruff format check
-        run: ruff format --check .
+        run: uv run --no-sync ruff format --check .
 
       - name: File-size ratchet
-        run: python scripts/check_file_size.py --full
+        run: uv run --no-sync python scripts/check_file_size.py --full
 
       - name: Mypy
-        run: mypy src
+        run: uv run --no-sync mypy src
 
       - name: Pytest
-        run: pytest
+        run: uv run --no-sync pytest
 
       - name: Pytest (temporal tier)
         # The authoritative record for the gate/wait temporal tests: a
@@ -41,7 +47,7 @@ jobs:
         # the tier records its result without gating pushes. Turn
         # continue-on-error off when the deadlock is fixed.
         continue-on-error: true
-        run: pytest -m temporal -v --timeout=90 --timeout-method=thread
+        run: uv run --no-sync pytest -m temporal -v --timeout=90 --timeout-method=thread
         env:
           PYTHONUNBUFFERED: 1
         timeout-minutes: 60
