@@ -21,8 +21,9 @@ Pins the edge behaviour the task specifies:
   to last_sink_result, else the sorted edgeless-sink list ("completed:a,b");
   a done node whose taken port HAS edges is not a sink, a node that is not
   done is not a sink either, and no sinks at all yields "completed:".
-- FAILURE_TYPES: exactly FailureError, UserError, PydanticUserError,
-  AgentRunError -- no more, no fewer.
+- FAILURE_TYPES: FailureError, UserError, PydanticUserError, AgentRunError,
+  plus UnsupportedEventLoopError when the installed pydantic-ai ships it
+  (>= 2.4x, where PydanticAIPlugin registers it too) -- no more, no fewer.
 - DispatchOutcome: a plain dataclass whose five fields are all required.
 - _is_boundary truth table: budget_after 'none' never boundary; 'exiting'
   always boundary unless one of the emitted edges is bounded; 'continuing'
@@ -329,8 +330,20 @@ def test_outcome_string_unknown_outcomes_are_unconstructible_and_running_falls_t
 def test_failure_types_is_exactly_the_temporal_and_plugin_set():
     from sdlc.workflows.graph_dispatch import FAILURE_TYPES
 
-    assert set(FAILURE_TYPES) == {FailureError, UserError, PydanticUserError, AgentRunError}
-    assert len(FAILURE_TYPES) == 4  # no extras beyond the four
+    expected: set[type[BaseException]] = {
+        FailureError,
+        UserError,
+        PydanticUserError,
+        AgentRunError,
+    }
+    try:
+        from pydantic_graph.exceptions import UnsupportedEventLoopError
+
+        expected.add(UnsupportedEventLoopError)
+    except ImportError:
+        pass
+    assert set(FAILURE_TYPES) == expected
+    assert len(FAILURE_TYPES) == len(expected)  # no extras, no duplicates
     assert all(isinstance(t, type) and issubclass(t, BaseException) for t in FAILURE_TYPES)
 
 

@@ -22,6 +22,16 @@ with workflow.unsafe.imports_passed_through():
     from pydantic import PydanticUserError
     from pydantic_ai.exceptions import AgentRunError, UserError
 
+    # Registered by PydanticAIPlugin in workflow_failure_exception_types from
+    # pydantic-ai 2.4x; older pydantic_graph does not ship it (and the plugin
+    # of that era does not register it either), so the import is conditional.
+    try:
+        from pydantic_graph.exceptions import UnsupportedEventLoopError
+
+        _PLUGIN_EXTRAS: tuple[type[BaseException], ...] = (UnsupportedEventLoopError,)
+    except ImportError:
+        _PLUGIN_EXTRAS = ()
+
     from ..core.models import NodeFailure, PipelineConfig
     from ..graph.model import PipelineGraph
     from ..graph.node_types import NodeTypeSpec, resolve_stage
@@ -46,13 +56,18 @@ with workflow.unsafe.imports_passed_through():
     )
     from .role_host import _BudgetRejected
 
-# FailureError fails an execution in temporalio itself; the other three are
-# what PydanticAIPlugin registers as workflow_failure_exception_types (D8).
+# FailureError fails an execution in temporalio itself; the rest are what
+# PydanticAIPlugin registers as workflow_failure_exception_types (D8),
+# including UnsupportedEventLoopError, which joined the plugin's list in
+# pydantic-ai 2.4x. A type the plugin registers but that is missing here
+# fails the D8 pin outright -- and would fail the workflow task instead of
+# routing to a node's fail port.
 FAILURE_TYPES: tuple[type[BaseException], ...] = (
     FailureError,
     UserError,
     PydanticUserError,
     AgentRunError,
+    *_PLUGIN_EXTRAS,
 )
 
 
