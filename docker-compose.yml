@@ -30,7 +30,12 @@ services:
     restart: unless-stopped
 
   worker:
-    build: .
+    build:
+      context: .
+      # The Dockerfile is multi-stage: runtime is the worker image, dev is
+      # the .devcontainer/ environment. Pin the target so compose never
+      # follows the last stage in the file.
+      target: runtime
     depends_on: ["temporal", "hindsight"]
     environment:
       TEMPORAL_HOST: "temporal:7233"

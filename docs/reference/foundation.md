@@ -107,8 +107,8 @@ No LLM, no I/O. Consumes typed check evidence and decides pass/fail:
 ## Developer setup
 
 ```bash
-pip install -e .[dev]        # Python >=3.11; 3.14 works
-python -m pytest             # 26 tests, all green — needs `git` on PATH
+uv sync --frozen --extra dev # Python >=3.11; use 3.13 — the image's python
+python -m pytest             # needs `git` on PATH
 ```
 
 Gotchas worth knowing:

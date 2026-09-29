@@ -45,7 +45,7 @@ RUN git config --global \
         "credential.https://github.com.helper" "!gh auth git-credential"
 
 WORKDIR /app
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 COPY src ./src
 # The registry is an asset, not code: pip install only takes src/, so without
 # this COPY the worker cannot boot (it loads the registry at import).
@@ -75,33 +75,33 @@ COPY blueprints ./blueprints
 # itself was installed -- agent.py cannot infer the repo root from
 # site-packages, the same trap SDLC_CASES_ROOT exists for.
 COPY interfaces/chat ./interfaces/chat
-# .env's LOGFIRE_TOKEN reaches this container via docker-compose's env_file,
-# so logfire_setup.configure() gates itself on and imports logfire -- without
-# the extra installed here, boot crash-loops on ModuleNotFoundError before
-# the worker ever polls its task queue.
-RUN pip install --no-cache-dir .[logfire]
 
-# Oracle grading deps the base image doesn't pull: grade_oracle runs a case's
-# oracle/test_*.py in the worker's own Python, and python oracle conftests use
-# pytest-asyncio. Without it, collection errors on every case and the oracle
-# scores 0/0 (judge='error') even on correct code.
-RUN pip install --no-cache-dir pytest-asyncio
+# Dependencies come from uv.lock, not from whatever PyPI serves on rebuild:
+# the research role imports a private module of a 0.x package, so a drifting
+# minor breaks the image itself, not just a dev venv. One sync covers what the
+# three ad-hoc pip resolves used to fetch at uncontrolled versions:
+# - `logfire` extra: .env's LOGFIRE_TOKEN reaches this container via
+#   docker-compose's env_file, so logfire_setup.configure() gates itself on
+#   and imports logfire -- without the extra installed here, boot crash-loops
+#   on ModuleNotFoundError before the worker ever polls its task queue.
+# - `dev` extra is what the image executes, not dev convenience:
+#   pytest-asyncio because grade_oracle runs a case's oracle/test_*.py in the
+#   worker's own Python and python oracle conftests use it (without it every
+#   case collects as errors and scores 0/0, judge='error'); jsonschema because
+#   tests/fakes/hindsight_contract.py imports it at module level and the merge
+#   gate's whole-suite run aborts on 5 collection errors without it (DS12);
+#   ruff as the lint fallback for a worker without PyPI egress at runtime
+#   (run_integration_checks' .sdlc-venv install is best-effort; without ruff on
+#   PATH lint_clean is unearnable for every Python case).
+# --no-editable: the image ships the built wheel; the copied source tree is
+# raw material, not the runtime import path.
+RUN pip install --no-cache-dir uv \
+    && uv sync --frozen --no-editable --extra dev --extra logfire
+ENV PATH="/app/.venv/bin:${PATH}"
 
-# tests/fakes/hindsight_contract.py imports jsonschema at module level, so the
-# merge gate's whole-suite run aborts on 5 collection errors without it and
-# build_integration_green reads NOT_COLLECTED (found on the first post-B0
-# brownfield run, DS12). It is a dev-group dependency on the host; the image
-# runs the suite, so it carries it explicitly.
-RUN pip install --no-cache-dir "jsonschema>=4"
 
-# Lint fallback for a worker without PyPI egress at runtime. run_integration_checks
-# resolves `ruff` from the worktree's own .sdlc-venv (qa/activities.py
-# _ensure_python_env pip-installs pytest/pytest-cov/ruff there), but that install
-# is best-effort and needs the network: on an egress-less worker the venv comes
-# up without it, `ruff check .` falls through to PATH, and lint_clean becomes
-# unearnable for every Python case. Same floor as the repo's own dev pin
-# (pyproject dev deps), so image and dev tooling never disagree on the minimum.
-RUN pip install --no-cache-dir "ruff>=0.16.5"
+# --- production worker image (what docker-compose builds) ---------------------
+FROM base AS runtime
 
 ENV TEMPORAL_HOST=temporal:7233
 ENV SDLC_WORKTREES_ROOT=/tmp/sdlc/worktrees
@@ -120,3 +120,22 @@ ENV SDLC_CHAT_ASSETS=/app/interfaces/chat
 ENV SDLC_BLUEPRINTS_DIR=/app/blueprints
 
 CMD ["python", "-m", "sdlc.worker"]
+
+
+# --- dev container (the .devcontainer/ target) --------------------------------
+# Same environment as the worker image by construction: identical base layers
+# (python, pinned opencode/claude-code/gh), identical uv.lock. Differences are
+# dev-only: the Temporal CLI for `server start-dev`, and an editable install
+# so host edits land without a rebuild.
+FROM base AS dev
+
+# Temporal CLI — embedded server for local dev (UI on :8233, gRPC on :7233)
+RUN curl -sSf https://temporal.download/cli.sh | sh
+
+# Flip the base stage's non-editable install to editable; same lock, so the
+# dependency set is byte-identical to the runtime image. The baked /app tree
+# (and this venv) is what a named volume seeded over /app/.venv starts from --
+# the devcontainer mounts the real repo over /app and re-syncs in
+# postCreateCommand. The suite runs against the mounted tree: tests read
+# scripts/, .github/ and the docs tree, which no image COPY set should carry.
+RUN uv sync --frozen --extra dev --extra logfire

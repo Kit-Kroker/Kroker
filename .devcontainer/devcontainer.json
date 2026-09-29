@@ -1,10 +1,22 @@
 {
   "name": "ai-sdlc-temporal",
+  // Built from the repo's own multi-stage Dockerfile, target `dev`: the same
+  // base layers as the production worker image (python 3.13, pinned
+  // opencode/claude-code/gh) and the same uv.lock -- dev drifts from prod
+  // only by the Temporal CLI and the editable install.
   "build": {
-    "dockerfile": "Dockerfile"
+    "dockerfile": "../Dockerfile",
+    "context": "..",
+    "target": "dev"
   },
+  "remoteUser": "root",
+  // The real repo tree mounts over the image's baked /app; the venv gets its
+  // own named volume so the Linux install never lands in the host checkout
+  // (the image's baked venv seeds the volume on first use).
+  "workspaceMount": "source=${localWorkspaceFolder},target=/app,type=bind,consistency=cached",
+  "workspaceFolder": "/app",
+  "mounts": ["source=kroker-devcontainer-venv,target=/app/.venv,type=volume"],
   "forwardPorts": [7233, 8233],
-  "postCreateCommand": "pip install -e .[dev]",
   "portsAttributes": {
     "7233": { "label": "Temporal gRPC" },
     "8233": { "label": "Temporal UI" }
@@ -12,6 +24,9 @@
   "remoteEnv": {
     "TEMPORAL_HOST": "localhost:7233"
   },
+  // Idempotent re-sync from the mounted uv.lock; --frozen refuses a lock that
+  // drifted from pyproject instead of silently re-resolving.
+  "postCreateCommand": "uv sync --frozen --extra dev --extra logfire",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -19,7 +34,7 @@
         "ms-python.vscode-pylance"
       ],
       "settings": {
-        "python.defaultInterpreterPath": "/usr/local/bin/python"
+        "python.defaultInterpreterPath": "/app/.venv/bin/python"
       }
     }
   }
