@@ -14,7 +14,6 @@ from temporalio import activity
 from sdlc.benchmarks.models import BenchmarkRecord
 from sdlc.core.models import RunState, RunSummary
 from sdlc.graph import GraphRunView
-from sdlc.notify.contract import NotifyInput, Results
 from sdlc.workflows.graph_catalog import build_run_input
 from tests.fakes.canned import e2e_config
 from tests.replay.harness import GRAPH_STARTER, capture, load_golden
@@ -115,13 +114,6 @@ async def _capture_record(record: BenchmarkRecord) -> None:
     _CAPTURED_RECORDS.append(record)
 
 
-@activity.defn(name="notify")
-async def _noop_notify(inp: NotifyInput) -> Results:
-    """GateHost schedules notification deliveries (workflows/gates.py); the
-    real worker registers sdlc.notify.activities.notify. Deliver nothing."""
-    return Results(results=[])
-
-
 @pytest.mark.asyncio
 async def test_graph_sha_is_stamped_on_state_summary_and_every_record(monkeypatch, tmp_path):
     observed: dict = {}
@@ -144,7 +136,11 @@ async def test_graph_sha_is_stamped_on_state_summary_and_every_record(monkeypatc
         GREENFIELD,
         name="graph_sha_stamped",
         cfg=lambda: cfg,
-        activities=lambda: [*GREENFIELD.activities(), _capture_record, _noop_notify],
+        # _noop_notify stays OUT: GREENFIELD.activities() (_base_activities)
+        # already registers fake_notify as "notify"; adding a second function
+        # under that name fails Worker init with "More than one activity
+        # named notify" (latent since the notify-flake fix joined the base).
+        activities=lambda: [*GREENFIELD.activities(), _capture_record],
         drive=drive,
     )
     # The sha the run must name is the start input graph's content hash (R-1).
