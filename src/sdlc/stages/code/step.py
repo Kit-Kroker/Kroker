@@ -58,6 +58,7 @@ with workflow.unsafe.imports_passed_through():
     from .activities import CodingTaskInput, DriftGlobsInput, load_drift_globs, run_coding_task
     from .freeze import _drift_note, _is_repair_attempt, _next_anchor
     from .models import HandoffSummary
+    from .usage import _record_attempt_usage
 
 ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=10),
@@ -729,16 +730,7 @@ async def step(
         thawed = False  # a thaw is single-attempt by construction
 
         code_spend = RoleUsage(role="dev", model=role_cfg.model or "")
-        ctx.emit(
-            RunEventKind.MODEL_USAGE,
-            stage="code",
-            role="dev",
-            model=role_cfg.model or "",
-            calls="1",
-            input_tokens=str(run.input_tokens or 0),
-            output_tokens=str(run.output_tokens or 0),
-            cost_usd=str(run.cost_usd or 0.0),
-        )
+        _record_attempt_usage(ctx, code_spend, run, role_cfg.model or "")
 
         test_cmd = _contract_shell_cmd(
             contract.test_commands if contract else None, DEFAULT_TEST_CMD
