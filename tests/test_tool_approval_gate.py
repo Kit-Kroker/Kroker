@@ -180,13 +180,10 @@ async def test_deferral_raises_a_gate_and_the_grant_reaches_the_resume(tmp_path,
                             comments="fine, that path is mine",
                         ),
                     )
-                    await _wait_for_status(handle, "awaiting:merge")
-                    await handle.signal(
-                        FeatureWorkflow.submit_gate_decision,
-                        GateDecision(
-                            gate="merge", round=1, outcome=GateOutcome.APPROVE, decided_by="human"
-                        ),
-                    )
+                    # No awaiting:merge step: the merge gate only opens on an
+                    # advisory failure or a SOFT verdict (merge/step.py), and
+                    # the fakes produce a clean report under HARD policy —
+                    # merge auto-passes, exactly as in test_e2e_greenfield.
                     await _wait_for_status(handle, "awaiting:deploy")
                     await handle.signal(
                         FeatureWorkflow.submit_gate_decision,
@@ -253,13 +250,8 @@ async def test_rejection_is_delivered_and_the_task_continues(tmp_path, monkeypat
                             comments="write inside the worktree",
                         ),
                     )
-                    await _wait_for_status(handle, "awaiting:merge")
-                    await handle.signal(
-                        FeatureWorkflow.submit_gate_decision,
-                        GateDecision(
-                            gate="merge", round=1, outcome=GateOutcome.APPROVE, decided_by="human"
-                        ),
-                    )
+                    # Merge auto-passes clean (HARD policy + green report);
+                    # see test_deferral above for the contract note.
                     await _wait_for_status(handle, "awaiting:deploy")
                     await handle.signal(
                         FeatureWorkflow.submit_gate_decision,
@@ -330,16 +322,11 @@ async def test_the_cap_stops_asking_and_the_loop_terminates(tmp_path, monkeypatc
                             decided_by="human",
                         ),
                     )
-                    # No second gate is ever raised: the cap refuses instead,
-                    # so the next status to appear is the merge gate. (The
-                    # fake QA passes, so the task never reaches escalation.)
-                    await _wait_for_status(handle, "awaiting:merge")
-                    await handle.signal(
-                        FeatureWorkflow.submit_gate_decision,
-                        GateDecision(
-                            gate="merge", round=1, outcome=GateOutcome.APPROVE, decided_by="human"
-                        ),
-                    )
+                    # No second tool gate is ever raised: the cap refuses
+                    # instead. Merge auto-passes the clean report (HARD
+                    # policy), but the deploy gate opens unconditionally
+                    # (deploy/step.py opens it even when deploy is disabled),
+                    # so the driver still services exactly one more gate.
                     await _wait_for_status(handle, "awaiting:deploy")
                     await handle.signal(
                         FeatureWorkflow.submit_gate_decision,
