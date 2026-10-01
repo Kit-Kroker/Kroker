@@ -19,9 +19,6 @@ Three coverage axes, all RED on main:
 
 from __future__ import annotations
 
-import inspect
-import re
-
 import pytest
 from pydantic_ai.capabilities import ResolveModelId
 from pydantic_ai.models.test import TestModel
@@ -101,8 +98,19 @@ async def test_research_synthesis_agent_is_built_through_the_factory(monkeypatch
 
 def _constructible_provider_names() -> list[str]:
     """Every provider name infer_provider_class knows that this install can
-    actually construct (class import + provider instance). Names whose SDK
-    extra is not installed raise on import and are not constructible."""
+    actually construct (class import + provider instance) AND that the
+    framework can turn into a chat Model via ``infer_model``. Names whose SDK
+    extra is not installed raise on import; names with no chat-model branch
+    (embeddings-only providers, e.g. sentence-transformers) raise
+    ``UserError('Unknown model')`` and are unreachable by a proposer model
+    request at all — they are excluded from THIS axis, not from validation:
+    ``validate_proposer_model`` keeps Q2's rule verbatim, and any provider
+    that DOES build here must still pass the retry assertion below (SG-5)."""
+    import inspect
+    import re
+
+    from pydantic_ai.exceptions import UserError
+    from pydantic_ai.models import infer_model
     from pydantic_ai.providers import infer_provider, infer_provider_class
 
     source = inspect.getsource(infer_provider_class)
@@ -118,6 +126,10 @@ def _constructible_provider_names() -> list[str]:
             infer_provider(name)
         except Exception:
             continue
+        try:
+            infer_model(f"{name}:single-layer-enum-probe")
+        except UserError:
+            continue  # no chat-model branch: not reachable by a model request
         constructible.append(name)
     assert constructible, "no constructible providers found at all — the test is blind"
     return constructible
