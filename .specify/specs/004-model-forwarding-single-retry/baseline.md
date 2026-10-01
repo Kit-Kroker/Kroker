@@ -47,4 +47,20 @@ greenfield_happy scenario, sandboxed runner via `SdlcPydanticAIPlugin`,
 
 ## T009 stacked-retry count on main
 
-(to be recorded; needs the stub from T008)
+Measured in `kroker-dev` on a clean worktree of the base sha `730f085` (with
+T008's stub and T009's test copied in), via `tests/durability/test_single_retry_layer.py`:
+
+| Stub mode | HTTP requests for one model request | Decomposition |
+|---|---|---|
+| always-429 | **9** | 3 engine attempts x 3 SDK attempts (SDK default `max_retries=2`) — the stacked-retry defect (expected 9) |
+| fail-once | 2 | SDK-internal retry serves attempt 2; same count as post-fix |
+| always-400 | 3 | 3 engine attempts x 1 SDK request (SDK never retries a 400) |
+
+**Plan deviation (T009, reported to the orchestrator):** the task text asserted
+`always-400 count == 1 (E7)`. History evidence on base (probe run, recorded in
+the phase-4 checkpoint): the `model_request` activity is **scheduled once and
+started 3 times** — the engine retries the retryable `ApplicationError` wrap of
+`ModelHTTPError`, and Q3 forbids any engine-policy edit. `== 1` is therefore
+unachievable; the corrected E7 invariant in the test is
+`count == AGENT_ACTIVITY_MAX_ATTEMPTS` (exactly one HTTP request per engine
+attempt; a stacked SDK would exceed it).
