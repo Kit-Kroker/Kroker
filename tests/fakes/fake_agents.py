@@ -3,12 +3,21 @@
 Each fake reuses the PRODUCTION agent name so its generated Temporal
 activity names match — the workflow's `t_<role>.run(...)` then dispatches
 to the fake when only these activities are registered on the test worker.
+
 The model is Pydantic AI's TestModel forced to emit a canned typed output.
 
 003: fakes use the SAME durability mechanism as production (the
 TemporalDurability capability attached at construction, same activity
 config including the heartbeat-none override; FR-008) so replay proof
 exercises the real registration surface.
+
+004 (T006): every resolver RECORDS `(agent name, model id)` into the
+module list ``MODEL_RESOLUTIONS`` — which model id each fake was asked to
+be — and the TestModel fakes answer as ``TestModel(..., model_name=<that
+id>)``, so usage/label surfaces name the model that was requested. The
+list is cleared between tests by the autouse reset in tests/conftest.py;
+``tests/test_model_forwarding.py`` (T025) reads it. Canned outputs are
+byte-identical to the previous shared-instance behaviour.
 """
 
 from __future__ import annotations
@@ -20,6 +29,18 @@ from pydantic_ai.durable_exec.temporal import TemporalDurability
 from pydantic_ai.models.test import TestModel
 
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
+
+#: (agent name, model id) for every fake resolver call, in call order.
+#: FR-006's recording surface: a test reads this to assert which model id
+#: served a proposer request. Autouse-cleared per test (tests/conftest.py).
+MODEL_RESOLUTIONS: list[tuple[str, str | None]] = []
+
+
+def _requested_name(model_id: str | None) -> str:
+    """TestModel's model_name: the requested id when one crossed the wire
+    (004 R2: for no-override runs it is the registry string), else the
+    historical default 'test' so a None id keeps byte-identical outputs."""
+    return model_id if isinstance(model_id, str) and model_id else "test"
 
 
 def fake_durable_agent(name: str, output_type: type, value: BaseModel) -> Agent:
@@ -38,10 +59,20 @@ def fake_durable_agent(name: str, output_type: type, value: BaseModel) -> Agent:
     activity rebuilds it with infer_model, which would make a REAL provider
     call. The old wrapper sent None and answered with the wrapped agent's
     own model (this TestModel). The resolver restores exactly that: any
-    arriving model id resolves to this fake's TestModel."""
-    test_model = TestModel(custom_output_args=value.model_dump(mode="json"), call_tools=[])
+    arriving model id resolves to this fake's TestModel — since T006 a
+    fresh one per call that ANSWERS AS the requested id (model_name) and
+    records the request in MODEL_RESOLUTIONS."""
+
+    def _resolve(ctx, model_id: str | None) -> TestModel:
+        MODEL_RESOLUTIONS.append((name, model_id))
+        return TestModel(
+            custom_output_args=value.model_dump(mode="json"),
+            call_tools=[],
+            model_name=_requested_name(model_id),
+        )
+
     agent = Agent(
-        test_model,
+        TestModel(custom_output_args=value.model_dump(mode="json"), call_tools=[]),
         name=name,
         output_type=output_type,
         capabilities=[
@@ -49,7 +80,7 @@ def fake_durable_agent(name: str, output_type: type, value: BaseModel) -> Agent:
                 activity_config=AGENT_ACTIVITY_CONFIG,
                 model_activity_config={"heartbeat_timeout": None},
             ),
-            ResolveModelId(lambda ctx, model_id: test_model),
+            ResolveModelId(_resolve),
         ],
     )
     return agent
@@ -79,7 +110,14 @@ def failing_durable_agent(name: str, output_type: type, model, activity_config) 
     assessment discover-exception test's 1-attempt config) and the same
     ResolveModelId pin: without it the activity rebuilds the workflow-side
     REAL agent's model string via infer_model and calls a real provider
-    instead of running the caller's failing model (research.md R9)."""
+    instead of running the caller's failing model (research.md R9). T006:
+    the resolver records `(name, model_id)` like the TestModel fakes, but
+    still returns the caller's failing model unchanged."""
+
+    def _resolve(ctx, model_id: str | None):
+        MODEL_RESOLUTIONS.append((name, model_id))
+        return model
+
     agent = Agent(
         model,
         name=name,
@@ -89,7 +127,7 @@ def failing_durable_agent(name: str, output_type: type, model, activity_config) 
                 activity_config=activity_config,
                 model_activity_config={"heartbeat_timeout": None},
             ),
-            ResolveModelId(lambda ctx, model_id: model),
+            ResolveModelId(_resolve),
         ],
     )
     return agent

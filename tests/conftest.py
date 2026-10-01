@@ -133,6 +133,17 @@ def _llm_api_keys(monkeypatch):
     monkeypatch.setenv("SDLC_MEMORY_ENABLED", "false")
 
 
+@pytest.fixture(autouse=True)
+def _reset_fake_model_resolutions():
+    """004 T006: the fake agents record every (agent name, model id)
+    resolver call into ``tests.fakes.fake_agents.MODEL_RESOLUTIONS``.
+    Autouse-clear it so each test starts from an empty recording."""
+    from tests.fakes.fake_agents import MODEL_RESOLUTIONS
+
+    MODEL_RESOLUTIONS.clear()
+    yield
+
+
 @pytest.fixture
 def git_repo(tmp_path, monkeypatch):
     """A fresh git repo with one commit on `main`, plus a writable
