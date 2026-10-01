@@ -25,6 +25,13 @@ file carries only what is true *here*.
   attempt budget is the only retry layer. The registry `research_agent`
   (sub-question fan-out, architect tool) gets the same capability via
   `build_agents`.
+- Model forwarding (004): the sub-question fan-out passes `model=inp.model`
+  when it differs from the registry `research` model (D7a; `inp.model` is
+  already an activity input, so the wire is unchanged). The architect's
+  research tool receives the run's forwarded `research` override on
+  `ResearchDeps.research_model` (populated by the architecture slice only
+  under an override; omitted from serialization while None) and passes it
+  as `model=` — no-override deps and calls are byte-identical to before.
 
 ## State
 

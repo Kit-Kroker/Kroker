@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 # Per-call cost estimates (spec §3). The fake provider is free; these bound a
 # real Tavily run. Kept as constants, not config, so the budget math is auditable.
@@ -58,7 +58,24 @@ class ResearchDeps(BaseModel):
     """The whole-run ceiling, charged alongside `scope` on every call. Carried
     on deps because the toolset charges activity-side and has no other route
     to the config."""
+
     budget: Budget = Field(default_factory=Budget)
+
+    research_model: str | None = None
+    """004 T033 (FR-001 path c / D7): the run's forwarded `research` override,
+    set only when the run overrides `research` with a model different from
+    the registry one. The architect's research tool passes it as `model=` so
+    the override reaches the model that answers. Omitted from serialization
+    while None, so no-override activity inputs stay byte-identical."""
+
+    @model_serializer(mode="wrap")
+    def _omit_research_model_when_none(self, handler, info):
+        """Serialize `research_model` ONLY when set — a null key would change
+        every no-override deps payload (FR-010)."""
+        data = handler(self)
+        if self.research_model is None:
+            data.pop("research_model", None)
+        return data
 
 
 def charge(deps: ResearchDeps, *, search: int = 0, fetch: int = 0) -> None:

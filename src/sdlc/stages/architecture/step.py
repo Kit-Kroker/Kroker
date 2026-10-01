@@ -137,8 +137,14 @@ async def produce(
 ) -> ArchitectureSpec:
     """One architect round (delta retries included). Verbatim body of the
     former `_run_architect(guidance)` closure."""
+    # 004 T033 (D7/FR-001 path c): the architect's research tool must be
+    # answered by the run's forwarded research model. Carried on deps because
+    # the tool runs activity-side with no other route to the run config;
+    # omitted from serialization when None (no-override inputs unchanged).
+    from ...agents.model_ids import forwarded_model
     from ..research.deps import ResearchDeps
 
+    research_model = forwarded_model(cfg, "research")
     research_role = cfg.roles.get("research") if cfg.research_enabled else None
     architect_deps = ResearchDeps(
         run_id=_workflow_id(),
@@ -151,6 +157,7 @@ async def produce(
         memory_bank=cfg.memory.project_bank,
         memory_watermark=memory_watermark,
         scope="architect",
+        research_model=research_model,
     )
 
     delta_retries = cfg.max_delta_retries

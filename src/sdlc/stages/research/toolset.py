@@ -45,7 +45,15 @@ async def research_subquery(deps: ResearchDeps, question: str) -> ResearchBrief:
             "missing) — cannot service an architect research call"
         )
     try:
-        return cast(ResearchBrief, (await t_research.run(question, deps=deps)).output)
+        # 004 T033 (D7/FR-001 path c): under a research override the deps
+        # carry it; forward it so the model that answers is the override
+        # (the string crosses the durable boundary as the model id). Without
+        # an override the call is made exactly as before.
+        if deps.research_model is not None:
+            result = await t_research.run(question, deps=deps, model=deps.research_model)
+        else:
+            result = await t_research.run(question, deps=deps)
+        return cast(ResearchBrief, result.output)
     except BudgetExceeded as exc:
         return ResearchBrief(
             gaps=[
