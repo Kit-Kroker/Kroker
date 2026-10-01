@@ -105,3 +105,69 @@ async def test_first_workflow_task_completes_under_the_deadlock_threshold(tmp_pa
     assert not any("TMPRL1101" in m for m in messages), (
         f"workflow task failed with the deadlock detector before teardown: {messages}"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.temporal
+async def test_first_task_under_budget_with_non_anthropic_override(tmp_path, monkeypatch):
+    """004 T034 (E4): a run whose proposer override names a NON-anthropic
+    provider must not trip the deadlock detector either — the plugin warms
+    the openai and google provider modules on the host, so the workflow-side
+    resolution of an ``openai:`` override pays no cold first-import."""
+    scenario = next(s for s in SCENARIOS if s.name == "greenfield_happy")
+    monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
+    monkeypatch.setenv("SDLC_RUNS_ROOT", str(tmp_path))
+    scenario.before()
+
+    def cfg_with_openai_override():
+        c = scenario.cfg()
+        from sdlc.core.models import RoleConfig
+
+        c.roles["architect"] = RoleConfig(kind="proposer", model="openai:gpt-5.2")
+        return c
+
+    async with await WorkflowEnvironment.start_time_skipping(
+        data_converter=pydantic_data_converter
+    ) as env:
+        async with Worker(
+            env.client,
+            task_queue=QUEUE,
+            workflows=[FeatureWorkflow, DeploymentWorkflow],
+            activities=scenario.activities(),
+            plugins=[SdlcPydanticAIPlugin()],
+        ):
+            with env.auto_time_skipping_disabled():
+                start = time.perf_counter()
+                handle = await env.client.start_workflow(
+                    FeatureWorkflow.run,
+                    args=[scenario.idea(), cfg_with_openai_override(), scenario.seeded()],
+                    id=f"004-first-task-openai-{uuid.uuid4()}",
+                    task_queue=QUEUE,
+                )
+                first_task_at: float | None = None
+                while time.perf_counter() - start < 30.0:
+                    history = await handle.fetch_history()
+                    if any(
+                        ev.event_type == EventType.EVENT_TYPE_WORKFLOW_TASK_COMPLETED
+                        for ev in history.events
+                    ):
+                        first_task_at = time.perf_counter()
+                        break
+                    await asyncio.sleep(0.01)
+
+                assert first_task_at is not None, (
+                    "no WorkflowTaskCompleted within 30s — the cold-provider "
+                    "import (E4) reproduced the TMPRL1101 family"
+                )
+                elapsed = first_task_at - start
+                messages = _failure_messages(await handle.fetch_history())
+                await handle.terminate("004 openai-override timing done")
+
+    assert elapsed < _DEADLOCK_THRESHOLD_S - _MARGIN_S, (
+        f"first workflow task under an openai override took {elapsed:.3f}s — "
+        f"over the {_DEADLOCK_THRESHOLD_S - _MARGIN_S}s budget; the provider "
+        f"warm-up (runner.py) is not covering non-anthropic overrides (E4)"
+    )
+    assert not any("TMPRL1101" in m for m in messages), (
+        f"workflow task failed with the deadlock detector before teardown: {messages}"
+    )

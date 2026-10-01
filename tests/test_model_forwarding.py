@@ -382,3 +382,37 @@ async def test_g_architect_research_tool_resolves_the_research_override():
     assert ("research_agent", _OVERRIDE) in _ids(), (
         f"the architect research tool did not resolve the override; recorded: {_ids()!r}"
     )
+
+
+@pytest.mark.asyncio
+async def test_h_override_provider_without_credential_fails_naming_it(monkeypatch, tmp_path):
+    """(h) E4 (004 T034): an override whose provider has no credential in the
+    environment must fail with an error naming the provider or its
+    credential — a clear message mid-run, never a silent fallback to another
+    model."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    base = _scenario("greenfield_happy")
+
+    def cfg() -> PipelineConfig:
+        c = base.cfg()
+        c.roles["architect"] = RoleConfig(kind="proposer", model=_OVERRIDE)
+        return c
+
+    sc = dataclasses.replace(base, cfg=cfg)
+    failure: BaseException | None = None
+    try:
+        await capture(sc, FEATURE_STARTER, monkeypatch, tmp_path)
+    except Exception as exc:  # the expected failure shape
+        failure = exc
+    assert failure is not None, "an override whose provider has no credential must fail the run"
+    chain: list[str] = []
+    seen: set[int] = set()
+    cur: BaseException | None = failure
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        chain.append(f"{type(cur).__name__}: {cur}")
+        cur = cur.__cause__ or cur.__context__
+    text = "\n".join(chain).lower()
+    assert "openai" in text or "api_key" in text or "credential" in text, (
+        f"the failure must name the provider or its credential; got:\n{chain}"
+    )

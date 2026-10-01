@@ -49,14 +49,18 @@ def _warm_workflow_side_imports() -> None:
     container). On the host that is a one-time boot cost; inside a workflow
     task it trips TMPRL1101. Every registry proposer model is
     anthropic:-prefixed today (only harness roles use zai, and harness roles
-    are never durable agents), so warming that one provider covers the
-    workflow-side resolution path. Failure is swallowed: warm-up is an
-    optimization, never a boot gate.
+    are never durable agents) — but 004 forwards proposer overrides to any
+    constructible provider, so a run with an ``openai:``/``google:`` override
+    resolves that provider workflow-side (E4). Warm the openai and google
+    provider modules too; a provider whose extra is absent stays cold and
+    its first import inside a task is the override's own cost. Failure is
+    swallowed per module: warm-up is an optimization, never a boot gate.
     """
-    try:
-        importlib.import_module("anthropic")
-    except Exception:  # noqa: BLE001 -- boot must not depend on warm-up
-        pass
+    for module in ("anthropic", "openai", "google.genai"):
+        try:
+            importlib.import_module(module)
+        except Exception:  # noqa: BLE001 -- boot must not depend on warm-up
+            pass
 
 
 class SdlcPydanticAIPlugin(PydanticAIPlugin):
