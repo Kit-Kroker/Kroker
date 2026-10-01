@@ -26,6 +26,8 @@ from typing import TYPE_CHECKING, Any, NoReturn
 if TYPE_CHECKING:  # annotation-only; runtime imports stay inside functions
     from pydantic_ai.capabilities import ResolveModelId
 
+    from ..core.models import PipelineConfig
+
 
 def single_retry_layer() -> ResolveModelId[Any]:
     """A fresh model-id resolver capability that turns SDK retries off (T011).
@@ -95,3 +97,24 @@ def validate_proposer_model(role: str, value: str) -> None:
         _reject(f"unknown provider '{provider_name}'")
     except ImportError:
         _reject(f"provider '{provider_name}' is known but its SDK extra is not installed")
+
+
+def forwarded_model(cfg: PipelineConfig, role: str) -> str | None:
+    """The one decision point for which model a role's call is forwarded
+    under (T028, FR-001/FR-002, contracts/model-resolution-contract.md).
+
+    `role` is a registry role name (the key space of ``cfg.roles``). Returns
+    the override string iff that role is overridden with a model that
+    DIFFERS from its registry model; otherwise ``None`` (no override, or an
+    override equal to the registry model — E1: both behave as today). Pure
+    over its arguments; safe to call inside workflow code.
+    """
+    from .roles import REGISTRY
+
+    rc = cfg.roles.get(role)
+    if rc is None or rc.model is None:
+        return None
+    registry_model = REGISTRY[role].model if role in REGISTRY else None
+    if registry_model is None or rc.model == registry_model:
+        return None
+    return rc.model
