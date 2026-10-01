@@ -21,7 +21,7 @@ cost — or trip the workflow deadlock detector — at module import time.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 if TYPE_CHECKING:  # annotation-only; runtime imports stay inside functions
     from pydantic_ai.capabilities import ResolveModelId
@@ -58,3 +58,40 @@ def single_retry_layer() -> ResolveModelId[Any]:
         return infer_model(model_id, provider_factory=_single_layer_provider)
 
     return ResolveModelId(_resolve)
+
+
+def validate_proposer_model(role: str, value: str) -> None:
+    """Offline validation of a proposer override (T020, FR-004/FR-005, Q2).
+
+    Accepts exactly ``provider:model`` with non-empty parts whose provider
+    class the installed framework can resolve WITHOUT instantiation — no
+    network, no credentials, no provider construction. Raises RegistryError
+    naming the role, the offending string and the accepted form. The model
+    name is not checked against any list (Q2). Harness roles are never
+    passed here (their grammar is their own, FR-005).
+    """
+    from pydantic_ai.models import parse_model_id
+    from pydantic_ai.providers import infer_provider_class
+
+    from .loader import RegistryError  # lazy: loader imports this module
+
+    def _reject(reason: str) -> NoReturn:
+        raise RegistryError(
+            f"role '{role}': '{value}' is not a valid proposer model id "
+            f"({reason}); the accepted form is provider:model, e.g. "
+            f"openai:gpt-5.2 (known provider, installed SDK)"
+        )
+
+    if value == "test":
+        _reject("the literal 'test' resolves to TestModel, never a real provider")
+    provider_name, model_name = parse_model_id(value)
+    if provider_name is None:
+        _reject("no provider part — that is the harness grammar, not provider:model")
+    if not provider_name or not model_name:
+        _reject("empty provider or model part")
+    try:
+        infer_provider_class(provider_name)
+    except ValueError:
+        _reject(f"unknown provider '{provider_name}'")
+    except ImportError:
+        _reject(f"provider '{provider_name}' is known but its SDK extra is not installed")
