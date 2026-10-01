@@ -27,6 +27,8 @@ served — proving retries still happen at exactly one layer.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 from pydantic_ai import Agent
 from pydantic_ai.durable_exec.temporal import TemporalDurability
@@ -42,6 +44,7 @@ from sdlc.agents.roles import (
     REGISTRY,
 )
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.stages.research.stage import research_subquestion
 
 from ._http_stub import ProviderStub
 
@@ -166,4 +169,95 @@ async def test_always_400_costs_one_request_per_engine_attempt():
         f"always-400 stub saw {count} HTTP requests; the SDK must add no "
         f"retries for a non-retryable provider error — expected exactly one "
         f"request per engine attempt ({AGENT_ACTIVITY_MAX_ATTEMPTS}; E7)"
+    )
+
+
+# --- T015: the research sub-question fan-out's own budget (V13) -------------
+#
+# The sub-question activity runs the PLAIN registry research_agent in-process
+# (stage.py falls back to in-process execution inside an activity), under
+# RESEARCH_SQ_ACT's 6-attempt policy (stages/research/step.py). The registry
+# agent carries the single-retry resolver since T012, so one sub-question call
+# against an always-429 provider must cost at most 6 HTTP requests — a 429 is
+# a transport failure, not an output-validation retry, so each engine attempt
+# makes exactly one model request (E8).
+
+
+@workflow.defn
+class _OneSubquestionWorkflow:
+    @workflow.run
+    async def run(self, prompt: str) -> str:
+        from sdlc.agents.roles import REGISTRY as _reg
+        from sdlc.stages.research.deps import ResearchDeps
+        from sdlc.stages.research.models import SubQuestion
+        from sdlc.stages.research.stage import SubQuestionInput
+        from sdlc.stages.research.step import RESEARCH_SQ_ACT
+
+        model = _reg["research"].model
+        assert model is not None, "research role has no registry model"
+        inp = SubQuestionInput(
+            sub_question=SubQuestion(id="sq-t015", question=prompt),
+            deps=ResearchDeps(
+                run_id="t015-subquestion",
+                provider="fake",
+                max_searches=1,
+                max_fetches=1,
+                max_cost_usd=1.0,
+            ),
+            model=model,
+            max_requests=3,
+            max_run_cost_usd=1.0,
+        )
+        finding = await workflow.execute_activity(
+            research_subquestion,
+            inp,
+            schedule_to_close_timeout=timedelta(minutes=5),
+            **RESEARCH_SQ_ACT,
+        )
+        return finding.brief.summary
+
+
+@pytest.mark.asyncio
+async def test_subquestion_always_429_is_bounded_by_the_research_budget():
+    import os
+
+    with ProviderStub(mode="always_429") as stub:
+        os.environ["ANTHROPIC_BASE_URL"] = stub.base_url
+        try:
+            async with await WorkflowEnvironment.start_time_skipping(
+                data_converter=pydantic_data_converter
+            ) as env:
+                async with Worker(
+                    env.client,
+                    task_queue="s004-subquestion-retry",
+                    workflows=[_OneSubquestionWorkflow],
+                    activities=[research_subquestion],
+                    plugins=[SdlcPydanticAIPlugin()],
+                    workflow_runner=UnsandboxedWorkflowRunner(),
+                ):
+                    handle = await env.client.start_workflow(
+                        _OneSubquestionWorkflow.run,
+                        "One question.",
+                        id="s004-subquestion-retry",
+                        task_queue="s004-subquestion-retry",
+                    )
+                    failure: BaseException | None = None
+                    try:
+                        await handle.result()
+                    except Exception as exc:  # exhaustion is the expected path
+                        failure = exc
+        finally:
+            os.environ.pop("ANTHROPIC_BASE_URL", None)
+
+    assert failure is not None, "an always-429 provider must fail the sub-question call"
+    chain = _failure_chain(failure)
+    assert "ApplicationError" in chain and "429" in chain, (
+        f"expected the activity failure carrying the 429, got:\n{chain}"
+    )
+    # V13 / T015: the research sub-question budget is 6 engine attempts and
+    # the SDK adds none beneath it.
+    assert stub.count <= 6, (
+        f"always-429 stub saw {stub.count} HTTP requests for one sub-question "
+        f"call; RESEARCH_SQ_ACT allows 6 attempts and the provider SDK must "
+        f"add none beneath them (FR-008, V13)"
     )
