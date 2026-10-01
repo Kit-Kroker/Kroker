@@ -75,7 +75,7 @@ Measurement pieces already in the tree, per `ROADMAP.md` and `SDLC-spec-v2.md`:
   history. On-demand, stage-isolated.
 - **Cost attribution** — exists *in benchmarks only* today (ROADMAP §9.5,
   E-19). `HarnessRunResult` carries `input_tokens, output_tokens,
-  context_window, compacted`; TemporalAgent usage records carry the proposer
+  context_window, compacted`; TemporalDurability usage records carry the proposer
   side. The numbers are collected; they are not yet aggregated into run-level
   counters.
 - **CLI surface** — `sdlc ... benchmark` verb already exists (FR-603).

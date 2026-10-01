@@ -125,7 +125,7 @@ Agent class → Temporal construct is **a rule, not a convention**:
 
 | Agent class | Temporal construct | Ours |
 |---|---|---|
-| Automation — one LLM call | activity via `TemporalAgent` | Clarifier, Architect, Planner, Reviewer, QA analyst |
+| Automation — one LLM call | activity via the `TemporalDurability` capability | Clarifier, Architect, Planner, Reviewer, QA analyst |
 | Long-running — tools, iteration | heartbeating activity | Developer / Resolver harness runs |
 | Conversational | external client ↔ signals / queries | operators via CLI, Slack, MCP |
 | Proactive | workflow on a timer / Schedule | MaintenanceWorkflow, nightly reflect |
@@ -144,7 +144,8 @@ Agent class → Temporal construct is **a rule, not a convention**:
 - **A decision is not a boolean**: `approve | reject | revise`.
 - **Pydantic AI plugs straight in**: the worker connects with
   `plugins=[PydanticAIPlugin()]` and a `pydantic_data_converter`; wrapping a
-  proposer in `TemporalAgent` offloads model calls and tool I/O to activities.
+  proposer with the `TemporalDurability` capability offloads model calls and
+  tool I/O to activities.
 
 **Two honest "Temporal does not give you this" notes:**
 - **Claim-check.** Every payload crosses the event history. Specs, diffs, and

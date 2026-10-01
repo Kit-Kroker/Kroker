@@ -19,7 +19,7 @@ def get_wrapped_exa_search():
 
         class WrappedExaSearchToolset(ExaSearchToolset):
             """Charges the run's persisted budget (Task 8: deps.charge()
-            alone doesn't hold under TemporalAgent -- see budget_store.py)
+            alone doesn't hold under durable execution -- see budget_store.py)
             before each Exa call, and mirrors get_page's fetched text to the
             page cache the grounding verifier reads."""
 
@@ -81,8 +81,8 @@ def get_wrapped_exa_search():
                 )
                 # ExaSearchToolset.__init__ doesn't forward an `id` to
                 # FunctionToolset, so it's a "leaf" toolset (implements its
-                # own tool listing/calling) with id=None. TemporalAgent
-                # refuses to wrap such a toolset -- it needs a stable id to
+                # own tool listing/calling) with id=None. Durable
+                # execution refuses such a toolset -- it needs a stable id to
                 # key the toolset's activities in workflow history. Set it
                 # directly: _id is a plain attribute behind the read-only
                 # `id` property, and this factory only ever produces one

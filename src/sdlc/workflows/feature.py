@@ -1,7 +1,7 @@
 """FeatureWorkflow â€” idea â†’ deployed feature.
 
 Deterministic orchestration only. All I/O happens in activities or inside
-TemporalAgent-managed activities. Human-in-the-loop gates are durable
+TemporalDurability-managed activities. Human-in-the-loop gates are durable
 signal waits with a per-gate policy (hard / soft / off).
 """
 

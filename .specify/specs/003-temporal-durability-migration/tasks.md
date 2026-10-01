@@ -106,12 +106,12 @@ Format: `- [ ] Tnnn [P?] [US?] description with path`. `[P]` = independent files
 
 ## Phase 6: Polish, docs, close
 
-- [ ] T038 [P] Update wording (artifact boundary rule, FR-009): `ARCHITECTURE.md` (Â§4, Â§13, ADR-2, diagram label line 37, tech table 722, tree 787), `README.md`, and comments/docstrings in `src/sdlc/agents/roles.py`, `src/sdlc/agents/settings.py`, `src/sdlc/naming.py`, `src/sdlc/worker.py`, `src/sdlc/workflows/{feature,assessment}.py`, `src/sdlc/stages/research/{stage,toolset,budget_store,deps,verify}.py`, `agents/research/exa_wrapper.py`; no living doc may name the wrapper as current
-- [ ] T039 Search proof: `grep -rn "TemporalAgent" src agents` returns no production reference (SC-004); tests keep it only inside explicitly labelled deprecated-comparison comments, if any
-- [ ] T040 [P] `ruff check .`, `ruff format --check .`, `mypy` (src scope) in the dev container; fix findings without altering frozen values
-- [ ] T041 [P] `python scripts/check_file_size.py` in the dev container (SC-007); touched files stay under 1000 lines
-- [ ] T042 Final full runs (separate commands): `pytest -q`; `pytest -m temporal -q`; compare pass counts with T002 (SC-005, at least 160 passed, no new failures)
-- [ ] T043 Confirm the follow-up note exists: `.workspace/tasks/2026-09-30-model-forwarding-and-single-retry-layer.md` (FR-018) and that no out-of-scope item (model forwarding, `max_retries`, zai, 6.2/6.3) was touched (FR-014)
+- [X] T038 [P] Update wording (artifact boundary rule, FR-009): `ARCHITECTURE.md` (Â§4, Â§13, ADR-2, diagram label line 37, tech table 722, tree 787), `README.md`, and comments/docstrings in `src/sdlc/agents/roles.py`, `src/sdlc/agents/settings.py`, `src/sdlc/naming.py`, `src/sdlc/worker.py`, `src/sdlc/workflows/{feature,assessment}.py`, `src/sdlc/stages/research/{stage,toolset,budget_store,deps,verify}.py`, `agents/research/exa_wrapper.py`; no living doc may name the wrapper as current
+- [X] T039 Search proof: `grep -rn "TemporalAgent" src agents` returns no production reference (SC-004); tests keep it only inside explicitly labelled deprecated-comparison comments, if any
+- [X] T040 [P] `ruff check .`, `ruff format --check .`, `mypy` (src scope) in the dev container; fix findings without altering frozen values
+- [X] T041 [P] `python scripts/check_file_size.py` in the dev container (SC-007); touched files stay under 1000 lines
+- [X] T042 Final full runs (separate commands): `pytest -q`; `pytest -m temporal -q`; compare pass counts with T002 (SC-005, at least 160 passed, no new failures)
+- [X] T043 Confirm the follow-up note exists: `.workspace/tasks/2026-09-30-model-forwarding-and-single-retry-layer.md` (FR-018) and that no out-of-scope item (model forwarding, `max_retries`, zai, 6.2/6.3) was touched (FR-014)
 - [ ] T044 Report to the orchestrator: counts, FR-020 outcomes, residual risks (cancel activity shape, heartbeat side effect), and the files changed; do not commit
 
 ---
@@ -136,3 +136,9 @@ MVP = Phase 1 + Phase 2 + US2 + US1: the migration with replay proof. US3 adds t
 ## Counts
 
 46 tasks: Setup 9, Foundational 5, US2 10, US1 5, US3 10, Polish 7. Parallel opportunities: 19 tasks marked [P].
+
+---
+
+## Phase 7: Convergence
+
+- [X] T047 Reword the living docs outside T038's list that still name the `TemporalAgent` wrapper as the current mechanism to the `TemporalDurability` capability, keeping clearly historical mentions: `SDLC-spec-v2.md` (§1 stage table rows 3-7, 9, 10; lines 175, 204, 385), `docs/reference/presentation-pipeline-temporal.md` (lines 128, 147), `BENCHMARK.md` (line 78), `docs/roadmap/filesystem-first.md` (line 252) per FR-009 / SC-008 (partial)

@@ -20,13 +20,13 @@ async def research_subquery(deps: ResearchDeps, question: str) -> ResearchBrief:
 
     NOTE (accepted loss, 2026-07-17 human decision, mirrors Task 8's feature.py
     comment): `deps.budget` accumulates correctly for direct/test invocation
-    and within a single non-temporal `agent.run()`, but under `TemporalAgent`
+    and within a single non-temporal `agent.run()`, but under durable execution
     each tool activity receives a fresh deserialized copy, so the shared-counter
     guarantee is advisory-only when the architect runs temporalized. Restoring
     real per-run enforcement needs a disk-persisted counter (deferred).
 
     Unlike the top-level research stage, this call runs INSIDE the architect's
-    own tool-call activity, not workflow code — pydantic_ai's TemporalAgent
+    own tool-call activity, not workflow code — pydantic_ai's durable execution
     cannot fan the inner agent's tool calls out as further activities from
     there, so it falls back to plain in-process execution and `deps.budget`
     genuinely accumulates and can genuinely raise BudgetExceeded mid-run.

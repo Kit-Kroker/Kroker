@@ -2,9 +2,10 @@
 
 Split out of ``roles.py`` so a consumer can obtain the settings WITHOUT
 paying for that module's eager side effects: importing ``roles`` loads the
-registry, builds every agent, and wraps each in a TemporalAgent -- about 18
-seconds. The prompt-gate provider runs inside a promptfoo worker with a
-readiness timeout far below that, so it imports from here instead (E-82).
+registry, builds every agent, and attaches the TemporalDurability capability
+to each -- about 18 seconds. The prompt-gate provider runs inside a promptfoo
+worker with a readiness timeout far below that, so it imports from here
+instead (E-82).
 
 ``roles.py`` re-exports ``MODEL_SETTINGS`` from this module, so existing
 imports keep working unchanged.

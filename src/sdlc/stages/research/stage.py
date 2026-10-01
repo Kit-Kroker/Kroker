@@ -203,7 +203,7 @@ async def _research_subquestion_impl(
 ) -> SubQuestionFinding:
     """Research ONE sub-question. The fan-out unit.
 
-    Runs the PLAIN research_agent, not the TemporalAgent: inside an activity
+    Runs the PLAIN research_agent, not its durable handle: inside an activity
     pydantic-ai falls back to in-process execution, so deps.budget accumulates
     for real within the run while budget_store enforces the persisted caps
     underneath (the pattern research/toolset.py already established for the

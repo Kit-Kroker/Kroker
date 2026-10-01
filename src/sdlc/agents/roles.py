@@ -147,7 +147,8 @@ risk_agent = AGENTS.get("risk")
 #
 # They exist as separate Agents rather than per-run output_type overrides
 # because an Agent's output type is fixed at build time and t_clarify is
-# pinned to ClarifiedRequirements. Keeping them as TemporalAgents means every
+# pinned to ClarifiedRequirements. Keeping them as durable Agents (003:
+# TemporalDurability capability attached at construction) means every
 # call still goes through _run_role, so E-33's single model-egress accounting
 # prices and attributes the spend -- research had to hand RoleUsage back from
 # its activities precisely because fan-out moved its calls out of that reach.

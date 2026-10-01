@@ -249,7 +249,7 @@ is marked **(new scope)** and needs a PRD line before it is real.
   `opus-4-8`), the volume is in the executing harness roles — so per-role $ is
   the number that moves ($1,339 vs $10,565 on the same task, in their run).
   `HarnessRunResult` already carries the token/context/`compacted` fields; this
-  is the aggregation + the proposer-side TemporalAgent usage join.
+  is the aggregation + the proposer-side TemporalDurability usage join.
   *Landed:* single workflow egress (`_run_role`) + `MODEL_USAGE` events + `price_usage` activity (genai-prices, replay-safe) + `RunSummary.roles` rollup + report.html role table + proposer CostBag fill, **and FR-701's run-level budget gate** (`run_budget_usd`, hard gate via FR-301/302, approve = one more increment, reject = `rejected:budget` with retro intact). Research provider spend stays stage-scoped. Spec `docs/superpowers/specs/2026-07-23-per-role-cost-attribution-design.md`, plan `docs/superpowers/plans/2026-07-23-per-role-cost-attribution.md`.
 - [x] **E-34 (new scope)** A decomposition-forcing benchmark case. *Landed
   via cat-café (E-27), not a new case* — the "both current cases" text

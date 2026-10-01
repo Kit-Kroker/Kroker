@@ -105,8 +105,8 @@ class GroundingViolation(Exception):
     GroundingViolation(violations) from the returned list.
 
     The workflow (Task 8) treats a non-empty violations list as a hard stage
-    failure: it is NOT a ModelRetry, because TemporalAgent silently drops
-    @agent.output_validator (Task 1 finding A); a hard stage failure is the
+    failure: it is NOT a ModelRetry, because durable execution silently dropped
+    @agent.output_validator when this was designed (Task 1 finding A); a hard stage failure is the
     authorized post-run fallback semantics."""
 
     def __init__(self, violations: list[Violation]):

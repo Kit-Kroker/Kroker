@@ -34,7 +34,7 @@ flowchart TB
 
     subgraph W[Temporal workers]
         FW[GraphWorkflow + MaintenanceWorkflow<br/>deterministic orchestration]
-        FW --> PA[Proposer agents<br/>Pydantic AI · TemporalAgent]
+        FW --> PA[Proposer agents<br/>Pydantic AI · TemporalDurability]
         FW --> HR[Harness runner<br/>claude -p · opencode run]
         FW --> SA[Support activities<br/>memory · git · QA · notify]
     end
@@ -159,7 +159,7 @@ Agent classes map to Temporal constructs (this is a rule, not a convention):
 
 | Class | Construct | Ours |
 |---|---|---|
-| Automation (one LLM call) | activity via TemporalAgent | Product, Clarifier, Architect, Planner, Reviewer, Analyst, QA analyst, MergeVerdict, detector, repair planner |
+| Automation (one LLM call) | activity via the TemporalDurability capability | Product, Clarifier, Architect, Planner, Reviewer, Analyst, QA analyst, MergeVerdict, detector, repair planner |
 | Long-running (tools, iteration) | heartbeating activity | Developer / Resolver harness runs; optional Reviewer *deep-review* tier |
 | Conversational | external client ↔ workflow signals/queries | operators via MCP/dashboard |
 | Proactive | workflow (timer loop / Schedule) | nightly reflect; MaintenanceWorkflow **(P4, unbuilt)** |
@@ -168,10 +168,12 @@ Agent classes map to Temporal constructs (this is a rule, not a convention):
 Agents are configuration (`config/agents.yaml`): role → kind
 (proposer|harness), model, prompt file, memory policy (banks, filters,
 top_k, retain kind). The loader builds Pydantic AI `Agent`s with declared
-`output_type` and wraps proposers in `TemporalAgent` — model calls and tool
-I/O offload to activities automatically. Constraints enforced at load:
-agent/toolset names are Temporal activity names (rename = breaking change);
-developer and reviewer must differ in harness or model family.
+`output_type` and attaches the `TemporalDurability` capability to every
+proposer — model calls and tool I/O offload to activities automatically.
+Constraints enforced at load: agent/toolset names are Temporal activity
+names (rename = breaking change); a role that drops or weakens the
+capability fails registry load (003); developer and reviewer must differ in
+harness or model family.
 
 **Context engineering (handles, not walls of text):** agent context is
 assembled from references and scoped extracts, never full artifact dumps —
@@ -474,7 +476,9 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
   workflow code (enforced by import-linter).
 - **ADR-2 Pydantic AI for proposers, harness CLIs for doers.** Typed,
   validated artifacts where thinking happens; full agentic tool use where
-  code gets written. `TemporalAgent` gives durability without custom glue.
+  code gets written. The `TemporalDurability` capability (003; previously
+  the deprecated `TemporalAgent` wrapper) gives durability without custom
+  glue.
   *Trade-off:* two agent runtimes to operate.
 - **ADR-3 `CodeArtifact` = files[] | diff_ref union.** Propose-mode for
   small/greenfield and test files; harness-mode (diff in worktree) for real
@@ -719,7 +723,7 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
 | Concern | Choice | Notes |
 |---|---|---|
 | Orchestration | Temporal (OSS or Cloud) | Python SDK, pydantic data converter |
-| Agent runtime | Pydantic AI + `pydantic-ai-slim[temporal]` | TemporalAgent wrapping |
+| Agent runtime | Pydantic AI + `pydantic-ai-slim[temporal]` | `TemporalDurability` capability (003) |
 | Coding harnesses | Claude Code (`claude -p`), OpenCode (`opencode run`) | adapter protocol; `--attach` to warm opencode serve |
 | Memory | Hindsight (vectorize-io) + Postgres | banks + metadata filters |
 | Artifacts | S3-compatible object store + git | claim-check |
@@ -784,7 +788,7 @@ Kroker/
 │   │                          #   worktree.py — roles/layouts as files, the round's I/O
 │   ├── harness/               # adapters.py (claude_code · opencode · cursor + registry),
 │   │                          #   containment.py (policy → predicates), hook.py, session.py
-│   ├── agents/                # registry loader → pydantic-ai Agent / TemporalAgent
+│   ├── agents/                # registry loader → pydantic-ai Agent + TemporalDurability
 │   ├── memory/                # Hindsight client + protocol, scrub, query hashing
 │   ├── memoization/           # content-addressed activity cache (ADR-5)
 │   ├── graph/                 # PipelineGraph schema, node-type registry, content_sha, YAML io (E-72);

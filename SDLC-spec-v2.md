@@ -37,14 +37,14 @@ workflows on the `ai-sdlc` task queue.
 | 0 | intake | *(deterministic)* | workflow init | `IdeaBrief{mode}` | mode ∈ {greenfield, brownfield} resolved |
 | 1 | constitution | *(deterministic)* | local code | `Constitution` | governing principles fixed |
 | 2 | context | Cartographer *(brownfield only)* | activity (repo tools) | `CodebaseMap` | modules, contracts, hot spots extracted from repo |
-| 3 | requirements | Product | TemporalAgent activity | `Requirements` | ≥1 story; FR-### + SC-### |
-| 4 | research | Researcher *(optional; off by default — FR-107)* | TemporalAgent activity (bounded per-run: searches, fetches, cost) | `ResearchBrief` | grounded findings carry source URL + verbatim quote verified against bytes fetched this run; unverifiable claims flagged inferred or omitted; stage off by default |
-| 5 | clarify | Clarifier | TemporalAgent + **gate(clarify)** | `Clarifications` | ambiguities resolved; low-confidence ones routed to human |
-| 6 | architecture | Architect | TemporalAgent + **gate(architecture)** | `Architecture` | greenfield: stack+tree+contracts; brownfield: **delta** (added/modified/removed) grounded in `CodebaseMap` |
-| 7 | planning | Planner | TemporalAgent + **gate(plan)** | `TaskPlan` | acyclic DAG (Kahn validator, kept from v1); phased vertical slices |
+| 3 | requirements | Product | activity via TemporalDurability | `Requirements` | ≥1 story; FR-### + SC-### |
+| 4 | research | Researcher *(optional; off by default — FR-107)* | activity via TemporalDurability (bounded per-run: searches, fetches, cost) | `ResearchBrief` | grounded findings carry source URL + verbatim quote verified against bytes fetched this run; unverifiable claims flagged inferred or omitted; stage off by default |
+| 5 | clarify | Clarifier | activity via TemporalDurability + **gate(clarify)** | `Clarifications` | ambiguities resolved; low-confidence ones routed to human |
+| 6 | architecture | Architect | activity via TemporalDurability + **gate(architecture)** | `Architecture` | greenfield: stack+tree+contracts; brownfield: **delta** (added/modified/removed) grounded in `CodebaseMap` |
+| 7 | planning | Planner | activity via TemporalDurability + **gate(plan)** | `TaskPlan` | acyclic DAG (Kahn validator, kept from v1); phased vertical slices |
 | 8 | code | Developer | **long-running activity** (harness) per task, parallel waves | `CodeArtifact` | worktree cut from the **running integration head** (ADR-14); diff measured against the task's branch point; merged back into integration on gate approval; honors contracts |
-| 9 | review | Reviewer | TemporalAgent activity *(clean-context proposer; optional harness deep-review tier)* | `ReviewReport` | contract conformance; blocking issues listed |
-| 10 | analyze | Analyst | TemporalAgent activity | `AnalysisReport` | cross-artifact consistency; *proposes* criterion→test mapping (gate enforces) |
+| 9 | review | Reviewer | activity via TemporalDurability *(clean-context proposer; optional harness deep-review tier)* | `ReviewReport` | contract conformance; blocking issues listed |
+| 10 | analyze | Analyst | activity via TemporalDurability | `AnalysisReport` | cross-artifact consistency; *proposes* criterion→test mapping (gate enforces) |
 | 11 | qa | QA (+ Resolver) | activities (test run + repair loop) | `TestReport` | red→green within `MAX_REPAIR_ATTEMPTS` |
 | 12 | quality_gate | *(deterministic)* | local code + **gate(merge)** | `GateReport` | `DeterministicQualityGate`: absolute checks (lint, no critical security, build/integration) pass, advisory checks (coverage, traceability, severity) pass-or-human-overridden |
 | 13 | deploy | DevOps | activity + **gate(deploy)** | `DeployPlan` → `DeployReport` | greenfield: smoke test; brownfield: PR merged + env deploy |
@@ -172,7 +172,7 @@ agents:
 ```
 
 Loader semantics: `kind: proposer` (default) builds a Pydantic AI `Agent`
-with the declared `output_model` and wraps it in `TemporalAgent`; `kind:
+with the declared `output_model` and attaches the `TemporalDurability` capability; `kind:
 harness` routes the role through the harness activity. **Constraint carried
 over from v1 activity-naming rules:** agent names and toolset ids become
 Temporal activity names — adding agents is safe, renaming deployed ones is a
@@ -201,7 +201,7 @@ too many.
 | `run_manifest.md` (current stage, statuses) | workflow state, exposed via **queries** (`status()`, `pending_gate()`) |
 | `events.jsonl` (append-only trace) | Temporal event history is the record of truth; `events.jsonl` + `report.html` become an **export** rendered by the retro stage |
 | retry counters in the harness | activity `RetryPolicy` + bounded loops in workflow code |
-| loop budgets (steps, wall-clock, cost) | workflow timers + a `Budget` counter in workflow state; cost accumulated from harness `total_cost_usd` and TemporalAgent usage; exhaustion → escalate gate |
+| loop budgets (steps, wall-clock, cost) | workflow timers + a `Budget` counter in workflow state; cost accumulated from harness `total_cost_usd` and TemporalDurability proposer usage; exhaustion → escalate gate |
 | "stop cleanly, write ESCALATION.md" | **durable signal wait** (see §5); `ESCALATION.md` is still written, as the gate's human-readable payload |
 | input hashes for incremental re-runs | content-addressed activity cache keyed on `hash(inputs + prompt_file_content + model_id + recall_snapshot)`; memory is pinned per run by a **watermark** so re-runs inside a run are deterministic cache hits and a memory refresh is a deliberate watermark bump, not silent drift — *correction:* v1's hash omitted prompt and model, so prompt edits served stale artifacts. Auditability (full Temporal history, every artifact) is separate from memoization (skipping recompute): the cache never elides a *record*, only the recompute. |
 
@@ -382,7 +382,7 @@ Deltas:
   over a repo-wide ratio (v1's coverage ≥ 0.80 alone is gameable when the same
   factory writes code and tests, and dilutes on large repos).
 - **Budgets** include LLM spend, summed from harness JSON cost output and
-  TemporalAgent usage records; visible in the run summary and in Temporal
+  TemporalDurability proposer usage records; visible in the run summary and in Temporal
   search attributes for fleet-level queries.
 
 ---

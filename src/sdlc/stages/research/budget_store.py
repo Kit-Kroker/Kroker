@@ -1,7 +1,7 @@
 """Disk-persisted per-run research budget (deps.py's deferred Task 8 item).
 
 `deps.charge()` mutates `ResearchDeps.budget` in place, which accumulates
-correctly for a single in-process `agent.run()` but NOT under `TemporalAgent`:
+correctly for a single in-process `agent.run()` but NOT under durable execution:
 each tool call is a separate activity that receives its own deserialized copy
 of `deps`, so a mutation never flows back to the workflow or to the next tool
 call. `charge_persisted` makes the cap in `ResearchConfig.max_searches` /

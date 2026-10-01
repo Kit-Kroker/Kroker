@@ -451,7 +451,7 @@ class AssessmentWorkflow(GateHost):
         if inp.propose_discover and t_discover is not None:
             try:
                 run = await t_discover.run(render_discover_prompt(context))
-                # The TemporalAgent's run() is untyped generically; the
+                # The durable agent's run() is untyped generically; the
                 # discover agent's output_type IS DiscoverProposal.
                 proposal = cast(DiscoverProposal, run.output)
             except Exception as e:  # noqa: BLE001

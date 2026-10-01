@@ -12,18 +12,18 @@ proposer roles.
 
 | Role | Kind | Runs as |
 |---|---|---|
-| clarify | Pydantic AI (TemporalAgent) | activity via TemporalAgent |
-| architect | Pydantic AI | activity via TemporalAgent |
-| planner | Pydantic AI | activity via TemporalAgent |
+| clarify | Pydantic AI | activity via TemporalDurability |
+| architect | Pydantic AI | activity via TemporalDurability |
+| planner | Pydantic AI | activity via TemporalDurability |
 | dev / test / devops executor | coding harness | long-running heartbeating activity in a git worktree |
 | qa analyst | Pydantic AI + test-suite activity | activities |
-| quality gate | `DeterministicQualityGate` (pure code) + advisory `MergeVerdict` (Pydantic AI, soft-gate only) | `evaluate_gate` activity + TemporalAgent |
+| quality gate | `DeterministicQualityGate` (pure code) + advisory `MergeVerdict` (Pydantic AI, soft-gate only) | `evaluate_gate` activity + TemporalDurability |
 | reviewer | coding harness (different model/harness than dev) | activity |
-| analyst | Pydantic AI, clean-context | activity via TemporalAgent |
+| analyst | Pydantic AI, clean-context | activity via TemporalDurability |
 | research *(optional, `research_enabled`)* | Pydantic AI, fans out (`plan_research` → `research_subquestion` × N → `synthesize_brief`) | activities; provider `fake` (CI) / `tavily` / `exa` (ExaSearch + Harness `run_code`, needs `EXA_API_KEY`) |
-| deep_review *(optional, `deep_review_enabled`)* | Pydantic AI, reads the scrubbed harness transcript | activity via TemporalAgent, advisory only |
-| handoff *(optional, `handoff_enabled`, FR-805)* | Pydantic AI, extracts task→task claims from the scrubbed session | activity via TemporalAgent, best-effort |
-| adversary *(optional, `adversarial_review_enabled`)* | Pydantic AI, decorrelated second opinion (different model identity than dev+reviewer) on the approving path | activity via TemporalAgent, advisory, fail-open |
+| deep_review *(optional, `deep_review_enabled`)* | Pydantic AI, reads the scrubbed harness transcript | activity via TemporalDurability, advisory only |
+| handoff *(optional, `handoff_enabled`, FR-805)* | Pydantic AI, extracts task→task claims from the scrubbed session | activity via TemporalDurability, best-effort |
+| adversary *(optional, `adversarial_review_enabled`)* | Pydantic AI, decorrelated second opinion (different model identity than dev+reviewer) on the approving path | activity via TemporalDurability, advisory, fail-open |
 
 ## Human-in-the-loop
 Gates: clarify, architecture, plan, merge, deploy — each `hard` / `soft` /
