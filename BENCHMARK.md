@@ -193,7 +193,7 @@ benchmark is tractable: an axis is a config sweep, not a fork.
 | Axis | What varies | Where it lives today | Roadmap dependency |
 |---|---|---|---|
 | **Harness** | `claude -p` vs `opencode run` vs **cursor (to add)** | `harness/adapters.py`, `HARNESSES` (FR-203) | new adapter must normalise into `HarnessRunResult` (§4) |
-| **Model × role** | which model drives each of 11 roles | `STAGE_MODELS` + `agents.yaml` per-role `model` | landed (E-37): per-cell arms + `--role-model`, ADR-6 per run |
+| **Model × role** | which model drives each of 11 roles | `STAGE_MODELS` + `agents.yaml` per-role `model` | landed (E-37): per-cell arms + `--role-model`, ADR-6 per run; **proposer arms real since 004** (override is forwarded and validated; pre-004 caveat in §3.2) |
 | **Memory** | Hindsight on/off/watermark, `project` vs `+org` banks | `MemoryConfig` (`memory.enabled` default `False`) | org bank has no writers — **E-25**; retro closes the loop — stage 14 |
 | **Case** | greenfield feature specs of graded complexity | `benchmarks/cases/` | only single-run-sized cases exist — need a decomposition-forcing case (§5) |
 
@@ -242,7 +242,7 @@ precisely Cursor's $1,339-vs-$10,565 experiment, expressed in your config.
 *E-33 landed this: `RunSummary.roles` carries per-role dollars on every run; proposer `BenchmarkRecord.cost` is now populated, so `mean_cost_usd` is real for proposer cells.*
 
 Blocker to be honest about: `cfg.roles` was a hardcoded mirror of `agents.yaml`
-because `PipelineConfig()` is constructed *inside* the workflow (E-26). A
+because `PipelineConfig()` is constructed *inside the workflow* (E-26). A
 per-cell model sweep needs the override to resolve at the boundary
 (`benchmarks/workflow.py`) and satisfy ADR-6 *per run*. **E-37 landed this:**
 each cell now carries a named `Arm` (role→model mix); `_cell_config` builds
@@ -250,6 +250,19 @@ each cell now carries a named `Arm` (role→model mix); `_cell_config` builds
 and the CLI exposes the same override via `--role-model`. The full model×role
 sweep is now expressible; the pre-E-37 harness-only `models=[...]` form still
 works (desugared to one arm per model).
+
+**004 closes the loop on proposer arms:** until 004, a proposer override was
+resolved, priced and keyed but never *forwarded* — the registry model answered
+while the record named the override. From 004, proposer arms and `--role-model`
+overrides are real: the override reaches the call, and the label, the priced
+model, the usage record and the memo key all describe the model that actually
+answered; invalid arm strings (`default` or proposer `role_models` entries that
+are not `provider:model` ids of an installed provider) are refused at matrix
+expansion before any cell runs. Records made before 004: the inventory in
+`.specify/specs/004-model-forwarding-single-retry/inventory.md` establishes
+that **no benchmark record predating the fix carries a mislabelled proposer
+model** — no proposer override was ever used in a committed arm on this
+machine, so nothing needs re-running or re-labelling.
 
 ### 3.3 Memory axis — the measurement the whole stack was built for
 

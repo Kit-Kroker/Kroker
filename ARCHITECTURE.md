@@ -175,6 +175,20 @@ names (rename = breaking change); a role that drops or weakens the
 capability fails registry load (003); developer and reviewer must differ in
 harness or model family.
 
+Beside durability every durable proposer (and the research stage's
+activity-side planner/synthesis agents) carries the single-retry resolver
+(`agents/model_ids.py::single_retry_layer`, 004): the provider client is
+built with its SDK retries off, so one model request costs at most its
+agent's engine attempt budget of HTTP calls — the workflow engine is the
+only retry layer. Per-run proposer overrides (`--role-model role=provider:model`,
+benchmark arms, graph node roles) are validated offline at submission
+(unknown provider, malformed string → refused before anything starts) and
+**forwarded to the call** from `RoleHost._run_role` via
+`agents/model_ids.py::forwarded_model` — the model that answers, the label,
+the priced model and the memo key all name the override, and a call site
+whose label disagrees fails non-retryably instead of recording a wrong
+label. Runs without overrides are byte-identical to before (replay-safe).
+
 **Context engineering (handles, not walls of text):** agent context is
 assembled from references and scoped extracts, never full artifact dumps —
 the Developer gets its task, the relevant `CodebaseMap` slice, and contract
