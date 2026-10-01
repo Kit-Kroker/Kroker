@@ -62,11 +62,14 @@ def _pid_alive(pid: int) -> bool:
     # the last ')': comm may contain spaces and parens of its own.
     try:
         stat = open(f"/proc/{pid}/stat").read()
-    except FileNotFoundError:
+    except (FileNotFoundError, ProcessLookupError):
         # Either /proc does not exist (non-Linux POSIX: no stat to consult)
-        # or the pid was reaped between the signal probe and this read -- a
-        # poll loop catches the latter on its next tick via the
-        # ProcessLookupError branch. Conservative True either way.
+        # or the pid was reaped between the signal probe and this read --
+        # opening a vanished /proc/<pid>/stat raises ESRCH
+        # (ProcessLookupError), not ENOENT, on some kernels/CI sandboxes
+        # (first seen on ubuntu-latest runners, 2026-10-01). A poll loop
+        # catches the latter on its next tick via the same branch.
+        # Conservative True either way.
         return True
     except PermissionError:
         # /proc mounted with hidepid (or equivalent) on Linux: the state
