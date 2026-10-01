@@ -1,0 +1,70 @@
+{
+ "activities": [
+  "classify_repo",
+  "setup_integration_branch",
+  "agent__clarify_agent__model_request",
+  "price_usage",
+  "publish_artifact_version",
+  "agent__architect_agent__model_request",
+  "price_usage",
+  "notify",
+  "publish_artifact_version",
+  "agent__planner_agent__model_request",
+  "price_usage",
+  "notify",
+  "publish_artifact_version",
+  "sync_plan_tasks",
+  "set_task_authoritative",
+  "create_worktree",
+  "run_coding_task",
+  "run_test_suite",
+  "get_task_diff",
+  "agent__qa_analyst_agent__model_request",
+  "price_usage",
+  "agent__reviewer_agent__model_request",
+  "price_usage",
+  "set_task_authoritative",
+  "attach_task_evidence",
+  "attach_task_evidence",
+  "merge_into_integration",
+  "get_task_diff",
+  "agent__analyst_agent__model_request",
+  "price_usage",
+  "prepare_base_worktree",
+  "run_integration_checks",
+  "run_lint",
+  "measure_coverage",
+  "scoped_security_scan",
+  "evaluate_gate",
+  "open_pull_request",
+  "notify",
+  "export_run_artifacts",
+  "apply_session_retention"
+ ],
+ "model_requests": [
+  {
+   "activity": "agent__clarify_agent__model_request",
+   "model_id": "anthropic:glm-5.2"
+  },
+  {
+   "activity": "agent__architect_agent__model_request",
+   "model_id": "anthropic:glm-5.2"
+  },
+  {
+   "activity": "agent__planner_agent__model_request",
+   "model_id": "anthropic:glm-5.2"
+  },
+  {
+   "activity": "agent__qa_analyst_agent__model_request",
+   "model_id": "anthropic:glm-5.2"
+  },
+  {
+   "activity": "agent__reviewer_agent__model_request",
+   "model_id": "anthropic:glm-5.2"
+  },
+  {
+   "activity": "agent__analyst_agent__model_request",
+   "model_id": "anthropic:glm-5.2"
+  }
+ ]
+}

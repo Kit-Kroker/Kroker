@@ -28,7 +28,13 @@ pre-existing failure.
 
 ## T003 wire fixture verdict (R2)
 
-(to be recorded)
+Fixture `tests/durability/fixtures/wire_no_override.json` (frozen; regeneration only
+via `SDLSC_WIRE_REGEN=1` on an unmodified base, executor-only). The greenfield_happy
+no-override capture schedules 41 activities; all 6 `agent__*__model_request` inputs
+carry the **registry string `anthropic:glm-5.2`**, not null. **R2 verdict: the model
+id crosses the wire as the registry string** (advisor's reading; the worker-side
+resolver chain sees the id for no-override runs too). Determinism confirmed: a second
+live run equals the frozen fixture (test green, RC=0).
 
 ## T004 first-workflow-task timing
 
