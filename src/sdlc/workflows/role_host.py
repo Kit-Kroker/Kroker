@@ -15,9 +15,11 @@ from typing import Any, TypeVar
 from pydantic import BaseModel
 from temporalio import workflow
 from temporalio.common import RetryPolicy
+from temporalio.exceptions import ApplicationError
 
 with workflow.unsafe.imports_passed_through():
-    from ..agents.roles import PROMPT_SHAS, resolve_role_model
+    from ..agents.model_ids import forwarded_model
+    from ..agents.roles import PROMPT_SHAS, STAGE_ROLES, resolve_role_model
     from ..calibration.activities import VerdictInput, calibration_verdict
     from ..calibration.decision import auto_decision_for
     from ..calibration.models import INSUFFICIENT, CalibrationVerdict, LabelSource
@@ -101,11 +103,17 @@ class RoleHost:
         model would be served."""
         if not cfg.memoization_enabled:
             return await run_fn(), False
+        resolved = resolve_role_model(cfg, stage)
+        # 004 T029 (FR-003/E3, D6): entries written pre-004 under an override
+        # key were produced by the REGISTRY model — a narrow salt in the model
+        # slot makes them unreachable without touching any no-override key.
+        # content_key's five positional arguments are unchanged.
+        fwd = forwarded_model(cfg, STAGE_ROLES[stage])
         key = content_key(
             stage,
             input_json,
             PROMPT_SHAS[stage] + prompt_digest,
-            resolve_role_model(cfg, stage),
+            f"fwd1:{resolved}" if fwd is not None else resolved,
             getattr(self, "_memory_watermark", None) or "none",
         )
         cached = await workflow.execute_activity(cache_get, CacheGetInput(key=key), **MEM_ACT)
@@ -131,8 +139,29 @@ class RoleHost:
         agent, capture its usage, price it (replay-safe: in an activity),
         accumulate per role. Returns the AgentRunResult — callers keep
         taking .output. Pricing failure of ANY kind degrades to usd=None;
-        it must never fail the stage."""
-        result = await agent.run(*args, **kwargs)
+        it must never fail the stage.
+
+        004 T029 (FR-001/FR-002): when forwarded_model(cfg, role) is not
+        None the call is made as agent.run(*args, model=<forwarded>,
+        **kwargs) — the override reaches the model that serves it. The
+        caller's `model` label must agree with what is forwarded under an
+        override; a disagreeing label fails the call non-retryably before
+        any model request rather than record a label the model never had.
+        No-override and override-equals-registry calls are made exactly as
+        before (E1), so no-override replays are byte-identical."""
+        fwd = forwarded_model(cfg, role)
+        if fwd is None:
+            result = await agent.run(*args, **kwargs)
+        elif fwd == model:
+            result = await agent.run(*args, model=fwd, **kwargs)
+        else:
+            raise ApplicationError(
+                f"role '{role}' is forwarded to model '{fwd}' for this run, "
+                f"but the call site labelled it '{model}' — the label, the "
+                f"priced model and the serving model must agree "
+                f"(FR-002; the call was NOT made)",
+                non_retryable=True,
+            )
         u = result.usage
         usd: float | None = None
         if u.input_tokens or u.output_tokens:

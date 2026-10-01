@@ -45,6 +45,21 @@ Attributes on the MRO of `FeatureWorkflow` and `GraphWorkflow` across its servic
 | `BenchmarkHost._record` override | `GraphWorkflow` (override) | — | `GraphWorkflow._record` (stamps via `_stamp`, then `super()._record`) | E-77 R-4: every record carries `GraphAttribution` before emit/schedule; base host behaviour unchanged |
 | `_graph_sha` (new cross-host reader) | `GraphWorkflow` | `RunHost._retro` (cross-host, via `getattr(self, "_graph_sha", "") or None` → `build_run_summary`) | `GraphWorkflow.run` (unchanged) | E-77 R-3: summary content only — no command change (U6) |
 
+## Single model egress: forwarding and the label guard (004)
+
+`RoleHost._run_role` is the E-33 single model-egress point. Since 004 it
+also FORWARDs the run's proposer override: when
+`sdlc.agents.model_ids.forwarded_model(cfg, role)` is not `None`, the call
+is made as `agent.run(*args, model=<forwarded>, **kwargs)` — only then. A
+caller's `model` label that disagrees with what would be forwarded under an
+override fails the call non-retryably before any model request (FR-002);
+`model` is `_run_role`'s own positional parameter, so a caller-supplied
+`model=` kwarg cannot reach `agent.run` at all. No-override and
+override-equals-registry runs call exactly as before (E1), which is why
+no-override replays stay byte-identical. `_cached_stage` salts the memo
+key's model slot `fwd1:<model>` when the run's model differs from the
+registry model (FR-003/E3); `content_key`'s signature is unchanged.
+
 ## Grace edits while FeatureWorkflow is registered (E-74 U6)
 
 `FeatureWorkflow` stays registered only to carry in-flight runs to terminal

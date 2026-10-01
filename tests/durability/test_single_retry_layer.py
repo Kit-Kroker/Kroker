@@ -261,3 +261,65 @@ async def test_subquestion_always_429_is_bounded_by_the_research_budget():
         f"call; RESEARCH_SQ_ACT allows 6 attempts and the provider SDK must "
         f"add none beneath them (FR-008, V13)"
     )
+
+
+# --- US3 scenario 3 (T029): the override's provider runs single-layer too ---
+
+
+@workflow.defn
+class _OneForwardedCallWorkflow:
+    @workflow.run
+    async def run(self, prompt: str) -> str:
+        # Mirrors _run_role's forwarded branch exactly (D1): the override
+        # string reaches agent.run as model= and crosses to the activity.
+        result = await _AGENT.run(prompt, model="openai:gpt-5.2")
+        return result.output
+
+
+@pytest.mark.asyncio
+async def test_override_provider_always_429_is_bounded_by_the_attempt_budget():
+    """US3 scenario 3 / FR-007: an `openai:`-prefixed override is served by
+    the openai provider (OPENAI_BASE_URL stub) and its client runs with SDK
+    retries off — the bound holds for the override's provider exactly as for
+    the registry provider."""
+    import os
+
+    with ProviderStub(mode="always_429") as stub:
+        os.environ["OPENAI_BASE_URL"] = stub.base_url
+        try:
+            async with await WorkflowEnvironment.start_time_skipping(
+                data_converter=pydantic_data_converter
+            ) as env:
+                async with Worker(
+                    env.client,
+                    task_queue="s004-single-retry-fwd",
+                    workflows=[_OneForwardedCallWorkflow],
+                    activities=TemporalDurability.from_agent(_AGENT).temporal_activities,
+                    plugins=[SdlcPydanticAIPlugin()],
+                    workflow_runner=UnsandboxedWorkflowRunner(),
+                ):
+                    handle = await env.client.start_workflow(
+                        _OneForwardedCallWorkflow.run,
+                        "Say ok.",
+                        id="s004-single-retry-fwd",
+                        task_queue="s004-single-retry-fwd",
+                    )
+                    failure: BaseException | None = None
+                    try:
+                        await handle.result()
+                    except Exception as exc:  # exhaustion is the expected path
+                        failure = exc
+        finally:
+            os.environ.pop("OPENAI_BASE_URL", None)
+
+    assert failure is not None, "an always-429 override provider must fail the call"
+    chain = _failure_chain(failure)
+    assert "ApplicationError" in chain and "429" in chain, (
+        f"expected the activity failure carrying the 429, got:\n{chain}"
+    )
+    assert stub.count <= AGENT_ACTIVITY_MAX_ATTEMPTS, (
+        f"always-429 stub saw {stub.count} HTTP requests for one model request "
+        f"through the override's provider; the budget is "
+        f"{AGENT_ACTIVITY_MAX_ATTEMPTS} and the SDK must add none beneath it "
+        f"(FR-007/FR-008, US3 scenario 3)"
+    )

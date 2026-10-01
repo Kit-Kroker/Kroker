@@ -275,11 +275,15 @@ async def test_e_benchmark_arm_default_serves_every_overridable_proposer_role(
         role_models=arm_b.resolve(),
     )
     cfg_opus = _cell_config(base.cfg(), greenfield_idea(), spec, cell_b, bench_run_id="t025e-b")
-    # _cell_config retargets every gate at the unattended policy; the capture
-    # is driven by the scenario's own HARD-gate driver, so restore it.
+    # _cell_config retargets every gate at the unattended policy and turns on
+    # benchmark recording; the capture is driven by the scenario's own
+    # HARD-gate driver and registers no record_benchmark activity, so restore
+    # both — the scenario's point is the ROLES the arm fans out to, not the
+    # recording machinery.
     reference = base.cfg()
     cfg_opus.gates = reference.gates
     cfg_opus.deploy.enabled = reference.deploy.enabled
+    cfg_opus.benchmark = reference.benchmark
 
     sc = dataclasses.replace(base, cfg=lambda: cfg_opus)
     await capture(sc, FEATURE_STARTER, monkeypatch, tmp_path)
