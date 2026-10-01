@@ -21,9 +21,27 @@ def test_parse_rejects_unknown_role():
 
 
 def test_build_overrides_sets_proposer_and_harness():
-    roles = build_role_overrides({"architect": "openai/gpt-5.2"})
+    roles = build_role_overrides({"architect": "openai:gpt-5.2"})
     assert roles["architect"].kind == "proposer"
-    assert roles["architect"].model == "openai/gpt-5.2"
+    assert roles["architect"].model == "openai:gpt-5.2"
+
+
+def test_build_overrides_rejects_invalid_proposer_model():
+    """FR-004 (004 T017): a proposer override that is not a valid
+    provider:model id is refused at submission. RED on main: the string is
+    currently accepted and silently never reaches the model."""
+    with pytest.raises(RegistryError, match=r"provider:model") as excinfo:
+        build_role_overrides({"architect": "openai/gpt-5.2"})
+    message = str(excinfo.value)
+    assert "architect" in message
+    assert "openai/gpt-5.2" in message
+
+
+def test_build_overrides_accepts_harness_grammar_unchanged():
+    """FR-005: harness roles keep their own grammar (the CLI adapter takes
+    the string verbatim); validation is per role kind."""
+    roles = build_role_overrides({"dev": "zai-coding-plan/glm-5.2"})
+    assert roles["dev"].model == "zai-coding-plan/glm-5.2"
 
 
 def test_build_overrides_rejects_adr6_violation():
