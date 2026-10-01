@@ -18,6 +18,7 @@ from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.usage import UsageLimits
 from temporalio import activity
 
+from ...agents.model_ids import single_retry_layer
 from ...core.models import (
     RoleUsage,
 )
@@ -101,7 +102,16 @@ async def _plan_research_impl(inp: PlanInput, _model=None) -> ResearchPlan:
     that planners return the top of whatever range they are given, even for a
     yes/no lookup -- so the config value, not the question, decides the width.
     """
-    agent = Agent(_model or inp.model, output_type=_PlannerOutput, system_prompt=PLAN_SYSTEM)
+    agent = Agent(
+        _model or inp.model,
+        output_type=_PlannerOutput,
+        system_prompt=PLAN_SYSTEM,
+        # 004 T013 (FR-007): activity-side model requests run single-layer —
+        # the capability's resolver turns SDK retries off for the provider
+        # client this string builds, so the activity's own attempt budget
+        # (step.py) is the only retry layer.
+        capabilities=[single_retry_layer()],
+    )
     result = await agent.run(_plan_prompt(inp))
     texts = [t.strip() for t in result.output.sub_questions if t and t.strip()]
     texts = texts[: inp.max_sub_questions]
@@ -355,7 +365,13 @@ async def _synthesize_brief_impl(
     if not inp.findings:
         return merged, RoleUsage(role="research", model=inp.model)
 
-    agent = Agent(_model or inp.model, output_type=_SynthesisOutput, system_prompt=SYNTHESIS_SYSTEM)
+    agent = Agent(
+        _model or inp.model,
+        output_type=_SynthesisOutput,
+        system_prompt=SYNTHESIS_SYSTEM,
+        # 004 T013 (FR-007): same single-layer rule as the planner above.
+        capabilities=[single_retry_layer()],
+    )
     result = await agent.run(_synthesis_prompt(inp, merged))
     out = result.output
 

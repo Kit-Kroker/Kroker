@@ -18,6 +18,13 @@ file carries only what is true *here*.
 
 - Activities: `plan_research`, `research_subquestion`, `synthesize_brief`, `verify_brief_activity`.
 - Rule 3 passthrough set: this slice passes through `core/models.py`, `workflows/models.py`, and upstream artifact models.
+- Single retry layer (004): the planner and synthesis agents constructed in
+  `stage.py` are built through `sdlc.agents.model_ids.single_retry_layer()`
+  (a fresh `ResolveModelId` per construction), so every activity-side model
+  request runs with the provider SDK's retries off — the activity's own
+  attempt budget is the only retry layer. The registry `research_agent`
+  (sub-question fan-out, architect tool) gets the same capability via
+  `build_agents`.
 
 ## State
 
