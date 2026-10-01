@@ -138,3 +138,34 @@ another agent's activities must pin the arriving id to their own model via a
 real provider call (observed: 401 `ModelHTTPError` from `agent__clarify_agent__model_request`
 in the research e2e). Applied to `tests/fakes/fake_agents.py`, `tests/replay/scenarios.py`,
 `tests/research/test_research_{e2e,spike}.py`, and both assessment e2e helpers.
+
+## R10. FR-020 outcomes (T029-T032, T037; recorded 2026-10-01, Phase 5)
+
+| # | Hypothesis | Outcome | Evidence |
+|---|---|---|---|
+| a | Provider request payloads differ (no re-prepare) | **verified-neutral** | `tests/durability/test_provider_payload_parity.py` (temporal): re-ran the T008 two-turn architect scenario on migrated code; recorded `(messages, model_settings, params)` are deep-equal to the frozen `architect_provider_requests_pre_migration.json`. The R9 wire difference (workflow-side model_id None→string) does NOT reach the concrete model's request boundary. |
+| b | Kroker triggers `validate_args` | **verified-neutral** | `tests/durability/test_no_unreachable_activities.py`: no `args_validator`/`DynamicToolset` anywhere in src/agents; zero `validate_tool_arguments` call sites; the activity stays registered-but-never-scheduled. |
+| c | `model_cancel_suspended_response` arity differs | **verified difference, unreachable** (residual risk) | Same test: registered for every agent (the 1→2-arg wire shape change is real in installed 2.51) but Kroker never streams (`run_stream`/`model_request_stream`/event handlers absent from src/ and agents/), so no shipped path can schedule it. Residual: a future streaming feature crossing an upgrade must re-rule the arity. |
+| d | Sandbox import cost trips the 2 s deadlock detector | **mitigated** | Reproduced at real-registry scale in Phase 3 (R9: replay itself failed TMPRL1101); mitigation = `sdlc.agents` passthrough + host-side provider warm-up (`src/sdlc/agents/runner.py`). `tests/durability/test_first_workflow_task_time.py` (temporal) asserts the first workflow task of a real-registry FeatureWorkflow stays under 1.5 s (2 s threshold minus 0.5 s margin) and no TMPRL1101 failure appears. |
+| e | Strict tool-result decoding rejects recorded results | **verified-neutral** | By source (R4e: the wrapper's function toolset used the same strict `unwrap_tool_call_result`); proven behaviourally by the architect replays: `test_feature_workflow_replays_captured_history[architect_research_tool]` (T025, tool-call round trip) and the T027 prefix replay both pass on migrated code. |
+
+**FR-014 priced usage (T046)** — `tests/durability/test_priced_usage_parity.py` (temporal;
+record name checked: `greenfield_happy`) found ONE drift and it was MITIGATED in the same
+change: the four stage steps that derive the pricing label from the agent's model
+(clarify/analyze/qa/review `step.py`) used to read the pre-migration wrapper's CONCRETE
+model name (provider-stripped, `glm-5.2`); a plain agent keeps the registry STRING
+(`anthropic:glm-5.2`). Cost was never affected (`pricing.compute_price` splits the provider
+prefix and retries unhinted), but the `price_usage` input labels and the `RoleUsage.model`
+spend-record labels drifted. Fix: the string-fallback branches now normalize through
+`loader.model_id` (the explicit registry-string branches are unchanged, matching the
+recording). After the fix the live run's six price_usage inputs are byte-identical to the
+recorded history; the benchmark-record comparison half is vacuous for this scenario (zero
+`record_benchmark` schedules in the recording; guarded to bite if one ever appears).
+
+**Phase-5 guards:** FR-011 nested research (`tests/research/test_research_durability_nested.py`:
+in-activity plain run, zero research-agent workflow activities, budget store exercised);
+FR-010 failure routing (`test_graph_dispatch_chaos.py` neighbour only: malformed model
+response → non-retryable → fail port, D8 pin untouched); FR-013 bounded retries
+(`tests/durability/test_bounded_retries.py`: every agent attempts==3, finite timeout,
+heartbeat none, fan-out pair on its own config values). Nothing broke replay; no escalation
+was required beyond the recorded-and-mitigated label drift.

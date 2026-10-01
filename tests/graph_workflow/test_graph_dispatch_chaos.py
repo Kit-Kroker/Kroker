@@ -347,6 +347,38 @@ def test_failure_types_is_exactly_the_temporal_and_plugin_set():
     assert all(isinstance(t, type) and issubclass(t, BaseException) for t in FAILURE_TYPES)
 
 
+def test_malformed_model_response_is_non_retryable_and_lands_on_the_fail_port():
+    """003 T034 neighbour of the D8 pin (FR-010): a malformed model response
+    surfaces as UnexpectedModelBehavior, the shipped capability marks it
+    NON-retryable on every agent, and the dispatcher turns a single
+    occurrence into a NodeResult on the node's fail port carrying
+    NodeFailure -- a re-raise here would fail the workflow task and loop
+    Temporal retries instead."""
+    from pydantic_ai.durable_exec.temporal import TemporalDurability
+    from pydantic_ai.exceptions import UnexpectedModelBehavior
+
+    from sdlc.agents.roles import ALL_TEMPORAL_AGENTS
+
+    bound = TemporalDurability.from_agent(ALL_TEMPORAL_AGENTS[0])
+    assert bound is not None
+    non_retryable = bound.activity_config["retry_policy"].non_retryable_error_types
+    assert "UnexpectedModelBehavior" in non_retryable
+
+    dispatcher, _ = _dispatcher()
+    boom = UnexpectedModelBehavior("malformed model response")
+
+    result = dispatcher._classify("w#1", "w", boom)
+
+    assert isinstance(result, NodeResult)
+    assert result.port == "fail"
+    assert result.payload == NodeFailure(
+        activation_id="w#1",
+        error_type="UnexpectedModelBehavior",
+        message="malformed model response",
+    )
+    assert dispatcher._stored_failure is boom  # fail port unrouted on G_UNROUTED
+
+
 # ---- DispatchOutcome structure -------------------------------------------------
 
 

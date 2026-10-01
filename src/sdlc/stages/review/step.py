@@ -21,6 +21,7 @@ from temporalio.common import RetryPolicy
 # pydantic then rejects (LensOutcome via TaskResult.lens_outcomes, first
 # post-B0 brownfield run, DS12).
 with workflow.unsafe.imports_passed_through():
+    from ...agents.loader import model_id
     from ...artifacts.read import LoadSessionInput, load_session
     from ...benchmarks.models import BenchmarkOutcome
     from ...benchmarks.record_builder import stage_record
@@ -88,7 +89,9 @@ def _role_model(cfg: PipelineConfig, role: str, agent: Any = None, default: str 
         name = (
             getattr(m, "model_name", None)
             or getattr(m, "name", None)
-            or (m if isinstance(m, str) else None)
+            # 003/FR-014: strip the provider prefix so the label matches the
+            # pre-migration wrapper's concrete-model name (T046 parity).
+            or (model_id(m) if isinstance(m, str) else None)
         )
         if isinstance(name, str) and name:
             return name

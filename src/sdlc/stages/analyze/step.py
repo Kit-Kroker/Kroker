@@ -17,6 +17,7 @@ from temporalio.common import RetryPolicy
 # the marker the sandbox re-imports them isolated, duplicating classes
 # pydantic then rejects (first post-B0 brownfield run, DS12).
 with workflow.unsafe.imports_passed_through():
+    from ...agents.loader import model_id
     from ...benchmarks.models import BenchmarkOutcome
     from ...benchmarks.record_builder import stage_record
     from ...core.context import StageContext
@@ -114,7 +115,9 @@ async def step(
         ):
             analyst_model = analyst_agent.model.model_name
         elif hasattr(analyst_agent, "model") and isinstance(analyst_agent.model, str):
-            analyst_model = analyst_agent.model
+            # 003/FR-014: strip the provider prefix so the label matches the
+            # pre-migration wrapper's concrete-model name (T046 parity).
+            analyst_model = model_id(analyst_agent.model)
         else:
             analyst_model = "unknown"
     resolved_model = str(analyst_model)

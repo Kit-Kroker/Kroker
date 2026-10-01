@@ -15,6 +15,7 @@ from typing import Any
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
+from ...agents.loader import model_id
 from ...core.context import StageContext
 from ...core.models import PipelineConfig, RoleConfig, RoleUsage
 from .activities import QAInput, run_test_suite
@@ -156,7 +157,9 @@ async def step(
             if isinstance(m_name, str):
                 qa_model = m_name
             elif isinstance(m, str):
-                qa_model = m
+                # 003/FR-014: strip the provider prefix so the label matches
+                # the pre-migration wrapper's concrete-model name (T046).
+                qa_model = model_id(m)
             else:
                 qa_model = "unknown"
         else:

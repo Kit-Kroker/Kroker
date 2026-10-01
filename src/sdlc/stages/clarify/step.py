@@ -20,6 +20,7 @@ from temporalio import workflow
 # the marker the sandbox re-imports them isolated, duplicating classes
 # pydantic then rejects (first post-B0 brownfield run, DS12).
 with workflow.unsafe.imports_passed_through():
+    from ...agents.loader import model_id
     from ...benchmarks.models import BenchmarkOutcome
     from ...benchmarks.record_builder import stage_record
     from ...context.models import CodebaseMap
@@ -139,7 +140,16 @@ async def step(
             clarify_model = rc.model
         elif hasattr(clarify_agent, "model"):
             m = clarify_agent.model
-            clarify_model = getattr(m, "model_name", None) or getattr(m, "name", None) or str(m)
+            # 003/FR-014: a plain agent keeps the registry's provider-prefixed
+            # model STRING; the pre-migration wrapper exposed the CONCRETE
+            # model's provider-stripped name. Normalize the string so
+            # price_usage inputs and spend records stay byte-identical (T046).
+            clarify_model = (
+                getattr(m, "model_name", None)
+                or getattr(m, "name", None)
+                or (model_id(m) if isinstance(m, str) else None)
+                or "unknown"
+            )
         else:
             clarify_model = "unknown"
 
