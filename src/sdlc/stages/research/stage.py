@@ -252,11 +252,28 @@ async def _research_subquestion_impl(
                     model=_model,
                 )
             else:
-                result = await agent.run(
-                    sub_question_prompt(sub.question),
-                    deps=deps,
-                    usage_limits=usage_limits,
-                )
+                # 004 T032 (D7a/FR-001 path b): inp.model is the run's
+                # resolved research model, already an activity input — the
+                # wire is unchanged. Forward it only when it differs from the
+                # registry model; an equal or absent override calls exactly as
+                # before (E1), so no-override behaviour and replays are
+                # untouched.
+                from sdlc.agents.roles import REGISTRY
+
+                registry_model = REGISTRY["research"].model
+                if registry_model is not None and inp.model != registry_model:
+                    result = await agent.run(
+                        sub_question_prompt(sub.question),
+                        deps=deps,
+                        usage_limits=usage_limits,
+                        model=inp.model,
+                    )
+                else:
+                    result = await agent.run(
+                        sub_question_prompt(sub.question),
+                        deps=deps,
+                        usage_limits=usage_limits,
+                    )
     except (BudgetExceeded, UsageLimitExceeded) as exc:
         # Expected exhaustion: degrade. NEVER re-raise -- the counter is
         # persisted, so a retry hits the same exhausted cap and burns six
