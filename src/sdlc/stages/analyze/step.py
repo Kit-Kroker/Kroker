@@ -18,6 +18,7 @@ from temporalio.common import RetryPolicy
 # pydantic then rejects (first post-B0 brownfield run, DS12).
 with workflow.unsafe.imports_passed_through():
     from ...agents.loader import model_id
+    from ...agents.model_ids import forwarded_model
     from ...benchmarks.models import BenchmarkOutcome
     from ...benchmarks.record_builder import stage_record
     from ...core.context import StageContext
@@ -104,7 +105,13 @@ async def step(
         for r in results_iter
     )
 
-    if not analyst_model or not isinstance(analyst_model, str):
+    # 004 T031 (FR-002): when the run overrides `analyst` with a non-registry
+    # model, that override is what _run_role forwards — the label must name
+    # it, never a provider-less fallback (V11). No override: unchanged chain.
+    fwd = forwarded_model(cfg, "analyst")
+    if fwd is not None:
+        analyst_model = fwd
+    elif not analyst_model or not isinstance(analyst_model, str):
         rc = cfg.roles.get("analyze") or cfg.roles.get("analyst")
         if rc is not None and rc.model is not None:
             analyst_model = str(rc.model)
