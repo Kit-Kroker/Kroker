@@ -15,6 +15,10 @@ file carries only what is true *here*.
 - All tool escalations and approvals are recorded to benchmarks and trace events.
 - The C8 lens tombstones are classified here but defined in the review slice (`stages/review/lenses.py`); this slice never re-implements the presence rules or the admission predicates.
 - QA and review stages are invoked clean-context, validating against the frozen contract.
+- The review loop's reviewer label is the run's resolved model
+  (`resolve_role_model(cfg, "review")`), never the registry default: under a
+  `reviewer` override the label, the priced model and the model that serves
+  the call must agree, or `_run_role`'s guard fails the call (004, FR-002).
 
 ## Temporal notes for this slice
 

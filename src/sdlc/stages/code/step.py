@@ -503,7 +503,7 @@ async def step(
     # marker keeps the sandbox on the shared modules without adding the
     # import-time edge.
     with workflow.unsafe.imports_passed_through():
-        from ...agents.roles import STAGE_MODELS, resolve_role_model
+        from ...agents.roles import resolve_role_model
         from ...workflows.models import TaskResult
         from ..review.lenses import backstop_admits, classify_lens, primary_admits
         from ..review.step import step as review_step
@@ -767,7 +767,7 @@ async def step(
             worktree=worktree,
             reviewer_agent=reviewer_agent,
             qa_raw=qa_raw,
-            reviewer_model=STAGE_MODELS.get("review", "unknown"),
+            reviewer_model=resolve_role_model(cfg, "review"),
             attempt=attempt - 1,
             started=_attempt_started,
         )
