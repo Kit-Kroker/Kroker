@@ -30,7 +30,7 @@ pre-existing failure.
 
 Fixture `tests/durability/fixtures/wire_no_override.json` (frozen; regeneration only
 via `SDLSC_WIRE_REGEN=1` on an unmodified base, executor-only). The greenfield_happy
-no-override capture schedules 41 activities; all 6 `agent__*__model_request` inputs
+no-override capture schedules 40 activities; all 6 `agent__*__model_request` inputs
 carry the **registry string `anthropic:glm-5.2`**, not null. **R2 verdict: the model
 id crosses the wire as the registry string** (advisor's reading; the worker-side
 resolver chain sees the id for no-override runs too). Determinism confirmed: a second
@@ -38,7 +38,12 @@ live run equals the frozen fixture (test green, RC=0).
 
 ## T004 first-workflow-task timing
 
-(to be recorded)
+Measured on the clean base `730f085` in `kroker-dev` with a one-off replica of
+`tests/durability/test_first_workflow_task_time.py`'s measurement (same
+greenfield_happy scenario, sandboxed runner via `SdlcPydanticAIPlugin`,
+`auto_time_skipping_disabled`): **first WorkflowTaskCompleted at 0.130s** from
+`start_workflow` — far under the 1.5s assert budget (2s TMPRL1101 threshold minus
+0.5s margin). The test itself is green on base (fast-tier baseline run, RC=0).
 
 ## T009 stacked-retry count on main
 
