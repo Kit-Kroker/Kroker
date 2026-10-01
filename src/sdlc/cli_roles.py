@@ -9,6 +9,7 @@ from .agents.loader import (
     load_registry,
     validate_run_roles,
 )
+from .agents.model_ids import validate_proposer_model
 from .core.models import (
     HarnessKind,
     RoleConfig,
@@ -46,6 +47,12 @@ def build_role_overrides(overrides: dict[str, str]) -> dict[str, RoleConfig]:
         if role in HARNESS_ROLES:
             roles[role] = RoleConfig(harness=reg[role].harness, model=model)
         else:
+            # 004 T021 (FR-004): a proposer override must be a valid
+            # provider:model id BEFORE anything starts — an invalid string is
+            # refused at submission, not discovered mid-run once US1's
+            # forwarding makes it reach a real call. Harness roles keep their
+            # own grammar (FR-005) and are never validated here.
+            validate_proposer_model(role, model)
             roles[role] = RoleConfig(kind="proposer", model=model)
     # E-88 §5: a crew's roles enter the same decorrelation rule. The dev
     # role's harness decides whether there is a crew at all; the layout name

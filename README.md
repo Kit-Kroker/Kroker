@@ -172,6 +172,13 @@ not be evaluated is `errored` and never counts as a pass.
   live view and nothing else, and replay stays the source of truth.
 - Cross-harness review: configure `roles["reviewer"]` with a different
   harness/model family than `roles["dev"]`.
+- Per-run model overrides: `--role-model role=model` (repeatable). Harness
+  roles (`dev`, `test`, `devops`) take their own grammar verbatim
+  (e.g. `--role-model dev=zai-coding-plan/glm-5.2`); a **proposer** role's
+  override must be a `provider:model` id the installed framework can
+  construct (e.g. `--role-model architect=openai:gpt-5.2`) and is validated
+  offline at submission — an invalid string exits non-zero before any
+  workflow starts, naming the role, the string and the accepted form.
 - Harness is a config axis, not a fork: `claude -p` and `opencode run` are
   registry entries (`HARNESSES`), so a third adapter (e.g. `cursor`) drops in
   once it normalises into `HarnessRunResult`. The benchmark sweeps this axis.
