@@ -42,8 +42,16 @@ def close_projection(history: WorkflowHistory) -> str:
         t = ev.event_type
         if t == EventType.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
             payloads = list(ev.workflow_execution_completed_event_attributes.result.payloads)
-            (value,) = pydantic_data_converter.payload_converter.from_payloads(payloads, [str])
-            return str(value)
+            try:
+                (value,) = pydantic_data_converter.payload_converter.from_payloads(payloads, [str])
+                return str(value)
+            except Exception:
+                # 003: workflows whose result is not a str (AssessmentWorkflow
+                # returns an Assessment) project to a constant. A payload
+                # digest would embed run timestamps and break the SG-1
+                # double-capture equality; the load-bearing projection for
+                # these histories is the command sequence anyway.
+                return "COMPLETED"
         if t == EventType.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
             failure = ev.workflow_execution_failed_event_attributes.failure
             return f"FAILED:{failure.application_failure_info.type}:{failure.message}"

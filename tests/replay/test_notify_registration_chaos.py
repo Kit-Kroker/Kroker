@@ -75,6 +75,10 @@ NOTIFY_SCHEDULERS = [
 # test_activity_registration.py at consolidation). The fix registers a fake
 # and must not change what the workflows schedule; the goldens are
 # byte-frozen and may not be regenerated, so these counts are contract.
+# 003 Phase 1 added three NEW captures recorded on unmodified main (the
+# original 16 are untouched): the architect tool path, the clarify fan-out
+# and the assessment proposers (which schedule no notify -- GateHost-only
+# host, no F4 artifact link).
 NOTIFY_SCHEDULINGS: dict[str, int] = {
     "arch_revise_final": 5,
     "arch_timeout_reject": 4,
@@ -92,6 +96,10 @@ NOTIFY_SCHEDULINGS: dict[str, int] = {
     "research_greenfield": 1,
     "seeded": 1,
     "waves": 3,
+    # -- 003 captures (2026-10-01, base 203e7dd) --
+    "architect_research_tool": 3,
+    "clarify_fanout": 3,
+    "assessment_discover_risk": 0,
 }
 
 

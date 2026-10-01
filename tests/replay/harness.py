@@ -183,3 +183,27 @@ def _graph_workflows() -> tuple[type, ...]:
 
 
 GRAPH_STARTER = Starter("GraphWorkflow", _graph_workflows(), _start_graph)
+
+
+async def _start_assessment(client: Client, scenario: Scenario, wf_id: str) -> WorkflowHandle:
+    from sdlc.workflows.assessment import AssessmentWorkflow
+
+    # 003: the scenario stages a deterministic repo in `before()`; the input
+    # is built there and carried on `extra` (Scenario's idea/cfg fields are
+    # FeatureWorkflow-shaped and unused for this starter).
+    return await client.start_workflow(
+        AssessmentWorkflow.run,
+        scenario.extra["assessment_input"],
+        id=wf_id,
+        task_queue=TASK_QUEUE,
+    )
+
+
+def _assessment_workflows() -> tuple[type, ...]:
+    from sdlc.workflows.assessment import AssessmentWorkflow
+    from sdlc.workflows.triage import TriageWorkflow
+
+    return (AssessmentWorkflow, TriageWorkflow)
+
+
+ASSESSMENT_STARTER = Starter("AssessmentWorkflow", _assessment_workflows(), _start_assessment)

@@ -1,0 +1,133 @@
+{
+ "agent": "architect_agent",
+ "base_commit": "203e7dde4b86ae496319b6eb8ae2f55a110bb352",
+ "turns": [
+  {
+   "messages": [
+    {
+     "conversation_id": "01a0f4ab-043a-7478-96a6-41e080702e9f",
+     "instructions": null,
+     "kind": "request",
+     "metadata": null,
+     "parts": [
+      {
+       "content": "Design a greeting endpoint.",
+       "part_kind": "user-prompt",
+       "timestamp": "2026-09-30T23:34:03.584418Z"
+      }
+     ],
+     "run_id": "01a0f4ab-043a-7478-96a6-41df285dfc28",
+     "state": "complete",
+     "timestamp": "2026-09-30T23:34:03.585435Z"
+    }
+   ],
+   "model_settings": {},
+   "params": {
+    "allow_image_output": false,
+    "expect_mode": "None",
+    "function_tools": [
+     "research"
+    ]
+   }
+  },
+  {
+   "messages": [
+    {
+     "conversation_id": "01a0f4ab-043a-7478-96a6-41e080702e9f",
+     "instructions": null,
+     "kind": "request",
+     "metadata": null,
+     "parts": [
+      {
+       "content": "Design a greeting endpoint.",
+       "part_kind": "user-prompt",
+       "timestamp": "2026-09-30T23:34:03.584418Z"
+      }
+     ],
+     "run_id": "01a0f4ab-043a-7478-96a6-41df285dfc28",
+     "state": "complete",
+     "timestamp": "2026-09-30T23:34:03.585435Z"
+    },
+    {
+     "conversation_id": "01a0f4ab-043a-7478-96a6-41e080702e9f",
+     "finish_reason": null,
+     "kind": "response",
+     "metadata": null,
+     "model_name": "test",
+     "parts": [
+      {
+       "args": {
+        "question": "a"
+       },
+       "id": null,
+       "part_kind": "tool-call",
+       "provider_details": null,
+       "provider_name": null,
+       "tool_call_id": "pyd_ai_tool_call_id__research",
+       "tool_kind": null,
+       "tool_name": "research"
+      }
+     ],
+     "provider_details": null,
+     "provider_name": "test",
+     "provider_response_id": null,
+     "provider_url": null,
+     "run_id": "01a0f4ab-043a-7478-96a6-41df285dfc28",
+     "state": "complete",
+     "timestamp": "2026-09-30T23:34:03.804807Z",
+     "usage": {
+      "audio_seconds": 0.0,
+      "cache_audio_read_tokens": 0,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "cost": null,
+      "details": {},
+      "input_audio_tokens": 0,
+      "input_tokens": 55,
+      "output_audio_tokens": 0,
+      "output_tokens": 5
+     }
+    },
+    {
+     "conversation_id": "01a0f4ab-043a-7478-96a6-41e080702e9f",
+     "instructions": null,
+     "kind": "request",
+     "metadata": null,
+     "parts": [
+      {
+       "content": {
+        "brief_ref": null,
+        "confidence": 0.0,
+        "contradictions": [],
+        "gaps": [],
+        "grounded_findings": [],
+        "inferred_findings": [],
+        "sources_consulted": [],
+        "sub_questions": [],
+        "summary": "provider-capture canned brief"
+       },
+       "metadata": null,
+       "outcome": "success",
+       "part_kind": "tool-return",
+       "timestamp": "2026-09-30T23:34:03.962383Z",
+       "tool_call_id": "pyd_ai_tool_call_id__research",
+       "tool_kind": null,
+       "tool_name": "research"
+      }
+     ],
+     "run_id": "01a0f4ab-043a-7478-96a6-41df285dfc28",
+     "state": "complete",
+     "timestamp": "2026-09-30T23:34:03.963846Z"
+    }
+   ],
+   "model_settings": {},
+   "params": {
+    "allow_image_output": false,
+    "expect_mode": "None",
+    "function_tools": [
+     "research"
+    ]
+   }
+  }
+ ]
+}

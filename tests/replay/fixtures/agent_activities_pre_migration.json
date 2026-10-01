@@ -1,0 +1,497 @@
+{
+ "agents": {
+  "adversary_agent": {
+   "model_command": {
+    "arg_count": 2,
+    "heartbeat_s": 0,
+    "max_attempts": 3,
+    "non_retryable": [
+     "FallbackExceptionGroup",
+     "PayloadSizeError",
+     "PayloadsTooLarge",
+     "PydanticUserError",
+     "UnexpectedModelBehavior",
+     "UserError"
+    ],
+    "start_to_close_s": 600.0
+   },
+   "registered": [
+    "agent__adversary_agent__event_stream_handler",
+    "agent__adversary_agent__model_cancel_suspended_response",
+    "agent__adversary_agent__model_request",
+    "agent__adversary_agent__model_request_stream",
+    "agent__adversary_agent__toolset__<agent>__call_tool"
+   ],
+   "scheduled": [
+    "agent__adversary_agent__model_request",
+    "agent__adversary_agent__toolset__<agent>__call_tool"
+   ],
+   "toolset_ids": [
+    "<agent>"
+   ]
+  },
+  "analyst_agent": {
+   "model_command": {
+    "arg_count": 2,
+    "heartbeat_s": 0,
+    "max_attempts": 3,
+    "non_retryable": [
+     "FallbackExceptionGroup",
+     "PayloadSizeError",
+     "PayloadsTooLarge",
+     "PydanticUserError",
+     "UnexpectedModelBehavior",
+     "UserError"
+    ],
+    "start_to_close_s": 600.0
+   },
+   "registered": [
+    "agent__analyst_agent__event_stream_handler",
+    "agent__analyst_agent__model_cancel_suspended_response",
+    "agent__analyst_agent__model_request",
+    "agent__analyst_agent__model_request_stream",
+    "agent__analyst_agent__toolset__<agent>__call_tool"
+   ],
+   "scheduled": [
+    "agent__analyst_agent__model_request",
+    "agent__analyst_agent__toolset__<agent>__call_tool"
+   ],
+   "toolset_ids": [
+    "<agent>"
+   ]
+  },
+  "architect_agent": {
+   "model_command": {
+    "arg_count": 2,
+    "heartbeat_s": 0,
+    "max_attempts": 3,
+    "non_retryable": [
+     "FallbackExceptionGroup",
+     "PayloadSizeError",
+     "PayloadsTooLarge",
+     "PydanticUserError",
+     "UnexpectedModelBehavior",
+     "UserError"
+    ],
+    "start_to_close_s": 600.0
+   },
+   "registered": [
+    "agent__architect_agent__event_stream_handler",
+    "agent__architect_agent__model_cancel_suspended_response",
+    "agent__architect_agent__model_request",
+    "agent__architect_agent__model_request_stream",
+    "agent__architect_agent__toolset__<agent>__call_tool"
+   ],
+   "scheduled": [
+    "agent__architect_agent__model_request",
+    "agent__architect_agent__toolset__<agent>__call_tool"
+   ],
+   "toolset_ids": [
+    "<agent>"
+   ]
+  },
+  "clarify_agent": {
+   "model_command": {
+    "arg_count": 2,
+    "heartbeat_s": 0,
+    "max_attempts": 3,
+    "non_retryable": [
+     "FallbackExceptionGroup",
+     "PayloadSizeError",
+     "PayloadsTooLarge",
+     "PydanticUserError",
+     "UnexpectedModelBehavior",
+     "UserError"
+    ],
+    "start_to_close_s": 600.0
+   },
+   "registered": [
+    "agent__clarify_agent__event_stream_handler",
+    "agent__clarify_agent__model_cancel_suspended_response",
+    "agent__clarify_agent__model_request",
+    "agent__clarify_agent__model_request_stream",
+    "agent__clarify_agent__toolset__<agent>__call_tool"
+   ],
+   "scheduled": [
+    "agent__clarify_agent__model_request",
+    "agent__clarify_agent__toolset__<agent>__call_tool"
+   ],
+   "toolset_ids": [
+    "<agent>"
+   ]
+  },
+  "clarify_probe_agent": {
+   "model_command": {
+    "arg_count": 2,
+    "heartbeat_s": 0,
+    "max_attempts": 3,
+    "non_retryable": [
+     "FallbackExceptionGroup",
+     "PayloadSizeError",
+     "PayloadsTooLarge",
+     "PydanticUserError",
+     "UnexpectedModelBehavior",
+     "UserError"
+    ],
+    "start_to_close_s": 600.0
+   },
+   "registered": [
+    "agent__clarify_probe_agent__event_stream_handler",
+    "agent__clarify_probe_agent__model_cancel_suspended_response",
+    "agent__clarify_probe_agent__model_request",
+    "agent__clarify_probe_agent__model_request_stream",
+    "agent__clarify_probe_agent__toolset__<agent>__call_tool"
+   ],
+   "scheduled": [
+    "agent__clarify_probe_agent__model_request",
+    "agent__clarify_probe_agent__toolset__<agent>__call_tool"
+   ],
+   "toolset_ids": [
+    "<agent>"
+   ]
+  },
+  "clarify_route_agent": {
+   "model_command": {
+    "arg_count": 2,
+    "heartbeat_s": 0,
+    "max_attempts": 3,
+    "non_retryable": [
+     "FallbackExceptionGroup",
+     "PayloadSizeError",
+     "PayloadsTooLarge",
+     "PydanticUserError",
+     "UnexpectedModelBehavior",
+     "UserError"
+    ],
+    "start_to_close_s": 600.0
+   },
+   "registered": [
+    "agent__clarify_route_agent__event_stream_handler",
+    "agent__clarify_route_agent__model_cancel_suspended_response",
+    "agent__clarify_route_agent__model_request",
+    "agent__clarify_route_agent__model_request_stream",
+    "agent__clarify_route_agent__toolset__<agent>__call_tool"
+   ],
+   "scheduled": [
+    "agent__clarify_route_agent__model_request",
+    "agent__clarify_route_agent__toolset__<agent>__call_tool"
+   ],
+   "toolset_ids": [
+    "<agent>"
+   ]
+  },
+  "deep_review_agent": {
+   "model_command": {
+    "arg_count": 2,
+    "heartbeat_s": 0,
+    "max_attempts": 3,
+    "non_retryable": [
+     "FallbackExceptionGroup",
+     "PayloadSizeError",
+     "PayloadsTooLarge",
+     "PydanticUserError",
+     "UnexpectedModelBehavior",
+     "UserError"
+    ],
+    "start_to_close_s": 600.0
+   },
+   "registered": [
+    "agent__deep_review_agent__event_stream_handler",
+    "agent__deep_review_agent__model_cancel_suspended_response",
+    "agent__deep_review_agent__model_request",
+    "agent__deep_review_agent__model_request_stream",
+    "agent__deep_review_agent__toolset__<agent>__call_tool"
+   ],
+   "scheduled": [
+    "agent__deep_review_agent__model_request",
+    "agent__deep_review_agent__toolset__<agent>__call_tool"
+   ],
+   "toolset_ids": [
+    "<agent>"
+   ]
+  },
+  "devops_agent": {
+   "model_command": {
+    "arg_count": 2,
+    "heartbeat_s": 0,
+    "max_attempts": 3,
+    "non_retryable": [
+     "FallbackExceptionGroup",
+     "PayloadSizeError",
+     "PayloadsTooLarge",
+     "PydanticUserError",
+     "UnexpectedModelBehavior",
+     "UserError"
+    ],
+    "start_to_close_s": 600.0
+   },
+   "registered": [
+    "agent__devops_agent__event_stream_handler",
+    "agent__devops_agent__model_cancel_suspended_response",
+    "agent__devops_agent__model_request",
+    "agent__devops_agent__model_request_stream",
+    "agent__devops_agent__toolset__<agent>__call_tool"
+   ],
+   "scheduled": [
+    "agent__devops_agent__model_request",
+    "agent__devops_agent__toolset__<agent>__call_tool"
+   ],
+   "toolset_ids": [
+    "<agent>"
+   ]
+  },
+  "discover_agent": {
+   "model_command": {
+    "arg_count": 2,
+    "heartbeat_s": 0,
+    "max_attempts": 3,
+    "non_retryable": [
+     "FallbackExceptionGroup",
+     "PayloadSizeError",
+     "PayloadsTooLarge",
+     "PydanticUserError",
+     "UnexpectedModelBehavior",
+     "UserError"
+    ],
+    "start_to_close_s": 600.0
+   },
+   "registered": [
+    "agent__discover_agent__event_stream_handler",
+    "agent__discover_agent__model_cancel_suspended_response",
+    "agent__discover_agent__model_request",
+    "agent__discover_agent__model_request_stream",
+    "agent__discover_agent__toolset__<agent>__call_tool"
+   ],
+   "scheduled": [
+    "agent__discover_agent__model_request",
+    "agent__discover_agent__toolset__<agent>__call_tool"
+   ],
+   "toolset_ids": [
+    "<agent>"
+   ]
+  },
+  "handoff_agent": {
+   "model_command": {
+    "arg_count": 2,
+    "heartbeat_s": 0,
+    "max_attempts": 3,
+    "non_retryable": [
+     "FallbackExceptionGroup",
+     "PayloadSizeError",
+     "PayloadsTooLarge",
+     "PydanticUserError",
+     "UnexpectedModelBehavior",
+     "UserError"
+    ],
+    "start_to_close_s": 600.0
+   },
+   "registered": [
+    "agent__handoff_agent__event_stream_handler",
+    "agent__handoff_agent__model_cancel_suspended_response",
+    "agent__handoff_agent__model_request",
+    "agent__handoff_agent__model_request_stream",
+    "agent__handoff_agent__toolset__<agent>__call_tool"
+   ],
+   "scheduled": [
+    "agent__handoff_agent__model_request",
+    "agent__handoff_agent__toolset__<agent>__call_tool"
+   ],
+   "toolset_ids": [
+    "<agent>"
+   ]
+  },
+  "merge_verdict_agent": {
+   "model_command": {
+    "arg_count": 2,
+    "heartbeat_s": 0,
+    "max_attempts": 3,
+    "non_retryable": [
+     "FallbackExceptionGroup",
+     "PayloadSizeError",
+     "PayloadsTooLarge",
+     "PydanticUserError",
+     "UnexpectedModelBehavior",
+     "UserError"
+    ],
+    "start_to_close_s": 600.0
+   },
+   "registered": [
+    "agent__merge_verdict_agent__event_stream_handler",
+    "agent__merge_verdict_agent__model_cancel_suspended_response",
+    "agent__merge_verdict_agent__model_request",
+    "agent__merge_verdict_agent__model_request_stream",
+    "agent__merge_verdict_agent__toolset__<agent>__call_tool"
+   ],
+   "scheduled": [
+    "agent__merge_verdict_agent__model_request",
+    "agent__merge_verdict_agent__toolset__<agent>__call_tool"
+   ],
+   "toolset_ids": [
+    "<agent>"
+   ]
+  },
+  "planner_agent": {
+   "model_command": {
+    "arg_count": 2,
+    "heartbeat_s": 0,
+    "max_attempts": 3,
+    "non_retryable": [
+     "FallbackExceptionGroup",
+     "PayloadSizeError",
+     "PayloadsTooLarge",
+     "PydanticUserError",
+     "UnexpectedModelBehavior",
+     "UserError"
+    ],
+    "start_to_close_s": 600.0
+   },
+   "registered": [
+    "agent__planner_agent__event_stream_handler",
+    "agent__planner_agent__model_cancel_suspended_response",
+    "agent__planner_agent__model_request",
+    "agent__planner_agent__model_request_stream",
+    "agent__planner_agent__toolset__<agent>__call_tool"
+   ],
+   "scheduled": [
+    "agent__planner_agent__model_request",
+    "agent__planner_agent__toolset__<agent>__call_tool"
+   ],
+   "toolset_ids": [
+    "<agent>"
+   ]
+  },
+  "qa_analyst_agent": {
+   "model_command": {
+    "arg_count": 2,
+    "heartbeat_s": 0,
+    "max_attempts": 3,
+    "non_retryable": [
+     "FallbackExceptionGroup",
+     "PayloadSizeError",
+     "PayloadsTooLarge",
+     "PydanticUserError",
+     "UnexpectedModelBehavior",
+     "UserError"
+    ],
+    "start_to_close_s": 600.0
+   },
+   "registered": [
+    "agent__qa_analyst_agent__event_stream_handler",
+    "agent__qa_analyst_agent__model_cancel_suspended_response",
+    "agent__qa_analyst_agent__model_request",
+    "agent__qa_analyst_agent__model_request_stream",
+    "agent__qa_analyst_agent__toolset__<agent>__call_tool"
+   ],
+   "scheduled": [
+    "agent__qa_analyst_agent__model_request",
+    "agent__qa_analyst_agent__toolset__<agent>__call_tool"
+   ],
+   "toolset_ids": [
+    "<agent>"
+   ]
+  },
+  "research_agent": {
+   "model_command": {
+    "arg_count": 2,
+    "heartbeat_s": 0,
+    "max_attempts": 3,
+    "non_retryable": [
+     "FallbackExceptionGroup",
+     "PayloadSizeError",
+     "PayloadsTooLarge",
+     "PydanticUserError",
+     "UnexpectedModelBehavior",
+     "UserError"
+    ],
+    "start_to_close_s": 600.0
+   },
+   "registered": [
+    "agent__research_agent__event_stream_handler",
+    "agent__research_agent__model_cancel_suspended_response",
+    "agent__research_agent__model_request",
+    "agent__research_agent__model_request_stream",
+    "agent__research_agent__toolset__<agent>__call_tool",
+    "agent__research_agent__toolset__exa_search__call_tool"
+   ],
+   "scheduled": [
+    "agent__research_agent__model_request",
+    "agent__research_agent__toolset__<agent>__call_tool",
+    "agent__research_agent__toolset__exa_search__call_tool"
+   ],
+   "toolset_ids": [
+    "<agent>",
+    "exa_search"
+   ]
+  },
+  "reviewer_agent": {
+   "model_command": {
+    "arg_count": 2,
+    "heartbeat_s": 0,
+    "max_attempts": 3,
+    "non_retryable": [
+     "FallbackExceptionGroup",
+     "PayloadSizeError",
+     "PayloadsTooLarge",
+     "PydanticUserError",
+     "UnexpectedModelBehavior",
+     "UserError"
+    ],
+    "start_to_close_s": 600.0
+   },
+   "registered": [
+    "agent__reviewer_agent__event_stream_handler",
+    "agent__reviewer_agent__model_cancel_suspended_response",
+    "agent__reviewer_agent__model_request",
+    "agent__reviewer_agent__model_request_stream",
+    "agent__reviewer_agent__toolset__<agent>__call_tool"
+   ],
+   "scheduled": [
+    "agent__reviewer_agent__model_request",
+    "agent__reviewer_agent__toolset__<agent>__call_tool"
+   ],
+   "toolset_ids": [
+    "<agent>"
+   ]
+  },
+  "risk_agent": {
+   "model_command": {
+    "arg_count": 2,
+    "heartbeat_s": 0,
+    "max_attempts": 3,
+    "non_retryable": [
+     "FallbackExceptionGroup",
+     "PayloadSizeError",
+     "PayloadsTooLarge",
+     "PydanticUserError",
+     "UnexpectedModelBehavior",
+     "UserError"
+    ],
+    "start_to_close_s": 600.0
+   },
+   "registered": [
+    "agent__risk_agent__event_stream_handler",
+    "agent__risk_agent__model_cancel_suspended_response",
+    "agent__risk_agent__model_request",
+    "agent__risk_agent__model_request_stream",
+    "agent__risk_agent__toolset__<agent>__call_tool"
+   ],
+   "scheduled": [
+    "agent__risk_agent__model_request",
+    "agent__risk_agent__toolset__<agent>__call_tool"
+   ],
+   "toolset_ids": [
+    "<agent>"
+   ]
+  }
+ },
+ "base_commit": "203e7dde4b86ae496319b6eb8ae2f55a110bb352",
+ "expected_registered_delta": {
+  "added_suffixes": [
+   "__model_compact_messages",
+   "__validate_args"
+  ],
+  "removed_suffixes": [
+   "__event_stream_handler"
+  ]
+ }
+}

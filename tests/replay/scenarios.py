@@ -8,19 +8,28 @@ scenario drives FeatureWorkflow (captured) and GraphWorkflow (asserted).
 from __future__ import annotations
 
 import asyncio
+import os
+import subprocess
+import tempfile
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.durable_exec.temporal import TemporalAgent
+from pydantic_ai.models.test import TestModel
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
+from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
 from sdlc.assessment.activities import AssessmentTreeInput
 from sdlc.board.activities import AttachEvidenceInput
 from sdlc.context.delta import DELTA_CHECK
 from sdlc.context.models import RepoObservation
 from sdlc.core.models import (
     ArtifactRef,
+    ClarificationDimension,
     ExecutionMode,
     GateConfig,
     GateDecision,
@@ -37,12 +46,14 @@ from sdlc.observability.activities import export_run_artifacts
 from sdlc.pricing import PriceUsageInput
 from sdlc.pricing import price_usage as real_price_usage
 from sdlc.stages.analyze.models import AnalysisReport, CriterionTrace
-from sdlc.stages.architecture.models import ValidationContract
+from sdlc.stages.architecture.models import ArchitectureSpec, ValidationContract
+from sdlc.stages.clarify.models import ClarifyRoute, OpenQuestion, ProbeResult
 from sdlc.stages.code.activities import CodingTaskInput
 from sdlc.stages.context.activities import DeltaCheckInput, RepoProbeInput
 from sdlc.stages.merge.activities import evaluate_gate
 from sdlc.stages.plan.models import DevTask, ImplementationPlan
-from sdlc.stages.research.models import ResearchPlan
+from sdlc.stages.research.deps import ResearchDeps
+from sdlc.stages.research.models import ResearchBrief, ResearchPlan
 from sdlc.stages.research.stage import PlanInput
 from sdlc.stages.research.verify import verify_brief_activity
 from sdlc.workflows.models import SeededWork
@@ -414,6 +425,107 @@ def _cancel_before() -> None:
     _BLOCKING["started"] = asyncio.Event()
 
 
+# ---- 003 pre-migration captures (spec 003 FR-005.5) ----------------------------
+#
+# Three scenarios recorded on UNMODIFIED main while the old TemporalAgent
+# wrapper still builds the durable agents: the architect's research tool
+# path (the only tool call any workflow can schedule), the clarify fan-out
+# (route + probe agents), and the assessment proposers (separate tuple +
+# starter -- a different workflow). Their histories are frozen evidence for
+# the TemporalDurability migration; never re-record them to make a test
+# pass (SG-2 family).
+
+RESEARCH_BRIEF_FAKE = ResearchBrief(
+    summary="Fake grounded research brief returned by the capture-only architect tool.",
+)
+
+ROUTED_FAKE = ClarifyRoute(
+    summary="Add a greeting endpoint.",
+    functional_requirements=["GET /hello returns 200"],
+    out_of_scope=["auth"],
+    questions=[
+        # materiality >= MATERIALITY_FLOOR so the merge keeps it; id q1 so
+        # the shared driver (QUESTION_IDS) answers it and the run proceeds.
+        # Abstaining probes (below) leave it the only open question.
+        OpenQuestion(
+            id="q1",
+            question="Anonymous access ok?",
+            why_it_matters="scopes auth work",
+            suggested_answer="yes",
+            materiality=0.9,
+        )
+    ],
+    # Both greenfield-permitted probe dimensions (C5, C6): two probe calls.
+    live_dimensions=[
+        ClarificationDimension.INTERFACE_SPEC,
+        ClarificationDimension.DATA_SEMANTICS,
+    ],
+)
+
+PROBE_FAKE = ProbeResult(
+    dimension=ClarificationDimension.INTERFACE_SPEC,
+    questions=[],  # abstains: merged open questions = the route's q1 only
+)
+
+
+def _architect_research_activities() -> list:
+    """The architect fake whose model CALLS its research tool once (FR-005.5a:
+    model turn -> research tool call -> answer). Same agent name, deps_type,
+    output type and tool name/signature as production; the tool returns a
+    canned brief so the capture stays offline and deterministic."""
+
+    agent = Agent(
+        TestModel(custom_output_args=ARCH.model_dump(mode="json"), call_tools=["research"]),
+        name="architect_agent",
+        deps_type=ResearchDeps,
+        output_type=ArchitectureSpec,
+    )
+
+    @agent.tool
+    async def research(ctx: RunContext[ResearchDeps], question: str) -> ResearchBrief:
+        """Consult grounded research on a sub-question. Draws down this run's
+        shared research budget (SGR Routing: local vs. web)."""
+        return RESEARCH_BRIEF_FAKE
+
+    ta = TemporalAgent(agent, activity_config=AGENT_ACTIVITY_CONFIG)
+    return ta.temporal_activities
+
+
+def _research_tool_activities() -> list:
+    return [
+        evaluate_gate,
+        export_run_artifacts,
+        fake_notify,
+        *GIT_FAKES,
+        *DEPLOY_FAKES,
+        *fake_agent_activities([s for s in AGENT_SPECS if s[0] != "architect_agent"]),
+        *_architect_research_activities(),
+    ]
+
+
+def _fanout_cfg() -> PipelineConfig:
+    cfg = _deploying(e2e_config())
+    cfg.clarify_probes_enabled = True
+    return cfg
+
+
+def _fanout_activities() -> list:
+    return [
+        evaluate_gate,
+        export_run_artifacts,
+        fake_notify,
+        *GIT_FAKES,
+        *DEPLOY_FAKES,
+        *fake_agent_activities(
+            [
+                *(s for s in AGENT_SPECS if s[0] != "clarify_agent"),
+                ("clarify_route_agent", ClarifyRoute, ROUTED_FAKE),
+                ("clarify_probe_agent", ProbeResult, PROBE_FAKE),
+            ]
+        ),
+    ]
+
+
 SCENARIOS: tuple[Scenario, ...] = (
     Scenario(
         "greenfield_happy",
@@ -621,6 +733,30 @@ SCENARIOS: tuple[Scenario, ...] = (
         mode="partial",
         golden=False,
     ),
+    Scenario(
+        # 003 T005: the only capture where a workflow schedules a tool-call
+        # activity (agent__architect_agent__toolset__<agent>__call_tool) and
+        # the ResearchDeps payload crosses the wire (FR-005.5a).
+        "architect_research_tool",
+        greenfield_idea,
+        lambda: _deploying(e2e_config()),
+        _research_tool_activities,
+        _drive_happy,
+        before=reset_deploy,
+        golden=False,
+    ),
+    Scenario(
+        # 003 T006: clarify fan-out -- route then two probe model requests
+        # (agent__clarify_route_agent__model_request, two x
+        # agent__clarify_probe_agent__model_request), then merge.
+        "clarify_fanout",
+        greenfield_idea,
+        _fanout_cfg,
+        _fanout_activities,
+        _drive_happy,
+        before=reset_deploy,
+        golden=False,
+    ),
 )
 
 GOLDEN_SCENARIOS: tuple[Scenario, ...] = tuple(s for s in SCENARIOS if s.golden)
@@ -644,3 +780,109 @@ def _failing_delta() -> Any:
         )
 
     return failing_delta
+
+
+# ---- 003 T007: assessment proposers (AssessmentWorkflow, own starter) ----------
+#
+# The assessment workflow is a different starter (see harness.ASSESSMENT_STARTER),
+# so its scenario lives in its own tuple and is captured by
+# test_capture_assessment.py, not the FeatureWorkflow capture test. The
+# deterministic repo + fake triage + real scan/discover/risk activities + canned
+# proposer agents mirror tests/test_assessment_workflow_e2e_proposer_hang_chaos.py.
+
+from tests.test_assessment_workflow_e2e_proposer_hang_chaos import (  # noqa: E402
+    _acts as _assessment_acts,
+)
+from tests.test_assessment_workflow_e2e_proposer_hang_chaos import (  # noqa: E402
+    _canned_discover_proposal,
+    _canned_risk_proposal,
+)
+
+_ASSESS_STAGING: dict[str, str] = {}
+
+
+def _assessment_repo_before() -> None:
+    """Build the deterministic git repo per capture run (same bytes -> same
+    sha) and isolate the machine-global memo cache and board DB to it, so the
+    SG-1 double capture cannot cross-contaminate (chaos module, mechanism 2)."""
+    root = tempfile.mkdtemp(prefix="sdlc-assess-replay-")
+    p = Path(root)
+    (p / "package.json").write_text('{"dependencies": {"next": "14.0.0"}}\n')
+    (p / "app" / "payments").mkdir(parents=True)
+    (p / "app" / "payments" / "page.tsx").write_text(
+        "export default function PaymentsPage() { return null; }\n"
+    )
+    (p / "payments").mkdir()
+    (p / "payments" / "api.py").write_text(
+        "from fastapi import FastAPI\n"
+        "from payments.models import Order\n"
+        "app = FastAPI()\n"
+        "@app.post('/api/payments')\ndef charge(): pass\n"
+    )
+    (p / "payments" / "models.py").write_text(
+        "class Order(Base):\n    __tablename__ = 'payments'\n    id = Column(Integer)\n"
+    )
+
+    def _git(args: list[str]) -> None:
+        subprocess.run(
+            ["git", *args],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+        )
+
+    _git(["init", "-q"])
+    _git(["config", "user.email", "t@t"])
+    _git(["config", "user.name", "t"])
+    _git(["add", "-A"])
+    _git(["commit", "-qm", "init"])
+    sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+    ).stdout.strip()
+    _ASSESS_STAGING["repo_dir"] = root
+    _ASSESS_STAGING["sha"] = sha
+    os.environ["SDLC_MEMOIZATION_CACHE_ROOT"] = str(p / "memo-cache")
+    os.environ["SDLC_BOARD_DB"] = str(p / "board.sqlite3")
+    from sdlc.workflows.assessment import AssessmentInput
+
+    _ASSESSMENT_SCENARIO_EXTRA["assessment_input"] = AssessmentInput(
+        repo_dir=root, project_key="acme"
+    )
+
+
+def _assessment_activities() -> list:
+    from sdlc.assessment.discover.map import DiscoverProposal
+    from sdlc.assessment.risk.models import RiskProposal
+
+    proposers = fake_agent_activities(
+        [
+            ("discover_agent", DiscoverProposal, _canned_discover_proposal()),
+            ("risk_agent", RiskProposal, _canned_risk_proposal()),
+        ]
+    )
+    return _assessment_acts(_ASSESS_STAGING["sha"], *proposers)
+
+
+_ASSESSMENT_SCENARIO_EXTRA: dict[str, Any] = {}
+
+ASSESSMENT_SCENARIOS: tuple[Scenario, ...] = (
+    Scenario(
+        # 003 T007: discover + risk proposer activities scheduled by a
+        # workflow (agent__discover_agent__model_request,
+        # agent__risk_agent__model_request) -- no other capture reaches them.
+        "assessment_discover_risk",
+        greenfield_idea,
+        e2e_config,
+        _assessment_activities,
+        _drive_nothing,
+        before=_assessment_repo_before,
+        golden=False,
+        extra=_ASSESSMENT_SCENARIO_EXTRA,
+    ),
+)

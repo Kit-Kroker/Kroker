@@ -25,6 +25,10 @@ EXPECTED_CLOSES = {
     "max_gate_rounds_1": "deployed:",
     # history fetched before terminate: unfinished on purpose
     "partial_awaiting_architecture": "OPEN",
+    # 003 Phase-1 captures (base 203e7dd): same happy-path driver as
+    # greenfield_happy, so the same close prefix.
+    "architect_research_tool": "deployed:",
+    "clarify_fanout": "deployed:",
 }
 
 
