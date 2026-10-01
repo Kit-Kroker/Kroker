@@ -23,9 +23,8 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from ..core.models import (
-    RoleConfig,
-)
+from ..core.models import RoleConfig
+from .model_ids import single_retry_layer
 
 if TYPE_CHECKING:  # pydantic_ai import is not free
     from pydantic_ai import Agent
@@ -535,7 +534,10 @@ def build_agents(
             # a shared instance would silently bind two Temporal activity
             # sets to one configuration object.
             dur = durability_factory()
-            build_kwargs["capabilities"] = [dur]
+            # 004 T012: beside durability, the single-retry resolver — also
+            # fresh per agent. Only on the durable path: the loader-only/eval
+            # path keeps building capability-free.
+            build_kwargs["capabilities"] = [dur, single_retry_layer()]
         try:
             if cfg.kind == "research":
                 # Research build takes its tool paths and provider name too.

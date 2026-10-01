@@ -1,20 +1,30 @@
-"""Loader contract tests for the 003 durability seam (T010).
+"""Loader contract tests for the 003 durability seam (T010, extended 004 T012).
 
-build_agents() must hand every role's build() a one-element capabilities
-list holding THAT role's own durability instance — fresh per role, from
-the supplied factory — and stay capability-free when no factory is given.
-The fixture agents under fixture_agents/ record the call on BuiltAgent
-instead of building a real pydantic_ai.Agent: the loader contract is about
-the CALL, not the agent (see fixture_agents/*/agent.py).
+build_agents() must hand every role's build() a capabilities list holding
+THAT role's own durability instance — fresh per role, from the supplied
+factory — followed by a fresh single_retry_layer() resolver (004). It must
+stay capability-free when no factory is given. The fixture agents under
+fixture_agents/ record the call on BuiltAgent instead of building a real
+pydantic_ai.Agent: the loader contract is about the CALL, not the agent
+(see fixture_agents/*/agent.py).
 """
 
 from pathlib import Path
+
+from pydantic_ai.capabilities import ResolveModelId
 
 from sdlc.agents.loader import build_agents
 from sdlc.core.models import RoleConfig
 
 _FIXTURES = Path(__file__).parent / "fixture_agents"
 _PROPOSER_MODEL = "anthropic:glm-5.2"
+
+
+def _durable_and_retry(caps: list) -> tuple[list, list]:
+    """Split a received capabilities list into (non-resolver, resolver)."""
+    resolvers = [c for c in caps if isinstance(c, ResolveModelId)]
+    others = [c for c in caps if not isinstance(c, ResolveModelId)]
+    return others, resolvers
 
 
 def _roles() -> dict[str, RoleConfig]:
@@ -33,8 +43,8 @@ def _roles() -> dict[str, RoleConfig]:
 
 def test_factory_gives_each_role_its_own_fresh_capability():
     """One factory call per role (planner first, dict order); the returned
-    instance is the ONE element the role's build received, and no instance
-    is shared across roles."""
+    instance leads the role's capabilities list, a fresh single-retry
+    resolver follows it, and no instance is shared across roles."""
     sentinels: list[object] = []
 
     def factory() -> object:
@@ -44,9 +54,14 @@ def test_factory_gives_each_role_its_own_fresh_capability():
 
     agents = build_agents(_roles(), {}, durability_factory=factory, agents_dir=_FIXTURES)
 
-    assert agents["planner"].received_capabilities == [sentinels[0]]
-    assert agents["research"].received_capabilities == [sentinels[1]]
+    for key, sentinel in (("planner", sentinels[0]), ("research", sentinels[1])):
+        durables, resolvers = _durable_and_retry(agents[key].received_capabilities)
+        assert durables == [sentinel], f"{key}: durability instance changed"
+        assert len(resolvers) == 1, f"{key}: exactly one single-retry resolver"
     assert sentinels[0] is not sentinels[1]
+    planner_retry = _durable_and_retry(agents["planner"].received_capabilities)[1][0]
+    research_retry = _durable_and_retry(agents["research"].received_capabilities)[1][0]
+    assert planner_retry is not research_retry, "resolvers must be fresh per agent"
 
 
 def test_default_and_explicit_none_leave_agents_capability_free():
@@ -78,4 +93,5 @@ def test_research_build_still_receives_tool_files_and_provider():
 
     assert research.tool_paths == research_role["research"].tool_files
     assert research.provider == "fake"
-    assert research.received_capabilities == [sentinels[0]]
+    durables, _ = _durable_and_retry(research.received_capabilities)
+    assert durables == [sentinels[0]]

@@ -11,6 +11,7 @@ explicit None factory is the capability-free default.
 from pathlib import Path
 
 import pytest
+from pydantic_ai.capabilities import ResolveModelId as _RESOLVER
 
 from sdlc.agents.loader import RegistryError, build_agents
 from sdlc.core.models import RoleConfig
@@ -57,7 +58,8 @@ def test_factory_called_once_per_role_instances_not_shared():
     """With BOTH roles present the factory runs exactly once per role, in
     registry order, and no capability object is shared between planner and
     research (a shared instance would bind one TemporalDurability to two
-    agents)."""
+    agents). 004 T012: the durability sentinel LEADS the list and a fresh
+    single-retry resolver follows it per agent."""
     sentinels: list[object] = []
 
     def factory() -> object:
@@ -68,9 +70,18 @@ def test_factory_called_once_per_role_instances_not_shared():
     agents = build_agents(_roles(), {}, durability_factory=factory, agents_dir=_FIXTURES)
 
     assert len(sentinels) == 2, "factory must run exactly once per role"
-    assert agents["planner"].received_capabilities == [sentinels[0]]
-    assert agents["research"].received_capabilities == [sentinels[1]]
+    for key, sentinel in (("planner", sentinels[0]), ("research", sentinels[1])):
+        caps = agents[key].received_capabilities
+        assert len(caps) == 2, f"{key}: durability + single-retry resolver expected"
+        assert caps[0] is sentinel, f"{key}: durability instance must lead the list"
+        assert isinstance(caps[1], _RESOLVER), f"{key}: the second capability is the resolver"
     assert sentinels[0] is not sentinels[1]
+    resolvers = [
+        [c for c in agents[k].received_capabilities if isinstance(c, _RESOLVER)]
+        for k in ("planner", "research")
+    ]
+    assert all(len(rs) == 1 for rs in resolvers)
+    assert resolvers[0][0] is not resolvers[1][0], "resolvers must be fresh per agent"
 
 
 def test_capabilities_reach_build_as_keyword_not_positional():
@@ -85,10 +96,10 @@ def test_capabilities_reach_build_as_keyword_not_positional():
     planner, research = agents["planner"], agents["research"]
 
     assert planner.name == "planner_agent"
-    assert planner.received_capabilities == [dur]
+    assert planner.received_capabilities[0] is dur
     assert research.tool_paths == [str(_TOOL)]
     assert research.provider == "fake"
-    assert research.received_capabilities == [dur]
+    assert research.received_capabilities[0] is dur
 
 
 _DUPE_AGENT_SRC = """\

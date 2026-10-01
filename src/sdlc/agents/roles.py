@@ -24,6 +24,7 @@ from ..core.models import PipelineConfig
 from ..stages.clarify.models import ClarifyRoute, ProbeResult
 from ..stages.clarify.prompts import PROBE_SYSTEM, ROUTE_SCOPE
 from .loader import build_agents, load_registry
+from .model_ids import single_retry_layer
 
 # Bounded (bug e2e-proposer-hang): with no retry_policy Temporal's default
 # is UNLIMITED attempts, and a retryable failure -- or an activity no worker
@@ -167,7 +168,11 @@ clarify_route_agent = Agent(
         TemporalDurability(
             activity_config=CLARIFY_FANOUT_ACTIVITY_CONFIG,
             model_activity_config={"heartbeat_timeout": None},
-        )
+        ),
+        # 004 T012: the single-retry resolver, fresh instance per agent —
+        # the fan-out agents reuse the clarify role, so an override-named
+        # provider must not stack SDK retries under the fan-out budget (E2).
+        single_retry_layer(),
     ],
 )
 
@@ -181,7 +186,8 @@ clarify_probe_agent = Agent(
         TemporalDurability(
             activity_config=CLARIFY_FANOUT_ACTIVITY_CONFIG,
             model_activity_config={"heartbeat_timeout": None},
-        )
+        ),
+        single_retry_layer(),  # 004 T012 — same as the route agent above
     ],
 )
 

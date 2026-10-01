@@ -159,9 +159,12 @@ def test_stub_agents_skip_durability_verification():
     assert not isinstance(planner, Agent)
     assert not hasattr(planner, "root_capability")
     assert planner.name == "planner_agent"
-    assert planner.received_capabilities == [sentinels[0]]
+    # 004 T012: durability sentinel leads, single-retry resolver follows.
+    assert planner.received_capabilities[0] is sentinels[0]
+    assert len(planner.received_capabilities) == 2
     assert research.name == "research_agent"
-    assert research.received_capabilities == [sentinels[1]]
+    assert research.received_capabilities[0] is sentinels[1]
+    assert len(research.received_capabilities) == 2
 
 
 def test_per_role_check_names_only_the_failing_role(tmp_path):
