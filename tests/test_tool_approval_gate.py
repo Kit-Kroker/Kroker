@@ -8,12 +8,12 @@ import asyncio
 import uuid
 
 import pytest
-from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 from temporalio import activity, workflow
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
+from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.core.models import (
     GateDecision,
     GateOutcome,
@@ -158,7 +158,7 @@ async def test_deferral_raises_a_gate_and_the_grant_reaches_the_resume(tmp_path,
                 task_queue=TASK_QUEUE,
                 workflows=[FeatureWorkflow, DeploymentWorkflow],
                 activities=_activities(defer_once),
-                plugins=[PydanticAIPlugin()],
+                plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
@@ -228,7 +228,7 @@ async def test_rejection_is_delivered_and_the_task_continues(tmp_path, monkeypat
                 task_queue=TASK_QUEUE,
                 workflows=[FeatureWorkflow, DeploymentWorkflow],
                 activities=_activities(defer_once),
-                plugins=[PydanticAIPlugin()],
+                plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
@@ -301,7 +301,7 @@ async def test_the_cap_stops_asking_and_the_loop_terminates(tmp_path, monkeypatc
                 task_queue=TASK_QUEUE,
                 workflows=[FeatureWorkflow],
                 activities=_activities(always_defer),
-                plugins=[PydanticAIPlugin()],
+                plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,

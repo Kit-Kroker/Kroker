@@ -22,5 +22,6 @@ def test_reviewer_model_family_differs_from_dev():
     feature.py:434 resolves for coding tasks."""
     reg = load_registry()
     assert model_family(reg["reviewer"].model) != model_family(reg["dev"].model)
-    # the agent actually binds that reviewer model
-    assert reg["reviewer"].model in roles.reviewer_agent.model.model_id
+    # the agent actually binds that reviewer model. 003: a plain Agent keeps
+    # the model id string until a run resolves it, so compare the string.
+    assert roles.reviewer_agent.model == reg["reviewer"].model

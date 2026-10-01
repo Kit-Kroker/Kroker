@@ -10,12 +10,12 @@ import asyncio
 import uuid
 
 import pytest
-from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 from temporalio import workflow
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
+from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.core.models import (
     GateConfig,
     GateDecision,
@@ -110,7 +110,7 @@ async def test_architecture_gate_timeout_still_rejects(tmp_path, monkeypatch):
                 *GIT_FAKES,
                 *fake_agent_activities(AGENT_SPECS),
             ],
-            plugins=[PydanticAIPlugin()],
+            plugins=[SdlcPydanticAIPlugin()],
         ):
             handle = await env.client.start_workflow(
                 FeatureWorkflow.run,
@@ -148,7 +148,7 @@ async def test_hold_keeps_the_gate_pending_past_its_nominal_deadline(tmp_path, m
                 *GIT_FAKES,
                 *fake_agent_activities(AGENT_SPECS),
             ],
-            plugins=[PydanticAIPlugin()],
+            plugins=[SdlcPydanticAIPlugin()],
         ):
             handle = await env.client.start_workflow(
                 FeatureWorkflow.run,

@@ -4,7 +4,7 @@ Two checks, because the syntactic one alone is not the property we care
 about. The original version of this test only parsed import statements, so
 it passed while `from ..cli import slug` -- one regex helper -- transitively
 loaded pydantic_ai, temporalio and the whole agent registry, constructing
-every TemporalAgent at import time. What matters is what ACTUALLY loads.
+every durable agent at import time. What matters is what ACTUALLY loads.
 """
 
 import ast

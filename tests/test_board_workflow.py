@@ -14,12 +14,12 @@ import asyncio
 import uuid
 
 import pytest
-from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 from temporalio import activity, workflow
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
+from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.board.activities import (
     attach_task_evidence,
     publish_artifact_version,
@@ -125,7 +125,7 @@ async def test_shipped_run_publishes_artifacts_tasks_and_evidence(board_env):
                 *fake_agent_activities(AGENT_SPECS),
                 *BOARD_REAL,
             ],
-            plugins=[PydanticAIPlugin()],
+            plugins=[SdlcPydanticAIPlugin()],
         ):
             handle = await env.client.start_workflow(
                 FeatureWorkflow.run, args=[greenfield_idea(), cfg, None], id=tag, task_queue=tag
@@ -187,7 +187,7 @@ async def test_rejected_architecture_records_rejected_and_keeps_pointer(board_en
                     *fake_agent_activities(AGENT_SPECS),
                     *BOARD_REAL,
                 ],
-                plugins=[PydanticAIPlugin()],
+                plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run, args=[greenfield_idea(), cfg, None], id=tag, task_queue=tag

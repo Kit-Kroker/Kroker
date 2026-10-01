@@ -1,7 +1,7 @@
 """Structural check: every proposer stage recalls before running, retains
 a stage summary after, gate decisions retain gate feedback, and the
 fix-loop retains a gotcha on failure. AST-based like test_memory_purity.py
-— a full time-skipping run would require faking the TemporalAgent
+â€” a full time-skipping run would require faking the durability-capability
 activity surface (see test_factory_purity.py's docstring for why that's
 out of scope here)."""
 

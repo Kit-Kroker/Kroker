@@ -6,12 +6,12 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 from temporalio import activity, workflow
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
+from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.core.models import GateConfig, GatePolicy
 from sdlc.notify.contract import NotifyInput, Results
 from sdlc.observability.activities import export_run_artifacts
@@ -74,7 +74,7 @@ async def test_the_merge_gate_reads_the_setup_sha(tmp_path, monkeypatch):
                 *git_fakes_except("get_task_diff", "prepare_base_worktree"),
                 *fake_agent_activities(AGENT_SPECS),
             ],
-            plugins=[PydanticAIPlugin()],
+            plugins=[SdlcPydanticAIPlugin()],
         ):
             handle = await env.client.start_workflow(
                 FeatureWorkflow.run,

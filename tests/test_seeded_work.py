@@ -87,11 +87,11 @@ async def test_seeded_run_skips_clarify_architect_and_planner():
     import asyncio
     import uuid
 
-    from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
     from temporalio.contrib.pydantic import pydantic_data_converter
     from temporalio.testing import WorkflowEnvironment
     from temporalio.worker import Worker
 
+    from sdlc.agents.runner import SdlcPydanticAIPlugin
     from sdlc.core.models import (
         GateDecision,
         GateOutcome,
@@ -128,7 +128,7 @@ async def test_seeded_run_skips_clarify_architect_and_planner():
                 task_queue="seeded",
                 workflows=[FeatureWorkflow],
                 activities=activities,
-                plugins=[PydanticAIPlugin()],
+                plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,

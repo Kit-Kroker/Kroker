@@ -42,9 +42,11 @@ def test_every_stage_model_comes_from_its_registry_role():
 
 
 def test_agents_bind_their_own_roles_model():
-    assert roles.REGISTRY["reviewer"].model in roles.reviewer_agent.model.model_id
-    assert roles.REGISTRY["analyst"].model in roles.analyst_agent.model.model_id
-    assert roles.REGISTRY["clarify"].model in roles.clarify_agent.model.model_id
+    # 003: a plain Agent keeps the model id string until a run resolves it,
+    # so the binding assertion compares the string the agent was built with.
+    assert roles.reviewer_agent.model == roles.REGISTRY["reviewer"].model
+    assert roles.analyst_agent.model == roles.REGISTRY["analyst"].model
+    assert roles.clarify_agent.model == roles.REGISTRY["clarify"].model
 
 
 def test_changing_one_roles_model_moves_only_that_stages_key():

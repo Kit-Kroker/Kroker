@@ -7,12 +7,12 @@ import asyncio
 import uuid
 
 import pytest
-from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 from temporalio import activity, workflow
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
+from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.core.models import (
     GateDecision,
     GateOutcome,
@@ -101,7 +101,7 @@ async def test_opened_notification_fires_and_signal_stops_the_rest(tmp_path, mon
                 task_queue=TASK_QUEUE,
                 workflows=[FeatureWorkflow, DeploymentWorkflow],
                 activities=_activities(recording_notify),
-                plugins=[PydanticAIPlugin()],
+                plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
@@ -150,7 +150,7 @@ async def test_exploding_notifier_leaves_every_gate_decidable(tmp_path, monkeypa
                 task_queue=TASK_QUEUE,
                 workflows=[FeatureWorkflow, DeploymentWorkflow],
                 activities=_activities(exploding_notify),
-                plugins=[PydanticAIPlugin()],
+                plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
@@ -198,7 +198,7 @@ async def test_full_timer_sequence_fires_in_order_then_expires(tmp_path, monkeyp
             task_queue=TASK_QUEUE,
             workflows=[FeatureWorkflow],
             activities=_activities(recording_notify),
-            plugins=[PydanticAIPlugin()],
+            plugins=[SdlcPydanticAIPlugin()],
         ):
             handle = await env.client.start_workflow(
                 FeatureWorkflow.run,

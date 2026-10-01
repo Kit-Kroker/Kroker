@@ -8,12 +8,12 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 from temporalio import workflow
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
+from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.stages.clarify.models import (
     ClarifiedRequirements,
     OpenQuestion,
@@ -61,7 +61,7 @@ async def test_fake_agent_dispatches_canned_output():
             task_queue="spike",
             workflows=[_OneShotWorkflow],
             activities=acts,
-            plugins=[PydanticAIPlugin()],
+            plugins=[SdlcPydanticAIPlugin()],
         ):
             result = await env.client.execute_workflow(
                 _OneShotWorkflow.run, id=f"spike-{uuid.uuid4()}", task_queue="spike"

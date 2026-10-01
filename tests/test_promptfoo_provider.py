@@ -115,7 +115,7 @@ def test_cost_is_none_for_an_unknown_model():
 def test_provider_imports_fast_enough_for_the_promptfoo_worker():
     """promptfoo spawns the Python provider in a worker with a readiness
     timeout. Importing sdlc.agents.roles eagerly builds every agent and wraps
-    each in a TemporalAgent (~18s), which blew that timeout and made the gate
+    each durable (~18s), which blew that timeout and made the gate
     unrunnable -- hence agents/settings.py. Guard against the import creeping
     back."""
     import os

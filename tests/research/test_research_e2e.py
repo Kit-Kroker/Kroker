@@ -9,7 +9,8 @@ import uuid
 
 import pytest
 from pydantic_ai import Agent
-from pydantic_ai.durable_exec.temporal import PydanticAIPlugin, TemporalAgent
+from pydantic_ai.capabilities import ResolveModelId
+from pydantic_ai.durable_exec.temporal import TemporalDurability
 from pydantic_ai.models.test import TestModel
 from temporalio import workflow
 from temporalio.contrib.pydantic import pydantic_data_converter
@@ -17,6 +18,7 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
+from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.core.models import (
     GateConfig,
     GateDecision,
@@ -89,13 +91,26 @@ def _research_fake_activities(brief: ResearchBrief = _RESEARCH) -> list:
     branch entirely. The OTHER proposer fakes (clarify/architect/etc.) have no
     function tools, so the default TestModel behaviour already produces [] for
     them and this override is unnecessary there."""
+    # ResolveModelId: the workflow-side real research agent's model STRING
+    # crosses the wire; resolve it to this fake's TestModel (003) instead of
+    # letting infer_model rebuild a real provider client in the activity.
+    test_model = TestModel(custom_output_args=brief.model_dump(mode="json"), call_tools=[])
     agent = Agent(
-        TestModel(custom_output_args=brief.model_dump(mode="json"), call_tools=[]),
+        test_model,
         name="research_agent",
         output_type=ResearchBrief,
+        capabilities=[
+            # 003: same mechanism as production (FR-008).
+            TemporalDurability(
+                activity_config=AGENT_ACTIVITY_CONFIG,
+                model_activity_config={"heartbeat_timeout": None},
+            ),
+            ResolveModelId(lambda ctx, model_id: test_model),
+        ],
     )
-    ta = TemporalAgent(agent, activity_config=AGENT_ACTIVITY_CONFIG)
-    return list(ta.temporal_activities)
+    bound = TemporalDurability.from_agent(agent)
+    assert bound is not None  # attached above
+    return list(bound.temporal_activities)
 
 
 async def _wait_for_status(handle, target: str, timeout_s: float = 30.0):
@@ -168,7 +183,7 @@ async def test_research_stage_runs_and_hands_off():
                 task_queue=TASK_QUEUE,
                 workflows=[FeatureWorkflow, DeploymentWorkflow],
                 activities=activities,
-                plugins=[PydanticAIPlugin()],
+                plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
@@ -235,7 +250,7 @@ async def test_research_stage_degrades_instead_of_blocking_on_grounding_violatio
                 task_queue=TASK_QUEUE,
                 workflows=[FeatureWorkflow, DeploymentWorkflow],
                 activities=activities,
-                plugins=[PydanticAIPlugin()],
+                plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,
@@ -295,7 +310,7 @@ async def test_research_stage_degrades_instead_of_crashing_on_usage_limit_exceed
                 task_queue=TASK_QUEUE,
                 workflows=[FeatureWorkflow, DeploymentWorkflow],
                 activities=activities,
-                plugins=[PydanticAIPlugin()],
+                plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,

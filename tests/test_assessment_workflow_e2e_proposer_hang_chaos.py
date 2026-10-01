@@ -40,7 +40,8 @@ import uuid
 
 import pytest
 from pydantic_ai import Agent
-from pydantic_ai.durable_exec.temporal import PydanticAIPlugin, TemporalAgent
+from pydantic_ai.capabilities import ResolveModelId
+from pydantic_ai.durable_exec.temporal import TemporalDurability
 from pydantic_ai.models.function import FunctionModel
 from temporalio import activity
 from temporalio.contrib.pydantic import pydantic_data_converter
@@ -49,6 +50,7 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
+from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.assessment.activities import (
     AssessmentTree,
     AssessmentTreeInput,
@@ -213,16 +215,31 @@ def _flaky_agent_activities(name: str, output_type: type) -> list:
     test_discover_proposer_exception_fails_closed opts OUT of this defect
     (its own ActivityConfig with maximum_attempts=1 and non_retryable=True);
     this fake opts IN, which is what makes the exhaustion contract testable.
+    003: same mechanism as production (capability, FR-008).
     """
 
     async def _transient(messages, info):
         raise ApplicationError(f"{name} model transiently unavailable")
 
-    ta = TemporalAgent(
-        Agent(FunctionModel(_transient), name=name, output_type=output_type),
-        activity_config=AGENT_ACTIVITY_CONFIG,
+    # ResolveModelId (003): the workflow-side real proposer's model STRING
+    # crosses the wire; resolve it to this fake's FunctionModel instead of
+    # letting infer_model rebuild a real provider client in the activity.
+    failing_model = FunctionModel(_transient)
+    agent = Agent(
+        failing_model,
+        name=name,
+        output_type=output_type,
+        capabilities=[
+            TemporalDurability(
+                activity_config=AGENT_ACTIVITY_CONFIG,
+                model_activity_config={"heartbeat_timeout": None},
+            ),
+            ResolveModelId(lambda ctx, model_id: failing_model),
+        ],
     )
-    return ta.temporal_activities
+    bound = TemporalDurability.from_agent(agent)
+    assert bound is not None  # attached above
+    return list(bound.temporal_activities)
 
 
 def _acts(repo_sha: str, *extra: object) -> list:
@@ -367,7 +384,7 @@ async def test_a_degraded_run_leaves_no_memo_poison_for_a_healthy_rerun(
             task_queue=TASK_QUEUE,
             workflows=WORKFLOWS,
             activities=_acts(sha, *discover_acts),
-            plugins=[PydanticAIPlugin()],
+            plugins=[SdlcPydanticAIPlugin()],
         ):
             res1 = await _run(env, repo_dir)
 
@@ -387,7 +404,7 @@ async def test_a_degraded_run_leaves_no_memo_poison_for_a_healthy_rerun(
             task_queue=TASK_QUEUE,
             workflows=WORKFLOWS,
             activities=_acts(sha, *healthy_acts),
-            plugins=[PydanticAIPlugin()],
+            plugins=[SdlcPydanticAIPlugin()],
         ):
             res2 = await _run(env, repo_dir)
 
@@ -432,7 +449,7 @@ async def test_a_retryable_risk_proposer_failure_exhausts_and_degrades(
             task_queue=TASK_QUEUE,
             workflows=WORKFLOWS,
             activities=_acts(sha, *agent_acts, *flaky_risk),
-            plugins=[PydanticAIPlugin()],
+            plugins=[SdlcPydanticAIPlugin()],
         ):
             res = await _run(env, repo_dir)
 
@@ -476,7 +493,7 @@ async def test_a_retryable_discover_proposer_failure_fails_the_phase_closed(
             task_queue=TASK_QUEUE,
             workflows=WORKFLOWS,
             activities=_acts(sha, *agent_acts, *flaky_discover),
-            plugins=[PydanticAIPlugin()],
+            plugins=[SdlcPydanticAIPlugin()],
         ):
             res = await _run(env, repo_dir)
 

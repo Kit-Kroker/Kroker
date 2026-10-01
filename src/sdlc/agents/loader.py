@@ -423,6 +423,76 @@ def _validate_tool_files(role: str, tools_dir: Path) -> list[str]:
     return paths
 
 
+def _verify_durability(name: str, agent: Any, expected: Any) -> None:
+    """003 fail-closed checks (contracts/loader-build-contract.md): a role
+    whose build() does not attach the factory-supplied durability — or swaps
+    in one that is weaker, heartbeating, or mis-named — fails registry load
+    with an error naming the role.
+
+    All temporal imports are lazy: this module must stay importable by the
+    eval path without paying for pydantic_ai's temporal extra (E-82).
+
+    `expected` is the capability instance the loader handed to build() for
+    this role; `agent`'s BOUND capability is compared against it. Non-
+    pydantic-ai agents (no `root_capability`, the Phase-2 contract-test stub
+    pattern) skip verification: they cannot run in a workflow, so there is
+    nothing to fail closed on, and from_agent cannot walk them.
+    """
+    from pydantic_ai.durable_exec.temporal import TemporalDurability
+    from pydantic_ai.exceptions import UserError
+    from temporalio.common import RetryPolicy
+
+    if not hasattr(agent, "root_capability"):
+        return
+    try:
+        bound = TemporalDurability.from_agent(agent)
+    except UserError as exc:
+        raise RegistryError(
+            f"role '{name}': {exc} Only the loader's durability_factory may "
+            f"supply TemporalDurability; forward it, never add a second one."
+        ) from exc
+    if bound is None:
+        raise RegistryError(
+            f"role '{name}': its build() dropped the durability capability. "
+            f"Forward the passed capabilities to Agent(...) verbatim "
+            f"(FR-003: a role that fails to attach durability fails load)."
+        )
+    if bound.name != agent.name:
+        raise RegistryError(
+            f"role '{name}': durability is bound as '{bound.name}' but the "
+            f"agent is named '{agent.name}' — activity names must derive from "
+            f"the agent name (FR-002)."
+        )
+    bound_config = bound.activity_config
+    expected_config = expected.activity_config
+    if bound_config.get("start_to_close_timeout") > expected_config.get("start_to_close_timeout"):
+        raise RegistryError(
+            f"role '{name}': bound durability start_to_close_timeout "
+            f"{bound_config.get('start_to_close_timeout')} is weaker than the "
+            f"factory's {expected_config.get('start_to_close_timeout')} "
+            f"(FR-004/FR-013: bounded activity config is not negotiable)."
+        )
+    bound_attempts = (bound_config.get("retry_policy") or RetryPolicy()).maximum_attempts
+    expected_attempts = (expected_config.get("retry_policy") or RetryPolicy()).maximum_attempts
+    if bound_attempts > expected_attempts:
+        raise RegistryError(
+            f"role '{name}': bound durability maximum_attempts {bound_attempts} "
+            f"is weaker than the factory's {expected_attempts} (FR-013: no "
+            f"unbounded-ward drift from the registry's retry bound)."
+        )
+    # The effective model-request config is private on the installed 2.51
+    # capability and the ONLY surface that reflects the merged heartbeat
+    # default (30s unless overridden). FR-019: strict neutrality requires
+    # heartbeat_timeout none on model activities.
+    heartbeat = bound._model_activity_config.get("heartbeat_timeout")  # noqa: SLF001
+    if heartbeat is not None:
+        raise RegistryError(
+            f"role '{name}': bound durability leaves the model-request "
+            f"heartbeat_timeout at {heartbeat}; the registry contract "
+            f"requires None (FR-019 strict neutrality)."
+        )
+
+
 def build_agents(
     roles: dict[str, RoleConfig],
     model_settings,
@@ -458,26 +528,43 @@ def build_agents(
         if cfg.kind == "harness":
             continue
         build = _load_build(name, root / name)
+        dur: Any = None
         build_kwargs: dict[str, Any] = {}
         if durability_factory is not None:
             # Fresh instance per role: one capability binds to one agent, and
             # a shared instance would silently bind two Temporal activity
             # sets to one configuration object.
-            build_kwargs["capabilities"] = [durability_factory()]
-        if cfg.kind == "research":
-            # Research build takes its tool paths and provider name too. Tool
-            # modules are imported HERE — after the whole registry validated
-            # (validation precedes import; registry spec finding 3).
-            agent = build(
-                cfg.model,
-                cfg.instructions,
-                model_settings,
-                cfg.tool_files,
-                cfg.provider,
-                **build_kwargs,
-            )
-        else:
-            agent = build(cfg.model, cfg.instructions, model_settings, **build_kwargs)
+            dur = durability_factory()
+            build_kwargs["capabilities"] = [dur]
+        try:
+            if cfg.kind == "research":
+                # Research build takes its tool paths and provider name too.
+                # Tool modules are imported HERE — after the whole registry
+                # validated (validation precedes import; registry spec
+                # finding 3).
+                agent = build(
+                    cfg.model,
+                    cfg.instructions,
+                    model_settings,
+                    cfg.tool_files,
+                    cfg.provider,
+                    **build_kwargs,
+                )
+            else:
+                agent = build(cfg.model, cfg.instructions, model_settings, **build_kwargs)
+        except TypeError as exc:
+            if durability_factory is None:
+                raise
+            # A pre-003 build signature rejects the capabilities keyword: the
+            # contract fails this closed as a registry error naming the role,
+            # not a bare TypeError from the call site.
+            raise RegistryError(
+                f"role '{name}': its build() does not accept the keyword-only "
+                f"`capabilities` argument ({exc}); the registry contract "
+                f"requires every asset to forward it (FR-003)."
+            ) from exc
+        if dur is not None:
+            _verify_durability(name, agent, dur)
         if agent.name in seen:
             raise RegistryError(
                 f"roles '{seen[agent.name]}' and '{name}' both build an agent "

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import pytest
-from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.exceptions import FailureError
 from temporalio.worker import Replayer
 
+from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.graph import validate
 from sdlc.graph.router import NodeState, RouterState
 from sdlc.workflows.feature import FeatureWorkflow
@@ -22,7 +22,7 @@ def test_failure_types_cover_temporal_and_the_plugin():
     config = Replayer(
         workflows=[FeatureWorkflow],
         data_converter=pydantic_data_converter,
-        plugins=[PydanticAIPlugin()],
+        plugins=[SdlcPydanticAIPlugin()],
     ).config(active_config=True)
     assert set(config["workflow_failure_exception_types"]) <= set(FAILURE_TYPES)
     assert FailureError in FAILURE_TYPES

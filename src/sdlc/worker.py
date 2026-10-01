@@ -1,9 +1,9 @@
 """Worker entrypoint.
 
-Registers the FeatureWorkflow, plain activities, and the activities that
-TemporalAgent generates for each Pydantic AI agent (model requests, tool
-calls). Uses the Pydantic data converter so pipeline models serialize
-cleanly through Temporal.
+Registers the FeatureWorkflow, plain activities, and the durable activities
+the TemporalDurability capability generates for each Pydantic AI agent
+(model requests, tool calls). Uses the Pydantic data converter so pipeline
+models serialize cleanly through Temporal.
 """
 
 from __future__ import annotations
@@ -23,13 +23,14 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 
-from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
+from pydantic_ai.durable_exec.temporal import TemporalDurability
 from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker
 
 from .agents.loader import load_registry, validate_registry
 from .agents.roles import ALL_TEMPORAL_AGENTS
+from .agents.runner import SdlcPydanticAIPlugin
 from .artifacts.read import load_session
 from .artifacts.retention import apply_session_retention
 from .assessment.activities import (
@@ -125,10 +126,27 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
     """Compose all activities registered on the Temporal worker.
 
     Combines vertical slice activities from STAGE_MODULES, horizontal domain
-    activities, and TemporalAgent-generated activities.
+    activities, and the durable activities each agent's TemporalDurability
+    capability registers (003: via the agent's own registration surface —
+    `from_agent(a)` is the bound handle whose activities these are; no
+    hand-maintained name list, FR-007).
     """
     stage_activities = [act for mod in STAGE_MODULES for act in mod.ACTIVITIES]
-    agent_activities = [act for ta in ALL_TEMPORAL_AGENTS for act in ta.temporal_activities]
+    agent_activities: list[Callable[..., Any]] = []
+    for agent in ALL_TEMPORAL_AGENTS:
+        durability = TemporalDurability.from_agent(agent)
+        if durability is None:
+            # Unreachable while roles.py builds every agent through the
+            # loader's durability factory (whose fail-closed checks would
+            # have rejected a capability-free agent first); kept explicit so
+            # a future agent that skips the factory still fails HERE, at
+            # boot, naming the agent — not mid-run as an unregistered
+            # activity type.
+            raise RuntimeError(
+                f"agent '{agent.name}' has no TemporalDurability capability; "
+                f"build it through build_agents(durability_factory=...)"
+            )
+        agent_activities.extend(durability.temporal_activities)
     return [
         *stage_activities,
         create_worktree,
@@ -238,7 +256,7 @@ async def main() -> None:
     client = await Client.connect(
         os.environ.get("TEMPORAL_HOST", "localhost:7233"),
         data_converter=pydantic_data_converter,
-        plugins=[PydanticAIPlugin()],
+        plugins=[SdlcPydanticAIPlugin()],
     )
 
     worker = Worker(

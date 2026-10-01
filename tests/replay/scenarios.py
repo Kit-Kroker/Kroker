@@ -17,7 +17,8 @@ from pathlib import Path
 from typing import Any
 
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.durable_exec.temporal import TemporalAgent
+from pydantic_ai.capabilities import ResolveModelId
+from pydantic_ai.durable_exec.temporal import TemporalDurability
 from pydantic_ai.models.test import TestModel
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
@@ -472,13 +473,29 @@ def _architect_research_activities() -> list:
     """The architect fake whose model CALLS its research tool once (FR-005.5a:
     model turn -> research tool call -> answer). Same agent name, deps_type,
     output type and tool name/signature as production; the tool returns a
-    canned brief so the capture stays offline and deterministic."""
+    canned brief so the capture stays offline and deterministic.
+
+    The history was captured with the OLD wrapper; this bundle now builds
+    the fake with the SAME durability mechanism as production (capability,
+    003 T022) so the bundle's registration surface matches the migrated
+    tree — the recorded history itself is frozen and never re-captured."""
+
+    test_model = TestModel(custom_output_args=ARCH.model_dump(mode="json"), call_tools=["research"])
 
     agent = Agent(
-        TestModel(custom_output_args=ARCH.model_dump(mode="json"), call_tools=["research"]),
+        test_model,
         name="architect_agent",
         deps_type=ResearchDeps,
         output_type=ArchitectureSpec,
+        capabilities=[
+            TemporalDurability(
+                activity_config=AGENT_ACTIVITY_CONFIG,
+                model_activity_config={"heartbeat_timeout": None},
+            ),
+            # 003: pin the arriving model id to this fake's TestModel (see
+            # tests/fakes/fake_agents.py for the mechanism).
+            ResolveModelId(lambda ctx, model_id: test_model),
+        ],
     )
 
     @agent.tool
@@ -487,8 +504,9 @@ def _architect_research_activities() -> list:
         shared research budget (SGR Routing: local vs. web)."""
         return RESEARCH_BRIEF_FAKE
 
-    ta = TemporalAgent(agent, activity_config=AGENT_ACTIVITY_CONFIG)
-    return ta.temporal_activities
+    bound = TemporalDurability.from_agent(agent)
+    assert bound is not None  # attached above
+    return list(bound.temporal_activities)
 
 
 def _research_tool_activities() -> list:

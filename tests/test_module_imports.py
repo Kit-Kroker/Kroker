@@ -1,11 +1,11 @@
 import os
 
-# roles.py constructs pydantic_ai Agents (wrapped in TemporalAgent) at
-# import time, which eagerly resolves the model and requires
-# ANTHROPIC_API_KEY to be present (pre-existing design smell, tracked
-# separately). Set a placeholder before importing so collection-time
-# agent construction succeeds — matches the pattern used elsewhere in
-# this codebase for the same reason.
+# roles.py constructs pydantic_ai Agents (durable via the
+# TemporalDurability capability) at import time, which eagerly resolves
+# the model and requires ANTHROPIC_API_KEY to be present (pre-existing
+# design smell, tracked separately). Set a placeholder before importing
+# so collection-time agent construction succeeds -- matches the pattern
+# used elsewhere in this codebase for the same reason.
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-dummy")
 
 

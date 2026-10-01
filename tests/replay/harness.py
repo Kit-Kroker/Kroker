@@ -12,12 +12,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 from temporalio.client import Client, WorkflowHandle, WorkflowHistory
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
+from sdlc.agents.runner import SdlcPydanticAIPlugin
 from tests.replay.projection import TraceRecorder, close_projection, command_projection
 from tests.replay.scenarios import Scenario
 
@@ -88,7 +88,7 @@ async def capture(
             task_queue=TASK_QUEUE,
             workflows=list(starter.workflows),
             activities=scenario.activities(),
-            plugins=[PydanticAIPlugin()],
+            plugins=[SdlcPydanticAIPlugin()],
             **runner_kw,
         ):
             if scenario.mode == "then_skip":

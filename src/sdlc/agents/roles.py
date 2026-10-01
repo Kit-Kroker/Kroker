@@ -1,8 +1,10 @@
-"""'Thinking' role agents — Pydantic AI, wrapped in TemporalAgent.
+"""'Thinking' role agents — Pydantic AI, durable via the TemporalDurability
+capability (003).
 
 These agents never touch the repo. They read artifacts (via tools if
 needed) and emit typed pipeline contracts. Model requests and tool calls
-are automatically offloaded to Temporal activities by TemporalAgent.
+are automatically offloaded to Temporal activities by the capability each
+agent is constructed with.
 
 IMPORTANT: agent names and toolset ids become Temporal activity names.
 Set them explicitly and never rename after deploying to production.
@@ -14,7 +16,7 @@ import hashlib
 from datetime import timedelta
 
 from pydantic_ai import Agent
-from pydantic_ai.durable_exec.temporal import TemporalAgent
+from pydantic_ai.durable_exec.temporal import TemporalDurability
 from temporalio.common import RetryPolicy
 from temporalio.workflow import ActivityConfig
 
@@ -80,7 +82,21 @@ def _model(role: str) -> str:
 # from `sdlc.agents.roles` -- feature.py and worker.py rely on it.
 from .settings import MODEL_SETTINGS  # noqa: E402
 
-AGENTS = build_agents(REGISTRY, MODEL_SETTINGS)
+
+def shared_durability() -> TemporalDurability:
+    """Fresh durability capability per role (003 D3): the registry's shared
+    bounded config, with the model-request heartbeat explicitly DISABLED so
+    the scheduled command attributes stay byte-identical to the pre-migration
+    wrapper's (FR-019 strict neutrality — TemporalDurability's own default
+    is a 30 s model heartbeat the old wrapper never had)."""
+
+    return TemporalDurability(
+        activity_config=AGENT_ACTIVITY_CONFIG,
+        model_activity_config={"heartbeat_timeout": None},
+    )
+
+
+AGENTS = build_agents(REGISTRY, MODEL_SETTINGS, durability_factory=shared_durability)
 
 # Module-level names are preserved verbatim: feature.py and worker.py import
 # these and must not change. Note role name != agent name for two of them.
@@ -144,6 +160,14 @@ clarify_route_agent = Agent(
     output_type=ClarifyRoute,
     model_settings=MODEL_SETTINGS,
     system_prompt=_clarify_role.instructions + "\n\n" + ROUTE_SCOPE,
+    capabilities=[
+        # 003: the fan-out's OWN bounded config (D3) with the FR-019
+        # heartbeat override, matching shared_durability()'s shape.
+        TemporalDurability(
+            activity_config=CLARIFY_FANOUT_ACTIVITY_CONFIG,
+            model_activity_config={"heartbeat_timeout": None},
+        )
+    ],
 )
 
 clarify_probe_agent = Agent(
@@ -152,6 +176,12 @@ clarify_probe_agent = Agent(
     output_type=ProbeResult,
     model_settings=MODEL_SETTINGS,
     system_prompt=PROBE_SYSTEM,  # standalone -- see the note above
+    capabilities=[
+        TemporalDurability(
+            activity_config=CLARIFY_FANOUT_ACTIVITY_CONFIG,
+            model_activity_config={"heartbeat_timeout": None},
+        )
+    ],
 )
 
 # Stage name -> registry role. Stage names (feature.py's pipeline vocabulary)
@@ -210,62 +240,36 @@ PROMPT_SHAS: dict[str, str] = {
     stage: hashlib.sha256(prompt.encode()).hexdigest() for stage, prompt in _STAGE_PROMPTS.items()
 }
 
-# Temporal-wrapped versions used inside workflows.
-t_clarify = TemporalAgent(clarify_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-t_clarify_route = TemporalAgent(clarify_route_agent, activity_config=CLARIFY_FANOUT_ACTIVITY_CONFIG)
-t_clarify_probe = TemporalAgent(clarify_probe_agent, activity_config=CLARIFY_FANOUT_ACTIVITY_CONFIG)
-t_architect = TemporalAgent(architect_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-t_planner = TemporalAgent(planner_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-t_qa = TemporalAgent(qa_analyst_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-t_reviewer = TemporalAgent(reviewer_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-t_analyst = TemporalAgent(analyst_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-t_merge_verdict = TemporalAgent(merge_verdict_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-t_devops = TemporalAgent(devops_agent, activity_config=AGENT_ACTIVITY_CONFIG)
+# The workflow-facing handles. Since 003 the agents themselves are durable
+# (the capability is attached at construction), so these are plain aliases —
+# the module-level names are the import surface feature.py, assessment.py
+# and the worker rely on, kept verbatim. Note role name != agent name for
+# two of them.
+t_clarify = clarify_agent
+t_clarify_route = clarify_route_agent
+t_clarify_probe = clarify_probe_agent
+t_architect = architect_agent
+t_planner = planner_agent
+t_qa = qa_analyst_agent
+t_reviewer = reviewer_agent
+t_analyst = analyst_agent
+t_merge_verdict = merge_verdict_agent
+t_devops = devops_agent
 
-# Optional: the research TemporalAgent exists iff agents/research/ shipped
-# and built cleanly. feature.py guards the stage with `t_research is not None`
-# AND cfg.research_enabled before invoking it.
-t_research = (
-    TemporalAgent(research_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-    if research_agent is not None
-    else None
-)
+# Optional agents are None when their folder did not ship; the None-able
+# t_* handles keep that contract unchanged (feature.py and assessment.py
+# guard on `is not None`).
+t_research = research_agent
 
-t_deep_review = (
-    TemporalAgent(deep_review_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-    if deep_review_agent is not None
-    else None
-)
+t_deep_review = deep_review_agent
 
-t_handoff = (
-    TemporalAgent(handoff_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-    if handoff_agent is not None
-    else None
-)
+t_handoff = handoff_agent
 
-t_adversary = (
-    TemporalAgent(adversary_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-    if adversary_agent is not None
-    else None
-)
+t_adversary = adversary_agent
 
-# Optional: the discover TemporalAgent exists iff agents/discover/ shipped and
-# built cleanly. workflows/assessment.py guards the phase with
-# `t_discover is not None`, feature.py's t_research pattern (DD7).
-t_discover = (
-    TemporalAgent(discover_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-    if discover_agent is not None
-    else None
-)
+t_discover = discover_agent
 
-# Optional: the risk TemporalAgent exists iff agents/risk/ shipped and built
-# cleanly. workflows/assessment.py guards the phase with
-# `t_risk is not None`, t_discover's pattern (RD7).
-t_risk = (
-    TemporalAgent(risk_agent, activity_config=AGENT_ACTIVITY_CONFIG)
-    if risk_agent is not None
-    else None
-)
+t_risk = risk_agent
 
 ALL_TEMPORAL_AGENTS = [
     t_clarify,

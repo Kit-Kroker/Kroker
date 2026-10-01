@@ -8,12 +8,12 @@ import json
 import uuid
 
 import pytest
-from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 from temporalio import workflow
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
+from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.core.models import (
     GateDecision,
     GateOutcome,
@@ -83,7 +83,7 @@ async def test_model_usage_events_exported(tmp_path, monkeypatch):
                 task_queue=TASK_QUEUE,
                 workflows=[FeatureWorkflow, DeploymentWorkflow],
                 activities=activities,
-                plugins=[PydanticAIPlugin()],
+                plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
                     FeatureWorkflow.run,

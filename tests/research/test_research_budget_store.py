@@ -1,7 +1,7 @@
 """budget_store.charge_persisted: the disk-persisted counterpart to
 deps.charge() (Task 8's deferred item — see deps.py's module docstring).
 Each test constructs a FRESH ResearchDeps per call, mirroring what a
-TemporalAgent tool-call activity actually receives (its own deserialized
+durable tool-call activity actually receives (its own deserialized
 copy, budget always zeroed) -- the in-memory Budget.searches/fetches on any
 one of these objects proves nothing; only the on-disk count does.
 """

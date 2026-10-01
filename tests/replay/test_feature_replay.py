@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import pytest
 from pydantic import PydanticUserError
-from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 from pydantic_ai.exceptions import AgentRunError, UserError
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Replayer
 from temporalio.worker.workflow_sandbox import SandboxedWorkflowRunner
 
+from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.workflows.crew import CrewTaskWorkflow
 from sdlc.workflows.deployment import DeploymentWorkflow
 from sdlc.workflows.feature import FeatureWorkflow
@@ -26,7 +26,7 @@ def replayer(*workflows: type) -> Replayer:
     return Replayer(
         workflows=list(workflows) or [FeatureWorkflow, DeploymentWorkflow, CrewTaskWorkflow],
         data_converter=pydantic_data_converter,
-        plugins=[PydanticAIPlugin()],
+        plugins=[SdlcPydanticAIPlugin()],
     )
 
 

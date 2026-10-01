@@ -15,6 +15,7 @@ from temporalio import activity
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
+from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.assessment.activities import (
     AssessmentTree,
     AssessmentTreeInput,
@@ -572,7 +573,6 @@ async def test_discover_proposer_judgment_and_verification(assessed_repo, tmp_pa
     db = str(tmp_path / "board.sqlite3")
     monkeypatch.setenv("SDLC_BOARD_DB", db)
 
-    from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
     from temporalio.contrib.pydantic import pydantic_data_converter
 
     from sdlc.assessment.discover.map import (
@@ -640,7 +640,7 @@ async def test_discover_proposer_judgment_and_verification(assessed_repo, tmp_pa
             task_queue=TASK_QUEUE,
             workflows=WORKFLOWS,
             activities=acts,
-            plugins=[PydanticAIPlugin()],
+            plugins=[SdlcPydanticAIPlugin()],
         ):
             h = await env.client.start_workflow(
                 AssessmentWorkflow.run,
@@ -667,7 +667,6 @@ async def test_discover_proposer_trips_guard_fails_closed(assessed_repo, tmp_pat
     db = str(tmp_path / "board.sqlite3")
     monkeypatch.setenv("SDLC_BOARD_DB", db)
 
-    from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
     from temporalio.contrib.pydantic import pydantic_data_converter
 
     from sdlc.assessment.discover.map import (
@@ -735,7 +734,7 @@ async def test_discover_proposer_trips_guard_fails_closed(assessed_repo, tmp_pat
             task_queue=TASK_QUEUE,
             workflows=WORKFLOWS,
             activities=acts,
-            plugins=[PydanticAIPlugin()],
+            plugins=[SdlcPydanticAIPlugin()],
         ):
             h = await env.client.start_workflow(
                 AssessmentWorkflow.run,
@@ -760,8 +759,7 @@ async def test_discover_proposer_exception_fails_closed(assessed_repo, tmp_path,
 
     from datetime import timedelta
 
-    from pydantic_ai import Agent
-    from pydantic_ai.durable_exec.temporal import PydanticAIPlugin, TemporalAgent
+    from pydantic_ai.durable_exec.temporal import TemporalDurability
     from pydantic_ai.models.function import FunctionModel
     from temporalio.common import RetryPolicy
     from temporalio.contrib.pydantic import pydantic_data_converter
@@ -769,23 +767,26 @@ async def test_discover_proposer_exception_fails_closed(assessed_repo, tmp_path,
     from temporalio.workflow import ActivityConfig
 
     from sdlc.assessment.discover.map import DiscoverProposal
+    from tests.fakes.fake_agents import failing_durable_agent
 
     async def _failing_model(messages, info):
         raise ApplicationError("LLM service unavailable", non_retryable=True)
 
-    agent = Agent(
+    # The deliberately 1-attempt config stays HERE (this test opts out of the
+    # shared bound on purpose); the capability + ResolveModelId pin live in
+    # the shared helper (003, research.md R9).
+    agent = failing_durable_agent(
+        "discover_agent",
+        DiscoverProposal,
         FunctionModel(_failing_model),
-        name="discover_agent",
-        output_type=DiscoverProposal,
-    )
-    ta = TemporalAgent(
-        agent,
-        activity_config=ActivityConfig(
+        ActivityConfig(
             start_to_close_timeout=timedelta(seconds=5),
             retry_policy=RetryPolicy(maximum_attempts=1),
         ),
     )
-    agent_acts = ta.temporal_activities
+    bound = TemporalDurability.from_agent(agent)
+    assert bound is not None  # attached by failing_durable_agent
+    agent_acts = bound.temporal_activities
 
     @activity.defn(name="triage_resolve_commit")
     async def real_pin(inp: TriagePinInput) -> TriagePin:
@@ -826,7 +827,7 @@ async def test_discover_proposer_exception_fails_closed(assessed_repo, tmp_path,
             task_queue=TASK_QUEUE,
             workflows=WORKFLOWS,
             activities=acts,
-            plugins=[PydanticAIPlugin()],
+            plugins=[SdlcPydanticAIPlugin()],
         ):
             h = await env.client.start_workflow(
                 AssessmentWorkflow.run,
@@ -911,7 +912,6 @@ async def test_risk_proposer_judgment_reaches_the_map(assessed_repo, tmp_path, m
     repo_dir, sha = assessed_repo
     monkeypatch.setenv("SDLC_BOARD_DB", str(tmp_path / "board.sqlite3"))
 
-    from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
     from temporalio.contrib.pydantic import pydantic_data_converter
 
     from sdlc.assessment.activities import (
@@ -1005,7 +1005,7 @@ async def test_risk_proposer_judgment_reaches_the_map(assessed_repo, tmp_path, m
             task_queue=TASK_QUEUE,
             workflows=WORKFLOWS,
             activities=acts,
-            plugins=[PydanticAIPlugin()],
+            plugins=[SdlcPydanticAIPlugin()],
         ):
             h = await env.client.start_workflow(
                 AssessmentWorkflow.run,

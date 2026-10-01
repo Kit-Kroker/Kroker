@@ -1,6 +1,8 @@
 """The two extra clarify agents. They are NOT new registry roles: they reuse
 the clarify role's model, so agents/ stays at 15 roles."""
 
+from pydantic_ai.durable_exec.temporal import TemporalDurability
+
 from sdlc.agents.roles import (
     AGENT_ACTIVITY_CONFIG,
     AGENT_ACTIVITY_MAX_ATTEMPTS,
@@ -106,8 +108,12 @@ def test_the_fanout_agents_bound_their_retries():
         == CLARIFY_FANOUT_MAX_ATTEMPTS
     )
     # ...and it is the config the two agents are actually built with.
+    # 003: the config lives on the agent's BOUND TemporalDurability
+    # capability (from_agent), not on the agent object itself.
     for agent in (t_clarify_route, t_clarify_probe):
-        assert agent.activity_config["retry_policy"].maximum_attempts == CLARIFY_FANOUT_MAX_ATTEMPTS
+        bound = TemporalDurability.from_agent(agent)
+        assert bound is not None, agent.name
+        assert bound.activity_config["retry_policy"].maximum_attempts == CLARIFY_FANOUT_MAX_ATTEMPTS
 
 
 def test_the_shared_config_bounds_every_agent():
@@ -119,11 +125,13 @@ def test_the_shared_config_bounds_every_agent():
     encoding of UNLIMITED: no agent in the fleet may carry it anymore."""
     assert 1 <= AGENT_ACTIVITY_MAX_ATTEMPTS < 10
     assert AGENT_ACTIVITY_CONFIG["retry_policy"].maximum_attempts == AGENT_ACTIVITY_MAX_ATTEMPTS
-    assert t_clarify.activity_config["retry_policy"].maximum_attempts == (
-        AGENT_ACTIVITY_MAX_ATTEMPTS
-    )
+    bound = TemporalDurability.from_agent(t_clarify)
+    assert bound is not None
+    assert bound.activity_config["retry_policy"].maximum_attempts == (AGENT_ACTIVITY_MAX_ATTEMPTS)
     for agent in ALL_TEMPORAL_AGENTS:
-        assert agent.activity_config["retry_policy"].maximum_attempts > 0
+        bound = TemporalDurability.from_agent(agent)
+        assert bound is not None, agent.name
+        assert bound.activity_config["retry_policy"].maximum_attempts > 0
 
 
 def test_the_fanout_config_stays_a_separate_knob():

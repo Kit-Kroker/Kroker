@@ -32,12 +32,15 @@ import uuid
 import pytest
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.durable_exec.temporal import PydanticAIPlugin, TemporalAgent
+from pydantic_ai.capabilities import ResolveModelId
+from pydantic_ai.durable_exec.temporal import TemporalDurability
 from pydantic_ai.models.test import TestModel
 from temporalio import workflow
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
+
+from sdlc.agents.runner import SdlcPydanticAIPlugin
 
 with workflow.unsafe.imports_passed_through():
     from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
@@ -56,11 +59,22 @@ class _Out(BaseModel):
 _VALIDATOR_RAN_IN: list[str] = []
 
 
-def _build_validated_agent(retry_once: bool) -> TemporalAgent:
+def _build_validated_agent(retry_once: bool) -> Agent:
+    # ResolveModelId (003): pin any arriving model id to this fake's
+    # TestModel (see tests/fakes/fake_agents.py for the mechanism).
+    test_model = TestModel(custom_output_args={"text": "hello"})
     agent = Agent(
-        TestModel(custom_output_args={"text": "hello"}),
+        test_model,
         name="spike_validated_agent",
         output_type=_Out,
+        capabilities=[
+            # 003: same mechanism as production (capability, FR-008).
+            TemporalDurability(
+                activity_config=AGENT_ACTIVITY_CONFIG,
+                model_activity_config={"heartbeat_timeout": None},
+            ),
+            ResolveModelId(lambda ctx, model_id: test_model),
+        ],
     )
 
     @agent.output_validator
@@ -72,10 +86,16 @@ def _build_validated_agent(retry_once: bool) -> TemporalAgent:
         _VALIDATOR_RAN_IN.append("workflow" if in_workflow else "activity")
         return out
 
-    return TemporalAgent(agent, activity_config=AGENT_ACTIVITY_CONFIG)
+    return agent
 
 
 t_spike = _build_validated_agent(retry_once=False)
+
+
+def _bound_activities(agent) -> list:
+    bound = TemporalDurability.from_agent(agent)
+    assert bound is not None, agent.name  # attached at construction above
+    return list(bound.temporal_activities)
 
 
 @workflow.defn
@@ -103,8 +123,8 @@ async def test_output_validator_survives_temporalization_and_runs_activity_side(
             env.client,
             task_queue="spike-ov",
             workflows=[_SpikeWorkflow],
-            activities=list(t_spike.temporal_activities),
-            plugins=[PydanticAIPlugin()],
+            activities=list(_bound_activities(t_spike)),
+            plugins=[SdlcPydanticAIPlugin()],
         ):
             out = await env.client.execute_workflow(
                 _SpikeWorkflow.run, id=f"spike-ov-{uuid.uuid4()}", task_queue="spike-ov"
@@ -121,10 +141,19 @@ async def test_output_validator_survives_temporalization_and_runs_activity_side(
 # --- Test B setup (module-level — Temporal forbids local workflow classes).
 from pydantic_ai_harness import CodeMode
 
+_cm_model = TestModel(call_tools=["run_code"])
 _cm_agent = Agent(
-    TestModel(call_tools=["run_code"]),
+    _cm_model,
     name="spike_codemode_agent",
-    capabilities=[CodeMode(tools="all")],
+    capabilities=[
+        # 003: durability outermost, this role's own capability after it.
+        TemporalDurability(
+            activity_config=AGENT_ACTIVITY_CONFIG,
+            model_activity_config={"heartbeat_timeout": None},
+        ),
+        CodeMode(tools="all"),
+        ResolveModelId(lambda ctx, model_id: _cm_model),
+    ],
 )
 
 
@@ -133,7 +162,7 @@ def _add_one(n: int) -> int:
     return n + 1
 
 
-t_cm = TemporalAgent(_cm_agent, activity_config=AGENT_ACTIVITY_CONFIG)
+t_cm = _cm_agent
 
 
 @workflow.defn
@@ -167,8 +196,8 @@ async def test_codemode_run_code_executes_through_temporal_agent():
             env.client,
             task_queue="spike-cm",
             workflows=[_CodeModeWorkflow],
-            activities=list(t_cm.temporal_activities),
-            plugins=[PydanticAIPlugin()],
+            activities=list(_bound_activities(t_cm)),
+            plugins=[SdlcPydanticAIPlugin()],
         ):
             await asyncio.wait_for(
                 env.client.execute_workflow(

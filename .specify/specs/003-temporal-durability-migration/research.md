@@ -104,3 +104,37 @@ Host-hazard notes added during this run:
 - Full-suite single-process temporal runs on this workstation flake; per-file chunked runs
   are the trustworthy shape. Tier-level claims in T014/T023/T026/T042 should use chunked
   runs or narrow selections.
+
+## R9. FR-020(d) outcome — TMPRL1101 reproduced on the migrated tree; mitigation landed (2026-10-01, Phase 3)
+
+The spike's cold-worker hazard (R4 row d) reproduced at real-registry scale the moment
+roles.py built durable agents via the capability:
+
+1. **Sandbox re-execution of `roles.py`** (eager construction of 16 capability-bound
+   agents, pydantic schema generation at bind time) put the first workflow task over the
+   2 s deadlock detector — replay included (`tests/replay` failed with TMPRL1101).
+2. **Workflow-side model resolution**: the capability resolves model-id strings inside
+   the workflow; the first resolution imports the provider SDK and builds its pydantic
+   schemas (~1.9 s measured for `anthropic` in the dev container) — also in the
+   workflow thread.
+
+**Mitigation (T031's sanctioned fix, pulled into Phase 3 because the tier could not run
+without it):** `src/sdlc/agents/runner.py` — `SdlcPydanticAIPlugin(PydanticAIPlugin)`
+extends the sandboxed runner's restrictions with `sdlc.agents` passthrough (the agents
+are module-level constants constructed once, deterministically; the sandbox gains
+nothing re-executing them) and warms `anthropic` host-side at plugin construction so the
+sandbox's pydantic passthrough finds it imported. Swapped into `src/sdlc/worker.py` and
+every test/replayer plugin site. Evidence: full `tests/replay` directory 163 passed /
+0 failed (and ~2x faster); zero TMPRL1101 occurrences after. T031 (Phase 5) still owes
+the old-vs-new first-task duration measurement with margin.
+
+**Related finding (feeds FR-020a/T029):** under the old wrapper the workflow sent
+`params.model_id = None` and the activity answered with the WRAPPED agent's own concrete
+model; under the capability the workflow-side agent's model STRING crosses the wire and
+the activity rebuilds it with `infer_model`. Production semantics are unchanged (the
+serving worker resolves its own registry strings — by design), but TEST FAKES that serve
+another agent's activities must pin the arriving id to their own model via a
+`ResolveModelId(lambda ctx, model_id: <fake model>)` capability, or the activity makes a
+real provider call (observed: 401 `ModelHTTPError` from `agent__clarify_agent__model_request`
+in the research e2e). Applied to `tests/fakes/fake_agents.py`, `tests/replay/scenarios.py`,
+`tests/research/test_research_{e2e,spike}.py`, and both assessment e2e helpers.

@@ -1,7 +1,7 @@
 """Structural purity check for the benchmark wiring.
 
 We attempted a full time-skipping Temporal integration test, but the
-proposer agents' TemporalAgent-generated ``model_request`` activities
+proposer agents' durability-generated ``model_request`` activities
 (``agent__<name>_agent__model_request``) require faking an undocumented
 pydantic-ai ``ModelResponse`` shape, and that proved intractable without
 deeper research. Instead we regression-protect the production-safety
@@ -22,7 +22,7 @@ unguarded path — without depending on a brittle full-workflow runtime test.
 
 A future hardening task can add the runtime time-skipping test once the
 proposer agents honor ``cfg.roles`` (so a real worker can run the workflow
-end-to-end with ``TestModel`` rather than faking the TemporalAgent
+end-to-end with ``TestModel`` rather than faking the durability-capability
 activity surface).
 """
 
