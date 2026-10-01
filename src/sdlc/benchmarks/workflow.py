@@ -21,6 +21,7 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from ..agents.loader import HARNESS_ROLES, validate_run_roles
+    from ..agents.model_ids import validate_proposer_model
     from ..agents.roles import STAGE_MODELS
     from ..core.models import (
         BenchmarkConfig,
@@ -93,6 +94,10 @@ def _cell_config(
                 ],
             )
         else:
+            # 004 T022 (FR-004): backstop — expansion validates first
+            # (matrix.py), but a cell built any other way is refused here
+            # too, before it runs.
+            validate_proposer_model(role, model)
             roles[role] = RoleConfig(kind="proposer", model=model)
     cfg.roles = roles
 

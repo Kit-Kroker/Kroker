@@ -4,6 +4,8 @@ model explicitly named in EVERY arm."""
 
 from __future__ import annotations
 
+from ..agents.loader import HARNESS_ROLES
+from ..agents.model_ids import validate_proposer_model
 from ..core.models import (
     HarnessKind,
 )
@@ -78,6 +80,15 @@ def expand_matrix(spec: CaseSpec) -> list[BenchmarkCell]:
             f"tier exists. The case is quarantined, not broken."
         )
     arms = _arms_for(spec)
+    # 004 T022 (FR-004): proposer overrides are validated at matrix
+    # expansion, BEFORE any cell exists. An arm `default` fans out to harness
+    # AND proposer roles; only the proposer subset is validated — harness
+    # roles keep their own grammar (FR-005), and the judge is not a
+    # proposer role (its stacking is the T037 inbox task).
+    for arm in arms:
+        for role, model in arm.resolve().items():
+            if role not in HARNESS_ROLES:
+                validate_proposer_model(role, model)
     judge_family = _family(spec.judge_model)
     # every model a producer role is explicitly set to, across all arms
     author_models = {m for arm in arms for m in arm.resolve().values()}

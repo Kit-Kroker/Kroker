@@ -87,8 +87,11 @@ def test_arm_role_models_reach_cell():
 
 
 def test_judge_rejects_family_shared_with_any_arm_model():
+    # 004 (FR-004): arm proposer ids are provider:model now; the judge still
+    # shares the openai family with the arm's producer, so the ADR-6 judge
+    # check fires — after the proposer-id validation passes.
     spec = _spec_arms(
-        [Arm(name="a", role_models={"architect": "openai/gpt-5.2"})], judge="openai/gpt-5.2"
+        [Arm(name="a", role_models={"architect": "openai:gpt-5.2"})], judge="openai/gpt-5.2"
     )  # judge shares family with an arm producer
     with pytest.raises(SameFamilyJudgeError):
         expand_matrix(spec)
