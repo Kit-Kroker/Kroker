@@ -73,11 +73,11 @@ Format: `- [ ] Tnnn [P?] [US?] description with path`. `[P]` = independent files
 
 **Independent Test**: all 16 existing histories + 3 new histories replay; graph goldens match; fixture diff empty; D8 pins green; in-flight mixed-prefix run completes.
 
-- [ ] T024 [US1] Write `tests/durability/test_activity_fixture.py`: compare migrated agents to `tests/replay/fixtures/agent_activities_pre_migration.json`: scheduled names **exactly equal**; command attributes **exactly equal** (heartbeat 0, s2c 600, attempts, non-retryable list, arg count); every name a history can schedule is registered exactly once; expected registered deltas (`-event_stream_handler`, `+model_compact_messages`, `+validate_args`) listed; the fixture's recorded base sha is asserted
-- [ ] T025 [P] [US1] Extend `tests/replay/test_feature_replay.py` (parametrization only, no edit to existing cases) to replay `architect_research_tool`, `clarify_fanout` and, if captured, `assessment_discover_risk`
-- [ ] T026 [US1] Run in the dev container, separate commands: `pytest tests/replay/test_feature_replay.py -q`; `pytest -m temporal tests/replay/test_graph_golden.py -q`; `pytest tests/graph_workflow/test_graph_dispatch_chaos.py -q` (D8 pin, no edit to expected set); `pytest tests/durability/test_activity_fixture.py -q`. Any replay failure: STOP and escalate to the orchestrator
-- [ ] T027 [US1] Mixed-prefix in-flight test `tests/durability/test_inflight_resume.py`: replay the old-recorded `architect_research_tool` prefix and continue with new code through a live worker to completion (SC-006)
-- [ ] T028 [US1] Confirm no existing history/golden file changed: `git diff --stat -- tests/replay/histories tests/replay/golden` shows only added files (FR-006)
+- [X] T024 [US1] Write `tests/durability/test_activity_fixture.py`: compare migrated agents to `tests/replay/fixtures/agent_activities_pre_migration.json`: scheduled names **exactly equal**; command attributes **exactly equal** (heartbeat 0, s2c 600, attempts, non-retryable list, arg count); every name a history can schedule is registered exactly once; expected registered deltas (`-event_stream_handler`, `+model_compact_messages`, `+validate_args`) listed; the fixture's recorded base sha is asserted
+- [X] T025 [P] [US1] Extend `tests/replay/test_feature_replay.py` (parametrization only, no edit to existing cases) to replay `architect_research_tool`, `clarify_fanout` and, if captured, `assessment_discover_risk`
+- [X] T026 [US1] Run in the dev container, separate commands: `pytest tests/replay/test_feature_replay.py -q`; `pytest -m temporal tests/replay/test_graph_golden.py -q`; `pytest tests/graph_workflow/test_graph_dispatch_chaos.py -q` (D8 pin, no edit to expected set); `pytest tests/durability/test_activity_fixture.py -q`. Any replay failure: STOP and escalate to the orchestrator
+- [X] T027 [US1] Mixed-prefix in-flight test `tests/durability/test_inflight_resume.py`: replay the old-recorded `architect_research_tool` prefix and continue with new code through a live worker to completion (SC-006)
+- [X] T028 [US1] Confirm no existing history/golden file changed: `git diff --stat -- tests/replay/histories tests/replay/golden` shows only added files (FR-006)
 
 **Checkpoint**: US1 MVP proven.
 
