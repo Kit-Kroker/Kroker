@@ -187,4 +187,8 @@ def test_validate_loads_only_the_agents_loader_at_call_time():
         [sys.executable, "-c", code], capture_output=True, text=True, env=env, check=True
     )
     loaded = proc.stdout.strip()
-    assert loaded == "['sdlc.agents', 'sdlc.agents.loader']", loaded + proc.stderr
+    # 004 T023: validate's proposer-model check also loads
+    # sdlc.agents.model_ids (stdlib-only at module level) beside the loader.
+    assert loaded == "['sdlc.agents', 'sdlc.agents.loader', 'sdlc.agents.model_ids']", (
+        loaded + proc.stderr
+    )

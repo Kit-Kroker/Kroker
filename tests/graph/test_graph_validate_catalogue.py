@@ -73,6 +73,17 @@ ROWS: dict[ProblemCode, Callable[[], tuple]] = {
         roles(),
     ),
     C.ROLE_HARNESS_MISSING: lambda: (_g(node("b", "builder", role={})), GENERIC, roles()),
+    C.ROLE_MODEL_INVALID: lambda: (
+        graph(
+            [
+                node("intake", "intake"),
+                node("a", "architect", role={"kind": "proposer", "model": "openai/gpt-5.2"}),
+            ],
+            [],
+        ),
+        NODE_TYPES,
+        roles(),
+    ),
     C.RESEARCH_PROVIDER_MISSING: lambda: (
         graph([node("intake", "intake"), node("r", "research", role={"kind": "research"})], []),
         NODE_TYPES,

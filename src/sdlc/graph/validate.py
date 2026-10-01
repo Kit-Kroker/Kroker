@@ -63,6 +63,7 @@ class ProblemCode(StrEnum):
     ROLE_KIND_MISMATCH = "role_kind_mismatch"
     ROLE_HARNESS_MISSING = "role_harness_missing"
     RESEARCH_PROVIDER_MISSING = "research_provider_missing"
+    ROLE_MODEL_INVALID = "role_model_invalid"
     ADR6_VIOLATION = "adr6_violation"
     ADR6_COMBINATIONS_EXCEEDED = "adr6_combinations_exceeded"
     RESERVED_GATE_NAME = "reserved_gate_name"
@@ -312,6 +313,18 @@ def _node_config_problems(
                 node_id,
                 "a research-kind role override must name a provider",
             )
+        elif n.role.kind == "proposer" and n.role.model is not None:
+            # 004 T023 (FR-004, third entry path): a node's role copies into
+            # the run's role config (graph_nodes/base.py), so an invalid
+            # proposer model here reaches a real call exactly like a CLI
+            # override — refuse it at graph validation, beside ADR-6.
+            from ..agents.loader import RegistryError
+            from ..agents.model_ids import validate_proposer_model
+
+            try:
+                validate_proposer_model(spec.role, n.role.model)
+            except RegistryError as exc:
+                add(ProblemCode.ROLE_MODEL_INVALID, node_id, str(exc))
     return problems + _adr6_problems(nodes, registry, roles)
 
 
