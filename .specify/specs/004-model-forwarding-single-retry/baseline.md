@@ -45,6 +45,21 @@ greenfield_happy scenario, sandboxed runner via `SdlcPydanticAIPlugin`,
 `start_workflow` — far under the 1.5s assert budget (2s TMPRL1101 threshold minus
 0.5s margin). The test itself is green on base (fast-tier baseline run, RC=0).
 
+## T035 phase-6 verification (post-forwarding, all in kroker-dev)
+
+| Command (one pytest each) | Result |
+|---|---|
+| `tests/test_model_forwarding.py` | **8 passed** (a-h: all FR-006 scenarios + E4) |
+| `tests/test_run_role_guard.py` | **5 passed** (contract table complete) |
+| `tests/test_role_model_resolution.py` | **8 passed** (memo re-key green) |
+| `tests/durability/test_wire_neutrality.py` | **1 passed** (no-override wire byte-equal; SG-2 clear) |
+| `pytest -m temporal tests/replay` | **32 passed, 19 skipped, 0 failed** (SG-2 clear) |
+| `tests/durability/test_first_workflow_task_time.py` | **2 passed** (incl. openai override; E4) |
+
+SG-3 never fired: the guard raised only inside override runs where the label
+disagreed (scenario e pre-T030), never in a no-override test. US1 scenarios 1-4
+green; SC-001 and SC-004 hold.
+
 ## T009 stacked-retry count on main
 
 Measured in `kroker-dev` on a clean worktree of the base sha `730f085` (with
