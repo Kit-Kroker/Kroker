@@ -35,6 +35,7 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
+from sdlc.agents.model_ids import single_retry_layer
 from sdlc.agents.roles import (
     AGENT_ACTIVITY_CONFIG,
     AGENT_ACTIVITY_MAX_ATTEMPTS,
@@ -53,6 +54,8 @@ assert _REGISTRY_MODEL is not None
 # inside a workflow (TemporalDurability._check_bindable). No output_type —
 # the stub serves plain text and output-validation retries would add model
 # requests the count here is not about (the bound is per model request, E8).
+# The capability pair mirrors build_agents exactly (T012): durability plus
+# the single-retry resolver, both fresh instances.
 _AGENT = Agent(
     _REGISTRY_MODEL,
     name="single_retry_layer_probe_agent",
@@ -60,7 +63,8 @@ _AGENT = Agent(
         TemporalDurability(
             activity_config=AGENT_ACTIVITY_CONFIG,
             model_activity_config={"heartbeat_timeout": None},
-        )
+        ),
+        single_retry_layer(),
     ],
 )
 
