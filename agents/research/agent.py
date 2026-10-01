@@ -1,7 +1,9 @@
 import importlib.util
+from collections.abc import Sequence
 from pathlib import Path
 
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai_harness import CodeMode
 
@@ -33,16 +35,23 @@ def build(
     model_settings: ModelSettings,
     tool_paths: list[str],
     provider: str,
+    *,
+    capabilities: Sequence[AbstractCapability] = (),
 ) -> Agent:
     """The research role: a proposer with four plain tools. Uniquely among
     roles it receives tool_paths and provider — supplied by build_agents AFTER
     the whole registry validated (validation precedes import).
 
     """
-    capabilities = []
+    # Loader-supplied capabilities (durability) stay FIRST/outermost; this
+    # role's own (CodeMode, exa) append after them (003 contract).
+    own_capabilities: list[AbstractCapability] = []
     if provider == "exa":
         get_wrapped_exa_search = _import_exa_wrapper()
-        capabilities = [CodeMode(), get_wrapped_exa_search()(include_deep_search=True)]
+        own_capabilities = [
+            CodeMode(),
+            get_wrapped_exa_search()(include_deep_search=True),
+        ]
 
     agent = Agent(
         model,
@@ -51,7 +60,7 @@ def build(
         output_type=ResearchBrief,
         model_settings=model_settings,
         system_prompt=instructions,
-        capabilities=capabilities,
+        capabilities=[*capabilities, *own_capabilities],
     )
     for path in tool_paths:
         if "web_search" in path or "fetch_page" in path:

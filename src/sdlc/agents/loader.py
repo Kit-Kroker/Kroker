@@ -17,8 +17,9 @@ from __future__ import annotations
 import importlib.util
 import os
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -423,7 +424,10 @@ def _validate_tool_files(role: str, tools_dir: Path) -> list[str]:
 
 
 def build_agents(
-    roles: dict[str, RoleConfig], model_settings, agents_dir: str | os.PathLike | None = None
+    roles: dict[str, RoleConfig],
+    model_settings,
+    durability_factory: Callable[[], Any] | None = None,
+    agents_dir: str | os.PathLike | None = None,
 ) -> dict[str, Agent]:
     """Construct every proposer role's Agent from its own agent.py.
 
@@ -436,6 +440,13 @@ def build_agents(
     imports this function, so importing back would be a cycle that only works
     by definition order.
 
+    durability_factory (003, contracts/loader-build-contract.md): a
+    zero-argument callable returning a FRESH capability instance per role,
+    which build_agents hands to each asset's build() as
+    capabilities=[instance]. None (the default) passes NO capabilities kwarg
+    at all — the loader-only/eval path stays capability-free, and an asset
+    with the pre-003 build signature keeps working.
+
     agents_dir is a parameter rather than a re-resolution: the caller knows
     which tree it loaded, and re-resolving would import agent.py from the
     shipped registry while validating a different one.
@@ -447,13 +458,26 @@ def build_agents(
         if cfg.kind == "harness":
             continue
         build = _load_build(name, root / name)
+        build_kwargs: dict[str, Any] = {}
+        if durability_factory is not None:
+            # Fresh instance per role: one capability binds to one agent, and
+            # a shared instance would silently bind two Temporal activity
+            # sets to one configuration object.
+            build_kwargs["capabilities"] = [durability_factory()]
         if cfg.kind == "research":
             # Research build takes its tool paths and provider name too. Tool
             # modules are imported HERE — after the whole registry validated
             # (validation precedes import; registry spec finding 3).
-            agent = build(cfg.model, cfg.instructions, model_settings, cfg.tool_files, cfg.provider)
+            agent = build(
+                cfg.model,
+                cfg.instructions,
+                model_settings,
+                cfg.tool_files,
+                cfg.provider,
+                **build_kwargs,
+            )
         else:
-            agent = build(cfg.model, cfg.instructions, model_settings)
+            agent = build(cfg.model, cfg.instructions, model_settings, **build_kwargs)
         if agent.name in seen:
             raise RegistryError(
                 f"roles '{seen[agent.name]}' and '{name}' both build an agent "

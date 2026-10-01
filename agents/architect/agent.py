@@ -1,4 +1,7 @@
+from collections.abc import Sequence
+
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.settings import ModelSettings
 
 from sdlc.stages.architecture.models import ArchitectureSpec
@@ -6,13 +9,20 @@ from sdlc.stages.research.deps import ResearchDeps
 from sdlc.stages.research.models import ResearchBrief
 
 
-def build(model: str, instructions: str, model_settings: ModelSettings) -> Agent:
+def build(
+    model: str,
+    instructions: str,
+    model_settings: ModelSettings,
+    *,
+    capabilities: Sequence[AbstractCapability] = (),
+) -> Agent:
     agent = Agent(
         model,
         name="architect_agent",  # Temporal activity name -- NEVER rename
         deps_type=ResearchDeps,
         output_type=ArchitectureSpec,
         model_settings=model_settings,
+        capabilities=list(capabilities),
         system_prompt=instructions,
     )
 

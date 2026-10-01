@@ -36,11 +36,11 @@ Format: `- [ ] Tnnn [P?] [US?] description with path`. `[P]` = independent files
 
 **Purpose**: the `capabilities` seam. See contracts/loader-build-contract.md.
 
-- [ ] T010 [P] Write failing tests `tests/durability/test_loader_contract.py`: `build_agents(..., durability_factory=...)` passes a fresh `capabilities=[dur]` per role; `None` factory leaves agents capability-free; both `build` shapes (3-arg and research 5-arg) accept `capabilities`
-- [ ] T011 Add `tests/durability/__init__.py` and a tiny fixture registry under `tests/durability/` (temp agents dir) for the contract tests
-- [ ] T012 Implement in `src/sdlc/agents/loader.py`: `durability_factory` parameter on `build_agents`, keyword-only `capabilities` passed to `build` (both shapes); no module-level temporal import (lazy inside the function)
-- [ ] T013 Update the 14 `agents/<role>/agent.py` `build()` signatures to accept `capabilities` and forward `capabilities=[*capabilities, *own]` (durability first/outermost; research: before `CodeMode`/exa); do NOT touch `name=` values: `agents/{adversary,analyst,architect,clarify,deep_review,devops_planner,discover,handoff,merge_verdict,planner,qa,research,reviewer,risk}/agent.py`
-- [ ] T014 Run `pytest tests/durability/test_loader_contract.py tests/test_agents_registry.py tests/test_registry_resolution.py -q` in the dev container (one command); all green
+- [X] T010 [P] Write failing tests `tests/durability/test_loader_contract.py`: `build_agents(..., durability_factory=...)` passes a fresh `capabilities=[dur]` per role; `None` factory leaves agents capability-free; both `build` shapes (3-arg and research 5-arg) accept `capabilities`
+- [X] T011 Add `tests/durability/__init__.py` and a tiny fixture registry under `tests/durability/` (temp agents dir) for the contract tests
+- [X] T012 Implement in `src/sdlc/agents/loader.py`: `durability_factory` parameter on `build_agents`, keyword-only `capabilities` passed to `build` (both shapes); no module-level temporal import (lazy inside the function)
+- [X] T013 Update the 14 `agents/<role>/agent.py` `build()` signatures to accept `capabilities` and forward `capabilities=[*capabilities, *own]` (durability first/outermost; research: before `CodeMode`/exa); do NOT touch `name=` values: `agents/{adversary,analyst,architect,clarify,deep_review,devops_planner,discover,handoff,merge_verdict,planner,qa,research,reviewer,risk}/agent.py`
+- [X] T014 Run `pytest tests/durability/test_loader_contract.py tests/test_agents_registry.py tests/test_registry_resolution.py -q` in the dev container (one command); all green
 
 **Checkpoint**: contract in place; agents still capability-free until roles.py supplies the factory.
 
