@@ -62,7 +62,16 @@ one-time re-capture of `greenfield_happy.json` on the flipped registry
 (analogous to the T021 wire regen); (b) re-scope the parity test to
 compare per-role spend with the model label mapped across the 005 break
 marker; (c) retire/replace the recording with a post-005 capture policy.
-**No change made to the test or the recording; failure left visible.**
+**RESOLVED — orchestrator ruling 2026-10-02: option (b), label-mapped
+comparison.** The recording stays untouched (it anchors PRE-005 history;
+003's SC-006a depends on that anchor). The test gained a dated
+`_RECORDED_MODEL_MAP` (`anthropic:glm-5.2` → `zai:glm-5.3`, plus the bare
+`glm-5.2` → `glm-5.3` — the recording's research sub-question price entry
+carries the bare grammar; verified by decoding the frozen payload labels:
+five prefixed + one bare) applied to the RECORDED side only; token parity
+per role in order is still asserted exactly. The docstring states the
+post-005 parity scope and that a future route change must extend the
+mapping deliberately, never silently. Test-only edit; green: 1 passed RC=0.
 
 ## T030 live confirmation (FR-015, SC-007; quickstart step 6)
 
@@ -139,12 +148,11 @@ one escalation). Actual vs predicted divergences are recorded in place.
 
 ### Open item handed to the orchestrator
 
-**SG-2 escalation** (see the T025 section): `test_priced_usage_parity` is
+**SG-2 escalation** (see the T025 section): `test_priced_usage_parity` was
 red on the flipped registry — live inputs token-identical to the frozen
-recording, only the model label differs. Recording and test untouched;
-ruling requested between (a) sanctioned re-capture, (b) label-mapped
-comparison, (c) new capture policy. Until ruled, the temporal tier carries
-this one red (plus the pre-existing base red recorded in baseline.md).
+recording, only the model label differed. **Ruled 2026-10-02: option (b)
+applied; see the resolution note in the T025 section.** The temporal tier's
+only remaining red is the pre-existing base failure recorded in baseline.md.
 
 ### Follow-ups to hand the orchestrator (T032 list)
 
