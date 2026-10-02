@@ -254,3 +254,35 @@ def test_unset_zai_base_url_builds_the_model_without_any_network_call(
             f"building a model made {stub.count} HTTP requests; resolution "
             f"must not touch the network (T009, C5)"
         )
+
+
+# --- T022: the zai model profile pin (research R11) --------------------------
+#
+# The profile is what makes the glm-5.3 responses behave: structured output
+# rides tools, thinking is on and cannot be turned off, a per-request
+# reasoning effort is accepted, and thinking content comes back in the
+# `reasoning_content` field. R11 probed these live; this pins them so a
+# pydantic-ai upgrade that silently changes the zai profile fails here
+# instead of in a live stage (FR-015's precondition).
+
+
+def test_zai_model_profile_pins_the_r11_probe():
+    model = resolve_model(_ZAI_ID)
+    profile = model.profile
+    assert profile["default_structured_output_mode"] == "tool", (
+        f"structured output mode is {profile['default_structured_output_mode']!r}; "
+        f"the zai profile must keep 'tool' (R11 probe)"
+    )
+    assert profile["supports_thinking"] is True, (
+        "the zai profile must mark glm-5.3 thinking-capable (R11)"
+    )
+    assert profile["thinking_always_enabled"] is True, (
+        "glm-5.3 always reasons and rejects thinking.type 'disabled'; the profile must say so (R11)"
+    )
+    assert profile["zai_supports_reasoning_effort"] is True, (
+        "glm-5.3 accepts a per-request reasoning_effort level; the profile must flag it (R11)"
+    )
+    assert profile["openai_chat_thinking_field"] == "reasoning_content", (
+        f"thinking content rides {profile['openai_chat_thinking_field']!r}; "
+        f"z.ai's chat protocol uses 'reasoning_content' (R11)"
+    )
