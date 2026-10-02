@@ -91,7 +91,8 @@ def test_resolve_instructions_git_ref_reads_from_git():
 def test_cost_resolves_for_the_shipped_role_models():
     """A permanently-None cost makes the config's ABSOLUTE `cost` gate
     vacuous. Delegating to pricing.compute_price is what makes the registry's
-    routing prefix (anthropic:glm-5.2, priced under zhipuai) resolve."""
+    routing prefix resolve (zai:glm-5.3 on the native zai row since 005;
+    anthropic:glm-5.2 was priced under zhipuai before it)."""
     from sdlc.eval.promptfoo.provider import _cost_usd
 
     class _U:

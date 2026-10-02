@@ -109,10 +109,12 @@ def test_get_assert_accepts_an_object_context():
 
 
 def test_same_weights_behind_different_prefixes_is_refused():
-    """This repo runs `anthropic:glm-5.2` against ANTHROPIC_BASE_URL=api.z.ai,
-    so the provider prefix says who SERVES the model, not what it is.
-    `zai-coding-plan/glm-5.2` clears the family check while being the same
-    weights -- exactly what loader.py:237 guards the adversary against."""
+    """A provider prefix says who SERVES the model, not what it is. Pre-005
+    this repo ran `anthropic:glm-5.2` against ANTHROPIC_BASE_URL=api.z.ai;
+    `zai-coding-plan/glm-5.2` cleared the family check while being the same
+    weights -- exactly what loader.py:237 guards the adversary against.
+    Post-005 the ids differ by string (glm-5.2 vs glm-5.3); the guard stays
+    for the day two prefixes meet on one id again."""
     res = grade("{}", _ctx(judge_model="zai-coding-plan/glm-5.2"))
     assert res["pass"] is False
     assert "same model" in res["reason"]

@@ -28,10 +28,10 @@ models:
   - zai-coding-plan/glm-5.3
 judge_model: google:gemini-3.7-flash     # different family than the author (ADR-6)
 # dev/test/devops are the HARNESS_ROLES this arm runs through the crew.
-# `zai-coding-plan` is already a different ADR-6 family from the reviewer's
-# registry default (anthropic:glm-5.2), so no provider-prefix trick is
-# needed here any more -- the model string is now passed through to the
-# crew's CLI verbatim.
+# `zai-coding-plan` is a different ADR-6 family from the reviewer's
+# registry default (zai:glm-5.3 since the 005 flip; anthropic:glm-5.2
+# before it), so no provider-prefix trick is needed here any more -- the
+# model string is now passed through to the crew's CLI verbatim.
 arms:
   - name: crew-glm-5.3
     role_models:

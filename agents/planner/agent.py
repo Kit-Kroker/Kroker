@@ -22,7 +22,9 @@ def build(
         capabilities=list(capabilities),
         system_prompt=instructions,
         # pydantic_ai's own default output-retry budget is 1. Confirmed
-        # empirically against a live run (anthropic:glm-5.2 via z.ai):
+        # empirically against a live run (observed 2026-09 on the pre-005
+        # route, anthropic:glm-5.2 via z.ai's Anthropic-compatible
+        # endpoint):
         # ImplementationPlan.tasks is a long array of near-identical DevTask
         # objects, and the model twice in a row filled the first task's
         # `description` correctly, then dropped it on every task after --

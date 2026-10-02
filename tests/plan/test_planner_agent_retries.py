@@ -1,10 +1,11 @@
 """ImplementationPlan.tasks is a long array of near-identical DevTask
-objects; a live run against anthropic:glm-5.2 showed the model filling the
-first task's `description` correctly and then dropping it on every task
-after -- pydantic_ai's default output-retry budget (1) spends its only
-attempt on that first, uncorrected response. Pins the widened budget so a
-future refactor of agents/planner/agent.py can't silently drop it back to
-the default and reintroduce the flake this was written to fix."""
+objects; a live run (2026-09, the pre-005 route anthropic:glm-5.2) showed
+the model filling the first task's `description` correctly and then
+dropping it on every task after -- pydantic_ai's default output-retry
+budget (1) spends its only attempt on that first, uncorrected response.
+Pins the widened budget so a future refactor of agents/planner/agent.py
+can't silently drop it back to the default and reintroduce the flake this
+was written to fix."""
 
 from __future__ import annotations
 

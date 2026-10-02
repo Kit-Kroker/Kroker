@@ -70,11 +70,13 @@ def grade(output: str, context: dict) -> dict:
             f"Pick a different family.",
         }
     # Family alone is not enough. A provider prefix says who SERVES a model,
-    # not what it is -- this repo runs `anthropic:glm-5.2` against
-    # ANTHROPIC_BASE_URL=api.z.ai, so `zai-coding-plan/glm-5.2` would clear
-    # the family check while being the very same weights grading their own
-    # output. loader.py:237 already guards the adversary this way; the judge
-    # needs the same guard for the same reason.
+    # not what it is -- pre-005 this repo ran `anthropic:glm-5.2` against
+    # ANTHROPIC_BASE_URL=api.z.ai while dev ran `zai-coding-plan/glm-5.2`:
+    # different families, same weights. Since 005 the reviewer is
+    # `zai:glm-5.3` and dev `zai-coding-plan/glm-5.2` (ids differ by string),
+    # but the guard stays: same id behind any two prefixes must still fail.
+    # loader.py:237 already guards the adversary this way; the judge needs
+    # the same guard for the same reason.
     if model_id(judge) == model_id(author):
         return {
             "pass": False,

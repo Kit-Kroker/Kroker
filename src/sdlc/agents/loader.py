@@ -245,11 +245,14 @@ def check_adversary_model(role_models: dict[str, str]) -> None:
     """The adversary must not BE either model it is decorrelating from.
 
     Deliberately by model id, not family: the shipped registry runs `dev`
-    and `reviewer` on the same glm-5.2 behind different providers, so a
-    family check here would wave through a second copy of the reviewer.
-    (That dev/reviewer pairing is spec OQ-A4 and is NOT changed here --
-    check_adr6_families keeps its existing semantics so no benchmark
-    baseline shifts.) No-op when the optional role is absent.
+    and `reviewer` at the same vendor behind two prefixes (pre-005 that was
+    the same glm-5.2 behind `zai-coding-plan/` and `anthropic:`; since 005
+    it is glm-5.2 behind `zai-coding-plan/` and glm-5.3 behind `zai:` --
+    ids differ by string, families differ by prefix), so a family check
+    here would wave through a second copy of the reviewer in the shapes
+    where the two coincide. (That dev/reviewer pairing is spec OQ-A4 and is
+    NOT changed here -- check_adr6_families keeps its existing semantics so
+    no benchmark baseline shifts.) No-op when the optional role is absent.
     """
     adv = role_models.get("adversary")
     if adv is None:

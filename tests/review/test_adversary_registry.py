@@ -1,10 +1,12 @@
 """The adversary's decorrelation is by MODEL IDENTITY, not provider prefix.
 
 model_family() splits on the provider, which is wrong in both directions
-against the shipped registry: it accepts zai-coding-plan/glm-5.2 vs
-anthropic:glm-5.2 (same weights, no decorrelation) and would reject
+against the shipped registry: pre-005 it accepted zai-coding-plan/glm-5.2
+vs anthropic:glm-5.2 (same weights, no decorrelation) and would reject
 anthropic:claude-sonnet-4-6 vs anthropic:glm-5.2 (different weights, real
-decorrelation). See spec OQ-A4.
+decorrelation). Post-005 the registry ids differ by string
+(zai-coding-plan/glm-5.2 vs zai:glm-5.3), which the by-id check catches
+without caring -- same principle, whatever the prefixes. See spec OQ-A4.
 """
 
 import pytest
