@@ -18,10 +18,13 @@ import pytest
 # client that reads EXA_API_KEY at construction time. conftest is imported
 # before any test module, so set placeholders here at module load so
 # collection-time agent construction succeeds. The autouse _llm_api_keys
-# fixture below still monkeypatches per-test for hygiene.
+# fixture below still monkeypatches per-test for hygiene. 005 T005: a zai
+# provider reads ZAI_API_KEY when a model string is resolved eagerly, so it
+# gets the same placeholder treatment.
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-dummy")
 os.environ.setdefault("OPENAI_API_KEY", "test-dummy")
 os.environ.setdefault("EXA_API_KEY", "test-dummy")
+os.environ.setdefault("ZAI_API_KEY", "test-dummy")
 # E-75: start sites write graphs/<sha>.yaml; keep test runs out of the checkout.
 # Hardened (bug root-store-write): bare setdefault let a pre-exported
 # RELATIVE value through, re-creating the CWD-anchored litter the fix
@@ -130,6 +133,7 @@ def _llm_api_keys(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("EXA_API_KEY", "test-key")
+    monkeypatch.setenv("ZAI_API_KEY", "test-key")
     monkeypatch.setenv("SDLC_MEMORY_ENABLED", "false")
 
 
