@@ -3,9 +3,11 @@
 from datetime import UTC
 
 import pytest
+from pydantic_ai.models import infer_model
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.tools import DeferredToolRequests
 
+from sdlc.agents.model_ids import ZAI_CODING_BASE_URL
 from sdlc.operator import agent as chat_agent
 from sdlc.operator import tools
 from sdlc.operator.deps import OperatorDeps
@@ -203,3 +205,72 @@ def test_asset_dir_falls_back_to_the_checkout(monkeypatch):
     monkeypatch.delenv(chat_agent.ASSETS_ENV, raising=False)
     assert chat_agent.asset_dir().name == "chat"
     assert (chat_agent.asset_dir() / "agent.yaml").is_file()
+
+
+# --- 005 T013: the chat site builds agents through the route seam -----------
+
+
+def _cfg(model: str) -> chat_agent.ChatConfig:
+    return chat_agent.ChatConfig(model=model, max_tokens=1000, instructions="test instructions")
+
+
+def _url(base_url: object) -> str:
+    """A client base URL without the trailing slash the OpenAI-style client
+    normalises onto every URL."""
+    return str(base_url).rstrip("/")
+
+
+_LAST_BUILT: list[object] = []
+
+
+class _RecordingChatAgent:
+    """Stands in for pydantic_ai.Agent in build_agent: records the model the
+    site was handed, serves nothing, never touches the network."""
+
+    def __init__(self, model, **kwargs):
+        self.model = model
+        _LAST_BUILT.append(model)
+
+    def instructions(self, fn):
+        return fn
+
+
+def test_build_agent_resolves_a_zai_model_and_builds_non_zai_through_the_framework(
+    monkeypatch,
+):
+    """005 T013 (FR-016, plan D2 site 7, contract C4/C7): the chat agent
+    must be built from a RESOLVED model — a ``zai:`` cfg.model reaches
+    Agent() as a pydantic-ai Model whose client sits on the coding endpoint,
+    not as the bare agent.yaml string — while a non-zai string builds
+    exactly the model the framework itself builds (the URL policy applies
+    to provider name zai only, C4)."""
+    monkeypatch.setattr(chat_agent, "Agent", _RecordingChatAgent)
+    monkeypatch.delenv("ZAI_BASE_URL", raising=False)
+
+    chat_agent.build_agent(_cfg("zai:glm-5.3"))
+    built = _LAST_BUILT[-1]
+    assert built is not None and not isinstance(built, str), (
+        "the chat site built Agent from the bare string "
+        f"{built!r} — route it through sdlc.agents.model_ids.resolve_model "
+        "so zai: ids reach the coding endpoint (plan D2 site 7, contract C7)"
+    )
+    assert _url(built.client.base_url) == ZAI_CODING_BASE_URL, (  # type: ignore[attr-defined]
+        f"the resolved chat model sits on {_url(built.client.base_url)!r}; "
+        "the zai URL policy must reach the chat site (C1, C4)"
+    )
+
+    chat_agent.build_agent(_cfg("openai:gpt-5.2"))
+    built = _LAST_BUILT[-1]
+    assert built is not None and not isinstance(built, str), (
+        "the chat site built Agent from the bare string "
+        f"{built!r} — string cfg.model values must resolve (plan D2 site 7)"
+    )
+    reference = infer_model("openai:gpt-5.2")  # the plain framework path
+    assert type(built) is type(reference), (
+        "the chat site built a different model class than the framework's "
+        f"own path ({type(built).__name__} vs {type(reference).__name__}); a "
+        "non-zai string must be built exactly as infer_model builds it (C4)"
+    )
+    assert built.model_name == reference.model_name, (  # type: ignore[attr-defined]
+        "the chat site changed the model name on the framework path"
+    )

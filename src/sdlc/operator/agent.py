@@ -31,6 +31,8 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import DeferredToolRequests
 from pydantic_ai.toolsets import FunctionToolset
 
+from ..agents.model_ids import resolve_model
+
 if TYPE_CHECKING:
     # The public `pydantic_ai.ui` namespace re-exports lazily via
     # __getattr__, which mypy cannot see through; _web is the real home.
@@ -186,7 +188,11 @@ def build_toolset() -> FunctionToolset:
 def build_agent(cfg: ChatConfig | None = None) -> Agent:
     cfg = cfg or load_chat_config()
     agent: Agent = Agent(
-        cfg.model,
+        # 005 T013 (plan D2 site 7, contract C7): the chat model string
+        # resolves through the shared seam, so a zai: id reaches the coding
+        # endpoint; non-zai strings build exactly as the framework builds
+        # them.
+        resolve_model(cfg.model),
         deps_type=OperatorDeps,
         toolsets=[build_toolset()],
         # The write tools are requires_approval=True, so their calls come
