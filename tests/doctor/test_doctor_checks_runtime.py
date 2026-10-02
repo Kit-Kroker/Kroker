@@ -142,6 +142,65 @@ def test_placeholder_derived_key_reports_fail(monkeypatch):
     assert checks.check_provider_keys().status is Status.FAIL
 
 
+# --- US2 (005): the zai family derives ZAI_API_KEY (spec E6) -----------------
+
+
+def test_missing_zai_key_reports_fail_naming_it(monkeypatch):
+    """US2 independent test: a zai proposer with no ZAI_API_KEY is exactly
+    the opaque boot failure 005 removes -- doctor must name the key before
+    the run starts (spec E5; contract 'Observable evidence', doctor row)."""
+    monkeypatch.setattr(
+        checks, "load_registry", lambda: {"qa": _Role("proposer", model="zai:glm-5.3")}
+    )
+    monkeypatch.setattr(checks, "parse_env_example", lambda: {})
+    monkeypatch.delenv("ZAI_API_KEY", raising=False)
+    r = checks.check_provider_keys()
+    assert r.status is Status.FAIL
+    assert "ZAI_API_KEY" in r.detail
+
+
+def test_placeholder_zai_key_reports_fail_naming_the_placeholder(monkeypatch):
+    monkeypatch.setattr(
+        checks, "load_registry", lambda: {"qa": _Role("proposer", model="zai:glm-5.3")}
+    )
+    monkeypatch.setattr(checks, "parse_env_example", lambda: {"ZAI_API_KEY": "your-zai-api-key"})
+    monkeypatch.setenv("ZAI_API_KEY", "your-zai-api-key")
+    r = checks.check_provider_keys()
+    assert r.status is Status.FAIL
+    assert "your-zai-api-key" in r.detail
+
+
+def test_set_zai_key_passes(monkeypatch):
+    monkeypatch.setattr(
+        checks, "load_registry", lambda: {"qa": _Role("proposer", model="zai:glm-5.3")}
+    )
+    monkeypatch.setattr(checks, "parse_env_example", lambda: {})
+    monkeypatch.setenv("ZAI_API_KEY", "zk-live-credential")
+    r = checks.check_provider_keys()
+    assert r.status is Status.PASS
+    assert "ZAI_API_KEY" in r.detail
+
+
+def test_zai_and_anthropic_roles_require_both_keys(monkeypatch):
+    """Spec E6: adversary/discover/risk stay on anthropic claude models while
+    the proposers flip to zai, so a mixed registry needs BOTH credentials --
+    having one of the two set must still fail naming the missing one."""
+    monkeypatch.setattr(
+        checks,
+        "load_registry",
+        lambda: {
+            "qa": _Role("proposer", model="zai:glm-5.3"),
+            "reviewer": _Role("proposer", model="anthropic:claude-sonnet-4-5"),
+        },
+    )
+    monkeypatch.setattr(checks, "parse_env_example", lambda: {})
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-real")
+    monkeypatch.delenv("ZAI_API_KEY", raising=False)
+    r = checks.check_provider_keys()
+    assert r.status is Status.FAIL
+    assert "ZAI_API_KEY" in r.detail
+
+
 def test_research_role_derives_its_provider_key(monkeypatch):
     monkeypatch.setattr(
         checks,
