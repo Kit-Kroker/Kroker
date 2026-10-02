@@ -56,3 +56,22 @@ runner via `SdlcPydanticAIPlugin`, `auto_time_skipping_disabled`, script kept
 outside the repo): **first WorkflowTaskCompleted at 0.128s** from
 `start_workflow`; no TMPRL1101 in the history. 004's baseline on `730f085`
 was 0.130s — consistent. Budget: < 1.5s.
+
+## T004 capability-assertion inventory (plan Risks, item 2)
+
+Grep of `capabilities` / `has_resolve_model_id` / `_root_capability` over
+`tests/durability/test_loader_*.py`, `tests/test_eval_*.py`,
+`tests/test_agents_registry.py`:
+
+| Hit | Pins | T010/T011 break it? |
+|---|---|---|
+| `tests/durability/test_loader_contract.py::test_default_and_explicit_none_leave_agents_capability_free` (L67-76; module docstring L6) | `received_capabilities == []` for factory omitted AND explicit None | **YES (T010)** — both branches gain `[route_layer()]`. Reason it pinned (no route policy exists on the non-durable path) is exactly what 005 reverses → adjust the test, no fallback |
+| `tests/durability/test_loader_contract_edges.py::test_explicit_none_factory_is_the_capability_free_default` (L141-152) | `== []` for explicit None | **YES (T010)** — same disposition |
+| `tests/durability/test_loader_contract.py::test_factory_gives_each_role_its_own_fresh_capability`, `_edges.py::test_factory_called_once_per_role_instances_not_shared`, `test_loader_failclosed_edges.py::test_stub_agents_skip_durability_verification` | durable path shape (`[dur, resolver]`, len 2) | No — durable path unchanged |
+| `tests/durability/test_loader_failclosed*.py` remaining rows | durable-path fail-closed behaviour | No |
+| `tests/test_eval_*.py` (runner, fixture_build, cli_*, verdict, mutation_seam, absolute_vetoes) | no capability assertions at all; `test_eval_runner.py` L41 pins the injected-model pass-through (T011's unchanged row) | No for T011's capability aspect; `test_eval_fixture_build.py::47` asserts the registry model string and is triage manifest FLIP candidate (T021, by running) |
+| `tests/test_agents_registry.py` | no capability assertions | No |
+
+No T004 hit pins capability-free for a reason that still holds, so the
+plan's `resolve_model`-inside-the-branch fallback is not needed: T010 takes
+the `capabilities=[route_layer()]` route.
