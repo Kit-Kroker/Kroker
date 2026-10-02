@@ -22,9 +22,13 @@ def compute_price(inp: PriceUsageInput) -> float | None:
     """Pure lookup. None = unknown model/provider — NEVER raises: a missing
     price must not fail a stage; the tokens still record (spec §3).
 
-    The registry's model strings carry a routing provider ("anthropic:" for
-    an anthropic-compatible endpoint), which may not be the pricing
-    provider — so a hinted miss retries unhinted (glm via zhipuai)."""
+    The registry's model strings carry a routing provider ("zai:" on the
+    coding endpoint since 005), which may not be the pricing provider — so
+    a hinted miss retries unhinted. Post-005 the unhinted fallback serves
+    the harness strings ("zai-coding-plan/glm-5.2" → zhipuai) and the
+    rollback override ("anthropic:glm-5.2" → zhipuai), not the registry
+    proposers: zai:glm-5.3 hints onto the native zai row (005 T027,
+    research R10)."""
     import genai_prices
 
     usage = genai_prices.Usage(

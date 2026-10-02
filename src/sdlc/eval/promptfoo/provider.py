@@ -43,8 +43,11 @@ def _cost_usd(usage: Any, model: str) -> float | None:
 
     Delegates to pricing.compute_price rather than calling genai-prices
     directly: that function already splits the registry's routing prefix
-    ("anthropic:glm-5.2") from the pricing provider and retries unhinted,
-    which a naive calc_price call gets wrong (glm is priced under zhipuai).
+    from the pricing provider and retries unhinted, which a naive
+    calc_price call gets wrong. Post-005 the fallback row serves the
+    harness strings and the rollback override ("anthropic:glm-5.2" and
+    "zai-coding-plan/glm-5.2" → zhipuai), while the registry proposers'
+    zai:glm-5.3 hints onto the native zai row (005 T027, R10).
     Returns None for an unknown model -- a missing price must not fail a
     gate, and verdict.py treats None as not-measured.
     """
