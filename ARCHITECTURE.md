@@ -189,6 +189,17 @@ the priced model and the memo key all name the override, and a call site
 whose label disagrees fails non-retryably instead of recording a wrong
 label. Runs without overrides are byte-identical to before (replay-safe).
 
+Since 005 the 11 glm proposer roles ship `zai:glm-5.3` and are served on
+z.ai's native **coding** endpoint (the subscription-covered one):
+`agents/model_ids.py` owns the base-URL policy — `ZAI_CODING_BASE_URL` by
+default, a non-blank `ZAI_BASE_URL` overrides it, read at call time — and
+every site that turns a model string into a model applies it through
+`single_retry_layer` / `route_layer` / `resolve_model` (the durable loader
+path, the loader-only/eval path, the eval runner, the benchmark judge and
+the operator chat; `tests/test_model_construction_sites.py` pins the site
+list). The claude roles keep the Anthropic-compatible endpoint; per-role
+rollback is `--role-model <role>=anthropic:glm-5.2`.
+
 **Context engineering (handles, not walls of text):** agent context is
 assembled from references and scoped extracts, never full artifact dumps —
 the Developer gets its task, the relevant `CodebaseMap` slice, and contract

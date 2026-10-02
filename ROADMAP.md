@@ -15,6 +15,17 @@
 
 > Since the 2026-07-05 audit, the **reviewer stage (ADR-6/FR-204)** and **agent registry (FR-201)** landed (merged `b9455c3`), plus a **coding-harness adapter layer** and **harness observability logging**. Those items are now checked. The audit's `docs/reports/feature-coverage-audit-2026-07-05.md` is superseded by this tracker.
 
+> **2026-10-02 — native zai provider (decision C3 of the 2026-09-30
+> forwarding task doc; feature
+> `.specify/specs/005-native-zai-provider/`).** The 11 glm proposer roles
+> were cut over from `anthropic:glm-5.2` over the Anthropic-compatible
+> endpoint to `zai:glm-5.3` on z.ai's native **coding** endpoint, behind a
+> base-URL policy in `agents/model_ids.py` applied at every construction
+> site. Cost history carries a dated break marker in `BENCHMARK.md`
+> (zhipuai fallback 1.103/3.862 → native zai 1.400/4.400 per 1M; research
+> budgets tighten 14–27% on the same tokens, not retuned; no re-runs).
+> C3 is **landed**.
+
 > **2026-07-16 — ADR-6 correction.** The anti-collusion check was validating `config/agents.yaml`'s `developer` role, which nothing ever ran; `cfg.roles["dev"]` (a second, hardcoded registry in `models.py`) selected the coding model. The invariant held only while two hardcoded lists agreed. `agents.yaml` is now the single registry, the check compares `reviewer` against `dev`, and `PipelineConfig.roles` is asserted at boot to mirror it. Prior `[x]` marks on ADR-6/US-5 were true of the mechanism, not of the pairing it constrained.
 
 > **2026-07-17 — research stage (FR-107).** A grounded research stage lands
