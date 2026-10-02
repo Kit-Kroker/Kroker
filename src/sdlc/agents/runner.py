@@ -47,16 +47,28 @@ def _warm_workflow_side_imports() -> None:
     (FR-020d); the first resolution imports the provider SDK and builds its
     pydantic schemas (~1.9 s for the anthropic SDK, measured in the dev
     container). On the host that is a one-time boot cost; inside a workflow
-    task it trips TMPRL1101. Every registry proposer model is
-    anthropic:-prefixed today (only harness roles use zai, and harness roles
-    are never durable agents) — but 004 forwards proposer overrides to any
-    constructible provider, so a run with an ``openai:``/``google:`` override
-    resolves that provider workflow-side (E4). Warm the openai and google
-    provider modules too; a provider whose extra is absent stays cold and
-    its first import inside a task is the override's own cost. Failure is
-    swallowed per module: warm-up is an optimization, never a boot gate.
+    task it trips TMPRL1101. Since 005 the registry's 11 glm proposer roles
+    are ``zai:``-prefixed, so the zai provider modules are the COMMON path
+    and warmed first-class (``pydantic_ai.providers.zai`` /
+    ``pydantic_ai.models.zai`` / ``pydantic_ai.profiles.zai`` — 005 T024,
+    research R4: zai resolution drops from ~1 s to ~0.13 s with anthropic/
+    openai already warm). ``anthropic`` stays for the claude roles
+    (adversary, discover, risk) and the rollback override
+    (``--role-model <role>=anthropic:glm-5.2``); 004 forwards proposer
+    overrides to any constructible provider, so ``openai:``/``google:``
+    overrides resolve workflow-side too (E4) and those modules warm as
+    well. A provider whose extra is absent stays cold and its first import
+    inside a task is the override's own cost. Failure is swallowed per
+    module: warm-up is an optimization, never a boot gate.
     """
-    for module in ("anthropic", "openai", "google.genai"):
+    for module in (
+        "anthropic",
+        "openai",
+        "google.genai",
+        "pydantic_ai.providers.zai",
+        "pydantic_ai.models.zai",
+        "pydantic_ai.profiles.zai",
+    ):
         try:
             importlib.import_module(module)
         except Exception:  # noqa: BLE001 -- boot must not depend on warm-up
