@@ -44,7 +44,9 @@ def test_clarify_prompt_matches_what_the_workflow_sends():
 
 def test_fixture_carries_the_role_registry_model():
     fx = build_fixture("clarify", "add-login-greenfield", CASES, AGENTS)
-    assert fx.model == "anthropic:glm-5.2"
+    # 005 T021 FLIP: the fixture model follows the shipped registry — the
+    # clarify role flipped to zai:glm-5.3 (T020).
+    assert fx.model == "zai:glm-5.3"
     assert fx.source_run_id == "_built"
     assert fx.role == "clarify"
     assert fx.case == "add-login-greenfield"

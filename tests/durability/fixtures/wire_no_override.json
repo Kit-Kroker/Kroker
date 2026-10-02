@@ -44,27 +44,27 @@
  "model_requests": [
   {
    "activity": "agent__clarify_agent__model_request",
-   "model_id": "anthropic:glm-5.2"
+   "model_id": "zai:glm-5.3"
   },
   {
    "activity": "agent__architect_agent__model_request",
-   "model_id": "anthropic:glm-5.2"
+   "model_id": "zai:glm-5.3"
   },
   {
    "activity": "agent__planner_agent__model_request",
-   "model_id": "anthropic:glm-5.2"
+   "model_id": "zai:glm-5.3"
   },
   {
    "activity": "agent__qa_analyst_agent__model_request",
-   "model_id": "anthropic:glm-5.2"
+   "model_id": "zai:glm-5.3"
   },
   {
    "activity": "agent__reviewer_agent__model_request",
-   "model_id": "anthropic:glm-5.2"
+   "model_id": "zai:glm-5.3"
   },
   {
    "activity": "agent__analyst_agent__model_request",
-   "model_id": "anthropic:glm-5.2"
+   "model_id": "zai:glm-5.3"
   }
  ]
 }
