@@ -23,6 +23,7 @@ ACCEPTED = [
     "anthropic:claude-sonnet-4-6",
     "openai:gpt-5.2",
     "google:gemini-3.5-flash",
+    "zai:glm-5.3",  # 005: the native z.ai provider is a real proposer id
 ]
 
 REJECTED = [

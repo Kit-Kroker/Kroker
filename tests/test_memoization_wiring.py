@@ -80,3 +80,4 @@ def test_no_hardcoded_model_literals_in_the_workflow():
     source = FEATURE_PY.read_text(encoding="utf-8")
     assert "anthropic:glm-5.2" not in source
     assert "zai-coding-plan/glm-5.2" not in source
+    assert "zai:glm-5.3" not in source  # 005: the registry's new proposer id
