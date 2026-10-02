@@ -3,4 +3,4 @@
 # puts this on a small fast model. Editing the model here is configuration,
 # not a code change.
 kind: proposer
-model: anthropic:glm-5.2
+model: zai:glm-5.3
