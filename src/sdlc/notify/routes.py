@@ -9,6 +9,7 @@ expiring.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
@@ -16,6 +17,8 @@ import yaml
 from pydantic import BaseModel, Field
 
 from .contract import NotifyReason
+
+log = logging.getLogger(__name__)
 
 ROUTES_PATH_ENV = "SDLC_NOTIFY_ROUTES"
 _ROOT_MARKERS = ("pyproject.toml", "agents/registry.yaml")
@@ -68,10 +71,21 @@ def _resolve_path(path: str | os.PathLike | None) -> Path:
     )
 
 
+def _env_ref(raw: str) -> str | None:
+    """The variable name when the route string's target starts with '$',
+    else None — the one definition of a '$VAR' target."""
+    target = raw.partition(":")[2].strip()
+    if target.startswith("$"):
+        return target[1:]
+    return None
+
+
 def _parse_route(raw: str, where: str) -> Route | None:
     """'log' -> Route(log); 'webhook:$X' -> Route(webhook, os.environ[X]).
-    Returns None when an env-var target is unset: dropping the route beats
-    POSTing to the literal string."""
+    A '$VAR' target whose variable is unset or empty drops the route: the
+    drop is logged (one WARNING naming where and the variable, never a
+    value) and None is returned -- dropping beats POSTing to the literal
+    string."""
     from .notifiers import NOTIFIERS  # local: avoids an import cycle
 
     notifier, _, raw_target = raw.partition(":")
@@ -81,9 +95,11 @@ def _parse_route(raw: str, where: str) -> Route | None:
             f"unknown notifier {notifier!r} at {where}; known: {', '.join(sorted(NOTIFIERS))}"
         )
     target: str | None = raw_target.strip() or None
-    if target and target.startswith("$"):
-        target = os.environ.get(target[1:])
+    var = _env_ref(raw)
+    if var is not None:
+        target = os.environ.get(var)
         if not target:
+            log.warning("notification route %s dropped: $%s is unset or empty", where, var)
             return None
     return Route(notifier=notifier, target=target)
 
