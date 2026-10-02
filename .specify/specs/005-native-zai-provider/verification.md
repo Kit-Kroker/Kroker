@@ -32,7 +32,10 @@ equals the regenerated fixture).
 ## T025 temporal tier on the flipped registry
 
 Per-file driver (45 files, `timeout 300` each, one pytest per file):
-**181 passed, 20 skipped, 1 xfailed, 2 failed, 0 timeout-kills.**
+**180 passed, 20 skipped, 1 xfailed, 2 failed, 0 timeout-kills** (count
+corrected post-ruling: the originally recorded 181 was a summation slip —
+179 base + 2 T023 tests − 1 parity = 180; see the post-ruling section for
+the arithmetic that exposed it).
 T002 baseline was 179/20/1 (+1 pre-existing failure); the +2 passed are
 T023's durable-path wire tests.
 
@@ -72,6 +75,24 @@ five prefixed + one bare) applied to the RECORDED side only; token parity
 per role in order is still asserted exactly. The docstring states the
 post-005 parity scope and that a future route change must extend the
 mapping deliberately, never silently. Test-only edit; green: 1 passed RC=0.
+
+### Post-ruling final verification (2026-10-02, after host restart)
+
+Full temporal tier re-run per the same chunked driver (45 files,
+`timeout 300` each, one pytest per command): **182 passed, 20 skipped,
+1 xfailed, 0 failed, 0 timeouts — every file RC=0.** Arithmetic vs base:
+179 (T002) + 2 (T023) + 1 (parity under the ruling) + 1 (golden, see
+below) = 182 ✓. First-workflow-task replica on the flipped registry:
+**0.134s**, no TMPRL1101 (baseline 0.128s, T025 0.123s; budget 1.5s —
+SG-4 clear throughout).
+
+**Golden-flake re-attribution**: `test_graph_golden.py[budget_arch_reject]`
+(the T002 "pre-existing failure", then 3/3 red) passed in this run AND in
+an immediate re-run (32 passed × 2, RC=0 both) with zero 005 changes near
+its path. Baseline.md carries a dated addendum: the failure is
+load-dependent flakiness in the scenario's timer-vs-activity projection,
+not a deterministic base red. It stays recorded, not investigated —
+re-attribution only.
 
 ## T030 live confirmation (FR-015, SC-007; quickstart step 6)
 

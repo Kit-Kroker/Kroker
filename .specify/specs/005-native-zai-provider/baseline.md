@@ -47,6 +47,14 @@ the golden contains one more item, `activity:apply_session_retention`).
 (004 merge + docs commits). Recorded per T002, not investigated, not fixed
 here.
 
+Addendum 2026-10-02 (post-ruling verification, after a host restart): the
+same file passed the same driver twice in a row (32 passed × 2, RC=0) with
+zero 005 changes near its path. The T002 failure is therefore
+**load-dependent flakiness** in the scenario's timer-vs-activity
+projection, not a deterministic base red — the 3/3 reproduction above was
+taken under load. Re-attribution only; still recorded, still not
+investigated here.
+
 ## T003 first-workflow-task timing
 
 `tests/durability/test_first_workflow_task_time.py` green on base (temporal
