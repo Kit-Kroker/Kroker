@@ -46,3 +46,13 @@ the golden contains one more item, `activity:apply_session_retention`).
 004's close-out recorded 180/20/1/0 on base `730f085`; main has moved since
 (004 merge + docs commits). Recorded per T002, not investigated, not fixed
 here.
+
+## T003 first-workflow-task timing
+
+`tests/durability/test_first_workflow_task_time.py` green on base (temporal
+tier, RC=0, 2 passed; the measured value only travels in the assert message).
+One-off replica of the measurement (same greenfield_happy scenario, sandboxed
+runner via `SdlcPydanticAIPlugin`, `auto_time_skipping_disabled`, script kept
+outside the repo): **first WorkflowTaskCompleted at 0.128s** from
+`start_workflow`; no TMPRL1101 in the history. 004's baseline on `730f085`
+was 0.130s — consistent. Budget: < 1.5s.
