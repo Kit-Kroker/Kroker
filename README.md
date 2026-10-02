@@ -126,10 +126,11 @@ not be evaluated is `errored` and never counts as a pass.
 ## Develop
 - `pip install -e .[dev]` then `python -m pytest` (needs `git` on PATH).
 - Importing the workflow/agents currently requires `ANTHROPIC_API_KEY` /
-  `OPENAI_API_KEY` / `EXA_API_KEY` set (agents are constructed at import,
-  including the shipped research role's `provider: exa` ExaSearch client);
-  `tests/conftest.py` sets dummy values for import-only, so `pytest` needs no
-  real keys.
+  `OPENAI_API_KEY` / `EXA_API_KEY` / `ZAI_API_KEY` set (agents are
+  constructed at import, including the shipped research role's
+  `provider: exa` ExaSearch client, and the glm proposer roles resolve
+  `zai:glm-5.3` models); `tests/conftest.py` sets dummy values for
+  import-only, so `pytest` needs no real keys.
 - Added a new module and hit `ModuleNotFoundError`? Re-run `pip install -e .`
   (setuptools' editable wheel doesn't auto-discover new files).
 - Prompt changes are gated (E-82):
@@ -179,6 +180,13 @@ not be evaluated is `errored` and never counts as a pass.
   construct (e.g. `--role-model architect=openai:gpt-5.2`) and is validated
   offline at submission — an invalid string exits non-zero before any
   workflow starts, naming the role, the string and the accepted form.
+  E2 (005): the glm proposers run on z.ai's **coding** endpoint, where a
+  `zai:glm-5.2` request is answered by glm-5.3 — name the model you mean;
+  the served model follows the endpoint.
+- Upgrading across the 005 route cutover: an open run's remaining stages
+  resolve roles from the registry at execution time, so they run on the new
+  route (`zai:glm-5.3`) while completed stages replay from history — drain
+  open runs before upgrading, or accept a mixed-route run (plan D6).
 - Harness is a config axis, not a fork: `claude -p` and `opencode run` are
   registry entries (`HARNESSES`), so a third adapter (e.g. `cursor`) drops in
   once it normalises into `HarnessRunResult`. The benchmark sweeps this axis.
