@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from ..core.models import RoleConfig
-from .model_ids import single_retry_layer
+from .model_ids import route_layer, single_retry_layer
 
 if TYPE_CHECKING:  # pydantic_ai import is not free
     from pydantic_ai import Agent
@@ -512,9 +512,11 @@ def build_agents(
     durability_factory (003, contracts/loader-build-contract.md): a
     zero-argument callable returning a FRESH capability instance per role,
     which build_agents hands to each asset's build() as
-    capabilities=[instance]. None (the default) passes NO capabilities kwarg
-    at all — the loader-only/eval path stays capability-free, and an asset
-    with the pre-003 build signature keeps working.
+    capabilities=[instance, single_retry_layer()]. None (the default) is
+    the loader-only/eval path: build_agents passes
+    capabilities=[route_layer()] — the 005 T010 URL-only resolver, fresh
+    per role, so a bare ``zai:`` model string reaches the coding endpoint
+    there too; no durability, SDK retries untouched.
 
     agents_dir is a parameter rather than a re-resolution: the caller knows
     which tree it loaded, and re-resolving would import agent.py from the
@@ -531,13 +533,17 @@ def build_agents(
         build_kwargs: dict[str, Any] = {}
         if durability_factory is not None:
             # Fresh instance per role: one capability binds to one agent, and
-            # a shared instance would silently bind two Temporal activity
+            # a shared instance would silently bind two Temporal durability
             # sets to one configuration object.
             dur = durability_factory()
             # 004 T012: beside durability, the single-retry resolver — also
-            # fresh per agent. Only on the durable path: the loader-only/eval
-            # path keeps building capability-free.
+            # fresh per agent.
             build_kwargs["capabilities"] = [dur, single_retry_layer()]
+        else:
+            # 005 T010: the loader-only/eval path routes too — a URL-only
+            # resolver, fresh per role (contract C4/C7): no durability, and
+            # the SDK retry count keeps its default.
+            build_kwargs["capabilities"] = [route_layer()]
         try:
             if cfg.kind == "research":
                 # Research build takes its tool paths and provider name too.

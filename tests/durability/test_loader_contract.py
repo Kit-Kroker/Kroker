@@ -2,8 +2,11 @@
 
 build_agents() must hand every role's build() a capabilities list holding
 THAT role's own durability instance — fresh per role, from the supplied
-factory — followed by a fresh single_retry_layer() resolver (004). It must
-stay capability-free when no factory is given. The fixture agents under
+factory — followed by a fresh single_retry_layer() resolver (004). With no
+factory (the loader-only/eval path) the role instead receives a fresh
+route_layer() resolver (005 T010) — still exactly one resolver per role,
+no durability sentinel, so a bare model string reaches the shared seam.
+The fixture agents under
 fixture_agents/ record the call on BuiltAgent instead of building a real
 pydantic_ai.Agent: the loader contract is about the CALL, not the agent
 (see fixture_agents/*/agent.py).
@@ -64,16 +67,25 @@ def test_factory_gives_each_role_its_own_fresh_capability():
     assert planner_retry is not research_retry, "resolvers must be fresh per agent"
 
 
-def test_default_and_explicit_none_leave_agents_capability_free():
-    """durability_factory=None (the default) is the loader-only/eval path:
-    fixture agents receive NO capabilities — an empty list — whether the
-    factory is omitted entirely or passed as None explicitly."""
+def test_default_and_explicit_none_attach_a_fresh_route_layer():
+    """durability_factory=None (the default) is the loader-only/eval path.
+    005 T010: with the factory omitted AND passed as None explicitly, each
+    fixture agent receives EXACTLY ONE capability — the route_layer resolver
+    (a pydantic_ai ResolveModelId) — fresh per role, with no durability
+    sentinels, so a bare model string still reaches the shared seam."""
     default = build_agents(_roles(), {}, agents_dir=_FIXTURES)
     explicit = build_agents(_roles(), {}, durability_factory=None, agents_dir=_FIXTURES)
-    assert default["planner"].received_capabilities == []
-    assert default["research"].received_capabilities == []
-    assert explicit["planner"].received_capabilities == []
-    assert explicit["research"].received_capabilities == []
+
+    for label, agents in (("default", default), ("explicit None", explicit)):
+        for key in ("planner", "research"):
+            durables, resolvers = _durable_and_retry(agents[key].received_capabilities)
+            assert durables == [], f"{label}/{key}: no durability sentinel expected"
+            assert len(resolvers) == 1, f"{label}/{key}: exactly one route-layer resolver expected"
+        planner_layer = _durable_and_retry(agents["planner"].received_capabilities)[1][0]
+        research_layer = _durable_and_retry(agents["research"].received_capabilities)[1][0]
+        assert planner_layer is not research_layer, (
+            f"{label}: the route layer must be fresh per role"
+        )
 
 
 def test_research_build_still_receives_tool_files_and_provider():

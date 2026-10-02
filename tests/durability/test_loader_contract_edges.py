@@ -5,7 +5,8 @@ Complements tests/durability/test_loader_contract.py (qa-happy) on the same
 fixture_agents/ registry: a raising factory must propagate, instances stay
 per-role, capabilities reach build() as a KEYWORD on both shapes, the
 duplicate-agent-name guard keeps firing with a factory supplied, and an
-explicit None factory is the capability-free default.
+explicit None factory is the route-layer-only path (005 T010: exactly one
+fresh resolver per agent, no durability).
 """
 
 from pathlib import Path
@@ -138,15 +139,26 @@ def test_agent_name_collision_still_guarded_with_factory(tmp_path):
     assert "alpha" in message and "beta" in message
 
 
-def test_explicit_none_factory_is_the_capability_free_default():
+def test_explicit_none_factory_attaches_the_route_layer():
     """durability_factory=None passed EXPLICITLY (not omitted) is the same
     loader-only/eval path: no error, and nothing else about the call
-    changes -- agents come back with their names and research positionals
-    intact and no capabilities at all."""
+    changes -- names and research positionals stay intact -- but 005 T010
+    attaches exactly one route_layer resolver (a ResolveModelId) per agent
+    and none of them is shared."""
     agents = build_agents(_roles(), {}, durability_factory=None, agents_dir=_FIXTURES)
 
     assert agents["planner"].name == "planner_agent"
-    assert agents["planner"].received_capabilities == []
     assert agents["research"].tool_paths == [str(_TOOL)]
     assert agents["research"].provider == "fake"
-    assert agents["research"].received_capabilities == []
+    resolvers = {
+        key: [c for c in agents[key].received_capabilities if isinstance(c, _RESOLVER)]
+        for key in ("planner", "research")
+    }
+    for key, rs in resolvers.items():
+        assert len(agents[key].received_capabilities) == 1, (
+            f"{key}: the route layer is the only capability on this path"
+        )
+        assert len(rs) == 1, f"{key}: exactly one ResolveModelId expected"
+    assert resolvers["planner"][0] is not resolvers["research"][0], (
+        "route layers must be fresh per role, never shared"
+    )
