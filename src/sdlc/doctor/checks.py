@@ -248,6 +248,9 @@ _FAMILY_KEYS = {
     "openai": "OPENAI_API_KEY",
     "google": "GEMINI_API_KEY",
     "gemini": "GEMINI_API_KEY",
+    # 005 US2 (T016): the zai family is the shipped proposer route; the key
+    # is read by the provider itself (contract "Environment").
+    "zai": "ZAI_API_KEY",
 }
 
 # The one acknowledged second copy of an upstream rule (spec section 7). The
