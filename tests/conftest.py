@@ -181,9 +181,9 @@ PROPOSER_ROLE_NAMES = (
 
 _AGENT_PY = (
     "from pydantic_ai import Agent\n"
-    "def build(model, instructions, model_settings):\n"
+    "def build(model, instructions, model_settings, *, capabilities=()):\n"
     "    return Agent(model, name={name!r}, model_settings=model_settings,\n"
-    "                 system_prompt=instructions)\n"
+    "                 system_prompt=instructions, capabilities=list(capabilities))\n"
 )
 
 # Role -> agent name. Mirrors roles.py; NOT derived — 'qa' builds
@@ -230,10 +230,11 @@ def write_registry_dir(root, version=1):
     (r / "instructions.md").write_bytes(b"research the question")
     (r / "agent.py").write_bytes(
         b"from pydantic_ai import Agent\n"
-        b"def build(model, instructions, model_settings, tool_paths, provider):\n"
+        b"def build(model, instructions, model_settings, tool_paths, provider, "
+        b"*, capabilities=()):\n"
         b"    return Agent(model, name='research_agent',\n"
         b"                 model_settings=model_settings,\n"
-        b"                 system_prompt=instructions)\n"
+        b"                 system_prompt=instructions, capabilities=list(capabilities))\n"
     )
     (r / "tools").mkdir(exist_ok=True)
     (r / "tools" / "web_search.py").write_bytes(
@@ -246,9 +247,9 @@ def write_registry_dir(root, version=1):
     (dr / "instructions.md").write_bytes(b"deep review the transcript")
     (dr / "agent.py").write_bytes(
         b"from pydantic_ai import Agent\n"
-        b"def build(model, instructions, model_settings):\n"
+        b"def build(model, instructions, model_settings, *, capabilities=()):\n"
         b"    return Agent(model, name='deep_review_agent',\n"
-        b"                 system_prompt=instructions)\n"
+        b"                 system_prompt=instructions, capabilities=list(capabilities))\n"
     )
     # Optional handoff extractor (FR-805): a plain proposer. No ADR-6
     # constraint applies to it -- it is extraction, not review.
@@ -258,9 +259,9 @@ def write_registry_dir(root, version=1):
     (ho / "instructions.md").write_bytes(b"extract the handoff")
     (ho / "agent.py").write_bytes(
         b"from pydantic_ai import Agent\n"
-        b"def build(model, instructions, model_settings):\n"
+        b"def build(model, instructions, model_settings, *, capabilities=()):\n"
         b"    return Agent(model, name='handoff_agent',\n"
-        b"                 system_prompt=instructions)\n"
+        b"                 system_prompt=instructions, capabilities=list(capabilities))\n"
     )
     # Optional adversarial reviewer (spec part 2): a different MODEL ID from
     # dev/reviewer (both glm-5.2 here) so check_adversary_model passes.
@@ -270,9 +271,9 @@ def write_registry_dir(root, version=1):
     (adv / "instructions.md").write_bytes(b"adversarially review the diff")
     (adv / "agent.py").write_bytes(
         b"from pydantic_ai import Agent\n"
-        b"def build(model, instructions, model_settings):\n"
+        b"def build(model, instructions, model_settings, *, capabilities=()):\n"
         b"    return Agent(model, name='adversary_agent',\n"
-        b"                 system_prompt=instructions)\n"
+        b"                 system_prompt=instructions, capabilities=list(capabilities))\n"
     )
     # Optional discover proposer (E-48 DD7): a plain proposer.
     disc = root / "discover"
@@ -281,9 +282,9 @@ def write_registry_dir(root, version=1):
     (disc / "instructions.md").write_bytes(b"judge candidate capabilities")
     (disc / "agent.py").write_bytes(
         b"from pydantic_ai import Agent\n"
-        b"def build(model, instructions, model_settings):\n"
+        b"def build(model, instructions, model_settings, *, capabilities=()):\n"
         b"    return Agent(model, name='discover_agent',\n"
-        b"                 system_prompt=instructions)\n"
+        b"                 system_prompt=instructions, capabilities=list(capabilities))\n"
     )
     # Optional risk proposer (E-49 RD7): a plain proposer.
     rk = root / "risk"
@@ -292,9 +293,9 @@ def write_registry_dir(root, version=1):
     (rk / "instructions.md").write_bytes(b"judge risk baseline")
     (rk / "agent.py").write_bytes(
         b"from pydantic_ai import Agent\n"
-        b"def build(model, instructions, model_settings):\n"
+        b"def build(model, instructions, model_settings, *, capabilities=()):\n"
         b"    return Agent(model, name='risk_agent',\n"
-        b"                 system_prompt=instructions)\n"
+        b"                 system_prompt=instructions, capabilities=list(capabilities))\n"
     )
     return root
 
