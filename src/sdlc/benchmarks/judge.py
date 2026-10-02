@@ -18,6 +18,7 @@ from pathlib import Path
 from pydantic_ai import Agent
 from temporalio import activity
 
+from ..agents.model_ids import resolve_model
 from .models import QualityScore
 from .vetoes import check, parse_vetoes
 
@@ -135,8 +136,13 @@ def _run_judge_agent(model, system_prompt: str, user_prompt: str) -> str:
     eager-construction smell that bit ``agents/roles.py``. Kept as a small,
     explicitly-patchable seam: ``TestModel`` cannot flow through
     ``JudgeInput.judge_model`` (typed ``str | None``), so tests patch this
-    helper rather than the ``Agent`` class.
+    helper rather than the ``Agent`` class. 005 T012 (plan D2 site 6,
+    contract C7): a string model resolves through the shared seam first, so
+    a ``zai:`` judge id reaches the coding endpoint; non-zai strings build
+    exactly as the framework builds them.
     """
+    if isinstance(model, str):
+        model = resolve_model(model)
     agent = Agent(model, name="benchmark_judge", system_prompt=system_prompt)
     result = agent.run_sync(user_prompt)
     return result.output

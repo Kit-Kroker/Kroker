@@ -435,3 +435,95 @@ def test_judge_never_raises_even_on_a_non_dict_artifact_with_vetoes():
         _set_judge_fn(None)
     assert qs.score is None
     assert qs.judge == "error"
+
+
+# --- 005 T012: the judge site routes strings through the shared seam -------
+#
+# _run_judge_agent holds a bare model string, so before 005 it built
+# Agent(<string>) and the framework resolved the model eagerly on the SDK
+# default base URL — a zai: id never reached the coding endpoint (plan D2
+# site 6, contract C4/C7). These tests capture the Agent CONSTRUCTION (the
+# same patchable seam the module docstring names) instead of running a real
+# request: a red here must be an assertion about what the site built, never
+# a live call to api.z.ai. The url helper matches test_zai_route.py.
+
+_GATEWAY = "https://gateway.example.com/zai"
+
+
+def _url(base_url: object) -> str:
+    """A client base URL as a string, without the trailing slash the
+    OpenAI-style client normalises onto every URL."""
+    return str(base_url).rstrip("/")
+
+
+_LAST_BUILT: list[object] = []
+
+
+class _RecordingAgent:
+    """Stands in for pydantic_ai.Agent: records what the site built, serves
+    a canned output without any network."""
+
+    def __init__(self, model, **kwargs):
+        self.model = model
+        _LAST_BUILT.append(model)
+
+    def run_sync(self, prompt):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(output="ok")
+
+
+def test_run_judge_agent_resolves_a_zai_string_through_the_seam(monkeypatch):
+    """005 T012 (contract C4): a zai: judge string must be resolved through
+    resolve_model BEFORE Agent construction — the agent must receive a MODEL
+    whose client sits on the ZAI_BASE_URL honoured at call time, not the
+    bare string."""
+    monkeypatch.setattr(judge_mod, "Agent", _RecordingAgent)
+    monkeypatch.setenv("ZAI_BASE_URL", _GATEWAY)
+
+    raw = _run_judge_agent("zai:glm-5.3", "sys", "user prompt")
+
+    assert raw == "ok", "the judge site must still return the agent output"
+    built = _LAST_BUILT[-1]
+    assert built is not None and not isinstance(built, str), (
+        "the judge site built Agent from the bare string "
+        f"{built!r} — route it through sdlc.agents.model_ids.resolve_model "
+        "so zai: ids reach the coding endpoint (plan D2 site 6, contract C7)"
+    )
+    assert _url(built.client.base_url) == _GATEWAY, (
+        f"the resolved judge model sits on {_url(built.client.base_url)!r}; "
+        "the zai URL policy must reach the judge site (C1, C4)"
+    )
+
+
+def test_run_judge_agent_builds_a_google_string_through_the_framework(monkeypatch):
+    """A google judge string changes NOTHING about the framework path:
+    resolve_model leaves non-zai providers exactly as infer_provider builds
+    them, so the site must still produce the model infer_model() itself
+    builds — same class, same model name (C4: URL policy applies to zai
+    only)."""
+    monkeypatch.setattr(judge_mod, "Agent", _RecordingAgent)
+    # google's provider resolves the key at construction; the conftest dummy
+    # pattern — offline, never run.
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-dummy")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-dummy")
+
+    from pydantic_ai.models import infer_model
+
+    _run_judge_agent("google:gemini-2.5-pro", "sys", "user prompt")
+
+    built = _LAST_BUILT[-1]
+    assert built is not None and not isinstance(built, str), (
+        "the judge site built Agent from the bare string "
+        f"{built!r} — route it through sdlc.agents.model_ids.resolve_model "
+        "(plan D2 site 6, contract C7)"
+    )
+    reference = infer_model("google:gemini-2.5-pro")  # the plain framework path
+    assert type(built) is type(reference), (
+        "the judge site built a different model class than the framework's "
+        f"own path ({type(built).__name__} vs {type(reference).__name__}); a "
+        "non-zai string must be built exactly as infer_model builds it (C4)"
+    )
+    assert built.model_name == reference.model_name, (
+        "the judge site changed the model name on the framework path"
+    )
