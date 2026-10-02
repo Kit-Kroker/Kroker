@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ..agents.loader import _load_build
+from ..agents.model_ids import resolve_model
 from ..agents.settings import MODEL_SETTINGS
 from .fixtures import EvalFixture
 
@@ -37,6 +38,11 @@ def run_variant_detailed(
     """
     build = _load_build(role, agents_dir / role)
     model = model_override if model_override is not None else fixture.model
+    if isinstance(model, str):
+        # 005 T011 (plan D2 site 5, contract C7): a string model id resolves
+        # through the shared seam so a ``zai:`` id reaches the coding
+        # endpoint; an injected test-model instance passes through unchanged.
+        model = resolve_model(model)
     agent = build(model, instructions_text, MODEL_SETTINGS)
     result = agent.run_sync(fixture.prompt)
     # `usage` is a PROPERTY on RunResult (RunUsage), not a method.
