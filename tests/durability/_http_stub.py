@@ -14,7 +14,10 @@ bodies on ``/v1/chat/completions`` / ``/v1/responses``. Modes:
 - ``fail_once`` — the first request answers 429, the rest answer a valid
   message (US3 scenario 2: one transient failure then success);
 - ``always_400`` — every request answers 400 (non-retryable provider
-  error, E7).
+  error, E7);
+- ``always_ok`` — every request answers a valid message for its protocol
+  (the no-retry baseline behind the 005 T009 wire-evidence tests: one
+  model request must be exactly one HTTP call).
 """
 
 from __future__ import annotations
@@ -119,6 +122,14 @@ class ProviderStub:
                     return
                 if mode == "always_400":
                     self._reply(400, _ANTHROPIC_400 if anthropic else _OPENAI_400)
+                    return
+                if mode == "always_ok":
+                    if anthropic:
+                        self._reply(200, _ANTHROPIC_VALID)
+                    elif self.path.endswith("/v1/responses"):
+                        self._reply(200, _OPENAI_RESPONSES_VALID)
+                    else:
+                        self._reply(200, _OPENAI_CHAT_VALID)
                     return
                 if mode == "fail_once":
                     if stub.count == 1:
