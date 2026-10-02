@@ -17,6 +17,20 @@
 > P3's exit is literally "SC-4 and SC-6 measurable", and SC-1/SC-2/SC-3 are
 > all marked `—` (not falsifiable from code alone).
 
+> **COST-HISTORY BREAK MARKER — 2026-10-02 (005 native zai provider).** The
+> 11 glm proposer roles changed route and served model:
+> `anthropic:glm-5.2` over the Anthropic-compatible endpoint →
+> `zai:glm-5.3` on z.ai's native **coding** endpoint; the served model went
+> glm-5.2 → glm-5.3. Per-1M rates (USD, genai-prices): old row (zhipuai
+> fallback) 1.103 input / 3.862 output; new row (native zai) 1.400 input /
+> 4.400 output. **Every record before this marker was priced on the old row
+> and answered by the old model** — do not compare token-USD or quality
+> across the marker without re-basing. Research-stage dollar budgets are
+> reached 14–27% sooner on the same tokens (same rows, higher rates); they
+> were **not retuned** — the tightening is accepted and recorded here. **No
+> benchmark was re-run** for this change; the harness and case suites are
+> untouched.
+
 ---
 
 ## 0. Why a benchmark is the load-bearing artifact here
