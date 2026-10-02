@@ -63,3 +63,22 @@ one-time re-capture of `greenfield_happy.json` on the flipped registry
 compare per-role spend with the model label mapped across the 005 break
 marker; (c) retire/replace the recording with a post-005 capture policy.
 **No change made to the test or the recording; failure left visible.**
+
+## T030 live confirmation (FR-015, SC-007; quickstart step 6)
+
+One clarify stage (real role build via `agents/clarify`, fixture prompt
+`add-login-greenfield`, `MODEL_SETTINGS`) on the flipped registry in
+`kroker-dev`, real `ZAI_API_KEY` via `docker exec -e`, **no `ZAI_BASE_URL`,
+no override**. Two runs (the second only to read the response's reported
+model name); scripts outside the repo in the container's /logs.
+
+| Evidence | Value |
+|---|---|
+| Result | RC=0, one HTTP request per stage |
+| Endpoint | `https://api.z.ai/api/coding/paas/v4/` (the client's base URL — the coding endpoint) |
+| Model name the endpoint reported | **`glm-5.3`** (asked `zai:glm-5.3`, answered by glm-5.3) |
+| Artifact | schema-validated `ClarifiedRequirements` (all fields present: summary, functional/non_functional_requirements, dimensions_probed, open_questions, out_of_scope, dropped, spec_ref; 10,077 bytes serialized) |
+| Usage | 899 input / 5,124 output tokens (2,849 reasoning — thinking active), cost $0.0238, requests=1 |
+
+SG-6 never fired: the key was present and the call succeeded for an
+account reason never arose.
