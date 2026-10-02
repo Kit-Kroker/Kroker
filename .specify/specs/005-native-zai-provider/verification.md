@@ -92,3 +92,72 @@ account reason never arose.
 | `mypy` | RC=0, no issues in 378 source files |
 | `python scripts/check_file_size.py` | RC=0 |
 | `git diff --stat 0f4ac11 -- pyproject.toml uv.lock src/sdlc/stages/code/step.py src/sdlc/harness/base.py agents/dev agents/test agents/devops` | **empty** (0 lines) — FR-010, FR-014, no dependency change, no harness-role edit |
+
+## T032 close-out
+
+### Requirement-by-requirement evidence (plan "Requirement coverage")
+
+| Requirement | Evidence |
+|---|---|
+| FR-001, FR-002, FR-003 | `test_shipped_registry_models_are_the_005_targets` (11 roles = `zai:glm-5.3`, harness trio + claude roles unchanged, `validate_registry` passes); commit 352cc8e is exactly the 11-line diff; T031 forbidden-path diff empty |
+| FR-004 | `.env.example` z.ai native block + Anthropic re-description (6ed6b77); README key list + E2 warning (1ed9c02) |
+| FR-005 | doctor cases absent/placeholder/set/both-keys (T015, 2f5facf) green over the `zai` `_FAMILY_KEYS` entry (3d354d0) |
+| FR-006 | T023 durable always-429 == `AGENT_ACTIVITY_MAX_ATTEMPTS`; T006/T008 retry-split pin |
+| FR-007 | T025 timing 0.123s vs 0.128s baseline, no TMPRL1101; T024 zai warm-up |
+| FR-008 | T027 price pins (1.400/4.400 native; 1.103/3.862 fallback) |
+| FR-009 | T028 BENCHMARK.md break marker |
+| FR-010, FR-014 | T031: forbidden-path diff vs 0f4ac11 empty |
+| FR-011 | T021 triage table (1 predicted FLIP, fixed); default tier green with dummy keys (T014: 5460/11/245) |
+| FR-012 | T021 fixture diff: only six `model_id` values (SG-3 clear) |
+| FR-013 | T008/T010/T024/T027 docstrings + T029 comment sweep |
+| FR-015 | T030 live confirmation table above |
+| FR-016 (A1, A2, A3) | T006-T014 policy + guard; T009/T023 wire evidence per site category |
+| E1, E4 (A4) | T025 (timing, tier counts); T032 operator note below |
+| E2 | T017 `.env.example` + T018 README warning |
+| E3 | T032 operator note below |
+| E5, E7 | contract C5–C6; T023 always-400 rows |
+| E6 | T015 both-keys case |
+
+### Triage record
+
+See the T021 section (default tier: one R7-predicted FLIP) and the T025
+section (temporal tier: one FLIP stub swap, one pre-existing base failure,
+one escalation). Actual vs predicted divergences are recorded in place.
+
+### Operator note (E1/E3)
+
+- **Drain or accept**: an open run's remaining stages resolve roles from the
+  registry at execution time — after upgrading they run on `zai:glm-5.3`
+  while completed stages replay from history. Drain open runs before
+  upgrading, or accept a mixed-route run.
+- **One-time memo miss**: the memoization cache keys include the model
+  string; the first post-flip run of each role misses once and re-pays the
+  full proposer cost for that role's first stage.
+- **Rollback**: per role `--role-model <role>=anthropic:glm-5.2` (needs the
+  `ANTHROPIC_*` variables); whole feature: revert the registry commit
+  (352cc8e) — memo entries for the old strings are still on disk.
+
+### Open item handed to the orchestrator
+
+**SG-2 escalation** (see the T025 section): `test_priced_usage_parity` is
+red on the flipped registry — live inputs token-identical to the frozen
+recording, only the model label differs. Recording and test untouched;
+ruling requested between (a) sanctioned re-capture, (b) label-mapped
+comparison, (c) new capture policy. Until ruled, the temporal tier carries
+this one red (plus the pre-existing base red recorded in baseline.md).
+
+### Follow-ups to hand the orchestrator (T032 list)
+
+1. **ADR-6 observation against OQ-A4 (GATE 1 Q5)**: post-flip, dev
+   (`zai-coding-plan/glm-5.2`) and reviewer (`zai:glm-5.3`) differ in both
+   family and model id — the OQ-A4 "same weights" concern no longer applies
+   to the shipped registry, but ADR-6 itself was left untouched per Q5.
+2. **Claude roles through z.ai's Anthropic endpoint (spec A9)**: adversary,
+   discover and risk ride `ANTHROPIC_BASE_URL=api.z.ai/api/anthropic` —
+   pre-existing, out of scope, reported.
+3. **Registry-snapshot pinning for in-flight runs** (R9/D6): the mixed-run
+   semantics are tested and documented, but pinning the registry into
+   workflow state is a separate feature if stronger guarantees are wanted.
+4. **Research budget retune**: research dollar budgets are reached 14–27%
+   sooner on the same tokens (T028 marker); retuning is a product decision,
+   not taken here.
