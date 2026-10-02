@@ -60,6 +60,23 @@ SG-3 never fired: the guard raised only inside override runs where the label
 disagreed (scenario e pre-T030), never in a no-override test. US1 scenarios 1-4
 green; SC-001 and SC-004 hold.
 
+## T038 full verification (close-out, all in kroker-dev, one command each)
+
+| Command | Result | vs baseline |
+|---|---|---|
+| `pytest -q` (fast) | **5436 passed, 11 skipped, 245 deselected**, RC=0 | baseline 5382/11/230: +54 tests, 0 failures |
+| `pytest -m temporal -q` (chunked per file, 44 files, `timeout 300` each) | **180 passed, 20 skipped, 1 xfailed, 0 failed**, every file RC=0 | baseline 166/20/1: +14 (wire 1, retry-layer 5, forwarding 8) |
+| `ruff check .` | All checks passed, RC=0 | — |
+| `ruff format --check .` | 1457 files already formatted, RC=0 | — |
+| `mypy` | no issues in 378 source files, RC=0 | — |
+| `python scripts/check_file_size.py` | RC=0 (`stages/code/step.py` at 990 ≤ 991; SG-4 clear) | — |
+
+One 003-era source pin updated during T038 with the reviewer's knowledge:
+`tests/review/test_adversary_workflow.py::test_review_record_names_the_model_that_actually_ran`
+asserted the registry-default reviewer label because the override was inert
+pre-004; 004 makes the override real (V11/T030), so the pin now asserts the
+per-run resolved label — the test's own name, finally true.
+
 ## T009 stacked-retry count on main
 
 Measured in `kroker-dev` on a clean worktree of the base sha `730f085` (with

@@ -191,13 +191,21 @@ def test_non_blocking_adversary_rejection_does_not_abandon_the_task():
 
 
 def test_review_record_names_the_model_that_actually_ran():
-    """The reviewer agent is built at import on the registry model and always
-    RUNS that model (the call site's model arg is pricing-only); cfg.roles
-    ['reviewer'] is dead config by design (registry-drives-every-role spec).
-    So the record must use STAGE_MODELS.get('review'), never
-    resolve_role_model -- which would credit an inert arm override."""
+    """Since 004 the reviewer override is REAL: _run_role forwards it to the
+    call and fails any label that disagrees (FR-002), so the review loop MUST
+    resolve its label per run — resolve_role_model(cfg, "review") — and the
+    record then names the model that actually ran. (Pre-004 this pin read the
+    other way: the override was inert, pricing-only, so crediting it would
+    have been a lie and STAGE_MODELS was the honest label. 004 V11/T030
+    inverted the honesty.)"""
     src = _src()
-    assert 'resolve_role_model(cfg, "review")' not in src
+    assert 'resolve_role_model(cfg, "review")' in src, (
+        "the review loop must label the run's resolved model, not the registry default (004 FR-002)"
+    )
+    assert 'STAGE_MODELS.get("review"' not in src, (
+        "a registry-default label disagrees with a forwarded reviewer "
+        "override and trips _run_role's guard (004)"
+    )
 
 
 def test_adversary_runs_without_a_primary_reviewer():
