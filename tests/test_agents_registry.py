@@ -14,6 +14,7 @@ from sdlc.core.models import (
 
 _HARNESS_MODEL = "zai-coding-plan/glm-5.2"
 _PROPOSER_MODEL = "anthropic:glm-5.2"
+_FLIPPED_PROPOSER_MODEL = "zai:glm-5.3"
 
 
 def _complete_registry(**overrides: RoleConfig) -> dict[str, RoleConfig]:
@@ -56,6 +57,42 @@ def test_shipped_registry_loads_and_validates():
     roles = load_registry()  # default: discovered agents/
     assert REQUIRED_ROLES <= set(roles)
     validate_registry(roles)  # must not raise
+
+
+def test_shipped_registry_models_are_the_005_targets():
+    """US1 (005 T019, data-model.md): the SHIPPED agents/ tree declares the
+    flipped models exactly — the 11 glm proposer roles on ``zai:glm-5.3``,
+    the harness trio unchanged on ``zai-coding-plan/glm-5.2``, adversary on
+    ``anthropic:claude-sonnet-4-6`` and discover/risk on
+    ``anthropic:claude-sonnet-4-5`` — and ADR-6 still holds on the flipped
+    registry (validate_registry does not raise)."""
+    roles = load_registry()
+    for name in (
+        "analyst",
+        "architect",
+        "clarify",
+        "deep_review",
+        "devops_planner",
+        "handoff",
+        "merge_verdict",
+        "planner",
+        "qa",
+        "research",
+        "reviewer",
+    ):
+        assert roles[name].model == _FLIPPED_PROPOSER_MODEL, (
+            f"{name} ships {roles[name].model!r}; the 005 flip puts the 11 "
+            f"glm proposer roles on '{_FLIPPED_PROPOSER_MODEL}' (data-model.md)"
+        )
+    for name in ("dev", "test", "devops"):
+        assert roles[name].model == _HARNESS_MODEL, (
+            f"{name} ships {roles[name].model!r}; the harness trio keeps "
+            f"'{_HARNESS_MODEL}' (data-model.md)"
+        )
+    assert roles["adversary"].model == "anthropic:claude-sonnet-4-6"
+    assert roles["discover"].model == "anthropic:claude-sonnet-4-5"
+    assert roles["risk"].model == "anthropic:claude-sonnet-4-5"
+    validate_registry(roles)  # must not raise: ADR-6 on the flipped registry
 
 
 @pytest.mark.parametrize("missing", sorted(REQUIRED_ROLES))
@@ -114,7 +151,6 @@ def test_directory_registry_loads_and_validates(tmp_path):
     roles = load_registry(root)
     assert set(roles) == KNOWN_ROLES
     assert roles["dev"].harness == HarnessKind.OPENCODE
-    assert roles["reviewer"].model == "anthropic:glm-5.2"
 
 
 def test_unknown_role_directory_rejected(tmp_path):
