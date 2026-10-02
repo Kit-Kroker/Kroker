@@ -119,9 +119,12 @@ Gotchas worth knowing:
 - **Importing the workflow needs an API key.** `agents/roles.py` constructs all
   six `pydantic_ai.Agent`s at *import* time, so importing
   `sdlc.agents.roles` / `sdlc.workflows.feature` / `sdlc.worker` requires
-  `ANTHROPIC_API_KEY` set (a dummy value is fine for import-only — no network
-  call happens at construction). Fixing this (lazy construction) is the first
-  Plan 2 cleanup.
+  `ANTHROPIC_API_KEY` set — and, since 005, `ZAI_API_KEY` too: the 11 glm
+  proposer roles resolve `zai:glm-5.3` on z.ai's native coding endpoint
+  (`ZAI_BASE_URL` overrides it), while the claude roles keep the
+  Anthropic-compatible endpoint (`ANTHROPIC_BASE_URL`). A dummy value is fine
+  for import-only — no network call happens at construction. Fixing this
+  (lazy construction) is the first Plan 2 cleanup.
 - **`SDLC_WORKTREES_ROOT`** overrides where worktrees are created; the test
   suite points it at a temp dir.
 - Use `python -m pytest` (not bare `pytest`) if the Scripts dir isn't on PATH.
