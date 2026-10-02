@@ -82,3 +82,13 @@ model name); scripts outside the repo in the container's /logs.
 
 SG-6 never fired: the key was present and the call succeeded for an
 account reason never arose.
+
+## T031 static gates (each its own command, in kroker-dev)
+
+| Gate | Result |
+|---|---|
+| `ruff check .` | RC=0, all checks passed |
+| `ruff format --check .` | RC=0, 1551 files already formatted |
+| `mypy` | RC=0, no issues in 378 source files |
+| `python scripts/check_file_size.py` | RC=0 |
+| `git diff --stat 0f4ac11 -- pyproject.toml uv.lock src/sdlc/stages/code/step.py src/sdlc/harness/base.py agents/dev agents/test agents/devops` | **empty** (0 lines) — FR-010, FR-014, no dependency change, no harness-role edit |
