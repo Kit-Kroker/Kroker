@@ -9,8 +9,8 @@ does not ship.
 
 SCOPING IS LOAD-BEARING. classify_key is called only on the credential keys
 rows 7 and 10 resolve, never over the whole environment: .env.example ships
-working defaults beside its placeholders (TEMPORAL_HOST=localhost:7233 :11,
-SDLC_MEMORY_BACKEND=hindsight :25, ANTHROPIC_BASE_URL :8) and a blanket
+working defaults beside its placeholders (TEMPORAL_HOST=localhost:7233 :22,
+SDLC_MEMORY_BACKEND=hindsight :36, ANTHROPIC_BASE_URL :19) and a blanket
 equals-shipped-value rule would flag every one.
 """
 
