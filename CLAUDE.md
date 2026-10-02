@@ -18,5 +18,5 @@ the repo. `AGENTS.md` explains the distinction.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`.specify/specs/005-native-zai-provider/plan.md`
+`.specify/specs/006-s-batch-inbox-fixes/plan.md`
 <!-- SPECKIT END -->
