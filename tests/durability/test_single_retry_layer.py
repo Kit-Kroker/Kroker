@@ -4,7 +4,9 @@ requests (004 T009, FR-008; former 003 SC-007).
 A registry-model durable agent — same model string, same AGENT_ACTIVITY_CONFIG
 and heartbeat-neutrality shape as ``shared_durability()`` builds — runs inside
 a real worker against the local counting stub (``_http_stub.py``) via
-``ANTHROPIC_BASE_URL``. On main the provider SDK's own retries stack under the
+``ZAI_BASE_URL`` (005: the registry model is ``zai:glm-5.3`` and the route
+policy honours the override; pre-005 this was ``ANTHROPIC_BASE_URL`` over
+``anthropic:glm-5.2``). On main the provider SDK's own retries stack under the
 engine's attempt budget: the always-429 count is 9 (3 attempts x (1 + 2 SDK
 retries)), so the bound assertion here FAILS on main. After 004 Phase B the
 count is at most AGENT_ACTIVITY_MAX_ATTEMPTS.
@@ -99,7 +101,7 @@ async def _run_one_call(mode: str) -> tuple[str | None, int, BaseException | Non
     with ProviderStub(mode=mode) as stub:
         import os
 
-        os.environ["ANTHROPIC_BASE_URL"] = stub.base_url
+        os.environ["ZAI_BASE_URL"] = stub.base_url
         try:
             async with await WorkflowEnvironment.start_time_skipping(
                 data_converter=pydantic_data_converter
@@ -124,7 +126,7 @@ async def _run_one_call(mode: str) -> tuple[str | None, int, BaseException | Non
                     except Exception as exc:  # the exhaustion path (429/400)
                         return None, stub.count, exc
         finally:
-            os.environ.pop("ANTHROPIC_BASE_URL", None)
+            os.environ.pop("ZAI_BASE_URL", None)
 
 
 @pytest.mark.asyncio
@@ -222,7 +224,9 @@ async def test_subquestion_always_429_is_bounded_by_the_research_budget():
     import os
 
     with ProviderStub(mode="always_429") as stub:
-        os.environ["ANTHROPIC_BASE_URL"] = stub.base_url
+        # 005: the registry research role is zai:glm-5.3 — stub via the
+        # route-policy override, not ANTHROPIC_BASE_URL.
+        os.environ["ZAI_BASE_URL"] = stub.base_url
         try:
             async with await WorkflowEnvironment.start_time_skipping(
                 data_converter=pydantic_data_converter
@@ -247,7 +251,7 @@ async def test_subquestion_always_429_is_bounded_by_the_research_budget():
                     except Exception as exc:  # exhaustion is the expected path
                         failure = exc
         finally:
-            os.environ.pop("ANTHROPIC_BASE_URL", None)
+            os.environ.pop("ZAI_BASE_URL", None)
 
     assert failure is not None, "an always-429 provider must fail the sub-question call"
     chain = _failure_chain(failure)

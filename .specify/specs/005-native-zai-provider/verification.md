@@ -28,3 +28,38 @@ deletions — exactly the six `model_id` values
 Activity names, order, scheduling and every other field byte-identical.
 **SG-3 clear.** Frozen-mode rerun after regen: RC=0, 1 passed (live run
 equals the regenerated fixture).
+
+## T025 temporal tier on the flipped registry
+
+Per-file driver (45 files, `timeout 300` each, one pytest per file):
+**181 passed, 20 skipped, 1 xfailed, 2 failed, 0 timeout-kills.**
+T002 baseline was 179/20/1 (+1 pre-existing failure); the +2 passed are
+T023's durable-path wire tests.
+
+| Item | Result | Verdict |
+|---|---|---|
+| first-workflow-task timing (replica of T003's measurement, flipped registry, zai warm-up live) | **0.123s** (baseline 0.128s), no TMPRL1101 | **SG-4 clear** |
+| `tests/durability/test_inflight_resume.py` | green (driver RC=0) | SG-2 evidence |
+| replay tier (`tests/replay/*`) | all green except the ONE pre-existing base failure below | SG-2 evidence |
+| `tests/replay/test_graph_golden.py[budget_arch_reject-sandboxed]` | 1 failed — **pre-existing on base 2196438** (baseline.md; reproduced 3/3 incl. kroker-baseline; failure mode identical on base) | recorded, not a 005 regression |
+| `tests/durability/test_single_retry_layer.py` | was 4 failed (tests stubbed `ANTHROPIC_BASE_URL`; the registry model is now `zai:glm-5.3`, so the dummy-keyed call reached the real endpoint and got 401) — **FLIP**: stub switched to `ZAI_BASE_URL` (the route-policy override), docstring dated | fixed; 5 passed RC=0 |
+| `tests/durability/test_priced_usage_parity.py` | 1 failed — see the SG-2 escalation below | **escalated** |
+
+### SG-2 escalation: `test_live_priced_usage_matches_the_frozen_recording`
+
+The test runs `greenfield_happy` LIVE and compares `price_usage` activity
+inputs against the frozen recording `tests/replay/histories/greenfield_happy.json`
+(captured pre-005). The live run schedules identical activity inputs
+token-for-token (114/54/0/0); the ONLY difference is the model label:
+`zai:glm-5.3` vs the recorded `anthropic:glm-5.2` — the deliberate 005
+registry change. This is a golden-recording test red on the flipped
+registry, i.e. SG-2's letter. Diagnosis: not a replay/in-flight failure
+(the replay tier and `test_inflight_resume` are green); the recording is
+captured history (standing rule: not edited; the one sanctioned regen was
+the wire fixture in T021), and no task in tasks.md rules on this file —
+R7's manifest missed it. Options for the orchestrator: (a) sanction a
+one-time re-capture of `greenfield_happy.json` on the flipped registry
+(analogous to the T021 wire regen); (b) re-scope the parity test to
+compare per-role spend with the model label mapped across the 005 break
+marker; (c) retire/replace the recording with a post-005 capture policy.
+**No change made to the test or the recording; failure left visible.**
