@@ -28,8 +28,13 @@ from typing import Any
 
 import pytest
 from pydantic_ai import Agent
+from pydantic_ai.durable_exec.temporal import TemporalDurability
 from pydantic_ai.models import infer_model
 from pydantic_ai.providers import infer_provider
+from temporalio import workflow
+from temporalio.contrib.pydantic import pydantic_data_converter
+from temporalio.testing import WorkflowEnvironment
+from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
 from sdlc.agents.model_ids import (
     ZAI_CODING_BASE_URL,
@@ -38,6 +43,8 @@ from sdlc.agents.model_ids import (
     single_retry_layer,
     zai_base_url,
 )
+from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG, AGENT_ACTIVITY_MAX_ATTEMPTS, REGISTRY
+from sdlc.agents.runner import SdlcPydanticAIPlugin
 
 from ._http_stub import ProviderStub
 
@@ -285,4 +292,144 @@ def test_zai_model_profile_pins_the_r11_probe():
     assert profile["openai_chat_thinking_field"] == "reasoning_content", (
         f"thinking content rides {profile['openai_chat_thinking_field']!r}; "
         f"z.ai's chat protocol uses 'reasoning_content' (R11)"
+    )
+
+
+# --- T023: durable-path wire evidence (temporal tier; spec A3, E5, E7) -------
+#
+# The T009 section proves the URL policy reaches the wire for a PLAIN agent;
+# this section proves it for a DURABLE one — the shape production actually
+# runs. Modelled on tests/durability/test_single_retry_layer.py: the agent is
+# built at MODULE level (TemporalDurability._check_bindable forbids
+# constructing a durability-bound agent inside a workflow), one model request
+# per workflow run, real worker, counting stub. Under the flipped registry
+# both modes are evidence, not RED: a failure here is a real defect.
+
+_REGISTRY_MODEL = REGISTRY["architect"].model
+assert _REGISTRY_MODEL is not None
+
+# Capability pair mirrors build_agents exactly: durability plus the
+# single-retry resolver, both fresh instances (004 T012).
+_ZAI_DURABLE_AGENT = Agent(
+    _REGISTRY_MODEL,
+    name="zai_route_durable_probe_agent",
+    capabilities=[
+        TemporalDurability(
+            activity_config=AGENT_ACTIVITY_CONFIG,
+            model_activity_config={"heartbeat_timeout": None},
+        ),
+        single_retry_layer(),
+    ],
+)
+
+
+@workflow.defn
+class _OneZaiModelCallWorkflow:
+    @workflow.run
+    async def run(self, prompt: str) -> str:
+        result = await _ZAI_DURABLE_AGENT.run(prompt)
+        return result.output
+
+
+def _failure_chain(exc: BaseException | None) -> str:
+    parts: list[str] = []
+    seen: set[int] = set()
+    cur = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        parts.append(f"{type(cur).__name__}: {cur}")
+        cur = cur.__cause__ or cur.__context__
+    return "\n".join(parts)
+
+
+async def _run_one_durable_call(
+    mode: str,
+) -> tuple[str | None, int, list[str], BaseException | None]:
+    """Run one durable agent call against the stub in `mode`, routed there
+    by ZAI_BASE_URL; returns (output_or_None, stub.count, observed paths,
+    failure_or_None). The workflow either completes or its failure
+    propagates out of handle.result() — both are expected shapes depending
+    on the mode."""
+    with ProviderStub(mode=mode) as stub:
+        import os
+
+        os.environ["ZAI_BASE_URL"] = stub.base_url
+        try:
+            async with await WorkflowEnvironment.start_time_skipping(
+                data_converter=pydantic_data_converter
+            ) as env:
+                async with Worker(
+                    env.client,
+                    task_queue="s005-zai-route",
+                    workflows=[_OneZaiModelCallWorkflow],
+                    activities=TemporalDurability.from_agent(
+                        _ZAI_DURABLE_AGENT
+                    ).temporal_activities,
+                    plugins=[SdlcPydanticAIPlugin()],
+                    workflow_runner=UnsandboxedWorkflowRunner(),
+                ):
+                    handle = await env.client.start_workflow(
+                        _OneZaiModelCallWorkflow.run,
+                        "Say ok.",
+                        id="s005-zai-route",
+                        task_queue="s005-zai-route",
+                    )
+                    try:
+                        output = await handle.result()
+                        return output, stub.count, [p for p, _ in stub.requests], None
+                    except Exception as exc:  # the exhaustion path (429/400)
+                        return None, stub.count, [p for p, _ in stub.requests], exc
+        finally:
+            os.environ.pop("ZAI_BASE_URL", None)
+
+
+@pytest.mark.temporal
+@pytest.mark.asyncio
+async def test_durable_zai_always_429_costs_exactly_the_attempt_budget():
+    """T023 (spec A3, FR-006): one model request of a durable registry agent
+    on the flipped registry makes EXACTLY the engine's attempt budget of
+    HTTP calls under ZAI_BASE_URL=<stub> — the engine retries, the SDK adds
+    none — every call lands on /chat/completions under the stub base, and
+    exhaustion fails through the activity carrying the 429 (FR-011)."""
+    _, count, paths, failure = await _run_one_durable_call("always_429")
+    assert count == AGENT_ACTIVITY_MAX_ATTEMPTS, (
+        f"always-429 stub saw {count} HTTP requests for one durable model "
+        f"request; the budget is {AGENT_ACTIVITY_MAX_ATTEMPTS} — the SDK "
+        f"must add none beneath the engine (FR-006)"
+    )
+    assert paths and all(p.endswith("/chat/completions") for p in paths), (
+        f"observed paths {paths!r}; every durable attempt must ride the zai "
+        f"chat-completions route under the stub base (spec A3 wire evidence)"
+    )
+    assert failure is not None, "an always-429 provider must fail the call"
+    chain = _failure_chain(failure)
+    assert "ApplicationError" in chain and "429" in chain, (
+        f"expected the activity's ApplicationError carrying the 429 in the "
+        f"failure chain, got:\n{chain}"
+    )
+
+
+@pytest.mark.temporal
+@pytest.mark.asyncio
+async def test_durable_zai_always_400_costs_one_request_per_engine_attempt():
+    """T023 (E5, E7 as corrected by the 004 base measurement): a non-
+    retryable 400 costs exactly one HTTP request per engine attempt (the SDK
+    adds none), the provider error surfaces attributed to the agent through
+    the ApplicationError chain, and the ONLY endpoint ever tried is the
+    stub's — no second endpoint, no fallback (C6)."""
+    output, count, paths, failure = await _run_one_durable_call("always_400")
+    assert output is None, "an always-400 provider must fail the call, not serve it"
+    assert failure is not None
+    chain = _failure_chain(failure)
+    assert "ApplicationError" in chain, (
+        f"expected the activity's ApplicationError in the failure chain, got:\n{chain}"
+    )
+    assert count == AGENT_ACTIVITY_MAX_ATTEMPTS, (
+        f"always-400 stub saw {count} HTTP requests; the SDK must add no "
+        f"retries for a non-retryable provider error — one request per "
+        f"engine attempt ({AGENT_ACTIVITY_MAX_ATTEMPTS}; E7, 004-corrected)"
+    )
+    assert paths and all(p.endswith("/chat/completions") for p in paths), (
+        f"observed paths {paths!r}; only the stub route may be tried — a "
+        f"second endpoint would appear as another path (C6, E5)"
     )
