@@ -201,6 +201,14 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
     )
     if commit.returncode == 0:
         result.commit_sha = _git(["rev-parse", "HEAD"], inp.worktree).stdout.strip()
+    else:
+        _log.warning(
+            "checkpoint commit failed in %s (exit %s); the C2 test-freeze "
+            "anchor will not advance: %s",
+            inp.worktree,
+            commit.returncode,
+            commit.stderr.strip() or commit.stdout.strip(),
+        )
     return result
 
 

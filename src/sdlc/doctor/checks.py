@@ -207,9 +207,9 @@ def check_git_identity() -> CheckResult:
         return CheckResult.fail(
             name,
             f"no committer identity ({first}). Every checkpoint commit will "
-            f"fail SILENTLY -- the failure is swallowed at "
-            f"stages/code/activities.py:197-202 -- so commit_sha stays None "
-            f"and the C2 test-freeze anchor never advances. Set user.email "
+            f"fail; run_coding_task logs the failure at WARNING and does "
+            f"not raise it -- so commit_sha stays None and the C2 "
+            f"test-freeze anchor never advances. Set user.email "
             f"and user.name globally.",
         )
     return CheckResult.ok(name, (out.stdout or "").strip())

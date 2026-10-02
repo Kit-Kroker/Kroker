@@ -1,9 +1,9 @@
 """F2 doctor: binaries and git identity (spec section 5 rows 4-7, section 6).
 
 Row 5 is the headline check. An unresolvable committer identity makes every
-checkpoint commit fail, and stages/code/activities.py:197-202 swallows that
-failure with no raise and no log -- so commit_sha stays None and the C2
-test-freeze anchor never advances (freeze.py:46-51).
+checkpoint commit fail, and the failure is logged at WARNING by
+run_coding_task and not raised -- so commit_sha stays None and the C2
+test-freeze anchor never advances.
 """
 
 from pathlib import Path
@@ -71,7 +71,7 @@ def test_identity_resolves_reports_pass(monkeypatch):
     assert "dev@example.com" in r.detail
 
 
-def test_identity_unresolvable_reports_fail_naming_the_silent_consequence(monkeypatch):
+def test_identity_unresolvable_reports_fail_naming_the_logged_consequence(monkeypatch):
     """git var exits 128 with its own 'Please tell me who you are' text."""
     monkeypatch.setattr(checks.shutil, "which", lambda c: "/usr/bin/git")
     monkeypatch.setattr(
@@ -84,7 +84,8 @@ def test_identity_unresolvable_reports_fail_naming_the_silent_consequence(monkey
     r = checks.check_git_identity()
     assert r.status is Status.FAIL
     assert "auto-detect email address" in r.detail
-    assert "silently" in r.detail.lower()
+    assert "silently" not in r.detail.lower()
+    assert "warning" in r.detail.lower()
     assert "anchor" in r.detail.lower()
 
 
