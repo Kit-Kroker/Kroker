@@ -35,7 +35,7 @@ jobs:
       - name: Build site (strict)
         run: uv run --no-sync mkdocs build --strict
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
