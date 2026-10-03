@@ -295,7 +295,7 @@
 ### Human-in-the-loop (FR-300)
 - [ ] ⚠️ **FR-301** hard/soft/off + threshold + revise + `MAX_GATE_ROUNDS` — wired for architecture/plan/merge; soft still confidence-only (no deterministic-check AND-clause); no calibration monitoring. Tool-call approval now escalates into this same machinery (E-17), so a `pre_tool` denial and a human gate are one mechanism.
 - [x] **FR-302** idempotent signals, `(gate, round)` identity, first-decision-wins.
-- [x] **FR-303** notifications + durable timers — notify activity (`log`/`webhook` adapters), reminder + escalation + expiry timers, `on_timeout` per gate (E-9).
+- [x] **FR-303** notifications + durable timers — notify activity (`log`/`webhook` adapters), reminder + escalation + expiry timers, `on_timeout` per gate (E-9). A `$VAR` route target whose variable is unset is still dropped, but now visibly: one load-time WARNING per dropped route, and `sdlc doctor` lists unset targets (006-B2).
 - [ ] ⚠️ **FR-304** decisions recorded/queryable — fields captured + retained as text; no structured queryable decision log.
 - [ ] **FR-305** cross-run decision inbox — no surface lists everything awaiting a human.
 

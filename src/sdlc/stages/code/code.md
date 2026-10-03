@@ -24,6 +24,9 @@ When the bounded fix loop attempts are exhausted without passing both tests and 
 ### CODE-1.6
 Every `TaskResult` the code stage returns — from both return sites, across all three statuses — carries one `LensOutcome` per name in `GATING_LENSES`, classified once per attempt. The task success condition reads those outcomes through `primary_admits` / `backstop_admits` rather than testing a report for `None`; no presence state blocks the done path. [C8]
 
+### CODE-1.7
+When `run_coding_task`'s checkpoint commit exits non-zero, the activity logs one WARNING naming the worktree, the exit code and git's own text, and returns normally with `commit_sha` unset: a failed checkpoint commit is visible but never raises, and the C2 test-freeze anchor does not advance. A zero exit logs nothing. [006-B1]
+
 ## Failure modes
 
 - **Tool escalation timeout / rejection**: A suspended tool call is rejected by policy or human gate; execution resumes with denied grant.

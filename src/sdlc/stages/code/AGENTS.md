@@ -13,6 +13,7 @@ file carries only what is true *here*.
 - The slice exports `step`, `prompt_digest`, and `ACTIVITIES = [run_coding_task, load_drift_globs]`.
 - `freeze.py` holds the C2 freeze/thaw decision rules as pure functions (no `ctx`, no I/O, table-testable); `step.py` re-exports them, so existing `from ...code.step import _next_anchor` sites keep working. Audit recorders (`_record_escalation`, `_record_thaw`) stay in `step.py`.
 - All tool escalations and approvals are recorded to benchmarks and trace events.
+- `run_coding_task`'s checkpoint commit failing is logged at WARNING and never raised (CODE-1.7): `commit_sha` stays `None` and the C2 anchor does not advance. `sdlc doctor`'s git-identity check is the pre-run guard for the usual cause; keep its FAIL text in step with this behaviour.
 - The C8 lens tombstones are classified here but defined in the review slice (`stages/review/lenses.py`); this slice never re-implements the presence rules or the admission predicates.
 - QA and review stages are invoked clean-context, validating against the frozen contract.
 - The review loop's reviewer label is the run's resolved model

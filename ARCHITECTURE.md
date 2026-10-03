@@ -101,8 +101,8 @@ context ceiling**: past either, the factory starts a fresh session seeded
 with a structured handoff, because a compacted session has lost the
 reasoning thread and is treated as failed. Exhaustion escalates to a human
 task gate (accept / retry with guidance / quarantine). Every harness run
-ends with a checkpoint commit, and every completed task emits a
-`HandoffSummary` (what changed, decisions, open concerns) consumed by
+ends with a checkpoint commit (a failed one is logged at WARNING, not raised),
+and every completed task emits a `HandoffSummary` (what changed, decisions, open concerns) consumed by
 subsequent tasks and the merge stage.
 
 **One session or a crew (E-88):** a task's implementation is by default one

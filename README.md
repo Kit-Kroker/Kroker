@@ -41,6 +41,8 @@ python -m sdlc.cli doctor --strict   # exit non-zero on warnings too
 ```
 
 > Run it before the first `start` on a new machine, and whenever a run fails in a way that smells like configuration. It reports every finding at once rather than dying on the first, and it writes nothing.
+>
+> Notification routes in `policy/notifications.yaml` may take `$VAR` targets (for example `webhook:$SDLC_NOTIFY_WEBHOOK`). A route whose variable is unset or empty is dropped, not sent to the literal string; the loader logs one WARNING per dropped route, and doctor's `notify routes` check lists each unset target as a WARN.
 
 
 Scoring stored benchmark runs needs no running Temporal (it reads records on disk):
