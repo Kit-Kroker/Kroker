@@ -113,12 +113,12 @@ a defect, it is listed for the orchestrator, not fixed here (006-B4).
 - A budget lock older than 10 s is stolen; acquire timeout raises
   `TimeoutError`, which the exhaustion handler in `stage.py` does not
   catch (`budget_store.py`).
-- The budget write is not atomic (`budget_store.py` writes in place, no
-  tmp+replace like `write_page`): a truncated `budget-<scope>.json`
-  wedges that scope until manually cleared.
-- Two docstrings are stale: `deps.py` still describes the persisted
-  counter as a future "Task 8 concern" and `toolset.py` calls it
-  "(deferred)" — `budget_store.py` implements it.
+- A truncated or garbage `budget-<scope>.json` wedges that scope until
+  someone clears it by hand. This is deliberate: `budget_store.py` never
+  auto-resets an unreadable counter, because that would hand the spent
+  budget back. The write itself is atomic (temp file + `os.replace`, like
+  `write_page`), so a crash mid-write leaves the previous counter intact;
+  only external damage to the file produces the wedge.
 
 ## Tests
 
