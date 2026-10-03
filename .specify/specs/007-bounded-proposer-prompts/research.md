@@ -123,36 +123,38 @@ Message shape (A7): `agent '<name>': proposer payload <size> bytes exceeds the <
 
 ## R7 — Input inventory (FR-009, US3)
 
-Every proposer call site, what it embeds, and whether each input is capped. "None found" means no cap exists at the call site or in the producer I read; task T009 re-verifies those rows against their producers before the feature closes. Sizes are estimates, not measurements. Recommendation "guard" means: leave it to the guard.
+Every proposer call site, what it embeds, and whether each input is capped. Rows re-verified against their producers on the branch by T009: every "none found" is replaced by the cap (file and symbol) or by an explicit "uncapped" with the reason; rows 15-16 add the workflow-built research-stage activity inputs, which sit outside the guard (A1). Sizes are estimates, not measurements. Recommendation "guard" means: leave it to the guard.
 
 | # | Call site | Embedded input | Cap | Can it reach 1 MiB? | Recommendation |
 |---|---|---|---|---|---|
-| 1 | clarify single / route (`stages/clarify/step.py:166, :189`) | idea brief JSON | none found (user-supplied) | Only with a pasted document of that size. | guard |
-| | | recall items | none found | Unlikely (short memory items). | guard |
-| 2 | clarify probes (`clarify/step.py:90-95`) | idea JSON; route output JSON | none; model output | As row 1. Up to one probe per live dimension in one workflow task: the aggregate case. | guard; aggregate residual |
+| 1 | clarify single / route (`stages/clarify/step.py:166, :189`) | idea brief JSON | uncapped: `IdeaBrief` carries no length constraint (`src/sdlc/core/models.py`) — user-supplied at run start | Only with a pasted document of that size. | guard |
+| | | recall items | capped: recall answers are bounded by a 4096-token budget — `RECALL_TOKEN_BUDGET` (`src/sdlc/memory/hindsight_client.py:107`, sent as the request's `max_tokens` at `:222`; `hindsight_api.py:37-41` records that the API has no result-count field) | No. | — |
+| 2 | clarify probes (`clarify/step.py:90-95`) | idea JSON; route output JSON | uncapped as row 1; model output bounded by the `ClarifyRoute` schema | As row 1. Up to one probe per live dimension in one workflow task: the aggregate case. | guard; aggregate residual |
 | | | codebase-map grounding | capped: 40 modules with 5 member paths each, 60 contracts, 25 hot spots (`render_for_prompt`, `context/render.py:35, :26-30, :40`) | No. | — |
-| 3 | architect (`stages/architecture/step.py:168-174`) | clarified requirements | model output plus human answers | No. | guard |
+| 3 | architect (`stages/architecture/step.py:168-174`) | clarified requirements | model output plus human answers (uncapped gate text: `GateDecision` carries no length constraint) | No. | guard |
 | | | codebase-map block | capped, same renderer (`stages/architecture/step.py:110`; `context/render.py:35`) | No. | — |
-| | | recall items | none found | Unlikely (short memory items). | guard |
-| | | gate revision guidance; delta guidance | none (human text; generated) | No in practice. | guard |
-| | | research tool returns, accumulated across requests | each is model output; number of calls not capped by the workflow | Possible on a long research loop: the US2 case. | guard |
-| 4 | planner (`stages/plan/step.py:105`) | architecture JSON; recall; guidance | model output; none found; none | No. | guard |
-| 5 | QA (`stages/qa/step.py:171-176`) | assertions; QA raw result JSON | none found | Depends on how much test output the raw result keeps. | guard; T009 traces the producer |
-| | | diff stat | **none** (`vcs/git.py:102, :115`) | About 80 bytes a file: 13,000 changed files. | follow-up candidate (cap with marker) |
+| | | recall items | capped: same 4096-token recall budget (`hindsight_client.py:107, :222`) | No. | — |
+| | | gate revision guidance; delta guidance | uncapped: human gate text (no length constraint on the decision payload) | No in practice. | guard |
+| | | research tool returns, accumulated across requests | each is model output; the number of tool calls is capped per run by the research budget (`max_searches`/`max_fetches`/`max_cost_usd`, `stages/research/deps.py:45-47`, enforced `:85-91`) — but the accumulated returns still grow with each request | Possible on a long research loop within budget: the US2 case. | guard |
+| 4 | planner (`stages/plan/step.py:105`) | architecture JSON; recall; guidance | model output; capped (row 1's 4096-token recall budget); uncapped human gate text | No. | guard |
+| 5 | QA (`stages/qa/step.py:171-176`) | assertions; QA raw result JSON | assertions: model output (plan artifact). QA raw: capped — `QAReport.issues` carries one diagnostic slice cut at `_QA_OUTPUT_MAX = 2000` chars (`stages/qa/activities.py:295`, `:307`) and `failing_tests` is cut at 50 (`:285`) | No (worst case tens of KB). | guard |
+| | | diff stat | **uncapped** (`vcs/git.py:102, :115`) | About 80 bytes a file: 13,000 changed files. | follow-up candidate (cap with marker) |
 | | | diff patch | 60,000 characters (`vcs/git.py:93, :115`), silent (N1) | No. | — |
-| 6 | reviewer, adversary (`stages/review/step.py:141, :203`) | assertions; QA raw JSON; patch | as row 5 | As row 5. | guard |
+| 6 | reviewer, adversary (`stages/review/step.py:141, :203`) | assertions; QA raw JSON; patch | as row 5 | No. | guard |
 | 7 | deep review (`review/step.py:296`) | assertions; task JSON; patch | as above | No. | — |
 | | | scrubbed transcript | 512 KiB of raw session before conversion (`artifacts/read.py:21, :39-41`), plus digest | Close: 512 KiB of code-like text can pass 700 KB once JSON-escaped (R3). | guard; the most likely real trigger |
 | 8 | handoff (`stages/code/step.py:427-431`) | assertions; patch; transcript | as row 7 | As row 7. | guard |
-| 9 | analyst (`stages/analyze/step.py:141-146`) | criteria lines; one QA line per task | none | No. | guard |
-| | | integration diff stat; patch | none; 60,000 | As row 5, on the whole run's diff. | follow-up candidate |
-| 10 | merge verdict (`stages/merge/step.py:548-561`) | full dump of every task result | none | Grows with task count and with each result's embedded reports. Plausible on a run of many tasks. | follow-up candidate (summarise) |
-| 11 | assessment discover (`workflows/assessment.py:453`) | discover context | 20 members per candidate (`assessment/discover/context.py:201, :250`); candidate count none found | Large repository only. | guard |
-| 12 | assessment risk (`assessment.py:675`) | risk baseline | 30 vulnerabilities per capability and per-family caps (`assessment/risk/prompt.py:19-23`); capability count none | Large repository only. | guard |
+| 9 | analyst (`stages/analyze/step.py:141-146`) | criteria lines; one QA line per task | criteria: uncapped in code (plan artifact — count is tasks x criteria). QA lines: each embeds `failing_tests` already cut at 50 per task (`analyze/step.py:102-105`; `qa/activities.py:285`); count grows with task count | No. | guard |
+| | | integration diff stat; patch | uncapped (`vcs/git.py:102, :115`); 60,000 | As row 5, on the whole run's diff. | follow-up candidate |
+| 10 | merge verdict (`stages/merge/step.py:548-561`) | full dump of every task result | uncapped: `model_dump()` of every result with no cut (`merge/step.py:548-560`) | Grows with task count and with each result's embedded reports. Plausible on a run of many tasks. | follow-up candidate (summarise) |
+| 11 | assessment discover (`workflows/assessment.py:453`) | discover context | 20 members per candidate (`assessment/discover/context.py:201, :250`); candidate count uncapped: `build_context` iterates `scan.candidates` with no count cap (`context.py:122, :128`) — scan-driven | Large repository only. | guard |
+| 12 | assessment risk (`assessment.py:675`) | risk baseline | 30 vulnerabilities per capability and per-family caps (`assessment/risk/prompt.py:19-23`); capability count uncapped: capability rows come from the scan's `CapabilityMap` with no count cap (`risk/prompt.py` caps rows per family only) | Large repository only. | guard |
 | 13 | devops planner | no call site in `src/` | — | — | — |
-| 14 | research stage and the architect's research tool | run inside activities; history does not cross as activity input (A1) | — | Not this defect. Workflow-built activity inputs here (idea JSON, merged findings) are the same class as rows 1 and 3. | guard does not apply; follow-up only if T009 finds a reachable one |
+| 14 | research stage and the architect's research tool | run inside activities; history does not cross as activity input (A1) | — | Not this defect. Workflow-built activity inputs here are the same class as rows 1 and 3. | guard does not apply; follow-up only if a reachable one is found (none found by T009: see rows 15-16) |
+| 15 | research plan activity input (`stages/research/stage.py:45-51`, `PlanInput`) | idea JSON; guidance; gaps/contradictions from clarify | **outside the guard** (A1: the planning agent runs inside the activity; its history never crosses the boundary — the workflow-built INPUT is the payload). idea JSON uncapped as row 1; guidance uncapped human gate text; gaps/contradictions are clarify model output | As row 1 (only with a pasted document). | workflow input, not a proposer payload; leave to a follow-up only if row 1's input is ever capped |
+| 16 | research synthesis activity input (`stage.py:326`, `SynthesizeInput`) | idea JSON; findings list (`findings: list[SubQuestionFinding]`, rendered by `_synthesis_prompt` `stage.py:344`) | **outside the guard** (A1, as row 15). Findings count capped: the fan-out slices to `max_sub_questions` (default 4, `core/models.py:278`; `stage.py:117`); each finding is a `ResearchBrief` (bounded schema) plus error text | No on an ordinary run (4 findings x bounded briefs + the idea JSON of row 1). | workflow input; same follow-up condition as row 15 |
 
-**Reading.** No input is shown to reach the limit on an ordinary run. The nearest are the transcript-carrying prompts (rows 7, 8), the merge verdict's task dump (row 10), and a long architect research loop (row 3). The uncapped diff stat (rows 5, 9) needs a very wide change. This supports the GATE 1 ruling: the guard is the fix, and per-input caps are separate, optional follow-ups.
+**Reading.** No input is shown to reach the limit on an ordinary run. The nearest are the transcript-carrying prompts (rows 7, 8), the merge verdict's task dump (row 10), and a long architect research loop within its budget (row 3, the US2 case). The uncapped diff stat (rows 5, 9) needs a very wide change. T009's verified caps (recall token budget, QA raw cuts, research budgets, sub-question slice) removed several "none found" rows from the plausible list without capping anything (FR-009). This supports the GATE 1 ruling: the guard is the fix, and per-input caps are separate, optional follow-ups.
 
 ## Consult disposition
 
