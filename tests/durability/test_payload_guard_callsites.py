@@ -37,16 +37,34 @@ from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserProm
 from pydantic_ai.models import ModelRequestParameters
 from temporalio.exceptions import ApplicationError
 
-from sdlc.agents import payload_guard
+import sdlc.workflows.assessment as assessment_module
+from sdlc.agents import payload_guard, roles
+from sdlc.agents.payload_guard import has_payload_guard
+from sdlc.assessment.activities import discover_context
+from sdlc.assessment.discover.map import CapabilityMap, DiscoverContext, GraphSummary
+from sdlc.assessment.models import PhaseId, PhaseResult
+from sdlc.assessment.risk.models import UnifiedRiskMap
 from sdlc.core.models import PipelineConfig
+from sdlc.measurement import CollectionState, Measurement
 from sdlc.stages.review.lenses import LensPresence, classify_lens
 from sdlc.stages.review.step import run_adversary
 from sdlc.workflows import graph_dispatch
+from sdlc.workflows.assessment import AssessmentInput, AssessmentWorkflow
 from sdlc.workflows.feature import FeatureWorkflow
 from sdlc.workflows.role_host import RoleHost
+from sdlc.workflows.scanning import ScanOutcome
+from tests.test_assessment_workflow import _risk_map, _scan_result, _triage
 
 _LIMIT = payload_guard.PROPOSER_PAYLOAD_LIMIT_BYTES
 _AGENT_NAME = "callsite_guard_agent"
+_OVERSIZE_PROMPT = "E" * (_LIMIT + 2_048)
+# The measure the guard embedded in the message below: deterministic (pure
+# function over the same fixture), so the reason-name assertions can pin it.
+_EXPECTED_SIZE = payload_guard.payload_size(
+    [ModelRequest(parts=[UserPromptPart(content=_OVERSIZE_PROMPT)])],
+    ModelRequestParameters(),
+    None,
+)
 
 
 # -- the real error, driven through the guard (not hand-written) --------------
@@ -90,18 +108,18 @@ def _seam_workflow(
     monkeypatch.setattr(payload_guard.workflow, "patched", lambda _patch_id: patched)
 
 
-def _real_error(monkeypatch: pytest.MonkeyPatch) -> ApplicationError:
+def _real_error(monkeypatch: pytest.MonkeyPatch, name: str = _AGENT_NAME) -> ApplicationError:
     """Drive the real guard over the limit once and return the caught
     exception object. Identity of THIS object is what the call-site tests
-    assert on."""
+    assert on; ``name`` is the agent name baked into the message rule."""
     _seam_workflow(monkeypatch, in_workflow=True, patched=True)
     handler = _NeverCalled()
     with pytest.raises(ApplicationError) as excinfo:
         asyncio.run(
             payload_guard.payload_guard().wrap_model_request(
-                _Ctx(_AGENT_NAME),
+                _Ctx(name),
                 request_context=SimpleNamespace(
-                    messages=_messages("E" * (_LIMIT + 2_048)),
+                    messages=_messages(_OVERSIZE_PROMPT),
                     model_request_parameters=_params(),
                     model_settings=None,
                 ),
@@ -204,3 +222,118 @@ def test_the_guard_error_routes_to_a_graph_failure_type(monkeypatch):
     err = _real_error(monkeypatch)
 
     assert isinstance(err, graph_dispatch.FAILURE_TYPES)
+
+
+# -- T008 (b): the assessment phases' fail-closed / degraded paths -----------
+#
+# The same real error, handed to the proposer binding the phase bodies
+# actually read: assessment.py imports t_discover/t_risk at MODULE level
+# (under workflow.unsafe.imports_passed_through), so the stub is patched on
+# the assessment module's own name, not on roles' -- patching roles would
+# leave the real durable agent running. No server: the only activities
+# faked are the phase lead-ins (discover_context succeeds with a measured
+# empty context; every run_or_degrade call degrades to its fallback), which
+# is exactly the scaffolding's no-workflow test posture.
+
+
+def _measured_context() -> DiscoverContext:
+    return DiscoverContext(
+        graph=GraphSummary(
+            parsed=1,
+            unparsed=0,
+            edges=0,
+            unresolved_relative_rate=Measurement.measured(0.0),
+        ),
+        collected=Measurement.measured(1.0),
+    )
+
+
+def _scan_outcome() -> ScanOutcome:
+    """A measured scan over the scaffolding's ScanResult, so the S5 row
+    _discover requires is MEASURED."""
+    return ScanOutcome(
+        result=PhaseResult(phase=PhaseId.SCAN, collected=Measurement.measured(1.0)),
+        scan=_scan_result(),
+        tree_hash="t" * 40,
+    )
+
+
+def _fake_lead_in_activities(monkeypatch: pytest.MonkeyPatch) -> None:
+    """discover_context succeeds; anything run_or_degrade-wrapped raises and
+    takes its fallback (memo MISS, verification skip)."""
+
+    async def _fake_activity(activity: object, arg: object, **_opts: object) -> object:
+        if activity is discover_context:
+            return _measured_context()
+        raise RuntimeError("no activity runtime in-process")
+
+    monkeypatch.setattr(assessment_module.workflow, "execute_activity", _fake_activity)
+
+
+def test_discover_phase_fails_closed_naming_agent_size_and_limit(monkeypatch):
+    """R6 row 'assessment discover': the guard's error through t_discover.run
+    lands in the existing catch and becomes no_discover -- map-less, phase
+    NOT_COLLECTED, and the reason carries the agent name, the measured size
+    and the limit (no cut at this site)."""
+    agent_name = roles.t_discover.name
+    err = _real_error(monkeypatch, name=agent_name)
+    monkeypatch.setattr(assessment_module, "t_discover", _RaisingAgent(err))
+    _fake_lead_in_activities(monkeypatch)
+
+    out = asyncio.run(
+        AssessmentWorkflow()._discover(AssessmentInput(repo_dir="/r"), _triage(), _scan_outcome())
+    )
+
+    reason = out.result.collected.reason
+    assert out.map is None, "fail closed: a tripped proposer yields no map"
+    assert out.result.phase is PhaseId.DISCOVER
+    assert out.result.collected.state is CollectionState.NOT_COLLECTED
+    assert reason.startswith("discover proposer failed:")
+    assert agent_name in reason
+    assert str(_EXPECTED_SIZE) in reason
+    assert str(_LIMIT) in reason
+
+
+def test_risk_phase_degrades_and_the_facts_survive_the_300_char_cut(monkeypatch):
+    """R6 row 'assessment risk': the guard's error through t_risk.run lands
+    in _judge's catch and returns the baseline DEGRADED -- composites
+    survive, judgment NOT_COLLECTED -- and the agent name, size and limit
+    all sit inside the 300-character cut (assessment.py's [:300])."""
+    agent_name = roles.t_risk.name
+    err = _real_error(monkeypatch, name=agent_name)
+    monkeypatch.setattr(assessment_module, "t_risk", _RaisingAgent(err))
+    baseline = _risk_map()
+
+    out = asyncio.run(
+        AssessmentWorkflow()._judge(
+            AssessmentInput(repo_dir="/r"),
+            _triage(),
+            CapabilityMap(collected=Measurement.measured(1.0)),
+            baseline,
+            proposing=True,
+        )
+    )
+
+    reason = out.judgment.reason
+    assert isinstance(out, UnifiedRiskMap)
+    assert out.collected.state is CollectionState.MEASURED, "the composites survive"
+    assert out.capabilities == baseline.capabilities
+    assert out.judgment.state is CollectionState.NOT_COLLECTED
+    assert len(reason) <= 300, "the degraded reason is cut at 300 characters"
+    assert reason.startswith("the risk proposer ran and failed:")
+    assert agent_name in reason, "the agent name must survive the cut"
+    assert str(_EXPECTED_SIZE) in reason, "the measured size must survive the cut"
+    assert str(_LIMIT) in reason, "the limit must survive the cut"
+
+
+# -- T008 (c): the two assessment agents are durable and guarded --------------
+
+
+def test_discover_and_risk_agents_are_durable_and_guarded():
+    """The attachment claim behind (b): both assessment proposers are in
+    ALL_TEMPORAL_AGENTS (so the boot check covers them) and carry the guard
+    (so the errors (b) drives are the ones a real run would raise)."""
+    assert roles.discover_agent in roles.ALL_TEMPORAL_AGENTS
+    assert roles.risk_agent in roles.ALL_TEMPORAL_AGENTS
+    assert has_payload_guard(roles.discover_agent)
+    assert has_payload_guard(roles.risk_agent)
