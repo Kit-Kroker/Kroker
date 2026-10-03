@@ -24,11 +24,14 @@ from sdlc.dashboard.fleet import FleetSnapshot
 from sdlc.gate import CheckClass, CheckResult
 from sdlc.pending import ClarifyPending, MergeGatePending, StageGatePending, TaskEscalationPending
 
-OUT = Path("interfaces/dashboard/frontend/src/api/__fixtures__")
+ROOT = Path(__file__).resolve().parents[1]
+OUT = ROOT / "interfaces" / "dashboard" / "frontend" / "src" / "api" / "__fixtures__"
 AT = datetime(2026, 8, 18, 9, 0, tzinfo=UTC)
 
 
-def main() -> None:
+def build() -> dict:
+    """Construct the snapshot from the real models and return the parsed
+    JSON object -- exactly what main() writes to fleet-snapshot.json."""
     snap = FleetSnapshot(
         at=AT + timedelta(hours=2),
         total_open_runs=2,
@@ -161,11 +164,12 @@ def main() -> None:
             )
         ],
     )
+    return json.loads(snap.model_dump_json())
 
+
+def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "fleet-snapshot.json").write_text(
-        json.dumps(json.loads(snap.model_dump_json()), indent=2) + "\n", encoding="utf-8"
-    )
+    (OUT / "fleet-snapshot.json").write_text(json.dumps(build(), indent=2) + "\n", encoding="utf-8")
     print(f"wrote {OUT / 'fleet-snapshot.json'}")
 
 
