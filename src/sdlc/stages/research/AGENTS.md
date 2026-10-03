@@ -38,6 +38,82 @@ file carries only what is true *here*.
 - `StageContext` capabilities provide access to `stage`, `gate`, `record`, and `retain`.
 - No state is retained on workflow instances by this slice.
 
+## Gotchas
+
+Traps verified in code on the 006 branch. Each is a behaviour an editor of
+this slice can trip over; none is a bug report — where behaviour looks like
+a defect, it is listed for the orchestrator, not fixed here (006-B4).
+
+### Fail-and-continue (E-29)
+
+- One `try` in `step.py` wraps BOTH the fan-out and `synthesize_brief`: a
+  synthesis failure discards every successful sub-question finding and
+  degrades the whole stage, even when all investigations succeeded.
+- That degradation poisons the next refine round: `id_offset=len([])` is 0,
+  so sub-question ids restart at `sq-0` while `budget_store.py`'s persisted
+  per-run counters still hold the already-spent allowance.
+- A degraded brief has no grounded findings, so it verifies clean and
+  digests non-empty — after human approval the stage records PASS with a
+  judged quality score (`step.py`).
+- Budget/usage exhaustion in `stage.py`'s handler returns a finding with
+  `failed` False and zeroed usage: the all-failed check and `merge.py`'s
+  failed-gap branch never fire, the sub-question's partial work is
+  discarded for a gap-only brief, and the spend before the cap is silently
+  lost from the benchmark record.
+- REVISE past `max_refine_rounds`, or any exception during refine, breaks
+  out with the last good brief — which is then retained, judged and
+  recorded PASS (`step.py`).
+- `verify_brief_activity` is the one non-fail-soft call: outside every
+  `try`, `maximum_attempts=1` (`step.py`) — a verifier raise fails the
+  workflow, not the stage.
+- A human rejection returns immediately (`step.py`): no benchmark row is
+  recorded for the rounds of spend already incurred.
+
+### Verifier rules
+
+- Only `grounded_findings` are verified and hashed (`verify.py`):
+  inferred findings and gaps are never checked against pages.
+- Pages are written only by `get_page` and keyed by sha256 of the EXACT
+  URL string (`exa_wrapper.py`, `verify.py`): a quote sourced from a
+  search snippet, or whose URL is any variant of the fetched one
+  (trailing slash, scheme), fails `source_unavailable`; a failed page
+  write is only logged, the fetch still succeeds.
+- Pages and budgets live under `runs/<run_id>/research`, rooted at
+  `$SDLC_RUNS_ROOT` (default: CWD-relative `runs/`) — a restart with the
+  same workflow id inherits both, and fetch and verify must share
+  environment and CWD or every quote fails (`verify.py`, `budget_store.py`).
+- `brief_digest` hashes `(source_url, claim)` pairs while `merge.py`
+  dedupes exact `(url, quote, claim)` triples — two quote-variants of one
+  fact both survive the merge and double-count in the digest; and any
+  brief without grounded findings (every degraded one) digests to the
+  same constant, with `""` the only ungrounded sentinel (`verify.py`,
+  `merge.py`, `step.py`).
+- Retention re-runs the verifier: `retain.py` calls `verify_brief` — real
+  page I/O, from workflow context (`step.py`). Verified by reading only.
+
+### Budget enforcement
+
+- Caps price TOOL use from constants (`deps.py`'s per-search/per-fetch
+  estimates): LLM tokens are priced separately and never enforced against
+  the budget.
+- The run counter is charged FIRST, enforces cost only (count caps are
+  pinned unbounded in `charge_scoped`), and is never rolled back when the
+  sub-question scope refuses its charge; being disk-persisted per
+  run+scope, activity retries inherit the already-spent allowance —
+  attempt N is not a fresh budget (`budget_store.py`).
+- `scope == "run"` collapses both charges onto `budget-run.json`, and its
+  callers catch `BudgetExceeded` only (`toolset.py`) — a lock
+  `TimeoutError` escapes as an uncapped retry.
+- A budget lock older than 10 s is stolen; acquire timeout raises
+  `TimeoutError`, which the exhaustion handler in `stage.py` does not
+  catch (`budget_store.py`).
+- The budget write is not atomic (`budget_store.py` writes in place, no
+  tmp+replace like `write_page`): a truncated `budget-<scope>.json`
+  wedges that scope until manually cleared.
+- Two docstrings are stale: `deps.py` still describes the persisted
+  counter as a future "Task 8 concern" and `toolset.py` calls it
+  "(deferred)" — `budget_store.py` implements it.
+
 ## Tests
 
     pytest tests/research/ -q
