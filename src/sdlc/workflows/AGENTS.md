@@ -60,6 +60,25 @@ no-override replays stay byte-identical. `_cached_stage` salts the memo
 key's model slot `fwd1:<model>` when the run's model differs from the
 registry model (FR-003/E3); `content_key`'s signature is unchanged.
 
+## The proposer payload guard (007)
+
+The proposer payload guard lives in `src/sdlc/agents/payload_guard.py`
+and is attached to every durable agent by the loader
+(`build_agents`' durable path hands each role
+`[durability, single_retry_layer(), payload_guard()]`) and to the two
+clarify fan-out agents in `roles.py`; the worker refuses to boot a
+durable agent without it (`worker.get_worker_activities`). It checks
+each model request in workflow code BEFORE it is scheduled: over
+`PROPOSER_PAYLOAD_LIMIT_BYTES` (1 MiB) it raises the non-retryable
+`ApplicationError` of type `ProposerPayloadTooLarge`, so each call site
+takes the failure path it already has. It is inert inside activities.
+The `workflow.patched` marker (`GUARD_PATCH_ID`) is taken only on the
+failing branch, so an under-limit run schedules exactly the commands it
+always did and stays replay-identical; `GUARD_PATCH_ID` is a wire name
+(recorded in histories) and is never renamed. Two things it does not
+cover: the combined size of parallel requests in one workflow task, and
+agents run inside activities.
+
 ## Grace edits while FeatureWorkflow is registered (E-74 U6)
 
 `FeatureWorkflow` stays registered only to carry in-flight runs to terminal
