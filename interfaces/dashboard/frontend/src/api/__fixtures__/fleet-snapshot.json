@@ -19,6 +19,7 @@
           "reviewer": "human:mika",
           "comments": "all suggestions accepted",
           "guidance": null,
+          "thaw_tests": false,
           "decided_at": "2026-08-18T09:00:00Z"
         }
       ],
@@ -37,6 +38,8 @@
       "cost_usd_total": 3.12,
       "budget_usd": 40.0,
       "budget_crossings": 0,
+      "stage_marks": null,
+      "graph_sha": null,
       "project_key": "kroker"
     },
     {
@@ -51,7 +54,9 @@
       "roles": [],
       "cost_usd_total": null,
       "budget_usd": null,
-      "budget_crossings": 0
+      "budget_crossings": 0,
+      "stage_marks": null,
+      "graph_sha": null
     },
     {
       "run_id": "graph-run-live",
@@ -111,6 +116,7 @@
       "memory_enabled": false,
       "memory_watermark": null,
       "memory_retains": 0,
+      "graph_sha": null,
       "project_key": "kroker"
     },
     {
@@ -132,7 +138,8 @@
       "budget_crossings": 0,
       "memory_enabled": false,
       "memory_watermark": null,
-      "memory_retains": 0
+      "memory_retains": 0,
+      "graph_sha": null
     },
     {
       "run_id": "feature-flag-cleanup",
@@ -153,7 +160,8 @@
       "budget_crossings": 0,
       "memory_enabled": false,
       "memory_watermark": null,
-      "memory_retains": 0
+      "memory_retains": 0,
+      "graph_sha": null
     },
     {
       "run_id": "graph-run-closed",
@@ -175,31 +183,10 @@
       "memory_enabled": false,
       "memory_watermark": null,
       "memory_retains": 0,
+      "graph_sha": null,
       "project_key": null
     }
   ],
-  "closed_marks": {
-    "graph-run-closed": {
-      "intake": "done",
-      "constitution": "skipped",
-      "context": "skipped",
-      "requirements": "skipped",
-      "research": "skipped",
-      "clarify": "done",
-      "architecture": "done",
-      "planning": "done",
-      "code": "done",
-      "review": "done",
-      "adversary": "done",
-      "handoff": "done",
-      "deep_review": "done",
-      "analyze": "done",
-      "qa": "done",
-      "quality_gate": "done",
-      "deploy": "done",
-      "retro": "done"
-    }
-  },
   "inbox": [
     {
       "run_id": "feature-add-sso",
@@ -210,7 +197,8 @@
           "question": "Which identity protocol?",
           "why_it_matters": "no auth abstraction exists",
           "suggested_answer": "OIDC",
-          "opened_at": "2026-08-18T09:00:00Z"
+          "opened_at": "2026-08-18T09:00:00Z",
+          "parent_run_id": null
         },
         {
           "kind": "stage_gate",
@@ -218,7 +206,8 @@
           "gate": "architecture",
           "round": 1,
           "spec_summary": "Adds MeteringService",
-          "opened_at": "2026-08-18T09:00:00Z"
+          "opened_at": "2026-08-18T09:00:00Z",
+          "parent_run_id": null
         },
         {
           "kind": "merge_gate",
@@ -240,7 +229,8 @@
             }
           ],
           "verdict": "MergeVerdict 0.91 - approve",
-          "opened_at": "2026-08-18T09:00:00Z"
+          "opened_at": "2026-08-18T09:00:00Z",
+          "parent_run_id": null
         },
         {
           "kind": "task_escalation",
@@ -250,10 +240,34 @@
           "task_id": "T07",
           "analysis": "test_retry_budget flakes",
           "attempts": 3,
-          "opened_at": "2026-08-18T09:00:00Z"
+          "opened_at": "2026-08-18T09:00:00Z",
+          "parent_run_id": null
         }
       ]
     }
   ],
-  "errors": []
+  "errors": [],
+  "open_errors": [],
+  "closed_marks": {
+    "graph-run-closed": {
+      "intake": "done",
+      "constitution": "skipped",
+      "context": "skipped",
+      "requirements": "skipped",
+      "research": "skipped",
+      "clarify": "done",
+      "architecture": "done",
+      "planning": "done",
+      "code": "done",
+      "review": "done",
+      "adversary": "done",
+      "handoff": "done",
+      "deep_review": "done",
+      "analyze": "done",
+      "qa": "done",
+      "quality_gate": "done",
+      "deploy": "done",
+      "retro": "done"
+    }
+  }
 }
