@@ -9,7 +9,7 @@ import logging
 import pytest
 
 from sdlc.notify.contract import NotifyReason
-from sdlc.notify.routes import NotifyConfigError, load_routes
+from sdlc.notify.routes import NotifyConfigError, load_routes, unset_env_targets
 
 ASSET = """
 version: 1
@@ -22,6 +22,36 @@ gates:
   merge:
     primary: webhook:$MERGE_HOOK
     fallback: webhook:$ONCALL_HOOK
+"""
+
+# Two gates plus a default table: exercises the loader's walk order
+# (default first, then gates in asset order, primary before fallback) and
+# the set / set-to-empty / unset split of the unset-or-empty contract.
+MULTIGATE_ASSET = """
+version: 1
+default:
+  primary: webhook:$DEFAULT_HOOK
+  fallback: webhook:$DEFAULT_FALLBACK
+gates:
+  merge:
+    primary: webhook:$MERGE_HOOK
+    fallback: log
+  deploy:
+    primary: log
+    fallback: webhook:$DEPLOY_FALLBACK
+"""
+
+# A yaml list where a route string belongs: the loader raises on this
+# (structural error); unset_env_targets must skip the tier instead.
+BAD_TIER_ASSET = """
+version: 1
+default:
+  primary: log
+  fallback: [webhook, $DEFAULT_FALLBACK]
+gates:
+  merge:
+    primary: webhook:$MERGE_HOOK
+    fallback: log
 """
 
 
@@ -172,3 +202,51 @@ def test_shipped_asset_parses():
 
     root = Path(__file__).resolve().parents[1]
     assert load_routes(root / "policy" / "notifications.yaml").version == 1
+
+
+# --- unset_env_targets (006-B2): the doctor's pre-run listing of every
+# --- $VAR target whose variable will drop its route at load time.
+
+
+def test_unset_env_targets_lists_unset_targets_in_loader_order(tmp_path, monkeypatch):
+    """default before gates.*, each gate in asset order, primary before
+    fallback -- the same walk load_routes does. A variable set to '' is
+    unset-or-empty; a resolvable webhook never appears."""
+    monkeypatch.setenv("DEFAULT_HOOK", "")
+    monkeypatch.delenv("DEFAULT_FALLBACK", raising=False)
+    monkeypatch.setenv("MERGE_HOOK", "https://hooks.slack.com/merge")
+    monkeypatch.delenv("DEPLOY_FALLBACK", raising=False)
+    assert unset_env_targets(_write(tmp_path, MULTIGATE_ASSET)) == [
+        ("default.primary", "DEFAULT_HOOK"),
+        ("default.fallback", "DEFAULT_FALLBACK"),
+        ("gates.deploy.fallback", "DEPLOY_FALLBACK"),
+    ]
+
+
+def test_unset_env_targets_with_every_variable_set_is_empty(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEFAULT_HOOK", "https://hooks.slack.com/a")
+    monkeypatch.setenv("DEFAULT_FALLBACK", "https://hooks.slack.com/b")
+    monkeypatch.setenv("MERGE_HOOK", "https://hooks.slack.com/c")
+    monkeypatch.setenv("DEPLOY_FALLBACK", "https://hooks.slack.com/d")
+    assert unset_env_targets(_write(tmp_path, MULTIGATE_ASSET)) == []
+
+
+def test_unset_env_targets_on_the_shipped_asset_is_empty():
+    """policy/notifications.yaml routes everything to `log` -- a clean
+    checkout must report nothing for the doctor to warn about."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    assert unset_env_targets(root / "policy" / "notifications.yaml") == []
+
+
+def test_unset_env_targets_skips_a_non_string_tier_instead_of_raising(tmp_path, monkeypatch):
+    """A yaml list where a route string belongs is a structural error the
+    LOADER raises on; the doctor helper must not -- its WARN should still
+    list the tiers it can read, so a malformed tier cannot hide a real
+    unset variable elsewhere in the asset."""
+    monkeypatch.delenv("MERGE_HOOK", raising=False)
+    monkeypatch.delenv("DEFAULT_FALLBACK", raising=False)
+    assert unset_env_targets(_write(tmp_path, BAD_TIER_ASSET)) == [
+        ("gates.merge.primary", "MERGE_HOOK")
+    ]

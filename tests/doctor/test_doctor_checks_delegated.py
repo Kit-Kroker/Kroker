@@ -137,7 +137,71 @@ def test_notify_routes_ok_reports_pass(monkeypatch):
         version = 1
 
     monkeypatch.setattr(checks, "load_routes", lambda: _R())
+    monkeypatch.setattr(checks, "unset_env_targets", lambda: [])
     assert checks.check_notify_routes().status is Status.PASS
+
+
+_UNSET_ASSET = """
+version: 1
+base_url: null
+allow_hosts: [hooks.slack.com]
+default:
+  primary: log
+  fallback: log
+gates:
+  merge:
+    primary: webhook:$MERGE_HOOK
+    fallback: webhook:$ONCALL_HOOK
+"""
+
+
+def test_unset_route_targets_report_warn_naming_each_location_and_variable(tmp_path, monkeypatch):
+    """The asset parses, so the load leg is quiet -- but each '$' target
+    whose variable is unset still lost its route (notify/routes.py drops it
+    in _parse_route). Row 12 must say where and which variable, as WARN,
+    not hand back a bare ok."""
+    p = tmp_path / "notifications.yaml"
+    p.write_text(_UNSET_ASSET, encoding="utf-8")
+    monkeypatch.setenv("SDLC_NOTIFY_ROUTES", str(p))
+    monkeypatch.delenv("MERGE_HOOK", raising=False)
+    monkeypatch.delenv("ONCALL_HOOK", raising=False)
+    r = checks.check_notify_routes()
+    assert r.status is Status.WARN
+    assert "gates.merge.primary" in r.detail
+    assert "MERGE_HOOK" in r.detail
+    assert "gates.merge.fallback" in r.detail
+    assert "ONCALL_HOOK" in r.detail
+
+
+def test_resolved_route_targets_keep_the_plain_parses_pass(tmp_path, monkeypatch):
+    """Every '$' target resolves: row 12 stays the plain parses-PASS it is
+    today. The probe adds nothing to a sound asset."""
+    p = tmp_path / "notifications.yaml"
+    p.write_text(_UNSET_ASSET, encoding="utf-8")
+    monkeypatch.setenv("SDLC_NOTIFY_ROUTES", str(p))
+    monkeypatch.setenv("MERGE_HOOK", "https://hooks.slack.com/a")
+    monkeypatch.setenv("ONCALL_HOOK", "https://hooks.slack.com/b")
+    r = checks.check_notify_routes()
+    assert r.status is Status.PASS
+    assert "parses" in r.detail
+
+
+def test_unset_target_probe_failure_reports_warn_and_does_not_raise(monkeypatch):
+    """The probe is upstream like any other leg: if it raises something
+    ordinary (OSError re-reading the asset), the check degrades to WARN
+    inside its own try -- run_doctor still gets a result (SG-3)."""
+
+    class _R:
+        version = 1
+
+    def _boom():
+        raise OSError("disk gone")
+
+    monkeypatch.setattr(checks, "load_routes", lambda: _R())
+    monkeypatch.setattr(checks, "unset_env_targets", _boom)
+    r = checks.check_notify_routes()
+    assert r.status is Status.WARN
+    assert "disk gone" in r.detail
 
 
 def test_notify_routes_error_reports_warn_not_fail(monkeypatch):

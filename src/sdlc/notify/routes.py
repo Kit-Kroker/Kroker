@@ -136,3 +136,29 @@ def load_routes(path: str | os.PathLike | None = None) -> NotifyRoutes:
         default=_parse_table(raw.get("default") or {}, "default"),
         gates={g: _parse_table(t or {}, f"gates.{g}") for g, t in (raw.get("gates") or {}).items()},
     )
+
+
+def unset_env_targets(path: str | os.PathLike | None = None) -> list[tuple[str, str]]:
+    """Every (where, variable) whose route will be dropped at load time
+    because the variable is unset or empty -- the doctor's pre-run listing.
+    Walks the asset in the loader's order (default, then gates in asset
+    order; tiers primary then fallback). A non-string tier value is skipped,
+    not raised: the loader owns structural errors. Does not log."""
+    p = _resolve_path(path)
+    if not p.is_file():
+        raise NotifyConfigError(f"notification routes asset is not a file: {p}")
+
+    raw = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    tables: list[tuple[str, dict]] = [("default", raw.get("default") or {})]
+    tables.extend((f"gates.{g}", t or {}) for g, t in (raw.get("gates") or {}).items())
+
+    targets: list[tuple[str, str]] = []
+    for where, table in tables:
+        for tier in ("primary", "fallback"):
+            value = table.get(tier)
+            if not isinstance(value, str):
+                continue
+            var = _env_ref(value)
+            if var is not None and not os.environ.get(var):
+                targets.append((f"{where}.{tier}", var))
+    return targets

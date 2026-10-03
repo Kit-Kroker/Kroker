@@ -30,7 +30,7 @@ from sdlc.board.schema import DEFAULT_DB
 from sdlc.crew.loader import CrewConfigError, crew_dir, validate_crew_clis
 from sdlc.harness.containment import ContainmentError, load_policy
 from sdlc.harness.registry import HARNESSES, check_harness_versions
-from sdlc.notify.routes import NotifyConfigError, load_routes
+from sdlc.notify.routes import NotifyConfigError, load_routes, unset_env_targets
 
 from .env import classify_key, parse_env_example
 from .models import CheckResult
@@ -123,10 +123,17 @@ def check_notify_routes() -> CheckResult:
     name = "notify routes"
     try:
         routes = load_routes()
+        unset = unset_env_targets()
     except NotifyConfigError as e:
         return CheckResult.warn(name, str(e))
     except Exception as e:  # noqa: BLE001
         return CheckResult.warn(name, f"could not load the notification routes: {e}")
+    if unset:
+        listing = ", ".join(f"{where} (${var})" for where, var in unset)
+        return CheckResult.warn(
+            name,
+            f"parses (v{routes.version}) but routes will be dropped for unset variables: {listing}",
+        )
     return CheckResult.ok(name, f"parses (v{routes.version})")
 
 
