@@ -16,6 +16,7 @@ can't race past the cap.
 from __future__ import annotations
 
 import asyncio
+import itertools
 import os
 import time
 from pathlib import Path
@@ -24,6 +25,7 @@ from .deps import Budget, ResearchDeps, charge
 
 _LOCK_TIMEOUT_S = 10.0
 _LOCK_POLL_S = 0.05
+_TMP_COUNTER = itertools.count()
 
 
 def budget_path(run_id: str, scope: str = "run") -> Path:
@@ -84,7 +86,21 @@ async def charge_persisted(
             budget = Budget()
         scratch = deps.model_copy(update={"budget": budget})
         charge(scratch, search=search, fetch=fetch)
-        path.write_text(scratch.budget.model_dump_json(), encoding="utf-8")
+        # Publish atomically (write_page's pattern, verify.py): write_text()
+        # in place truncates first, and a crash between truncate and write
+        # leaves a file that fails Budget validation on every later charge,
+        # wedging that scope. The temp name carries the PID and a counter so
+        # concurrent writers of DIFFERENT scopes (the same directory) cannot
+        # collide on it. A crash before os.replace() must leave the previous
+        # counter intact -- an unreadable file stays an operator problem;
+        # the store never auto-resets it, that would hand the budget back.
+        tmp = path.with_suffix(f".{os.getpid()}.{next(_TMP_COUNTER)}.tmp")
+        try:
+            tmp.write_text(scratch.budget.model_dump_json(), encoding="utf-8")
+            os.replace(tmp, path)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
     finally:
         lock_path.unlink(missing_ok=True)
 
