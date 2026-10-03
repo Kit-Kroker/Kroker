@@ -487,7 +487,7 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
 | Human absent at gate | reminder timer → fallback approver → timeout policy |
 | Fix loops exhausted | escalation gate (accept/retry-with-guidance/quarantine) |
 | Quarantined task | dependents blocked, run fails cleanly with state preserved |
-| Payload > limits | claim-check refs; oversized payloads rejected in code review by convention + runtime guard |
+| Payload > limits | claim-check refs for artifacts; proposer model requests over 1 MiB fail non-retryably before they are scheduled (`agents/payload_guard.py`) |
 | Hindsight down | recalls degrade to empty snapshot (logged); retains retry in background — pipeline never blocks on memory |
 | History growth (maintenance/long runs) | continue-as-new |
 | Prompt edited mid-fleet | memoization hash invalidates only affected stages |
