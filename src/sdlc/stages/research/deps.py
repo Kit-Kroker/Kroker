@@ -5,11 +5,12 @@ and COUNTERS — never a live provider handle or a filesystem path.
 The `budget` counter is a mutable pydantic model on `ResearchDeps`. It
 accumulates correctly when tools are called directly (unit tests) or within a
 single non-temporal `agent.run()` (the same deps instance is threaded through
-every `ctx.deps`). Under durable execution (Task 8 wires this), each tool call is
-a SEPARATE activity that receives its own deserialized copy of `deps`, so
-mutations do NOT flow back to the workflow. Per-run budget enforcement under
-durable execution is a Task 8 concern (likely a disk-persisted counter at
-runs/<run_id>/research/budget.json), NOT a Task 6 concern.
+every `ctx.deps`). Under durable execution, each tool call is a SEPARATE
+activity that receives its own deserialized copy of `deps`, so mutations do
+NOT flow back to the workflow — per-run enforcement therefore does not ride on
+this field: `budget_store.py` keeps the authoritative counters on disk at
+runs/<run_id>/research/budget-<scope>.json (one per scope, charged by the
+tools via `charge_scoped`), and those, not `deps.budget`, hold the caps.
 
 (Task 1 spike finding B + the 2026-07-17 human-authorised fallback: CodeMode
 was the original mechanism for keeping this counter in-process across the

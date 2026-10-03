@@ -213,11 +213,12 @@ async def _research_subquestion_impl(
 ) -> SubQuestionFinding:
     """Research ONE sub-question. The fan-out unit.
 
-    Runs the PLAIN research_agent, not its durable handle: inside an activity
-    pydantic-ai falls back to in-process execution, so deps.budget accumulates
-    for real within the run while budget_store enforces the persisted caps
-    underneath (the pattern research/toolset.py already established for the
-    architect's mid-run call).
+    Runs research_agent directly: inside an activity pydantic-ai falls back to
+    in-process execution, so deps.budget accumulates for real within the run
+    while budget_store enforces the persisted caps underneath (the pattern
+    research/toolset.py already established for the architect's mid-run
+    call). The old "plain agent vs durable handle" distinction is void —
+    roles.py binds one research agent object (`t_research = research_agent`).
 
     `_model` / `_agent` are test seams; production passes neither.
     """

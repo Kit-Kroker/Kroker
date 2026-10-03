@@ -18,12 +18,14 @@ async def research_subquery(deps: ResearchDeps, question: str) -> ResearchBrief:
     lazily so architect/agent.py stays importable without constructing the
     research agent at its own import time.
 
-    NOTE (accepted loss, 2026-07-17 human decision, mirrors Task 8's feature.py
-    comment): `deps.budget` accumulates correctly for direct/test invocation
-    and within a single non-temporal `agent.run()`, but under durable execution
-    each tool activity receives a fresh deserialized copy, so the shared-counter
-    guarantee is advisory-only when the architect runs temporalized. Restoring
-    real per-run enforcement needs a disk-persisted counter (deferred).
+    NOTE (2026-07-17 human decision, wording updated): `deps.budget`
+    accumulates correctly for direct/test invocation and within a single
+    non-temporal `agent.run()`, but under durable execution each tool
+    activity receives a fresh deserialized copy, so the in-memory counter
+    alone cannot hold a cross-activity cap. It does not have to: the
+    research tools charge `budget_store.py`'s disk-persisted counters
+    (this call runs under `scope="architect"` plus the shared run
+    ceiling), which is what actually enforces the budget here.
 
     Unlike the top-level research stage, this call runs INSIDE the architect's
     own tool-call activity, not workflow code — pydantic_ai's durable execution
@@ -31,12 +33,13 @@ async def research_subquery(deps: ResearchDeps, question: str) -> ResearchBrief:
     there, so it falls back to plain in-process execution and `deps.budget`
     genuinely accumulates and can genuinely raise BudgetExceeded mid-run.
     A raised BudgetExceeded is a plain Exception, so left uncaught it escapes
-    this activity's Temporal boundary as an ApplicationFailure that retries
-    with no cap (same failure class as the read_repo fix in
-    tests/test_research_tools.py — an uncapped Temporal retry storm on a
-    deterministic-ish LLM tool-call pattern). Caught here instead, matching
-    ResearchConfig's documented contract: exceeding a bound degrades to a
-    brief with the shortfall recorded in `gaps`, never a crash."""
+    this activity's Temporal boundary as an ApplicationFailure and is retried
+    — bounded, not uncapped: agent activities cap at 3 attempts (`roles.py`),
+    and under CodeMode a tool-side timeout surfaces to the model as a retry
+    prompt before any Temporal retry is spent (same failure class as the
+    read_repo fix in tests/test_research_tools.py). Caught here instead,
+    matching ResearchConfig's documented contract: exceeding a bound degrades
+    to a brief with the shortfall recorded in `gaps`, never a crash."""
     from sdlc.agents.roles import t_research
 
     if t_research is None:

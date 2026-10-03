@@ -101,9 +101,15 @@ a defect, it is listed for the orchestrator, not fixed here (006-B4).
   sub-question scope refuses its charge; being disk-persisted per
   run+scope, activity retries inherit the already-spent allowance —
   attempt N is not a fresh budget (`budget_store.py`).
-- `scope == "run"` collapses both charges onto `budget-run.json`, and its
-  callers catch `BudgetExceeded` only (`toolset.py`) — a lock
-  `TimeoutError` escapes as an uncapped retry.
+- The `scope == "run"` collapsed branch in `charge_scoped`
+  (`budget_store.py`) is correct and tested but dead in production: the
+  architect charges `scope="architect"` (`architecture/step.py`), the
+  stage fan-out charges `sq-<id>` scopes — only tests and the default
+  scope reach it. Its callers catch `BudgetExceeded` only (`toolset.py`),
+  so a lock `TimeoutError` escapes the catch and is retried — bounded
+  (6 attempts on the sub-question activity, 3 on agent activities), not
+  uncapped; under CodeMode a tool-side timeout surfaces to the model as
+  a retry prompt first.
 - A budget lock older than 10 s is stolen; acquire timeout raises
   `TimeoutError`, which the exhaustion handler in `stage.py` does not
   catch (`budget_store.py`).
