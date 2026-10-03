@@ -38,7 +38,15 @@ _AGENTS_DIR = Path(__file__).resolve().parents[2] / "src" / "sdlc" / "agents"
 # sdlc.agents, so it never sandbox-executes at all. Adding a module without
 # editing this set is exactly the un-marked-module defect FR-021 guards
 # against.
-_PINNED_MODULES = {"__init__", "loader", "model_ids", "roles", "runner", "settings"}
+_PINNED_MODULES = {
+    "__init__",
+    "loader",
+    "model_ids",
+    "payload_guard",
+    "roles",
+    "runner",
+    "settings",
+}
 
 
 def test_no_unpinned_modules_under_agents():
