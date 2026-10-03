@@ -26,6 +26,7 @@ from temporalio.common import RetryPolicy
 from temporalio.workflow import ActivityConfig
 
 from sdlc.agents.loader import RegistryError, build_agents
+from sdlc.agents.payload_guard import ProposerPayloadGuard
 from sdlc.core.models import HarnessKind, RoleConfig
 
 _FIXTURES = Path(__file__).parent / "fixture_agents"
@@ -160,11 +161,14 @@ def test_stub_agents_skip_durability_verification():
     assert not hasattr(planner, "root_capability")
     assert planner.name == "planner_agent"
     # 004 T012: durability sentinel leads, single-retry resolver follows.
+    # 007 T004: the payload guard trails as the third (attached in T005).
     assert planner.received_capabilities[0] is sentinels[0]
-    assert len(planner.received_capabilities) == 2
+    assert len(planner.received_capabilities) == 3
+    assert isinstance(planner.received_capabilities[2], ProposerPayloadGuard)
     assert research.name == "research_agent"
     assert research.received_capabilities[0] is sentinels[1]
-    assert len(research.received_capabilities) == 2
+    assert len(research.received_capabilities) == 3
+    assert isinstance(research.received_capabilities[2], ProposerPayloadGuard)
 
 
 def test_per_role_check_names_only_the_failing_role(tmp_path):

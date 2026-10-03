@@ -25,6 +25,7 @@ from ..stages.clarify.models import ClarifyRoute, ProbeResult
 from ..stages.clarify.prompts import PROBE_SYSTEM, ROUTE_SCOPE
 from .loader import build_agents, load_registry
 from .model_ids import single_retry_layer
+from .payload_guard import payload_guard
 
 # Bounded (bug e2e-proposer-hang): with no retry_policy Temporal's default
 # is UNLIMITED attempts, and a retryable failure -- or an activity no worker
@@ -173,6 +174,10 @@ clarify_route_agent = Agent(
         # the fan-out agents reuse the clarify role, so an override-named
         # provider must not stack SDK retries under the fan-out budget (E2).
         single_retry_layer(),
+        # 007 T005: the proposer payload guard, fresh per agent — the
+        # fan-out agents are durable and workflow-scheduled, so their
+        # requests are measured like every other proposer's.
+        payload_guard(),
     ],
 )
 
@@ -188,6 +193,7 @@ clarify_probe_agent = Agent(
             model_activity_config={"heartbeat_timeout": None},
         ),
         single_retry_layer(),  # 004 T012 — same as the route agent above
+        payload_guard(),  # 007 T005 — same as the route agent above
     ],
 )
 

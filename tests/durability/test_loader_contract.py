@@ -6,7 +6,11 @@ factory — followed by a fresh single_retry_layer() resolver (004). With no
 factory (the loader-only/eval path) the role instead receives a fresh
 route_layer() resolver (005 T010) — still exactly one resolver per role,
 no durability sentinel, so a bare model string reaches the shared seam.
-The fixture agents under
+007 T004: the durable path also gains a trailing ProposerPayloadGuard
+(attached in T005, pinned in test_loader_contract_edges.py) — the split
+here deliberately counts it as NEITHER durability nor resolver, so the
+durability slot must still hold exactly the factory's instance and
+nothing else. The fixture agents under
 fixture_agents/ record the call on BuiltAgent instead of building a real
 pydantic_ai.Agent: the loader contract is about the CALL, not the agent
 (see fixture_agents/*/agent.py).
@@ -17,6 +21,7 @@ from pathlib import Path
 from pydantic_ai.capabilities import ResolveModelId
 
 from sdlc.agents.loader import build_agents
+from sdlc.agents.payload_guard import ProposerPayloadGuard
 from sdlc.core.models import RoleConfig
 
 _FIXTURES = Path(__file__).parent / "fixture_agents"
@@ -24,9 +29,15 @@ _PROPOSER_MODEL = "anthropic:glm-5.2"
 
 
 def _durable_and_retry(caps: list) -> tuple[list, list]:
-    """Split a received capabilities list into (non-resolver, resolver)."""
+    """Split a received capabilities list into (durability, resolver).
+
+    The 007 payload guard is neither, so it is filtered out on both sides:
+    the durability side must stay exactly the factory's instance even once
+    T005 appends the guard. (Boot-time guard coverage is pinned through
+    has_payload_guard in test_payload_guard.py, not here.)
+    """
     resolvers = [c for c in caps if isinstance(c, ResolveModelId)]
-    others = [c for c in caps if not isinstance(c, ResolveModelId)]
+    others = [c for c in caps if not isinstance(c, (ResolveModelId, ProposerPayloadGuard))]
     return others, resolvers
 
 

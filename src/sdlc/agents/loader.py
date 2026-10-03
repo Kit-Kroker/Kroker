@@ -515,11 +515,13 @@ def build_agents(
     durability_factory (003, contracts/loader-build-contract.md): a
     zero-argument callable returning a FRESH capability instance per role,
     which build_agents hands to each asset's build() as
-    capabilities=[instance, single_retry_layer()]. None (the default) is
-    the loader-only/eval path: build_agents passes
+    capabilities=[instance, single_retry_layer(), payload_guard()] —
+    007 attaches the proposer payload guard beside the resolver. None
+    (the default) is the loader-only/eval path: build_agents passes
     capabilities=[route_layer()] — the 005 T010 URL-only resolver, fresh
     per role, so a bare ``zai:`` model string reaches the coding endpoint
-    there too; no durability, SDK retries untouched.
+    there too; no durability, SDK retries untouched, no guard (the eval
+    path never runs in a workflow).
 
     agents_dir is a parameter rather than a re-resolution: the caller knows
     which tree it loaded, and re-resolving would import agent.py from the
@@ -540,8 +542,17 @@ def build_agents(
             # sets to one configuration object.
             dur = durability_factory()
             # 004 T012: beside durability, the single-retry resolver — also
-            # fresh per agent.
-            build_kwargs["capabilities"] = [dur, single_retry_layer()]
+            # fresh per agent. 007 T005: and the proposer payload guard,
+            # fresh per agent like the resolver, so every workflow-scheduled
+            # model request of every durable agent is measured before it is
+            # scheduled (worker boot refuses an unguarded one). Imported
+            # HERE, lazily: payload_guard imports temporalio, and this module
+            # must stay import-light for the graph-validation subprocess and
+            # the calibration import check (roles.py, already temporal-heavy,
+            # imports it at module level).
+            from .payload_guard import payload_guard
+
+            build_kwargs["capabilities"] = [dur, single_retry_layer(), payload_guard()]
         else:
             # 005 T010: the loader-only/eval path routes too — a URL-only
             # resolver, fresh per role (contract C4/C7): no durability, and

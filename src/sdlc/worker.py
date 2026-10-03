@@ -29,6 +29,7 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker
 
 from .agents.loader import load_registry, validate_registry
+from .agents.payload_guard import has_payload_guard
 from .agents.roles import ALL_TEMPORAL_AGENTS
 from .agents.runner import SdlcPydanticAIPlugin
 from .artifacts.read import load_session
@@ -144,6 +145,16 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
             # activity type.
             raise RuntimeError(
                 f"agent '{agent.name}' has no TemporalDurability capability; "
+                f"build it through build_agents(durability_factory=...)"
+            )
+        # 007 T005 (D3): a durable agent without the proposer payload guard
+        # is a partial guard described as complete (FR-002) — same boot-time
+        # refusal as the durability check above, so a future agent that
+        # skips the loader's list fails HERE, naming the agent, not mid-run
+        # as an oversized payload left to the workflow engine.
+        if not has_payload_guard(agent):
+            raise RuntimeError(
+                f"agent '{agent.name}' has no ProposerPayloadGuard capability; "
                 f"build it through build_agents(durability_factory=...)"
             )
         agent_activities.extend(durability.temporal_activities)

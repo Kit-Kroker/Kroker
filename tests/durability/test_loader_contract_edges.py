@@ -6,7 +6,9 @@ fixture_agents/ registry: a raising factory must propagate, instances stay
 per-role, capabilities reach build() as a KEYWORD on both shapes, the
 duplicate-agent-name guard keeps firing with a factory supplied, and an
 explicit None factory is the route-layer-only path (005 T010: exactly one
-fresh resolver per agent, no durability).
+fresh resolver per agent, no durability). 007 T004: the with-factory path
+additionally pins a trailing third capability, the ProposerPayloadGuard
+(T005 attaches it; the eval path stays capability-solo).
 """
 
 from pathlib import Path
@@ -15,6 +17,7 @@ import pytest
 from pydantic_ai.capabilities import ResolveModelId as _RESOLVER
 
 from sdlc.agents.loader import RegistryError, build_agents
+from sdlc.agents.payload_guard import ProposerPayloadGuard
 from sdlc.core.models import RoleConfig
 
 _FIXTURES = Path(__file__).parent / "fixture_agents"
@@ -73,9 +76,12 @@ def test_factory_called_once_per_role_instances_not_shared():
     assert len(sentinels) == 2, "factory must run exactly once per role"
     for key, sentinel in (("planner", sentinels[0]), ("research", sentinels[1])):
         caps = agents[key].received_capabilities
-        assert len(caps) == 2, f"{key}: durability + single-retry resolver expected"
+        assert len(caps) == 3, f"{key}: durability + single-retry resolver + payload guard expected"
         assert caps[0] is sentinel, f"{key}: durability instance must lead the list"
         assert isinstance(caps[1], _RESOLVER), f"{key}: the second capability is the resolver"
+        assert isinstance(caps[2], ProposerPayloadGuard), (
+            f"{key}: the payload guard trails as the third capability"
+        )
     assert sentinels[0] is not sentinels[1]
     resolvers = [
         [c for c in agents[k].received_capabilities if isinstance(c, _RESOLVER)]
