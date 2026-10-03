@@ -492,7 +492,7 @@ as tracked rather than accidental.
 - [ ] **ADR-7** Repairs execute through the factory — maintenance loop absent.
 - [ ] ⚠️ **ADR-8** Interfaces as stateless shells — true for CLI. **Two documented exceptions, both deliberate:** the agent board API (E-78) serves durable cross-run state no live workflow holds (ADR-21); and the dashboard backend (E-10) holds an in-process fleet poller and subscriber set — not durable state, but not a stateless shell either. The poller exists because a per-request fan-out costs `N_clients × N_runs` while one shared poller costs `N_runs`. ARCHITECTURE.md §8 scopes the claim accordingly.
 - [ ] **ADR-9** Two worker pools by capability — single queue.
-- [ ] ⚠️ **ADR-10** Claim-check for large payloads — `ArtifactRef` exists but not load-bearing.
+- [ ] ⚠️ **ADR-10** Claim-check for large payloads — `ArtifactRef` exists but not load-bearing. *Proposer prompts are guarded, not claim-checked: 1 MiB limit, non-retryable `ProposerPayloadTooLarge` before scheduling (007). Uncovered: aggregate parallel-request overflow, in-activity agents.*
 - [ ] ⚠️ **ADR-11** Deterministic DAG — holds for the 8 live stages; 6 stages absent.
 - [x] **ADR-12** Contract-first, clean-context validators — QA ✅ and review ✅ both clean-context. **(now complete)**
 - [x] **ADR-13** Serial-by-default; resume-bounded; context by reference (`near_context_ceiling` wired).

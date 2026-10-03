@@ -159,7 +159,7 @@ not be evaluated is `errored` and never counts as a pass.
   then `mkdocs serve`. Nothing on it is hand-maintained.
 
 ## Notes
-- Payloads through Temporal stay small (claim-check for specs/diffs/logs).
+- Payloads through Temporal stay small (claim-check for specs/diffs/logs). Proposer prompts are also guarded at runtime: a payload over 1 MiB raises the non-retryable `ProposerPayloadTooLarge` before the activity is scheduled (see ARCHITECTURE.md §11).
 - Agent names / toolset ids are activity names — never rename in prod.
 - Harness sessions are resumed across fix-loop attempts (claude `--resume`,
   opencode `-s`), so the fixer keeps its context.
