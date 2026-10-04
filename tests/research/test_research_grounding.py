@@ -1,5 +1,9 @@
+import inspect
+from pathlib import Path
+
 import pytest
 
+from sdlc.grounding import Violation
 from sdlc.memory.models import MemoryKind
 from sdlc.stages.research import verify
 from sdlc.stages.research.models import (
@@ -21,6 +25,10 @@ def _write_page(run_id, url, body):
     (d / verify.page_filename(url)).write_text(body, encoding="utf-8")
 
 
+def _no_read(*args, **kwargs):
+    raise AssertionError("the retain path must not read page files (SC-004)")
+
+
 def test_only_verified_findings_are_retained(runs_root):
     _write_page("r1", "https://x/1", "quote one is here")
     # url /2 is NEVER fetched -> a recalled lead masquerading as grounded.
@@ -30,7 +38,7 @@ def test_only_verified_findings_are_retained(runs_root):
             GroundedFinding(source_url="https://x/2", quote="never fetched", claim="c2"),
         ]
     )
-    items = verified_findings_to_retain(brief, "r1")
+    items = verified_findings_to_retain(brief, verify.verify_brief(brief, "r1"))
     assert len(items) == 1
     assert items[0].kind is MemoryKind.RESEARCH_FINDING
     assert items[0].metadata["stage"] == "research"
@@ -47,7 +55,79 @@ def test_recalled_lead_in_grounded_fails_verification(runs_root):
     )
     vios = verify.verify_brief(brief, "r1")
     assert [v.kind for v in vios] == ["source_unavailable"]
-    assert verified_findings_to_retain(brief, "r1") == []
+    assert verified_findings_to_retain(brief, vios) == []
+
+
+def test_a_result_naming_a_finding_drops_it_despite_its_page(runs_root):
+    """The result decides, not the disk: a violation naming /2 drops it even
+    though /2's page is present and its quote verifies."""
+    _write_page("r1", "https://x/1", "quote one is here")
+    _write_page("r1", "https://x/2", "quote two is here")
+    brief = ResearchBrief(
+        grounded_findings=[
+            GroundedFinding(source_url="https://x/1", quote="quote one is here", claim="c1"),
+            GroundedFinding(source_url="https://x/2", quote="quote two is here", claim="c2"),
+        ]
+    )
+    result = [Violation(kind="quote_not_found", source="https://x/2", quote="quote two is here")]
+    items = verified_findings_to_retain(brief, result)
+    assert len(items) == 1
+    assert items[0].metadata["source_url"] == "https://x/1"
+
+
+def test_an_empty_result_retains_every_grounded_finding_in_order(runs_root):
+    """An empty result is the caller's claim that the brief verified clean:
+    every grounded finding is retained, in the brief's order, with today's
+    exact item content (FR-006)."""
+    brief = ResearchBrief(
+        grounded_findings=[
+            GroundedFinding(source_url="https://x/1", quote="quote one is here", claim="c1"),
+            GroundedFinding(source_url="https://x/2", quote="quote two is here", claim="c2"),
+        ]
+    )
+    items = verified_findings_to_retain(brief, [])
+    assert [i.kind for i in items] == [MemoryKind.RESEARCH_FINDING] * 2
+    assert [i.bank for i in items] == ["project:default", "project:default"]
+    assert [i.text for i in items] == ["c1 — https://x/1", "c2 — https://x/2"]
+    assert items[0].metadata == {"stage": "research", "source_url": "https://x/1"}
+    assert items[1].metadata == {"stage": "research", "source_url": "https://x/2"}
+    banked = verified_findings_to_retain(brief, [], bank="project:other")
+    assert [i.bank for i in banked] == ["project:other", "project:other"]
+
+
+def test_the_retain_path_performs_no_file_read(runs_root, monkeypatch):
+    """SC-004: with every filesystem read patched to raise, the same brief and
+    result yield the same items — the retain path reads no file. Patching
+    `verify.pages_dir` and the `Path` methods (not `verify.verify_brief`) is
+    what reaches the name `retain.py` imported."""
+    _write_page("r1", "https://x/1", "quote one is here")
+    brief = ResearchBrief(
+        grounded_findings=[
+            GroundedFinding(source_url="https://x/1", quote="quote one is here", claim="c1"),
+            GroundedFinding(source_url="https://x/2", quote="never fetched", claim="c2"),
+        ]
+    )
+    result = verify.verify_brief(brief, "r1")
+    items = verified_findings_to_retain(brief, result)
+    with monkeypatch.context() as m:
+        m.setattr(verify, "pages_dir", _no_read)
+        m.setattr(Path, "is_file", _no_read)
+        m.setattr(Path, "exists", _no_read)
+        m.setattr(Path, "read_text", _no_read)
+        m.setattr(Path, "open", _no_read)
+        assert verified_findings_to_retain(brief, result) == items
+
+
+def test_the_verification_result_is_a_required_argument():
+    """FR-005/US2-4: `violations` is required and positional — a caller
+    without a verification result cannot call the function by leaving it
+    out."""
+    sig = inspect.signature(verified_findings_to_retain)
+    assert list(sig.parameters) == ["brief", "violations", "bank"]
+    assert sig.parameters["violations"].default is inspect.Parameter.empty
+    brief = ResearchBrief(grounded_findings=[])
+    with pytest.raises(TypeError):
+        verified_findings_to_retain(brief)
 
 
 @pytest.mark.asyncio

@@ -270,8 +270,11 @@ async def step(
         brief = _degraded_research_brief(exc)
         findings = []
 
-    violations = await workflow.execute_activity(
-        verify_brief_activity, args=[brief, run_id_val], **VERIFY_ACT
+    verified_brief, violations = (
+        brief,
+        await workflow.execute_activity(
+            verify_brief_activity, args=[brief, run_id_val], **VERIFY_ACT
+        ),
     )
     if violations:
         ctx.stage("research_failed", "research")
@@ -330,10 +333,11 @@ async def step(
             await _fold_research_usage(cfg, synth_usage, research_spend)
         except Exception:
             break
-        violations = await workflow.execute_activity(
-            verify_brief_activity,
-            args=[brief, run_id_val],
-            **VERIFY_ACT,
+        verified_brief, violations = (
+            brief,
+            await workflow.execute_activity(
+                verify_brief_activity, args=[brief, run_id_val], **VERIFY_ACT
+            ),
         )
         if violations:
             ctx.stage("research_failed", "research")
@@ -343,7 +347,9 @@ async def step(
         round_n += 1
 
     if brief_digest_val:
-        for item in verified_findings_to_retain(brief, run_id_val, bank=cfg.memory.project_bank):
+        for item in verified_findings_to_retain(
+            verified_brief, violations, bank=cfg.memory.project_bank
+        ):
             await ctx.retain(cfg, item.kind, item.bank, item.text, item.metadata)
         _r_quality = await ctx.judge(
             cfg,
