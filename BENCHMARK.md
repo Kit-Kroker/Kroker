@@ -31,6 +31,17 @@
 > benchmark was re-run** for this change; the harness and case suites are
 > untouched.
 
+> **RESEARCH-SPEND BREAK MARKER — 2026-10-04 (008 research cap handling).** A
+> research sub-question that hits a bound — its request limit or a tool
+> budget cap — now reports and prices the model spend it incurred before
+> stopping, instead of recording zero. Research rows for capped runs
+> therefore show more `calls`, more tokens and more `cost_usd` than
+> before, and the run budget gate reads the higher total — a run that
+> used to pass that gate can now stop there. **Every record before this
+> marker under-reports research spend for capped runs and is not
+> rewritten**; runs that hit no cap are unchanged. **No benchmark was
+> re-run** for this change.
+
 ---
 
 ## 0. Why a benchmark is the load-bearing artifact here
