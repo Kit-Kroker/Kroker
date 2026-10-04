@@ -15,7 +15,7 @@ from typing import cast
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import UsageLimitExceeded
-from pydantic_ai.usage import UsageLimits
+from pydantic_ai.usage import RunUsage, UsageLimits
 from temporalio import activity
 
 from ...agents.model_ids import single_retry_layer
@@ -56,21 +56,27 @@ class PlanInput(BaseModel):
     contradictions: list[Contradiction] = Field(default_factory=list)
 
 
-def _usage_of(result, model: str) -> RoleUsage:
-    """One pydantic-ai run's usage as a RoleUsage. cost_usd stays None: dollars
-    are a lookup the WORKFLOW performs via the price_usage activity, because
-    pricing must stay replay-safe and must never fail a stage."""
-    u = result.usage
+def _role_usage(run_usage: RunUsage, model: str, calls: int = 1) -> RoleUsage:
+    """A pydantic-ai usage object — a run's `result.usage` or the caller-owned
+    object threaded through `agent.run(usage=...)` — as a RoleUsage. cost_usd
+    stays None: dollars are a lookup the WORKFLOW performs via the
+    price_usage activity, because pricing must stay replay-safe and must
+    never fail a stage."""
     return RoleUsage(
         role="research",
         model=model,
-        calls=1,
-        input_tokens=u.input_tokens or 0,
-        output_tokens=u.output_tokens or 0,
-        cache_read_tokens=u.cache_read_tokens or 0,
-        cache_write_tokens=u.cache_write_tokens or 0,
+        calls=calls,
+        input_tokens=run_usage.input_tokens or 0,
+        output_tokens=run_usage.output_tokens or 0,
+        cache_read_tokens=run_usage.cache_read_tokens or 0,
+        cache_write_tokens=run_usage.cache_write_tokens or 0,
         cost_usd=None,
     )
+
+
+def _usage_of(result, model: str) -> RoleUsage:
+    """One pydantic-ai run's usage as a RoleUsage."""
+    return _role_usage(result.usage, model)
 
 
 def _plan_prompt(inp: PlanInput) -> str:
@@ -241,7 +247,7 @@ async def _research_subquestion_impl(
         }
     )
 
-    usage = RoleUsage(role="research", model=inp.model)
+    run_usage = RunUsage()
     try:
         async with _heartbeating():
             usage_limits = UsageLimits(request_limit=inp.max_requests)
@@ -251,6 +257,7 @@ async def _research_subquestion_impl(
                     deps=deps,
                     usage_limits=usage_limits,
                     model=_model,
+                    usage=run_usage,
                 )
             else:
                 # 004 T032 (D7a/FR-001 path b): inp.model is the run's
@@ -268,18 +275,28 @@ async def _research_subquestion_impl(
                         deps=deps,
                         usage_limits=usage_limits,
                         model=inp.model,
+                        usage=run_usage,
                     )
                 else:
                     result = await agent.run(
                         sub_question_prompt(sub.question),
                         deps=deps,
                         usage_limits=usage_limits,
+                        usage=run_usage,
                     )
     except (BudgetExceeded, UsageLimitExceeded) as exc:
         # Expected exhaustion: degrade. NEVER re-raise -- the counter is
         # persisted, so a retry hits the same exhausted cap and burns six
-        # attempts with backoff for a guaranteed failure.
+        # attempts with backoff for a guaranteed failure. The caller-owned
+        # run_usage survives the abort and holds every completed request's
+        # spend, so the finding reports and prices it (008 FR-001/FR-002);
+        # a run refused before any request completed returns today's zero
+        # object and the workflow's fold still skips it (EC1).
         activity.logger.info("sub-question %s degraded: %s", sub.id, exc)
+        if run_usage.input_tokens or run_usage.output_tokens:
+            usage = _role_usage(run_usage, inp.model, calls=1)
+        else:
+            usage = RoleUsage(role="research", model=inp.model)
         return SubQuestionFinding(sub_question=sub, brief=_degraded(sub, exc), usage=usage)
     except asyncio.CancelledError:
         # Graceful shutdown cancels in-flight activities. Heartbeat on the way
