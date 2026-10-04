@@ -21,7 +21,7 @@ import os
 import time
 from pathlib import Path
 
-from .deps import Budget, ResearchDeps, charge
+from .deps import Budget, BudgetExceeded, ResearchDeps, charge
 
 _LOCK_TIMEOUT_S = 10.0
 _LOCK_POLL_S = 0.05
@@ -66,6 +66,32 @@ async def _acquire_lock(lock_path: Path) -> None:
             await asyncio.sleep(_LOCK_POLL_S)
 
 
+def _read_counter(path: Path) -> Budget:
+    """A counter's current value; a missing file is an empty budget. An
+    unreadable (truncated/garbage) file still raises -- the store never
+    auto-resets it, that would hand the budget back."""
+    if path.exists():
+        return Budget.model_validate_json(path.read_text(encoding="utf-8"))
+    return Budget()
+
+
+def _publish_counter(path: Path, budget: Budget) -> None:
+    """Publish atomically (write_page's pattern, verify.py): write_text()
+    in place truncates first, and a crash between truncate and write
+    leaves a file that fails Budget validation on every later charge,
+    wedging that scope. The temp name carries the PID and a counter so
+    concurrent writers of DIFFERENT scopes (the same directory) cannot
+    collide on it. A crash before os.replace() must leave the previous
+    counter intact."""
+    tmp = path.with_suffix(f".{os.getpid()}.{next(_TMP_COUNTER)}.tmp")
+    try:
+        tmp.write_text(budget.model_dump_json(), encoding="utf-8")
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
 async def charge_persisted(
     deps: ResearchDeps, *, search: int = 0, fetch: int = 0, scope: str = "run"
 ) -> None:
@@ -80,27 +106,9 @@ async def charge_persisted(
     lock_path = path.with_suffix(".lock")
     await _acquire_lock(lock_path)
     try:
-        if path.exists():
-            budget = Budget.model_validate_json(path.read_text(encoding="utf-8"))
-        else:
-            budget = Budget()
-        scratch = deps.model_copy(update={"budget": budget})
+        scratch = deps.model_copy(update={"budget": _read_counter(path)})
         charge(scratch, search=search, fetch=fetch)
-        # Publish atomically (write_page's pattern, verify.py): write_text()
-        # in place truncates first, and a crash between truncate and write
-        # leaves a file that fails Budget validation on every later charge,
-        # wedging that scope. The temp name carries the PID and a counter so
-        # concurrent writers of DIFFERENT scopes (the same directory) cannot
-        # collide on it. A crash before os.replace() must leave the previous
-        # counter intact -- an unreadable file stays an operator problem;
-        # the store never auto-resets it, that would hand the budget back.
-        tmp = path.with_suffix(f".{os.getpid()}.{next(_TMP_COUNTER)}.tmp")
-        try:
-            tmp.write_text(scratch.budget.model_dump_json(), encoding="utf-8")
-            os.replace(tmp, path)
-        except BaseException:
-            tmp.unlink(missing_ok=True)
-            raise
+        _publish_counter(path, scratch.budget)
     finally:
         lock_path.unlink(missing_ok=True)
 
@@ -110,10 +118,23 @@ async def charge_scoped(
 ) -> None:
     """Charge BOTH the sub-question scope and the shared run ceiling.
 
-    The run counter is charged FIRST, so a sub-question is never billed for
-    work the run ceiling refused. The run counter only enforces cost
-    (search/fetch counts are per-sub-question concerns), so it is charged
-    against a deps copy whose count caps are effectively unbounded.
+    Both counters are checked BEFORE either is written (008 D3), so a
+    charge refused by either counter leaves both unchanged: the scope
+    lock then the run lock are held across one read of each counter, a
+    scratch-copy check of the run ceiling first (cost cap
+    ``run_max_cost_usd`` only -- search/fetch counts are per-sub-question
+    concerns, so the run copy's count caps are unbounded) and of the
+    scope caps second, and, only if both pass, a publish of the scope
+    counter then the run counter. A refusal is noted on the caller's
+    deps (which counter refused, then the message) and the same
+    exception is re-raised unaltered; a lock ``TimeoutError`` is not a
+    refusal and is never noted; nothing ever subtracts from a counter.
+
+    The publishes are two separate atomic writes, so a crash between
+    them can leave the scope counter one charge ahead of the run
+    counter: one phantom charge against this sub-question's own
+    allowance, never against the shared ceiling. Work starts only after
+    both writes, so the run counter never under-counts real work.
 
     When ``scope == "run"`` the scope IS the run ceiling (the architect path,
     which doesn't fan out, and the default scope). The two charges collapse
@@ -127,12 +148,40 @@ async def charge_scoped(
         scoped = deps.model_copy(update={"max_cost_usd": min(deps.max_cost_usd, run_max_cost_usd)})
         await charge_persisted(scoped, search=search, fetch=fetch, scope="run")
         return
-    run_deps = deps.model_copy(
-        update={
-            "max_cost_usd": run_max_cost_usd,
-            "max_searches": 10**9,
-            "max_fetches": 10**9,
-        }
-    )
-    await charge_persisted(run_deps, search=search, fetch=fetch, scope="run")
-    await charge_persisted(deps, search=search, fetch=fetch, scope=scope)
+
+    scope_path = budget_path(deps.run_id, scope)
+    run_path = budget_path(deps.run_id, "run")
+    scope_path.parent.mkdir(parents=True, exist_ok=True)
+    scope_lock = scope_path.with_suffix(".lock")
+    run_lock = run_path.with_suffix(".lock")
+    await _acquire_lock(scope_lock)
+    try:
+        await _acquire_lock(run_lock)
+        try:
+            scope_budget = _read_counter(scope_path)
+            run_budget = _read_counter(run_path)
+            run_scratch = deps.model_copy(
+                update={
+                    "budget": run_budget,
+                    "max_cost_usd": run_max_cost_usd,
+                    "max_searches": 10**9,
+                    "max_fetches": 10**9,
+                }
+            )
+            try:
+                charge(run_scratch, search=search, fetch=fetch)
+            except BudgetExceeded as exc:
+                deps.note_refusal(f"run ceiling: {exc}")
+                raise
+            scope_scratch = deps.model_copy(update={"budget": scope_budget})
+            try:
+                charge(scope_scratch, search=search, fetch=fetch)
+            except BudgetExceeded as exc:
+                deps.note_refusal(f"{scope} allowance: {exc}")
+                raise
+            _publish_counter(scope_path, scope_scratch.budget)
+            _publish_counter(run_path, run_scratch.budget)
+        finally:
+            run_lock.unlink(missing_ok=True)
+    finally:
+        scope_lock.unlink(missing_ok=True)
