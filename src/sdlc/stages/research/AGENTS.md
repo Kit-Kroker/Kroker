@@ -91,8 +91,10 @@ a defect, it is listed for the orchestrator, not fixed here (006-B4).
   brief without grounded findings (every degraded one) digests to the
   same constant, with `""` the only ungrounded sentinel (`verify.py`,
   `merge.py`, `step.py`).
-- Retention re-runs the verifier: `retain.py` calls `verify_brief` — real
-  page I/O, from workflow context (`step.py`). Verified by reading only.
+- Retention does not verify: `retain.py` takes the violations list
+  `verify_brief_activity` returned for that brief and reads no file; the
+  step retains the brief that was verified (`step.py`), so a replay does
+  not depend on the page files.
 
 ### Budget enforcement
 
