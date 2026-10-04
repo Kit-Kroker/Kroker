@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_serializer
+from pydantic import BaseModel, Field, PrivateAttr, model_serializer
 
 # Per-call cost estimates (spec §3). The fake provider is free; these bound a
 # real Tavily run. Kept as constants, not config, so the budget math is auditable.
@@ -77,6 +77,27 @@ class ResearchDeps(BaseModel):
         if self.research_model is None:
             data.pop("research_model", None)
         return data
+
+    _refusal_record: list[str] = PrivateAttr(default_factory=list)
+    """008 D2: the refused-charge record. In memory only, never serialized
+    and never written to disk, owned by whoever runs the agent — a fresh
+    run or activity attempt starts with it empty."""
+
+    def note_refusal(self, text: str) -> None:
+        """Append one refused charge to the record (in-memory only; the
+        serialized form never changes)."""
+        self._refusal_record.append(text)
+
+    @property
+    def refusals(self) -> list[str]:
+        """The record's contents, read-only (a copy; in-memory only)."""
+        return list(self._refusal_record)
+
+    def reset_refusals(self) -> None:
+        """Give this deps a fresh, empty record. `model_copy` shares the
+        list, so a caller reusing an input object across runs must reset
+        its copy's record before running."""
+        self._refusal_record = []
 
 
 def charge(deps: ResearchDeps, *, search: int = 0, fetch: int = 0) -> None:
