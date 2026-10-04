@@ -14,7 +14,7 @@ from typing import cast
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
-from pydantic_ai.exceptions import UsageLimitExceeded
+from pydantic_ai.exceptions import UnexpectedModelBehavior, UsageLimitExceeded
 from pydantic_ai.usage import RunUsage, UsageLimits
 from temporalio import activity
 
@@ -198,19 +198,30 @@ async def _heartbeating(interval: float | None = None):
             await task
 
 
-def _degraded(sub: SubQuestion, exc: Exception) -> ResearchBrief:
+def _first_sentence(text: str, limit: int = 200) -> str:
+    """`text` cut at its first sentence (the period excluded) and at `limit`
+    characters — drops pydantic-ai's retry advice and docs URL from a
+    degraded finding's reason (008 A1)."""
+    idx = text.find(".")
+    sentence = text[:idx] if idx != -1 else text
+    return sentence[:limit]
+
+
+def _degraded(sub: SubQuestion, reason: str) -> ResearchBrief:
     """A bound was hit. Conclude with what we have and record the shortfall as
     a gap -- ResearchConfig's documented contract. Never grounded, so
-    verify_brief passes it through the ordinary success path."""
+    verify_brief passes it through the ordinary success path. One `reason`
+    builds both the gap and the summary, so every consumer (the synthesis
+    prompt, a refine replan) names the same cause."""
     return ResearchBrief(
         gaps=[
             Gap(
                 sub_question_id=sub.id,
                 what_is_missing=sub.question,
-                why_it_matters=f"research stopped early: {exc}",
+                why_it_matters=f"research stopped early: {reason}",
             )
         ],
-        summary=f"Research stopped early: {exc}",
+        summary=f"Research stopped early: {reason}",
     )
 
 
@@ -225,6 +236,11 @@ async def _research_subquestion_impl(
     research/toolset.py already established for the architect's mid-run
     call). The old "plain agent vs durable handle" distinction is void —
     roles.py binds one research agent object (`t_research = research_agent`).
+
+    Budget exhaustion degrades to a gap-only brief carrying the run's usage;
+    a run that ends in UnexpectedModelBehavior with a refused charge on the
+    run's own deps degrades the same way, once (any other error propagates
+    and is retried by the activity's attempt budget).
 
     `_model` / `_agent` are test seams; production passes neither.
     """
@@ -246,6 +262,10 @@ async def _research_subquestion_impl(
             "max_run_cost_usd": inp.max_run_cost_usd,
         }
     )
+    # 008 D2: model_copy shares the refusal list with the input's deps, so a
+    # refusal noted in one run would leak into the next run made from the
+    # same input object (E4 A4). Give THIS run a fresh record.
+    deps.reset_refusals()
 
     run_usage = RunUsage()
     try:
@@ -297,7 +317,29 @@ async def _research_subquestion_impl(
             usage = _role_usage(run_usage, inp.model, calls=1)
         else:
             usage = RoleUsage(role="research", model=inp.model)
-        return SubQuestionFinding(sub_question=sub, brief=_degraded(sub, exc), usage=usage)
+        return SubQuestionFinding(sub_question=sub, brief=_degraded(sub, str(exc)), usage=usage)
+    except UnexpectedModelBehavior as exc:
+        # 008 D4 (FR-003/FR-004): the run died in retry exhaustion (or any
+        # other model-behaviour dead end) AFTER a refused charge -- the
+        # record on the run's own deps is the evidence. The counter is
+        # persisted, so a retry would burn five more attempts against a cap
+        # that stays exhausted: degrade ONCE, naming the refused bound and
+        # the terminal error. With an EMPTY record this is not
+        # budget-caused: the bare raise keeps today's retry path (FR-005).
+        if not deps.refusals:
+            raise
+        reason = f"{deps.refusals[0]}; then {_first_sentence(str(exc))}"
+        activity.logger.warning(
+            "sub-question %s degraded after a refused charge: %s (terminal error: %s)",
+            sub.id,
+            deps.refusals[0],
+            exc,
+        )
+        if run_usage.input_tokens or run_usage.output_tokens:
+            usage = _role_usage(run_usage, inp.model, calls=1)
+        else:
+            usage = RoleUsage(role="research", model=inp.model)
+        return SubQuestionFinding(sub_question=sub, brief=_degraded(sub, reason), usage=usage)
     except asyncio.CancelledError:
         # Graceful shutdown cancels in-flight activities. Heartbeat on the way
         # out so the server learns immediately rather than waiting out

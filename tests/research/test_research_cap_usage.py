@@ -18,6 +18,7 @@ import json
 
 import pytest
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.usage import RunUsage
@@ -246,3 +247,38 @@ async def test_exhaustion_before_any_request_returns_todays_zero_usage():
     inp = _inp()
     out = await research_subquestion(inp, _agent=_Boom(BudgetExceeded("search budget exhausted")))
     assert out.usage == RoleUsage(role="research", model=inp.model)
+
+
+# ---------------------------------------------------------------------------
+# Plan-D5 usage case 6b: two impl calls from ONE SubQuestionInput must not
+# share the refusal record. `model_copy` shares the private list (E4 A4), so
+# the impl has to hand each run's deps copy a fresh record or the first
+# call's refusal degrades the second call too.
+
+
+class _NotingThenUmb:
+    """Notes a refusal on the run's deps, then dies in retry exhaustion."""
+
+    async def run(self, prompt, **kw):
+        kw["deps"].note_refusal("sq-0 allowance: search budget exhausted (1 searches)")
+        raise UnexpectedModelBehavior(
+            "Tool 'run_code' exceeded max retries count of 3. Consider "
+            "raising the retry limit, or see the docs on tool retries: "
+            "https://example.invalid/docs"
+        )
+
+
+class _PlainUmb:
+    """The same terminal error with nothing refused behind it."""
+
+    async def run(self, prompt, **kw):
+        raise UnexpectedModelBehavior("boom")
+
+
+@pytest.mark.asyncio
+async def test_two_runs_from_one_input_do_not_share_the_refusal_record():
+    inp = _inp()
+    first = await research_subquestion(inp, _agent=_NotingThenUmb())
+    assert first.failed is False
+    with pytest.raises(UnexpectedModelBehavior):
+        await research_subquestion(inp, _agent=_PlainUmb())
