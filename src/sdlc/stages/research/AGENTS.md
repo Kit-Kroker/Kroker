@@ -55,11 +55,14 @@ a defect, it is listed for the orchestrator, not fixed here (006-B4).
 - A degraded brief has no grounded findings, so it verifies clean and
   digests non-empty — after human approval the stage records PASS with a
   judged quality score (`step.py`).
-- Budget/usage exhaustion in `stage.py`'s handler returns a finding with
-  `failed` False and zeroed usage: the all-failed check and `merge.py`'s
-  failed-gap branch never fire, the sub-question's partial work is
-  discarded for a gap-only brief, and the spend before the cap is silently
-  lost from the benchmark record.
+- Budget/usage exhaustion in `stage.py`'s handler still returns a finding
+  with `failed` False and still drops the partial work for a gap-only
+  brief (the all-failed check and `merge.py`'s failed-gap branch never
+  fire), but the usage up to the cap is now returned and priced instead
+  of zeroed. A run that ends in retry exhaustion after a refused charge
+  degrades the same way, in one attempt (`UnexpectedModelBehavior` with a
+  refusal noted on the run's own deps record); any other error is
+  retried as before, and an attempt that raises still loses its spend.
 - REVISE past `max_refine_rounds`, or any exception during refine, breaks
   out with the last good brief — which is then retained, judged and
   recorded PASS (`step.py`).
@@ -96,10 +99,13 @@ a defect, it is listed for the orchestrator, not fixed here (006-B4).
 - Caps price TOOL use from constants (`deps.py`'s per-search/per-fetch
   estimates): LLM tokens are priced separately and never enforced against
   the budget.
-- The run counter is charged FIRST, enforces cost only (count caps are
-  pinned unbounded in `charge_scoped`), and is never rolled back when the
-  sub-question scope refuses its charge; being disk-persisted per
-  run+scope, activity retries inherit the already-spent allowance —
+- Both counters are checked before either is written (`charge_scoped`), so
+  a charge refused by the scope allowance or the run ceiling writes
+  nothing to either; the run counter still enforces cost only (count caps
+  pinned unbounded). The two publishes are separate atomic writes, so a
+  crash between them can leave the scope counter one charge ahead — never
+  the shared ceiling short of real work. Being disk-persisted per
+  run+scope, activity retries still inherit the already-spent allowance —
   attempt N is not a fresh budget (`budget_store.py`).
 - The `scope == "run"` collapsed branch in `charge_scoped`
   (`budget_store.py`) is correct and tested but dead in production: the
