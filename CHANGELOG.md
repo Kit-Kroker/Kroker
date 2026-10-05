@@ -1,0 +1,54 @@
+# Changelog
+
+Notable changes to Kroker, newest first. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html); while the major
+version is 0, any release may break compatibility.
+
+## [Unreleased]
+
+## [0.0.1] - 2026-10-05
+
+The first tagged version. Alpha: single operator, your own repositories,
+localhost only — see [`SECURITY.md`](SECURITY.md). The history before this
+tag is not itemised here; [`ROADMAP.md`](ROADMAP.md) records what is
+delivered and what is open, requirement by requirement.
+
+### What this version contains
+
+- An idea → deployed feature pipeline orchestrated by Temporal: clarify,
+  architecture, plan, code, review, QA, analysis, merge gate and an
+  optional deploy stage, with human gates that are `hard`, `soft` or `off`
+  per project.
+- Proposer roles on Pydantic AI and coding harnesses (`claude -p`,
+  `opencode run`) working in per-task git worktrees, configured from the
+  versioned role registry in `agents/`.
+- A deterministic merge gate with absolute checks (build, lint, security)
+  judged against the run's pinned base.
+- Optional research, deep-review, handoff and adversary roles, off by
+  default.
+- Run budgets, a per-run summary, and the `events.jsonl` / `report.html`
+  export.
+- The agent board API and the operator dashboard.
+- A benchmark harness with stored-run scoring (`sdlc.cli benchmark`).
+- `sdlc.cli doctor` for diagnosing a local setup.
+
+### Added
+
+- `LICENSE` (Apache-2.0) and `NOTICE`.
+- `SECURITY.md`: the threat model and a private reporting channel.
+- `CONTRIBUTING.md` and this changelog.
+
+### Changed
+
+- The distribution is renamed from `ai-sdlc-temporal` to `kroker`. The
+  import package is still `sdlc`, and the commands (`python -m sdlc.cli`,
+  `python -m sdlc.worker`) are unchanged. Re-run the install
+  (`uv sync --frozen --extra dev` or `pip install -e ".[dev]"`) in an
+  existing checkout.
+- The version is reset from an untagged `0.1.0` to `0.0.1`.
+- `docker-compose.yml` publishes Temporal and Hindsight on `127.0.0.1`
+  only.
+
+[Unreleased]: https://github.com/Kit-Kroker/Kroker/compare/v0.0.1...HEAD
+[0.0.1]: https://github.com/Kit-Kroker/Kroker/releases/tag/v0.0.1

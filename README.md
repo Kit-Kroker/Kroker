@@ -1,4 +1,4 @@
-# ai-sdlc-temporal
+# Kroker
 
 Idea → deployed feature pipeline. Temporal orchestrates; Pydantic AI agents
 think (clarify, architect, plan, QA, quality gate, devops); coding harnesses
@@ -218,3 +218,7 @@ not be evaluated is `errored` and never counts as a pass.
 - Memory (Hindsight) defaults to a fake in-process backend; the real client
   (`memory/hindsight_client.py`) talks to a live Hindsight container (see
   Docker Compose above).
+
+## License
+Apache License 2.0 — see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). Contributing:
+[`CONTRIBUTING.md`](CONTRIBUTING.md). Changes: [`CHANGELOG.md`](CHANGELOG.md).
