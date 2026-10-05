@@ -107,7 +107,7 @@ No LLM, no I/O. Consumes typed check evidence and decides pass/fail:
 ## Developer setup
 
 ```bash
-uv sync --frozen --extra dev # Python >=3.11; use 3.13 — the image's python
+uv sync --frozen --extra dev # Python 3.13 — the floor, and what CI and the image run
 python -m pytest             # needs `git` on PATH
 ```
 

@@ -79,7 +79,7 @@ def create_app(store_factory: Callable[[], BoardStore] | None = None) -> FastAPI
     factory = store_factory or BoardStore
     app = FastAPI(title="SDLC Agent Board", version="1.0")
 
-    def get_store() -> Generator[BoardStore, None, None]:
+    def get_store() -> Generator[BoardStore]:
         store = factory()
         try:
             yield store

@@ -12,7 +12,6 @@ is what makes E-50's threshold a gate over a number no model wrote.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from typing import TypeVar
 
 from ...measurement import CollectionState, Measurement
 from ..scan.models import EvidenceRef
@@ -36,9 +35,6 @@ from .models import (
     Vulnerability,
 )
 
-T = TypeVar("T")
-K = TypeVar("K")
-
 
 def degraded(m: UnifiedRiskMap, reason: str) -> UnifiedRiskMap:
     """RD7: the judgment layer did not collect; the composites survive.
@@ -55,7 +51,7 @@ def degraded(m: UnifiedRiskMap, reason: str) -> UnifiedRiskMap:
     )
 
 
-def _unique(rows: Iterable[T], key: Callable[[T], K]) -> dict[K, T]:
+def _unique[T, K](rows: Iterable[T], key: Callable[[T], K]) -> dict[K, T]:
     """The rows whose key appears exactly once (P2-D5).
 
     A key dispositioned twice is the proposer contradicting itself; picking

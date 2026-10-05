@@ -25,7 +25,8 @@ uv sync --frozen --extra dev   # from uv.lock, like CI and the image
 ```
 
 or `pip install -e ".[dev]"` if you don't use uv. Python 3.13 is the
-version the image and the dev container run (3.14 has no Windows wheel for
+floor (`requires-python`) and the version CI, the image and the dev
+container run (3.14 has no Windows wheel for
 `pydantic-monty-client`); `git` must be on PATH. Editable installs don't
 auto-discover newly added modules — re-run the install after adding a
 new file if you hit `ModuleNotFoundError`.

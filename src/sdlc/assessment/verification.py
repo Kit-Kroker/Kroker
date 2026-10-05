@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from typing import Generic, Protocol, TypeVar
+from typing import Protocol
 
 from ..grounding import Profile, verify_quote
 from .scan.models import EvidenceRef
@@ -48,9 +48,6 @@ class VerifiableRow(Protocol):
     quote: str
 
 
-R = TypeVar("R", bound=VerifiableRow)
-
-
 class Fabricating(Protocol):
     """What guard_reason needs. A protocol rather than a concrete type so the
     typed wrappers (RefVerification, RiskVerification) can each keep their own
@@ -64,7 +61,7 @@ class Fabricating(Protocol):
 
 
 @dataclass(frozen=True)
-class RowVerification(Generic[R]):
+class RowVerification[R: VerifiableRow]:
     """What survived, what was refused, and the guard's two terms.
 
     Deliberately NOT a Pydantic model: it never crosses the Temporal
@@ -174,7 +171,7 @@ def _refuse(row: VerifiableRow, blobs: Mapping[str, str | None]) -> tuple[str, s
     return first_rule, first_detail, unresolved
 
 
-def verify_rows(
+def verify_rows[R: VerifiableRow](
     rows: Iterable[R], blobs: Mapping[str, str | None], *, id_of: Callable[[R], str]
 ) -> RowVerification[R]:
     """Every reference resolved, every quote byte-verified.

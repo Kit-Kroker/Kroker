@@ -12,7 +12,7 @@ readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Maksim Shautsou" }]
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
     "temporalio>=1.9",
     "pydantic>=2.13.5",
@@ -73,7 +73,7 @@ eval = ["promptfoo>=0.1.4"]
 docs = ["mkdocs-material>=9.6", "mkdocs-gen-files>=0.5.0"]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py313"
 line-length = 100
 # benchmarks/cases/** are vendored fixtures (third-party reference repos and
 # their oracle tests) — data, not product code. Keep them byte-stable.
@@ -97,7 +97,7 @@ select = ["E", "F", "I", "UP", "B"]
 "scripts/aggregate_benchmarks.py" = ["E501"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.13"
 ignore_missing_imports = true
 files = ["src"]
 

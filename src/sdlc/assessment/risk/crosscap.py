@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Generic, TypeVar
+from typing import Any
 
 from ...measurement import CollectionState, Measurement
 from ..discover.map import Capability, CapabilityMap
@@ -62,11 +62,9 @@ from .rules import (
 )
 from .severity import REACHABLE_KINDS, max_severity
 
-R = TypeVar("R")
-
 
 @dataclass(frozen=True)
-class FamilyResult(Generic[R]):
+class FamilyResult[R]:
     """One family's Measurement, its rows, and whether its cap bit.
 
     A dataclass rather than a Pydantic model: it never crosses the Temporal
@@ -83,7 +81,7 @@ class FamilyResult(Generic[R]):
     truncated: bool = False
 
 
-def _capped(rows: list[R], cap: int) -> FamilyResult[R]:
+def _capped[R](rows: list[R], cap: int) -> FamilyResult[R]:
     """Truncate to `cap` and record whether the cap bit.
 
     Order is the CALLER's responsibility: rows must already be sorted so
@@ -94,7 +92,7 @@ def _capped(rows: list[R], cap: int) -> FamilyResult[R]:
     )
 
 
-def _uncollected(reason: str) -> FamilyResult[R]:
+def _uncollected[R](reason: str) -> FamilyResult[R]:
     return FamilyResult(collected=Measurement.not_collected(reason))
 
 

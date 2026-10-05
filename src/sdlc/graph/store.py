@@ -39,7 +39,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal, TypeAlias
+from typing import Any, Literal
 
 from ..core.models import RoleConfig
 from .io import GraphSchemaError, from_yaml, to_yaml
@@ -112,7 +112,7 @@ def default_root() -> Path:
 
 
 # The parsed registry-snapshot document: {"schema": 1, "node_types": [...]}.
-RegistrySnapshot: TypeAlias = Mapping[str, Any]
+type RegistrySnapshot = Mapping[str, Any]
 
 
 def snapshot_registry(registry: Mapping[str, NodeTypeSpec]) -> str:

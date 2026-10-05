@@ -12,9 +12,6 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
-from typing import TypeVar
-
-T = TypeVar("T")
 
 # (tool, rule, path, line). Callers return components already normalized with
 # normalize_path / normalize_line.
@@ -36,7 +33,7 @@ def rename_map(renames: Sequence[Sequence[str]]) -> dict[str, str]:
     return {normalize_path(old): normalize_path(new) for old, new in renames}
 
 
-def delta(
+def delta[T](
     base: Sequence[T],
     head: Sequence[T],
     key: Callable[[T], FindingKey],

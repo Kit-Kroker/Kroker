@@ -13,14 +13,12 @@ extracted GateHost out of FeatureWorkflow.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any
 
 from temporalio import workflow
 
-T = TypeVar("T")
 
-
-async def run_or_degrade(
+async def run_or_degrade[T](
     activity: Any, arg: Any, opts: workflow.ActivityConfig, *, fallback: Callable[[], T]
 ) -> T:
     """Run one activity, or return `fallback()` if it could not run.
