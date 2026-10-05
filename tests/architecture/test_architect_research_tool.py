@@ -77,7 +77,7 @@ async def test_research_subquery_degrades_instead_of_raising_on_budget_exceeded(
     from sdlc.stages.research.deps import BudgetExceeded, ResearchDeps
 
     class _ExhaustedAgent:
-        async def run(self, question, deps):
+        async def run(self, question, deps, **kwargs):
             raise BudgetExceeded(f"search budget exhausted ({deps.max_searches} searches)")
 
     monkeypatch.setattr(roles, "t_research", _ExhaustedAgent())

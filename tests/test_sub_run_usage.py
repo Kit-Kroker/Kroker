@@ -214,12 +214,11 @@ def test_harvest_survives_a_raising_new_messages():
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(strict=True, reason="needs tool_return, T008")
 async def test_end_to_end_report_round_trips_through_a_real_agent():
     """A real pydantic_ai agent whose tool returns tool_return(brief, report):
     harvest_reports(result) reads back exactly that report -- pinning the
     ``tool-return`` part kind and the key on BOTH sides (writer and reader).
-    xfail(strict) until T008 lands tool_return; T008 removes this mark."""
+    xfail mark removed at T008, which landed tool_return."""
     from sdlc.observability.sub_run_usage import SubRunUsage, harvest_reports
     from sdlc.stages.research.toolset import tool_return
 

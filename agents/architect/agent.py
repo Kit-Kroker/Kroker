@@ -30,8 +30,12 @@ def build(
     async def research(ctx: RunContext[ResearchDeps], question: str) -> ResearchBrief:
         """Consult grounded research on a sub-question. Draws down this run's
         shared research budget (SGR Routing: local vs. web)."""
-        from sdlc.stages.research.toolset import research_subquery
+        from sdlc.stages.research.toolset import research_subquery_reported, tool_return
 
-        return await research_subquery(ctx.deps, question)
+        brief, report = await research_subquery_reported(ctx.deps, question)
+        # A ToolReturn from a -> ResearchBrief tool is pydantic-ai's sanctioned
+        # metadata channel; the annotation must stay a plain ResearchBrief (a
+        # parameterized ToolReturn would change the tool schema the model sees).
+        return tool_return(brief, report)  # type: ignore[return-value]
 
     return agent

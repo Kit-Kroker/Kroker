@@ -28,6 +28,11 @@ from pydantic import BaseModel, Field, PrivateAttr, model_serializer
 SEARCH_COST_USD = 0.01
 FETCH_COST_USD = 0.02
 
+DEFAULT_MAX_REQUESTS = 40
+"""The architect tool's inner-run request limit when the run config does not
+say otherwise. Equals ResearchConfig's default (pinned by test); a constant
+here so the omit-when-default serializer below has a stable sentinel."""
+
 
 class BudgetExceeded(Exception):
     """A stage-scoped bound was hit. Surfaces to the model as an ordinary error;
@@ -69,13 +74,23 @@ class ResearchDeps(BaseModel):
     the override reaches the model that answers. Omitted from serialization
     while None, so no-override activity inputs stay byte-identical."""
 
+    max_requests: int = Field(default=DEFAULT_MAX_REQUESTS, ge=1)
+    """Bounds the architect tool's INNER research run only (the request limit
+    the toolset hands the inner agent run); the stage path passes its own
+    limit and is unaffected. Floor 1: a limit of 0 would stop the inner run
+    before its first request. Omitted from serialization while it equals
+    DEFAULT_MAX_REQUESTS, so default-config payloads stay byte-identical."""
+
     @model_serializer(mode="wrap")
-    def _omit_research_model_when_none(self, handler, info):
-        """Serialize `research_model` ONLY when set — a null key would change
-        every no-override deps payload (FR-010)."""
+    def _omit_defaulted_fields(self, handler, info):
+        """Serialize `research_model` ONLY when set, and `max_requests` only
+        when it differs from the default — a null or always-present key would
+        change every no-override deps payload (FR-010)."""
         data = handler(self)
         if self.research_model is None:
             data.pop("research_model", None)
+        if self.max_requests == DEFAULT_MAX_REQUESTS:
+            data.pop("max_requests", None)
         return data
 
     _refusal_record: list[str] = PrivateAttr(default_factory=list)
