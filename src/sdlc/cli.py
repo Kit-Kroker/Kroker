@@ -46,11 +46,11 @@ from .core.models import (
 )
 from .dashboard.fleet import FleetCapacityExceeded, guard_fleet_capacity
 from .naming import slug
-from .worker import TASK_QUEUE
-from .workflows.assessment import AssessmentInput, AssessmentWorkflow
-from .workflows.graph import GraphWorkflow
-from .workflows.tidyup import TidyUpInput, TidyUpWorkflow
-from .workflows.triage import TriageInput, TriageWorkflow
+
+# The worker and the workflows are imported inside main(), after `doctor` has
+# been dispatched: importing them builds the agent registry, which fails
+# closed without its provider keys -- and a machine without keys is the
+# first one `doctor` has to be able to report on.
 
 # `slug` is imported from the leaf module sdlc.naming, not defined here:
 # `sdlc.cli.slug` is an established import path (dashboard/api.py and this
@@ -404,6 +404,17 @@ async def main() -> None:
         print("revise requires --comment <guidance>")
         raise SystemExit(1)
 
+    if args.cmd == "doctor":
+        from .doctor.cli import run_doctor
+
+        raise SystemExit(await run_doctor(args))
+
+    from .worker import TASK_QUEUE
+    from .workflows.assessment import AssessmentInput, AssessmentWorkflow
+    from .workflows.graph import GraphWorkflow
+    from .workflows.tidyup import TidyUpInput, TidyUpWorkflow
+    from .workflows.triage import TriageInput, TriageWorkflow
+
     client = None
     if _needs_temporal_client(args):
         client = await Client.connect(
@@ -616,11 +627,6 @@ async def main() -> None:
         from .dispositions.cli import run_dispositions
 
         raise SystemExit(run_dispositions(args))
-
-    if args.cmd == "doctor":
-        from .doctor.cli import run_doctor
-
-        raise SystemExit(await run_doctor(args))
 
     if args.cmd == "triage" and args.triage_cmd == "show":
         assert client is not None

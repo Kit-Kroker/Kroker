@@ -37,6 +37,9 @@ version is 0, any release may break compatibility.
 
 ### Fixed
 
+- `sdlc.cli doctor` reports on a machine with no provider keys instead of
+  dying on a traceback: the CLI no longer builds the agent registry before
+  dispatching it.
 - `.env.example` asks for `EXA_API_KEY`, which the shipped research role
   requires at worker start, instead of `TAVILY_API_KEY`, which it does not.
 

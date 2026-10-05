@@ -2,6 +2,9 @@
 
 import argparse
 import json
+import os
+import subprocess
+import sys
 
 import pytest
 
@@ -104,3 +107,35 @@ def test_doctor_is_reachable_through_the_real_parser():
     assert args.cmd == "doctor"
     assert args.strict is True
     assert args.as_json is False
+
+
+def test_doctor_reports_instead_of_crashing_without_provider_keys():
+    """The machine doctor exists for has no keys yet. sdlc.cli used to import
+    the worker at module level, which builds the agent registry, which fails
+    closed without EXA_API_KEY -- so doctor died on a traceback before it
+    could report the missing key. A subprocess, because the failure was at
+    import and this process already holds conftest's placeholder keys.
+
+    Empty rather than removed: load_dotenv never overrides a variable that
+    is set, so a developer's own .env cannot leak real keys into the child.
+    """
+    env = dict(os.environ)
+    for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY", "ZAI_API_KEY"):
+        env[key] = ""
+    env["TEMPORAL_HOST"] = "127.0.0.1:1"  # refused at once; no 3s probe timeout
+
+    out = subprocess.run(
+        [sys.executable, "-m", "sdlc.cli", "doctor", "--json"],
+        env=env,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        stdin=subprocess.DEVNULL,
+        timeout=120,
+    )
+
+    assert "Traceback" not in out.stderr, out.stderr
+    rows = {r["name"]: r for r in json.loads(out.stdout)}
+    assert rows["agents registry"]["status"] == "FAIL"
+    assert "EXA_API_KEY" in rows["agents registry"]["detail"]
+    assert out.returncode == 1
