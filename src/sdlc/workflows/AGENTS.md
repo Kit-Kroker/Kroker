@@ -60,6 +60,15 @@ no-override replays stay byte-identical. `_cached_stage` salts the memo
 key's model slot `fwd1:<model>` when the run's model differs from the
 registry model (FR-003/E3); `content_key`'s signature is unchanged.
 
+Since architect-research-surface, `_run_role` also harvests sub-run usage
+reports: a tool that ran a model inside its own activity hands the usage
+back as `ToolReturn` metadata under `sub_run_usage.SUB_RUN_USAGE_KEY`;
+after the role's own usage is tracked, `_run_role` prices the reports once
+per answering model and tracks them under role `research` (`into=None`),
+then adds the spend to the caller's bag with `add_spend`, never
+`merge_usage`. A run with no report schedules nothing extra, which is why
+this needs no `workflow.patched` marker.
+
 ## The proposer payload guard (007)
 
 The proposer payload guard lives in `src/sdlc/agents/payload_guard.py`

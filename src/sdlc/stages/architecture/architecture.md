@@ -22,4 +22,5 @@ The step is composed of `prepare` (the once-per-stage prefix: stage event, start
 
 - **Delta grounding mismatch**: Proposed file changes do not match repository layout; retries with delta guidance or raises ApplicationError.
 - **Budget exhaustion**: Search budget exhausted during research subqueries; degrades gracefully into brief gaps without raising unhandled exceptions.
+- **Request limit**: a research subquery that reaches its request limit degrades the same way; its spend is still reported.
 - **Gate rejection**: Human reviewer rejects architecture spec; workflow aborts or branches cleanly per gate decision.

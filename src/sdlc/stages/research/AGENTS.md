@@ -32,6 +32,10 @@ file carries only what is true *here*.
   `ResearchDeps.research_model` (populated by the architecture slice only
   under an override; omitted from serialization while None) and passes it
   as `model=` — no-override deps and calls are byte-identical to before.
+  The tool also bounds its inner run with `ResearchDeps.max_requests` (the
+  architecture slice passes `cfg.research.max_requests`; omitted from
+  serialization at the default) and returns the inner run's usage beside
+  the brief as `ToolReturn` metadata, which the model never sees.
 
 ## State
 
@@ -113,8 +117,10 @@ a defect, it is listed for the orchestrator, not fixed here (006-B4).
   (`budget_store.py`) is correct and tested but dead in production: the
   architect charges `scope="architect"` (`architecture/step.py`), the
   stage fan-out charges `sq-<id>` scopes — only tests and the default
-  scope reach it. Its callers catch `BudgetExceeded` only (`toolset.py`),
-  so a lock `TimeoutError` escapes the catch and is retried — bounded
+  scope reach it. `toolset.py` catches `BudgetExceeded` and
+  `UsageLimitExceeded` and degrades both to a gap-only brief, reporting
+  the spend made so far, so a lock `TimeoutError` escapes the catch and
+  is retried — bounded
   (6 attempts on the sub-question activity, 3 on agent activities), not
   uncapped; under CodeMode a tool-side timeout surfaces to the model as
   a retry prompt first.

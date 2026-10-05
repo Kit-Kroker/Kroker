@@ -13,6 +13,7 @@ file carries only what is true *here*.
 - The slice exports `step`, `prompt_digest`, and `ACTIVITIES = []`.
 - Downstream requirements view excludes telemetry and dropped questions (`dropped`, `dimensions_probed`).
 - Grounded research subqueries operate under the dedicated `scope="architect"` budget.
+- The architect's research deps carry the configured run ceiling and request limit (`cfg.research.max_run_cost_usd`, `cfg.research.max_requests`, floor 1).
 
 ## Temporal notes for this slice
 
