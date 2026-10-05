@@ -90,6 +90,12 @@ Switching Board → Graph → Board leaves the Graph tab unchanged (same canvas
 node count), and the run header — title and stage strip — persists above the
 tab bar on every tab. [FR-017, FR-018]
 
+### CONSOLE-17
+The inbox renders one entry per item the provider reports as waiting, each
+showing its kind, its run, its age and its title; the number of entries
+equals the header's inbox badge; and an entry's run link opens that run's
+page. [FR-601, FR-305]
+
 ## Failure modes
 
 Both clauses are asserted by `app.pw.ts` against the built dashboard on

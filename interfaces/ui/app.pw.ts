@@ -277,3 +277,21 @@ test('Graph is unchanged after a Board round trip', async ({ page }) => {  // cl
   // The header title and strip persist above the tab bar on every tab (FR-018).
   await expect(page.locator('[data-testid="run-view"] [data-testid="stage-dot"]')).toHaveCount(18)
 })
+
+test('the inbox lists every waiting item and links to its run', async ({ page }) => {  // clause: CONSOLE-17
+  await page.goto('/#/inbox')
+  const view = page.locator('[data-testid="inbox-view"]')
+  // One entry per seeded item (FR-001), and the count equals the badge (FR-002).
+  await expect(view.locator('[data-testid="inbox-entry"]')).toHaveCount(6)
+  await expect(page.locator('[data-testid="inbox-count"]')).toHaveText('6')
+  // Kind, run, age and title are shown (FR-003).
+  const entry = view.locator(
+    '[data-testid="inbox-entry"][data-run-id="feature-add-sso"][data-key="q1"]',
+  )
+  await expect(entry.locator('[data-testid="inbox-entry-kind"]')).not.toBeEmpty()
+  await expect(entry.locator('[data-testid="inbox-entry-age"]')).not.toBeEmpty()
+  await expect(entry.locator('[data-testid="inbox-entry-title"]')).not.toBeEmpty()
+  // The run link opens that run's page.
+  await entry.locator('[data-testid="inbox-entry-run"]').click()
+  await expect(page.locator('[data-testid="run-view"]')).toBeVisible()
+})
