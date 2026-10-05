@@ -26,7 +26,11 @@ services:
     ports:
       - "127.0.0.1:8888:8888"   # API
       - "127.0.0.1:9999:9999"   # Web UI
-    env_file: [".env"]
+    # Optional so that `docker compose run --rm demo` works on a fresh clone.
+    # Without its LLM key Hindsight does not come up; see .env.example.
+    env_file:
+      - path: .env
+        required: false
     volumes:
       - hindsight-data:/home/hindsight/.pg0
     restart: unless-stopped
@@ -52,7 +56,11 @@ services:
       GIT_AUTHOR_EMAIL: "sdlc-benchmark@localhost"
       GIT_COMMITTER_NAME: "SDLC Benchmark Worker"
       GIT_COMMITTER_EMAIL: "sdlc-benchmark@localhost"
-    env_file: [".env"]
+    # Optional for the same reason as above. Without the provider keys the
+    # worker exits at boot, naming the missing one.
+    env_file:
+      - path: .env
+        required: false
     volumes:
       # worktrees need persistent storage across activity retries
       - worker-worktrees:/tmp/sdlc/worktrees
@@ -67,6 +75,24 @@ services:
       # per-machine and live in docker-compose.override.yml, which compose
       # loads automatically -- see docker-compose.override.example.yml.
     restart: unless-stopped
+
+  # Token-free dry run: `docker compose run --rm demo`. The real workflow on
+  # the Temporal above, with scripted agents and activities (src/sdlc/demo/)
+  # -- no .env, no keys, no login, no repository. Behind a profile so that
+  # `docker compose up` never starts it.
+  demo:
+    profiles: ["demo"]
+    image: ghcr.io/kit-kroker/kroker-worker:${KROKER_IMAGE_TAG:-latest}
+    build:
+      context: .
+      target: runtime
+    depends_on: ["temporal"]
+    environment:
+      TEMPORAL_HOST: "temporal:7233"
+    command: ["python", "-m", "sdlc.demo"]
+    volumes:
+      # report.html / events.jsonl / summary.json land beside real runs'
+      - worker-runs:/app/runs
 
 volumes:
   worker-worktrees:

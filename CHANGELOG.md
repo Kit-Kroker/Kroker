@@ -9,6 +9,12 @@ version is 0, any release may break compatibility.
 
 ### Added
 
+- `python -m sdlc.demo`, a token-free dry run: the real workflow from intake
+  to deploy against scripted agents and activities, answering its own
+  gates. It needs a reachable Temporal and nothing else — no provider key,
+  no CLI login, no repository.
+- A `demo` service in `docker-compose.yml`, so a fresh clone runs that with
+  one command: `docker compose run --rm demo`.
 - A release workflow that publishes the worker image to
   `ghcr.io/kit-kroker/kroker-worker` on every `v*` tag.
 - `docker-compose.override.example.yml`, the template for per-machine bind
@@ -18,6 +24,9 @@ version is 0, any release may break compatibility.
 
 ### Changed
 
+- `.env` is optional in `docker-compose.yml`, so compose loads on a fresh
+  clone. A worker started without its keys still exits at boot, naming the
+  missing one.
 - Python 3.13 is now the minimum (`requires-python = ">=3.13"`), and CI
   runs on it. 3.11 and 3.12 were declared but never the version the image
   ran.

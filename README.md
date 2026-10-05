@@ -78,8 +78,25 @@ Python 3.13, the pinned `opencode` and `claude` CLIs, `gh` and `git`, and
 to it. You need Docker and the accounts below; nothing else is installed on
 the host.
 
+**See it run first — one command, no keys.** A dry run of the whole
+pipeline with scripted agents and activities:
+
 ```bash
 git clone https://github.com/Kit-Kroker/Kroker.git && cd Kroker
+docker compose run --rm demo
+```
+
+That builds the image (a few minutes the first time), starts Temporal and
+runs the real workflow from intake to deploy in about fifteen seconds. It
+stops at each human gate, prints the command a real run would wait for, and
+answers it itself. Nothing calls a model, runs a coding CLI or touches a
+repository, so it needs no `.env`, no account and no login — and it proves
+only the orchestration, not your keys. Without Docker:
+`python -m sdlc.demo` against any reachable Temporal.
+
+**Then a real run.**
+
+```bash
 cp .env.example .env                                   # then fill in the keys
 cp docker-compose.override.example.yml docker-compose.override.yml   # then edit the paths
 docker compose up -d --build
@@ -108,10 +125,10 @@ docker compose exec worker python -m sdlc.cli start \
 docker compose exec worker python -m sdlc.cli inbox
 ```
 
-A run spends tokens from the first stage; there is no dry-run mode yet.
-Read [`SECURITY.md`](SECURITY.md) before pointing it at a repository: the
-pipeline executes that repository's build and tests with the worker's
-environment.
+A real run spends tokens from the first stage; the dry run above is the
+only mode that does not. Read [`SECURITY.md`](SECURITY.md) before pointing
+it at a repository: the pipeline executes that repository's build and tests
+with the worker's environment.
 
 **Published image.** Each `v*` tag publishes
 `ghcr.io/kit-kroker/kroker-worker:<version>` (and `latest`) from the same
