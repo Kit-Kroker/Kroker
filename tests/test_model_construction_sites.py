@@ -41,6 +41,9 @@ ALLOW_LISTED = {
     "src/sdlc/benchmarks/judge.py",
     "src/sdlc/operator/agent.py",
     "src/sdlc/agents/model_ids.py",
+    # The dry run's scripted agents: built from a TestModel INSTANCE, never
+    # a model string, so there is nothing for the seam to resolve.
+    "src/sdlc/demo/fakes.py",
 }
 
 # Sites 5, 6, 7 of plan D2 - the ones that hold a bare string today.
