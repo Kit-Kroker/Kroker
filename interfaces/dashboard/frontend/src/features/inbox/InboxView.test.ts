@@ -2,12 +2,13 @@
 // written against the stub view -- the RED cause (the stub renders neither
 // the state test ids nor entries). The store is seeded directly: the view
 // must not refresh on mount (contract §3.4), so no api mock is needed.
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia, getActivePinia } from 'pinia'
 import InboxView from './InboxView.vue'
 import { useInboxStore } from '../../app/inbox.store'
+import { entryKey } from '../../shared/entryKey'
 import type { ClarifyItem, UnreadableRun } from '../../api/types'
 
 // Field names per data-model §1.1.
@@ -34,6 +35,17 @@ const mountView = (): VueWrapper =>
 beforeEach(() => {
   setActivePinia(createPinia())
 })
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
+// Per-entry scoping: an entry is the article with its run id (contract §4).
+const entryByRunId = (w: VueWrapper, runId: string) =>
+  w.findAll('[data-testid="inbox-entry"]').find((e) => e.attributes('data-run-id') === runId)!
+
+const fieldValue = (entry: ReturnType<VueWrapper['find']>): string =>
+  (entry.find('[data-testid="field-control"]').element as HTMLTextAreaElement).value
 
 describe('InboxView states', () => {
   it('not loaded, no error: only the loading state shows', () => {
@@ -154,5 +166,102 @@ describe('InboxView states', () => {
     expect(entries[1].attributes('data-run-id')).toBe('run-b')
     expect(entries[0].attributes('data-key')).toBe('q1')
     expect(entries[1].attributes('data-key')).toBe('q1')
+  })
+})
+
+// 010 T011 part B (RED): the clarify wiring of contract §3.4. The store's
+// actions are spied (call-through), the store seeded as above; the RED
+// cause is the empty slot -- the view renders no kind component yet.
+describe('InboxView clarify wiring', () => {
+  it('(9) an accept click calls answerClarify with the item runId, id and the trimmed suggestion', async () => {
+    const inbox = useInboxStore()
+    const a = clarify('run-a')
+    inbox.items = [a]
+    inbox.loaded = true
+    inbox.loadError = null
+    inbox.unreadable = []
+    const spy = vi.spyOn(inbox, 'answerClarify').mockResolvedValue(undefined)
+    const w = mountView()
+    await entryByRunId(w, 'run-a').find('[data-testid="inbox-accept"]').trigger('click')
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(spy).toHaveBeenCalledWith('run-a', 'q1', 'Use OIDC.')
+  })
+
+  it('(10) toggle-edit with an empty draft copies the suggestion; with a typed draft it leaves the draft', async () => {
+    const inbox = useInboxStore()
+    const a = clarify('run-a')
+    const b = clarify('run-b', 'q1')
+    inbox.items = [a, b]
+    inbox.loaded = true
+    inbox.loadError = null
+    inbox.unreadable = []
+    inbox.setDraft(entryKey(b), 'typed already')
+    const setDraftSpy = vi.spyOn(inbox, 'setDraft')
+    const w = mountView()
+    await entryByRunId(w, 'run-a').find('[data-testid="inbox-edit"]').trigger('click')
+    expect(inbox.drafts[entryKey(a)]).toBe('Use OIDC.')
+    expect(inbox.editing[entryKey(a)]).toBe(true)
+    await entryByRunId(w, 'run-b').find('[data-testid="inbox-edit"]').trigger('click')
+    expect(inbox.drafts[entryKey(b)]).toBe('typed already')
+    expect(inbox.editing[entryKey(b)]).toBe(true)
+    // only the empty-draft entry got the suggestion copied in
+    expect(setDraftSpy).toHaveBeenCalledTimes(1)
+    expect(setDraftSpy).toHaveBeenCalledWith(entryKey(a), 'Use OIDC.')
+  })
+
+  it('(11) an entry in flight renders busy while the other stays enabled', () => {
+    const inbox = useInboxStore()
+    const a = clarify('run-a')
+    const b = clarify('run-b', 'q1')
+    inbox.items = [a, b]
+    inbox.loaded = true
+    inbox.loadError = null
+    inbox.unreadable = []
+    inbox.inFlight = new Set([entryKey(a)])
+    const w = mountView()
+    const busy = entryByRunId(w, 'run-a')
+    const idle = entryByRunId(w, 'run-b')
+    expect(busy.find('[data-testid="inbox-accept"]').attributes('disabled')).toBeDefined()
+    expect(busy.find('[data-testid="inbox-edit"]').attributes('disabled')).toBeDefined()
+    expect(idle.find('[data-testid="inbox-accept"]').attributes('disabled')).toBeUndefined()
+    expect(idle.find('[data-testid="inbox-edit"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('(12) two runs sharing an id: fields stay separate and sending uses that item runId and its own text', async () => {
+    const inbox = useInboxStore()
+    const a = { ...clarify('run-a'), suggestion: '' } // no suggestion: field always shown
+    const b = clarify('run-b', 'q1')
+    inbox.items = [a, b]
+    inbox.loaded = true
+    inbox.loadError = null
+    inbox.unreadable = []
+    inbox.editing = { [entryKey(b)]: true }
+    const spy = vi.spyOn(inbox, 'answerClarify').mockResolvedValue(undefined)
+    const w = mountView()
+    const entryA = entryByRunId(w, 'run-a')
+    const entryB = entryByRunId(w, 'run-b')
+    await entryA.find('[data-testid="field-control"]').setValue('text for a')
+    // typing in A leaves B's field empty
+    expect(fieldValue(entryB)).toBe('')
+    await entryB.find('[data-testid="field-control"]').setValue('text for b')
+    await entryB.find('[data-testid="inbox-send"]').trigger('click')
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(spy).toHaveBeenCalledWith('run-b', 'q1', 'text for b')
+    expect(inbox.drafts[entryKey(a)]).toBe('text for a')
+  })
+
+  it('(13) typed text survives two refreshes that replace items with fresh equal objects', async () => {
+    const inbox = useInboxStore()
+    const fresh = (): ClarifyItem => ({ ...clarify('run-a'), suggestion: '' })
+    inbox.items = [fresh()]
+    inbox.loaded = true
+    inbox.loadError = null
+    inbox.unreadable = []
+    const w = mountView()
+    await w.find('[data-testid="field-control"]').setValue('persisted answer')
+    inbox.items = [fresh()]
+    inbox.items = [fresh()]
+    await w.vm.$nextTick()
+    expect(fieldValue(entryByRunId(w, 'run-a'))).toBe('persisted answer')
   })
 })

@@ -96,6 +96,11 @@ showing its kind, its run, its age and its title; the number of entries
 equals the header's inbox badge; and an entry's run link opens that run's
 page. [FR-601, FR-305]
 
+### CONSOLE-18
+On a clarify entry, accepting the suggestion sends it with that one action;
+a typed answer is sent only when it is not blank. Either way the entry
+leaves the list and the badge drops by one. [FR-601]
+
 ## Failure modes
 
 Both clauses are asserted by `app.pw.ts` against the built dashboard on

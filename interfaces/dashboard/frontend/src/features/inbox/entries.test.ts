@@ -141,3 +141,93 @@ describe('InboxEntry', () => {
     expect(notice.compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
+
+// --- ClarifyEntry (010 T011, RED; contract §3.3 row 1). The import is
+// dynamic with a non-literal specifier on purpose: a static one (and even a
+// literal dynamic one — Vite resolves those at transform time) would fail
+// this whole file's collection, taking the green InboxEntry tests down with
+// it. Runtime resolution keeps the RED scoped to the missing
+// ./ClarifyEntry.vue (T012 creates it).
+const clarifyEntryPath = './ClarifyEntry.vue'
+const mountClarify = async (
+  over: { item?: ClarifyItem; busy?: boolean; draft?: string; editing?: boolean } = {},
+) => {
+  const { default: ClarifyEntry } = await import(/* @vite-ignore */ clarifyEntryPath)
+  return mount(ClarifyEntry, {
+    props: {
+      item: over.item ?? clarifyItem(),
+      busy: over.busy ?? false,
+      draft: over.draft ?? '',
+      editing: over.editing ?? false,
+    },
+  })
+}
+
+describe('ClarifyEntry', () => {
+  it('with a suggestion and not editing: suggestion with the longtext class, accept and edit, no field', async () => {
+    const wrapper = await mountClarify()
+    const suggestion = wrapper.get('[data-testid="inbox-suggestion"]')
+    expect(suggestion.classes()).toContain('inbox-longtext')
+    expect(suggestion.text()).toBe('Use OIDC.')
+    expect(wrapper.get('[data-testid="inbox-accept"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="inbox-edit"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="field-control"]').exists()).toBe(false)
+  })
+
+  it('clicking accept emits answer once with the trimmed suggestion', async () => {
+    const wrapper = await mountClarify({ item: { ...clarifyItem(), suggestion: '  Use OIDC.  ' } })
+    await wrapper.get('[data-testid="inbox-accept"]').trigger('click')
+    expect(wrapper.emitted('answer')).toEqual([['Use OIDC.']])
+  })
+
+  it('editing shows the Answer field with the draft; typing emits update:draft', async () => {
+    const wrapper = await mountClarify({ editing: true, draft: 'partial ans' })
+    expect(wrapper.findAll('label').map((l) => l.text())).toContain('Answer')
+    const control = wrapper.get('[data-testid="field-control"]')
+    expect((control.element as HTMLTextAreaElement).value).toBe('partial ans')
+    await control.setValue('typed answer')
+    expect(wrapper.emitted('update:draft')).toEqual([['typed answer']])
+  })
+
+  it('send is disabled while the draft is blank and sends the trimmed draft otherwise', async () => {
+    for (const draft of ['', '   ']) {
+      const blank = await mountClarify({ editing: true, draft })
+      expect(blank.get('[data-testid="inbox-send"]').attributes('disabled')).toBeDefined()
+    }
+    const filled = await mountClarify({ editing: true, draft: '  real answer  ' })
+    const send = filled.get('[data-testid="inbox-send"]')
+    expect(send.attributes('disabled')).toBeUndefined()
+    await send.trigger('click')
+    expect(filled.emitted('answer')).toEqual([['real answer']])
+  })
+
+  it('a blank suggestion hides suggestion, accept and edit, and shows the answer field (EC7)', async () => {
+    for (const suggestion of ['', '   ']) {
+      const wrapper = await mountClarify({ item: { ...clarifyItem(), suggestion } })
+      expect(wrapper.find('[data-testid="inbox-suggestion"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="inbox-accept"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="inbox-edit"]').exists()).toBe(false)
+      expect(wrapper.get('[data-testid="field-control"]').exists()).toBe(true)
+    }
+  })
+
+  it('clicking edit emits toggle-edit once', async () => {
+    const wrapper = await mountClarify()
+    await wrapper.get('[data-testid="inbox-edit"]').trigger('click')
+    expect(wrapper.emitted('toggle-edit')).toHaveLength(1)
+  })
+
+  it('busy disables accept, edit, send and the field, and clicks emit nothing', async () => {
+    const wrapper = await mountClarify({ busy: true, editing: true, draft: 'ready' })
+    for (const id of ['inbox-accept', 'inbox-edit', 'inbox-send']) {
+      expect(wrapper.get(`[data-testid="${id}"]`).attributes('disabled')).toBeDefined()
+    }
+    expect(wrapper.get('[data-testid="field-control"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="inbox-accept"]').trigger('click')
+    await wrapper.get('[data-testid="inbox-edit"]').trigger('click')
+    await wrapper.get('[data-testid="inbox-send"]').trigger('click')
+    expect(wrapper.emitted('answer')).toBeUndefined()
+    expect(wrapper.emitted('toggle-edit')).toBeUndefined()
+    expect(wrapper.emitted('update:draft')).toBeUndefined()
+  })
+})

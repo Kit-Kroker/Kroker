@@ -295,3 +295,26 @@ test('the inbox lists every waiting item and links to its run', async ({ page })
   await entry.locator('[data-testid="inbox-entry-run"]').click()
   await expect(page.locator('[data-testid="run-view"]')).toBeVisible()
 })
+
+test('a clarify entry is answered by accepting or typing', async ({ page }) => {  // clause: CONSOLE-18
+  await page.goto('/#/inbox')
+  const view = page.locator('[data-testid="inbox-view"]')
+  // One action accepts the suggestion (SC-003): the entry leaves, badge 6 -> 5.
+  await view.locator(
+    '[data-testid="inbox-entry"][data-run-id="feature-add-sso"][data-key="q1"] [data-testid="inbox-accept"]',
+  ).click()
+  await expect(view.locator('[data-testid="inbox-entry"][data-key="q1"]')).toHaveCount(0)
+  await expect(page.locator('[data-testid="inbox-count"]')).toHaveText('5')
+  // A typed answer: opening the field seeds the suggestion; a blank answer
+  // cannot be sent; a filled one can. The entry leaves, badge 5 -> 4.
+  const q2 = view.locator('[data-testid="inbox-entry"][data-key="q2"]')
+  await q2.locator('[data-testid="inbox-edit"]').click()
+  const field = q2.locator('[data-testid="field-control"]')
+  await expect(q2.locator('[data-testid="inbox-send"]')).toBeEnabled()
+  await field.fill('')
+  await expect(q2.locator('[data-testid="inbox-send"]')).toBeDisabled()
+  await field.fill('Ship the OIDC fallback first.')
+  await q2.locator('[data-testid="inbox-send"]').click()
+  await expect(view.locator('[data-testid="inbox-entry"][data-key="q2"]')).toHaveCount(0)
+  await expect(page.locator('[data-testid="inbox-count"]')).toHaveText('4')
+})

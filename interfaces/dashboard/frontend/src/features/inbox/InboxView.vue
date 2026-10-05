@@ -4,9 +4,19 @@
 // starts no poll and calls no refresh (contract §3.4).
 import { useInboxStore } from '../../app/inbox.store'
 import { entryKey } from '../../shared/entryKey'
+import type { ClarifyItem } from '../../api/types'
 import InboxEntry from './InboxEntry.vue'
+import ClarifyEntry from './ClarifyEntry.vue'
 
 const inbox = useInboxStore()
+
+// Contract §3.4: opening the answer field seeds the draft with the
+// suggestion only when the draft is empty (R-12).
+function onToggleEdit(item: ClarifyItem) {
+  const k = entryKey(item)
+  if (!inbox.drafts[k]) inbox.setDraft(k, item.suggestion)
+  inbox.toggleEdit(k)
+}
 </script>
 
 <template>
@@ -49,7 +59,18 @@ const inbox = useInboxStore()
           :key="entryKey(item)"
           :item="item"
           :notice="inbox.notice[entryKey(item)]"
-        />
+        >
+          <ClarifyEntry
+            v-if="item.type === 'clarify'"
+            :item="item"
+            :busy="inbox.inFlight.has(entryKey(item))"
+            :draft="inbox.drafts[entryKey(item)] ?? ''"
+            :editing="inbox.editing[entryKey(item)] ?? false"
+            @update:draft="(v) => inbox.setDraft(entryKey(item), v)"
+            @toggle-edit="onToggleEdit(item)"
+            @answer="(text) => inbox.answerClarify(item.runId, item.id, text)"
+          />
+        </InboxEntry>
       </div>
     </template>
   </main>
