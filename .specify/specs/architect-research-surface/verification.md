@@ -36,7 +36,7 @@ carries advice + URL, caller-owned usage non-zero after the limit,
 |---|---|---|---|
 | 1a | `pytest tests/test_sub_run_usage.py` | 18 passed | c12-q-1a |
 | 1b | `pytest tests/test_role_usage.py` | 10 passed | c12-q-1b |
-| 2a | `pytest tests/architecture/test_architect_research_report.py` | 12 passed | c12-q-2a |
+| 2a | `pytest tests/architecture/test_architect_research_report.py` | 11 passed | c12-q-2a |
 | 2b | `pytest tests/architecture/test_architect_research_tool.py` | 4 passed | c12-q-2b |
 | 3 | `pytest tests/architecture/test_architect_research_deps.py` | 3 passed | c12-q-3 |
 | 4a | `pytest tests/test_run_role_sub_run_harvest.py` | 8 passed | c12-q-4a |

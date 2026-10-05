@@ -1,4 +1,4 @@
-﻿# Tasks: Architect Research Surface
+# Tasks: Architect Research Surface
 
 **Input**: `.specify/specs/architect-research-surface/` (spec.md, plan.md, research.md, quickstart.md)
 
@@ -39,14 +39,14 @@
 
 | Phase | Purpose | Story | Plan | Commits |
 |---|---|---|---|---|
-| 1 Setup, baseline, probes | the channel still holds | â€” | Delivery 1 | 1 |
+| 1 Setup, baseline, probes | the channel still holds | — | Delivery 1 | 1 |
 | 2 REDs | the three defects and the units, seen failing | US1, US2, US3 | D7, D5 | 0 (ride phases 3-5) |
-| 3 Foundation: pure modules | report, reader, `add_spend` | â€” | D1 | 1 |
+| 3 Foundation: pure modules | report, reader, `add_spend` | — | D1 | 1 |
 | 4 Tool side | the tool reports, is limited, degrades | US1, US3 | D2 | 1 |
 | 5 Architect step | deps carry ceiling and limit | US2, US3 | D3 | 1 |
 | 6 Harvest | the run accounts the spend | US1 | D4 | 1 |
 | 7 Replay fixture | captured once, pinned | US1 | D5 | 1 |
-| 8 Living docs and verification | â€” | â€” | D6 | 2 |
+| 8 Living docs and verification | — | — | D6 | 2 |
 
 ---
 
@@ -72,7 +72,7 @@
 
 ---
 
-## Phase 3: Foundation â€” the pure modules (blocks phases 4 and 6)
+## Phase 3: Foundation — the pure modules (blocks phases 4 and 6)
 
 - [X] T007 Implement plan D1. Create `src/sdlc/observability/sub_run_usage.py` (no `temporalio`, no `pydantic_ai`, no stage import): `SUB_RUN_USAGE_KEY = "sdlc_sub_run_usage"`; frozen pydantic model `SubRunUsage` (`model: str`; `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`: `int`, `ge=0`); `from_run_usage(run_usage, model) -> SubRunUsage | None` (`None` when input and output are both zero; counts coerced with `or 0`); `metadata_for(report) -> dict` returning `{SUB_RUN_USAGE_KEY: report.model_dump(mode="json")}`; `harvest_reports(result) -> list[SubRunUsage]`, duck-typed and total as in research R5 (`getattr` for `new_messages`, `parts`, `part_kind == "tool-return"`, `metadata` a dict holding the key, `model_validate` per part with a failure skipping the part, zero-token reports dropped, an outer `except Exception` returning `[]`). In `src/sdlc/observability/usage.py` add `add_spend(bag, *, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd)`: adds the four counts and, when `cost_usd is not None`, the dollars; never touches `bag.model` or `bag.calls`. Switch the literal in `tests/durability/test_sub_run_usage_wire.py` to `metadata_for(...)`. T005 goes green except its one end-to-end case, which needs `tool_return` and stays red until T008. Run, as separate commands: `pytest tests/test_sub_run_usage.py`; `pytest tests/test_role_usage.py`; `pytest tests/durability/test_sub_run_usage_wire.py`; `ruff check .`; `mypy`. Commit T005 (with the end-to-end case marked `xfail(strict=True, reason="needs tool_return, T008")`), T006 and T007 together
 
@@ -80,7 +80,7 @@
 
 ---
 
-## Phase 4: User Stories 1 and 3 â€” the tool reports, is limited, and degrades (P1, P2)
+## Phase 4: User Stories 1 and 3 — the tool reports, is limited, and degrades (P1, P2)
 
 **Goal**: the tool returns the brief with a report beside it, bounds its inner run, and degrades a limit stop with a clean text (FR-001, FR-007, FR-008, FR-009; plan D2).
 
@@ -92,7 +92,7 @@
 
 ---
 
-## Phase 5: User Story 2 â€” the architect's research honours the configured bounds (P1)
+## Phase 5: User Story 2 — the architect's research honours the configured bounds (P1)
 
 **Goal**: FR-006, FR-007; plan D3.
 
@@ -104,7 +104,7 @@
 
 ---
 
-## Phase 6: User Story 1 â€” the run accounts the spend (P1)
+## Phase 6: User Story 1 — the run accounts the spend (P1)
 
 **Goal**: FR-003, FR-004, FR-005; plan D4.
 
@@ -116,7 +116,7 @@
 
 ---
 
-## Phase 7: User Story 1 â€” the replay fixture, captured once (P1)
+## Phase 7: User Story 1 — the replay fixture, captured once (P1)
 
 **Goal**: FR-010, SC-005; plan D5.
 
@@ -144,7 +144,7 @@
 - T011 needs T010 green (the history must contain the harvest's command).
 - T012 needs T011 (it describes what landed).
 
-## Requirement â†’ task map
+## Requirement → task map
 
 | Requirement | Tasks |
 |---|---|
@@ -170,4 +170,4 @@
 
 US3 and the tool half of US1 land first (T008) and are safe alone: an unharvested report is ignored. US2 (T009) is independent of the harvest. US1 completes at T010 and is pinned at T011. If T001's probes fail the feature stops with nothing under `src/` touched.
 
-**Totals**: 13 tasks â€” setup 1, REDs 5, foundation 1, tool side 1, step 1, harvest 1, replay 1, docs and verification 2. Eight commits (baseline; pure modules; tool side; step; harvest; replay fixture; docs; verification).
+**Totals**: 13 tasks — setup 1, REDs 5, foundation 1, tool side 1, step 1, harvest 1, replay 1, docs and verification 2. Eight commits (baseline; pure modules; tool side; step; harvest; replay fixture; docs; verification).
